@@ -4,7 +4,38 @@ Browser port (work in progress) of the CyberFlix **DreamFactory 4.0** engine,
 targeting *Titanic: Adventure Out of Time* (1996) — no DOSBox, a native
 TypeScript reimplementation running on canvas.
 
-## Status: Milestone 7 — movies (MOV)
+## Status: Milestone 8 — stage layer (STG flats) & inventory
+
+- `src/df/stg.ts` — STG reader: palette @56, flat table @2124 (46-byte
+  records: script/image/click-logic containers per flat); flat images use
+  the common frame codec. Container 1 is the stage's main script.
+- Session stage state: `openstagefile`/`closestagefile`/`gotoflat`/
+  `currentstage`/`currentflat`/`setvisible` builtins; flat scripts fire
+  openflat/closeflat; MAIN.STG opens at startup (the boot does this).
+- Rendering layers: flat image (512×384) as background, the set view
+  composited into the top 512×264 when `setvisible`, props over everything
+  with `propdist` z-order (more negative = closer). The UI band lives:
+  lifesaver menu button, hand item, watch — all house.shp props.
+- Input: props hit-test first (front-to-back, opaque-pixel accurate), then
+  view hotspots, then flat script → stage script.
+- Inventory: `addinven` (inven.shp) puts items in Frank's hand (owner
+  "frank", shown in the band); boot's `transtoflat("inven1.stg")` swaps
+  the stage (fade, save/restore stack) and the inven flat shows all owned
+  items via their `moveyoself` handlers. `sendto*` targets now resolve
+  session-wide (shops/flats/props before a set opens), and missing
+  handlers on a sendto target fall back to the boot library with `me` =
+  the target — that's how `initprop()`/`initprops()` initialize.
+- boot() variable defaults (savestage1-3, handitem, …) are seeded at
+  session start — scripts test them with `!= ""` under text comparison.
+- Props placed with `propxyz` (bag/watch in the C73 world, turkwater) are
+  world-space: coordinates are stored but the props are NOT drawn until
+  world->screen projection is implemented — otherwise they'd pile up at
+  their screen anchor in the middle of the UI band (user-reported).
+  `propxy` returns a prop to screen space (pickup does this).
+- Known gaps: no in-world pickup yet (needs the projection);
+  `invenhelp` renders slightly misplaced.
+
+## Milestone 7 — movies (MOV)
 
 - `src/df/mov.ts` — MOV parser: 256-color palette, frame table @0x870
   (42-byte records, keyframe flag), frames in the SET delta codec; audio

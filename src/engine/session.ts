@@ -1,5 +1,7 @@
 import { readContainerFile } from "../df/container";
 import { SetFile, readSetFile } from "../df/set";
+import { StgFile, readStgFile } from "../df/stg";
+import { FrameBuffer, decodeFrame, paletteToRGBA } from "../df/image";
 import { readShpFile } from "../df/shp";
 import { sniffScript } from "../df/script";
 import { parseScript } from "./parser";
@@ -114,7 +116,7 @@ export class GameSession {
     }
   }
 
-  /** load BOOTFILE and MAIN.STG standard-library scripts if available */
+  /** load BOOTFILE and the MAIN.STG stage if available */
   loadCoreScripts(): void {
     const boot = this.files("bootfile");
     if (boot && !this.bootScripts.length) {
@@ -131,20 +133,144 @@ export class GameSession {
         this.onLog(`bootfile: ${(e as Error).message}`);
       }
     }
-    const stg = this.files("main.stg");
-    if (stg && !this.stage) {
-      try {
-        const file = readContainerFile(stg);
-        this.stage = this.instanceFrom(file.containers[1].data, "main.stg");
-        if (this.stage) this.onLog(`stage script loaded (${this.stage.script.codes.size} handlers)`);
-      } catch (e) {
-        this.onLog(`main.stg: ${(e as Error).message}`);
+    this.refreshFallbacks();
+    // boot()'s variable initialization — scripts test these with != ""
+    // and text-compares would treat the uninitialized 0 as "0"
+    if (!this.interp.globals.has("handitem")) {
+      for (const [k, v] of [
+        ["handitem", ""], ["savestage1", ""], ["savestage2", ""], ["savestage3", ""],
+        ["saveflat1", ""], ["saveflat2", ""], ["saveflat3", ""],
+        ["jumpset", ""], ["playerdeath", ""], ["loopsound", ""], ["seldir", "north"],
+        ["twocount", 1], ["threecount", 1], ["fourcount", 1], ["fivecount", 1],
+        ["themevolume", 255],
+      ] as [string, Value][]) {
+        this.interp.globals.set(k, v);
       }
     }
+    this.loadBootResources();
+    // the boot script opens the standard in-game stage at startup and
+    // initializes the inventory + interface props
+    this.openStageFile("main.stg");
+    const inven = this.shopMain("inven.shp");
+    if (inven?.script.codes.has("initprops") && !this.interp.globals.has("__propsinit")) {
+      this.interp.globals.set("__propsinit", 1);
+      try {
+        this.interp.runHandler(inven, "initprops", [], { me: "inven.shp", target: "" });
+      } catch (e) {
+        this.onLog(`initprops: ${(e as Error).message}`);
+      }
+    }
+  }
+
+  // ---- stage layer (STG flats) -------------------------------------------
+
+  stageFile: StgFile | null = null;
+  stageName = "none";
+  /** flat script instances of the current stage, by lowercase flat name */
+  readonly flatScripts = new Map<string, ScriptInstance>();
+  flatNames: string[] = [];
+  currentFlat = "none";
+  /** whether the set view draws over the flat (setvisible builtin) */
+  setVisible = true;
+  private flatImageCache = new Map<
+    string,
+    { pixels: Uint8Array; width: number; height: number; palette: Uint8ClampedArray }
+  >();
+
+  private refreshFallbacks(): void {
     this.interp.fallbackScripts = [this.stage, ...this.bootScripts].filter(
       (x): x is ScriptInstance => !!x,
     );
-    this.loadBootResources();
+  }
+
+  /** engine primitive: load an STG stage and activate its first flat */
+  openStageFile(fileName: string): boolean {
+    const key = toStr(fileName).toLowerCase();
+    if (this.stageName === key) return true;
+    if (this.stageFile) this.closeStageFile();
+    const data = this.files(key);
+    if (!data) {
+      this.onLog(`openstagefile: "${fileName}" not available`);
+      return false;
+    }
+    let stg: StgFile;
+    try {
+      stg = readStgFile(data);
+    } catch (e) {
+      this.onLog(`openstagefile: ${fileName}: ${(e as Error).message}`);
+      return false;
+    }
+    this.stageFile = stg;
+    this.stageName = key;
+    this.stage = this.instanceFrom(stg.file.containers[1]?.data, key);
+    this.refreshFallbacks();
+    for (const f of stg.flats) {
+      const inst = this.instanceFrom(stg.file.containers[f.locationScript]?.data, f.name);
+      if (inst) this.flatScripts.set(f.name.toLowerCase(), inst);
+      this.flatNames.push(f.name);
+    }
+    this.onLog(`stage loaded: ${key} (${stg.flats.length} flat(s))`);
+    if (stg.flats.length) this.gotoFlat(stg.flats[0].name);
+    return true;
+  }
+
+  /** engine primitive: close the current stage (closestagefile) */
+  closeStageFile(): void {
+    this.fireFlat(this.currentFlat, "closeflat");
+    this.currentFlat = "none";
+    this.stageFile = null;
+    this.stageName = "none";
+    this.stage = null;
+    this.flatScripts.clear();
+    this.flatNames = [];
+    this.flatImageCache.clear();
+    this.refreshFallbacks();
+  }
+
+  /** engine primitive: switch the active flat (gotoflat) */
+  gotoFlat(name: string): void {
+    const target =
+      this.flatNames.find((f) => f.toLowerCase() === toStr(name).toLowerCase()) ?? toStr(name);
+    this.fireFlat(this.currentFlat, "closeflat");
+    this.currentFlat = target;
+    this.fireFlat(target, "openflat");
+  }
+
+  private fireFlat(name: string, handler: string): void {
+    const inst = this.flatScripts.get(name.toLowerCase());
+    if (!inst || !inst.script.codes.has(handler)) return;
+    try {
+      this.interp.runHandler(inst, handler, [], { me: inst.name, target: "" });
+    } catch (e) {
+      this.onLog(`${name}.${handler}: ${(e as Error).message}`);
+    }
+  }
+
+  /** decoded image of the active flat (background layer), cached */
+  flatImage(): { pixels: Uint8Array; width: number; height: number; palette: Uint8ClampedArray } | null {
+    const stg = this.stageFile;
+    if (!stg || this.currentFlat === "none") return null;
+    const key = `${this.stageName}:${this.currentFlat}`;
+    let img = this.flatImageCache.get(key);
+    if (!img) {
+      const flat = stg.flats.find((f) => f.name === this.currentFlat);
+      if (!flat) return null;
+      try {
+        const fb = new FrameBuffer();
+        const d = decodeFrame(stg.file.containers[flat.locationFrame], fb);
+        img = {
+          pixels: fb.pixels.slice(0, d.width * d.height),
+          width: d.width,
+          height: d.height,
+          palette: paletteToRGBA(stg.paletteRaw, 256),
+        };
+        this.flatImageCache.set(key, img);
+      } catch (e) {
+        this.onLog(`flat image ${key}: ${(e as Error).message}`);
+        return null;
+      }
+    }
+    return img;
   }
 
   /** host hook: default navigation from boot's keydown (currentscene setter) */
@@ -199,6 +325,23 @@ export class GameSession {
   /** prop-group script instances of loaded shops, by lowercase prop name */
   readonly propScripts = new Map<string, ScriptInstance>();
   private shopMains = new Map<string, ScriptInstance | null>();
+
+  /** main script of a loaded shop (sendtoshop target), by file name */
+  shopMain(name: string): ScriptInstance | null {
+    return this.shopMains.get(name.toLowerCase()) ?? null;
+  }
+
+  /** session-scoped sendto* targets (usable before any set is open) */
+  findGlobalInstance(name: string): ScriptInstance | null {
+    const lower = name.toLowerCase();
+    return (
+      this.propScripts.get(lower) ??
+      this.shopMains.get(lower) ??
+      this.flatScripts.get(lower) ??
+      (this.stage && this.stage.name.toLowerCase() === lower ? this.stage : null) ??
+      (lower === "boot" ? this.boot : null)
+    );
+  }
 
   /**
    * Load a SHP file session-wide: register its props + prop scripts and fire

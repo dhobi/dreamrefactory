@@ -562,14 +562,63 @@ export class SetViewer {
       this.movieClick(x, y);
       return;
     }
-    const hit = this.hitTest(x, y);
-    if (!hit) return;
-    const consumed = this.scripts.mouseDown(this.sceneIdx, this.viewIdx, hit.objIdx, hit.obj.identifier);
-    this.onLog(`click ${hit.obj.identifier}${consumed ? "" : " (unhandled)"}`);
+    // props (UI band, inventory items) sit in front of everything
+    const prop = this.session.propRuntime.propAt(x, y);
+    if (prop) {
+      const name = prop.group.name;
+      const inst = this.session.propScripts.get(name.toLowerCase());
+      if (inst?.script.codes.has("mousedown")) {
+        try {
+          this.session.interp.runHandler(inst, "mousedown", [name], { me: name, target: name });
+        } catch (e) {
+          this.onLog(`script error in ${name}.mousedown: ${(e as Error).message}`);
+        }
+        this.onLog(`click prop ${name}`);
+        return;
+      }
+    }
+    // inside the set view: the usual hotspot chain
+    if (this.session.setVisible && this.current && y < this.current.height) {
+      const hit = this.hitTest(x, y);
+      if (hit) {
+        const consumed = this.scripts.mouseDown(this.sceneIdx, this.viewIdx, hit.objIdx, hit.obj.identifier);
+        this.onLog(`click ${hit.obj.identifier}${consumed ? "" : " (unhandled)"}`);
+        return;
+      }
+    }
+    // flat surface: flat script -> stage script
+    const flat = this.session.flatScripts.get(this.session.currentFlat.toLowerCase());
+    const interp = this.session.interp;
+    interp.eventConsumed = false;
+    for (const inst of [flat, this.session.stage]) {
+      if (!inst || !inst.script.codes.has("mousedown")) continue;
+      try {
+        const res = interp.runHandler(inst, "mousedown", [""], { me: inst.name, target: "" });
+        if (interp.eventConsumed || (res.handled && !res.passed)) return;
+      } catch (e) {
+        this.onLog(`script error in ${inst.name}.mousedown: ${(e as Error).message}`);
+      }
+    }
   }
 
   /** returns the DreamFactory cursor name for this position ("" = default) */
   hover(x: number, y: number): string {
+    const prop = this.session.propRuntime.propAt(x, y);
+    if (prop) {
+      const name = prop.group.name;
+      const inst = this.session.propScripts.get(name.toLowerCase());
+      if (inst?.script.codes.has("setcursor")) {
+        this.scripts.cursorName = "";
+        try {
+          this.session.interp.runHandler(inst, "setcursor", [name], { me: name, target: name });
+        } catch {
+          /* cursor is cosmetic */
+        }
+        return this.scripts.cursorName || "touch";
+      }
+      return "touch";
+    }
+    if (!this.session.setVisible || (this.current && y >= this.current.height)) return "";
     const hit = this.hitTest(x, y);
     if (!hit) return "";
     return this.scripts.setCursor(this.sceneIdx, this.viewIdx, hit.objIdx, hit.obj.identifier);
@@ -647,6 +696,34 @@ export class SetViewer {
       this.applyFade(ctx);
       return;
     }
+    // stage flat active: full 512×384 screen — flat image as background,
+    // the set view composited into the top region, props over everything
+    const flat = this.session.flatImage();
+    if (flat) {
+      const canvas = ctx.canvas;
+      if (canvas.width !== flat.width || canvas.height !== flat.height) {
+        canvas.width = flat.width;
+        canvas.height = flat.height;
+      }
+      const img = ctx.createImageData(flat.width, flat.height);
+      indexedToRGBA(flat.pixels, flat.width, flat.height, flat.palette, img.data);
+      const f = this.current;
+      if (this.session.setVisible && f) {
+        const view = new Uint8ClampedArray(f.width * f.height * 4);
+        indexedToRGBA(f.pixels, f.width, f.height, this.palette, view);
+        for (let y = 0; y < f.height && y < flat.height; y++) {
+          img.data.set(view.subarray(y * f.width * 4, (y + 1) * f.width * 4), y * flat.width * 4);
+        }
+      }
+      // during walk/turn animation only the UI band props keep drawing
+      const minAnchorY = this.animation !== null ? (f?.height ?? 0) : -Infinity;
+      const propPal = this.session.setVisible ? this.propPalette : flat.palette;
+      this.session.propRuntime.composite(img.data, flat.width, flat.height, propPal, minAnchorY);
+      ctx.putImageData(img, 0, 0);
+      this.applyFade(ctx);
+      if (this.session.setVisible) this.drawHotspots(ctx);
+      return;
+    }
     const f = this.current;
     if (!f) return;
     const canvas = ctx.canvas;
@@ -661,22 +738,24 @@ export class SetViewer {
     }
     ctx.putImageData(img, 0, 0);
     this.applyFade(ctx);
+    this.drawHotspots(ctx);
+  }
 
-    if (this.showHotspots && this.animation === null) {
-      ctx.save();
-      ctx.strokeStyle = "rgba(255, 220, 120, 0.9)";
-      ctx.fillStyle = "rgba(255, 220, 120, 0.9)";
-      ctx.font = "10px sans-serif";
-      for (const o of this.scene.views[this.viewIdx].objects) {
-        const x = Math.min(o.startRegionX, o.endRegionX);
-        const y = Math.min(o.startRegionY, o.endRegionY);
-        const w = Math.abs(o.endRegionX - o.startRegionX);
-        const h = Math.abs(o.endRegionY - o.startRegionY);
-        ctx.strokeRect(x + 0.5, y + 0.5, w, h);
-        ctx.fillText(o.identifier, x + 2, y + 10);
-      }
-      ctx.restore();
+  private drawHotspots(ctx: CanvasRenderingContext2D): void {
+    if (!this.showHotspots || this.animation !== null) return;
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 220, 120, 0.9)";
+    ctx.fillStyle = "rgba(255, 220, 120, 0.9)";
+    ctx.font = "10px sans-serif";
+    for (const o of this.scene.views[this.viewIdx].objects) {
+      const x = Math.min(o.startRegionX, o.endRegionX);
+      const y = Math.min(o.startRegionY, o.endRegionY);
+      const w = Math.abs(o.endRegionX - o.startRegionX);
+      const h = Math.abs(o.endRegionY - o.startRegionY);
+      ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+      ctx.fillText(o.identifier, x + 2, y + 10);
     }
+    ctx.restore();
   }
 
   /** black overlay for screentoblack/blacktoscreen transitions */

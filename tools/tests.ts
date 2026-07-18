@@ -369,5 +369,60 @@ function runAnimations(v: SetViewer): void {
   check("gstair3 walk up reaches gstair2", state() === "gstair2 Scene17/View49", state());
 }
 
+// --- 14. stage layer: main.stg UI, inventory pickup, inven1 flat ---
+{
+  const { session, viewer } = newSession();
+  session.openSetFile("b59.set");
+  const v = viewer();
+  check(
+    "main stage active with its flat",
+    session.stageName === "main.stg" && session.currentFlat === "main 1",
+    `${session.stageName}/${session.currentFlat}`,
+  );
+  check("flat image decodes 512x384", session.flatImage()?.width === 512 && session.flatImage()?.height === 384);
+  check("UI band lifesaver visible", session.propRuntime.get("life")?.visible === true);
+  // bag/watch live in the C73 world (propxyz) — they must NOT pile into
+  // the band at their screen anchor (user-reported stacking)
+  check(
+    "world-space props stay out of the band",
+    session.propRuntime.get("bag")?.worldSpace === true &&
+      session.propRuntime.get("watch")?.worldSpace === true &&
+      session.propRuntime.propAt(256, 324)?.group.name !== "bag",
+  );
+
+  // pick up an item: inven.shp's addinven puts it in Frank's hand
+  session.interp.globals.set("mission", 1);
+  void v;
+  check("inven shop main resolvable", !!session.shopMain("inven.shp"));
+  session.interp.runHandler(session.shopMain("inven.shp")!, "addinven", ["carkeys"], {
+    me: "inven.shp",
+    target: "",
+  });
+  const keys = session.propRuntime.get("carkeys")!;
+  check(
+    "addinven puts carkeys in hand",
+    session.interp.globals.get("handitem") === "carkeys" && keys.owner === "frank" && keys.visible,
+    `handitem=${session.interp.globals.get("handitem")} owner=${keys.owner} visible=${keys.visible}`,
+  );
+
+  // open the inventory: boot's transtoflat swaps the stage
+  session.runGlobal("transtoflat", ["inven1.stg"]);
+  check(
+    "transtoflat opens inven1",
+    session.stageName === "inven1.stg" && session.currentFlat === "inven 1",
+    `${session.stageName}/${session.currentFlat}`,
+  );
+  check("set hidden behind inventory", !session.setVisible);
+  check("carkeys shown highlighted", keys.visible && keys.stateName === "hilite1", keys.stateName);
+
+  // and back
+  session.runGlobal("transfromflat", []);
+  check(
+    "transfromflat restores main.stg",
+    session.stageName === "main.stg" && session.currentFlat === "main 1",
+    `${session.stageName}/${session.currentFlat}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

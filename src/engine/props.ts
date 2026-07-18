@@ -22,6 +22,19 @@ export class PropInstance {
   owner: string | number = "";
   value: string | number = 0;
   deg: string | number = 0;
+  /** z-order (propdist): more negative = closer to the viewer */
+  dist = 0;
+  /**
+   * placed with propxyz (world coordinates in a set) — not drawable until
+   * world→screen projection is implemented, so the renderer skips these
+   * instead of dumping them at their screen anchor
+   */
+  worldSpace = false;
+  worldX = 0;
+  worldY = 0;
+  worldZ = 0;
+  scale = 0;
+  zclip = 0;
   frameIdx = 0;
   lastTick = 0;
 
@@ -102,16 +115,38 @@ export class PropRuntime {
    * Blit all visible props into an RGBA view buffer, colorizing through the
    * ACTIVE SET's palette (the engine shares one CLUT across set and props).
    */
+  /** visible props with a drawable frame, back-to-front (dist descending) */
+  private drawList(): PropInstance[] {
+    return [...this.props.values()]
+      .filter((p) => p.visible && !p.worldSpace && p.state()?.frames.length)
+      .sort((a, b) => b.dist - a.dist);
+  }
+
+  /** front-most visible prop whose opaque pixels cover (x, y) */
+  propAt(x: number, y: number): PropInstance | null {
+    const list = this.drawList();
+    for (let i = list.length - 1; i >= 0; i--) {
+      const p = list[i];
+      const st = p.state()!;
+      const f = p.shop.frame(st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);
+      const lx = x - (p.anchorX - f.posXraw);
+      const ly = y - (p.anchorY - f.posYraw);
+      if (lx < 0 || ly < 0 || lx >= f.width || ly >= f.height) continue;
+      if (f.opaque[ly * f.width + lx]) return p;
+    }
+    return null;
+  }
+
   composite(
     rgba: Uint8ClampedArray,
     width: number,
     height: number,
     paletteRGBA: Uint8ClampedArray,
+    minAnchorY = -Infinity,
   ): void {
-    for (const p of this.props.values()) {
-      if (!p.visible) continue;
-      const st = p.state();
-      if (!st || !st.frames.length) continue;
+    for (const p of this.drawList()) {
+      if (p.anchorY < minAnchorY) continue;
+      const st = p.state()!;
       const f = p.shop.frame(st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);
       const dx = p.anchorX - f.posXraw;
       const dy = p.anchorY - f.posYraw;

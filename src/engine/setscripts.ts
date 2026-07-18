@@ -220,6 +220,10 @@ export class SetScripts {
     if (this.session.stage && lower === this.session.stage.name.toLowerCase()) {
       return this.session.stage;
     }
+    const shop = this.session.shopMain(lower);
+    if (shop) return shop;
+    const flat = this.session.flatScripts.get(lower);
+    if (flat) return flat;
     if (lower === "boot") return this.session.boot;
     return null;
   }
@@ -252,7 +256,7 @@ export function registerGameBuiltins(session: GameSession): void {
   // sendto*("name", handler(args)): the second argument is a DEFERRED call,
   // executed against the target object's script — not evaluated locally
   for (const cmd of [
-    "sendtoprop", "sendtoactor", "sendtoscene", "sendtoset", "sendtoshop",
+    "sendtoprop", "sendtoactor", "sendtoscene", "sendtoset", "sendtoshop", "sendtoshopfx",
     "sendtopuppet", "sendtocast", "sendtostage", "sendtobutton", "sendtoflat",
     "sendtopainting", "sendtoboot", "sendtopost", "sendtoserver",
   ]) {
@@ -271,7 +275,9 @@ export function registerGameBuiltins(session: GameSession): void {
         log(`${cmd}: no deferred call argument`);
         return 0;
       }
-      let inst = session.currentBinding?.findInstance(targetName) ?? null;
+      let inst =
+        session.currentBinding?.findInstance(targetName) ??
+        session.findGlobalInstance(targetName);
       if (!inst && cmd === "sendtostage") inst = session.stage;
       if (!inst && cmd === "sendtoboot") inst = session.boot;
       // events sent to a scene forward along the containment chain when the
@@ -291,13 +297,28 @@ export function registerGameBuiltins(session: GameSession): void {
       // arguments of the deferred call ARE evaluated in the caller's frame
       const args = deferred.args.map((a) => ip.evalExpr(a, frame));
       let value: Value = 0;
+      let ran = false;
       for (const link of chain) {
+        if (!link.script.codes.has(deferred.name)) continue;
+        ran = true;
         const res = ip.runHandler(link, deferred.name, args, {
           me: link.name,
           target: frame.ctx.me,
         });
         value = res.value;
         if (ip.eventConsumed || (res.handled && !res.passed)) break;
+      }
+      // the target resolves missing handlers like its own unqualified call:
+      // library code runs with me = the target (boot's initprop() etc.)
+      if (!ran && inst) {
+        for (const lib of ip.fallbackScripts) {
+          if (!lib.script.codes.has(deferred.name)) continue;
+          value = ip.runHandler(lib, deferred.name, args, {
+            me: inst.name,
+            target: frame.ctx.me,
+          }).value;
+          break;
+        }
       }
       return value;
     });
@@ -324,11 +345,17 @@ export function registerGameBuiltins(session: GameSession): void {
     session.onNavigate(toStr(dir).toLowerCase());
   });
   r("currentview", () => session.currentViewName());
-  // boot's keydown routing gates on these before forwarding to the scene
-  r("setvisible", () => (session.currentSetName !== "none" ? 1 : 0));
-  r("stagevisible", () => 0);
-  r("currentstage", () => "none");
-  r("currentflat", () => "none");
+  // stage layer (STG flats): the UI band / inventory / mini-game screens
+  r("setvisible", (_i, [v]) => {
+    if (v === undefined) return session.setVisible && session.currentSetName !== "none" ? 1 : 0;
+    session.setVisible = truthy(v);
+  });
+  r("stagevisible", () => (session.stageName !== "none" ? 1 : 0));
+  r("currentstage", () => session.stageName);
+  r("currentflat", () => session.currentFlat);
+  r("openstagefile", (_i, [n]) => (session.openStageFile(toStr(n ?? "")) ? 1 : 0));
+  r("closestagefile", () => session.closeStageFile());
+  r("gotoflat", (_i, [n]) => session.gotoFlat(toStr(n ?? "")));
 
   // prop commands — getter/setter by arity
   const prop = (name: Value) => session.propRuntime.get(toStr(name));
@@ -352,6 +379,29 @@ export function registerGameBuiltins(session: GameSession): void {
     if (!p || x === undefined) return 0;
     p.anchorX = Number(x) || 0;
     p.anchorY = Number(y) || 0;
+    p.worldSpace = false; // screen placement (band/inventory/flat)
+  });
+  // world-space placement in a set (bag on the C73 bed, turkwater...) —
+  // projection is still an open TI.EXE question, values stored for later
+  r("propxyz", (_i, [n, x, y, z]) => {
+    const p = prop(n);
+    if (!p) return 0;
+    p.worldSpace = true;
+    p.worldX = Number(x) || 0;
+    p.worldY = Number(y) || 0;
+    p.worldZ = Number(z) || 0;
+  });
+  r("propscale", (_i, [n, v]) => {
+    const p = prop(n);
+    if (!p) return 0;
+    if (v === undefined) return p.scale;
+    p.scale = Number(v) || 0;
+  });
+  r("propzclip", (_i, [n, v]) => {
+    const p = prop(n);
+    if (!p) return 0;
+    if (v === undefined) return p.zclip;
+    p.zclip = Number(v) || 0;
   });
   r("propowner", (_i, [n, v]) => {
     const p = prop(n);
@@ -365,6 +415,20 @@ export function registerGameBuiltins(session: GameSession): void {
     if (v === undefined) return p.deg;
     p.deg = v;
   });
+  // z-order: more negative = closer to the viewer (inventory items at -11
+  // draw over the UI band at -3)
+  r("propdist", (_i, [n, v]) => {
+    const p = prop(n);
+    if (!p) return 0;
+    if (v === undefined) return p.dist;
+    p.dist = Number(v) || 0;
+  });
+  // shop-scoped enumeration (me = the shop file inside its main script)
+  const myShop = (frame: { ctx: { me: string } }) =>
+    session.propRuntime.shops.get(frame.ctx.me.toLowerCase());
+  r("countprops", (_i, _a, _c, frame) => myShop(frame)?.shp.groups.length ?? 0);
+  r("indextoprop", (_i, [idx], _c, frame) => myShop(frame)?.shp.groups[Number(idx) - 1]?.name ?? "");
+  r("error", (_i, args) => log(`script error(): ${args.map(String).join(", ")}`));
   r("propvalue", (_i, [n, v]) => {
     const p = prop(n);
     if (!p) return 0;
@@ -444,6 +508,7 @@ export function registerGameBuiltins(session: GameSession): void {
     session.fade.snapshot = null;
     session.fade.level = 1;
   });
+  r("currenttheme", () => "none");
   for (const noop of [
     "forceupdate", "flushevents", "hidecursor", "showcursor", "debugger",
     "visualeffect", "mixclut",
