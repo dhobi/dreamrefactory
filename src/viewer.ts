@@ -1,5 +1,6 @@
-import { SetFile, Scene, FrameInfo, Transition, RIGHTTURNS, LEFTTURNS } from "./df/set";
+import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTURNS } from "./df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "./df/image";
+import { SetScripts } from "./engine/setscripts";
 
 /**
  * Navigation state machine over a parsed SET file.
@@ -18,6 +19,14 @@ interface CachedFrame {
 
 const FRAME_MS = 90; // ~11 fps for turn/walk animation, close to the original feel
 
+/** smallest absolute difference between two angles in radians */
+function angularDistance(a: number, b: number): number {
+  const TAU = Math.PI * 2;
+  let d = (a - b) % TAU;
+  if (d < 0) d += TAU;
+  return Math.min(d, TAU - d);
+}
+
 export class SetViewer {
   readonly set: SetFile;
   private palette: Uint8ClampedArray;
@@ -35,12 +44,18 @@ export class SetViewer {
   private current: CachedFrame | null = null;
 
   onHud: (text: string) => void = () => {};
+  onLog: (line: string) => void = () => {};
+  readonly scripts: SetScripts;
 
   constructor(set: SetFile) {
     this.set = set;
     this.palette = paletteToRGBA(set.paletteRaw, set.colorCount);
+    this.scripts = new SetScripts(set);
+    this.scripts.onLog = (l) => this.onLog(l);
     this.predecodeAll();
     this.jumpToDefault();
+    this.scripts.openSet();
+    this.scripts.openScene(this.sceneIdx);
   }
 
   private predecodeAll(): void {
@@ -157,21 +172,73 @@ export class SetViewer {
     const roads = this.availableRoads();
     if (!roads.length) return;
     const { road, register, arriveViewID } = roads[0];
-    const frames = road.frameRegisters[register].frames
+    const reg = road.frameRegisters[register];
+    const frames = reg.frames
       .map((fi) => this.cache.get(fi.frameContainerLoc))
       .filter((f): f is CachedFrame => !!f);
     this.play(frames, () => {
-      // find scene+view owning the arrival global view id
-      for (let s = 0; s < this.set.scenes.length; s++) {
-        const v = this.set.scenes[s].views.findIndex((vw) => vw.viewID === arriveViewID);
-        if (v >= 0) {
-          this.sceneIdx = s;
-          this.viewIdx = v;
-          break;
+      // arrival scene: the register's `destination` is the container index
+      // of the arrival scene's view table; fall back to the scene owning the
+      // road's far-end global view id
+      let sceneIdx = this.set.scenes.findIndex((s) => s.locationViews === reg.destination);
+      if (sceneIdx < 0) {
+        sceneIdx = this.set.scenes.findIndex((s) =>
+          s.views.some((vw) => vw.viewID === arriveViewID),
+        );
+      }
+      if (sceneIdx >= 0) {
+        if (sceneIdx !== this.sceneIdx) {
+          this.scripts.closeScene(this.sceneIdx);
+          this.scripts.openScene(sceneIdx);
         }
+        this.sceneIdx = sceneIdx;
+        // arrival view: keep facing the direction of travel — the road's
+        // endpoint view faces BACK along the road, so match the last walked
+        // frame's camera angle against the scene's view rotations instead
+        const travelDir = reg.frames[reg.frames.length - 1].axisX;
+        const views = this.scene.views;
+        let best = 0;
+        let bestDist = Infinity;
+        for (let v = 0; v < views.length; v++) {
+          const d = angularDistance(views[v].rotation, travelDir);
+          if (d < bestDist) {
+            bestDist = d;
+            best = v;
+          }
+        }
+        this.viewIdx = best;
       }
       this.showView();
     });
+  }
+
+  /** hotspot under the given view-pixel position in the current view */
+  hitTest(x: number, y: number): { objIdx: number; obj: ObjectEntry } | null {
+    if (this.busy) return null;
+    const objects = this.scene.views[this.viewIdx].objects;
+    for (let o = 0; o < objects.length; o++) {
+      const obj = objects[o];
+      const x0 = Math.min(obj.startRegionX, obj.endRegionX);
+      const x1 = Math.max(obj.startRegionX, obj.endRegionX);
+      const y0 = Math.min(obj.startRegionY, obj.endRegionY);
+      const y1 = Math.max(obj.startRegionY, obj.endRegionY);
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) return { objIdx: o, obj };
+    }
+    return null;
+  }
+
+  click(x: number, y: number): void {
+    const hit = this.hitTest(x, y);
+    if (!hit) return;
+    const consumed = this.scripts.mouseDown(this.sceneIdx, this.viewIdx, hit.objIdx, hit.obj.identifier);
+    this.onLog(`click ${hit.obj.identifier}${consumed ? "" : " (unhandled)"}`);
+  }
+
+  /** returns the DreamFactory cursor name for this position ("" = default) */
+  hover(x: number, y: number): string {
+    const hit = this.hitTest(x, y);
+    if (!hit) return "";
+    return this.scripts.setCursor(this.sceneIdx, this.viewIdx, hit.objIdx, hit.obj.identifier);
   }
 
   private play(frames: CachedFrame[], done: () => void): void {

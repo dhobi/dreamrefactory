@@ -16,11 +16,31 @@ const mapCtx = minimap.getContext("2d")!;
 const loadedSets = new Map<string, SetFile>();
 let viewer: SetViewer | null = null;
 
+const scriptlog = document.getElementById("scriptlog") as HTMLPreElement;
+
+function log(line: string): void {
+  scriptlog.style.display = "block";
+  scriptlog.textContent += line + "\n";
+  scriptlog.scrollTop = scriptlog.scrollHeight;
+}
+
+// DreamFactory cursor names -> CSS cursors (refined as more names show up)
+const CURSOR_CSS: Record<string, string> = {
+  touch: "pointer",
+  hand: "grab",
+  take: "grab",
+  turn: "pointer",
+  look: "zoom-in",
+  talk: "help",
+};
+
 function activateSet(name: string): void {
   const set = loadedSets.get(name);
   if (!set) return;
+  scriptlog.textContent = "";
   viewer = new SetViewer(set);
   viewer.onHud = (t) => (hud.textContent = t);
+  viewer.onLog = log;
   viewer.refreshHud();
   drop.style.display = "none";
   stage.style.display = "block";
@@ -88,6 +108,28 @@ document.body.addEventListener("drop", (e) => {
   e.preventDefault();
   drop.classList.remove("hover");
   if (e.dataTransfer?.files) addFiles(e.dataTransfer.files);
+});
+
+/** map a mouse event to view-pixel coordinates on the canvas */
+function canvasCoords(e: MouseEvent): { x: number; y: number } {
+  const rect = screen.getBoundingClientRect();
+  return {
+    x: Math.floor(((e.clientX - rect.left) / rect.width) * screen.width),
+    y: Math.floor(((e.clientY - rect.top) / rect.height) * screen.height),
+  };
+}
+
+screen.addEventListener("click", (e) => {
+  if (!viewer) return;
+  const { x, y } = canvasCoords(e);
+  viewer.click(x, y);
+});
+
+screen.addEventListener("mousemove", (e) => {
+  if (!viewer) return;
+  const { x, y } = canvasCoords(e);
+  const name = viewer.hover(x, y);
+  screen.style.cursor = name ? (CURSOR_CSS[name] ?? "pointer") : "default";
 });
 
 window.addEventListener("keydown", (e) => {

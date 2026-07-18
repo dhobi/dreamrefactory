@@ -4,7 +4,63 @@ Browser port (work in progress) of the CyberFlix **DreamFactory 4.0** engine,
 targeting *Titanic: Adventure Out of Time* (1996) — no DOSBox, a native
 TypeScript reimplementation running on canvas.
 
-## Status: Milestone 1 — SET viewer
+## Status: Milestone 3 — interactive hotspots
+
+The interpreter is wired into the SET viewer:
+
+- `src/engine/setscripts.ts` binds a SET's scripts (main, per-scene,
+  per-view-object) to interpreter instances and dispatches events along the
+  original engine's chain: **object script → scene script → set main script
+  → engine default**, where `passcode` (or a missing handler) forwards.
+- Events fired: `openset`/`closeset`, `openscene`/`closescene`, `mousedown`
+  (canvas click on a hotspot region), `setcursor` (hover; the `cursor(..)`
+  builtin's answer maps to a CSS cursor).
+- `sendto*` commands are implemented as **special forms**: the second
+  argument is a deferred call executed in the *target's* script context
+  (`sendtoprop ("door", setupprop ("b59-hallb"))`), not evaluated locally.
+  Targets resolve within the loaded set; props/stages/puppets from other
+  files log until those loaders exist.
+- Road-arrival fix: a walk register's `destination` field is the container
+  index of the arrival scene's **view table**; the arrival *view* is chosen
+  by matching the last walked frame's camera angle (`axisX`) against the
+  scene's view rotations — the road's endpoint view ID faces *back* along
+  the road and must not be used for arrival facing.
+- The script log panel below the canvas shows script activity, including
+  calls whose semantics aren't implemented yet (`? name(args)`).
+
+## Milestone 2 — script layer
+
+The DreamFactory script system is decoded, parsed, and executing:
+
+- `src/df/script.ts` — script container decoder + decompiler (full 351-command
+  opcode table, validated byte-for-byte against the name→ID table inside
+  TI.EXE at `.data:0x45bxxx`, 6-byte records `{char* name, u16 id}`)
+- `src/engine/parser.ts` — token stream → AST; parses **100%** of the 578
+  script containers (1,631 `code` blocks) in the shipped game files,
+  including original-compiler quirks: `//` comment lines tokenized as two
+  division ops, unterminated blocks, dead statements before the first
+  `case`, and bare-identifier typo lines (`reutrn`)
+- `src/engine/interp.ts` — interpreter core: scopes (global/local),
+  operators (`@` = string concat, `&`/`|` short-circuit logic, case-
+  insensitive string `=`), control flow, `code` handler dispatch with
+  `me`/`target` context and `exitcode`/`passcode`/`return` signals, and a
+  builtin registry where per-command semantics are filled in as recovered
+- verified by `tools/interptest.ts`: runs the blackjack minigame's real
+  `winner()` logic from the original binary `BLKJACK.STG` — 8/8 rule
+  checks pass
+
+Event model (observed from the corpus): every object (set, scene, prop,
+puppet, stage, boot) owns a script whose named `code` handlers receive
+engine events — `openset`, `closeset`, `mousedown`, `setcursor`, `idle` …
+`exitcode` = handled; `passcode` = fall through to the engine default;
+`sendto*("name", handler(args))` invokes a handler in another object's
+script (deferred call, evaluated in the target's context).
+
+Corpus tools: `tools/dumpscripts.ts` (decompile everything + opcode
+frequency), `tools/parsecheck.ts` (AST coverage), `tools/exetable.ts`
+(extract the command table from TI.EXE).
+
+## Milestone 1 — SET viewer
 
 Load original `.SET` files and walk the ship: pre-rendered views, animated
 turning (left/right ring frames), and walking roads between scenes.
