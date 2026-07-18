@@ -227,7 +227,8 @@ async function loadServerSet(setName: string): Promise<void> {
   // prefetch siblings so the viewer finds them synchronously at construction
   await Promise.all(
     [`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`,
-     "unilib.trk", "bootfile", "main.stg"].map(fetchIntoStore),
+     "unilib.trk", "bootfile", "main.stg",
+     "house.shp", "inven.shp", "inven.trk"].map(fetchIntoStore),
   );
   try {
     loadedSets.set(setName, readSetFile(data));

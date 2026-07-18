@@ -1,7 +1,6 @@
 import { SetFile } from "../df/set";
-import { readShpFile } from "../df/shp";
 import { ScriptInstance, Value, toStr, truthy } from "./interp";
-import { GameSession } from "./session";
+import type { GameSession } from "./session";
 
 /** resolves sibling game files (turk.shp etc.) by lowercase basename */
 export type FileProvider = (name: string) => Uint8Array | null;
@@ -24,16 +23,11 @@ export class SetScripts {
   /** cursor name requested by the last setcursor handler */
   cursorName = "";
   onLog: (line: string) => void = () => {};
-  /** script instances of loaded prop groups, by lowercase prop name */
-  private propScripts = new Map<string, ScriptInstance>();
-  /** main-script instances of loaded shops, by shop file name */
-  private shopMains = new Map<string, ScriptInstance | null>();
 
   constructor(
     readonly set: SetFile,
     readonly session: GameSession,
   ) {
-    registerGameBuiltins(session);
     session.currentBinding = this;
     session.currentSetName = set.setName.toLowerCase();
     session.interp.onUnknown = (name, args) =>
@@ -69,24 +63,80 @@ export class SetScripts {
     }
   }
 
+  /** most recently opened scene (for closesetfile's implicit closescene) */
+  lastSceneIdx = -1;
+
+  /**
+   * Lifecycle events run through the chain like keydown: scene script →
+   * set main → stage → boot scripts. Boot's defaults matter — e.g. its
+   * closescene closes any open door (sendtoprop("door", initprop())).
+   */
+  private fireLifecycle(handler: string, sceneIdx: number): void {
+    const interp = this.session.interp;
+    interp.eventConsumed = false;
+    const chain = [
+      sceneIdx >= 0 ? this.sceneScripts[sceneIdx] : null,
+      this.main,
+      this.session.stage,
+      ...this.session.bootScripts,
+    ];
+    for (const inst of chain) {
+      if (!inst) continue;
+      try {
+        interp.runHandler(inst, handler, [], { me: inst.name, target: "" });
+        if (interp.eventConsumed) return;
+      } catch (e) {
+        this.onLog(`script error in ${inst.name}.${handler}: ${(e as Error).message}`);
+      }
+    }
+  }
+
   openSet(): void {
-    this.fire(this.main, "openset", []);
+    this.fireLifecycle("openset", -1);
   }
   closeSet(): void {
-    this.fire(this.main, "closeset", []);
+    // leaving a set also leaves its scene
+    if (this.lastSceneIdx >= 0) this.closeScene(this.lastSceneIdx);
+    this.fireLifecycle("closeset", -1);
   }
   openScene(sceneIdx: number): void {
-    this.fire(this.sceneScripts[sceneIdx], "openscene", []);
+    this.lastSceneIdx = sceneIdx;
+    this.fireLifecycle("openscene", sceneIdx);
   }
   closeScene(sceneIdx: number): void {
-    this.fire(this.sceneScripts[sceneIdx], "closescene", []);
+    this.fireLifecycle("closescene", sceneIdx);
+    this.lastSceneIdx = -1;
+  }
+
+  /**
+   * View change within a scene (turning): run only the BOOT defaults of
+   * closescene — closes open doors/signs, resets the nav arrow — without
+   * the scene script's own scene-exit logic (sounds etc. keep running).
+   */
+  viewChanged(): void {
+    const interp = this.session.interp;
+    interp.eventConsumed = false;
+    for (const inst of this.session.bootScripts) {
+      try {
+        interp.runHandler(inst, "closescene", [], { me: inst.name, target: "" });
+        if (interp.eventConsumed) return;
+      } catch (e) {
+        this.onLog(`script error in ${inst.name}.closescene: ${(e as Error).message}`);
+      }
+    }
   }
 
   objectScript(sceneIdx: number, viewIdx: number, objIdx: number): ScriptInstance | null {
     return this.objectScripts.get(`${sceneIdx}:${viewIdx}:${objIdx}`) ?? null;
   }
 
-  /** the passcode chain: object → scene → set main → stage → boot */
+  /**
+   * Pointer-event chain over a hotspot: object → scene → set main → stage.
+   * A handler that runs to completion (without `passcode`) answers the
+   * event; `passcode`/missing handler forwards. Boot's generic defaults do
+   * NOT run for hotspot events — they'd overwrite e.g. the object's cursor
+   * choice. (keydown works differently: see keyDown.)
+   */
   private fireChain(
     sceneIdx: number,
     viewIdx: number,
@@ -94,21 +144,22 @@ export class SetScripts {
     handler: string,
     identifier: string,
   ): boolean {
+    const interp = this.session.interp;
+    interp.eventConsumed = false;
     const chain = [
       this.objectScript(sceneIdx, viewIdx, objIdx),
       this.sceneScripts[sceneIdx],
       this.main,
       this.session.stage,
-      this.session.boot,
     ];
     for (const inst of chain) {
       if (!inst) continue;
       try {
-        const res = this.session.interp.runHandler(inst, handler, [identifier], {
+        const res = interp.runHandler(inst, handler, [identifier], {
           me: inst.name,
           target: identifier,
         });
-        if (res.handled && !res.passed) return true;
+        if (interp.eventConsumed || (res.handled && !res.passed)) return true;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.${handler}: ${(e as Error).message}`);
       }
@@ -128,28 +179,36 @@ export class SetScripts {
     return this.cursorName;
   }
 
-  /** keyboard event through the chain of the current scene (no object) */
+  /**
+   * Keyboard event. The boot script is the primary receiver — it routes to
+   * the current scene itself via sendtoscene(currentscene(), keydown(arg)).
+   * Returns true when some handler consumed the event with `exitcode`
+   * (a handler merely finishing does NOT suppress the engine default).
+   */
   keyDown(sceneIdx: number, keyName: string): boolean {
-    const chain = [this.sceneScripts[sceneIdx], this.main, this.session.stage, this.session.boot];
+    const interp = this.session.interp;
+    interp.eventConsumed = false;
+    // boot1 routes to the scene itself (sendtoscene); boot2 implements the
+    // default movement. Without a boot script, fall back to scene + main.
+    const chain = this.session.bootScripts.length
+      ? this.session.bootScripts
+      : [this.sceneScripts[sceneIdx], this.main];
     for (const inst of chain) {
       if (!inst) continue;
       try {
-        const res = this.session.interp.runHandler(inst, "keydown", [keyName], {
-          me: inst.name,
-          target: keyName,
-        });
-        if (res.handled && !res.passed) return true;
+        interp.runHandler(inst, "keydown", [keyName], { me: inst.name, target: keyName });
+        if (interp.eventConsumed) break;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.keydown: ${(e as Error).message}`);
       }
     }
-    return false;
+    return interp.eventConsumed;
   }
 
   /** find any script instance in this set by its owner name */
   findInstance(name: string): ScriptInstance | null {
     const lower = name.toLowerCase();
-    const prop = this.propScripts.get(lower);
+    const prop = this.session.propScripts.get(lower);
     if (prop) return prop;
     if (this.main && this.main.name.toLowerCase() === lower) return this.main;
     for (let s = 0; s < this.set.scenes.length; s++) {
@@ -165,56 +224,24 @@ export class SetScripts {
     return null;
   }
 
-  /** load a SHP file: register its props, prop scripts, and fire openshop */
+  /** shops are session-scoped (boot's house.shp survives set changes) */
   openShop(fileName: string): boolean {
-    const key = fileName.toLowerCase();
-    if (this.shopMains.has(key)) return true;
-    const data = this.session.files(key);
-    if (!data) {
-      this.onLog(`openshopfile: "${fileName}" not available`);
-      return false;
-    }
-    let shp;
-    try {
-      shp = readShpFile(data);
-    } catch (e) {
-      this.onLog(`openshopfile: ${fileName}: ${(e as Error).message}`);
-      return false;
-    }
-    this.session.propRuntime.addShop(key, shp);
-    for (const g of shp.groups) {
-      const inst = this.session.instanceFrom(
-        shp.file.containers[g.scriptContainerLocation]?.data,
-        g.name,
-      );
-      if (inst) this.propScripts.set(g.name.toLowerCase(), inst);
-    }
-    const main = this.session.instanceFrom(shp.file.containers[shp.mainScriptLocation]?.data, key);
-    this.shopMains.set(key, main);
-    this.fire(main, "openshop", []);
-    this.onLog(`shop loaded: ${key} (${shp.groups.map((g) => g.name).join(", ")})`);
-    return true;
+    return this.session.openShop(fileName);
   }
 
   closeShop(fileName: string): void {
-    const key = fileName.toLowerCase();
-    const main = this.shopMains.get(key);
-    if (main !== undefined) this.fire(main, "closeshop", []);
-    this.shopMains.delete(key);
-    const shop = this.session.propRuntime.shops.get(key);
-    if (shop) {
-      for (const g of shop.shp.groups) this.propScripts.delete(g.name.toLowerCase());
-    }
-    this.session.propRuntime.removeShop(key);
+    this.session.closeShop(fileName);
   }
 }
 
 /**
  * Register all game builtins on the session interpreter (idempotent).
- * Set-specific commands delegate through session.currentBinding so they
- * always act on the active set.
+ * Called from the GameSession constructor — must happen before any script
+ * runs (shop openshop handlers fire during loadBootResources, before the
+ * first set binding exists). Set-specific commands delegate through
+ * session.currentBinding so they always act on the active set.
  */
-function registerGameBuiltins(session: GameSession): void {
+export function registerGameBuiltins(session: GameSession): void {
   if (session.builtinsRegistered) return;
   session.builtinsRegistered = true;
 
@@ -230,10 +257,18 @@ function registerGameBuiltins(session: GameSession): void {
     "sendtopainting", "sendtoboot", "sendtopost", "sendtoserver",
   ]) {
     interp.registerSpecial(cmd, (ip, argExprs, frame) => {
-      const targetName = toStr(ip.evalExpr(argExprs[0], frame));
-      const deferred = argExprs[1];
+      // sendtostage(call()) / sendtoboot(call()) take the deferred call as
+      // their only argument — the target is implicit
+      let targetName: string;
+      let deferred = argExprs[1];
+      if (argExprs.length === 1 && argExprs[0]?.t === "call") {
+        targetName = cmd === "sendtoboot" ? "boot" : (session.stage?.name ?? "main.stg");
+        deferred = argExprs[0];
+      } else {
+        targetName = toStr(ip.evalExpr(argExprs[0], frame));
+      }
       if (!deferred || deferred.t !== "call") {
-        log(`${cmd}: second argument is not a call`);
+        log(`${cmd}: no deferred call argument`);
         return 0;
       }
       let inst = session.currentBinding?.findInstance(targetName) ?? null;
@@ -264,8 +299,18 @@ function registerGameBuiltins(session: GameSession): void {
     session.currentSetName = "none";
   });
   r("currentset", () => session.currentSetName);
-  r("currentscene", () => session.currentSceneName());
+  // currentscene(dir) is a SETTER too: boot's default keydown implements
+  // movement with currentscene("strait"/"left"/"right")
+  r("currentscene", (_i, [dir]) => {
+    if (dir === undefined) return session.currentSceneName();
+    session.onNavigate(toStr(dir).toLowerCase());
+  });
   r("currentview", () => session.currentViewName());
+  // boot's keydown routing gates on these before forwarding to the scene
+  r("setvisible", () => (session.currentSetName !== "none" ? 1 : 0));
+  r("stagevisible", () => 0);
+  r("currentstage", () => "none");
+  r("currentflat", () => "none");
 
   // prop commands — getter/setter by arity
   const prop = (name: Value) => session.propRuntime.get(toStr(name));
@@ -295,6 +340,12 @@ function registerGameBuiltins(session: GameSession): void {
     if (!p) return "";
     if (v === undefined) return p.owner;
     p.owner = v;
+  });
+  r("propdeg", (_i, [n, v]) => {
+    const p = prop(n);
+    if (!p) return 0;
+    if (v === undefined) return p.deg;
+    p.deg = v;
   });
   r("propvalue", (_i, [n, v]) => {
     const p = prop(n);
@@ -362,7 +413,12 @@ function registerGameBuiltins(session: GameSession): void {
     "forceupdate", "flushevents", "hidecursor", "showcursor", "debugger",
     "visualeffect", "screentoblack", "blacktoscreen", "blackscreen", "mixclut",
     "exportclut", "clut",
+    // ambient loop system — TODO real timers; stubs keep door/prop scripts running
+    "stoploop", "stopcricket", "stopwalk", "pauseloop", "pausecricket", "pausewalk",
   ]) {
     r(noop, () => {});
   }
+  for (const q of ["isloop", "iscricket", "iswalk"]) r(q, () => 0);
+  r("makeloop", (_i, args) => log(`makeloop(${args.map(String).join(", ")}) — loops not implemented yet`));
+  r("makecricket", (_i, args) => log(`makecricket(${args.map(String).join(", ")}) — crickets not implemented yet`));
 }

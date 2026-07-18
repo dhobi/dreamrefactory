@@ -4,7 +4,44 @@ Browser port (work in progress) of the CyberFlix **DreamFactory 4.0** engine,
 targeting *Titanic: Adventure Out of Time* (1996) — no DOSBox, a native
 TypeScript reimplementation running on canvas.
 
-## Status: Milestone 6 — game session & cross-set travel
+## Status: Milestone 6.5 — working doors & the real event model
+
+Clicking a door now opens it (prop appears, `dooropen1-4` plays), and `↑`
+through the open door travels to the next set. Fixes that made it work:
+
+- **Shops are session-scoped**; the boot resources (`house.shp` with 44
+  ship-wide props incl. the 135-state `door` prop, `inven.shp`,
+  `inven.trk`/`unilib.trk`) load at session start, mirroring the boot
+  script. `sendtoprop("door", …)` therefore hits the real prop script.
+- **`sendtostage(call())` / `sendtoboot(call())`** take the deferred call as
+  their only argument (target implicit).
+- **Prop state animations play once and hold** (a door stays open); loops
+  are scripted explicitly via `makeloop` (not yet implemented).
+- **Props colorize through the ACTIVE SET's palette** (shared CLUT — the
+  `clut`/`mixclut` commands exist for this); decoding is palette-independent
+  (`ShpFrame.indexed` + `opaque` mask), colorized at composite time.
+- **The real keyboard event model**: BOOTFILE's two script containers stay
+  separate. Container 1's `keydown` routes to the current scene via
+  `sendtoscene(currentscene(), keydown(arg))`; container 2's `keydown`
+  implements the DEFAULT MOVEMENT via a setter form of `currentscene`
+  (`"strait"` = walk, `"left"`/`"right"` = turn). Events run through the
+  whole chain — normal end and `passcode` both forward — and only an
+  `exitcode` anywhere consumes the event (sticky `interp.eventConsumed`).
+  That's how a scene script suppresses the default walk when sending you
+  through a door. Pointer events over hotspots resolve in the set-level
+  chain (object → scene → main → stage) so boot defaults don't clobber the
+  object's cursor.
+- Mixed-type `=` compares as text (`"uparrow" = 0` must be false).
+- **Doors close on navigation**: lifecycle events (`openset`/`closeset`,
+  `openscene`/`closescene`) run through the same chain as keydown — boot's
+  default `closescene` closes any open door via `sendtoprop("door",
+  initprop())`, which plays the matching `doorclose1-4` in the door's own
+  script. `closesetfile` implies a `closescene` for the departing scene, so
+  props can't survive into the next set. Turning (view change within a
+  scene) fires only the BOOT defaults of `closescene` — the door closes,
+  but the scene script's own exit logic doesn't run on a mere turn.
+
+## Milestone 6 — game session & cross-set travel
 
 The ship is connected: walking through a door in one set loads the next set
 and lands you at the scripted arrival view, with all game state intact.

@@ -153,5 +153,75 @@ function runAnimations(v: SetViewer): void {
   }
 }
 
+// --- 7. door opens: prop becomes visible, sound plays, uparrow travels ---
+{
+  const { session, sink, viewer } = newSession();
+  session.openSetFile("b59.set");
+  let v = viewer();
+  // click the door hotspot in Scene14/View18
+  const obj = v.scene.views[v.viewIdx].objects[0];
+  v.click(
+    Math.floor((obj.startRegionX + obj.endRegionX) / 2),
+    Math.floor((obj.startRegionY + obj.endRegionY) / 2),
+  );
+  const door = session.propRuntime.get("door");
+  check(
+    "door prop opens on click",
+    !!door && door.visible && door.stateName === "b59-hallb",
+    `visible=${door?.visible} state=${door?.stateName}`,
+  );
+  const voice = sink.calls.find((c) => c.channel === "voice");
+  check("dooropen sound plays", !!voice && voice.seconds > 0.1, `${voice?.seconds.toFixed(2)}s`);
+  // with the door open, uparrow is intercepted by the scene script -> hallb
+  const consumed = v.keyDown("uparrow");
+  v = viewer();
+  check(
+    "uparrow through open door travels to hallb",
+    consumed && session.currentSetName === "hallb",
+    `consumed=${consumed} set=${session.currentSetName} ${v.scene.sceneName}/${v.scene.views[v.viewIdx].viewName}`,
+  );
+}
+
+// --- 8. doors close on navigation (boot's default closescene) ---
+{
+  const { session, sink, viewer } = newSession();
+  session.openSetFile("b59.set");
+  let v = viewer();
+  const obj = v.scene.views[v.viewIdx].objects[0];
+  const cx = Math.floor((obj.startRegionX + obj.endRegionX) / 2);
+  const cy = Math.floor((obj.startRegionY + obj.endRegionY) / 2);
+  const door = session.propRuntime.get("door")!;
+
+  // open door, then walk away to another scene in the same set
+  v.click(cx, cy);
+  sink.calls.length = 0;
+  v.jumpTo("Scene14", "View19"); // View19 faces Road34 to Scene15
+  v.walk();
+  let clock = 0;
+  while (v.busy) v.tick((clock += 100));
+  const closedOnWalk = !door.visible;
+  const closeSound = sink.calls.find((c) => c.channel === "voice");
+  check("door closes when walking away", closedOnWalk, `visible=${door.visible}`);
+  check("doorclose sound plays", !!closeSound, `${closeSound?.seconds.toFixed(2) ?? "-"}s`);
+
+  // open again, then just turn: view change must also close the door
+  v.jumpTo("Scene14", "View18");
+  v.click(cx, cy);
+  sink.calls.length = 0;
+  v.turn(0);
+  while (v.busy) v.tick((clock += 100));
+  check("door closes on turn", !door.visible, `visible=${door.visible}`);
+  check("doorclose sound on turn", sink.calls.some((c) => c.channel === "voice"));
+
+  // open again, travel to another set: door must not survive the trip
+  v.jumpTo("Scene14", "View18");
+  v.click(cx, cy);
+  session.interp.runHandler(session.stage!, "gotospecial", ["hallb", "scene29", "view41"], {
+    me: "main.stg",
+    target: "",
+  });
+  check("door closes on set change", !door.visible, `visible=${door.visible}`);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

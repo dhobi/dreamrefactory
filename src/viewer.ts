@@ -31,6 +31,8 @@ function angularDistance(a: number, b: number): number {
 export class SetViewer {
   readonly set: SetFile;
   private palette: Uint8ClampedArray;
+  /** full 256-entry set palette — props colorize through the set's CLUT */
+  private propPalette: Uint8ClampedArray;
   private cache = new Map<number, CachedFrame>();
 
   sceneIdx = 0;
@@ -54,6 +56,7 @@ export class SetViewer {
     this.set = set;
     this.session = session;
     this.palette = paletteToRGBA(set.paletteRaw, set.colorCount);
+    this.propPalette = paletteToRGBA(set.paletteRaw, 256);
     this.scripts = new SetScripts(set, session);
     this.scripts.onLog = (l) => this.onLog(l);
     session.currentSceneName = () => this.scene.sceneName.toLowerCase();
@@ -94,10 +97,23 @@ export class SetViewer {
     return true;
   }
 
-  /** keyboard event into the script chain; true if a script consumed it */
+  /**
+   * Keyboard event into the script chain. Boot's default keydown performs
+   * walking/turning itself via the currentscene() setter (onNavigate), so
+   * the return value covers both "a script exitcoded" and "we navigated".
+   */
   keyDown(keyName: string): boolean {
     if (this.busy) return false;
-    return this.scripts.keyDown(this.sceneIdx, keyName);
+    let navigated = false;
+    this.session.onNavigate = (dir) => {
+      navigated = true;
+      if (dir === "strait") this.walk();
+      else if (dir === "left") this.turn(LEFTTURNS);
+      else if (dir === "right") this.turn(RIGHTTURNS);
+    };
+    const consumed = this.scripts.keyDown(this.sceneIdx, keyName);
+    this.session.onNavigate = () => {};
+    return consumed || navigated;
   }
 
   /** start looping background music if a theme bank is available */
@@ -218,6 +234,7 @@ export class SetViewer {
       }
     }
     this.play(frames, () => {
+      if (target !== this.viewIdx) this.scripts.viewChanged();
       this.viewIdx = target;
       this.showView();
     });
@@ -348,7 +365,7 @@ export class SetViewer {
     const img = ctx.createImageData(f.width, f.height);
     indexedToRGBA(f.pixels, f.width, f.height, this.palette, img.data);
     if (!this.busy) {
-      this.session.propRuntime.composite(img.data, f.width, f.height);
+      this.session.propRuntime.composite(img.data, f.width, f.height, this.propPalette);
     }
     ctx.putImageData(img, 0, 0);
 

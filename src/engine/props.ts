@@ -1,5 +1,4 @@
 import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/shp";
-import { paletteToRGBA } from "../df/image";
 
 /**
  * Runtime state of props loaded from SHP ("shop") files.
@@ -19,9 +18,10 @@ export class PropInstance {
   stateName = "";
   anchorX = DEFAULT_ANCHOR_X;
   anchorY = DEFAULT_ANCHOR_Y;
-  /** free-form script storage (propowner / propvalue) */
+  /** free-form script storage (propowner / propvalue / propdeg) */
   owner: string | number = "";
   value: string | number = 0;
+  deg: string | number = 0;
   frameIdx = 0;
   lastTick = 0;
 
@@ -36,20 +36,17 @@ export class PropInstance {
 }
 
 export class LoadedShop {
-  readonly paletteRGBA: Uint8ClampedArray;
   private frameCache = new Map<number, ShpFrame>();
 
   constructor(
     readonly name: string,
     readonly shp: ShpFile,
-  ) {
-    this.paletteRGBA = paletteToRGBA(shp.paletteRaw, 256);
-  }
+  ) {}
 
   frame(containerLoc: number): ShpFrame {
     let f = this.frameCache.get(containerLoc);
     if (!f) {
-      f = decodeShpFrame(this.shp.file.containers[containerLoc], this.paletteRGBA);
+      f = decodeShpFrame(this.shp.file.containers[containerLoc]);
       this.frameCache.set(containerLoc, f);
     }
     return f;
@@ -82,22 +79,35 @@ export class PropRuntime {
     return this.props.get(String(name).toLowerCase()) ?? null;
   }
 
-  /** advance animations; frameMs matches the viewer's animation cadence */
+  /**
+   * Advance animations; frameMs matches the viewer's animation cadence.
+   * State animations play ONCE and hold the last frame (door opens and
+   * stays open) — continuous animation is scripted explicitly via makeloop.
+   */
   tick(now: number, frameMs: number): void {
     for (const p of this.props.values()) {
       if (!p.visible) continue;
       const st = p.state();
       if (!st || st.frames.length < 2) continue;
+      if (p.frameIdx >= st.frames.length - 1) continue;
       if (!p.lastTick) p.lastTick = now;
       if (now - p.lastTick >= frameMs) {
         p.lastTick = now;
-        p.frameIdx = (p.frameIdx + 1) % st.frames.length;
+        p.frameIdx++;
       }
     }
   }
 
-  /** alpha-blit all visible props into an RGBA view buffer */
-  composite(rgba: Uint8ClampedArray, width: number, height: number): void {
+  /**
+   * Blit all visible props into an RGBA view buffer, colorizing through the
+   * ACTIVE SET's palette (the engine shares one CLUT across set and props).
+   */
+  composite(
+    rgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+    paletteRGBA: Uint8ClampedArray,
+  ): void {
     for (const p of this.props.values()) {
       if (!p.visible) continue;
       const st = p.state();
@@ -111,12 +121,13 @@ export class PropRuntime {
         for (let x = 0; x < f.width; x++) {
           const tx = dx + x;
           if (tx < 0 || tx >= width) continue;
-          const s = (y * f.width + x) * 4;
-          if (f.rgba[s + 3] === 0) continue;
+          const s = y * f.width + x;
+          if (!f.opaque[s]) continue;
+          const pal = f.indexed[s] * 4;
           const d = (ty * width + tx) * 4;
-          rgba[d] = f.rgba[s];
-          rgba[d + 1] = f.rgba[s + 1];
-          rgba[d + 2] = f.rgba[s + 2];
+          rgba[d] = paletteRGBA[pal];
+          rgba[d + 1] = paletteRGBA[pal + 1];
+          rgba[d + 2] = paletteRGBA[pal + 2];
         }
       }
     }

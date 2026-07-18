@@ -91,17 +91,19 @@ export interface ShpFrame {
   /** raw stored position shorts (Y first, X second, center-relative) */
   posYraw: number;
   posXraw: number;
-  /** RGBA pixels with transparency */
-  rgba: Uint8ClampedArray;
+  /** palette indexes, width*height */
+  indexed: Uint8Array;
+  /** 1 = opaque, 0 = transparent, width*height */
+  opaque: Uint8Array;
 }
 
 /**
  * Transparent-image codec used by SHP/STG/prop frames.
- * Port of DFfile::writeTransPNGimage. Palette color (0xFF,0xFF,0xFF) in the
- * raw table marks pure white handled specially by dfet; here every palette
- * index maps through paletteRGBA and flag-runs become transparent pixels.
+ * Port of DFfile::writeTransPNGimage, kept palette-independent: props are
+ * colorized at composite time with the ACTIVE SET's palette (the engine
+ * shares one CLUT — see the clut/mixclut script commands).
  */
-export function decodeShpFrame(container: Container, paletteRGBA: Uint8ClampedArray): ShpFrame {
+export function decodeShpFrame(container: Container): ShpFrame {
   const data = container.data;
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const height = view.getInt16(0, true);
@@ -109,17 +111,10 @@ export function decodeShpFrame(container: Container, paletteRGBA: Uint8ClampedAr
   const posYraw = view.getInt16(4, true);
   const posXraw = view.getInt16(6, true);
 
-  const rgba = new Uint8ClampedArray(width * height * 4);
+  const indexed = new Uint8Array(width * height);
+  const opaque = new Uint8Array(width * height);
   let inPos = 8;
   let outPos = 0;
-
-  const emit = (palIdx: number) => {
-    const p = palIdx * 4;
-    rgba[outPos++] = paletteRGBA[p];
-    rgba[outPos++] = paletteRGBA[p + 1];
-    rgba[outPos++] = paletteRGBA[p + 2];
-    rgba[outPos++] = 255;
-  };
 
   for (let row = 0; row < height; row++) {
     const segmentSize = view.getInt16(inPos, true);
@@ -131,24 +126,30 @@ export function decodeShpFrame(container: Container, paletteRGBA: Uint8ClampedAr
       if (flag & 1) {
         if (flag & 2) {
           // literal run: copy `count` palette pixels
-          for (let i = 0; i < count; i++) emit(data[inPos++]);
+          for (let i = 0; i < count; i++) {
+            indexed[outPos] = data[inPos++];
+            opaque[outPos++] = 1;
+          }
         } else {
           // transparent run
-          outPos += count * 4;
+          outPos += count;
         }
       } else {
         if (flag & 2) {
           // repeat one palette pixel `count` times
-          for (let i = 0; i < count; i++) emit(data[inPos]);
+          indexed.fill(data[inPos], outPos, outPos + count);
+          opaque.fill(1, outPos, outPos + count);
+          outPos += count;
           inPos++;
         } else {
           // copy from previous row
-          rgba.copyWithin(outPos, outPos - width * 4, outPos - width * 4 + count * 4);
-          outPos += count * 4;
+          indexed.copyWithin(outPos, outPos - width, outPos - width + count);
+          opaque.copyWithin(outPos, outPos - width, outPos - width + count);
+          outPos += count;
         }
       }
     }
   }
 
-  return { width, height, posYraw, posXraw, rgba };
+  return { width, height, posYraw, posXraw, indexed, opaque };
 }

@@ -69,6 +69,13 @@ export class Interpreter {
    * (changeset, spotmovie, progress, setupactor, ...).
    */
   fallbackScripts: ScriptInstance[] = [];
+  /**
+   * Sticky per-event flag: set whenever any handler run during the current
+   * dispatch executes `exitcode`. The engine default action (e.g. walking on
+   * uparrow) runs only when NO handler exitcoded — a handler merely ending
+   * (like boot's keydown after routing) does not consume the event.
+   */
+  eventConsumed = false;
   private unknownLogged = new Set<string>();
 
   /** trace of builtin calls with no registered semantics (for development) */
@@ -171,6 +178,7 @@ export class Interpreter {
         return NORMAL;
       }
       case "exitcode":
+        this.eventConsumed = true;
         return { s: "exitcode" };
       case "passcode":
         return { s: "passcode" };
@@ -283,10 +291,10 @@ export function toStr(v: Value): string {
   return typeof v === "string" ? v : String(v);
 }
 export function valueEq(a: Value, b: Value): boolean {
-  if (typeof a === "string" && typeof b === "string") {
-    return a.toLowerCase() === b.toLowerCase(); // scripts mix case freely
-  }
-  return toNum(a) === toNum(b);
+  if (typeof a === "number" && typeof b === "number") return a === b;
+  // mixed / string comparison is by text, case-insensitive (scripts mix case
+  // freely); comparing numerically would make "uparrow" = 0 true
+  return toStr(a).toLowerCase() === toStr(b).toLowerCase();
 }
 
 /** obviously-semantic builtins that need no reverse engineering */

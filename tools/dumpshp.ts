@@ -23,10 +23,19 @@ for (const g of shp.groups) {
   for (const s of g.states) {
     console.log(`    state "${s.identifier}": ${s.frames.length} frame(s)`);
     if (dumped < 12 && s.frames.length) {
-      const f = decodeShpFrame(shp.file.containers[s.frames[0]], pal);
+      const f = decodeShpFrame(shp.file.containers[s.frames[0]]);
+      const rgba = new Uint8ClampedArray(f.width * f.height * 4);
+      for (let i = 0; i < f.width * f.height; i++) {
+        if (!f.opaque[i]) continue;
+        const p = f.indexed[i] * 4;
+        rgba[i * 4] = pal[p];
+        rgba[i * 4 + 1] = pal[p + 1];
+        rgba[i * 4 + 2] = pal[p + 2];
+        rgba[i * 4 + 3] = 255;
+      }
       writeFileSync(
         join(outDir, `${g.name}_${s.identifier}.png`.replace(/[^\w.-]/g, "_")),
-        encodePNG(f.rgba, f.width, f.height),
+        encodePNG(rgba, f.width, f.height),
       );
       console.log(`      -> ${f.width}x${f.height} posRaw(y=${f.posYraw}, x=${f.posXraw})`);
       dumped++;
