@@ -223,5 +223,57 @@ function runAnimations(v: SetViewer): void {
   check("door closes on set change", !door.visible, `visible=${door.visible}`);
 }
 
+// --- 9. movies: boot's spotmovie -> playmovie builtin -> viewer playback ---
+{
+  const { session, viewer } = newSession();
+  session.openSetFile("turk.set");
+  const v = viewer();
+  session.runGlobal("spotmovie", ["turknmes.mov"]);
+  check("spotmovie starts playback", v.moviePlaying);
+  let clock = 0;
+  const settle9 = () => {
+    for (let i = 0; i < 30 && v.moviePlaying; i++) v.tick((clock += 250));
+  };
+  settle9();
+  check("interactive movie opens on a still", v.moviePlaying);
+  v.click(10, 10); // anywhere except OK: starts playback
+  settle9();
+  check("click starts it, pauses at OK frame", v.moviePlaying);
+  v.click(458, 350); // on the OK button (region 431..485 x 339..362)
+  settle9();
+  check("OK click resumes and movie ends", !v.moviePlaying);
+}
+
+// --- 10. movie zoom cycle (MENU.MOV): paper toggles zoom, only OK leaves ---
+{
+  const { session, viewer } = newSession();
+  session.openSetFile("turk.set"); // any set; movie loads via provider
+  const v = viewer();
+  v.playMovie("menu.mov");
+  let clock = 0;
+  const settle = () => {
+    for (let i = 0; i < 30 && v.moviePlaying; i++) v.tick((clock += 250));
+  };
+  settle();
+  check("menu opens on a still", v.moviePlaying);
+  v.click(460, 350); // OK on the initial still -> leave immediately
+  check("OK on initial still leaves", !v.moviePlaying);
+
+  v.playMovie("menu.mov");
+  settle();
+  v.click(100, 100); // start playback
+  settle();
+  check("menu pauses at first pause frame", v.moviePlaying);
+  v.click(280, 210); // the menu paper -> zoom in
+  settle();
+  check("paper click zooms (still in movie)", v.moviePlaying);
+  v.click(250, 200); // zoomed paper -> zoom back out
+  settle();
+  check("second paper click unzooms, does NOT leave", v.moviePlaying);
+  v.click(460, 350); // OK button
+  settle();
+  check("OK leaves the menu movie", !v.moviePlaying);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

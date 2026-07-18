@@ -135,6 +135,16 @@ function activateSet(name: string, startScene = "", startView = ""): void {
   viewer = new SetViewer(set, session, startScene, startView);
   viewer.onHud = (t) => (hud.textContent = t);
   viewer.onLog = log;
+  // movies aren't prefetched: fetch on demand, then play
+  session.onPlayMovie = (name) => {
+    const v = viewer;
+    if (!v) return;
+    if (fileStore.has(name.toLowerCase())) {
+      void v.playMovie(name);
+    } else {
+      void fetchIntoStore(name.toLowerCase()).then((d) => d && v.playMovie(name));
+    }
+  };
   viewer.refreshHud();
   drop.style.display = "none";
   stage.style.display = "block";

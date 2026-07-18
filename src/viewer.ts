@@ -1,5 +1,7 @@
 import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTURNS } from "./df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "./df/image";
+import { MovClickRegion, readMovFile } from "./df/mov";
+import { decodeAudioContainer } from "./df/audio";
 import { SetScripts } from "./engine/setscripts";
 import { GameSession } from "./engine/session";
 
@@ -46,6 +48,29 @@ export class SetViewer {
   private lastTick = 0;
   private current: CachedFrame | null = null;
 
+  /** active movie playback (cutscene / object close-up) */
+  private movie: {
+    frames: CachedFrame[];
+    /** per-frame click regions — playback pauses on frames that have any */
+    regions: MovClickRegion[][];
+    kinds: number[];
+    firstRegionIdx: number;
+    lastRegionIdx: number;
+    regionFrameCount: number;
+    palette: Uint8ClampedArray;
+    pos: number;
+    /** ms per frame; 0 = wait for clicks (click-through object movies) */
+    interval: number;
+    lastTick: number;
+    /** holding on a click-region frame (e.g. an OK button) */
+    paused: boolean;
+    /**
+     * initial: waiting still, a click starts playback · intro: play to
+     * first pause · cycle: wrap between pauses · exit: play out
+     */
+    mode: "initial" | "intro" | "cycle" | "exit";
+  } | null = null;
+
   onHud: (text: string) => void = () => {};
   onLog: (line: string) => void = () => {};
   readonly scripts: SetScripts;
@@ -61,6 +86,7 @@ export class SetViewer {
     this.scripts.onLog = (l) => this.onLog(l);
     session.currentSceneName = () => this.scene.sceneName.toLowerCase();
     session.currentViewName = () => this.scene.views[this.viewIdx].viewName.toLowerCase();
+    session.onPlayMovie = (name) => void this.playMovie(name);
     this.predecodeAll();
     this.jumpToDefault();
     if (startScene) this.jumpTo(startScene, startView);
@@ -114,6 +140,181 @@ export class SetViewer {
     const consumed = this.scripts.keyDown(this.sceneIdx, keyName);
     this.session.onNavigate = () => {};
     return consumed || navigated;
+  }
+
+  /**
+   * Play a MOV file full-screen. With a soundtrack, frames pace themselves
+   * over its duration; without one, clicks step through the frames
+   * (object close-ups like inspection views).
+   */
+  playMovie(fileName: string): boolean {
+    const data = this.session.files(fileName.toLowerCase());
+    if (!data) {
+      this.onLog(`playmovie: "${fileName}" not available`);
+      return false;
+    }
+    let mov;
+    try {
+      mov = readMovFile(data);
+    } catch (e) {
+      this.onLog(`playmovie: ${fileName}: ${(e as Error).message}`);
+      return false;
+    }
+    // frames are delta-encoded: decode all in order
+    const fb = new FrameBuffer();
+    const frames: CachedFrame[] = [];
+    for (const f of mov.frames) {
+      const d = decodeFrame(mov.file.containers[f.locationFrame], fb);
+      frames.push({
+        pixels: fb.pixels.slice(0, d.width * d.height),
+        width: d.width,
+        height: d.height,
+      });
+    }
+    if (!frames.length) return false;
+
+    // soundtrack: concatenate the ordered chunks, play once
+    let audioSec = 0;
+    if (mov.audioChunks.length) {
+      const parts = mov.audioChunks.map((loc) => decodeAudioContainer(mov.file.containers[loc]));
+      const total = parts.reduce((a, p) => a + p.samples.length, 0);
+      const samples = new Float32Array(total);
+      let off = 0;
+      for (const p of parts) {
+        samples.set(p.samples, off);
+        off += p.samples.length;
+      }
+      const sampleRate = Math.max(...parts.map((p) => p.sampleRate));
+      audioSec = total / sampleRate;
+      this.session.audio.play("voice", { sampleRate, samples });
+    }
+
+    const regions = mov.frames.map((f) => f.regions);
+    const kinds = mov.frames.map((f) => f.kind);
+    const regionIdxs = regions.map((r, i) => (r.length ? i : -1)).filter((i) => i >= 0);
+    const hasPausePoints = regionIdxs.length > 0;
+    // pacing: soundtrack duration when present; otherwise animate at a
+    // default rate if there are pause points, else pure click-through
+    const interval =
+      audioSec > 0 ? (audioSec * 1000) / frames.length : hasPausePoints ? 200 : 0;
+    this.movie = {
+      frames,
+      regions,
+      kinds,
+      firstRegionIdx: regionIdxs[0] ?? -1,
+      lastRegionIdx: regionIdxs[regionIdxs.length - 1] ?? -1,
+      regionFrameCount: regionIdxs.length,
+      palette: paletteToRGBA(mov.paletteRaw, 256),
+      pos: 0,
+      interval,
+      lastTick: 0,
+      // interactive movies open on a still and wait for a click to start;
+      // plain cutscenes (no regions) auto-play
+      paused: hasPausePoints,
+      mode: hasPausePoints ? "initial" : "intro",
+    };
+    this.onLog(
+      `movie: ${fileName} (${frames.length} frames${audioSec ? `, ${audioSec.toFixed(1)}s audio` : ""}${hasPausePoints ? ", waits for click" : ""})`,
+    );
+    return true;
+  }
+
+  get moviePlaying(): boolean {
+    return this.movie !== null;
+  }
+
+  /** click during a movie: resume from a pause point / advance / dismiss */
+  private movieClick(x: number, y: number): void {
+    const m = this.movie;
+    if (!m) return;
+    if (m.mode === "initial") {
+      // waiting still: OK (a leave-action region of the first pause frame,
+      // whose button is already visible) exits; any other click starts it
+      const okHit = m.regions[m.firstRegionIdx]?.some(
+        (r) =>
+          r.action === 1 &&
+          x >= Math.min(r.x0, r.x1) && x <= Math.max(r.x0, r.x1) &&
+          y >= Math.min(r.y0, r.y1) && y <= Math.max(r.y0, r.y1),
+      );
+      this.onLog(`movie click (${x},${y})${okHit ? " on OK -> leave" : " -> start"}`);
+      if (okHit) {
+        this.endMovie();
+        return;
+      }
+      m.mode = "intro";
+      m.paused = false;
+      m.lastTick = 0;
+      return;
+    }
+    if (m.paused) {
+      // waiting on a click-region frame: only a region hit does anything
+      const region = m.regions[m.pos].find(
+        (r) =>
+          x >= Math.min(r.x0, r.x1) && x <= Math.max(r.x0, r.x1) &&
+          y >= Math.min(r.y0, r.y1) && y <= Math.max(r.y0, r.y1),
+      );
+      this.onLog(
+        `movie click (${x},${y}) frame ${m.pos}${region ? ` -> action ${region.action}` : " (no region hit)"}`,
+      );
+      if (!region) return;
+      if (region.sound) {
+        const snd = this.session.audioLib.sound(region.sound);
+        if (snd) this.session.audio.play("sound", snd);
+      }
+      m.paused = false;
+      m.lastTick = 0;
+      if (m.interval === 0) m.interval = 200;
+      if (region.action === 1) {
+        // leave: jump to the exit segment (after the last pause frame; with
+        // multiple pauses, the transition frames there belong to the cycle)
+        let exit = m.lastRegionIdx + 1;
+        if (m.regionFrameCount >= 2) {
+          while (exit < m.frames.length && m.kinds[exit] === 2 && !m.regions[exit].length) exit++;
+        }
+        if (exit >= m.frames.length) {
+          this.endMovie();
+          return;
+        }
+        m.pos = exit;
+        m.mode = "exit";
+      } else {
+        // cycle: animate to the next pause frame (or wrap back to the first)
+        m.mode = "cycle";
+      }
+      return;
+    }
+    // pure click-through movies (no regions anywhere)
+    if (m.regionFrameCount === 0) {
+      m.pos++;
+      if (m.pos >= m.frames.length) this.endMovie();
+    }
+  }
+
+  /** advance one movie frame according to the playback mode */
+  private movieAdvance(): void {
+    const m = this.movie;
+    if (!m) return;
+    const next = m.pos + 1;
+    if (m.mode === "cycle") {
+      // cycle segment: transition (kind 2) frames run; anything else wraps
+      // back to the first pause frame without playing the exit animation
+      if (next >= m.frames.length || (!m.regions[next].length && m.kinds[next] !== 2)) {
+        m.pos = m.firstRegionIdx;
+        m.paused = true;
+        return;
+      }
+    } else if (next >= m.frames.length) {
+      this.endMovie();
+      return;
+    }
+    m.pos = next;
+    if (m.mode !== "exit" && m.regions[next].length) m.paused = true;
+  }
+
+  private endMovie(): void {
+    this.movie = null;
+    this.session.audio.halt("voice");
+    this.showView();
   }
 
   /** start looping background music if a theme bank is available */
@@ -211,7 +412,7 @@ export class SetViewer {
   }
 
   get busy(): boolean {
-    return this.animation !== null;
+    return this.animation !== null || this.movie !== null;
   }
 
   /** dir: RIGHTTURNS or LEFTTURNS */
@@ -311,6 +512,10 @@ export class SetViewer {
   }
 
   click(x: number, y: number): void {
+    if (this.movie) {
+      this.movieClick(x, y);
+      return;
+    }
     const hit = this.hitTest(x, y);
     if (!hit) return;
     const consumed = this.scripts.mouseDown(this.sceneIdx, this.viewIdx, hit.objIdx, hit.obj.identifier);
@@ -338,6 +543,17 @@ export class SetViewer {
   /** advance animation; returns the frame to draw this tick */
   tick(now: number): CachedFrame | null {
     this.session.propRuntime.tick(now, FRAME_MS);
+    if (this.movie) {
+      const m = this.movie;
+      if (m.interval > 0 && !m.paused) {
+        if (!m.lastTick) m.lastTick = now;
+        if (now - m.lastTick >= m.interval) {
+          m.lastTick = now;
+          this.movieAdvance();
+        }
+      }
+      return this.movie ? this.movie.frames[this.movie.pos] : this.current;
+    }
     if (this.animation) {
       if (!this.lastTick) this.lastTick = now;
       if (now - this.lastTick >= FRAME_MS) {
@@ -355,6 +571,19 @@ export class SetViewer {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
+    if (this.movie) {
+      const m = this.movie;
+      const f = m.frames[Math.min(m.pos, m.frames.length - 1)];
+      const canvas = ctx.canvas;
+      if (canvas.width !== f.width || canvas.height !== f.height) {
+        canvas.width = f.width;
+        canvas.height = f.height;
+      }
+      const img = ctx.createImageData(f.width, f.height);
+      indexedToRGBA(f.pixels, f.width, f.height, m.palette, img.data);
+      ctx.putImageData(img, 0, 0);
+      return;
+    }
     const f = this.current;
     if (!f) return;
     const canvas = ctx.canvas;

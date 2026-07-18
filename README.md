@@ -4,7 +4,33 @@ Browser port (work in progress) of the CyberFlix **DreamFactory 4.0** engine,
 targeting *Titanic: Adventure Out of Time* (1996) — no DOSBox, a native
 TypeScript reimplementation running on canvas.
 
-## Status: Milestone 6.5 — working doors & the real event model
+## Status: Milestone 7 — movies (MOV)
+
+- `src/df/mov.ts` — MOV parser: 256-color palette, frame table @0x870
+  (42-byte records, keyframe flag), frames in the SET delta codec; audio
+  from the loop-chunk table (container 1) or, for play-once cutscene
+  audio, the non-looping chunk block referenced at header +0x60 (42-byte
+  records, 31-char names).
+- Viewer movie mode: full-screen playback, input blocked while playing.
+  With a soundtrack, frames pace themselves across its duration; without
+  one, clicks step through (object close-ups — e.g. the Turkish-bath
+  mirror with its baked-in OK button). Click also skips/advances.
+- `playmovie` builtin → session hook (browser fetches the MOV on demand);
+  boot's `spotmovie` helper (premovie/playmovie/postmovie) works through
+  standard fallback resolution. `session.runGlobal(name, args)` invokes
+  stage/boot library handlers the way unqualified calls resolve.
+- **Pause points & region actions**: the MOV frame-logic tables (@1090 in
+  each frame's click-region container, 64-byte records, coords Y-first)
+  define click regions with an **action** (i16 @+6: 0 = cycle to the next
+  pause frame, 1 = leave the movie) and a pascal **event-sound name** @+16
+  (page rustles). Playback pauses on region frames; a 0-action click plays
+  the kind-2 transition frames to the next pause or wraps back to the
+  first (menu zoom in/out), a 1-action click (OK) jumps to the exit
+  segment and dismisses. Verified against MENU.MOV and TURKNMES.MOV.
+- Not yet: per-frame event sounds from the frame-logic tables (precise
+  cutscene audio sync).
+
+## Milestone 6.5 — working doors & the real event model
 
 Clicking a door now opens it (prop appears, `dooropen1-4` plays), and `↑`
 through the open door travels to the next set. Fixes that made it work:

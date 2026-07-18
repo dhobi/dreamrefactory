@@ -3,7 +3,7 @@ import { SetFile, readSetFile } from "../df/set";
 import { readShpFile } from "../df/shp";
 import { sniffScript } from "../df/script";
 import { parseScript } from "./parser";
-import { Interpreter, ScriptInstance, registerCoreBuiltins, toStr } from "./interp";
+import { Interpreter, ScriptInstance, Value, registerCoreBuiltins, toStr } from "./interp";
 import { PropRuntime } from "./props";
 import { AudioLibrary, AudioSink, NullAudioSink } from "./audio";
 import { FileProvider, registerGameBuiltins } from "./setscripts";
@@ -104,6 +104,22 @@ export class GameSession {
 
   /** host hook: default navigation from boot's keydown (currentscene setter) */
   onNavigate: (direction: string) => void = () => {};
+  /** host hook: playmovie builtin (viewer plays it; browser may fetch first) */
+  onPlayMovie: (fileName: string) => void = () => {};
+
+  /**
+   * Invoke a globally-callable handler (stage/boot standard library) the way
+   * unqualified script calls resolve — first fallback script that defines it.
+   */
+  runGlobal(handler: string, args: Value[] = []): Value {
+    for (const inst of this.interp.fallbackScripts) {
+      if (inst.script.codes.has(handler)) {
+        return this.interp.runHandler(inst, handler, args, { me: inst.name, target: "" }).value;
+      }
+    }
+    this.onLog(`runGlobal: no handler "${handler}"`);
+    return 0;
+  }
 
   /** engine primitive behind boot's changeset(): switch to another set */
   openSetFile(fileName: string, sceneName = "", viewName = ""): void {

@@ -353,6 +353,9 @@ export function registerGameBuiltins(session: GameSession): void {
     if (v === undefined) return p.value;
     p.value = v;
   });
+  r("playmovie", (_i, [n]) => {
+    session.onPlayMovie(toStr(n ?? ""));
+  });
   r("openshopfile", (_i, [n]) => {
     session.currentBinding?.openShop(toStr(n));
   });
