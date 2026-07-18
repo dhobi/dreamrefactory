@@ -274,14 +274,32 @@ export function registerGameBuiltins(session: GameSession): void {
       let inst = session.currentBinding?.findInstance(targetName) ?? null;
       if (!inst && cmd === "sendtostage") inst = session.stage;
       if (!inst && cmd === "sendtoboot") inst = session.boot;
-      if (!inst) {
+      // events sent to a scene forward along the containment chain when the
+      // scene leaves them unhandled or passes — or has no script at all
+      // (gstair keydown interceptors live in the set MAIN script; scene13
+      // itself has no script container)
+      const chain = inst ? [inst] : [];
+      if (cmd === "sendtoscene" || cmd === "sendtoset") {
+        const main = session.currentBinding?.main;
+        if (main && main !== inst) chain.push(main);
+        if (session.stage && session.stage !== inst) chain.push(session.stage);
+      }
+      if (!chain.length) {
         log(`${cmd}("${targetName}", ${deferred.name}(..)) — target not loaded`);
         return 0;
       }
       // arguments of the deferred call ARE evaluated in the caller's frame
       const args = deferred.args.map((a) => ip.evalExpr(a, frame));
-      return ip.runHandler(inst, deferred.name, args, { me: inst.name, target: frame.ctx.me })
-        .value;
+      let value: Value = 0;
+      for (const link of chain) {
+        const res = ip.runHandler(link, deferred.name, args, {
+          me: link.name,
+          target: frame.ctx.me,
+        });
+        value = res.value;
+        if (ip.eventConsumed || (res.handled && !res.passed)) break;
+      }
+      return value;
     });
   }
 
@@ -412,9 +430,23 @@ export function registerGameBuiltins(session: GameSession): void {
   ]) {
     r(t, () => t);
   }
+  // screen fades — gotospecial wraps set changes in screentoblack/
+  // blacktoscreen; without them stair transitions look like nothing moved
+  r("screentoblack", (_i, [, steps]) => {
+    if (!session.fade.snapshot) session.fade.snapshot = session.captureFrame?.() ?? null;
+    session.fade.queue.push({ to: 1, steps: Math.max(1, Number(steps) || 10) });
+  });
+  r("blacktoscreen", (_i, [, steps]) => {
+    session.fade.queue.push({ to: 0, steps: Math.max(1, Number(steps) || 10) });
+  });
+  r("blackscreen", () => {
+    session.fade.queue.length = 0;
+    session.fade.snapshot = null;
+    session.fade.level = 1;
+  });
   for (const noop of [
     "forceupdate", "flushevents", "hidecursor", "showcursor", "debugger",
-    "visualeffect", "screentoblack", "blacktoscreen", "blackscreen", "mixclut",
+    "visualeffect", "mixclut",
     "exportclut", "clut",
     // ambient loop system — TODO real timers; stubs keep door/prop scripts running
     "stoploop", "stopcricket", "stopwalk", "pauseloop", "pausecricket", "pausewalk",

@@ -333,5 +333,41 @@ function runAnimations(v: SetViewer): void {
   check("corner click leaves the faucet movie", !v.moviePlaying);
 }
 
+// --- 13. grand staircase: deck flips + cross-set travel (user-reported) ---
+{
+  const { session, viewer } = newSession();
+  const state = () => {
+    const v = viewer();
+    return `${session.currentSetName} ${v.scene.sceneName}/${v.scene.views[v.viewIdx].viewName}`;
+  };
+  // B deck, down the stairs: keydown interceptor lives in the SET MAIN
+  // script (scene13 has no script container); its changeset targets the
+  // shipped typo "view79" — facing-continuity fallback lands on View69
+  session.openSetFile("gstair3.set");
+  session.interp.globals.set("savedeck", "b");
+  viewer().jumpTo("Scene13", "View33");
+  viewer().keyDown("uparrow");
+  runAnimations(viewer());
+  check(
+    "gstair3 B-deck stairs flip to C deck",
+    state() === "gstair3 Scene65/View69" && session.interp.globals.get("savedeck") === "c",
+    `${state()} savedeck=${session.interp.globals.get("savedeck")}`,
+  );
+  // C deck, down again: leads to the reception set
+  session.openSetFile("gstair3.set");
+  session.interp.globals.set("savedeck", "c");
+  viewer().jumpTo("Scene13", "View33");
+  viewer().keyDown("uparrow");
+  runAnimations(viewer());
+  check("gstair3 C-deck stairs reach recept1c", state() === "recept1c Scene102/View104", state());
+  // B deck, walk UP: road to Scene64, arrival openscene forwards to gstair2
+  session.openSetFile("gstair3.set");
+  session.interp.globals.set("savedeck", "b");
+  viewer().jumpTo("Scene50", "View54");
+  viewer().walk();
+  runAnimations(viewer());
+  check("gstair3 walk up reaches gstair2", state() === "gstair2 Scene17/View49", state());
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

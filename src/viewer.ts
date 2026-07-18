@@ -85,6 +85,14 @@ export class SetViewer {
     this.scripts.onLog = (l) => this.onLog(l);
     session.currentSceneName = () => this.scene.sceneName.toLowerCase();
     session.currentViewName = () => this.scene.views[this.viewIdx].viewName.toLowerCase();
+    session.currentRotation = () => this.scene.views[this.viewIdx].rotation;
+    session.captureFrame = () => {
+      const f = this.current;
+      if (!f) return null;
+      const rgba = new Uint8ClampedArray(f.width * f.height * 4);
+      indexedToRGBA(f.pixels, f.width, f.height, this.palette, rgba);
+      return { rgba, width: f.width, height: f.height };
+    };
     session.onPlayMovie = (name, startFrame) => void this.playMovie(name, startFrame);
     this.predecodeAll();
     this.jumpToDefault();
@@ -113,10 +121,29 @@ export class SetViewer {
       (sc) => sc.sceneName.toLowerCase() === sceneName.toLowerCase(),
     );
     if (s < 0) return false;
-    this.sceneIdx = s;
-    const v = viewName
-      ? this.scene.views.findIndex((vw) => vw.viewName.toLowerCase() === viewName.toLowerCase())
+    const scene = this.set.scenes[s];
+    let v = viewName
+      ? scene.views.findIndex((vw) => vw.viewName.toLowerCase() === viewName.toLowerCase())
       : -1;
+    if (v < 0 && viewName) {
+      // authored view names can be stale (gstair3 changeset targets the
+      // typo "view79" in scene65): keep the current facing direction, the
+      // same continuity rule road arrival uses. Across a set change the
+      // previous viewer's facing is carried in session.lastRotation.
+      const rot = this.session.lastRotation ?? this.scene?.views[this.viewIdx]?.rotation;
+      this.session.lastRotation = null;
+      if (rot !== undefined && rot !== null) {
+        let best = Infinity;
+        scene.views.forEach((vw, i) => {
+          const d = angularDistance(vw.rotation, rot);
+          if (d < best) {
+            best = d;
+            v = i;
+          }
+        });
+      }
+    }
+    this.sceneIdx = s;
     this.viewIdx = v >= 0 ? v : 0;
     this.showView();
     return true;
@@ -427,7 +454,7 @@ export class SetViewer {
   }
 
   get busy(): boolean {
-    return this.animation !== null || this.movie !== null;
+    return this.animation !== null || this.movie !== null || this.session.fading;
   }
 
   /** dir: RIGHTTURNS or LEFTTURNS */
@@ -486,10 +513,7 @@ export class SetViewer {
         );
       }
       if (sceneIdx >= 0) {
-        if (sceneIdx !== this.sceneIdx) {
-          this.scripts.closeScene(this.sceneIdx);
-          this.scripts.openScene(sceneIdx);
-        }
+        const prevScene = this.sceneIdx;
         this.sceneIdx = sceneIdx;
         // arrival view: keep facing the direction of travel — the road's
         // endpoint view faces BACK along the road, so match the last walked
@@ -506,6 +530,13 @@ export class SetViewer {
           }
         }
         this.viewIdx = best;
+        // lifecycle events fire AFTER arrival — openscene handlers check
+        // currentview() (gstair's deck-transition scenes forward via
+        // changeset from their openscene)
+        if (sceneIdx !== prevScene) {
+          this.scripts.closeScene(prevScene);
+          this.scripts.openScene(sceneIdx);
+        }
       }
       this.showView();
     });
@@ -558,6 +589,7 @@ export class SetViewer {
   /** advance animation; returns the frame to draw this tick */
   tick(now: number): CachedFrame | null {
     this.session.propRuntime.tick(now, FRAME_MS);
+    this.session.tickFade(now);
     if (this.movie) {
       const m = this.movie;
       if (m.interval > 0 && m.meta[m.pos].regions.length === 0) {
@@ -586,6 +618,21 @@ export class SetViewer {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
+    // frozen pre-transition frame while fading out (the set may already
+    // have changed underneath — gotospecial fades around changeset)
+    const snap = this.session.fade.snapshot;
+    if (snap) {
+      const canvas = ctx.canvas;
+      if (canvas.width !== snap.width || canvas.height !== snap.height) {
+        canvas.width = snap.width;
+        canvas.height = snap.height;
+      }
+      const simg = ctx.createImageData(snap.width, snap.height);
+      simg.data.set(snap.rgba);
+      ctx.putImageData(simg, 0, 0);
+      this.applyFade(ctx);
+      return;
+    }
     if (this.movie) {
       const m = this.movie;
       const f = m.frames[Math.min(m.pos, m.frames.length - 1)];
@@ -597,6 +644,7 @@ export class SetViewer {
       const img = ctx.createImageData(f.width, f.height);
       indexedToRGBA(f.pixels, f.width, f.height, m.palette, img.data);
       ctx.putImageData(img, 0, 0);
+      this.applyFade(ctx);
       return;
     }
     const f = this.current;
@@ -608,12 +656,13 @@ export class SetViewer {
     }
     const img = ctx.createImageData(f.width, f.height);
     indexedToRGBA(f.pixels, f.width, f.height, this.palette, img.data);
-    if (!this.busy) {
+    if (this.animation === null) {
       this.session.propRuntime.composite(img.data, f.width, f.height, this.propPalette);
     }
     ctx.putImageData(img, 0, 0);
+    this.applyFade(ctx);
 
-    if (this.showHotspots && !this.busy) {
+    if (this.showHotspots && this.animation === null) {
       ctx.save();
       ctx.strokeStyle = "rgba(255, 220, 120, 0.9)";
       ctx.fillStyle = "rgba(255, 220, 120, 0.9)";
@@ -628,6 +677,16 @@ export class SetViewer {
       }
       ctx.restore();
     }
+  }
+
+  /** black overlay for screentoblack/blacktoscreen transitions */
+  private applyFade(ctx: CanvasRenderingContext2D): void {
+    const level = this.session.fade.level;
+    if (level <= 0) return;
+    ctx.save();
+    ctx.fillStyle = `rgba(0,0,0,${Math.min(1, level).toFixed(3)})`;
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.restore();
   }
 
   /** decode a map container on demand (256-color palette) */

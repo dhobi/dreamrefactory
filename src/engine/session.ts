@@ -47,6 +47,51 @@ export class GameSession {
   /** host hooks for currentscene()/currentview() queries */
   currentSceneName: () => string = () => "";
   currentViewName: () => string = () => "";
+  /** facing direction of the current view (radians), for arrival continuity */
+  currentRotation: (() => number) | null = null;
+  /** facing carried across a set change; the next viewer consumes it */
+  lastRotation: number | null = null;
+
+  /**
+   * Screen fade (screentoblack/blacktoscreen around gotospecial): 0 = clear,
+   * 1 = black. Lives on the session — the viewer is rebuilt mid-transition.
+   * While fading OUT the pre-transition frame stays visible via `snapshot`.
+   */
+  fade = {
+    level: 0,
+    lastTick: 0,
+    queue: [] as { to: number; steps: number }[],
+    snapshot: null as { rgba: Uint8ClampedArray; width: number; height: number } | null,
+  };
+  /** host hook: snapshot the currently displayed frame for fade-outs */
+  captureFrame: (() => { rgba: Uint8ClampedArray; width: number; height: number } | null) | null =
+    null;
+
+  get fading(): boolean {
+    return this.fade.queue.length > 0;
+  }
+
+  /** advance the fade one 66 ms engine step at a time */
+  tickFade(now: number): void {
+    const f = this.fade;
+    if (!f.queue.length) {
+      f.lastTick = 0;
+      return;
+    }
+    const STEP_MS = 66;
+    if (!f.lastTick) f.lastTick = now - STEP_MS;
+    while (f.queue.length && now - f.lastTick >= STEP_MS) {
+      f.lastTick += STEP_MS;
+      const ramp = f.queue[0];
+      if (ramp.to === 0) f.snapshot = null; // fading back in reveals the live frame
+      const delta = 1 / ramp.steps;
+      f.level =
+        ramp.to > f.level
+          ? Math.min(ramp.to, f.level + delta)
+          : Math.max(ramp.to, f.level - delta);
+      if (f.level === ramp.to) f.queue.shift();
+    }
+  }
 
   constructor(
     readonly files: FileProvider = () => null,
@@ -125,6 +170,7 @@ export class GameSession {
   openSetFile(fileName: string, sceneName = "", viewName = ""): void {
     const key = fileName.toLowerCase();
     this.onLog(`opensetfile("${key}", "${sceneName}", "${viewName}")`);
+    this.lastRotation = this.currentRotation ? this.currentRotation() : null;
     this.onSetChange(key, sceneName.toLowerCase(), viewName.toLowerCase());
   }
 
