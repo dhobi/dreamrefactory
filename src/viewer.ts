@@ -1,6 +1,6 @@
 import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTURNS } from "./df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "./df/image";
-import { MovClickRegion, readMovFile } from "./df/mov";
+import { MovFrame, readMovFile } from "./df/mov";
 import { Container } from "./df/container";
 import { decodeAudioContainer } from "./df/audio";
 import { SetScripts } from "./engine/setscripts";
@@ -51,10 +51,11 @@ export class SetViewer {
 
   /** active movie playback (cutscene / object close-up) */
   private movie: {
+    fileName: string;
     frames: CachedFrame[];
-    /** per-frame click regions — playback pauses on frames that have any */
-    regions: MovClickRegion[][];
-    /** frame name (lowercase) -> index, for click-region jump targets */
+    /** frame types/regions/targets — the movie's own state machine */
+    meta: MovFrame[];
+    /** frame name (lowercase) -> index, for jump targets */
     frameByName: Map<string, number>;
     /** named event-sound chunks: name (lowercase) -> container location */
     sounds: Map<string, number>;
@@ -65,9 +66,9 @@ export class SetViewer {
     /** ms per frame; 0 = wait for clicks (click-through object movies) */
     interval: number;
     lastTick: number;
-    /** holding on a click-region frame (e.g. an OK button) */
-    paused: boolean;
   } | null = null;
+  /** cross-movie return stack (type-4 call / type-5 return, TI.EXE depth 5) */
+  private movieStack: { movie: string; frame: number }[] = [];
 
   onHud: (text: string) => void = () => {};
   onLog: (line: string) => void = () => {};
@@ -84,7 +85,7 @@ export class SetViewer {
     this.scripts.onLog = (l) => this.onLog(l);
     session.currentSceneName = () => this.scene.sceneName.toLowerCase();
     session.currentViewName = () => this.scene.views[this.viewIdx].viewName.toLowerCase();
-    session.onPlayMovie = (name) => void this.playMovie(name);
+    session.onPlayMovie = (name, startFrame) => void this.playMovie(name, startFrame);
     this.predecodeAll();
     this.jumpToDefault();
     if (startScene) this.jumpTo(startScene, startView);
@@ -145,7 +146,7 @@ export class SetViewer {
    * over its duration; without one, clicks step through the frames
    * (object close-ups like inspection views).
    */
-  playMovie(fileName: string): boolean {
+  playMovie(fileName: string, startFrame = 0): boolean {
     const data = this.session.files(fileName.toLowerCase());
     if (!data) {
       this.onLog(`playmovie: "${fileName}" not available`);
@@ -193,24 +194,24 @@ export class SetViewer {
 
     // pacing: soundtrack duration when present; otherwise animate at a
     // default rate if there are pause frames, else pure click-through
+    // 145 ms/frame measured from FAUCET.MOV: Brook Babbling (3.62 s) spans
+    // exactly its 25 water frames
     const interval =
-      audioSec > 0 ? (audioSec * 1000) / frames.length : hasRegions ? 200 : 0;
+      audioSec > 0 ? (audioSec * 1000) / frames.length : hasRegions ? 145 : 0;
     const frameByName = new Map<string, number>();
     mov.frames.forEach((f, i) => f.name && frameByName.set(f.name.toLowerCase(), i));
     this.movie = {
+      fileName: fileName.toLowerCase(),
       frames,
-      regions,
+      meta: mov.frames,
       frameByName,
       sounds: mov.sounds,
       containers: mov.file.containers,
       hasRegions,
       palette: paletteToRGBA(mov.paletteRaw, 256),
-      pos: 0,
+      pos: Math.min(Math.max(startFrame, 0), frames.length - 1),
       interval,
       lastTick: 0,
-      // playback pauses on the first region frame (usually right away),
-      // showing e.g. the closed curtains until the player clicks
-      paused: regions[0].length > 0,
     };
     this.onLog(
       `movie: ${fileName} (${frames.length} frames${audioSec ? `, ${audioSec.toFixed(1)}s audio` : ""}${hasRegions ? ", interactive" : ""})`,
@@ -222,7 +223,7 @@ export class SetViewer {
     return this.movie !== null;
   }
 
-  /** click during a movie: resume from a pause point / advance / dismiss */
+  /** click during a movie: only region frames react (modal wait) */
   private movieClick(x: number, y: number): void {
     const m = this.movie;
     if (!m) return;
@@ -234,54 +235,95 @@ export class SetViewer {
       }
       return;
     }
-    if (!m.paused) return; // animation in flight
-    const region = m.regions[m.pos].find(
+    const regions = m.meta[m.pos].regions;
+    if (!regions.length) return; // animation in flight
+    const region = regions.find(
       (r) =>
         x >= Math.min(r.x0, r.x1) && x <= Math.max(r.x0, r.x1) &&
         y >= Math.min(r.y0, r.y1) && y <= Math.max(r.y0, r.y1),
     );
     this.onLog(
-      `movie click (${x},${y}) frame ${m.pos}${region ? ` -> "${region.target || "play on"}"` : " (no region hit)"}`,
+      `movie click (${x},${y}) frame ${m.pos}${region ? ` -> type ${region.type} "${region.target || region.event}"` : " (no region hit)"}`,
     );
     if (!region) return;
-    if (region.sound) {
-      // event sounds live in the movie's own chunk table, banks as fallback
-      const loc = m.sounds.get(region.sound.toLowerCase());
-      const snd = loc !== undefined
-        ? decodeAudioContainer(m.containers[loc])
-        : this.session.audioLib.sound(region.sound);
-      if (snd) this.session.audio.play("sound", snd);
-    }
-    const target = region.target ? m.frameByName.get(region.target.toLowerCase()) : undefined;
-    if (target !== undefined && m.regions[target].length) {
-      // hard cut onto another pause frame (menu zoom toggle)
-      m.pos = target;
-      return;
-    }
-    const start = target ?? m.pos + 1;
-    const ahead = m.regions.slice(start).some((r) => r.length);
-    if ((target !== undefined && target > m.pos) || !ahead) {
-      // OK buttons: a forward jump, or nothing left to pause on — close
-      // right away (the click sound plays out over the set view)
-      this.endMovie();
-      return;
-    }
-    m.pos = start; // animate to the next pause frame (curtain open/close)
-    m.paused = false;
+    if (region.sound) this.playMovieSound(region.sound);
     m.lastTick = 0;
+    this.movieAction(region.type, region.target, region.event);
   }
 
-  /** advance one movie frame; pause on region frames, end dismisses */
+  /** event sounds live in the movie's own chunk table, banks as fallback */
+  private playMovieSound(name: string): void {
+    const m = this.movie;
+    if (!m) return;
+    const loc = m.sounds.get(name.toLowerCase());
+    const snd = loc !== undefined
+      ? decodeAudioContainer(m.containers[loc])
+      : this.session.audioLib.sound(name);
+    if (snd) this.session.audio.play("sound", snd);
+  }
+
+  /** move playback to a frame, firing its entry sound (faucet on/off…) */
+  private movieEnter(idx: number): void {
+    const m = this.movie!;
+    m.pos = idx;
+    const sound = m.meta[idx].sound;
+    if (sound) this.playMovieSound(sound);
+  }
+
+  /**
+   * Apply a type-code action (region click or region-less frame). Codes from
+   * TI.EXE's movie loop: 1 exit · 2 goto target · 3 chain to event movie ·
+   * 4 call event movie (resume at target on return) · 5 return · 6/7 step.
+   */
+  private movieAction(type: number, target: string, event: string): void {
+    const m = this.movie!;
+    switch (type) {
+      case 2: {
+        const idx = m.frameByName.get(target.toLowerCase());
+        if (idx === undefined) {
+          this.onLog(`movie: no frame named "${target}"`);
+          this.endMovie();
+        } else {
+          this.movieEnter(idx);
+        }
+        return;
+      }
+      case 3:
+      case 4: {
+        if (type === 4) {
+          const idx = m.frameByName.get(target.toLowerCase());
+          if (idx !== undefined && this.movieStack.length < 5) {
+            this.movieStack.push({ movie: m.fileName, frame: idx });
+          }
+        }
+        this.endMovie();
+        if (event) this.session.onPlayMovie(event);
+        return;
+      }
+      case 5: {
+        const ret = this.movieStack.pop();
+        this.endMovie();
+        if (ret) this.session.onPlayMovie(ret.movie, ret.frame);
+        return;
+      }
+      case 6:
+        if (m.pos + 1 < m.frames.length) this.movieEnter(m.pos + 1);
+        else this.endMovie();
+        return;
+      case 7:
+        if (m.pos > 0) this.movieEnter(m.pos - 1);
+        return;
+      default:
+        this.endMovie(); // 1 = exit
+    }
+  }
+
+  /** clock tick on a region-less frame: run the frame's own auto-action */
   private movieAdvance(): void {
     const m = this.movie;
     if (!m) return;
-    const next = m.pos + 1;
-    if (next >= m.frames.length) {
-      this.endMovie();
-      return;
-    }
-    m.pos = next;
-    if (m.regions[next].length) m.paused = true;
+    const f = m.meta[m.pos];
+    this.movieAction(f.type, f.target, f.event);
   }
 
   private endMovie(): void {
@@ -518,7 +560,7 @@ export class SetViewer {
     this.session.propRuntime.tick(now, FRAME_MS);
     if (this.movie) {
       const m = this.movie;
-      if (m.interval > 0 && !m.paused) {
+      if (m.interval > 0 && m.meta[m.pos].regions.length === 0) {
         if (!m.lastTick) m.lastTick = now;
         if (now - m.lastTick >= m.interval) {
           m.lastTick = now;

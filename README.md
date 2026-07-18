@@ -38,8 +38,12 @@ TypeScript reimplementation running on canvas.
 - Patch frames (e.g. the 350×353 curtain animation frames) already come
   out of the delta codec as full screens; the frame-table w/h + the two
   words @+4 are just the dirty rectangle, no compositing needed.
-- Not yet: per-frame event sounds from the frame-logic tables (precise
-  cutscene audio sync).
+- **Per-frame event sounds**: a frame's logic container carries a pascal
+  sound name at +0x12, fired when playback enters the frame (FAUCET.MOV:
+  frame 2 `fon.SE`, frame 4 `Brook Babbling.`, frame 29 `foff.SE` — the
+  water cycle turns itself off; the faucet is a "runs once" toy, not a
+  toggle). Interactive movies pace at 145 ms/frame, measured from
+  Brook Babbling (3.62 s) spanning exactly its 25 water frames.
 
 ## Milestone 6.5 — working doors & the real event model
 

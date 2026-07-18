@@ -3,14 +3,26 @@ import { DFContainerFile, readContainerFile } from "./container";
 
 /**
  * MOV files — cutscenes, item close-ups, clickable multi-frame objects.
- * Port of DFmov (dfet DFmov.cpp). Frames use the SET delta codec (decode in
- * order with a shared FrameBuffer; `keyframe` marks self-contained frames).
- * Audio uses the common bank layout in its MOV variant: the one-shot chunk
- * table location sits at container0+0x60 and identifiers are 31 chars.
+ * Frames use the SET delta codec (decode in order with a shared FrameBuffer).
+ *
+ * Playback semantics recovered from TI.EXE's movie interaction loop
+ * (fn at 0x449310): a movie is a frame state machine. Each frame's
+ * click-region container carries a TYPE word plus optional event/target
+ * strings; the same type codes drive both frames (auto-action when the frame
+ * has no regions) and regions (action on click):
+ *   1 = exit the movie
+ *   2 = go to the frame named `target`
+ *   3 = exit + chain to the movie named `event`
+ *   4 = push (this movie, `target` frame) on the return stack, chain to `event`
+ *   5 = pop the return stack and resume there (max depth 5 in the original)
+ *   6 = advance one frame            7 = step back one frame
+ * A frame WITH regions waits modally for a click; clicks outside all regions
+ * do nothing. The i16 at record+6 (an "action" flag in earlier guesses) is
+ * never read by the engine. Region coords are Y-first (top,left,bottom,right).
  */
 
 export interface MovClickRegion {
-  /** not behavioral — probably the hover cursor (2 = arrow, 6 = hand) */
+  /** action type 1..7 (see module comment) */
   type: number;
   x0: number;
   y0: number;
@@ -18,23 +30,26 @@ export interface MovClickRegion {
   y1: number;
   /** event sound played on click (page rustle etc.), "" = none */
   sound: string;
-  /**
-   * frame the click jumps to, "" = play on from the current frame.
-   * A target that is itself a region frame is a hard cut (menu zoom);
-   * a backward target replays a segment (curtains re-open); a forward
-   * target — or nothing ahead to pause on — closes the movie (OK).
-   */
+  /** movie chained to by types 3/4, "" = none */
+  event: string;
+  /** frame name jumped to by types 2/4, "" = none */
   target: string;
 }
 
 export interface MovFrame {
-  /** frame type: transition frames are 2; other values mark intro/exit */
-  kind: number;
+  /** auto-action type 1..7 applied when the frame has no regions */
+  type: number;
   height: number;
   width: number;
   locationFrame: number;
   name: string;
-  /** click regions (e.g. the OK button) — playback pauses on such frames */
+  /** event sound fired when playback enters this frame (faucet on/off) */
+  sound: string;
+  /** movie chained to by frame types 3/4, "" = none */
+  event: string;
+  /** frame name jumped to by frame types 2/4, "" = none */
+  target: string;
+  /** click regions — playback waits on frames that have any */
   regions: MovClickRegion[];
 }
 
@@ -70,7 +85,7 @@ export function readMovFile(data: Uint8Array): MovFile {
 
   const frames: MovFrame[] = [];
   for (let i = 0; i < frameCount; i++) {
-    const kind = r.i32();
+    r.skip(4); // frame-table kind — authoring metadata, the engine ignores it
     r.skip(4); // 2 unknown words
     const h = r.i16();
     const w = r.i16();
@@ -80,13 +95,17 @@ export function readMovFile(data: Uint8Array): MovFile {
     r.skip(4); // frame container size
     const name = r.pstr(15);
 
-    // frame-logic table: click regions at +1090 (64-byte records, coords
-    // stored Y-first like everywhere else in this engine)
+    // the click-region container drives playback: type word at +0, frame
+    // event sound at +0x12, event movie at +0x22, target frame name at
+    // +0x32, region table at +1090
+    let type = 6;
+    let sound = "";
+    let event = "";
+    let target = "";
     const regions: MovClickRegion[] = [];
     const rd = file.containers[locationClickRegion]?.data;
-    if (rd && rd.length >= 1094) {
+    if (rd && rd.length >= 0x42) {
       const rv = new DataView(rd.buffer, rd.byteOffset, rd.byteLength);
-      const count = rv.getInt32(1090, true);
       const pascal = (off: number, max: number): string => {
         const len = rd[off];
         if (len <= 0 || len > max) return "";
@@ -94,20 +113,28 @@ export function readMovFile(data: Uint8Array): MovFile {
         for (let c = 0; c < len; c++) s += String.fromCharCode(rd[off + 1 + c]);
         return /^[\x20-\x7e]+$/.test(s) ? s : "";
       };
-      for (let g = 0; g < count && 1094 + g * 64 + 64 <= rd.length; g++) {
-        const off = 1094 + g * 64;
-        regions.push({
-          type: rv.getInt16(off, true),
-          y0: rv.getInt16(off + 8, true),
-          x0: rv.getInt16(off + 10, true),
-          y1: rv.getInt16(off + 12, true),
-          x1: rv.getInt16(off + 14, true),
-          sound: pascal(off + 16, 16), // event sound (page rustles etc.)
-          target: pascal(off + 48, 15), // frame name the click jumps to
-        });
+      type = rv.getInt16(0, true);
+      sound = pascal(0x12, 15);
+      event = pascal(0x22, 15);
+      target = pascal(0x32, 15);
+      if (rd.length >= 1094) {
+        const count = rv.getInt32(1090, true);
+        for (let g = 0; g < count && 1094 + g * 64 + 64 <= rd.length; g++) {
+          const off = 1094 + g * 64;
+          regions.push({
+            type: rv.getInt16(off, true),
+            y0: rv.getInt16(off + 8, true),
+            x0: rv.getInt16(off + 10, true),
+            y1: rv.getInt16(off + 12, true),
+            x1: rv.getInt16(off + 14, true),
+            sound: pascal(off + 16, 15), // event sound (page rustles etc.)
+            event: pascal(off + 32, 15), // movie chained to (types 3/4)
+            target: pascal(off + 48, 15), // frame jumped to (types 2/4)
+          });
+        }
       }
     }
-    frames.push({ kind, height: h, width: w, locationFrame, name, regions });
+    frames.push({ type, height: h, width: w, locationFrame, name, sound, event, target, regions });
   }
 
   // soundtrack: loop-chunk table in container 1 (same as TRK banks)

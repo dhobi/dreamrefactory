@@ -240,7 +240,8 @@ function runAnimations(v: SetViewer): void {
   settle9();
   check("click outside regions is ignored", v.moviePlaying);
   v.click(458, 350); // on the OK button (region 431..485 x 339..362)
-  check("OK click closes the movie immediately", !v.moviePlaying);
+  settle9(); // OK jumps to the pressed-button frame, then the exit chain
+  check("OK click closes the movie", !v.moviePlaying);
 }
 
 // --- 10. movie zoom cycle (MENU.MOV): paper toggles zoom, only OK leaves ---
@@ -255,8 +256,9 @@ function runAnimations(v: SetViewer): void {
   };
   settle();
   check("menu pauses on the closed view", v.moviePlaying);
-  v.click(460, 350); // OK -> closes immediately
-  check("OK leaves right away", !v.moviePlaying);
+  v.click(460, 350); // OK -> pressed-button frame, then exit
+  settle();
+  check("OK leaves from the closed view", !v.moviePlaying);
 
   v.playMovie("menu.mov");
   settle();
@@ -267,6 +269,7 @@ function runAnimations(v: SetViewer): void {
   settle();
   check("second paper click unzooms, does NOT leave", v.moviePlaying);
   v.click(460, 350); // OK button
+  settle();
   check("OK leaves the menu movie", !v.moviePlaying);
 }
 
@@ -293,8 +296,41 @@ function runAnimations(v: SetViewer): void {
   v.click(230, 200); // closed again (frame 15) -> jumps back, reopens
   settle();
   check("toggle repeats endlessly", v.moviePlaying);
-  v.click(455, 350); // OK at the open view (frame 8)
-  check("OK closes the movie immediately", !v.moviePlaying);
+  v.click(455, 350); // OK at the open view (frame 8) -> exit animation
+  settle();
+  check("OK plays the exit animation and closes", !v.moviePlaying);
+}
+
+// --- 12. faucet: water cycle with per-frame sounds, OK-position exits ---
+{
+  const { session, sink, viewer } = newSession();
+  session.openSetFile("c73.set");
+  const v = viewer();
+  sink.calls.length = 0;
+  v.playMovie("faucet.mov");
+  let clock = 0;
+  const settle = () => {
+    for (let i = 0; i < 60 && v.moviePlaying; i++) v.tick((clock += 250));
+  };
+  settle();
+  check("faucet opens silently on the off view", v.moviePlaying && sink.calls.length === 0);
+  v.click(220, 140); // the handle (frame 1: x171..274 y116..163) -> water runs
+  settle();
+  const sounds = sink.calls.filter((c) => c.channel === "sound").map((c) => c.seconds.toFixed(2));
+  check(
+    "water cycle fires on/babble/off sounds",
+    v.moviePlaying && sounds.length === 3 && sounds[0] === "0.23" && sounds[1] === "3.62" && sounds[2] === "0.19",
+    sounds.join(","),
+  );
+  v.click(220, 140); // handle again (frame 38) -> the cycle replays
+  settle();
+  check(
+    "handle replays the cycle",
+    v.moviePlaying && sink.calls.filter((c) => c.channel === "sound").length === 6,
+  );
+  v.click(455, 350); // bottom-right region on frame 38 -> steps out, exits
+  settle();
+  check("corner click leaves the faucet movie", !v.moviePlaying);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

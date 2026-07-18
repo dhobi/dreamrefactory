@@ -105,7 +105,7 @@ export class GameSession {
   /** host hook: default navigation from boot's keydown (currentscene setter) */
   onNavigate: (direction: string) => void = () => {};
   /** host hook: playmovie builtin (viewer plays it; browser may fetch first) */
-  onPlayMovie: (fileName: string) => void = () => {};
+  onPlayMovie: (fileName: string, startFrame?: number) => void = () => {};
 
   /**
    * Invoke a globally-callable handler (stage/boot standard library) the way

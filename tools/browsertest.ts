@@ -76,7 +76,7 @@ const main = async () => {
 
   // 1) OK on the initial still should leave
   await canvasClick(page, 460, 350);
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(1000);
   console.log("after OK on still:", await state(page));
 
   // reopen for the full cycle
