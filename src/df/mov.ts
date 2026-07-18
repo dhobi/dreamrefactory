@@ -10,14 +10,21 @@ import { DFContainerFile, readContainerFile } from "./container";
  */
 
 export interface MovClickRegion {
+  /** not behavioral — probably the hover cursor (2 = arrow, 6 = hand) */
+  type: number;
   x0: number;
   y0: number;
   x1: number;
   y1: number;
-  /** 0 = cycle to the next pause frame (zoom toggle), 1 = leave the movie */
-  action: number;
   /** event sound played on click (page rustle etc.), "" = none */
   sound: string;
+  /**
+   * frame the click jumps to, "" = play on from the current frame.
+   * A target that is itself a region frame is a hard cut (menu zoom);
+   * a backward target replays a segment (curtains re-open); a forward
+   * target — or nothing ahead to pause on — closes the movie (OK).
+   */
+  target: string;
 }
 
 export interface MovFrame {
@@ -39,6 +46,8 @@ export interface MovFile {
   frames: MovFrame[];
   /** soundtrack chunk container locations, in playback order */
   audioChunks: number[];
+  /** named one-shot chunks (event sounds for click regions), lowercase */
+  sounds: Map<string, number>;
 }
 
 export function readMovFile(data: Uint8Array): MovFile {
@@ -78,23 +87,23 @@ export function readMovFile(data: Uint8Array): MovFile {
     if (rd && rd.length >= 1094) {
       const rv = new DataView(rd.buffer, rd.byteOffset, rd.byteLength);
       const count = rv.getInt32(1090, true);
-      for (let g = 0; g < count && 1094 + g * 64 + 24 <= rd.length; g++) {
+      const pascal = (off: number, max: number): string => {
+        const len = rd[off];
+        if (len <= 0 || len > max) return "";
+        let s = "";
+        for (let c = 0; c < len; c++) s += String.fromCharCode(rd[off + 1 + c]);
+        return /^[\x20-\x7e]+$/.test(s) ? s : "";
+      };
+      for (let g = 0; g < count && 1094 + g * 64 + 64 <= rd.length; g++) {
         const off = 1094 + g * 64;
-        const action = rv.getInt16(off + 6, true);
-        // pascal event-sound name at +16 (page rustles etc.)
-        const slen = rd[off + 16];
-        let sound = "";
-        if (slen > 0 && slen <= 16) {
-          for (let c = 0; c < slen; c++) sound += String.fromCharCode(rd[off + 17 + c]);
-          if (!/^[\x20-\x7e]+$/.test(sound)) sound = "";
-        }
         regions.push({
+          type: rv.getInt16(off, true),
           y0: rv.getInt16(off + 8, true),
           x0: rv.getInt16(off + 10, true),
           y1: rv.getInt16(off + 12, true),
           x1: rv.getInt16(off + 14, true),
-          action,
-          sound,
+          sound: pascal(off + 16, 16), // event sound (page rustles etc.)
+          target: pascal(off + 48, 15), // frame name the click jumps to
         });
       }
     }
@@ -127,20 +136,26 @@ export function readMovFile(data: Uint8Array): MovFile {
       }
     }
   }
-  // cutscene soundtracks are usually in the NON-looping chunk block
-  // (they play once); MOV records are 42 bytes with 31-char identifiers
-  if (!audioChunks.length && audioLocation > 0 && audioLocation < file.containers.length) {
+  // one-shot chunks in the NON-looping block: named event sounds for click
+  // regions, or the play-once soundtrack of a plain cutscene. MOV records
+  // are 42 bytes with 31-char identifiers.
+  const sounds = new Map<string, number>();
+  if (audioLocation > 0 && audioLocation < file.containers.length) {
     const b = new BinaryReader(file.containers[audioLocation].data);
     b.skip(4);
     const count = b.i16();
     b.seek(8);
+    const order: number[] = [];
     for (let i = 0; i < count; i++) {
       b.skip(4);
-      audioChunks.push(b.i32());
+      const loc = b.i32();
       b.skip(2);
-      b.pstr(31);
+      const name = b.pstr(31);
+      order.push(loc);
+      if (name) sounds.set(name.toLowerCase(), loc);
     }
+    if (!audioChunks.length) audioChunks.push(...order);
   }
 
-  return { file, width, height, paletteRaw, frames, audioChunks };
+  return { file, width, height, paletteRaw, frames, audioChunks, sounds };
 }

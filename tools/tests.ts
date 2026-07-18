@@ -235,13 +235,12 @@ function runAnimations(v: SetViewer): void {
     for (let i = 0; i < 30 && v.moviePlaying; i++) v.tick((clock += 250));
   };
   settle9();
-  check("interactive movie opens on a still", v.moviePlaying);
-  v.click(10, 10); // anywhere except OK: starts playback
+  check("movie pauses at the OK frame", v.moviePlaying);
+  v.click(10, 10); // not on a region: nothing happens
   settle9();
-  check("click starts it, pauses at OK frame", v.moviePlaying);
+  check("click outside regions is ignored", v.moviePlaying);
   v.click(458, 350); // on the OK button (region 431..485 x 339..362)
-  settle9();
-  check("OK click resumes and movie ends", !v.moviePlaying);
+  check("OK click closes the movie immediately", !v.moviePlaying);
 }
 
 // --- 10. movie zoom cycle (MENU.MOV): paper toggles zoom, only OK leaves ---
@@ -255,24 +254,47 @@ function runAnimations(v: SetViewer): void {
     for (let i = 0; i < 30 && v.moviePlaying; i++) v.tick((clock += 250));
   };
   settle();
-  check("menu opens on a still", v.moviePlaying);
-  v.click(460, 350); // OK on the initial still -> leave immediately
-  check("OK on initial still leaves", !v.moviePlaying);
+  check("menu pauses on the closed view", v.moviePlaying);
+  v.click(460, 350); // OK -> closes immediately
+  check("OK leaves right away", !v.moviePlaying);
 
   v.playMovie("menu.mov");
   settle();
-  v.click(100, 100); // start playback
-  settle();
-  check("menu pauses at first pause frame", v.moviePlaying);
-  v.click(280, 210); // the menu paper -> zoom in
+  v.click(280, 210); // the menu paper -> hard cut to "frame3" (zoomed)
   settle();
   check("paper click zooms (still in movie)", v.moviePlaying);
-  v.click(250, 200); // zoomed paper -> zoom back out
+  v.click(250, 200); // zoomed paper -> hard cut back to "frame1"
   settle();
   check("second paper click unzooms, does NOT leave", v.moviePlaying);
   v.click(460, 350); // OK button
-  settle();
   check("OK leaves the menu movie", !v.moviePlaying);
+}
+
+// --- 11. curtains (user-reported): silent open, endless toggle, OK exits ---
+{
+  const { session, sink, viewer } = newSession();
+  session.openSetFile("c73.set");
+  const v = viewer();
+  sink.calls.length = 0;
+  v.playMovie("curtains.mov");
+  let clock = 0;
+  const settle = () => {
+    for (let i = 0; i < 40 && v.moviePlaying; i++) v.tick((clock += 250));
+  };
+  settle();
+  check("curtains open silently on the closed view", v.moviePlaying && sink.calls.length === 0);
+  v.click(230, 200); // the curtain (frame 1: x116..350 y82..354) -> opens
+  settle();
+  const openSound = sink.calls.length;
+  check("curtain click plays sound + open animation", v.moviePlaying && openSound > 0);
+  v.click(140, 250); // left curtain edge (frame 8) -> closes again
+  settle();
+  check("second click closes the curtain", v.moviePlaying && sink.calls.length > openSound);
+  v.click(230, 200); // closed again (frame 15) -> jumps back, reopens
+  settle();
+  check("toggle repeats endlessly", v.moviePlaying);
+  v.click(455, 350); // OK at the open view (frame 8)
+  check("OK closes the movie immediately", !v.moviePlaying);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

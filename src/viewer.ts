@@ -1,6 +1,7 @@
 import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTURNS } from "./df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "./df/image";
 import { MovClickRegion, readMovFile } from "./df/mov";
+import { Container } from "./df/container";
 import { decodeAudioContainer } from "./df/audio";
 import { SetScripts } from "./engine/setscripts";
 import { GameSession } from "./engine/session";
@@ -53,10 +54,12 @@ export class SetViewer {
     frames: CachedFrame[];
     /** per-frame click regions — playback pauses on frames that have any */
     regions: MovClickRegion[][];
-    kinds: number[];
-    firstRegionIdx: number;
-    lastRegionIdx: number;
-    regionFrameCount: number;
+    /** frame name (lowercase) -> index, for click-region jump targets */
+    frameByName: Map<string, number>;
+    /** named event-sound chunks: name (lowercase) -> container location */
+    sounds: Map<string, number>;
+    containers: Container[];
+    hasRegions: boolean;
     palette: Uint8ClampedArray;
     pos: number;
     /** ms per frame; 0 = wait for clicks (click-through object movies) */
@@ -64,11 +67,6 @@ export class SetViewer {
     lastTick: number;
     /** holding on a click-region frame (e.g. an OK button) */
     paused: boolean;
-    /**
-     * initial: waiting still, a click starts playback · intro: play to
-     * first pause · cycle: wrap between pauses · exit: play out
-     */
-    mode: "initial" | "intro" | "cycle" | "exit";
   } | null = null;
 
   onHud: (text: string) => void = () => {};
@@ -173,9 +171,13 @@ export class SetViewer {
     }
     if (!frames.length) return false;
 
-    // soundtrack: concatenate the ordered chunks, play once
+    const regions = mov.frames.map((f) => f.regions);
+    const hasRegions = regions.some((r) => r.length > 0);
+
+    // plain cutscenes play their soundtrack once; in interactive movies the
+    // audio chunks are per-click event sounds instead — silence until a click
     let audioSec = 0;
-    if (mov.audioChunks.length) {
+    if (!hasRegions && mov.audioChunks.length) {
       const parts = mov.audioChunks.map((loc) => decodeAudioContainer(mov.file.containers[loc]));
       const total = parts.reduce((a, p) => a + p.samples.length, 0);
       const samples = new Float32Array(total);
@@ -189,32 +191,29 @@ export class SetViewer {
       this.session.audio.play("voice", { sampleRate, samples });
     }
 
-    const regions = mov.frames.map((f) => f.regions);
-    const kinds = mov.frames.map((f) => f.kind);
-    const regionIdxs = regions.map((r, i) => (r.length ? i : -1)).filter((i) => i >= 0);
-    const hasPausePoints = regionIdxs.length > 0;
     // pacing: soundtrack duration when present; otherwise animate at a
-    // default rate if there are pause points, else pure click-through
+    // default rate if there are pause frames, else pure click-through
     const interval =
-      audioSec > 0 ? (audioSec * 1000) / frames.length : hasPausePoints ? 200 : 0;
+      audioSec > 0 ? (audioSec * 1000) / frames.length : hasRegions ? 200 : 0;
+    const frameByName = new Map<string, number>();
+    mov.frames.forEach((f, i) => f.name && frameByName.set(f.name.toLowerCase(), i));
     this.movie = {
       frames,
       regions,
-      kinds,
-      firstRegionIdx: regionIdxs[0] ?? -1,
-      lastRegionIdx: regionIdxs[regionIdxs.length - 1] ?? -1,
-      regionFrameCount: regionIdxs.length,
+      frameByName,
+      sounds: mov.sounds,
+      containers: mov.file.containers,
+      hasRegions,
       palette: paletteToRGBA(mov.paletteRaw, 256),
       pos: 0,
       interval,
       lastTick: 0,
-      // interactive movies open on a still and wait for a click to start;
-      // plain cutscenes (no regions) auto-play
-      paused: hasPausePoints,
-      mode: hasPausePoints ? "initial" : "intro",
+      // playback pauses on the first region frame (usually right away),
+      // showing e.g. the closed curtains until the player clicks
+      paused: regions[0].length > 0,
     };
     this.onLog(
-      `movie: ${fileName} (${frames.length} frames${audioSec ? `, ${audioSec.toFixed(1)}s audio` : ""}${hasPausePoints ? ", waits for click" : ""})`,
+      `movie: ${fileName} (${frames.length} frames${audioSec ? `, ${audioSec.toFixed(1)}s audio` : ""}${hasRegions ? ", interactive" : ""})`,
     );
     return true;
   }
@@ -227,88 +226,62 @@ export class SetViewer {
   private movieClick(x: number, y: number): void {
     const m = this.movie;
     if (!m) return;
-    if (m.mode === "initial") {
-      // waiting still: OK (a leave-action region of the first pause frame,
-      // whose button is already visible) exits; any other click starts it
-      const okHit = m.regions[m.firstRegionIdx]?.some(
-        (r) =>
-          r.action === 1 &&
-          x >= Math.min(r.x0, r.x1) && x <= Math.max(r.x0, r.x1) &&
-          y >= Math.min(r.y0, r.y1) && y <= Math.max(r.y0, r.y1),
-      );
-      this.onLog(`movie click (${x},${y})${okHit ? " on OK -> leave" : " -> start"}`);
-      if (okHit) {
-        this.endMovie();
-        return;
-      }
-      m.mode = "intro";
-      m.paused = false;
-      m.lastTick = 0;
-      return;
-    }
-    if (m.paused) {
-      // waiting on a click-region frame: only a region hit does anything
-      const region = m.regions[m.pos].find(
-        (r) =>
-          x >= Math.min(r.x0, r.x1) && x <= Math.max(r.x0, r.x1) &&
-          y >= Math.min(r.y0, r.y1) && y <= Math.max(r.y0, r.y1),
-      );
-      this.onLog(
-        `movie click (${x},${y}) frame ${m.pos}${region ? ` -> action ${region.action}` : " (no region hit)"}`,
-      );
-      if (!region) return;
-      if (region.sound) {
-        const snd = this.session.audioLib.sound(region.sound);
-        if (snd) this.session.audio.play("sound", snd);
-      }
-      m.paused = false;
-      m.lastTick = 0;
-      if (m.interval === 0) m.interval = 200;
-      if (region.action === 1) {
-        // leave: jump to the exit segment (after the last pause frame; with
-        // multiple pauses, the transition frames there belong to the cycle)
-        let exit = m.lastRegionIdx + 1;
-        if (m.regionFrameCount >= 2) {
-          while (exit < m.frames.length && m.kinds[exit] === 2 && !m.regions[exit].length) exit++;
-        }
-        if (exit >= m.frames.length) {
-          this.endMovie();
-          return;
-        }
-        m.pos = exit;
-        m.mode = "exit";
-      } else {
-        // cycle: animate to the next pause frame (or wrap back to the first)
-        m.mode = "cycle";
+    // pure click-through movies (no regions anywhere): any click steps
+    if (!m.hasRegions) {
+      if (m.interval === 0) {
+        m.pos++;
+        if (m.pos >= m.frames.length) this.endMovie();
       }
       return;
     }
-    // pure click-through movies (no regions anywhere)
-    if (m.regionFrameCount === 0) {
-      m.pos++;
-      if (m.pos >= m.frames.length) this.endMovie();
+    if (!m.paused) return; // animation in flight
+    const region = m.regions[m.pos].find(
+      (r) =>
+        x >= Math.min(r.x0, r.x1) && x <= Math.max(r.x0, r.x1) &&
+        y >= Math.min(r.y0, r.y1) && y <= Math.max(r.y0, r.y1),
+    );
+    this.onLog(
+      `movie click (${x},${y}) frame ${m.pos}${region ? ` -> "${region.target || "play on"}"` : " (no region hit)"}`,
+    );
+    if (!region) return;
+    if (region.sound) {
+      // event sounds live in the movie's own chunk table, banks as fallback
+      const loc = m.sounds.get(region.sound.toLowerCase());
+      const snd = loc !== undefined
+        ? decodeAudioContainer(m.containers[loc])
+        : this.session.audioLib.sound(region.sound);
+      if (snd) this.session.audio.play("sound", snd);
     }
+    const target = region.target ? m.frameByName.get(region.target.toLowerCase()) : undefined;
+    if (target !== undefined && m.regions[target].length) {
+      // hard cut onto another pause frame (menu zoom toggle)
+      m.pos = target;
+      return;
+    }
+    const start = target ?? m.pos + 1;
+    const ahead = m.regions.slice(start).some((r) => r.length);
+    if ((target !== undefined && target > m.pos) || !ahead) {
+      // OK buttons: a forward jump, or nothing left to pause on — close
+      // right away (the click sound plays out over the set view)
+      this.endMovie();
+      return;
+    }
+    m.pos = start; // animate to the next pause frame (curtain open/close)
+    m.paused = false;
+    m.lastTick = 0;
   }
 
-  /** advance one movie frame according to the playback mode */
+  /** advance one movie frame; pause on region frames, end dismisses */
   private movieAdvance(): void {
     const m = this.movie;
     if (!m) return;
     const next = m.pos + 1;
-    if (m.mode === "cycle") {
-      // cycle segment: transition (kind 2) frames run; anything else wraps
-      // back to the first pause frame without playing the exit animation
-      if (next >= m.frames.length || (!m.regions[next].length && m.kinds[next] !== 2)) {
-        m.pos = m.firstRegionIdx;
-        m.paused = true;
-        return;
-      }
-    } else if (next >= m.frames.length) {
+    if (next >= m.frames.length) {
       this.endMovie();
       return;
     }
     m.pos = next;
-    if (m.mode !== "exit" && m.regions[next].length) m.paused = true;
+    if (m.regions[next].length) m.paused = true;
   }
 
   private endMovie(): void {

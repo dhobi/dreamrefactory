@@ -19,14 +19,25 @@ TypeScript reimplementation running on canvas.
   boot's `spotmovie` helper (premovie/playmovie/postmovie) works through
   standard fallback resolution. `session.runGlobal(name, args)` invokes
   stage/boot library handlers the way unqualified calls resolve.
-- **Pause points & region actions**: the MOV frame-logic tables (@1090 in
+- **Click regions & jump targets**: the MOV frame-logic tables (@1090 in
   each frame's click-region container, 64-byte records, coords Y-first)
-  define click regions with an **action** (i16 @+6: 0 = cycle to the next
-  pause frame, 1 = leave the movie) and a pascal **event-sound name** @+16
-  (page rustles). Playback pauses on region frames; a 0-action click plays
-  the kind-2 transition frames to the next pause or wraps back to the
-  first (menu zoom in/out), a 1-action click (OK) jumps to the exit
-  segment and dismisses. Verified against MENU.MOV and TURKNMES.MOV.
+  define click regions with a pascal **event-sound name** @+16 (resolved
+  in the movie's own named chunk table, banks as fallback) and a pascal
+  **target frame name** @+48. Playback pauses on region frames (starting
+  with the first — interactive movies open as a silent still). A click
+  plays the region's sound, then: target that is itself a region frame →
+  hard cut (menu zoom toggle); forward target — or no target with nothing
+  ahead to pause on — → close the movie immediately (OK buttons; the
+  trailing "exit animation" frames in the file are never played); backward
+  or near no-target → animate to the next region frame (the endless
+  curtain open/close toggle). Neither the i16 @+0 (hover cursor, probably)
+  nor the i16 @+6 is behavioral; dfet's "action" reading was a red
+  herring. Verified against MENU.MOV, TURKNMES.MOV and CURTAINS.MOV.
+- Interactive movies never auto-play their audio chunks — those are the
+  event sounds. Only regionless cutscenes play them as a soundtrack.
+- Patch frames (e.g. the 350×353 curtain animation frames) already come
+  out of the delta codec as full screens; the frame-table w/h + the two
+  words @+4 are just the dirty rectangle, no compositing needed.
 - Not yet: per-frame event sounds from the frame-logic tables (precise
   cutscene audio sync).
 

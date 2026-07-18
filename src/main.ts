@@ -45,6 +45,9 @@ const serverFiles = new Map<string, string>();
 const pendingFetches = new Set<string>();
 let viewer: SetViewer | null = null;
 
+// debug handle for browser-automation tests (tools/browsertest.ts)
+Object.defineProperty(window, "dbg", { get: () => ({ viewer, session }) });
+
 /**
  * FileProvider used by the engine. Synchronous by contract: returns what is
  * loaded; on a miss that the dev server could satisfy, kicks off a background
@@ -363,3 +366,11 @@ function loop(now: number): void {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+// debug handle for driving the app from the console / automated tests
+(window as unknown as Record<string, unknown>).__taoot = {
+  session,
+  get viewer() {
+    return viewer;
+  },
+};
