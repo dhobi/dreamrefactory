@@ -4,6 +4,7 @@ import { readShpFile } from "../df/shp";
 import { parseScript } from "./parser";
 import { Interpreter, ScriptInstance, Value, registerCoreBuiltins, toStr, truthy } from "./interp";
 import { PropRuntime } from "./props";
+import { AudioLibrary, AudioSink, NullAudioSink } from "./audio";
 
 /** resolves sibling game files (turk.shp etc.) by lowercase basename */
 export type FileProvider = (name: string) => Uint8Array | null;
@@ -30,9 +31,12 @@ export class SetScripts {
   /** main-script instances of loaded shops, by shop file name */
   private shopMains = new Map<string, ScriptInstance | null>();
 
+  readonly audioLib = new AudioLibrary();
+
   constructor(
     readonly set: SetFile,
     readonly files: FileProvider = () => null,
+    readonly audio: AudioSink = new NullAudioSink(),
   ) {
     this.interp = new Interpreter();
     registerCoreBuiltins(this.interp);
@@ -144,6 +148,21 @@ export class SetScripts {
       if (inst.name.toLowerCase() === lower) return inst;
     }
     return null;
+  }
+
+  /** open a TRK/SFX/11K audio bank through the file provider */
+  openTrackFile(fileName: string): boolean {
+    const key = fileName.toLowerCase();
+    const data = this.files(key);
+    if (!data) {
+      this.onLog(`opentrackfile: "${fileName}" not available`);
+      return false;
+    }
+    if (!this.audioLib.openBank(key, data)) {
+      this.onLog(`opentrackfile: "${fileName}" is not an audio bank`);
+      return false;
+    }
+    return true;
   }
 
   /** load a SHP file: register its props, prop scripts, and fire openshop */
@@ -275,9 +294,40 @@ export class SetScripts {
       this.closeShop(toStr(n));
     });
     r("message", (_i, args) => this.onLog(`msg: ${args.map(String).join(" ")}`));
-    for (const snd of ["voicesound", "singlesound", "bothsound", "dualsound", "multiplesound"]) {
-      r(snd, (_i, args) => this.onLog(`${snd}: ${args.map(String).join(", ")}`));
-    }
+
+    // sound playback
+    const playNamed = (name: Value, channel: "sound" | "voice", overlap = false) => {
+      const audio = this.audioLib.sound(toStr(name));
+      if (!audio) {
+        this.onLog(`sound not found: ${toStr(name)} (banks: ${this.audioLib.bankNames.join(", ") || "none"})`);
+        return;
+      }
+      this.audio.play(channel, audio, { overlap });
+    };
+    r("voicesound", (_i, [n]) => playNamed(n, "voice"));
+    r("singlesound", (_i, [n]) => playNamed(n, "sound"));
+    r("multiplesound", (_i, [n]) => playNamed(n, "sound", true));
+    r("bothsound", (_i, [n]) => playNamed(n, "sound"));
+    r("dualsound", (_i, [n]) => playNamed(n, "sound", true));
+    r("haltsound", () => this.audio.halt("sound"));
+    r("haltvoice", () => this.audio.halt("voice"));
+    r("halttheme", () => this.audio.halt("theme"));
+    r("sounddone", () => (this.audio.isDone("sound") ? 1 : 0));
+    r("voicedone", () => (this.audio.isDone("voice") ? 1 : 0));
+    r("playtheme", (_i, [n]) => {
+      const theme = this.audioLib.theme(n === undefined ? undefined : toStr(n));
+      if (!theme) {
+        this.onLog(`playtheme: no theme available${n !== undefined ? ` (${toStr(n)})` : ""}`);
+        return;
+      }
+      this.audio.play("theme", theme, { loop: true });
+    });
+    r("opentrackfile", (_i, [n]) => {
+      this.openTrackFile(toStr(n));
+    });
+    r("closetrackfile", (_i, [n]) => {
+      this.audioLib.closeBank(toStr(n));
+    });
     for (const noop of ["forceupdate", "flushevents", "hidecursor", "showcursor", "debugger"]) {
       r(noop, () => {});
     }

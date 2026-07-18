@@ -4,7 +4,30 @@ Browser port (work in progress) of the CyberFlix **DreamFactory 4.0** engine,
 targeting *Titanic: Adventure Out of Time* (1996) — no DOSBox, a native
 TypeScript reimplementation running on canvas.
 
-## Status: Milestone 4 — props (SHP)
+## Status: Milestone 5 — audio
+
+- `src/df/audio.ts` — both engine codecs ported: v40 (8-bit; literal /
+  step-table-pair / repeat modes, generated 256-entry tables) and v41
+  (16-bit; delta-or-absolute per byte). Bank reader for TRK/SFX/11K files:
+  ordered loop chunks (music) + named one-shot chunks
+  (`doorlocked` etc. — shared lines live in `UNILIB.TRK`).
+- `src/engine/audio.ts` — three channels matching the command families
+  (`sound`, `voice`, `theme`), `WebAudioSink` for the browser (created on
+  first user gesture per autoplay policy), `NullAudioSink` for headless
+  runs, and an `AudioLibrary` that resolves sound names across open banks
+  with a decode cache.
+- Builtins wired: `voicesound`, `singlesound`, `multiplesound`/`dualsound`
+  (overlapping), `bothsound`, `haltsound`/`haltvoice`/`halttheme`,
+  `sounddone`/`voicedone`, `playtheme` (looped concatenated loop-chunks),
+  `opentrackfile`/`closetrackfile`.
+- The viewer auto-opens `<set>.trk/.sfx/.11k` and `unilib.trk` from the
+  file provider (drop them alongside the .SET) until the boot/stage layer
+  owns bank management.
+- Verified headless: clicking B59's locked door plays the 1.16 s
+  `doorlocked` voice line; `tools/dumpaudio.ts` exports WAVs and waveform
+  PNGs (`--find <name>` scans all banks for an identifier).
+
+## Milestone 4 — props (SHP)
 
 - `src/df/shp.ts` — SHP ("shop") loader: prop groups → named states →
   animation frames, plus the transparent-image codec (per-frame draw offsets
@@ -93,8 +116,16 @@ turning (left/right ring frames), and walking roads between scenes.
 
 ```
 npm install
-npm run dev          # then drop e.g. gamefiles/LOCAL/B59.SET onto the page
+npm run dev          # dev server lists all sets from gamefiles/ — click one
 ```
+
+In dev mode the page shows every `.SET` found under `gamefiles/` (via the
+`/api/gamefiles` manifest in [vite.config.ts](vite.config.ts)); picking one
+lazy-loads it plus its siblings (`.shp`, `.trk`, `.sfx`, `.11k`,
+`unilib.trk`) over HTTP, and anything scripts request later
+(`openshopfile("blkjack.shp")`) is fetched on demand in the background.
+This is dev-server-only — production builds don't bundle or serve game
+files; there, drag-and-drop remains the way in.
 
 Controls: `←`/`→` turn, `↑` walk a road, `M` deck-plan map, `O` hotspot overlay.
 

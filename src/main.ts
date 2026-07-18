@@ -1,5 +1,28 @@
 import { readSetFile, SetFile } from "./df/set";
 import { SetViewer } from "./viewer";
+import { AudioSink, WebAudioSink } from "./engine/audio";
+
+// AudioContext must be created after a user gesture; the sink proxies until then
+let webAudio: WebAudioSink | null = null;
+const audioSink: AudioSink = {
+  play: (c, a, o) => webAudio?.play(c, a, o),
+  halt: (c) => webAudio?.halt(c),
+  isDone: (c) => (webAudio ? webAudio.isDone(c) : true),
+};
+function ensureAudio(): void {
+  if (!webAudio) {
+    try {
+      webAudio = new WebAudioSink();
+    } catch {
+      /* no audio available */
+    }
+    // theme playback requested before the AudioContext existed was dropped —
+    // start it now that we can actually make noise
+    viewer?.startTheme();
+  }
+}
+window.addEventListener("pointerdown", ensureAudio, { once: true });
+window.addEventListener("keydown", ensureAudio, { once: true });
 
 const drop = document.getElementById("drop") as HTMLDivElement;
 const fileInput = document.getElementById("fileInput") as HTMLInputElement;
@@ -14,9 +37,53 @@ const ctx = screen.getContext("2d")!;
 const mapCtx = minimap.getContext("2d")!;
 
 const loadedSets = new Map<string, SetFile>();
-/** every dropped file by lowercase basename — scripts pull in siblings (.shp) */
+/** every available file by lowercase basename — scripts pull in siblings (.shp) */
 const fileStore = new Map<string, Uint8Array>();
+/** lowercase basename -> server URL (dev server manifest); lazy-fetched */
+const serverFiles = new Map<string, string>();
+const pendingFetches = new Set<string>();
 let viewer: SetViewer | null = null;
+
+/**
+ * FileProvider used by the engine. Synchronous by contract: returns what is
+ * loaded; on a miss that the dev server could satisfy, kicks off a background
+ * fetch and wires the file into the running viewer once it arrives.
+ */
+function provideFile(name: string): Uint8Array | null {
+  const key = name.toLowerCase();
+  const hit = fileStore.get(key);
+  if (hit) return hit;
+  const url = serverFiles.get(key);
+  if (url && !pendingFetches.has(key)) {
+    pendingFetches.add(key);
+    void fetch(url)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((buf) => {
+        fileStore.set(key, new Uint8Array(buf));
+        viewer?.addResource(key, fileStore.get(key)!);
+      })
+      .catch(() => {})
+      .finally(() => pendingFetches.delete(key));
+  }
+  return null;
+}
+
+/** fetch a server file into the store (await-able, for set activation) */
+async function fetchIntoStore(key: string): Promise<Uint8Array | null> {
+  const cached = fileStore.get(key);
+  if (cached) return cached;
+  const url = serverFiles.get(key);
+  if (!url) return null;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const data = new Uint8Array(await r.arrayBuffer());
+    fileStore.set(key, data);
+    return data;
+  } catch {
+    return null;
+  }
+}
 
 const scriptlog = document.getElementById("scriptlog") as HTMLPreElement;
 
@@ -40,7 +107,7 @@ function activateSet(name: string): void {
   const set = loadedSets.get(name);
   if (!set) return;
   scriptlog.textContent = "";
-  viewer = new SetViewer(set, (name) => fileStore.get(name) ?? null);
+  viewer = new SetViewer(set, provideFile, audioSink);
   viewer.onHud = (t) => (hud.textContent = t);
   viewer.onLog = log;
   viewer.refreshHud();
@@ -48,6 +115,7 @@ function activateSet(name: string): void {
   stage.style.display = "block";
   help.style.display = "block";
   refreshMap();
+  if (webAudio) viewer.startTheme();
 }
 
 function refreshMap(): void {
@@ -61,10 +129,14 @@ function refreshMap(): void {
 
 async function addFiles(files: FileList | File[]): Promise<void> {
   let firstNew: string | null = null;
+  const lateResources: [string, Uint8Array][] = [];
   for (const f of files) {
     const data = new Uint8Array(await f.arrayBuffer());
     fileStore.set(f.name.toLowerCase(), data);
-    if (!/\.set$/i.test(f.name)) continue;
+    if (!/\.set$/i.test(f.name)) {
+      lateResources.push([f.name, data]);
+      continue;
+    }
     try {
       loadedSets.set(f.name, readSetFile(data));
       if (!firstNew) firstNew = f.name;
@@ -74,20 +146,42 @@ async function addFiles(files: FileList | File[]): Promise<void> {
     }
   }
   rebuildSetSelect();
-  if (firstNew) activateSet(firstNew);
+  if (firstNew) {
+    activateSet(firstNew);
+  } else if (viewer) {
+    // banks/shops dropped after the set is already running
+    let opened = false;
+    for (const [name, data] of lateResources) {
+      opened = viewer.addResource(name, data) || opened;
+    }
+    if (opened && webAudio) viewer.startTheme();
+  }
 }
 
 function rebuildSetSelect(): void {
   setSelectWrap.innerHTML = "";
-  if (loadedSets.size < 1) return;
+  const serverSets = [...serverFiles.keys()].filter((n) => n.endsWith(".set")).sort();
+  if (loadedSets.size < 1 && serverSets.length < 1) return;
   const sel = document.createElement("select");
+  const seen = new Set<string>();
   for (const name of loadedSets.keys()) {
     const opt = document.createElement("option");
     opt.value = name;
     opt.textContent = name;
     sel.appendChild(opt);
+    seen.add(name.toLowerCase());
   }
-  sel.addEventListener("change", () => activateSet(sel.value));
+  for (const name of serverSets) {
+    if (seen.has(name)) continue;
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = `${name} (server)`;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener("change", () => {
+    if (loadedSets.has(sel.value)) activateSet(sel.value);
+    else void loadServerSet(sel.value);
+  });
   setSelectWrap.appendChild(sel);
   const add = document.createElement("button");
   add.textContent = "+ add sets";
@@ -95,6 +189,64 @@ function rebuildSetSelect(): void {
   add.addEventListener("click", () => fileInput.click());
   setSelectWrap.appendChild(add);
 }
+
+/** activate a set that lives on the dev server: fetch it + its siblings */
+async function loadServerSet(setName: string): Promise<void> {
+  hud.textContent = `loading ${setName}…`;
+  const data = await fetchIntoStore(setName);
+  if (!data) {
+    hud.textContent = `could not fetch ${setName}`;
+    return;
+  }
+  const base = setName.replace(/\.set$/, "");
+  // prefetch siblings so the viewer finds them synchronously at construction
+  await Promise.all(
+    [`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`, "unilib.trk"].map(fetchIntoStore),
+  );
+  try {
+    loadedSets.set(setName, readSetFile(data));
+  } catch (e) {
+    hud.textContent = `failed to parse ${setName}: ${(e as Error).message}`;
+    return;
+  }
+  rebuildSetSelect();
+  activateSet(setName);
+}
+
+/** dev-server mode: offer all hosted .SET files as a clickable list */
+async function initServerBrowser(): Promise<void> {
+  let paths: string[];
+  try {
+    const r = await fetch("/api/gamefiles");
+    if (!r.ok) return;
+    paths = await r.json();
+  } catch {
+    return; // production / no dev server: drag-and-drop only
+  }
+  for (const p of paths) {
+    serverFiles.set(p.split("/").pop()!.toLowerCase(), "/" + p);
+  }
+  const sets = [...serverFiles.keys()].filter((n) => n.endsWith(".set")).sort();
+  if (!sets.length) return;
+  const list = document.createElement("div");
+  list.style.cssText = "margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.4rem;max-width:1024px;justify-content:center";
+  for (const s of sets) {
+    const b = document.createElement("button");
+    b.textContent = s.replace(/\.set$/, "");
+    b.style.cssText = "background:#1c1b16;color:#d8d4c8;border:1px solid #3a3428;font-family:inherit;cursor:pointer;padding:0.2rem 0.6rem";
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      void loadServerSet(s);
+    });
+    list.appendChild(b);
+  }
+  drop.appendChild(list);
+  const note = document.createElement("div");
+  note.style.cssText = "margin-top:0.6rem;font-size:0.75rem;color:#6c6759";
+  note.textContent = "sets found on the dev server — click to play (siblings load automatically)";
+  drop.appendChild(note);
+}
+void initServerBrowser();
 
 drop.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => fileInput.files && addFiles(fileInput.files));

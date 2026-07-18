@@ -1,6 +1,7 @@
 import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTURNS } from "./df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "./df/image";
 import { FileProvider, SetScripts } from "./engine/setscripts";
+import { AudioSink, NullAudioSink } from "./engine/audio";
 
 /**
  * Navigation state machine over a parsed SET file.
@@ -47,17 +48,53 @@ export class SetViewer {
   onLog: (line: string) => void = () => {};
   readonly scripts: SetScripts;
 
-  constructor(set: SetFile, files: FileProvider = () => null) {
+  constructor(set: SetFile, files: FileProvider = () => null, audio: AudioSink = new NullAudioSink()) {
     this.set = set;
     this.palette = paletteToRGBA(set.paletteRaw, set.colorCount);
-    this.scripts = new SetScripts(set, files);
+    this.scripts = new SetScripts(set, files, audio);
     this.scripts.onLog = (l) => this.onLog(l);
     this.predecodeAll();
     this.jumpToDefault();
+    // stage/boot layer doesn't exist yet: auto-load sibling resources
+    const base = set.setName.toLowerCase();
+    for (const bank of [`${base}.trk`, `${base}.sfx`, `${base}.11k`, "unilib.trk"]) {
+      const data = files(bank);
+      if (data) this.scripts.audioLib.openBank(bank, data);
+    }
+    if (this.scripts.audioLib.bankNames.length) {
+      this.onLog(`audio banks: ${this.scripts.audioLib.bankNames.join(", ")}`);
+    } else {
+      this.onLog(
+        `no audio banks — drop UNILIB.TRK and ${base.toUpperCase()}.TRK/.SFX alongside the .SET to hear sound`,
+      );
+    }
     this.scripts.openSet();
-    // stage layer doesn't exist yet: auto-load the sibling shop if present
-    this.scripts.openShop(`${set.setName.toLowerCase()}.shp`);
+    this.scripts.openShop(`${base}.shp`);
     this.scripts.openScene(this.sceneIdx);
+  }
+
+  /** start looping background music if a theme bank is available */
+  startTheme(): void {
+    const theme =
+      this.scripts.audioLib.theme(`${this.set.setName.toLowerCase()}.trk`) ??
+      this.scripts.audioLib.theme();
+    if (theme) this.scripts.audio.play("theme", theme, { loop: true });
+  }
+
+  /** wire a file added after construction (audio bank or this set's shop) */
+  addResource(name: string, data: Uint8Array): boolean {
+    const key = name.toLowerCase();
+    if (/\.(trk|sfx|11k)$/.test(key)) {
+      if (this.scripts.audioLib.openBank(key, data)) {
+        this.onLog(`audio bank opened: ${key}`);
+        return true;
+      }
+      return false;
+    }
+    if (key === `${this.set.setName.toLowerCase()}.shp`) {
+      return this.scripts.openShop(key);
+    }
+    return false;
   }
 
   private predecodeAll(): void {
