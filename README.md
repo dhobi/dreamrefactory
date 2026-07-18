@@ -4,7 +4,33 @@ Browser port (work in progress) of the CyberFlix **DreamFactory 4.0** engine,
 targeting *Titanic: Adventure Out of Time* (1996) — no DOSBox, a native
 TypeScript reimplementation running on canvas.
 
-## Status: Milestone 3 — interactive hotspots
+## Status: Milestone 4 — props (SHP)
+
+- `src/df/shp.ts` — SHP ("shop") loader: prop groups → named states →
+  animation frames, plus the transparent-image codec (per-frame draw offsets
+  in the header, Y before X).
+- `src/engine/props.ts` — prop runtime: visibility/state/anchor driven by
+  scripts, frame animation, alpha compositing into the view buffer.
+- Builtins wired: `propexists/propvisible/propview/propxy/propowner/
+  propvalue`, `openshopfile`/`closeshopfile` (via a FileProvider — drop the
+  .SHP next to the .SET in the browser); a shop's `openshop` handler fires
+  on load, prop group scripts join the `sendto*` target namespace.
+- Placement rule (validated against corpus usage — mouse-dragged inventory
+  props, blackjack cards, UI-band buttons): `screenPos = propxy − storedOffset`,
+  anchor default (256,192) = centre of the original 512×384 screen; the
+  512×264 view occupies its top rows.
+- **Open item:** scene-embedded props (e.g. TURK `turkwater`) ignore that
+  rule — empirically the faucet belongs at (302,88) on Scene109/View118
+  (implied anchor (317,130) vs scripted propxy (256,192)); their state
+  containers carry a flag the UI props lack, and placement presumably goes
+  through the world→screen projection (`propxyz` exists for 3D positions).
+  Needs the TI.EXE prop-draw routine (Ghidra).
+
+## Milestone 3 — interactive hotspots
+
+- Hotspot region fields in SET view objects are stored **Y-first**
+  `(top, left, bottom, right)`; dfet's struct labels them X-first, which
+  misplaced every hotspot (user-visible as a bottom-left offset).
 
 The interpreter is wired into the SET viewer:
 

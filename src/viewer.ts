@@ -1,6 +1,6 @@
 import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTURNS } from "./df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "./df/image";
-import { SetScripts } from "./engine/setscripts";
+import { FileProvider, SetScripts } from "./engine/setscripts";
 
 /**
  * Navigation state machine over a parsed SET file.
@@ -47,14 +47,16 @@ export class SetViewer {
   onLog: (line: string) => void = () => {};
   readonly scripts: SetScripts;
 
-  constructor(set: SetFile) {
+  constructor(set: SetFile, files: FileProvider = () => null) {
     this.set = set;
     this.palette = paletteToRGBA(set.paletteRaw, set.colorCount);
-    this.scripts = new SetScripts(set);
+    this.scripts = new SetScripts(set, files);
     this.scripts.onLog = (l) => this.onLog(l);
     this.predecodeAll();
     this.jumpToDefault();
     this.scripts.openSet();
+    // stage layer doesn't exist yet: auto-load the sibling shop if present
+    this.scripts.openShop(`${set.setName.toLowerCase()}.shp`);
     this.scripts.openScene(this.sceneIdx);
   }
 
@@ -254,6 +256,7 @@ export class SetViewer {
 
   /** advance animation; returns the frame to draw this tick */
   tick(now: number): CachedFrame | null {
+    this.scripts.propRuntime.tick(now, FRAME_MS);
     if (this.animation) {
       if (!this.lastTick) this.lastTick = now;
       if (now - this.lastTick >= FRAME_MS) {
@@ -280,6 +283,9 @@ export class SetViewer {
     }
     const img = ctx.createImageData(f.width, f.height);
     indexedToRGBA(f.pixels, f.width, f.height, this.palette, img.data);
+    if (!this.busy) {
+      this.scripts.propRuntime.composite(img.data, f.width, f.height);
+    }
     ctx.putImageData(img, 0, 0);
 
     if (this.showHotspots && !this.busy) {

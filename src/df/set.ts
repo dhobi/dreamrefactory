@@ -152,10 +152,12 @@ function readObjects(c: Container): ObjectEntry[] {
     r.skip(4); // unknownInt
     const rotation8 = r.i16();
     r.skip(2); // unknownShort2
-    const startRegionX = r.i16();
+    // regions are stored Y-first: (top, left, bottom, right) — dfet's struct
+    // labels these X-first, which misplaces every hotspot
     const startRegionY = r.i16();
-    const endRegionX = r.i16();
+    const startRegionX = r.i16();
     const endRegionY = r.i16();
+    const endRegionX = r.i16();
     const locationScript = r.i32();
     const identifier = r.pstr(15);
     objects.push({

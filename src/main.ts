@@ -14,6 +14,8 @@ const ctx = screen.getContext("2d")!;
 const mapCtx = minimap.getContext("2d")!;
 
 const loadedSets = new Map<string, SetFile>();
+/** every dropped file by lowercase basename — scripts pull in siblings (.shp) */
+const fileStore = new Map<string, Uint8Array>();
 let viewer: SetViewer | null = null;
 
 const scriptlog = document.getElementById("scriptlog") as HTMLPreElement;
@@ -38,7 +40,7 @@ function activateSet(name: string): void {
   const set = loadedSets.get(name);
   if (!set) return;
   scriptlog.textContent = "";
-  viewer = new SetViewer(set);
+  viewer = new SetViewer(set, (name) => fileStore.get(name) ?? null);
   viewer.onHud = (t) => (hud.textContent = t);
   viewer.onLog = log;
   viewer.refreshHud();
@@ -60,10 +62,11 @@ function refreshMap(): void {
 async function addFiles(files: FileList | File[]): Promise<void> {
   let firstNew: string | null = null;
   for (const f of files) {
+    const data = new Uint8Array(await f.arrayBuffer());
+    fileStore.set(f.name.toLowerCase(), data);
     if (!/\.set$/i.test(f.name)) continue;
     try {
-      const set = readSetFile(new Uint8Array(await f.arrayBuffer()));
-      loadedSets.set(f.name, set);
+      loadedSets.set(f.name, readSetFile(data));
       if (!firstNew) firstNew = f.name;
     } catch (e) {
       hud.textContent = `Failed to load ${f.name}: ${(e as Error).message}`;

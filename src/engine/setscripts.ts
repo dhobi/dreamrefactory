@@ -1,7 +1,12 @@
 import { SetFile } from "../df/set";
 import { sniffScript } from "../df/script";
+import { readShpFile } from "../df/shp";
 import { parseScript } from "./parser";
-import { Interpreter, ScriptInstance, Value, registerCoreBuiltins, toStr } from "./interp";
+import { Interpreter, ScriptInstance, Value, registerCoreBuiltins, toStr, truthy } from "./interp";
+import { PropRuntime } from "./props";
+
+/** resolves sibling game files (turk.shp etc.) by lowercase basename */
+export type FileProvider = (name: string) => Uint8Array | null;
 
 /**
  * Binds a parsed SET file to the script interpreter: the set's main script,
@@ -19,8 +24,16 @@ export class SetScripts {
   /** cursor name requested by the last setcursor handler */
   cursorName = "";
   onLog: (line: string) => void = () => {};
+  readonly propRuntime = new PropRuntime();
+  /** script instances of loaded prop groups, by lowercase prop name */
+  private propScripts = new Map<string, ScriptInstance>();
+  /** main-script instances of loaded shops, by shop file name */
+  private shopMains = new Map<string, ScriptInstance | null>();
 
-  constructor(readonly set: SetFile) {
+  constructor(
+    readonly set: SetFile,
+    readonly files: FileProvider = () => null,
+  ) {
     this.interp = new Interpreter();
     registerCoreBuiltins(this.interp);
     this.registerViewerBuiltins();
@@ -42,14 +55,7 @@ export class SetScripts {
 
   private instance(containerLoc: number, owner: string): ScriptInstance | null {
     if (!containerLoc) return null;
-    const tokens = sniffScript(this.set.file.containers[containerLoc].data);
-    if (!tokens) return null;
-    try {
-      return new ScriptInstance(owner, parseScript(tokens));
-    } catch (e) {
-      this.onLog(`parse error in ${owner}: ${(e as Error).message}`);
-      return null;
-    }
+    return this.instanceFrom(this.set.file.containers[containerLoc].data, owner);
   }
 
   /** fire an event; returns the handler result or null if nobody handled it */
@@ -128,6 +134,8 @@ export class SetScripts {
   /** find any script instance in this set by its owner name */
   findInstance(name: string): ScriptInstance | null {
     const lower = name.toLowerCase();
+    const prop = this.propScripts.get(lower);
+    if (prop) return prop;
     if (this.main && this.main.name.toLowerCase() === lower) return this.main;
     for (let s = 0; s < this.set.scenes.length; s++) {
       if (this.set.scenes[s].sceneName.toLowerCase() === lower) return this.sceneScripts[s];
@@ -136,6 +144,58 @@ export class SetScripts {
       if (inst.name.toLowerCase() === lower) return inst;
     }
     return null;
+  }
+
+  /** load a SHP file: register its props, prop scripts, and fire openshop */
+  openShop(fileName: string): boolean {
+    const key = fileName.toLowerCase();
+    if (this.shopMains.has(key)) return true;
+    const data = this.files(key);
+    if (!data) {
+      this.onLog(`openshopfile: "${fileName}" not available`);
+      return false;
+    }
+    let shp;
+    try {
+      shp = readShpFile(data);
+    } catch (e) {
+      this.onLog(`openshopfile: ${fileName}: ${(e as Error).message}`);
+      return false;
+    }
+    this.propRuntime.addShop(key, shp);
+    for (const g of shp.groups) {
+      const inst = this.instanceFrom(shp.file.containers[g.scriptContainerLocation]?.data, g.name);
+      if (inst) this.propScripts.set(g.name.toLowerCase(), inst);
+    }
+    const main = this.instanceFrom(shp.file.containers[shp.mainScriptLocation]?.data, key);
+    this.shopMains.set(key, main);
+    this.fire(main, "openshop", []);
+    this.onLog(`shop loaded: ${key} (${shp.groups.map((g) => g.name).join(", ")})`);
+    return true;
+  }
+
+  closeShop(fileName: string): void {
+    const key = fileName.toLowerCase();
+    const main = this.shopMains.get(key);
+    if (main !== undefined) this.fire(main, "closeshop", []);
+    this.shopMains.delete(key);
+    const shop = this.propRuntime.shops.get(key);
+    if (shop) {
+      for (const g of shop.shp.groups) this.propScripts.delete(g.name.toLowerCase());
+    }
+    this.propRuntime.removeShop(key);
+  }
+
+  private instanceFrom(data: Uint8Array | undefined, owner: string): ScriptInstance | null {
+    if (!data) return null;
+    const tokens = sniffScript(data);
+    if (!tokens) return null;
+    try {
+      return new ScriptInstance(owner, parseScript(tokens));
+    } catch (e) {
+      this.onLog(`parse error in ${owner}: ${(e as Error).message}`);
+      return null;
+    }
   }
 
   private registerViewerBuiltins(): void {
@@ -170,6 +230,49 @@ export class SetScripts {
     }
     r("cursor", (_i, [name]) => {
       this.cursorName = String(name ?? "");
+    });
+
+    // prop commands — getter/setter by arity
+    const prop = (name: Value) => this.propRuntime.get(toStr(name));
+    r("propexists", (_i, [n]) => (prop(n) ? 1 : 0));
+    r("propvisible", (_i, [n, v]) => {
+      const p = prop(n);
+      if (!p) return 0;
+      if (v === undefined) return p.visible ? 1 : 0;
+      p.visible = truthy(v);
+    });
+    r("propview", (_i, [n, v]) => {
+      const p = prop(n);
+      if (!p) return "";
+      if (v === undefined) return p.stateName;
+      p.stateName = toStr(v).toLowerCase();
+      p.frameIdx = 0;
+      p.lastTick = 0;
+    });
+    r("propxy", (_i, [n, x, y]) => {
+      const p = prop(n);
+      if (!p) return 0;
+      if (x === undefined) return 0;
+      p.anchorX = Number(x) || 0;
+      p.anchorY = Number(y) || 0;
+    });
+    r("propowner", (_i, [n, v]) => {
+      const p = prop(n);
+      if (!p) return "";
+      if (v === undefined) return p.owner;
+      p.owner = v;
+    });
+    r("propvalue", (_i, [n, v]) => {
+      const p = prop(n);
+      if (!p) return 0;
+      if (v === undefined) return p.value;
+      p.value = v;
+    });
+    r("openshopfile", (_i, [n]) => {
+      this.openShop(toStr(n));
+    });
+    r("closeshopfile", (_i, [n]) => {
+      this.closeShop(toStr(n));
     });
     r("message", (_i, args) => this.onLog(`msg: ${args.map(String).join(" ")}`));
     for (const snd of ["voicesound", "singlesound", "bothsound", "dualsound", "multiplesound"]) {
