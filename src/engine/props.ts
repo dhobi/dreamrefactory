@@ -13,6 +13,57 @@ import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/s
 const DEFAULT_ANCHOR_X = 256;
 const DEFAULT_ANCHOR_Y = 192;
 
+/**
+ * World→screen projection, ported from TI.EXE fn 0x43a970. Angles are in
+ * 1/256 turns; trig is 2.14 fixed point (the engine's TRIG resource tables).
+ * The camera sits at the scene's map position; its height comes from the
+ * per-view double in the view table (×512 = world units).
+ */
+export interface WorldCamera {
+  x: number;
+  y: number;
+  z: number;
+  /** view angle, 0..255 */
+  deg: number;
+  /** focal length = max(viewW, viewH)/2 */
+  f: number;
+  cx: number;
+  cy: number;
+  /** viewport clip (world props only draw inside the set view) */
+  clipW: number;
+  clipH: number;
+}
+
+const SIN14 = new Int16Array(256);
+const COS14 = new Int16Array(256);
+for (let i = 0; i < 256; i++) {
+  SIN14[i] = Math.round(16384 * Math.sin((2 * Math.PI * i) / 256));
+  COS14[i] = Math.round(16384 * Math.cos((2 * Math.PI * i) / 256));
+}
+/** the engine's rounding: add 0x3fff before >>14 only for negatives */
+const fix14 = (v: number): number => (v < 0 ? v + 0x3fff : v) >> 14;
+
+export function projectPoint(
+  cam: WorldCamera,
+  x: number,
+  y: number,
+  z: number,
+): { x: number; y: number; depth: number } | null {
+  const dx = x - cam.x;
+  const dy = y - cam.y;
+  const dz = z - cam.z;
+  const s = SIN14[cam.deg & 0xff];
+  const c = COS14[cam.deg & 0xff];
+  const depth = fix14(dy * s + dx * c);
+  if (depth <= 0) return null;
+  const lateral = fix14(dy * c - dx * s);
+  return {
+    x: cam.cx + Math.trunc((lateral * cam.f) / depth),
+    y: cam.cy - Math.trunc((dz * cam.f) / depth),
+    depth,
+  };
+}
+
 export class PropInstance {
   visible = false;
   stateName = "";
@@ -24,12 +75,10 @@ export class PropInstance {
   deg: string | number = 0;
   /** z-order (propdist): more negative = closer to the viewer */
   dist = 0;
-  /**
-   * placed with propxyz (world coordinates in a set) — not drawable until
-   * world→screen projection is implemented, so the renderer skips these
-   * instead of dumping them at their screen anchor
-   */
+  /** placed with propxyz: drawn via world→screen projection */
   worldSpace = false;
+  /** set this world prop belongs to (propset) — only drawn there */
+  setName = "";
   worldX = 0;
   worldY = 0;
   worldZ = 0;
@@ -122,8 +171,40 @@ export class PropRuntime {
       .sort((a, b) => b.dist - a.dist);
   }
 
+  /** the set currently displayed — world props only draw in their own set */
+  currentSet = "";
+
+  /** visible world-space props, far to near (projected depth descending) */
+  private worldDrawList(cam: WorldCamera): { p: PropInstance; proj: { x: number; y: number; depth: number } }[] {
+    const out: { p: PropInstance; proj: { x: number; y: number; depth: number } }[] = [];
+    for (const p of this.props.values()) {
+      if (!p.visible || !p.worldSpace || !p.state()?.frames.length || p.scale <= 0) continue;
+      if (p.setName && p.setName !== this.currentSet) continue;
+      const proj = projectPoint(cam, p.worldX, p.worldY, p.worldZ);
+      if (!proj || proj.depth - p.zclip <= 0) continue;
+      out.push({ p, proj });
+    }
+    return out.sort((a, b) => b.proj.depth - a.proj.depth);
+  }
+
+  /** screen rect + scale of a projected prop frame (sprites shrink with depth) */
+  private worldRect(p: PropInstance, proj: { x: number; y: number; depth: number }) {
+    const st = p.state()!;
+    const f = p.shop.frame(st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);
+    // TI.EXE: scale reference 180 per state, per-mille propscale, ÷ depth
+    const k = (p.scale * 180) / (1000 * proj.depth);
+    return {
+      f,
+      k,
+      x: proj.x - Math.round(f.posXraw * k),
+      y: proj.y - Math.round(f.posYraw * k),
+      w: Math.max(1, Math.round(f.width * k)),
+      h: Math.max(1, Math.round(f.height * k)),
+    };
+  }
+
   /** front-most visible prop whose opaque pixels cover (x, y) */
-  propAt(x: number, y: number): PropInstance | null {
+  propAt(x: number, y: number, cam: WorldCamera | null = null): PropInstance | null {
     const list = this.drawList();
     for (let i = list.length - 1; i >= 0; i--) {
       const p = list[i];
@@ -134,6 +215,17 @@ export class PropRuntime {
       if (lx < 0 || ly < 0 || lx >= f.width || ly >= f.height) continue;
       if (f.opaque[ly * f.width + lx]) return p;
     }
+    if (cam) {
+      const world = this.worldDrawList(cam);
+      for (let i = world.length - 1; i >= 0; i--) {
+        const { p, proj } = world[i];
+        const r = this.worldRect(p, proj);
+        if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
+        const sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
+        const sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
+        if (r.f.opaque[sy * r.f.width + sx]) return p;
+      }
+    }
     return null;
   }
 
@@ -143,7 +235,29 @@ export class PropRuntime {
     height: number,
     paletteRGBA: Uint8ClampedArray,
     minAnchorY = -Infinity,
+    cam: WorldCamera | null = null,
   ): void {
+    // world-space props first (they belong to the scene), far to near
+    if (cam) {
+      for (const { p, proj } of this.worldDrawList(cam)) {
+        const r = this.worldRect(p, proj);
+        const maxY = Math.min(cam.clipH, height, r.y + r.h);
+        const maxX = Math.min(cam.clipW, width, r.x + r.w);
+        for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
+          const sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
+          for (let tx = Math.max(0, r.x); tx < maxX; tx++) {
+            const sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
+            const s = sy * r.f.width + sx;
+            if (!r.f.opaque[s]) continue;
+            const pal = r.f.indexed[s] * 4;
+            const d = (ty * width + tx) * 4;
+            rgba[d] = paletteRGBA[pal];
+            rgba[d + 1] = paletteRGBA[pal + 1];
+            rgba[d + 2] = paletteRGBA[pal + 2];
+          }
+        }
+      }
+    }
     for (const p of this.drawList()) {
       if (p.anchorY < minAnchorY) continue;
       const st = p.state()!;

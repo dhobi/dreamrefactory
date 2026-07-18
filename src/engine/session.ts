@@ -364,12 +364,15 @@ export class GameSession {
       return false;
     }
     this.propRuntime.addShop(key, shp);
-    for (const g of shp.groups) {
-      const inst = this.instanceFrom(shp.file.containers[g.scriptContainerLocation]?.data, g.name);
-      if (inst) this.propScripts.set(g.name.toLowerCase(), inst);
-    }
     const main = this.instanceFrom(shp.file.containers[shp.mainScriptLocation]?.data, key);
     this.shopMains.set(key, main);
+    for (const g of shp.groups) {
+      const inst = this.instanceFrom(shp.file.containers[g.scriptContainerLocation]?.data, g.name);
+      if (inst) {
+        inst.parent = main; // unqualified calls resolve via the shop main
+        this.propScripts.set(g.name.toLowerCase(), inst);
+      }
+    }
     if (main) {
       try {
         this.interp.runHandler(main, "openshop", [], { me: key, target: "" });

@@ -86,6 +86,7 @@ export class SetViewer {
     session.currentSceneName = () => this.scene.sceneName.toLowerCase();
     session.currentViewName = () => this.scene.views[this.viewIdx].viewName.toLowerCase();
     session.currentRotation = () => this.scene.views[this.viewIdx].rotation;
+    session.propRuntime.currentSet = set.setName.toLowerCase();
     session.captureFrame = () => {
       const f = this.current;
       if (!f) return null;
@@ -457,6 +458,26 @@ export class SetViewer {
     return this.animation !== null || this.movie !== null || this.session.fading;
   }
 
+  /** camera of the current view, for world-space (propxyz) props */
+  worldCamera(): import("./engine/props").WorldCamera | null {
+    const sc = this.scene;
+    const v = sc?.views[this.viewIdx];
+    if (!v) return null;
+    const w = this.set.viewPortWidth || 512;
+    const h = this.set.viewPortHeight || 264;
+    return {
+      x: sc.xAxisMap,
+      y: sc.zAxisMap,
+      z: Math.round(v.cameraHeight * 512),
+      deg: v.rotation8,
+      f: Math.max(w, h) / 2,
+      cx: w / 2,
+      cy: h / 2,
+      clipW: w,
+      clipH: h,
+    };
+  }
+
   /** dir: RIGHTTURNS or LEFTTURNS */
   turn(dir: number): void {
     if (this.busy) return;
@@ -563,7 +584,9 @@ export class SetViewer {
       return;
     }
     // props (UI band, inventory items) sit in front of everything
-    const prop = this.session.propRuntime.propAt(x, y);
+    const prop = this.session.propRuntime.propAt(
+      x, y, this.session.setVisible ? this.worldCamera() : null,
+    );
     if (prop) {
       const name = prop.group.name;
       const inst = this.session.propScripts.get(name.toLowerCase());
@@ -603,7 +626,9 @@ export class SetViewer {
 
   /** returns the DreamFactory cursor name for this position ("" = default) */
   hover(x: number, y: number): string {
-    const prop = this.session.propRuntime.propAt(x, y);
+    const prop = this.session.propRuntime.propAt(
+      x, y, this.session.setVisible ? this.worldCamera() : null,
+    );
     if (prop) {
       const name = prop.group.name;
       const inst = this.session.propScripts.get(name.toLowerCase());
@@ -718,7 +743,8 @@ export class SetViewer {
       // during walk/turn animation only the UI band props keep drawing
       const minAnchorY = this.animation !== null ? (f?.height ?? 0) : -Infinity;
       const propPal = this.session.setVisible ? this.propPalette : flat.palette;
-      this.session.propRuntime.composite(img.data, flat.width, flat.height, propPal, minAnchorY);
+      const cam = this.session.setVisible && this.animation === null ? this.worldCamera() : null;
+      this.session.propRuntime.composite(img.data, flat.width, flat.height, propPal, minAnchorY, cam);
       ctx.putImageData(img, 0, 0);
       this.applyFade(ctx);
       if (this.session.setVisible) this.drawHotspots(ctx);
@@ -734,7 +760,9 @@ export class SetViewer {
     const img = ctx.createImageData(f.width, f.height);
     indexedToRGBA(f.pixels, f.width, f.height, this.palette, img.data);
     if (this.animation === null) {
-      this.session.propRuntime.composite(img.data, f.width, f.height, this.propPalette);
+      this.session.propRuntime.composite(
+        img.data, f.width, f.height, this.propPalette, -Infinity, this.worldCamera(),
+      );
     }
     ctx.putImageData(img, 0, 0);
     this.applyFade(ctx);

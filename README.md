@@ -4,7 +4,35 @@ Browser port (work in progress) of the CyberFlix **DreamFactory 4.0** engine,
 targeting *Titanic: Adventure Out of Time* (1996) — no DOSBox, a native
 TypeScript reimplementation running on canvas.
 
-## Status: Milestone 8 — stage layer (STG flats) & inventory
+## Status: Milestone 9 — world-space props (the TI.EXE projection)
+
+The engine's world→screen projection is recovered from TI.EXE (fn
+0x43a970, reached via the command dispatch jump tables at 0x4269f8):
+
+    dx,dy,dz = prop − camera        (ints; ~1000 units/m in-set)
+    depth    = (dy·sin + dx·cos) >> 14      · 2.14 fixed-point trig,
+    lateral  = (dy·cos − dx·sin) >> 14        angles in 1/256 turns
+    x = cx + lateral·f/depth
+    y = cy − dz·f/depth             · f = max(viewW,viewH)/2, center (256,132)
+
+- The camera sits at the scene's map position (`xAxisMap`,`zAxisMap`);
+  its **height is the per-view double** we used to skip as "unknownDB2"
+  (×512 = world units). The trig tables are TI.EXE's TRIG resource —
+  plain 16384·sin/cos, regenerated at load.
+- Sprites scale with depth: k = propscale × 180 / (1000 × depth), where
+  180 is the state-header reference scale; stored frame offsets scale
+  too. `propzclip` extends/limits visibility (depth − zclip ≤ 0 hides).
+- `propset(name, set)` binds a world prop to its set — it only draws
+  there. `propxy` returns a prop to screen space (pickup).
+- Unqualified calls in prop scripts resolve through the **shop main
+  script** (ScriptInstance.parent) — the bag's mousedown calls
+  watchidle()/mapidle(), defined in house.shp's main.
+- End-to-end: the bag renders on the C73 bed (Scene50/View59, projected
+  anchor exactly (314,200) at depth 1755), click → addbag() → owner
+  "frank", appears in the UI band, trunkkey granted. Verified headless
+  + real Chromium.
+
+## Milestone 8 — stage layer (STG flats) & inventory
 
 - `src/df/stg.ts` — STG reader: palette @56, flat table @2124 (46-byte
   records: script/image/click-logic containers per flat); flat images use

@@ -391,6 +391,12 @@ export function registerGameBuiltins(session: GameSession): void {
     p.worldY = Number(y) || 0;
     p.worldZ = Number(z) || 0;
   });
+  r("propset", (_i, [n, v]) => {
+    const p = prop(n);
+    if (!p) return "";
+    if (v === undefined) return p.setName;
+    p.setName = toStr(v).toLowerCase();
+  });
   r("propscale", (_i, [n, v]) => {
     const p = prop(n);
     if (!p) return 0;

@@ -52,6 +52,13 @@ export class Frame {
 
 /** a script bound to its owning object */
 export class ScriptInstance {
+  /**
+   * resolution parent for unqualified calls (a prop script's shop main —
+   * the bag's mousedown calls watchidle(), defined in house.shp's main),
+   * consulted after builtins and before the global fallbacks
+   */
+  parent: ScriptInstance | null = null;
+
   constructor(
     readonly name: string,
     readonly script: Script,
@@ -256,6 +263,11 @@ export class Interpreter {
     const args = call.args.map((a) => this.evalExpr(a, frame));
     if (builtin) return builtin(this, args, call, frame);
     if (call.id === undefined) {
+      for (let p = frame.script.parent; p; p = p.parent) {
+        if (p.script.codes.has(call.name)) {
+          return this.runHandler(p, call.name, args, frame.ctx).value;
+        }
+      }
       for (const inst of this.fallbackScripts) {
         if (inst.script.codes.has(call.name)) {
           return this.runHandler(inst, call.name, args, frame.ctx).value;

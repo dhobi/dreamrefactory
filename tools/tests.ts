@@ -12,6 +12,7 @@ import { parseScript } from "../src/engine/parser";
 import { GameSession } from "../src/engine/session";
 import { ScriptInstance } from "../src/engine/interp";
 import { NullAudioSink } from "../src/engine/audio";
+import { projectPoint } from "../src/engine/props";
 import { SetViewer } from "../src/viewer";
 
 const root = process.argv[2] ?? "gamefiles";
@@ -422,6 +423,39 @@ function runAnimations(v: SetViewer): void {
     session.stageName === "main.stg" && session.currentFlat === "main 1",
     `${session.stageName}/${session.currentFlat}`,
   );
+}
+
+// --- 15. world-space props: the bag on the C73 bed, projected + takeable ---
+{
+  const { session, viewer } = newSession();
+  session.openSetFile("c73.set");
+  const v = viewer();
+  v.jumpTo("Scene50", "View59");
+  const bag = session.propRuntime.get("bag")!;
+  check("bag is a visible world prop", bag.visible && bag.worldSpace, `vis=${bag.visible} ws=${bag.worldSpace}`);
+  // scan the view for the bag under the cursor (projection + opaque mask)
+  const cam = v.worldCamera()!;
+  let hit: { x: number; y: number } | null = null;
+  for (let y = 140; y < 264 && !hit; y += 4) {
+    for (let x = 200; x < 400 && !hit; x += 4) {
+      if (session.propRuntime.propAt(x, y, cam)?.group.name === "bag") hit = { x, y };
+    }
+  }
+  check("bag projects into View59", !!hit, hit ? `${hit.x},${hit.y}` : "not found");
+  // the projected anchor must sit on the bed (TI.EXE math: 314,200)
+  const proj = projectPoint(cam, bag.worldX, bag.worldY, bag.worldZ);
+  check(
+    "projection matches TI.EXE math",
+    !!proj && proj.x === 314 && proj.y === 200 && proj.depth === 1755,
+    proj ? `${proj.x},${proj.y} d=${proj.depth}` : "behind camera",
+  );
+  if (hit) v.click(hit.x, hit.y); // bag's mousedown -> addbag()
+  check(
+    "clicking the bag picks it up",
+    bag.owner === "frank" && !bag.worldSpace && bag.anchorY === 324,
+    `owner=${bag.owner} ws=${bag.worldSpace} anchor=${bag.anchorX},${bag.anchorY}`,
+  );
+  check("trunkkey comes along", session.propRuntime.get("trunkkey")?.owner === "frank");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -49,6 +49,12 @@ export interface SceneView {
   rotation: number;
   rotation8: number;
   viewPairType: number;
+  /**
+   * camera height for world→screen projection, in metres from the ship's
+   * datum; world units are height × 512 (TI.EXE projects props against
+   * per-view camera structs whose z comes from this double)
+   */
+  cameraHeight: number;
   viewID: number;
   locationObjects: number;
   viewName: string;
@@ -196,7 +202,7 @@ function readScene(index: number, containers: Container[], mainSceneRegister: nu
     const rotation = vr.f64be();
     const rotation8 = vr.i16();
     const viewPairType = vr.i32();
-    vr.f64be(); // unknownDB2
+    const cameraHeight = vr.f64be();
     const viewID = vr.i32();
     const locationObjects = vr.i32();
     const viewName = vr.pstr(15);
@@ -204,6 +210,7 @@ function readScene(index: number, containers: Container[], mainSceneRegister: nu
       rotation,
       rotation8,
       viewPairType,
+      cameraHeight,
       viewID,
       locationObjects,
       viewName,
