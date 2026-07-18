@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TAOOT Web — SET Viewer</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        background: #101014;
+        color: #d8d4c8;
+        font-family: Georgia, "Times New Roman", serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+      }
+      h1 {
+        font-size: 1.1rem;
+        font-weight: normal;
+        letter-spacing: 0.25em;
+        color: #b7a97a;
+        margin: 0.8rem 0 0.4rem;
+        text-transform: uppercase;
+      }
+      #stage {
+        position: relative;
+        margin-top: 0.4rem;
+      }
+      #screen {
+        image-rendering: pixelated;
+        width: 1024px;
+        max-width: 96vw;
+        background: #000;
+        border: 1px solid #3a3428;
+        display: block;
+      }
+      #minimap {
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        image-rendering: pixelated;
+        border: 1px solid #3a3428;
+        background: rgba(0, 0, 0, 0.6);
+        display: none;
+        width: 180px;
+      }
+      #hud {
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        color: #8f8a7c;
+        min-height: 1.2em;
+      }
+      #drop {
+        border: 1px dashed #5a523e;
+        padding: 2.5rem 4rem;
+        margin-top: 3rem;
+        text-align: center;
+        cursor: pointer;
+      }
+      #drop.hover {
+        background: #1c1b16;
+      }
+      #help {
+        font-size: 0.8rem;
+        color: #6c6759;
+        margin-top: 0.4rem;
+      }
+      select {
+        background: #1c1b16;
+        color: #d8d4c8;
+        border: 1px solid #3a3428;
+        font-family: inherit;
+        margin-left: 0.6rem;
+      }
+      input[type="file"] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Titanic — Adventure Out of Time</h1>
+    <div id="drop">
+      Drop <b>.SET</b> files here (e.g. <code>gamefiles/LOCAL/B59.SET</code>)<br />
+      or click to choose files
+      <input id="fileInput" type="file" accept=".SET,.set" multiple />
+    </div>
+    <div id="stage" style="display: none">
+      <canvas id="screen" width="512" height="384"></canvas>
+      <canvas id="minimap"></canvas>
+    </div>
+    <div id="hud"></div>
+    <div id="help" style="display: none">
+      ← → turn &nbsp;·&nbsp; ↑ walk (when a road leads onward) &nbsp;·&nbsp; M map
+      &nbsp;·&nbsp; O hotspots
+      <span id="setSelectWrap"></span>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
