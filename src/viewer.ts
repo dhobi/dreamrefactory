@@ -1,7 +1,7 @@
 import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTURNS } from "./df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "./df/image";
-import { FileProvider, SetScripts } from "./engine/setscripts";
-import { AudioSink, NullAudioSink } from "./engine/audio";
+import { SetScripts } from "./engine/setscripts";
+import { GameSession } from "./engine/session";
 
 /**
  * Navigation state machine over a parsed SET file.
@@ -48,21 +48,27 @@ export class SetViewer {
   onLog: (line: string) => void = () => {};
   readonly scripts: SetScripts;
 
-  constructor(set: SetFile, files: FileProvider = () => null, audio: AudioSink = new NullAudioSink()) {
+  readonly session: GameSession;
+
+  constructor(set: SetFile, session: GameSession, startScene = "", startView = "") {
     this.set = set;
+    this.session = session;
     this.palette = paletteToRGBA(set.paletteRaw, set.colorCount);
-    this.scripts = new SetScripts(set, files, audio);
+    this.scripts = new SetScripts(set, session);
     this.scripts.onLog = (l) => this.onLog(l);
+    session.currentSceneName = () => this.scene.sceneName.toLowerCase();
+    session.currentViewName = () => this.scene.views[this.viewIdx].viewName.toLowerCase();
     this.predecodeAll();
     this.jumpToDefault();
-    // stage/boot layer doesn't exist yet: auto-load sibling resources
+    if (startScene) this.jumpTo(startScene, startView);
+    // auto-load sibling resources (the boot script does this in the real game)
     const base = set.setName.toLowerCase();
     for (const bank of [`${base}.trk`, `${base}.sfx`, `${base}.11k`, "unilib.trk"]) {
-      const data = files(bank);
-      if (data) this.scripts.audioLib.openBank(bank, data);
+      const data = session.files(bank);
+      if (data) session.audioLib.openBank(bank, data);
     }
-    if (this.scripts.audioLib.bankNames.length) {
-      this.onLog(`audio banks: ${this.scripts.audioLib.bankNames.join(", ")}`);
+    if (session.audioLib.bankNames.length) {
+      this.onLog(`audio banks: ${session.audioLib.bankNames.join(", ")}`);
     } else {
       this.onLog(
         `no audio banks — drop UNILIB.TRK and ${base.toUpperCase()}.TRK/.SFX alongside the .SET to hear sound`,
@@ -73,19 +79,40 @@ export class SetViewer {
     this.scripts.openScene(this.sceneIdx);
   }
 
+  /** position at a named scene/view (case-insensitive), e.g. from changeset() */
+  jumpTo(sceneName: string, viewName = ""): boolean {
+    const s = this.set.scenes.findIndex(
+      (sc) => sc.sceneName.toLowerCase() === sceneName.toLowerCase(),
+    );
+    if (s < 0) return false;
+    this.sceneIdx = s;
+    const v = viewName
+      ? this.scene.views.findIndex((vw) => vw.viewName.toLowerCase() === viewName.toLowerCase())
+      : -1;
+    this.viewIdx = v >= 0 ? v : 0;
+    this.showView();
+    return true;
+  }
+
+  /** keyboard event into the script chain; true if a script consumed it */
+  keyDown(keyName: string): boolean {
+    if (this.busy) return false;
+    return this.scripts.keyDown(this.sceneIdx, keyName);
+  }
+
   /** start looping background music if a theme bank is available */
   startTheme(): void {
     const theme =
-      this.scripts.audioLib.theme(`${this.set.setName.toLowerCase()}.trk`) ??
-      this.scripts.audioLib.theme();
-    if (theme) this.scripts.audio.play("theme", theme, { loop: true });
+      this.session.audioLib.theme(`${this.set.setName.toLowerCase()}.trk`) ??
+      this.session.audioLib.theme();
+    if (theme) this.session.audio.play("theme", theme, { loop: true });
   }
 
   /** wire a file added after construction (audio bank or this set's shop) */
   addResource(name: string, data: Uint8Array): boolean {
     const key = name.toLowerCase();
     if (/\.(trk|sfx|11k)$/.test(key)) {
-      if (this.scripts.audioLib.openBank(key, data)) {
+      if (this.session.audioLib.openBank(key, data)) {
         this.onLog(`audio bank opened: ${key}`);
         return true;
       }
@@ -293,7 +320,7 @@ export class SetViewer {
 
   /** advance animation; returns the frame to draw this tick */
   tick(now: number): CachedFrame | null {
-    this.scripts.propRuntime.tick(now, FRAME_MS);
+    this.session.propRuntime.tick(now, FRAME_MS);
     if (this.animation) {
       if (!this.lastTick) this.lastTick = now;
       if (now - this.lastTick >= FRAME_MS) {
@@ -321,7 +348,7 @@ export class SetViewer {
     const img = ctx.createImageData(f.width, f.height);
     indexedToRGBA(f.pixels, f.width, f.height, this.palette, img.data);
     if (!this.busy) {
-      this.scripts.propRuntime.composite(img.data, f.width, f.height);
+      this.session.propRuntime.composite(img.data, f.width, f.height);
     }
     ctx.putImageData(img, 0, 0);
 

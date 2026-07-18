@@ -1,6 +1,7 @@
 import { readSetFile, SetFile } from "./df/set";
 import { SetViewer } from "./viewer";
 import { AudioSink, WebAudioSink } from "./engine/audio";
+import { GameSession } from "./engine/session";
 
 // AudioContext must be created after a user gesture; the sink proxies until then
 let webAudio: WebAudioSink | null = null;
@@ -103,11 +104,35 @@ const CURSOR_CSS: Record<string, string> = {
   talk: "help",
 };
 
-function activateSet(name: string): void {
+// one session for the whole browser tab: globals persist across sets
+const session = new GameSession(provideFile, audioSink);
+session.onLog = (l) => log(l);
+session.onSetChange = (fileName, sceneName, viewName) => {
+  void (async () => {
+    const data = await fetchIntoStore(fileName) ?? fileStore.get(fileName) ?? null;
+    if (!data) {
+      log(`cannot travel to ${fileName}: file not available`);
+      return;
+    }
+    try {
+      loadedSets.set(fileName, readSetFile(data));
+    } catch (e) {
+      log(`cannot parse ${fileName}: ${(e as Error).message}`);
+      return;
+    }
+    const base = fileName.replace(/\.set$/, "");
+    await Promise.all([`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`].map(fetchIntoStore));
+    rebuildSetSelect();
+    activateSet(fileName, sceneName, viewName);
+  })();
+};
+
+function activateSet(name: string, startScene = "", startView = ""): void {
   const set = loadedSets.get(name);
   if (!set) return;
   scriptlog.textContent = "";
-  viewer = new SetViewer(set, provideFile, audioSink);
+  session.loadCoreScripts();
+  viewer = new SetViewer(set, session, startScene, startView);
   viewer.onHud = (t) => (hud.textContent = t);
   viewer.onLog = log;
   viewer.refreshHud();
@@ -201,7 +226,8 @@ async function loadServerSet(setName: string): Promise<void> {
   const base = setName.replace(/\.set$/, "");
   // prefetch siblings so the viewer finds them synchronously at construction
   await Promise.all(
-    [`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`, "unilib.trk"].map(fetchIntoStore),
+    [`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`,
+     "unilib.trk", "bootfile", "main.stg"].map(fetchIntoStore),
   );
   try {
     loadedSets.set(setName, readSetFile(data));
@@ -297,7 +323,11 @@ window.addEventListener("keydown", (e) => {
       viewer.turn(1);
       break;
     case "ArrowUp":
-      viewer.walk();
+      // scripts may intercept walking (e.g. doors leading to other sets)
+      if (!viewer.keyDown("uparrow")) viewer.walk();
+      break;
+    case "ArrowDown":
+      viewer.keyDown("downarrow");
       break;
     case "m":
     case "M":

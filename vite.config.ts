@@ -1,6 +1,6 @@
 import { defineConfig, Plugin } from "vite";
-import { readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { createReadStream, existsSync, readdirSync, statSync } from "node:fs";
+import { join, normalize, resolve } from "node:path";
 
 /**
  * Dev-only convenience: expose a listing of gamefiles/ so the app can offer
@@ -31,6 +31,22 @@ function gamefilesManifest(): Plugin {
         walk("gamefiles");
         res.setHeader("content-type", "application/json");
         res.end(JSON.stringify(files));
+      });
+
+      // serve the game files as raw bytes ourselves: Vite's transform
+      // middleware 500s on extension-less paths like /gamefiles/LOCAL/BOOTFILE
+      // (it tries to load them as modules)
+      const rootDir = resolve("gamefiles");
+      server.middlewares.use("/gamefiles", (req, res, next) => {
+        const rel = decodeURIComponent((req.url ?? "").split("?")[0]);
+        const path = normalize(join(rootDir, rel));
+        if (!path.startsWith(rootDir) || !existsSync(path) || statSync(path).isDirectory()) {
+          next();
+          return;
+        }
+        res.setHeader("content-type", "application/octet-stream");
+        res.setHeader("content-length", statSync(path).size);
+        createReadStream(path).pipe(res);
       });
     },
   };

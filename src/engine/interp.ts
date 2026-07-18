@@ -62,6 +62,13 @@ export class Interpreter {
   readonly globals = new Map<string, Value>();
   readonly builtins = new Map<string, Builtin>();
   readonly specialForms = new Map<string, SpecialForm>();
+  /**
+   * Scripts whose code blocks are callable from anywhere (checked in order
+   * after the local script and the builtins): the current stage's main
+   * script and the boot script — the game's "standard library"
+   * (changeset, spotmovie, progress, setupactor, ...).
+   */
+  fallbackScripts: ScriptInstance[] = [];
   private unknownLogged = new Set<string>();
 
   /** trace of builtin calls with no registered semantics (for development) */
@@ -240,6 +247,13 @@ export class Interpreter {
     const builtin = this.builtins.get(call.name);
     const args = call.args.map((a) => this.evalExpr(a, frame));
     if (builtin) return builtin(this, args, call, frame);
+    if (call.id === undefined) {
+      for (const inst of this.fallbackScripts) {
+        if (inst.script.codes.has(call.name)) {
+          return this.runHandler(inst, call.name, args, frame.ctx).value;
+        }
+      }
+    }
     this.onUnknown(call.name, args);
     return 0;
   }

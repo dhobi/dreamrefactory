@@ -4,7 +4,31 @@ Browser port (work in progress) of the CyberFlix **DreamFactory 4.0** engine,
 targeting *Titanic: Adventure Out of Time* (1996) — no DOSBox, a native
 TypeScript reimplementation running on canvas.
 
-## Status: Milestone 5 — audio
+## Status: Milestone 6 — game session & cross-set travel
+
+The ship is connected: walking through a door in one set loads the next set
+and lands you at the scripted arrival view, with all game state intact.
+
+- `src/engine/session.ts` — **GameSession**: one interpreter whose globals
+  persist across sets, plus session-owned audio banks and props.
+- **The boot script is the game's standard library.** BOOTFILE's script
+  containers define ~76 globally callable handlers (`changeset`,
+  `spotmovie`, `progress`, `setupactor`, …); MAIN.STG's main script defines
+  `gotospecial`. Unqualified calls resolve local script → builtins →
+  stage script → boot script (`Interpreter.fallbackScripts`).
+- Set switching bottoms out in the engine primitives `opensetfile(name,
+  scene, view)` / `closesetfile()` — now builtins that fire the proper
+  `closeset`/`openset` lifecycle and reposition the viewer.
+- The event chain is now complete: object → scene → set main → stage →
+  boot → engine default; `keydown` (e.g. `"uparrow"`) goes through the
+  chain before the default walk, so scripts can intercept movement.
+- Extra builtins: `findword`, `currentscene`/`currentview`/`currentset`,
+  transition names (`plain`, `wipeleft`, …) and screen-fade commands as
+  stubs (visual polish later).
+- **Regression suite**: `npm test` (tools/tests.ts) — 9 checks covering
+  hotspots, road arrival, blackjack logic, audio, travel, props.
+
+## Milestone 5 — audio
 
 - `src/df/audio.ts` — both engine codecs ported: v40 (8-bit; literal /
   step-table-pair / repeat modes, generated 256-entry tables) and v41
