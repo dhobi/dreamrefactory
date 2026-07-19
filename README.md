@@ -4,10 +4,11 @@ Browser port (work in progress) of the CyberFlix **DreamFactory 4.0** engine,
 targeting *Titanic: Adventure Out of Time* (1996) — no DOSBox, a native
 TypeScript reimplementation running on canvas.
 
-> 📖 **New here? Read [`docs/`](docs/README.md)** — a guided tour from "how the
-> game works" down to each DFile container format, written for readers who
-> haven't done low-level reverse engineering. The sections below are the
-> chronological milestone log.
+> 📖 **New here? Read the docs: <https://dhobi.github.io/taoot-web/>** — a
+> guided tour from "how the game works" down to each DFile container format,
+> written for readers who haven't done low-level reverse engineering. (Source
+> in [`docs/`](docs/README.md).) The sections below are the chronological
+> milestone log.
 
 ## Status: Milestone 10 — the timing model (delay, ambient loops, crickets)
 
