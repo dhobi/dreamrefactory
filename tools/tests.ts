@@ -566,5 +566,94 @@ async function runAnimations(v: SetViewer): Promise<void> {
   check("morrow projects into a deckbd view at person size", seen !== "", seen);
 }
 
+// --- 18. puppets: SMETH1 conversation — speaks, choices, branching --------
+{
+  const { session, sink, viewer } = await newSession();
+  await session.openSetFile("c73.set");
+  const v = viewer();
+  const conversation = session.track(
+    (async () => {
+      await session.openPuppetFile("smeth1.pup");
+      await session.sendEvent("sendtopuppet", "before", "intro", [], "test");
+      session.closePuppetFile();
+    })(),
+  );
+  const pump = async (until: () => boolean, max = 3000): Promise<boolean> => {
+    for (let i = 0; i < max && !until(); i++) {
+      v.tick((clock += 100));
+      await drain();
+    }
+    return until();
+  };
+  check("puppet file opens into puppet mode", await pump(() => session.puppet !== null));
+  const line = (id: string) => session.puppet?.pup.dialogue.get(id)?.text ?? "?";
+  check(
+    "first line speaks with its subtitle",
+    await pump(() => session.puppet?.subtitle === line("smeth1.031")),
+  );
+  const voice = sink.calls.find((c) => c.channel === "voice");
+  check("line voice audio plays", !!voice && voice.seconds > 0.5, `${voice?.seconds.toFixed(2)}s`);
+  check(
+    "two choice bevels appear after the speeches",
+    await pump(() => (session.puppet?.bevels.length ?? 0) === 2),
+  );
+  await v.click(256, 276 + 26 + 11); // second bevel, via real click routing
+  check(
+    "choice branches to the next line",
+    await pump(() => session.puppet?.subtitle === line("smeth1.034")),
+  );
+  check(
+    "second choice round appears",
+    await pump(() => (session.puppet?.bevels.length ?? 0) === 2),
+  );
+  await v.click(256, 276 + 26 + 11); // decline help -> closing line
+  check("conversation ends, puppet closes", await pump(() => session.puppet === null));
+  await conversation;
+  check("world display returns after the talk", !session.puppet && !v.moviePlaying);
+}
+
+// --- 19. actor walking: morrow strolls to his next deck star --------------
+{
+  const { session, viewer } = await newSession();
+  session.interp.globals.set("mission", 1);
+  session.interp.globals.set("phase", 1);
+  await session.openSetFile("deckbd.set", "scene33", "view94");
+  const v = viewer();
+  const morrow = session.actorRuntime.get("morrow")!;
+  const startX = morrow.worldX;
+  // send him to morrow.2 (13045,551) through the real builtin path
+  await session.interp.builtins.get("walktostar")!(
+    session.interp, ["morrow", "morrow.2"], null as never, null as never,
+  );
+  check(
+    "walk starts: walk pose, facing travel, iswalk true",
+    session.isWalk("morrow") && morrow.poseName === "walk",
+    `pose=${morrow.poseName} deg=${morrow.deg}`,
+  );
+  for (let i = 0; i < 4; i++) {
+    v.tick((clock += 100));
+    await drain();
+  }
+  const midX = morrow.worldX;
+  const midStep = morrow.step;
+  check(
+    "mid-walk: position moved toward the target, cycle advancing",
+    midX > startX && midX < 13045 && midStep > 0,
+    `x ${startX} -> ${midX} (target 13045) step=${midStep}`,
+  );
+  let guard = 0;
+  while (session.isWalk("morrow") && guard++ < 500) {
+    v.tick((clock += 100));
+    await drain();
+  }
+  check(
+    "arrival: at the star, stand pose, walk slot freed",
+    morrow.worldX === 13045 && morrow.worldY === 551 &&
+      morrow.poseName === "stand" && !session.isWalk("morrow"),
+    `@${morrow.worldX},${morrow.worldY} pose=${morrow.poseName}`,
+  );
+  check("actorstar getter reports the destination", morrow.starName === "morrow.2");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

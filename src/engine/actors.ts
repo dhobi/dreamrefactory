@@ -27,6 +27,8 @@ export class ActorInstance {
   turn = 0;
   owner: string | number = "";
   value: string | number = 0;
+  /** name of the star the actor was last placed on (actorstar getter) */
+  starName = "";
   lastTick = 0;
 
   constructor(
@@ -91,29 +93,37 @@ export class ActorRuntime {
   }
 
   /**
-   * The sprite frame for an actor as seen from the camera: pick the
-   * direction whose depicted angle best matches the actor's facing
-   * relative to the camera's view direction.
+   * The sprite frame for an actor as seen from the camera. TI.EXE (actor
+   * draw fn at 0x411235): the view angle is the actor's facing relative
+   * to the BEARING from the camera to the actor — which side of a person
+   * you see depends on where you stand, not where you look. The engine
+   * keeps the frame record whose depicted angle (direction × 32, in the
+   * 0..255 angle space) is angularly closest; /32 rounding is equivalent.
    */
   private frameFor(a: ActorInstance, cam: WorldCamera): ShpFrame | null {
     const pose = a.pose();
     if (!pose || !pose.steps.length) return null;
     const step = pose.steps[a.step % pose.steps.length];
     if (!step) return null;
-    const rel = (a.deg - cam.deg) & 0xff; // relative facing, 0..255
+    const dx = a.worldX - cam.x;
+    const dy = a.worldY - cam.y;
+    const bearing = Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
+    const rel = (a.deg - bearing) & 0xff;
     const dir = Math.round(rel / 32) & 7;
     const cf = step[dir] ?? step.find((f) => !!f);
     return cf ? a.cast.frame(cf.location) : null;
   }
 
   /**
-   * Depth-scaling reference. Props use their state-header value (180); the
-   * CST frame records carry 96 at the analogous slot, but that renders
-   * people visibly too small against expected person-height — 180 lands
-   * right. APPROXIMATION until the actor draw fn is recovered from TI.EXE.
+   * Depth-scaling reference: the frame record's i16 @+42 (96 in GANG.CST).
+   * TI.EXE's actor draw computes k = actorscale × ref / (1000 × depth)
+   * with exactly this per-record value — the same shape as prop drawing,
+   * just with the reference stored per frame record instead of per state.
    */
-  private refScale(_a: ActorInstance): number {
-    return 180;
+  private refScale(a: ActorInstance): number {
+    const pose = a.pose();
+    const cf = pose?.steps[0]?.find((f) => !!f);
+    return cf?.refScale || 96;
   }
 
   /** visible actors of the current set, far to near */

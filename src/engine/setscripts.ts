@@ -498,11 +498,9 @@ export function registerGameBuiltins(session: GameSession): void {
     "flushevents", "hidecursor", "showcursor", "debugger",
     "visualeffect", "mixclut",
     "exportclut", "clut",
-    "stopwalk", "pausewalk", // actor walk sounds — actors not implemented yet
   ]) {
     r(noop, () => {});
   }
-  r("iswalk", () => 0);
 
   // ---- timing model (TI.EXE): delay / makeloop / makecricket / soundloop --
   // 1 script tick = 1/60 s; loops+crickets are serviced every 66 ms.
@@ -590,12 +588,13 @@ export function registerGameBuiltins(session: GameSession): void {
     const a = actor(n);
     if (!a) return 0;
     if (x === undefined) return 0;
-    // getter form actorxyz(name, axis): axis 1..3 like starxyz
+    // getter form actorxyz(name, axis): axis 1..3 like starxyz, 4 = packed
     if (y === undefined) {
       switch (toNum(x)) {
         case 1: return a.worldX;
         case 2: return a.worldY;
         case 3: return a.worldZ;
+        case 4: return ((a.worldX & 0xffff) << 16) | (a.worldY & 0xffff);
         default: return 0;
       }
     }
@@ -603,18 +602,23 @@ export function registerGameBuiltins(session: GameSession): void {
     a.worldY = toNum(y);
     a.worldZ = toNum(z ?? 0);
   });
-  // place an actor on a named star point of the current set
+  // place an actor on a named star point of the current set; the getter
+  // form returns the star the actor was last placed on (endwalk checks
+  // for "custom" placements)
   r("actorstar", (_i, [n, starName]) => {
     const a = actor(n);
+    if (!a) return "";
+    if (starName === undefined) return a.starName;
     const star = findStar(starName);
-    if (!a || !star) {
-      log(`actorstar: ${toStr(n)} -> "${toStr(starName ?? "")}" not found`);
+    if (!star) {
+      log(`actorstar: ${toStr(n)} -> "${toStr(starName)}" not found`);
       return 0;
     }
     a.worldX = star.positionX;
     a.worldY = star.positionZ;
     a.worldZ = star.positionY;
     a.deg = star.rotation8 & 0xff;
+    a.starName = toStr(starName).toLowerCase();
   });
   r("actordeg", (_i, [n, v]) => {
     const a = actor(n);
@@ -669,22 +673,119 @@ export function registerGameBuiltins(session: GameSession): void {
   r("indextoactor", (_i, [idx]) => {
     return [...session.actorRuntime.actors.keys()][toNum(idx ?? 0) - 1] ?? "";
   });
-  // walking is a later checkpoint: actors teleport to their destination so
-  // scripted movement still ends in the right place
+  // walking: straight-line motion at the actor's per-set speed, walk pose
+  // cycling, facing the direction of travel (session.startWalk)
   r("walktostar", (_i, [n, starName]) => {
-    const a = actor(n);
     const star = findStar(starName);
-    if (!a || !star) return 0;
-    a.worldX = star.positionX;
-    a.worldY = star.positionZ;
-    a.worldZ = star.positionY;
+    if (!actor(n) || !star) {
+      log(`walktostar: ${toStr(n)} -> "${toStr(starName ?? "")}" not found`);
+      return 0;
+    }
+    session.startWalk(toStr(n), star.positionX, star.positionZ, star.positionY);
+    const a = actor(n)!;
+    a.starName = toStr(starName).toLowerCase();
   });
   r("walktoxyz", (_i, [n, x, y, z]) => {
+    if (!actor(n)) return 0;
+    session.startWalk(toStr(n), toNum(x ?? 0), toNum(y ?? 0), toNum(z ?? 0));
+  });
+  // walkonpath(actor, fromStar|"resume", toStar): straight-line between
+  // stars (the authored waypoint paths are a refinement for later)
+  r("walkonpath", (_i, [n, from, to]) => {
     const a = actor(n);
     if (!a) return 0;
-    a.worldX = toNum(x ?? 0);
-    a.worldY = toNum(y ?? 0);
-    a.worldZ = toNum(z ?? 0);
+    const f = toStr(from ?? "").toLowerCase();
+    if (f !== "resume") {
+      const start = findStar(from);
+      if (start) {
+        a.worldX = start.positionX;
+        a.worldY = start.positionZ;
+        a.worldZ = start.positionY;
+      }
+    }
+    const dest = findStar(to);
+    if (!dest) {
+      log(`walkonpath: star "${toStr(to ?? "")}" not found`);
+      return 0;
+    }
+    session.startWalk(toStr(n), dest.positionX, dest.positionZ, dest.positionY);
+    a.starName = toStr(to).toLowerCase();
   });
-  r("iswalk", () => 0);
+  r("iswalk", (_i, [n]) => (n !== undefined && session.isWalk(toStr(n)) ? 1 : 0));
+  r("stopwalk", (_i, [n]) => {
+    if (n !== undefined) session.stopWalk(toStr(n));
+  });
+  r("pausewalk", (_i, [n, flag]) => {
+    if (n !== undefined) session.pauseWalk(toStr(n), truthy(flag ?? 1));
+  });
+  r("countwalks", () => session.walks.size);
+  r("indextowalk", (_i, [idx]) => [...session.walks.keys()][toNum(idx ?? 0) - 1] ?? "");
+  r("walkdest", (_i, [n]) => {
+    const w = session.walks.get(toStr(n ?? "").toLowerCase());
+    if (!w) return 0;
+    return (((w.sx + w.dx) & 0xffff) << 16) | ((w.sy + w.dy) & 0xffff);
+  });
+
+  // ---- puppets (PUP conversations) ----------------------------------------
+
+  r("openpuppetfile", async (_i, [n]) => ((await session.openPuppetFile(toStr(n ?? ""))) ? 1 : 0));
+  r("closepuppetfile", () => session.closePuppetFile());
+  r("currentpuppet", () => session.puppet?.name ?? "none");
+  r("puppetspeak", (_i, [ident]) => session.puppetSpeak(toStr(ident ?? "")));
+  r("puppetclear", () => session.puppetClear());
+  r("puppetbevel", (_i, [text, id]) => session.puppetBevel(toStr(text ?? ""), toNum(id ?? 0)));
+  r("puppetevent", (_i, [_timeout]) => session.puppetEvent());
+  r("countpuppets", () => session.puppet?.scripts.size ?? 0);
+  r("indextopuppet", (_i, [idx]) => {
+    return [...(session.puppet?.scripts.keys() ?? [])][toNum(idx ?? 0) - 1] ?? "";
+  });
+  // stance/pose selection by dialogue ident ("bx2.07") — stance switching
+  // is part of the lip-sync work; log once for now
+  for (const stub of ["puppetbase", "puppetparam", "puppetvisible", "puppetsubtitle", "puppetgrab", "puppetscramble"]) {
+    r(stub, () => {});
+  }
+  // helpers used around conversations that live outside any script
+  r("cameraxyz", (_i, [axis]) => {
+    const lis = session.listener();
+    if (!lis) return 0;
+    switch (toNum(axis ?? 1)) {
+      case 1: return lis.x;
+      case 2: return lis.y;
+      case 4: return ((lis.x & 0xffff) << 16) | (lis.y & 0xffff);
+      default: return 0;
+    }
+  });
+  // calcdeg(fromPacked, toPacked): bearing between two packed (x<<16|y)
+  // points in the engine's 0..255 angle space (turntodeg targets)
+  r("calcdeg", (_i, [from, to]) => {
+    const fx = (toNum(from ?? 0) >> 16) & 0xffff;
+    const fy = toNum(from ?? 0) & 0xffff;
+    const tx = (toNum(to ?? 0) >> 16) & 0xffff;
+    const ty = toNum(to ?? 0) & 0xffff;
+    return Math.round((Math.atan2(ty - fy, tx - fx) * 256) / (2 * Math.PI)) & 0xff;
+  });
+  r("turntodeg", (_i, [n, deg]) => {
+    const a = actor(n);
+    if (a) a.deg = toNum(deg ?? 0) & 0xff;
+  });
+  // primitives behind the cast library's realdist()/facing helpers:
+  // playerxyz(4) = the camera's packed ground position, calcdist between
+  // two packed (x<<16|y) points
+  r("playerxyz", (_i, [axis]) => {
+    const lis = session.listener();
+    if (!lis) return 0;
+    switch (toNum(axis ?? 1)) {
+      case 1: return lis.x;
+      case 2: return lis.y;
+      case 4: return ((lis.x & 0xffff) << 16) | (lis.y & 0xffff);
+      default: return 0;
+    }
+  });
+  r("calcdist", (_i, [a, b]) => {
+    const ax = (toNum(a ?? 0) >> 16) & 0xffff;
+    const ay = toNum(a ?? 0) & 0xffff;
+    const bx = (toNum(b ?? 0) >> 16) & 0xffff;
+    const by = toNum(b ?? 0) & 0xffff;
+    return Math.round(Math.hypot(bx - ax, by - ay));
+  });
 }

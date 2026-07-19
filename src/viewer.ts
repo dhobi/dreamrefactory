@@ -1,5 +1,7 @@
 import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTURNS } from "./df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "./df/image";
+import { decodeShpFrame } from "./df/shp";
+import { PUP_LAYERS } from "./df/pup";
 import { MovFrame, readMovFile } from "./df/mov";
 import { Container } from "./df/container";
 import { decodeAudioContainer } from "./df/audio";
@@ -477,7 +479,12 @@ export class SetViewer {
    * itself invoked from inside a running script (boot's keydown).
    */
   get busy(): boolean {
-    return this.animation !== null || this.movie !== null || this.session.fading;
+    return (
+      this.animation !== null ||
+      this.movie !== null ||
+      this.session.puppet !== null || // conversation in progress
+      this.session.fading
+    );
   }
 
   /** gate for NEW user input: also waits for running/suspended scripts */
@@ -610,6 +617,12 @@ export class SetViewer {
   }
 
   async click(x: number, y: number): Promise<void> {
+    // conversation clicks reach the puppet even while its script is
+    // suspended in puppetevent/puppetspeak
+    if (this.session.puppet) {
+      this.session.puppetChoose(this.puppetBevelAt(x, y));
+      return;
+    }
     if (this.movie) {
       this.movieClick(x, y);
       return;
@@ -681,8 +694,144 @@ export class SetViewer {
     }
   }
 
+  // ---- puppet mode (conversation close-ups) --------------------------------
+
+  /** cached layer composite of the active puppet stance */
+  private puppetImage: { key: string; rgba: Uint8ClampedArray } | null = null;
+  /** decoded puppet layer frames, by container location */
+  private puppetFrames = new Map<number, import("./df/shp").ShpFrame>();
+
+  /** bevel button geometry (shared by render + click hit-test) */
+  private puppetBevelRects(): { x: number; y: number; w: number; h: number }[] {
+    const p = this.session.puppet;
+    if (!p) return [];
+    return p.bevels.map((_, i) => ({ x: 96, y: 276 + i * 26, w: 320, h: 22 }));
+  }
+
+  private puppetBevelAt(x: number, y: number): number {
+    const rects = this.puppetBevelRects();
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return i;
+    }
+    return -1;
+  }
+
+  private renderPuppet(ctx: CanvasRenderingContext2D): void {
+    const p = this.session.puppet!;
+    const W = 512;
+    const H = 384;
+    const canvas = ctx.canvas;
+    if (canvas.width !== W || canvas.height !== H) {
+      canvas.width = W;
+      canvas.height = H;
+    }
+    // layer state for this instant: animLogic playback while a line is
+    // spoken (~30 records/s: lip sync, blinks, gestures), else the held
+    // pose from the last record
+    const state = this.session.puppetFrame();
+    const key = `${p.name}:${p.stanceIdx}:${state ? state.layers.map((l) => l.frame).join(",") : "-"}`;
+    if (!this.puppetImage || this.puppetImage.key !== key) {
+      // the character composites OVER the live scene view; a stance's
+      // "background" layer that is one flat colour is a key-colour matte
+      // (SMETH1: all-247 plate), not a backdrop
+      const rgba = new Uint8ClampedArray(W * H * 4);
+      const cur = this.current;
+      if (cur) {
+        const view = new Uint8ClampedArray(cur.width * cur.height * 4);
+        indexedToRGBA(cur.pixels, cur.width, cur.height, this.palette, view);
+        for (let y = 0; y < cur.height && y < H; y++) {
+          rgba.set(view.subarray(y * cur.width * 4, (y + 1) * cur.width * 4), y * W * 4);
+        }
+      }
+      const pal = paletteToRGBA(p.pup.paletteRaw, 256);
+      const stance = p.pup.stances[p.stanceIdx] ?? p.pup.stances[0];
+      if (stance && state) {
+        for (let l = 0; l < PUP_LAYERS.length; l++) {
+          const st = state.layers[l];
+          const layer = stance.layers[l];
+          if (!st || st.frame < 0 || !layer?.frames.length) continue;
+          const loc = layer.frames[Math.min(st.frame, layer.frames.length - 1)];
+          try {
+            let f = this.puppetFrames.get(loc);
+            if (!f) {
+              f = decodeShpFrame(p.pup.file.containers[loc]);
+              this.puppetFrames.set(loc, f);
+            }
+            if (l === 0) {
+              let flat = true;
+              const first = f.indexed[0];
+              for (let i = 1; i < f.width * f.height; i++) {
+                if (f.opaque[i] && f.indexed[i] !== first) {
+                  flat = false;
+                  break;
+                }
+              }
+              if (flat) continue; // key-colour matte: keep the scene
+            }
+            // the record's anchor minus the frame's stored offset
+            const dx = st.x - f.posXraw;
+            const dy = st.y - f.posYraw;
+            for (let yy = 0; yy < f.height; yy++) {
+              const ty = dy + yy;
+              if (ty < 0 || ty >= H) continue;
+              for (let xx = 0; xx < f.width; xx++) {
+                const tx = dx + xx;
+                if (tx < 0 || tx >= W) continue;
+                const s = yy * f.width + xx;
+                if (!f.opaque[s]) continue;
+                const c = f.indexed[s] * 4;
+                const d = (ty * W + tx) * 4;
+                rgba[d] = pal[c];
+                rgba[d + 1] = pal[c + 1];
+                rgba[d + 2] = pal[c + 2];
+                rgba[d + 3] = 255;
+              }
+            }
+          } catch {
+            /* skip undecodable layer */
+          }
+        }
+      }
+      this.puppetImage = { key, rgba };
+    }
+    const img = ctx.createImageData(W, H);
+    img.data.set(this.puppetImage.rgba);
+    ctx.putImageData(img, 0, 0);
+    // subtitle while a line is being spoken
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = "14px Georgia, serif";
+    if (p.subtitle) {
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(0, 268, W, 40);
+      ctx.fillStyle = "#e8e2d0";
+      const words = p.subtitle.split(" ");
+      const lines: string[] = [""];
+      for (const w of words) {
+        const cur = lines[lines.length - 1];
+        if (ctx.measureText(cur + " " + w).width > W - 60) lines.push(w);
+        else lines[lines.length - 1] = cur ? cur + " " + w : w;
+      }
+      lines.slice(0, 2).forEach((ln, i) => ctx.fillText(ln, W / 2, 284 + i * 17));
+    }
+    // choice bevels
+    const rects = this.puppetBevelRects();
+    rects.forEach((r, i) => {
+      ctx.fillStyle = "#2c2618";
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = "#6a5c3a";
+      ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+      ctx.fillStyle = "#e8e2d0";
+      ctx.fillText(this.session.puppet!.bevels[i].text, r.x + r.w / 2, r.y + 15);
+    });
+    ctx.restore();
+    this.applyFade(ctx);
+  }
+
   /** returns the DreamFactory cursor name for this position ("" = default) */
   async hover(x: number, y: number): Promise<string> {
+    if (this.session.puppet) return this.puppetBevelAt(x, y) >= 0 ? "touch" : "";
     const prop = this.session.propRuntime.propAt(
       x, y, this.session.setVisible ? this.worldCamera() : null,
     );
@@ -755,6 +904,11 @@ export class SetViewer {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
+    // conversation close-up (openpuppetfile) replaces the world display
+    if (this.session.puppet && !this.session.fade.snapshot) {
+      this.renderPuppet(ctx);
+      return;
+    }
     // frozen pre-transition frame while fading out (the set may already
     // have changed underneath — gotospecial fades around changeset)
     const snap = this.session.fade.snapshot;

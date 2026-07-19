@@ -24,8 +24,8 @@ import { DFContainerFile, readContainerFile } from "./container";
 export interface CastFrame {
   location: number;
   direction: number;
-  /** depicted facing, 16-bit angle units (dir * 0x2000) */
-  angle16: number;
+  /** depicted facing in the engine's 0..255 angle space (direction * 32) */
+  angle: number;
   /** reference scale for depth scaling (like the SHP state header's 180) */
   refScale: number;
 }
@@ -86,10 +86,10 @@ export function readCstFile(data: Uint8Array): CstFile {
         rs.seek(base + 10);
         const direction = rs.i16();
         rs.seek(base + 40);
-        const angle16 = rs.i16();
+        const angle = rs.i16();
         const refScale = rs.i16();
         const step = Math.floor(fi / 8);
-        (steps[step] ??= [])[direction & 7] = { location, direction, angle16, refScale };
+        (steps[step] ??= [])[direction & 7] = { location, direction, angle, refScale };
       }
       poses.push({ name: poseName.toLowerCase(), location: setLoc, steps, frameCount });
     }

@@ -12,6 +12,65 @@ TypeScript reimplementation running on canvas.
 
 ## Status: Milestone 11 (in progress) — actors & puppets (CST/PUP)
 
+Checkpoint 4: **they walk** — scripted actor movement.
+
+- A correction to the milestone-10 notes: the 16-slot table at 0x48b970
+  is the *walk* table, and the fn with the five-type dispatch is the
+  walk mover (star/xyz/path/road/frames), not the cricket service.
+- `walktostar`/`walktoxyz`/`walkonpath` move an actor in a straight
+  line at their per-set `actorspeed`, facing the direction of travel,
+  cycling the walk pose, snapping to the target and returning to
+  "stand" on arrival. `iswalk`/`stopwalk`/`pausewalk` and the
+  `actorstar` getter round out the cast library's needs (`endwalk`
+  spins `while iswalk(...) forceupdate()` — the service advances, so
+  it terminates).
+- The per-step pace constant is feel-calibrated (the exact TI stepping
+  math is still unrecovered); waypoint paths currently walk straight.
+- Morrow strolls between his three promenade stars (test 19 +
+  Chromium).
+
+Checkpoint 3: **they speak with moving lips** — animLogic playback.
+
+- Each dialogue line's animation-logic container decodes to 82-byte
+  records, one per ~33 ms tick: a 16-byte header plus 11 layer triplets
+  `{frame, anchorY, anchorX}` (frame −1 hides the layer). The anchors
+  were the missing piece — every layer lands exactly where it belongs,
+  gestures included, and the composite needs no heuristics at all.
+- `puppetspeak` now runs the records at ~30/s alongside the voice: lip
+  sync, blinks, brow raises, hand gestures. The last record persists as
+  the idle pose between lines. (TI queues up to 3 lines and drains from
+  the pump; our blocking version is order-equivalent.)
+- Verified by frame-capturing mid-speech in Chromium: the mouth opens
+  and closes with the line.
+
+Checkpoint 2: **conversations work** — PUP dialogue plays end-to-end.
+
+- The actor draw is now TI-exact (fn 0x411235): k = actorscale ×
+  frame-record ref (96) / (1000 × depth), and the sprite direction uses
+  the actor's facing relative to the **bearing from the camera to the
+  actor** (fn 0x4446d0) — which side of a person you see depends on
+  where you stand. Depicted angles are direction × 32 in the 0..255
+  angle space.
+- `src/df/pup.ts` — PUP reader: dialogue table (each line = voice
+  audio + subtitle text + animation-logic container, addressed by ident
+  from `puppetspeak`), conversation scripts, and layered stances
+  (backdrop, body, head + face-part/gesture overlay layers).
+- Puppet mode: `openpuppetfile` switches the display to the close-up;
+  `puppetspeak` suspends the script for the line's duration (voice +
+  subtitle, click to skip); `puppetbevel`/`puppetevent` build modal
+  choice menus — the async interpreter makes the blocking waits
+  natural. Conversation flow: click actor → cast script → `runpuppet`
+  → the PUP's "Boot Script" drives everything.
+- Render facts: a stance background that decodes to one flat colour is
+  a key-colour matte (the live scene stays visible behind the
+  character); the eyes/eyebrows/nose/jaw and arm layers are animation
+  overlays — the head layer holds the complete neutral face.
+- Verified: the full first Smethells conversation — three spoken lines
+  with subtitles, a choice menu, branching, a second choice round —
+  headless (test 18) and in Chromium.
+- Next: animLogic playback (lip sync, blinks, gestures), walk
+  animation, `puppetbase` stance selection.
+
 Checkpoint 1: **the cast walks aboard** — CST cast files parse and static
 characters render in the world.
 

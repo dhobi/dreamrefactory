@@ -6,6 +6,8 @@ import { readShpFile } from "../df/shp";
 import { sniffScript } from "../df/script";
 import { parseScript } from "./parser";
 import { readCstFile } from "../df/cst";
+import { PupAnimFrame, PupFile, readAnimLogic, readPupFile } from "../df/pup";
+import { decodeAudioContainer } from "../df/audio";
 import { Interpreter, ScriptInstance, Value, registerCoreBuiltins, toStr } from "./interp";
 import { ActorRuntime } from "./actors";
 import { PropRuntime } from "./props";
@@ -309,9 +311,86 @@ export class GameSession {
     this.soundLoops.clear();
   }
 
+  // ---- actor walking (walktostar/walktoxyz/walkonpath) --------------------
+
+  /**
+   * One straight-line walk per actor (TI.EXE fn 0x443260 record shape:
+   * start position, deltas, total distance, facing = bearing to target).
+   * Progress advances with the actor's per-set speed each 66 ms service
+   * step while the walk pose cycles; on arrival the actor snaps to the
+   * target and returns to "stand".
+   */
+  readonly walks = new Map<
+    string,
+    { sx: number; sy: number; sz: number; dx: number; dy: number; dz: number; dist: number; progress: number; paused: boolean }
+  >();
+
+  startWalk(name: string, tx: number, ty: number, tz: number): void {
+    const a = this.actorRuntime.get(name);
+    if (!a) return;
+    const dx = tx - a.worldX;
+    const dy = ty - a.worldY;
+    const dz = tz - a.worldZ;
+    const dist = Math.max(1, Math.round(Math.hypot(dx, dy, dz)));
+    a.deg = Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
+    if (a.member.poses.some((p) => p.name === "walk")) {
+      a.poseName = "walk";
+      a.step = 0;
+    }
+    this.walks.set(a.member.name, {
+      sx: a.worldX, sy: a.worldY, sz: a.worldZ,
+      dx, dy, dz, dist, progress: 0, paused: false,
+    });
+  }
+
+  stopWalk(name: string): void {
+    const key = name.toLowerCase();
+    const a = this.actorRuntime.get(key);
+    if (this.walks.delete(key) && a && a.poseName === "walk") {
+      a.poseName = "stand";
+      a.step = 0;
+    }
+  }
+
+  isWalk(name: string): boolean {
+    return this.walks.has(name.toLowerCase());
+  }
+
+  pauseWalk(name: string, paused: boolean): void {
+    const w = this.walks.get(name.toLowerCase());
+    if (w) w.paused = paused;
+  }
+
+  private serviceWalks(): void {
+    for (const [key, w] of this.walks) {
+      if (w.paused) continue;
+      const a = this.actorRuntime.get(key);
+      if (!a) {
+        this.walks.delete(key);
+        continue;
+      }
+      // units per 66 ms step: actorspeed × 4 — APPROXIMATION (the exact
+      // TI stepping lives in fn 0x443730's per-type movers; stdspeed is
+      // per-set, so this constant only tunes overall walking pace)
+      w.progress += Math.max(1, a.speed) * 4;
+      const t = Math.min(1, w.progress / w.dist);
+      a.worldX = Math.round(w.sx + w.dx * t);
+      a.worldY = Math.round(w.sy + w.dy * t);
+      a.worldZ = Math.round(w.sz + w.dz * t);
+      a.step++; // walk pose cycle advances per service tick
+      if (t >= 1) {
+        this.walks.delete(key);
+        if (a.poseName === "walk") {
+          a.poseName = "stand";
+          a.step = 0;
+        }
+      }
+    }
+  }
+
   /**
    * Advance game time: resolve delay()s, then run 66 ms service steps —
-   * crickets first, then due loops (TI.EXE master service order).
+   * walks, then crickets, then due loops (TI.EXE master service order).
    */
   tickTime(now: number): void {
     this.clock.advance(now);
@@ -326,6 +405,7 @@ export class GameSession {
   }
 
   private serviceStep(): void {
+    this.serviceWalks();
     for (let i = this.crickets.length - 1; i >= 0; i--) {
       const c = this.crickets[i];
       if (c.paused) continue;
@@ -689,6 +769,167 @@ export class GameSession {
     return this.castMains.get(name.toLowerCase()) ?? null;
   }
 
+  // ---- puppet mode (PUP conversation close-ups) ---------------------------
+
+  /**
+   * Active conversation. While set, the viewer renders the puppet screen
+   * (stance layers + subtitle + choice bevels) instead of the world.
+   * puppetspeak() suspends the running script for the line's duration;
+   * puppetevent() suspends until the player clicks a bevel.
+   */
+  puppet: {
+    name: string;
+    pup: PupFile;
+    scripts: Map<string, ScriptInstance>;
+    stanceIdx: number;
+    subtitle: string;
+    bevels: { text: string; id: number }[];
+    /** puppetevent resolver — a bevel click ends the wait */
+    eventWaiter: ((id: number) => void) | null;
+    /** click-to-skip resolver for the line currently being spoken */
+    speakSkip: (() => void) | null;
+    /** animLogic playback of the line being spoken (~30 records/s) */
+    anim: { frames: PupAnimFrame[]; start: number } | null;
+    /** layer state held between lines (the last played record) */
+    pose: PupAnimFrame | null;
+  } | null = null;
+
+  async openPuppetFile(fileName: string): Promise<boolean> {
+    const key = toStr(fileName).toLowerCase();
+    const data = this.files(key);
+    if (!data) {
+      this.onLog(`openpuppetfile: "${fileName}" not available`);
+      return false;
+    }
+    let pup: PupFile;
+    try {
+      pup = readPupFile(data);
+    } catch (e) {
+      this.onLog(`openpuppetfile: ${fileName}: ${(e as Error).message}`);
+      return false;
+    }
+    const scripts = new Map<string, ScriptInstance>();
+    let main: ScriptInstance | null = null;
+    for (const s of pup.scripts) {
+      const inst = this.instanceFrom(pup.file.containers[s.location]?.data, s.name);
+      if (!inst) continue;
+      scripts.set(s.name, inst);
+      if (s.name === "boot script") main = inst;
+    }
+    // branch scripts resolve shared helpers through the boot script
+    for (const inst of scripts.values()) if (inst !== main) inst.parent = main;
+    // neutral opening pose: the first record of the first line's animLogic
+    let pose: PupAnimFrame | null = null;
+    const firstLine = pup.dialogue.values().next().value;
+    if (firstLine) pose = readAnimLogic(pup, firstLine.animLogicLocation)[0] ?? null;
+    this.puppet = {
+      name: key,
+      pup,
+      scripts,
+      stanceIdx: 0,
+      subtitle: "",
+      bevels: [],
+      eventWaiter: null,
+      speakSkip: null,
+      anim: null,
+      pose,
+    };
+    this.onLog(`puppet opened: ${key} (${pup.dialogue.size} lines, ${pup.scripts.length} scripts)`);
+    return true;
+  }
+
+  closePuppetFile(): void {
+    if (!this.puppet) return;
+    this.puppet.eventWaiter?.(-1);
+    this.puppet.speakSkip?.();
+    this.audio.halt("voice");
+    this.puppet = null;
+  }
+
+  /** play one dialogue line: voice + subtitle, suspend until it ends */
+  async puppetSpeak(ident: string): Promise<void> {
+    const p = this.puppet;
+    if (!p) return;
+    const line = p.pup.dialogue.get(toStr(ident).toLowerCase());
+    if (!line) {
+      this.onLog(`puppetspeak: no line "${ident}" in ${p.name}`);
+      return;
+    }
+    p.subtitle = line.text;
+    // TI paces a missing-audio line by text length (min 1 s)
+    let seconds = Math.max(1, line.text.length / 15);
+    try {
+      const audio = decodeAudioContainer(p.pup.file.containers[line.audioLocation]);
+      seconds = audio.samples.length / audio.sampleRate;
+      this.audio.play("voice", audio);
+    } catch (e) {
+      this.onLog(`puppetspeak ${ident}: ${(e as Error).message}`);
+    }
+    // lip-sync/gesture playback: the line's animLogic records run at
+    // ~30/s alongside the voice; the last record stays as the idle pose
+    const frames = readAnimLogic(p.pup, line.animLogicLocation);
+    if (frames.length) p.anim = { frames, start: this.clock.now };
+    // a click skips the rest of the line (halting the voice)
+    await Promise.race([
+      this.clock.sleep(seconds * 1000 + 150),
+      new Promise<void>((resolve) => (p.speakSkip = resolve)),
+    ]);
+    p.speakSkip = null;
+    if (this.puppet === p) {
+      p.subtitle = "";
+      if (p.anim) {
+        p.pose = p.anim.frames[p.anim.frames.length - 1];
+        p.anim = null;
+      }
+    }
+  }
+
+  /** the layer state to draw right now (animLogic playback or held pose) */
+  puppetFrame(): PupAnimFrame | null {
+    const p = this.puppet;
+    if (!p) return null;
+    if (p.anim) {
+      const idx = Math.floor((this.clock.now - p.anim.start) / 33.3);
+      return p.anim.frames[Math.max(0, Math.min(idx, p.anim.frames.length - 1))];
+    }
+    return p.pose;
+  }
+
+  puppetClear(): void {
+    if (!this.puppet) return;
+    this.puppet.bevels = [];
+    this.puppet.subtitle = "";
+  }
+
+  puppetBevel(text: string, id: number): void {
+    this.puppet?.bevels.push({ text, id });
+  }
+
+  /** modal wait for a choice; resolves with the clicked bevel's id */
+  puppetEvent(): Promise<number> {
+    const p = this.puppet;
+    if (!p) return Promise.resolve(-1);
+    if (!p.bevels.length) return Promise.resolve(-1);
+    return new Promise<number>((resolve) => {
+      p.eventWaiter = (id) => {
+        p.eventWaiter = null;
+        p.bevels = [];
+        resolve(id);
+      };
+    });
+  }
+
+  /** viewer hook: player clicked bevel index i (or -1 = skip the line) */
+  puppetChoose(i: number): void {
+    const p = this.puppet;
+    if (!p) return;
+    if (i >= 0 && i < p.bevels.length && p.eventWaiter) {
+      p.eventWaiter(p.bevels[i].id);
+      return;
+    }
+    p.speakSkip?.(); // click during speech: skip the line
+  }
+
   /**
    * Load a CST cast file session-wide: register its characters (actors) and
    * their scripts. Idempotent — sets call opencastfile("extra.cst") freely.
@@ -748,6 +989,7 @@ export class GameSession {
   findGlobalInstance(name: string): ScriptInstance | null {
     const lower = name.toLowerCase();
     return (
+      this.puppet?.scripts.get(lower) ??
       this.propScripts.get(lower) ??
       this.castScripts.get(lower) ??
       this.shopMains.get(lower) ??
