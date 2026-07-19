@@ -1,4 +1,4 @@
-# taoot-web
+# Titanic: Adventure Out of Time (RE)
 
 Browser port (work in progress) of the CyberFlix **DreamFactory 4.0** engine,
 targeting *Titanic: Adventure Out of Time* (1996) — no DOSBox, a native
@@ -10,7 +10,41 @@ TypeScript reimplementation running on canvas.
 > in [`docs/`](docs/README.md).) The sections below are the chronological
 > milestone log.
 
-## Status: Milestone 10 — the timing model (delay, ambient loops, crickets)
+## Status: Milestone 11 (in progress) — actors & puppets (CST/PUP)
+
+Checkpoint 1: **the cast walks aboard** — CST cast files parse and static
+characters render in the world.
+
+- `src/df/cst.ts` — CST reader: 25 story characters in GANG.CST, each
+  with a script and named pose sets ("stand"/"standlj"/"walk"…) of
+  sprite frames in the familiar SHP transparent codec, **8 view
+  directions per animation step** (walk = 10 steps × 8 dirs).
+- `src/engine/actors.ts` — ActorRuntime mirrors the prop runtime:
+  world-positioned, set-bound, drawn through the TI.EXE projection;
+  the sprite direction is picked from the actor's facing relative to
+  the camera. Clicking an actor runs their cast script's `mousedown`;
+  hovering shows the "talk" cursor.
+- The script chain does the rest with no special casing: DECKBD's
+  `openset` calls `sendtoactor("morrow", setupactor("deckbd"))`, the
+  character's own script places him on star `morrow.1`, and `stdactor`
+  in the cast main script (reached via the shop-main-style parent
+  chain) applies per-set standards.
+- Two data quirks fixed along the way: DreamFactory `switch` uses
+  stacked case labels sharing one body (the interpreter now falls
+  through empty cases — `stdscale` returned 0 for every deck set
+  before); and DECKBD.SET's internal name field says "decka", so the
+  canonical set identity is now the opened *file* name.
+- The B and D decks interleave: several DECKBD scenes forward straight
+  to DECKA from `openscene`, exactly like the grand-staircase deck
+  flips.
+- OPEN: the actor draw-scale formula. Per-set `actorscale` values span
+  900 (decks) to 30000 (cabins), compensating per-set world-unit
+  scales; the current constant renders people somewhat small. Needs
+  the actor draw fn from TI.EXE — same treatment the projection got.
+- Next: walk animation, then PUP dialogue (talking-head close-ups with
+  voice + subtitles + lip-sync layers — the format is already mapped).
+
+## Milestone 10 — the timing model (delay, ambient loops, crickets)
 
 The engine's whole notion of time, recovered from TI.EXE: **1 script tick
 = 1/60 s** (`delay(n)` waits n×50/3 ms against `timeGetTime`), while

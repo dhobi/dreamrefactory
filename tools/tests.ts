@@ -521,5 +521,50 @@ async function runAnimations(v: SetViewer): Promise<void> {
   session.soundLoop("doorlocked", false);
 }
 
+// --- 17. actors: GANG.CST loads, DECKBD openset places Morrow -------------
+{
+  const { session, sink, viewer } = await newSession();
+  check("gang.cst cast loads at boot", session.actorRuntime.actors.size === 25,
+    `${session.actorRuntime.actors.size} actors`);
+  // mission state that makes DECKBD's openset place gang actors
+  session.interp.globals.set("mission", 1);
+  session.interp.globals.set("phase", 1);
+  sink.calls.length = 0;
+  // enter next to morrow's star (the default scene auto-forwards to DECKA —
+  // the two decks chain like the grand staircase)
+  await session.openSetFile("deckbd.set", "scene33", "view94");
+  const v = viewer();
+  check("still on deckbd (no auto-forward)", session.currentSetName === "deckbd",
+    session.currentSetName);
+  const morrow = session.actorRuntime.get("morrow")!;
+  check(
+    "setupactor places morrow on deckbd",
+    morrow.visible && morrow.setName === "deckbd" && morrow.scale > 0 &&
+      (morrow.worldX !== 0 || morrow.worldY !== 0),
+    `vis=${morrow.visible} set=${morrow.setName} scale=${morrow.scale} @${morrow.worldX},${morrow.worldY} pose=${morrow.poseName}`,
+  );
+  check("deckbd ambient soundloops start", sink.calls.filter((c) => c.loop).length >= 2,
+    `${sink.calls.filter((c) => c.loop).length} loops`);
+  // find a view where morrow projects on screen and is clickable
+  let seen = "";
+  outer: for (let s = 0; s < v.set.scenes.length; s++) {
+    for (let vi = 0; vi < v.set.scenes[s].views.length; vi++) {
+      v.sceneIdx = s;
+      v.viewIdx = vi;
+      const cam = v.worldCamera()!;
+      const list = session.actorRuntime.drawList(cam);
+      const hit = list.find((e) => e.a === morrow);
+      if (hit) {
+        const r = session.actorRuntime.rect(morrow, hit.proj, cam);
+        if (r && r.x + r.w > 0 && r.x < 512 && r.h > 20 && r.h < 400) {
+          seen = `${v.set.scenes[s].sceneName}/${v.set.scenes[s].views[vi].viewName} rect ${r.x},${r.y} ${r.w}x${r.h}`;
+          break outer;
+        }
+      }
+    }
+  }
+  check("morrow projects into a deckbd view at person size", seen !== "", seen);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

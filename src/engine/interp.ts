@@ -184,9 +184,13 @@ export class Interpreter {
         return NORMAL;
       case "switch": {
         const subject = await this.evalExpr(st.subject, frame);
-        for (const c of st.cases) {
-          if (valueEq(subject, await this.evalExpr(c.match, frame))) {
-            return this.execBlock(c.body, frame);
+        for (let i = 0; i < st.cases.length; i++) {
+          if (valueEq(subject, await this.evalExpr(st.cases[i].match, frame))) {
+            // stacked labels share the next non-empty body:
+            //   case "poop"  /  case "deckbd"  /  case "decka"  -> return 900
+            let j = i;
+            while (j < st.cases.length - 1 && st.cases[j].body.length === 0) j++;
+            return this.execBlock(st.cases[j].body, frame);
           }
         }
         return NORMAL;

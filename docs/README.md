@@ -1,4 +1,4 @@
-# taoot-web documentation
+# Titanic: Adventure Out of Time (RE)
 
 This folder explains how *Titanic: Adventure Out of Time* (TAOOT) is put
 together and how this project turns the original 1996 game files into

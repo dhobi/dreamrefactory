@@ -86,7 +86,9 @@ export class SetViewer {
     session.currentSceneName = () => this.scene.sceneName.toLowerCase();
     session.currentViewName = () => this.scene.views[this.viewIdx].viewName.toLowerCase();
     session.currentRotation = () => this.scene.views[this.viewIdx].rotation;
-    session.propRuntime.currentSet = set.setName.toLowerCase();
+    // canonical set identity = the opened file's basename (see SetScripts)
+    session.propRuntime.currentSet = session.currentSetName;
+    session.actorRuntime.currentSet = session.currentSetName;
     // crickets attenuate/pan against the camera's ground position + facing
     session.listener = () => {
       const sc = this.scene;
@@ -633,6 +635,26 @@ export class SetViewer {
         return;
       }
     }
+    // actors stand in the world between the props and the view hotspots
+    if (this.session.setVisible && this.current && y < this.current.height) {
+      const cam = this.worldCamera();
+      const act = cam ? this.session.actorRuntime.actorAt(x, y, cam) : null;
+      if (act) {
+        const inst = this.session.castScripts.get(act.member.name);
+        if (inst?.script.codes.has("mousedown")) {
+          try {
+            await this.session.interp.runHandler(inst, "mousedown", [act.member.name], {
+              me: act.member.name,
+              target: act.member.name,
+            });
+          } catch (e) {
+            this.onLog(`script error in ${act.member.name}.mousedown: ${(e as Error).message}`);
+          }
+          this.onLog(`click actor ${act.member.name}`);
+          return;
+        }
+      }
+    }
     // inside the set view: the usual hotspot chain
     if (this.session.setVisible && this.current && y < this.current.height) {
       const hit = this.hitTest(x, y);
@@ -682,6 +704,8 @@ export class SetViewer {
       return "touch";
     }
     if (!this.session.setVisible || (this.current && y >= this.current.height)) return "";
+    const cam = this.worldCamera();
+    if (cam && this.session.actorRuntime.actorAt(x, y, cam)) return "talk";
     const hit = this.hitTest(x, y);
     if (!hit) return "";
     return this.scripts.setCursor(this.sceneIdx, this.viewIdx, hit.objIdx, hit.obj.identifier);
@@ -783,6 +807,7 @@ export class SetViewer {
       const minAnchorY = this.animation !== null ? (f?.height ?? 0) : -Infinity;
       const propPal = this.session.setVisible ? this.propPalette : flat.palette;
       const cam = this.session.setVisible && this.animation === null ? this.worldCamera() : null;
+      if (cam) this.session.actorRuntime.composite(img.data, flat.width, flat.height, propPal, cam);
       this.session.propRuntime.composite(img.data, flat.width, flat.height, propPal, minAnchorY, cam);
       ctx.putImageData(img, 0, 0);
       this.applyFade(ctx);
@@ -799,8 +824,10 @@ export class SetViewer {
     const img = ctx.createImageData(f.width, f.height);
     indexedToRGBA(f.pixels, f.width, f.height, this.palette, img.data);
     if (this.animation === null) {
+      const cam = this.worldCamera();
+      if (cam) this.session.actorRuntime.composite(img.data, f.width, f.height, this.propPalette, cam);
       this.session.propRuntime.composite(
-        img.data, f.width, f.height, this.propPalette, -Infinity, this.worldCamera(),
+        img.data, f.width, f.height, this.propPalette, -Infinity, cam,
       );
     }
     ctx.putImageData(img, 0, 0);

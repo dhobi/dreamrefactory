@@ -1,0 +1,190 @@
+import { CstFile, CastMember, CastPose } from "../df/cst";
+import { ShpFrame, decodeShpFrame } from "../df/shp";
+import { WorldCamera, projectPoint } from "./props";
+
+/**
+ * Runtime for cast characters ("actors"). Actors are world-space sprites
+ * like propxyz props, but with 8 view directions per pose: the drawn frame
+ * depends on the actor's facing relative to the camera. Scripts drive them
+ * with actorset/actorstar/actorxyz/actordeg/actorpose/actorvisible/
+ * actorscale — the same getter/setter-by-arity pattern as props.
+ */
+
+export class ActorInstance {
+  visible = false;
+  setName = "";
+  worldX = 0;
+  worldY = 0;
+  worldZ = 0;
+  /** facing, 0..255 like the camera */
+  deg = 0;
+  poseName = "stand";
+  /** animation step within the pose (walk cycles advance this) */
+  step = 0;
+  scale = 0;
+  zclip = 0;
+  speed = 0;
+  turn = 0;
+  owner: string | number = "";
+  value: string | number = 0;
+  lastTick = 0;
+
+  constructor(
+    readonly member: CastMember,
+    readonly cast: LoadedCast,
+  ) {}
+
+  pose(): CastPose | null {
+    return this.member.poses.find((p) => p.name === this.poseName) ?? this.member.poses[0] ?? null;
+  }
+}
+
+export class LoadedCast {
+  private frameCache = new Map<number, ShpFrame>();
+
+  constructor(
+    readonly name: string,
+    readonly cst: CstFile,
+  ) {}
+
+  frame(containerLoc: number): ShpFrame {
+    let f = this.frameCache.get(containerLoc);
+    if (!f) {
+      f = decodeShpFrame(this.cst.file.containers[containerLoc]);
+      this.frameCache.set(containerLoc, f);
+    }
+    return f;
+  }
+}
+
+interface DrawEntry {
+  a: ActorInstance;
+  proj: { x: number; y: number; depth: number };
+}
+
+export class ActorRuntime {
+  readonly actors = new Map<string, ActorInstance>();
+  readonly casts = new Map<string, LoadedCast>();
+  /** the set currently displayed — actors only draw in their own set */
+  currentSet = "";
+
+  addCast(name: string, cst: CstFile): LoadedCast {
+    const cast = new LoadedCast(name.toLowerCase(), cst);
+    this.casts.set(cast.name, cast);
+    for (const m of cst.members) {
+      if (!this.actors.has(m.name)) this.actors.set(m.name, new ActorInstance(m, cast));
+    }
+    return cast;
+  }
+
+  removeCast(name: string): void {
+    const cast = this.casts.get(name.toLowerCase());
+    if (!cast) return;
+    this.casts.delete(cast.name);
+    for (const [key, a] of this.actors) {
+      if (a.cast === cast) this.actors.delete(key);
+    }
+  }
+
+  get(name: string): ActorInstance | null {
+    return this.actors.get(String(name).toLowerCase()) ?? null;
+  }
+
+  /**
+   * The sprite frame for an actor as seen from the camera: pick the
+   * direction whose depicted angle best matches the actor's facing
+   * relative to the camera's view direction.
+   */
+  private frameFor(a: ActorInstance, cam: WorldCamera): ShpFrame | null {
+    const pose = a.pose();
+    if (!pose || !pose.steps.length) return null;
+    const step = pose.steps[a.step % pose.steps.length];
+    if (!step) return null;
+    const rel = (a.deg - cam.deg) & 0xff; // relative facing, 0..255
+    const dir = Math.round(rel / 32) & 7;
+    const cf = step[dir] ?? step.find((f) => !!f);
+    return cf ? a.cast.frame(cf.location) : null;
+  }
+
+  /**
+   * Depth-scaling reference. Props use their state-header value (180); the
+   * CST frame records carry 96 at the analogous slot, but that renders
+   * people visibly too small against expected person-height — 180 lands
+   * right. APPROXIMATION until the actor draw fn is recovered from TI.EXE.
+   */
+  private refScale(_a: ActorInstance): number {
+    return 180;
+  }
+
+  /** visible actors of the current set, far to near */
+  drawList(cam: WorldCamera): DrawEntry[] {
+    const out: DrawEntry[] = [];
+    for (const a of this.actors.values()) {
+      if (!a.visible || a.scale <= 0) continue;
+      if (a.setName && a.setName !== this.currentSet) continue;
+      const proj = projectPoint(cam, a.worldX, a.worldY, a.worldZ);
+      if (!proj || proj.depth - a.zclip <= 0) continue;
+      out.push({ a, proj });
+    }
+    return out.sort((x, y) => y.proj.depth - x.proj.depth);
+  }
+
+  /** screen rect of an actor sprite (same depth scaling as world props) */
+  rect(a: ActorInstance, proj: { x: number; y: number; depth: number }, cam: WorldCamera) {
+    const f = this.frameFor(a, cam);
+    if (!f) return null;
+    const k = (a.scale * this.refScale(a)) / (1000 * proj.depth);
+    return {
+      f,
+      k,
+      x: proj.x - Math.round(f.posXraw * k),
+      y: proj.y - Math.round(f.posYraw * k),
+      w: Math.max(1, Math.round(f.width * k)),
+      h: Math.max(1, Math.round(f.height * k)),
+    };
+  }
+
+  /** blit visible actors into the view buffer (before screen-space props) */
+  composite(
+    rgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+    paletteRGBA: Uint8ClampedArray,
+    cam: WorldCamera,
+  ): void {
+    for (const { a, proj } of this.drawList(cam)) {
+      const r = this.rect(a, proj, cam);
+      if (!r) continue;
+      const maxY = Math.min(cam.clipH, height, r.y + r.h);
+      const maxX = Math.min(cam.clipW, width, r.x + r.w);
+      for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
+        const sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
+        for (let tx = Math.max(0, r.x); tx < maxX; tx++) {
+          const sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
+          const s = sy * r.f.width + sx;
+          if (!r.f.opaque[s]) continue;
+          const pal = r.f.indexed[s] * 4;
+          const d = (ty * width + tx) * 4;
+          rgba[d] = paletteRGBA[pal];
+          rgba[d + 1] = paletteRGBA[pal + 1];
+          rgba[d + 2] = paletteRGBA[pal + 2];
+        }
+      }
+    }
+  }
+
+  /** front-most actor whose opaque pixels cover (x, y) — for talking */
+  actorAt(x: number, y: number, cam: WorldCamera): ActorInstance | null {
+    const list = this.drawList(cam);
+    for (let i = list.length - 1; i >= 0; i--) {
+      const { a, proj } = list[i];
+      const r = this.rect(a, proj, cam);
+      if (!r) continue;
+      if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
+      const sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
+      const sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
+      if (r.f.opaque[sy * r.f.width + sx]) return a;
+    }
+    return null;
+  }
+}

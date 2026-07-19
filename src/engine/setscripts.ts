@@ -29,7 +29,9 @@ export class SetScripts {
     readonly session: GameSession,
   ) {
     session.currentBinding = this;
-    session.currentSetName = set.setName.toLowerCase();
+    // prefer the opened FILE's basename: DECKBD.SET's internal name field
+    // says "decka", but scripts address the set as "deckbd"
+    session.currentSetName = session.currentSetFile || set.setName.toLowerCase();
     session.interp.onUnknown = (name, args) =>
       this.onLog(`? ${name}(${args.map((a) => JSON.stringify(a)).join(", ")})`);
 
@@ -542,11 +544,12 @@ export function registerGameBuiltins(session: GameSession): void {
   // starxyz(name, axis): named world point from the set's actor/star table.
   // Axes: 1 = x, 2 = y (ground plane, same pair the camera/crickets use),
   // 3 = height, 4 = packed (x << 16 | y).
-  r("starxyz", (_i, [name, axis]) => {
+  const findStar = (name: Value) => {
     const n = toStr(name ?? "").toLowerCase();
-    const star = session.currentBinding?.set.actors.find(
-      (a) => a.identifier.toLowerCase() === n,
-    );
+    return session.currentBinding?.set.actors.find((a) => a.identifier.toLowerCase() === n);
+  };
+  r("starxyz", (_i, [name, axis]) => {
+    const star = findStar(name);
     if (!star) {
       log(`starxyz: no star "${toStr(name ?? "")}" in ${session.currentSetName}`);
       return 0;
@@ -559,4 +562,129 @@ export function registerGameBuiltins(session: GameSession): void {
       default: return 0;
     }
   });
+
+  // ---- actors (CST casts) --------------------------------------------------
+
+  const actor = (name: Value) => session.actorRuntime.get(toStr(name));
+  r("opencastfile", async (_i, [n]) => ((await session.openCastFile(toStr(n ?? ""))) ? 1 : 0));
+  r("closecastfile", (_i, [n]) => session.closeCastFile(toStr(n ?? "")));
+  r("actorexists", (_i, [n]) => (actor(n) ? 1 : 0));
+  r("actorvisible", (_i, [n, v]) => {
+    const a = actor(n);
+    if (!a) return 0;
+    if (v === undefined) return a.visible ? 1 : 0;
+    a.visible = truthy(v);
+  });
+  r("actorhide", (_i, [n]) => {
+    const a = actor(n);
+    if (a) a.visible = false;
+  });
+  // actorset binds an actor to a set; it only draws there (like propset)
+  r("actorset", (_i, [n, v]) => {
+    const a = actor(n);
+    if (!a) return "";
+    if (v === undefined) return a.setName;
+    a.setName = toStr(v).toLowerCase();
+  });
+  r("actorxyz", (_i, [n, x, y, z]) => {
+    const a = actor(n);
+    if (!a) return 0;
+    if (x === undefined) return 0;
+    // getter form actorxyz(name, axis): axis 1..3 like starxyz
+    if (y === undefined) {
+      switch (toNum(x)) {
+        case 1: return a.worldX;
+        case 2: return a.worldY;
+        case 3: return a.worldZ;
+        default: return 0;
+      }
+    }
+    a.worldX = toNum(x);
+    a.worldY = toNum(y);
+    a.worldZ = toNum(z ?? 0);
+  });
+  // place an actor on a named star point of the current set
+  r("actorstar", (_i, [n, starName]) => {
+    const a = actor(n);
+    const star = findStar(starName);
+    if (!a || !star) {
+      log(`actorstar: ${toStr(n)} -> "${toStr(starName ?? "")}" not found`);
+      return 0;
+    }
+    a.worldX = star.positionX;
+    a.worldY = star.positionZ;
+    a.worldZ = star.positionY;
+    a.deg = star.rotation8 & 0xff;
+  });
+  r("actordeg", (_i, [n, v]) => {
+    const a = actor(n);
+    if (!a) return 0;
+    if (v === undefined) return a.deg;
+    a.deg = toNum(v) & 0xff;
+  });
+  r("actorpose", (_i, [n, v]) => {
+    const a = actor(n);
+    if (!a) return "";
+    if (v === undefined) return a.poseName;
+    a.poseName = toStr(v).toLowerCase();
+    a.step = 0;
+  });
+  r("actorscale", (_i, [n, v]) => {
+    const a = actor(n);
+    if (!a) return 0;
+    if (v === undefined) return a.scale;
+    a.scale = toNum(v);
+  });
+  r("actorzclip", (_i, [n, v]) => {
+    const a = actor(n);
+    if (!a) return 0;
+    if (v === undefined) return a.zclip;
+    a.zclip = toNum(v);
+  });
+  r("actorspeed", (_i, [n, v]) => {
+    const a = actor(n);
+    if (!a) return 0;
+    if (v === undefined) return a.speed;
+    a.speed = toNum(v);
+  });
+  r("actorturn", (_i, [n, v]) => {
+    const a = actor(n);
+    if (!a) return 0;
+    if (v === undefined) return a.turn;
+    a.turn = toNum(v);
+  });
+  r("actorvalue", (_i, [n, v]) => {
+    const a = actor(n);
+    if (!a) return 0;
+    if (v === undefined) return a.value;
+    a.value = v;
+  });
+  r("actorowner", (_i, [n, v]) => {
+    const a = actor(n);
+    if (!a) return "";
+    if (v === undefined) return a.owner;
+    a.owner = v;
+  });
+  r("countactors", () => session.actorRuntime.actors.size);
+  r("indextoactor", (_i, [idx]) => {
+    return [...session.actorRuntime.actors.keys()][toNum(idx ?? 0) - 1] ?? "";
+  });
+  // walking is a later checkpoint: actors teleport to their destination so
+  // scripted movement still ends in the right place
+  r("walktostar", (_i, [n, starName]) => {
+    const a = actor(n);
+    const star = findStar(starName);
+    if (!a || !star) return 0;
+    a.worldX = star.positionX;
+    a.worldY = star.positionZ;
+    a.worldZ = star.positionY;
+  });
+  r("walktoxyz", (_i, [n, x, y, z]) => {
+    const a = actor(n);
+    if (!a) return 0;
+    a.worldX = toNum(x ?? 0);
+    a.worldY = toNum(y ?? 0);
+    a.worldZ = toNum(z ?? 0);
+  });
+  r("iswalk", () => 0);
 }

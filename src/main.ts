@@ -123,7 +123,11 @@ session.onSetChange = async (fileName, sceneName, viewName) => {
     return;
   }
   const base = fileName.replace(/\.set$/, "");
-  await Promise.all([`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`].map(fetchIntoStore));
+  await Promise.all(
+    [`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`, "gang.cst", "extra.cst"].map(
+      fetchIntoStore,
+    ),
+  );
   rebuildSetSelect();
   await activateSet(fileName, sceneName, viewName);
 };
@@ -132,6 +136,8 @@ async function activateSet(name: string, startScene = "", startView = ""): Promi
   const set = loadedSets.get(name);
   if (!set) return;
   scriptlog.textContent = "";
+  // direct activation (set list / drag-drop) bypasses openSetFile
+  session.currentSetFile = name.toLowerCase().replace(/\.set$/, "");
   await session.loadCoreScripts();
   viewer = new SetViewer(set, session, startScene, startView);
   viewer.onHud = (t) => (hud.textContent = t);
@@ -240,7 +246,7 @@ async function loadServerSet(setName: string): Promise<void> {
   await Promise.all(
     [`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`,
      "unilib.trk", "bootfile", "main.stg", "inven1.stg", "inven2.stg",
-     "house.shp", "inven.shp", "inven.trk"].map(fetchIntoStore),
+     "house.shp", "inven.shp", "inven.trk", "gang.cst", "extra.cst"].map(fetchIntoStore),
   );
   try {
     loadedSets.set(setName, readSetFile(data));

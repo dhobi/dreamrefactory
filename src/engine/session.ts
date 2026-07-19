@@ -5,7 +5,9 @@ import { FrameBuffer, decodeFrame, paletteToRGBA } from "../df/image";
 import { readShpFile } from "../df/shp";
 import { sniffScript } from "../df/script";
 import { parseScript } from "./parser";
+import { readCstFile } from "../df/cst";
 import { Interpreter, ScriptInstance, Value, registerCoreBuiltins, toStr } from "./interp";
+import { ActorRuntime } from "./actors";
 import { PropRuntime } from "./props";
 import { AudioLibrary, AudioSink, NullAudioSink, PlayHandle } from "./audio";
 import { FileProvider, registerGameBuiltins } from "./setscripts";
@@ -82,6 +84,7 @@ export class GameSession {
   readonly interp = new Interpreter();
   readonly audioLib = new AudioLibrary();
   readonly propRuntime = new PropRuntime();
+  readonly actorRuntime = new ActorRuntime();
 
   /**
    * BOOTFILE script containers, in order. Container 1 holds the startup +
@@ -635,11 +638,19 @@ export class GameSession {
     return 0;
   }
 
+  /**
+   * Canonical name of the set being opened = the FILE basename. The
+   * internal setName field can differ (DECKBD.SET says "decka"), but
+   * scripts bind actors/props/crickets to the name they opened.
+   */
+  currentSetFile = "";
+
   /** engine primitive behind boot's changeset(): switch to another set */
   async openSetFile(fileName: string, sceneName = "", viewName = ""): Promise<void> {
     const key = fileName.toLowerCase();
     this.onLog(`opensetfile("${key}", "${sceneName}", "${viewName}")`);
     this.lastRotation = this.currentRotation ? this.currentRotation() : null;
+    this.currentSetFile = key.replace(/\.set$/, "");
     await this.onSetChange(key, sceneName.toLowerCase(), viewName.toLowerCase());
   }
 
@@ -669,6 +680,65 @@ export class GameSession {
   readonly propScripts = new Map<string, ScriptInstance>();
   private shopMains = new Map<string, ScriptInstance | null>();
 
+  /** per-character script instances of loaded casts, by actor name */
+  readonly castScripts = new Map<string, ScriptInstance>();
+  private castMains = new Map<string, ScriptInstance | null>();
+
+  /** main script of a loaded cast (sendtocast target), by file name */
+  castMain(name: string): ScriptInstance | null {
+    return this.castMains.get(name.toLowerCase()) ?? null;
+  }
+
+  /**
+   * Load a CST cast file session-wide: register its characters (actors) and
+   * their scripts. Idempotent — sets call opencastfile("extra.cst") freely.
+   */
+  async openCastFile(fileName: string): Promise<boolean> {
+    const key = fileName.toLowerCase();
+    if (this.castMains.has(key)) return true;
+    const data = this.files(key);
+    if (!data) {
+      this.onLog(`opencastfile: "${fileName}" not available`);
+      return false;
+    }
+    let cst;
+    try {
+      cst = readCstFile(data);
+    } catch (e) {
+      this.onLog(`opencastfile: ${fileName}: ${(e as Error).message}`);
+      return false;
+    }
+    this.actorRuntime.addCast(key, cst);
+    const main = this.instanceFrom(cst.file.containers[1]?.data, key);
+    this.castMains.set(key, main);
+    for (const m of cst.members) {
+      const inst = this.instanceFrom(cst.file.containers[m.scriptLocation]?.data, m.name);
+      if (inst) {
+        inst.parent = main; // stdactor/stdscale/endwalk live in the cast main
+        this.castScripts.set(m.name, inst);
+      }
+    }
+    if (main) {
+      try {
+        await this.interp.runHandler(main, "opencast", [], { me: key, target: "" });
+      } catch (e) {
+        this.onLog(`opencast ${key}: ${(e as Error).message}`);
+      }
+    }
+    this.onLog(`cast loaded: ${key} (${cst.members.length} characters)`);
+    return true;
+  }
+
+  closeCastFile(fileName: string): void {
+    const key = fileName.toLowerCase();
+    const cast = this.actorRuntime.casts.get(key);
+    if (cast) {
+      for (const m of cast.cst.members) this.castScripts.delete(m.name);
+    }
+    this.castMains.delete(key);
+    this.actorRuntime.removeCast(key);
+  }
+
   /** main script of a loaded shop (sendtoshop target), by file name */
   shopMain(name: string): ScriptInstance | null {
     return this.shopMains.get(name.toLowerCase()) ?? null;
@@ -679,7 +749,9 @@ export class GameSession {
     const lower = name.toLowerCase();
     return (
       this.propScripts.get(lower) ??
+      this.castScripts.get(lower) ??
       this.shopMains.get(lower) ??
+      this.castMains.get(lower) ??
       this.flatScripts.get(lower) ??
       (this.stage && this.stage.name.toLowerCase() === lower ? this.stage : null) ??
       (lower === "boot" ? this.boot : null)
@@ -757,5 +829,7 @@ export class GameSession {
     for (const shop of ["inven.shp", "house.shp"]) {
       if (this.files(shop)) await this.openShop(shop);
     }
+    // the boot script opens the story cast at startup (opencastfile)
+    if (this.files("gang.cst")) await this.openCastFile("gang.cst");
   }
 }
