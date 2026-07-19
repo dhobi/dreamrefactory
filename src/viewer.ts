@@ -87,6 +87,12 @@ export class SetViewer {
     session.currentViewName = () => this.scene.views[this.viewIdx].viewName.toLowerCase();
     session.currentRotation = () => this.scene.views[this.viewIdx].rotation;
     session.propRuntime.currentSet = set.setName.toLowerCase();
+    // crickets attenuate/pan against the camera's ground position + facing
+    session.listener = () => {
+      const sc = this.scene;
+      const v = sc?.views[this.viewIdx];
+      return v ? { x: sc.xAxisMap, y: sc.zAxisMap, deg: v.rotation8 } : null;
+    };
     session.captureFrame = () => {
       const f = this.current;
       if (!f) return null;
@@ -111,9 +117,17 @@ export class SetViewer {
         `no audio banks — drop UNILIB.TRK and ${base.toUpperCase()}.TRK/.SFX alongside the .SET to hear sound`,
       );
     }
-    this.scripts.openSet();
-    this.scripts.openShop(`${base}.shp`);
-    this.scripts.openScene(this.sceneIdx);
+  }
+
+  /**
+   * Fire the set's opening lifecycle (openset → openscene). Separate from
+   * the constructor because handlers can suspend (delay) or change the set
+   * again — the host awaits this from its onSetChange hook.
+   */
+  async start(): Promise<void> {
+    await this.scripts.openSet();
+    await this.scripts.openShop(`${this.set.setName.toLowerCase()}.shp`);
+    await this.scripts.openScene(this.sceneIdx);
   }
 
   /** position at a named scene/view (case-insensitive), e.g. from changeset() */
@@ -155,8 +169,8 @@ export class SetViewer {
    * walking/turning itself via the currentscene() setter (onNavigate), so
    * the return value covers both "a script exitcoded" and "we navigated".
    */
-  keyDown(keyName: string): boolean {
-    if (this.busy) return false;
+  async keyDown(keyName: string): Promise<boolean> {
+    if (this.inputLocked) return false;
     let navigated = false;
     this.session.onNavigate = (dir) => {
       navigated = true;
@@ -164,7 +178,7 @@ export class SetViewer {
       else if (dir === "left") this.turn(LEFTTURNS);
       else if (dir === "right") this.turn(RIGHTTURNS);
     };
-    const consumed = this.scripts.keyDown(this.sceneIdx, keyName);
+    const consumed = await this.scripts.keyDown(this.sceneIdx, keyName);
     this.session.onNavigate = () => {};
     return consumed || navigated;
   }
@@ -379,7 +393,8 @@ export class SetViewer {
       return false;
     }
     if (key === `${this.set.setName.toLowerCase()}.shp`) {
-      return this.scripts.openShop(key);
+      void this.session.track(this.scripts.openShop(key));
+      return true;
     }
     return false;
   }
@@ -454,8 +469,18 @@ export class SetViewer {
     );
   }
 
+  /**
+   * Engine-side busy: something visual is in flight. Checked by walk/turn —
+   * deliberately WITHOUT scriptBusy, because the engine default movement is
+   * itself invoked from inside a running script (boot's keydown).
+   */
   get busy(): boolean {
     return this.animation !== null || this.movie !== null || this.session.fading;
+  }
+
+  /** gate for NEW user input: also waits for running/suspended scripts */
+  get inputLocked(): boolean {
+    return this.busy || this.session.scriptBusy;
   }
 
   /** camera of the current view, for world-space (propxyz) props */
@@ -498,7 +523,7 @@ export class SetViewer {
       }
     }
     this.play(frames, () => {
-      if (target !== this.viewIdx) this.scripts.viewChanged();
+      if (target !== this.viewIdx) void this.session.track(this.scripts.viewChanged());
       this.viewIdx = target;
       this.showView();
     });
@@ -555,8 +580,12 @@ export class SetViewer {
         // currentview() (gstair's deck-transition scenes forward via
         // changeset from their openscene)
         if (sceneIdx !== prevScene) {
-          this.scripts.closeScene(prevScene);
-          this.scripts.openScene(sceneIdx);
+          void this.session.track(
+            (async () => {
+              await this.scripts.closeScene(prevScene);
+              await this.scripts.openScene(sceneIdx);
+            })(),
+          );
         }
       }
       this.showView();
@@ -578,11 +607,12 @@ export class SetViewer {
     return null;
   }
 
-  click(x: number, y: number): void {
+  async click(x: number, y: number): Promise<void> {
     if (this.movie) {
       this.movieClick(x, y);
       return;
     }
+    if (this.inputLocked) return; // a script is running/suspended (delay)
     // props (UI band, inventory items) sit in front of everything
     const prop = this.session.propRuntime.propAt(
       x, y, this.session.setVisible ? this.worldCamera() : null,
@@ -592,7 +622,10 @@ export class SetViewer {
       const inst = this.session.propScripts.get(name.toLowerCase());
       if (inst?.script.codes.has("mousedown")) {
         try {
-          this.session.interp.runHandler(inst, "mousedown", [name], { me: name, target: name });
+          await this.session.interp.runHandler(inst, "mousedown", [name], {
+            me: name,
+            target: name,
+          });
         } catch (e) {
           this.onLog(`script error in ${name}.mousedown: ${(e as Error).message}`);
         }
@@ -604,7 +637,9 @@ export class SetViewer {
     if (this.session.setVisible && this.current && y < this.current.height) {
       const hit = this.hitTest(x, y);
       if (hit) {
-        const consumed = this.scripts.mouseDown(this.sceneIdx, this.viewIdx, hit.objIdx, hit.obj.identifier);
+        const consumed = await this.scripts.mouseDown(
+          this.sceneIdx, this.viewIdx, hit.objIdx, hit.obj.identifier,
+        );
         this.onLog(`click ${hit.obj.identifier}${consumed ? "" : " (unhandled)"}`);
         return;
       }
@@ -616,7 +651,7 @@ export class SetViewer {
     for (const inst of [flat, this.session.stage]) {
       if (!inst || !inst.script.codes.has("mousedown")) continue;
       try {
-        const res = interp.runHandler(inst, "mousedown", [""], { me: inst.name, target: "" });
+        const res = await interp.runHandler(inst, "mousedown", [""], { me: inst.name, target: "" });
         if (interp.eventConsumed || (res.handled && !res.passed)) return;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.mousedown: ${(e as Error).message}`);
@@ -625,7 +660,7 @@ export class SetViewer {
   }
 
   /** returns the DreamFactory cursor name for this position ("" = default) */
-  hover(x: number, y: number): string {
+  async hover(x: number, y: number): Promise<string> {
     const prop = this.session.propRuntime.propAt(
       x, y, this.session.setVisible ? this.worldCamera() : null,
     );
@@ -635,7 +670,10 @@ export class SetViewer {
       if (inst?.script.codes.has("setcursor")) {
         this.scripts.cursorName = "";
         try {
-          this.session.interp.runHandler(inst, "setcursor", [name], { me: name, target: name });
+          await this.session.interp.runHandler(inst, "setcursor", [name], {
+            me: name,
+            target: name,
+          });
         } catch {
           /* cursor is cosmetic */
         }
@@ -664,6 +702,7 @@ export class SetViewer {
   tick(now: number): CachedFrame | null {
     this.session.propRuntime.tick(now, FRAME_MS);
     this.session.tickFade(now);
+    this.session.tickTime(now); // delay() clock + loop/cricket service
     if (this.movie) {
       const m = this.movie;
       if (m.interval > 0 && m.meta[m.pos].regions.length === 0) {

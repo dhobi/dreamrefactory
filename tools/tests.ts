@@ -34,50 +34,62 @@ function check(name: string, ok: boolean, detail = ""): void {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
 }
 
-function newSession(): { session: GameSession; sink: NullAudioSink; viewer: () => SetViewer } {
+async function newSession(): Promise<{
+  session: GameSession;
+  sink: NullAudioSink;
+  viewer: () => SetViewer;
+}> {
   const sink = new NullAudioSink();
   const session = new GameSession(provider, sink);
   let current: SetViewer | null = null;
-  session.onSetChange = (fileName, sceneName, viewName) => {
+  session.onSetChange = async (fileName, sceneName, viewName) => {
     const set = session.loadSet(fileName);
     if (!set) return;
     current = new SetViewer(set, session, sceneName, viewName);
     current.onHud = () => {};
+    await current.start();
   };
-  session.loadCoreScripts();
+  await session.loadCoreScripts();
   return { session, sink, viewer: () => current! };
 }
 
-function runAnimations(v: SetViewer): void {
-  let clock = 0;
+// one monotonic virtual clock for the whole suite (sessions each track their
+// own offsets; time must never run backwards for delay()/loop service)
+let clock = 0;
+
+/** let suspended scripts (await points, resolved delays) continue */
+const drain = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+async function runAnimations(v: SetViewer): Promise<void> {
   let guard = 0;
-  while (v.busy) {
+  while (v.busy || v.session.scriptBusy) {
     v.tick((clock += 100));
+    await drain();
     if (++guard > 2000) throw new Error("animation never finished");
   }
 }
 
 // --- 1. hotspot alignment + cursor + click (B59 door) ---
 {
-  const { session, viewer } = newSession();
-  session.openSetFile("b59.set");
+  const { session, viewer } = await newSession();
+  await session.openSetFile("b59.set");
   const v = viewer();
   const view = v.scene.views[v.viewIdx];
   const obj = view.objects[0];
   const cx = Math.floor((obj.startRegionX + obj.endRegionX) / 2);
   const cy = Math.floor((obj.startRegionY + obj.endRegionY) / 2);
   check("b59 door hotspot present", obj?.identifier === "door");
-  check("hover returns touch cursor", v.hover(cx, cy) === "touch");
+  check("hover returns touch cursor", (await v.hover(cx, cy)) === "touch");
 }
 
 // --- 2. road arrival faces travel direction (user-reported bug) ---
 {
-  const { session, viewer } = newSession();
-  session.openSetFile("turk.set");
+  const { session, viewer } = await newSession();
+  await session.openSetFile("turk.set");
   const v = viewer();
   v.jumpTo("scene11", "View116");
   v.walk();
-  runAnimations(v);
+  await runAnimations(v);
   const scene = v.scene.sceneName;
   const view = v.scene.views[v.viewIdx].viewName;
   check("turk Road144 arrival", scene === "Scene134" && view === "View138", `${scene}/${view}`);
@@ -85,7 +97,7 @@ function runAnimations(v: SetViewer): void {
 
 // --- 3. interpreter runs real game logic (blackjack winner()) ---
 {
-  const { session } = newSession();
+  const { session } = await newSession();
   const file = readContainerFile(provider("blkjack.stg")!);
   let inst: ScriptInstance | null = null;
   for (const c of file.containers) {
@@ -97,35 +109,37 @@ function runAnimations(v: SetViewer): void {
       break;
     }
   }
-  const winner = (p: number, d: number) => {
+  const winner = async (p: number, d: number) => {
     session.interp.globals.set("playertotal", p);
     session.interp.globals.set("dealertotal", d);
-    return session.interp.runHandler(inst!, "winner", [], { me: "blkjack", target: "" }).value;
+    return (await session.interp.runHandler(inst!, "winner", [], { me: "blkjack", target: "" }))
+      .value;
   };
   check(
     "blackjack winner()",
-    winner(20, 18) === "player" && winner(18, 20) === "dealer" && winner(19, 19) === "draw" &&
-      winner(20, 22) === "player" && winner(21, 21) === "draw",
+    (await winner(20, 18)) === "player" && (await winner(18, 20)) === "dealer" &&
+      (await winner(19, 19)) === "draw" && (await winner(20, 22)) === "player" &&
+      (await winner(21, 21)) === "draw",
   );
 }
 
 // --- 4. audio: locked-door voice line through the script chain ---
 {
-  const { session, sink, viewer } = newSession();
-  session.openSetFile("b59.set");
+  const { session, sink, viewer } = await newSession();
+  await session.openSetFile("b59.set");
   const v = viewer();
   const main = v.scripts.findInstance("b59")!;
-  session.interp.runHandler(main, "mousedown", ["locked"], { me: "b59", target: "locked" });
+  await session.interp.runHandler(main, "mousedown", ["locked"], { me: "b59", target: "locked" });
   const call = sink.calls.find((c) => c.channel === "voice");
   check("doorlocked voice plays", !!call && call.seconds > 0.5, `${call?.seconds.toFixed(2)}s`);
 }
 
 // --- 5. cross-set travel via stage gotospecial, globals persist ---
 {
-  const { session, viewer } = newSession();
-  session.openSetFile("b59.set");
+  const { session, viewer } = await newSession();
+  await session.openSetFile("b59.set");
   session.interp.globals.set("testmarker", 42);
-  session.interp.runHandler(session.stage!, "gotospecial", ["hallb", "scene29", "view41"], {
+  await session.interp.runHandler(session.stage!, "gotospecial", ["hallb", "scene29", "view41"], {
     me: "main.stg",
     target: "",
   });
@@ -142,8 +156,8 @@ function runAnimations(v: SetViewer): void {
 
 // --- 6. props: shop loads, prop state machinery works (TURK) ---
 {
-  const { session, viewer } = newSession();
-  session.openSetFile("turk.set");
+  const { session, viewer } = await newSession();
+  await session.openSetFile("turk.set");
   void viewer();
   const p = session.propRuntime.get("turkwater");
   check("turk.shp props loaded", !!p, session.propRuntime.shops.size + " shop(s)");
@@ -156,12 +170,12 @@ function runAnimations(v: SetViewer): void {
 
 // --- 7. door opens: prop becomes visible, sound plays, uparrow travels ---
 {
-  const { session, sink, viewer } = newSession();
-  session.openSetFile("b59.set");
+  const { session, sink, viewer } = await newSession();
+  await session.openSetFile("b59.set");
   let v = viewer();
   // click the door hotspot in Scene14/View18
   const obj = v.scene.views[v.viewIdx].objects[0];
-  v.click(
+  await v.click(
     Math.floor((obj.startRegionX + obj.endRegionX) / 2),
     Math.floor((obj.startRegionY + obj.endRegionY) / 2),
   );
@@ -174,7 +188,7 @@ function runAnimations(v: SetViewer): void {
   const voice = sink.calls.find((c) => c.channel === "voice");
   check("dooropen sound plays", !!voice && voice.seconds > 0.1, `${voice?.seconds.toFixed(2)}s`);
   // with the door open, uparrow is intercepted by the scene script -> hallb
-  const consumed = v.keyDown("uparrow");
+  const consumed = await v.keyDown("uparrow");
   v = viewer();
   check(
     "uparrow through open door travels to hallb",
@@ -185,21 +199,20 @@ function runAnimations(v: SetViewer): void {
 
 // --- 8. doors close on navigation (boot's default closescene) ---
 {
-  const { session, sink, viewer } = newSession();
-  session.openSetFile("b59.set");
-  let v = viewer();
+  const { session, sink, viewer } = await newSession();
+  await session.openSetFile("b59.set");
+  const v = viewer();
   const obj = v.scene.views[v.viewIdx].objects[0];
   const cx = Math.floor((obj.startRegionX + obj.endRegionX) / 2);
   const cy = Math.floor((obj.startRegionY + obj.endRegionY) / 2);
   const door = session.propRuntime.get("door")!;
 
   // open door, then walk away to another scene in the same set
-  v.click(cx, cy);
+  await v.click(cx, cy);
   sink.calls.length = 0;
   v.jumpTo("Scene14", "View19"); // View19 faces Road34 to Scene15
   v.walk();
-  let clock = 0;
-  while (v.busy) v.tick((clock += 100));
+  await runAnimations(v);
   const closedOnWalk = !door.visible;
   const closeSound = sink.calls.find((c) => c.channel === "voice");
   check("door closes when walking away", closedOnWalk, `visible=${door.visible}`);
@@ -207,17 +220,17 @@ function runAnimations(v: SetViewer): void {
 
   // open again, then just turn: view change must also close the door
   v.jumpTo("Scene14", "View18");
-  v.click(cx, cy);
+  await v.click(cx, cy);
   sink.calls.length = 0;
   v.turn(0);
-  while (v.busy) v.tick((clock += 100));
+  await runAnimations(v);
   check("door closes on turn", !door.visible, `visible=${door.visible}`);
   check("doorclose sound on turn", sink.calls.some((c) => c.channel === "voice"));
 
   // open again, travel to another set: door must not survive the trip
   v.jumpTo("Scene14", "View18");
-  v.click(cx, cy);
-  session.interp.runHandler(session.stage!, "gotospecial", ["hallb", "scene29", "view41"], {
+  await v.click(cx, cy);
+  await session.interp.runHandler(session.stage!, "gotospecial", ["hallb", "scene29", "view41"], {
     me: "main.stg",
     target: "",
   });
@@ -226,96 +239,92 @@ function runAnimations(v: SetViewer): void {
 
 // --- 9. movies: boot's spotmovie -> playmovie builtin -> viewer playback ---
 {
-  const { session, viewer } = newSession();
-  session.openSetFile("turk.set");
+  const { session, viewer } = await newSession();
+  await session.openSetFile("turk.set");
   const v = viewer();
-  session.runGlobal("spotmovie", ["turknmes.mov"]);
+  await session.runGlobal("spotmovie", ["turknmes.mov"]);
   check("spotmovie starts playback", v.moviePlaying);
-  let clock = 0;
   const settle9 = () => {
     for (let i = 0; i < 30 && v.moviePlaying; i++) v.tick((clock += 250));
   };
   settle9();
   check("movie pauses at the OK frame", v.moviePlaying);
-  v.click(10, 10); // not on a region: nothing happens
+  await v.click(10, 10); // not on a region: nothing happens
   settle9();
   check("click outside regions is ignored", v.moviePlaying);
-  v.click(458, 350); // on the OK button (region 431..485 x 339..362)
+  await v.click(458, 350); // on the OK button (region 431..485 x 339..362)
   settle9(); // OK jumps to the pressed-button frame, then the exit chain
   check("OK click closes the movie", !v.moviePlaying);
 }
 
 // --- 10. movie zoom cycle (MENU.MOV): paper toggles zoom, only OK leaves ---
 {
-  const { session, viewer } = newSession();
-  session.openSetFile("turk.set"); // any set; movie loads via provider
+  const { session, viewer } = await newSession();
+  await session.openSetFile("turk.set"); // any set; movie loads via provider
   const v = viewer();
   v.playMovie("menu.mov");
-  let clock = 0;
   const settle = () => {
     for (let i = 0; i < 30 && v.moviePlaying; i++) v.tick((clock += 250));
   };
   settle();
   check("menu pauses on the closed view", v.moviePlaying);
-  v.click(460, 350); // OK -> pressed-button frame, then exit
+  await v.click(460, 350); // OK -> pressed-button frame, then exit
   settle();
   check("OK leaves from the closed view", !v.moviePlaying);
 
   v.playMovie("menu.mov");
   settle();
-  v.click(280, 210); // the menu paper -> hard cut to "frame3" (zoomed)
+  await v.click(280, 210); // the menu paper -> hard cut to "frame3" (zoomed)
   settle();
   check("paper click zooms (still in movie)", v.moviePlaying);
-  v.click(250, 200); // zoomed paper -> hard cut back to "frame1"
+  await v.click(250, 200); // zoomed paper -> hard cut back to "frame1"
   settle();
   check("second paper click unzooms, does NOT leave", v.moviePlaying);
-  v.click(460, 350); // OK button
+  await v.click(460, 350); // OK button
   settle();
   check("OK leaves the menu movie", !v.moviePlaying);
 }
 
 // --- 11. curtains (user-reported): silent open, endless toggle, OK exits ---
 {
-  const { session, sink, viewer } = newSession();
-  session.openSetFile("c73.set");
+  const { session, sink, viewer } = await newSession();
+  await session.openSetFile("c73.set");
   const v = viewer();
   sink.calls.length = 0;
   v.playMovie("curtains.mov");
-  let clock = 0;
   const settle = () => {
     for (let i = 0; i < 40 && v.moviePlaying; i++) v.tick((clock += 250));
   };
   settle();
   check("curtains open silently on the closed view", v.moviePlaying && sink.calls.length === 0);
-  v.click(230, 200); // the curtain (frame 1: x116..350 y82..354) -> opens
+  await v.click(230, 200); // the curtain (frame 1: x116..350 y82..354) -> opens
   settle();
   const openSound = sink.calls.length;
   check("curtain click plays sound + open animation", v.moviePlaying && openSound > 0);
-  v.click(140, 250); // left curtain edge (frame 8) -> closes again
+  await v.click(140, 250); // left curtain edge (frame 8) -> closes again
   settle();
   check("second click closes the curtain", v.moviePlaying && sink.calls.length > openSound);
-  v.click(230, 200); // closed again (frame 15) -> jumps back, reopens
+  await v.click(230, 200); // closed again (frame 15) -> jumps back, reopens
   settle();
   check("toggle repeats endlessly", v.moviePlaying);
-  v.click(455, 350); // OK at the open view (frame 8) -> exit animation
+  await v.click(455, 350); // OK at the open view (frame 8) -> exit animation
   settle();
   check("OK plays the exit animation and closes", !v.moviePlaying);
 }
 
 // --- 12. faucet: water cycle with per-frame sounds, OK-position exits ---
 {
-  const { session, sink, viewer } = newSession();
-  session.openSetFile("c73.set");
+  const { session, sink, viewer } = await newSession();
+  await session.openSetFile("c73.set");
   const v = viewer();
   sink.calls.length = 0;
   v.playMovie("faucet.mov");
-  let clock = 0;
   const settle = () => {
     for (let i = 0; i < 60 && v.moviePlaying; i++) v.tick((clock += 250));
   };
   settle();
   check("faucet opens silently on the off view", v.moviePlaying && sink.calls.length === 0);
-  v.click(220, 140); // the handle (frame 1: x171..274 y116..163) -> water runs
+  await v.click(220, 140); // the handle (frame 1: x171..274 y116..163) -> water runs
   settle();
   const sounds = sink.calls.filter((c) => c.channel === "sound").map((c) => c.seconds.toFixed(2));
   check(
@@ -323,20 +332,20 @@ function runAnimations(v: SetViewer): void {
     v.moviePlaying && sounds.length === 3 && sounds[0] === "0.23" && sounds[1] === "3.62" && sounds[2] === "0.19",
     sounds.join(","),
   );
-  v.click(220, 140); // handle again (frame 38) -> the cycle replays
+  await v.click(220, 140); // handle again (frame 38) -> the cycle replays
   settle();
   check(
     "handle replays the cycle",
     v.moviePlaying && sink.calls.filter((c) => c.channel === "sound").length === 6,
   );
-  v.click(455, 350); // bottom-right region on frame 38 -> steps out, exits
+  await v.click(455, 350); // bottom-right region on frame 38 -> steps out, exits
   settle();
   check("corner click leaves the faucet movie", !v.moviePlaying);
 }
 
 // --- 13. grand staircase: deck flips + cross-set travel (user-reported) ---
 {
-  const { session, viewer } = newSession();
+  const { session, viewer } = await newSession();
   const state = () => {
     const v = viewer();
     return `${session.currentSetName} ${v.scene.sceneName}/${v.scene.views[v.viewIdx].viewName}`;
@@ -344,36 +353,36 @@ function runAnimations(v: SetViewer): void {
   // B deck, down the stairs: keydown interceptor lives in the SET MAIN
   // script (scene13 has no script container); its changeset targets the
   // shipped typo "view79" — facing-continuity fallback lands on View69
-  session.openSetFile("gstair3.set");
+  await session.openSetFile("gstair3.set");
   session.interp.globals.set("savedeck", "b");
   viewer().jumpTo("Scene13", "View33");
-  viewer().keyDown("uparrow");
-  runAnimations(viewer());
+  await viewer().keyDown("uparrow");
+  await runAnimations(viewer());
   check(
     "gstair3 B-deck stairs flip to C deck",
     state() === "gstair3 Scene65/View69" && session.interp.globals.get("savedeck") === "c",
     `${state()} savedeck=${session.interp.globals.get("savedeck")}`,
   );
   // C deck, down again: leads to the reception set
-  session.openSetFile("gstair3.set");
+  await session.openSetFile("gstair3.set");
   session.interp.globals.set("savedeck", "c");
   viewer().jumpTo("Scene13", "View33");
-  viewer().keyDown("uparrow");
-  runAnimations(viewer());
+  await viewer().keyDown("uparrow");
+  await runAnimations(viewer());
   check("gstair3 C-deck stairs reach recept1c", state() === "recept1c Scene102/View104", state());
   // B deck, walk UP: road to Scene64, arrival openscene forwards to gstair2
-  session.openSetFile("gstair3.set");
+  await session.openSetFile("gstair3.set");
   session.interp.globals.set("savedeck", "b");
   viewer().jumpTo("Scene50", "View54");
   viewer().walk();
-  runAnimations(viewer());
+  await runAnimations(viewer());
   check("gstair3 walk up reaches gstair2", state() === "gstair2 Scene17/View49", state());
 }
 
 // --- 14. stage layer: main.stg UI, inventory pickup, inven1 flat ---
 {
-  const { session, viewer } = newSession();
-  session.openSetFile("b59.set");
+  const { session, viewer } = await newSession();
+  await session.openSetFile("b59.set");
   const v = viewer();
   check(
     "main stage active with its flat",
@@ -395,7 +404,7 @@ function runAnimations(v: SetViewer): void {
   session.interp.globals.set("mission", 1);
   void v;
   check("inven shop main resolvable", !!session.shopMain("inven.shp"));
-  session.interp.runHandler(session.shopMain("inven.shp")!, "addinven", ["carkeys"], {
+  await session.interp.runHandler(session.shopMain("inven.shp")!, "addinven", ["carkeys"], {
     me: "inven.shp",
     target: "",
   });
@@ -407,7 +416,7 @@ function runAnimations(v: SetViewer): void {
   );
 
   // open the inventory: boot's transtoflat swaps the stage
-  session.runGlobal("transtoflat", ["inven1.stg"]);
+  await session.runGlobal("transtoflat", ["inven1.stg"]);
   check(
     "transtoflat opens inven1",
     session.stageName === "inven1.stg" && session.currentFlat === "inven 1",
@@ -417,7 +426,7 @@ function runAnimations(v: SetViewer): void {
   check("carkeys shown highlighted", keys.visible && keys.stateName === "hilite1", keys.stateName);
 
   // and back
-  session.runGlobal("transfromflat", []);
+  await session.runGlobal("transfromflat", []);
   check(
     "transfromflat restores main.stg",
     session.stageName === "main.stg" && session.currentFlat === "main 1",
@@ -427,8 +436,8 @@ function runAnimations(v: SetViewer): void {
 
 // --- 15. world-space props: the bag on the C73 bed, projected + takeable ---
 {
-  const { session, viewer } = newSession();
-  session.openSetFile("c73.set");
+  const { session, viewer } = await newSession();
+  await session.openSetFile("c73.set");
   const v = viewer();
   v.jumpTo("Scene50", "View59");
   const bag = session.propRuntime.get("bag")!;
@@ -449,13 +458,67 @@ function runAnimations(v: SetViewer): void {
     !!proj && proj.x === 314 && proj.y === 200 && proj.depth === 1755,
     proj ? `${proj.x},${proj.y} d=${proj.depth}` : "behind camera",
   );
-  if (hit) v.click(hit.x, hit.y); // bag's mousedown -> addbag()
+  if (hit) await v.click(hit.x, hit.y); // bag's mousedown -> addbag()
   check(
     "clicking the bag picks it up",
     bag.owner === "frank" && !bag.worldSpace && bag.anchorY === 324,
     `owner=${bag.owner} ws=${bag.worldSpace} anchor=${bag.anchorX},${bag.anchorY}`,
   );
   check("trunkkey comes along", session.propRuntime.get("trunkkey")?.owner === "frank");
+}
+
+// --- 16. timing model: makeloop/makecricket/starxyz/delay/soundloop -------
+{
+  const { session, sink, viewer } = await newSession();
+  await session.openSetFile("c73.set");
+  const v = viewer();
+  // C73's openset arms the Smethells door-knock loop on scene49
+  // (makeloop("scene","scene49","smethknock",300) — actorvalue("smeth")=0)
+  check("openset arms the knock loop", session.isLoop("scene", "scene49"));
+
+  // fast-forward ~25 s of game time: the loop fires ONCE (loops are
+  // self-clearing one-shots), plays a knock cricket at the buzzer star
+  // (starxyz -> actor "buzzer" at 3787,1251), and re-arms itself
+  sink.calls.length = 0;
+  for (let i = 0; i < 380; i++) {
+    v.tick((clock += 66));
+    if (i % 10 === 0) await drain();
+  }
+  await session.settle();
+  const knock = sink.calls.find((c) => c.channel === "sound" && c.volume < 1 && c.volume > 0);
+  check(
+    "knock cricket fires with positional volume",
+    !!knock,
+    knock ? `vol=${knock.volume.toFixed(2)} pan=${knock.pan.toFixed(2)}` : `${sink.calls.length} calls`,
+  );
+  check("one-shot cricket removed after firing", session.crickets.length === 0);
+  check("knock loop re-armed itself", session.isLoop("scene", "scene49"));
+
+  // delay(n) = n/60 s of game time; the script stays suspended (busy) while
+  // the clock ticks and resumes exactly after the interval
+  let resumed = false;
+  const delayFn = session.interp.builtins.get("delay")!;
+  void session.track(
+    Promise.resolve(
+      delayFn(session.interp, [60], null as never, null as never) as Promise<void>,
+    ).then(() => {
+      resumed = true;
+    }),
+  );
+  v.tick((clock += 500));
+  await drain();
+  check("delay(60) still suspended after 0.5s", !resumed && v.inputLocked);
+  v.tick((clock += 600));
+  await drain();
+  check("delay(60) resumes after 1s", resumed && !v.inputLocked);
+
+  // soundloop: named looping ambient, on/off, no double-start
+  sink.calls.length = 0;
+  session.soundLoop("doorlocked", true);
+  session.soundLoop("doorlocked", true); // already sounding: no second start
+  const loops = sink.calls.filter((c) => c.loop);
+  check("soundloop starts one looping sound", loops.length === 1, `${loops.length} loop starts`);
+  session.soundLoop("doorlocked", false);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

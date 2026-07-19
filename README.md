@@ -4,7 +4,57 @@ Browser port (work in progress) of the CyberFlix **DreamFactory 4.0** engine,
 targeting *Titanic: Adventure Out of Time* (1996) — no DOSBox, a native
 TypeScript reimplementation running on canvas.
 
-## Status: Milestone 9 — world-space props (the TI.EXE projection)
+> 📖 **New here? Read [`docs/`](docs/README.md)** — a guided tour from "how the
+> game works" down to each DFile container format, written for readers who
+> haven't done low-level reverse engineering. The sections below are the
+> chronological milestone log.
+
+## Status: Milestone 10 — the timing model (delay, ambient loops, crickets)
+
+The engine's whole notion of time, recovered from TI.EXE: **1 script tick
+= 1/60 s** (`delay(n)` waits n×50/3 ms against `timeGetTime`), while
+ambient loops and crickets are serviced on a **66 ms (~15 Hz) heartbeat**
+— the same cadence as the screen fades.
+
+- **The interpreter is async now.** `delay(n)` suspends the running
+  script on the game clock while rendering, animation and audio keep
+  going; input is blocked (`viewer.busy`) until the script resumes.
+  Every dispatch is tracked on the session (`session.settle()` for
+  tests).
+- **`makeloop(kind, obj, handler, n)` is a one-shot, not a loop** (fn
+  0x4424e0, 32-slot table): the countdown decrements per 66 ms step, at
+  zero the slot removes itself and fires `sendto<kind>(obj, handler())`
+  once — persistent behaviors re-arm themselves inside their handler.
+  Identity is (kind, obj): re-making replaces; `stoploop(kind, "all")`
+  clears a kind; `pauseloop` freezes the countdown. Kinds: actor 1,
+  prop 2, scene 3, flat 4.
+- **`makecricket(sound, x, y, radius, base, jitter)`** (fn 0x443cc0,
+  16 slots) is a positional ambient one-shot bound to the current set:
+  countdown = base + random(jitter) (jitter −1 → fire once and vanish),
+  2D distance to the camera scales volume (linear falloff — the exact
+  TI curve is unrecovered), bearing vs. camera facing drives stereo pan,
+  and a cricket never re-fires while its previous play is still
+  sounding — which is how `(0,0)` makes a seamless loop and `(200,200)`
+  an occasional steam hiss.
+- **`starxyz(name, axis)`** reads the set's *actor register* — the
+  "stars" are named world points (C73: "buzzer" at 3787,1251) and the
+  table we already parsed as actors is exactly TI.EXE's star table.
+- `soundloop(name, on)` toggles a named looping ambient;
+  `forceupdate()` runs a service step immediately.
+- End-to-end: C73's `openset` arms `makeloop("scene","scene49",
+  "smethknock",300)`; ~20 s later Smethells knocks — a one-shot cricket
+  at the buzzer's star position (volume 0.95, panned left), the cricket
+  vanishes, the loop re-arms at 60+random(180). Verified headless and
+  in real Chromium.
+- The async interpreter has no call-stack limit, so dispatch cycles in
+  game data now OOM instead of throwing (TURK's scene134 has a script
+  without `keydown`; resolving the missing handler back into the boot
+  library recursed forever). Fix: sendto missing-handler fallback
+  resolves through the target's containment only (shop main → stage),
+  plus a hard dispatch-depth cap (64) that turns any future cycle into
+  a logged script error.
+
+## Milestone 9 — world-space props (the TI.EXE projection)
 
 The engine's world→screen projection is recovered from TI.EXE (fn
 0x43a970, reached via the command dispatch jump tables at 0x4269f8):

@@ -10,21 +10,46 @@ import { AudioBank, readAudioBank, decodeAudioContainer, DecodedAudio } from "..
  */
 export type AudioChannel = "sound" | "voice" | "theme";
 
+export interface PlayOpts {
+  loop?: boolean;
+  overlap?: boolean;
+  /** 0..1 (crickets attenuate with distance) */
+  volume?: number;
+  /** -1 (left) .. 1 (right) — positional ambient sounds */
+  pan?: number;
+}
+
+/** a single playback — crickets hold onto it to avoid re-firing mid-sound */
+export interface PlayHandle {
+  readonly done: boolean;
+  stop(): void;
+}
+
 export interface AudioSink {
-  play(channel: AudioChannel, audio: DecodedAudio, opts?: { loop?: boolean; overlap?: boolean }): void;
+  play(channel: AudioChannel, audio: DecodedAudio, opts?: PlayOpts): PlayHandle;
   halt(channel: AudioChannel): void;
   isDone(channel: AudioChannel): boolean;
 }
 
 /** headless/no-op sink that still answers isDone(); records calls for tests */
 export class NullAudioSink implements AudioSink {
-  calls: { channel: AudioChannel; seconds: number; loop: boolean }[] = [];
-  play(channel: AudioChannel, audio: DecodedAudio, opts?: { loop?: boolean }): void {
+  calls: { channel: AudioChannel; seconds: number; loop: boolean; volume: number; pan: number }[] =
+    [];
+  play(channel: AudioChannel, audio: DecodedAudio, opts?: PlayOpts): PlayHandle {
     this.calls.push({
       channel,
       seconds: audio.samples.length / audio.sampleRate,
       loop: !!opts?.loop,
+      volume: opts?.volume ?? 1,
+      pan: opts?.pan ?? 0,
     });
+    let stopped = false;
+    return {
+      get done() {
+        return !opts?.loop || stopped;
+      },
+      stop: () => (stopped = true),
+    };
   }
   halt(): void {}
   isDone(): boolean {
@@ -49,19 +74,47 @@ export class WebAudioSink implements AudioSink {
     for (const g of Object.values(this.gains)) g.connect(this.ctx.destination);
   }
 
-  play(channel: AudioChannel, audio: DecodedAudio, opts?: { loop?: boolean; overlap?: boolean }): void {
+  play(channel: AudioChannel, audio: DecodedAudio, opts?: PlayOpts): PlayHandle {
     if (!opts?.overlap) this.halt(channel);
     const buffer = this.ctx.createBuffer(1, audio.samples.length, audio.sampleRate);
     buffer.copyToChannel(new Float32Array(audio.samples), 0);
     const src = this.ctx.createBufferSource();
     src.buffer = buffer;
     src.loop = !!opts?.loop;
-    src.connect(this.gains[channel]);
+    let head: AudioNode = src;
+    if (opts?.volume !== undefined && opts.volume < 1) {
+      const g = this.ctx.createGain();
+      g.gain.value = Math.max(0, Math.min(1, opts.volume));
+      head.connect(g);
+      head = g;
+    }
+    if (opts?.pan) {
+      const p = this.ctx.createStereoPanner();
+      p.pan.value = Math.max(-1, Math.min(1, opts.pan));
+      head.connect(p);
+      head = p;
+    }
+    head.connect(this.gains[channel]);
     const entry = { src, done: false };
     src.onended = () => (entry.done = true);
     src.start();
     if (!opts?.overlap) this.playing[channel] = entry;
     if (this.ctx.state === "suspended") void this.ctx.resume();
+    return {
+      get done() {
+        return entry.done;
+      },
+      stop: () => {
+        if (!entry.done) {
+          try {
+            src.stop();
+          } catch {
+            /* already stopped */
+          }
+          entry.done = true;
+        }
+      },
+    };
   }
 
   halt(channel: AudioChannel): void {

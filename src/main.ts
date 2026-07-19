@@ -6,7 +6,7 @@ import { GameSession } from "./engine/session";
 // AudioContext must be created after a user gesture; the sink proxies until then
 let webAudio: WebAudioSink | null = null;
 const audioSink: AudioSink = {
-  play: (c, a, o) => webAudio?.play(c, a, o),
+  play: (c, a, o) => webAudio?.play(c, a, o) ?? { done: true, stop() {} },
   halt: (c) => webAudio?.halt(c),
   isDone: (c) => (webAudio ? webAudio.isDone(c) : true),
 };
@@ -110,31 +110,29 @@ const CURSOR_CSS: Record<string, string> = {
 // one session for the whole browser tab: globals persist across sets
 const session = new GameSession(provideFile, audioSink);
 session.onLog = (l) => log(l);
-session.onSetChange = (fileName, sceneName, viewName) => {
-  void (async () => {
-    const data = await fetchIntoStore(fileName) ?? fileStore.get(fileName) ?? null;
-    if (!data) {
-      log(`cannot travel to ${fileName}: file not available`);
-      return;
-    }
-    try {
-      loadedSets.set(fileName, readSetFile(data));
-    } catch (e) {
-      log(`cannot parse ${fileName}: ${(e as Error).message}`);
-      return;
-    }
-    const base = fileName.replace(/\.set$/, "");
-    await Promise.all([`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`].map(fetchIntoStore));
-    rebuildSetSelect();
-    activateSet(fileName, sceneName, viewName);
-  })();
+session.onSetChange = async (fileName, sceneName, viewName) => {
+  const data = await fetchIntoStore(fileName) ?? fileStore.get(fileName) ?? null;
+  if (!data) {
+    log(`cannot travel to ${fileName}: file not available`);
+    return;
+  }
+  try {
+    loadedSets.set(fileName, readSetFile(data));
+  } catch (e) {
+    log(`cannot parse ${fileName}: ${(e as Error).message}`);
+    return;
+  }
+  const base = fileName.replace(/\.set$/, "");
+  await Promise.all([`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`].map(fetchIntoStore));
+  rebuildSetSelect();
+  await activateSet(fileName, sceneName, viewName);
 };
 
-function activateSet(name: string, startScene = "", startView = ""): void {
+async function activateSet(name: string, startScene = "", startView = ""): Promise<void> {
   const set = loadedSets.get(name);
   if (!set) return;
   scriptlog.textContent = "";
-  session.loadCoreScripts();
+  await session.loadCoreScripts();
   viewer = new SetViewer(set, session, startScene, startView);
   viewer.onHud = (t) => (hud.textContent = t);
   viewer.onLog = log;
@@ -154,6 +152,7 @@ function activateSet(name: string, startScene = "", startView = ""): void {
   help.style.display = "block";
   refreshMap();
   if (webAudio) viewer.startTheme();
+  await viewer.start();
 }
 
 function refreshMap(): void {
@@ -185,7 +184,7 @@ async function addFiles(files: FileList | File[]): Promise<void> {
   }
   rebuildSetSelect();
   if (firstNew) {
-    activateSet(firstNew);
+    void activateSet(firstNew);
   } else if (viewer) {
     // banks/shops dropped after the set is already running
     let opened = false;
@@ -217,7 +216,7 @@ function rebuildSetSelect(): void {
     sel.appendChild(opt);
   }
   sel.addEventListener("change", () => {
-    if (loadedSets.has(sel.value)) activateSet(sel.value);
+    if (loadedSets.has(sel.value)) void activateSet(sel.value);
     else void loadServerSet(sel.value);
   });
   setSelectWrap.appendChild(sel);
@@ -250,7 +249,7 @@ async function loadServerSet(setName: string): Promise<void> {
     return;
   }
   rebuildSetSelect();
-  activateSet(setName);
+  void activateSet(setName);
 }
 
 /** dev-server mode: offer all hosted .SET files as a clickable list */
@@ -317,18 +316,21 @@ function canvasCoords(e: MouseEvent): { x: number; y: number } {
 screen.addEventListener("click", (e) => {
   if (!viewer) return;
   const { x, y } = canvasCoords(e);
-  viewer.click(x, y);
+  void session.track(viewer.click(x, y));
 });
 
 screen.addEventListener("mousemove", (e) => {
   if (!viewer) return;
+  const v = viewer;
   const { x, y } = canvasCoords(e);
-  const name = viewer.hover(x, y);
-  screen.style.cursor = name ? (CURSOR_CSS[name] ?? "pointer") : "default";
+  void v.hover(x, y).then((name) => {
+    screen.style.cursor = name ? (CURSOR_CSS[name] ?? "pointer") : "default";
+  });
 });
 
 window.addEventListener("keydown", (e) => {
   if (!viewer) return;
+  const v = viewer;
   switch (e.key) {
     case "ArrowRight":
       viewer.turn(0);
@@ -338,10 +340,10 @@ window.addEventListener("keydown", (e) => {
       break;
     case "ArrowUp":
       // scripts may intercept walking (e.g. doors leading to other sets)
-      if (!viewer.keyDown("uparrow")) viewer.walk();
+      void session.track(v.keyDown("uparrow").then((consumed) => consumed || v.walk()));
       break;
     case "ArrowDown":
-      viewer.keyDown("downarrow");
+      void session.track(v.keyDown("downarrow"));
       break;
     case "m":
     case "M":

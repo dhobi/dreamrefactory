@@ -33,14 +33,27 @@ export interface CallCtx {
   target: string;
 }
 
-export type Builtin = (interp: Interpreter, args: Value[], call: CallExpr, ctx: Frame) => Value | void;
+/**
+ * Builtins may return a Promise — the interpreter awaits it. `delay(n)`
+ * suspends the running script this way while the engine keeps ticking.
+ */
+export type Builtin = (
+  interp: Interpreter,
+  args: Value[],
+  call: CallExpr,
+  ctx: Frame,
+) => Value | void | Promise<Value | void>;
 
 /**
  * Special forms receive their argument expressions unevaluated — needed for
  * the `sendto*` family, whose second argument is a call executed in the
  * TARGET object's script, not the caller's.
  */
-export type SpecialForm = (interp: Interpreter, argExprs: Expr[], frame: Frame) => Value | void;
+export type SpecialForm = (
+  interp: Interpreter,
+  argExprs: Expr[],
+  frame: Frame,
+) => Value | void | Promise<Value | void>;
 
 export class Frame {
   locals = new Map<string, Value>();
@@ -84,6 +97,13 @@ export class Interpreter {
    */
   eventConsumed = false;
   private unknownLogged = new Set<string>();
+  /**
+   * Nested handler dispatch depth. The async interpreter has no natural
+   * call-stack limit — a dispatch cycle in game data would allocate
+   * promises until the tab dies. Legitimate nesting (double gstair set
+   * hops) stays under ~30; anything deeper is a cycle.
+   */
+  private depth = 0;
 
   /** trace of builtin calls with no registered semantics (for development) */
   onUnknown: (name: string, args: Value[]) => void = (name, args) => {
@@ -104,35 +124,43 @@ export class Interpreter {
    * Dispatch an event/procedure call to a script's handler.
    * Returns the handler's return value, and whether the event was passed on.
    */
-  runHandler(
+  async runHandler(
     inst: ScriptInstance,
     handler: string,
     args: Value[],
     ctx: CallCtx,
-  ): { value: Value; passed: boolean; handled: boolean } {
+  ): Promise<{ value: Value; passed: boolean; handled: boolean }> {
     const block = inst.script.codes.get(handler);
     if (!block) return { value: 0, passed: true, handled: false };
+    if (this.depth >= 64) {
+      throw new Error(`dispatch cycle: ${inst.name}.${handler} at depth ${this.depth}`);
+    }
     const frame = new Frame(inst, ctx);
     for (let i = 0; i < block.params.length; i++) {
       frame.locals.set(block.params[i], args[i] ?? 0);
     }
-    const sig = this.execBlock(block.body, frame);
-    return {
-      value: sig.s === "return" ? sig.value : 0,
-      passed: sig.s === "passcode",
-      handled: true,
-    };
+    this.depth++;
+    try {
+      const sig = await this.execBlock(block.body, frame);
+      return {
+        value: sig.s === "return" ? sig.value : 0,
+        passed: sig.s === "passcode",
+        handled: true,
+      };
+    } finally {
+      this.depth--;
+    }
   }
 
-  execBlock(stmts: Stmt[], frame: Frame): Signal {
+  async execBlock(stmts: Stmt[], frame: Frame): Promise<Signal> {
     for (const st of stmts) {
-      const sig = this.execStmt(st, frame);
+      const sig = await this.execStmt(st, frame);
       if (sig.s !== "normal") return sig;
     }
     return NORMAL;
   }
 
-  private execStmt(st: Stmt, frame: Frame): Signal {
+  private async execStmt(st: Stmt, frame: Frame): Promise<Signal> {
     switch (st.t) {
       case "noop":
         return NORMAL;
@@ -145,19 +173,19 @@ export class Interpreter {
         // dumpglobal/dumplocal: mark for save-game persistence — TODO
         return NORMAL;
       case "assign":
-        this.setVar(st.name, this.evalExpr(st.value, frame), frame);
+        this.setVar(st.name, await this.evalExpr(st.value, frame), frame);
         return NORMAL;
       case "callstmt":
-        this.evalCall(st.call, frame);
+        await this.evalCall(st.call, frame);
         return NORMAL;
       case "if":
-        if (truthy(this.evalExpr(st.cond, frame))) return this.execBlock(st.then, frame);
+        if (truthy(await this.evalExpr(st.cond, frame))) return this.execBlock(st.then, frame);
         if (st.else_) return this.execBlock(st.else_, frame);
         return NORMAL;
       case "switch": {
-        const subject = this.evalExpr(st.subject, frame);
+        const subject = await this.evalExpr(st.subject, frame);
         for (const c of st.cases) {
-          if (valueEq(subject, this.evalExpr(c.match, frame))) {
+          if (valueEq(subject, await this.evalExpr(c.match, frame))) {
             return this.execBlock(c.body, frame);
           }
         }
@@ -165,21 +193,21 @@ export class Interpreter {
       }
       case "while": {
         let guard = 0;
-        while (truthy(this.evalExpr(st.cond, frame))) {
-          const sig = this.execBlock(st.body, frame);
+        while (truthy(await this.evalExpr(st.cond, frame))) {
+          const sig = await this.execBlock(st.body, frame);
           if (sig.s !== "normal") return sig;
           if (++guard > 100_000) throw new Error("while loop runaway (100k iterations)");
         }
         return NORMAL;
       }
       case "for": {
-        const from = toNum(this.evalExpr(st.from, frame));
-        const to = toNum(this.evalExpr(st.to, frame));
-        const step = st.step ? toNum(this.evalExpr(st.step, frame)) : 1;
+        const from = toNum(await this.evalExpr(st.from, frame));
+        const to = toNum(await this.evalExpr(st.to, frame));
+        const step = st.step ? toNum(await this.evalExpr(st.step, frame)) : 1;
         if (step === 0) throw new Error("for loop with step 0");
         for (let i = from; step > 0 ? i <= to : i >= to; i += step) {
           this.setVar(st.varName, i, frame);
-          const sig = this.execBlock(st.body, frame);
+          const sig = await this.execBlock(st.body, frame);
           if (sig.s !== "normal") return sig;
         }
         return NORMAL;
@@ -190,11 +218,11 @@ export class Interpreter {
       case "passcode":
         return { s: "passcode" };
       case "return":
-        return { s: "return", value: st.value ? this.evalExpr(st.value, frame) : 0 };
+        return { s: "return", value: st.value ? await this.evalExpr(st.value, frame) : 0 };
     }
   }
 
-  evalExpr(e: Expr, frame: Frame): Value {
+  async evalExpr(e: Expr, frame: Frame): Promise<Value> {
     switch (e.t) {
       case "int":
         return e.v;
@@ -209,17 +237,17 @@ export class Interpreter {
       case "var":
         return this.getVar(e.name, frame);
       case "call":
-        return this.evalCall(e, frame) ?? 0;
+        return (await this.evalCall(e, frame)) ?? 0;
       case "un": {
-        const v = this.evalExpr(e.e, frame);
+        const v = await this.evalExpr(e.e, frame);
         return e.op === "not" ? (truthy(v) ? 0 : 1) : -toNum(v);
       }
       case "bin": {
-        const l = this.evalExpr(e.l, frame);
+        const l = await this.evalExpr(e.l, frame);
         // short-circuit logical ops
-        if (e.op === "&") return truthy(l) && truthy(this.evalExpr(e.r, frame)) ? 1 : 0;
-        if (e.op === "|") return truthy(l) || truthy(this.evalExpr(e.r, frame)) ? 1 : 0;
-        const r = this.evalExpr(e.r, frame);
+        if (e.op === "&") return truthy(l) && truthy(await this.evalExpr(e.r, frame)) ? 1 : 0;
+        if (e.op === "|") return truthy(l) || truthy(await this.evalExpr(e.r, frame)) ? 1 : 0;
+        const r = await this.evalExpr(e.r, frame);
         switch (e.op) {
           case "@":
             return toStr(l) + toStr(r);
@@ -250,32 +278,39 @@ export class Interpreter {
     }
   }
 
-  evalCall(call: CallExpr, frame: Frame): Value | void {
+  async evalCall(call: CallExpr, frame: Frame): Promise<Value | void> {
     // user code block in the same script takes precedence over builtins
     // only for names that aren't engine commands (no opcode id)
     if (call.id === undefined && frame.script.script.codes.has(call.name)) {
-      const args = call.args.map((a) => this.evalExpr(a, frame));
-      return this.runHandler(frame.script, call.name, args, frame.ctx).value;
+      const args = await this.evalArgs(call.args, frame);
+      return (await this.runHandler(frame.script, call.name, args, frame.ctx)).value;
     }
     const special = this.specialForms.get(call.name);
     if (special) return special(this, call.args, frame);
     const builtin = this.builtins.get(call.name);
-    const args = call.args.map((a) => this.evalExpr(a, frame));
+    const args = await this.evalArgs(call.args, frame);
     if (builtin) return builtin(this, args, call, frame);
     if (call.id === undefined) {
       for (let p = frame.script.parent; p; p = p.parent) {
         if (p.script.codes.has(call.name)) {
-          return this.runHandler(p, call.name, args, frame.ctx).value;
+          return (await this.runHandler(p, call.name, args, frame.ctx)).value;
         }
       }
       for (const inst of this.fallbackScripts) {
         if (inst.script.codes.has(call.name)) {
-          return this.runHandler(inst, call.name, args, frame.ctx).value;
+          return (await this.runHandler(inst, call.name, args, frame.ctx)).value;
         }
       }
     }
     this.onUnknown(call.name, args);
     return 0;
+  }
+
+  /** evaluate call arguments left to right (each may itself suspend) */
+  async evalArgs(exprs: Expr[], frame: Frame): Promise<Value[]> {
+    const out: Value[] = [];
+    for (const e of exprs) out.push(await this.evalExpr(e, frame));
+    return out;
   }
 
   getVar(name: string, frame: Frame): Value {

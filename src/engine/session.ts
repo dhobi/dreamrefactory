@@ -7,8 +7,66 @@ import { sniffScript } from "../df/script";
 import { parseScript } from "./parser";
 import { Interpreter, ScriptInstance, Value, registerCoreBuiltins, toStr } from "./interp";
 import { PropRuntime } from "./props";
-import { AudioLibrary, AudioSink, NullAudioSink } from "./audio";
+import { AudioLibrary, AudioSink, NullAudioSink, PlayHandle } from "./audio";
 import { FileProvider, registerGameBuiltins } from "./setscripts";
+
+/**
+ * Game time. TI.EXE runs scripts against timeGetTime with 1 script tick =
+ * 1/60 s (delay(n) waits n×50/3 ms) and services ambient loops/crickets on
+ * a 66 ms (~15 Hz) heartbeat. The viewer feeds real/virtual time into
+ * advance(); delay() suspends scripts on sleep().
+ */
+export class Clock {
+  now = 0;
+  private waiters: { at: number; resolve: () => void }[] = [];
+
+  sleep(ms: number): Promise<void> {
+    if (ms <= 0) return Promise.resolve();
+    return new Promise((resolve) => this.waiters.push({ at: this.now + ms, resolve }));
+  }
+
+  advance(now: number): void {
+    if (now <= this.now) return;
+    this.now = now;
+    if (!this.waiters.length) return;
+    const due = this.waiters.filter((w) => w.at <= now);
+    this.waiters = this.waiters.filter((w) => w.at > now);
+    for (const w of due) w.resolve();
+  }
+}
+
+/**
+ * One scheduled callback (makeloop). TI.EXE semantics: the countdown
+ * decrements once per 66 ms service step; at zero the slot REMOVES ITSELF
+ * and fires sendto<kind>(name, handler()) once — persistent loops re-arm
+ * inside their own handler. Identity is (kind, name): re-making replaces.
+ */
+export interface GameLoop {
+  kind: string;
+  name: string;
+  handler: string;
+  count: number;
+  paused: boolean;
+}
+
+/**
+ * A positional ambient one-shot scheduler (makecricket), bound to the set
+ * that created it. Fires its sound with distance volume + bearing pan when
+ * the countdown ends AND the previous play finished; re-arms with
+ * base + random(jitter), or disappears when jitter < 0.
+ */
+export interface Cricket {
+  name: string;
+  x: number;
+  y: number;
+  radius: number;
+  base: number;
+  jitter: number;
+  count: number;
+  paused: boolean;
+  setName: string;
+  handle: PlayHandle | null;
+}
 
 /**
  * Game-wide state that outlives individual sets: one interpreter (globals
@@ -45,7 +103,8 @@ export class GameSession {
 
   onLog: (line: string) => void = () => {};
   /** host hook: actually load + display a set (async in the browser) */
-  onSetChange: (fileName: string, sceneName: string, viewName: string) => void = () => {};
+  onSetChange: (fileName: string, sceneName: string, viewName: string) => void | Promise<void> =
+    () => {};
   /** host hooks for currentscene()/currentview() queries */
   currentSceneName: () => string = () => "";
   currentViewName: () => string = () => "";
@@ -103,6 +162,289 @@ export class GameSession {
     registerGameBuiltins(this);
   }
 
+  // ---- timing runtime (delay / makeloop / makecricket / soundloop) --------
+
+  readonly clock = new Clock();
+  readonly loops: GameLoop[] = [];
+  readonly crickets: Cricket[] = [];
+  private soundLoops = new Map<string, PlayHandle>();
+  /** host hook: listener (camera) ground position + facing for crickets */
+  listener: () => { x: number; y: number; deg: number } | null = () => null;
+  private timeLastTick = 0;
+
+  /** scripts currently executing/suspended (delay) — input waits on these */
+  private inflight = new Set<Promise<unknown>>();
+
+  /** run a script dispatch in the background, tracked for busy/settle */
+  track<T>(p: Promise<T>): Promise<T> {
+    this.inflight.add(p);
+    void p.catch((e) => this.onLog(`script error: ${(e as Error).message}`)).then(() => {
+      this.inflight.delete(p);
+    });
+    return p;
+  }
+
+  get scriptBusy(): boolean {
+    return this.inflight.size > 0;
+  }
+
+  /** wait until all in-flight script dispatches finish (tests, shutdown) */
+  async settle(maxRounds = 1000): Promise<void> {
+    for (let i = 0; i < maxRounds && this.inflight.size; i++) {
+      await Promise.allSettled([...this.inflight]);
+    }
+  }
+
+  /** DreamFactory random(n) = 1..n (0 for n <= 0) */
+  private rand(n: number): number {
+    return n > 0 ? Math.floor(Math.random() * n) + 1 : 0;
+  }
+
+  /** makeloop: (kind, name) identity — replaces an existing loop */
+  makeLoop(kind: string, name: string, handler: string, period: number): void {
+    this.stopLoop(kind, name);
+    if (this.loops.length >= 32) {
+      this.onLog(`makeloop: table full (32), dropping ${kind}/${name}`);
+      return;
+    }
+    this.loops.push({
+      kind: kind.toLowerCase(),
+      name: name.toLowerCase(),
+      handler: handler.toLowerCase(),
+      count: Math.max(1, period),
+      paused: false,
+    });
+  }
+
+  stopLoop(kind: string, name: string): void {
+    const k = kind.toLowerCase();
+    const n = name.toLowerCase();
+    for (let i = this.loops.length - 1; i >= 0; i--) {
+      const l = this.loops[i];
+      if (l.kind === k && (n === "all" || l.name === n)) this.loops.splice(i, 1);
+    }
+  }
+
+  pauseLoop(kind: string, name: string, paused: boolean): void {
+    const k = kind.toLowerCase();
+    const n = name.toLowerCase();
+    for (const l of this.loops) {
+      if (l.kind === k && (n === "all" || l.name === n)) l.paused = paused;
+    }
+  }
+
+  isLoop(kind: string, name: string): boolean {
+    const k = kind.toLowerCase();
+    const n = name.toLowerCase();
+    return this.loops.some((l) => l.kind === k && l.name === n);
+  }
+
+  makeCricket(name: string, x: number, y: number, radius: number, base: number, jitter: number): void {
+    this.stopCricket(name);
+    if (this.crickets.length >= 16) {
+      this.onLog(`makecricket: table full (16), dropping ${name}`);
+      return;
+    }
+    this.crickets.push({
+      name: name.toLowerCase(),
+      x,
+      y,
+      radius: Math.max(1, radius),
+      base,
+      jitter,
+      count: jitter >= 0 ? base + this.rand(jitter) : base,
+      paused: false,
+      setName: this.currentSetName,
+      handle: null,
+    });
+  }
+
+  stopCricket(name: string): void {
+    const n = name.toLowerCase();
+    for (let i = this.crickets.length - 1; i >= 0; i--) {
+      const c = this.crickets[i];
+      if (n === "all" || c.name === n) {
+        c.handle?.stop();
+        this.crickets.splice(i, 1);
+      }
+    }
+  }
+
+  pauseCricket(name: string, paused: boolean): void {
+    const n = name.toLowerCase();
+    for (const c of this.crickets) {
+      if (n === "all" || c.name === n) c.paused = paused;
+    }
+  }
+
+  isCricket(name: string): boolean {
+    const n = name.toLowerCase();
+    return this.crickets.some((c) => c.name === n);
+  }
+
+  /** soundloop(name, on/off): a named non-positional looping sound */
+  soundLoop(name: string, on: boolean): void {
+    const key = name.toLowerCase();
+    const existing = this.soundLoops.get(key);
+    if (!on) {
+      existing?.stop();
+      this.soundLoops.delete(key);
+      return;
+    }
+    if (existing && !existing.done) return;
+    const audio = this.audioLib.sound(key);
+    if (!audio) {
+      this.onLog(`soundloop: "${name}" not found`);
+      return;
+    }
+    this.soundLoops.set(key, this.audio.play("sound", audio, { loop: true, overlap: true }));
+  }
+
+  /** silence every ambient sound (set change cleans its crickets itself) */
+  stopAllAmbient(): void {
+    for (const h of this.soundLoops.values()) h.stop();
+    this.soundLoops.clear();
+  }
+
+  /**
+   * Advance game time: resolve delay()s, then run 66 ms service steps —
+   * crickets first, then due loops (TI.EXE master service order).
+   */
+  tickTime(now: number): void {
+    this.clock.advance(now);
+    const STEP_MS = 66;
+    if (!this.timeLastTick) this.timeLastTick = now;
+    let steps = Math.floor((now - this.timeLastTick) / STEP_MS);
+    if (steps <= 0) return;
+    this.timeLastTick += steps * STEP_MS;
+    // after a long stall (suspended tab) don't replay the whole gap
+    if (steps > 64) steps = 64;
+    for (let s = 0; s < steps; s++) this.serviceStep();
+  }
+
+  private serviceStep(): void {
+    for (let i = this.crickets.length - 1; i >= 0; i--) {
+      const c = this.crickets[i];
+      if (c.paused) continue;
+      if (c.count > 0) c.count--;
+      if (c.count > 0) continue;
+      if (c.setName && c.setName !== this.currentSetName) continue;
+      if (c.handle && !c.handle.done) continue; // previous play still sounding
+      this.fireCricket(c);
+      if (c.jitter < 0) this.crickets.splice(i, 1);
+      else c.count = c.base + this.rand(c.jitter);
+    }
+    // loops fire one at a time and never re-enter a running script (the
+    // original engine is single-threaded; its service is likewise guarded)
+    if (!this.scriptBusy) {
+      const due = this.loops.filter((l) => !l.paused && --l.count <= 0);
+      if (due.length) {
+        for (const l of due) this.loops.splice(this.loops.indexOf(l), 1);
+        this.track(
+          (async () => {
+            for (const l of due) await this.fireLoop(l);
+          })(),
+        );
+      }
+    }
+  }
+
+  private fireCricket(c: Cricket): void {
+    const audio = this.audioLib.sound(c.name);
+    if (!audio) return;
+    let volume = 1;
+    let pan = 0;
+    const lis = this.listener();
+    if (lis) {
+      const dx = c.x - lis.x;
+      const dy = c.y - lis.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist >= c.radius) return; // out of earshot (counts as fired)
+      // linear falloff (exact TI curve unrecovered); pan = sine of the
+      // bearing relative to the camera facing, same convention as the
+      // projection's lateral axis (positive = right of screen)
+      volume = 1 - dist / c.radius;
+      if (dist > 1) {
+        const th = ((lis.deg & 0xff) / 256) * 2 * Math.PI;
+        const lateral = dy * Math.cos(th) - dx * Math.sin(th);
+        pan = Math.max(-1, Math.min(1, lateral / dist));
+      }
+    }
+    c.handle = this.audio.play("sound", audio, { overlap: true, volume, pan });
+  }
+
+  private async fireLoop(l: GameLoop): Promise<void> {
+    const cmd =
+      { actor: "sendtoactor", prop: "sendtoprop", scene: "sendtoscene", flat: "sendtoflat" }[
+        l.kind
+      ] ?? "sendtoprop";
+    try {
+      await this.sendEvent(cmd, l.name, l.handler, [], `loop:${l.kind}`);
+    } catch (e) {
+      this.onLog(`loop ${l.kind}/${l.name}.${l.handler}: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * sendto* resolution + containment-chain forwarding, shared by the
+   * sendto special forms and loop firing. Events sent to a scene forward
+   * along scene → set main → stage when unhandled/passed (or when the
+   * scene has no script at all).
+   */
+  async sendEvent(
+    cmd: string,
+    targetName: string,
+    handler: string,
+    args: Value[],
+    callerName: string,
+  ): Promise<Value> {
+    let inst =
+      this.currentBinding?.findInstance(targetName) ?? this.findGlobalInstance(targetName);
+    if (!inst && cmd === "sendtostage") inst = this.stage;
+    if (!inst && cmd === "sendtoboot") inst = this.boot;
+    const chain = inst ? [inst] : [];
+    if (cmd === "sendtoscene" || cmd === "sendtoset") {
+      const main = this.currentBinding?.main;
+      if (main && main !== inst) chain.push(main);
+      if (this.stage && this.stage !== inst) chain.push(this.stage);
+    }
+    if (!chain.length) {
+      this.onLog(`${cmd}("${targetName}", ${handler}(..)) — target not loaded`);
+      return 0;
+    }
+    let value: Value = 0;
+    let ran = false;
+    for (const link of chain) {
+      if (!link.script.codes.has(handler)) continue;
+      ran = true;
+      const res = await this.interp.runHandler(link, handler, args, {
+        me: link.name,
+        target: callerName,
+      });
+      value = res.value;
+      if (this.interp.eventConsumed || (res.handled && !res.passed)) break;
+    }
+    // the target resolves missing handlers through its CONTAINMENT chain
+    // (prop -> shop main, where initprop() lives; then the stage), with
+    // me = the target. Deliberately NOT the boot scripts: boot1's keydown
+    // routes events via sendtoscene, so resolving a scene's missing
+    // keydown back into boot would recurse forever (TURK scene134 has a
+    // script without keydown — user-reported OOM).
+    if (!ran && inst) {
+      const libs: ScriptInstance[] = [];
+      for (let p = inst.parent; p; p = p.parent) libs.push(p);
+      if (this.stage && this.stage !== inst) libs.push(this.stage);
+      for (const lib of libs) {
+        if (!lib.script.codes.has(handler)) continue;
+        value = (
+          await this.interp.runHandler(lib, handler, args, { me: inst.name, target: callerName })
+        ).value;
+        break;
+      }
+    }
+    return value;
+  }
+
   /** parse a script container into an instance bound to `owner` */
   instanceFrom(data: Uint8Array | undefined, owner: string): ScriptInstance | null {
     if (!data) return null;
@@ -117,7 +459,7 @@ export class GameSession {
   }
 
   /** load BOOTFILE and the MAIN.STG stage if available */
-  loadCoreScripts(): void {
+  async loadCoreScripts(): Promise<void> {
     const boot = this.files("bootfile");
     if (boot && !this.bootScripts.length) {
       try {
@@ -147,15 +489,15 @@ export class GameSession {
         this.interp.globals.set(k, v);
       }
     }
-    this.loadBootResources();
+    await this.loadBootResources();
     // the boot script opens the standard in-game stage at startup and
     // initializes the inventory + interface props
-    this.openStageFile("main.stg");
+    await this.openStageFile("main.stg");
     const inven = this.shopMain("inven.shp");
     if (inven?.script.codes.has("initprops") && !this.interp.globals.has("__propsinit")) {
       this.interp.globals.set("__propsinit", 1);
       try {
-        this.interp.runHandler(inven, "initprops", [], { me: "inven.shp", target: "" });
+        await this.interp.runHandler(inven, "initprops", [], { me: "inven.shp", target: "" });
       } catch (e) {
         this.onLog(`initprops: ${(e as Error).message}`);
       }
@@ -184,10 +526,10 @@ export class GameSession {
   }
 
   /** engine primitive: load an STG stage and activate its first flat */
-  openStageFile(fileName: string): boolean {
+  async openStageFile(fileName: string): Promise<boolean> {
     const key = toStr(fileName).toLowerCase();
     if (this.stageName === key) return true;
-    if (this.stageFile) this.closeStageFile();
+    if (this.stageFile) await this.closeStageFile();
     const data = this.files(key);
     if (!data) {
       this.onLog(`openstagefile: "${fileName}" not available`);
@@ -210,13 +552,13 @@ export class GameSession {
       this.flatNames.push(f.name);
     }
     this.onLog(`stage loaded: ${key} (${stg.flats.length} flat(s))`);
-    if (stg.flats.length) this.gotoFlat(stg.flats[0].name);
+    if (stg.flats.length) await this.gotoFlat(stg.flats[0].name);
     return true;
   }
 
   /** engine primitive: close the current stage (closestagefile) */
-  closeStageFile(): void {
-    this.fireFlat(this.currentFlat, "closeflat");
+  async closeStageFile(): Promise<void> {
+    await this.fireFlat(this.currentFlat, "closeflat");
     this.currentFlat = "none";
     this.stageFile = null;
     this.stageName = "none";
@@ -228,19 +570,19 @@ export class GameSession {
   }
 
   /** engine primitive: switch the active flat (gotoflat) */
-  gotoFlat(name: string): void {
+  async gotoFlat(name: string): Promise<void> {
     const target =
       this.flatNames.find((f) => f.toLowerCase() === toStr(name).toLowerCase()) ?? toStr(name);
-    this.fireFlat(this.currentFlat, "closeflat");
+    await this.fireFlat(this.currentFlat, "closeflat");
     this.currentFlat = target;
-    this.fireFlat(target, "openflat");
+    await this.fireFlat(target, "openflat");
   }
 
-  private fireFlat(name: string, handler: string): void {
+  private async fireFlat(name: string, handler: string): Promise<void> {
     const inst = this.flatScripts.get(name.toLowerCase());
     if (!inst || !inst.script.codes.has(handler)) return;
     try {
-      this.interp.runHandler(inst, handler, [], { me: inst.name, target: "" });
+      await this.interp.runHandler(inst, handler, [], { me: inst.name, target: "" });
     } catch (e) {
       this.onLog(`${name}.${handler}: ${(e as Error).message}`);
     }
@@ -282,10 +624,11 @@ export class GameSession {
    * Invoke a globally-callable handler (stage/boot standard library) the way
    * unqualified script calls resolve — first fallback script that defines it.
    */
-  runGlobal(handler: string, args: Value[] = []): Value {
+  async runGlobal(handler: string, args: Value[] = []): Promise<Value> {
     for (const inst of this.interp.fallbackScripts) {
       if (inst.script.codes.has(handler)) {
-        return this.interp.runHandler(inst, handler, args, { me: inst.name, target: "" }).value;
+        return (await this.interp.runHandler(inst, handler, args, { me: inst.name, target: "" }))
+          .value;
       }
     }
     this.onLog(`runGlobal: no handler "${handler}"`);
@@ -293,11 +636,11 @@ export class GameSession {
   }
 
   /** engine primitive behind boot's changeset(): switch to another set */
-  openSetFile(fileName: string, sceneName = "", viewName = ""): void {
+  async openSetFile(fileName: string, sceneName = "", viewName = ""): Promise<void> {
     const key = fileName.toLowerCase();
     this.onLog(`opensetfile("${key}", "${sceneName}", "${viewName}")`);
     this.lastRotation = this.currentRotation ? this.currentRotation() : null;
-    this.onSetChange(key, sceneName.toLowerCase(), viewName.toLowerCase());
+    await this.onSetChange(key, sceneName.toLowerCase(), viewName.toLowerCase());
   }
 
   /** try to parse a set through the provider (null if not available yet) */
@@ -348,7 +691,7 @@ export class GameSession {
    * its openshop handler. Shops opened by the boot script (house.shp,
    * inven.shp) stay loaded across set changes.
    */
-  openShop(fileName: string): boolean {
+  async openShop(fileName: string): Promise<boolean> {
     const key = fileName.toLowerCase();
     if (this.shopMains.has(key)) return true;
     const data = this.files(key);
@@ -375,7 +718,7 @@ export class GameSession {
     }
     if (main) {
       try {
-        this.interp.runHandler(main, "openshop", [], { me: key, target: "" });
+        await this.interp.runHandler(main, "openshop", [], { me: key, target: "" });
       } catch (e) {
         this.onLog(`openshop ${key}: ${(e as Error).message}`);
       }
@@ -384,12 +727,12 @@ export class GameSession {
     return true;
   }
 
-  closeShop(fileName: string): void {
+  async closeShop(fileName: string): Promise<void> {
     const key = fileName.toLowerCase();
     const main = this.shopMains.get(key);
     if (main) {
       try {
-        this.interp.runHandler(main, "closeshop", [], { me: key, target: "" });
+        await this.interp.runHandler(main, "closeshop", [], { me: key, target: "" });
       } catch {
         /* tolerated */
       }
@@ -407,12 +750,12 @@ export class GameSession {
    * inven/house shops, inven/unilib banks). We mirror the resource loads
    * without running the boot game-flow (movies, day cycle).
    */
-  loadBootResources(): void {
+  async loadBootResources(): Promise<void> {
     for (const bank of ["inven.trk", "unilib.trk"]) {
       if (this.files(bank)) this.audioLib.openBank(bank, this.files(bank)!);
     }
     for (const shop of ["inven.shp", "house.shp"]) {
-      if (this.files(shop)) this.openShop(shop);
+      if (this.files(shop)) await this.openShop(shop);
     }
   }
 }

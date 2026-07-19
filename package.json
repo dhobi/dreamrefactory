@@ -8,13 +8,19 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "tsx tools/tests.ts",
-    "dump": "tsx tools/dumpset.ts"
+    "dump": "tsx tools/dumpset.ts",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
+    "mermaid": "^11.4.0",
     "playwright-core": "^1.61.1",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitepress": "^1.5.0",
+    "vitepress-plugin-mermaid": "^2.0.17"
   }
 }

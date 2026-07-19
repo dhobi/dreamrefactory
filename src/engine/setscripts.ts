@@ -1,5 +1,5 @@
 import { SetFile } from "../df/set";
-import { ScriptInstance, Value, toStr, truthy } from "./interp";
+import { ScriptInstance, Value, toNum, toStr, truthy } from "./interp";
 import type { GameSession } from "./session";
 
 /** resolves sibling game files (turk.shp etc.) by lowercase basename */
@@ -52,10 +52,18 @@ export class SetScripts {
   }
 
   /** fire an event; returns the handler result or null if nobody handled it */
-  fire(inst: ScriptInstance | null, handler: string, args: Value[], target = ""): Value | null {
+  async fire(
+    inst: ScriptInstance | null,
+    handler: string,
+    args: Value[],
+    target = "",
+  ): Promise<Value | null> {
     if (!inst) return null;
     try {
-      const res = this.session.interp.runHandler(inst, handler, args, { me: inst.name, target });
+      const res = await this.session.interp.runHandler(inst, handler, args, {
+        me: inst.name,
+        target,
+      });
       return res.handled && !res.passed ? res.value : null;
     } catch (e) {
       this.onLog(`script error in ${inst.name}.${handler}: ${(e as Error).message}`);
@@ -71,7 +79,7 @@ export class SetScripts {
    * set main → stage → boot scripts. Boot's defaults matter — e.g. its
    * closescene closes any open door (sendtoprop("door", initprop())).
    */
-  private fireLifecycle(handler: string, sceneIdx: number): void {
+  private async fireLifecycle(handler: string, sceneIdx: number): Promise<void> {
     const interp = this.session.interp;
     interp.eventConsumed = false;
     const chain = [
@@ -83,7 +91,7 @@ export class SetScripts {
     for (const inst of chain) {
       if (!inst) continue;
       try {
-        interp.runHandler(inst, handler, [], { me: inst.name, target: "" });
+        await interp.runHandler(inst, handler, [], { me: inst.name, target: "" });
         if (interp.eventConsumed) return;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.${handler}: ${(e as Error).message}`);
@@ -91,20 +99,20 @@ export class SetScripts {
     }
   }
 
-  openSet(): void {
-    this.fireLifecycle("openset", -1);
+  async openSet(): Promise<void> {
+    await this.fireLifecycle("openset", -1);
   }
-  closeSet(): void {
+  async closeSet(): Promise<void> {
     // leaving a set also leaves its scene
-    if (this.lastSceneIdx >= 0) this.closeScene(this.lastSceneIdx);
-    this.fireLifecycle("closeset", -1);
+    if (this.lastSceneIdx >= 0) await this.closeScene(this.lastSceneIdx);
+    await this.fireLifecycle("closeset", -1);
   }
-  openScene(sceneIdx: number): void {
+  async openScene(sceneIdx: number): Promise<void> {
     this.lastSceneIdx = sceneIdx;
-    this.fireLifecycle("openscene", sceneIdx);
+    await this.fireLifecycle("openscene", sceneIdx);
   }
-  closeScene(sceneIdx: number): void {
-    this.fireLifecycle("closescene", sceneIdx);
+  async closeScene(sceneIdx: number): Promise<void> {
+    await this.fireLifecycle("closescene", sceneIdx);
     this.lastSceneIdx = -1;
   }
 
@@ -113,12 +121,12 @@ export class SetScripts {
    * closescene — closes open doors/signs, resets the nav arrow — without
    * the scene script's own scene-exit logic (sounds etc. keep running).
    */
-  viewChanged(): void {
+  async viewChanged(): Promise<void> {
     const interp = this.session.interp;
     interp.eventConsumed = false;
     for (const inst of this.session.bootScripts) {
       try {
-        interp.runHandler(inst, "closescene", [], { me: inst.name, target: "" });
+        await interp.runHandler(inst, "closescene", [], { me: inst.name, target: "" });
         if (interp.eventConsumed) return;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.closescene: ${(e as Error).message}`);
@@ -137,13 +145,13 @@ export class SetScripts {
    * NOT run for hotspot events — they'd overwrite e.g. the object's cursor
    * choice. (keydown works differently: see keyDown.)
    */
-  private fireChain(
+  private async fireChain(
     sceneIdx: number,
     viewIdx: number,
     objIdx: number,
     handler: string,
     identifier: string,
-  ): boolean {
+  ): Promise<boolean> {
     const interp = this.session.interp;
     interp.eventConsumed = false;
     const chain = [
@@ -155,7 +163,7 @@ export class SetScripts {
     for (const inst of chain) {
       if (!inst) continue;
       try {
-        const res = interp.runHandler(inst, handler, [identifier], {
+        const res = await interp.runHandler(inst, handler, [identifier], {
           me: inst.name,
           target: identifier,
         });
@@ -168,14 +176,24 @@ export class SetScripts {
   }
 
   /** mouse click on a hotspot; returns true when a handler consumed it */
-  mouseDown(sceneIdx: number, viewIdx: number, objIdx: number, identifier: string): boolean {
+  mouseDown(
+    sceneIdx: number,
+    viewIdx: number,
+    objIdx: number,
+    identifier: string,
+  ): Promise<boolean> {
     return this.fireChain(sceneIdx, viewIdx, objIdx, "mousedown", identifier);
   }
 
   /** hover: ask the scripts which cursor to show; returns cursor name or "" */
-  setCursor(sceneIdx: number, viewIdx: number, objIdx: number, identifier: string): string {
+  async setCursor(
+    sceneIdx: number,
+    viewIdx: number,
+    objIdx: number,
+    identifier: string,
+  ): Promise<string> {
     this.cursorName = "";
-    this.fireChain(sceneIdx, viewIdx, objIdx, "setcursor", identifier);
+    await this.fireChain(sceneIdx, viewIdx, objIdx, "setcursor", identifier);
     return this.cursorName;
   }
 
@@ -185,7 +203,7 @@ export class SetScripts {
    * Returns true when some handler consumed the event with `exitcode`
    * (a handler merely finishing does NOT suppress the engine default).
    */
-  keyDown(sceneIdx: number, keyName: string): boolean {
+  async keyDown(sceneIdx: number, keyName: string): Promise<boolean> {
     const interp = this.session.interp;
     interp.eventConsumed = false;
     // boot1 routes to the scene itself (sendtoscene); boot2 implements the
@@ -196,7 +214,7 @@ export class SetScripts {
     for (const inst of chain) {
       if (!inst) continue;
       try {
-        interp.runHandler(inst, "keydown", [keyName], { me: inst.name, target: keyName });
+        await interp.runHandler(inst, "keydown", [keyName], { me: inst.name, target: keyName });
         if (interp.eventConsumed) break;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.keydown: ${(e as Error).message}`);
@@ -229,12 +247,12 @@ export class SetScripts {
   }
 
   /** shops are session-scoped (boot's house.shp survives set changes) */
-  openShop(fileName: string): boolean {
+  openShop(fileName: string): Promise<boolean> {
     return this.session.openShop(fileName);
   }
 
-  closeShop(fileName: string): void {
-    this.session.closeShop(fileName);
+  closeShop(fileName: string): Promise<void> {
+    return this.session.closeShop(fileName);
   }
 }
 
@@ -260,7 +278,7 @@ export function registerGameBuiltins(session: GameSession): void {
     "sendtopuppet", "sendtocast", "sendtostage", "sendtobutton", "sendtoflat",
     "sendtopainting", "sendtoboot", "sendtopost", "sendtoserver",
   ]) {
-    interp.registerSpecial(cmd, (ip, argExprs, frame) => {
+    interp.registerSpecial(cmd, async (ip, argExprs, frame) => {
       // sendtostage(call()) / sendtoboot(call()) take the deferred call as
       // their only argument — the target is implicit
       let targetName: string;
@@ -269,58 +287,17 @@ export function registerGameBuiltins(session: GameSession): void {
         targetName = cmd === "sendtoboot" ? "boot" : (session.stage?.name ?? "main.stg");
         deferred = argExprs[0];
       } else {
-        targetName = toStr(ip.evalExpr(argExprs[0], frame));
+        targetName = toStr(await ip.evalExpr(argExprs[0], frame));
       }
       if (!deferred || deferred.t !== "call") {
         log(`${cmd}: no deferred call argument`);
         return 0;
       }
-      let inst =
-        session.currentBinding?.findInstance(targetName) ??
-        session.findGlobalInstance(targetName);
-      if (!inst && cmd === "sendtostage") inst = session.stage;
-      if (!inst && cmd === "sendtoboot") inst = session.boot;
-      // events sent to a scene forward along the containment chain when the
-      // scene leaves them unhandled or passes — or has no script at all
-      // (gstair keydown interceptors live in the set MAIN script; scene13
-      // itself has no script container)
-      const chain = inst ? [inst] : [];
-      if (cmd === "sendtoscene" || cmd === "sendtoset") {
-        const main = session.currentBinding?.main;
-        if (main && main !== inst) chain.push(main);
-        if (session.stage && session.stage !== inst) chain.push(session.stage);
-      }
-      if (!chain.length) {
-        log(`${cmd}("${targetName}", ${deferred.name}(..)) — target not loaded`);
-        return 0;
-      }
-      // arguments of the deferred call ARE evaluated in the caller's frame
-      const args = deferred.args.map((a) => ip.evalExpr(a, frame));
-      let value: Value = 0;
-      let ran = false;
-      for (const link of chain) {
-        if (!link.script.codes.has(deferred.name)) continue;
-        ran = true;
-        const res = ip.runHandler(link, deferred.name, args, {
-          me: link.name,
-          target: frame.ctx.me,
-        });
-        value = res.value;
-        if (ip.eventConsumed || (res.handled && !res.passed)) break;
-      }
-      // the target resolves missing handlers like its own unqualified call:
-      // library code runs with me = the target (boot's initprop() etc.)
-      if (!ran && inst) {
-        for (const lib of ip.fallbackScripts) {
-          if (!lib.script.codes.has(deferred.name)) continue;
-          value = ip.runHandler(lib, deferred.name, args, {
-            me: inst.name,
-            target: frame.ctx.me,
-          }).value;
-          break;
-        }
-      }
-      return value;
+      // arguments of the deferred call ARE evaluated in the caller's frame;
+      // resolution + containment-chain forwarding live on the session
+      // (shared with makeloop firing)
+      const args = await ip.evalArgs(deferred.args, frame);
+      return session.sendEvent(cmd, targetName, deferred.name, args, frame.ctx.me);
     });
   }
 
@@ -330,11 +307,11 @@ export function registerGameBuiltins(session: GameSession): void {
   r("message", (_i, args) => log(`msg: ${args.map(String).join(" ")}`));
 
   // set switching — the engine primitives behind boot's changeset()
-  r("opensetfile", (_i, [name, scene, view]) => {
-    session.openSetFile(toStr(name ?? ""), toStr(scene ?? ""), toStr(view ?? ""));
+  r("opensetfile", async (_i, [name, scene, view]) => {
+    await session.openSetFile(toStr(name ?? ""), toStr(scene ?? ""), toStr(view ?? ""));
   });
-  r("closesetfile", () => {
-    session.currentBinding?.closeSet();
+  r("closesetfile", async () => {
+    await session.currentBinding?.closeSet();
     session.currentSetName = "none";
   });
   r("currentset", () => session.currentSetName);
@@ -353,9 +330,9 @@ export function registerGameBuiltins(session: GameSession): void {
   r("stagevisible", () => (session.stageName !== "none" ? 1 : 0));
   r("currentstage", () => session.stageName);
   r("currentflat", () => session.currentFlat);
-  r("openstagefile", (_i, [n]) => (session.openStageFile(toStr(n ?? "")) ? 1 : 0));
-  r("closestagefile", () => session.closeStageFile());
-  r("gotoflat", (_i, [n]) => session.gotoFlat(toStr(n ?? "")));
+  r("openstagefile", async (_i, [n]) => ((await session.openStageFile(toStr(n ?? ""))) ? 1 : 0));
+  r("closestagefile", () => session.closeStageFile().then(() => {}));
+  r("gotoflat", (_i, [n]) => session.gotoFlat(toStr(n ?? "")).then(() => {}));
 
   // prop commands — getter/setter by arity
   const prop = (name: Value) => session.propRuntime.get(toStr(name));
@@ -444,11 +421,11 @@ export function registerGameBuiltins(session: GameSession): void {
   r("playmovie", (_i, [n]) => {
     session.onPlayMovie(toStr(n ?? ""));
   });
-  r("openshopfile", (_i, [n]) => {
-    session.currentBinding?.openShop(toStr(n));
+  r("openshopfile", async (_i, [n]) => {
+    await session.openShop(toStr(n));
   });
-  r("closeshopfile", (_i, [n]) => {
-    session.currentBinding?.closeShop(toStr(n));
+  r("closeshopfile", async (_i, [n]) => {
+    await session.closeShop(toStr(n));
   });
 
   // sound playback
@@ -516,15 +493,70 @@ export function registerGameBuiltins(session: GameSession): void {
   });
   r("currenttheme", () => "none");
   for (const noop of [
-    "forceupdate", "flushevents", "hidecursor", "showcursor", "debugger",
+    "flushevents", "hidecursor", "showcursor", "debugger",
     "visualeffect", "mixclut",
     "exportclut", "clut",
-    // ambient loop system — TODO real timers; stubs keep door/prop scripts running
-    "stoploop", "stopcricket", "stopwalk", "pauseloop", "pausecricket", "pausewalk",
+    "stopwalk", "pausewalk", // actor walk sounds — actors not implemented yet
   ]) {
     r(noop, () => {});
   }
-  for (const q of ["isloop", "iscricket", "iswalk"]) r(q, () => 0);
-  r("makeloop", (_i, args) => log(`makeloop(${args.map(String).join(", ")}) — loops not implemented yet`));
-  r("makecricket", (_i, args) => log(`makecricket(${args.map(String).join(", ")}) — crickets not implemented yet`));
+  r("iswalk", () => 0);
+
+  // ---- timing model (TI.EXE): delay / makeloop / makecricket / soundloop --
+  // 1 script tick = 1/60 s; loops+crickets are serviced every 66 ms.
+
+  // delay(n): suspend this script n/60 s while the engine keeps ticking
+  r("delay", async (_i, [n]) => {
+    await session.clock.sleep((toNum(n ?? 0) * 50) / 3);
+  });
+  r("makeloop", (_i, [kind, name, handler, period]) => {
+    session.makeLoop(toStr(kind ?? ""), toStr(name ?? ""), toStr(handler ?? ""), toNum(period ?? 1));
+  });
+  r("stoploop", (_i, [kind, name]) => session.stopLoop(toStr(kind ?? ""), toStr(name ?? "")));
+  r("pauseloop", (_i, [kind, name, flag]) =>
+    session.pauseLoop(toStr(kind ?? ""), toStr(name ?? ""), truthy(flag ?? 1)),
+  );
+  r("isloop", (_i, [kind, name]) => (session.isLoop(toStr(kind ?? ""), toStr(name ?? "")) ? 1 : 0));
+  r("countloops", () => session.loops.length);
+  r("indextoloop", (_i, [idx]) => session.loops[toNum(idx ?? 0) - 1]?.name ?? "");
+
+  r("makecricket", (_i, [name, x, y, radius, base, jitter]) => {
+    session.makeCricket(
+      toStr(name ?? ""), toNum(x ?? 0), toNum(y ?? 0),
+      toNum(radius ?? 1), toNum(base ?? 0), toNum(jitter ?? -1),
+    );
+  });
+  r("stopcricket", (_i, [name]) => session.stopCricket(toStr(name ?? "all")));
+  r("pausecricket", (_i, [name, flag]) =>
+    session.pauseCricket(toStr(name ?? "all"), truthy(flag ?? 1)),
+  );
+  r("iscricket", (_i, [name]) => (session.isCricket(toStr(name ?? "")) ? 1 : 0));
+  r("countcrickets", () => session.crickets.length);
+  r("indextocricket", (_i, [idx]) => session.crickets[toNum(idx ?? 0) - 1]?.name ?? "");
+
+  r("soundloop", (_i, [name, flag]) => session.soundLoop(toStr(name ?? ""), truthy(flag ?? 1)));
+
+  // forceupdate(): run the ambient service immediately (transitions do too)
+  r("forceupdate", () => session.tickTime(session.clock.now + 66));
+
+  // starxyz(name, axis): named world point from the set's actor/star table.
+  // Axes: 1 = x, 2 = y (ground plane, same pair the camera/crickets use),
+  // 3 = height, 4 = packed (x << 16 | y).
+  r("starxyz", (_i, [name, axis]) => {
+    const n = toStr(name ?? "").toLowerCase();
+    const star = session.currentBinding?.set.actors.find(
+      (a) => a.identifier.toLowerCase() === n,
+    );
+    if (!star) {
+      log(`starxyz: no star "${toStr(name ?? "")}" in ${session.currentSetName}`);
+      return 0;
+    }
+    switch (toNum(axis ?? 1)) {
+      case 1: return star.positionX;
+      case 2: return star.positionZ;
+      case 3: return star.positionY;
+      case 4: return ((star.positionX & 0xffff) << 16) | (star.positionZ & 0xffff);
+      default: return 0;
+    }
+  });
 }

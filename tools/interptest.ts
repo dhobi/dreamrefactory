@@ -31,29 +31,29 @@ if (!inst) throw new Error("no winner() in this file");
 const interp = new Interpreter();
 registerCoreBuiltins(interp);
 
-function winner(player: number, dealer: number): Value {
+async function winner(player: number, dealer: number): Promise<Value> {
   interp.globals.set("playertotal", player);
   interp.globals.set("dealertotal", dealer);
-  return interp.runHandler(inst!, "winner", [], { me: "blkjack", target: "" }).value;
+  return (await interp.runHandler(inst!, "winner", [], { me: "blkjack", target: "" })).value;
 }
 
 let pass = 0;
 let fail = 0;
-function expect(player: number, dealer: number, want: Value): void {
-  const got = winner(player, dealer);
+async function expect(player: number, dealer: number, want: Value): Promise<void> {
+  const got = await winner(player, dealer);
   const ok = got === want;
   ok ? pass++ : fail++;
   console.log(`${ok ? "PASS" : "FAIL"} player=${player} dealer=${dealer} -> ${JSON.stringify(got)} (want ${JSON.stringify(want)})`);
 }
 
-expect(20, 18, "player");
-expect(18, 20, "dealer");
-expect(19, 19, "draw");
-expect(20, 21, "dealer");
-expect(20, 22, "player");
-expect(21, 20, "player");
-expect(21, 21, "draw");
-expect(21, 22, "player");
+await expect(20, 18, "player");
+await expect(18, 20, "dealer");
+await expect(19, 19, "draw");
+await expect(20, 21, "dealer");
+await expect(20, 22, "player");
+await expect(21, 20, "player");
+await expect(21, 21, "draw");
+await expect(21, 22, "player");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
