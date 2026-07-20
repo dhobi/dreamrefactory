@@ -21,6 +21,8 @@ interface CachedFrame {
   pixels: Uint8Array;
   width: number;
   height: number;
+  /** per-pixel depth levels (0..24) from the frame's Z image, if present */
+  z?: Uint8Array;
 }
 
 const FRAME_MS = 90; // ~11 fps for turn/walk animation, close to the original feel
@@ -419,6 +421,8 @@ export class SetViewer {
         pixels: fb.pixels.slice(0, d.width * d.height),
         width: d.width,
         height: d.height,
+        // the SET Z image occludes world sprites (actors) behind scenery
+        z: d.hasZ ? fb.zPixels.slice(0, d.width * d.height) : undefined,
       });
     };
     for (const scene of this.set.scenes) {
@@ -492,6 +496,19 @@ export class SetViewer {
     return this.busy || this.session.scriptBusy;
   }
 
+  /**
+   * the current view's depth map for occluding world sprites behind scenery.
+   * scale (units/level) = zFarMax / zLevelCount from the SET's SCDO chunk.
+   */
+  private occlusion(): import("./engine/actors").Occlusion | null {
+    const f = this.current;
+    if (!f || !f.z) return null;
+    const levels = this.set.zLevelCount || 24;
+    const scale = this.set.zFarMax / levels;
+    if (!(scale > 0)) return null;
+    return { z: f.z, w: f.width, h: f.height, scale, levels };
+  }
+
   /** camera of the current view, for world-space (propxyz) props */
   worldCamera(): import("./engine/props").WorldCamera | null {
     const sc = this.scene;
@@ -499,10 +516,17 @@ export class SetViewer {
     if (!v) return null;
     const w = this.set.viewPortWidth || 512;
     const h = this.set.viewPortHeight || 264;
+    // the view's stand frame carries the camera's true world position
+    // (posX16/posZ16/posY16) — scale-free across sets (C73 is 150 units/m,
+    // DECKBD 55/m; the old cameraHeight×512 only held for C73's scale and
+    // floated deck cameras 2-3× too high). Vista views ride the same ring.
+    const fi = sc.turns[RIGHTTURNS].frames.find(
+      (f) => f.viewID === this.viewIdx && f.motionInfo > 0,
+    );
     return {
-      x: sc.xAxisMap,
-      y: sc.zAxisMap,
-      z: Math.round(v.cameraHeight * 512),
+      x: fi ? fi.posX16 : sc.xAxisMap,
+      y: fi ? fi.posZ16 : sc.zAxisMap,
+      z: fi ? fi.posY16 : Math.round(v.cameraHeight * 512),
       deg: v.rotation8,
       f: Math.max(w, h) / 2,
       cx: w / 2,
@@ -651,7 +675,7 @@ export class SetViewer {
     // actors stand in the world between the props and the view hotspots
     if (this.session.setVisible && this.current && y < this.current.height) {
       const cam = this.worldCamera();
-      const act = cam ? this.session.actorRuntime.actorAt(x, y, cam) : null;
+      const act = cam ? this.session.actorRuntime.actorAt(x, y, cam, this.occlusion()) : null;
       if (act) {
         const inst = this.session.castScripts.get(act.member.name);
         if (inst?.script.codes.has("mousedown")) {
@@ -854,7 +878,7 @@ export class SetViewer {
     }
     if (!this.session.setVisible || (this.current && y >= this.current.height)) return "";
     const cam = this.worldCamera();
-    if (cam && this.session.actorRuntime.actorAt(x, y, cam)) return "talk";
+    if (cam && this.session.actorRuntime.actorAt(x, y, cam, this.occlusion())) return "talk";
     const hit = this.hitTest(x, y);
     if (!hit) return "";
     return this.scripts.setCursor(this.sceneIdx, this.viewIdx, hit.objIdx, hit.obj.identifier);
@@ -961,7 +985,11 @@ export class SetViewer {
       const minAnchorY = this.animation !== null ? (f?.height ?? 0) : -Infinity;
       const propPal = this.session.setVisible ? this.propPalette : flat.palette;
       const cam = this.session.setVisible && this.animation === null ? this.worldCamera() : null;
-      if (cam) this.session.actorRuntime.composite(img.data, flat.width, flat.height, propPal, cam);
+      if (cam) {
+        this.session.actorRuntime.composite(
+          img.data, flat.width, flat.height, propPal, cam, this.occlusion(),
+        );
+      }
       this.session.propRuntime.composite(img.data, flat.width, flat.height, propPal, minAnchorY, cam);
       ctx.putImageData(img, 0, 0);
       this.applyFade(ctx);
@@ -979,7 +1007,11 @@ export class SetViewer {
     indexedToRGBA(f.pixels, f.width, f.height, this.palette, img.data);
     if (this.animation === null) {
       const cam = this.worldCamera();
-      if (cam) this.session.actorRuntime.composite(img.data, f.width, f.height, this.propPalette, cam);
+      if (cam) {
+        this.session.actorRuntime.composite(
+          img.data, f.width, f.height, this.propPalette, cam, this.occlusion(),
+        );
+      }
       this.session.propRuntime.composite(
         img.data, f.width, f.height, this.propPalette, -Infinity, cam,
       );

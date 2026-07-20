@@ -110,6 +110,11 @@ const CURSOR_CSS: Record<string, string> = {
 // one session for the whole browser tab: globals persist across sets
 const session = new GameSession(provideFile, audioSink);
 session.onLog = (l) => log(l);
+// on-demand loaders (puppets/casts/movies) await this so the first click
+// works even before the file is cached (provideFile fetches lazily)
+session.ensureFile = async (name) => {
+  await fetchIntoStore(name.toLowerCase());
+};
 session.onSetChange = async (fileName, sceneName, viewName) => {
   const data = await fetchIntoStore(fileName) ?? fileStore.get(fileName) ?? null;
   if (!data) {

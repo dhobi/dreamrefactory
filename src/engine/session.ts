@@ -107,6 +107,13 @@ export class GameSession {
   builtinsRegistered = false;
 
   onLog: (line: string) => void = () => {};
+  /**
+   * host hook: make a game file available before the (synchronous) provider
+   * reads it — the browser fetches on demand and returns null on the first
+   * miss, so on-demand loaders (puppets, casts, movies) await this first.
+   * No-op in tests, where every file is present synchronously.
+   */
+  ensureFile: (name: string) => Promise<void> = () => Promise.resolve();
   /** host hook: actually load + display a set (async in the browser) */
   onSetChange: (fileName: string, sceneName: string, viewName: string) => void | Promise<void> =
     () => {};
@@ -796,6 +803,7 @@ export class GameSession {
 
   async openPuppetFile(fileName: string): Promise<boolean> {
     const key = toStr(fileName).toLowerCase();
+    await this.ensureFile(key);
     const data = this.files(key);
     if (!data) {
       this.onLog(`openpuppetfile: "${fileName}" not available`);
@@ -937,6 +945,7 @@ export class GameSession {
   async openCastFile(fileName: string): Promise<boolean> {
     const key = fileName.toLowerCase();
     if (this.castMains.has(key)) return true;
+    await this.ensureFile(key);
     const data = this.files(key);
     if (!data) {
       this.onLog(`opencastfile: "${fileName}" not available`);

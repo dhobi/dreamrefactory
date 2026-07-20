@@ -102,6 +102,16 @@ export interface SetFile {
   defaultViewName: string;
   viewPortWidth: number;
   viewPortHeight: number;
+  /**
+   * Z-image depth quantization (SCDO chunk, TI.EXE 0x4078ad): the far clip
+   * depth (farMax) and the number of depth levels. A frame's Z image stores
+   * per-pixel levels 0..zLevelCount where level = worldDepth × zLevelCount /
+   * zFarMax (units/level = zFarMax/zLevelCount). Used to occlude world sprites
+   * (actors) behind scenery — an actor pixel draws only where the scenery's
+   * level is >= the actor's level (scenery farther-or-equal).
+   */
+  zFarMax: number;
+  zLevelCount: number;
   mapLight: number;
   mapDark: number;
   mapWidth: number;
@@ -329,6 +339,13 @@ export function readSetFile(data: Uint8Array): SetFile {
   r.seek(0x84);
   const viewPortWidth = r.i16();
   const viewPortHeight = r.i16();
+  // depth quantization for actor occlusion (same SCDO chunk = container 0);
+  // read via a separate cursor so the palette read below keeps r.pos at 0x88
+  const zr = new BinaryReader(c0);
+  zr.seek(0x9fa);
+  const zLevelCount = zr.i16();
+  zr.seek(0xa08);
+  const zFarMax = zr.i16();
   r.skip(5 * 8 + 3 * 4); // coords, rotations, 3 unknown floats
   r.skip(3 * 18); // 3 unknown data entries
 
@@ -353,6 +370,8 @@ export function readSetFile(data: Uint8Array): SetFile {
     defaultViewName,
     viewPortWidth,
     viewPortHeight,
+    zFarMax,
+    zLevelCount,
     mapLight,
     mapDark,
     mapWidth,

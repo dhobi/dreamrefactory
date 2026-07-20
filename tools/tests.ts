@@ -451,11 +451,14 @@ async function runAnimations(v: SetViewer): Promise<void> {
     }
   }
   check("bag projects into View59", !!hit, hit ? `${hit.x},${hit.y}` : "not found");
-  // the projected anchor must sit on the bed (TI.EXE math: 314,200)
+  // the projected anchor must sit on the bed. Camera z comes from the
+  // view's stand FRAME (posY16 = 2190 here) — scale-free across sets;
+  // the earlier fitted cameraHeight×512 (2351) gave y=200, the frame
+  // camera gives y=177 at the same x/depth (both on the bed)
   const proj = projectPoint(cam, bag.worldX, bag.worldY, bag.worldZ);
   check(
     "projection matches TI.EXE math",
-    !!proj && proj.x === 314 && proj.y === 200 && proj.depth === 1755,
+    !!proj && proj.x === 314 && proj.y === 177 && proj.depth === 1755,
     proj ? `${proj.x},${proj.y} d=${proj.depth}` : "behind camera",
   );
   if (hit) await v.click(hit.x, hit.y); // bag's mousedown -> addbag()
@@ -545,25 +548,78 @@ async function runAnimations(v: SetViewer): Promise<void> {
   );
   check("deckbd ambient soundloops start", sink.calls.filter((c) => c.loop).length >= 2,
     `${sink.calls.filter((c) => c.loop).length} loops`);
-  // find a view where morrow projects on screen and is clickable
+  // find the view where morrow projects LARGEST while fully on screen — the
+  // conversational view you actually approach him in (not a distant/empty one)
   let seen = "";
-  outer: for (let s = 0; s < v.set.scenes.length; s++) {
+  let bestH = 0;
+  for (let s = 0; s < v.set.scenes.length; s++) {
     for (let vi = 0; vi < v.set.scenes[s].views.length; vi++) {
       v.sceneIdx = s;
       v.viewIdx = vi;
       const cam = v.worldCamera()!;
       const list = session.actorRuntime.drawList(cam);
       const hit = list.find((e) => e.a === morrow);
-      if (hit) {
-        const r = session.actorRuntime.rect(morrow, hit.proj, cam);
-        if (r && r.x + r.w > 0 && r.x < 512 && r.h > 20 && r.h < 400) {
-          seen = `${v.set.scenes[s].sceneName}/${v.set.scenes[s].views[vi].viewName} rect ${r.x},${r.y} ${r.w}x${r.h}`;
-          break outer;
-        }
+      if (!hit) continue;
+      const r = session.actorRuntime.rect(morrow, hit.proj, cam);
+      if (r && r.x >= 0 && r.x + r.w <= 512 && r.h > 20 && r.h < 400 && r.h > bestH) {
+        bestH = r.h;
+        seen = `${v.set.scenes[s].sceneName}/${v.set.scenes[s].views[vi].viewName} rect ${r.x},${r.y} ${r.w}x${r.h}`;
       }
     }
   }
   check("morrow projects into a deckbd view at person size", seen !== "", seen);
+
+  // --- actor Z-occlusion (SET Z image): scenery hides world sprites ---------
+  // fraction of an actor's sprite bbox NOT occluded by the SET depth map;
+  // null when the actor isn't in the draw list / has no rect
+  const notOccludedFrac = (actor: typeof morrow): number | null => {
+    const cam = v.worldCamera();
+    if (!cam) return null;
+    const hit = session.actorRuntime.drawList(cam).find((e) => e.a === actor);
+    if (!hit) return null;
+    const r = session.actorRuntime.rect(actor, hit.proj, cam);
+    const cur = (v as unknown as { current?: { z?: Uint8Array; width: number; height: number } })
+      .current;
+    const z = cur?.z;
+    if (!r || !cur || !z) return null;
+    const scale = v.set.zFarMax / (v.set.zLevelCount || 24);
+    const level = Math.max(0, Math.floor(hit.proj.depth / Math.max(1, scale)));
+    let vis = 0;
+    let tot = 0;
+    for (let ty = Math.max(0, r.y); ty < Math.min(cur.height, r.y + r.h); ty++) {
+      for (let tx = Math.max(0, r.x); tx < Math.min(cur.width, r.x + r.w); tx++) {
+        tot++;
+        if (z[ty * cur.width + tx] >= level) vis++;
+      }
+    }
+    return tot ? vis / tot : null;
+  };
+
+  check(
+    "deckbd SET carries depth quantization (SCDO)",
+    v.set.zLevelCount === 24 && v.set.zFarMax === 2750,
+    `levels=${v.set.zLevelCount} farMax=${v.set.zFarMax}`,
+  );
+  // asea stands far down the promenade, behind the deckhouse wall (all near
+  // levels) — the ship must hide him (user-reported occlusion bug)
+  const asea = session.actorRuntime.get("asea")!;
+  v.jumpTo("Scene33", "View94");
+  const aseaFrac = asea ? notOccludedFrac(asea) : null;
+  check(
+    "asea is occluded by the deckhouse on Scene33/View94",
+    aseaFrac === 0,
+    `notOccludedFrac=${aseaFrac}`,
+  );
+  // but morrow, at conversational distance where he projects at person size,
+  // must NOT be wrongly hidden by his own scenery
+  const [msc, mvw] = seen.split(" ")[0].split("/");
+  v.jumpTo(msc, mvw);
+  const morrowFrac = notOccludedFrac(morrow);
+  check(
+    "morrow is not over-occluded where he faces the player",
+    morrowFrac !== null && morrowFrac > 0.5,
+    `notOccludedFrac=${morrowFrac} at ${msc}/${mvw}`,
+  );
 }
 
 // --- 18. puppets: SMETH1 conversation — speaks, choices, branching --------

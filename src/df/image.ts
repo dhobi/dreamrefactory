@@ -13,6 +13,8 @@ export interface DecodedFrame {
   width: number;
   height: number;
   hasZ: boolean;
+  /** byte offset (within the container) where the Z image begins, if any */
+  zStart?: number;
 }
 
 export class FrameBuffer {
@@ -180,8 +182,10 @@ export function decodeFrame(container: Container, fb: FrameBuffer): DecodedFrame
 
   // Z layer follows if the container is not exhausted
   let hasZ = false;
+  let zStart: number | undefined;
   if (inPos < data.length) {
     hasZ = true;
+    zStart = inPos;
     const tableStart = inPos;
     const zOut = fb.zPixels;
     let zPos = 0;
@@ -196,7 +200,7 @@ export function decodeFrame(container: Container, fb: FrameBuffer): DecodedFrame
     }
   }
 
-  return { width, height, hasZ };
+  return { width, height, hasZ, zStart };
 }
 
 /**

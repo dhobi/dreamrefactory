@@ -12,6 +12,30 @@ TypeScript reimplementation running on canvas.
 
 ## Status: Milestone 11 (in progress) — actors & puppets (CST/PUP)
 
+Checkpoint 5: **scenery hides them** — depth occlusion from the SET Z image.
+
+- Every SET frame appends a per-pixel **Z image**: an RLE depth map (one
+  offset-table entry per row, runs summing to the frame width — row-major;
+  verified by dumping the plane, which aligns with the colour frame — near
+  geometry is low, far is high). Our frame decoder already reconstructed it
+  into `FrameBuffer.zPixels`; it is now cached per view.
+- Depth quantization lives in the SET's SCDO chunk (container 0):
+  `zLevelCount = i16 @0x9fa` (24), `zFarMax = i16 @0xa08`; a pixel's level
+  is `worldDepth × zLevelCount / zFarMax`, i.e. units/level `= zFarMax /
+  zLevelCount` (TI.EXE `0x4078ad`). `zFarMax` is per-set (c73 15335, deckbd
+  2750 — the same world-scale spread that drove the camera-Z fix).
+- An actor sprite pixel is drawn only where the scenery's level is **≥** the
+  actor's level (scenery farther-or-equal); nearer scenery occludes it
+  (TI.EXE blit `0x412940`: skip run when `sceneZ < actorZ`). The actor's
+  level is `floor(depth / (zFarMax/zLevelCount))` — the per-actor
+  `groundOffset` is 0 unless movement code sets it, which the placed cast
+  doesn't. The same test gates click/hover, so you can't talk to an actor
+  through a wall.
+- On DECKBD/Scene33/View94 the deckhouse now correctly hides the officer
+  standing far down the promenade (user-reported); Morrow stays fully
+  visible where you approach him. Locked by tests (deckbd occlusion +
+  Chromium capture).
+
 Checkpoint 4: **they walk** — scripted actor movement.
 
 - A correction to the milestone-10 notes: the 16-slot table at 0x48b970

@@ -64,6 +64,32 @@ interface DrawEntry {
   proj: { x: number; y: number; depth: number };
 }
 
+/**
+ * The current SET view's depth map, for occluding actors behind scenery.
+ * z holds per-pixel levels 0..levels (low = near, high = far) at w×h; scale
+ * is world-depth units per level (SET.zFarMax / SET.zLevelCount). TI.EXE
+ * (blit 0x412940) draws an actor pixel only where the scenery level is >= the
+ * actor's level, i.e. where the scenery is farther-or-equal.
+ */
+export interface Occlusion {
+  z: Uint8Array;
+  w: number;
+  h: number;
+  scale: number;
+  levels: number;
+}
+
+/** actor's quantized depth level (groundOffset defaults to 0; TI.EXE 0x41140e) */
+function actorLevel(depth: number, occ: Occlusion): number {
+  return Math.max(0, Math.floor(depth / Math.max(1, occ.scale)));
+}
+
+/** true if scenery at (x, y) is nearer than the actor level → hide the pixel */
+function occluded(occ: Occlusion, x: number, y: number, level: number): boolean {
+  if (x < 0 || y < 0 || x >= occ.w || y >= occ.h) return false;
+  return occ.z[y * occ.w + x] < level;
+}
+
 export class ActorRuntime {
   readonly actors = new Map<string, ActorInstance>();
   readonly casts = new Map<string, LoadedCast>();
@@ -161,10 +187,12 @@ export class ActorRuntime {
     height: number,
     paletteRGBA: Uint8ClampedArray,
     cam: WorldCamera,
+    occ: Occlusion | null = null,
   ): void {
     for (const { a, proj } of this.drawList(cam)) {
       const r = this.rect(a, proj, cam);
       if (!r) continue;
+      const level = occ ? actorLevel(proj.depth, occ) : 0;
       const maxY = Math.min(cam.clipH, height, r.y + r.h);
       const maxX = Math.min(cam.clipW, width, r.x + r.w);
       for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
@@ -173,6 +201,8 @@ export class ActorRuntime {
           const sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
           const s = sy * r.f.width + sx;
           if (!r.f.opaque[s]) continue;
+          // scenery in front of the actor hides this pixel (SET Z image)
+          if (occ && occluded(occ, tx, ty, level)) continue;
           const pal = r.f.indexed[s] * 4;
           const d = (ty * width + tx) * 4;
           rgba[d] = paletteRGBA[pal];
@@ -184,7 +214,7 @@ export class ActorRuntime {
   }
 
   /** front-most actor whose opaque pixels cover (x, y) — for talking */
-  actorAt(x: number, y: number, cam: WorldCamera): ActorInstance | null {
+  actorAt(x: number, y: number, cam: WorldCamera, occ: Occlusion | null = null): ActorInstance | null {
     const list = this.drawList(cam);
     for (let i = list.length - 1; i >= 0; i--) {
       const { a, proj } = list[i];
@@ -193,7 +223,10 @@ export class ActorRuntime {
       if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
       const sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
       const sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
-      if (r.f.opaque[sy * r.f.width + sx]) return a;
+      if (!r.f.opaque[sy * r.f.width + sx]) continue;
+      // a click landing on scenery that occludes the actor doesn't reach them
+      if (occ && occluded(occ, x, y, actorLevel(proj.depth, occ))) continue;
+      return a;
     }
     return null;
   }
