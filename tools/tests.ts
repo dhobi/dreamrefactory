@@ -1954,5 +1954,231 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- 56. fence stage (M1 staging): duel opens onto the piste at centre -------
+// SQUASH.SET's fence() seeds fencelevel/willphase then transtoflat("fence.stg").
+// openstage loads fence.shp/fence.trk, stands Willie + the player on the 16-flat
+// piste, goes to centre (flat "fence 8"), lights the "engage" button, and kicks
+// the idle loops — but does NOT start fighting until the engage click.
+{
+  const { session } = await newSession();
+  session.interp.globals.set("fencelevel", 15);
+  session.interp.globals.set("willphase", 201);
+  await session.openSetFile("squash.set");
+  await session.transToFlat("fence.stg");
+  const willie = session.propRuntime.get("willie");
+  const player = session.propRuntime.get("player");
+  const start = session.propRuntime.get("startfence");
+  const staged =
+    session.stageName === "fence.stg" &&
+    session.setVisible === false &&
+    session.flatNames.length === 15 &&
+    session.flatToIndex(session.currentFlat) === 8;
+  const fighters =
+    !!willie && willie.visible && willie.stateName === "idle1" &&
+    !!player && player.visible && player.stateName === "idle1";
+  const ready =
+    !!start && start.visible &&
+    !session.interp.globals.get("fighting");
+  check(
+    "fence duel opens onto the piste at centre with fighters idle and engage lit",
+    staged && fighters && ready,
+    `stage=${session.stageName} flats=${session.flatNames.length} idx=${session.flatToIndex(session.currentFlat)} ` +
+      `willie=${willie?.visible}/${willie?.stateName} player=${player?.visible}/${player?.stateName} ` +
+      `start=${start?.visible} fighting=${session.interp.globals.get("fighting")}`,
+  );
+}
+
+// --- 57. fence M2: engage + live mouse-driven parry --------------------------
+// Clicking the lit "engage" fires the flat's newpoint(): fighting flips true and
+// the engage button hides. Then playeridle() polls mouse-X every tick and sets
+// the player's blade angle (propdeg 0..8) + playerblock (left/none/right) — the
+// defense is steered entirely by where the cursor sits across the piste.
+{
+  const { session, viewer } = await newSession();
+  session.interp.globals.set("fencelevel", 15);
+  session.interp.globals.set("willphase", 201);
+  await session.openSetFile("squash.set");
+  await session.transToFlat("fence.stg");
+  const player = session.propRuntime.get("player")!;
+  const start = session.propRuntime.get("startfence")!;
+  // fire a duel action the way the engine does: tracked, so scriptBusy suppresses
+  // loop-firing while it runs (deterministic), then pump the clock to settle it.
+  const fire = async (p: Promise<unknown>) => { session.track(p); await runAnimations(viewer()); };
+
+  // engage: the lit "engage" is the flat's "startfence" click-region; its
+  // mousedown does `if trackbut("startlit",…) newpoint()`. Dispatch newpoint by
+  // name (the same by-name button path the engine exposes) to start the bout.
+  await fire(session.sendToButton(session.currentFlat, "startfence", "newpoint", [], "test"));
+  const engaged = !!session.interp.globals.get("fighting") && start.visible === false;
+
+  // defense: sweep the cursor across the piste; each band picks a blade deg +
+  // block side. At centre flat 8 the backed-up weakenings don't apply, so the
+  // thresholds are the raw ones from playeridle.
+  const probe = async (x: number) => {
+    session.setPointer(x, 190);
+    await fire(session.sendEvent("sendtoprop", "player", "playeridle", [], "test"));
+    return { deg: player.deg, block: session.interp.globals.get("playerblock") };
+  };
+  const farRight = await probe(350); // >=346 -> deg 8, right
+  const right = await probe(320);    // >=316 -> deg 7, right
+  const centre = await probe(260);   // >=256 -> deg 5, none
+  const left = await probe(150);     // >=136 -> deg 1, left
+  const farLeft = await probe(130);  // <136  -> deg 0, left
+
+  const defends =
+    farRight.deg === 8 && farRight.block === "right" &&
+    right.deg === 7 && right.block === "right" &&
+    centre.deg === 5 && centre.block === "none" &&
+    left.deg === 1 && left.block === "left" &&
+    farLeft.deg === 0 && farLeft.block === "left" &&
+    player.stateName === "defend";
+  check(
+    "fence engage starts the bout; mouse-X drives the player's parry + block side",
+    engaged && defends,
+    `engaged=${engaged} far-right=${farRight.deg}/${farRight.block} right=${right.deg}/${right.block} ` +
+      `centre=${centre.deg}/${centre.block} left=${left.deg}/${left.block} far-left=${farLeft.deg}/${farLeft.block} ` +
+      `view=${player.stateName}`,
+  );
+}
+
+// --- 58. fence M3a: player attack vs Willie's open quadrants -----------------
+// A lunge (mousedown) targets a quadrant (UL/UR/LL/LR by click x/y). willieblock
+// holds the quadrants Willie leaves OPEN (pickdef fills them by fencelevel — a
+// higher/"mediocre" level opens more). notdefended(quad) is true when that quad
+// is open (and we're past the 2-lunge warmup): the thrust lands and scores;
+// otherwise Willie parries it. (Confirmed backwards from the name — the guard is
+// `if notdefended(quad) -> pointgoesto("player")`.)
+{
+  const { session, viewer } = await newSession();
+  const g = session.interp.globals;
+  g.set("fencelevel", 15);
+  g.set("willphase", 201);
+  await session.openSetFile("squash.set");
+  await session.transToFlat("fence.stg");
+  const playerscore = session.propRuntime.get("playerscore")!;
+  const UR = (300 << 16) | 150; // x>256, y<193 -> upper-right quadrant
+  const fire = async (p: Promise<unknown>) => { session.track(p); await runAnimations(viewer()); };
+  const engage = () => fire(session.sendToButton(session.currentFlat, "startfence", "newpoint", [], "test"));
+  const attack = (pt: number) => fire(session.sendEvent("sendtoprop", "player", "playerattack", [pt], "test"));
+
+  // PARRIED: UR is NOT among Willie's open quadrants -> he defends, no touch
+  await engage();
+  g.set("willieblock", "xx;xx;xx;xx;");
+  g.set("attacktot", 5); // past the 2-lunge warmup
+  await attack(UR);
+  const parried = playerscore.visible === false;
+
+  // TOUCH: Willie has left UR open -> the lunge lands; pointgoesto("player")
+  // reveals the score readout (first touch = degree 0) and stiffens Willie (-4)
+  await engage();
+  g.set("willieblock", "UR;xx;xx;xx;");
+  g.set("attacktot", 5);
+  await attack(UR);
+  const touched = playerscore.visible === true && playerscore.deg === 0;
+  const stiffened = g.get("fencelevel") === 11;
+
+  check(
+    "fence player attack: a lunge into a covered quadrant is parried, into an open one it touches",
+    parried && touched && stiffened,
+    `parried=${parried} touched=${touched}(vis=${playerscore.visible} deg=${playerscore.deg}) fencelevel=${g.get("fencelevel")}`,
+  );
+}
+
+// --- 59. fence M3b: Willie's attack vs the player's guard side ----------------
+// Willie commits to a side (willieside, from willieintent); willieattack lands
+// unless the player's guard (playerblock, steered live by the mouse) is on that
+// same side. A matched guard is a parry (miss), a mismatched guard is a touch
+// for Willie and eases him off (fencelevel +4).
+{
+  const { session, viewer } = await newSession();
+  const g = session.interp.globals;
+  g.set("fencelevel", 15);
+  g.set("willphase", 201);
+  await session.openSetFile("squash.set");
+  await session.transToFlat("fence.stg");
+  const williescore = session.propRuntime.get("williescore")!;
+  const fire = async (p: Promise<unknown>) => { session.track(p); await runAnimations(viewer()); };
+  const engage = () => fire(session.sendToButton(session.currentFlat, "startfence", "newpoint", [], "test"));
+  const willieAtk = () => fire(session.sendEvent("sendtoprop", "willie", "willieattack", [], "test"));
+
+  // PARRIED: guard side matches Willie's committed side -> he misses, no touch
+  await engage();
+  g.set("willieside", "left");
+  g.set("playerblock", "left");
+  await willieAtk();
+  const willieMissed = williescore.visible === false;
+
+  // SCORES: guard on the wrong side -> the thrust lands, williescore appears
+  await engage();
+  g.set("willieside", "right");
+  g.set("playerblock", "left");
+  await willieAtk();
+  const willieScored = williescore.visible === true && williescore.deg === 0;
+  const eased = g.get("fencelevel") === 19;
+
+  check(
+    "fence Willie attack: matched guard parries; mismatched guard is a touch for Willie",
+    willieMissed && willieScored && eased,
+    `missed=${willieMissed} scored=${willieScored}(vis=${williescore.visible} deg=${williescore.deg}) fencelevel=${g.get("fencelevel")}`,
+  );
+}
+
+// --- 60. fence M4: a full match to five touches ends the bout ----------------
+// Score five touches (each: engage, leave UR open, lunge past the warmup) and the
+// score readout climbs deg 0..4. On the fifth, pointgoesto's end-branch fires:
+// fighting stops, Willie is marked "won" (the player won), fencewins increments,
+// and transfromflat() leaves the stage — after which sendtoset(fence()) opens the
+// post-match conversation (which blocks on a bevel), so we pump a bounded number
+// of steps rather than waiting on the puppet, and assert the pre-conversation win.
+{
+  const { session, viewer } = await newSession();
+  const g = session.interp.globals;
+  g.set("fencelevel", 15);
+  g.set("willphase", 201);
+  g.set("fencewins", 0);
+  g.set("fencecount", 0);
+  g.set("mission", 2);
+  await session.openSetFile("squash.set");
+  await session.transToFlat("fence.stg");
+  const playerscore = session.propRuntime.get("playerscore")!;
+  const UR = (300 << 16) | 150;
+  const ownerOf = (n: string) =>
+    (session.interp.builtins.get("actorowner") as (i: unknown, a: string[]) => string)(session.interp, [n]);
+  const fire = async (p: Promise<unknown>) => { session.track(p); await runAnimations(viewer()); };
+  const engage = () => fire(session.sendToButton(session.currentFlat, "startfence", "newpoint", [], "test"));
+
+  // touches 1..4 — bout continues, score readout climbs to deg 3
+  for (let i = 0; i < 4; i++) {
+    await engage();
+    g.set("willieblock", "UR;xx;xx;xx;");
+    g.set("attacktot", 5); // skip the 2-lunge warmup
+    await fire(session.sendEvent("sendtoprop", "player", "playerattack", [UR], "test"));
+  }
+  const fourTouches = playerscore.visible && playerscore.deg === 3 && !session.interp.globals.get("fighting");
+
+  // fifth (winning) touch: fire it, then pump a bounded number of steps — the
+  // end-branch runs (win recorded, stage left) before the conversation blocks.
+  await engage();
+  g.set("willieblock", "UR;xx;xx;xx;");
+  g.set("attacktot", 5);
+  session.track(session.sendEvent("sendtoprop", "player", "playerattack", [UR], "test"));
+  for (let i = 0; i < 120; i++) {
+    session.tickTime((clock += 66));
+    await drain();
+    if (session.puppet?.bevels?.length || session.stageName !== "fence.stg") break;
+  }
+  const won =
+    !session.interp.globals.get("fighting") &&
+    ownerOf("willie") === "won" &&
+    session.interp.globals.get("fencewins") === 1 &&
+    session.stageName !== "fence.stg";
+  check(
+    "fence: a match won five-touches-to-nil ends the bout and records the win",
+    fourTouches && won,
+    `fourTouches=${fourTouches}(deg=${playerscore.deg}) fighting=${session.interp.globals.get("fighting")} ` +
+      `owner=${ownerOf("willie")} fencewins=${session.interp.globals.get("fencewins")} stage=${session.stageName}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

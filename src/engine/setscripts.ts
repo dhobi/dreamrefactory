@@ -373,6 +373,11 @@ export function registerGameBuiltins(session: GameSession): void {
   r("closestagefile", () => session.closeStageFile().then(() => {}));
   r("gotoflat", (_i, [n]) => session.gotoFlat(toStr(n ?? "")).then(() => {}));
   r("flattoindex", (_i, [n]) => session.flatToIndex(toStr(n ?? "")));
+  // indextoflat(i): inverse of flattoindex — the 1-based flat's name (fencing
+  // walks the 16-flat piste by index, stepflat(±1) then indextoflat to move).
+  r("indextoflat", (_i, [i]) => session.flatNames[toNum(i) - 1] ?? "none");
+  // countflats(): how many flats the current stage has (piste length bound).
+  r("countflats", () => session.flatNames.length);
   // transtoflat/transfromflat: enter/leave a full-screen overlay stage (the
   // deck map opens via the "map" prop's open() -> transtoflat("map.stg"))
   r("transtoflat", (_i, [n]) => session.transToFlat(toStr(n ?? "")).then(() => {}));
@@ -681,8 +686,21 @@ export function registerGameBuiltins(session: GameSession): void {
     "flushevents", "hidecursor", "showcursor", "debugger",
     "visualeffect", "mixclut",
     "exportclut", "clut",
+    // *warm: asset preloaders (propwarm/actorwarm/shopwarm). openshopfile/
+    // openset already instantiate every prop/actor up front, so warming is a
+    // no-op for us — it only mattered on the original's streaming loader.
+    "propwarm", "actorwarm", "shopwarm",
+    // propscript: opens the script debugger on a prop (debug builds only).
+    "propscript",
   ]) {
     r(noop, () => {});
+  }
+  // modifier-key probes — debug affordances (shift+click dumps a prop's script,
+  // option+click drags it). No hardware modifier state in the browser build, so
+  // always "not held": the debug branches guarded by `debugging & shiftkey()`
+  // stay dormant and the normal gameplay branch runs.
+  for (const key of ["shiftkey", "optionkey", "commandkey"]) {
+    r(key, () => 0);
   }
 
   // ---- timing model (TI.EXE): delay / makeloop / makecricket / soundloop --

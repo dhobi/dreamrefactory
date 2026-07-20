@@ -586,8 +586,10 @@ export class GameSession {
     if (!inst && cmd === "sendtostage") inst = this.stage;
     if (!inst && cmd === "sendtoboot") inst = this.boot;
     // a flat is contained in its stage: an event to a flat with no own script
-    // (e.g. the wireless overview flat) resolves on the stage main, where
-    // handlers like setupsmallprops live
+    // (fencing's per-flat click regions carry the scripts, not the flat itself)
+    // resolves on the stage main, where handlers like pointgoesto()/centerstage()
+    // /setupsmallprops live. (findInstance already returns the flat's own script
+    // when one exists, so this fallback only fires when it doesn't.)
     if (!inst && cmd === "sendtoflat") inst = this.stage;
     const chain = inst ? [inst] : [];
     if (cmd === "sendtoscene" || cmd === "sendtoset") {

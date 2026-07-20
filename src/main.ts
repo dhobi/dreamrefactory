@@ -379,6 +379,27 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(kitBtn);
 
+  // dev: enter the fencing duel (FENCE.STG) the way SQUASH.SET's fence() does
+  // after the Willie/Haderlitz conversation (WILFENC1.PUP) — seed the globals
+  // that conversation would set (fencelevel = difficulty 5/15/25; willphase 201
+  // = "playing"; fencewins/fencecount = match tallies) and transtoflat into the
+  // stage. openstage then loads fence.shp/fence.trk, stands Willie + the player
+  // on the 16-flat piste at centre (flat 8), and lights the "engage" button.
+  const fenceBtn = document.createElement("button");
+  fenceBtn.textContent = "🤺 Fence (dev)";
+  fenceBtn.style.marginLeft = "0.5rem";
+  fenceBtn.addEventListener("click", async () => {
+    if (!viewer) return;
+    const g = session.interp.globals;
+    g.set("fencelevel", 15);
+    g.set("willphase", 201);
+    if (g.get("fencewins") === undefined) g.set("fencewins", 0);
+    if (g.get("fencecount") === undefined) g.set("fencecount", 0);
+    if (g.get("mission") === undefined) g.set("mission", 2);
+    await session.track(session.transToFlat("fence.stg"));
+  });
+  setSelectWrap.appendChild(fenceBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).
