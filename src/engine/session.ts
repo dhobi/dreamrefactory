@@ -329,10 +329,13 @@ export class GameSession {
    */
   readonly walks = new Map<
     string,
-    { sx: number; sy: number; sz: number; dx: number; dy: number; dz: number; dist: number; progress: number; paused: boolean }
+    { sx: number; sy: number; sz: number; dx: number; dy: number; dz: number; dist: number; progress: number; paused: boolean; arriveStar?: string }
   >();
 
-  startWalk(name: string, tx: number, ty: number, tz: number): void {
+  /** arriveStar: the value actorstar() should report once the walk lands
+   *  (walkonpath rides the "walkonpath" sentinel while moving, then settles
+   *  on the destination star so pacing loops can tell where the actor is). */
+  startWalk(name: string, tx: number, ty: number, tz: number, arriveStar?: string): void {
     const a = this.actorRuntime.get(name);
     if (!a) return;
     const dx = tx - a.worldX;
@@ -346,7 +349,7 @@ export class GameSession {
     }
     this.walks.set(a.member.name, {
       sx: a.worldX, sy: a.worldY, sz: a.worldZ,
-      dx, dy, dz, dist, progress: 0, paused: false,
+      dx, dy, dz, dist, progress: 0, paused: false, arriveStar,
     });
   }
 
@@ -369,6 +372,7 @@ export class GameSession {
   }
 
   private serviceWalks(): void {
+    const arrived: string[] = [];
     for (const [key, w] of this.walks) {
       if (w.paused) continue;
       const a = this.actorRuntime.get(key);
@@ -391,6 +395,17 @@ export class GameSession {
           a.poseName = "stand";
           a.step = 0;
         }
+        if (w.arriveStar !== undefined) a.starName = w.arriveStar;
+        arrived.push(key);
+      }
+    }
+    // fire each arrived actor's endwalk() — the arrival lifecycle handler.
+    // NPCs use it to face the player, resume an idle loop, or start the next
+    // leg of a patrol; without it walk-driven actors freeze after one leg.
+    // (Fired after the loop so a new walk it starts doesn't perturb this pass.)
+    for (const key of arrived) {
+      if (this.castScripts.get(key)?.script.codes.has("endwalk")) {
+        void this.track(this.sendEvent("sendtoactor", key, "endwalk", [], "walk"));
       }
     }
   }

@@ -637,15 +637,16 @@ export function registerGameBuiltins(session: GameSession): void {
     const a = actor(n);
     if (!a) return "";
     if (starName === undefined) return a.starName;
+    // placing at a real star teleports the actor there; a value that isn't a
+    // star (the "walkonpath"/"custom"/"resume" sentinels, or a packed point)
+    // is just stored — the walk-resume logic reads these back
     const star = findStar(starName);
-    if (!star) {
-      log(`actorstar: ${toStr(n)} -> "${toStr(starName)}" not found`);
-      return 0;
+    if (star) {
+      a.worldX = star.positionX;
+      a.worldY = star.positionZ;
+      a.worldZ = star.positionY;
+      a.deg = star.rotation8 & 0xff;
     }
-    a.worldX = star.positionX;
-    a.worldY = star.positionZ;
-    a.worldZ = star.positionY;
-    a.deg = star.rotation8 & 0xff;
     a.starName = toStr(starName).toLowerCase();
   });
   r("actordeg", (_i, [n, v]) => {
@@ -717,13 +718,17 @@ export function registerGameBuiltins(session: GameSession): void {
     if (!actor(n)) return 0;
     session.startWalk(toStr(n), toNum(x ?? 0), toNum(y ?? 0), toNum(z ?? 0));
   });
-  // walkonpath(actor, fromStar|"resume", toStar): straight-line between
-  // stars (the authored waypoint paths are a refinement for later)
+  // walkonpath(actor, fromStar|"resume", toStar|point): walk from one star to
+  // another. `from`="resume" keeps the current position; otherwise the actor
+  // teleports to `from` first. `to` is a star name, or a packed point (the
+  // value walkdest() returns — the talk-interrupt/resume path in GANG.CST
+  // saves the destination and resumes toward it). While walking, actorstar()
+  // reports the sentinel "walkonpath" (how the resume logic detects a path
+  // walk); on arrival it settles on the destination star.
   r("walkonpath", (_i, [n, from, to]) => {
     const a = actor(n);
     if (!a) return 0;
-    const f = toStr(from ?? "").toLowerCase();
-    if (f !== "resume") {
+    if (toStr(from ?? "").toLowerCase() !== "resume") {
       const start = findStar(from);
       if (start) {
         a.worldX = start.positionX;
@@ -732,12 +737,22 @@ export function registerGameBuiltins(session: GameSession): void {
       }
     }
     const dest = findStar(to);
-    if (!dest) {
+    let tx: number, ty: number, tz: number, arriveStar: string;
+    if (dest) {
+      tx = dest.positionX; ty = dest.positionZ; tz = dest.positionY;
+      arriveStar = toStr(to).toLowerCase();
+    } else if (to !== undefined && to !== "" && !isNaN(Number(to))) {
+      const pt = toNum(to); // packed (x<<16)|y from walkdest(); z stays current
+      tx = (((pt >> 16) & 0xffff) ^ 0x8000) - 0x8000;
+      ty = ((pt & 0xffff) ^ 0x8000) - 0x8000;
+      tz = a.worldZ;
+      arriveStar = "walkonpath"; // no named destination; keep the sentinel
+    } else {
       log(`walkonpath: star "${toStr(to ?? "")}" not found`);
       return 0;
     }
-    session.startWalk(toStr(n), dest.positionX, dest.positionZ, dest.positionY);
-    a.starName = toStr(to).toLowerCase();
+    a.starName = "walkonpath"; // sentinel while moving
+    session.startWalk(toStr(n), tx, ty, tz, arriveStar);
   });
   r("iswalk", (_i, [n]) => (n !== undefined && session.isWalk(toStr(n)) ? 1 : 0));
   r("stopwalk", (_i, [n]) => {

@@ -1204,5 +1204,56 @@ for (const [label, releaseX, releaseY, expectExit] of [
   session.closePuppetFile();
 }
 
+// --- 35. walkonpath: sentinel while moving, dest on arrival, endwalk fires -
+{
+  const { session, viewer } = await newSession();
+  session.interp.globals.set("mission", 1);
+  session.interp.globals.set("tour", 1); // morrowidle idles in place (deterministic)
+  await session.openSetFile("deckbd.set", "scene33", "view94");
+  const v = viewer();
+  const morrow = session.actorRuntime.get("morrow")!;
+  session.interp.builtins.get("walkonpath")!(
+    session.interp, ["morrow", "morrow.1", "morrow.2"], null as never, null as never,
+  );
+  // while walking, actorstar() reports the sentinel (resume detection)
+  const sentinel = morrow.starName === "walkonpath" && session.isWalk("morrow");
+  let guard = 0;
+  while (session.isWalk("morrow") && guard++ < 500) { v.tick((clock += 100)); await drain(); }
+  await drain(); // let the arrival endwalk() dispatch run
+  // on arrival: settles on the destination star + endwalk fired (morrowidle
+  // reschedules itself as an actor loop — proof the arrival handler ran)
+  const endwalkFired = session.loops.some((l) => l.kind === "actor" && l.name === "morrow");
+  check(
+    "walkonpath: sentinel while moving, dest star on arrival, endwalk fires",
+    sentinel && morrow.starName === "morrow.2" && endwalkFired,
+    `sentinel=${sentinel} arrived=${morrow.starName} endwalkLoop=${endwalkFired}`,
+  );
+}
+
+// --- 36. actor facing: sprite direction faces the camera (front, not back) -
+{
+  const { session } = await newSession();
+  await session.openSetFile("deckbd.set");
+  const morrow = session.actorRuntime.get("morrow")!;
+  const stand = morrow.member.poses.find((p) => p.name === "stand")!;
+  morrow.poseName = "stand";
+  morrow.step = 0;
+  // actor due east of the camera → actor→camera bearing is 128 (west)
+  morrow.worldX = 1000; morrow.worldY = 0; morrow.worldZ = 0; morrow.scale = 900;
+  const cam = { x: 0, y: 0, z: 0, deg: 0, f: 256, cx: 256, cy: 132, clipW: 512, clipH: 264 };
+  const proj = { x: 256, y: 132, depth: 482 };
+  const front = morrow.cast.frame(stand.steps[0][0]!.location); // dir 0 (angle 0) = face toward viewer
+  const back = morrow.cast.frame(stand.steps[0][4]!.location); //  dir 4 (angle 128) = back
+  morrow.deg = 128; // facing the camera → must show the FRONT sprite
+  const facing = session.actorRuntime.rect(morrow, proj, cam)?.f;
+  morrow.deg = 0; // facing away (east, into the scene) → BACK sprite
+  const away = session.actorRuntime.rect(morrow, proj, cam)?.f;
+  check(
+    "actor facing the camera shows the front sprite, not the back",
+    facing === front && away === back,
+    `facing=front?${facing === front} away=back?${away === back}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

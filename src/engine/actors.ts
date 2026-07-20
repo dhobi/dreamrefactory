@@ -131,8 +131,13 @@ export class ActorRuntime {
     if (!pose || !pose.steps.length) return null;
     const step = pose.steps[a.step % pose.steps.length];
     if (!step) return null;
-    const dx = a.worldX - cam.x;
-    const dy = a.worldY - cam.y;
+    // which side you see depends on where you STAND relative to the actor, so
+    // the reference is the bearing from the actor to the CAMERA. Sprite dir 0
+    // (angle 0) is the front (face toward viewer): when the actor faces the
+    // camera (deg == actor→camera bearing) rel is 0 → dir 0. (Using camera→
+    // actor here inverted it: facing you showed the back, and walkers moonwalked.)
+    const dx = cam.x - a.worldX;
+    const dy = cam.y - a.worldY;
     const bearing = Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
     const rel = (a.deg - bearing) & 0xff;
     const dir = Math.round(rel / 32) & 7;
