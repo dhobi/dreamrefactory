@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readSetFile } from "../src/df/set";
+import { readStgRegions } from "../src/df/stg";
 import { readContainerFile } from "../src/df/container";
 import { sniffScript } from "../src/df/script";
 import { parseScript } from "../src/engine/parser";
@@ -753,6 +754,115 @@ async function runAnimations(v: SetViewer): Promise<void> {
     "puppet frames are cached per-pup (no cross-character sprite reuse)",
     tested > 0 && stale === 0,
     `checked ${tested} shared locs, ${stale} reused the previous character`,
+  );
+}
+
+// --- 21. MAP.STG deck plan: opens, 8 deck flats, renders full-screen -------
+{
+  const { session } = await newSession();
+  await session.openSetFile("c73.set");
+  const ok = await session.openStageFile("map.stg");
+  check("map.stg opens as a stage", ok && session.stageName === "map.stg");
+  check(
+    "map.stg has 8 deck flats (Boat..G)",
+    session.stageFile?.flats.length === 8 &&
+      session.stageFile.flats[0].name === "Map 1",
+    `${session.stageFile?.flats.length} flats`,
+  );
+  session.setVisible = false;
+  await session.gotoFlat("Map 1");
+  const img = session.flatImage();
+  check(
+    "map.stg flat decodes to a full 512x384 deck plan",
+    !!img && img.width === 512 && img.height === 384,
+    img ? `${img.width}x${img.height}` : "no image",
+  );
+}
+
+// --- 22. point + live pointer builtins (makepoint/pointx/pointy/mouse) -----
+{
+  const { session, viewer } = await newSession();
+  // invoke a builtin by name (call/frame args are unused by these primitives)
+  const inv = (name: string, args: number[] = []): number =>
+    Number((session.interp.builtins.get(name) as unknown as (i: unknown, a: number[]) => number)(
+      session.interp,
+      args,
+    ));
+  const p = inv("makepoint", [353, 137]);
+  check(
+    "makepoint/pointx/pointy round-trip",
+    inv("pointx", [p]) === 353 && inv("pointy", [p]) === 137,
+    `p=${p} -> ${inv("pointx", [p])},${inv("pointy", [p])}`,
+  );
+  // mouse() reflects the live cursor the viewer publishes on move/click
+  await session.openSetFile("c73.set");
+  await viewer().hover(200, 150);
+  const m = inv("mouse");
+  check(
+    "mouse() reflects the pointer the viewer set on hover",
+    inv("pointx", [m]) === 200 && inv("pointy", [m]) === 150,
+    `mouse=${inv("pointx", [m])},${inv("pointy", [m])}`,
+  );
+}
+
+// --- 23. deck map interactivity: transtoflat opens to the player's deck ----
+{
+  const { session } = await newSession();
+  // player is in c73 = C Deck; currentpage() should map that to deck 4
+  await session.openSetFile("c73.set");
+  await session.transToFlat("map.stg");
+  check(
+    "transtoflat opens the map full-screen (setvisible off)",
+    session.stageName === "map.stg" && session.setVisible === false,
+    `stage=${session.stageName} setVisible=${session.setVisible}`,
+  );
+  check(
+    "map opens to the player's current deck (c73 -> C Deck = Map 4)",
+    session.currentFlat === "Map 4",
+    session.currentFlat,
+  );
+  check("flattoindex resolves names and indices", session.flatToIndex("Map 4") === 4);
+  // page to A Deck via the stage's gotopage (numeric gotoflat under the hood)
+  await session.runGlobal("gotopage", [2]);
+  check("gotopage pages decks (A Deck = Map 2)", session.currentFlat === "Map 2", session.currentFlat);
+  // leaving the map restores the in-game stage
+  await session.transFromFlat();
+  check(
+    "transfromflat restores the in-game stage",
+    session.stageName === "main.stg" && session.setVisible === true,
+    `stage=${session.stageName} setVisible=${session.setVisible}`,
+  );
+}
+
+// --- 24. deck map click-logic regions: deck buttons + OK are clickable -----
+{
+  const { session } = await newSession();
+  await session.openSetFile("c73.set");
+  await session.transToFlat("map.stg"); // opens to Map 4 (C Deck)
+  // regions decode with clean pascal names and in-bounds Y-first rects
+  const stg = session.stageFile!;
+  const flat = stg.flats.find((f) => f.name === session.currentFlat)!;
+  const regions = readStgRegions(stg.file.containers[flat.locationClickLogic].data);
+  check(
+    "click-logic regions parse (count + clean names + in bounds)",
+    regions.length === 12 &&
+      regions.every((r) => /^[\x20-\x7e]*$/.test(r.name)) &&
+      regions.every((r) => r.top >= 0 && r.left >= 0 && r.bottom <= 384 && r.right <= 512),
+    `${regions.length} regions, names e.g. "${regions[0]?.name}"`,
+  );
+  // clicking the Boat Deck button (fixed bottom-panel position) pages the map
+  const handled = await session.stageClickAt(123, 325);
+  check(
+    "clicking a deck button pages to that deck",
+    handled && session.currentFlat === "Map 1",
+    `handled=${handled} flat=${session.currentFlat}`,
+  );
+  // clicking OK runs exitmap -> transfromflat -> back to the in-game stage
+  await session.stageClickAt(399, 340);
+  check(
+    "clicking OK closes the deck map",
+    session.stageName === "main.stg" && session.setVisible === true,
+    `stage=${session.stageName} setVisible=${session.setVisible}`,
   );
 }
 

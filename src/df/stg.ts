@@ -21,10 +21,56 @@ export interface StgFlat {
   name: string;
 }
 
+/**
+ * A clickable region of a flat, decoded from its click-logic container. The
+ * rect is stored Y-first (top, left, bottom, right) like SET hotspots; a click
+ * inside it runs `script`'s mousedown handler (e.g. gotopage(3), exitmap,
+ * jumpbaby(...) on the deck map).
+ */
+export interface StgRegion {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** container index of the region's mousedown script */
+  script: number;
+  name: string;
+}
+
 export interface StgFile {
   file: DFContainerFile;
   paletteRaw: Uint8Array;
   flats: StgFlat[];
+}
+
+/**
+ * Decode a flat's click-logic container: a 1028-byte header, an int32 region
+ * count @0x404, then `count` 32-byte records — {i32 flag, i16 top/left/bottom/
+ * right, i32 scriptContainer, char[16] name}. Verified across all MAP.STG
+ * decks (size always == 1032 + count*32).
+ */
+export function readStgRegions(data: Uint8Array): StgRegion[] {
+  if (data.length < 1032) return [];
+  const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const count = v.getInt32(1028, true);
+  if (count < 0 || 1032 + count * 32 > data.length) return [];
+  const out: StgRegion[] = [];
+  for (let r = 0; r < count; r++) {
+    const o = 1032 + r * 32;
+    // name is a pascal string: length byte at +16, then the characters
+    const nameLen = Math.min(data[o + 16], 15);
+    let name = "";
+    for (let k = 0; k < nameLen; k++) name += String.fromCharCode(data[o + 17 + k]);
+    out.push({
+      top: v.getInt16(o + 4, true),
+      left: v.getInt16(o + 6, true),
+      bottom: v.getInt16(o + 8, true),
+      right: v.getInt16(o + 10, true),
+      script: v.getInt32(o + 12, true),
+      name,
+    });
+  }
+  return out;
 }
 
 export function readStgFile(data: Uint8Array): StgFile {

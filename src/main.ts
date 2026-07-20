@@ -339,9 +339,25 @@ screen.addEventListener("mousemove", (e) => {
   });
 });
 
+const DF_KEY: Record<string, string> = {
+  ArrowLeft: "leftarrow",
+  ArrowRight: "rightarrow",
+  ArrowUp: "uparrow",
+  ArrowDown: "downarrow",
+};
+
 window.addEventListener("keydown", (e) => {
   if (!viewer) return;
   const v = viewer;
+  // a full-screen overlay stage (the deck map) consumes all keys itself
+  if (!session.setVisible && session.stage?.script.codes.has("keydown")) {
+    const df = DF_KEY[e.key] ?? (e.key.length === 1 ? e.key.toLowerCase() : "");
+    if (df) {
+      void session.track(v.keyDown(df));
+      e.preventDefault();
+    }
+    return;
+  }
   switch (e.key) {
     case "ArrowRight":
       viewer.turn(0);

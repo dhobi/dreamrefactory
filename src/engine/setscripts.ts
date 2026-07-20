@@ -335,6 +335,11 @@ export function registerGameBuiltins(session: GameSession): void {
   r("openstagefile", async (_i, [n]) => ((await session.openStageFile(toStr(n ?? ""))) ? 1 : 0));
   r("closestagefile", () => session.closeStageFile().then(() => {}));
   r("gotoflat", (_i, [n]) => session.gotoFlat(toStr(n ?? "")).then(() => {}));
+  r("flattoindex", (_i, [n]) => session.flatToIndex(toStr(n ?? "")));
+  // transtoflat/transfromflat: enter/leave a full-screen overlay stage (the
+  // deck map opens via the "map" prop's open() -> transtoflat("map.stg"))
+  r("transtoflat", (_i, [n]) => session.transToFlat(toStr(n ?? "")).then(() => {}));
+  r("transfromflat", () => session.transFromFlat().then(() => {}));
 
   // prop commands — getter/setter by arity
   const prop = (name: Value) => session.propRuntime.get(toStr(name));
@@ -744,6 +749,29 @@ export function registerGameBuiltins(session: GameSession): void {
   for (const stub of ["puppetbase", "puppetparam", "puppetvisible", "puppetsubtitle", "puppetgrab", "puppetscramble"]) {
     r(stub, () => {});
   }
+
+  // ---- points & live pointer (mouse/button) --------------------------------
+  // Points pack as (x<<16)|y with signed 16-bit halves — the same layout as
+  // cameraxyz/actorxyz axis 4. Stage/UI scripts hit-test clicks themselves by
+  // reading mouse() (e.g. propxy(me, pointx(mouse()), pointy(mouse()))), so the
+  // engine only has to expose the live cursor, not resolve regions.
+  const s16 = (v: number): number => ((v & 0xffff) ^ 0x8000) - 0x8000;
+  r("makepoint", (_i, [x, y]) => ((toNum(x ?? 0) & 0xffff) << 16) | (toNum(y ?? 0) & 0xffff));
+  r("pointx", (_i, [p]) => s16((toNum(p ?? 0) >> 16) & 0xffff));
+  r("pointy", (_i, [p]) => s16(toNum(p ?? 0) & 0xffff));
+  r("mouse", () => session.pointerPoint());
+  r("button", () => (session.pointerDown ? 1 : 0));
+  r("numtostring", (_i, [n]) => String(toNum(n ?? 0)));
+  r("lowmemory", () => 0); // we never simulate the CD-era low-memory path
+  // stageparam(idx[, val]): per-stage scratch parameters, getter/setter by arity
+  const stageParams = new Map<number, Value>();
+  r("stageparam", (_i, [idx, val]) => {
+    const k = toNum(idx ?? 0);
+    if (val === undefined) return stageParams.get(k) ?? 0;
+    stageParams.set(k, val);
+    return 0;
+  });
+
   // helpers used around conversations that live outside any script
   r("cameraxyz", (_i, [axis]) => {
     const lis = session.listener();

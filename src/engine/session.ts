@@ -1,6 +1,6 @@
 import { readContainerFile } from "../df/container";
 import { SetFile, readSetFile } from "../df/set";
-import { StgFile, readStgFile } from "../df/stg";
+import { StgFile, StgRegion, readStgFile, readStgRegions } from "../df/stg";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "../df/image";
 import { readShpFile } from "../df/shp";
 import { sniffScript } from "../df/script";
@@ -604,6 +604,24 @@ export class GameSession {
   currentFlat = "none";
   /** whether the set view draws over the flat (setvisible builtin) */
   setVisible = true;
+
+  // ---- pointer state (mouse()/button()/pointx/pointy builtins) ------------
+  /** last pointer position in 512×384 screen space; scripts read it via mouse() */
+  pointerX = 0;
+  pointerY = 0;
+  /** whether a mouse button is currently held (button() builtin) */
+  pointerDown = false;
+
+  /** update the cursor position scripts see (called by the viewer on move/click) */
+  setPointer(x: number, y: number): void {
+    this.pointerX = x;
+    this.pointerY = y;
+  }
+
+  /** the pointer as the engine's packed point: (x<<16)|y, 16-bit halves */
+  pointerPoint(): number {
+    return ((this.pointerX & 0xffff) << 16) | (this.pointerY & 0xffff);
+  }
   private flatImageCache = new Map<
     string,
     { pixels: Uint8Array; width: number; height: number; palette: Uint8ClampedArray }
@@ -620,6 +638,7 @@ export class GameSession {
     const key = toStr(fileName).toLowerCase();
     if (this.stageName === key) return true;
     if (this.stageFile) await this.closeStageFile();
+    await this.ensureFile(key); // lazy browser provider: fetch before first read
     const data = this.files(key);
     if (!data) {
       this.onLog(`openstagefile: "${fileName}" not available`);
@@ -642,12 +661,33 @@ export class GameSession {
       this.flatNames.push(f.name);
     }
     this.onLog(`stage loaded: ${key} (${stg.flats.length} flat(s))`);
-    if (stg.flats.length) await this.gotoFlat(stg.flats[0].name);
+    this.currentFlat = "none";
+    // the stage's openstage handler runs first (the map pages to the player's
+    // current deck via gotopage(currentpage()) there); if it didn't pick a
+    // flat, fall back to the first one
+    if (this.stage?.script.codes.has("openstage")) {
+      try {
+        await this.interp.runHandler(this.stage, "openstage", [], { me: key, target: "" });
+      } catch (e) {
+        this.onLog(`${key}.openstage: ${(e as Error).message}`);
+      }
+    }
+    if (this.currentFlat === "none" && stg.flats.length) await this.gotoFlat(stg.flats[0].name);
     return true;
   }
 
   /** engine primitive: close the current stage (closestagefile) */
   async closeStageFile(): Promise<void> {
+    if (this.stage?.script.codes.has("closestage")) {
+      try {
+        await this.interp.runHandler(this.stage, "closestage", [], {
+          me: this.stageName,
+          target: "",
+        });
+      } catch (e) {
+        this.onLog(`${this.stageName}.closestage: ${(e as Error).message}`);
+      }
+    }
     await this.fireFlat(this.currentFlat, "closeflat");
     this.currentFlat = "none";
     this.stageFile = null;
@@ -656,16 +696,102 @@ export class GameSession {
     this.flatScripts.clear();
     this.flatNames = [];
     this.flatImageCache.clear();
+    this.regionCache.clear();
     this.refreshFallbacks();
   }
 
-  /** engine primitive: switch the active flat (gotoflat) */
+  /** resolve a flat reference — a name ("Map 3") or a 1-based index (3) */
+  private resolveFlat(ref: string): string {
+    const byName = this.flatNames.find((f) => f.toLowerCase() === ref.toLowerCase());
+    if (byName) return byName;
+    const idx = Number(ref);
+    if (Number.isInteger(idx) && idx >= 1 && idx <= this.flatNames.length) {
+      return this.flatNames[idx - 1];
+    }
+    return ref;
+  }
+
+  /** 1-based index of a flat (flattoindex builtin), 0 when unknown */
+  flatToIndex(ref: string): number {
+    const name = this.resolveFlat(ref);
+    return this.flatNames.findIndex((f) => f.toLowerCase() === name.toLowerCase()) + 1;
+  }
+
+  /** engine primitive: switch the active flat (gotoflat) — by name or index */
   async gotoFlat(name: string): Promise<void> {
-    const target =
-      this.flatNames.find((f) => f.toLowerCase() === toStr(name).toLowerCase()) ?? toStr(name);
+    const target = this.resolveFlat(toStr(name));
     await this.fireFlat(this.currentFlat, "closeflat");
     this.currentFlat = target;
     await this.fireFlat(target, "openflat");
+  }
+
+  /** stage that was active before transToFlat, restored by transFromFlat */
+  private prevStage = "none";
+
+  /**
+   * transtoflat: open a stage full-screen (e.g. the deck map) over the game,
+   * remembering the stage it replaced so transfromflat can restore it.
+   */
+  async transToFlat(fileName: string): Promise<void> {
+    this.prevStage = this.stageName;
+    if (await this.openStageFile(fileName)) this.setVisible = false;
+  }
+
+  /** transfromflat: leave the overlay stage and restore the in-game stage */
+  async transFromFlat(): Promise<void> {
+    this.setVisible = true;
+    const prev = this.prevStage;
+    this.prevStage = "none";
+    if (prev && prev !== "none" && prev !== this.stageName) {
+      await this.openStageFile(prev);
+    } else if (!prev || prev === "none") {
+      await this.closeStageFile();
+    }
+  }
+
+  /** clickable regions of the current flat (parsed from its click-logic), cached */
+  private regionCache = new Map<string, StgRegion[]>();
+
+  private currentFlatRegions(): StgRegion[] {
+    const stg = this.stageFile;
+    if (!stg || this.currentFlat === "none") return [];
+    const key = `${this.stageName}:${this.currentFlat}`;
+    let regs = this.regionCache.get(key);
+    if (!regs) {
+      const flat = stg.flats.find((f) => f.name === this.currentFlat);
+      const data = flat && stg.file.containers[flat.locationClickLogic]?.data;
+      regs = data ? readStgRegions(data) : [];
+      this.regionCache.set(key, regs);
+    }
+    return regs;
+  }
+
+  /**
+   * Route a click on a full-screen overlay stage (the deck map) to the region
+   * it lands in: hit-test the current flat's click-logic rects (Y-first) and
+   * run that region's mousedown script — gotopage(n) for the deck buttons,
+   * exitmap for OK, jumpbaby(...) for the red areas. Returns true if handled.
+   */
+  async stageClickAt(x: number, y: number): Promise<boolean> {
+    const stg = this.stageFile;
+    if (!stg) return false;
+    const hit = this.currentFlatRegions().find(
+      (r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom,
+    );
+    if (!hit) return false;
+    const inst = this.instanceFrom(stg.file.containers[hit.script]?.data, hit.name || "region");
+    if (!inst) return false;
+    inst.parent = this.stage; // gotopage/exitmap/jumpbaby resolve via the stage main
+    this.setPointer(x, y);
+    try {
+      await this.interp.runHandler(inst, "mousedown", [hit.name], {
+        me: hit.name,
+        target: hit.name,
+      });
+    } catch (e) {
+      this.onLog(`stage region ${hit.name}: ${(e as Error).message}`);
+    }
+    return true;
   }
 
   private async fireFlat(name: string, handler: string): Promise<void> {

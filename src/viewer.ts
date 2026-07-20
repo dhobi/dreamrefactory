@@ -177,6 +177,20 @@ export class SetViewer {
    */
   async keyDown(keyName: string): Promise<boolean> {
     if (this.inputLocked) return false;
+    // a full-screen overlay stage (the deck map) handles keys itself — page
+    // decks with arrows/letters — instead of the world turn/walk navigation
+    const stage = this.session.stage;
+    if (!this.session.setVisible && stage?.script.codes.has("keydown")) {
+      try {
+        await this.session.interp.runHandler(stage, "keydown", [keyName], {
+          me: stage.name,
+          target: "",
+        });
+      } catch (e) {
+        this.onLog(`stage keydown: ${(e as Error).message}`);
+      }
+      return true;
+    }
     let navigated = false;
     this.session.onNavigate = (dir) => {
       navigated = true;
@@ -641,6 +655,11 @@ export class SetViewer {
   }
 
   async click(x: number, y: number): Promise<void> {
+    // publish the cursor position so scripts that hit-test themselves (stage
+    // flats, draggable props) read the click via mouse()/pointx/pointy. Note:
+    // pointerDown stays false — held-button drag loops (`while button()`) need
+    // real pointerdown/up events, which atomic clicks don't provide yet.
+    this.session.setPointer(x, y);
     // conversation clicks reach the puppet even while its script is
     // suspended in puppetevent/puppetspeak
     if (this.session.puppet) {
@@ -650,6 +669,11 @@ export class SetViewer {
     if (this.movie) {
       this.movieClick(x, y);
       return;
+    }
+    // a full-screen overlay stage (the deck map) resolves clicks through its
+    // own click-logic regions — deck buttons, OK, red-area jumps
+    if (!this.session.setVisible && this.session.stage) {
+      if (await this.session.stageClickAt(x, y)) return;
     }
     if (this.inputLocked) return; // a script is running/suspended (delay)
     // props (UI band, inventory items) sit in front of everything
@@ -892,6 +916,7 @@ export class SetViewer {
 
   /** returns the DreamFactory cursor name for this position ("" = default) */
   async hover(x: number, y: number): Promise<string> {
+    this.session.setPointer(x, y); // keep mouse() current as the cursor moves
     if (this.session.puppet) return this.puppetBevelAt(x, y) >= 0 ? "touch" : "";
     const prop = this.session.propRuntime.propAt(
       x, y, this.session.setVisible ? this.worldCamera() : null,
