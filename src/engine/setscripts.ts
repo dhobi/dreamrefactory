@@ -394,6 +394,11 @@ export function registerGameBuiltins(session: GameSession): void {
     p.frameIdx = 0;
     p.lastTick = 0;
     p.frameLocked = false;
+    // entering a state plays its frames once (a door opens and holds open); a
+    // single-frame state has nothing to animate. A prop that is only made
+    // visible (never propview'd) keeps animating=false and holds frame 0.
+    const st = p.state();
+    p.animating = !!st && st.frames.length > 1;
   });
   r("propxy", (_i, [n, x, y]) => {
     const p = prop(n);

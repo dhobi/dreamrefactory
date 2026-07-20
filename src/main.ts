@@ -312,6 +312,20 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(boilBtn);
 
+  // dev: open the bomb-defuse stage (normally reached from C59.SET in mission 4
+  // when bombphase=1). openstage() is self-contained — it opens bomb.shp/.trk,
+  // sets up the props + globals, and starts the ambient loop — so a bare
+  // transToFlat reproduces the puzzle. Its shop/track/stg are prefetched in
+  // loadServerSet; the movies fetch on demand via onPlayMovie.
+  const bombBtn = document.createElement("button");
+  bombBtn.textContent = "💣 Bomb (dev)";
+  bombBtn.style.marginLeft = "0.5rem";
+  bombBtn.addEventListener("click", () => {
+    if (!viewer) return;
+    void session.track(session.transToFlat("bomb.stg"));
+  });
+  setSelectWrap.appendChild(bombBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).
@@ -401,6 +415,7 @@ async function loadServerSet(setName: string): Promise<void> {
      "trunk.stg", "trunk.shp", "grammy.sfx", "oldtune.trk", "oldboss.trk",
      "enigma.stg", "enigma.shp", "enigma.sfx",
      "boil.stg", "boil.shp", "boilflat.trk", "boil.trk",
+     "bomb.stg", "bomb.shp", "bomb.trk",
      "house.shp", "inven.shp", "inven.trk", "gang.cst", "extra.cst"].map(fetchIntoStore),
   );
   try {

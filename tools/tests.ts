@@ -1490,5 +1490,68 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- 45. BOMB defuse: hit-test routing, changedone, timer loop, OK win ------
+// The bomb is a timed multi-switch logic puzzle. Exercises: openstage setup;
+// authentic click routing (hit-test which prop is drawn under a region, then
+// dispatch its mousedown with the point — the prop's own pointinbutton reads
+// the sub-region); changedone() re-evaluation; the NEW stage-flat self-re-arming
+// timer (makeloop("flat", currentflat(), "unibomnoise", …) firing the stage
+// handler each service step, sweeping the second hand); and the hitok() win
+// (door open + key out + power spent -> addinven + transfromflat).
+{
+  const { session } = await newSession();
+  await session.openSetFile("b59.set");
+  await session.transToFlat("bomb.stg");
+  await drain();
+  const g = (n: string): unknown => session.interp.globals.get(n);
+  const setup = {
+    door: g("unibomdoor"),
+    power: g("unibompower"),
+    sw1: session.propRuntime.get("switch1")?.deg,
+  };
+  const center = (name: string): [number, number] => {
+    const r = session.flatRegion(session.currentFlat, name)!;
+    return [Math.floor((r.left + r.right) / 2), Math.floor((r.top + r.bottom) / 2)];
+  };
+  const pt = (x: number, y: number): number => (x << 16) | (y & 0xffff);
+  const clickRegion = async (name: string): Promise<void> => {
+    const [x, y] = center(name);
+    session.pointerX = x;
+    session.pointerY = y;
+    const p = session.propRuntime.propAt(x, y, null, false)!; // prop drawn there
+    const inst = session.propScripts.get(p.group.name)!;
+    await session.interp.runHandler(inst, "mousedown", [pt(x, y)], {
+      me: p.group.name,
+      target: p.group.name,
+    });
+    await drain();
+  };
+  await clickRegion("3B"); // top switch -> power on, starts the countdown
+  const poweredOn =
+    g("unibompower") === 1 &&
+    session.loops.some((l) => l.kind === "flat" && l.handler === "unibomnoise") &&
+    session.currentThemeName === "bomb.trk";
+  const tin0 = session.propRuntime.get("tinhands")?.deg ?? 0;
+  let now = 0;
+  for (let i = 0; i < 90; i++) {
+    session.tickTime((now += 66));
+    await drain();
+  }
+  const ticked = (session.propRuntime.get("tinhands")?.deg ?? 0) > tin0;
+  // win: reach the OK-accepted state directly, then hit OK -> hitok() leaves
+  session.interp.globals.set("unibomdoor", 0);
+  session.interp.globals.set("unibompower", -1);
+  session.propRuntime.get("key")!.deg = 5;
+  const flatBefore = session.currentFlat;
+  await session.sendToButton(session.currentFlat, "OK", "mousedown", [pt(...center("OK"))], "OK");
+  await drain();
+  const won = flatBefore === "Bomb 1" && session.currentFlat !== "Bomb 1";
+  check(
+    "bomb: openstage setup, click routing, ticking timer loop, OK win",
+    setup.door === 1 && setup.power === 0 && setup.sw1 === 1 && poweredOn && ticked && won,
+    `setup=${JSON.stringify(setup)} poweredOn=${poweredOn} ticked=${ticked} leftFlat=${won}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

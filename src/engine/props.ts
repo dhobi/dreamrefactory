@@ -88,6 +88,14 @@ export class PropInstance {
   lastTick = 0;
   /** frame pinned by propdeg (a rotational/selector prop) — skip auto-anim */
   frameLocked = false;
+  /**
+   * Play this state's frames once (set by propview on a state change). A prop
+   * merely made visible in its default state does NOT animate — it holds frame
+   * 0 until a propview state change or a propdeg frame select. Without this the
+   * bomb key (6 discrete frames, opened by clicking) auto-played 0→5 the moment
+   * openstage made it visible, so the puzzle started with the case open + empty.
+   */
+  animating = false;
 
   constructor(
     readonly group: PropGroup,
@@ -164,14 +172,17 @@ export class PropRuntime {
    */
   tick(now: number, frameMs: number): void {
     for (const p of this.props.values()) {
-      if (!p.visible || p.frameLocked) continue;
+      if (!p.visible || p.frameLocked || !p.animating) continue;
       const st = p.state();
-      if (!st || st.frames.length < 2) continue;
-      if (p.frameIdx >= st.frames.length - 1) continue;
+      if (!st || st.frames.length < 2 || p.frameIdx >= st.frames.length - 1) {
+        p.animating = false;
+        continue;
+      }
       if (!p.lastTick) p.lastTick = now;
       if (now - p.lastTick >= frameMs) {
         p.lastTick = now;
         p.frameIdx++;
+        if (p.frameIdx >= st.frames.length - 1) p.animating = false; // hold last frame
       }
     }
   }

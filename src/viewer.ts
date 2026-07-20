@@ -272,9 +272,16 @@ export class SetViewer {
     // pacing: soundtrack duration when present; otherwise animate at a
     // default rate if there are pause frames, else pure click-through
     // 145 ms/frame measured from FAUCET.MOV: Brook Babbling (3.62 s) spans
-    // exactly its 25 water frames
+    // exactly its 25 water frames. But audio may be a short one-shot SFX, not a
+    // pacing track — bombopen.mov's latch click (~0.4 s) over 22 frames would
+    // otherwise play the suitcase opening at ~50 fps. Floor at a native movie
+    // rate (~15 fps): audio can only make frames SLOWER (faucet stays 145 ms),
+    // never faster than the floor. The soundtrack still plays once from frame 0.
+    const NATIVE_FRAME_MS = 66; // ~15 fps
     const interval =
-      audioSec > 0 ? (audioSec * 1000) / frames.length : hasRegions ? 145 : 0;
+      audioSec > 0
+        ? Math.max(NATIVE_FRAME_MS, (audioSec * 1000) / frames.length)
+        : hasRegions ? 145 : 0;
     const frameByName = new Map<string, number>();
     mov.frames.forEach((f, i) => f.name && frameByName.set(f.name.toLowerCase(), i));
     this.movie = {
@@ -406,6 +413,16 @@ export class SetViewer {
   private endMovie(): void {
     this.movie = null;
     this.session.audio.halt("voice");
+    // Reveal whatever the movie transitioned to. blackscreen() paints the
+    // screen black one-shot before an intro movie (bomb's openstage:
+    // blackscreen -> playmovie("bombopen.mov") -> setvisible(false) with no
+    // blacktoscreen to follow); in our retained renderer that left fade.level
+    // pinned at 1, so the flat stayed black after the movie. When no animated
+    // fade is in progress (a queued screentoblack/blacktoscreen owns the
+    // level, e.g. spotmovie's postmovie), clear the one-shot black now.
+    if (!this.session.fade.queue.length && !this.session.fade.snapshot) {
+      this.session.fade.level = 0;
+    }
     this.showView();
   }
 
@@ -733,10 +750,18 @@ export class SetViewer {
         (s): s is NonNullable<typeof s> => !!s && s.script.codes.has("mousedown"),
       );
       if (chain.length) {
+        // mousedown's ARGUMENT is the click point, not the prop name — the
+        // original boot routes `sendtoprop(name, mousedown(thepoint))`, so a
+        // handler like the bomb switches' `pointinbutton(currentflat(), "3B",
+        // arg)` can hit-test the sub-region under the cursor. The prop NAME is
+        // carried in the me/target context (the shop-main dispatcher keys on
+        // target). Passing the name as the arg silently broke point-reading
+        // props (every switch click was a no-op at point 0,0).
+        const point = this.session.pointerPoint();
         this.session.interp.eventConsumed = false;
         for (const inst of chain) {
           try {
-            const res = await this.session.interp.runHandler(inst, "mousedown", [name], {
+            const res = await this.session.interp.runHandler(inst, "mousedown", [point], {
               me: name,
               target: name,
             });
@@ -1075,7 +1100,11 @@ export class SetViewer {
       const img = ctx.createImageData(f.width, f.height);
       indexedToRGBA(f.pixels, f.width, f.height, m.palette, img.data);
       ctx.putImageData(img, 0, 0);
-      this.applyFade(ctx);
+      // A live movie presents its own pixels at full brightness — it is NOT
+      // dimmed by the persistent fade level. Fade-OUTs around a movie use the
+      // snapshot branch above (screentoblack captures the frame first), and a
+      // preceding blackscreen() is a one-shot clear the movie draws over. Do
+      // NOT applyFade here, or an intro movie after blackscreen renders black.
       return;
     }
     // stage flat active: full 512×384 screen — flat image as background,
