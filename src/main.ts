@@ -261,6 +261,77 @@ function rebuildSetSelect(): void {
     void session.track(session.transToFlat("wireless.stg"));
   });
   setSelectWrap.appendChild(wirelessBtn);
+
+  // dev: mission/state panel. Puzzle screens are gated on the mission/phase
+  // globals + prop/actor owners + tuning; these controls reproduce a testable
+  // state in one click (the alternative is a long dbg incantation each time).
+  const stateWrap = document.createElement("div");
+  stateWrap.style.marginTop = "0.4rem";
+  stateWrap.style.fontSize = "0.85em";
+  const label = document.createElement("span");
+  label.textContent = "dev state: ";
+  label.style.opacity = "0.7";
+  stateWrap.appendChild(label);
+
+  const mkSelect = (title: string, global: string, values: number[]): HTMLSelectElement => {
+    const s = document.createElement("select");
+    s.title = title;
+    s.style.marginRight = "0.4rem";
+    for (const v of values) {
+      const o = document.createElement("option");
+      o.value = String(v);
+      o.textContent = `${title} ${v}`;
+      s.appendChild(o);
+    }
+    s.addEventListener("change", () => session.interp.globals.set(global, Number(s.value)));
+    return s;
+  };
+  const missionSel = mkSelect("mission", "mission", [1, 2, 3, 4]);
+  const phaseSel = mkSelect("phase", "phase", [0, 1, 2, 3]);
+  stateWrap.append(missionSel, phaseSel);
+
+  // find the flat that owns the wireless morse readout (RX receive / TX send)
+  const wirelessReadoutFlat = (): string | null => {
+    for (const fn of session.flatNames) {
+      if (session.flatScripts.get(fn)?.script.codes.has("keydown")) return fn;
+    }
+    return null;
+  };
+  // arm the wireless RX/TX puzzle: sender on + tuner tuned + breaker in mode,
+  // then jump to the readout flat so its openflat runs setuprx()/setuptx()
+  const armWireless = async (mode: "rx" | "tx"): Promise<void> => {
+    if (!viewer) return;
+    session.interp.globals.set("mission", Number(missionSel.value));
+    session.interp.globals.set("phase", Number(phaseSel.value));
+    if (session.stageName !== "wireless.stg") await session.transToFlat("wireless.stg");
+    const own = (n: string, o: string) => {
+      const p = session.propRuntime.get(n);
+      if (p) p.owner = o;
+    };
+    own("senderhandle", "on");
+    own("tunerknob", "on");
+    const needle = session.propRuntime.get("tunerneedle");
+    if (mode === "rx") {
+      own("breakerhandle", "rx");
+      if (needle) { needle.anchorX = 256; needle.anchorY = 84; needle.value = 84; } // RX window 81-87
+    } else {
+      own("breakerhandle", "tx");
+      if (needle) { needle.anchorX = 256; needle.anchorY = 37; needle.value = 37; } // TX window 34-40
+      const purs = session.actorRuntime.get("purs"); // purser handed over the Thayer gram
+      if (purs) purs.owner = "sendgram";
+    }
+    const flat = wirelessReadoutFlat();
+    if (flat) await session.gotoFlat(flat);
+  };
+  const mkPreset = (text: string, mode: "rx" | "tx"): HTMLButtonElement => {
+    const b = document.createElement("button");
+    b.textContent = text;
+    b.style.marginRight = "0.4rem";
+    b.addEventListener("click", () => void session.track(armWireless(mode)));
+    return b;
+  };
+  stateWrap.append(mkPreset("📻 RX armed", "rx"), mkPreset("📻 TX + Thayer gram", "tx"));
+  setSelectWrap.appendChild(stateWrap);
 }
 
 /** activate a set that lives on the dev server: fetch it + its siblings */
