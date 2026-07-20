@@ -737,7 +737,12 @@ export class GameSession {
     if (await this.openStageFile(fileName)) this.setVisible = false;
   }
 
-  /** transfromflat: leave the overlay stage and restore the in-game stage */
+  /**
+   * transfromflat: leave the overlay stage and restore the in-game stage. The
+   * boot's full version does this via restorescreen(); we mirror its essential
+   * step — completing a pending map jump by changeset()-ing to the destination
+   * the red-area click stashed in jumpset/jumpscene/jumpview.
+   */
   async transFromFlat(): Promise<void> {
     this.setVisible = true;
     const prev = this.prevStage;
@@ -746,6 +751,13 @@ export class GameSession {
       await this.openStageFile(prev);
     } else if (!prev || prev === "none") {
       await this.closeStageFile();
+    }
+    const jumpset = toStr(this.interp.globals.get("jumpset") ?? "");
+    if (jumpset) {
+      const jumpscene = toStr(this.interp.globals.get("jumpscene") ?? "");
+      const jumpview = toStr(this.interp.globals.get("jumpview") ?? "");
+      this.interp.globals.set("jumpset", "");
+      await this.runGlobal("changeset", [jumpset, jumpscene, jumpview]);
     }
   }
 
@@ -781,7 +793,10 @@ export class GameSession {
     if (!hit) return false;
     const inst = this.instanceFrom(stg.file.containers[hit.script]?.data, hit.name || "region");
     if (!inst) return false;
-    inst.parent = this.stage; // gotopage/exitmap/jumpbaby resolve via the stage main
+    // resolve unqualified calls through the current FLAT script first (it
+    // defines jumpbaby for the red areas), which chains to the stage main
+    // (gotopage/exitmap/jumppapa) via the fallback scripts
+    inst.parent = this.flatScripts.get(this.currentFlat.toLowerCase()) ?? this.stage;
     this.setPointer(x, y);
     try {
       await this.interp.runHandler(inst, "mousedown", [hit.name], {

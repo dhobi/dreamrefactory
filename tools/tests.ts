@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { readSetFile } from "../src/df/set";
 import { readStgRegions } from "../src/df/stg";
 import { readContainerFile } from "../src/df/container";
-import { sniffScript } from "../src/df/script";
+import { sniffScript, scriptToText } from "../src/df/script";
 import { parseScript } from "../src/engine/parser";
 import { GameSession } from "../src/engine/session";
 import { ScriptInstance } from "../src/engine/interp";
@@ -863,6 +863,38 @@ async function runAnimations(v: SetViewer): Promise<void> {
     "clicking OK closes the deck map",
     session.stageName === "main.stg" && session.setVisible === true,
     `stage=${session.stageName} setVisible=${session.setVisible}`,
+  );
+}
+
+// --- 25. deck map red-area jump: click a zone -> travel to that location ---
+{
+  const { session } = await newSession();
+  await session.openSetFile("c73.set");
+  // mapdisabled() gates jumping on owning the bag + watch (and not mission 4)
+  const bag = session.propRuntime.get("bag");
+  const watch = session.propRuntime.get("watch");
+  if (bag) bag.owner = "frank";
+  if (watch) watch.owner = "frank";
+  await session.transToFlat("map.stg"); // -> Map 4 (C Deck)
+  // find a red-area (jumpbaby) region and click its centre
+  const stg = session.stageFile!;
+  const flat = stg.flats.find((f) => f.name === session.currentFlat)!;
+  const regions = readStgRegions(stg.file.containers[flat.locationClickLogic].data);
+  let jumped = "";
+  for (const r of regions) {
+    const toks = sniffScript(stg.file.containers[r.script].data);
+    if (!toks || !scriptToText(toks).includes("jumpbaby")) continue;
+    await session.stageClickAt(
+      Math.round((r.left + r.right) / 2),
+      Math.round((r.top + r.bottom) / 2),
+    );
+    jumped = session.currentSetName;
+    break;
+  }
+  check(
+    "clicking a red map area travels there and closes the map",
+    jumped !== "" && jumped !== "c73" && session.stageName === "main.stg" && session.setVisible,
+    `set=${jumped} stage=${session.stageName}`,
   );
 }
 

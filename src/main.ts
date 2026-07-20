@@ -236,6 +236,20 @@ function rebuildSetSelect(): void {
   add.style.marginLeft = "0.5rem";
   add.addEventListener("click", () => fileInput.click());
   setSelectWrap.appendChild(add);
+  // dev affordance: open the deck map (normally triggered by the inventory
+  // map prop, which isn't wired into the dev harness yet)
+  const mapBtn = document.createElement("button");
+  mapBtn.textContent = "🗺 Deck Map (dev)";
+  mapBtn.style.marginLeft = "0.5rem";
+  mapBtn.addEventListener("click", () => {
+    if (!viewer) return;
+    // Dev convenience: the game's mapdisabled() gate refuses deck-map jumps
+    // until Frank owns the bag + watch. Setting the game's own `tour` flag
+    // makes mapdisabled() return false, so jumps are testable from any set.
+    session.interp.globals.set("tour", 1);
+    void session.track(session.transToFlat("map.stg"));
+  });
+  setSelectWrap.appendChild(mapBtn);
 }
 
 /** activate a set that lives on the dev server: fetch it + its siblings */
@@ -250,7 +264,7 @@ async function loadServerSet(setName: string): Promise<void> {
   // prefetch siblings so the viewer finds them synchronously at construction
   await Promise.all(
     [`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`,
-     "unilib.trk", "bootfile", "main.stg", "inven1.stg", "inven2.stg",
+     "unilib.trk", "bootfile", "main.stg", "map.stg", "inven1.stg", "inven2.stg",
      "house.shp", "inven.shp", "inven.trk", "gang.cst", "extra.cst"].map(fetchIntoStore),
   );
   try {
