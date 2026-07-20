@@ -338,6 +338,28 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(turbineBtn);
 
+  // dev: open the blackjack minigame (normally entered from the house UI via
+  // the blkjack1.pup dealer conversation, which trans-to-flats then deals). The
+  // full game (shuffle/deal/hit/stay/dealer AI/win) lives in the flat script;
+  // start it directly: firsthand=1 skips the puppet "play again" prompt, then
+  // run initgame() on the flat. After one hand it exits (no puppet to re-deal).
+  const bjBtn = document.createElement("button");
+  bjBtn.textContent = "🃏 Blackjack (dev)";
+  bjBtn.style.marginLeft = "0.5rem";
+  bjBtn.addEventListener("click", async () => {
+    if (!viewer) return;
+    session.interp.globals.set("firsthand", 1);
+    if (session.interp.globals.get("mission") === undefined) session.interp.globals.set("mission", 1);
+    await session.track(session.transToFlat("blkjack.stg"));
+    const flat = session.flatScripts.get(session.currentFlat.toLowerCase());
+    if (flat) {
+      await session.track(
+        session.interp.runHandler(flat, "initgame", [], { me: session.currentFlat, target: "" }),
+      );
+    }
+  });
+  setSelectWrap.appendChild(bjBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).
@@ -429,6 +451,7 @@ async function loadServerSet(setName: string): Promise<void> {
      "boil.stg", "boil.shp", "boilflat.trk", "boil.trk",
      "bomb.stg", "bomb.shp", "bomb.trk",
      "turbine.stg", "turbine.shp", "turbpuz.trk",
+     "blkjack.stg", "blkjack.shp", "blkjack.trk",
      "house.shp", "inven.shp", "inven.trk", "gang.cst", "extra.cst"].map(fetchIntoStore),
   );
   try {

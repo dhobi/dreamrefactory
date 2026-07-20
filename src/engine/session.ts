@@ -861,6 +861,16 @@ export class GameSession {
     if (this.stageName === "main.stg") {
       await this.sendEvent("sendtoshop", "house.shp", "hideinterface", [], "transtoflat");
     }
+    // Entering an overlay presents fresh content, so lift any leftover
+    // transition-black from the previous screen. HOUSE fades the blackjack
+    // dealer puppet out — screentoblack("puppet") — and THEN transtoflat()s to
+    // the game; the reveal is a wipe visualeffect we render as instant, so
+    // without this the game table stayed black. The flat's own openstage may
+    // re-establish a fade (bomb: blackscreen + intro movie), which still runs
+    // after this because openStageFile fires the openstage lifecycle.
+    this.fade.level = 0;
+    this.fade.queue.length = 0;
+    this.fade.snapshot = null;
     if (await this.openStageFile(fileName)) this.setVisible = false;
   }
 

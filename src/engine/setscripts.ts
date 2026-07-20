@@ -454,6 +454,15 @@ export function registerGameBuiltins(session: GameSession): void {
     if (!p) return 0;
     if (v === undefined) return p.deg;
     p.deg = v;
+    // A world prop's propdeg is an ORIENTATION (0..255), not a frame index: the
+    // frame is chosen at draw time from this facing vs. the camera bearing (a
+    // 32-view card table, a 21-view fire). Clamping it as a frame index froze
+    // blkjacktable/flames on their last frame. Screen-space props keep the
+    // direct selector behaviour (deck-map deck highlight, boiler/turbine sliders).
+    if (p.worldSpace) {
+      p.directional = true;
+      return;
+    }
     const st = p.state();
     if (st && st.frames.length) {
       p.frameIdx = Math.max(0, Math.min(st.frames.length - 1, Number(v) || 0));
@@ -592,6 +601,16 @@ export function registerGameBuiltins(session: GameSession): void {
     return parts.join(sep);
   });
   r("stringlength", (_i, [s]) => toStr(s ?? "").length);
+  // variable(name[, val]): dynamic global access by computed name — getter with
+  // one arg, setter with two. Blackjack tracks per-side state this way
+  // (variable(who @ "count") -> playercount/dealercount, variable(who @
+  // "downcard", card)). Reads/writes the same global table as named globals.
+  r("variable", (_i, [name, val]) => {
+    const key = toStr(name ?? "");
+    if (val === undefined) return interp.globals.get(key) ?? 0;
+    interp.globals.set(key, val);
+    return 0;
+  });
 
   // screen transitions: visual polish for later — behave as instant for now
   for (const t of [
@@ -716,6 +735,28 @@ export function registerGameBuiltins(session: GameSession): void {
       case 4: return ((star.positionX & 0xffff) << 16) | (star.positionZ & 0xffff);
       default: return 0;
     }
+  });
+
+  // propstar(name, star): place a prop at a named world point of the current
+  // set — the world-space twin of propxyz. Set-decoration props (the smoking-
+  // room card table, the fireplace flames, cafe/bath tables, potted plants) use
+  // it instead of raw coordinates. Without it these stayed screen-space overlays
+  // pinned at the anchor centre, floating in the middle of every view. The star
+  // table is the SET's actor table (findStar); rotation seeds the facing, which
+  // a following propdeg() may override.
+  r("propstar", (_i, [n, starName]) => {
+    const p = prop(n);
+    if (!p) return "";
+    if (starName === undefined) return p.starName;
+    const star = findStar(starName);
+    if (star) {
+      p.worldSpace = true;
+      p.worldX = star.positionX;
+      p.worldY = star.positionZ;
+      p.worldZ = star.positionY;
+      p.deg = star.rotation8 & 0xff;
+    }
+    p.starName = toStr(starName).toLowerCase();
   });
 
   // ---- actors (CST casts) --------------------------------------------------

@@ -77,6 +77,17 @@ export class PropInstance {
   dist = 0;
   /** placed with propxyz: drawn via world→screen projection */
   worldSpace = false;
+  /** name of the star the prop was placed on (propstar getter) */
+  starName = "";
+  /**
+   * A world prop whose frames are 8-way-style DIRECTIONAL views (a card table,
+   * a plant), not an animation — set when propdeg() gives it an orientation.
+   * The drawn frame is then chosen at composite time from the prop's facing
+   * relative to the camera bearing, exactly like an actor (TI.EXE shares the
+   * sprite draw path). Without this, blkjacktable/flames froze on one frame and
+   * looked wrong from every view but one.
+   */
+  directional = false;
   /** set this world prop belongs to (propset) — only drawn there */
   setName = "";
   worldX = 0;
@@ -219,10 +230,26 @@ export class PropRuntime {
     return out.sort((a, b) => b.proj.depth - a.proj.depth);
   }
 
+  /**
+   * The frame to draw for a projected world prop. A `directional` prop (one
+   * given an orientation with propdeg) picks its frame the same way actors do:
+   * from the prop's facing relative to the bearing from the prop to the CAMERA,
+   * quantized to the frame count. Otherwise it uses the (possibly animated)
+   * frameIdx, so animated world props are unaffected.
+   */
+  private worldFrameIdx(p: PropInstance, nFrames: number, cam: WorldCamera): number {
+    if (!p.directional || nFrames < 2) return Math.min(p.frameIdx, nFrames - 1);
+    const dx = cam.x - p.worldX;
+    const dy = cam.y - p.worldY;
+    const bearing = Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
+    const rel = (Number(p.deg) - bearing) & 0xff;
+    return Math.round((rel * nFrames) / 256) % nFrames;
+  }
+
   /** screen rect + scale of a projected prop frame (sprites shrink with depth) */
-  private worldRect(p: PropInstance, proj: { x: number; y: number; depth: number }) {
+  private worldRect(p: PropInstance, proj: { x: number; y: number; depth: number }, cam: WorldCamera) {
     const st = p.state()!;
-    const idx = Math.min(p.frameIdx, st.frames.length - 1);
+    const idx = this.worldFrameIdx(p, st.frames.length, cam);
     const f = p.shop.frame(st.frames[idx]);
     // TI.EXE world→screen: k = propscale(per-mille) × refScale / (1000 × depth).
     // refScale is the frame record's i16 @+42 (uniformly 96 across the shipped
@@ -255,7 +282,7 @@ export class PropRuntime {
       const world = this.worldDrawList(cam);
       for (let i = world.length - 1; i >= 0; i--) {
         const { p, proj } = world[i];
-        const r = this.worldRect(p, proj);
+        const r = this.worldRect(p, proj, cam);
         if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
         const sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
         const sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
@@ -277,7 +304,7 @@ export class PropRuntime {
     // world-space props first (they belong to the scene), far to near
     if (cam) {
       for (const { p, proj } of this.worldDrawList(cam)) {
-        const r = this.worldRect(p, proj);
+        const r = this.worldRect(p, proj, cam);
         const maxY = Math.min(cam.clipH, height, r.y + r.h);
         const maxX = Math.min(cam.clipW, width, r.x + r.w);
         for (let ty = Math.max(0, r.y); ty < maxY; ty++) {

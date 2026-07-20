@@ -1601,5 +1601,87 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- 47. BLACKJACK: deal + variable() + transToFlat lifts transition-black --
+// Self-contained game (shuffle/deal/hit/dealer/win) launched from a dealer
+// puppet. Exercises variable(name[,val]) dynamic globals (playercount via
+// `variable(who @ "count")`), and the fade-lift: HOUSE screentoblack("puppet")s
+// the dealer out THEN transtoflat("blkjack.stg") — the reveal is a wipe
+// visualeffect we render instantly, so transToFlat must clear the leftover
+// black or the table stays dark ("black screen after the talk").
+{
+  const { session } = await newSession();
+  // simulate the post-dialog state: screen faded to black + stale snapshot
+  session.fade.level = 1;
+  session.fade.snapshot = { rgba: new Uint8ClampedArray(4), width: 1, height: 1 };
+  session.fade.queue.push({ to: 1, steps: 10 });
+  session.interp.globals.set("firsthand", 1);
+  session.interp.globals.set("mission", 1);
+  await session.openSetFile("halla.set");
+  await session.transToFlat("blkjack.stg");
+  const fadeLifted = session.fade.level === 0 && !session.fade.snapshot && session.fade.queue.length === 0;
+  const flat = session.flatScripts.get(session.currentFlat.toLowerCase())!;
+  let now = 0;
+  const runFlat = async (h: string): Promise<void> => {
+    const p = flat ? session.interp.runHandler(flat, h, [], { me: session.currentFlat, target: "" }) : Promise.resolve();
+    let done = false;
+    void p.then(() => (done = true)).catch(() => (done = true));
+    for (let i = 0; i < 500 && !done; i++) {
+      session.tickTime((now += 66));
+      await drain();
+    }
+    await p.catch(() => {});
+  };
+  await runFlat("initgame");
+  const g = (n: string): number => Number(session.interp.globals.get(n) ?? -1);
+  const dealt = g("playercount") === 2 && g("dealercount") === 2 && g("playerphase") === 1;
+  // variable() drives the per-side counts
+  const varWorks = Number(session.interp.globals.get("playercount")) === 2;
+  check(
+    "blackjack: transToFlat lifts transition-black; deal fills both hands via variable()",
+    fadeLifted && dealt && varWorks,
+    `fadeLifted=${fadeLifted} player=${g("playertotal")}(${g("playercount")}) dealer=${g("dealertotal")}(${g("dealercount")}) phase=${g("playerphase")}`,
+  );
+}
+
+// --- 48. smoke: blkjacktable is a world prop placed by propstar ------------
+// Regression for "Buck Riviera and his table float fixed-centre": propstar was
+// unimplemented, so the (persistent HOUSE.SHP) table stayed a screen-space
+// overlay pinned at the anchor centre over every view. propstar must bind it
+// into the world at the "buick" star, and propdeg must orient it (directional
+// sprite) instead of clamping+locking a frame.
+{
+  const { session, viewer } = await newSession();
+  await session.openSetFile("smoke.set");
+  await runAnimations(viewer());
+  const table = session.propRuntime.get("blkjacktable")!;
+  const flames = session.propRuntime.get("flames")!;
+  const buick = session.currentBinding!.set.actors.find((a) => a.identifier.toLowerCase() === "buick")!;
+  const placed =
+    table.worldSpace &&
+    table.setName === "smoke" &&
+    table.scale > 0 &&
+    table.worldX === buick.positionX &&
+    table.worldY === buick.positionZ &&
+    table.directional &&
+    !table.frameLocked &&
+    Number(table.deg) === 250; // propdeg(250) overrides the star's rotation seed
+  // directional frame tracks the camera: two opposite bearings pick different frames
+  const nf = table.state()!.frames.length;
+  const frameAt = (camDeg: number): number => {
+    // mirror worldFrameIdx: rel = deg - bearing(prop->camera)
+    const cam = viewer().worldCamera()!;
+    const dx = cam.x - table.worldX;
+    const dy = cam.y - table.worldY;
+    const bearing = Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
+    void camDeg;
+    return Math.round((((Number(table.deg) - bearing) & 0xff) * nf) / 256) % nf;
+  };
+  check(
+    "smoke: blkjacktable placed in the world by propstar (not floating at centre)",
+    placed && flames.worldSpace && flames.directional && nf === 32 && frameAt(0) >= 0,
+    `world=${table.worldSpace} set=${table.setName} scale=${table.scale} dir=${table.directional} locked=${table.frameLocked} deg=${table.deg} @(${table.worldX},${table.worldY}) star=(${buick.positionX},${buick.positionZ}) flamesWorld=${flames.worldSpace} frames=${nf}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
