@@ -338,25 +338,21 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(turbineBtn);
 
-  // dev: open the blackjack minigame (normally entered from the house UI via
-  // the blkjack1.pup dealer conversation, which trans-to-flats then deals). The
-  // full game (shuffle/deal/hit/stay/dealer AI/win) lives in the flat script;
-  // start it directly: firsthand=1 skips the puppet "play again" prompt, then
-  // run initgame() on the flat. After one hand it exits (no puppet to re-deal).
+  // dev: play blackjack THROUGH Buick, exactly as the smoking room does — fire
+  // the blkjacktable prop's mousedown (HOUSE.SHP 176), which opens the dealer
+  // puppet (blkjack1.pup), runs the "want to play?" conversation, and on "yes"
+  // transtoflats to the table; entering blkjack.stg now deals via the boot's
+  // per-stage initgame hook, and after each hand Buick offers another. mission<4
+  // selects the disk-1 dealer conversation.
   const bjBtn = document.createElement("button");
   bjBtn.textContent = "🃏 Blackjack (dev)";
   bjBtn.style.marginLeft = "0.5rem";
   bjBtn.addEventListener("click", async () => {
     if (!viewer) return;
-    session.interp.globals.set("firsthand", 1);
     if (session.interp.globals.get("mission") === undefined) session.interp.globals.set("mission", 1);
-    await session.track(session.transToFlat("blkjack.stg"));
-    const flat = session.flatScripts.get(session.currentFlat.toLowerCase());
-    if (flat) {
-      await session.track(
-        session.interp.runHandler(flat, "initgame", [], { me: session.currentFlat, target: "" }),
-      );
-    }
+    await session.track(
+      session.sendEvent("sendtoprop", "blkjacktable", "mousedown", [0], "dev"),
+    );
   });
   setSelectWrap.appendChild(bjBtn);
 

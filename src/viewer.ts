@@ -544,7 +544,7 @@ export class SetViewer {
     return (
       this.animation !== null ||
       this.movie !== null ||
-      this.session.puppet !== null || // conversation in progress
+      (this.session.puppet?.visible ?? false) || // conversation in progress
       this.session.fading
     );
   }
@@ -710,8 +710,9 @@ export class SetViewer {
     // otherwise make the inputLocked gate reject the prop path spuriously.
     const busyOnEntry = this.inputLocked;
     // conversation clicks reach the puppet even while its script is
-    // suspended in puppetevent/puppetspeak
-    if (this.session.puppet) {
+    // suspended in puppetevent/puppetspeak — but only while it is shown; a
+    // hidden puppet (blackjack table between prompts) lets clicks reach the flat
+    if (this.session.puppet?.visible) {
       this.session.puppetChoose(this.puppetBevelAt(x, y));
       return;
     }
@@ -996,7 +997,7 @@ export class SetViewer {
   /** returns the DreamFactory cursor name for this position ("" = default) */
   async hover(x: number, y: number): Promise<string> {
     this.session.setPointer(x, y); // keep mouse() current as the cursor moves
-    if (this.session.puppet) return this.puppetBevelAt(x, y) >= 0 ? "touch" : "";
+    if (this.session.puppet?.visible) return this.puppetBevelAt(x, y) >= 0 ? "touch" : "";
     const prop = this.session.propRuntime.propAt(
       x, y, this.session.setVisible ? this.worldCamera() : null, this.session.setVisible,
     );
@@ -1069,8 +1070,10 @@ export class SetViewer {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    // conversation close-up (openpuppetfile) replaces the world display
-    if (this.session.puppet && !this.session.fade.snapshot) {
+    // conversation close-up (openpuppetfile) replaces the world display — only
+    // while shown; puppetvisible(false) keeps the puppet loaded but reveals the
+    // stage flat behind it (blackjack table between "play again?" prompts)
+    if (this.session.puppet?.visible && !this.session.fade.snapshot) {
       this.renderPuppet(ctx);
       return;
     }

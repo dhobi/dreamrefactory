@@ -20,6 +20,11 @@ export interface PropState {
    *  the same field GANG.CST stores for actors — uniformly 96 in the shipped
    *  shops). world→screen scale is scale×refScale/(1000×depth). */
   refScales: number[];
+  /** per-frame stored degree (i16 @+40). propdeg(N) picks the frame whose
+   *  degree == N (NOT the Nth frame): a card table's 32 views hold 0,8,…,248;
+   *  the blackjack score readout holds 2,3,…,21,BUST=22,BLACKJACK=23 (so the
+   *  digit shown is the frame's degree, offset from its index). */
+  degrees: number[];
 }
 
 export interface PropGroup {
@@ -85,11 +90,13 @@ function readGroup(location: number, containers: Container[]): PropGroup {
     const subCount = ev.getInt32(114, true);
     const frames: number[] = [];
     const refScales: number[] = [];
+    const degrees: number[] = [];
     for (let s = 0; s < subCount; s++) {
       frames.push(ev.getInt32(118 + 44 * s, true));
+      degrees.push(ev.getInt16(118 + 44 * s + 40, true));
       refScales.push(ev.getInt16(118 + 44 * s + 42, true) || 96);
     }
-    states.push({ identifier, location: entryLoc, frames, refScales });
+    states.push({ identifier, location: entryLoc, frames, refScales, degrees });
   }
   return { name, location, scriptContainerLocation, states };
 }

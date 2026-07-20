@@ -1,6 +1,31 @@
 import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/shp";
 
 /**
+ * The frame of a state to show for propdeg(deg). Each frame carries a stored
+ * degree (SHP +40): propdeg selects the frame whose degree is angularly closest
+ * to `deg`, NOT the deg-th frame. Selector props store small ascending values
+ * (score readout 2..23, a valve 0..19) that are usually offset from the frame
+ * index; directional props store 0,8,…,248 around the circle. Returns 0 when
+ * the state has no degree metadata.
+ */
+export function frameIndexForDegree(st: PropState, deg: number): number {
+  const d = st.degrees;
+  if (!d || !d.length) return 0;
+  const target = ((Math.round(deg) % 256) + 256) % 256;
+  let best = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < d.length; i++) {
+    const diff = ((((d[i] - target) % 256) + 256) % 256);
+    const dist = Math.min(diff, 256 - diff);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/**
  * Runtime state of props loaded from SHP ("shop") files.
  *
  * Props are screen-space overlays: each visible prop draws its current
@@ -242,8 +267,10 @@ export class PropRuntime {
     const dx = cam.x - p.worldX;
     const dy = cam.y - p.worldY;
     const bearing = Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
-    const rel = (Number(p.deg) - bearing) & 0xff;
-    return Math.round((rel * nFrames) / 256) % nFrames;
+    // the facing to depict is the prop's orientation relative to the camera;
+    // pick the frame whose stored degree matches it (the frames' degrees are
+    // the depicted view angles, e.g. 0,8,…,248 for a 32-view sprite)
+    return frameIndexForDegree(p.state()!, (Number(p.deg) - bearing) & 0xff);
   }
 
   /** screen rect + scale of a projected prop frame (sprites shrink with depth) */

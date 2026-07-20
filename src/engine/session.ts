@@ -15,6 +15,18 @@ import { AudioLibrary, AudioSink, NullAudioSink, PlayHandle } from "./audio";
 import { FileProvider, registerGameBuiltins } from "./setscripts";
 
 /**
+ * Stages whose entry handler lives on the FLAT (not the stage main), mirroring
+ * the per-stage switch in the boot's transtoflat(): opening the stage file must
+ * then call this handler on the current flat. blkjack deals the first hand;
+ * fight starts the brawl. (Stage-main setup uses the open<basename> convention
+ * handled separately in openStageFile.)
+ */
+const STAGE_FLAT_ENTRY: Record<string, string> = {
+  "blkjack.stg": "initgame",
+  "fight.stg": "openfight",
+};
+
+/**
  * Game time. TI.EXE runs scripts against timeGetTime with 1 script tick =
  * 1/60 s (delay(n) waits n×50/3 ms) and services ambient loops/crickets on
  * a 66 ms (~15 Hz) heartbeat. The viewer feeds real/virtual time into
@@ -542,8 +554,15 @@ export class GameSession {
       { actor: "sendtoactor", prop: "sendtoprop", scene: "sendtoscene", flat: "sendtoflat" }[
         l.kind
       ] ?? "sendtoprop";
+    // A "flat" loop belongs to the ONE active overlay flat, so fire it on the
+    // current flat rather than the captured name. blackjack's gameover() does
+    // makeloop("flat", me, "newgame", 45), but when the hand ends from a click
+    // in a flat REGION (hit/stay), `me` is that region's name, not the flat —
+    // sendtoflat(region) wouldn't resolve newgame and the play-again prompt
+    // never fired. (For the deal-triggered gameover, me already IS the flat.)
+    const target = l.kind === "flat" ? this.currentFlat : l.name;
     try {
-      await this.sendEvent(cmd, l.name, l.handler, [], `loop:${l.kind}`);
+      await this.sendEvent(cmd, target, l.handler, [], `loop:${l.kind}`);
     } catch (e) {
       this.onLog(`loop ${l.kind}/${l.name}.${l.handler}: ${(e as Error).message}`);
     }
@@ -784,6 +803,14 @@ export class GameSession {
         this.onLog(`${key}.${entry}: ${(e as Error).message}`);
       }
     }
+    // The boot's transtoflat() ALSO runs a per-stage FLAT entry handler for a
+    // few stages (BOOTFILE transtoflat switch): blkjack deals the opening hand
+    // via sendtoflat(currentflat(), initgame()), fight starts via openfight().
+    // Unlike the open<basename> setup above these live on the FLAT, not the
+    // stage main — without mirroring them, entering blkjack.stg from the Buick
+    // conversation opened the table but never dealt a hand.
+    const flatEntry = STAGE_FLAT_ENTRY[key];
+    if (flatEntry) await this.fireFlat(this.currentFlat, flatEntry);
     return true;
   }
 
@@ -1145,6 +1172,13 @@ export class GameSession {
     pup: PupFile;
     scripts: Map<string, ScriptInstance>;
     stanceIdx: number;
+    /**
+     * puppetvisible: whether the conversation close-up is drawn. A puppet stays
+     * LOADED (so its scripts keep running) while hidden — blackjack hides the
+     * dealer with puppetvisible(false) to reveal the table during a hand, then
+     * puppetvisible(true) to bring Buick back for the "play again?" prompt.
+     */
+    visible: boolean;
     subtitle: string;
     bevels: { text: string; id: number }[];
     /** puppetevent resolver — a bevel click ends the wait */
@@ -1193,6 +1227,7 @@ export class GameSession {
       pup,
       scripts,
       stanceIdx: 0,
+      visible: true,
       subtitle: "",
       bevels: [],
       eventWaiter: null,

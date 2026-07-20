@@ -1,5 +1,6 @@
 import { SetFile } from "../df/set";
 import { ScriptInstance, Value, toNum, toStr, truthy } from "./interp";
+import { frameIndexForDegree } from "./props";
 import type { GameSession } from "./session";
 
 /** resolves sibling game files (turk.shp etc.) by lowercase basename */
@@ -290,8 +291,13 @@ export function registerGameBuiltins(session: GameSession): void {
     "sendtopuppet", "sendtocast", "sendtostage", "sendtoflat",
     "sendtopainting", "sendtoboot", "sendtopost", "sendtoserver",
     // "fx" variants target the same object; our props have a single script,
-    // so an fx call resolves the same handler as its non-fx sibling
-    "sendtopropfx", "sendtostagefx",
+    // so an fx call resolves the same handler as its non-fx sibling.
+    // sendtopuppetfx runs a handler on the loaded puppet and returns its value —
+    // blackjack's newgame asks the dealer `sendtopuppetfx("boot script",
+    // playagain())` whether to deal again. Without it registered as a deferred
+    // form, the playagain() argument evaluated locally and recursed forever, so
+    // a finished hand hung instead of offering another.
+    "sendtopropfx", "sendtostagefx", "sendtopuppetfx",
   ]) {
     interp.registerSpecial(cmd, async (ip, argExprs, frame) => {
       // sendtostage(call()) / sendtoboot(call()) take the deferred call as
@@ -463,9 +469,14 @@ export function registerGameBuiltins(session: GameSession): void {
       p.directional = true;
       return;
     }
+    // A selector prop's frames carry stored degrees (SHP +40) that are usually
+    // offset from the frame index — the blackjack score readout holds 2,3,…,21,
+    // BUST=22, BLACKJACK=23, so propdeg(total) must pick the frame WHOSE DEGREE
+    // is `total`, not the total-th frame (which read ~2 high). frameIndexForDegree
+    // matches the degree; deck/valve selectors happen to store degree==index.
     const st = p.state();
     if (st && st.frames.length) {
-      p.frameIdx = Math.max(0, Math.min(st.frames.length - 1, Number(v) || 0));
+      p.frameIdx = frameIndexForDegree(st, Number(v) || 0);
       p.frameLocked = true;
     }
   });
@@ -955,10 +966,20 @@ export function registerGameBuiltins(session: GameSession): void {
   // puppetbase(ident): seat the character in a line's resting pose (bx2 with/
   // without the baby); "" reverts to the neutral opening pose
   r("puppetbase", (_i, [ident]) => session.puppetBase(toStr(ident ?? "")));
+  // puppetvisible(v): show/hide the conversation close-up while keeping the
+  // puppet LOADED. Blackjack toggles this to swap between the dealer and the
+  // table (newgame hides Buick to deal; playagain shows him to ask again).
+  // Without it the dealer stayed drawn over the table and the game "hung".
+  r("puppetvisible", (_i, [v]) => {
+    const p = session.puppet;
+    if (!p) return 0;
+    if (v === undefined) return p.visible ? 1 : 0;
+    p.visible = truthy(v);
+  });
   // remaining puppet effects are rare and unverified: puppetparam (gesture
-  // params), puppetvisible (hide a layer), puppetsubtitle (override text),
-  // puppetgrab (hold an item in-frame), puppetscramble (garbled face)
-  for (const stub of ["puppetparam", "puppetvisible", "puppetsubtitle", "puppetgrab", "puppetscramble"]) {
+  // params), puppetsubtitle (override text), puppetgrab (hold an item in-frame),
+  // puppetscramble (garbled face)
+  for (const stub of ["puppetparam", "puppetsubtitle", "puppetgrab", "puppetscramble"]) {
     r(stub, () => {});
   }
 

@@ -945,8 +945,12 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `buttons=${buttons.state()?.identifier} spot=${spot.state()?.identifier}`,
   );
   check(
-    "deck highlight pins the current deck's frame (C Deck = page 4 -> frame 3)",
-    buttons.visible && buttons.frameLocked && buttons.frameIdx === 3,
+    // propdeg("buttons", page-1): page 4 -> deg 3. The frames' stored degrees
+    // are [8,0,1,2,3,4,5,6,7], so deg 3 is frame index 4 (deg 8 = frame 0 =
+    // "no deck highlighted"). Selecting by frame index instead of degree used
+    // to highlight the wrong deck / show a deck for exitmap's "none".
+    "deck highlight pins the current deck's frame (C Deck = deg 3 -> frame 4)",
+    buttons.visible && buttons.frameLocked && buttons.frameIdx === 4,
     `visible=${buttons.visible} locked=${buttons.frameLocked} frame=${buttons.frameIdx}`,
   );
   check(
@@ -958,8 +962,8 @@ async function runAnimations(v: SetViewer): Promise<void> {
   // paging to another deck moves the highlight frame with it
   await session.runGlobal("gotopage", [2]); // A Deck
   check(
-    "deck highlight follows paging (A Deck = page 2 -> frame 1)",
-    session.currentFlat === "Map 2" && buttons.frameIdx === 1,
+    "deck highlight follows paging (A Deck = page 2 -> deg 1 -> frame 2)",
+    session.currentFlat === "Map 2" && buttons.frameIdx === 2,
     `flat=${session.currentFlat} frame=${buttons.frameIdx}`,
   );
 }
@@ -1617,27 +1621,27 @@ for (const [label, releaseX, releaseY, expectExit] of [
   session.interp.globals.set("firsthand", 1);
   session.interp.globals.set("mission", 1);
   await session.openSetFile("halla.set");
-  await session.transToFlat("blkjack.stg");
-  const fadeLifted = session.fade.level === 0 && !session.fade.snapshot && session.fade.queue.length === 0;
-  const flat = session.flatScripts.get(session.currentFlat.toLowerCase())!;
+  // transToFlat -> openStageFile now deals the opening hand itself (the boot's
+  // per-stage initgame hook), just like the real Buick entry — so pump the
+  // clock while it runs (each dealt card spins forceupdate 19x in take()).
   let now = 0;
-  const runFlat = async (h: string): Promise<void> => {
-    const p = flat ? session.interp.runHandler(flat, h, [], { me: session.currentFlat, target: "" }) : Promise.resolve();
-    let done = false;
-    void p.then(() => (done = true)).catch(() => (done = true));
-    for (let i = 0; i < 500 && !done; i++) {
-      session.tickTime((now += 66));
-      await drain();
-    }
-    await p.catch(() => {});
-  };
-  await runFlat("initgame");
+  const p = session.transToFlat("blkjack.stg");
+  let done = false;
+  void p.then(() => (done = true)).catch(() => (done = true));
+  for (let i = 0; i < 3000 && !done; i++) {
+    session.tickTime((now += 66));
+    await drain();
+  }
+  await p;
+  const fadeLifted = session.fade.level === 0 && !session.fade.snapshot && session.fade.queue.length === 0;
   const g = (n: string): number => Number(session.interp.globals.get(n) ?? -1);
-  const dealt = g("playercount") === 2 && g("dealercount") === 2 && g("playerphase") === 1;
+  // both hands got two cards; playerphase is set (1 mid-hand, 0 if the opening
+  // deal was itself a blackjack/gameover — either way the deal ran)
+  const dealt = g("playercount") === 2 && g("dealercount") === 2 && g("playerphase") >= 0;
   // variable() drives the per-side counts
   const varWorks = Number(session.interp.globals.get("playercount")) === 2;
   check(
-    "blackjack: transToFlat lifts transition-black; deal fills both hands via variable()",
+    "blackjack: transToFlat deals via the boot initgame hook + lifts transition-black",
     fadeLifted && dealt && varWorks,
     `fadeLifted=${fadeLifted} player=${g("playertotal")}(${g("playercount")}) dealer=${g("dealertotal")}(${g("dealercount")}) phase=${g("playerphase")}`,
   );
@@ -1680,6 +1684,142 @@ for (const [label, releaseX, releaseY, expectExit] of [
     "smoke: blkjacktable placed in the world by propstar (not floating at centre)",
     placed && flames.worldSpace && flames.directional && nf === 32 && frameAt(0) >= 0,
     `world=${table.worldSpace} set=${table.setName} scale=${table.scale} dir=${table.directional} locked=${table.frameLocked} deg=${table.deg} @(${table.worldX},${table.worldY}) star=(${buick.positionX},${buick.positionZ}) flamesWorld=${flames.worldSpace} frames=${nf}`,
+  );
+}
+
+// --- 49. blackjack entry through Buick hides the puppet to reveal the table -
+// Regression for "hangs with Buick, no table": the dealer puppet stays LOADED
+// while you play (for the "play again?" prompt), but puppetvisible(false) — a
+// stub before — must hide it so the flat renders and hit/stay clicks reach the
+// table. newgame() (via the boot initgame hook) calls puppetvisible(false), so
+// after the deal the puppet is hidden but not closed, and the viewer is no
+// longer "busy" on it.
+{
+  const { session, viewer } = await newSession();
+  await session.openSetFile("smoke.set");
+  await runAnimations(viewer());
+  session.interp.globals.set("firsthand", 1);
+  session.interp.globals.set("mission", 1);
+  await session.openPuppetFile("blkjack1.pup");
+  const shownDuringTalk = session.puppet?.visible === true && viewer().busy;
+  // enter the table (deals via the boot initgame hook); pump the clock
+  let now = 0;
+  const p = session.transToFlat("blkjack.stg");
+  let done = false;
+  void p.then(() => (done = true)).catch(() => (done = true));
+  for (let i = 0; i < 3000 && !done; i++) {
+    session.tickTime((now += 66));
+    await drain();
+  }
+  await p;
+  const g = (n: string): number => Number(session.interp.globals.get(n) ?? -1);
+  const hiddenForTable =
+    session.puppet !== null && // still loaded for the play-again prompt
+    session.puppet.visible === false && // but hidden so the table shows
+    !viewer().busy && // not blocking hit/stay input
+    g("playercount") === 2 &&
+    g("dealercount") === 2;
+  check(
+    "blackjack: entering through Buick hides the puppet and deals the table",
+    shownDuringTalk && hiddenForTable,
+    `shownDuringTalk=${shownDuringTalk} loaded=${session.puppet !== null} visible=${session.puppet?.visible} busy=${viewer().busy} player=${g("playercount")} dealer=${g("dealercount")}`,
+  );
+}
+
+// --- 50. blackjack: a finished hand offers "play again"; Yes re-deals -------
+// Regression for "does not nicely end and is not repeatable": newgame() asks
+// the dealer `sendtopuppetfx("boot script", playagain())` whether to deal
+// again. sendtopuppetfx wasn't a registered deferred-call form, so its
+// playagain() argument evaluated locally and recursed forever. With it fixed,
+// finishing a hand re-shows Buick (puppetvisible true) with Yes/No bevels, and
+// Yes deals a fresh hand.
+{
+  const { session, viewer } = await newSession();
+  await session.openSetFile("smoke.set");
+  await runAnimations(viewer());
+  session.interp.globals.set("firsthand", 1);
+  session.interp.globals.set("mission", 1);
+  await session.openPuppetFile("blkjack1.pup");
+  let now = 0;
+  const pump = async (until: () => boolean, max = 8000): Promise<boolean> => {
+    for (let i = 0; i < max && !until(); i++) {
+      session.tickTime((now += 66));
+      await drain();
+    }
+    return until();
+  };
+  const g = (n: string): number => Number(session.interp.globals.get(n) ?? -1);
+  // enter + deal via the boot initgame hook
+  const enter = session.transToFlat("blkjack.stg");
+  let entered = false;
+  void enter.then(() => (entered = true));
+  const dealt = await pump(() => entered) && g("playercount") === 2;
+  // stand -> dealer draws to completion -> gameover schedules the newgame loop.
+  // Run dealerdraw as the STAY REGION does — with me = the region name, NOT the
+  // flat (regions dispatch with me=region and flat handlers inherit it). This is
+  // what broke the browser: gameover's makeloop("flat", me, "newgame") then
+  // captured the region name; fireLoop must target the current flat regardless.
+  if (g("playerphase") === 1) {
+    session.interp.globals.set("playerstand", 1);
+    const flat = session.flatScripts.get(session.currentFlat.toLowerCase())!;
+    void session.track(
+      session.interp.runHandler(flat, "dealerdraw", [], { me: "staybevel", target: "staybevel" }),
+    );
+  }
+  // the newgame loop fires playagain(): Buick returns (visible) with Yes/No
+  const offered = await pump(
+    () => (session.puppet?.visible ?? false) && (session.puppet?.bevels.length ?? 0) === 2,
+  );
+  // click "Yes" (bevel index 0, id 101) -> playagain() true -> a fresh hand
+  session.puppetChoose(0);
+  const replayed = await pump(
+    () => !(session.puppet?.visible ?? true) && g("playerphase") === 1 && g("playercount") === 2,
+  );
+  check(
+    "blackjack: a finished hand offers play-again via Buick; Yes re-deals",
+    dealt && offered && replayed,
+    `dealt=${dealt} offered=${offered} replayed=${replayed} visible=${session.puppet?.visible} phase=${g("playerphase")} pc=${g("playercount")}`,
+  );
+}
+
+// --- 51. blackjack score readout shows the right number (propdeg by degree) -
+// Regression for "cards counted +1": showscores does propdeg(who@"scores",
+// total), and the score sprite's frames store degrees 2,3,…,21,BUST=22,
+// BLACKJACK=23 — offset ~2 from their frame index. Selecting the frame WHOSE
+// DEGREE equals the total (not the total-th frame) makes the digit match.
+{
+  const { session } = await newSession();
+  await session.openSetFile("smoke.set");
+  session.interp.globals.set("firsthand", 1);
+  session.interp.globals.set("mission", 1);
+  let now = 0;
+  const pump = async (until: () => boolean, max = 3000): Promise<boolean> => {
+    for (let i = 0; i < max && !until(); i++) {
+      session.tickTime((now += 66));
+      await drain();
+    }
+    return until();
+  };
+  const enter = session.transToFlat("blkjack.stg");
+  let entered = false;
+  void enter.then(() => (entered = true));
+  await pump(() => entered);
+  const flat = session.flatScripts.get(session.currentFlat.toLowerCase())!;
+  const scores = session.propRuntime.get("playerscores")!;
+  const degAt = (): number => scores.state()!.degrees[scores.frameIdx];
+  // a plain total: the shown frame's degree must equal the total
+  session.interp.globals.set("playertotal", 17);
+  session.interp.globals.set("playercount", 3);
+  await session.interp.runHandler(flat, "showscores", ["player"], { me: flat.name, target: "" });
+  const at17 = degAt();
+  // a bust: total > 21 -> propdeg(22) -> the BUST frame (degree 22)
+  session.interp.globals.set("playertotal", 24);
+  await session.interp.runHandler(flat, "showscores", ["player"], { me: flat.name, target: "" });
+  const atBust = degAt();
+  check(
+    "blackjack: the score readout frame's degree matches the total (no +1/+2 skew)",
+    at17 === 17 && atBust === 22,
+    `deg@17=${at17} deg@bust=${atBust} frames=${scores.state()!.degrees.length}`,
   );
 }
 
