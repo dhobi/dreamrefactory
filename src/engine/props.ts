@@ -1,4 +1,16 @@
 import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/shp";
+import type { Occlusion } from "./actors";
+
+/** a world sprite's quantized depth level against the SET Z image (TI.EXE) */
+function depthLevel(depth: number, occ: Occlusion): number {
+  return Math.max(0, Math.floor(depth / Math.max(1, occ.scale)));
+}
+
+/** true if the scenery at (x,y) is NEARER than the sprite level → hide the pixel */
+function sceneryOccludes(occ: Occlusion, x: number, y: number, level: number): boolean {
+  if (x < 0 || y < 0 || x >= occ.w || y >= occ.h) return false;
+  return occ.z[y * occ.w + x] < level;
+}
 
 /**
  * The frame of a state to show for propdeg(deg). Each frame carries a stored
@@ -327,11 +339,15 @@ export class PropRuntime {
     minAnchorY = -Infinity,
     cam: WorldCamera | null = null,
     persistentScreenOnly = false,
+    occ: Occlusion | null = null,
   ): void {
     // world-space props first (they belong to the scene), far to near
     if (cam) {
       for (const { p, proj } of this.worldDrawList(cam)) {
         const r = this.worldRect(p, proj, cam);
+        // scenery nearer than the prop hides it, same SET Z image as actors —
+        // without this the smoke table / plants drew over pillars in front
+        const level = occ ? depthLevel(proj.depth, occ) : 0;
         const maxY = Math.min(cam.clipH, height, r.y + r.h);
         const maxX = Math.min(cam.clipW, width, r.x + r.w);
         for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
@@ -340,6 +356,7 @@ export class PropRuntime {
             const sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
             const s = sy * r.f.width + sx;
             if (!r.f.opaque[s]) continue;
+            if (occ && sceneryOccludes(occ, tx, ty, level)) continue;
             const pal = r.f.indexed[s] * 4;
             const d = (ty * width + tx) * 4;
             rgba[d] = paletteRGBA[pal];

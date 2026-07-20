@@ -28,6 +28,15 @@ interface CachedFrame {
   height: number;
   /** per-pixel depth levels (0..24) from the frame's Z image, if present */
   z?: Uint8Array;
+  /**
+   * Camera pose of this motion frame (posX16/posZ16/posY16 + axisX8). Every
+   * turn/walk frame carries one, so world sprites (actors, propxyz/propstar
+   * props) can be projected onto the frame WHILE the room turns or walks —
+   * without it they vanished until the standpoint and popped back at the end.
+   * axisX8 == the destination view's rotation8 at standpoints, so the reveal is
+   * seamless with the still-camera worldCamera().
+   */
+  cam?: { x: number; y: number; z: number; deg: number };
 }
 
 const FRAME_MS = 90; // ~11 fps for turn/walk animation, close to the original feel
@@ -481,6 +490,8 @@ export class SetViewer {
         height: d.height,
         // the SET Z image occludes world sprites (actors) behind scenery
         z: d.hasZ ? fb.zPixels.slice(0, d.width * d.height) : undefined,
+        // camera pose so actors/world props stay projected during the motion
+        cam: { x: fi.posX16, y: fi.posZ16, z: fi.posY16, deg: fi.axisX8 & 0xff },
       });
     };
     for (const scene of this.set.scenes) {
@@ -572,8 +583,6 @@ export class SetViewer {
     const sc = this.scene;
     const v = sc?.views[this.viewIdx];
     if (!v) return null;
-    const w = this.set.viewPortWidth || 512;
-    const h = this.set.viewPortHeight || 264;
     // the view's stand frame carries the camera's true world position
     // (posX16/posZ16/posY16) — scale-free across sets (C73 is 150 units/m,
     // DECKBD 55/m; the old cameraHeight×512 only held for C73's scale and
@@ -581,17 +590,44 @@ export class SetViewer {
     const fi = sc.turns[RIGHTTURNS].frames.find(
       (f) => f.viewID === this.viewIdx && f.motionInfo > 0,
     );
-    return {
+    return this.cameraFrom({
       x: fi ? fi.posX16 : sc.xAxisMap,
       y: fi ? fi.posZ16 : sc.zAxisMap,
       z: fi ? fi.posY16 : Math.round(v.cameraHeight * 512),
       deg: v.rotation8,
+    });
+  }
+
+  /** build a full WorldCamera (viewport focal/centre/clip) from a camera pose —
+   *  shared by the still standpoint camera and the per-frame motion cameras */
+  private cameraFrom(pose: {
+    x: number;
+    y: number;
+    z: number;
+    deg: number;
+  }): import("./engine/props").WorldCamera {
+    const w = this.set.viewPortWidth || 512;
+    const h = this.set.viewPortHeight || 264;
+    return {
+      x: pose.x,
+      y: pose.y,
+      z: pose.z,
+      deg: pose.deg,
       f: Math.max(w, h) / 2,
       cx: w / 2,
       cy: h / 2,
       clipW: w,
       clipH: h,
     };
+  }
+
+  /** camera to project world sprites onto the frame shown right now — the
+   *  moving motion-frame camera during a turn/walk, else the standpoint */
+  private activeCamera(): import("./engine/props").WorldCamera | null {
+    if (this.animation !== null) {
+      return this.current?.cam ? this.cameraFrom(this.current.cam) : null;
+    }
+    return this.worldCamera();
   }
 
   /** dir: RIGHTTURNS or LEFTTURNS */
@@ -1132,7 +1168,9 @@ export class SetViewer {
       // during walk/turn animation only the UI band props keep drawing
       const minAnchorY = this.animation !== null ? (f?.height ?? 0) : -Infinity;
       const propPal = this.session.setVisible ? this.propPalette : flat.palette;
-      const cam = this.session.setVisible && this.animation === null ? this.worldCamera() : null;
+      // world sprites follow the motion-frame camera during movement too, so
+      // actors/world props stay visible over the composited set region
+      const cam = this.session.setVisible ? this.activeCamera() : null;
       if (cam) {
         this.session.actorRuntime.composite(
           img.data, flat.width, flat.height, propPal, cam, this.occlusion(),
@@ -1140,6 +1178,7 @@ export class SetViewer {
       }
       this.session.propRuntime.composite(
         img.data, flat.width, flat.height, propPal, minAnchorY, cam, this.session.setVisible,
+        this.occlusion(),
       );
       ctx.putImageData(img, 0, 0);
       this.drawTextOverlay(ctx);
@@ -1156,17 +1195,20 @@ export class SetViewer {
     }
     const img = ctx.createImageData(f.width, f.height);
     indexedToRGBA(f.pixels, f.width, f.height, this.palette, img.data);
-    if (this.animation === null) {
-      const cam = this.worldCamera();
-      if (cam) {
-        this.session.actorRuntime.composite(
-          img.data, f.width, f.height, this.propPalette, cam, this.occlusion(),
-        );
-      }
-      this.session.propRuntime.composite(
-        img.data, f.width, f.height, this.propPalette, -Infinity, cam, this.session.setVisible,
+    // world sprites (actors + propxyz/propstar props) track the camera even
+    // mid-turn/walk via the motion frame's own pose, so people no longer vanish
+    // during movement. Screen-space props stay hidden while animating (minAnchorY
+    // = +inf), exactly as before — only the world layer is added.
+    const cam = this.activeCamera();
+    if (cam) {
+      this.session.actorRuntime.composite(
+        img.data, f.width, f.height, this.propPalette, cam, this.occlusion(),
       );
     }
+    this.session.propRuntime.composite(
+      img.data, f.width, f.height, this.propPalette,
+      this.animation === null ? -Infinity : Infinity, cam, this.session.setVisible, this.occlusion(),
+    );
     ctx.putImageData(img, 0, 0);
     this.drawTextOverlay(ctx);
     this.applyFade(ctx);

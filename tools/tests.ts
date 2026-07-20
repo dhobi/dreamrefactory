@@ -1823,5 +1823,37 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- 52. world sprites keep a camera during movement (no vanish on turn) ----
+// Regression for "actors vanish while moving, reappear at the standpoint": each
+// motion frame carries its own camera (posX16/axisX8), so the viewer projects
+// actors/world props THROUGHOUT a turn instead of only at rest. activeCamera()
+// returns the moving motion-frame camera mid-turn and the standpoint at rest.
+{
+  const { session, viewer } = await newSession();
+  await session.openSetFile("smoke.set");
+  const v = viewer();
+  const anyv = v as unknown as {
+    animation: unknown;
+    activeCamera: () => { deg: number } | null;
+  };
+  const standDeg = v.worldCamera()!.deg;
+  v.turn(0); // start a right turn
+  v.tick((clock += 100)); // step into the animation
+  v.tick((clock += 100));
+  const animating = anyv.animation !== null;
+  const midCam = anyv.activeCamera();
+  // mid-turn: a camera exists (was null before) and it has moved off the standpoint
+  const tracksWhileMoving = animating && !!midCam && midCam.deg !== standDeg;
+  await runAnimations(v);
+  // at rest: back to the standpoint camera, seamlessly
+  const restCam = anyv.activeCamera();
+  const backToStand = anyv.animation === null && !!restCam && restCam.deg === v.worldCamera()!.deg;
+  check(
+    "world sprites track the camera during movement, not just at the standpoint",
+    tracksWhileMoving && backToStand,
+    `animating=${animating} midDeg=${midCam?.deg} standDeg=${standDeg} back=${backToStand}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
