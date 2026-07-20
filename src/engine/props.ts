@@ -198,9 +198,13 @@ export class PropRuntime {
   /** screen rect + scale of a projected prop frame (sprites shrink with depth) */
   private worldRect(p: PropInstance, proj: { x: number; y: number; depth: number }) {
     const st = p.state()!;
-    const f = p.shop.frame(st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);
-    // TI.EXE: scale reference 180 per state, per-mille propscale, ÷ depth
-    const k = (p.scale * 180) / (1000 * proj.depth);
+    const idx = Math.min(p.frameIdx, st.frames.length - 1);
+    const f = p.shop.frame(st.frames[idx]);
+    // TI.EXE world→screen: k = propscale(per-mille) × refScale / (1000 × depth).
+    // refScale is the frame record's i16 @+42 (uniformly 96 across the shipped
+    // shops — the same field GANG.CST stores for actors); the old hardcoded 180
+    // was a fit that ballooned near props (e.g. the wireless message slips).
+    const k = (p.scale * (st.refScales[idx] ?? 96)) / (1000 * proj.depth);
     return {
       f,
       k,

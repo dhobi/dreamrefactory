@@ -16,6 +16,10 @@ export interface PropState {
   location: number;
   /** frame container locations (animation frames of this state) */
   frames: number[];
+  /** per-frame depth-scale reference (i16 @+42 of each 44-byte frame record,
+   *  the same field GANG.CST stores for actors — uniformly 96 in the shipped
+   *  shops). world→screen scale is scale×refScale/(1000×depth). */
+  refScales: number[];
 }
 
 export interface PropGroup {
@@ -80,10 +84,12 @@ function readGroup(location: number, containers: Container[]): PropGroup {
     const ev = new DataView(ed.buffer, ed.byteOffset, ed.byteLength);
     const subCount = ev.getInt32(114, true);
     const frames: number[] = [];
+    const refScales: number[] = [];
     for (let s = 0; s < subCount; s++) {
       frames.push(ev.getInt32(118 + 44 * s, true));
+      refScales.push(ev.getInt16(118 + 44 * s + 42, true) || 96);
     }
-    states.push({ identifier, location: entryLoc, frames });
+    states.push({ identifier, location: entryLoc, frames, refScales });
   }
   return { name, location, scriptContainerLocation, states };
 }

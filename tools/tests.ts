@@ -462,6 +462,14 @@ async function runAnimations(v: SetViewer): Promise<void> {
     !!proj && proj.x === 314 && proj.y === 177 && proj.depth === 1755,
     proj ? `${proj.x},${proj.y} d=${proj.depth}` : "behind camera",
   );
+  // depth scaling reads the frame's refScale (i16 @+42), not a fitted constant:
+  // uniformly 96 in the shipped shops, matching GANG.CST (the old 180 ballooned
+  // near props like the wireless message slips)
+  check(
+    "world prop refScale comes from the frame record (96, not the fitted 180)",
+    bag.state()?.refScales[0] === 96,
+    `ref=${bag.state()?.refScales[0]}`,
+  );
   if (hit) await v.click(hit.x, hit.y); // bag's mousedown -> addbag()
   check(
     "clicking the bag picks it up",
