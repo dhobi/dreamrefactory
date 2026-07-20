@@ -96,7 +96,29 @@ function readGroup(location: number, containers: Container[]): PropGroup {
       degrees.push(ev.getInt16(118 + 44 * s + 40, true));
       refScales.push(ev.getInt16(118 + 44 * s + 42, true) || 96);
     }
-    states.push({ identifier, location: entryLoc, frames, refScales, degrees });
+    // Play-order table (state header @46, subCount 1-based frame indices): an
+    // "open" animation lists 1..N, its "close" lists N..1 (the SAME frames, the
+    // reverse direction). Reorder the frames into play order when the table is a
+    // valid permutation — otherwise a closing animation (watch/bag/lid) played
+    // forward and looked exactly like opening. Non-permutation garbage (2-frame
+    // selector states, mode-grouped props) is ignored, so nothing else changes.
+    const order: number[] = [];
+    for (let s = 0; s < subCount; s++) order.push(ev.getInt16(46 + 2 * s, true) - 1);
+    const isPermutation =
+      order.length > 1 &&
+      order.every((v) => v >= 0 && v < subCount) &&
+      new Set(order).size === order.length;
+    if (isPermutation) {
+      states.push({
+        identifier,
+        location: entryLoc,
+        frames: order.map((i) => frames[i]),
+        refScales: order.map((i) => refScales[i]),
+        degrees: order.map((i) => degrees[i]),
+      });
+    } else {
+      states.push({ identifier, location: entryLoc, frames, refScales, degrees });
+    }
   }
   return { name, location, scriptContainerLocation, states };
 }

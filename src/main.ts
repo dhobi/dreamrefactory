@@ -356,6 +356,29 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(bjBtn);
 
+  // dev: give Frank the three band items he normally collects in his cabin
+  // (C73) — the inventory bag, the pocket watch (clock), and the deck map. Each
+  // HOUSE.SHP prop has its own "add" handler that docks it in the bottom band
+  // (owner=frank, moved to 256,324); this is the same trio the bag's mousedown
+  // adds under `if debugging`. addbag/addwatch assume the item is already
+  // on-screen from the pickup, so force visibility afterwards.
+  const kitBtn = document.createElement("button");
+  kitBtn.textContent = "🎒 Give kit (dev)";
+  kitBtn.style.marginLeft = "0.5rem";
+  kitBtn.addEventListener("click", async () => {
+    if (!viewer) return;
+    for (const [prop, handler] of [
+      ["bag", "addbag"],
+      ["map", "addmap"],
+      ["watch", "addwatch"],
+    ] as const) {
+      await session.track(session.sendEvent("sendtoprop", prop, handler, [], "dev"));
+      const inst = session.propRuntime.get(prop);
+      if (inst) inst.visible = true;
+    }
+  });
+  setSelectWrap.appendChild(kitBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).

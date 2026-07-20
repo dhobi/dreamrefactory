@@ -1770,11 +1770,12 @@ for (const [label, releaseX, releaseY, expectExit] of [
   const offered = await pump(
     () => (session.puppet?.visible ?? false) && (session.puppet?.bevels.length ?? 0) === 2,
   );
-  // click "Yes" (bevel index 0, id 101) -> playagain() true -> a fresh hand
+  // click "Yes" (bevel index 0, id 101) -> playagain() true -> a fresh hand.
+  // playerphase was 0 at the prompt (gameover); a re-deal drives it back to 1
+  // with two fresh cards. (Don't assert the puppet is hidden — if the re-dealt
+  // hand is itself an instant blackjack it bounces straight back to the prompt.)
   session.puppetChoose(0);
-  const replayed = await pump(
-    () => !(session.puppet?.visible ?? true) && g("playerphase") === 1 && g("playercount") === 2,
-  );
+  const replayed = await pump(() => g("playerphase") === 1 && g("playercount") === 2);
   check(
     "blackjack: a finished hand offers play-again via Buick; Yes re-deals",
     dealt && offered && replayed,
@@ -1852,6 +1853,104 @@ for (const [label, releaseX, releaseY, expectExit] of [
     "world sprites track the camera during movement, not just at the standpoint",
     tracksWhileMoving && backToStand,
     `animating=${animating} midDeg=${midCam?.deg} standDeg=${standDeg} back=${backToStand}`,
+  );
+}
+
+// --- 53. dev "give kit": bag + watch + map dock into the bottom band --------
+// The dev button fires each HOUSE.SHP prop's own add handler (addbag/addwatch/
+// addmap), which Frank normally triggers by picking them up in C73: owner=frank,
+// moved to the band anchor (256,324) as a screen prop, closed/idle view.
+{
+  const { session } = await newSession();
+  await session.openSetFile("smoke.set");
+  for (const [prop, handler] of [
+    ["bag", "addbag"],
+    ["map", "addmap"],
+    ["watch", "addwatch"],
+  ] as const) {
+    await session.sendEvent("sendtoprop", prop, handler, [], "dev");
+    const inst = session.propRuntime.get(prop);
+    if (inst) inst.visible = true;
+  }
+  const docked = (name: string): boolean => {
+    const p = session.propRuntime.get(name);
+    return (
+      !!p && p.visible && p.owner === "frank" && !p.worldSpace && p.anchorX === 256 && p.anchorY === 324
+    );
+  };
+  check(
+    "dev give-kit docks bag + watch + map into the band (owner frank, screen band anchor)",
+    docked("bag") && docked("watch") && docked("map"),
+    `bag=${docked("bag")} watch=${docked("watch")} map=${docked("map")}`,
+  );
+}
+
+// --- 54. life preserver keeps its tour/mission variant across state changes -
+// The band's "life" button is deg 0 (mission) / 1 (tour); each of its states
+// holds both variants as 2 frames. propview used to animate through them and
+// end on the last (tour), so a mission-mode click flipped the icon to the tour
+// art. A deg-locked selector must re-pick its variant by deg on every state.
+{
+  const { session } = await newSession();
+  await session.openSetFile("smoke.set"); // house.shp (persistent) -> life prop
+  const life = session.propRuntime.get("life")!;
+  const call = (name: string, args: (string | number)[]): void => {
+    (session.interp.builtins.get(name) as (i: unknown, a: (string | number)[]) => void)(
+      session.interp,
+      args,
+    );
+  };
+  call("propview", ["life", "light"]);
+  call("propdeg", ["life", 0]); // mission
+  const missionAfterDeg = life.frameIdx;
+  call("propview", ["life", "push"]); // a click's push animation...
+  call("propview", ["life", "light"]); // ...must return to the mission variant
+  const missionAfterClick = life.frameIdx;
+  call("propdeg", ["life", 1]); // tour
+  call("propview", ["life", "light"]);
+  const tourAfterClick = life.frameIdx;
+  check(
+    "life preserver keeps its tour/mission variant across state changes",
+    missionAfterDeg === 0 && missionAfterClick === 0 && tourAfterClick === 1 && life.frameLocked,
+    `afterDeg=${missionAfterDeg} missionClick=${missionAfterClick} tourClick=${tourAfterClick} locked=${life.frameLocked}`,
+  );
+}
+
+// --- 55. band prop close animations + variant persistence ------------------
+// "close" states store the SAME frames as "open" (closed->open) plus a play-
+// order table (header @46) that reverses them; honouring it makes close play
+// open->closed instead of replaying the opening. And a deg-variant prop (map)
+// keeps its mission/tour icon after its open/close animation, not the last frame.
+{
+  const { session } = await newSession();
+  await session.openSetFile("smoke.set");
+  const stateOf = (prop: string, name: string) =>
+    session.propRuntime.get(prop)!.group.states.find((s) => s.identifier === name)!;
+  const asc = (a: number[]) => a[0] < a[a.length - 1];
+  const lidOpen = stateOf("lid", "open").frames;
+  const lidClose = stateOf("lid", "close").frames;
+  const bagOpen = stateOf("bag", "darkopen").frames;
+  const bagClose = stateOf("bag", "darkclose").frames;
+  // open plays natural (ascending containers); close is reordered to reverse
+  const reordered =
+    asc(lidOpen) && !asc(lidClose) && asc(bagOpen) && !asc(bagClose);
+  // map keeps its mission variant (frame 0) through open/close, not tour (1)
+  const map = session.propRuntime.get("map")!;
+  const call = (name: string, a: (string | number)[]): void => {
+    (session.interp.builtins.get(name) as (i: unknown, args: (string | number)[]) => void)(
+      session.interp,
+      a,
+    );
+  };
+  await session.sendEvent("sendtoprop", "map", "addmap", [], "dev"); // deg 0 (mission)
+  call("propview", ["map", "open"]);
+  call("propview", ["map", "close"]);
+  call("propview", ["map", "light"]);
+  const mapVariantKept = map.frameIdx === 0 && map.degVariants;
+  check(
+    "close animations play reversed; deg-variant icon survives open/close",
+    reordered && mapVariantKept,
+    `lidClose[0..-1]=${lidClose[0]}..${lidClose[lidClose.length - 1]} reordered=${reordered} mapFrame=${map.frameIdx} degVariants=${map.degVariants}`,
   );
 }
 

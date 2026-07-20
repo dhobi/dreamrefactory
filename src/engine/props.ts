@@ -137,6 +137,15 @@ export class PropInstance {
   /** frame pinned by propdeg (a rotational/selector prop) — skip auto-anim */
   frameLocked = false;
   /**
+   * propdeg was used on this prop, so its states are deg-indexed VARIANTS: a
+   * later propview into a small (<=2 frame) state must re-pick the frame by deg
+   * (the mission/tour icon) instead of animating through the alternatives. This
+   * PERSISTS across the prop's animation states (open/close), which clear
+   * frameLocked — the life preserver / map icon otherwise ended on the wrong
+   * variant (and a differently-offset frame) after their open/close animation.
+   */
+  degVariants = false;
+  /**
    * Play this state's frames once (set by propview on a state change). A prop
    * merely made visible in its default state does NOT animate — it holds frame
    * 0 until a propview state change or a propdeg frame select. Without this the

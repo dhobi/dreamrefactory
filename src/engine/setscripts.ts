@@ -397,14 +397,27 @@ export function registerGameBuiltins(session: GameSession): void {
     if (!p) return "";
     if (v === undefined) return p.stateName;
     p.stateName = toStr(v).toLowerCase();
-    p.frameIdx = 0;
     p.lastTick = 0;
-    p.frameLocked = false;
-    // entering a state plays its frames once (a door opens and holds open); a
-    // single-frame state has nothing to animate. A prop that is only made
-    // visible (never propview'd) keeps animating=false and holds frame 0.
     const st = p.state();
-    p.animating = !!st && st.frames.length > 1;
+    // A deg-locked prop entering a small (<=2 frame) VARIANT state keeps its
+    // selected variant instead of animating through the alternatives: the life
+    // preserver / map / watch-lid "run" hold a mission (deg 0) + tour (deg 1)
+    // pair, so auto-animating them ended every click on the last frame (tour).
+    // Multi-frame states (open/close swings, 6-12 frames with repeating rotation
+    // degrees) are real ANIMATIONS and still play — clearing frameLocked so the
+    // tick advances them (this is what un-froze the watch/bag/map close).
+    if (p.degVariants && st && st.frames.length <= 2) {
+      p.frameIdx = frameIndexForDegree(st, Number(p.deg) || 0);
+      p.frameLocked = true;
+      p.animating = false;
+    } else {
+      p.frameIdx = 0;
+      p.frameLocked = false;
+      // entering a state plays its frames once (a door opens and holds open); a
+      // single-frame state has nothing to animate. A prop only made visible
+      // (never propview'd) keeps animating=false and holds frame 0.
+      p.animating = !!st && st.frames.length > 1;
+    }
   });
   r("propxy", (_i, [n, x, y]) => {
     const p = prop(n);
@@ -474,6 +487,7 @@ export function registerGameBuiltins(session: GameSession): void {
     // BUST=22, BLACKJACK=23, so propdeg(total) must pick the frame WHOSE DEGREE
     // is `total`, not the total-th frame (which read ~2 high). frameIndexForDegree
     // matches the degree; deck/valve selectors happen to store degree==index.
+    p.degVariants = true; // its states are deg-indexed variants (see propview)
     const st = p.state();
     if (st && st.frames.length) {
       p.frameIdx = frameIndexForDegree(st, Number(v) || 0);
