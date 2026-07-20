@@ -110,6 +110,12 @@ const CURSOR_CSS: Record<string, string> = {
 // one session for the whole browser tab: globals persist across sets
 const session = new GameSession(provideFile, audioSink);
 session.onLog = (l) => log(l);
+// Script poll loops (forceupdate/stilldown) yield through this so a real frame
+// renders and pending pointer events are delivered between iterations.
+// hasRealFrames also relaxes the interpreter's while-loop runaway guard for
+// such loops — only valid here, where each iteration really waits on a frame.
+session.hasRealFrames = true;
+session.nextFrame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
 // on-demand loaders (puppets/casts/movies) await this so the first click
 // works even before the file is cached (provideFile fetches lazily)
 session.ensureFile = async (name) => {
@@ -262,6 +268,17 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(wirelessBtn);
 
+  // dev: open the gramophone-in-a-trunk stage (normally reached from Frank's
+  // stateroom). Its shop/track/stg are prefetched in loadServerSet.
+  const trunkBtn = document.createElement("button");
+  trunkBtn.textContent = "📦 Trunk (dev)";
+  trunkBtn.style.marginLeft = "0.5rem";
+  trunkBtn.addEventListener("click", () => {
+    if (!viewer) return;
+    void session.track(session.transToFlat("trunk.stg"));
+  });
+  setSelectWrap.appendChild(trunkBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).
@@ -348,6 +365,7 @@ async function loadServerSet(setName: string): Promise<void> {
     [`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`,
      "unilib.trk", "bootfile", "main.stg", "map.stg", "inven1.stg", "inven2.stg",
      "wireless.stg", "wireless.shp", "wireless.sfx",
+     "trunk.stg", "trunk.shp", "grammy.sfx", "oldtune.trk", "oldboss.trk",
      "house.shp", "inven.shp", "inven.trk", "gang.cst", "extra.cst"].map(fetchIntoStore),
   );
   try {

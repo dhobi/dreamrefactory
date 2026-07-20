@@ -277,11 +277,11 @@ export function registerGameBuiltins(session: GameSession): void {
   // executed against the target object's script — not evaluated locally
   for (const cmd of [
     "sendtoprop", "sendtoactor", "sendtoscene", "sendtoset", "sendtoshop", "sendtoshopfx",
-    "sendtopuppet", "sendtocast", "sendtostage", "sendtobutton", "sendtoflat",
+    "sendtopuppet", "sendtocast", "sendtostage", "sendtoflat",
     "sendtopainting", "sendtoboot", "sendtopost", "sendtoserver",
     // "fx" variants target the same object; our props have a single script,
     // so an fx call resolves the same handler as its non-fx sibling
-    "sendtopropfx", "sendtobuttonfx",
+    "sendtopropfx",
   ]) {
     interp.registerSpecial(cmd, async (ip, argExprs, frame) => {
       // sendtostage(call()) / sendtoboot(call()) take the deferred call as
@@ -303,6 +303,24 @@ export function registerGameBuiltins(session: GameSession): void {
       // (shared with makeloop firing)
       const args = await ip.evalArgs(deferred.args, frame);
       return session.sendEvent(cmd, targetName, deferred.name, args, frame.ctx.me);
+    });
+  }
+
+  // sendtobutton(flat, "name", handler(args)): unlike the generic sendto*,
+  // this has THREE args — a flat, a region NAME, then the deferred call. It
+  // dispatches to a flat's named click-region ("button"), the drop-target /
+  // hotspot system stage mini-games use. sendtobuttonfx resolves the same.
+  for (const cmd of ["sendtobutton", "sendtobuttonfx"]) {
+    interp.registerSpecial(cmd, async (ip, argExprs, frame) => {
+      const flat = toStr(await ip.evalExpr(argExprs[0], frame));
+      const name = toStr(await ip.evalExpr(argExprs[1], frame));
+      const deferred = argExprs[2];
+      if (!deferred || deferred.t !== "call") {
+        log(`${cmd}: no deferred call argument`);
+        return 0;
+      }
+      const args = await ip.evalArgs(deferred.args, frame);
+      return session.sendToButton(flat, name, deferred.name, args, frame.ctx.me);
     });
   }
 
@@ -459,6 +477,11 @@ export function registerGameBuiltins(session: GameSession): void {
 
   // sound playback
   const playNamed = (name: Value, channel: "sound" | "voice", overlap = false) => {
+    // the sound channel honours soundloop() flags + tracks looping handles
+    if (channel === "sound") {
+      session.playSound(toStr(name), overlap);
+      return;
+    }
     const audio = session.audioLib.sound(toStr(name));
     if (!audio) {
       log(`sound not found: ${toStr(name)} (banks: ${session.audioLib.bankNames.join(", ") || "none"})`);
@@ -471,7 +494,9 @@ export function registerGameBuiltins(session: GameSession): void {
   r("multiplesound", (_i, [n]) => playNamed(n, "sound", true));
   r("bothsound", (_i, [n]) => playNamed(n, "sound"));
   r("dualsound", (_i, [n]) => playNamed(n, "sound", true));
-  r("haltsound", () => session.audio.halt("sound"));
+  // haltsound(n): stops looping sounds too — the crank cleanup relies on it
+  // to end the gramophone hiss (an untracked loop would outlive the stage)
+  r("haltsound", () => session.haltSounds());
   r("haltvoice", () => session.audio.halt("voice"));
   r("halttheme", () => session.audio.halt("theme"));
   r("sounddone", () => (session.audio.isDone("sound") ? 1 : 0));
@@ -483,12 +508,41 @@ export function registerGameBuiltins(session: GameSession): void {
       return;
     }
     session.audio.play("theme", theme, { loop: true });
+    session.currentThemeName = n === undefined ? "none" : toStr(n);
+  });
+  // playnewtheme(name): swap the looping theme to a specific track/bank. Puzzle
+  // scripts save the prior theme via currenttheme() and restore it afterwards
+  // (the gramophone plays a record over the ambient theme, then puts it back).
+  r("playnewtheme", (_i, [n]) => {
+    const name = toStr(n ?? "");
+    if (name === "none" || name === "") {
+      session.audio.halt("theme");
+      session.currentThemeName = "none";
+      return;
+    }
+    const theme = session.audioLib.theme(name);
+    if (!theme) {
+      log(`playnewtheme: no theme "${name}"`);
+      return;
+    }
+    session.audio.play("theme", theme, { loop: true });
+    session.currentThemeName = name;
   });
   r("opentrackfile", (_i, [n]) => {
     session.openTrackFile(toStr(n));
   });
   r("closetrackfile", (_i, [n]) => {
-    session.audioLib.closeBank(toStr(n));
+    const name = toStr(n ?? "");
+    // Closing the track file that is currently the playing theme stops it: the
+    // gramophone's record is a theme sourced from its .trk, and the crank
+    // cleanup closes that .trk to end the record before restoring the room's
+    // ambient theme (which is "none" in the dev harness — so this is what
+    // actually silences the record there).
+    if (session.currentThemeName.toLowerCase() === name.toLowerCase()) {
+      session.audio.halt("theme");
+      session.currentThemeName = "none";
+    }
+    session.audioLib.closeBank(name);
   });
 
   // string helper used by boot logic: findword("a,b,c", ",", 2) -> "b"
@@ -521,7 +575,9 @@ export function registerGameBuiltins(session: GameSession): void {
     session.fade.snapshot = null;
     session.fade.level = 1;
   });
-  r("currenttheme", () => "none");
+  // currenttheme([layer]): the looping theme currently playing (the layer arg
+  // selects a mix channel in TI.EXE; we track a single theme, so it's ignored).
+  r("currenttheme", () => session.currentThemeName);
   for (const noop of [
     "flushevents", "hidecursor", "showcursor", "debugger",
     "visualeffect", "mixclut",
@@ -564,8 +620,26 @@ export function registerGameBuiltins(session: GameSession): void {
 
   r("soundloop", (_i, [name, flag]) => session.soundLoop(toStr(name ?? ""), truthy(flag ?? 1)));
 
-  // forceupdate(): run the ambient service immediately (transitions do too)
-  r("forceupdate", () => session.tickTime(session.clock.now + 66));
+  // forceupdate(): advance one engine step, then yield a real frame so the
+  // browser renders and delivers pending input. Script poll loops (the crank
+  // play loop `while done=0 { forceupdate(); mouse(); button() }`) depend on
+  // this yield to ever see the click that ends them — a synchronous tick alone
+  // would spin forever. The realYieldSeq bump spares the loop from the guard.
+  r("forceupdate", async () => {
+    // With real frames, the rAF loop advances the clock with REAL time each
+    // frame — self-advancing +66 here on top of that races the sim clock
+    // ahead of real time (4x at 60fps), and every later clock.sleep (trackbut
+    // after a long crank play) stalls until real time catches back up. So in
+    // the browser forceupdate only waits a frame; the tick does the rest.
+    // Headless has no frame source, so it self-advances one 66 ms step —
+    // which also keeps tests deterministic (one call = one service step).
+    if (!session.hasRealFrames) {
+      session.tickTime(session.clock.now + 66);
+    } else {
+      session.realYieldSeq++;
+    }
+    await session.nextFrame();
+  });
 
   // starxyz(name, axis): named world point from the set's actor/star table.
   // Axes: 1 = x, 2 = y (ground plane, same pair the camera/crickets use),
@@ -803,6 +877,11 @@ export function registerGameBuiltins(session: GameSession): void {
   r("pointy", (_i, [p]) => s16(toNum(p ?? 0) & 0xffff));
   r("mouse", () => session.pointerPoint());
   r("button", () => (session.pointerDown ? 1 : 0));
+  // flushevents(): discard queued input so the click that ended a drag/poll
+  // loop doesn't leak into the next interaction. Our host dispatches clicks one
+  // at a time (a mousedown handler runs to completion before the next click),
+  // so there is no queue to drain — a no-op that keeps scripts happy.
+  r("flushevents", () => {});
   // mousedown(point): synthesise a click at a point. Only reached by scripts
   // that replay a press (wireless rx()'s ok-interrupt); return the point.
   r("mousedown", (_i, [p]) => toNum(p ?? 0));
@@ -838,6 +917,7 @@ export function registerGameBuiltins(session: GameSession): void {
   // next pointermove/pointerup, and repaint before the next iteration.
   r("stilldown", async () => {
     await session.clock.sleep(16);
+    if (session.hasRealFrames) session.realYieldSeq++;
     return session.pointerDown ? 1 : 0;
   });
   // a "button" is a prop drawn at (x,y); its screen rect comes from the frame's
@@ -854,8 +934,29 @@ export function registerGameBuiltins(session: GameSession): void {
     return !!r0 && session.pointerX >= r0.x0 && session.pointerX < r0.x0 + r0.w &&
       session.pointerY >= r0.y0 && session.pointerY < r0.y0 + r0.h;
   };
-  // pointinbutton(name, x, y): is the pointer currently over the button?
-  r("pointinbutton", (_i, [n, x, y]) => (inButton(toStr(n ?? ""), toNum(x ?? 256), toNum(y ?? 192)) ? 1 : 0));
+  // pointinbutton(flat, name, point): is `point` inside the flat's named
+  // click-region? This is the stage "button" system (drop targets, OK, dials);
+  // scripts pass currentflat() and either the click arg or mouse() as the point.
+  r("pointinbutton", (_i, [flat, name, point]) => {
+    const region = session.flatRegion(toStr(flat ?? ""), toStr(name ?? ""));
+    if (!region) return 0;
+    const pt = toNum(point ?? 0);
+    const x = s16((pt >> 16) & 0xffff), y = s16(pt & 0xffff);
+    return x >= region.left && x <= region.right && y >= region.top && y <= region.bottom ? 1 : 0;
+  });
+  // pointinprop(name, point): is `point` inside the prop's drawn screen rect?
+  // (rect = anchor - frame offset, size = frame w/h — the same geometry as a
+  // UI button prop.) Used for grabbing draggable props (crank, inventory bags).
+  r("pointinprop", (_i, [n, point]) => {
+    const p = prop(n);
+    const st = p?.state();
+    if (!p || !st || !st.frames.length) return 0;
+    const f = p.shop.frame(st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);
+    const x0 = p.anchorX - f.posXraw, y0 = p.anchorY - f.posYraw;
+    const pt = toNum(point ?? 0);
+    const x = s16((pt >> 16) & 0xffff), y = s16(pt & 0xffff);
+    return x >= x0 && x < x0 + f.width && y >= y0 && y < y0 + f.height ? 1 : 0;
+  });
   // trackbut(name, x, y): a push-button. Called from a button's mousedown (so
   // the button is already pressed); tracks the hold (showing the prop as the
   // pressed highlight) and returns 1 iff released while still over it.

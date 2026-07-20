@@ -524,13 +524,25 @@ async function runAnimations(v: SetViewer): Promise<void> {
   await drain();
   check("delay(60) resumes after 1s", resumed && !v.inputLocked);
 
-  // soundloop: named looping ambient, on/off, no double-start
+  // soundloop: a FLAG — the sound loops when subsequently played (the corpus
+  // always pairs `soundloop(x, true)` with a singlesound/multiplesound or a
+  // makecricket); playing a flagged sound twice doesn't stack; haltsound
+  // stops the tracked loop (the gramophone hiss must not outlive the crank)
   sink.calls.length = 0;
   session.soundLoop("doorlocked", true);
-  session.soundLoop("doorlocked", true); // already sounding: no second start
+  check("soundloop alone plays nothing (it only flags)", sink.calls.length === 0, `${sink.calls.length} plays`);
+  session.playSound("doorlocked", false);
+  session.playSound("doorlocked", false); // already looping: no second start
   const loops = sink.calls.filter((c) => c.loop);
-  check("soundloop starts one looping sound", loops.length === 1, `${loops.length} loop starts`);
+  check("flagged sound plays as ONE tracked loop", loops.length === 1 && sink.calls.length === 1, `${loops.length} loop starts of ${sink.calls.length} plays`);
+  session.haltSounds();
+  sink.calls.length = 0;
+  session.playSound("doorlocked", false); // flag persists: loops again after halt
+  check("haltsound stops the loop; flag persists for the next play", sink.calls.filter((c) => c.loop).length === 1, `${sink.calls.length} plays`);
   session.soundLoop("doorlocked", false);
+  sink.calls.length = 0;
+  session.playSound("doorlocked", false);
+  check("soundloop(off) unflags: plays one-shot again", sink.calls.length === 1 && !sink.calls[0].loop, `loop=${sink.calls[0]?.loop}`);
 }
 
 // --- 17. actors: GANG.CST loads, DECKBD openset places Morrow -------------
@@ -555,8 +567,17 @@ async function runAnimations(v: SetViewer): Promise<void> {
       (morrow.worldX !== 0 || morrow.worldY !== 0),
     `vis=${morrow.visible} set=${morrow.setName} scale=${morrow.scale} @${morrow.worldX},${morrow.worldY} pose=${morrow.poseName}`,
   );
-  check("deckbd ambient soundloops start", sink.calls.filter((c) => c.loop).length >= 2,
-    `${sink.calls.filter((c) => c.loop).length} loops`);
+  // ambience = soundloop flag + makecricket; a cricket starts LOOPING on the
+  // first service tick the player is within its radius (positional — the far
+  // one stays armed and will start when approached, so exactly one of
+  // motor/machine is audible from this spawn)
+  for (let i = 0; i < 3; i++) { session.tickTime((clock += 66)); await drain(); }
+  check(
+    "deckbd ambient: in-earshot cricket loops, far one stays armed",
+    sink.calls.filter((c) => c.loop).length === 1 &&
+      session.isCricket("motor") && session.isCricket("machine"),
+    `${sink.calls.filter((c) => c.loop).length} loops, motor=${session.isCricket("motor")} machine=${session.isCricket("machine")}`,
+  );
   // find the view where morrow projects LARGEST while fully on screen — the
   // conversational view you actually approach him in (not a distant/empty one)
   let seen = "";
@@ -1252,6 +1273,65 @@ for (const [label, releaseX, releaseY, expectExit] of [
     "actor facing the camera shows the front sprite, not the back",
     facing === front && away === back,
     `facing=front?${facing === front} away=back?${away === back}`,
+  );
+}
+
+// --- 37. trunk gramophone: clicking gramdrawerbut opens the drawer ----------
+// Exercises the stage "button" dispatch: a region whose own script only sets
+// the cursor forwards its mousedown up region -> flat -> stage main, keyed by
+// target; the trunk main runs sendtoprop("gramdrawer", open()), and the prop's
+// open() handler shows the drawer and (via makeloop) settles it to "idle".
+{
+  const { session } = await newSession();
+  await session.openSetFile("b59.set");
+  await session.transToFlat("trunk.stg");
+  await session.gotoFlat("Trunk 2");
+  const gd = session.propRuntime.get("gramdrawer")!;
+  const before = gd.visible;
+  await session.stageClickAt(344, 328); // gramdrawerbut region center
+  const openedView = gd.stateName;
+  for (let i = 0; i < 8; i++) { session.tickTime((clock += 66)); await drain(); } // makeloop -> idle
+  check(
+    "trunk: gramdrawerbut opens the drawer (region->stage main->sendtoprop open())",
+    !before && gd.visible && openedView.startsWith("open") && gd.stateName.startsWith("idle"),
+    `before=${before} openedView=${openedView} settled=${gd.stateName}`,
+  );
+}
+
+// --- 38. trunk: pointinbutton hit-tests a flat's named click-region ---------
+{
+  const { session } = await newSession();
+  await session.openSetFile("b59.set");
+  await session.transToFlat("trunk.stg");
+  await session.gotoFlat("Trunk 2");
+  const pib = session.interp.builtins.get("pointinbutton")!;
+  const pt = (x: number, y: number) => ((x & 0xffff) << 16) | (y & 0xffff);
+  const flat = session.currentFlat; // "Trunk 2"
+  // wax1 drop-slot region ~ [391,304,437,358]
+  const inside = pib(session.interp, [flat, "wax1", pt(414, 331)], null as never, null as never);
+  const outside = pib(session.interp, [flat, "wax1", pt(10, 10)], null as never, null as never);
+  const nosuch = pib(session.interp, [flat, "nope", pt(414, 331)], null as never, null as never);
+  check(
+    "trunk: pointinbutton is 1 inside a flat region, 0 outside / unknown",
+    inside === 1 && outside === 0 && nosuch === 0,
+    `in=${inside} out=${outside} nosuch=${nosuch}`,
+  );
+}
+
+// --- 39. substring(haystack, needle) is a 1-based find, not a slice ---------
+// Scripts gate on it: `substring(propview(me),"idle") >= 0` (trunk drawer),
+// `substring(path(1),"titanic1:") = 1` (prefix), and ENIGMA's key mapping
+// `substring("abcdefghijklmnopqrstuvwxyz ", arg) - 1` needs 'a' -> 1.
+{
+  const { session } = await newSession();
+  const sub = session.interp.builtins.get("substring")!;
+  const call = (s: string, n: string) => sub(session.interp, [s, n], null as never, null as never);
+  check(
+    "substring is a 1-based case-insensitive find (-1 when absent)",
+    call("abcdefghijklmnopqrstuvwxyz ", "a") === 1 && call("abcdefghijklmnopqrstuvwxyz ", "c") === 3 &&
+      call("idle12", "idle") === 1 && call("open2", "idle") === -1 &&
+      call("Titanic1:foo", "titanic1:") === 1,
+    `a=${call("abcdefghijklmnopqrstuvwxyz ", "a")} c=${call("abcdefghijklmnopqrstuvwxyz ", "c")} miss=${call("open2", "idle")}`,
   );
 }
 

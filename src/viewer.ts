@@ -691,8 +691,16 @@ export class SetViewer {
       return;
     }
     // a full-screen overlay stage (the deck map) resolves clicks through its
-    // own click-logic regions — deck buttons, OK, red-area jumps
+    // own click-logic regions — deck buttons, OK, red-area jumps. But when a
+    // script is already suspended in an interactive poll loop (the crank play
+    // loop, drag loops), that loop OWNS the input: it reads mouse()/button()
+    // itself and dispatches the button by name (sendtobutton). Dispatching the
+    // region here too would run the same handler twice concurrently (the trunk
+    // OK would close the flat while the play loop's cleanup still runs). The
+    // original engine is single-threaded: a modal loop pumps input, nothing
+    // interleaves — so while busy, just publish the pointer and stand back.
     if (!this.session.setVisible && this.session.stage) {
+      if (busyOnEntry) return;
       if (await this.session.stageClickAt(x, y)) return;
     }
     if (busyOnEntry) return; // a script was already running/suspended (delay)

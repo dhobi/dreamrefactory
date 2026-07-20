@@ -172,7 +172,27 @@ export class GameSession {
   ) {
     registerCoreBuiltins(this.interp);
     registerGameBuiltins(this);
+    this.interp.realYieldSeq = () => this.realYieldSeq;
   }
+
+  /**
+   * Real event-loop yield hook + counter. forceupdate()/stilldown() call
+   * nextFrame() to render a frame and pump input, then bump realYieldSeq; the
+   * interpreter's while-guard uses the counter to spare interactive loops. In
+   * the browser main.ts points nextFrame at requestAnimationFrame; the default
+   * resolves immediately (headless / tests advance the clock manually).
+   */
+  nextFrame: () => Promise<void> = () => Promise.resolve();
+  /**
+   * True once the host wires nextFrame to real rendered frames (rAF). Only
+   * then do forceupdate/stilldown bump realYieldSeq: in a browser an
+   * interactive poll loop genuinely waits on the user, so the while-guard must
+   * not trip it. Headless (tests) keeps this false — there forceupdate
+   * free-runs (it advances its own clock and nextFrame resolves immediately),
+   * so a stuck loop MUST still hit the 100k guard instead of hanging forever.
+   */
+  hasRealFrames = false;
+  realYieldSeq = 0;
 
   // ---- timing runtime (delay / makeloop / makecricket / soundloop) --------
 
@@ -294,22 +314,55 @@ export class GameSession {
     return this.crickets.some((c) => c.name === n);
   }
 
-  /** soundloop(name, on/off): a named non-positional looping sound */
+  /** sound names flagged by soundloop(name, true): they LOOP when played */
+  readonly loopFlags = new Set<string>();
+
+  /**
+   * soundloop(name, on/off): flag a sound as looping — it does NOT play
+   * anything itself. Every corpus call pairs the flag with a play that
+   * follows (`soundloop("hissloop", true); singlesound("hissloop")`, or a
+   * makecricket for positional ambience); off clears the flag AND stops the
+   * loop if it is sounding (BOMB stops its tick with soundloop(off) alone).
+   */
   soundLoop(name: string, on: boolean): void {
     const key = name.toLowerCase();
-    const existing = this.soundLoops.get(key);
-    if (!on) {
-      existing?.stop();
-      this.soundLoops.delete(key);
+    if (on) {
+      this.loopFlags.add(key);
       return;
     }
-    if (existing && !existing.done) return;
+    this.loopFlags.delete(key);
+    this.soundLoops.get(key)?.stop();
+    this.soundLoops.delete(key);
+  }
+
+  /**
+   * Play a named sound on the sound channel, honouring the loop flag.
+   * A flagged play loops and is TRACKED, so haltsound()/soundloop(off) can
+   * stop it (an untracked looping source would sound forever — the
+   * gramophone hiss outliving the whole trunk stage). A flagged sound that
+   * is already looping is left alone (no double start on re-entry).
+   */
+  playSound(name: string, overlap: boolean): void {
+    const key = name.toLowerCase();
     const audio = this.audioLib.sound(key);
     if (!audio) {
-      this.onLog(`soundloop: "${name}" not found`);
+      this.onLog(`sound not found: ${name} (banks: ${this.audioLib.bankNames.join(", ") || "none"})`);
       return;
     }
-    this.soundLoops.set(key, this.audio.play("sound", audio, { loop: true, overlap: true }));
+    if (this.loopFlags.has(key)) {
+      const existing = this.soundLoops.get(key);
+      if (existing && !existing.done) return;
+      this.soundLoops.set(key, this.audio.play("sound", audio, { loop: true, overlap: true }));
+      return;
+    }
+    this.audio.play("sound", audio, { overlap });
+  }
+
+  /** haltsound(n): stop the sound channel INCLUDING tracked looping sounds */
+  haltSounds(): void {
+    this.audio.halt("sound");
+    for (const h of this.soundLoops.values()) h.stop();
+    this.soundLoops.clear();
   }
 
   /** silence every ambient sound (set change cleans its crickets itself) */
@@ -475,7 +528,13 @@ export class GameSession {
         pan = Math.max(-1, Math.min(1, lateral / dist));
       }
     }
-    c.handle = this.audio.play("sound", audio, { overlap: true, volume, pan });
+    // a soundloop-flagged cricket starts once and keeps looping in place
+    // (handle.done stays false, so the re-fire check never triggers again) —
+    // this is how the sets run positional ambience: soundloop("motor", true)
+    // + makecricket("motor", ...) on deckbd
+    c.handle = this.audio.play("sound", audio, {
+      overlap: true, volume, pan, loop: this.loopFlags.has(c.name),
+    });
   }
 
   private async fireLoop(l: GameLoop): Promise<void> {
@@ -623,6 +682,8 @@ export class GameSession {
   currentFlat = "none";
   /** whether the set view draws over the flat (setvisible builtin) */
   setVisible = true;
+  /** name of the looping theme currently playing (currenttheme getter) */
+  currentThemeName = "none";
 
   // ---- persistent text layer (drawstring/stringwidth builtins) ------------
   /** text drawn by drawstring(), composited over the screen after props.
@@ -832,18 +893,59 @@ export class GameSession {
   /** clickable regions of the current flat (parsed from its click-logic), cached */
   private regionCache = new Map<string, StgRegion[]>();
 
-  private currentFlatRegions(): StgRegion[] {
+  /** clickable regions of an arbitrary flat by name (current flat included) */
+  private regionsFor(flatName: string): StgRegion[] {
     const stg = this.stageFile;
-    if (!stg || this.currentFlat === "none") return [];
-    const key = `${this.stageName}:${this.currentFlat}`;
+    if (!stg || flatName === "none") return [];
+    const key = `${this.stageName}:${flatName}`;
     let regs = this.regionCache.get(key);
     if (!regs) {
-      const flat = stg.flats.find((f) => f.name === this.currentFlat);
+      const flat = stg.flats.find((f) => f.name.toLowerCase() === flatName.toLowerCase());
       const data = flat && stg.file.containers[flat.locationClickLogic]?.data;
       regs = data ? readStgRegions(data) : [];
       this.regionCache.set(key, regs);
     }
     return regs;
+  }
+
+  private currentFlatRegions(): StgRegion[] {
+    return this.regionsFor(this.currentFlat);
+  }
+
+  /** a flat's named clickable region (the stage "button" system), or null */
+  flatRegion(flatName: string, name: string): StgRegion | null {
+    const lower = name.toLowerCase();
+    return this.regionsFor(flatName).find((r) => r.name.toLowerCase() === lower) ?? null;
+  }
+
+  /**
+   * Dispatch a deferred handler (mousedown/setcursor/…) to a flat's named
+   * region — the "button" system stage mini-games use via sendtobutton. Like
+   * a click on that region (stageClickAt), but invoked by name from a script
+   * rather than resolved from a cursor position.
+   */
+  async sendToButton(
+    flatName: string,
+    regionName: string,
+    handler: string,
+    args: Value[],
+    callerName: string,
+  ): Promise<Value> {
+    const stg = this.stageFile;
+    if (!stg) return 0;
+    const region = this.flatRegion(flatName, regionName);
+    if (!region) {
+      this.onLog(`sendtobutton: no region "${regionName}" in flat ${flatName}`);
+      return 0;
+    }
+    const inst = this.instanceFrom(stg.file.containers[region.script]?.data, region.name || "region");
+    if (!inst || !inst.script.codes.has(handler)) return 0;
+    inst.parent = this.flatScripts.get(this.currentFlat.toLowerCase()) ?? this.stage;
+    const res = await this.interp.runHandler(inst, handler, args, {
+      me: region.name,
+      target: callerName,
+    });
+    return res.value;
   }
 
   /**
@@ -859,20 +961,36 @@ export class GameSession {
       (r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom,
     );
     if (!hit) return false;
-    const inst = this.instanceFrom(stg.file.containers[hit.script]?.data, hit.name || "region");
-    if (!inst) return false;
+    const region = this.instanceFrom(stg.file.containers[hit.script]?.data, hit.name || "region");
+    // A region with no backing script is a bare drop-zone / hotspot (the
+    // gramophone's horn/wax targets): it is NOT a button, so let the click fall
+    // through to the prop beneath it, whose SHP mousedown runs the drag loop.
+    if (!region) return false;
     // resolve unqualified calls through the current FLAT script first (it
-    // defines jumpbaby for the red areas), which chains to the stage main
-    // (gotopage/exitmap/jumppapa) via the fallback scripts
-    inst.parent = this.flatScripts.get(this.currentFlat.toLowerCase()) ?? this.stage;
+    // defines jumpbaby for the map's red areas), which chains to the stage main
+    const flat = this.flatScripts.get(this.currentFlat.toLowerCase());
+    region.parent = flat ?? this.stage;
     this.setPointer(x, y);
-    try {
-      await this.interp.runHandler(inst, "mousedown", [hit.name], {
-        me: hit.name,
-        target: hit.name,
-      });
-    } catch (e) {
-      this.onLog(`stage region ${hit.name}: ${(e as Error).message}`);
+    this.interp.eventConsumed = false;
+    // region → flat → stage main, with target = the region name: a button
+    // region may only set the cursor and leave the mousedown to the stage main,
+    // keyed by target (trunk's gramdrawerbut -> sendtoprop(gramdrawer, open())).
+    const chain: ScriptInstance[] = [];
+    for (const link of [region, flat, this.stage]) {
+      if (link && !chain.includes(link)) chain.push(link);
+    }
+    for (const link of chain) {
+      if (!link.script.codes.has("mousedown")) continue;
+      try {
+        const res = await this.interp.runHandler(link, "mousedown", [hit.name], {
+          me: link.name,
+          target: hit.name,
+        });
+        if (this.interp.eventConsumed || (res.handled && !res.passed)) break;
+      } catch (e) {
+        this.onLog(`stage region ${hit.name}: ${(e as Error).message}`);
+        break;
+      }
     }
     return true;
   }

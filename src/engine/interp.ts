@@ -96,6 +96,15 @@ export class Interpreter {
    * (like boot's keydown after routing) does not consume the event.
    */
   eventConsumed = false;
+  /**
+   * A monotonic counter of real rendered-frame yields. The while-loop guard
+   * reads it to tell an interactive loop that waits on the user (crank play,
+   * drags) from a synchronous runaway: a real yield resets the counter.
+   * forceupdate()/stilldown() bump it ONLY when the host renders real frames
+   * (session.hasRealFrames — the browser); headless it never advances, so a
+   * stuck loop still trips the 100k guard instead of hanging the test run.
+   */
+  realYieldSeq: () => number = () => 0;
   private unknownLogged = new Set<string>();
   /**
    * Nested handler dispatch depth. The async interpreter has no natural
@@ -196,11 +205,22 @@ export class Interpreter {
         return NORMAL;
       }
       case "while": {
+        // The guard catches a synchronous infinite loop (a data bug that would
+        // hang the tab). A loop that yields a real frame each turn (forceupdate/
+        // stilldown — the crank play loop, drag loops) is NOT that: it can run
+        // for minutes waiting on the user, so a real yield resets the counter.
         let guard = 0;
+        let lastYield = this.realYieldSeq();
         while (truthy(await this.evalExpr(st.cond, frame))) {
           const sig = await this.execBlock(st.body, frame);
           if (sig.s !== "normal") return sig;
-          if (++guard > 100_000) throw new Error("while loop runaway (100k iterations)");
+          const y = this.realYieldSeq();
+          if (y !== lastYield) {
+            lastYield = y;
+            guard = 0;
+          } else if (++guard > 100_000) {
+            throw new Error("while loop runaway (100k iterations)");
+          }
         }
         return NORMAL;
       }
@@ -357,9 +377,15 @@ export function registerCoreBuiltins(interp: Interpreter, rng: () => number = Ma
   r("numtostring", (_i, [n]) => toStr(n ?? 0));
   r("stringtonum", (_i, [s]) => toNum(s ?? 0));
   r("stringlength", (_i, [s]) => toStr(s ?? "").length);
-  r("substring", (_i, [s, from, len]) =>
-    toStr(s ?? "").substr(Math.max(0, toNum(from ?? 0) - 1), toNum(len ?? 0)),
-  );
+  // substring(haystack, needle): 1-based FIND, -1 when absent — not a slice.
+  // Every corpus call compares the result (`substring(propview(me),"idle")>=0`,
+  // `substring(path(1),"titanic1:")=1`), and ENIGMA maps letters to key angles
+  // with `substring("abcdefghijklmnopqrstuvwxyz ", arg) - 1`, which only works
+  // 1-based. Case-insensitive like every other string comparison in the engine.
+  r("substring", (_i, [s, needle]) => {
+    const i = toStr(s ?? "").toLowerCase().indexOf(toStr(needle ?? "").toLowerCase());
+    return i < 0 ? -1 : i + 1;
+  });
   r("message", (_i, args) => {
     console.log(`[script] ${args.map(toStr).join(" ")}`);
   });
