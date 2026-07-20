@@ -290,6 +290,28 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(enigmaBtn);
 
+  // dev: open the boiler-room chute stage (normally reached from a BOIL.SET
+  // coal hotspot). Its shop/track/stg are prefetched in loadServerSet.
+  const boilBtn = document.createElement("button");
+  boilBtn.textContent = "🔥 Boiler + Rubaiyat (dev)";
+  boilBtn.style.marginLeft = "0.5rem";
+  boilBtn.addEventListener("click", async () => {
+    // Reproduce the Enigma clue's state: the Rubaiyat hidden in coal chute 4.
+    // inchute() (boil.shp openshop) shows boilrubaiyat when savedeck="boil3",
+    // propowner("rubaiyat")="coal4" and we're on that chute's scene (Scene13).
+    session.interp.globals.set("savedeck", "boil3");
+    session.interp.globals.set("mission", 1);
+    const rub = session.propRuntime.get("rubaiyat");
+    if (rub) rub.owner = "coal4";
+    else log("boiler dev: no rubaiyat prop (inven.shp not loaded?)");
+    if (session.currentSetName !== "boil") await loadServerSet("boil.set");
+    // Scene13/View21 = coal chute 4; jump there so inchute() matches, then
+    // open the boiler flat as the coal hotspot would (transtoflat)
+    viewer?.jumpTo("Scene13", "View21");
+    if (viewer) void session.track(session.transToFlat("boil.stg"));
+  });
+  setSelectWrap.appendChild(boilBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).
@@ -378,6 +400,7 @@ async function loadServerSet(setName: string): Promise<void> {
      "wireless.stg", "wireless.shp", "wireless.sfx",
      "trunk.stg", "trunk.shp", "grammy.sfx", "oldtune.trk", "oldboss.trk",
      "enigma.stg", "enigma.shp", "enigma.sfx",
+     "boil.stg", "boil.shp", "boilflat.trk", "boil.trk",
      "house.shp", "inven.shp", "inven.trk", "gang.cst", "extra.cst"].map(fetchIntoStore),
   );
   try {
@@ -387,7 +410,7 @@ async function loadServerSet(setName: string): Promise<void> {
     return;
   }
   rebuildSetSelect();
-  void activateSet(setName);
+  await activateSet(setName);
 }
 
 /** dev-server mode: offer all hosted .SET files as a clickable list */

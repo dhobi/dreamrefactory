@@ -545,17 +545,12 @@ export function registerGameBuiltins(session: GameSession): void {
     session.openTrackFile(toStr(n));
   });
   r("closetrackfile", (_i, [n]) => {
-    const name = toStr(n ?? "");
-    // Closing the track file that is currently the playing theme stops it: the
-    // gramophone's record is a theme sourced from its .trk, and the crank
-    // cleanup closes that .trk to end the record before restoring the room's
-    // ambient theme (which is "none" in the dev harness — so this is what
-    // actually silences the record there).
-    if (session.currentThemeName.toLowerCase() === name.toLowerCase()) {
-      session.audio.halt("theme");
-      session.currentThemeName = "none";
-    }
-    session.audioLib.closeBank(name);
+    // Only unload the bank — do NOT stop the theme. Set travel closes and
+    // reopens theme tracks around transitions (BOOTFILE closes deckb/deckc/…
+    // then setupsound reopens the destination's), so halting the theme here
+    // would silence normal room-to-room music. A theme ends only when
+    // explicitly replaced (playnewtheme) or halted (halttheme/playnewtheme "none").
+    session.audioLib.closeBank(toStr(n ?? ""));
   });
 
   // string helper used by boot logic: findword("a,b,c", ",", 2) -> "b"

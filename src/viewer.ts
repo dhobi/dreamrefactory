@@ -706,7 +706,7 @@ export class SetViewer {
     if (busyOnEntry) return; // a script was already running/suspended (delay)
     // props (UI band, inventory items) sit in front of everything
     const prop = this.session.propRuntime.propAt(
-      x, y, this.session.setVisible ? this.worldCamera() : null,
+      x, y, this.session.setVisible ? this.worldCamera() : null, this.session.setVisible,
     );
     if (prop) {
       const name = prop.group.name;
@@ -961,7 +961,7 @@ export class SetViewer {
     this.session.setPointer(x, y); // keep mouse() current as the cursor moves
     if (this.session.puppet) return this.puppetBevelAt(x, y) >= 0 ? "touch" : "";
     const prop = this.session.propRuntime.propAt(
-      x, y, this.session.setVisible ? this.worldCamera() : null,
+      x, y, this.session.setVisible ? this.worldCamera() : null, this.session.setVisible,
     );
     if (prop) {
       const name = prop.group.name;
@@ -1094,7 +1094,9 @@ export class SetViewer {
           img.data, flat.width, flat.height, propPal, cam, this.occlusion(),
         );
       }
-      this.session.propRuntime.composite(img.data, flat.width, flat.height, propPal, minAnchorY, cam);
+      this.session.propRuntime.composite(
+        img.data, flat.width, flat.height, propPal, minAnchorY, cam, this.session.setVisible,
+      );
       ctx.putImageData(img, 0, 0);
       this.drawTextOverlay(ctx);
       this.applyFade(ctx);
@@ -1118,7 +1120,7 @@ export class SetViewer {
         );
       }
       this.session.propRuntime.composite(
-        img.data, f.width, f.height, this.propPalette, -Infinity, cam,
+        img.data, f.width, f.height, this.propPalette, -Infinity, cam, this.session.setVisible,
       );
     }
     ctx.putImageData(img, 0, 0);

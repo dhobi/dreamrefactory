@@ -107,6 +107,14 @@ export class PropInstance {
 
 export class LoadedShop {
   private frameCache = new Map<number, ShpFrame>();
+  /**
+   * Persistent = a boot-level UI shop (house.shp / inven.shp) whose screen
+   * props (the interface band, inventory) belong on top of the set view.
+   * Non-persistent shops are set/stage shops: their SCREEN-space props (e.g.
+   * the boiler flat's switch/door) must only draw while their overlay is up,
+   * not bleed onto the room's navigation view.
+   */
+  persistent = false;
 
   constructor(
     readonly name: string,
@@ -172,10 +180,15 @@ export class PropRuntime {
    * Blit all visible props into an RGBA view buffer, colorizing through the
    * ACTIVE SET's palette (the engine shares one CLUT across set and props).
    */
-  /** visible props with a drawable frame, back-to-front (dist descending) */
-  private drawList(): PropInstance[] {
+  /**
+   * Visible screen-space props with a drawable frame, back-to-front. In the
+   * set view (persistentOnly) only boot-UI shops qualify, so a set/stage
+   * shop's screen props don't bleed onto the room (the boiler flat controls).
+   */
+  private drawList(persistentOnly = false): PropInstance[] {
     return [...this.props.values()]
       .filter((p) => p.visible && !p.worldSpace && p.state()?.frames.length)
+      .filter((p) => !persistentOnly || p.shop.persistent)
       .sort((a, b) => b.dist - a.dist);
   }
 
@@ -216,8 +229,8 @@ export class PropRuntime {
   }
 
   /** front-most visible prop whose opaque pixels cover (x, y) */
-  propAt(x: number, y: number, cam: WorldCamera | null = null): PropInstance | null {
-    const list = this.drawList();
+  propAt(x: number, y: number, cam: WorldCamera | null = null, persistentScreenOnly = false): PropInstance | null {
+    const list = this.drawList(persistentScreenOnly);
     for (let i = list.length - 1; i >= 0; i--) {
       const p = list[i];
       const st = p.state()!;
@@ -248,6 +261,7 @@ export class PropRuntime {
     paletteRGBA: Uint8ClampedArray,
     minAnchorY = -Infinity,
     cam: WorldCamera | null = null,
+    persistentScreenOnly = false,
   ): void {
     // world-space props first (they belong to the scene), far to near
     if (cam) {
@@ -270,7 +284,7 @@ export class PropRuntime {
         }
       }
     }
-    for (const p of this.drawList()) {
+    for (const p of this.drawList(persistentScreenOnly)) {
       if (p.anchorY < minAnchorY) continue;
       const st = p.state()!;
       const f = p.shop.frame(st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);

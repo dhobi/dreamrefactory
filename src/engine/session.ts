@@ -1461,7 +1461,13 @@ export class GameSession {
       if (this.files(bank)) this.audioLib.openBank(bank, this.files(bank)!);
     }
     for (const shop of ["inven.shp", "house.shp"]) {
-      if (this.files(shop)) await this.openShop(shop);
+      if (this.files(shop)) {
+        await this.openShop(shop);
+        // boot UI shops: their screen props (interface band, inventory) draw on
+        // top of the set view; every other shop's screen props are overlay-only
+        const loaded = this.propRuntime.shops.get(shop.toLowerCase());
+        if (loaded) loaded.persistent = true;
+      }
     }
     // the boot script opens the story cast at startup (opencastfile)
     if (this.files("gang.cst")) await this.openCastFile("gang.cst");

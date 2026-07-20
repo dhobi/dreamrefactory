@@ -1401,5 +1401,63 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- 42. BOIL boiler chute: door opens, switch slides the gate + flips flat -
+// Reuses the shared machinery with no new opcodes: prop mousedowns (own
+// scripts), sendtoprop up()/down(), the soundloop-flagged slide, and gotoflat
+// between the two flats (boil 1 closed <-> boil 2 chute revealed).
+{
+  const { session } = await newSession();
+  await session.openSetFile("b59.set");
+  await session.transToFlat("boil.stg");
+  await session.gotoFlat("boil 1");
+  const door = session.propRuntime.get("boildoor")!;
+  const sw = session.propRuntime.get("boilswitch")!;
+  const fire = async (name: string) => {
+    const inst = session.propScripts.get(name)!;
+    await session.interp.runHandler(inst, "mousedown", [name], { me: name, target: name });
+    await drain();
+  };
+  const startFlat = session.currentFlat;
+  await fire("boildoor"); // idleclosed -> idleopen
+  const doorOpen = door.stateName;
+  await fire("boilswitch"); // idleup -> down; boilgate.down() slides + gotoflat(2)
+  const afterDown = { sw: sw.stateName, flat: session.currentFlat };
+  await fire("boilswitch"); // idledown -> up; boilgate.up() -> gotoflat(1)
+  const afterUp = { sw: sw.stateName, flat: session.currentFlat };
+  check(
+    "boil: door opens; switch slides the gate and flips flat 1<->2",
+    startFlat === "boil 1" && doorOpen === "idleopen" &&
+      afterDown.sw === "idledown" && afterDown.flat === "boil 2" &&
+      afterUp.sw === "idleup" && afterUp.flat === "boil 1",
+    `door=${doorOpen} down=${JSON.stringify(afterDown)} up=${JSON.stringify(afterUp)}`,
+  );
+}
+
+// --- 43. set view scopes screen props to persistent (boot) shops -----------
+// A set's auto-opened shop can be a STAGE shop with screen-space props (boil.shp
+// = the boiler flat controls). Those must not draw/click on the room's
+// navigation view — only the persistent UI shops (house/inven) may. Regression
+// for the "wrong overlay: clickable rubaiyat hiding place on Scene10/View31".
+{
+  const { session } = await newSession();
+  await session.openSetFile("boil.set");
+  const boilShop = session.propRuntime.shops.get("boil.shp");
+  const houseShop = session.propRuntime.shops.get("house.shp");
+  const bag = session.propRuntime.get("boilbag")!; // a boil.shp screen control
+  // a point inside boilbag's drawn rect
+  const st = bag.state()!;
+  const f = bag.shop.frame(st.frames[0]);
+  const px = bag.anchorX - f.posXraw + Math.floor(f.width / 2);
+  const py = bag.anchorY - f.posYraw + Math.floor(f.height / 2);
+  const hitAll = session.propRuntime.propAt(px, py, null, false); // stage overlay scope
+  const hitSetView = session.propRuntime.propAt(px, py, null, true); // set-view scope
+  check(
+    "set view: stage-shop screen props are excluded (draw + click); boot UI persists",
+    boilShop?.persistent === false && houseShop?.persistent === true &&
+      bag.visible === true && hitAll === bag && hitSetView !== bag,
+    `boilPersist=${boilShop?.persistent} housePersist=${houseShop?.persistent} hitAll=${hitAll?.group.name} hitSetView=${hitSetView?.group.name ?? null}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
