@@ -86,13 +86,21 @@ export class PropInstance {
   zclip = 0;
   frameIdx = 0;
   lastTick = 0;
+  /** frame pinned by propdeg (a rotational/selector prop) — skip auto-anim */
+  frameLocked = false;
 
   constructor(
     readonly group: PropGroup,
     readonly shop: LoadedShop,
   ) {}
 
+  /**
+   * A visible prop with no explicit propview() defaults to its first state
+   * (the engine draws state 0 / frame 0). The map's buttons/spot/disable props
+   * rely on this — their scripts never call propview.
+   */
   state(): PropState | null {
+    if (!this.stateName) return this.group.states[0] ?? null;
     return this.group.states.find((s) => s.identifier.toLowerCase() === this.stateName) ?? null;
   }
 }
@@ -148,7 +156,7 @@ export class PropRuntime {
    */
   tick(now: number, frameMs: number): void {
     for (const p of this.props.values()) {
-      if (!p.visible) continue;
+      if (!p.visible || p.frameLocked) continue;
       const st = p.state();
       if (!st || st.frames.length < 2) continue;
       if (p.frameIdx >= st.frames.length - 1) continue;

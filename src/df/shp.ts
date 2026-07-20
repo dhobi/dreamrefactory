@@ -44,7 +44,10 @@ export function readShpFile(data: Uint8Array): ShpFile {
   if (r.i32() !== 4) throw new Error("unsupported DreamFactory SHP version (need 4.0)");
 
   r.seek(20);
-  const mainScriptLocation = r.i32();
+  // Container 0 is always the header, so a stored 0 means "unset" — the main
+  // script lives in container 1 by convention (the stage shops wireless/trunk/
+  // cargo store 0; house/inven store 1 explicitly).
+  const mainScriptLocation = r.i32() || 1;
   const paletteRaw = c0.subarray(36, 36 + 256 * 8);
   r.seek(2344);
   const refName = r.pstr();

@@ -898,5 +898,284 @@ async function runAnimations(v: SetViewer): Promise<void> {
   );
 }
 
+// --- 26. deck map cosmetics: you-are-here dot, deck highlight, disable bar --
+{
+  const { session } = await newSession();
+  await session.openSetFile("c73.set"); // C Deck = page 4
+  // tour mode opens the map with jumps enabled (mapdisabled() -> false)
+  session.interp.globals.set("tour", 1);
+  await session.transToFlat("map.stg");
+  const buttons = session.propRuntime.get("buttons")!;
+  const spot = session.propRuntime.get("spot")!;
+  const disable = session.propRuntime.get("disable")!;
+  check(
+    "map props default to their first state (no propview in scripts)",
+    buttons.state()?.identifier === "untitled" &&
+      spot.state()?.identifier === "blink" &&
+      disable.state()?.identifier === "untitled",
+    `buttons=${buttons.state()?.identifier} spot=${spot.state()?.identifier}`,
+  );
+  check(
+    "deck highlight pins the current deck's frame (C Deck = page 4 -> frame 3)",
+    buttons.visible && buttons.frameLocked && buttons.frameIdx === 3,
+    `visible=${buttons.visible} locked=${buttons.frameLocked} frame=${buttons.frameIdx}`,
+  );
+  check(
+    "you-are-here dot is placed off the default anchor (posdot ran)",
+    spot.visible && !(spot.anchorX === 256 && spot.anchorY === 192),
+    `visible=${spot.visible} anchor=(${spot.anchorX},${spot.anchorY})`,
+  );
+  check("tour mode hides the disable bar", disable.visible === false);
+  // paging to another deck moves the highlight frame with it
+  await session.runGlobal("gotopage", [2]); // A Deck
+  check(
+    "deck highlight follows paging (A Deck = page 2 -> frame 1)",
+    session.currentFlat === "Map 2" && buttons.frameIdx === 1,
+    `flat=${session.currentFlat} frame=${buttons.frameIdx}`,
+  );
+}
+
+// --- 27. deck map disable bar shows when jumps are locked (no bag/watch) ----
+{
+  const { session } = await newSession();
+  await session.openSetFile("c73.set");
+  // fresh session: no bag, no watch, no tour -> mapdisabled() is true
+  await session.transToFlat("map.stg");
+  const disable = session.propRuntime.get("disable")!;
+  check(
+    "disable bar is shown + centred when the map is locked",
+    disable.visible && disable.anchorX === 256 && disable.anchorY === 192,
+    `visible=${disable.visible} anchor=(${disable.anchorX},${disable.anchorY})`,
+  );
+}
+
+// --- 28. wireless stage: opens, sets up its props, zooms into a control -----
+{
+  const { session } = await newSession();
+  await session.openSetFile("wireless.set");
+  await session.transToFlat("wireless.stg");
+  check(
+    "wireless stage opens full-screen to its overview flat",
+    session.stageName === "wireless.stg" && session.setVisible === false &&
+      session.currentFlat === "wireless 1",
+    `stage=${session.stageName} flat=${session.currentFlat} setVisible=${session.setVisible}`,
+  );
+  // openwireless() -> openshopfile("wireless.shp"); openshop() -> setupsmallprops()
+  // makes the overview ("small") apparatus props visible on the stage
+  const senderhandle = session.propRuntime.get("senderhandle")!;
+  const tunerneedle = session.propRuntime.get("tunerneedle")!;
+  const wirelessbag = session.propRuntime.get("wirelessbag")!;
+  check(
+    "openshop re-fires on stage entry -> overview props set up (setupsmallprops)",
+    senderhandle.visible && senderhandle.stateName === "small" &&
+      tunerneedle.visible && wirelessbag.visible,
+    `sender=${senderhandle.visible}/${senderhandle.stateName} tuner=${tunerneedle.visible} bag=${wirelessbag.visible}`,
+  );
+  // the in-game interface band (house.shp) is hidden behind the full-screen stage
+  check("in-game interface band hidden during the stage", session.propRuntime.get("life")?.visible === false);
+  // clicking the "tuner" control region zooms into its big flat (openflat sets
+  // tunerneedle to its "big" view)
+  const stg = session.stageFile!;
+  const flat = stg.flats.find((f) => f.name === session.currentFlat)!;
+  const regions = readStgRegions(stg.file.containers[flat.locationClickLogic].data);
+  const tuner = regions.find((r) => r.name === "tuner")!;
+  await session.stageClickAt(
+    Math.round((tuner.left + tuner.right) / 2),
+    Math.round((tuner.top + tuner.bottom) / 2),
+  );
+  check(
+    "clicking a control zooms into its flat (tuner -> big view)",
+    session.currentFlat !== "wireless 1" && tunerneedle.stateName === "big",
+    `flat=${session.currentFlat} tunerneedle=${tunerneedle.stateName}`,
+  );
+}
+
+// --- 29. wireless knob drag: held-button (stilldown) rotates a control ------
+{
+  const { session, viewer } = await newSession();
+  await session.openSetFile("wireless.set");
+  await session.transToFlat("wireless.stg");
+  await session.gotoFlat("wireless 2"); // breaker big flat
+  const v = viewer();
+  const breaker = session.propRuntime.get("breakerhandle")!;
+  // the breaker lever's clickable pivot sits near (200,85); its big-view
+  // mousedown enters a `while stilldown()` loop that sets propdeg from the
+  // live pointer x — x>198 selects deg 4 -> owner "rx"
+  session.setPointer(200, 85);
+  session.pointerDown = true;
+  const drag = session.track(v.click(200, 85));
+  // pump the clock so stilldown()'s per-frame yield resolves, then release
+  let done = false;
+  drag.then(() => (done = true));
+  for (let i = 0; i < 6 && !done; i++) {
+    v.tick((clock += 50));
+    await drain();
+  }
+  const draggedDeg = breaker.deg;
+  session.pointerDown = false; // release ends the loop
+  for (let i = 0; i < 8 && !done; i++) {
+    v.tick((clock += 50));
+    await drain();
+  }
+  await drag;
+  check(
+    "held-button drag rotates the breaker knob and commits on release",
+    draggedDeg === 4 && breaker.owner === "rx",
+    `deg-during=${draggedDeg} owner-after=${breaker.owner}`,
+  );
+}
+
+// --- 30. wireless OK button: trackbut commits only if released over it ------
+for (const [label, releaseX, releaseY, expectExit] of [
+  ["released over OK -> exits the stage", 457, 350, true],
+  ["released off OK -> stays in the stage", 100, 100, false],
+] as [string, number, number, boolean][]) {
+  const { session } = await newSession();
+  await session.openSetFile("wireless.set");
+  await session.transToFlat("wireless.stg");
+  // OK button rect ~ (428..485, 338..363); press inside it
+  session.setPointer(457, 350);
+  session.pointerDown = true;
+  const p = session.track(session.stageClickAt(457, 350));
+  let done = false;
+  p.then(() => (done = true));
+  for (let i = 0; i < 4 && !done; i++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
+  session.setPointer(releaseX, releaseY); // move to release point
+  session.tickTime((clock += 50));
+  await drain();
+  session.pointerDown = false; // release
+  for (let i = 0; i < 8 && !done; i++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
+  await p;
+  const exited = session.stageName === "main.stg" && session.setVisible === true;
+  check(`wireless OK: ${label}`, exited === expectExit, `stage=${session.stageName} setVisible=${session.setVisible}`);
+}
+
+// --- 31. wireless message readout: drawstring text layer accumulates/clears -
+{
+  const { session } = await newSession();
+  await session.openSetFile("wireless.set");
+  await session.transToFlat("wireless.stg");
+  // find the flat whose script owns the morse readout (drawtext/clearmessagebox)
+  let readoutFlat: string | null = null;
+  for (const fn of session.flatNames) {
+    if (session.flatScripts.get(fn)?.script.codes.has("drawtext")) {
+      readoutFlat = fn;
+      break;
+    }
+  }
+  await session.gotoFlat(readoutFlat!);
+  const inst = session.flatScripts.get(session.currentFlat)!;
+  const ctx = { me: session.currentFlat, target: "" };
+  const call = (h: string, a: (string | number)[] = []) =>
+    session.interp.runHandler(inst, h, a, ctx);
+
+  // clearmessagebox() resets the pen to 75 and flashes messageboxclear, whose
+  // visibility hook wipes the text layer
+  await call("clearmessagebox");
+  const clearedFirst = session.textOverlay.length === 0;
+
+  // each drawtext(letter) paints one glyph at the pen and advances the pen by
+  // its stringwidth — so the layer grows and the x coordinates increase
+  for (const ch of ["h", "e", "l", "l", "o"]) await call("drawtext", [ch]);
+  const ov = session.textOverlay;
+  const grew = ov.length === 5;
+  const advancing = ov.every((e, i) => i === 0 || e.x > ov[i - 1].x);
+  // the pen advanced past the left margin (messagebox value tracks the x pen)
+  const penMoved = (session.propRuntime.get("messagebox")!.value as number) > 75;
+  check(
+    "wireless readout: drawtext lays out glyphs left-to-right",
+    clearedFirst && grew && advancing && penMoved,
+    `cleared=${clearedFirst} n=${ov.length} advancing=${advancing} pen=${session.propRuntime.get("messagebox")!.value}`,
+  );
+
+  // clearmessagebox() again empties the layer (messageboxclear shown -> hook)
+  await call("clearmessagebox");
+  check(
+    "wireless readout: clearmessagebox() wipes the text layer",
+    session.textOverlay.length === 0,
+    `n=${session.textOverlay.length}`,
+  );
+
+  // a full line (pen past 340) auto-wraps: the next drawtext clears then draws
+  // one glyph back at the left margin
+  session.propRuntime.get("messagebox")!.value = 345;
+  await call("drawtext", ["z"]);
+  const wrapped = session.textOverlay.length === 1 && session.textOverlay[0].x < 100;
+  check(
+    "wireless readout: pen past the right edge wraps to a fresh line",
+    wrapped,
+    `n=${session.textOverlay.length} x=${session.textOverlay[0]?.x}`,
+  );
+}
+
+// --- 32. wireless tuner gating: propxy getter + tuned() -> tunerknob "on" ----
+{
+  const { session } = await newSession();
+  await session.openSetFile("wireless.set");
+  await session.transToFlat("wireless.stg");
+  const needle = session.propRuntime.get("tunerneedle")!;
+  const knob = session.propScripts.get("tunerknob")!;
+  const runKnob = (h: string, a: any[] = []) =>
+    session.interp.runHandler(knob, h, a, { me: "tunerknob", target: "" });
+
+  // the needle's screen Y IS the frequency. adjustneedle() reads it via the
+  // propxy(name,2) GETTER and writes it back via the setter — exercising both.
+  needle.anchorX = 256;
+  needle.anchorY = 100;
+  await runKnob("adjustneedle", [2]);
+  const movedY = needle.anchorY; // 100 -> 102 iff the propxy getter works
+
+  // RX puzzle preconditions: sender on, breaker rx, needle in the 81-87 window
+  session.propRuntime.get("senderhandle")!.owner = "on";
+  session.propRuntime.get("breakerhandle")!.owner = "rx";
+  session.propRuntime.get("tunerneedle")!.value = 84;
+  const tunedIn = (await runKnob("tuned")).value;
+
+  // off-window -> not tuned
+  session.propRuntime.get("tunerneedle")!.value = 100;
+  const tunedOut = (await runKnob("tuned")).value;
+
+  // tuneron() latches the knob "on" and lights the tuner
+  session.propRuntime.get("tunerneedle")!.value = 84;
+  await runKnob("tuneron", ["big"]);
+  const knobOwner = session.propRuntime.get("tunerknob")!.owner;
+  const lit = session.propRuntime.get("tunerlight1")!.visible;
+
+  check(
+    "wireless tuner: propxy getter moves needle; tuned() gates; tuneron latches on",
+    movedY === 102 && !!tunedIn && !tunedOut && knobOwner === "on" && lit,
+    `movedY=${movedY} in=${tunedIn} out=${tunedOut} owner=${knobOwner} lit=${lit}`,
+  );
+}
+
+// --- 33. wireless TX keydown routes to the flat script (not the stage main) --
+{
+  const { session } = await newSession();
+  await session.openSetFile("wireless.set");
+  await session.transToFlat("wireless.stg");
+  // the deck-map-style stage routes keydown to the stage main; wireless routes
+  // to the current FLAT (its keydown/tx lives there). On the readout flat the
+  // target is that flat; the stage main has no keydown of its own.
+  let readoutFlat: string | null = null;
+  for (const fn of session.flatNames) {
+    if (session.flatScripts.get(fn)?.script.codes.has("keydown")) { readoutFlat = fn; break; }
+  }
+  await session.gotoFlat(readoutFlat!);
+  const target = session.keydownTarget();
+  const isFlat = target === session.flatScripts.get(session.currentFlat);
+  const stageHasNoKeydown = !session.stage!.script.codes.has("keydown");
+  check(
+    "wireless TX: keydown routes to the readout flat, not the stage main",
+    isFlat && stageHasNoKeydown && target !== null,
+    `target=${target?.name} stageKeydown=${!stageHasNoKeydown}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

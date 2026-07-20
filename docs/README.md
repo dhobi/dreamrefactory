@@ -61,32 +61,35 @@ Start at the top and go down. Each doc assumes you've read the ones above it.
    mostly *scripted*, not hard-coded. This explains DreamFactory's little
    scripting language, the event model (`openset`, `mousedown`, …), and how
    the interpreter runs it.
+4. **[The mission flow](04-mission-flow.md)** — how the *plot* is encoded:
+   the `mission`/`phase` globals, the story spine reconstructed straight from
+   the scripts, and the tool that extracts it.
 
 ### File formats — the DFile containers
 
 All game data lives in "DFile" container files. Read the foundation doc
 first; every format doc after it builds on it.
 
-4. **[The DFile container format](formats/README.md)** — the shared skeleton
+5. **[The DFile container format](formats/README.md)** — the shared skeleton
    *every* DreamFactory file uses. **Read this before any specific format.**
-5. **[The image codec](formats/image-codec.md)** — how a compressed picture
+6. **[The image codec](formats/image-codec.md)** — how a compressed picture
    (a room view, a movie frame, a prop) turns back into pixels, plus how
    colour palettes and depth maps work.
-6. **[SET — rooms, scenes & views](formats/set.md)** — the pre-rendered
+7. **[SET — rooms, scenes & views](formats/set.md)** — the pre-rendered
    world you walk around in.
-7. **[SHP — props ("shop" files)](formats/shp.md)** — the things drawn on top
+8. **[SHP — props ("shop" files)](formats/shp.md)** — the things drawn on top
    of the world: doors, items, buttons.
-8. **[MOV — movies & inspectable objects](formats/mov.md)** — cutscenes and
+9. **[MOV — movies & inspectable objects](formats/mov.md)** — cutscenes and
    click-through close-ups.
-9. **[STG — stage files & the UI](formats/stg.md)** — full-screen screens
-   like the deck map, the inventory, and the on-screen UI band.
-10. **[Audio — TRK / SFX / 11K / SND](formats/audio.md)** — music, sound
+10. **[STG — stage files & the UI](formats/stg.md)** — full-screen screens
+    like the deck map, the inventory, and the on-screen UI band.
+11. **[Audio — TRK / SFX / 11K / SND](formats/audio.md)** — music, sound
     effects and voice lines, and the two custom compression codecs.
-11. **[BOOTFILE — the game's startup & standard library](formats/bootfile.md)**
+12. **[BOOTFILE — the game's startup & standard library](formats/bootfile.md)**
     — the script bundle that boots the game and defines its shared behaviour.
-12. **[The script container on disk](formats/script-container.md)** — the
+13. **[The script container on disk](formats/script-container.md)** — the
     binary layout of a compiled script, for when you want to go deep.
-13. **[PUP & CST — characters ("puppets")](formats/pup-cst.md)** — dialogue,
+14. **[PUP & CST — characters ("puppets")](formats/pup-cst.md)** — dialogue,
     facial animation and character sprites. *(Documented from DFET; not yet
     ported.)*
 

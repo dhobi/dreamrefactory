@@ -279,6 +279,9 @@ export function registerGameBuiltins(session: GameSession): void {
     "sendtoprop", "sendtoactor", "sendtoscene", "sendtoset", "sendtoshop", "sendtoshopfx",
     "sendtopuppet", "sendtocast", "sendtostage", "sendtobutton", "sendtoflat",
     "sendtopainting", "sendtoboot", "sendtopost", "sendtoserver",
+    // "fx" variants target the same object; our props have a single script,
+    // so an fx call resolves the same handler as its non-fx sibling
+    "sendtopropfx", "sendtobuttonfx",
   ]) {
     interp.registerSpecial(cmd, async (ip, argExprs, frame) => {
       // sendtostage(call()) / sendtoboot(call()) take the deferred call as
@@ -349,6 +352,11 @@ export function registerGameBuiltins(session: GameSession): void {
     if (!p) return 0;
     if (v === undefined) return p.visible ? 1 : 0;
     p.visible = truthy(v);
+    // clearmessagebox() wipes the drawstring text by flashing an opaque
+    // "clean strip" prop over it (visible → forceupdate → invisible). Our
+    // props are non-destructive, so instead we drop the text layer when that
+    // eraser prop is shown.
+    if (p.visible && toStr(n).toLowerCase() === "messageboxclear") session.clearTextOverlay();
   });
   r("propview", (_i, [n, v]) => {
     const p = prop(n);
@@ -357,13 +365,19 @@ export function registerGameBuiltins(session: GameSession): void {
     p.stateName = toStr(v).toLowerCase();
     p.frameIdx = 0;
     p.lastTick = 0;
+    p.frameLocked = false;
   });
   r("propxy", (_i, [n, x, y]) => {
     const p = prop(n);
     if (!p || x === undefined) return 0;
+    // getter: propxy(name, axis) — 1 = screen x, 2 = screen y. The wireless
+    // tuner reads the needle's y this way (its y position IS the frequency:
+    // `propvalue("tunerneedle", propxy("tunerneedle", 2))`).
+    if (y === undefined) return toNum(x) === 2 ? p.anchorY : p.anchorX;
     p.anchorX = Number(x) || 0;
     p.anchorY = Number(y) || 0;
     p.worldSpace = false; // screen placement (band/inventory/flat)
+    return 0;
   });
   // world-space placement in a set (bag on the C73 bed, turkwater...) —
   // projection is still an open TI.EXE question, values stored for later
@@ -399,11 +413,19 @@ export function registerGameBuiltins(session: GameSession): void {
     if (v === undefined) return p.owner;
     p.owner = v;
   });
+  // propdeg selects a discrete frame of a rotational/selector prop (the deck
+  // map's "buttons" highlight: 9 frames, deg 0..7 = deck 1..8, deg 8 = none).
+  // The pinned frame overrides auto-animation until propview() changes state.
   r("propdeg", (_i, [n, v]) => {
     const p = prop(n);
     if (!p) return 0;
     if (v === undefined) return p.deg;
     p.deg = v;
+    const st = p.state();
+    if (st && st.frames.length) {
+      p.frameIdx = Math.max(0, Math.min(st.frames.length - 1, Number(v) || 0));
+      p.frameLocked = true;
+    }
   });
   // z-order: more negative = closer to the viewer (inventory items at -11
   // draw over the UI band at -3)
@@ -474,6 +496,7 @@ export function registerGameBuiltins(session: GameSession): void {
     const parts = toStr(s ?? "").split(toStr(delim ?? ","));
     return parts[(Number(idx) || 1) - 1] ?? "";
   });
+  r("stringlength", (_i, [s]) => toStr(s ?? "").length);
 
   // screen transitions: visual polish for later — behave as instant for now
   for (const t of [
@@ -761,6 +784,80 @@ export function registerGameBuiltins(session: GameSession): void {
   r("pointy", (_i, [p]) => s16(toNum(p ?? 0) & 0xffff));
   r("mouse", () => session.pointerPoint());
   r("button", () => (session.pointerDown ? 1 : 0));
+  // mousedown(point): synthesise a click at a point. Only reached by scripts
+  // that replay a press (wireless rx()'s ok-interrupt); return the point.
+  r("mousedown", (_i, [p]) => toNum(p ?? 0));
+  // ---- persistent text (drawstring/stringwidth) ----------------------------
+  // drawstring(text, point, color, size): paint text at a screen point into
+  // the persistent text layer (composited after props, cleared per flat).
+  r("drawstring", (_i, [text, point, color, size]) => {
+    const t = toStr(text ?? "");
+    const pt = toNum(point ?? 0);
+    const x = s16((pt >> 16) & 0xffff);
+    const y = s16(pt & 0xffff);
+    const sz = toNum(size ?? 12);
+    const col = toNum(color ?? 0);
+    const ov = session.textOverlay;
+    const i = ov.findIndex((e) => e.x === x && e.y === y && e.size === sz);
+    const entry = { text: t, x, y, color: col, size: sz };
+    if (i >= 0) ov[i] = entry;
+    else ov.push(entry);
+    return 0;
+  });
+  // stringwidth(text, color, size): pixel width for pen advance. Must match
+  // what drawstring actually paints, so measure with the render font.
+  r("stringwidth", (_i, [text, , size]) => {
+    const t = toStr(text ?? "");
+    const sz = toNum(size ?? 12);
+    return session.measureText
+      ? Math.round(session.measureText(t, sz))
+      : Math.ceil(t.length * sz * 0.6);
+  });
+  // stilldown(): true while the mouse button is held. Drag loops spin on it
+  // (`while stilldown() { propdeg(me, ...); forceupdate() }`), so each check
+  // yields one frame — letting the rAF loop advance the clock, deliver the
+  // next pointermove/pointerup, and repaint before the next iteration.
+  r("stilldown", async () => {
+    await session.clock.sleep(16);
+    return session.pointerDown ? 1 : 0;
+  });
+  // a "button" is a prop drawn at (x,y); its screen rect comes from the frame's
+  // stored offset (rect = anchor - offset, size = frame w/h)
+  const buttonRect = (name: string, x: number, y: number) => {
+    const p = session.propRuntime.get(name);
+    const st = p?.state();
+    if (!p || !st || !st.frames.length) return null;
+    const f = p.shop.frame(st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);
+    return { p, x0: x - f.posXraw, y0: y - f.posYraw, w: f.width, h: f.height };
+  };
+  const inButton = (name: string, x: number, y: number) => {
+    const r0 = buttonRect(name, x, y);
+    return !!r0 && session.pointerX >= r0.x0 && session.pointerX < r0.x0 + r0.w &&
+      session.pointerY >= r0.y0 && session.pointerY < r0.y0 + r0.h;
+  };
+  // pointinbutton(name, x, y): is the pointer currently over the button?
+  r("pointinbutton", (_i, [n, x, y]) => (inButton(toStr(n ?? ""), toNum(x ?? 256), toNum(y ?? 192)) ? 1 : 0));
+  // trackbut(name, x, y): a push-button. Called from a button's mousedown (so
+  // the button is already pressed); tracks the hold (showing the prop as the
+  // pressed highlight) and returns 1 iff released while still over it.
+  r("trackbut", async (_i, [n, x, y]) => {
+    const name = toStr(n ?? "");
+    const ax = toNum(x ?? 256), ay = toNum(y ?? 192);
+    const p = session.propRuntime.get(name);
+    if (!p) return 0;
+    p.anchorX = ax;
+    p.anchorY = ay;
+    p.worldSpace = false;
+    const wasVisible = p.visible;
+    let inside = inButton(name, ax, ay);
+    while (session.pointerDown) {
+      inside = inButton(name, ax, ay);
+      p.visible = inside; // pressed highlight only while held over the button
+      await session.clock.sleep(16);
+    }
+    p.visible = wasVisible;
+    return inside ? 1 : 0;
+  });
   r("numtostring", (_i, [n]) => String(toNum(n ?? 0)));
   r("lowmemory", () => 0); // we never simulate the CD-era low-memory path
   // stageparam(idx[, val]): per-stage scratch parameters, getter/setter by arity

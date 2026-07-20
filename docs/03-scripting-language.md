@@ -190,6 +190,8 @@ current view; `propview(me, "x")` sets it. Same name, arity decides.
 
 ### Where to look next
 
+- How these scripts add up to the whole **plot** — the `mission`/`phase` model
+  and the reconstructed story spine: **[the mission flow](04-mission-flow.md)**.
 - The **on-disk format** of a compiled script (the command table, the string
   pool at the end of the container): **[script container](formats/script-container.md)**.
 - How the language actually starts the game: **[BOOTFILE](formats/bootfile.md)**.

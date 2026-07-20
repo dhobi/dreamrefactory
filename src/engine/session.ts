@@ -492,6 +492,10 @@ export class GameSession {
       this.currentBinding?.findInstance(targetName) ?? this.findGlobalInstance(targetName);
     if (!inst && cmd === "sendtostage") inst = this.stage;
     if (!inst && cmd === "sendtoboot") inst = this.boot;
+    // a flat is contained in its stage: an event to a flat with no own script
+    // (e.g. the wireless overview flat) resolves on the stage main, where
+    // handlers like setupsmallprops live
+    if (!inst && cmd === "sendtoflat") inst = this.stage;
     const chain = inst ? [inst] : [];
     if (cmd === "sendtoscene" || cmd === "sendtoset") {
       const main = this.currentBinding?.main;
@@ -605,6 +609,22 @@ export class GameSession {
   /** whether the set view draws over the flat (setvisible builtin) */
   setVisible = true;
 
+  // ---- persistent text layer (drawstring/stringwidth builtins) ------------
+  /** text drawn by drawstring(), composited over the screen after props.
+   *  DreamFactory draws into a persistent buffer; we recomposite each frame,
+   *  so we keep the drawn strings and re-apply them. Later draws at the same
+   *  (x,y,size) replace earlier ones (CTL redraws its direction letters every
+   *  update(); wireless writes each morse glyph at a fresh x). Cleared on flat
+   *  change and by clearmessagebox() (see the messageboxclear hook). */
+  readonly textOverlay: { text: string; x: number; y: number; color: number; size: number }[] = [];
+  /** measure a drawstring in device pixels using the render font; set by the
+   *  viewer so stringwidth() matches what actually paints. null in headless
+   *  tests, where stringwidth() falls back to a fixed-pitch estimate. */
+  measureText: ((text: string, size: number) => number) | null = null;
+  clearTextOverlay(): void {
+    this.textOverlay.length = 0;
+  }
+
   // ---- pointer state (mouse()/button()/pointx/pointy builtins) ------------
   /** last pointer position in 512×384 screen space; scripts read it via mouse() */
   pointerX = 0;
@@ -673,11 +693,34 @@ export class GameSession {
       }
     }
     if (this.currentFlat === "none" && stg.flats.length) await this.gotoFlat(stg.flats[0].name);
+    // The boot's transtoflat() dispatches a per-stage entry handler after
+    // opening the file: sendtostage(open<basename>()) — e.g. openwireless()
+    // opens the stage's shop + track and sets up its props. We mirror that
+    // dispatch generically (the map uses openstage instead, so this only
+    // fires when a matching handler exists).
+    const entry = `open${key.replace(/\.stg$/, "")}`;
+    if (entry !== "openstage" && this.stage?.script.codes.has(entry)) {
+      try {
+        await this.interp.runHandler(this.stage, entry, [], { me: key, target: "" });
+      } catch (e) {
+        this.onLog(`${key}.${entry}: ${(e as Error).message}`);
+      }
+    }
     return true;
   }
 
   /** engine primitive: close the current stage (closestagefile) */
   async closeStageFile(): Promise<void> {
+    // mirror the per-stage entry dispatch: close<basename>() tears down the
+    // stage's shop + track (e.g. closewireless -> closeshopfile/closetrackfile)
+    const exit = `close${this.stageName.replace(/\.stg$/, "")}`;
+    if (exit !== "closestage" && this.stage?.script.codes.has(exit)) {
+      try {
+        await this.interp.runHandler(this.stage, exit, [], { me: this.stageName, target: "" });
+      } catch (e) {
+        this.onLog(`${this.stageName}.${exit}: ${(e as Error).message}`);
+      }
+    }
     if (this.stage?.script.codes.has("closestage")) {
       try {
         await this.interp.runHandler(this.stage, "closestage", [], {
@@ -722,6 +765,7 @@ export class GameSession {
     const target = this.resolveFlat(toStr(name));
     await this.fireFlat(this.currentFlat, "closeflat");
     this.currentFlat = target;
+    this.clearTextOverlay(); // a new flat starts with a blank text layer
     await this.fireFlat(target, "openflat");
   }
 
@@ -734,6 +778,11 @@ export class GameSession {
    */
   async transToFlat(fileName: string): Promise<void> {
     this.prevStage = this.stageName;
+    // the boot hides the in-game interface band (house.shp) before an overlay
+    // stage takes the full screen; only main.stg carries that band
+    if (this.stageName === "main.stg") {
+      await this.sendEvent("sendtoshop", "house.shp", "hideinterface", [], "transtoflat");
+    }
     if (await this.openStageFile(fileName)) this.setVisible = false;
   }
 
@@ -751,6 +800,10 @@ export class GameSession {
       await this.openStageFile(prev);
     } else if (!prev || prev === "none") {
       await this.closeStageFile();
+    }
+    // restore the in-game interface band when returning to it
+    if (this.stageName === "main.stg") {
+      await this.sendEvent("sendtoshop", "house.shp", "showinterface", [], "transfromflat");
     }
     const jumpset = toStr(this.interp.globals.get("jumpset") ?? "");
     if (jumpset) {
@@ -807,6 +860,16 @@ export class GameSession {
       this.onLog(`stage region ${hit.name}: ${(e as Error).message}`);
     }
     return true;
+  }
+
+  /** the script that should receive a keyboard event on an overlay stage:
+   *  the current flat if it defines keydown (wireless TX lives in the flat),
+   *  else the stage main (the deck map's keydown lives there). */
+  keydownTarget(): ScriptInstance | null {
+    const flat = this.flatScripts.get(this.currentFlat.toLowerCase());
+    if (flat?.script.codes.has("keydown")) return flat;
+    if (this.stage?.script.codes.has("keydown")) return this.stage;
+    return null;
   }
 
   private async fireFlat(name: string, handler: string): Promise<void> {
@@ -1157,7 +1220,23 @@ export class GameSession {
    */
   async openShop(fileName: string): Promise<boolean> {
     const key = fileName.toLowerCase();
-    if (this.shopMains.has(key)) return true;
+    // Already loaded: re-run its openshop handler without rebuilding the props
+    // (which would drop their state). A stage opens its shop on entry via
+    // open<basename>() — e.g. openwireless -> openshopfile("wireless.shp") —
+    // and openshop() ends by pushing the per-entry view setup to the active
+    // flat (setupsmallprops). Re-firing it here makes that run in the stage's
+    // context even when the shop was first opened at set-load.
+    if (this.shopMains.has(key)) {
+      const loaded = this.shopMains.get(key);
+      if (loaded?.script.codes.has("openshop")) {
+        try {
+          await this.interp.runHandler(loaded, "openshop", [], { me: key, target: "" });
+        } catch (e) {
+          this.onLog(`openshop ${key} (re-entry): ${(e as Error).message}`);
+        }
+      }
+      return true;
+    }
     const data = this.files(key);
     if (!data) {
       this.onLog(`openshopfile: "${fileName}" not available`);

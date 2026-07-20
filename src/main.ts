@@ -250,6 +250,17 @@ function rebuildSetSelect(): void {
     void session.track(session.transToFlat("map.stg"));
   });
   setSelectWrap.appendChild(mapBtn);
+
+  // dev: open the Marconi wireless stage from any set (normally entered from
+  // the wireless room). Its shop/track/stg are prefetched in loadServerSet.
+  const wirelessBtn = document.createElement("button");
+  wirelessBtn.textContent = "📻 Wireless (dev)";
+  wirelessBtn.style.marginLeft = "0.5rem";
+  wirelessBtn.addEventListener("click", () => {
+    if (!viewer) return;
+    void session.track(session.transToFlat("wireless.stg"));
+  });
+  setSelectWrap.appendChild(wirelessBtn);
 }
 
 /** activate a set that lives on the dev server: fetch it + its siblings */
@@ -265,6 +276,7 @@ async function loadServerSet(setName: string): Promise<void> {
   await Promise.all(
     [`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`,
      "unilib.trk", "bootfile", "main.stg", "map.stg", "inven1.stg", "inven2.stg",
+     "wireless.stg", "wireless.shp", "wireless.sfx",
      "house.shp", "inven.shp", "inven.trk", "gang.cst", "extra.cst"].map(fetchIntoStore),
   );
   try {
@@ -338,16 +350,32 @@ function canvasCoords(e: MouseEvent): { x: number; y: number } {
   };
 }
 
-screen.addEventListener("click", (e) => {
+// Press/move/release so held-button drag loops work (`while stilldown()` in
+// the wireless knobs). pointerdown routes the mousedown (which may enter a
+// drag loop); pointermove keeps mouse() live; pointerup ends the loop.
+screen.addEventListener("pointerdown", (e) => {
   if (!viewer) return;
   const { x, y } = canvasCoords(e);
+  session.setPointer(x, y);
+  session.pointerDown = true;
   void session.track(viewer.click(x, y));
+});
+
+// release anywhere ends a drag (the pointer may leave the canvas mid-drag)
+window.addEventListener("pointerup", () => {
+  session.pointerDown = false;
 });
 
 screen.addEventListener("mousemove", (e) => {
   if (!viewer) return;
   const v = viewer;
   const { x, y } = canvasCoords(e);
+  // while dragging, just track the pointer — don't run hover's setcursor
+  // scripts concurrently with the suspended drag handler
+  if (session.pointerDown) {
+    session.setPointer(x, y);
+    return;
+  }
   void v.hover(x, y).then((name) => {
     screen.style.cursor = name ? (CURSOR_CSS[name] ?? "pointer") : "default";
   });
@@ -364,7 +392,7 @@ window.addEventListener("keydown", (e) => {
   if (!viewer) return;
   const v = viewer;
   // a full-screen overlay stage (the deck map) consumes all keys itself
-  if (!session.setVisible && session.stage?.script.codes.has("keydown")) {
+  if (!session.setVisible && session.keydownTarget()) {
     const df = DF_KEY[e.key] ?? (e.key.length === 1 ? e.key.toLowerCase() : "");
     if (df) {
       void session.track(v.keyDown(df));

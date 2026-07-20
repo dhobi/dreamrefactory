@@ -8,6 +8,11 @@ import { decodeAudioContainer } from "./df/audio";
 import { SetScripts } from "./engine/setscripts";
 import { GameSession } from "./engine/session";
 
+/** font for drawstring() text (wireless morse readout, CTL direction keys) —
+ *  a fixed-pitch face reads like the period teletype/terminal. Used for both
+ *  measuring (stringwidth) and painting so pen advance matches the glyphs. */
+const overlayFont = (size: number): string => `${size}px "Courier New", monospace`;
+
 /**
  * Navigation state machine over a parsed SET file.
  *
@@ -107,6 +112,16 @@ export class SetViewer {
       return { rgba, width: f.width, height: f.height };
     };
     session.onPlayMovie = (name, startFrame) => void this.playMovie(name, startFrame);
+    // stringwidth() measures against the same font drawTextOverlay paints with
+    if (typeof document !== "undefined") {
+      const mctx = document.createElement("canvas").getContext("2d");
+      if (mctx) {
+        session.measureText = (text, size) => {
+          mctx.font = overlayFont(size);
+          return mctx.measureText(text).width;
+        };
+      }
+    }
     this.predecodeAll();
     this.jumpToDefault();
     if (startScene) this.jumpTo(startScene, startView);
@@ -179,11 +194,11 @@ export class SetViewer {
     if (this.inputLocked) return false;
     // a full-screen overlay stage (the deck map) handles keys itself — page
     // decks with arrows/letters — instead of the world turn/walk navigation
-    const stage = this.session.stage;
-    if (!this.session.setVisible && stage?.script.codes.has("keydown")) {
+    const target = this.session.keydownTarget();
+    if (!this.session.setVisible && target) {
       try {
-        await this.session.interp.runHandler(stage, "keydown", [keyName], {
-          me: stage.name,
+        await this.session.interp.runHandler(target, "keydown", [keyName], {
+          me: target.name,
           target: "",
         });
       } catch (e) {
@@ -656,10 +671,15 @@ export class SetViewer {
 
   async click(x: number, y: number): Promise<void> {
     // publish the cursor position so scripts that hit-test themselves (stage
-    // flats, draggable props) read the click via mouse()/pointx/pointy. Note:
-    // pointerDown stays false — held-button drag loops (`while button()`) need
-    // real pointerdown/up events, which atomic clicks don't provide yet.
+    // flats, draggable props) read the click via mouse()/pointx/pointy. The
+    // caller (pointerdown) has already set pointerDown, so held-button drag
+    // loops (`while stilldown()`) see the button held.
     this.session.setPointer(x, y);
+    // Capture busy state up front: this dispatch is itself tracked (adds to
+    // inflight), and in an overlay stage the `await stageClickAt` below
+    // suspends us long enough for our own promise to register — which would
+    // otherwise make the inputLocked gate reject the prop path spuriously.
+    const busyOnEntry = this.inputLocked;
     // conversation clicks reach the puppet even while its script is
     // suspended in puppetevent/puppetspeak
     if (this.session.puppet) {
@@ -675,7 +695,7 @@ export class SetViewer {
     if (!this.session.setVisible && this.session.stage) {
       if (await this.session.stageClickAt(x, y)) return;
     }
-    if (this.inputLocked) return; // a script is running/suspended (delay)
+    if (busyOnEntry) return; // a script was already running/suspended (delay)
     // props (UI band, inventory items) sit in front of everything
     const prop = this.session.propRuntime.propAt(
       x, y, this.session.setVisible ? this.worldCamera() : null,
@@ -1054,6 +1074,7 @@ export class SetViewer {
       }
       this.session.propRuntime.composite(img.data, flat.width, flat.height, propPal, minAnchorY, cam);
       ctx.putImageData(img, 0, 0);
+      this.drawTextOverlay(ctx);
       this.applyFade(ctx);
       if (this.session.setVisible) this.drawHotspots(ctx);
       return;
@@ -1079,8 +1100,25 @@ export class SetViewer {
       );
     }
     ctx.putImageData(img, 0, 0);
+    this.drawTextOverlay(ctx);
     this.applyFade(ctx);
     this.drawHotspots(ctx);
+  }
+
+  /** paint the persistent drawstring() text layer over the composited frame */
+  private drawTextOverlay(ctx: CanvasRenderingContext2D): void {
+    const ov = this.session.textOverlay;
+    if (!ov.length) return;
+    ctx.save();
+    ctx.textBaseline = "alphabetic"; // drawstring's y is the text baseline (QuickDraw heritage)
+    for (const e of ov) {
+      ctx.font = overlayFont(e.size);
+      // color 0 = black (the wireless readout / CTL keys); other indices fall
+      // back to a bright ink until we need a real palette lookup here
+      ctx.fillStyle = e.color === 0 ? "#000" : "#e8e8e8";
+      ctx.fillText(e.text, e.x, e.y);
+    }
+    ctx.restore();
   }
 
   private drawHotspots(ctx: CanvasRenderingContext2D): void {

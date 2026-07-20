@@ -52,6 +52,7 @@ export default withMermaid(
             { text: "How the game works", link: "/01-how-the-game-works" },
             { text: "Engine architecture", link: "/02-engine-architecture" },
             { text: "The scripting language", link: "/03-scripting-language" },
+            { text: "The mission flow", link: "/04-mission-flow" },
           ],
         },
         {
