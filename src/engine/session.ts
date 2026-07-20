@@ -684,6 +684,8 @@ export class GameSession {
   setVisible = true;
   /** name of the looping theme currently playing (currenttheme getter) */
   currentThemeName = "none";
+  /** framerate() target cadence; drag loops save/drop/restore it (turbine dials) */
+  frameRate = 3;
 
   // ---- persistent text layer (drawstring/stringwidth builtins) ------------
   /** text drawn by drawstring(), composited over the screen after props.

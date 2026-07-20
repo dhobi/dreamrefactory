@@ -291,7 +291,7 @@ export function registerGameBuiltins(session: GameSession): void {
     "sendtopainting", "sendtoboot", "sendtopost", "sendtoserver",
     // "fx" variants target the same object; our props have a single script,
     // so an fx call resolves the same handler as its non-fx sibling
-    "sendtopropfx",
+    "sendtopropfx", "sendtostagefx",
   ]) {
     interp.registerSpecial(cmd, async (ip, argExprs, frame) => {
       // sendtostage(call()) / sendtoboot(call()) take the deferred call as
@@ -619,6 +619,20 @@ export function registerGameBuiltins(session: GameSession): void {
   // currenttheme([layer]): the looping theme currently playing (the layer arg
   // selects a mix channel in TI.EXE; we track a single theme, so it's ignored).
   r("currenttheme", () => session.currentThemeName);
+  // framerate([n]): getter/setter for the engine's target frame cadence. Drag
+  // loops save it, drop to a slow rate to pace the rotate (turbine valves:
+  // `rate = framerate(); framerate(2); …; framerate(rate)`), then restore. Our
+  // poll loops pace on real rAF frames via forceupdate(), so this only needs to
+  // round-trip a value — store it so the save/restore reads back consistently.
+  r("framerate", (_i, [n]) => {
+    if (n === undefined) return session.frameRate;
+    session.frameRate = toNum(n);
+    return 0;
+  });
+  // themevol(track, vol): dynamic theme loudness (0..255) — the turbine hum
+  // swells with electrical output. No per-channel volume control on the audio
+  // sink yet; a no-op that keeps scripts happy (audio-mix polish, not gameplay).
+  r("themevol", () => {});
   for (const noop of [
     "flushevents", "hidecursor", "showcursor", "debugger",
     "visualeffect", "mixclut",

@@ -1553,5 +1553,53 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- 46. TURBINE plant: continuous sim loop, control -> gauge response ------
+// A steam-plant simulation: valves/pumps/slider feed a physics step
+// (iterateone) that moves water between boiler/turbine/condensor/steamtank and
+// derives pressures/temps/electricity, read out on 20-frame gauges. The sim
+// self-re-arms via makeloop("flat",…,"changedone",10) (same loop machinery as
+// BOMB). Exercises sendtostagefx (controls read `valve = sendtostagefx(
+// degtonum(...))`), framerate() round-trip, and the gauge mapping (numtodeg).
+{
+  const { session } = await newSession();
+  await session.openSetFile("turb.set");
+  await session.transToFlat("turbine.stg");
+  await drain();
+  const g = (n: string): number => Number(session.interp.globals.get(n) ?? 0);
+  const stageName = session.stage!.name;
+  const runSim = (): Promise<unknown> =>
+    session.sendEvent("sendtostage", stageName, "changedone", [], "test");
+  const loopArmed = session.loops.some((l) => l.kind === "flat" && l.handler === "changedone");
+  const valve1Init = g("valve1"); // initvalue() sets 50
+  // boilpres = boiler * valve3 / 400 — higher valve3 must raise boiler pressure
+  session.interp.globals.set("boiler", 80000);
+  session.interp.globals.set("valve3", 2);
+  await runSim();
+  const presLow = g("boilpres");
+  session.interp.globals.set("boiler", 80000);
+  session.interp.globals.set("valve3", 76);
+  await runSim();
+  const presHigh = g("boilpres");
+  // gauge reflects the sim: pressure1 deg == numtodeg(boilpres, 5000) clamped 0..19
+  const expectDeg = Math.max(0, Math.min(19, Math.floor((g("boilpres") * 19) / 5000)));
+  const gaugeDeg = session.propRuntime.get("pressure1")?.deg;
+  // slider parse-regression: boilsound ends with a bare `exitcode` (no
+  // `endcode`), which used to make it swallow the following calcswitchdeg
+  // handler — the slider then read 0 always and pinned to one end. Verify the
+  // handler survives parsing and maps mouse-Y (245..345) -> deg 0..20.
+  const slider = session.propScripts.get("slider")!;
+  const hasCalc = slider.script.codes.has("calcswitchdeg");
+  session.setPointer(239, 290);
+  const calcMid = Number(
+    (await session.interp.runHandler(slider, "calcswitchdeg", [], { me: "slider", target: "slider" })).value,
+  );
+  check(
+    "turbine: sim loop, control raises pressure, gauge tracks; slider handler parses",
+    loopArmed && valve1Init === 50 && presHigh > presLow && gaugeDeg === expectDeg &&
+      hasCalc && calcMid === 9,
+    `loop=${loopArmed} valve1=${valve1Init} presLow=${presLow} presHigh=${presHigh} gauge=${gaugeDeg} expect=${expectDeg} calcswitchdeg?${hasCalc} mid=${calcMid}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

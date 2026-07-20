@@ -326,6 +326,18 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(bombBtn);
 
+  // dev: open the turbine-plant stage (normally reached from the engine room in
+  // mission 4). openstage() is self-contained (opens turbine.shp/turbpuz.trk,
+  // randomises the dials, starts the continuous sim loop). Prefetched below.
+  const turbineBtn = document.createElement("button");
+  turbineBtn.textContent = "⚙️ Turbine (dev)";
+  turbineBtn.style.marginLeft = "0.5rem";
+  turbineBtn.addEventListener("click", () => {
+    if (!viewer) return;
+    void session.track(session.transToFlat("turbine.stg"));
+  });
+  setSelectWrap.appendChild(turbineBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).
@@ -416,6 +428,7 @@ async function loadServerSet(setName: string): Promise<void> {
      "enigma.stg", "enigma.shp", "enigma.sfx",
      "boil.stg", "boil.shp", "boilflat.trk", "boil.trk",
      "bomb.stg", "bomb.shp", "bomb.trk",
+     "turbine.stg", "turbine.shp", "turbpuz.trk",
      "house.shp", "inven.shp", "inven.trk", "gang.cst", "extra.cst"].map(fetchIntoStore),
   );
   try {

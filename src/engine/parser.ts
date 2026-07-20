@@ -142,8 +142,13 @@ class Parser {
       if (this.atOp(OP.COMMA)) this.pos++;
     }
     this.pos++; // )
-    const body = this.parseBlock([OP.ENDCODE]);
-    this.expectCloser(OP.ENDCODE, "endcode");
+    // A handler ends at `endcode` OR at the next `code` (start of the following
+    // handler). Some compiled scripts end a handler with a bare `exitcode` and
+    // NO `endcode` — e.g. TURBINE slider's boilsound — and stopping only at
+    // `endcode` made this block swallow the entire next handler (calcswitchdeg
+    // vanished, so the slider's `calcswitchdeg()` resolved to 0 and pinned it).
+    const body = this.parseBlock([OP.ENDCODE, OP.CODE]);
+    if (this.atOp(OP.ENDCODE)) this.pos++; // consume endcode when present
     return { name: nameTok.name, params, body };
   }
 
