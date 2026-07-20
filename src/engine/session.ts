@@ -1090,8 +1090,15 @@ export class GameSession {
     }
   }
 
-  openTrackFile(fileName: string): boolean {
+  async openTrackFile(fileName: string): Promise<boolean> {
     const key = toStr(fileName).toLowerCase();
+    // Theme tracks are named by DECK, not by set — recept1c's theme is
+    // deckd.trk, halla's is decka.trk (see BOOTFILE setupsound/themetype).
+    // The set-change prefetch only pulls <setName>.trk, so the real theme
+    // bank is usually absent here. Fetch it on demand (browser provider),
+    // exactly as opensetfile/puppets/casts do — otherwise playnewtheme finds
+    // no theme and the room is silent (or the wrong theme keeps playing).
+    await this.ensureFile(key);
     const data = this.files(key);
     if (!data) {
       this.onLog(`opentrackfile: "${fileName}" not available`);

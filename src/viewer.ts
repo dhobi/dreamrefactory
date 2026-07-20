@@ -411,10 +411,22 @@ export class SetViewer {
 
   /** start looping background music if a theme bank is available */
   startTheme(): void {
-    const theme =
-      this.session.audioLib.theme(`${this.set.setName.toLowerCase()}.trk`) ??
-      this.session.audioLib.theme();
-    if (theme) this.session.audio.play("theme", theme, { loop: true });
+    // Authentic theme control lives in BOOTFILE setupsound(), which openset
+    // runs from viewer.start(): it plays the DECK theme (recept1c -> deckd.trk,
+    // halla -> decka.trk — the track is named by deck, not by set) and, just
+    // as important, LEAVES the theme untouched when the deck is unchanged, so
+    // same-deck travel (halla -> lnghall) keeps decka.trk playing seamlessly.
+    // Don't fight it: never replace an already-playing theme, and never fall
+    // back to "any loaded bank" (that bleeds inven/unilib over the room). Only
+    // best-effort start the set-named bank on a cold start with nothing
+    // playing; setupsound corrects it a frame later if the deck track differs.
+    if (this.session.currentThemeName !== "none") return;
+    const key = `${this.set.setName.toLowerCase()}.trk`;
+    const theme = this.session.audioLib.theme(key);
+    if (theme) {
+      this.session.audio.play("theme", theme, { loop: true });
+      this.session.currentThemeName = key;
+    }
   }
 
   /** wire a file added after construction (audio bank or this set's shop) */

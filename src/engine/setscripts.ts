@@ -83,7 +83,6 @@ export class SetScripts {
    */
   private async fireLifecycle(handler: string, sceneIdx: number): Promise<void> {
     const interp = this.session.interp;
-    interp.eventConsumed = false;
     const chain = [
       sceneIdx >= 0 ? this.sceneScripts[sceneIdx] : null,
       this.main,
@@ -93,8 +92,19 @@ export class SetScripts {
     for (const inst of chain) {
       if (!inst) continue;
       try {
-        await interp.runHandler(inst, handler, [], { me: inst.name, target: "" });
-        if (interp.eventConsumed) return;
+        // Consumption is decided by THIS handler's own signal — whether it
+        // ran without passcode-ing on. The shared interp.eventConsumed flag
+        // must NOT be used here: a passcode-ing handler routinely fires
+        // sub-events (sendtoactor(setupactor()), sendtoprop(...)) whose own
+        // handlers end in exitcode, which sets that global flag as a side
+        // effect. Trusting it would let e.g. recept1c's openset — which does
+        // sendtoactor("elev", setupactor()) then passcode — falsely look
+        // consumed, skipping boot2's openset (setupsound) and leaving the
+        // room silent / on the wrong theme. Reset per iteration so the flag
+        // reflects only this dispatch for any code that reads it downstream.
+        interp.eventConsumed = false;
+        const res = await interp.runHandler(inst, handler, [], { me: inst.name, target: "" });
+        if (res.handled && !res.passed) return;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.${handler}: ${(e as Error).message}`);
       }
@@ -541,8 +551,8 @@ export function registerGameBuiltins(session: GameSession): void {
     session.audio.play("theme", theme, { loop: true });
     session.currentThemeName = name;
   });
-  r("opentrackfile", (_i, [n]) => {
-    session.openTrackFile(toStr(n));
+  r("opentrackfile", async (_i, [n]) => {
+    await session.openTrackFile(toStr(n));
   });
   r("closetrackfile", (_i, [n]) => {
     // Only unload the bank — do NOT stop the theme. Set travel closes and
@@ -1017,6 +1027,14 @@ export function registerGameBuiltins(session: GameSession): void {
   });
   r("numtostring", (_i, [n]) => String(toNum(n ?? 0)));
   r("lowmemory", () => 0); // we never simulate the CD-era low-memory path
+  // heapsize(): free memory in bytes. BOOTFILE defines its own lowmemory()
+  // (which shadows the builtin above) as `heapsize() < 6144000` — and every
+  // setupsound() case for a memory-heavy deck (decka/deckb/decke/deckf/cargo)
+  // then loads the 11 kHz `.11k` bank instead of the full `.trk`, while still
+  // calling playnewtheme("<deck>.trk"). Left at 0, heapsize() reported "low
+  // memory", the .trk bank was never opened, and those rooms were silent.
+  // We run in a browser with ample memory: report plenty so the full path runs.
+  r("heapsize", () => 64 * 1024 * 1024);
   // stageparam(idx[, val]): per-stage scratch parameters, getter/setter by arity
   const stageParams = new Map<number, Value>();
   r("stageparam", (_i, [idx, val]) => {

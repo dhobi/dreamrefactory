@@ -1459,5 +1459,36 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- 44. per-deck theme selection via changeset -> setupsound --------------
+// Themes are named by DECK, not by set (recept1c -> deckd.trk, halla ->
+// decka.trk); BOOTFILE setupsound() picks them on set entry. Two bugs made
+// rooms silent: (1) a set's openset passcodes to boot's setupsound but first
+// fires sendtoactor(setupactor()) whose handler exitcodes — the shared
+// eventConsumed flag leaked and fireLifecycle skipped boot's openset; (2) the
+// lowmemory() deck path (decka/deckb/decke/deckf/cargo) loaded the .11k bank
+// while playnewtheme asked for the .trk, because heapsize() reported 0. This
+// exercises the authentic boot changeset() path end to end.
+{
+  const { session } = await newSession();
+  await session.runGlobal("changeset", ["recept1c", "", ""]); // deckd, no lowmemory branch
+  const deckd = session.currentThemeName;
+  await session.runGlobal("changeset", ["halla", "", ""]); // decka, via lowmemory() branch
+  const decka = session.currentThemeName;
+  // same-deck travel must keep the theme playing (setupsound exits early)
+  let themePlays = 0;
+  const origPlay = session.audio.play.bind(session.audio);
+  (session.audio as unknown as { play: unknown }).play = (ch: string, a: unknown, o: unknown) => {
+    if (ch === "theme") themePlays++;
+    return (origPlay as (c: string, a: unknown, o: unknown) => unknown)(ch, a, o);
+  };
+  await session.runGlobal("changeset", ["lnghall", "", ""]); // decka again -> no change
+  const stayed = session.currentThemeName;
+  check(
+    "themes are chosen per deck; same-deck travel is seamless",
+    deckd === "deckd.trk" && decka === "decka.trk" && stayed === "decka.trk" && themePlays === 0,
+    `recept1c=${deckd} halla=${decka} lnghall=${stayed} sameDeckReplays=${themePlays}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
