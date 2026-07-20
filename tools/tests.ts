@@ -711,5 +711,50 @@ async function runAnimations(v: SetViewer): Promise<void> {
   check("actorstar getter reports the destination", morrow.starName === "morrow.2");
 }
 
+// --- 20. puppet frame cache is per-pup (switching characters, no overlap) --
+{
+  const { session, viewer } = await newSession();
+  await session.openSetFile("c73.set");
+  const v = viewer();
+  await session.openPuppetFile("morrow1.pup");
+  const mpup = session.puppet!.pup;
+  const locs = [
+    ...new Set(mpup.stances.flatMap((s) => s.layers.flatMap((l) => l.frames))),
+  ].filter((n) => n > 0);
+  const aByLoc = new Map<number, ReturnType<SetViewer["puppetLayerFrame"]>>();
+  for (const loc of locs) {
+    try {
+      aByLoc.set(loc, v.puppetLayerFrame(loc));
+    } catch {
+      /* undecodable under morrow — skip */
+    }
+  }
+  session.closePuppetFile();
+  // a DIFFERENT character: the same container loc must not return morrow's
+  // cached sprite (the reported "leftover data overlaps" bug)
+  await session.openPuppetFile("smeth1.pup");
+  const spup = session.puppet!.pup;
+  let tested = 0;
+  let stale = 0;
+  for (const loc of locs) {
+    const a = aByLoc.get(loc);
+    if (!a || !spup.file.containers[loc]) continue;
+    let b: ReturnType<SetViewer["puppetLayerFrame"]> = null;
+    try {
+      b = v.puppetLayerFrame(loc);
+    } catch {
+      continue;
+    }
+    if (!b) continue;
+    tested++;
+    if (a === b) stale++; // same object => cache reused morrow's frame
+  }
+  check(
+    "puppet frames are cached per-pup (no cross-character sprite reuse)",
+    tested > 0 && stale === 0,
+    `checked ${tested} shared locs, ${stale} reused the previous character`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

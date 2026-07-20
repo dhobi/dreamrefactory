@@ -722,14 +722,52 @@ export class SetViewer {
 
   /** cached layer composite of the active puppet stance */
   private puppetImage: { key: string; rgba: Uint8ClampedArray } | null = null;
-  /** decoded puppet layer frames, by container location */
-  private puppetFrames = new Map<number, import("./df/shp").ShpFrame>();
+  /**
+   * decoded puppet layer frames, keyed by "<pup name>:<container loc>". The
+   * pup name MUST be part of the key: different PUP files hold different data
+   * at the same container index, so keying by loc alone made a second
+   * character reuse the first's decoded sprites (garbled overlap).
+   */
+  private puppetFrames = new Map<string, import("./df/shp").ShpFrame>();
 
-  /** bevel button geometry (shared by render + click hit-test) */
+  /**
+   * Decode (once, cached per pup) a layer sprite of the active puppet. The
+   * cache key includes the pup name so switching characters never reuses the
+   * previous one's sprites at the same container index.
+   */
+  puppetLayerFrame(loc: number): import("./df/shp").ShpFrame | null {
+    const p = this.session.puppet;
+    if (!p) return null;
+    const key = `${p.name}:${loc}`;
+    let f = this.puppetFrames.get(key);
+    if (!f) {
+      f = decodeShpFrame(p.pup.file.containers[loc]);
+      this.puppetFrames.set(key, f);
+    }
+    return f;
+  }
+
+  /**
+   * Bevel button geometry (shared by render + click hit-test, so they can
+   * never disagree). The block is anchored to the bottom of the 384-px screen
+   * and the row pitch shrinks to fit however many choices there are — a line
+   * with 5+ options (e.g. Morrow's opener) no longer runs off the bottom.
+   */
   private puppetBevelRects(): { x: number; y: number; w: number; h: number }[] {
     const p = this.session.puppet;
     if (!p) return [];
-    return p.bevels.map((_, i) => ({ x: 96, y: 276 + i * 26, w: 320, h: 22 }));
+    const n = p.bevels.length;
+    if (!n) return [];
+    const preferredTop = 276; // where a short list sits (unchanged for n<=3)
+    const bottomY = 378; // 6-px margin at the screen edge
+    const topMin = 208; // for long lists: don't climb over the speaker's face
+    const gap = 4;
+    // full pitch (26) until the list would overflow, then compress; also raise
+    // the block toward topMin so even a long list fits above the bottom edge
+    const pitch = Math.min(26, Math.max(12, Math.floor((bottomY - topMin) / n)));
+    const h = Math.max(12, pitch - gap);
+    const startY = Math.min(preferredTop, bottomY - n * pitch);
+    return p.bevels.map((_, i) => ({ x: 96, y: startY + i * pitch, w: 320, h }));
   }
 
   private puppetBevelAt(x: number, y: number): number {
@@ -777,11 +815,7 @@ export class SetViewer {
           if (!st || st.frame < 0 || !layer?.frames.length) continue;
           const loc = layer.frames[Math.min(st.frame, layer.frames.length - 1)];
           try {
-            let f = this.puppetFrames.get(loc);
-            if (!f) {
-              f = decodeShpFrame(p.pup.file.containers[loc]);
-              this.puppetFrames.set(loc, f);
-            }
+            const f = this.puppetLayerFrame(loc)!;
             if (l === 0) {
               let flat = true;
               const first = f.indexed[0];
@@ -839,7 +873,8 @@ export class SetViewer {
       }
       lines.slice(0, 2).forEach((ln, i) => ctx.fillText(ln, W / 2, 284 + i * 17));
     }
-    // choice bevels
+    // choice bevels — font tracks the (possibly compressed) row height, text
+    // is vertically centred so it stays legible even when rows are tight
     const rects = this.puppetBevelRects();
     rects.forEach((r, i) => {
       ctx.fillStyle = "#2c2618";
@@ -847,7 +882,9 @@ export class SetViewer {
       ctx.strokeStyle = "#6a5c3a";
       ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
       ctx.fillStyle = "#e8e2d0";
-      ctx.fillText(this.session.puppet!.bevels[i].text, r.x + r.w / 2, r.y + 15);
+      ctx.font = `${Math.min(14, r.h - 4)}px Georgia, serif`;
+      ctx.textBaseline = "middle";
+      ctx.fillText(this.session.puppet!.bevels[i].text, r.x + r.w / 2, r.y + r.h / 2 + 1);
     });
     ctx.restore();
     this.applyFade(ctx);
