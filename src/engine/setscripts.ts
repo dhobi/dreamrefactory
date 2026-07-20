@@ -767,9 +767,13 @@ export function registerGameBuiltins(session: GameSession): void {
   r("indextopuppet", (_i, [idx]) => {
     return [...(session.puppet?.scripts.keys() ?? [])][toNum(idx ?? 0) - 1] ?? "";
   });
-  // stance/pose selection by dialogue ident ("bx2.07") — stance switching
-  // is part of the lip-sync work; log once for now
-  for (const stub of ["puppetbase", "puppetparam", "puppetvisible", "puppetsubtitle", "puppetgrab", "puppetscramble"]) {
+  // puppetbase(ident): seat the character in a line's resting pose (bx2 with/
+  // without the baby); "" reverts to the neutral opening pose
+  r("puppetbase", (_i, [ident]) => session.puppetBase(toStr(ident ?? "")));
+  // remaining puppet effects are rare and unverified: puppetparam (gesture
+  // params), puppetvisible (hide a layer), puppetsubtitle (override text),
+  // puppetgrab (hold an item in-frame), puppetscramble (garbled face)
+  for (const stub of ["puppetparam", "puppetvisible", "puppetsubtitle", "puppetgrab", "puppetscramble"]) {
     r(stub, () => {});
   }
 

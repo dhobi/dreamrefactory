@@ -1185,5 +1185,24 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- 34. puppetbase seats the character in a line's resting pose ----------
+{
+  const { session } = await newSession();
+  await session.openPuppetFile("bx2.pup");
+  const hands1 = () => session.puppetFrame()?.layers[8]?.frame; // hands1 layer
+  session.puppetBase("bx2.07"); // baby present -> hands1 holds it (frame 2)
+  const withBaby = hands1();
+  session.puppetBase("bx2.01"); // no baby -> hands1 hidden (-1)
+  const noBaby = hands1();
+  session.puppetBase(""); // revert to the neutral opening pose
+  const reverted = session.puppetFrame() === session.puppet?.defaultPose;
+  check(
+    "puppetbase seats the character in a line's resting pose (bx2 baby)",
+    withBaby === 2 && noBaby === -1 && reverted,
+    `withBaby=${withBaby} noBaby=${noBaby} reverted=${reverted}`,
+  );
+  session.closePuppetFile();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

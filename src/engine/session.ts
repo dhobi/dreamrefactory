@@ -1003,6 +1003,8 @@ export class GameSession {
     anim: { frames: PupAnimFrame[]; start: number } | null;
     /** layer state held between lines (the last played record) */
     pose: PupAnimFrame | null;
+    /** the neutral opening pose (puppetbase("") reverts to it) */
+    defaultPose: PupAnimFrame | null;
   } | null = null;
 
   async openPuppetFile(fileName: string): Promise<boolean> {
@@ -1045,6 +1047,7 @@ export class GameSession {
       speakSkip: null,
       anim: null,
       pose,
+      defaultPose: pose,
     };
     this.onLog(`puppet opened: ${key} (${pup.dialogue.size} lines, ${pup.scripts.length} scripts)`);
     return true;
@@ -1111,6 +1114,33 @@ export class GameSession {
     if (!this.puppet) return;
     this.puppet.bevels = [];
     this.puppet.subtitle = "";
+  }
+
+  /**
+   * puppetbase(ident): seat the character in a resting pose taken from a
+   * dialogue line's first animLogic record (the game calls this before a
+   * branch — e.g. bx2 posed with vs without the baby). "" reverts to the
+   * neutral opening pose. Unknown idents are ignored (some scenarios name a
+   * line from a companion puppet we don't have loaded).
+   */
+  puppetBase(ident: string): void {
+    const p = this.puppet;
+    if (!p) return;
+    if (!ident) {
+      p.pose = p.defaultPose;
+      p.anim = null;
+      return;
+    }
+    const line = p.pup.dialogue.get(toStr(ident).toLowerCase());
+    if (!line) {
+      this.onLog(`puppetbase: no line "${ident}" in ${p.name}`);
+      return;
+    }
+    const frames = readAnimLogic(p.pup, line.animLogicLocation);
+    if (frames.length) {
+      p.pose = frames[0];
+      p.anim = null;
+    }
   }
 
   puppetBevel(text: string, id: number): void {
