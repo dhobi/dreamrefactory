@@ -710,15 +710,29 @@ export class SetViewer {
     );
     if (prop) {
       const name = prop.group.name;
-      const inst = this.session.propScripts.get(name.toLowerCase());
-      if (inst?.script.codes.has("mousedown")) {
-        try {
-          await this.session.interp.runHandler(inst, "mousedown", [name], {
-            me: name,
-            target: name,
-          });
-        } catch (e) {
-          this.onLog(`script error in ${name}.mousedown: ${(e as Error).message}`);
+      // A prop's mousedown may live on its own script (the trunk's gramdrawer)
+      // OR only on the owning shop's main, which dispatches by `switch target`
+      // for a whole bank of props (the Enigma switch/wires/dials share one
+      // handler). Try the prop script first, then fall through to the shop
+      // main, with target = the prop name so that dispatcher matches.
+      const own = this.session.propScripts.get(name.toLowerCase());
+      const shopMain = this.session.shopMain(prop.shop.name);
+      const chain = [own, shopMain].filter(
+        (s): s is NonNullable<typeof s> => !!s && s.script.codes.has("mousedown"),
+      );
+      if (chain.length) {
+        this.session.interp.eventConsumed = false;
+        for (const inst of chain) {
+          try {
+            const res = await this.session.interp.runHandler(inst, "mousedown", [name], {
+              me: name,
+              target: name,
+            });
+            if (this.session.interp.eventConsumed || (res.handled && !res.passed)) break;
+          } catch (e) {
+            this.onLog(`script error in ${name}.mousedown: ${(e as Error).message}`);
+            break;
+          }
         }
         this.onLog(`click prop ${name}`);
         return;

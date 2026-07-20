@@ -279,6 +279,17 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(trunkBtn);
 
+  // dev: open the Enigma decoder stage (normally reached from the trunk's
+  // "enigma" hotspot). Its shop/track/stg are prefetched in loadServerSet.
+  const enigmaBtn = document.createElement("button");
+  enigmaBtn.textContent = "🔐 Enigma (dev)";
+  enigmaBtn.style.marginLeft = "0.5rem";
+  enigmaBtn.addEventListener("click", () => {
+    if (!viewer) return;
+    void session.track(session.transToFlat("enigma.stg"));
+  });
+  setSelectWrap.appendChild(enigmaBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).
@@ -366,6 +377,7 @@ async function loadServerSet(setName: string): Promise<void> {
      "unilib.trk", "bootfile", "main.stg", "map.stg", "inven1.stg", "inven2.stg",
      "wireless.stg", "wireless.shp", "wireless.sfx",
      "trunk.stg", "trunk.shp", "grammy.sfx", "oldtune.trk", "oldboss.trk",
+     "enigma.stg", "enigma.shp", "enigma.sfx",
      "house.shp", "inven.shp", "inven.trk", "gang.cst", "extra.cst"].map(fetchIntoStore),
   );
   try {

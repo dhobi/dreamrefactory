@@ -499,8 +499,21 @@ export function registerGameBuiltins(session: GameSession): void {
   r("haltsound", () => session.haltSounds());
   r("haltvoice", () => session.audio.halt("voice"));
   r("halttheme", () => session.audio.halt("theme"));
-  r("sounddone", () => (session.audio.isDone("sound") ? 1 : 0));
-  r("voicedone", () => (session.audio.isDone("voice") ? 1 : 0));
+  // sounddone/voicedone: scripts spin `while not voicedone() endwhile` to wait
+  // for a line/SFX to finish (the Enigma power switch, many puppet beats). That
+  // empty-body loop has no other yield, so the poll itself must give up a real
+  // frame — otherwise it spins synchronously and the audio can never progress
+  // to "done". Mirrors stilldown; headless returns immediately (NullAudioSink
+  // is always done, so the wait resolves at once and stays deterministic).
+  const audioDonePoll = (channel: "sound" | "voice") => async () => {
+    if (session.hasRealFrames) {
+      session.realYieldSeq++;
+      await session.nextFrame();
+    }
+    return session.audio.isDone(channel) ? 1 : 0;
+  };
+  r("sounddone", audioDonePoll("sound"));
+  r("voicedone", audioDonePoll("voice"));
   r("playtheme", (_i, [n]) => {
     const theme = session.audioLib.theme(n === undefined ? undefined : toStr(n));
     if (!theme) {
@@ -546,9 +559,27 @@ export function registerGameBuiltins(session: GameSession): void {
   });
 
   // string helper used by boot logic: findword("a,b,c", ",", 2) -> "b"
+  // word list = a string split on a separator; an EMPTY (or omitted) delimiter
+  // means the default separator, a space (CyberFlix convention). saveprops
+  // strings ("1 0 1 …", built by putword) round-trip through this.
+  const wordSep = (delim: Value) => {
+    const d = delim === undefined ? "" : toStr(delim);
+    return d === "" ? " " : d;
+  };
   r("findword", (_i, [s, delim, idx]) => {
-    const parts = toStr(s ?? "").split(toStr(delim ?? ","));
+    const parts = toStr(s ?? "").split(wordSep(delim));
     return parts[(Number(idx) || 1) - 1] ?? "";
+  });
+  // putword(str, delim, idx, word): replace the idx-th (1-based) word, padding
+  // with empty words when idx is past the end so an empty string grows into a
+  // fixed-slot list (hideenigma/hidetrunk save each prop's visibility by slot).
+  r("putword", (_i, [s, delim, idx, word]) => {
+    const sep = wordSep(delim);
+    const i = Math.max(1, Number(idx) || 1) - 1;
+    const parts = toStr(s ?? "") === "" ? [] : toStr(s ?? "").split(sep);
+    while (parts.length <= i) parts.push("");
+    parts[i] = toStr(word ?? "");
+    return parts.join(sep);
   });
   r("stringlength", (_i, [s]) => toStr(s ?? "").length);
 
@@ -876,7 +907,18 @@ export function registerGameBuiltins(session: GameSession): void {
   r("pointx", (_i, [p]) => s16((toNum(p ?? 0) >> 16) & 0xffff));
   r("pointy", (_i, [p]) => s16(toNum(p ?? 0) & 0xffff));
   r("mouse", () => session.pointerPoint());
-  r("button", () => (session.pointerDown ? 1 : 0));
+  // button(): is the mouse button held? Scripts wait for a click with an
+  // empty-body poll `while not (button() & pointinprop(...)) endwhile` (the
+  // Enigma result dismissal), which has no other yield — so, like stilldown,
+  // the poll gives up a real frame so input can arrive. Headless returns at
+  // once (button state is set directly; keeps the runaway guard live).
+  r("button", async () => {
+    if (session.hasRealFrames) {
+      session.realYieldSeq++;
+      await session.nextFrame();
+    }
+    return session.pointerDown ? 1 : 0;
+  });
   // flushevents(): discard queued input so the click that ended a drag/poll
   // loop doesn't leak into the next interaction. Our host dispatches clicks one
   // at a time (a mousedown handler runs to completion before the next click),

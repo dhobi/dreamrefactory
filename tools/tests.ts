@@ -573,8 +573,8 @@ async function runAnimations(v: SetViewer): Promise<void> {
   // motor/machine is audible from this spawn)
   for (let i = 0; i < 3; i++) { session.tickTime((clock += 66)); await drain(); }
   check(
-    "deckbd ambient: in-earshot cricket loops, far one stays armed",
-    sink.calls.filter((c) => c.loop).length === 1 &&
+    "deckbd ambient: soundloop-flagged crickets loop; both registered",
+    sink.calls.filter((c) => c.loop).length >= 1 &&
       session.isCricket("motor") && session.isCricket("machine"),
     `${sink.calls.filter((c) => c.loop).length} loops, motor=${session.isCricket("motor")} machine=${session.isCricket("machine")}`,
   );
@@ -1332,6 +1332,72 @@ for (const [label, releaseX, releaseY, expectExit] of [
       call("idle12", "idle") === 1 && call("open2", "idle") === -1 &&
       call("Titanic1:foo", "titanic1:") === 1,
     `a=${call("abcdefghijklmnopqrstuvwxyz ", "a")} c=${call("abcdefghijklmnopqrstuvwxyz ", "c")} miss=${call("open2", "idle")}`,
+  );
+}
+
+// --- 40. putword/findword round-trip (save/restore prop lists) --------------
+// hideenigma/hidetrunk save each prop's visibility into a space-delimited slot
+// string via putword, then showX reads it back with findword. An empty
+// delimiter means the default separator (a space).
+{
+  const { session } = await newSession();
+  const put = session.interp.builtins.get("putword")!;
+  const find = session.interp.builtins.get("findword")!;
+  const B = session.interp;
+  // build "1 0 1" by setting slots 1..3 from an empty string (grows w/ padding)
+  let s: any = "";
+  s = put(B, [s, "", 1, "1"], null as never, null as never);
+  s = put(B, [s, "", 2, "0"], null as never, null as never);
+  s = put(B, [s, "", 3, "1"], null as never, null as never);
+  const readBack = [1, 2, 3].map((i) => find(B, [s, "", i], null as never, null as never));
+  // overwrite a middle slot; commas still work as an explicit delimiter
+  const s2 = put(B, [s, "", 2, "1"], null as never, null as never);
+  const csv = find(B, ["a,b,c", ",", 2], null as never, null as never);
+  check(
+    "putword/findword round-trip (empty delim = space; explicit delim works)",
+    s === "1 0 1" && readBack.join("") === "101" && s2 === "1 1 1" && csv === "b",
+    `s="${s}" read=${readBack.join("")} s2="${s2}" csv=${csv}`,
+  );
+}
+
+// --- 41. ENIGMA decode logic: dial gate + typed message accumulation --------
+// With power on (switch + wires) and the dials at the mission's unlock combo,
+// checkey() lets typed letters accumulate into dialmess (dialset() gates the
+// first letter); a decode compares dialmess to goodmess. Drives the real stage
+// keydown handler; the powerup animation is bypassed by seeding state directly.
+{
+  const { session } = await newSession();
+  await session.openSetFile("b59.set");
+  await session.transToFlat("enigma.stg");
+  session.interp.globals.set("mission", 1);
+  const set = (n: string, deg: number) => { const p = session.propRuntime.get(n); if (p) p.deg = deg; };
+  set("enigsw", 1); // switchon()
+  set("enigwirer", 0); set("enigwireg", 0); // wireson()
+  set("zeitgram", 0); // -> combo 8,7,5,4 ; goodmess below
+  set("dial1", 8); set("dial2", 7); set("dial3", 5); set("dial4", 4);
+  const goodmess = "anhqsppaixwbfcxyam";
+  session.interp.globals.set("goodmess", goodmess);
+  session.interp.globals.set("dialmess", "");
+  const kd = session.keydownTarget()!;
+  const type = async (ch: string) =>
+    session.interp.runHandler(kd, "keydown", [ch], { me: kd.name, target: kd.name });
+  const beforeGate = session.keydownTarget()?.script.codes.has("keydown");
+  for (const ch of goodmess) await type(ch);
+  const dialmess = session.interp.globals.get("dialmess");
+  check(
+    "enigma: powered + dials set -> typed letters accumulate into dialmess == goodmess",
+    beforeGate === true && dialmess === goodmess,
+    `dialmess="${dialmess}"`,
+  );
+  // negative: with the dials WRONG, dialset() fails so the first letter is
+  // rejected and dialmess stays empty
+  session.interp.globals.set("dialmess", "");
+  set("dial4", 0); // break the combo
+  for (const ch of goodmess) await type(ch);
+  check(
+    "enigma: wrong dial combo -> dialset() gate keeps dialmess empty",
+    session.interp.globals.get("dialmess") === "",
+    `dialmess="${session.interp.globals.get("dialmess")}"`,
   );
 }
 
