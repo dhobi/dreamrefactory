@@ -65,16 +65,64 @@
         background: #1c1b16;
       }
       #help {
+        width: 1024px;
+        max-width: 96vw;
+        margin-top: 0.4rem;
+      }
+      #help .bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0;
+      }
+      #help .bar + .bar {
+        border-top: 1px solid #2a2820;
+      }
+      #help .keys {
         font-size: 0.8rem;
         color: #6c6759;
-        margin-top: 0.4rem;
+      }
+      #help .keys b {
+        color: #b7a97a;
+        font-weight: normal;
+      }
+      #help .seclabel {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: #6c6759;
+        margin-right: 0.2rem;
+      }
+      #help .spacer {
+        flex: 1;
       }
       select {
         background: #1c1b16;
         color: #d8d4c8;
         border: 1px solid #3a3428;
         font-family: inherit;
-        margin-left: 0.6rem;
+        font-size: 0.8rem;
+        padding: 0.12rem 0.3rem;
+        border-radius: 2px;
+      }
+      #help button,
+      #help input[type="text"] {
+        background: #1c1b16;
+        color: #d8d4c8;
+        border: 1px solid #3a3428;
+        font-family: inherit;
+        font-size: 0.8rem;
+        cursor: pointer;
+        padding: 0.15rem 0.5rem;
+        border-radius: 2px;
+      }
+      #help input[type="text"] {
+        cursor: text;
+      }
+      #help button:hover {
+        border-color: #b7a97a;
+        color: #efe9d8;
       }
       input[type="file"] {
         display: none;
@@ -98,9 +146,16 @@
       max-width: 96vw; font-size: 0.7rem; color: #6f8f6f; margin: 0.3rem 0 0;
       border-top: 1px solid #2a2820; padding-top: 0.3rem;"></pre>
     <div id="help" style="display: none">
-      ← → turn &nbsp;·&nbsp; ↑ walk (when a road leads onward) &nbsp;·&nbsp; M map
-      &nbsp;·&nbsp; O hotspots
-      <span id="setSelectWrap"></span>
+      <div class="bar">
+        <span class="keys">
+          <b>← →</b> turn &nbsp;·&nbsp; <b>↑</b> walk (when a road leads onward)
+          &nbsp;·&nbsp; <b>M</b> map &nbsp;·&nbsp; <b>O</b> hotspots
+        </span>
+        <span class="spacer"></span>
+        <span id="setSelectWrap"></span>
+      </div>
+      <div id="devbar" class="bar"></div>
+      <div id="devstate" class="bar"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

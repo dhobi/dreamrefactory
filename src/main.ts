@@ -38,6 +38,8 @@ const minimap = document.getElementById("minimap") as HTMLCanvasElement;
 const hud = document.getElementById("hud") as HTMLDivElement;
 const help = document.getElementById("help") as HTMLDivElement;
 const setSelectWrap = document.getElementById("setSelectWrap") as HTMLSpanElement;
+const devbar = document.getElementById("devbar") as HTMLDivElement;
+const devstate = document.getElementById("devstate") as HTMLDivElement;
 
 const ctx = screen.getContext("2d")!;
 const mapCtx = minimap.getContext("2d")!;
@@ -247,12 +249,36 @@ function rebuildSetSelect(): void {
   add.style.marginLeft = "0.5rem";
   add.addEventListener("click", () => fileInput.click());
   setSelectWrap.appendChild(add);
+  buildDevTools();
+}
+
+// Puzzle-jump buttons + the mission/phase state controls don't depend on the
+// set list, so they're built once — into their own bars (#devbar / #devstate) —
+// and persist across set changes. #help's button/select CSS styles them and the
+// bars' flex `gap` handles spacing (no per-element margins needed).
+let devToolsBuilt = false;
+function buildDevTools(): void {
+  if (devToolsBuilt) return;
+  devToolsBuilt = true;
+
+  const seclabel = (parent: HTMLElement, text: string): void => {
+    const s = document.createElement("span");
+    s.className = "seclabel";
+    s.textContent = text;
+    parent.appendChild(s);
+  };
+  const mkDevBtn = (label: string, onClick: () => unknown): void => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.addEventListener("click", () => void onClick());
+    devbar.appendChild(b);
+  };
+
+  seclabel(devbar, "jump to");
+
   // dev affordance: open the deck map (normally triggered by the inventory
   // map prop, which isn't wired into the dev harness yet)
-  const mapBtn = document.createElement("button");
-  mapBtn.textContent = "🗺 Deck Map (dev)";
-  mapBtn.style.marginLeft = "0.5rem";
-  mapBtn.addEventListener("click", () => {
+  mkDevBtn("🗺 Deck Map", () => {
     if (!viewer) return;
     // Dev convenience: the game's mapdisabled() gate refuses deck-map jumps
     // until Frank owns the bag + watch. Setting the game's own `tour` flag
@@ -260,47 +286,31 @@ function rebuildSetSelect(): void {
     session.interp.globals.set("tour", 1);
     void session.track(session.transToFlat("map.stg"));
   });
-  setSelectWrap.appendChild(mapBtn);
 
   // dev: open the Marconi wireless stage from any set (normally entered from
   // the wireless room). Its shop/track/stg are prefetched in loadServerSet.
-  const wirelessBtn = document.createElement("button");
-  wirelessBtn.textContent = "📻 Wireless (dev)";
-  wirelessBtn.style.marginLeft = "0.5rem";
-  wirelessBtn.addEventListener("click", () => {
+  mkDevBtn("📻 Wireless", () => {
     if (!viewer) return;
     void session.track(session.transToFlat("wireless.stg"));
   });
-  setSelectWrap.appendChild(wirelessBtn);
 
   // dev: open the gramophone-in-a-trunk stage (normally reached from Frank's
   // stateroom). Its shop/track/stg are prefetched in loadServerSet.
-  const trunkBtn = document.createElement("button");
-  trunkBtn.textContent = "📦 Trunk (dev)";
-  trunkBtn.style.marginLeft = "0.5rem";
-  trunkBtn.addEventListener("click", () => {
+  mkDevBtn("📦 Trunk", () => {
     if (!viewer) return;
     void session.track(session.transToFlat("trunk.stg"));
   });
-  setSelectWrap.appendChild(trunkBtn);
 
   // dev: open the Enigma decoder stage (normally reached from the trunk's
   // "enigma" hotspot). Its shop/track/stg are prefetched in loadServerSet.
-  const enigmaBtn = document.createElement("button");
-  enigmaBtn.textContent = "🔐 Enigma (dev)";
-  enigmaBtn.style.marginLeft = "0.5rem";
-  enigmaBtn.addEventListener("click", () => {
+  mkDevBtn("🔐 Enigma", () => {
     if (!viewer) return;
     void session.track(session.transToFlat("enigma.stg"));
   });
-  setSelectWrap.appendChild(enigmaBtn);
 
   // dev: open the boiler-room chute stage (normally reached from a BOIL.SET
   // coal hotspot). Its shop/track/stg are prefetched in loadServerSet.
-  const boilBtn = document.createElement("button");
-  boilBtn.textContent = "🔥 Boiler + Rubaiyat (dev)";
-  boilBtn.style.marginLeft = "0.5rem";
-  boilBtn.addEventListener("click", async () => {
+  mkDevBtn("🔥 Boiler", async () => {
     // Reproduce the Enigma clue's state: the Rubaiyat hidden in coal chute 4.
     // inchute() (boil.shp openshop) shows boilrubaiyat when savedeck="boil3",
     // propowner("rubaiyat")="coal4" and we're on that chute's scene (Scene13).
@@ -315,33 +325,24 @@ function rebuildSetSelect(): void {
     viewer?.jumpTo("Scene13", "View21");
     if (viewer) void session.track(session.transToFlat("boil.stg"));
   });
-  setSelectWrap.appendChild(boilBtn);
 
   // dev: open the bomb-defuse stage (normally reached from C59.SET in mission 4
   // when bombphase=1). openstage() is self-contained — it opens bomb.shp/.trk,
   // sets up the props + globals, and starts the ambient loop — so a bare
   // transToFlat reproduces the puzzle. Its shop/track/stg are prefetched in
   // loadServerSet; the movies fetch on demand via onPlayMovie.
-  const bombBtn = document.createElement("button");
-  bombBtn.textContent = "💣 Bomb (dev)";
-  bombBtn.style.marginLeft = "0.5rem";
-  bombBtn.addEventListener("click", () => {
+  mkDevBtn("💣 Bomb", () => {
     if (!viewer) return;
     void session.track(session.transToFlat("bomb.stg"));
   });
-  setSelectWrap.appendChild(bombBtn);
 
   // dev: open the turbine-plant stage (normally reached from the engine room in
   // mission 4). openstage() is self-contained (opens turbine.shp/turbpuz.trk,
   // randomises the dials, starts the continuous sim loop). Prefetched below.
-  const turbineBtn = document.createElement("button");
-  turbineBtn.textContent = "⚙️ Turbine (dev)";
-  turbineBtn.style.marginLeft = "0.5rem";
-  turbineBtn.addEventListener("click", () => {
+  mkDevBtn("⚙️ Turbine", () => {
     if (!viewer) return;
     void session.track(session.transToFlat("turbine.stg"));
   });
-  setSelectWrap.appendChild(turbineBtn);
 
   // dev: play blackjack THROUGH Buick, exactly as the smoking room does — fire
   // the blkjacktable prop's mousedown (HOUSE.SHP 176), which opens the dealer
@@ -349,17 +350,13 @@ function rebuildSetSelect(): void {
   // transtoflats to the table; entering blkjack.stg now deals via the boot's
   // per-stage initgame hook, and after each hand Buick offers another. mission<4
   // selects the disk-1 dealer conversation.
-  const bjBtn = document.createElement("button");
-  bjBtn.textContent = "🃏 Blackjack (dev)";
-  bjBtn.style.marginLeft = "0.5rem";
-  bjBtn.addEventListener("click", async () => {
+  mkDevBtn("🃏 Blackjack", async () => {
     if (!viewer) return;
     if (session.interp.globals.get("mission") === undefined) session.interp.globals.set("mission", 1);
     await session.track(
       session.sendEvent("sendtoprop", "blkjacktable", "mousedown", [0], "dev"),
     );
   });
-  setSelectWrap.appendChild(bjBtn);
 
   // dev: give Frank the three band items he normally collects in his cabin
   // (C73) — the inventory bag, the pocket watch (clock), and the deck map. Each
@@ -367,10 +364,7 @@ function rebuildSetSelect(): void {
   // (owner=frank, moved to 256,324); this is the same trio the bag's mousedown
   // adds under `if debugging`. addbag/addwatch assume the item is already
   // on-screen from the pickup, so force visibility afterwards.
-  const kitBtn = document.createElement("button");
-  kitBtn.textContent = "🎒 Give kit (dev)";
-  kitBtn.style.marginLeft = "0.5rem";
-  kitBtn.addEventListener("click", async () => {
+  mkDevBtn("🎒 Give kit", async () => {
     if (!viewer) return;
     for (const [prop, handler] of [
       ["bag", "addbag"],
@@ -382,7 +376,6 @@ function rebuildSetSelect(): void {
       if (inst) inst.visible = true;
     }
   });
-  setSelectWrap.appendChild(kitBtn);
 
   // dev: enter the fencing duel (FENCE.STG) the way SQUASH.SET's fence() does
   // after the Willie/Haderlitz conversation (WILFENC1.PUP) — seed the globals
@@ -390,10 +383,7 @@ function rebuildSetSelect(): void {
   // = "playing"; fencewins/fencecount = match tallies) and transtoflat into the
   // stage. openstage then loads fence.shp/fence.trk, stands Willie + the player
   // on the 16-flat piste at centre (flat 8), and lights the "engage" button.
-  const fenceBtn = document.createElement("button");
-  fenceBtn.textContent = "🤺 Fence (dev)";
-  fenceBtn.style.marginLeft = "0.5rem";
-  fenceBtn.addEventListener("click", async () => {
+  mkDevBtn("🤺 Fence", async () => {
     if (!viewer) return;
     const g = session.interp.globals;
     g.set("fencelevel", 15);
@@ -403,24 +393,19 @@ function rebuildSetSelect(): void {
     if (g.get("mission") === undefined) g.set("mission", 2);
     await session.track(session.transToFlat("fence.stg"));
   });
-  setSelectWrap.appendChild(fenceBtn);
 
   // dev: enter the Vlad fistfight (FIGHT.STG) the way GSTAIR1.SET's runfight()
   // does at mission 3 / phase 1 — transtoflat into the stage. openstage loads
   // fight.shp/fight.trk and openfight() stands Vlad + the first-person fists on
   // screen with both power bars full (512). Click Vlad to punch (type by where
   // you click); he counter-attacks on his idle loop; first to power < -50 loses.
-  const fightBtn = document.createElement("button");
-  fightBtn.textContent = "🥊 Fight (dev)";
-  fightBtn.style.marginLeft = "0.5rem";
-  fightBtn.addEventListener("click", async () => {
+  mkDevBtn("🥊 Fight", async () => {
     if (!viewer) return;
     const g = session.interp.globals;
     if (g.get("mission") === undefined) g.set("mission", 3);
     if (g.get("phase") === undefined) g.set("phase", 1);
     await session.track(session.transToFlat("fight.stg"));
   });
-  setSelectWrap.appendChild(fightBtn);
 
   // dev: stand at the A-deck fuse standpoint (HALLA scene52/view61, port side)
   // during the Sasha subplot — but do NOT open the fusebox overlay directly.
@@ -429,10 +414,7 @@ function rebuildSetSelect(): void {
   // gate passes). HALLA openset then spawns the officer (asea) at view61, so you
   // land facing Alex: click him to talk (send him off), then click the fuse
   // panel to transtoflat into FUSE.STG yourself.
-  const fuseBtn = document.createElement("button");
-  fuseBtn.textContent = "🔌 Fuse (dev)";
-  fuseBtn.style.marginLeft = "0.5rem";
-  fuseBtn.addEventListener("click", async () => {
+  mkDevBtn("🔌 Fuse", async () => {
     if (!viewer) return;
     const g = session.interp.globals;
     g.set("neckphase", 6);
@@ -448,7 +430,6 @@ function rebuildSetSelect(): void {
     // the dev button while already standing in HALLA); setupactor is idempotent.
     await session.sendEvent("sendtoactor", "asea", "setupactor", ["fuse"], "fuse-dev");
   });
-  setSelectWrap.appendChild(fuseBtn);
 
   // dev: the matryoshka-doll necklace swap (PATTY.STG). Normally reached from
   // the A14 cabin once neckphase = 8 (A14.SET object -> transtoflat "patty.stg").
@@ -457,10 +438,7 @@ function rebuildSetSelect(): void {
   // We reproduce the entry state: mission 1, neckphase 8, the doll's dials
   // pre-solved (solvedoll() honours the `debugging` flag), realneck stashed in
   // the doll, and the fake necklace in your hand/bag via addinven.
-  const dollBtn = document.createElement("button");
-  dollBtn.textContent = "🪆 Doll (dev)";
-  dollBtn.style.marginLeft = "0.5rem";
-  dollBtn.addEventListener("click", async () => {
+  mkDevBtn("🪆 Doll", async () => {
     const g = session.interp.globals;
     g.set("mission", 1);
     g.set("tour", 0);
@@ -479,7 +457,6 @@ function rebuildSetSelect(): void {
     // pre-solve the combination dials so the doll can be opened straight away.
     await session.sendEvent("sendtostage", "patty.stg", "solvedoll", [], "doll-dev");
   });
-  setSelectWrap.appendChild(dollBtn);
 
   // dev: the darkroom photo-development puzzle (PHOTO.STG / REDPHOTO.STG),
   // normally reached from the C78.SET developing bench. You develop 3 negatives
@@ -487,10 +464,7 @@ function rebuildSetSelect(): void {
   // region develops it good, "stop" spoils it), working under the red lamp;
   // white light ruins them. photo.stg is the white-light view, redphoto.stg the
   // red-light view (props at deg 0 vs 1) — both share photo.shp + openphoto.
-  const photoBtn = document.createElement("button");
-  photoBtn.textContent = "📷 Photo (dev)";
-  photoBtn.style.marginLeft = "0.5rem";
-  photoBtn.addEventListener("click", async () => {
+  mkDevBtn("📷 Photo", async () => {
     const g = session.interp.globals;
     g.set("mission", 1);
     g.set("tour", 0);
@@ -499,7 +473,6 @@ function rebuildSetSelect(): void {
     if (!viewer || session.currentSetName === "none") await loadServerSet("c78.set");
     await session.track(session.transToFlat("photo.stg"));
   });
-  setSelectWrap.appendChild(photoBtn);
 
   // dev: the cufflink clue pickup (CUFF.STG). Normally reached from RECEPT1C.SET
   // by clicking one of three chair hotspots (cufflink1/2/3), which sets the
@@ -509,10 +482,7 @@ function rebuildSetSelect(): void {
   // is on the "findcuff" task & cuffchair="cufflink1". You click the cufflink to
   // enlarge it (small->med->big) then take it into your bag; the OK button
   // (cuffok, a trackbut) leaves the flat. We reproduce that entry state.
-  const cuffBtn = document.createElement("button");
-  cuffBtn.textContent = "🔗 Cuff (dev)";
-  cuffBtn.style.marginLeft = "0.5rem";
-  cuffBtn.addEventListener("click", async () => {
+  mkDevBtn("🔗 Cuff", async () => {
     const g = session.interp.globals;
     g.set("mission", 2);
     g.set("tour", 0);
@@ -526,7 +496,6 @@ function rebuildSetSelect(): void {
     if (link) link.owner = "none";
     await session.track(session.transToFlat("cuff.stg"));
   });
-  setSelectWrap.appendChild(cuffBtn);
 
   // dev: the ship's-wheel steering sim (BRIDGE.STG). Reached from BRIDGE.SET by
   // clicking the helm (BRIDGE.SET/0007 -> transtoflat "bridge.stg"). openstage
@@ -536,15 +505,11 @@ function rebuildSetSelect(): void {
   // and sets `driftdesire`; skydrift eases `drifttotal` toward it and scrolls
   // the sky, so the ship swings off course (driftpos != 256 -> drifthappen=1).
   // Clicking OK (oklit trackbut) leaves; if you drifted, Morrow's kickout fires.
-  const bridgeBtn = document.createElement("button");
-  bridgeBtn.textContent = "🛞 Bridge (dev)";
-  bridgeBtn.style.marginLeft = "0.5rem";
-  bridgeBtn.addEventListener("click", async () => {
+  mkDevBtn("🛞 Bridge", async () => {
     session.interp.globals.set("tour", 0);
     if (session.currentSetName !== "bridge") await loadServerSet("bridge.set");
     await session.track(session.transToFlat("bridge.stg"));
   });
-  setSelectWrap.appendChild(bridgeBtn);
 
   // dev: the Purser's Office (GSTAIR3.SET, Scene14/View36). Normally reached by
   // pressing up-arrow at the purser's window on C Deck (GSTAIR3.SET/0234 keydown
@@ -553,10 +518,7 @@ function rebuildSetSelect(): void {
   // which passes through an action frame -> actionframe(1) true -> the purser
   // conversation (purs1.pup) opens. Needs mission < 4, savedeck "c", the door
   // prop visible, and the modal playmovie() the engine now blocks on.
-  const pursBtn = document.createElement("button");
-  pursBtn.textContent = "🛎 Purser (dev)";
-  pursBtn.style.marginLeft = "0.5rem";
-  pursBtn.addEventListener("click", async () => {
+  mkDevBtn("🛎 Purser", async () => {
     const g = session.interp.globals;
     g.set("tour", 0);
     g.set("mission", 2); // mission-2 purser has the fullest menu (Thayer, cargo…)
@@ -570,7 +532,6 @@ function rebuildSetSelect(): void {
       await viewer.keyDown("uparrow"); // -> dopurser: knock the window to talk
     }
   });
-  setSelectWrap.appendChild(pursBtn);
 
   // dev: the endgame "what happened to history" slideshow (NAREND.STG). Normally
   // reached from BOOTFILE after the ship sinks (leave.mov/debris.mov -> transtoflat
@@ -599,7 +560,7 @@ function rebuildSetSelect(): void {
     narSel.appendChild(o);
   }
   const narBtn = document.createElement("button");
-  narBtn.textContent = "🗞 Play ending (dev)";
+  narBtn.textContent = "🗞 Ending";
   narBtn.style.marginLeft = "0.3rem";
   narBtn.addEventListener("click", async () => {
     const e = ENDINGS[narSel.value] ?? ENDINGS["Prozac (good) — proz"];
@@ -625,29 +586,23 @@ function rebuildSetSelect(): void {
     await session.sendEvent("sendtostage", "narend.stg", "opennarend", [], "ending-dev");
   });
   narWrap.append(narSel, narBtn);
-  setSelectWrap.appendChild(narWrap);
+  devbar.appendChild(narWrap);
 
   // dev: the in-game settings panel (the "life" pocketwatch prop in the menu
   // band → dolife() → transtoflat("ctl.stg")). The wave-volume dial and the
   // theme-volume slider live here; both drive the audio sink's channel gains.
-  const ctlBtn = document.createElement("button");
-  ctlBtn.textContent = "⚙ Settings (dev)";
-  ctlBtn.style.marginLeft = "0.5rem";
-  ctlBtn.addEventListener("click", async () => {
+  mkDevBtn("⚙ Settings", async () => {
     if (!viewer || session.currentSetName === "none") await loadServerSet("c78.set");
     await session.track(session.transToFlat("ctl.stg"));
   });
-  setSelectWrap.appendChild(ctlBtn);
 
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).
   const stateWrap = document.createElement("div");
-  stateWrap.style.marginTop = "0.4rem";
-  stateWrap.style.fontSize = "0.85em";
   const label = document.createElement("span");
-  label.textContent = "dev state: ";
-  label.style.opacity = "0.7";
+  label.className = "seclabel";
+  label.textContent = "state";
   stateWrap.appendChild(label);
 
   const mkSelect = (title: string, global: string, values: number[]): HTMLSelectElement => {
@@ -708,7 +663,39 @@ function rebuildSetSelect(): void {
     return b;
   };
   stateWrap.append(mkPreset("📻 RX armed", "rx"), mkPreset("📻 TX + Thayer gram", "tx"));
-  setSelectWrap.appendChild(stateWrap);
+
+  // free-form scene/view jump within the current set. Combined with the set
+  // dropdown and the mission/phase selects above, this reaches almost any point
+  // in the game: pick the set, set the story flags, then jump to a standpoint.
+  const sceneInput = document.createElement("input");
+  sceneInput.type = "text";
+  sceneInput.placeholder = "scene";
+  sceneInput.size = 8;
+  sceneInput.style.marginLeft = "0.5rem";
+  sceneInput.style.marginRight = "0.3rem";
+  const viewInput = document.createElement("input");
+  viewInput.type = "text";
+  viewInput.placeholder = "view";
+  viewInput.size = 8;
+  viewInput.style.marginRight = "0.3rem";
+  const jumpBtn = document.createElement("button");
+  jumpBtn.textContent = "⤳ Jump";
+  const doJump = (): void => {
+    if (!viewer) return;
+    const scene = sceneInput.value.trim();
+    const ok = viewer.jumpTo(scene, viewInput.value.trim());
+    hud.textContent = ok ? `jumped to ${scene} ${viewInput.value.trim()}`.trim() : `no such scene: ${scene}`;
+  };
+  jumpBtn.addEventListener("click", doJump);
+  for (const inp of [sceneInput, viewInput]) {
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") doJump();
+      e.stopPropagation(); // keep the game's global keydown handler from stealing typed keys
+    });
+  }
+  stateWrap.append(sceneInput, viewInput, jumpBtn);
+
+  devstate.appendChild(stateWrap);
 }
 
 /** activate a set that lives on the dev server: fetch it + its siblings */
