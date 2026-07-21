@@ -1097,7 +1097,16 @@ export class GameSession {
     this.fade.level = 0;
     this.fade.queue.length = 0;
     this.fade.snapshot = null;
-    if (await this.openStageFile(fileName)) this.setVisible = false;
+    if (await this.openStageFile(fileName)) {
+      this.setVisible = false;
+      // Mirror the boot's transtoflat (BOOTFILE 0002:1418): a flat opened while a
+      // conversation is live hides the puppet close-up, so the flat shows and its
+      // own input loop takes the clicks (the purser "check in" hand-select runs
+      // inven.shp's handleselect() over inven1.stg; blackjack reveals the table).
+      // transFromFlat restores it. Without this the puppet stayed drawn on top and
+      // ate every click — you could open the inventory but never hand an item over.
+      if (this.puppet) this.puppet.visible = false;
+    }
   }
 
   /**
@@ -1126,6 +1135,14 @@ export class GameSession {
       await this.restoreStageProps(prev);
     } else {
       await this.closeStageFile();
+    }
+    // Mirror restorescreen (BOOTFILE 0002:1650): returning to the in-game main
+    // stage with a conversation still loaded brings the puppet back — the purser
+    // resumes after the inventory hand-select so you can pick the "check <item>"
+    // bevel that actually gifts it. Only for main.stg (the boot gates on the same
+    // condition), so an overlay-over-overlay return doesn't flash the puppet.
+    if (this.puppet && this.setVisible && this.stageName === "main.stg") {
+      this.puppet.visible = true;
     }
     // restore the ambient theme if the overlay stage replaced it with its own
     // (fence.trk). Only when it actually changed, so closing a themeless overlay
