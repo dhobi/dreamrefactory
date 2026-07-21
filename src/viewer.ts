@@ -895,25 +895,28 @@ export class SetViewer {
 
   /**
    * Bevel button geometry (shared by render + click hit-test, so they can
-   * never disagree). The block is anchored to the bottom of the 384-px screen
-   * and the row pitch shrinks to fit however many choices there are — a line
-   * with 5+ options (e.g. Morrow's opener) no longer runs off the bottom.
+   * never disagree). Matches the real game: full-width rows stacked at the
+   * bottom of the 384-px screen and anchored to the bottom edge (the last
+   * choice sits lowest), the block growing upward as options are added. The
+   * row pitch compresses only when a long list would climb over the speaker.
    */
   private puppetBevelRects(): { x: number; y: number; w: number; h: number }[] {
     const p = this.session.puppet;
     if (!p) return [];
     const n = p.bevels.length;
     if (!n) return [];
-    const preferredTop = 276; // where a short list sits (unchanged for n<=3)
-    const bottomY = 378; // 6-px margin at the screen edge
-    const topMin = 208; // for long lists: don't climb over the speaker's face
+    const marginX = 8;
+    const bottomY = 380; // ~4-px margin at the screen edge
+    const topMin = 200; // long lists stop here so they don't bury the speaker
     const gap = 4;
-    // full pitch (26) until the list would overflow, then compress; also raise
-    // the block toward topMin so even a long list fits above the bottom edge
-    const pitch = Math.min(26, Math.max(12, Math.floor((bottomY - topMin) / n)));
-    const h = Math.max(12, pitch - gap);
-    const startY = Math.min(preferredTop, bottomY - n * pitch);
-    return p.bevels.map((_, i) => ({ x: 96, y: startY + i * pitch, w: 320, h }));
+    // full pitch (~27) until the list would overflow, then compress and climb
+    // toward topMin so even a long list still fits above the bottom edge
+    const pitch = Math.min(27, Math.max(14, Math.floor((bottomY - topMin) / n)));
+    const h = pitch - gap;
+    const startY = bottomY - n * pitch;
+    const x = marginX;
+    const w = 512 - marginX * 2;
+    return p.bevels.map((_, i) => ({ x, y: startY + i * pitch, w, h }));
   }
 
   private puppetBevelAt(x: number, y: number): number {
@@ -923,6 +926,54 @@ export class SetViewer {
       if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return i;
     }
     return -1;
+  }
+
+  /** rounded-rectangle sub-path (roundRect isn't in our TS lib target) */
+  private roundRectPath(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number,
+  ): void {
+    const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  /** a small scroll-curl ornament (the bevel end-caps in the menu band) */
+  private drawBevelOrnament(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    r: number,
+    mirror: boolean,
+  ): void {
+    ctx.save();
+    ctx.strokeStyle = "#8f8a7e";
+    ctx.lineWidth = 1.1;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    const turns = 1.6;
+    const steps = 36;
+    const dir = mirror ? -1 : 1;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const ang = dir * (t * turns * Math.PI * 2 - Math.PI / 2);
+      const rad = r * (0.25 + 0.75 * t);
+      const px = cx + Math.cos(ang) * rad;
+      const py = cy + Math.sin(ang) * rad;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.restore();
   }
 
   private renderPuppet(ctx: CanvasRenderingContext2D): void {
@@ -1019,18 +1070,47 @@ export class SetViewer {
       }
       lines.slice(0, 2).forEach((ln, i) => ctx.fillText(ln, W / 2, 284 + i * 17));
     }
-    // choice bevels — font tracks the (possibly compressed) row height, text
-    // is vertically centred so it stays legible even when rows are tight
+    // choice bevels — full-width raised plaques with scroll-curl end ornaments
+    // and left-aligned engraved text, matching the real game's menu band; the
+    // row under the pointer gets a light selection outline
     const rects = this.puppetBevelRects();
+    const hovered = this.puppetBevelAt(this.session.pointerX, this.session.pointerY);
+    ctx.textBaseline = "middle";
     rects.forEach((r, i) => {
-      ctx.fillStyle = "#2c2618";
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = "#6a5c3a";
-      ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
-      ctx.fillStyle = "#e8e2d0";
-      ctx.font = `${Math.min(14, r.h - 4)}px Georgia, serif`;
-      ctx.textBaseline = "middle";
-      ctx.fillText(this.session.puppet!.bevels[i].text, r.x + r.w / 2, r.y + r.h / 2 + 1);
+      const oy = r.y + r.h / 2;
+      // raised plaque: dark vertical gradient inside a rounded bevel
+      const grad = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
+      grad.addColorStop(0, "#3c3b39");
+      grad.addColorStop(0.5, "#292826");
+      grad.addColorStop(1, "#1b1a18");
+      this.roundRectPath(ctx, r.x, r.y, r.w, r.h, 4);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      // bevel edge: faint light inner top line, dark outer seam
+      this.roundRectPath(ctx, r.x + 1, r.y + 1, r.w - 2, r.h - 2, 3.5);
+      ctx.strokeStyle = "rgba(255,255,255,0.10)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      this.roundRectPath(ctx, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 4);
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // mirrored scroll-curl ornaments at each end
+      const oR = Math.min(7, r.h / 2 - 3);
+      this.drawBevelOrnament(ctx, r.x + 16, oy, oR, false);
+      this.drawBevelOrnament(ctx, r.x + r.w - 16, oy, oR, true);
+      // engraved label, left-aligned after the left ornament
+      ctx.fillStyle = "#d2cfc7";
+      ctx.font = `${Math.min(14, r.h - 6)}px Georgia, serif`;
+      ctx.textAlign = "left";
+      ctx.fillText(this.session.puppet!.bevels[i].text, r.x + 30, oy + 0.5);
+      // hover/selection: light rounded outline around the plaque
+      if (i === hovered) {
+        this.roundRectPath(ctx, r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3, 3);
+        ctx.strokeStyle = "#e6e3da";
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
     });
     ctx.restore();
     this.applyFade(ctx);

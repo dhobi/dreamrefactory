@@ -683,7 +683,7 @@ async function runAnimations(v: SetViewer): Promise<void> {
     "two choice bevels appear after the speeches",
     await pump(() => (session.puppet?.bevels.length ?? 0) === 2),
   );
-  await v.click(256, 276 + 26 + 11); // second bevel, via real click routing
+  await v.click(256, 326 + 27 + 11); // 2nd of 2 bevels (startY 326 + pitch 27 + half-row), real click routing
   check(
     "choice branches to the next line",
     await pump(() => session.puppet?.subtitle === line("smeth1.034")),
@@ -692,7 +692,7 @@ async function runAnimations(v: SetViewer): Promise<void> {
     "second choice round appears",
     await pump(() => (session.puppet?.bevels.length ?? 0) === 2),
   );
-  await v.click(256, 276 + 26 + 11); // decline help -> closing line
+  await v.click(256, 326 + 27 + 11); // 2nd of 2 bevels (decline help -> closing line)
   check("conversation ends, puppet closes", await pump(() => session.puppet === null));
   await conversation;
   check("world display returns after the talk", !session.puppet && !v.moviePlaying);
