@@ -2641,5 +2641,59 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- darkroom (PHOTO.STG / REDPHOTO.STG): the red-light view reuses photo.shp
+//     + openphoto (stageBase maps redphoto -> photo). Develop a negative by
+//     turning on the red safelight, opening its case, and dragging it into the
+//     "start" bath (good) vs "stop" (spoiled). Exercises the entry-handler alias
+//     and the region-vs-foreground-prop click routing. ---
+{
+  const { session, viewer } = await newSession();
+  const g = session.interp.globals;
+  g.set("mission", 1); g.set("tour", 0);
+  for (const k of ["picone", "pictwo", "picthree", "badone", "badtwo", "badthree"]) g.set(k, 0);
+  await session.openSetFile("c78.set");
+  await session.track(session.transToFlat("redphoto.stg")); // red-light view (whitelight off)
+  const v = viewer();
+  const redphotoSetUp =
+    session.stageName === "redphoto.stg" &&
+    String(g.get("whitelight")) === "off" &&
+    (session.propRuntime.get("photobag")?.deg === 1); // deg-1 = red-light variants (openphoto ran)
+
+  const click = async (x: number, y: number) => {
+    session.setPointer(x, y);
+    session.pointerDown = true;
+    void v.click(x, y);
+    for (let i = 0; i < 8; i++) { v.tick((clock += 50)); await drain(); }
+    session.pointerDown = false;
+    for (let i = 0; i < 8; i++) { v.tick((clock += 50)); await drain(); }
+  };
+  // turn on the red safelight via the region's own handler (dispatch by name —
+  // robust vs pixel routing), then let its forceupdate loop settle
+  void session.sendToButton(session.currentFlat, "redlight", "mousedown", [0], "test");
+  for (let i = 0; i < 10; i++) { v.tick((clock += 50)); await drain(); }
+  const lampOn = session.propRuntime.get("redlamp")?.visible === true;
+  await click(276, 193); // open case1
+  const caseOpen = session.propRuntime.get("case1")?.stateName === "openpic";
+  // develop: press on the open case, drag the negative into bath 1 (start), release
+  session.setPointer(276, 193);
+  session.pointerDown = true;
+  void v.click(276, 193);
+  for (let i = 0; i < 10; i++) { v.tick((clock += 50)); await drain(); }
+  session.setPointer(120, 290); // bath 1 = "start" region (good develop)
+  for (let i = 0; i < 6; i++) { await drain(); }
+  session.pointerDown = false;
+  for (let i = 0; i < 20; i++) { v.tick((clock += 50)); await drain(); }
+  const developedGood =
+    Number(g.get("picone")) === 1 &&
+    Number(g.get("badone")) === 0 &&
+    session.propRuntime.get("pic1")?.owner !== "bad";
+
+  check(
+    "darkroom: redphoto opens (photo.shp reused), red safelight + drag negative to bath 1 develops it good",
+    redphotoSetUp && lampOn && caseOpen && developedGood,
+    `redSetup=${redphotoSetUp} lamp=${lampOn} case=${caseOpen} picone=${g.get("picone")} badone=${g.get("badone")} owner=${session.propRuntime.get("pic1")?.owner}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

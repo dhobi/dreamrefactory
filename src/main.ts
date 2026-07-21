@@ -476,6 +476,26 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(dollBtn);
 
+  // dev: the darkroom photo-development puzzle (PHOTO.STG / REDPHOTO.STG),
+  // normally reached from the C78.SET developing bench. You develop 3 negatives
+  // (pic1/2/3) by dragging each from its case into the correct bath (the "start"
+  // region develops it good, "stop" spoils it), working under the red lamp;
+  // white light ruins them. photo.stg is the white-light view, redphoto.stg the
+  // red-light view (props at deg 0 vs 1) — both share photo.shp + openphoto.
+  const photoBtn = document.createElement("button");
+  photoBtn.textContent = "📷 Photo (dev)";
+  photoBtn.style.marginLeft = "0.5rem";
+  photoBtn.addEventListener("click", async () => {
+    const g = session.interp.globals;
+    g.set("mission", 1);
+    g.set("tour", 0);
+    // fresh negatives (undeveloped, not yet spoiled)
+    for (const k of ["picone", "pictwo", "picthree", "badone", "badtwo", "badthree"]) g.set(k, 0);
+    if (!viewer || session.currentSetName === "none") await loadServerSet("c78.set");
+    await session.track(session.transToFlat("photo.stg"));
+  });
+  setSelectWrap.appendChild(photoBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).

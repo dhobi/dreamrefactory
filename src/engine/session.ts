@@ -27,6 +27,20 @@ const STAGE_FLAT_ENTRY: Record<string, string> = {
 };
 
 /**
+ * Canonical basename for a stage's entry/exit handlers + its shop. Usually just
+ * the filename stem (wireless.stg → "wireless" → openwireless/closewireless,
+ * wireless.shp/hidewireless). The exception is the darkroom: BOTH photo.stg and
+ * redphoto.stg (white-light and red-light views of the same room) reuse
+ * photo.shp and the openphoto/closephoto/hidephoto/showphoto handlers — the
+ * boot's transtoflat/transfromflat switch routes both there — so redphoto maps
+ * to "photo".
+ */
+function stageBase(stageName: string): string {
+  const base = stageName.replace(/\.stg$/, "");
+  return base === "redphoto" ? "photo" : base;
+}
+
+/**
  * Game time. TI.EXE runs scripts against timeGetTime with 1 script tick =
  * 1/60 s (delay(n) waits n×50/3 ms) and services ambient loops/crickets on
  * a 66 ms (~15 Hz) heartbeat. The viewer feeds real/virtual time into
@@ -831,7 +845,7 @@ export class GameSession {
     // opens the stage's shop + track and sets up its props. We mirror that
     // dispatch generically (the map uses openstage instead, so this only
     // fires when a matching handler exists).
-    const entry = `open${key.replace(/\.stg$/, "")}`;
+    const entry = `open${stageBase(key)}`;
     if (entry !== "openstage" && this.stage?.script.codes.has(entry)) {
       try {
         await this.interp.runHandler(this.stage, entry, [], { me: key, target: "" });
@@ -854,7 +868,7 @@ export class GameSession {
   async closeStageFile(): Promise<void> {
     // mirror the per-stage entry dispatch: close<basename>() tears down the
     // stage's shop + track (e.g. closewireless -> closeshopfile/closetrackfile)
-    const exit = `close${this.stageName.replace(/\.stg$/, "")}`;
+    const exit = `close${stageBase(this.stageName)}`;
     if (exit !== "closestage" && this.stage?.script.codes.has(exit)) {
       try {
         await this.interp.runHandler(this.stage, exit, [], { me: this.stageName, target: "" });
@@ -934,7 +948,7 @@ export class GameSession {
       await this.sendEvent("sendtoshop", "house.shp", "hideinterface", [], "transtoflat");
       return;
     }
-    const base = stageName.replace(/\.stg$/, "");
+    const base = stageBase(stageName);
     if (this.shopMain(`${base}.shp`)?.script.codes.has(`hide${base}`)) {
       await this.sendEvent("sendtoshop", `${base}.shp`, `hide${base}`, [], "transtoflat");
     }
@@ -947,7 +961,7 @@ export class GameSession {
       await this.sendEvent("sendtoshop", "house.shp", "showinterface", [], "transfromflat");
       return;
     }
-    const base = stageName.replace(/\.stg$/, "");
+    const base = stageBase(stageName);
     if (this.shopMain(`${base}.shp`)?.script.codes.has(`show${base}`)) {
       await this.sendEvent("sendtoshop", `${base}.shp`, `show${base}`, [], "transfromflat");
     }
