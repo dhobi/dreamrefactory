@@ -417,6 +417,34 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(fightBtn);
 
+  // dev: stand at the A-deck fuse standpoint (HALLA scene52/view61, port side)
+  // during the Sasha subplot — but do NOT open the fusebox overlay directly.
+  // Seed the gate globals (neckphase 6 = subplot live; fusebox "1,1,1,1," = all
+  // fuses lit; hallside port; mission 1/phase 4 so the boot's progress(1,4) door
+  // gate passes). HALLA openset then spawns the officer (asea) at view61, so you
+  // land facing Alex: click him to talk (send him off), then click the fuse
+  // panel to transtoflat into FUSE.STG yourself.
+  const fuseBtn = document.createElement("button");
+  fuseBtn.textContent = "🔌 Fuse (dev)";
+  fuseBtn.style.marginLeft = "0.5rem";
+  fuseBtn.addEventListener("click", async () => {
+    if (!viewer) return;
+    const g = session.interp.globals;
+    g.set("neckphase", 6);
+    g.set("hallside", "port");
+    // force the exact story point: the door gate is progress(1,4), i.e. at least
+    // mission 1 / phase 4 — a fresh load sits at mission 0, so seeding "if
+    // undefined" wasn't enough (the door stayed shut).
+    g.set("mission", 1);
+    g.set("phase", 4);
+    if (g.get("fusebox") === undefined) g.set("fusebox", "1,1,1,1,");
+    await session.openSetFile("halla.set", "scene52", "view61");
+    // ensure the officer is present even if openset didn't re-fire (clicking
+    // the dev button while already standing in HALLA); setupactor is idempotent.
+    await session.sendEvent("sendtoactor", "asea", "setupactor", ["fuse"], "fuse-dev");
+  });
+  setSelectWrap.appendChild(fuseBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).

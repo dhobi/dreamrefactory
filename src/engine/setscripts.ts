@@ -130,11 +130,22 @@ export class SetScripts {
   }
 
   /**
-   * View change within a scene (turning): run only the BOOT defaults of
-   * closescene — closes open doors/signs, resets the nav arrow — without
-   * the scene script's own scene-exit logic (sounds etc. keep running).
+   * View change within a scene (turning). Two things happen:
+   *  1. the BOOT defaults of closescene run — closes open doors/signs, resets
+   *     the nav arrow — WITHOUT the scene script's own scene-exit logic (sounds
+   *     etc. keep running across a turn);
+   *  2. the current scene's own openscene re-fires. In DreamFactory openscene
+   *     is a per-VIEW event, not per-scene: 33 of 51 shipped openscene handlers
+   *     gate on currentview() and only act when you turn to face a particular
+   *     view (HALLA's "Sasha walks down the hall" at view62; DECKBD's Max
+   *     calling you over when you see him; etc.). Firing scene-entry openscene
+   *     only left all of those dead on turns. We run ONLY the scene script here
+   *     (not main/stage/boot): the boot openscene does per-scene-entry work
+   *     (nav-arrow rebuild, the mission-4 doomsday-clock tick) that must NOT
+   *     repeat on every turn. The view-gated scene handlers are self-guarded
+   *     (actorstar/actorowner/flag checks) so re-entry is idempotent.
    */
-  async viewChanged(): Promise<void> {
+  async viewChanged(sceneIdx = -1): Promise<void> {
     const interp = this.session.interp;
     interp.eventConsumed = false;
     for (const inst of this.session.bootScripts) {
@@ -143,6 +154,15 @@ export class SetScripts {
         if (interp.eventConsumed) return;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.closescene: ${(e as Error).message}`);
+      }
+    }
+    const scene = sceneIdx >= 0 ? this.sceneScripts[sceneIdx] : null;
+    if (scene) {
+      interp.eventConsumed = false;
+      try {
+        await interp.runHandler(scene, "openscene", [], { me: scene.name, target: "" });
+      } catch (e) {
+        this.onLog(`script error in ${scene.name}.openscene (view change): ${(e as Error).message}`);
       }
     }
   }
@@ -354,6 +374,13 @@ export function registerGameBuiltins(session: GameSession): void {
     session.currentSetName = "none";
   });
   r("currentset", () => session.currentSetName);
+  // camerahi(n) sets / camerahi() reads the vertical projection bias (TI.EXE
+  // global 0x48a792). BOOTFILE adjustcamera() drives it per set from openset;
+  // the halls need it nonzero or their world sprites float. See session.cameraHiBias.
+  r("camerahi", (_i, [n]) => {
+    if (n === undefined) return session.cameraHiBias;
+    session.cameraHiBias = Number(n) | 0;
+  });
   // currentscene(dir) is a SETTER too: boot's default keydown implements
   // movement with currentscene("strait"/"left"/"right")
   r("currentscene", (_i, [dir]) => {

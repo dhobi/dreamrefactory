@@ -284,19 +284,52 @@ function readTransitions(containers: Container[], transitionRegister: number): T
   return transitions;
 }
 
+/** printable star identifier (letters/digits/dot/underscore) — used to tell a
+ *  real nested actor from leftover heap bytes in the record tail */
+function validStarId(s: string): boolean {
+  return s.length >= 1 && s.length <= 20 && /^[A-Za-z0-9._-]+$/.test(s);
+}
+
 function readActors(c: Container): Actor[] {
+  // Each record is a fixed 54-byte slot. Its first 12 bytes hold the primary
+  // actor (unknownInt, rotation8, X, Z, Y) followed by a length-prefixed
+  // identifier. Crucially the record's TAIL — which the GPL dfet reference
+  // (and this port, originally) skipped as "old copied mem" — packs an OPTIONAL
+  // *secondary* actor at record offset +32: {X, Z, Y, id}. HALLA's sasha.1
+  // record carries "sasha.2" (7212,10494,251) there, and ex1 carries "ex2";
+  // scripts (walkonpath sasha.1→sasha.2, sashaidle's sasha.2↔sasha.3 toggle)
+  // depend on those stars, so a fixed 41-byte skip silently dropped them and
+  // Sasha never walked down the hall. We read the primary, then add the
+  // secondary when its identifier is a real (printable, non-empty) name.
+  const RECORD = 54;
+  const SECONDARY_OFFSET = 32; // X of the nested actor, from record start
   const r = new BinaryReader(c.data);
   const count = r.i32();
   r.skip(4); // unknownInt
   const actors: Actor[] = [];
   for (let i = 0; i < count; i++) {
+    const base = r.pos;
     r.skip(4); // unknownInt
     const rotation8 = r.i16();
     const positionX = r.i16();
     const positionZ = r.i16();
     const positionY = r.i16();
-    const identifier = r.pstr(41);
+    const identifier = r.pstr(); // variable-length; primary name
     actors.push({ rotation8, positionX, positionZ, positionY, identifier });
+
+    // nested secondary actor at base+32 (rot lives just before it at +30)
+    const sec = new BinaryReader(c.data);
+    sec.seek(base + SECONDARY_OFFSET - 2);
+    const rot2 = sec.i16();
+    const x2 = sec.i16();
+    const z2 = sec.i16();
+    const y2 = sec.i16();
+    const id2 = sec.pstr();
+    if (validStarId(id2) && (x2 !== 0 || z2 !== 0 || y2 !== 0)) {
+      actors.push({ rotation8: rot2, positionX: x2, positionZ: z2, positionY: y2, identifier: id2 });
+    }
+
+    r.seek(base + RECORD);
   }
   return actors;
 }

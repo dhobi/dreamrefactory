@@ -65,6 +65,18 @@ interface DrawEntry {
 }
 
 /**
+ * Global multiplier on actor depth-scaling, kept as a tuning knob. Left at 1:
+ * the raw formula k = actorscale × refScale / (1000 × depth) reproduces the
+ * correct on-screen size (verified against SMOKE crowd actors and HALLA Sasha
+ * at a distance — both match the rendered floor and read at natural height).
+ * An earlier 0.58 "shrink" was WRONG — it made every actor too small. What can
+ * look off is purely proximity: an NPC standing ~2 m from the standpoint fills
+ * the frame with the feet below the interface band, which is geometrically
+ * correct, not a scale bug.
+ */
+const ACTOR_SCALE_CORRECTION = 1;
+
+/**
  * The current SET view's depth map, for occluding actors behind scenery.
  * z holds per-pixel levels 0..levels (low = near, high = far) at w×h; scale
  * is world-depth units per level (SET.zFarMax / SET.zLevelCount). TI.EXE
@@ -174,7 +186,7 @@ export class ActorRuntime {
   rect(a: ActorInstance, proj: { x: number; y: number; depth: number }, cam: WorldCamera) {
     const f = this.frameFor(a, cam);
     if (!f) return null;
-    const k = (a.scale * this.refScale(a)) / (1000 * proj.depth);
+    const k = (a.scale * this.refScale(a) * ACTOR_SCALE_CORRECTION) / (1000 * proj.depth);
     return {
       f,
       k,

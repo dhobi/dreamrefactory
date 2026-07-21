@@ -114,6 +114,17 @@ export class GameSession {
     return this.bootScripts[0] ?? null;
   }
   currentSetName = "none";
+  /**
+   * Vertical world→screen projection bias set by the `camerahi` script command
+   * (TI.EXE global 0x48a792, subtracted from a point's height in fn 0x43a970:
+   * `dyHeight = ptY - camHeight - camerahi`). BOOTFILE `adjustcamera()`, run
+   * from `openset`, sets it per set — nonzero ONLY for the A-deck halls
+   * (halla 139, hallc 80, halld 150), 0 everywhere else. Without it those
+   * halls' world sprites (Sasha/Alex) float above the floor; every other set
+   * already grounds because the bias is 0. Applied as `cam.z + cameraHiBias`
+   * in the viewer's camera builder (raising the eye drops the feet on screen).
+   */
+  cameraHiBias = 0;
   /** the active set's script binding (SetScripts) — set by its constructor */
   currentBinding: import("./setscripts").SetScripts | null = null;
   builtinsRegistered = false;
@@ -562,7 +573,10 @@ export class GameSession {
     // never fired. (For the deal-triggered gameover, me already IS the flat.)
     const target = l.kind === "flat" ? this.currentFlat : l.name;
     try {
-      await this.sendEvent(cmd, target, l.handler, [], `loop:${l.kind}`);
+      // caller/target = the loop's own target: a prop loop handler resolved on
+      // the shop main dispatches by `target` (the fusebox's fuseoff/fuseon run
+      // loops do propview(target,…)), so it must be the prop name, not a marker.
+      await this.sendEvent(cmd, target, l.handler, [], target);
     } catch (e) {
       this.onLog(`loop ${l.kind}/${l.name}.${l.handler}: ${(e as Error).message}`);
     }
@@ -591,6 +605,15 @@ export class GameSession {
     // /setupsmallprops live. (findInstance already returns the flat's own script
     // when one exists, so this fallback only fires when it doesn't.)
     if (!inst && cmd === "sendtoflat") inst = this.stage;
+    // a prop with no script of its own (a fuse in the fusebox bank) resolves on
+    // its owning shop's main, where the shared handler dispatches by `target`
+    // (fuseoff/fuseon do propview(target,…)). Mirrors the viewer's prop-click
+    // dispatch so prop RUN LOOPS — makeloop("prop", name, handler) — resolve too;
+    // without it a scriptless prop's loop fired into nothing (fuse never settled).
+    if (!inst && cmd === "sendtoprop") {
+      const pi = this.propRuntime.get(targetName);
+      if (pi) inst = this.shopMain(pi.shop.name);
+    }
     const chain = inst ? [inst] : [];
     if (cmd === "sendtoscene" || cmd === "sendtoset") {
       const main = this.currentBinding?.main;
@@ -603,30 +626,41 @@ export class GameSession {
     }
     let value: Value = 0;
     let ran = false;
+    // For sendtoactor the event TARGET is the actor itself: the boot lifecycle
+    // helpers read `target` (putdownactor -> actorvisible(target,false)), and
+    // the cast walktopuppet does `who = target`. Everywhere else `target` is the
+    // caller-supplied context (region/prop name for the shop-main dispatchers).
+    const evTarget = cmd === "sendtoactor" ? targetName : callerName;
     for (const link of chain) {
       if (!link.script.codes.has(handler)) continue;
       ran = true;
       const res = await this.interp.runHandler(link, handler, args, {
         me: link.name,
-        target: callerName,
+        target: evTarget,
       });
       value = res.value;
       if (this.interp.eventConsumed || (res.handled && !res.passed)) break;
     }
     // the target resolves missing handlers through its CONTAINMENT chain
     // (prop -> shop main, where initprop() lives; then the stage), with
-    // me = the target. Deliberately NOT the boot scripts: boot1's keydown
-    // routes events via sendtoscene, so resolving a scene's missing
+    // me = the target. Deliberately NOT the boot scripts in general: boot1's
+    // keydown routes events via sendtoscene, so resolving a scene's missing
     // keydown back into boot would recurse forever (TURK scene134 has a
-    // script without keydown — user-reported OOM).
+    // script without keydown — user-reported OOM). EXCEPTION: actor-lifecycle
+    // helpers (putdownactor/moveactorstar/moveactorxyz) live in the BOOTFILE and
+    // are dispatched via sendtoactor(name, putdownactor()); most casts don't
+    // override them, so an actor's putdownactor must reach the boot fallback —
+    // without it the officer/Sasha never hid ("actor doesn't leave"). Scoped to
+    // sendtoactor so the keydown/scene recursion above is unaffected.
     if (!ran && inst) {
       const libs: ScriptInstance[] = [];
       for (let p = inst.parent; p; p = p.parent) libs.push(p);
       if (this.stage && this.stage !== inst) libs.push(this.stage);
+      if (cmd === "sendtoactor") for (const b of this.bootScripts) if (!libs.includes(b)) libs.push(b);
       for (const lib of libs) {
         if (!lib.script.codes.has(handler)) continue;
         value = (
-          await this.interp.runHandler(lib, handler, args, { me: inst.name, target: callerName })
+          await this.interp.runHandler(lib, handler, args, { me: inst.name, target: evTarget })
         ).value;
         break;
       }
@@ -1028,10 +1062,27 @@ export class GameSession {
     );
     if (!hit) return false;
     const region = this.instanceFrom(stg.file.containers[hit.script]?.data, hit.name || "region");
-    // A region with no backing script is a bare drop-zone / hotspot (the
-    // gramophone's horn/wax targets): it is NOT a button, so let the click fall
-    // through to the prop beneath it, whose SHP mousedown runs the drag loop.
-    if (!region) return false;
+    // A region with no backing script is a bare hotspot. Two things may still
+    // want the click: the flat/stage main can DISPATCH it by target (the
+    // fusebox's fuse regions carry no script of their own — the FUSE.STG main
+    // switches that fuse light->off keyed on `target`), and the prop beneath
+    // handles the rest (its shop main does the off->on half). Run the stage-main
+    // dispatch here, then fall through (return false) so propAt runs too. The
+    // handlers switch on target, so a stage whose main doesn't know this hotspot
+    // (the gramophone's horn/wax drop-zones) no-ops and the drag prop still gets it.
+    if (!region) {
+      const flat0 = this.flatScripts.get(this.currentFlat.toLowerCase());
+      this.setPointer(x, y);
+      for (const link of [flat0, this.stage]) {
+        if (!link || !link.script.codes.has("mousedown")) continue;
+        try {
+          await this.interp.runHandler(link, "mousedown", [hit.name], { me: link.name, target: hit.name });
+        } catch (e) {
+          this.onLog(`stage hotspot ${hit.name}: ${(e as Error).message}`);
+        }
+      }
+      return false;
+    }
     // resolve unqualified calls through the current FLAT script first (it
     // defines jumpbaby for the map's red areas), which chains to the stage main
     const flat = this.flatScripts.get(this.currentFlat.toLowerCase());

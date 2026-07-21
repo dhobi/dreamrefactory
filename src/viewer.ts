@@ -611,7 +611,10 @@ export class SetViewer {
     return {
       x: pose.x,
       y: pose.y,
-      z: pose.z,
+      // TI.EXE projection subtracts the `camerahi` bias from the point height
+      // (dyHeight = ptY - camHeight - camerahi); adding it to the camera eye
+      // here is equivalent and drops the halls' floating sprites onto the floor.
+      z: pose.z + this.session.cameraHiBias,
       deg: pose.deg,
       f: Math.max(w, h) / 2,
       cx: w / 2,
@@ -650,9 +653,12 @@ export class SetViewer {
       }
     }
     this.play(frames, () => {
-      if (target !== this.viewIdx) void this.session.track(this.scripts.viewChanged());
+      const changed = target !== this.viewIdx;
+      // update the facing BEFORE firing viewChanged so the scene's openscene
+      // (a per-view event) sees the new currentview() in its guards
       this.viewIdx = target;
       this.showView();
+      if (changed) void this.session.track(this.scripts.viewChanged(this.sceneIdx));
     });
   }
 

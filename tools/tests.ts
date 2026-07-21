@@ -2297,5 +2297,251 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- 65. fuse stage (M1 staging): the fusebox opens with its fuses lit --------
+// HALLA.SET transtoflats("fuse.stg") when you click the panel at view61 (port).
+// openstage loads fuse.shp/fuse.snd; the shop's openshop shows the (closed) door
+// and sets each fuse "light"/"off" from the fusebox slot-string. Also confirms
+// the BOOTFILE progress(m,p) gate helper resolves + compares correctly (its
+// decompiled body ends oddly, so pin it: at mission 1/phase 4, progress(1,4) is
+// true, progress(1,5)/progress(2,0) false).
+{
+  const { session } = await newSession();
+  const g = session.interp.globals;
+  g.set("mission", 1);
+  g.set("phase", 4);
+  g.set("neckphase", 6);
+  g.set("hallside", "port");
+  g.set("fusebox", "1,1,1,1,");
+  await session.openSetFile("halla.set", "scene52", "view61");
+  await session.transToFlat("fuse.stg");
+  const door = session.propRuntime.get("fusedoor");
+  const f14 = session.propRuntime.get("fuse14");
+  const f20 = session.propRuntime.get("fuse20");
+  const staged =
+    session.stageName === "fuse.stg" && session.setVisible === false;
+  const wired =
+    !!door && door.visible && door.stateName === "closed" &&
+    !!f14 && f14.visible && f14.stateName === "light" &&
+    !!f20 && f20.visible && f20.stateName === "light";
+  const prog = (m: number, p: number) => session.runGlobal("progress", [m, p]);
+  const gate = !!(await prog(1, 4)) && !(await prog(1, 5)) && !(await prog(2, 0));
+  check(
+    "fuse stage opens with door closed + fuses lit; progress() gate resolves",
+    staged && wired && gate,
+    `stage=${session.stageName} door=${door?.stateName} f14=${f14?.stateName} f20=${f20?.stateName} ` +
+      `progress(1,4)=${await prog(1, 4)} progress(1,5)=${await prog(1, 5)} progress(2,0)=${await prog(2, 0)}`,
+  );
+}
+
+// --- 66. fuse M2: fuses toggle (light<->off) + door opens/closes -------------
+// A fuse click reaches BOTH the STG main (light->off, sets its fusebox slot "0")
+// and the prop's shop main (off->on, slot "1"); a run loop (fuseoff/fuseon)
+// settles the switch into its resting light/off frame. The door opens only when
+// the boot progress(1,4) + neckphase + view61 + port gate holds.
+{
+  const { session, viewer } = await newSession();
+  const g = session.interp.globals;
+  g.set("mission", 1); g.set("phase", 4); g.set("neckphase", 6);
+  g.set("hallside", "port"); g.set("fusebox", "1,1,1,1,");
+  await session.openSetFile("halla.set", "scene52", "view61");
+  session.currentViewName = () => "view61";
+  await session.transToFlat("fuse.stg");
+  const f14 = session.propRuntime.get("fuse14")!;
+  const door = session.propRuntime.get("fusedoor")!;
+  const stg = session.stageFile!;
+  const regions = readStgRegions(stg.file.containers[stg.flats[0].locationClickLogic].data);
+  const r = regions.find((x) => x.name === "fuse14")!;
+  const cx = Math.round((r.left + r.right) / 2), cy = Math.round((r.top + r.bottom) / 2);
+  const fire = async (p: Promise<unknown>) => { session.track(p); await runAnimations(viewer()); };
+  // pump service steps until the run loops drain (settling the switch frame)
+  const pump = async () => { for (let i = 0; i < 40 && session.loops.length; i++) { session.tickTime((clock += 100)); await drain(); } };
+
+  // door first (starts closed): the gated fusedoor mousedown opens then closes it
+  const startClosed = door.stateName === "closed";
+  await fire(session.sendEvent("sendtoprop", "fusedoor", "mousedown", [0], "test"));
+  const opened = door.stateName === "open";
+  await fire(session.sendEvent("sendtoprop", "fusedoor", "mousedown", [0], "test"));
+  const closed = door.stateName === "closed";
+
+  // fuse toggle: click the lit fuse -> off (STG main), then click again -> on
+  // (shop main), with a run loop settling each switch into its resting frame
+  await fire(viewer().click(cx, cy));
+  const off1 = String(g.get("fusebox")).split(",")[0] === "0";
+  await pump();
+  const nowOff = f14.stateName === "off";
+  await fire(viewer().click(cx, cy));
+  const on1 = String(g.get("fusebox")).split(",")[0] === "1";
+  await pump();
+  const nowLit = f14.stateName === "light";
+
+  check(
+    "fuse toggle both ways (light<->off, fusebox slot) and the door opens/closes",
+    startClosed && opened && closed && off1 && nowOff && on1 && nowLit,
+    `door closed=${startClosed}->open=${opened}->closed=${closed} | off1=${off1} nowOff=${nowOff} on1=${on1} nowLit=${nowLit}`,
+  );
+}
+
+// --- 67. fuse M3: confirming with fuse #1 off advances the Sasha subplot ------
+// Clicking the OK button (fuseokdark) runs the STG confirm: trackbut(fuseoklit)
+// -> close the door, transfromflat() out, and if fuse #1 (fuse14) is off and
+// neckphase == 6, advance neckphase to 7 (Sasha is freed to the hall).
+{
+  const { session, viewer } = await newSession();
+  const g = session.interp.globals;
+  g.set("mission", 1); g.set("phase", 4); g.set("neckphase", 6);
+  g.set("hallside", "port"); g.set("fusebox", "0,1,1,1,"); // fuse #1 already off
+  await session.openSetFile("halla.set", "scene52", "view61");
+  session.currentViewName = () => "view61";
+  await session.transToFlat("fuse.stg");
+  const fire = async (p: Promise<unknown>) => { session.track(p); await runAnimations(viewer()); };
+  // hold the pointer over the OK button so trackbut(fuseoklit) reads "released
+  // over the button" (its rect is anchored at 256,192 minus the frame offset),
+  // then run the confirm keyed on target = fuseokdark
+  const okp = session.propRuntime.get("fuseoklit")!;
+  const okst = okp.state()!;
+  const okf = okp.shop.frame(okst.frames[Math.min(okp.frameIdx, okst.frames.length - 1)]);
+  session.setPointer(256 - okf.posXraw + Math.floor(okf.width / 2), 192 - okf.posYraw + Math.floor(okf.height / 2));
+  await fire(session.sendEvent("sendtostage", "fuse.stg", "mousedown", [0], "fuseokdark"));
+  const advanced = g.get("neckphase") === 7 && session.stageName !== "fuse.stg";
+  check(
+    "fuse confirm: OK with fuse #1 off leaves the stage and advances neckphase 6->7",
+    advanced,
+    `neckphase=${g.get("neckphase")} stage=${session.stageName}`,
+  );
+}
+
+// --- 68. actor putdownactor (boot lifecycle helper) hides the actor ----------
+// The officer/Sasha leave via sendtoactor(name, putdownactor()); putdownactor is
+// a BOOTFILE helper (actorvisible(target,false)+stoploop+stopwalk), not on the
+// actor/cast, so sendtoactor's resolution must reach the boot fallback for it.
+{
+  const { session } = await newSession();
+  session.interp.globals.set("neckphase", 6);
+  session.interp.globals.set("mission", 1);
+  session.interp.globals.set("phase", 4);
+  session.interp.globals.set("hallside", "port");
+  await session.openSetFile("halla.set", "scene52", "view61");
+  await session.sendEvent("sendtoactor", "asea", "setupactor", ["fuse"], "test");
+  const before = session.actorRuntime.get("asea")?.visible;
+  await session.sendEvent("sendtoactor", "asea", "putdownactor", [], "test");
+  const after = session.actorRuntime.get("asea")?.visible;
+  check(
+    "putdownactor hides the actor (boot lifecycle helper resolves via sendtoactor)",
+    before === true && after === false,
+    `visible before=${before} after=${after}`,
+  );
+}
+
+// --- 69. Sasha walks away down the hall (sasha.1 -> sasha.2) -----------------
+// After the fuse subplot (neckphase 7) Sasha appears in his doorway (sasha.1);
+// entering Scene52 facing View62 fires HALLA.SET openscene -> walkonpath(sasha,
+// sasha.1, sasha.2). sasha.2 lives in the actor table's nested SECONDARY slot
+// (record tail +32) — the fixed-41 skip used to drop it, so the star wasn't
+// found and Sasha stood frozen in the doorway (rendering huge/headless right in
+// front of the camera). With the star recovered the walk runs and he leaves.
+{
+  const { session, viewer } = await newSession();
+  session.interp.globals.set("neckphase", 7);
+  session.interp.globals.set("mission", 1);
+  session.interp.globals.set("phase", 4);
+  session.interp.globals.set("tour", 0);
+  await session.openSetFile("halla.set", "scene52", "view62");
+  const v = viewer();
+  // Sasha in the doorway on sasha.1
+  await session.sendEvent("sendtoactor", "sasha", "setupactor", ["halla"], "test");
+  const sasha = session.actorRuntime.get("sasha")!;
+  const startedOnStar = sasha.starName === "sasha.1" && sasha.visible;
+  const dest = session.currentBinding?.set.actors.find((a) => a.identifier === "sasha.2");
+  // fire the scene's openscene (as scene entry would) -> triggers the walk
+  session.interp.builtins.get("stoploop")!(session.interp, ["actor", "sasha"], null as never, null as never);
+  session.interp.builtins.get("walkonpath")!(
+    session.interp, ["sasha", "sasha.1", "sasha.2"], null as never, null as never,
+  );
+  const walking = sasha.starName === "walkonpath" && session.isWalk("sasha");
+  let guard = 0;
+  while (session.isWalk("sasha") && guard++ < 800) { v.tick((clock += 100)); await drain(); }
+  await drain();
+  // he ends down the hall — sasha.2, or sasha.3 if the idle loiter loop has
+  // toggled him along (sashaidle nudges sasha.2<->sasha.3); either proves he
+  // left the doorway (sasha.1) rather than freezing there as a giant.
+  const arrived = sasha.starName === "sasha.2" || sasha.starName === "sasha.3";
+  check(
+    "Sasha walks the doorway->hall path (sasha.2 recovered from the actor-table tail)",
+    startedOnStar && !!dest && dest.positionZ > 8668 && walking && arrived,
+    `start=${startedOnStar} sasha.2@Z=${dest?.positionZ} walking=${walking} arrived=${sasha.starName}`,
+  );
+}
+
+// --- 70. TURNING to view62 fires openscene (per-view event) -> Sasha walks ---
+// openscene is a per-VIEW event in DreamFactory: turning to face a guarded view
+// re-fires the scene's openscene. Our engine used to fire it only on scene
+// ENTRY, so HALLA's view62 walk (Sasha leaving down the hall) was dead — you
+// enter Scene52 at view61 (the only road in) and turning to view62 never
+// triggered it. Now a turn re-runs the scene openscene with the new currentview.
+{
+  const { session, viewer } = await newSession();
+  session.interp.globals.set("neckphase", 7);
+  session.interp.globals.set("mission", 1);
+  session.interp.globals.set("phase", 4);
+  session.interp.globals.set("tour", 0);
+  await session.openSetFile("halla.set", "scene52", "view61");
+  const v = viewer();
+  // Sasha in the doorway on sasha.1 (as the fuse confirm leaves him)
+  await session.sendEvent("sendtoactor", "sasha", "setupactor", ["halla"], "test");
+  const sasha = session.actorRuntime.get("sasha")!;
+  const atView61 = v.scene.views[v.viewIdx].viewName.toLowerCase() === "view61";
+  const frozenBefore = sasha.starName === "sasha.1" && !session.isWalk("sasha");
+  // turn until we face view62 (the guarded view) — the walk must fire on arrival
+  let turns = 0;
+  let walked = false;
+  while (turns++ < 4 && !walked) {
+    v.turn(0); // RIGHTTURNS
+    await runAnimations(v);
+    await drain();
+    if (session.isWalk("sasha") || sasha.starName === "walkonpath") walked = true;
+  }
+  const facingView62 = v.scene.views[v.viewIdx].viewName.toLowerCase() === "view62";
+  check(
+    "turning to view62 fires openscene -> Sasha walks (per-view openscene)",
+    atView61 && frozenBefore && facingView62 && walked,
+    `atView61=${atView61} frozen=${frozenBefore} nowView62=${facingView62} walked=${walked} star=${sasha.starName}`,
+  );
+}
+
+// --- camerahi: BOOTFILE adjustcamera() sets the per-set projection bias that
+//     grounds the A-deck halls' world sprites (TI.EXE fn 0x43a970 / global
+//     0x48a792). halla=139, non-halls=0; the bias raises the camera eye so the
+//     projected feet drop onto the pre-rendered floor instead of floating. ---
+{
+  const { session, viewer } = await newSession();
+  // a non-hall set leaves the bias at 0 (matches grounded sets)
+  await session.openSetFile("b59.set");
+  const biasB59 = session.cameraHiBias;
+
+  // entering halla runs openset -> adjustcamera() -> camerahi(139)
+  await session.openSetFile("halla.set", "scene52", "view61");
+  const biasHalla = session.cameraHiBias;
+  const v = viewer();
+  const camZ = v.worldCamera()!.z;
+
+  // the bias must move a floor point's screen row DOWN vs. the old (bias-0)
+  // camera. Use a floor point straight ahead of the camera so depth > 0.
+  const camBiased = v.worldCamera()!;
+  const camPlain = { ...camBiased, z: camBiased.z - session.cameraHiBias };
+  const ang = (2 * Math.PI * camBiased.deg) / 256;
+  const fx = camBiased.x + Math.round(2000 * Math.cos(ang));
+  const fz = camBiased.y + Math.round(2000 * Math.sin(ang));
+  const floorH = camPlain.z - 200; // a point on the floor, below the eye
+  const feetBiased = projectPoint(camBiased, fx, fz, floorH);
+  const feetPlain = projectPoint(camPlain, fx, fz, floorH);
+  const dropped = !!feetBiased && !!feetPlain && feetBiased.y > feetPlain.y;
+
+  check(
+    "camerahi grounds the halls: b59=0, halla=139, camera eye raised, feet drop",
+    biasB59 === 0 && biasHalla === 139 && camZ > 0 && dropped,
+    `b59=${biasB59} halla=${biasHalla} camZ=${camZ} feetPlainY=${feetPlain?.y} feetBiasedY=${feetBiased?.y}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
