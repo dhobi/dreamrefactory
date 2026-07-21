@@ -924,15 +924,19 @@ export class SetViewer {
     // suspends us long enough for our own promise to register — which would
     // otherwise make the inputLocked gate reject the prop path spuriously.
     const busyOnEntry = this.inputLocked;
+    // A live movie owns the screen and its clicks — even over a suspended
+    // conversation (spotmovie's interactive penote.mov in the Smethells
+    // briefing): an interactive movie waits for a click to step/finish, so this
+    // must be checked before the puppet branch or the movie can never advance.
+    if (this.movie) {
+      this.movieClick(x, y);
+      return;
+    }
     // conversation clicks reach the puppet even while its script is
     // suspended in puppetevent/puppetspeak — but only while it is shown; a
     // hidden puppet (blackjack table between prompts) lets clicks reach the flat
     if (this.session.puppet?.visible) {
       this.session.puppetChoose(this.puppetBevelAt(x, y));
-      return;
-    }
-    if (this.movie) {
-      this.movieClick(x, y);
       return;
     }
     // a full-screen overlay stage (the deck map) resolves clicks through its
@@ -1292,7 +1296,8 @@ export class SetViewer {
   /** returns the DreamFactory cursor name for this position ("" = default) */
   async hover(x: number, y: number): Promise<string> {
     this.session.setPointer(x, y); // keep mouse() current as the cursor moves
-    if (this.session.puppet?.visible) return this.puppetBevelAt(x, y) >= 0 ? "touch" : "";
+    // a live movie owns the screen (see click/render) — don't offer bevel cursors
+    if (this.session.puppet?.visible && !this.movie) return this.puppetBevelAt(x, y) >= 0 ? "touch" : "";
     const prop = this.session.propRuntime.propAt(
       x, y, this.session.setVisible ? this.worldCamera() : null, this.session.setVisible,
     );
@@ -1368,8 +1373,12 @@ export class SetViewer {
   render(ctx: CanvasRenderingContext2D): void {
     // conversation close-up (openpuppetfile) replaces the world display — only
     // while shown; puppetvisible(false) keeps the puppet loaded but reveals the
-    // stage flat behind it (blackjack table between "play again?" prompts)
-    if (this.session.puppet?.visible && !this.session.fade.snapshot) {
+    // stage flat behind it (blackjack table between "play again?" prompts).
+    // A live movie beats the puppet: spotmovie() during a conversation plays a
+    // full-screen clip (penote.mov in the Smethells briefing) then postmovie
+    // fades the puppet back — so while `this.movie` is set, fall through to the
+    // movie branch below (identical to the working no-puppet spotmovie path).
+    if (this.session.puppet?.visible && !this.session.fade.snapshot && !this.movie) {
       this.renderPuppet(ctx);
       return;
     }

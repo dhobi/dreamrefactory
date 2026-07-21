@@ -605,6 +605,68 @@ function buildDevTools(): void {
   label.textContent = "state";
   stateWrap.appendChild(label);
 
+  // Story-state jumps: land at a fixed point in the game exactly the way
+  // BOOTFILE advanceday() sets it up for that `clock` value — minus the intro
+  // cutscene movies (datebed/datecab/datehit.mov). initall() = changeset +
+  // initactors + initprops, so the scene comes up fully reset: fresh inventory,
+  // actors at their marks, the set's openset() firing with the right mission/
+  // phase. See BOOTFILE 0002 advanceday, clocks "startdisk1"/"bedsit"/"startdisk2".
+  const gotoStoryState = async (o: {
+    set: string; scene: string; view: string; mission: number; phase: number;
+    resetGame: boolean; neckphase?: number; letterphase?: number;
+    hrs: number; min: number; sink?: boolean;
+  }): Promise<void> => {
+    const g = session.interp.globals;
+    g.set("tour", 0); // advanceday errors under tour; the whole date machine is off-tour
+    g.set("mission", o.mission);
+    g.set("phase", o.phase);
+    g.set("handitem", "");
+    g.set("sinkflag", 0); // 0/1 — the interp represents false/true as 0/1
+    // ensure the set + its boot script are loaded so the boot helpers below resolve
+    const base = o.set.replace(/\.set$/, "");
+    if (session.currentSetName !== base) await loadServerSet(o.set);
+    if (o.resetGame) await session.runGlobal("resetgamevars"); // startdisk2 keeps its story vars
+    await session.runGlobal("resetpupvars");
+    if (o.neckphase !== undefined) g.set("neckphase", o.neckphase);
+    if (o.letterphase !== undefined) g.set("letterphase", o.letterphase);
+    await session.runGlobal("initall", [base, o.scene, o.view]); // navigate + full reset + openset
+    g.set("hrs", o.hrs);
+    g.set("min", o.min);
+    g.set("sec", 0);
+    if (o.sink) {
+      // the sinking endgame: mission 4 + sinkflag, with the sink ambient bank
+      await fetchIntoStore("sink0.trk");
+      await session.runGlobal("setupsinksound");
+      g.set("sinkflag", 1);
+    }
+    await session.runGlobal("calctime"); // point the pocketwatch hands at the set time
+  };
+  const mkStateBtn = (text: string, run: () => Promise<void>): void => {
+    const b = document.createElement("button");
+    b.textContent = text;
+    b.style.marginRight = "0.4rem";
+    b.addEventListener("click", () => void session.track(run()));
+    stateWrap.appendChild(b);
+  };
+  // 1) game start — Frank's London flat (advanceday clock "startdisk1" target)
+  mkStateBtn("🏠 London flat", () => gotoStoryState({
+    set: "bedsit1.set", scene: "scene2", view: "view14",
+    mission: 0, phase: 0, resetGame: true, hrs: 9, min: 30,
+  }));
+  // 2) boarding the Titanic — cabin C73 with Smethells knocking, empty inventory
+  //    (advanceday clock "bedsit": mission 1 / phase 0, 9:30)
+  mkStateBtn("🛏 C73 (Smethells)", () => gotoStoryState({
+    set: "c73.set", scene: "scene51", view: "view63",
+    mission: 1, phase: 0, resetGame: true, hrs: 9, min: 30,
+  }));
+  // 3) the sinking endgame — back in C73 after Vlad's blow / Zeitel's shot
+  //    (advanceday clock "startdisk2": mission 4 / phase 0, sinkflag, ~13:02)
+  mkStateBtn("🌊 C73 (sinking)", () => gotoStoryState({
+    set: "c73.set", scene: "scene51", view: "view63",
+    mission: 4, phase: 0, resetGame: false, neckphase: -1, letterphase: -1,
+    hrs: 13, min: 2, sink: true,
+  }));
+
   const mkSelect = (title: string, global: string, values: number[]): HTMLSelectElement => {
     const s = document.createElement("select");
     s.title = title;
