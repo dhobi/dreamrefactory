@@ -400,6 +400,23 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(fenceBtn);
 
+  // dev: enter the Vlad fistfight (FIGHT.STG) the way GSTAIR1.SET's runfight()
+  // does at mission 3 / phase 1 — transtoflat into the stage. openstage loads
+  // fight.shp/fight.trk and openfight() stands Vlad + the first-person fists on
+  // screen with both power bars full (512). Click Vlad to punch (type by where
+  // you click); he counter-attacks on his idle loop; first to power < -50 loses.
+  const fightBtn = document.createElement("button");
+  fightBtn.textContent = "🥊 Fight (dev)";
+  fightBtn.style.marginLeft = "0.5rem";
+  fightBtn.addEventListener("click", async () => {
+    if (!viewer) return;
+    const g = session.interp.globals;
+    if (g.get("mission") === undefined) g.set("mission", 3);
+    if (g.get("phase") === undefined) g.set("phase", 1);
+    await session.track(session.transToFlat("fight.stg"));
+  });
+  setSelectWrap.appendChild(fightBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).

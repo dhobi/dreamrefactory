@@ -2206,5 +2206,96 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- 62. fight stage (M1 staging): the brawl opens with both fighters ready --
+// GSTAIR1.SET's runfight() transtoflats("fight.stg") at mission 3 / phase 1.
+// openstage loads fight.shp/fight.trk and openfight() stands Vlad + the first-
+// person fists on the default flat ("flat 0"), shows both power bars, sets both
+// powers to 512 (full), and kicks Vlad's idle loop. fightover stays false.
+{
+  const { session } = await newSession();
+  await session.openSetFile("gstair1.set");
+  await session.transToFlat("fight.stg");
+  const g = session.interp.globals;
+  const vlad = session.propRuntime.get("vlad");
+  const fists = session.propRuntime.get("fists");
+  const vladbar = session.propRuntime.get("vladbar");
+  const playerbar = session.propRuntime.get("playerbar");
+  const staged =
+    session.stageName === "fight.stg" &&
+    session.setVisible === false &&
+    session.flatNames.length === 15 &&
+    session.currentFlat === "flat 0";
+  const fighters =
+    !!vlad && vlad.visible && vlad.stateName === "idle" &&
+    !!fists && fists.visible && fists.stateName === "idle";
+  const hud = !!vladbar && vladbar.visible && !!playerbar && playerbar.visible;
+  const ready =
+    g.get("vladpower") === 512 && g.get("playerpower") === 512 && !g.get("fightover");
+  check(
+    "fight brawl opens with Vlad + fists idle, power bars up, both powers full",
+    staged && fighters && hud && ready,
+    `stage=${session.stageName} flat=${session.currentFlat} flats=${session.flatNames.length} ` +
+      `vlad=${vlad?.visible}/${vlad?.stateName} fists=${fists?.visible}/${fists?.stateName} ` +
+      `bars=${vladbar?.visible}/${playerbar?.visible} vp=${g.get("vladpower")} pp=${g.get("playerpower")} over=${g.get("fightover")}`,
+  );
+}
+
+// --- 63. fight M2: punches land both ways ------------------------------------
+// Clicking Vlad throws a player punch whose type comes from where you click
+// (upper-middle = uppercut); vladdamage() drops vladpower. Vlad's own offense
+// (his idle loop picks punches) lands on the player and drops playerpower.
+{
+  const { session, viewer } = await newSession();
+  await session.openSetFile("gstair1.set");
+  await session.transToFlat("fight.stg");
+  const g = session.interp.globals;
+  const fire = async (p: Promise<unknown>) => { session.track(p); await runAnimations(viewer()); };
+
+  // player punch: click upper-middle (y in 160..270) -> uppercut -> vladpower drops
+  session.setPointer(256, 200);
+  const vp0 = g.get("vladpower") as number;
+  await fire(session.sendEvent("sendtoprop", "fists", "mousedown", [(256 << 16) | 200], "test"));
+  const playerLanded = (g.get("vladpower") as number) < vp0;
+
+  // Vlad punch: fire an explicit uppercut from his prop -> playerpower drops
+  const pp0 = g.get("playerpower") as number;
+  await fire(session.sendEvent("sendtoprop", "vlad", "punch", ["uppercut"], "test"));
+  const vladLanded = (g.get("playerpower") as number) < pp0;
+
+  check(
+    "fight punches: a player hit lowers vladpower; a Vlad hit lowers playerpower",
+    playerLanded && vladLanded,
+    `vladpower ${vp0}->${g.get("vladpower")} (playerLanded=${playerLanded}) ` +
+      `playerpower ${pp0}->${g.get("playerpower")} (vladLanded=${vladLanded})`,
+  );
+}
+
+// --- 64. fight M3: a knock-out ends the bout ---------------------------------
+// When a fighter's power falls below -50, Vlad's idle loop calls endfight(),
+// which resolves the winner (vladpower < playerpower => player wins), marks Vlad
+// "lostfight", halts the combat theme, and transfromflat()s back out of the
+// stage. Drive Vlad's power under and fire his idle tick to trigger it.
+{
+  const { session, viewer } = await newSession();
+  await session.openSetFile("gstair1.set");
+  await session.transToFlat("fight.stg");
+  const g = session.interp.globals;
+  const fire = async (p: Promise<unknown>) => { session.track(p); await runAnimations(viewer()); };
+  const ownerOf = (n: string) =>
+    (session.interp.builtins.get("actorowner") as (i: unknown, a: string[]) => string)(session.interp, [n]);
+
+  g.set("vladpower", -60); // Vlad is spent
+  await fire(session.sendEvent("sendtoprop", "vlad", "idle", [], "test"));
+  const won =
+    !!g.get("fightover") &&
+    ownerOf("vlad") === "lostfight" &&
+    session.stageName !== "fight.stg";
+  check(
+    "fight KO: dropping Vlad below -50 ends the bout as a player win and leaves the stage",
+    won,
+    `fightover=${g.get("fightover")} owner=${ownerOf("vlad")} stage=${session.stageName}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
