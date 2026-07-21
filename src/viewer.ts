@@ -49,11 +49,47 @@ function angularDistance(a: number, b: number): number {
   return Math.min(d, TAU - d);
 }
 
+/** a mixclut(target,"black",lo,hi,amt) request: darken palette entries lo..hi */
+interface ClutDim {
+  lo: number;
+  hi: number;
+  amt: number;
+}
+
+/**
+ * Return a copy of `base` (an RGBA CLUT) with entries [lo..hi] blended toward
+ * black by amt/255 — the engine's `mixclut(target,"black",lo,hi,amt)`. amt=255
+ * is fully black, 0 leaves it unchanged; entries outside the range are kept.
+ * (The darkroom kills the room light with mixclut("set","black",0,127,240).)
+ */
+function dimPalette(base: Uint8ClampedArray, dim: ClutDim): Uint8ClampedArray {
+  const out = base.slice();
+  const factor = Math.max(0, Math.min(255, 255 - dim.amt)) / 255;
+  const lo = Math.max(0, dim.lo);
+  const hi = Math.min(base.length / 4 - 1, dim.hi);
+  for (let i = lo; i <= hi; i++) {
+    out[i * 4] = base[i * 4] * factor;
+    out[i * 4 + 1] = base[i * 4 + 1] * factor;
+    out[i * 4 + 2] = base[i * 4 + 2] * factor;
+    // alpha (i*4+3) left as-is
+  }
+  return out;
+}
+
 export class SetViewer {
   readonly set: SetFile;
   private palette: Uint8ClampedArray;
   /** full 256-entry set palette — props colorize through the set's CLUT */
   private propPalette: Uint8ClampedArray;
+  // Pristine baselines for the CLUT-mixing opcodes (clut/mixclut). `palette`
+  // and `propPalette` above are the EFFECTIVE (possibly dimmed) versions the
+  // renderer uses; these are the untouched originals to dim from / restore to.
+  private basePalette: Uint8ClampedArray;
+  private basePropPalette: Uint8ClampedArray;
+  /** active dim of the set CLUT (mixclut "set"/"current"); null = normal */
+  private setDim: ClutDim | null = null;
+  /** active dim of the stage-flat CLUT (mixclut "stage"/"current"); null = normal */
+  private stageDim: ClutDim | null = null;
   private cache = new Map<number, CachedFrame>();
 
   sceneIdx = 0;
@@ -84,6 +120,9 @@ export class SetViewer {
     /** ms per frame; 0 = wait for clicks (click-through object movies) */
     interval: number;
     lastTick: number;
+    /** frame indices for actionframe(1)/(2) (-1 = none); see recordAction */
+    actionFrame1: number;
+    actionFrame2: number;
   } | null = null;
   /** cross-movie return stack (type-4 call / type-5 return, TI.EXE depth 5) */
   private movieStack: { movie: string; frame: number }[] = [];
@@ -104,8 +143,12 @@ export class SetViewer {
   constructor(set: SetFile, session: GameSession, startScene = "", startView = "") {
     this.set = set;
     this.session = session;
-    this.palette = paletteToRGBA(set.paletteRaw, set.colorCount);
-    this.propPalette = paletteToRGBA(set.paletteRaw, 256);
+    this.basePalette = paletteToRGBA(set.paletteRaw, set.colorCount);
+    this.basePropPalette = paletteToRGBA(set.paletteRaw, 256);
+    this.palette = this.basePalette.slice();
+    this.propPalette = this.basePropPalette.slice();
+    // clut/mixclut palette dimming (darkroom light switch etc.)
+    session.onClut = (target, dim) => this.setClut(target, dim);
     this.scripts = new SetScripts(set, session);
     this.scripts.onLog = (l) => this.onLog(l);
     session.currentSceneName = () => this.scene.sceneName.toLowerCase();
@@ -354,6 +397,8 @@ export class SetViewer {
       pos: Math.min(Math.max(startFrame, 0), frames.length - 1),
       interval,
       lastTick: 0,
+      actionFrame1: mov.actionFrame1 ? frameByName.get(mov.actionFrame1.toLowerCase()) ?? -1 : -1,
+      actionFrame2: mov.actionFrame2 ? frameByName.get(mov.actionFrame2.toLowerCase()) ?? -1 : -1,
     };
     this.recordAction(this.movie.pos);
     this.onLog(
@@ -362,10 +407,45 @@ export class SetViewer {
     return true;
   }
 
-  /** note the action-frame index of the frame just entered (0 = none) */
+  /**
+   * Sticky-record the actionframe() bits as playback enters a frame: the
+   * script's `actionframe(1)`/`(2)` (session.movieActions) report whether this
+   * play passed through the movie's action-frame-1 / action-frame-2 (named in
+   * the movie header). Turning the car light on lands on "lightson" -> 1;
+   * knocking at the purser window lands on "openit"/"endit" -> 1/2.
+   */
   private recordAction(idx: number): void {
-    const a = this.movie?.meta[idx]?.action;
-    if (a) this.session.movieActions.add(a);
+    const m = this.movie;
+    if (!m) return;
+    if (idx === m.actionFrame1) this.session.movieActions.add(1);
+    if (idx === m.actionFrame2) this.session.movieActions.add(2);
+  }
+
+  /**
+   * clut(target)/mixclut(target,…) host hook. `dim` null = restore the target's
+   * normal palette (clut), a spec = darken it (mixclut). "current" resolves to
+   * the set when the 3D view is showing, else the stage flat. The set CLUT is
+   * rebuilt eagerly (set + world-prop palettes); the stage dim is applied to
+   * the flat palette at render time (flats are cached per-name, so we mustn't
+   * mutate the cache). clut("black") never reaches here — it's a no-op paired
+   * with blackscreen() in movie transitions.
+   */
+  private setClut(target: string, dim: ClutDim | null): void {
+    let t = target.toLowerCase();
+    if (t === "current") t = this.session.setVisible ? "set" : "stage";
+    if (t === "set") {
+      this.setDim = dim;
+      this.palette = dim ? dimPalette(this.basePalette, dim) : this.basePalette.slice();
+      this.propPalette = dim ? dimPalette(this.basePropPalette, dim) : this.basePropPalette.slice();
+    } else if (t === "stage") {
+      this.stageDim = dim; // consumed by flatPalette() during render
+    }
+    // any other target (or unknown) is ignored — nothing else uses it
+  }
+
+  /** the stage flat's effective palette, dimmed if a stage mixclut is active */
+  private flatPalette(base: Uint8ClampedArray): Uint8ClampedArray {
+    return this.stageDim ? dimPalette(base, this.stageDim) : base;
   }
 
   get moviePlaying(): boolean {
@@ -1336,7 +1416,8 @@ export class SetViewer {
         canvas.height = flat.height;
       }
       const img = ctx.createImageData(flat.width, flat.height);
-      indexedToRGBA(flat.pixels, flat.width, flat.height, flat.palette, img.data);
+      const flatPal = this.flatPalette(flat.palette);
+      indexedToRGBA(flat.pixels, flat.width, flat.height, flatPal, img.data);
       const f = this.current;
       if (this.session.setVisible && f) {
         const view = new Uint8ClampedArray(f.width * f.height * 4);
@@ -1347,7 +1428,7 @@ export class SetViewer {
       }
       // during walk/turn animation only the UI band props keep drawing
       const minAnchorY = this.animation !== null ? (f?.height ?? 0) : -Infinity;
-      const propPal = this.session.setVisible ? this.propPalette : flat.palette;
+      const propPal = this.session.setVisible ? this.propPalette : flatPal;
       // world sprites follow the motion-frame camera during movement too, so
       // actors/world props stay visible over the composited set region
       const cam = this.session.setVisible ? this.activeCamera() : null;

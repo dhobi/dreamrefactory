@@ -349,6 +349,111 @@ async function runAnimations(v: SetViewer): Promise<void> {
   check("corner click leaves the faucet movie", !v.moviePlaying);
 }
 
+// --- 12b. actionframe(n): the movie header's action-frame names (container-0
+// +0x40/+0x50) are tracked during playback; the car-light toggle (BIND/BINL)
+// and the purser window both branch on it. LIGHTOFF.MOV names "lightson" as
+// action frame 1: turning the light on traverses it (actionframe(1) true ->
+// carlights -> binl); leaving it off never does (actionframe(1) false -> bind).
+{
+  const { session, viewer } = await newSession();
+  await session.openSetFile("turk.set"); // any set; movie loads via provider
+  const v = viewer();
+  const settle = () => {
+    for (let i = 0; i < 60 && v.moviePlaying; i++) v.tick((clock += 250));
+  };
+  const af = () => [session.movieActions.has(1), session.movieActions.has(2)];
+
+  session.movieActions.clear();
+  v.playMovie("lightoff.mov");
+  settle();
+  await v.click(220, 230); // the light switch (center) -> starts the turn-on anim
+  settle();
+  await v.click(456, 350); // HEAD16 bottom-right -> "lightson" -> exit (light ON)
+  settle();
+  const on = af();
+  check("actionframe: turning the car light on sets actionframe(1)", on[0] && !on[1], `af=${on}`);
+
+  session.movieActions.clear();
+  v.playMovie("lightoff.mov");
+  settle();
+  await v.click(456, 350); // immediate OK from HEAD1 -> "HEAD 18" (light stays OFF)
+  settle();
+  const off = af();
+  check("actionframe: leaving the light off clears actionframe(1)", !off[0] && !off[1], `af=${off}`);
+
+  // MAINC.MOV names openit/endit (n=1/2): knocking chains through pursopen -> action set
+  session.movieActions.clear();
+  v.playMovie("mainc.mov");
+  settle();
+  await v.click(250, 190); // knock the window -> "openit" (action 1) -> pursopen -> exit
+  settle();
+  const knock = af();
+  check("actionframe: knocking the purser window sets an action frame", knock[0] || knock[1], `af=${knock}`);
+}
+
+// --- 12c. clut/mixclut: the darkroom light switch dims the CABIN palette
+// (mixclut "set" blends the set CLUT toward black; clut "set" restores it).
+// The C78 white-light switch does mixclut("set","black",0,127,240). clut("black")
+// must stay a no-op (it's paired with blackscreen() in movie transitions).
+{
+  const { session, viewer } = await newSession();
+  await session.openSetFile("c78.set");
+  const v = viewer();
+  // average brightness of palette entries 0-127 (the range the switch dims)
+  const bright = (): number => {
+    const p = (v as unknown as { palette: Uint8ClampedArray }).palette;
+    let s = 0;
+    for (let i = 0; i < 128; i++) s += p[i * 4] + p[i * 4 + 1] + p[i * 4 + 2];
+    return Math.round(s / 128);
+  };
+  const call = (name: string, args: unknown[]): void => {
+    void session.interp.builtins.get(name)!(
+      session.interp, args as never, { me: "", target: "" } as never, undefined as never,
+    );
+  };
+  const lit = bright();
+  call("mixclut", ["set", "black", 0, 127, 240]);
+  const dark = bright();
+  call("clut", ["set"]);
+  const restored = bright();
+  call("clut", ["black"]); // must NOT dim
+  const afterBlack = bright();
+  check(
+    "clut/mixclut: light switch dims the cabin (~6%), clut restores, clut(black) is a no-op",
+    lit > 100 && dark < lit * 0.15 && restored === lit && afterBlack === lit,
+    `lit=${lit} dark=${dark} restored=${restored} afterBlack=${afterBlack}`,
+  );
+}
+
+// --- 12d. darkroom stage darkness: entering redphoto.stg with the white light
+// off starts DARK (you must switch on the red safelight before handling photos);
+// the safelight toggles the stage CLUT; leaving doesn't leak the dim onward.
+{
+  const { session, viewer } = await newSession();
+  await session.openSetFile("c78.set");
+  const v = viewer();
+  const stageDark = (): boolean => (v as unknown as { stageDim: unknown }).stageDim !== null;
+  const call = (name: string, args: unknown[]): void => {
+    void session.interp.builtins.get(name)!(
+      session.interp, args as never, { me: "", target: "" } as never, undefined as never,
+    );
+  };
+  session.interp.globals.set("whitelight", "off"); // player killed the cabin light
+  await session.transToFlat("redphoto.stg");
+  const onEntry = stageDark();
+  call("clut", ["stage"]); // red safelight on -> room lit
+  const lampOn = stageDark();
+  call("mixclut", ["stage", "black", 0, 255, 245]); // safelight off -> room dark
+  const lampOff = stageDark();
+  await session.transToFlat("cuff.stg"); // leave: dim must not bleed to the next stage
+  const afterLeave = stageDark();
+  check(
+    "darkroom: enters dark (safelight off), safelight toggles the stage CLUT, no leak on exit",
+    onEntry && !lampOn && lampOff && !afterLeave,
+    `entry=${onEntry} lampOn=${lampOn} lampOff=${lampOff} afterLeave=${afterLeave}`,
+  );
+}
+
 // --- 13. grand staircase: deck flips + cross-set travel (user-reported) ---
 {
   const { session, viewer } = await newSession();

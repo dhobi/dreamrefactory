@@ -546,6 +546,32 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(bridgeBtn);
 
+  // dev: the Purser's Office (GSTAIR3.SET, Scene14/View36). Normally reached by
+  // pressing up-arrow at the purser's window on C Deck (GSTAIR3.SET/0234 keydown
+  // -> dopurser -> dopuppet). dopuppet plays the INTERACTIVE mainc.mov: knock on
+  // the window (or ring the bell) and it chains to pursopen.mov (the lid rising),
+  // which passes through an action frame -> actionframe(1) true -> the purser
+  // conversation (purs1.pup) opens. Needs mission < 4, savedeck "c", the door
+  // prop visible, and the modal playmovie() the engine now blocks on.
+  const pursBtn = document.createElement("button");
+  pursBtn.textContent = "🛎 Purser (dev)";
+  pursBtn.style.marginLeft = "0.5rem";
+  pursBtn.addEventListener("click", async () => {
+    const g = session.interp.globals;
+    g.set("tour", 0);
+    g.set("mission", 2); // mission-2 purser has the fullest menu (Thayer, cargo…)
+    g.set("phase", 0);
+    g.set("savedeck", "c");
+    if (session.currentSetName !== "gstair3") await loadServerSet("gstair3.set");
+    if (viewer) {
+      viewer.jumpTo("Scene14", "View36");
+      const door = session.propRuntime.get("door");
+      if (door) door.visible = true; // the keydown gate requires propvisible("door")
+      await viewer.keyDown("uparrow"); // -> dopurser: knock the window to talk
+    }
+  });
+  setSelectWrap.appendChild(pursBtn);
+
   // dev: the endgame "what happened to history" slideshow (NAREND.STG). Normally
   // reached from BOOTFILE after the ship sinks (leave.mov/debris.mov -> transtoflat
   // "narend.stg" -> opennarend). Which newspaper flats + narration + final movie

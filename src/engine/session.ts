@@ -891,6 +891,10 @@ export class GameSession {
     const key = toStr(fileName).toLowerCase();
     if (this.stageName === key) return true;
     if (this.stageFile) await this.closeStageFile();
+    // a fresh stage starts un-dimmed: clear any leftover stage CLUT dim so the
+    // darkroom's mixclut("stage") (re-applied right after this in transtoflat)
+    // doesn't bleed into the next stage you open (e.g. after leaving redphoto).
+    this.onClut("stage", null);
     await this.ensureFile(key); // lazy browser provider: fetch before first read
     const data = this.files(key);
     if (!data) {
@@ -947,6 +951,19 @@ export class GameSession {
     // conversation opened the table but never dealt a hand.
     const flatEntry = STAGE_FLAT_ENTRY[key];
     if (flatEntry) await this.fireFlat(this.currentFlat, flatEntry);
+    // The boot's transtoflat() also darkens the darkroom on entry
+    // (`case "redphoto.stg": mixclut("stage","black",0,255,245)`): with the
+    // white light off it's black until you switch on the red safelight (the
+    // switch toggles the stage CLUT itself). Handling photos is gated on the
+    // safelight being on, so this darkness is the cue to find the switch. Mirror
+    // that one entry effect (openphoto has already set whitelight + props).
+    if (
+      key === "redphoto.stg" &&
+      toStr(this.interp.globals.get("whitelight") ?? 0) === "off" &&
+      !this.propRuntime.get("redlamp")?.visible
+    ) {
+      this.onClut("stage", { lo: 0, hi: 255, amt: 245 });
+    }
     return true;
   }
 
@@ -1335,6 +1352,14 @@ export class GameSession {
    * `actionframe(n)` opcode queries membership. (The purser's knock frame sets 1.)
    */
   movieActions = new Set<number>();
+
+  /**
+   * host hook: clut/mixclut palette effect. `dim` null restores the target's
+   * normal palette (clut(target)); a spec darkens entries lo..hi toward black
+   * by amt/255 (mixclut(target,"black",lo,hi,amt)). Targets: "set", "stage",
+   * "current". The viewer rebuilds the rendered CLUT. (Darkroom light switch.)
+   */
+  onClut: (target: string, dim: { lo: number; hi: number; amt: number } | null) => void = () => {};
 
   /**
    * Invoke a globally-callable handler (stage/boot standard library) the way

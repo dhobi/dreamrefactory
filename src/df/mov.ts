@@ -39,15 +39,6 @@ export interface MovClickRegion {
 export interface MovFrame {
   /** auto-action type 1..7 applied when the frame has no regions */
   type: number;
-  /**
-   * Action-frame index (i16 at click-region container offset +6). Nonzero on
-   * the frames the script's `actionframe(n)` opcode reports as "reached": the
-   * purser window's knock/ring frames (openit/endit) carry 1, so knocking sets
-   * actionframe(1). 0 = not an action frame. (This is the field the module
-   * comment used to call "never read" — the frame state machine ignores it, but
-   * the actionframe query does not.)
-   */
-  action: number;
   height: number;
   width: number;
   locationFrame: number;
@@ -68,6 +59,17 @@ export interface MovFile {
   height: number;
   paletteRaw: Uint8Array;
   frames: MovFrame[];
+  /**
+   * Names of the movie's two "action frames" (container-0 header +0x40 / +0x50,
+   * each a pstr(15); "" = none). The engine's `actionframe(n)` opcode reports
+   * whether playback passed through the frame named here for n: +0x40 -> n=1,
+   * +0x50 -> n=2. Resolved to frame indices and tracked during playback.
+   * (Recovered from TI.EXE: impl 0x4277e0 reads the sticky flag word at
+   * 0x48a722 that the movie loop OR-sets at 0x448d95/0x448daa when the current
+   * frame index matches findFrameByName(base+0x40)/(base+0x50).)
+   */
+  actionFrame1: string;
+  actionFrame2: string;
   /** soundtrack chunk container locations, in playback order */
   audioChunks: number[];
   /** named one-shot chunks (event sounds for click regions), lowercase */
@@ -81,6 +83,12 @@ export function readMovFile(data: Uint8Array): MovFile {
 
   r.seek(0x02);
   if (r.i32() !== 4) throw new Error("unsupported DreamFactory MOV version (need 4.0)");
+
+  // action-frame names for the actionframe() opcode (see MovFile.actionFrame1)
+  r.seek(0x40);
+  const actionFrame1 = r.pstr(15);
+  r.seek(0x50);
+  const actionFrame2 = r.pstr(15);
 
   r.seek(0x60);
   const audioLocation = r.i32();
@@ -108,7 +116,6 @@ export function readMovFile(data: Uint8Array): MovFile {
     // event sound at +0x12, event movie at +0x22, target frame name at
     // +0x32, region table at +1090
     let type = 6;
-    let action = 0;
     let sound = "";
     let event = "";
     let target = "";
@@ -124,7 +131,6 @@ export function readMovFile(data: Uint8Array): MovFile {
         return /^[\x20-\x7e]+$/.test(s) ? s : "";
       };
       type = rv.getInt16(0, true);
-      action = rv.getInt16(6, true);
       sound = pascal(0x12, 15);
       event = pascal(0x22, 15);
       target = pascal(0x32, 15);
@@ -145,7 +151,7 @@ export function readMovFile(data: Uint8Array): MovFile {
         }
       }
     }
-    frames.push({ type, action, height: h, width: w, locationFrame, name, sound, event, target, regions });
+    frames.push({ type, height: h, width: w, locationFrame, name, sound, event, target, regions });
   }
 
   // soundtrack: loop-chunk table in container 1 (same as TRK banks)
@@ -195,5 +201,5 @@ export function readMovFile(data: Uint8Array): MovFile {
     if (!audioChunks.length) audioChunks.push(...order);
   }
 
-  return { file, width, height, paletteRaw, frames, audioChunks, sounds };
+  return { file, width, height, paletteRaw, frames, actionFrame1, actionFrame2, audioChunks, sounds };
 }

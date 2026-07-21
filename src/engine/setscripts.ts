@@ -754,10 +754,30 @@ export function registerGameBuiltins(session: GameSession): void {
     if (vol === undefined) return;
     session.audio.setChannelVolume("theme", Math.max(0, Math.min(1, toNum(vol) / 255)));
   });
+  // clut(target)/mixclut(target,color,lo,hi,amt): the DreamFactory colour-
+  // lookup-table effect. mixclut blends a palette range toward a colour (only
+  // "black" is ever used — a dim-to-dark), clut(target) restores the normal
+  // palette. Drives the darkroom light switch (mixclut "set" darkens the cabin,
+  // clut "set" brings it back) and various stage/current fades. clut("black")
+  // is the ONE exception: it's always paired with blackscreen() in the movie
+  // transition path, so it stays a no-op (the black is drawn by blackscreen).
+  r("mixclut", (_i, [target, color, lo, hi, amt]) => {
+    if (toStr(color ?? "").toLowerCase() !== "black") return; // only black-mix exists
+    session.onClut(toStr(target ?? ""), {
+      lo: toNum(lo ?? 0),
+      hi: toNum(hi ?? 255),
+      amt: toNum(amt ?? 0),
+    });
+  });
+  r("clut", (_i, [target]) => {
+    const t = toStr(target ?? "").toLowerCase();
+    if (t === "black" || t === "") return; // no-op: paired with blackscreen()
+    session.onClut(t, null);
+  });
   for (const noop of [
     "flushevents", "hidecursor", "showcursor", "debugger",
-    "visualeffect", "mixclut",
-    "exportclut", "clut",
+    "visualeffect",
+    "exportclut",
     // *warm: asset preloaders (propwarm/actorwarm/shopwarm). openshopfile/
     // openset already instantiate every prop/actor up front, so warming is a
     // no-op for us — it only mattered on the original's streaming loader.
