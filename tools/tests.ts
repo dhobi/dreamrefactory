@@ -2695,5 +2695,99 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- volume settings plumbing (CTL.STG dial + slider): wavevolume() drives the
+//     sound+voice channel gains, themevol() the theme channel, and a theme that
+//     starts (playtheme) picks up the current global themevolume. ---
+{
+  const { session, sink } = await newSession();
+  // builtins are (interp, args, call, ctx) but ignore the last two here
+  type Bi = (i: typeof session.interp, a: (number | string)[]) => unknown;
+  const wv = session.interp.builtins.get("wavevolume")! as unknown as Bi;
+  const tv = session.interp.builtins.get("themevol")! as unknown as Bi;
+  // setter scales sound + voice (0..9 -> 0..1); getter reads it back; clamps
+  await wv(session.interp, [3]);
+  const setOk =
+    session.waveVolume === 3 &&
+    Math.abs(sink.channelVolume.sound - 3 / 9) < 1e-6 &&
+    Math.abs(sink.channelVolume.voice - 3 / 9) < 1e-6;
+  const getOk = (await wv(session.interp, [])) === 3;
+  await wv(session.interp, [99]);
+  const clampOk = session.waveVolume === 9 && Math.abs(sink.channelVolume.sound - 1) < 1e-6;
+  // themevol(track, vol 0..255) sets the theme channel gain
+  await tv(session.interp, ["boil.trk", 128]);
+  const themeOk = Math.abs(sink.channelVolume.theme - 128 / 255) < 1e-6;
+  // a theme that starts adopts the current global themevolume (slider persists
+  // across set changes, not just when a script re-issues themevol)
+  session.interp.globals.set("themevolume", 0);
+  await session.openSetFile("c78.set");
+  const pt = session.interp.builtins.get("playtheme")! as unknown as Bi;
+  await pt(session.interp, []);
+  const themeStarted = session.currentThemeName !== "none";
+  const persistOk = !themeStarted || Math.abs(sink.channelVolume.theme - 0) < 1e-6;
+  check(
+    "volume settings: wavevolume scales sound+voice, themevol scales theme, playtheme adopts themevolume",
+    setOk && getOk && clampOk && themeOk && persistOk,
+    `set=${setOk} get=${getOk} clamp=${clampOk} theme=${themeOk} started=${themeStarted} persist=${persistOk} (sound=${sink.channelVolume.sound.toFixed(3)} theme=${sink.channelVolume.theme.toFixed(3)})`,
+  );
+}
+
+// --- CTL.STG settings panel (the "life" pocketwatch → dolife → transtoflat
+//     ctl.stg): the full-screen panel opens over the game, its HOUSE.SHP props
+//     (the wave-volume dial, the theme lever) are shown, and dragging the
+//     "themetoggle" flat region writes the global themevolume live. ---
+{
+  const { session, viewer } = await newSession();
+  const g = session.interp.globals;
+  g.set("mission", 1); g.set("tour", 0);
+  await session.openSetFile("c78.set");
+  await session.track(session.transToFlat("ctl.stg"));
+  const v = viewer();
+  const panelUp =
+    session.stageName === "ctl.stg" &&
+    session.currentFlat.toLowerCase() === "ctl 1" &&
+    session.setVisible === false;
+  // the dial + lever sprites (HOUSE.SHP props, repositioned by openflat) show
+  const dialShown = session.propRuntime.get("volume")?.visible === true;
+  const leverShown = session.propRuntime.get("themetoggle")?.visible === true;
+  // drag the theme lever: hold the pointer inside the "themetoggle" region at a
+  // known x (handler reads themevolume = 8*(x-322), clamped) and pump frames
+  session.setPointer(338, 340); // x-322 = 16 -> themevolume 128
+  session.pointerDown = true;
+  void session.sendToButton(session.currentFlat, "themetoggle", "mousedown", [session.pointerPoint()], "test");
+  for (let i = 0; i < 8; i++) { v.tick((clock += 50)); await drain(); }
+  session.pointerDown = false;
+  for (let i = 0; i < 6; i++) { v.tick((clock += 50)); await drain(); }
+  const themevolSet = Number(g.get("themevolume")) === 128;
+  check(
+    "settings panel: ctl.stg opens with the volume dial + theme lever, dragging the lever sets themevolume",
+    panelUp && dialShown && leverShown && themevolSet,
+    `panel=${panelUp} dial=${dialShown} lever=${leverShown} themevolume=${g.get("themevolume")}`,
+  );
+}
+
+// --- subtitles toggle + quiet-music default: subtitles are gated on
+//     puppetparam slot 7 (the CTL.STG subtoggle lever), and music starts very
+//     quiet with the theme lever synced to that low rest position. ---
+{
+  const { session } = await newSession();
+  const g = session.interp.globals;
+  type Bi = (i: typeof session.interp, a: (number | string)[]) => unknown;
+  const pp = session.interp.builtins.get("puppetparam")! as unknown as Bi;
+  // music default is quiet and the theme lever reflects it (not the boot's deg 5)
+  const quietDefault = Number(g.get("themevolume")) === 24;
+  const leverSynced = Number(session.propRuntime.get("themetoggle")?.deg) === 0;
+  // subtitles: on by default, puppetparam(7) flips the gate the viewer reads
+  const onByDefault = session.subtitlesOn() === true && Number(pp(session.interp, [7])) === 1;
+  pp(session.interp, [7, 0]);
+  const offAfter = session.subtitlesOn() === false;
+  pp(session.interp, [7, 1]);
+  const onAgain = session.subtitlesOn() === true;
+  check(
+    "subtitles gate on puppetparam(7) + music starts quiet with the theme lever synced low",
+    quietDefault && leverSynced && onByDefault && offAfter && onAgain,
+    `themevol=${g.get("themevolume")} leverDeg=${session.propRuntime.get("themetoggle")?.deg} on=${onByDefault} off=${offAfter} onAgain=${onAgain}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -29,12 +29,24 @@ export interface AudioSink {
   play(channel: AudioChannel, audio: DecodedAudio, opts?: PlayOpts): PlayHandle;
   halt(channel: AudioChannel): void;
   isDone(channel: AudioChannel): boolean;
+  /**
+   * Persistent per-channel master gain (0..1), multiplied on top of each play's
+   * own gain (crickets' distance falloff, etc.). Backs the game's volume
+   * settings: wavevolume() drives the sound+voice channels, themevol() the
+   * theme channel. Survives across individual plays on the channel.
+   */
+  setChannelVolume(channel: AudioChannel, volume: number): void;
 }
 
 /** headless/no-op sink that still answers isDone(); records calls for tests */
 export class NullAudioSink implements AudioSink {
   calls: { channel: AudioChannel; seconds: number; loop: boolean; volume: number; pan: number }[] =
     [];
+  /** last master gain set per channel — tests assert the volume plumbing */
+  channelVolume: Record<AudioChannel, number> = { sound: 1, voice: 1, theme: 0.6 };
+  setChannelVolume(channel: AudioChannel, volume: number): void {
+    this.channelVolume[channel] = Math.max(0, Math.min(1, volume));
+  }
   play(channel: AudioChannel, audio: DecodedAudio, opts?: PlayOpts): PlayHandle {
     this.calls.push({
       channel,
@@ -72,6 +84,10 @@ export class WebAudioSink implements AudioSink {
     };
     this.gains.theme.gain.value = 0.6;
     for (const g of Object.values(this.gains)) g.connect(this.ctx.destination);
+  }
+
+  setChannelVolume(channel: AudioChannel, volume: number): void {
+    this.gains[channel].gain.value = Math.max(0, Math.min(1, volume));
   }
 
   play(channel: AudioChannel, audio: DecodedAudio, opts?: PlayOpts): PlayHandle {

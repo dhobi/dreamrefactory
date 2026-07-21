@@ -1006,7 +1006,7 @@ export class SetViewer {
     ctx.save();
     ctx.textAlign = "center";
     ctx.font = "14px Georgia, serif";
-    if (p.subtitle) {
+    if (p.subtitle && this.session.subtitlesOn()) {
       ctx.fillStyle = "rgba(0,0,0,0.55)";
       ctx.fillRect(0, 268, W, 40);
       ctx.fillStyle = "#e8e2d0";

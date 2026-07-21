@@ -595,6 +595,13 @@ export function registerGameBuiltins(session: GameSession): void {
   };
   r("sounddone", audioDonePoll("sound"));
   r("voicedone", audioDonePoll("voice"));
+  // apply the theme channel's master gain from the global themevolume (0..255) —
+  // so a theme that starts on set entry (without its own themevol call) still
+  // reflects the player's music-volume slider setting.
+  const applyThemeVolume = () => {
+    const v = toNum(interp.globals.get("themevolume") ?? 255);
+    session.audio.setChannelVolume("theme", Math.max(0, Math.min(1, v / 255)));
+  };
   r("playtheme", (_i, [n]) => {
     const theme = session.audioLib.theme(n === undefined ? undefined : toStr(n));
     if (!theme) {
@@ -603,6 +610,7 @@ export function registerGameBuiltins(session: GameSession): void {
     }
     session.audio.play("theme", theme, { loop: true });
     session.currentThemeName = n === undefined ? "none" : toStr(n);
+    applyThemeVolume();
   });
   // playnewtheme(name): swap the looping theme to a specific track/bank. Puzzle
   // scripts save the prior theme via currenttheme() and restore it afterwards
@@ -621,6 +629,7 @@ export function registerGameBuiltins(session: GameSession): void {
     }
     session.audio.play("theme", theme, { loop: true });
     session.currentThemeName = name;
+    applyThemeVolume();
   });
   r("opentrackfile", async (_i, [n]) => {
     await session.openTrackFile(toStr(n));
@@ -705,10 +714,27 @@ export function registerGameBuiltins(session: GameSession): void {
     session.frameRate = toNum(n);
     return 0;
   });
-  // themevol(track, vol): dynamic theme loudness (0..255) — the turbine hum
-  // swells with electrical output. No per-channel volume control on the audio
-  // sink yet; a no-op that keeps scripts happy (audio-mix polish, not gameplay).
-  r("themevol", () => {});
+  // wavevolume([n]): master volume for sampled audio (SFX + speech), 0..9.
+  // Getter with no arg (the CTL.STG "volume" dial reads it on open); setter
+  // otherwise (the dial's drag loop writes it live). Scales the sound AND voice
+  // channels — theme/music is governed separately by themevol below.
+  r("wavevolume", (_i, [n]) => {
+    if (n === undefined) return session.waveVolume;
+    session.waveVolume = Math.max(0, Math.min(9, Math.round(toNum(n))));
+    const g = session.waveVolume / 9;
+    session.audio.setChannelVolume("sound", g);
+    session.audio.setChannelVolume("voice", g);
+    return session.waveVolume;
+  });
+  // themevol(track, vol): theme (music) loudness, 0..255. The CTL.STG slider
+  // sets the global `themevolume` then calls themevol(currenttheme, getthemevolume(...));
+  // set entry does the same on arrival, and the turbine hum swells with output.
+  // We track a single theme channel, so the track name is informational — apply
+  // the level as the theme channel's master gain.
+  r("themevol", (_i, [, vol]) => {
+    if (vol === undefined) return;
+    session.audio.setChannelVolume("theme", Math.max(0, Math.min(1, toNum(vol) / 255)));
+  });
   for (const noop of [
     "flushevents", "hidecursor", "showcursor", "debugger",
     "visualeffect", "mixclut",
@@ -1042,10 +1068,21 @@ export function registerGameBuiltins(session: GameSession): void {
     if (v === undefined) return p.visible ? 1 : 0;
     p.visible = truthy(v);
   });
-  // remaining puppet effects are rare and unverified: puppetparam (gesture
-  // params), puppetsubtitle (override text), puppetgrab (hold an item in-frame),
-  // puppetscramble (garbled face)
-  for (const stub of ["puppetparam", "puppetsubtitle", "puppetgrab", "puppetscramble"]) {
+  // puppetparam(slot[, value]): TI.EXE puppet render params, indexed by slot.
+  // Getter with one arg, setter with two. Slot 7 is the subtitles-enabled flag
+  // (the CTL.STG subtoggle lever writes it: 0 = off, 1 = on; openflat reads it
+  // to pick the lever's idleon/idleoff view). The viewer gates subtitle drawing
+  // on it (session.subtitlesOn). Other slots (9/10 = gesture params from boot)
+  // are stored but otherwise unused.
+  r("puppetparam", (_i, [slot, value]) => {
+    const s = toNum(slot);
+    if (value === undefined) return session.puppetParams.get(s) ?? (s === 7 ? 1 : 0);
+    session.puppetParams.set(s, toNum(value));
+    return 0;
+  });
+  // remaining puppet effects are rare and unverified: puppetsubtitle (override
+  // text), puppetgrab (hold an item in-frame), puppetscramble (garbled face)
+  for (const stub of ["puppetsubtitle", "puppetgrab", "puppetscramble"]) {
     r(stub, () => {});
   }
 

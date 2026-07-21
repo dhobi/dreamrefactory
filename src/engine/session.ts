@@ -721,7 +721,12 @@ export class GameSession {
         ["saveflat1", ""], ["saveflat2", ""], ["saveflat3", ""],
         ["jumpset", ""], ["playerdeath", ""], ["loopsound", ""], ["seldir", "north"],
         ["twocount", 1], ["threecount", 1], ["fourcount", 1], ["fivecount", 1],
-        ["themevolume", 255],
+        // music (theme) starts very quiet by default — the ambient themes at
+        // full volume (the boot's 255) are wearing over a long session; the
+        // player raises it with the CTL.STG theme lever. wavevolume (SFX/voice)
+        // stays at full. The theme lever's rest position is synced to this
+        // below so the panel doesn't show a high lever over quiet music.
+        ["themevolume", 24],
       ] as [string, Value][]) {
         this.interp.globals.set(k, v);
       }
@@ -739,6 +744,15 @@ export class GameSession {
         this.onLog(`initprops: ${(e as Error).message}`);
       }
     }
+    // Sync the theme lever's rest position to our low default themevolume
+    // (house.shp openshop hardcodes deg 5 = loud; CTL.STG's slider maps
+    // themevolume = 8·x, deg = x/6, so deg = themevolume/48). Without this the
+    // panel would show the lever near the top over deliberately quiet music.
+    const lever = this.propRuntime.get("themetoggle");
+    if (lever) {
+      const vol = Number(this.interp.globals.get("themevolume") ?? 0);
+      lever.deg = Math.max(0, Math.min(5, Math.floor(vol / 8 / 6)));
+    }
   }
 
   // ---- stage layer (STG flats) -------------------------------------------
@@ -753,6 +767,22 @@ export class GameSession {
   setVisible = true;
   /** name of the looping theme currently playing (currenttheme getter) */
   currentThemeName = "none";
+  /**
+   * TI.EXE puppet render params by slot (puppetparam builtin). Slot 7 is the
+   * subtitles-enabled flag (the CTL.STG subtoggle lever), defaulting to ON.
+   */
+  readonly puppetParams = new Map<number, number>([[7, 1]]);
+  /** subtitles-enabled (puppetparam slot 7); the viewer gates subtitle text on it */
+  subtitlesOn(): boolean {
+    return (this.puppetParams.get(7) ?? 1) !== 0;
+  }
+  /**
+   * wave (sampled-audio) master volume, 0..9 — the CTL.STG settings dial reads
+   * back wavevolume() and writes it live. Drives the sound + voice channels'
+   * master gain. Music is separate (global themevolume + themevol). Default 9
+   * (full) matches the sink's unity channel gain.
+   */
+  waveVolume = 9;
   /** framerate() target cadence; drag loops save/drop/restore it (turbine dials) */
   frameRate = 3;
 

@@ -5,15 +5,20 @@ import { GameSession } from "./engine/session";
 
 // AudioContext must be created after a user gesture; the sink proxies until then
 let webAudio: WebAudioSink | null = null;
+// channel master gains requested (volume settings) before the real sink exists,
+// replayed onto it once a user gesture lets us create the AudioContext
+const pendingVolume = new Map<string, number>();
 const audioSink: AudioSink = {
   play: (c, a, o) => webAudio?.play(c, a, o) ?? { done: true, stop() {} },
   halt: (c) => webAudio?.halt(c),
   isDone: (c) => (webAudio ? webAudio.isDone(c) : true),
+  setChannelVolume: (c, v) => (webAudio ? webAudio.setChannelVolume(c, v) : pendingVolume.set(c, v)),
 };
 function ensureAudio(): void {
   if (!webAudio) {
     try {
       webAudio = new WebAudioSink();
+      for (const [c, v] of pendingVolume) webAudio.setChannelVolume(c as never, v);
     } catch {
       /* no audio available */
     }
@@ -495,6 +500,18 @@ function rebuildSetSelect(): void {
     await session.track(session.transToFlat("photo.stg"));
   });
   setSelectWrap.appendChild(photoBtn);
+
+  // dev: the in-game settings panel (the "life" pocketwatch prop in the menu
+  // band → dolife() → transtoflat("ctl.stg")). The wave-volume dial and the
+  // theme-volume slider live here; both drive the audio sink's channel gains.
+  const ctlBtn = document.createElement("button");
+  ctlBtn.textContent = "⚙ Settings (dev)";
+  ctlBtn.style.marginLeft = "0.5rem";
+  ctlBtn.addEventListener("click", async () => {
+    if (!viewer || session.currentSetName === "none") await loadServerSet("c78.set");
+    await session.track(session.transToFlat("ctl.stg"));
+  });
+  setSelectWrap.appendChild(ctlBtn);
 
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
