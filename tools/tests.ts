@@ -2607,5 +2607,39 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- Sasha subplot conclusion: after swapping the necklace (real in your bag,
+//     fake left in the doll -> owned "vlad"), leaving Sasha's cabin triggers the
+//     A14 door "kickout": Sasha's sasha1.pup conversation runs, neckphase 8->9,
+//     and a changeset drops you into the HALLA corridor with the real necklace
+//     and NO player death (the "swap" outcome, vs "steal" which kills you). ---
+{
+  const { session, viewer } = await newSession();
+  const g = session.interp.globals;
+  g.set("mission", 1); g.set("tour", 0); g.set("neckphase", 8);
+  await session.openSetFile("a14.set", "scene2", "view21");
+  await session.sendEvent("sendtoshop", "inven.shp", "addinven", ["realneck"], "test"); // real -> frank
+  await session.sendEvent("sendtoshop", "inven.shp", "giveinven", ["fakeneck", "vlad"], "test"); // fake -> doll
+  const v = viewer();
+  const door = v.scene.views[v.viewIdx].objects.find((o) => o.identifier.toLowerCase() === "door")!;
+  const cx = Math.floor((door.startRegionX + door.endRegionX) / 2);
+  const cy = Math.floor((door.startRegionY + door.endRegionY) / 2);
+  session.setPointer(cx, cy);
+  session.pointerDown = true;
+  void v.click(cx, cy); // kickout(): puppet conversation + delays + changeset — driven below
+  session.pointerDown = false;
+  // drive the delays/puppet/changeset by ticking the (possibly swapped) viewer
+  for (let i = 0; i < 300 && Number(g.get("neckphase")) !== 9; i++) {
+    viewer()?.tick((clock += 100));
+    await drain();
+  }
+  check(
+    "Sasha subplot end: door kickout runs the conversation, advances neckphase 8->9 into halla, no death",
+    Number(g.get("neckphase")) === 9 &&
+      session.currentSetName === "halla" &&
+      String(g.get("playerdeath") ?? "") === "",
+    `neck=${g.get("neckphase")} set=${session.currentSetName} death=${g.get("playerdeath")}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
