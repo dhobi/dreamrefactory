@@ -76,6 +76,8 @@ export interface GameLoop {
   name: string;
   handler: string;
   count: number;
+  /** re-fire interval in ticks; period 1 = a smooth per-DISPLAY-frame loop */
+  period: number;
   paused: boolean;
 }
 
@@ -281,6 +283,7 @@ export class GameSession {
       name: name.toLowerCase(),
       handler: handler.toLowerCase(),
       count: Math.max(1, period),
+      period: Math.max(1, period),
       paused: false,
     });
   }
@@ -529,19 +532,59 @@ export class GameSession {
       if (c.jitter < 0) this.crickets.splice(i, 1);
       else c.count = c.base + this.rand(c.jitter);
     }
-    // loops fire one at a time and never re-enter a running script (the
-    // original engine is single-threaded; its service is likewise guarded)
-    if (!this.scriptBusy) {
-      const due = this.loops.filter((l) => !l.paused && --l.count <= 0);
-      if (due.length) {
-        for (const l of due) this.loops.splice(this.loops.indexOf(l), 1);
-        this.track(
-          (async () => {
-            for (const l of due) await this.fireLoop(l);
-          })(),
-        );
-      }
-    }
+    // Coarse timer loops (period >= 2) fire on the 66 ms master service.
+    // Smooth per-frame loops (period 1) are serviced separately at the DISPLAY
+    // frame rate (serviceFrameLoops) so animation-rate loops — the bridge's
+    // sky drift, the fencer's idle/parry pose — actually run at frame rate in
+    // the browser rather than crawling at 15 Hz. (Headless has one frame per
+    // tick, so both paths fire once per tick and tests are unaffected.)
+    this.fireDueLoops((l) => l.period > 1);
+  }
+
+  /**
+   * Fire due period-1 (per-display-frame) loops. Called once per rendered
+   * frame from the viewer — ~60 Hz in the browser, once per tick headless.
+   */
+  serviceFrameLoops(): void {
+    this.fireDueLoops((l) => l.period <= 1);
+  }
+
+  /**
+   * Fire period-1 loops from within a forceupdate() cooperative yield, so a
+   * long-running drag/animation loop (the bridge wheel's stilldown loop) still
+   * lets independent per-frame loops (the sky drift) advance while it runs —
+   * otherwise the drag holds scriptBusy and the sky freezes until release.
+   * Excludes the caller's OWN loop so a handler can't re-enter itself mid-swing
+   * (the fencer's attack sets its player-prop pose in a forceupdate loop and
+   * must not trip that same prop's idle/defend loop). Called only in the
+   * browser (real frames); headless forceupdate keeps its deterministic step.
+   */
+  pumpFrameLoops(exceptName: string): void {
+    const ex = String(exceptName).toLowerCase();
+    const due = this.loops.filter(
+      (l) => !l.paused && l.period <= 1 && l.name !== ex && --l.count <= 0,
+    );
+    if (!due.length) return;
+    for (const l of due) this.loops.splice(this.loops.indexOf(l), 1);
+    this.track(
+      (async () => {
+        for (const l of due) await this.fireLoop(l);
+      })(),
+    );
+  }
+
+  /** loops fire one at a time and never re-enter a running script (the
+   * original engine is single-threaded; its service is likewise guarded) */
+  private fireDueLoops(select: (l: GameLoop) => boolean): void {
+    if (this.scriptBusy) return;
+    const due = this.loops.filter((l) => !l.paused && select(l) && --l.count <= 0);
+    if (!due.length) return;
+    for (const l of due) this.loops.splice(this.loops.indexOf(l), 1);
+    this.track(
+      (async () => {
+        for (const l of due) await this.fireLoop(l);
+      })(),
+    );
   }
 
   private fireCricket(c: Cricket): void {

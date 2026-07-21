@@ -1163,7 +1163,8 @@ export class SetViewer {
   tick(now: number): CachedFrame | null {
     this.session.propRuntime.tick(now, FRAME_MS);
     this.session.tickFade(now);
-    this.session.tickTime(now); // delay() clock + loop/cricket service
+    this.session.tickTime(now); // delay() clock + coarse loop/cricket service
+    this.session.serviceFrameLoops(); // smooth per-frame loops (sky drift, fence idle)
     if (this.movie) {
       const m = this.movie;
       if (m.interval > 0 && m.meta[m.pos].regions.length === 0) {

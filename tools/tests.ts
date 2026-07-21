@@ -1539,6 +1539,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
   let now = 0;
   for (let i = 0; i < 90; i++) {
     session.tickTime((now += 66));
+    session.serviceFrameLoops(); // a frame also services per-frame (period-1) loops
     await drain();
   }
   const ticked = (session.propRuntime.get("tinhands")?.deg ?? 0) > tin0;
@@ -1644,6 +1645,18 @@ for (const [label, releaseX, releaseY, expectExit] of [
     "blackjack: transToFlat deals via the boot initgame hook + lifts transition-black",
     fadeLifted && dealt && varWorks,
     `fadeLifted=${fadeLifted} player=${g("playertotal")}(${g("playercount")}) dealer=${g("dealertotal")}(${g("dealercount")}) phase=${g("playerphase")}`,
+  );
+  // regression: blkjack.shp ships playerscores AND dealerscores as its own
+  // groups (same anchor, different baked offsets -> player-side vs dealer-side).
+  // openshop calls propinstance("playerscores","dealerscores"); that must NOT
+  // replace dealerscores' group with playerscores' or the two totals collapse
+  // onto each other at the end of the hand.
+  const ps = session.propRuntime.get("playerscores");
+  const ds = session.propRuntime.get("dealerscores");
+  check(
+    "blackjack: player/dealer score props keep distinct groups (propinstance doesn't clobber dealerscores)",
+    !!ps && !!ds && ps.group !== ds.group,
+    `player=${!!ps} dealer=${!!ds} sameGroup=${ps?.group === ds?.group}`,
   );
 }
 
@@ -2786,6 +2799,132 @@ for (const [label, releaseX, releaseY, expectExit] of [
     "subtitles gate on puppetparam(7) + music starts quiet with the theme lever synced low",
     quietDefault && leverSynced && onByDefault && offAfter && onAgain,
     `themevol=${g.get("themevolume")} leverDeg=${session.propRuntime.get("themetoggle")?.deg} on=${onByDefault} off=${offAfter} onAgain=${onAgain}`,
+  );
+}
+
+// --- cufflink clue pickup (CUFF.STG): the mission-2 purser investigation.
+//     Clicking the cufflink1 chair in RECEPT1C sets cuffchair + transtoflat
+//     "cuff.stg"; cuff.shp openshop reveals the hidden cufflink only when
+//     mission=2 & cufflink unowned & the purs actor is on "findcuff" & chair 1.
+//     You examine it (small->med->big) then take it into your bag. ZERO new
+//     engine code — pure overlay-stage + prop + inventory reuse. ---
+{
+  const { session, viewer } = await newSession();
+  const g = session.interp.globals;
+  g.set("mission", 2); g.set("tour", 0); g.set("cuffchair", "cufflink1");
+  await session.openSetFile("recept1c.set");
+  // satisfy the openshop gate so the hidden cufflink appears
+  const purs = session.actorRuntime.get("purs");
+  if (purs) purs.owner = "findcuff";
+  const link = () => session.propRuntime.get("cufflink");
+  if (link()) link()!.owner = "none";
+  await session.track(session.transToFlat("cuff.stg"));
+  const v = viewer();
+  const cuffcuff = () => session.propRuntime.get("cuffcuff");
+  // opened on the right flat with the cufflink shown small and the bag posed
+  const opened =
+    session.stageName === "cuff.stg" &&
+    session.currentFlat.toLowerCase() === "cuff 1" &&
+    !!cuffcuff()?.visible && cuffcuff()?.stateName === "small" &&
+    Number(session.propRuntime.get("cuffbag")?.deg) === 1;
+  // click a prop where it actually draws (the sprite is offset from its anchor)
+  const hitCenter = (name: string): [number, number] | null => {
+    const inst = session.propRuntime.get(name);
+    if (!inst?.visible) return null;
+    const pts: [number, number][] = [];
+    for (let y = 2; y < 384; y += 3)
+      for (let x = 2; x < 512; x += 3)
+        if (session.propRuntime.propAt(x, y, null, false) === inst) pts.push([x, y]);
+    if (!pts.length) return null;
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    return [
+      Math.round((Math.min(...xs) + Math.max(...xs)) / 2),
+      Math.round((Math.min(...ys) + Math.max(...ys)) / 2),
+    ];
+  };
+  const clickCuff = async () => {
+    const c = hitCenter("cuffcuff");
+    if (!c) return;
+    session.setPointer(c[0], c[1]);
+    session.pointerDown = true;
+    await v.click(c[0], c[1]);
+    session.pointerDown = false;
+    await drain();
+  };
+  // the open transition leaves a one-frame loop in flight; let it finish so the
+  // input gate (inputLocked) doesn't reject the prop clicks below
+  let clk = 1000;
+  for (let i = 0; i < 10 && session.scriptBusy; i++) { v.tick((clk += 50)); await drain(); }
+  await clickCuff();
+  const med = cuffcuff()?.stateName === "med";
+  await clickCuff();
+  const big = cuffcuff()?.stateName === "big";
+  await clickCuff(); // big -> addcuff(): take it into the bag
+  const took =
+    !cuffcuff()?.visible &&
+    String(link()?.owner) === "frank" &&
+    String(g.get("handitem")) === "cufflink";
+
+  check(
+    "cufflink clue (CUFF.STG): flat opens with the hidden cufflink, examine small->med->big, take into inventory",
+    opened && med && big && took,
+    `opened=${opened} med=${med} big=${big} took=${took}`,
+  );
+}
+
+// --- ship's-wheel steering sim (BRIDGE.STG): reached from BRIDGE.SET via
+//     transtoflat "bridge.stg". openstage lays out the bridge frame + wheel +
+//     four tiling sky props (sky3/sky4 are propinstance copies of sky1/sky2)
+//     and starts the self-re-registering `skydrift` loop at framerate(2).
+//     Turning the wheel sets `driftdesire`; skydrift eases `drifttotal` toward
+//     it, and once it passes ±64 the ship swings off course (driftpos != 256 ->
+//     drifthappen=1) and the sky scrolls. Needs 2 new builtins: propinstance +
+//     calcmod. ---
+{
+  const { session, viewer } = await newSession();
+  const g = session.interp.globals;
+  await session.openSetFile("bridge.set");
+  await session.track(session.transToFlat("bridge.stg"));
+  const v = viewer();
+  let clk = 1000;
+  const tick = (n: number) => (async () => {
+    for (let i = 0; i < n; i++) { v.tick((clk += 66)); await drain(); }
+  })();
+  await tick(4); // let openstage place props + the open transition settle
+
+  const P = (n: string) => session.propRuntime.get(n);
+  // propinstance: sky3/sky4 exist and are drawn with sky1/sky2's sprite group
+  const instanced =
+    !!P("sky3") && !!P("sky4") &&
+    P("sky3")!.group === P("sky1")!.group &&
+    P("sky4")!.group === P("sky2")!.group;
+  const opened =
+    session.stageName === "bridge.stg" &&
+    ["sky1", "sky2", "sky3", "sky4", "wheel", "bridge"].every((n) => P(n)?.visible) &&
+    Number(g.get("driftpos")) === 256 &&
+    Number(g.get("drifthappen")) === 0 &&
+    Number(session.frameRate) === 2;
+  const sky1x0 = Number(P("sky1")!.anchorX);
+
+  // turn the wheel hard over (what the wheel drag writes) and let the ship drift
+  g.set("driftdesire", 60);
+  await tick(220);
+  const drifted =
+    Number(g.get("drifttotal")) > 64 &&
+    Number(g.get("drifthappen")) === 1 &&
+    Number(g.get("driftpos")) !== 256 &&
+    Number(P("sky1")!.anchorX) !== sky1x0; // the sky scrolled with driftpos
+
+  // calcmod: the wheel's getpropdeg maps a 0..255 angle into 0..4 frames
+  type Bi = (i: typeof session.interp, a: (number | string)[]) => unknown;
+  const calcmod = session.interp.builtins.get("calcmod")! as unknown as Bi;
+  const modOk = calcmod(session.interp, [70, 32]) === 6 && calcmod(session.interp, [-1, 32]) === 31;
+
+  check(
+    "bridge steering (BRIDGE.STG): opens with the tiling sky (propinstance) + wheel, turning the wheel drifts the ship off course and scrolls the sky",
+    opened && instanced && drifted && modOk,
+    `opened=${opened} instanced=${instanced} drifted=${drifted} (pos=${g.get("driftpos")} total=${g.get("drifttotal")} happen=${g.get("drifthappen")}) calcmod=${modOk}`,
   );
 }
 

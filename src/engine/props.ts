@@ -223,6 +223,34 @@ export class PropRuntime {
   }
 
   /**
+   * propinstance(src, dst): make `dst` a second prop drawn with `src`'s sprite
+   * group — the bridge's tiling sky (sky3/sky4 copy sky1/sky2), SMOKE's extra
+   * plants/flames. It gets its own position/animation state but copies src's
+   * current display state so it shows immediately; the script then repositions
+   * it via propxy. Shares src's shop, so it is removed with that shop.
+   *
+   * Only CREATES `dst` when it isn't already a real prop. Some shops ship both
+   * names as their OWN groups with different baked frame offsets and call
+   * propinstance anyway (blackjack's playerscores/dealerscores sit at the same
+   * anchor but are drawn player-side vs dealer-side) — clobbering dst's group
+   * with src's would collapse them onto each other, so leave an existing dst be.
+   */
+  instance(src: string, dst: string): void {
+    const s = this.props.get(String(src).toLowerCase());
+    if (!s) return;
+    if (this.props.has(String(dst).toLowerCase())) return; // dst is its own group: don't clobber
+    const p = new PropInstance(s.group, s.shop);
+    p.visible = s.visible;
+    p.stateName = s.stateName;
+    p.deg = s.deg;
+    p.dist = s.dist;
+    p.worldSpace = s.worldSpace;
+    p.directional = s.directional;
+    p.setName = s.setName;
+    this.props.set(String(dst).toLowerCase(), p);
+  }
+
+  /**
    * Advance animations; frameMs matches the viewer's animation cadence.
    * State animations play ONCE and hold the last frame (door opens and
    * stays open) — continuous animation is scripted explicitly via makeloop.

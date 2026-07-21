@@ -501,6 +501,51 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(photoBtn);
 
+  // dev: the cufflink clue pickup (CUFF.STG). Normally reached from RECEPT1C.SET
+  // by clicking one of three chair hotspots (cufflink1/2/3), which sets the
+  // `cuffchair` global and transtoflat("cuff.stg"). Only the cufflink1 chair
+  // hides the real cufflink, and only during the mission-2 purser investigation:
+  // cuff.shp openshop shows it when mission=2 & cufflink unowned & the purs actor
+  // is on the "findcuff" task & cuffchair="cufflink1". You click the cufflink to
+  // enlarge it (small->med->big) then take it into your bag; the OK button
+  // (cuffok, a trackbut) leaves the flat. We reproduce that entry state.
+  const cuffBtn = document.createElement("button");
+  cuffBtn.textContent = "🔗 Cuff (dev)";
+  cuffBtn.style.marginLeft = "0.5rem";
+  cuffBtn.addEventListener("click", async () => {
+    const g = session.interp.globals;
+    g.set("mission", 2);
+    g.set("tour", 0);
+    g.set("cuffchair", "cufflink1");
+    // reception room, where the cufflink chairs live — exiting drops back here
+    await loadServerSet("recept1c.set");
+    // satisfy the openshop gate so the hidden cufflink appears
+    const purs = session.actorRuntime.get("purs");
+    if (purs) purs.owner = "findcuff";
+    const link = session.propRuntime.get("cufflink");
+    if (link) link.owner = "none";
+    await session.track(session.transToFlat("cuff.stg"));
+  });
+  setSelectWrap.appendChild(cuffBtn);
+
+  // dev: the ship's-wheel steering sim (BRIDGE.STG). Reached from BRIDGE.SET by
+  // clicking the helm (BRIDGE.SET/0007 -> transtoflat "bridge.stg"). openstage
+  // opens bridge.shp, places the bridge frame + wheel + the 4 tiling sky props
+  // (sky3/sky4 are propinstance copies of sky1/sky2), and starts the self-
+  // re-registering `skydrift` loop at framerate(2). Dragging the wheel turns it
+  // and sets `driftdesire`; skydrift eases `drifttotal` toward it and scrolls
+  // the sky, so the ship swings off course (driftpos != 256 -> drifthappen=1).
+  // Clicking OK (oklit trackbut) leaves; if you drifted, Morrow's kickout fires.
+  const bridgeBtn = document.createElement("button");
+  bridgeBtn.textContent = "🛞 Bridge (dev)";
+  bridgeBtn.style.marginLeft = "0.5rem";
+  bridgeBtn.addEventListener("click", async () => {
+    session.interp.globals.set("tour", 0);
+    if (session.currentSetName !== "bridge") await loadServerSet("bridge.set");
+    await session.track(session.transToFlat("bridge.stg"));
+  });
+  setSelectWrap.appendChild(bridgeBtn);
+
   // dev: the in-game settings panel (the "life" pocketwatch prop in the menu
   // band → dolife() → transtoflat("ctl.stg")). The wave-volume dial and the
   // theme-volume slider live here; both drive the audio sink's channel gains.

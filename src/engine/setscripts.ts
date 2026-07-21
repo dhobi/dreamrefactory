@@ -497,6 +497,12 @@ export function registerGameBuiltins(session: GameSession): void {
     if (v === undefined) return p.owner;
     p.owner = v;
   });
+  // propinstance(src, dst): make dst a second prop drawn with src's sprite
+  // group (the bridge's tiling sky, SMOKE's extra plants/flames) — it copies
+  // src's current display state, then the script repositions it via propxy.
+  r("propinstance", (_i, [src, dst]) => {
+    session.propRuntime.instance(toStr(src ?? ""), toStr(dst ?? ""));
+  });
   // propdeg selects a discrete frame of a rotational/selector prop (the deck
   // map's "buttons" highlight: 9 frames, deg 0..7 = deck 1..8, deg 8 = none).
   // The pinned frame overrides auto-animation until propview() changes state.
@@ -795,7 +801,7 @@ export function registerGameBuiltins(session: GameSession): void {
   // play loop `while done=0 { forceupdate(); mouse(); button() }`) depend on
   // this yield to ever see the click that ends them — a synchronous tick alone
   // would spin forever. The realYieldSeq bump spares the loop from the guard.
-  r("forceupdate", async () => {
+  r("forceupdate", async (_i, _a, _c, frame) => {
     // With real frames, the rAF loop advances the clock with REAL time each
     // frame — self-advancing +66 here on top of that races the sim clock
     // ahead of real time (4x at 60fps), and every later clock.sleep (trackbut
@@ -815,7 +821,13 @@ export function registerGameBuiltins(session: GameSession): void {
     // forceupdate to a single 60 Hz rAF made those loops run ~n× too fast (the
     // fencing attack blurred past in ~100 ms). Wait n frames instead.
     const frames = Math.max(1, Math.round(session.frameRate));
-    for (let i = 0; i < frames; i++) await session.nextFrame();
+    for (let i = 0; i < frames; i++) {
+      await session.nextFrame();
+      // this handler owns the CPU (scriptBusy), so the normal per-frame loop
+      // service is skipped; pump the OTHER per-frame loops here so e.g. the sky
+      // keeps drifting while the wheel is being turned (not the caller's own).
+      session.pumpFrameLoops(frame?.ctx?.me ?? "");
+    }
   });
 
   // starxyz(name, axis): named world point from the set's actor/star table.
@@ -1251,6 +1263,13 @@ export function registerGameBuiltins(session: GameSession): void {
   r("turntodeg", (_i, [n, deg]) => {
     const a = actor(n);
     if (a) a.deg = toNum(deg ?? 0) & 0xff;
+  });
+  // calcmod(a, b): non-negative modulo (bridge wheel's getpropdeg maps the
+  // 0..255 wheel angle into the sprite's 0..4 rotation frames)
+  r("calcmod", (_i, [a, b]) => {
+    const m = toNum(b ?? 0);
+    if (m === 0) return 0;
+    return ((toNum(a ?? 0) % m) + m) % m;
   });
   // primitives behind the cast library's realdist()/facing helpers:
   // playerxyz(4) = the camera's packed ground position, calcdist between
