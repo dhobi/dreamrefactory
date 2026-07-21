@@ -546,6 +546,61 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(bridgeBtn);
 
+  // dev: the endgame "what happened to history" slideshow (NAREND.STG). Normally
+  // reached from BOOTFILE after the ship sinks (leave.mov/debris.mov -> transtoflat
+  // "narend.stg" -> opennarend). Which newspaper flats + narration + final movie
+  // play depends on who owns the four artifacts (rubaiyat, real necklace, painting,
+  // notebook), via onehappens/twohappens/revhappens -> futures(). The selector
+  // below sets that ownership to reach each distinct ending (one movie each);
+  // mission goes "good" only for the Prozac future. We also hideinterface() first
+  // because the real endgame closesetfile()s before narend, so no menuband shows
+  // (otherwise the persistent band sits over the black transitions).
+  //   one = rubaiyat|realneck == vlad ; two = painting != frank ; rev = notebook != frank
+  const ENDINGS: Record<string, { painting: string; notebook: string; rubaiyat: string; realneck: string }> = {
+    "Prozac (good) — proz": { painting: "frank", notebook: "frank", rubaiyat: "frank", realneck: "frank" }, // F,F,F
+    "Soviet — rushend": { painting: "frank", notebook: "vlad", rubaiyat: "frank", realneck: "frank" }, // F,F,T
+    "Nazi — germend": { painting: "hack", notebook: "frank", rubaiyat: "frank", realneck: "frank" }, // F,T,F
+    "Nuke — nuke": { painting: "hack", notebook: "vlad", rubaiyat: "frank", realneck: "frank" }, // F,T,T
+    "Nochange (worst) — boom": { painting: "hack", notebook: "vlad", rubaiyat: "vlad", realneck: "vlad" }, // T,T,T
+  };
+  const narWrap = document.createElement("span");
+  narWrap.style.marginLeft = "0.5rem";
+  const narSel = document.createElement("select");
+  for (const label of Object.keys(ENDINGS)) {
+    const o = document.createElement("option");
+    o.value = label;
+    o.textContent = label;
+    narSel.appendChild(o);
+  }
+  const narBtn = document.createElement("button");
+  narBtn.textContent = "🗞 Play ending (dev)";
+  narBtn.style.marginLeft = "0.3rem";
+  narBtn.addEventListener("click", async () => {
+    const e = ENDINGS[narSel.value] ?? ENDINGS["Prozac (good) — proz"];
+    if (!viewer || session.currentSetName === "none") await loadServerSet("c78.set");
+    // match the real flow (closesetfile) so no menuband sits over the slideshow
+    // + black transitions. hideinterface only hides band props owned by "frank",
+    // so in the dev harness (nothing acquired) force the whole band hidden.
+    await session.sendEvent("sendtoshop", "house.shp", "hideinterface", [], "ending-dev");
+    for (const n of ["bag", "watch", "map", "ship", "life", "navarrow", "lid",
+      "hrs", "min", "sec", "light", "door", "signs", "baby", "invenhelp"]) {
+      const p = session.propRuntime.get(n);
+      if (p) p.visible = false;
+    }
+    const own = (n: string, o: string) => {
+      const p = session.propRuntime.get(n);
+      if (p) p.owner = o;
+    };
+    own("painting", e.painting);
+    own("notebook", e.notebook);
+    own("rubaiyat", e.rubaiyat);
+    own("realneck", e.realneck);
+    await session.track(session.transToFlat("narend.stg"));
+    await session.sendEvent("sendtostage", "narend.stg", "opennarend", [], "ending-dev");
+  });
+  narWrap.append(narSel, narBtn);
+  setSelectWrap.appendChild(narWrap);
+
   // dev: the in-game settings panel (the "life" pocketwatch prop in the menu
   // band → dolife() → transtoflat("ctl.stg")). The wave-volume dial and the
   // theme-volume slider live here; both drive the audio sink's channel gains.

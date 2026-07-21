@@ -2928,5 +2928,74 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- endgame slideshow logic (NAREND.STG): the ending is chosen by who owns
+//     the four artifacts. worldwar1/worldwar2/rushrev return the list of
+//     "newspaper" flats to show and set onehappens/twohappens/revhappens;
+//     futures() maps those three flags to the final future (last word -> the
+//     ending movie; "proz" is the only mission="good" outcome). Pure logic, so
+//     we drive the handlers directly (like the blackjack winner() test). ZERO
+//     new engine code — a scripted slideshow over existing machinery. ---
+{
+  const { session } = await newSession();
+  await session.openSetFile("c78.set"); // loads inven.shp so the artifact props exist
+  const file = readContainerFile(provider("narend.stg")!);
+  let inst: ScriptInstance | null = null;
+  for (const c of file.containers) {
+    const tokens = sniffScript(c.data);
+    if (!tokens) continue;
+    const script = parseScript(tokens);
+    if (script.codes.has("futures")) {
+      inst = new ScriptInstance("narend", script);
+      break;
+    }
+  }
+  const own = (n: string, o: string) => {
+    const p = session.propRuntime.get(n);
+    if (p) p.owner = o;
+  };
+  const run = async (h: string): Promise<string> =>
+    String((await session.interp.runHandler(inst!, h, [], { me: "narend", target: "" })).value ?? "");
+  const lastWord = (s: string): string => s.split(",").pop() ?? "";
+
+  // best ending: artifacts preserved -> all three flags false -> Prozac future
+  own("painting", "frank");
+  own("notebook", "frank");
+  own("rubaiyat", "frank");
+  own("realneck", "frank");
+  const g1 = await run("worldwar1");
+  const g2 = await run("worldwar2");
+  const g3 = await run("rushrev");
+  const gf = await run("futures");
+  // futures() reads the onehappens/twohappens/revhappens globals that the three
+  // war/rev handlers set, so a correct `gf` also proves those flags propagated
+  const good =
+    g1 === "4,07,11,11b,12" &&
+    g2 === "6,17,17b,18,18b,19,20" &&
+    g3 === "5,22,23,24,25,26" &&
+    lastWord(gf) === "proz";
+
+  // worst ending: rubaiyat + necklace to vlad, painting to hack, notebook lost
+  // -> all three flags true -> "nochange" future (boom.mov), mission stays bad
+  own("rubaiyat", "vlad");
+  own("realneck", "vlad");
+  own("painting", "hack");
+  own("notebook", "vlad");
+  const b1 = await run("worldwar1");
+  const b2 = await run("worldwar2");
+  const b3 = await run("rushrev");
+  const bf = await run("futures");
+  const bad =
+    b1 === "3,03,04,05" &&
+    b2 === "2,15,16" &&
+    b3 === "1,21" &&
+    lastWord(bf) === "nochange.01";
+
+  check(
+    "endgame (NAREND.STG): artifact ownership drives worldwar1/2/rushrev + futures (good=Prozac, bad=nochange)",
+    !!inst && good && bad,
+    `good=${good} (ww1=${g1} fut=${lastWord(gf)}) bad=${bad} (ww1=${b1} fut=${lastWord(bf)})`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
