@@ -1108,6 +1108,19 @@ export function registerGameBuiltins(session: GameSession): void {
   r("pointx", (_i, [p]) => s16((toNum(p ?? 0) >> 16) & 0xffff));
   r("pointy", (_i, [p]) => s16(toNum(p ?? 0) & 0xffff));
   r("mouse", () => session.pointerPoint());
+  // hittest(point): identify what's under a screen point (an actor, a scene
+  // hotspot, a flat region…) and stash its kind for result(). The inventory
+  // "use an item" flow depends on this: dropping the trunk key on the trunk
+  // does `thename = hittest(arg); switch result() case "scene": sendtoscene(
+  // thename, offerobject("trunkkey"))` → the trunk object's offerobject fires
+  // transtoflat("trunk.stg"). Returns the object name ("" if nothing).
+  r("hittest", (_i, [point]) => {
+    const pt = toNum(point ?? 0);
+    const hit = session.hitTestAt(s16((pt >> 16) & 0xffff), s16(pt & 0xffff));
+    session.lastResult = hit.type;
+    return hit.name;
+  });
+  r("result", () => session.lastResult);
   // button(): is the mouse button held? Scripts wait for a click with an
   // empty-body poll `while not (button() & pointinprop(...)) endwhile` (the
   // Enigma result dismissal), which has no other yield — so, like stilldown,

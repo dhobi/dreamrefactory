@@ -159,6 +159,19 @@ export class GameSession {
   /** host hooks for currentscene()/currentview() queries */
   currentSceneName: () => string = () => "";
   currentViewName: () => string = () => "";
+  /**
+   * hittest(point): what's under a screen pixel — the object NAME and its
+   * result() TYPE ("actor"/"scene"/"painting"/"button"/"flat", "" for nothing).
+   * The viewer wires this to its click-resolution geometry. Used by the
+   * inventory "use item" flow (INVEN.SHP: thename = hittest(arg); switch
+   * result() → sendto<type>(thename, offerobject(what))).
+   */
+  hitTestAt: (x: number, y: number) => { name: string; type: string } = () => ({
+    name: "",
+    type: "",
+  });
+  /** the type from the most recent hittest(), returned by result() */
+  lastResult = "";
   /** facing direction of the current view (radians), for arrival continuity */
   currentRotation: (() => number) | null = null;
   /** facing carried across a set change; the next viewer consumes it */
@@ -1139,7 +1152,7 @@ export class GameSession {
     return regs;
   }
 
-  private currentFlatRegions(): StgRegion[] {
+  currentFlatRegions(): StgRegion[] {
     return this.regionsFor(this.currentFlat);
   }
 

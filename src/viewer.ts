@@ -113,6 +113,24 @@ export class SetViewer {
       const v = sc?.views[this.viewIdx];
       return v ? { x: sc.xAxisMap, y: sc.zAxisMap, deg: v.rotation8 } : null;
     };
+    // hittest(point): resolve a screen pixel to an object name + kind, mirroring
+    // the click-dispatch order. Powers the inventory "use item" flow (dropping
+    // the trunk key on the trunk → sendtoscene("trunk", offerobject(...))).
+    session.hitTestAt = (x, y) => {
+      // an overlay flat (inventory bag, puzzle screen): resolve a click-region
+      if (!this.session.setVisible && this.session.stage) {
+        const r = this.session
+          .currentFlatRegions()
+          .find((rg) => x >= rg.left && x <= rg.right && y >= rg.top && y <= rg.bottom);
+        return r ? { name: r.name, type: "flat" } : { name: "", type: "" };
+      }
+      // in the 3D set: actors stand in front of the view's hotspots
+      const cam = this.worldCamera();
+      const act = cam ? this.session.actorRuntime.actorAt(x, y, cam, this.occlusion()) : null;
+      if (act) return { name: act.member.name, type: "actor" };
+      const hit = this.hitTest(x, y); // smallest-region-wins, same as clicks
+      return hit ? { name: hit.obj.identifier, type: "scene" } : { name: "", type: "" };
+    };
     session.captureFrame = () => {
       const f = this.current;
       if (!f) return null;
@@ -725,19 +743,33 @@ export class SetViewer {
     });
   }
 
-  /** hotspot under the given view-pixel position in the current view */
+  /**
+   * hotspot under the given view-pixel position in the current view. When
+   * regions OVERLAP, the SMALLEST (most specific) one wins — a small control
+   * sitting inside a larger backdrop must be clickable (C73's door-ringer is a
+   * 19×19 hotspot fully inside the 200×246 "door", so first-in-list order alone
+   * left it unreachable).
+   */
   hitTest(x: number, y: number): { objIdx: number; obj: ObjectEntry } | null {
     if (this.busy) return null;
     const objects = this.scene.views[this.viewIdx].objects;
+    let best: { objIdx: number; obj: ObjectEntry } | null = null;
+    let bestArea = Infinity;
     for (let o = 0; o < objects.length; o++) {
       const obj = objects[o];
       const x0 = Math.min(obj.startRegionX, obj.endRegionX);
       const x1 = Math.max(obj.startRegionX, obj.endRegionX);
       const y0 = Math.min(obj.startRegionY, obj.endRegionY);
       const y1 = Math.max(obj.startRegionY, obj.endRegionY);
-      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) return { objIdx: o, obj };
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+        const area = (x1 - x0) * (y1 - y0);
+        if (area < bestArea) {
+          bestArea = area;
+          best = { objIdx: o, obj };
+        }
+      }
     }
-    return null;
+    return best;
   }
 
   async click(x: number, y: number): Promise<void> {
