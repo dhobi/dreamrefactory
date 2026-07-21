@@ -878,6 +878,9 @@ export class GameSession {
 
   /** stage that was active before transToFlat, restored by transFromFlat */
   private prevStage = "none";
+  /** theme playing before transToFlat, restored by transFromFlat when an
+   *  overlay stage replaced it with its own (fencing's fence.trk) */
+  private prevStageTheme = "none";
 
   /**
    * transtoflat: open a stage full-screen (e.g. the deck map) over the game,
@@ -885,6 +888,12 @@ export class GameSession {
    */
   async transToFlat(fileName: string): Promise<void> {
     this.prevStage = this.stageName;
+    // Remember the ambient theme so transfromflat can put it back if the stage
+    // plays its own over it. Overlay stages don't go through changeset, so
+    // setupsound never runs for them; fencing's openstage does playnewtheme
+    // ("fence.trk"), and without a restore that combat theme kept looping after
+    // the duel (we model one theme layer, not the original's ambient+overlay).
+    this.prevStageTheme = this.currentThemeName;
     // the boot hides the in-game interface band (house.shp) before an overlay
     // stage takes the full screen; only main.stg carries that band
     if (this.stageName === "main.stg") {
@@ -918,6 +927,22 @@ export class GameSession {
     } else if (!prev || prev === "none") {
       await this.closeStageFile();
     }
+    // restore the ambient theme if the overlay stage replaced it with its own
+    // (fence.trk). Only when it actually changed, so closing a themeless overlay
+    // (the deck map) doesn't restart the room's music. If the prior bank is gone
+    // just stop the overlay theme — better silence than the wrong track leaking.
+    if (this.currentThemeName !== this.prevStageTheme) {
+      const saved = this.prevStageTheme;
+      const theme = saved !== "none" && saved !== "" ? this.audioLib.theme(saved) : null;
+      if (theme) {
+        this.audio.play("theme", theme, { loop: true });
+        this.currentThemeName = saved;
+      } else {
+        this.audio.halt("theme");
+        this.currentThemeName = "none";
+      }
+    }
+    this.prevStageTheme = "none";
     // restore the in-game interface band when returning to it
     if (this.stageName === "main.stg") {
       await this.sendEvent("sendtoshop", "house.shp", "showinterface", [], "transfromflat");
@@ -1456,6 +1481,7 @@ export class GameSession {
       }
       return true;
     }
+    await this.ensureFile(key); // lazy browser provider: fetch before first read
     const data = this.files(key);
     if (!data) {
       this.onLog(`openshopfile: "${fileName}" not available`);

@@ -2180,5 +2180,31 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- 61. fence theme doesn't leak: leaving the overlay restores the ambient --
+// The duel is a STG overlay (set stays the squash court), and its openstage does
+// playnewtheme("fence.trk"). Overlays bypass changeset, so setupsound never runs
+// to swap the theme back; declining the rematch travels same-deck, which is
+// seamless (no replay) -> the combat theme used to keep looping in the hall.
+// transToFlat now remembers the ambient theme and transFromFlat restores it.
+{
+  const { session } = await newSession();
+  await session.openSetFile("squash.set");
+  const call = (n: string, a: (string | number)[]) =>
+    (session.interp.builtins.get(n) as (i: unknown, args: (string | number)[]) => unknown)(session.interp, a);
+  // stand in for the ambient deck theme playing when the duel is entered
+  await call("opentrackfile", ["bomb.trk"]);
+  call("playnewtheme", ["bomb.trk"]);
+  const ambient = session.currentThemeName;
+  await session.transToFlat("fence.stg"); // openstage -> playnewtheme("fence.trk")
+  const during = session.currentThemeName;
+  await session.transFromFlat(); // leaving must put the ambient back
+  const after = session.currentThemeName;
+  check(
+    "fence: leaving the duel restores the ambient theme (combat theme doesn't leak)",
+    ambient === "bomb.trk" && during === "fence.trk" && after === "bomb.trk",
+    `ambient=${ambient} during=${during} after=${after}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

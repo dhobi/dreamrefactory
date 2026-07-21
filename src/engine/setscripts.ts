@@ -747,15 +747,22 @@ export function registerGameBuiltins(session: GameSession): void {
     // frame — self-advancing +66 here on top of that races the sim clock
     // ahead of real time (4x at 60fps), and every later clock.sleep (trackbut
     // after a long crank play) stalls until real time catches back up. So in
-    // the browser forceupdate only waits a frame; the tick does the rest.
+    // the browser forceupdate only waits real frames; the tick does the rest.
     // Headless has no frame source, so it self-advances one 66 ms step —
     // which also keeps tests deterministic (one call = one service step).
     if (!session.hasRealFrames) {
       session.tickTime(session.clock.now + 66);
-    } else {
-      session.realYieldSeq++;
+      await session.nextFrame();
+      return;
     }
-    await session.nextFrame();
+    session.realYieldSeq++;
+    // Honour framerate(n): the stage/animation asks for n ticks per displayed
+    // frame, so a `for … forceupdate()` animation loop (the fencing lunge/parry,
+    // gramophone crank) should hold each frame that long. Locking every
+    // forceupdate to a single 60 Hz rAF made those loops run ~n× too fast (the
+    // fencing attack blurred past in ~100 ms). Wait n frames instead.
+    const frames = Math.max(1, Math.round(session.frameRate));
+    for (let i = 0; i < frames; i++) await session.nextFrame();
   });
 
   // starxyz(name, axis): named world point from the set's actor/star table.
