@@ -445,6 +445,37 @@ function rebuildSetSelect(): void {
   });
   setSelectWrap.appendChild(fuseBtn);
 
+  // dev: the matryoshka-doll necklace swap (PATTY.STG). Normally reached from
+  // the A14 cabin once neckphase = 8 (A14.SET object -> transtoflat "patty.stg").
+  // The real necklace lives inside the doll (inven initprops does
+  // giveinven("realneck","vlad") at mission 1); you carry the FAKE and swap them.
+  // We reproduce the entry state: mission 1, neckphase 8, the doll's dials
+  // pre-solved (solvedoll() honours the `debugging` flag), realneck stashed in
+  // the doll, and the fake necklace in your hand/bag via addinven.
+  const dollBtn = document.createElement("button");
+  dollBtn.textContent = "🪆 Doll (dev)";
+  dollBtn.style.marginLeft = "0.5rem";
+  dollBtn.addEventListener("click", async () => {
+    const g = session.interp.globals;
+    g.set("mission", 1);
+    g.set("tour", 0);
+    g.set("neckphase", 8);
+    g.set("debugging", 1);
+    // land in Sasha's cabin (A14) facing the doll — Scene1/View11 is where the
+    // "patty" object lives — so exiting the puzzle drops back into the room.
+    await loadServerSet("a14.set");
+    await session.openSetFile("a14.set", "scene1", "view11");
+    // the real necklace belongs in the doll (Vlad's); inven initprops seeds this
+    // at mission 1, but force it so the dev button works from any prior state.
+    await session.sendEvent("sendtoshop", "inven.shp", "giveinven", ["realneck", "vlad"], "doll-dev");
+    // the fake necklace goes into the player's hand/bag to swap in.
+    await session.sendEvent("sendtoshop", "inven.shp", "addinven", ["fakeneck"], "doll-dev");
+    await session.track(session.transToFlat("patty.stg"));
+    // pre-solve the combination dials so the doll can be opened straight away.
+    await session.sendEvent("sendtostage", "patty.stg", "solvedoll", [], "doll-dev");
+  });
+  setSelectWrap.appendChild(dollBtn);
+
   // dev: mission/state panel. Puzzle screens are gated on the mission/phase
   // globals + prop/actor owners + tuning; these controls reproduce a testable
   // state in one click (the alternative is a long dbg incantation each time).

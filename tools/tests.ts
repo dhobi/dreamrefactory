@@ -2543,5 +2543,69 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
 }
 
+// --- matryoshka doll (PATTY.STG): a visible foreground prop with its own
+//     mousedown script must intercept clicks before the flat click-regions
+//     beneath it. The doll prop overlaps the doll1/dial hotspots that revealed
+//     it; before the fix every "open a layer" click on the doll's left half was
+//     swallowed by those regions and the doll only ever closed. ---
+{
+  const { session, viewer } = await newSession();
+  const g = session.interp.globals;
+  g.set("mission", 1); g.set("tour", 0); g.set("neckphase", 8); g.set("debugging", 1);
+  await session.openSetFile("a14.set", "scene1", "view11");
+  // real necklace inside the doll (Vlad's), fake in the player's hand to swap
+  await session.sendEvent("sendtoshop", "inven.shp", "giveinven", ["realneck", "vlad"], "test");
+  await session.sendEvent("sendtoshop", "inven.shp", "addinven", ["fakeneck"], "test");
+  await session.track(session.transToFlat("patty.stg"));
+  await session.sendEvent("sendtostage", "patty.stg", "solvedoll", [], "test");
+  const v = viewer();
+  const click = async (x: number, y: number) => {
+    session.setPointer(x, y);
+    session.pointerDown = true;
+    await v.click(x, y);
+    session.pointerDown = false;
+    await drain();
+  };
+  const doll = () => session.propRuntime.get("doll");
+  const preal = () => session.propRuntime.get("pattyreal");
+
+  await click(120, 170); // doll1 region -> reveal the doll prop
+  const revealed = !!doll()?.visible && doll()?.deg === 0;
+  await click(150, 226); // doll LEFT half -> peel a layer (reaches the prop now)
+  const peeled1 = doll()?.deg === 1;
+  // RIGHT half closes: step the layer back down
+  await click(250, 226);
+  const closed = doll()?.deg === 0;
+  // peel all the way open -> patty 3 reveals the real necklace inside
+  await click(150, 226); await click(150, 226); await click(150, 226);
+  const openedToNecklace = session.currentFlat.toLowerCase() === "patty 3" && !!preal()?.visible;
+  // take the real necklace out (into the player's hand)
+  await click(256, 180);
+  const took = String(g.get("handitem")) === "realneck";
+
+  // nested overlay: the inventory bag (inven1.stg) opens OVER the doll to swap
+  // an item; leaving it must return to the EXACT prior screen — patty 3, doll
+  // opened, set still hidden — not re-initialise the puzzle to "patty 1". This
+  // is the stage stack + saved-flat + hide/show restore.
+  await session.track(session.transToFlat("inven1.stg"));
+  const onBag = session.stageName === "inven1.stg";
+  await session.track(session.transFromFlat());
+  const returned =
+    session.stageName === "patty.stg" &&
+    session.currentFlat.toLowerCase() === "patty 3" &&
+    session.setVisible === false;
+
+  check(
+    "matryoshka doll: foreground prop intercepts, peels open/close, reveals + takes the real necklace",
+    revealed && peeled1 && closed && openedToNecklace && took,
+    `reveal=${revealed} peel=${peeled1} close=${closed} necklace=${openedToNecklace} took=${took}`,
+  );
+  check(
+    "inventory bag opens over the doll and returns to the same screen (nested overlay stage stack)",
+    onBag && returned,
+    `onBag=${onBag} backStage=${session.stageName} backFlat=${session.currentFlat} setVisible=${session.setVisible}`,
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -910,29 +910,66 @@ export class GameSession {
     await this.fireFlat(target, "openflat");
   }
 
-  /** stage that was active before transToFlat, restored by transFromFlat */
-  private prevStage = "none";
-  /** theme playing before transToFlat, restored by transFromFlat when an
-   *  overlay stage replaced it with its own (fencing's fence.trk) */
-  private prevStageTheme = "none";
+  /**
+   * Stack of stages an overlay was opened OVER (transtoflat), restored in
+   * reverse by transfromflat — mirrors the boot's savestage1..3/saveflat1..3.
+   * Each frame remembers the stage, its active flat, and the ambient theme so a
+   * nested overlay — the inventory bag (inven1.stg) opened MID-puzzle to swap an
+   * item — returns to the exact prior screen (the opened matryoshka on "patty 3")
+   * instead of re-initialising the puzzle to its first flat. A single string
+   * couldn't express the patty.stg → inven1.stg → patty.stg nesting.
+   */
+  private stageStack: { name: string; flat: string; theme: string }[] = [];
+
+  /**
+   * Save + hide the underlying stage's props before an overlay covers it (the
+   * boot's transtoflat calls sendtoshop(hide<stage>()) here). Each puzzle shop
+   * stashes its prop visibility (patty.shp hidepatty -> saveprops1) so the
+   * matching show<stage> can restore it after the overlay closes. main.stg is
+   * special: its band lives on house.shp via hide/showinterface.
+   */
+  private async saveStageProps(stageName: string): Promise<void> {
+    if (!stageName || stageName === "none") return;
+    if (stageName === "main.stg") {
+      await this.sendEvent("sendtoshop", "house.shp", "hideinterface", [], "transtoflat");
+      return;
+    }
+    const base = stageName.replace(/\.stg$/, "");
+    if (this.shopMain(`${base}.shp`)?.script.codes.has(`hide${base}`)) {
+      await this.sendEvent("sendtoshop", `${base}.shp`, `hide${base}`, [], "transtoflat");
+    }
+  }
+
+  /** restore what saveStageProps hid, once the previous stage is re-open */
+  private async restoreStageProps(stageName: string): Promise<void> {
+    if (!stageName || stageName === "none") return;
+    if (stageName === "main.stg") {
+      await this.sendEvent("sendtoshop", "house.shp", "showinterface", [], "transfromflat");
+      return;
+    }
+    const base = stageName.replace(/\.stg$/, "");
+    if (this.shopMain(`${base}.shp`)?.script.codes.has(`show${base}`)) {
+      await this.sendEvent("sendtoshop", `${base}.shp`, `show${base}`, [], "transfromflat");
+    }
+  }
 
   /**
    * transtoflat: open a stage full-screen (e.g. the deck map) over the game,
    * remembering the stage it replaced so transfromflat can restore it.
    */
   async transToFlat(fileName: string): Promise<void> {
-    this.prevStage = this.stageName;
-    // Remember the ambient theme so transfromflat can put it back if the stage
-    // plays its own over it. Overlay stages don't go through changeset, so
-    // setupsound never runs for them; fencing's openstage does playnewtheme
-    // ("fence.trk"), and without a restore that combat theme kept looping after
-    // the duel (we model one theme layer, not the original's ambient+overlay).
-    this.prevStageTheme = this.currentThemeName;
-    // the boot hides the in-game interface band (house.shp) before an overlay
-    // stage takes the full screen; only main.stg carries that band
-    if (this.stageName === "main.stg") {
-      await this.sendEvent("sendtoshop", "house.shp", "hideinterface", [], "transtoflat");
-    }
+    // Save + hide the underlying stage's props (the boot's transtoflat does
+    // sendtoshop(hide<stage>()) before closing), then push it — with its active
+    // flat and ambient theme — so transfromflat returns to the exact prior
+    // screen. Overlay stages don't go through changeset, so setupsound never
+    // runs for them; fencing's openstage does playnewtheme("fence.trk"), and the
+    // remembered theme lets transfromflat restore the room's ambient after.
+    await this.saveStageProps(this.stageName);
+    this.stageStack.push({
+      name: this.stageName,
+      flat: this.currentFlat,
+      theme: this.currentThemeName,
+    });
     // Entering an overlay presents fresh content, so lift any leftover
     // transition-black from the previous screen. HOUSE fades the blackjack
     // dealer puppet out — screentoblack("puppet") — and THEN transtoflat()s to
@@ -953,33 +990,40 @@ export class GameSession {
    * the red-area click stashed in jumpset/jumpscene/jumpview.
    */
   async transFromFlat(): Promise<void> {
-    this.setVisible = true;
-    const prev = this.prevStage;
-    this.prevStage = "none";
-    if (prev && prev !== "none" && prev !== this.stageName) {
-      await this.openStageFile(prev);
-    } else if (!prev || prev === "none") {
+    const frame = this.stageStack.pop();
+    const prev = frame?.name ?? "none";
+    // The set shows through only under main.stg's in-game band or when no stage
+    // remains; every other stage is a full-screen overlay that must keep the set
+    // hidden. Returning from the inventory bag to the matryoshka (patty.stg) is
+    // an overlay-over-overlay, so setVisible stays false — otherwise the A14 room
+    // rendered behind the doll-tray flat (the overlap the swap showed).
+    this.setVisible = prev === "none" || prev === "" || prev === "main.stg";
+    if (prev && prev !== "none") {
+      // Re-open the underlying stage (the boot re-runs openstagefile too), then
+      // restore its saved flat and prop visibility so a mid-puzzle overlay comes
+      // back to the exact screen it left — the opened matryoshka, not "patty 1".
+      if (prev !== this.stageName) {
+        await this.openStageFile(prev);
+        if (frame && frame.flat && frame.flat !== "none") await this.gotoFlat(frame.flat);
+      }
+      await this.restoreStageProps(prev);
+    } else {
       await this.closeStageFile();
     }
     // restore the ambient theme if the overlay stage replaced it with its own
     // (fence.trk). Only when it actually changed, so closing a themeless overlay
     // (the deck map) doesn't restart the room's music. If the prior bank is gone
     // just stop the overlay theme — better silence than the wrong track leaking.
-    if (this.currentThemeName !== this.prevStageTheme) {
-      const saved = this.prevStageTheme;
-      const theme = saved !== "none" && saved !== "" ? this.audioLib.theme(saved) : null;
+    const savedTheme = frame?.theme ?? "none";
+    if (this.currentThemeName !== savedTheme) {
+      const theme = savedTheme !== "none" && savedTheme !== "" ? this.audioLib.theme(savedTheme) : null;
       if (theme) {
         this.audio.play("theme", theme, { loop: true });
-        this.currentThemeName = saved;
+        this.currentThemeName = savedTheme;
       } else {
         this.audio.halt("theme");
         this.currentThemeName = "none";
       }
-    }
-    this.prevStageTheme = "none";
-    // restore the in-game interface band when returning to it
-    if (this.stageName === "main.stg") {
-      await this.sendEvent("sendtoshop", "house.shp", "showinterface", [], "transfromflat");
     }
     const jumpset = toStr(this.interp.globals.get("jumpset") ?? "");
     if (jumpset) {
@@ -1081,6 +1125,19 @@ export class GameSession {
           this.onLog(`stage hotspot ${hit.name}: ${(e as Error).message}`);
         }
       }
+      return false;
+    }
+    // The region HAS its own script — but a visible prop with its own mousedown
+    // script is a foreground sprite drawn ON TOP of the flat art, so when one
+    // covers this point it owns the click and the region beneath it must not
+    // steal it. The matryoshka (patty.stg): the doll prop overlaps the doll1/dial
+    // hotspots that revealed it, so every "open a layer" click on the doll's left
+    // half was being swallowed by those regions (the doll only ever closed).
+    // Defer to the prop path (return false → the viewer's propAt dispatch runs).
+    // Only applies to scripted regions: scriptless fusebox fuses (handled above)
+    // cooperate with their prop and must not be diverted.
+    const over = this.propRuntime.propAt(x, y, null, false);
+    if (over && this.propScripts.get(over.group.name.toLowerCase())?.script.codes.has("mousedown")) {
       return false;
     }
     // resolve unqualified calls through the current FLAT script first (it
