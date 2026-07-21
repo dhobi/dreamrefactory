@@ -243,7 +243,11 @@ async function runAnimations(v: SetViewer): Promise<void> {
   const { session, viewer } = await newSession();
   await session.openSetFile("turk.set");
   const v = viewer();
-  await session.runGlobal("spotmovie", ["turknmes.mov"]);
+  // playmovie is MODAL: spotmovie (premovie -> playmovie -> postmovie) blocks at
+  // the movie until it ends, so don't await it here — start it, drive the movie
+  // to completion with ticks/clicks, then await the tail (postmovie) at the end.
+  const spot = session.runGlobal("spotmovie", ["turknmes.mov"]);
+  for (let i = 0; i < 50 && !v.moviePlaying; i++) await Promise.resolve();
   check("spotmovie starts playback", v.moviePlaying);
   const settle9 = () => {
     for (let i = 0; i < 30 && v.moviePlaying; i++) v.tick((clock += 250));
@@ -256,6 +260,7 @@ async function runAnimations(v: SetViewer): Promise<void> {
   await v.click(458, 350); // on the OK button (region 431..485 x 339..362)
   settle9(); // OK jumps to the pressed-button frame, then the exit chain
   check("OK click closes the movie", !v.moviePlaying);
+  await spot; // playmovie resolved -> postmovie ran -> spotmovie returns
 }
 
 // --- 10. movie zoom cycle (MENU.MOV): paper toggles zoom, only OK leaves ---

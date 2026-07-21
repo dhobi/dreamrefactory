@@ -1318,8 +1318,23 @@ export class GameSession {
 
   /** host hook: default navigation from boot's keydown (currentscene setter) */
   onNavigate: (direction: string) => void = () => {};
-  /** host hook: playmovie builtin (viewer plays it; browser may fetch first) */
-  onPlayMovie: (fileName: string, startFrame?: number) => void = () => {};
+  /**
+   * host hook: playmovie builtin. Returns a promise that resolves when the
+   * whole movie (including any chained sub-movies) finishes, so the script
+   * BLOCKS on playmovie the way TI.EXE's modal movie loop does — essential for
+   * interactive movies (the purser window: knock -> lid opens -> only then does
+   * the script read actionframe() and open the conversation). Headless / the
+   * default no-op resolve at once (movies don't render in tests).
+   */
+  onPlayMovie: (fileName: string, startFrame?: number) => void | Promise<void> = () => {};
+
+  /**
+   * Action-frame indices the currently/most-recently played movie reached — the
+   * nonzero `action` field of every frame the movie passed through. Cleared at
+   * the start of each top-level playmovie and accumulated across a chain; the
+   * `actionframe(n)` opcode queries membership. (The purser's knock frame sets 1.)
+   */
+  movieActions = new Set<number>();
 
   /**
    * Invoke a globally-callable handler (stage/boot standard library) the way

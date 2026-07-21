@@ -39,6 +39,15 @@ export interface MovClickRegion {
 export interface MovFrame {
   /** auto-action type 1..7 applied when the frame has no regions */
   type: number;
+  /**
+   * Action-frame index (i16 at click-region container offset +6). Nonzero on
+   * the frames the script's `actionframe(n)` opcode reports as "reached": the
+   * purser window's knock/ring frames (openit/endit) carry 1, so knocking sets
+   * actionframe(1). 0 = not an action frame. (This is the field the module
+   * comment used to call "never read" — the frame state machine ignores it, but
+   * the actionframe query does not.)
+   */
+  action: number;
   height: number;
   width: number;
   locationFrame: number;
@@ -99,6 +108,7 @@ export function readMovFile(data: Uint8Array): MovFile {
     // event sound at +0x12, event movie at +0x22, target frame name at
     // +0x32, region table at +1090
     let type = 6;
+    let action = 0;
     let sound = "";
     let event = "";
     let target = "";
@@ -114,6 +124,7 @@ export function readMovFile(data: Uint8Array): MovFile {
         return /^[\x20-\x7e]+$/.test(s) ? s : "";
       };
       type = rv.getInt16(0, true);
+      action = rv.getInt16(6, true);
       sound = pascal(0x12, 15);
       event = pascal(0x22, 15);
       target = pascal(0x32, 15);
@@ -134,7 +145,7 @@ export function readMovFile(data: Uint8Array): MovFile {
         }
       }
     }
-    frames.push({ type, height: h, width: w, locationFrame, name, sound, event, target, regions });
+    frames.push({ type, action, height: h, width: w, locationFrame, name, sound, event, target, regions });
   }
 
   // soundtrack: loop-chunk table in container 1 (same as TRK banks)

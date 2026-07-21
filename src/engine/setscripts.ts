@@ -552,9 +552,22 @@ export function registerGameBuiltins(session: GameSession): void {
     if (v === undefined) return p.value;
     p.value = v;
   });
-  r("playmovie", (_i, [n]) => {
-    session.onPlayMovie(toStr(n ?? ""));
+  // playmovie is MODAL in TI.EXE: it runs the movie's frame state machine to
+  // completion (waiting for the player's clicks on interactive movies) before
+  // the script continues. Await the host promise so the script blocks — the
+  // purser's `playmovie("mainc.mov")` must not fall through to actionframe()
+  // until you've knocked and the window has opened. Only block when the host
+  // actually drives frames (the browser's rAF loop); headless (tests) has no
+  // loop to advance the movie, so it would deadlock — there we start the movie
+  // and continue, exactly as before (like stilldown/voicedone/forceupdate).
+  r("playmovie", async (_i, [n]) => {
+    const done = session.onPlayMovie(toStr(n ?? ""));
+    if (session.hasRealFrames) await done;
   });
+  // actionframe(n): did the movie just played reach action frame n? Its frames
+  // carry a nonzero action index (mov.ts) recorded as the movie plays; the
+  // purser knock/ring frames are 1, so `if actionframe(1)` opens the puppet.
+  r("actionframe", (_i, [n]) => (session.movieActions.has(toNum(n ?? 0)) ? 1 : 0));
   r("openshopfile", async (_i, [n]) => {
     await session.openShop(toStr(n));
   });

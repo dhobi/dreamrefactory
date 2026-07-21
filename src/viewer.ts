@@ -87,6 +87,13 @@ export class SetViewer {
   } | null = null;
   /** cross-movie return stack (type-4 call / type-5 return, TI.EXE depth 5) */
   private movieStack: { movie: string; frame: number }[] = [];
+  /**
+   * Resolver for the blocking playmovie() promise. Set by the top-level
+   * playMovie() call and held pending across a whole chain of sub-movies
+   * (mainc -> pursopen …); only the final exit (finishMovie) resolves it, so
+   * the script stays suspended until the entire sequence ends.
+   */
+  private movieResolve: (() => void) | null = null;
 
   onHud: (text: string) => void = () => {};
   onLog: (line: string) => void = () => {};
@@ -138,7 +145,9 @@ export class SetViewer {
       indexedToRGBA(f.pixels, f.width, f.height, this.palette, rgba);
       return { rgba, width: f.width, height: f.height };
     };
-    session.onPlayMovie = (name, startFrame) => void this.playMovie(name, startFrame);
+    // return the promise so playmovie() blocks the script until the movie ends
+    // (main.ts overrides this with a fetch-first version for on-demand movies)
+    session.onPlayMovie = (name, startFrame) => this.playMovie(name, startFrame);
     // stringwidth() measures against the same font drawTextOverlay paints with
     if (typeof document !== "undefined") {
       const mctx = document.createElement("canvas").getContext("2d");
@@ -250,7 +259,29 @@ export class SetViewer {
    * over its duration; without one, clicks step through the frames
    * (object close-ups like inspection views).
    */
-  playMovie(fileName: string, startFrame = 0): boolean {
+  /**
+   * Play a movie MODALLY: resolves when the movie (and any chained sub-movie)
+   * finishes, so the calling script blocks. A chained continuation (movieResolve
+   * already pending) reuses the outstanding promise rather than minting a new
+   * one — the original top-level call owns completion.
+   */
+  playMovie(fileName: string, startFrame = 0): Promise<void> {
+    const chained = this.movieResolve !== null;
+    // fresh top-level play: reset the action-frame set the script will query
+    if (!chained) this.session.movieActions.clear();
+    if (!this.loadMovie(fileName, startFrame)) {
+      // nothing to play — end the sequence (resolves any pending chain promise)
+      this.finishMovie();
+      return Promise.resolve();
+    }
+    if (chained) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      this.movieResolve = resolve;
+    });
+  }
+
+  /** parse + install a movie as the active one; false if unavailable/empty */
+  private loadMovie(fileName: string, startFrame = 0): boolean {
     const data = this.session.files(fileName.toLowerCase());
     if (!data) {
       this.onLog(`playmovie: "${fileName}" not available`);
@@ -324,10 +355,17 @@ export class SetViewer {
       interval,
       lastTick: 0,
     };
+    this.recordAction(this.movie.pos);
     this.onLog(
       `movie: ${fileName} (${frames.length} frames${audioSec ? `, ${audioSec.toFixed(1)}s audio` : ""}${hasRegions ? ", interactive" : ""})`,
     );
     return true;
+  }
+
+  /** note the action-frame index of the frame just entered (0 = none) */
+  private recordAction(idx: number): void {
+    const a = this.movie?.meta[idx]?.action;
+    if (a) this.session.movieActions.add(a);
   }
 
   get moviePlaying(): boolean {
@@ -342,7 +380,7 @@ export class SetViewer {
     if (!m.hasRegions) {
       if (m.interval === 0) {
         m.pos++;
-        if (m.pos >= m.frames.length) this.endMovie();
+        if (m.pos >= m.frames.length) this.finishMovie();
       }
       return;
     }
@@ -377,6 +415,7 @@ export class SetViewer {
   private movieEnter(idx: number): void {
     const m = this.movie!;
     m.pos = idx;
+    this.recordAction(idx);
     const sound = m.meta[idx].sound;
     if (sound) this.playMovieSound(sound);
   }
@@ -393,7 +432,7 @@ export class SetViewer {
         const idx = m.frameByName.get(target.toLowerCase());
         if (idx === undefined) {
           this.onLog(`movie: no frame named "${target}"`);
-          this.endMovie();
+          this.finishMovie();
         } else {
           this.movieEnter(idx);
         }
@@ -407,26 +446,42 @@ export class SetViewer {
             this.movieStack.push({ movie: m.fileName, frame: idx });
           }
         }
-        this.endMovie();
-        if (event) this.session.onPlayMovie(event);
+        this.chainTo(event);
         return;
       }
       case 5: {
         const ret = this.movieStack.pop();
-        this.endMovie();
-        if (ret) this.session.onPlayMovie(ret.movie, ret.frame);
+        if (ret) this.chainTo(ret.movie, ret.frame);
+        else this.finishMovie();
         return;
       }
       case 6:
         if (m.pos + 1 < m.frames.length) this.movieEnter(m.pos + 1);
-        else this.endMovie();
+        else this.finishMovie();
         return;
       case 7:
         if (m.pos > 0) this.movieEnter(m.pos - 1);
         return;
       default:
-        this.endMovie(); // 1 = exit
+        this.finishMovie(); // 1 = exit
     }
+  }
+
+  /**
+   * Chain to the next movie in a sequence, keeping the blocking playmovie
+   * promise (movieResolve) pending so the script stays suspended across the
+   * whole chain. Drop the current movie first so its region-less frame can't
+   * auto-advance again during the (possibly async) load of the next one. An
+   * empty target means there's nothing to chain to — end the sequence.
+   */
+  private chainTo(next: string, startFrame = 0): void {
+    this.movie = null;
+    if (!next) {
+      this.finishMovie();
+      return;
+    }
+    // reuses the pending movieResolve (playMovie sees a chained continuation)
+    void this.session.onPlayMovie(next, startFrame);
   }
 
   /** clock tick on a region-less frame: run the frame's own auto-action */
@@ -437,8 +492,10 @@ export class SetViewer {
     this.movieAction(f.type, f.target, f.event);
   }
 
-  private endMovie(): void {
+  /** the movie sequence has fully ended: reveal the world and unblock the script */
+  private finishMovie(): void {
     this.movie = null;
+    this.movieStack = [];
     this.session.audio.halt("voice");
     // Reveal whatever the movie transitioned to. blackscreen() paints the
     // screen black one-shot before an intro movie (bomb's openstage:
@@ -451,6 +508,10 @@ export class SetViewer {
       this.session.fade.level = 0;
     }
     this.showView();
+    // release the script blocked in playmovie() (whole chain done)
+    const resolve = this.movieResolve;
+    this.movieResolve = null;
+    if (resolve) resolve();
   }
 
   /** start looping background music if a theme bank is available */

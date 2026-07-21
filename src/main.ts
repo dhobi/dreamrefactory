@@ -158,15 +158,15 @@ async function activateSet(name: string, startScene = "", startView = ""): Promi
   viewer = new SetViewer(set, session, startScene, startView);
   viewer.onHud = (t) => (hud.textContent = t);
   viewer.onLog = log;
-  // movies aren't prefetched: fetch on demand, then play
-  session.onPlayMovie = (name, startFrame) => {
+  // movies aren't prefetched: fetch on demand, then play. Returns the play
+  // promise so playmovie() blocks the script until the movie (chain) ends —
+  // the modal behaviour interactive movies (the purser window) depend on.
+  session.onPlayMovie = async (name, startFrame) => {
     const v = viewer;
     if (!v) return;
-    if (fileStore.has(name.toLowerCase())) {
-      void v.playMovie(name, startFrame);
-    } else {
-      void fetchIntoStore(name.toLowerCase()).then((d) => d && v.playMovie(name, startFrame));
-    }
+    const key = name.toLowerCase();
+    if (!fileStore.has(key)) await fetchIntoStore(key);
+    await v.playMovie(name, startFrame);
   };
   viewer.refreshHud();
   drop.style.display = "none";
