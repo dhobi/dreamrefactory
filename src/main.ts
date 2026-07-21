@@ -605,42 +605,9 @@ function buildDevTools(): void {
   label.textContent = "state";
   stateWrap.appendChild(label);
 
-  // Story-state jumps: land at a fixed point in the game exactly the way
-  // BOOTFILE advanceday() sets it up for that `clock` value — minus the intro
-  // cutscene movies (datebed/datecab/datehit.mov). initall() = changeset +
-  // initactors + initprops, so the scene comes up fully reset: fresh inventory,
-  // actors at their marks, the set's openset() firing with the right mission/
-  // phase. See BOOTFILE 0002 advanceday, clocks "startdisk1"/"bedsit"/"startdisk2".
-  const gotoStoryState = async (o: {
-    set: string; scene: string; view: string; mission: number; phase: number;
-    resetGame: boolean; neckphase?: number; letterphase?: number;
-    hrs: number; min: number; sink?: boolean;
-  }): Promise<void> => {
-    const g = session.interp.globals;
-    g.set("tour", 0); // advanceday errors under tour; the whole date machine is off-tour
-    g.set("mission", o.mission);
-    g.set("phase", o.phase);
-    g.set("handitem", "");
-    g.set("sinkflag", 0); // 0/1 — the interp represents false/true as 0/1
-    // ensure the set + its boot script are loaded so the boot helpers below resolve
-    const base = o.set.replace(/\.set$/, "");
-    if (session.currentSetName !== base) await loadServerSet(o.set);
-    if (o.resetGame) await session.runGlobal("resetgamevars"); // startdisk2 keeps its story vars
-    await session.runGlobal("resetpupvars");
-    if (o.neckphase !== undefined) g.set("neckphase", o.neckphase);
-    if (o.letterphase !== undefined) g.set("letterphase", o.letterphase);
-    await session.runGlobal("initall", [base, o.scene, o.view]); // navigate + full reset + openset
-    g.set("hrs", o.hrs);
-    g.set("min", o.min);
-    g.set("sec", 0);
-    if (o.sink) {
-      // the sinking endgame: mission 4 + sinkflag, with the sink ambient bank
-      await fetchIntoStore("sink0.trk");
-      await session.runGlobal("setupsinksound");
-      g.set("sinkflag", 1);
-    }
-    await session.runGlobal("calctime"); // point the pocketwatch hands at the set time
-  };
+  // Story-state jumps (STORY_STATES / gotoStoryState at module scope; also on
+  // the landing screen): land at a fixed point in the game the way BOOTFILE
+  // advanceday() sets it up for that `clock` value.
   const mkStateBtn = (text: string, run: () => Promise<void>): void => {
     const b = document.createElement("button");
     b.textContent = text;
@@ -648,24 +615,7 @@ function buildDevTools(): void {
     b.addEventListener("click", () => void session.track(run()));
     stateWrap.appendChild(b);
   };
-  // 1) game start — Frank's London flat (advanceday clock "startdisk1" target)
-  mkStateBtn("🏠 London flat", () => gotoStoryState({
-    set: "bedsit1.set", scene: "scene2", view: "view14",
-    mission: 0, phase: 0, resetGame: true, hrs: 9, min: 30,
-  }));
-  // 2) boarding the Titanic — cabin C73 with Smethells knocking, empty inventory
-  //    (advanceday clock "bedsit": mission 1 / phase 0, 9:30)
-  mkStateBtn("🛏 C73 (Smethells)", () => gotoStoryState({
-    set: "c73.set", scene: "scene51", view: "view63",
-    mission: 1, phase: 0, resetGame: true, hrs: 9, min: 30,
-  }));
-  // 3) the sinking endgame — back in C73 after Vlad's blow / Zeitel's shot
-  //    (advanceday clock "startdisk2": mission 4 / phase 0, sinkflag, ~13:02)
-  mkStateBtn("🌊 C73 (sinking)", () => gotoStoryState({
-    set: "c73.set", scene: "scene51", view: "view63",
-    mission: 4, phase: 0, resetGame: false, neckphase: -1, letterphase: -1,
-    hrs: 13, min: 2, sink: true,
-  }));
+  for (const s of STORY_STATES) mkStateBtn(s.label, () => gotoStoryState(s.opts));
 
   const mkSelect = (title: string, global: string, values: number[]): HTMLSelectElement => {
     const s = document.createElement("select");
@@ -792,6 +742,70 @@ async function loadServerSet(setName: string): Promise<void> {
   await activateSet(setName);
 }
 
+/** A fixed story point to jump to — see BOOTFILE advanceday()'s `clock` recipes. */
+interface StoryState {
+  set: string; scene: string; view: string; mission: number; phase: number;
+  resetGame: boolean; neckphase?: number; letterphase?: number;
+  hrs: number; min: number; sink?: boolean;
+}
+
+/**
+ * Dev story-state presets, offered both on the landing screen (before any set
+ * loads) and in the #devstate bar. Each lands exactly where BOOTFILE advanceday()
+ * puts you for that `clock` value, minus the intro cutscene movies.
+ */
+const STORY_STATES: { label: string; opts: StoryState }[] = [
+  // game start — Frank's London flat (advanceday clock "startdisk1")
+  { label: "🏠 London flat", opts: {
+    set: "bedsit1.set", scene: "scene2", view: "view14", mission: 0, phase: 0, resetGame: true, hrs: 9, min: 30 } },
+  // boarding the Titanic — cabin C73, Smethells knocking, empty inventory (clock "bedsit")
+  { label: "🛏 C73 (Smethells)", opts: {
+    set: "c73.set", scene: "scene51", view: "view63", mission: 1, phase: 0, resetGame: true, hrs: 9, min: 30 } },
+  // the sinking endgame — back in C73 after Vlad's blow / Zeitel's shot (clock "startdisk2")
+  { label: "🌊 C73 (sinking)", opts: {
+    set: "c73.set", scene: "scene51", view: "view63", mission: 4, phase: 0, resetGame: false,
+    neckphase: -1, letterphase: -1, hrs: 13, min: 2, sink: true } },
+];
+
+/**
+ * Jump to a story state: seed the globals, load the set + boot, run the boot's
+ * own reset/init helpers (initall = changeset + initactors + initprops), so the
+ * scene comes up fully reset with openset() firing at the right mission/phase.
+ */
+async function gotoStoryState(o: StoryState): Promise<void> {
+  const g = session.interp.globals;
+  g.set("tour", 0); // advanceday errors under tour; the whole date machine is off-tour
+  g.set("mission", o.mission);
+  g.set("phase", o.phase);
+  g.set("handitem", "");
+  g.set("sinkflag", 0); // 0/1 — the interp represents false/true as 0/1
+  // advanceday() clears these at the top of every day-advance (BOOTFILE 0002:148);
+  // we must too, or a stale death from an earlier jump (e.g. the sinking state)
+  // lingers — a non-empty playerdeath DISABLES the ctl.stg OK button (HOUSE.SHP
+  // stdswitch: `if name="ok" & playerdeath != "" exitcode`), leaving Settings stuck.
+  g.set("playerdeath", "");
+  g.set("savestage1", "");
+  g.set("savestage2", "");
+  g.set("savestage3", "");
+  const base = o.set.replace(/\.set$/, "");
+  if (session.currentSetName !== base) await loadServerSet(o.set);
+  if (o.resetGame) await session.runGlobal("resetgamevars"); // startdisk2 keeps its story vars
+  await session.runGlobal("resetpupvars");
+  if (o.neckphase !== undefined) g.set("neckphase", o.neckphase);
+  if (o.letterphase !== undefined) g.set("letterphase", o.letterphase);
+  await session.runGlobal("initall", [base, o.scene, o.view]); // navigate + full reset + openset
+  g.set("hrs", o.hrs);
+  g.set("min", o.min);
+  g.set("sec", 0);
+  if (o.sink) {
+    // the sinking endgame: mission 4 + sinkflag, with the sink ambient bank
+    await fetchIntoStore("sink0.trk");
+    await session.runGlobal("setupsinksound");
+    g.set("sinkflag", 1);
+  }
+  await session.runGlobal("calctime"); // point the pocketwatch hands at the set time
+}
+
 /** dev-server mode: offer all hosted .SET files as a clickable list */
 async function initServerBrowser(): Promise<void> {
   let paths: string[];
@@ -807,6 +821,27 @@ async function initServerBrowser(): Promise<void> {
   }
   const sets = [...serverFiles.keys()].filter((n) => n.endsWith(".set")).sort();
   if (!sets.length) return;
+
+  // curated story-state entry points (also in the #devstate bar once a set is
+  // loaded) — jump straight to a scripted moment rather than a bare set
+  const stateRow = document.createElement("div");
+  stateRow.style.cssText = "margin-top:1.2rem;display:flex;flex-wrap:wrap;gap:0.5rem;max-width:1024px;justify-content:center";
+  for (const s of STORY_STATES) {
+    const b = document.createElement("button");
+    b.textContent = s.label;
+    b.style.cssText = "background:#26241c;color:#e7e0cd;border:1px solid #6a5d3e;font-family:inherit;font-size:0.95rem;cursor:pointer;padding:0.4rem 0.9rem;border-radius:3px";
+    b.addEventListener("click", (e) => {
+      e.stopPropagation(); // don't trigger #drop's file-picker click
+      void session.track(gotoStoryState(s.opts));
+    });
+    stateRow.appendChild(b);
+  }
+  drop.appendChild(stateRow);
+  const stateNote = document.createElement("div");
+  stateNote.style.cssText = "margin-top:0.4rem;font-size:0.75rem;color:#8a7f5f";
+  stateNote.textContent = "jump straight into the story";
+  drop.appendChild(stateNote);
+
   const list = document.createElement("div");
   list.style.cssText = "margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.4rem;max-width:1024px;justify-content:center";
   for (const s of sets) {
