@@ -6,14 +6,13 @@ import { readShpFile } from "../df/shp";
 import { sniffScript } from "../df/script";
 import { parseScript } from "./parser";
 import { readCstFile } from "../df/cst";
-import { PupAnimFrame, PupFile, readAnimLogic, readPupFile } from "../df/pup";
-import { decodeAudioContainer } from "../df/audio";
 import { Interpreter, ScriptInstance, Value, registerCoreBuiltins, toStr } from "./interp";
 import { ActorRuntime } from "./actors";
 import { PropRuntime } from "./props";
 import { AudioLibrary, AudioSink, NullAudioSink } from "./audio";
 import { Clock } from "./clock";
 import { Scheduler } from "./scheduler";
+import { PuppetController } from "./puppet";
 import { FileProvider, registerGameBuiltins } from "./setscripts";
 
 /**
@@ -1084,203 +1083,36 @@ export class GameSession {
   }
 
   // ---- puppet mode (PUP conversation close-ups) ---------------------------
-
-  /**
-   * Active conversation. While set, the viewer renders the puppet screen
-   * (stance layers + subtitle + choice bevels) instead of the world.
-   * puppetspeak() suspends the running script for the line's duration;
-   * puppetevent() suspends until the player clicks a bevel.
-   */
-  puppet: {
-    name: string;
-    pup: PupFile;
-    scripts: Map<string, ScriptInstance>;
-    stanceIdx: number;
-    /**
-     * puppetvisible: whether the conversation close-up is drawn. A puppet stays
-     * LOADED (so its scripts keep running) while hidden — blackjack hides the
-     * dealer with puppetvisible(false) to reveal the table during a hand, then
-     * puppetvisible(true) to bring Buick back for the "play again?" prompt.
-     */
-    visible: boolean;
-    subtitle: string;
-    bevels: { text: string; id: number }[];
-    /** puppetevent resolver — a bevel click ends the wait */
-    eventWaiter: ((id: number) => void) | null;
-    /** click-to-skip resolver for the line currently being spoken */
-    speakSkip: (() => void) | null;
-    /** animLogic playback of the line being spoken (~30 records/s) */
-    anim: { frames: PupAnimFrame[]; start: number } | null;
-    /** layer state held between lines (the last played record) */
-    pose: PupAnimFrame | null;
-    /** the neutral opening pose (puppetbase("") reverts to it) */
-    defaultPose: PupAnimFrame | null;
-  } | null = null;
-
-  async openPuppetFile(fileName: string): Promise<boolean> {
-    const key = toStr(fileName).toLowerCase();
-    await this.ensureFile(key);
-    const data = this.files(key);
-    if (!data) {
-      this.onLog(`openpuppetfile: "${fileName}" not available`);
-      return false;
-    }
-    let pup: PupFile;
-    try {
-      pup = readPupFile(data);
-    } catch (e) {
-      this.onLog(`openpuppetfile: ${fileName}: ${(e as Error).message}`);
-      return false;
-    }
-    const scripts = new Map<string, ScriptInstance>();
-    let main: ScriptInstance | null = null;
-    for (const s of pup.scripts) {
-      const inst = this.instanceFrom(pup.file.containers[s.location]?.data, s.name);
-      if (!inst) continue;
-      scripts.set(s.name, inst);
-      if (s.name === "boot script") main = inst;
-    }
-    // branch scripts resolve shared helpers through the boot script
-    for (const inst of scripts.values()) if (inst !== main) inst.parent = main;
-    // neutral opening pose: the first record of the first line's animLogic
-    let pose: PupAnimFrame | null = null;
-    const firstLine = pup.dialogue.values().next().value;
-    if (firstLine) pose = readAnimLogic(pup, firstLine.animLogicLocation)[0] ?? null;
-    this.puppet = {
-      name: key,
-      pup,
-      scripts,
-      stanceIdx: 0,
-      visible: true,
-      subtitle: "",
-      bevels: [],
-      eventWaiter: null,
-      speakSkip: null,
-      anim: null,
-      pose,
-      defaultPose: pose,
-    };
-    this.onLog(`puppet opened: ${key} (${pup.dialogue.size} lines, ${pup.scripts.length} scripts)`);
-    return true;
+  // Conversation state + playback live in PuppetController; the session exposes
+  // `puppet` and delegates the script/viewer-facing methods unchanged.
+  private readonly puppetCtrl = new PuppetController(this);
+  get puppet() { return this.puppetCtrl.puppet; }
+  openPuppetFile(fileName: string): Promise<boolean> {
+    return this.puppetCtrl.openPuppetFile(fileName);
   }
-
   closePuppetFile(): void {
-    if (!this.puppet) return;
-    this.puppet.eventWaiter?.(-1);
-    this.puppet.speakSkip?.();
-    this.audio.halt("voice");
-    this.puppet = null;
+    this.puppetCtrl.closePuppetFile();
   }
-
-  /** play one dialogue line: voice + subtitle, suspend until it ends */
-  async puppetSpeak(ident: string): Promise<void> {
-    const p = this.puppet;
-    if (!p) return;
-    const line = p.pup.dialogue.get(toStr(ident).toLowerCase());
-    if (!line) {
-      this.onLog(`puppetspeak: no line "${ident}" in ${p.name}`);
-      return;
-    }
-    p.subtitle = line.text;
-    // TI paces a missing-audio line by text length (min 1 s)
-    let seconds = Math.max(1, line.text.length / 15);
-    try {
-      const audio = decodeAudioContainer(p.pup.file.containers[line.audioLocation]);
-      seconds = audio.samples.length / audio.sampleRate;
-      this.audio.play("voice", audio);
-    } catch (e) {
-      this.onLog(`puppetspeak ${ident}: ${(e as Error).message}`);
-    }
-    // lip-sync/gesture playback: the line's animLogic records run at
-    // ~30/s alongside the voice; the last record stays as the idle pose
-    const frames = readAnimLogic(p.pup, line.animLogicLocation);
-    if (frames.length) p.anim = { frames, start: this.clock.now };
-    // a click skips the rest of the line (halting the voice)
-    await Promise.race([
-      this.clock.sleep(seconds * 1000 + 150),
-      new Promise<void>((resolve) => (p.speakSkip = resolve)),
-    ]);
-    p.speakSkip = null;
-    if (this.puppet === p) {
-      p.subtitle = "";
-      if (p.anim) {
-        p.pose = p.anim.frames[p.anim.frames.length - 1];
-        p.anim = null;
-      }
-    }
+  puppetSpeak(ident: string): Promise<void> {
+    return this.puppetCtrl.puppetSpeak(ident);
   }
-
-  /** the layer state to draw right now (animLogic playback or held pose) */
-  puppetFrame(): PupAnimFrame | null {
-    const p = this.puppet;
-    if (!p) return null;
-    if (p.anim) {
-      const idx = Math.floor((this.clock.now - p.anim.start) / 33.3);
-      return p.anim.frames[Math.max(0, Math.min(idx, p.anim.frames.length - 1))];
-    }
-    return p.pose;
+  puppetFrame() {
+    return this.puppetCtrl.puppetFrame();
   }
-
   puppetClear(): void {
-    if (!this.puppet) return;
-    this.puppet.bevels = [];
-    this.puppet.subtitle = "";
+    this.puppetCtrl.puppetClear();
   }
-
-  /**
-   * puppetbase(ident): seat the character in a resting pose taken from a
-   * dialogue line's first animLogic record (the game calls this before a
-   * branch — e.g. bx2 posed with vs without the baby). "" reverts to the
-   * neutral opening pose. Unknown idents are ignored (some scenarios name a
-   * line from a companion puppet we don't have loaded).
-   */
   puppetBase(ident: string): void {
-    const p = this.puppet;
-    if (!p) return;
-    if (!ident) {
-      p.pose = p.defaultPose;
-      p.anim = null;
-      return;
-    }
-    const line = p.pup.dialogue.get(toStr(ident).toLowerCase());
-    if (!line) {
-      this.onLog(`puppetbase: no line "${ident}" in ${p.name}`);
-      return;
-    }
-    const frames = readAnimLogic(p.pup, line.animLogicLocation);
-    if (frames.length) {
-      p.pose = frames[0];
-      p.anim = null;
-    }
+    this.puppetCtrl.puppetBase(ident);
   }
-
   puppetBevel(text: string, id: number): void {
-    this.puppet?.bevels.push({ text, id });
+    this.puppetCtrl.puppetBevel(text, id);
   }
-
-  /** modal wait for a choice; resolves with the clicked bevel's id */
   puppetEvent(): Promise<number> {
-    const p = this.puppet;
-    if (!p) return Promise.resolve(-1);
-    if (!p.bevels.length) return Promise.resolve(-1);
-    return new Promise<number>((resolve) => {
-      p.eventWaiter = (id) => {
-        p.eventWaiter = null;
-        p.bevels = [];
-        resolve(id);
-      };
-    });
+    return this.puppetCtrl.puppetEvent();
   }
-
-  /** viewer hook: player clicked bevel index i (or -1 = skip the line) */
   puppetChoose(i: number): void {
-    const p = this.puppet;
-    if (!p) return;
-    if (i >= 0 && i < p.bevels.length && p.eventWaiter) {
-      p.eventWaiter(p.bevels[i].id);
-      return;
-    }
-    p.speakSkip?.(); // click during speech: skip the line
+    this.puppetCtrl.puppetChoose(i);
   }
 
   /**
