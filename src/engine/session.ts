@@ -1,7 +1,5 @@
 import { readContainerFile } from "../df/container";
 import { SetFile, readSetFile } from "../df/set";
-import { StgFile, StgRegion, readStgFile, readStgRegions } from "../df/stg";
-import { FrameBuffer, decodeFrame, paletteToRGBA } from "../df/image";
 import { readShpFile } from "../df/shp";
 import { sniffScript } from "../df/script";
 import { parseScript } from "./parser";
@@ -13,33 +11,8 @@ import { AudioLibrary, AudioSink, NullAudioSink } from "./audio";
 import { Clock } from "./clock";
 import { Scheduler } from "./scheduler";
 import { PuppetController } from "./puppet";
+import { StageController } from "./stage";
 import { FileProvider, registerGameBuiltins } from "./setscripts";
-
-/**
- * Stages whose entry handler lives on the FLAT (not the stage main), mirroring
- * the per-stage switch in the boot's transtoflat(): opening the stage file must
- * then call this handler on the current flat. blkjack deals the first hand;
- * fight starts the brawl. (Stage-main setup uses the open<basename> convention
- * handled separately in openStageFile.)
- */
-const STAGE_FLAT_ENTRY: Record<string, string> = {
-  "blkjack.stg": "initgame",
-  "fight.stg": "openfight",
-};
-
-/**
- * Canonical basename for a stage's entry/exit handlers + its shop. Usually just
- * the filename stem (wireless.stg → "wireless" → openwireless/closewireless,
- * wireless.shp/hidewireless). The exception is the darkroom: BOTH photo.stg and
- * redphoto.stg (white-light and red-light views of the same room) reuse
- * photo.shp and the openphoto/closephoto/hidephoto/showphoto handlers — the
- * boot's transtoflat/transfromflat switch routes both there — so redphoto maps
- * to "photo".
- */
-function stageBase(stageName: string): string {
-  const base = stageName.replace(/\.stg$/, "");
-  return base === "redphoto" ? "photo" : base;
-}
 
 /**
  * Game-wide state that outlives individual sets: one interpreter (globals
@@ -442,9 +415,10 @@ export class GameSession {
     }
   }
 
-  // ---- stage layer (STG flats) -------------------------------------------
+  // ---- stage layer (STG flats) --------------------------------------------
+  // Flat/region/overlay logic lives in StageController (engine/stage.ts); the
+  // widely-shared fields below stay here and the session delegates the methods.
 
-  stageFile: StgFile | null = null;
   stageName = "none";
   /** flat script instances of the current stage, by lowercase flat name */
   readonly flatScripts = new Map<string, ScriptInstance>();
@@ -506,481 +480,36 @@ export class GameSession {
   pointerPoint(): number {
     return ((this.pointerX & 0xffff) << 16) | (this.pointerY & 0xffff);
   }
-  private flatImageCache = new Map<
-    string,
-    { pixels: Uint8Array; width: number; height: number; palette: Uint8ClampedArray }
-  >();
-
-  private refreshFallbacks(): void {
+  /** rebuild the unqualified-call fallback chain (stage main + boot scripts) */
+  refreshFallbacks(): void {
     this.interp.fallbackScripts = [this.stage, ...this.bootScripts].filter(
       (x): x is ScriptInstance => !!x,
     );
   }
 
-  /** engine primitive: load an STG stage and activate its first flat */
-  async openStageFile(fileName: string): Promise<boolean> {
-    const key = toStr(fileName).toLowerCase();
-    if (this.stageName === key) return true;
-    if (this.stageFile) await this.closeStageFile();
-    // a fresh stage starts un-dimmed: clear any leftover stage CLUT dim so the
-    // darkroom's mixclut("stage") (re-applied right after this in transtoflat)
-    // doesn't bleed into the next stage you open (e.g. after leaving redphoto).
-    this.onClut("stage", null);
-    await this.ensureFile(key); // lazy browser provider: fetch before first read
-    const data = this.files(key);
-    if (!data) {
-      this.onLog(`openstagefile: "${fileName}" not available`);
-      return false;
-    }
-    let stg: StgFile;
-    try {
-      stg = readStgFile(data);
-    } catch (e) {
-      this.onLog(`openstagefile: ${fileName}: ${(e as Error).message}`);
-      return false;
-    }
-    this.stageFile = stg;
-    this.stageName = key;
-    this.stage = this.instanceFrom(stg.file.containers[1]?.data, key);
-    this.refreshFallbacks();
-    for (const f of stg.flats) {
-      const inst = this.instanceFrom(stg.file.containers[f.locationScript]?.data, f.name);
-      if (inst) this.flatScripts.set(f.name.toLowerCase(), inst);
-      this.flatNames.push(f.name);
-    }
-    this.onLog(`stage loaded: ${key} (${stg.flats.length} flat(s))`);
-    this.currentFlat = "none";
-    // the stage's openstage handler runs first (the map pages to the player's
-    // current deck via gotopage(currentpage()) there); if it didn't pick a
-    // flat, fall back to the first one
-    if (this.stage?.script.codes.has("openstage")) {
-      try {
-        await this.interp.runHandler(this.stage, "openstage", [], { me: key, target: "" });
-      } catch (e) {
-        this.onLog(`${key}.openstage: ${(e as Error).message}`);
-      }
-    }
-    if (this.currentFlat === "none" && stg.flats.length) await this.gotoFlat(stg.flats[0].name);
-    // The boot's transtoflat() dispatches a per-stage entry handler after
-    // opening the file: sendtostage(open<basename>()) — e.g. openwireless()
-    // opens the stage's shop + track and sets up its props. We mirror that
-    // dispatch generically (the map uses openstage instead, so this only
-    // fires when a matching handler exists).
-    const entry = `open${stageBase(key)}`;
-    if (entry !== "openstage" && this.stage?.script.codes.has(entry)) {
-      try {
-        await this.interp.runHandler(this.stage, entry, [], { me: key, target: "" });
-      } catch (e) {
-        this.onLog(`${key}.${entry}: ${(e as Error).message}`);
-      }
-    }
-    // The boot's transtoflat() ALSO runs a per-stage FLAT entry handler for a
-    // few stages (BOOTFILE transtoflat switch): blkjack deals the opening hand
-    // via sendtoflat(currentflat(), initgame()), fight starts via openfight().
-    // Unlike the open<basename> setup above these live on the FLAT, not the
-    // stage main — without mirroring them, entering blkjack.stg from the Buick
-    // conversation opened the table but never dealt a hand.
-    const flatEntry = STAGE_FLAT_ENTRY[key];
-    if (flatEntry) await this.fireFlat(this.currentFlat, flatEntry);
-    // The boot's transtoflat() also darkens the darkroom on entry
-    // (`case "redphoto.stg": mixclut("stage","black",0,255,245)`): with the
-    // white light off it's black until you switch on the red safelight (the
-    // switch toggles the stage CLUT itself). Handling photos is gated on the
-    // safelight being on, so this darkness is the cue to find the switch. Mirror
-    // that one entry effect (openphoto has already set whitelight + props).
-    if (
-      key === "redphoto.stg" &&
-      toStr(this.interp.globals.get("whitelight") ?? 0) === "off" &&
-      !this.propRuntime.get("redlamp")?.visible
-    ) {
-      this.onClut("stage", { lo: 0, hi: 255, amt: 245 });
-    }
-    return true;
-  }
-
-  /** engine primitive: close the current stage (closestagefile) */
-  async closeStageFile(): Promise<void> {
-    // mirror the per-stage entry dispatch: close<basename>() tears down the
-    // stage's shop + track (e.g. closewireless -> closeshopfile/closetrackfile)
-    const exit = `close${stageBase(this.stageName)}`;
-    if (exit !== "closestage" && this.stage?.script.codes.has(exit)) {
-      try {
-        await this.interp.runHandler(this.stage, exit, [], { me: this.stageName, target: "" });
-      } catch (e) {
-        this.onLog(`${this.stageName}.${exit}: ${(e as Error).message}`);
-      }
-    }
-    if (this.stage?.script.codes.has("closestage")) {
-      try {
-        await this.interp.runHandler(this.stage, "closestage", [], {
-          me: this.stageName,
-          target: "",
-        });
-      } catch (e) {
-        this.onLog(`${this.stageName}.closestage: ${(e as Error).message}`);
-      }
-    }
-    await this.fireFlat(this.currentFlat, "closeflat");
-    this.currentFlat = "none";
-    this.stageFile = null;
-    this.stageName = "none";
-    this.stage = null;
-    this.flatScripts.clear();
-    this.flatNames = [];
-    this.flatImageCache.clear();
-    this.regionCache.clear();
-    this.refreshFallbacks();
-  }
-
-  /** resolve a flat reference — a name ("Map 3") or a 1-based index (3) */
-  private resolveFlat(ref: string): string {
-    const byName = this.flatNames.find((f) => f.toLowerCase() === ref.toLowerCase());
-    if (byName) return byName;
-    const idx = Number(ref);
-    if (Number.isInteger(idx) && idx >= 1 && idx <= this.flatNames.length) {
-      return this.flatNames[idx - 1];
-    }
-    return ref;
-  }
-
-  /** 1-based index of a flat (flattoindex builtin), 0 when unknown */
-  flatToIndex(ref: string): number {
-    const name = this.resolveFlat(ref);
-    return this.flatNames.findIndex((f) => f.toLowerCase() === name.toLowerCase()) + 1;
-  }
-
-  /** engine primitive: switch the active flat (gotoflat) — by name or index */
-  async gotoFlat(name: string): Promise<void> {
-    const target = this.resolveFlat(toStr(name));
-    await this.fireFlat(this.currentFlat, "closeflat");
-    this.currentFlat = target;
-    this.clearTextOverlay(); // a new flat starts with a blank text layer
-    await this.fireFlat(target, "openflat");
-  }
-
   /**
-   * Stack of stages an overlay was opened OVER (transtoflat), restored in
-   * reverse by transfromflat — mirrors the boot's savestage1..3/saveflat1..3.
-   * Each frame remembers the stage, its active flat, and the ambient theme so a
-   * nested overlay — the inventory bag (inven1.stg) opened MID-puzzle to swap an
-   * item — returns to the exact prior screen (the opened matryoshka on "patty 3")
-   * instead of re-initialising the puzzle to its first flat. A single string
-   * couldn't express the patty.stg → inven1.stg → patty.stg nesting.
+   * STG stage layer: flats, click regions, and transtoflat/transfromflat
+   * overlays. StageController owns the logic; the session keeps the shared
+   * fields (stage, stageName, currentFlat, setVisible, flatScripts, flatNames)
+   * and delegates the script/viewer-facing methods below.
    */
-  private stageStack: { name: string; flat: string; theme: string }[] = [];
-
-  /**
-   * Save + hide the underlying stage's props before an overlay covers it (the
-   * boot's transtoflat calls sendtoshop(hide<stage>()) here). Each puzzle shop
-   * stashes its prop visibility (patty.shp hidepatty -> saveprops1) so the
-   * matching show<stage> can restore it after the overlay closes. main.stg is
-   * special: its band lives on house.shp via hide/showinterface.
-   */
-  private async saveStageProps(stageName: string): Promise<void> {
-    if (!stageName || stageName === "none") return;
-    if (stageName === "main.stg") {
-      await this.sendEvent("sendtoshop", "house.shp", "hideinterface", [], "transtoflat");
-      return;
-    }
-    const base = stageBase(stageName);
-    if (this.shopMain(`${base}.shp`)?.script.codes.has(`hide${base}`)) {
-      await this.sendEvent("sendtoshop", `${base}.shp`, `hide${base}`, [], "transtoflat");
-    }
+  readonly stageCtrl = new StageController(this);
+  /** the parsed STG file of the active stage (null when none is open) */
+  get stageFile() { return this.stageCtrl.stageFile; }
+  openStageFile(fileName: string) { return this.stageCtrl.openStageFile(fileName); }
+  closeStageFile() { return this.stageCtrl.closeStageFile(); }
+  flatToIndex(ref: string) { return this.stageCtrl.flatToIndex(ref); }
+  gotoFlat(name: string) { return this.stageCtrl.gotoFlat(name); }
+  transToFlat(fileName: string) { return this.stageCtrl.transToFlat(fileName); }
+  transFromFlat() { return this.stageCtrl.transFromFlat(); }
+  currentFlatRegions() { return this.stageCtrl.currentFlatRegions(); }
+  flatRegion(flatName: string, name: string) { return this.stageCtrl.flatRegion(flatName, name); }
+  sendToButton(flatName: string, regionName: string, handler: string, args: Value[], callerName: string) {
+    return this.stageCtrl.sendToButton(flatName, regionName, handler, args, callerName);
   }
-
-  /** restore what saveStageProps hid, once the previous stage is re-open */
-  private async restoreStageProps(stageName: string): Promise<void> {
-    if (!stageName || stageName === "none") return;
-    if (stageName === "main.stg") {
-      await this.sendEvent("sendtoshop", "house.shp", "showinterface", [], "transfromflat");
-      return;
-    }
-    const base = stageBase(stageName);
-    if (this.shopMain(`${base}.shp`)?.script.codes.has(`show${base}`)) {
-      await this.sendEvent("sendtoshop", `${base}.shp`, `show${base}`, [], "transfromflat");
-    }
-  }
-
-  /**
-   * transtoflat: open a stage full-screen (e.g. the deck map) over the game,
-   * remembering the stage it replaced so transfromflat can restore it.
-   */
-  async transToFlat(fileName: string): Promise<void> {
-    // Save + hide the underlying stage's props (the boot's transtoflat does
-    // sendtoshop(hide<stage>()) before closing), then push it — with its active
-    // flat and ambient theme — so transfromflat returns to the exact prior
-    // screen. Overlay stages don't go through changeset, so setupsound never
-    // runs for them; fencing's openstage does playnewtheme("fence.trk"), and the
-    // remembered theme lets transfromflat restore the room's ambient after.
-    await this.saveStageProps(this.stageName);
-    this.stageStack.push({
-      name: this.stageName,
-      flat: this.currentFlat,
-      theme: this.currentThemeName,
-    });
-    // Entering an overlay presents fresh content, so lift any leftover
-    // transition-black from the previous screen. HOUSE fades the blackjack
-    // dealer puppet out — screentoblack("puppet") — and THEN transtoflat()s to
-    // the game; the reveal is a wipe visualeffect we render as instant, so
-    // without this the game table stayed black. The flat's own openstage may
-    // re-establish a fade (bomb: blackscreen + intro movie), which still runs
-    // after this because openStageFile fires the openstage lifecycle.
-    this.fade.level = 0;
-    this.fade.queue.length = 0;
-    this.fade.snapshot = null;
-    if (await this.openStageFile(fileName)) {
-      this.setVisible = false;
-      // Mirror the boot's transtoflat (BOOTFILE 0002:1418): a flat opened while a
-      // conversation is live hides the puppet close-up, so the flat shows and its
-      // own input loop takes the clicks (the purser "check in" hand-select runs
-      // inven.shp's handleselect() over inven1.stg; blackjack reveals the table).
-      // transFromFlat restores it. Without this the puppet stayed drawn on top and
-      // ate every click — you could open the inventory but never hand an item over.
-      if (this.puppet) this.puppet.visible = false;
-    }
-  }
-
-  /**
-   * transfromflat: leave the overlay stage and restore the in-game stage. The
-   * boot's full version does this via restorescreen(); we mirror its essential
-   * step — completing a pending map jump by changeset()-ing to the destination
-   * the red-area click stashed in jumpset/jumpscene/jumpview.
-   */
-  async transFromFlat(): Promise<void> {
-    const frame = this.stageStack.pop();
-    const prev = frame?.name ?? "none";
-    // The set shows through only under main.stg's in-game band or when no stage
-    // remains; every other stage is a full-screen overlay that must keep the set
-    // hidden. Returning from the inventory bag to the matryoshka (patty.stg) is
-    // an overlay-over-overlay, so setVisible stays false — otherwise the A14 room
-    // rendered behind the doll-tray flat (the overlap the swap showed).
-    this.setVisible = prev === "none" || prev === "" || prev === "main.stg";
-    if (prev && prev !== "none") {
-      // Re-open the underlying stage (the boot re-runs openstagefile too), then
-      // restore its saved flat and prop visibility so a mid-puzzle overlay comes
-      // back to the exact screen it left — the opened matryoshka, not "patty 1".
-      if (prev !== this.stageName) {
-        await this.openStageFile(prev);
-        if (frame && frame.flat && frame.flat !== "none") await this.gotoFlat(frame.flat);
-      }
-      await this.restoreStageProps(prev);
-    } else {
-      await this.closeStageFile();
-    }
-    // Mirror restorescreen (BOOTFILE 0002:1650): returning to the in-game main
-    // stage with a conversation still loaded brings the puppet back — the purser
-    // resumes after the inventory hand-select so you can pick the "check <item>"
-    // bevel that actually gifts it. Only for main.stg (the boot gates on the same
-    // condition), so an overlay-over-overlay return doesn't flash the puppet.
-    if (this.puppet && this.setVisible && this.stageName === "main.stg") {
-      this.puppet.visible = true;
-    }
-    // restore the ambient theme if the overlay stage replaced it with its own
-    // (fence.trk). Only when it actually changed, so closing a themeless overlay
-    // (the deck map) doesn't restart the room's music. If the prior bank is gone
-    // just stop the overlay theme — better silence than the wrong track leaking.
-    const savedTheme = frame?.theme ?? "none";
-    if (this.currentThemeName !== savedTheme) {
-      const theme = savedTheme !== "none" && savedTheme !== "" ? this.audioLib.theme(savedTheme) : null;
-      if (theme) {
-        this.audio.play("theme", theme, { loop: true });
-        this.currentThemeName = savedTheme;
-      } else {
-        this.audio.halt("theme");
-        this.currentThemeName = "none";
-      }
-    }
-    const jumpset = toStr(this.interp.globals.get("jumpset") ?? "");
-    if (jumpset) {
-      const jumpscene = toStr(this.interp.globals.get("jumpscene") ?? "");
-      const jumpview = toStr(this.interp.globals.get("jumpview") ?? "");
-      this.interp.globals.set("jumpset", "");
-      await this.runGlobal("changeset", [jumpset, jumpscene, jumpview]);
-    }
-  }
-
-  /** clickable regions of the current flat (parsed from its click-logic), cached */
-  private regionCache = new Map<string, StgRegion[]>();
-
-  /** clickable regions of an arbitrary flat by name (current flat included) */
-  private regionsFor(flatName: string): StgRegion[] {
-    const stg = this.stageFile;
-    if (!stg || flatName === "none") return [];
-    const key = `${this.stageName}:${flatName}`;
-    let regs = this.regionCache.get(key);
-    if (!regs) {
-      const flat = stg.flats.find((f) => f.name.toLowerCase() === flatName.toLowerCase());
-      const data = flat && stg.file.containers[flat.locationClickLogic]?.data;
-      regs = data ? readStgRegions(data) : [];
-      this.regionCache.set(key, regs);
-    }
-    return regs;
-  }
-
-  currentFlatRegions(): StgRegion[] {
-    return this.regionsFor(this.currentFlat);
-  }
-
-  /** a flat's named clickable region (the stage "button" system), or null */
-  flatRegion(flatName: string, name: string): StgRegion | null {
-    const lower = name.toLowerCase();
-    return this.regionsFor(flatName).find((r) => r.name.toLowerCase() === lower) ?? null;
-  }
-
-  /**
-   * Dispatch a deferred handler (mousedown/setcursor/…) to a flat's named
-   * region — the "button" system stage mini-games use via sendtobutton. Like
-   * a click on that region (stageClickAt), but invoked by name from a script
-   * rather than resolved from a cursor position.
-   */
-  async sendToButton(
-    flatName: string,
-    regionName: string,
-    handler: string,
-    args: Value[],
-    callerName: string,
-  ): Promise<Value> {
-    const stg = this.stageFile;
-    if (!stg) return 0;
-    const region = this.flatRegion(flatName, regionName);
-    if (!region) {
-      this.onLog(`sendtobutton: no region "${regionName}" in flat ${flatName}`);
-      return 0;
-    }
-    const inst = this.instanceFrom(stg.file.containers[region.script]?.data, region.name || "region");
-    if (!inst || !inst.script.codes.has(handler)) return 0;
-    inst.parent = this.flatScripts.get(this.currentFlat.toLowerCase()) ?? this.stage;
-    const res = await this.interp.runHandler(inst, handler, args, {
-      me: region.name,
-      target: callerName,
-    });
-    return res.value;
-  }
-
-  /**
-   * Route a click on a full-screen overlay stage (the deck map) to the region
-   * it lands in: hit-test the current flat's click-logic rects (Y-first) and
-   * run that region's mousedown script — gotopage(n) for the deck buttons,
-   * exitmap for OK, jumpbaby(...) for the red areas. Returns true if handled.
-   */
-  async stageClickAt(x: number, y: number): Promise<boolean> {
-    const stg = this.stageFile;
-    if (!stg) return false;
-    const hit = this.currentFlatRegions().find(
-      (r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom,
-    );
-    if (!hit) return false;
-    const region = this.instanceFrom(stg.file.containers[hit.script]?.data, hit.name || "region");
-    // A region with no backing script is a bare hotspot. Two things may still
-    // want the click: the flat/stage main can DISPATCH it by target (the
-    // fusebox's fuse regions carry no script of their own — the FUSE.STG main
-    // switches that fuse light->off keyed on `target`), and the prop beneath
-    // handles the rest (its shop main does the off->on half). Run the stage-main
-    // dispatch here, then fall through (return false) so propAt runs too. The
-    // handlers switch on target, so a stage whose main doesn't know this hotspot
-    // (the gramophone's horn/wax drop-zones) no-ops and the drag prop still gets it.
-    if (!region) {
-      const flat0 = this.flatScripts.get(this.currentFlat.toLowerCase());
-      this.setPointer(x, y);
-      for (const link of [flat0, this.stage]) {
-        if (!link || !link.script.codes.has("mousedown")) continue;
-        try {
-          await this.interp.runHandler(link, "mousedown", [hit.name], { me: link.name, target: hit.name });
-        } catch (e) {
-          this.onLog(`stage hotspot ${hit.name}: ${(e as Error).message}`);
-        }
-      }
-      return false;
-    }
-    // The region HAS its own script — but a visible prop with its own mousedown
-    // script is a foreground sprite drawn ON TOP of the flat art, so when one
-    // covers this point it owns the click and the region beneath it must not
-    // steal it. The matryoshka (patty.stg): the doll prop overlaps the doll1/dial
-    // hotspots that revealed it, so every "open a layer" click on the doll's left
-    // half was being swallowed by those regions (the doll only ever closed).
-    // Defer to the prop path (return false → the viewer's propAt dispatch runs).
-    // Only applies to scripted regions: scriptless fusebox fuses (handled above)
-    // cooperate with their prop and must not be diverted.
-    const over = this.propRuntime.propAt(x, y, null, false);
-    if (over && this.propScripts.get(over.group.name.toLowerCase())?.script.codes.has("mousedown")) {
-      return false;
-    }
-    // resolve unqualified calls through the current FLAT script first (it
-    // defines jumpbaby for the map's red areas), which chains to the stage main
-    const flat = this.flatScripts.get(this.currentFlat.toLowerCase());
-    region.parent = flat ?? this.stage;
-    this.setPointer(x, y);
-    this.interp.eventConsumed = false;
-    // region → flat → stage main, with target = the region name: a button
-    // region may only set the cursor and leave the mousedown to the stage main,
-    // keyed by target (trunk's gramdrawerbut -> sendtoprop(gramdrawer, open())).
-    const chain: ScriptInstance[] = [];
-    for (const link of [region, flat, this.stage]) {
-      if (link && !chain.includes(link)) chain.push(link);
-    }
-    for (const link of chain) {
-      if (!link.script.codes.has("mousedown")) continue;
-      try {
-        const res = await this.interp.runHandler(link, "mousedown", [hit.name], {
-          me: link.name,
-          target: hit.name,
-        });
-        if (this.interp.eventConsumed || (res.handled && !res.passed)) break;
-      } catch (e) {
-        this.onLog(`stage region ${hit.name}: ${(e as Error).message}`);
-        break;
-      }
-    }
-    return true;
-  }
-
-  /** the script that should receive a keyboard event on an overlay stage:
-   *  the current flat if it defines keydown (wireless TX lives in the flat),
-   *  else the stage main (the deck map's keydown lives there). */
-  keydownTarget(): ScriptInstance | null {
-    const flat = this.flatScripts.get(this.currentFlat.toLowerCase());
-    if (flat?.script.codes.has("keydown")) return flat;
-    if (this.stage?.script.codes.has("keydown")) return this.stage;
-    return null;
-  }
-
-  private async fireFlat(name: string, handler: string): Promise<void> {
-    const inst = this.flatScripts.get(name.toLowerCase());
-    if (!inst || !inst.script.codes.has(handler)) return;
-    try {
-      await this.interp.runHandler(inst, handler, [], { me: inst.name, target: "" });
-    } catch (e) {
-      this.onLog(`${name}.${handler}: ${(e as Error).message}`);
-    }
-  }
-
-  /** decoded image of the active flat (background layer), cached */
-  flatImage(): { pixels: Uint8Array; width: number; height: number; palette: Uint8ClampedArray } | null {
-    const stg = this.stageFile;
-    if (!stg || this.currentFlat === "none") return null;
-    const key = `${this.stageName}:${this.currentFlat}`;
-    let img = this.flatImageCache.get(key);
-    if (!img) {
-      const flat = stg.flats.find((f) => f.name === this.currentFlat);
-      if (!flat) return null;
-      try {
-        const fb = new FrameBuffer();
-        const d = decodeFrame(stg.file.containers[flat.locationFrame], fb);
-        img = {
-          pixels: fb.pixels.slice(0, d.width * d.height),
-          width: d.width,
-          height: d.height,
-          palette: paletteToRGBA(stg.paletteRaw, 256),
-        };
-        this.flatImageCache.set(key, img);
-      } catch (e) {
-        this.onLog(`flat image ${key}: ${(e as Error).message}`);
-        return null;
-      }
-    }
-    return img;
-  }
-
+  stageClickAt(x: number, y: number) { return this.stageCtrl.stageClickAt(x, y); }
+  keydownTarget() { return this.stageCtrl.keydownTarget(); }
+  flatImage() { return this.stageCtrl.flatImage(); }
   /** host hook: default navigation from boot's keydown (currentscene setter) */
   onNavigate: (direction: string) => void = () => {};
   /**
