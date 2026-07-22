@@ -166,7 +166,7 @@ what was learned:
 
 - `npm run dev` — dev server; lists every `.SET` under `gamefiles/` and lets
   you click one to walk around. Assets are fetched on demand.
-- `npm test` — the regression suite ([tools/tests.ts](https://github.com/dhobi/taoot-web/blob/master/tools/tests.ts)),
+- `npm test` — the regression suite ([tests/regression.ts](https://github.com/dhobi/taoot-web/blob/master/tests/regression.ts)),
   a set of end-to-end checks (hotspots, road arrival, blackjack rules, audio,
   travel, props). **Prefer extending this over writing throwaway tests.**
 - `tools/` also has standalone dumpers (`dumpset`, `dumpshp`, `dumpaudio`,

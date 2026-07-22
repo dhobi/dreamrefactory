@@ -1,8 +1,10 @@
 /**
  * Regression suite — runs headless against the original game files.
  *
- *   npx tsx tools/tests.ts [gamefilesDir]
+ *   npx vitest run tests/regression.ts
+ *   TAOOT_GAMEFILES=/path/to/gamefiles npx vitest run   # override data dir
  */
+import { test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readSetFile } from "../src/df/set";
@@ -16,7 +18,7 @@ import { NullAudioSink } from "../src/engine/audio";
 import { projectPoint } from "../src/engine/props";
 import { SetViewer } from "../src/viewer";
 
-const root = process.argv[2] ?? "gamefiles";
+const root = process.env.TAOOT_GAMEFILES ?? "gamefiles";
 const provider = (name: string): Uint8Array | null => {
   for (const dir of [join(root, "LOCAL"), root]) {
     try {
@@ -28,11 +30,12 @@ const provider = (name: string): Uint8Array | null => {
   return null;
 };
 
-let pass = 0;
-let fail = 0;
+// A thin shim over Vitest's soft assertions: every check in a scenario runs
+// (soft = doesn't abort the test on first failure), and the rich `detail`
+// readout is carried in the assertion message, so it surfaces in full on any
+// failure — which is where the per-check engine-state diagnostics matter.
 function check(name: string, ok: boolean, detail = ""): void {
-  ok ? pass++ : fail++;
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
+  expect.soft(ok, `${name}${detail ? ` — ${detail}` : ""}`).toBe(true);
 }
 
 async function newSession(): Promise<{
@@ -71,7 +74,7 @@ async function runAnimations(v: SetViewer): Promise<void> {
 }
 
 // --- 1. hotspot alignment + cursor + click (B59 door) ---
-{
+test("hotspot alignment + cursor + click (B59 door)", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("b59.set");
   const v = viewer();
@@ -82,9 +85,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   check("b59 door hotspot present", obj?.identifier === "door");
   check("hover returns touch cursor", (await v.hover(cx, cy)) === "touch");
 }
+);
 
 // --- 2. road arrival faces travel direction (user-reported bug) ---
-{
+test("road arrival faces travel direction (user-reported bug)", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("turk.set");
   const v = viewer();
@@ -95,9 +99,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   const view = v.scene.views[v.viewIdx].viewName;
   check("turk Road144 arrival", scene === "Scene134" && view === "View138", `${scene}/${view}`);
 }
+);
 
 // --- 3. interpreter runs real game logic (blackjack winner()) ---
-{
+test("interpreter runs real game logic (blackjack winner())", async () => {
   const { session } = await newSession();
   const file = readContainerFile(provider("blkjack.stg")!);
   let inst: ScriptInstance | null = null;
@@ -123,9 +128,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
       (await winner(21, 21)) === "draw",
   );
 }
+);
 
 // --- 4. audio: locked-door voice line through the script chain ---
-{
+test("audio: locked-door voice line through the script chain", async () => {
   const { session, sink, viewer } = await newSession();
   await session.openSetFile("b59.set");
   const v = viewer();
@@ -134,9 +140,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   const call = sink.calls.find((c) => c.channel === "voice");
   check("doorlocked voice plays", !!call && call.seconds > 0.5, `${call?.seconds.toFixed(2)}s`);
 }
+);
 
 // --- 5. cross-set travel via stage gotospecial, globals persist ---
-{
+test("cross-set travel via stage gotospecial, globals persist", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("b59.set");
   session.interp.globals.set("testmarker", 42);
@@ -154,9 +161,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   );
   check("globals persist across sets", session.interp.globals.get("testmarker") === 42);
 }
+);
 
 // --- 6. props: shop loads, prop state machinery works (TURK) ---
-{
+test("props: shop loads, prop state machinery works (TURK)", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("turk.set");
   void viewer();
@@ -168,9 +176,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     check("prop state has frames", (p.state()?.frames.length ?? 0) === 16);
   }
 }
+);
 
 // --- 7. door opens: prop becomes visible, sound plays, uparrow travels ---
-{
+test("door opens: prop becomes visible, sound plays, uparrow travels", async () => {
   const { session, sink, viewer } = await newSession();
   await session.openSetFile("b59.set");
   let v = viewer();
@@ -197,9 +206,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `consumed=${consumed} set=${session.currentSetName} ${v.scene.sceneName}/${v.scene.views[v.viewIdx].viewName}`,
   );
 }
+);
 
 // --- 8. doors close on navigation (boot's default closescene) ---
-{
+test("doors close on navigation (boot's default closescene)", async () => {
   const { session, sink, viewer } = await newSession();
   await session.openSetFile("b59.set");
   const v = viewer();
@@ -237,9 +247,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   });
   check("door closes on set change", !door.visible, `visible=${door.visible}`);
 }
+);
 
 // --- 9. movies: boot's spotmovie -> playmovie builtin -> viewer playback ---
-{
+test("movies: boot's spotmovie -> playmovie builtin -> viewer playback", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("turk.set");
   const v = viewer();
@@ -262,9 +273,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   check("OK click closes the movie", !v.moviePlaying);
   await spot; // playmovie resolved -> postmovie ran -> spotmovie returns
 }
+);
 
 // --- 10. movie zoom cycle (MENU.MOV): paper toggles zoom, only OK leaves ---
-{
+test("movie zoom cycle (MENU.MOV): paper toggles zoom, only OK leaves", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("turk.set"); // any set; movie loads via provider
   const v = viewer();
@@ -290,9 +302,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   settle();
   check("OK leaves the menu movie", !v.moviePlaying);
 }
+);
 
 // --- 11. curtains (user-reported): silent open, endless toggle, OK exits ---
-{
+test("curtains (user-reported): silent open, endless toggle, OK exits", async () => {
   const { session, sink, viewer } = await newSession();
   await session.openSetFile("c73.set");
   const v = viewer();
@@ -317,9 +330,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   settle();
   check("OK plays the exit animation and closes", !v.moviePlaying);
 }
+);
 
 // --- 12. faucet: water cycle with per-frame sounds, OK-position exits ---
-{
+test("faucet: water cycle with per-frame sounds, OK-position exits", async () => {
   const { session, sink, viewer } = await newSession();
   await session.openSetFile("c73.set");
   const v = viewer();
@@ -348,13 +362,14 @@ async function runAnimations(v: SetViewer): Promise<void> {
   settle();
   check("corner click leaves the faucet movie", !v.moviePlaying);
 }
+);
 
 // --- 12b. actionframe(n): the movie header's action-frame names (container-0
 // +0x40/+0x50) are tracked during playback; the car-light toggle (BIND/BINL)
 // and the purser window both branch on it. LIGHTOFF.MOV names "lightson" as
 // action frame 1: turning the light on traverses it (actionframe(1) true ->
 // carlights -> binl); leaving it off never does (actionframe(1) false -> bind).
-{
+test("actionframe(n): the movie header's action-frame names (container-0", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("turk.set"); // any set; movie loads via provider
   const v = viewer();
@@ -390,12 +405,13 @@ async function runAnimations(v: SetViewer): Promise<void> {
   const knock = af();
   check("actionframe: knocking the purser window sets an action frame", knock[0] || knock[1], `af=${knock}`);
 }
+);
 
 // --- 12c. clut/mixclut: the darkroom light switch dims the CABIN palette
 // (mixclut "set" blends the set CLUT toward black; clut "set" restores it).
 // The C78 white-light switch does mixclut("set","black",0,127,240). clut("black")
 // must stay a no-op (it's paired with blackscreen() in movie transitions).
-{
+test("clut/mixclut: the darkroom light switch dims the CABIN palette", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("c78.set");
   const v = viewer();
@@ -424,11 +440,12 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `lit=${lit} dark=${dark} restored=${restored} afterBlack=${afterBlack}`,
   );
 }
+);
 
 // --- 12d. darkroom stage darkness: entering redphoto.stg with the white light
 // off starts DARK (you must switch on the red safelight before handling photos);
 // the safelight toggles the stage CLUT; leaving doesn't leak the dim onward.
-{
+test("darkroom stage darkness: entering redphoto.stg with the white light", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("c78.set");
   const v = viewer();
@@ -453,9 +470,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `entry=${onEntry} lampOn=${lampOn} lampOff=${lampOff} afterLeave=${afterLeave}`,
   );
 }
+);
 
 // --- 13. grand staircase: deck flips + cross-set travel (user-reported) ---
-{
+test("grand staircase: deck flips + cross-set travel (user-reported)", async () => {
   const { session, viewer } = await newSession();
   const state = () => {
     const v = viewer();
@@ -489,9 +507,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   await runAnimations(viewer());
   check("gstair3 walk up reaches gstair2", state() === "gstair2 Scene17/View49", state());
 }
+);
 
 // --- 14. stage layer: main.stg UI, inventory pickup, inven1 flat ---
-{
+test("stage layer: main.stg UI, inventory pickup, inven1 flat", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("b59.set");
   const v = viewer();
@@ -544,9 +563,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `${session.stageName}/${session.currentFlat}`,
   );
 }
+);
 
 // --- 15. world-space props: the bag on the C73 bed, projected + takeable ---
-{
+test("world-space props: the bag on the C73 bed, projected + takeable", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("c73.set");
   const v = viewer();
@@ -588,9 +608,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   );
   check("trunkkey comes along", session.propRuntime.get("trunkkey")?.owner === "frank");
 }
+);
 
 // --- 16. timing model: makeloop/makecricket/starxyz/delay/soundloop -------
-{
+test("timing model: makeloop/makecricket/starxyz/delay/soundloop", async () => {
   const { session, sink, viewer } = await newSession();
   await session.openSetFile("c73.set");
   const v = viewer();
@@ -654,9 +675,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   session.playSound("doorlocked", false);
   check("soundloop(off) unflags: plays one-shot again", sink.calls.length === 1 && !sink.calls[0].loop, `loop=${sink.calls[0]?.loop}`);
 }
+);
 
 // --- 17. actors: GANG.CST loads, DECKBD openset places Morrow -------------
-{
+test("actors: GANG.CST loads, DECKBD openset places Morrow", async () => {
   const { session, sink, viewer } = await newSession();
   check("gang.cst cast loads at boot", session.actorRuntime.actors.size === 25,
     `${session.actorRuntime.actors.size} actors`);
@@ -761,9 +783,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `notOccludedFrac=${morrowFrac} at ${msc}/${mvw}`,
   );
 }
+);
 
 // --- 18. puppets: SMETH1 conversation — speaks, choices, branching --------
-{
+test("puppets: SMETH1 conversation — speaks, choices, branching", async () => {
   const { session, sink, viewer } = await newSession();
   await session.openSetFile("c73.set");
   const v = viewer();
@@ -807,9 +830,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   await conversation;
   check("world display returns after the talk", !session.puppet && !v.moviePlaying);
 }
+);
 
 // --- 19. actor walking: morrow strolls to his next deck star --------------
-{
+test("actor walking: morrow strolls to his next deck star", async () => {
   const { session, viewer } = await newSession();
   session.interp.globals.set("mission", 1);
   session.interp.globals.set("phase", 1);
@@ -850,9 +874,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
   );
   check("actorstar getter reports the destination", morrow.starName === "morrow.2");
 }
+);
 
 // --- 20. puppet frame cache is per-pup (switching characters, no overlap) --
-{
+test("puppet frame cache is per-pup (switching characters, no overlap)", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("c73.set");
   const v = viewer();
@@ -895,9 +920,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `checked ${tested} shared locs, ${stale} reused the previous character`,
   );
 }
+);
 
 // --- 21. MAP.STG deck plan: opens, 8 deck flats, renders full-screen -------
-{
+test("MAP.STG deck plan: opens, 8 deck flats, renders full-screen", async () => {
   const { session } = await newSession();
   await session.openSetFile("c73.set");
   const ok = await session.openStageFile("map.stg");
@@ -917,9 +943,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     img ? `${img.width}x${img.height}` : "no image",
   );
 }
+);
 
 // --- 22. point + live pointer builtins (makepoint/pointx/pointy/mouse) -----
-{
+test("point + live pointer builtins (makepoint/pointx/pointy/mouse)", async () => {
   const { session, viewer } = await newSession();
   // invoke a builtin by name (call/frame args are unused by these primitives)
   const inv = (name: string, args: number[] = []): number =>
@@ -943,9 +970,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `mouse=${inv("pointx", [m])},${inv("pointy", [m])}`,
   );
 }
+);
 
 // --- 23. deck map interactivity: transtoflat opens to the player's deck ----
-{
+test("deck map interactivity: transtoflat opens to the player's deck", async () => {
   const { session } = await newSession();
   // player is in c73 = C Deck; currentpage() should map that to deck 4
   await session.openSetFile("c73.set");
@@ -972,9 +1000,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `stage=${session.stageName} setVisible=${session.setVisible}`,
   );
 }
+);
 
 // --- 24. deck map click-logic regions: deck buttons + OK are clickable -----
-{
+test("deck map click-logic regions: deck buttons + OK are clickable", async () => {
   const { session } = await newSession();
   await session.openSetFile("c73.set");
   await session.transToFlat("map.stg"); // opens to Map 4 (C Deck)
@@ -1004,9 +1033,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `stage=${session.stageName} setVisible=${session.setVisible}`,
   );
 }
+);
 
 // --- 25. deck map red-area jump: click a zone -> travel to that location ---
-{
+test("deck map red-area jump: click a zone -> travel to that location", async () => {
   const { session } = await newSession();
   await session.openSetFile("c73.set");
   // mapdisabled() gates jumping on owning the bag + watch (and not mission 4)
@@ -1036,9 +1066,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `set=${jumped} stage=${session.stageName}`,
   );
 }
+);
 
 // --- 26. deck map cosmetics: you-are-here dot, deck highlight, disable bar --
-{
+test("deck map cosmetics: you-are-here dot, deck highlight, disable bar", async () => {
   const { session } = await newSession();
   await session.openSetFile("c73.set"); // C Deck = page 4
   // tour mode opens the map with jumps enabled (mapdisabled() -> false)
@@ -1077,9 +1108,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `flat=${session.currentFlat} frame=${buttons.frameIdx}`,
   );
 }
+);
 
 // --- 27. deck map disable bar shows when jumps are locked (no bag/watch) ----
-{
+test("deck map disable bar shows when jumps are locked (no bag/watch)", async () => {
   const { session } = await newSession();
   await session.openSetFile("c73.set");
   // fresh session: no bag, no watch, no tour -> mapdisabled() is true
@@ -1091,9 +1123,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `visible=${disable.visible} anchor=(${disable.anchorX},${disable.anchorY})`,
   );
 }
+);
 
 // --- 28. wireless stage: opens, sets up its props, zooms into a control -----
-{
+test("wireless stage: opens, sets up its props, zooms into a control", async () => {
   const { session } = await newSession();
   await session.openSetFile("wireless.set");
   await session.transToFlat("wireless.stg");
@@ -1132,9 +1165,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `flat=${session.currentFlat} tunerneedle=${tunerneedle.stateName}`,
   );
 }
+);
 
 // --- 29. wireless knob drag: held-button (stilldown) rotates a control ------
-{
+test("wireless knob drag: held-button (stilldown) rotates a control", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("wireless.set");
   await session.transToFlat("wireless.stg");
@@ -1167,8 +1201,10 @@ async function runAnimations(v: SetViewer): Promise<void> {
     `deg-during=${draggedDeg} owner-after=${breaker.owner}`,
   );
 }
+);
 
 // --- 30. wireless OK button: trackbut commits only if released over it ------
+test("wireless OK button: trackbut commits only if released over it", async () => {
 for (const [label, releaseX, releaseY, expectExit] of [
   ["released over OK -> exits the stage", 457, 350, true],
   ["released off OK -> stays in the stage", 100, 100, false],
@@ -1198,9 +1234,10 @@ for (const [label, releaseX, releaseY, expectExit] of [
   const exited = session.stageName === "main.stg" && session.setVisible === true;
   check(`wireless OK: ${label}`, exited === expectExit, `stage=${session.stageName} setVisible=${session.setVisible}`);
 }
+});
 
 // --- 31. wireless message readout: drawstring text layer accumulates/clears -
-{
+test("wireless message readout: drawstring text layer accumulates/clears", async () => {
   const { session } = await newSession();
   await session.openSetFile("wireless.set");
   await session.transToFlat("wireless.stg");
@@ -1256,9 +1293,10 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `n=${session.textOverlay.length} x=${session.textOverlay[0]?.x}`,
   );
 }
+);
 
 // --- 32. wireless tuner gating: propxy getter + tuned() -> tunerknob "on" ----
-{
+test("wireless tuner gating: propxy getter + tuned() -> tunerknob \"on\"", async () => {
   const { session } = await newSession();
   await session.openSetFile("wireless.set");
   await session.transToFlat("wireless.stg");
@@ -1296,9 +1334,10 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `movedY=${movedY} in=${tunedIn} out=${tunedOut} owner=${knobOwner} lit=${lit}`,
   );
 }
+);
 
 // --- 33. wireless TX keydown routes to the flat script (not the stage main) --
-{
+test("wireless TX keydown routes to the flat script (not the stage main)", async () => {
   const { session } = await newSession();
   await session.openSetFile("wireless.set");
   await session.transToFlat("wireless.stg");
@@ -1319,9 +1358,10 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `target=${target?.name} stageKeydown=${!stageHasNoKeydown}`,
   );
 }
+);
 
 // --- 34. puppetbase seats the character in a line's resting pose ----------
-{
+test("puppetbase seats the character in a line's resting pose", async () => {
   const { session } = await newSession();
   await session.openPuppetFile("bx2.pup");
   const hands1 = () => session.puppetFrame()?.layers[8]?.frame; // hands1 layer
@@ -1338,9 +1378,10 @@ for (const [label, releaseX, releaseY, expectExit] of [
   );
   session.closePuppetFile();
 }
+);
 
 // --- 35. walkonpath: sentinel while moving, dest on arrival, endwalk fires -
-{
+test("walkonpath: sentinel while moving, dest on arrival, endwalk fires", async () => {
   const { session, viewer } = await newSession();
   session.interp.globals.set("mission", 1);
   session.interp.globals.set("tour", 1); // morrowidle idles in place (deterministic)
@@ -1364,9 +1405,10 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `sentinel=${sentinel} arrived=${morrow.starName} endwalkLoop=${endwalkFired}`,
   );
 }
+);
 
 // --- 36. actor facing: sprite direction faces the camera (front, not back) -
-{
+test("actor facing: sprite direction faces the camera (front, not back)", async () => {
   const { session } = await newSession();
   await session.openSetFile("deckbd.set");
   const morrow = session.actorRuntime.get("morrow")!;
@@ -1389,13 +1431,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `facing=front?${facing === front} away=back?${away === back}`,
   );
 }
+);
 
 // --- 37. trunk gramophone: clicking gramdrawerbut opens the drawer ----------
 // Exercises the stage "button" dispatch: a region whose own script only sets
 // the cursor forwards its mousedown up region -> flat -> stage main, keyed by
 // target; the trunk main runs sendtoprop("gramdrawer", open()), and the prop's
 // open() handler shows the drawer and (via makeloop) settles it to "idle".
-{
+test("trunk gramophone: clicking gramdrawerbut opens the drawer", async () => {
   const { session } = await newSession();
   await session.openSetFile("b59.set");
   await session.transToFlat("trunk.stg");
@@ -1411,9 +1454,10 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `before=${before} openedView=${openedView} settled=${gd.stateName}`,
   );
 }
+);
 
 // --- 38. trunk: pointinbutton hit-tests a flat's named click-region ---------
-{
+test("trunk: pointinbutton hit-tests a flat's named click-region", async () => {
   const { session } = await newSession();
   await session.openSetFile("b59.set");
   await session.transToFlat("trunk.stg");
@@ -1431,12 +1475,13 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `in=${inside} out=${outside} nosuch=${nosuch}`,
   );
 }
+);
 
 // --- 39. substring(haystack, needle) is a 1-based find, not a slice ---------
 // Scripts gate on it: `substring(propview(me),"idle") >= 0` (trunk drawer),
 // `substring(path(1),"titanic1:") = 1` (prefix), and ENIGMA's key mapping
 // `substring("abcdefghijklmnopqrstuvwxyz ", arg) - 1` needs 'a' -> 1.
-{
+test("substring(haystack, needle) is a 1-based find, not a slice", async () => {
   const { session } = await newSession();
   const sub = session.interp.builtins.get("substring")!;
   const call = (s: string, n: string) => sub(session.interp, [s, n], null as never, null as never);
@@ -1448,12 +1493,13 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `a=${call("abcdefghijklmnopqrstuvwxyz ", "a")} c=${call("abcdefghijklmnopqrstuvwxyz ", "c")} miss=${call("open2", "idle")}`,
   );
 }
+);
 
 // --- 40. putword/findword round-trip (save/restore prop lists) --------------
 // hideenigma/hidetrunk save each prop's visibility into a space-delimited slot
 // string via putword, then showX reads it back with findword. An empty
 // delimiter means the default separator (a space).
-{
+test("putword/findword round-trip (save/restore prop lists)", async () => {
   const { session } = await newSession();
   const put = session.interp.builtins.get("putword")!;
   const find = session.interp.builtins.get("findword")!;
@@ -1473,13 +1519,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `s="${s}" read=${readBack.join("")} s2="${s2}" csv=${csv}`,
   );
 }
+);
 
 // --- 41. ENIGMA decode logic: dial gate + typed message accumulation --------
 // With power on (switch + wires) and the dials at the mission's unlock combo,
 // checkey() lets typed letters accumulate into dialmess (dialset() gates the
 // first letter); a decode compares dialmess to goodmess. Drives the real stage
 // keydown handler; the powerup animation is bypassed by seeding state directly.
-{
+test("ENIGMA decode logic: dial gate + typed message accumulation", async () => {
   const { session } = await newSession();
   await session.openSetFile("b59.set");
   await session.transToFlat("enigma.stg");
@@ -1514,12 +1561,13 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `dialmess="${session.interp.globals.get("dialmess")}"`,
   );
 }
+);
 
 // --- 42. BOIL boiler chute: door opens, switch slides the gate + flips flat -
 // Reuses the shared machinery with no new opcodes: prop mousedowns (own
 // scripts), sendtoprop up()/down(), the soundloop-flagged slide, and gotoflat
 // between the two flats (boil 1 closed <-> boil 2 chute revealed).
-{
+test("BOIL boiler chute: door opens, switch slides the gate + flips flat", async () => {
   const { session } = await newSession();
   await session.openSetFile("b59.set");
   await session.transToFlat("boil.stg");
@@ -1546,13 +1594,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `door=${doorOpen} down=${JSON.stringify(afterDown)} up=${JSON.stringify(afterUp)}`,
   );
 }
+);
 
 // --- 43. set view scopes screen props to persistent (boot) shops -----------
 // A set's auto-opened shop can be a STAGE shop with screen-space props (boil.shp
 // = the boiler flat controls). Those must not draw/click on the room's
 // navigation view — only the persistent UI shops (house/inven) may. Regression
 // for the "wrong overlay: clickable rubaiyat hiding place on Scene10/View31".
-{
+test("set view scopes screen props to persistent (boot) shops", async () => {
   const { session } = await newSession();
   await session.openSetFile("boil.set");
   const boilShop = session.propRuntime.shops.get("boil.shp");
@@ -1572,6 +1621,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `boilPersist=${boilShop?.persistent} housePersist=${houseShop?.persistent} hitAll=${hitAll?.group.name} hitSetView=${hitSetView?.group.name ?? null}`,
   );
 }
+);
 
 // --- 44. per-deck theme selection via changeset -> setupsound --------------
 // Themes are named by DECK, not by set (recept1c -> deckd.trk, halla ->
@@ -1582,7 +1632,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // lowmemory() deck path (decka/deckb/decke/deckf/cargo) loaded the .11k bank
 // while playnewtheme asked for the .trk, because heapsize() reported 0. This
 // exercises the authentic boot changeset() path end to end.
-{
+test("per-deck theme selection via changeset -> setupsound", async () => {
   const { session } = await newSession();
   await session.runGlobal("changeset", ["recept1c", "", ""]); // deckd, no lowmemory branch
   const deckd = session.currentThemeName;
@@ -1603,6 +1653,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `recept1c=${deckd} halla=${decka} lnghall=${stayed} sameDeckReplays=${themePlays}`,
   );
 }
+);
 
 // --- 45. BOMB defuse: hit-test routing, changedone, timer loop, OK win ------
 // The bomb is a timed multi-switch logic puzzle. Exercises: openstage setup;
@@ -1612,7 +1663,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // timer (makeloop("flat", currentflat(), "unibomnoise", …) firing the stage
 // handler each service step, sweeping the second hand); and the hitok() win
 // (door open + key out + power spent -> addinven + transfromflat).
-{
+test("BOMB defuse: hit-test routing, changedone, timer loop, OK win", async () => {
   const { session } = await newSession();
   await session.openSetFile("b59.set");
   await session.transToFlat("bomb.stg");
@@ -1667,6 +1718,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `setup=${JSON.stringify(setup)} poweredOn=${poweredOn} ticked=${ticked} leftFlat=${won}`,
   );
 }
+);
 
 // --- 46. TURBINE plant: continuous sim loop, control -> gauge response ------
 // A steam-plant simulation: valves/pumps/slider feed a physics step
@@ -1675,7 +1727,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // self-re-arms via makeloop("flat",…,"changedone",10) (same loop machinery as
 // BOMB). Exercises sendtostagefx (controls read `valve = sendtostagefx(
 // degtonum(...))`), framerate() round-trip, and the gauge mapping (numtodeg).
-{
+test("TURBINE plant: continuous sim loop, control -> gauge response", async () => {
   const { session } = await newSession();
   await session.openSetFile("turb.set");
   await session.transToFlat("turbine.stg");
@@ -1715,6 +1767,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `loop=${loopArmed} valve1=${valve1Init} presLow=${presLow} presHigh=${presHigh} gauge=${gaugeDeg} expect=${expectDeg} calcswitchdeg?${hasCalc} mid=${calcMid}`,
   );
 }
+);
 
 // --- 47. BLACKJACK: deal + variable() + transToFlat lifts transition-black --
 // Self-contained game (shuffle/deal/hit/dealer/win) launched from a dealer
@@ -1723,7 +1776,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // the dealer out THEN transtoflat("blkjack.stg") — the reveal is a wipe
 // visualeffect we render instantly, so transToFlat must clear the leftover
 // black or the table stays dark ("black screen after the talk").
-{
+test("BLACKJACK: deal + variable() + transToFlat lifts transition-black", async () => {
   const { session } = await newSession();
   // simulate the post-dialog state: screen faded to black + stale snapshot
   session.fade.level = 1;
@@ -1769,6 +1822,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `player=${!!ps} dealer=${!!ds} sameGroup=${ps?.group === ds?.group}`,
   );
 }
+);
 
 // --- 48. smoke: blkjacktable is a world prop placed by propstar ------------
 // Regression for "Buck Riviera and his table float fixed-centre": propstar was
@@ -1776,7 +1830,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // overlay pinned at the anchor centre over every view. propstar must bind it
 // into the world at the "buick" star, and propdeg must orient it (directional
 // sprite) instead of clamping+locking a frame.
-{
+test("smoke: blkjacktable is a world prop placed by propstar", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("smoke.set");
   await runAnimations(viewer());
@@ -1809,6 +1863,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `world=${table.worldSpace} set=${table.setName} scale=${table.scale} dir=${table.directional} locked=${table.frameLocked} deg=${table.deg} @(${table.worldX},${table.worldY}) star=(${buick.positionX},${buick.positionZ}) flamesWorld=${flames.worldSpace} frames=${nf}`,
   );
 }
+);
 
 // --- 49. blackjack entry through Buick hides the puppet to reveal the table -
 // Regression for "hangs with Buick, no table": the dealer puppet stays LOADED
@@ -1817,7 +1872,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // table. newgame() (via the boot initgame hook) calls puppetvisible(false), so
 // after the deal the puppet is hidden but not closed, and the viewer is no
 // longer "busy" on it.
-{
+test("blackjack entry through Buick hides the puppet to reveal the table", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("smoke.set");
   await runAnimations(viewer());
@@ -1848,6 +1903,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `shownDuringTalk=${shownDuringTalk} loaded=${session.puppet !== null} visible=${session.puppet?.visible} busy=${viewer().busy} player=${g("playercount")} dealer=${g("dealercount")}`,
   );
 }
+);
 
 // --- 50. blackjack: a finished hand offers "play again"; Yes re-deals -------
 // Regression for "does not nicely end and is not repeatable": newgame() asks
@@ -1856,7 +1912,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // playagain() argument evaluated locally and recursed forever. With it fixed,
 // finishing a hand re-shows Buick (puppetvisible true) with Yes/No bevels, and
 // Yes deals a fresh hand.
-{
+test("blackjack: a finished hand offers \"play again\"; Yes re-deals", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("smoke.set");
   await runAnimations(viewer());
@@ -1905,13 +1961,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `dealt=${dealt} offered=${offered} replayed=${replayed} visible=${session.puppet?.visible} phase=${g("playerphase")} pc=${g("playercount")}`,
   );
 }
+);
 
 // --- 51. blackjack score readout shows the right number (propdeg by degree) -
 // Regression for "cards counted +1": showscores does propdeg(who@"scores",
 // total), and the score sprite's frames store degrees 2,3,…,21,BUST=22,
 // BLACKJACK=23 — offset ~2 from their frame index. Selecting the frame WHOSE
 // DEGREE equals the total (not the total-th frame) makes the digit match.
-{
+test("blackjack score readout shows the right number (propdeg by degree)", async () => {
   const { session } = await newSession();
   await session.openSetFile("smoke.set");
   session.interp.globals.set("firsthand", 1);
@@ -1946,13 +2003,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `deg@17=${at17} deg@bust=${atBust} frames=${scores.state()!.degrees.length}`,
   );
 }
+);
 
 // --- 52. world sprites keep a camera during movement (no vanish on turn) ----
 // Regression for "actors vanish while moving, reappear at the standpoint": each
 // motion frame carries its own camera (posX16/axisX8), so the viewer projects
 // actors/world props THROUGHOUT a turn instead of only at rest. activeCamera()
 // returns the moving motion-frame camera mid-turn and the standpoint at rest.
-{
+test("world sprites keep a camera during movement (no vanish on turn)", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("smoke.set");
   const v = viewer();
@@ -1978,12 +2036,13 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `animating=${animating} midDeg=${midCam?.deg} standDeg=${standDeg} back=${backToStand}`,
   );
 }
+);
 
 // --- 53. dev "give kit": bag + watch + map dock into the bottom band --------
 // The dev button fires each HOUSE.SHP prop's own add handler (addbag/addwatch/
 // addmap), which Frank normally triggers by picking them up in C73: owner=frank,
 // moved to the band anchor (256,324) as a screen prop, closed/idle view.
-{
+test("dev \"give kit\": bag + watch + map dock into the bottom band", async () => {
   const { session } = await newSession();
   await session.openSetFile("smoke.set");
   for (const [prop, handler] of [
@@ -2007,13 +2066,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `bag=${docked("bag")} watch=${docked("watch")} map=${docked("map")}`,
   );
 }
+);
 
 // --- 54. life preserver keeps its tour/mission variant across state changes -
 // The band's "life" button is deg 0 (mission) / 1 (tour); each of its states
 // holds both variants as 2 frames. propview used to animate through them and
 // end on the last (tour), so a mission-mode click flipped the icon to the tour
 // art. A deg-locked selector must re-pick its variant by deg on every state.
-{
+test("life preserver keeps its tour/mission variant across state changes", async () => {
   const { session } = await newSession();
   await session.openSetFile("smoke.set"); // house.shp (persistent) -> life prop
   const life = session.propRuntime.get("life")!;
@@ -2038,13 +2098,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `afterDeg=${missionAfterDeg} missionClick=${missionAfterClick} tourClick=${tourAfterClick} locked=${life.frameLocked}`,
   );
 }
+);
 
 // --- 55. band prop close animations + variant persistence ------------------
 // "close" states store the SAME frames as "open" (closed->open) plus a play-
 // order table (header @46) that reverses them; honouring it makes close play
 // open->closed instead of replaying the opening. And a deg-variant prop (map)
 // keeps its mission/tour icon after its open/close animation, not the last frame.
-{
+test("band prop close animations + variant persistence", async () => {
   const { session } = await newSession();
   await session.openSetFile("smoke.set");
   const stateOf = (prop: string, name: string) =>
@@ -2076,13 +2137,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `lidClose[0..-1]=${lidClose[0]}..${lidClose[lidClose.length - 1]} reordered=${reordered} mapFrame=${map.frameIdx} degVariants=${map.degVariants}`,
   );
 }
+);
 
 // --- 56. fence stage (M1 staging): duel opens onto the piste at centre -------
 // SQUASH.SET's fence() seeds fencelevel/willphase then transtoflat("fence.stg").
 // openstage loads fence.shp/fence.trk, stands Willie + the player on the 16-flat
 // piste, goes to centre (flat "fence 8"), lights the "engage" button, and kicks
 // the idle loops — but does NOT start fighting until the engage click.
-{
+test("fence stage (M1 staging): duel opens onto the piste at centre", async () => {
   const { session } = await newSession();
   session.interp.globals.set("fencelevel", 15);
   session.interp.globals.set("willphase", 201);
@@ -2110,13 +2172,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
       `start=${start?.visible} fighting=${session.interp.globals.get("fighting")}`,
   );
 }
+);
 
 // --- 57. fence M2: engage + live mouse-driven parry --------------------------
 // Clicking the lit "engage" fires the flat's newpoint(): fighting flips true and
 // the engage button hides. Then playeridle() polls mouse-X every tick and sets
 // the player's blade angle (propdeg 0..8) + playerblock (left/none/right) — the
 // defense is steered entirely by where the cursor sits across the piste.
-{
+test("fence M2: engage + live mouse-driven parry", async () => {
   const { session, viewer } = await newSession();
   session.interp.globals.set("fencelevel", 15);
   session.interp.globals.set("willphase", 201);
@@ -2163,6 +2226,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
       `view=${player.stateName}`,
   );
 }
+);
 
 // --- 58. fence M3a: player attack vs Willie's open quadrants -----------------
 // A lunge (mousedown) targets a quadrant (UL/UR/LL/LR by click x/y). willieblock
@@ -2171,7 +2235,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // is open (and we're past the 2-lunge warmup): the thrust lands and scores;
 // otherwise Willie parries it. (Confirmed backwards from the name — the guard is
 // `if notdefended(quad) -> pointgoesto("player")`.)
-{
+test("fence M3a: player attack vs Willie's open quadrants", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("fencelevel", 15);
@@ -2206,13 +2270,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `parried=${parried} touched=${touched}(vis=${playerscore.visible} deg=${playerscore.deg}) fencelevel=${g.get("fencelevel")}`,
   );
 }
+);
 
 // --- 59. fence M3b: Willie's attack vs the player's guard side ----------------
 // Willie commits to a side (willieside, from willieintent); willieattack lands
 // unless the player's guard (playerblock, steered live by the mouse) is on that
 // same side. A matched guard is a parry (miss), a mismatched guard is a touch
 // for Willie and eases him off (fencelevel +4).
-{
+test("fence M3b: Willie's attack vs the player's guard side", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("fencelevel", 15);
@@ -2245,6 +2310,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `missed=${willieMissed} scored=${willieScored}(vis=${williescore.visible} deg=${williescore.deg}) fencelevel=${g.get("fencelevel")}`,
   );
 }
+);
 
 // --- 60. fence M4: a full match to five touches ends the bout ----------------
 // Score five touches (each: engage, leave UR open, lunge past the warmup) and the
@@ -2253,7 +2319,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // and transfromflat() leaves the stage — after which sendtoset(fence()) opens the
 // post-match conversation (which blocks on a bevel), so we pump a bounded number
 // of steps rather than waiting on the puppet, and assert the pre-conversation win.
-{
+test("fence M4: a full match to five touches ends the bout", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("fencelevel", 15);
@@ -2302,6 +2368,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
       `owner=${ownerOf("willie")} fencewins=${session.interp.globals.get("fencewins")} stage=${session.stageName}`,
   );
 }
+);
 
 // --- 61. fence theme doesn't leak: leaving the overlay restores the ambient --
 // The duel is a STG overlay (set stays the squash court), and its openstage does
@@ -2309,7 +2376,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // to swap the theme back; declining the rematch travels same-deck, which is
 // seamless (no replay) -> the combat theme used to keep looping in the hall.
 // transToFlat now remembers the ambient theme and transFromFlat restores it.
-{
+test("fence theme doesn't leak: leaving the overlay restores the ambient", async () => {
   const { session } = await newSession();
   await session.openSetFile("squash.set");
   const call = (n: string, a: (string | number)[]) =>
@@ -2328,13 +2395,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `ambient=${ambient} during=${during} after=${after}`,
   );
 }
+);
 
 // --- 62. fight stage (M1 staging): the brawl opens with both fighters ready --
 // GSTAIR1.SET's runfight() transtoflats("fight.stg") at mission 3 / phase 1.
 // openstage loads fight.shp/fight.trk and openfight() stands Vlad + the first-
 // person fists on the default flat ("flat 0"), shows both power bars, sets both
 // powers to 512 (full), and kicks Vlad's idle loop. fightover stays false.
-{
+test("fight stage (M1 staging): the brawl opens with both fighters ready", async () => {
   const { session } = await newSession();
   await session.openSetFile("gstair1.set");
   await session.transToFlat("fight.stg");
@@ -2362,12 +2430,13 @@ for (const [label, releaseX, releaseY, expectExit] of [
       `bars=${vladbar?.visible}/${playerbar?.visible} vp=${g.get("vladpower")} pp=${g.get("playerpower")} over=${g.get("fightover")}`,
   );
 }
+);
 
 // --- 63. fight M2: punches land both ways ------------------------------------
 // Clicking Vlad throws a player punch whose type comes from where you click
 // (upper-middle = uppercut); vladdamage() drops vladpower. Vlad's own offense
 // (his idle loop picks punches) lands on the player and drops playerpower.
-{
+test("fight M2: punches land both ways", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("gstair1.set");
   await session.transToFlat("fight.stg");
@@ -2392,13 +2461,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
       `playerpower ${pp0}->${g.get("playerpower")} (vladLanded=${vladLanded})`,
   );
 }
+);
 
 // --- 64. fight M3: a knock-out ends the bout ---------------------------------
 // When a fighter's power falls below -50, Vlad's idle loop calls endfight(),
 // which resolves the winner (vladpower < playerpower => player wins), marks Vlad
 // "lostfight", halts the combat theme, and transfromflat()s back out of the
 // stage. Drive Vlad's power under and fire his idle tick to trigger it.
-{
+test("fight M3: a knock-out ends the bout", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("gstair1.set");
   await session.transToFlat("fight.stg");
@@ -2419,6 +2489,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `fightover=${g.get("fightover")} owner=${ownerOf("vlad")} stage=${session.stageName}`,
   );
 }
+);
 
 // --- 65. fuse stage (M1 staging): the fusebox opens with its fuses lit --------
 // HALLA.SET transtoflats("fuse.stg") when you click the panel at view61 (port).
@@ -2427,7 +2498,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // the BOOTFILE progress(m,p) gate helper resolves + compares correctly (its
 // decompiled body ends oddly, so pin it: at mission 1/phase 4, progress(1,4) is
 // true, progress(1,5)/progress(2,0) false).
-{
+test("fuse stage (M1 staging): the fusebox opens with its fuses lit", async () => {
   const { session } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 1);
@@ -2455,13 +2526,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
       `progress(1,4)=${await prog(1, 4)} progress(1,5)=${await prog(1, 5)} progress(2,0)=${await prog(2, 0)}`,
   );
 }
+);
 
 // --- 66. fuse M2: fuses toggle (light<->off) + door opens/closes -------------
 // A fuse click reaches BOTH the STG main (light->off, sets its fusebox slot "0")
 // and the prop's shop main (off->on, slot "1"); a run loop (fuseoff/fuseon)
 // settles the switch into its resting light/off frame. The door opens only when
 // the boot progress(1,4) + neckphase + view61 + port gate holds.
-{
+test("fuse M2: fuses toggle (light<->off) + door opens/closes", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 1); g.set("phase", 4); g.set("neckphase", 6);
@@ -2503,12 +2575,13 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `door closed=${startClosed}->open=${opened}->closed=${closed} | off1=${off1} nowOff=${nowOff} on1=${on1} nowLit=${nowLit}`,
   );
 }
+);
 
 // --- 67. fuse M3: confirming with fuse #1 off advances the Sasha subplot ------
 // Clicking the OK button (fuseokdark) runs the STG confirm: trackbut(fuseoklit)
 // -> close the door, transfromflat() out, and if fuse #1 (fuse14) is off and
 // neckphase == 6, advance neckphase to 7 (Sasha is freed to the hall).
-{
+test("fuse M3: confirming with fuse #1 off advances the Sasha subplot", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 1); g.set("phase", 4); g.set("neckphase", 6);
@@ -2532,12 +2605,13 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `neckphase=${g.get("neckphase")} stage=${session.stageName}`,
   );
 }
+);
 
 // --- 68. actor putdownactor (boot lifecycle helper) hides the actor ----------
 // The officer/Sasha leave via sendtoactor(name, putdownactor()); putdownactor is
 // a BOOTFILE helper (actorvisible(target,false)+stoploop+stopwalk), not on the
 // actor/cast, so sendtoactor's resolution must reach the boot fallback for it.
-{
+test("actor putdownactor (boot lifecycle helper) hides the actor", async () => {
   const { session } = await newSession();
   session.interp.globals.set("neckphase", 6);
   session.interp.globals.set("mission", 1);
@@ -2554,6 +2628,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `visible before=${before} after=${after}`,
   );
 }
+);
 
 // --- 69. Sasha walks away down the hall (sasha.1 -> sasha.2) -----------------
 // After the fuse subplot (neckphase 7) Sasha appears in his doorway (sasha.1);
@@ -2562,7 +2637,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // (record tail +32) — the fixed-41 skip used to drop it, so the star wasn't
 // found and Sasha stood frozen in the doorway (rendering huge/headless right in
 // front of the camera). With the star recovered the walk runs and he leaves.
-{
+test("Sasha walks away down the hall (sasha.1 -> sasha.2)", async () => {
   const { session, viewer } = await newSession();
   session.interp.globals.set("neckphase", 7);
   session.interp.globals.set("mission", 1);
@@ -2594,6 +2669,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `start=${startedOnStar} sasha.2@Z=${dest?.positionZ} walking=${walking} arrived=${sasha.starName}`,
   );
 }
+);
 
 // --- 70. TURNING to view62 fires openscene (per-view event) -> Sasha walks ---
 // openscene is a per-VIEW event in DreamFactory: turning to face a guarded view
@@ -2601,7 +2677,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 // ENTRY, so HALLA's view62 walk (Sasha leaving down the hall) was dead — you
 // enter Scene52 at view61 (the only road in) and turning to view62 never
 // triggered it. Now a turn re-runs the scene openscene with the new currentview.
-{
+test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
   const { session, viewer } = await newSession();
   session.interp.globals.set("neckphase", 7);
   session.interp.globals.set("mission", 1);
@@ -2630,12 +2706,13 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `atView61=${atView61} frozen=${frozenBefore} nowView62=${facingView62} walked=${walked} star=${sasha.starName}`,
   );
 }
+);
 
 // --- camerahi: BOOTFILE adjustcamera() sets the per-set projection bias that
 //     grounds the A-deck halls' world sprites (TI.EXE fn 0x43a970 / global
 //     0x48a792). halla=139, non-halls=0; the bias raises the camera eye so the
 //     projected feet drop onto the pre-rendered floor instead of floating. ---
-{
+test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
   const { session, viewer } = await newSession();
   // a non-hall set leaves the bias at 0 (matches grounded sets)
   await session.openSetFile("b59.set");
@@ -2665,13 +2742,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `b59=${biasB59} halla=${biasHalla} camZ=${camZ} feetPlainY=${feetPlain?.y} feetBiasedY=${feetBiased?.y}`,
   );
 }
+);
 
 // --- matryoshka doll (PATTY.STG): a visible foreground prop with its own
 //     mousedown script must intercept clicks before the flat click-regions
 //     beneath it. The doll prop overlaps the doll1/dial hotspots that revealed
 //     it; before the fix every "open a layer" click on the doll's left half was
 //     swallowed by those regions and the doll only ever closed. ---
-{
+test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 1); g.set("tour", 0); g.set("neckphase", 8); g.set("debugging", 1);
@@ -2729,13 +2807,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `onBag=${onBag} backStage=${session.stageName} backFlat=${session.currentFlat} setVisible=${session.setVisible}`,
   );
 }
+);
 
 // --- Sasha subplot conclusion: after swapping the necklace (real in your bag,
 //     fake left in the doll -> owned "vlad"), leaving Sasha's cabin triggers the
 //     A14 door "kickout": Sasha's sasha1.pup conversation runs, neckphase 8->9,
 //     and a changeset drops you into the HALLA corridor with the real necklace
 //     and NO player death (the "swap" outcome, vs "steal" which kills you). ---
-{
+test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 1); g.set("tour", 0); g.set("neckphase", 8);
@@ -2763,13 +2842,14 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `neck=${g.get("neckphase")} set=${session.currentSetName} death=${g.get("playerdeath")}`,
   );
 }
+);
 
 // --- darkroom (PHOTO.STG / REDPHOTO.STG): the red-light view reuses photo.shp
 //     + openphoto (stageBase maps redphoto -> photo). Develop a negative by
 //     turning on the red safelight, opening its case, and dragging it into the
 //     "start" bath (good) vs "stop" (spoiled). Exercises the entry-handler alias
 //     and the region-vs-foreground-prop click routing. ---
-{
+test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 1); g.set("tour", 0);
@@ -2817,11 +2897,12 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `redSetup=${redphotoSetUp} lamp=${lampOn} case=${caseOpen} picone=${g.get("picone")} badone=${g.get("badone")} owner=${session.propRuntime.get("pic1")?.owner}`,
   );
 }
+);
 
 // --- volume settings plumbing (CTL.STG dial + slider): wavevolume() drives the
 //     sound+voice channel gains, themevol() the theme channel, and a theme that
 //     starts (playtheme) picks up the current global themevolume. ---
-{
+test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
   const { session, sink } = await newSession();
   // builtins are (interp, args, call, ctx) but ignore the last two here
   type Bi = (i: typeof session.interp, a: (number | string)[]) => unknown;
@@ -2853,12 +2934,13 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `set=${setOk} get=${getOk} clamp=${clampOk} theme=${themeOk} started=${themeStarted} persist=${persistOk} (sound=${sink.channelVolume.sound.toFixed(3)} theme=${sink.channelVolume.theme.toFixed(3)})`,
   );
 }
+);
 
 // --- CTL.STG settings panel (the "life" pocketwatch → dolife → transtoflat
 //     ctl.stg): the full-screen panel opens over the game, its HOUSE.SHP props
 //     (the wave-volume dial, the theme lever) are shown, and dragging the
 //     "themetoggle" flat region writes the global themevolume live. ---
-{
+test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 1); g.set("tour", 0);
@@ -2887,11 +2969,12 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `panel=${panelUp} dial=${dialShown} lever=${leverShown} themevolume=${g.get("themevolume")}`,
   );
 }
+);
 
 // --- subtitles toggle + quiet-music default: subtitles are gated on
 //     puppetparam slot 7 (the CTL.STG subtoggle lever), and music starts very
 //     quiet with the theme lever synced to that low rest position. ---
-{
+test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
   const { session } = await newSession();
   const g = session.interp.globals;
   type Bi = (i: typeof session.interp, a: (number | string)[]) => unknown;
@@ -2911,6 +2994,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `themevol=${g.get("themevolume")} leverDeg=${session.propRuntime.get("themetoggle")?.deg} on=${onByDefault} off=${offAfter} onAgain=${onAgain}`,
   );
 }
+);
 
 // --- cufflink clue pickup (CUFF.STG): the mission-2 purser investigation.
 //     Clicking the cufflink1 chair in RECEPT1C sets cuffchair + transtoflat
@@ -2918,7 +3002,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 //     mission=2 & cufflink unowned & the purs actor is on "findcuff" & chair 1.
 //     You examine it (small->med->big) then take it into your bag. ZERO new
 //     engine code — pure overlay-stage + prop + inventory reuse. ---
-{
+test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 2); g.set("tour", 0); g.set("cuffchair", "cufflink1");
@@ -2982,6 +3066,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `opened=${opened} med=${med} big=${big} took=${took}`,
   );
 }
+);
 
 // --- ship's-wheel steering sim (BRIDGE.STG): reached from BRIDGE.SET via
 //     transtoflat "bridge.stg". openstage lays out the bridge frame + wheel +
@@ -2991,7 +3076,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 //     it, and once it passes ±64 the ship swings off course (driftpos != 256 ->
 //     drifthappen=1) and the sky scrolls. Needs 2 new builtins: propinstance +
 //     calcmod. ---
-{
+test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   await session.openSetFile("bridge.set");
@@ -3037,6 +3122,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `opened=${opened} instanced=${instanced} drifted=${drifted} (pos=${g.get("driftpos")} total=${g.get("drifttotal")} happen=${g.get("drifthappen")}) calcmod=${modOk}`,
   );
 }
+);
 
 // --- endgame slideshow logic (NAREND.STG): the ending is chosen by who owns
 //     the four artifacts. worldwar1/worldwar2/rushrev return the list of
@@ -3045,7 +3131,7 @@ for (const [label, releaseX, releaseY, expectExit] of [
 //     ending movie; "proz" is the only mission="good" outcome). Pure logic, so
 //     we drive the handlers directly (like the blackjack winner() test). ZERO
 //     new engine code — a scripted slideshow over existing machinery. ---
-{
+test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
   const { session } = await newSession();
   await session.openSetFile("c78.set"); // loads inven.shp so the artifact props exist
   const file = readContainerFile(provider("narend.stg")!);
@@ -3106,6 +3192,5 @@ for (const [label, releaseX, releaseY, expectExit] of [
     `good=${good} (ww1=${g1} fut=${lastWord(gf)}) bad=${bad} (ww1=${b1} fut=${lastWord(bf)})`,
   );
 }
+);
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);

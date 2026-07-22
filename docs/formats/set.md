@@ -143,7 +143,7 @@ props code; you need it only when working on in-world prop placement.
 
 - `npm run dump -- gamefiles/LOCAL/B59.SET out/` — decode a set and write its
   frames as PNGs ([tools/dumpset.ts](https://github.com/dhobi/taoot-web/blob/master/tools/dumpset.ts)).
-- `npx tsx tools/navtest.ts gamefiles/LOCAL/B59.SET out/` — headless
+- `npx tsx tests/nav.ts gamefiles/LOCAL/B59.SET out/` — headless
   navigation test.
 
 Next: the things drawn *on top* of these views — **[SHP props](shp.md)**.

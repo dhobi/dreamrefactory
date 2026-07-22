@@ -52,7 +52,7 @@ const serverFiles = new Map<string, string>();
 const pendingFetches = new Set<string>();
 let viewer: SetViewer | null = null;
 
-// debug handle for browser-automation tests (tools/browsertest.ts)
+// debug handle for browser-automation tests (tests/browser.ts)
 Object.defineProperty(window, "dbg", { get: () => ({ viewer, session }) });
 
 /**

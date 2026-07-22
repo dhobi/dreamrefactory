@@ -11,5 +11,5 @@
     "forceConsistentCasingInFileNames": true,
     "useDefineForClassFields": true
   },
-  "include": ["src", "tools"]
+  "include": ["src", "tools", "tests"]
 }

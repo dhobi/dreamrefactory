@@ -330,7 +330,7 @@ and lands you at the scripted arrival view, with all game state intact.
 - Extra builtins: `findword`, `currentscene`/`currentview`/`currentset`,
   transition names (`plain`, `wipeleft`, …) and screen-fade commands as
   stubs (visual polish later).
-- **Regression suite**: `npm test` (tools/tests.ts) — 9 checks covering
+- **Regression suite**: `npm test` (tests/regression.ts) — 9 checks covering
   hotspots, road arrival, blackjack logic, audio, travel, props.
 
 ## Milestone 5 — audio
@@ -423,7 +423,7 @@ The DreamFactory script system is decoded, parsed, and executing:
   insensitive string `=`), control flow, `code` handler dispatch with
   `me`/`target` context and `exitcode`/`passcode`/`return` signals, and a
   builtin registry where per-command semantics are filled in as recovered
-- verified by `tools/interptest.ts`: runs the blackjack minigame's real
+- verified by `tests/interp.ts`: runs the blackjack minigame's real
   `winner()` logic from the original binary `BLKJACK.STG` — 8/8 rule
   checks pass
 
@@ -435,7 +435,7 @@ engine events — `openset`, `closeset`, `mousedown`, `setcursor`, `idle` …
 script (deferred call, evaluated in the target's context).
 
 Corpus tools: `tools/dumpscripts.ts` (decompile everything + opcode
-frequency), `tools/parsecheck.ts` (AST coverage), `tools/exetable.ts`
+frequency), `tests/parse.ts` (AST coverage), `tools/exetable.ts`
 (extract the command table from TI.EXE).
 
 ## Milestone 1 — SET viewer
@@ -462,7 +462,7 @@ CLI verification tools (dump structure + frames as PNG, headless navigation):
 
 ```
 npm run dump -- gamefiles/LOCAL/B59.SET out/
-npx tsx tools/navtest.ts gamefiles/LOCAL/B59.SET out/
+npx tsx tests/nav.ts gamefiles/LOCAL/B59.SET out/
 ```
 
 ## Layout

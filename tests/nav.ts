@@ -2,7 +2,7 @@
  * Headless navigation test: drive SetViewer through turns and a road walk,
  * dumping the visible frame after each step.
  *
- *   npx tsx tools/navtest.ts gamefiles/LOCAL/B59.SET out/
+ *   npx tsx tests/nav.ts gamefiles/LOCAL/B59.SET out/
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -10,7 +10,7 @@ import { readSetFile } from "../src/df/set";
 import { SetViewer } from "../src/viewer";
 import { GameSession } from "../src/engine/session";
 import { paletteToRGBA, indexedToRGBA } from "../src/df/image";
-import { encodePNG } from "./png";
+import { encodePNG } from "../tools/png";
 
 const [, , setPath, outDir = "out"] = process.argv;
 const set = readSetFile(new Uint8Array(readFileSync(setPath)));

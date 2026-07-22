@@ -2,7 +2,7 @@
  * Parse every script container in the game files into an AST and report the
  * success rate — validates the grammar in parser.ts against the full corpus.
  *
- *   npx tsx tools/parsecheck.ts gamefiles
+ *   npx tsx tests/parse.ts gamefiles
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, basename } from "node:path";

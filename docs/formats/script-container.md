@@ -117,7 +117,7 @@ the format above is understood correctly.
 
 - `tools/dumpscripts.ts` — decompile every script in a file back to text, plus
   an opcode-frequency count.
-- `tools/parsecheck.ts` — run the parser over the whole corpus and report
+- `tests/parse.ts` — run the parser over the whole corpus and report
   coverage.
 - `tools/exetable.ts` — extract the command-name → ID table from `TI.EXE`.
 
