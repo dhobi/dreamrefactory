@@ -20,15 +20,22 @@ flowchart LR
     C --> SHP["shp.ts"]
     C --> MOV["mov.ts"]
     C --> STG["stg.ts"]
+    C --> CST["cst.ts"]
+    C --> PUP["pup.ts"]
     C --> AUD["audio.ts"]
     C --> SCR["script.ts"]
+    AUD --> BK["banks.ts"]
+    MOV --> BK
   end
   subgraph engine["src/engine/ — the runtime"]
     direction TB
     P["parser.ts"] --> I["interp.ts"]
-    I --> SS["setscripts.ts"]
+    I --> BI["builtins/*"]
+    BI --> SS["setscripts.ts"]
     SS --> SESS["session.ts"]
-    PR["props.ts"]
+    SESS --> SUB["clock · scheduler · puppet · stage"]
+    PR["props.ts / actors.ts"]
+    GEO["geometry.ts"]
     EA["audio.ts (channels)"]
   end
   df --> engine
@@ -51,7 +58,10 @@ plays. Every file in here corresponds to a format doc:
 | [`shp.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/shp.ts) | SHP props | [SHP](formats/shp.md) |
 | [`mov.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/mov.ts) | MOV movies | [MOV](formats/mov.md) |
 | [`stg.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/stg.ts) | STG stage/UI | [STG](formats/stg.md) |
+| [`cst.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/cst.ts) | CST casts (actor sprite sets) | [PUP / CST](formats/pup-cst.md) |
+| [`pup.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/pup.ts) | PUP puppets (conversation close-ups) | [PUP / CST](formats/pup-cst.md) |
 | [`audio.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/audio.ts) | TRK/SFX/11K audio banks | [Audio](formats/audio.md) |
+| [`banks.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/banks.ts) | shared chunk-directory walk for TRK/MOV banks | [Audio](formats/audio.md) |
 | [`script.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/script.ts) | the compiled-script binary | [Script container](formats/script-container.md) |
 
 ### `src/engine/` — the runtime ("how the game *behaves*")
@@ -63,14 +73,22 @@ disassembling `TI.EXE`. Key files:
 | File | Responsibility |
 |------|----------------|
 | [`parser.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/parser.ts) | turns a decoded script's tokens into a syntax tree |
-| [`interp.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/interp.ts) | **the interpreter** — runs the scripts |
-| [`setscripts.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/setscripts.ts) | binds one SET's scripts to the interpreter and routes events |
+| [`ast.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/ast.ts) | the syntax-tree node types the parser emits and the interpreter walks |
+| [`interp.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/interp.ts) | **the interpreter** — runs the scripts; owns the builtin registry |
+| [`builtins/`](https://github.com/dhobi/taoot-web/tree/master/src/engine/builtins) | the engine commands, grouped by family (scene, props, audio, timing, actors, puppets, pointer); `index.ts` registers them all against a session |
+| [`setscripts.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/setscripts.ts) | binds one SET's scripts to the interpreter and routes the event chain |
 | [`props.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/props.ts) | the prop runtime — visibility, animation, compositing |
+| [`actors.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/actors.ts) | the actor (CST) runtime — walking characters and their poses |
+| [`geometry.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/geometry.ts) | shared 3D math — projection, depth, occlusion, compass `bearing` |
 | [`audio.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/audio.ts) | playback channels (sound / voice / theme) and the sound library |
 | [`session.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/session.ts) | **GameSession** — ties everything together and owns cross-set state |
+| [`clock.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/clock.ts) | the fine time base behind `delay(n)` waits |
+| [`scheduler.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/scheduler.ts) | the heartbeat — loops (`makeloop`), crickets, walks, looping sounds |
+| [`puppet.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/puppet.ts) | `PuppetController` — PUP conversation close-ups |
+| [`stage.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/stage.ts) | `StageController` — the STG UI band / full-screen screens |
 
-The **[Scripting doc](03-scripting-language.md)** covers the interpreter in
-detail; the rest of this doc is about how the pieces run together.
+The **[Scripting doc](03-scripting-language.md)** covers the interpreter and
+builtins in detail; the rest of this doc is about how the pieces run together.
 
 ## The GameSession: the thing that persists
 
@@ -88,6 +106,14 @@ set to another. The session owns:
 When you travel to a new set, the *set* is swapped out but the *session*
 stays. That's the key architectural fact: **sets are disposable, the session
 is not**.
+
+`GameSession` used to be one very large class. The cohesive sub-runtimes have
+since been extracted into their own files — `Clock`, `Scheduler`,
+`PuppetController`, `StageController` — which the session **composes** and
+**delegates** to (`this.scheduler`, `this.stageCtrl`, …). The delegator
+methods keep the same names, so scripts, builtins and the viewer still call
+`session.makeloop(...)`, `session.openStageFile(...)` and friends exactly as
+before; only the implementation moved.
 
 ## The render picture: layers on a 512×384 screen
 
@@ -149,7 +175,10 @@ through a door instead of walking. The full event model is in the
 The engine has a **heartbeat** that ticks roughly **15 times a second**
 (every ~66 ms). On each tick it services timed things: script-scheduled
 callbacks (`makeloop`), positional ambient sounds (`makecricket`), and looping
-sounds. A separate, finer time base (1 tick = 1/60 s) drives `delay(n)` waits.
+sounds. This is the job of [`scheduler.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/scheduler.ts).
+A separate, finer time base (1 tick = 1/60 s) in
+[`clock.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/clock.ts)
+drives `delay(n)` waits.
 
 This timing layer is the current frontier of the port: its behaviour is fully
 recovered from `TI.EXE` but not yet fully implemented. The short version of
