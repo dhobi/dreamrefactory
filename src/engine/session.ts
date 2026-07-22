@@ -11,8 +11,9 @@ import { decodeAudioContainer } from "../df/audio";
 import { Interpreter, ScriptInstance, Value, registerCoreBuiltins, toStr } from "./interp";
 import { ActorRuntime } from "./actors";
 import { PropRuntime } from "./props";
-import { bearing } from "./geometry";
-import { AudioLibrary, AudioSink, NullAudioSink, PlayHandle } from "./audio";
+import { AudioLibrary, AudioSink, NullAudioSink } from "./audio";
+import { Clock } from "./clock";
+import { Scheduler } from "./scheduler";
 import { FileProvider, registerGameBuiltins } from "./setscripts";
 
 /**
@@ -39,66 +40,6 @@ const STAGE_FLAT_ENTRY: Record<string, string> = {
 function stageBase(stageName: string): string {
   const base = stageName.replace(/\.stg$/, "");
   return base === "redphoto" ? "photo" : base;
-}
-
-/**
- * Game time. TI.EXE runs scripts against timeGetTime with 1 script tick =
- * 1/60 s (delay(n) waits n×50/3 ms) and services ambient loops/crickets on
- * a 66 ms (~15 Hz) heartbeat. The viewer feeds real/virtual time into
- * advance(); delay() suspends scripts on sleep().
- */
-export class Clock {
-  now = 0;
-  private waiters: { at: number; resolve: () => void }[] = [];
-
-  sleep(ms: number): Promise<void> {
-    if (ms <= 0) return Promise.resolve();
-    return new Promise((resolve) => this.waiters.push({ at: this.now + ms, resolve }));
-  }
-
-  advance(now: number): void {
-    if (now <= this.now) return;
-    this.now = now;
-    if (!this.waiters.length) return;
-    const due = this.waiters.filter((w) => w.at <= now);
-    this.waiters = this.waiters.filter((w) => w.at > now);
-    for (const w of due) w.resolve();
-  }
-}
-
-/**
- * One scheduled callback (makeloop). TI.EXE semantics: the countdown
- * decrements once per 66 ms service step; at zero the slot REMOVES ITSELF
- * and fires sendto<kind>(name, handler()) once — persistent loops re-arm
- * inside their own handler. Identity is (kind, name): re-making replaces.
- */
-export interface GameLoop {
-  kind: string;
-  name: string;
-  handler: string;
-  count: number;
-  /** re-fire interval in ticks; period 1 = a smooth per-DISPLAY-frame loop */
-  period: number;
-  paused: boolean;
-}
-
-/**
- * A positional ambient one-shot scheduler (makecricket), bound to the set
- * that created it. Fires its sound with distance volume + bearing pan when
- * the countdown ends AND the previous play finished; re-arms with
- * base + random(jitter), or disappears when jitter < 0.
- */
-export interface Cricket {
-  name: string;
-  x: number;
-  y: number;
-  radius: number;
-  base: number;
-  jitter: number;
-  count: number;
-  paused: boolean;
-  setName: string;
-  handle: PlayHandle | null;
 }
 
 /**
@@ -250,12 +191,14 @@ export class GameSession {
   // ---- timing runtime (delay / makeloop / makecricket / soundloop) --------
 
   readonly clock = new Clock();
-  readonly loops: GameLoop[] = [];
-  readonly crickets: Cricket[] = [];
-  private soundLoops = new Map<string, PlayHandle>();
+  /**
+   * loop/cricket/walk scheduling + sound-loop handling on the 66 ms heartbeat.
+   * The script-facing surface is delegated below so builtins/viewer keep
+   * calling session.<method> unchanged.
+   */
+  readonly scheduler = new Scheduler(this);
   /** host hook: listener (camera) ground position + facing for crickets */
   listener: () => { x: number; y: number; deg: number } | null = () => null;
-  private timeLastTick = 0;
 
   /** scripts currently executing/suspended (delay) — input waits on these */
   private inflight = new Set<Promise<unknown>>();
@@ -280,379 +223,67 @@ export class GameSession {
     }
   }
 
-  /** DreamFactory random(n) = 1..n (0 for n <= 0) */
-  private rand(n: number): number {
-    return n > 0 ? Math.floor(Math.random() * n) + 1 : 0;
-  }
-
-  /** makeloop: (kind, name) identity — replaces an existing loop */
+  // ---- Scheduler delegators (timing surface preserved for builtins/viewer) --
+  get loops() { return this.scheduler.loops; }
+  get crickets() { return this.scheduler.crickets; }
+  get walks() { return this.scheduler.walks; }
   makeLoop(kind: string, name: string, handler: string, period: number): void {
-    this.stopLoop(kind, name);
-    if (this.loops.length >= 32) {
-      this.onLog(`makeloop: table full (32), dropping ${kind}/${name}`);
-      return;
-    }
-    this.loops.push({
-      kind: kind.toLowerCase(),
-      name: name.toLowerCase(),
-      handler: handler.toLowerCase(),
-      count: Math.max(1, period),
-      period: Math.max(1, period),
-      paused: false,
-    });
+    this.scheduler.makeLoop(kind, name, handler, period);
   }
-
   stopLoop(kind: string, name: string): void {
-    const k = kind.toLowerCase();
-    const n = name.toLowerCase();
-    for (let i = this.loops.length - 1; i >= 0; i--) {
-      const l = this.loops[i];
-      if (l.kind === k && (n === "all" || l.name === n)) this.loops.splice(i, 1);
-    }
+    this.scheduler.stopLoop(kind, name);
   }
-
   pauseLoop(kind: string, name: string, paused: boolean): void {
-    const k = kind.toLowerCase();
-    const n = name.toLowerCase();
-    for (const l of this.loops) {
-      if (l.kind === k && (n === "all" || l.name === n)) l.paused = paused;
-    }
+    this.scheduler.pauseLoop(kind, name, paused);
   }
-
   isLoop(kind: string, name: string): boolean {
-    const k = kind.toLowerCase();
-    const n = name.toLowerCase();
-    return this.loops.some((l) => l.kind === k && l.name === n);
+    return this.scheduler.isLoop(kind, name);
   }
-
   makeCricket(name: string, x: number, y: number, radius: number, base: number, jitter: number): void {
-    this.stopCricket(name);
-    if (this.crickets.length >= 16) {
-      this.onLog(`makecricket: table full (16), dropping ${name}`);
-      return;
-    }
-    this.crickets.push({
-      name: name.toLowerCase(),
-      x,
-      y,
-      radius: Math.max(1, radius),
-      base,
-      jitter,
-      count: jitter >= 0 ? base + this.rand(jitter) : base,
-      paused: false,
-      setName: this.currentSetName,
-      handle: null,
-    });
+    this.scheduler.makeCricket(name, x, y, radius, base, jitter);
   }
-
   stopCricket(name: string): void {
-    const n = name.toLowerCase();
-    for (let i = this.crickets.length - 1; i >= 0; i--) {
-      const c = this.crickets[i];
-      if (n === "all" || c.name === n) {
-        c.handle?.stop();
-        this.crickets.splice(i, 1);
-      }
-    }
+    this.scheduler.stopCricket(name);
   }
-
   pauseCricket(name: string, paused: boolean): void {
-    const n = name.toLowerCase();
-    for (const c of this.crickets) {
-      if (n === "all" || c.name === n) c.paused = paused;
-    }
+    this.scheduler.pauseCricket(name, paused);
   }
-
   isCricket(name: string): boolean {
-    const n = name.toLowerCase();
-    return this.crickets.some((c) => c.name === n);
+    return this.scheduler.isCricket(name);
   }
-
-  /** sound names flagged by soundloop(name, true): they LOOP when played */
-  readonly loopFlags = new Set<string>();
-
-  /**
-   * soundloop(name, on/off): flag a sound as looping — it does NOT play
-   * anything itself. Every corpus call pairs the flag with a play that
-   * follows (`soundloop("hissloop", true); singlesound("hissloop")`, or a
-   * makecricket for positional ambience); off clears the flag AND stops the
-   * loop if it is sounding (BOMB stops its tick with soundloop(off) alone).
-   */
   soundLoop(name: string, on: boolean): void {
-    const key = name.toLowerCase();
-    if (on) {
-      this.loopFlags.add(key);
-      return;
-    }
-    this.loopFlags.delete(key);
-    this.soundLoops.get(key)?.stop();
-    this.soundLoops.delete(key);
+    this.scheduler.soundLoop(name, on);
   }
-
-  /**
-   * Play a named sound on the sound channel, honouring the loop flag.
-   * A flagged play loops and is TRACKED, so haltsound()/soundloop(off) can
-   * stop it (an untracked looping source would sound forever — the
-   * gramophone hiss outliving the whole trunk stage). A flagged sound that
-   * is already looping is left alone (no double start on re-entry).
-   */
   playSound(name: string, overlap: boolean): void {
-    const key = name.toLowerCase();
-    const audio = this.audioLib.sound(key);
-    if (!audio) {
-      this.onLog(`sound not found: ${name} (banks: ${this.audioLib.bankNames.join(", ") || "none"})`);
-      return;
-    }
-    if (this.loopFlags.has(key)) {
-      const existing = this.soundLoops.get(key);
-      if (existing && !existing.done) return;
-      this.soundLoops.set(key, this.audio.play("sound", audio, { loop: true, overlap: true }));
-      return;
-    }
-    this.audio.play("sound", audio, { overlap });
+    this.scheduler.playSound(name, overlap);
   }
-
-  /** haltsound(n): stop the sound channel INCLUDING tracked looping sounds */
   haltSounds(): void {
-    this.audio.halt("sound");
-    for (const h of this.soundLoops.values()) h.stop();
-    this.soundLoops.clear();
+    this.scheduler.haltSounds();
   }
-
-  /** silence every ambient sound (set change cleans its crickets itself) */
   stopAllAmbient(): void {
-    for (const h of this.soundLoops.values()) h.stop();
-    this.soundLoops.clear();
+    this.scheduler.stopAllAmbient();
   }
-
-  // ---- actor walking (walktostar/walktoxyz/walkonpath) --------------------
-
-  /**
-   * One straight-line walk per actor (TI.EXE fn 0x443260 record shape:
-   * start position, deltas, total distance, facing = bearing to target).
-   * Progress advances with the actor's per-set speed each 66 ms service
-   * step while the walk pose cycles; on arrival the actor snaps to the
-   * target and returns to "stand".
-   */
-  readonly walks = new Map<
-    string,
-    { sx: number; sy: number; sz: number; dx: number; dy: number; dz: number; dist: number; progress: number; paused: boolean; arriveStar?: string }
-  >();
-
-  /** arriveStar: the value actorstar() should report once the walk lands
-   *  (walkonpath rides the "walkonpath" sentinel while moving, then settles
-   *  on the destination star so pacing loops can tell where the actor is). */
   startWalk(name: string, tx: number, ty: number, tz: number, arriveStar?: string): void {
-    const a = this.actorRuntime.get(name);
-    if (!a) return;
-    const dx = tx - a.worldX;
-    const dy = ty - a.worldY;
-    const dz = tz - a.worldZ;
-    const dist = Math.max(1, Math.round(Math.hypot(dx, dy, dz)));
-    a.deg = bearing(dx, dy);
-    if (a.member.poses.some((p) => p.name === "walk")) {
-      a.poseName = "walk";
-      a.step = 0;
-    }
-    this.walks.set(a.member.name, {
-      sx: a.worldX, sy: a.worldY, sz: a.worldZ,
-      dx, dy, dz, dist, progress: 0, paused: false, arriveStar,
-    });
+    this.scheduler.startWalk(name, tx, ty, tz, arriveStar);
   }
-
   stopWalk(name: string): void {
-    const key = name.toLowerCase();
-    const a = this.actorRuntime.get(key);
-    if (this.walks.delete(key) && a && a.poseName === "walk") {
-      a.poseName = "stand";
-      a.step = 0;
-    }
+    this.scheduler.stopWalk(name);
   }
-
   isWalk(name: string): boolean {
-    return this.walks.has(name.toLowerCase());
+    return this.scheduler.isWalk(name);
   }
-
   pauseWalk(name: string, paused: boolean): void {
-    const w = this.walks.get(name.toLowerCase());
-    if (w) w.paused = paused;
+    this.scheduler.pauseWalk(name, paused);
   }
-
-  private serviceWalks(): void {
-    const arrived: string[] = [];
-    for (const [key, w] of this.walks) {
-      if (w.paused) continue;
-      const a = this.actorRuntime.get(key);
-      if (!a) {
-        this.walks.delete(key);
-        continue;
-      }
-      // units per 66 ms step: actorspeed × 4 — APPROXIMATION (the exact
-      // TI stepping lives in fn 0x443730's per-type movers; stdspeed is
-      // per-set, so this constant only tunes overall walking pace)
-      w.progress += Math.max(1, a.speed) * 4;
-      const t = Math.min(1, w.progress / w.dist);
-      a.worldX = Math.round(w.sx + w.dx * t);
-      a.worldY = Math.round(w.sy + w.dy * t);
-      a.worldZ = Math.round(w.sz + w.dz * t);
-      a.step++; // walk pose cycle advances per service tick
-      if (t >= 1) {
-        this.walks.delete(key);
-        if (a.poseName === "walk") {
-          a.poseName = "stand";
-          a.step = 0;
-        }
-        if (w.arriveStar !== undefined) a.starName = w.arriveStar;
-        arrived.push(key);
-      }
-    }
-    // fire each arrived actor's endwalk() — the arrival lifecycle handler.
-    // NPCs use it to face the player, resume an idle loop, or start the next
-    // leg of a patrol; without it walk-driven actors freeze after one leg.
-    // (Fired after the loop so a new walk it starts doesn't perturb this pass.)
-    for (const key of arrived) {
-      if (this.castScripts.get(key)?.script.codes.has("endwalk")) {
-        void this.track(this.sendEvent("sendtoactor", key, "endwalk", [], "walk"));
-      }
-    }
-  }
-
-  /**
-   * Advance game time: resolve delay()s, then run 66 ms service steps —
-   * walks, then crickets, then due loops (TI.EXE master service order).
-   */
   tickTime(now: number): void {
-    this.clock.advance(now);
-    const STEP_MS = 66;
-    if (!this.timeLastTick) this.timeLastTick = now;
-    let steps = Math.floor((now - this.timeLastTick) / STEP_MS);
-    if (steps <= 0) return;
-    this.timeLastTick += steps * STEP_MS;
-    // after a long stall (suspended tab) don't replay the whole gap
-    if (steps > 64) steps = 64;
-    for (let s = 0; s < steps; s++) this.serviceStep();
+    this.scheduler.tickTime(now);
   }
-
-  private serviceStep(): void {
-    this.serviceWalks();
-    for (let i = this.crickets.length - 1; i >= 0; i--) {
-      const c = this.crickets[i];
-      if (c.paused) continue;
-      if (c.count > 0) c.count--;
-      if (c.count > 0) continue;
-      if (c.setName && c.setName !== this.currentSetName) continue;
-      if (c.handle && !c.handle.done) continue; // previous play still sounding
-      this.fireCricket(c);
-      if (c.jitter < 0) this.crickets.splice(i, 1);
-      else c.count = c.base + this.rand(c.jitter);
-    }
-    // Coarse timer loops (period >= 2) fire on the 66 ms master service.
-    // Smooth per-frame loops (period 1) are serviced separately at the DISPLAY
-    // frame rate (serviceFrameLoops) so animation-rate loops — the bridge's
-    // sky drift, the fencer's idle/parry pose — actually run at frame rate in
-    // the browser rather than crawling at 15 Hz. (Headless has one frame per
-    // tick, so both paths fire once per tick and tests are unaffected.)
-    this.fireDueLoops((l) => l.period > 1);
-  }
-
-  /**
-   * Fire due period-1 (per-display-frame) loops. Called once per rendered
-   * frame from the viewer — ~60 Hz in the browser, once per tick headless.
-   */
   serviceFrameLoops(): void {
-    this.fireDueLoops((l) => l.period <= 1);
+    this.scheduler.serviceFrameLoops();
   }
-
-  /**
-   * Fire period-1 loops from within a forceupdate() cooperative yield, so a
-   * long-running drag/animation loop (the bridge wheel's stilldown loop) still
-   * lets independent per-frame loops (the sky drift) advance while it runs —
-   * otherwise the drag holds scriptBusy and the sky freezes until release.
-   * Excludes the caller's OWN loop so a handler can't re-enter itself mid-swing
-   * (the fencer's attack sets its player-prop pose in a forceupdate loop and
-   * must not trip that same prop's idle/defend loop). Called only in the
-   * browser (real frames); headless forceupdate keeps its deterministic step.
-   */
   pumpFrameLoops(exceptName: string): void {
-    const ex = String(exceptName).toLowerCase();
-    const due = this.loops.filter(
-      (l) => !l.paused && l.period <= 1 && l.name !== ex && --l.count <= 0,
-    );
-    if (!due.length) return;
-    for (const l of due) this.loops.splice(this.loops.indexOf(l), 1);
-    this.track(
-      (async () => {
-        for (const l of due) await this.fireLoop(l);
-      })(),
-    );
+    this.scheduler.pumpFrameLoops(exceptName);
   }
-
-  /** loops fire one at a time and never re-enter a running script (the
-   * original engine is single-threaded; its service is likewise guarded) */
-  private fireDueLoops(select: (l: GameLoop) => boolean): void {
-    if (this.scriptBusy) return;
-    const due = this.loops.filter((l) => !l.paused && select(l) && --l.count <= 0);
-    if (!due.length) return;
-    for (const l of due) this.loops.splice(this.loops.indexOf(l), 1);
-    this.track(
-      (async () => {
-        for (const l of due) await this.fireLoop(l);
-      })(),
-    );
-  }
-
-  private fireCricket(c: Cricket): void {
-    const audio = this.audioLib.sound(c.name);
-    if (!audio) return;
-    let volume = 1;
-    let pan = 0;
-    const lis = this.listener();
-    if (lis) {
-      const dx = c.x - lis.x;
-      const dy = c.y - lis.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist >= c.radius) return; // out of earshot (counts as fired)
-      // linear falloff (exact TI curve unrecovered); pan = sine of the
-      // bearing relative to the camera facing, same convention as the
-      // projection's lateral axis (positive = right of screen)
-      volume = 1 - dist / c.radius;
-      if (dist > 1) {
-        const th = ((lis.deg & 0xff) / 256) * 2 * Math.PI;
-        const lateral = dy * Math.cos(th) - dx * Math.sin(th);
-        pan = Math.max(-1, Math.min(1, lateral / dist));
-      }
-    }
-    // a soundloop-flagged cricket starts once and keeps looping in place
-    // (handle.done stays false, so the re-fire check never triggers again) —
-    // this is how the sets run positional ambience: soundloop("motor", true)
-    // + makecricket("motor", ...) on deckbd
-    c.handle = this.audio.play("sound", audio, {
-      overlap: true, volume, pan, loop: this.loopFlags.has(c.name),
-    });
-  }
-
-  private async fireLoop(l: GameLoop): Promise<void> {
-    const cmd =
-      { actor: "sendtoactor", prop: "sendtoprop", scene: "sendtoscene", flat: "sendtoflat" }[
-        l.kind
-      ] ?? "sendtoprop";
-    // A "flat" loop belongs to the ONE active overlay flat, so fire it on the
-    // current flat rather than the captured name. blackjack's gameover() does
-    // makeloop("flat", me, "newgame", 45), but when the hand ends from a click
-    // in a flat REGION (hit/stay), `me` is that region's name, not the flat —
-    // sendtoflat(region) wouldn't resolve newgame and the play-again prompt
-    // never fired. (For the deal-triggered gameover, me already IS the flat.)
-    const target = l.kind === "flat" ? this.currentFlat : l.name;
-    try {
-      // caller/target = the loop's own target: a prop loop handler resolved on
-      // the shop main dispatches by `target` (the fusebox's fuseoff/fuseon run
-      // loops do propview(target,…)), so it must be the prop name, not a marker.
-      await this.sendEvent(cmd, target, l.handler, [], target);
-    } catch (e) {
-      this.onLog(`loop ${l.kind}/${l.name}.${l.handler}: ${(e as Error).message}`);
-    }
-  }
-
   /**
    * sendto* resolution + containment-chain forwarding, shared by the
    * sendto special forms and loop firing. Events sent to a scene forward
