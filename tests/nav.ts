@@ -9,6 +9,7 @@ import { join, dirname } from "node:path";
 import { readSetFile } from "../src/df/set";
 import { SetViewer } from "../src/viewer";
 import { GameSession } from "../src/engine/session";
+import { NullAudioSink } from "../src/engine/audio";
 import { paletteToRGBA, indexedToRGBA } from "../src/df/image";
 import { encodePNG } from "../tools/png";
 
@@ -23,7 +24,7 @@ const session = new GameSession((name) => {
   } catch {
     return null;
   }
-});
+}, new NullAudioSink());
 const viewer = new SetViewer(set, session);
 viewer.onHud = (t) => console.log(`HUD: ${t}`);
 viewer.refreshHud();

@@ -7,7 +7,7 @@ import { readCstFile } from "../df/cst";
 import { Interpreter, ScriptInstance, Value, registerCoreBuiltins, toStr } from "./interp";
 import { ActorRuntime } from "./actors";
 import { PropRuntime } from "./props";
-import { AudioLibrary, AudioSink, NullAudioSink } from "./audio";
+import { AudioLibrary, AudioSink } from "./audio";
 import { Clock } from "./clock";
 import { Scheduler } from "./scheduler";
 import { PuppetController } from "./puppet";
@@ -133,8 +133,8 @@ export class GameSession {
   }
 
   constructor(
-    readonly files: FileProvider = () => null,
-    readonly audio: AudioSink = new NullAudioSink(),
+    readonly files: FileProvider,
+    readonly audio: AudioSink,
   ) {
     registerCoreBuiltins(this.interp);
     registerGameBuiltins(this);
