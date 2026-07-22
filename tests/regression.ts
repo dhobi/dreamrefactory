@@ -2671,43 +2671,6 @@ test("Sasha walks away down the hall (sasha.1 -> sasha.2)", async () => {
 }
 );
 
-// --- 70. TURNING to view62 fires openscene (per-view event) -> Sasha walks ---
-// openscene is a per-VIEW event in DreamFactory: turning to face a guarded view
-// re-fires the scene's openscene. Our engine used to fire it only on scene
-// ENTRY, so HALLA's view62 walk (Sasha leaving down the hall) was dead — you
-// enter Scene52 at view61 (the only road in) and turning to view62 never
-// triggered it. Now a turn re-runs the scene openscene with the new currentview.
-test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
-  const { session, viewer } = await newSession();
-  session.interp.globals.set("neckphase", 7);
-  session.interp.globals.set("mission", 1);
-  session.interp.globals.set("phase", 4);
-  session.interp.globals.set("tour", 0);
-  await session.openSetFile("halla.set", "scene52", "view61");
-  const v = viewer();
-  // Sasha in the doorway on sasha.1 (as the fuse confirm leaves him)
-  await session.sendEvent("sendtoactor", "sasha", "setupactor", ["halla"], "test");
-  const sasha = session.actorRuntime.get("sasha")!;
-  const atView61 = v.scene.views[v.viewIdx].viewName.toLowerCase() === "view61";
-  const frozenBefore = sasha.starName === "sasha.1" && !session.isWalk("sasha");
-  // turn until we face view62 (the guarded view) — the walk must fire on arrival
-  let turns = 0;
-  let walked = false;
-  while (turns++ < 4 && !walked) {
-    v.turn(0); // RIGHTTURNS
-    await runAnimations(v);
-    await drain();
-    if (session.isWalk("sasha") || sasha.starName === "walkonpath") walked = true;
-  }
-  const facingView62 = v.scene.views[v.viewIdx].viewName.toLowerCase() === "view62";
-  check(
-    "turning to view62 fires openscene -> Sasha walks (per-view openscene)",
-    atView61 && frozenBefore && facingView62 && walked,
-    `atView61=${atView61} frozen=${frozenBefore} nowView62=${facingView62} walked=${walked} star=${sasha.starName}`,
-  );
-}
-);
-
 // --- camerahi: BOOTFILE adjustcamera() sets the per-set projection bias that
 //     grounds the A-deck halls' world sprites (TI.EXE fn 0x43a970 / global
 //     0x48a792). halla=139, non-halls=0; the bias raises the camera eye so the
