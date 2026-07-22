@@ -1,4 +1,5 @@
 import { BinaryReader } from "./binary";
+import { readLoopChunks, readOneShotChunks } from "./banks";
 import { Container, DFContainerFile } from "./container";
 
 /**
@@ -132,44 +133,15 @@ export function readAudioBank(file: DFContainerFile): AudioBank {
   let trackName = new BinaryReader(c0, 36).pstr();
   trackName = trackName.replace(/\.wav$/i, "");
 
-  const r = new BinaryReader(file.containers[1].data);
-  r.skip(4);
-  const totalLoops = r.i16();
-  const order: number[] = [];
-  for (let i = 0; i < totalLoops; i++) order.push(r.i16());
-  r.seek(6 + 260); // order field is fixed-size
-
-  const loopRecords: AudioChunkRef[] = [];
-  const loopCount = r.i16();
-  if (loopCount) {
-    r.skip(2); // rest of the i32 the count sits in (+4 total from count pos)
-    for (let i = 0; i < loopCount; i++) {
-      r.skip(4); // unknown int
-      const containerLoc = r.i16();
-      r.skip(2);
-      r.skip(2); // bool + pad
-      const identifier = r.pstr(15);
-      loopRecords.push({ identifier, containerLoc });
-    }
-  }
-  const loopChunks = order
-    .map((o) => loopRecords[o - 1]?.containerLoc)
-    .filter((x): x is number => x !== undefined);
+  // looping music chunks (container 1), already in playback order
+  const loopChunks = readLoopChunks(file.containers[1].data).map((c) => c.containerLoc);
 
   const singles = new Map<string, AudioChunkRef>();
   if (chunkInfo2Loc > 0 && chunkInfo2Loc < file.containers.length) {
-    const r2 = new BinaryReader(file.containers[chunkInfo2Loc].data);
-    r2.skip(4);
-    const singleCount = r2.i16();
-    r2.seek(8);
-    for (let i = 0; i < singleCount; i++) {
-      r2.skip(4); // unknown int
-      const containerLoc = r2.i32();
-      r2.skip(2); // bool + pad
-      const identifier = r2.pstr(15);
+    for (const chunk of readOneShotChunks(file.containers[chunkInfo2Loc].data, 15)) {
       // identifiers sometimes carry a subfolder prefix — strip it
-      const key = identifier.replace(/^.*\//, "").toLowerCase();
-      singles.set(key, { identifier, containerLoc });
+      const key = chunk.identifier.replace(/^.*\//, "").toLowerCase();
+      singles.set(key, chunk);
     }
   }
 

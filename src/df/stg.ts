@@ -1,3 +1,4 @@
+import { latin1 } from "./binary";
 import { DFContainerFile, readContainerFile } from "./container";
 
 /**
@@ -59,8 +60,7 @@ export function readStgRegions(data: Uint8Array): StgRegion[] {
     const o = 1032 + r * 32;
     // name is a pascal string: length byte at +16, then the characters
     const nameLen = Math.min(data[o + 16], 15);
-    let name = "";
-    for (let k = 0; k < nameLen; k++) name += String.fromCharCode(data[o + 17 + k]);
+    const name = latin1(data.subarray(o + 17, o + 17 + nameLen));
     out.push({
       top: v.getInt16(o + 4, true),
       left: v.getInt16(o + 6, true),
@@ -89,9 +89,8 @@ export function readStgFile(data: Uint8Array): StgFile {
     const locationClickLogic = v.getInt32(off + 14, true);
     const height = v.getInt16(off + 22, true);
     const width = v.getInt16(off + 24, true);
-    const len = c0[off + 30];
-    let name = "";
-    for (let c = 0; c < len && c < 15; c++) name += String.fromCharCode(c0[off + 31 + c]);
+    const len = Math.min(c0[off + 30], 15);
+    const name = latin1(c0.subarray(off + 31, off + 31 + len));
     flats.push({ condition, locationScript, locationFrame, locationClickLogic, width, height, name });
     off += 46;
   }

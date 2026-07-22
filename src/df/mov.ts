@@ -1,4 +1,5 @@
 import { BinaryReader } from "./binary";
+import { readLoopChunks, readOneShotChunks } from "./banks";
 import { DFContainerFile, readContainerFile } from "./container";
 
 /**
@@ -154,51 +155,22 @@ export function readMovFile(data: Uint8Array): MovFile {
     frames.push({ type, height: h, width: w, locationFrame, name, sound, event, target, regions });
   }
 
-  // soundtrack: loop-chunk table in container 1 (same as TRK banks)
+  // soundtrack: loop-chunk table in container 1 (same layout as TRK banks)
   const audioChunks: number[] = [];
   if (file.containers.length > 1 && file.containers[1].data.length >= 266) {
-    const a = new BinaryReader(file.containers[1].data);
-    a.skip(4);
-    const totalLoops = a.i16();
-    const order: number[] = [];
-    for (let i = 0; i < totalLoops; i++) order.push(a.i16());
-    a.seek(6 + 260);
-    const loopCount = a.i16();
-    if (loopCount > 0) {
-      a.skip(2);
-      const records: number[] = [];
-      for (let i = 0; i < loopCount; i++) {
-        a.skip(4);
-        records.push(a.i16());
-        a.skip(2);
-        a.skip(2);
-        a.pstr(15);
-      }
-      for (const o of order) {
-        const loc = records[o - 1];
-        if (loc !== undefined) audioChunks.push(loc);
-      }
-    }
+    audioChunks.push(...readLoopChunks(file.containers[1].data).map((c) => c.containerLoc));
   }
   // one-shot chunks in the NON-looping block: named event sounds for click
-  // regions, or the play-once soundtrack of a plain cutscene. MOV records
-  // are 42 bytes with 31-char identifiers.
+  // regions, or the play-once soundtrack of a plain cutscene. MOV records use
+  // a 31-char identifier field (TRK banks use 15).
   const sounds = new Map<string, number>();
   if (audioLocation > 0 && audioLocation < file.containers.length) {
-    const b = new BinaryReader(file.containers[audioLocation].data);
-    b.skip(4);
-    const count = b.i16();
-    b.seek(8);
-    const order: number[] = [];
-    for (let i = 0; i < count; i++) {
-      b.skip(4);
-      const loc = b.i32();
-      b.skip(2);
-      const name = b.pstr(31);
-      order.push(loc);
-      if (name) sounds.set(name.toLowerCase(), loc);
+    const chunks = readOneShotChunks(file.containers[audioLocation].data, 31);
+    for (const { identifier, containerLoc } of chunks) {
+      if (identifier) sounds.set(identifier.toLowerCase(), containerLoc);
     }
-    if (!audioChunks.length) audioChunks.push(...order);
+    // a plain cutscene's play-once soundtrack lives here when there's no loop table
+    if (!audioChunks.length) audioChunks.push(...chunks.map((c) => c.containerLoc));
   }
 
   return { file, width, height, paletteRaw, frames, actionFrame1, actionFrame2, audioChunks, sounds };
