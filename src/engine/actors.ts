@@ -1,6 +1,10 @@
 import { CstFile, CastMember, CastPose } from "../df/cst";
 import { ShpFrame, decodeShpFrame } from "../df/shp";
-import { WorldCamera, projectPoint } from "./props";
+import { WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, bearing } from "./geometry";
+
+// Occlusion lives in the neutral ./geometry module; re-exported here so
+// viewer.ts's import("./engine/actors").Occlusion keeps resolving.
+export type { Occlusion } from "./geometry";
 
 /**
  * Runtime for cast characters ("actors"). Actors are world-space sprites
@@ -76,32 +80,6 @@ interface DrawEntry {
  */
 const ACTOR_SCALE_CORRECTION = 1;
 
-/**
- * The current SET view's depth map, for occluding actors behind scenery.
- * z holds per-pixel levels 0..levels (low = near, high = far) at w×h; scale
- * is world-depth units per level (SET.zFarMax / SET.zLevelCount). TI.EXE
- * (blit 0x412940) draws an actor pixel only where the scenery level is >= the
- * actor's level, i.e. where the scenery is farther-or-equal.
- */
-export interface Occlusion {
-  z: Uint8Array;
-  w: number;
-  h: number;
-  scale: number;
-  levels: number;
-}
-
-/** actor's quantized depth level (groundOffset defaults to 0; TI.EXE 0x41140e) */
-function actorLevel(depth: number, occ: Occlusion): number {
-  return Math.max(0, Math.floor(depth / Math.max(1, occ.scale)));
-}
-
-/** true if scenery at (x, y) is nearer than the actor level → hide the pixel */
-function occluded(occ: Occlusion, x: number, y: number, level: number): boolean {
-  if (x < 0 || y < 0 || x >= occ.w || y >= occ.h) return false;
-  return occ.z[y * occ.w + x] < level;
-}
-
 export class ActorRuntime {
   readonly actors = new Map<string, ActorInstance>();
   readonly casts = new Map<string, LoadedCast>();
@@ -148,10 +126,8 @@ export class ActorRuntime {
     // (angle 0) is the front (face toward viewer): when the actor faces the
     // camera (deg == actor→camera bearing) rel is 0 → dir 0. (Using camera→
     // actor here inverted it: facing you showed the back, and walkers moonwalked.)
-    const dx = cam.x - a.worldX;
-    const dy = cam.y - a.worldY;
-    const bearing = Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
-    const rel = (a.deg - bearing) & 0xff;
+    const camBearing = bearing(cam.x - a.worldX, cam.y - a.worldY);
+    const rel = (a.deg - camBearing) & 0xff;
     const dir = Math.round(rel / 32) & 7;
     const cf = step[dir] ?? step.find((f) => !!f);
     return cf ? a.cast.frame(cf.location) : null;
@@ -209,7 +185,7 @@ export class ActorRuntime {
     for (const { a, proj } of this.drawList(cam)) {
       const r = this.rect(a, proj, cam);
       if (!r) continue;
-      const level = occ ? actorLevel(proj.depth, occ) : 0;
+      const level = occ ? depthLevel(proj.depth, occ) : 0;
       const maxY = Math.min(cam.clipH, height, r.y + r.h);
       const maxX = Math.min(cam.clipW, width, r.x + r.w);
       for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
@@ -219,7 +195,7 @@ export class ActorRuntime {
           const s = sy * r.f.width + sx;
           if (!r.f.opaque[s]) continue;
           // scenery in front of the actor hides this pixel (SET Z image)
-          if (occ && occluded(occ, tx, ty, level)) continue;
+          if (occ && sceneryOccludes(occ, tx, ty, level)) continue;
           const pal = r.f.indexed[s] * 4;
           const d = (ty * width + tx) * 4;
           rgba[d] = paletteRGBA[pal];
@@ -242,7 +218,7 @@ export class ActorRuntime {
       const sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
       if (!r.f.opaque[sy * r.f.width + sx]) continue;
       // a click landing on scenery that occludes the actor doesn't reach them
-      if (occ && occluded(occ, x, y, actorLevel(proj.depth, occ))) continue;
+      if (occ && sceneryOccludes(occ, x, y, depthLevel(proj.depth, occ))) continue;
       return a;
     }
     return null;

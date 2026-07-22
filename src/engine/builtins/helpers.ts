@@ -1,4 +1,5 @@
 import { Value, toNum, toStr } from "../interp";
+import { bearing } from "../geometry";
 import { BuiltinCtx } from "./context";
 
 /**
@@ -82,7 +83,7 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
     const fy = toNum(from ?? 0) & 0xffff;
     const tx = (toNum(to ?? 0) >> 16) & 0xffff;
     const ty = toNum(to ?? 0) & 0xffff;
-    return Math.round((Math.atan2(ty - fy, tx - fx) * 256) / (2 * Math.PI)) & 0xff;
+    return bearing(tx - fx, ty - fy);
   });
   // calcmod(a, b): non-negative modulo (bridge wheel's getpropdeg maps the
   // 0..255 wheel angle into the sprite's 0..4 rotation frames)

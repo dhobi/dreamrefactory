@@ -1,16 +1,11 @@
 import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/shp";
-import type { Occlusion } from "./actors";
+import { WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, bearing } from "./geometry";
 
-/** a world sprite's quantized depth level against the SET Z image (TI.EXE) */
-function depthLevel(depth: number, occ: Occlusion): number {
-  return Math.max(0, Math.floor(depth / Math.max(1, occ.scale)));
-}
-
-/** true if the scenery at (x,y) is NEARER than the sprite level → hide the pixel */
-function sceneryOccludes(occ: Occlusion, x: number, y: number, level: number): boolean {
-  if (x < 0 || y < 0 || x >= occ.w || y >= occ.h) return false;
-  return occ.z[y * occ.w + x] < level;
-}
+// Projection/camera types live in the neutral ./geometry module; re-exported
+// here so existing consumers keep resolving them from "./props" (viewer.ts's
+// import("./engine/props").WorldCamera, and tests importing projectPoint).
+export type { WorldCamera } from "./geometry";
+export { projectPoint } from "./geometry";
 
 /**
  * The frame of a state to show for propdeg(deg). Each frame carries a stored
@@ -49,57 +44,6 @@ export function frameIndexForDegree(st: PropState, deg: number): number {
 
 const DEFAULT_ANCHOR_X = 256;
 const DEFAULT_ANCHOR_Y = 192;
-
-/**
- * World→screen projection, ported from TI.EXE fn 0x43a970. Angles are in
- * 1/256 turns; trig is 2.14 fixed point (the engine's TRIG resource tables).
- * The camera sits at the scene's map position; its height comes from the
- * per-view double in the view table (×512 = world units).
- */
-export interface WorldCamera {
-  x: number;
-  y: number;
-  z: number;
-  /** view angle, 0..255 */
-  deg: number;
-  /** focal length = max(viewW, viewH)/2 */
-  f: number;
-  cx: number;
-  cy: number;
-  /** viewport clip (world props only draw inside the set view) */
-  clipW: number;
-  clipH: number;
-}
-
-const SIN14 = new Int16Array(256);
-const COS14 = new Int16Array(256);
-for (let i = 0; i < 256; i++) {
-  SIN14[i] = Math.round(16384 * Math.sin((2 * Math.PI * i) / 256));
-  COS14[i] = Math.round(16384 * Math.cos((2 * Math.PI * i) / 256));
-}
-/** the engine's rounding: add 0x3fff before >>14 only for negatives */
-const fix14 = (v: number): number => (v < 0 ? v + 0x3fff : v) >> 14;
-
-export function projectPoint(
-  cam: WorldCamera,
-  x: number,
-  y: number,
-  z: number,
-): { x: number; y: number; depth: number } | null {
-  const dx = x - cam.x;
-  const dy = y - cam.y;
-  const dz = z - cam.z;
-  const s = SIN14[cam.deg & 0xff];
-  const c = COS14[cam.deg & 0xff];
-  const depth = fix14(dy * s + dx * c);
-  if (depth <= 0) return null;
-  const lateral = fix14(dy * c - dx * s);
-  return {
-    x: cam.cx + Math.trunc((lateral * cam.f) / depth),
-    y: cam.cy - Math.trunc((dz * cam.f) / depth),
-    depth,
-  };
-}
 
 export class PropInstance {
   visible = false;
@@ -313,13 +257,11 @@ export class PropRuntime {
    */
   private worldFrameIdx(p: PropInstance, nFrames: number, cam: WorldCamera): number {
     if (!p.directional || nFrames < 2) return Math.min(p.frameIdx, nFrames - 1);
-    const dx = cam.x - p.worldX;
-    const dy = cam.y - p.worldY;
-    const bearing = Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
+    const camBearing = bearing(cam.x - p.worldX, cam.y - p.worldY);
     // the facing to depict is the prop's orientation relative to the camera;
     // pick the frame whose stored degree matches it (the frames' degrees are
     // the depicted view angles, e.g. 0,8,…,248 for a 32-view sprite)
-    return frameIndexForDegree(p.state()!, (Number(p.deg) - bearing) & 0xff);
+    return frameIndexForDegree(p.state()!, (Number(p.deg) - camBearing) & 0xff);
   }
 
   /** screen rect + scale of a projected prop frame (sprites shrink with depth) */

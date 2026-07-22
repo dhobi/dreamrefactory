@@ -11,6 +11,7 @@ import { decodeAudioContainer } from "../df/audio";
 import { Interpreter, ScriptInstance, Value, registerCoreBuiltins, toStr } from "./interp";
 import { ActorRuntime } from "./actors";
 import { PropRuntime } from "./props";
+import { bearing } from "./geometry";
 import { AudioLibrary, AudioSink, NullAudioSink, PlayHandle } from "./audio";
 import { FileProvider, registerGameBuiltins } from "./setscripts";
 
@@ -448,7 +449,7 @@ export class GameSession {
     const dy = ty - a.worldY;
     const dz = tz - a.worldZ;
     const dist = Math.max(1, Math.round(Math.hypot(dx, dy, dz)));
-    a.deg = Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
+    a.deg = bearing(dx, dy);
     if (a.member.poses.some((p) => p.name === "walk")) {
       a.poseName = "walk";
       a.step = 0;
