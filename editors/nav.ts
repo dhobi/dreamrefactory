@@ -5,7 +5,9 @@
  * the page is a list of links.
  */
 import { installLanguageMenu } from "../src/lang-menu";
+import { installVersion } from "../src/version";
 import { installI18n } from "../src/locales";
 
 void installI18n();
 void installLanguageMenu();
+installVersion();

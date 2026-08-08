@@ -1,7 +1,11 @@
 import { defineConfig, Plugin } from "vite";
-import { createReadStream, existsSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, normalize, resolve } from "node:path";
 import { MANIFEST_FILE, MANIFEST_URL, buildManifest } from "./tools/manifest";
+
+/** the port's version — package.json is the one place it is written; the pages
+    read it back through `__APP_VERSION__` (src/version.ts) */
+const VERSION = JSON.parse(readFileSync("package.json", "utf8")).version as string;
 
 /**
  * The two things a page needs from `gamefiles/` — a listing of what is there, and
@@ -87,6 +91,9 @@ export default defineConfig({
    * than the host's.
    */
   base: "./",
+  // substituted into the source text, so the version travels in the bundle and
+  // no page has to fetch anything to know it
+  define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [gamefilesManifest()],
   server: {
     watch: {

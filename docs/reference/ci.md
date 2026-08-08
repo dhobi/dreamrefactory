@@ -23,13 +23,14 @@ They fail rather than skip on purpose — `text.ts` asserts that it found langua
 trees, because a suite that silently checks nothing would let the table rot
 behind a green tick.
 
-## The three workflows
+## The four workflows
 
 | Workflow | Trigger | What |
 |---|---|---|
 | [`tests.yml`](https://github.com/dhobi/taoot-web/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` on GitHub's machines; `full` (whole auto suite + playthrough) self-hosted |
 | [`browser.yml`](https://github.com/dhobi/taoot-web/blob/master/.github/workflows/browser.yml) | nightly 02:00 UTC, manual, or the `full-run` label on a PR | the browser suite — ~39 min, because it costs what the game costs |
 | [`docs.yml`](https://github.com/dhobi/taoot-web/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to Pages |
+| [`deploy.yml`](https://github.com/dhobi/taoot-web/blob/master/.github/workflows/deploy.yml) | a `v*` tag, or manual | builds and uploads `dist/` to the host — [releasing and deploying](deploy.md) |
 
 The browser suite is off the per-PR path deliberately. Add the **`full-run`**
 label to a pull request to pull it in for that PR.

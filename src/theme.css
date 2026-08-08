@@ -299,6 +299,20 @@ kbd,
   white-space: nowrap;
 }
 
+/* The port's version, beside the wordmark. An identifier for a bug report, not
+   a control — so it takes the mute colour and no accent, and sits at the size
+   of the wordmark's second line. Drawn by src/version.ts. */
+.version {
+  align-self: center;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  color: var(--text-mute);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
 .topnav {
   margin-left: auto;
   display: flex;

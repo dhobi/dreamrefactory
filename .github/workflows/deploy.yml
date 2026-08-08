@@ -1,0 +1,160 @@
+name: Deploy
+
+# Publishing the site to www.danielhobi.ch/taoot.
+#
+# A release is a TAG. `git tag v0.9.0 && git push --tags` builds that commit and
+# uploads `dist/` over FTP; an ordinary push to master deploys nothing. The tag
+# and `version` in package.json are checked against each other, because the pages
+# read the version from package.json (src/version.ts) and a site announcing a
+# version nobody tagged is worse than a failed deploy.
+#
+# ## This deploy never deletes anything
+#
+# The site is served from the same directory as four things that are not in
+# `dist/` and never in this repository:
+#
+#   gamefiles/       the CD rip the host serves — ~7 GB, gitignored forever
+#   *.zip            the offline DBGL archives the collection page links to,
+#                    ~1 GB apiece
+#   nightdive.mov    the intro movie, gitignored, so a CI checkout lacks it
+#   gamefiles.json   the listing of the rip. A GitHub runner has no rip, so the
+#                    manifest THIS build writes holds ONE entry (`lang.stg`)
+#                    against the 4,137 the host serves — the play page would
+#                    offer nothing. It is deleted below rather than uploaded.
+#
+# So the mirror only ADDS and OVERWRITES, and the three that could be *written*
+# over are excluded on top of that. There is deliberately no --delete and no
+# option to turn one on: a re-upload of a wrong file is a minute, and a deleted
+# 7 GB rip is not. Vite's asset names are content-hashed, so a superseded bundle
+# is dead weight rather than a stale page — sweep `assets/` by hand if it ever
+# matters.
+#
+# ## The connection
+#
+# Plain FTP sends the password as text on the wire, so the run demands TLS
+# (AUTH TLS on the ordinary FTP port — "explicit FTPS", what shared hosts mean
+# by "FTP over SSL"). Two escape hatches for a host that cannot do it properly,
+# both loud and both off by default: FTP_INSECURE_TLS=1 keeps the encryption but
+# stops checking the certificate (the usual shared-hosting case, where the cert
+# names the server and not the domain), and FTP_ALLOW_PLAINTEXT=1 gives up on
+# TLS entirely.
+#
+# Secrets (repository or `production` environment): FTP_HOST, FTP_USER,
+# FTP_PASSWORD, FTP_PATH, and optionally FTP_PORT, FTP_INSECURE_TLS,
+# FTP_ALLOW_PLAINTEXT. See docs/reference/deploy.md.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# One upload at a time, and never cancel one in flight: a half-written mirror is
+# a half-broken site.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: build and upload dist/
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: The tag and package.json agree
+        if: github.ref_type == 'tag'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag $GITHUB_REF_NAME says $tag, package.json says $pkg"
+            exit 1
+          fi
+          echo "deploying $pkg"
+
+      # `npm run build` is `tsc && vite build` — a type error stops the deploy.
+      - run: npm run build
+
+      # See the header: without the rip, this file describes nothing.
+      - name: Drop the manifest this build could not write
+        run: rm -f dist/gamefiles.json
+
+      - name: Upload dist/ over FTP
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PATH: ${{ secrets.FTP_PATH }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+          FTP_INSECURE_TLS: ${{ secrets.FTP_INSECURE_TLS }}
+          FTP_ALLOW_PLAINTEXT: ${{ secrets.FTP_ALLOW_PLAINTEXT }}
+        run: |
+          set -eu
+          for v in FTP_HOST FTP_USER FTP_PASSWORD FTP_PATH; do
+            eval "test -n \"\${$v:-}\"" || { echo "::error::secret $v is not set"; exit 1; }
+          done
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp
+
+          # See the header. TLS is required unless someone has said otherwise in
+          # a secret, and either way of saying it prints why in the log.
+          force="true"; verify="yes"
+          if [ "${FTP_INSECURE_TLS:-}" = "1" ]; then
+            verify="no"
+            echo "::warning::FTP_INSECURE_TLS=1 — encrypted, but the certificate is not checked"
+          fi
+          if [ "${FTP_ALLOW_PLAINTEXT:-}" = "1" ]; then
+            force="false"
+            echo "::warning::FTP_ALLOW_PLAINTEXT=1 — the password may cross the wire in the clear"
+          fi
+
+          # Nothing in dist/ is named any of these, so this is the second lock
+          # rather than the first: a build that somehow produced one of them
+          # still cannot write it over the host's copy.
+          keep='--exclude-glob gamefiles.json --exclude-glob *.zip --exclude-glob nightdive.mov'
+
+          # One connection rather than four: shared FTP accounts cap concurrent
+          # logins, and 115 files / 37 MB does not need the parallelism.
+          #
+          # The script goes in a file rather than on the command line so the
+          # password is not in any process list; 077 because the runner is not
+          # the only thing that can read $RUNNER_TEMP.
+          umask 077
+          script="$RUNNER_TEMP/deploy.lftp"
+          cat > "$script" <<LFTP
+          set cmd:fail-exit yes
+          set ftp:passive-mode true
+          set ftp:ssl-allow true
+          set ftp:ssl-force $force
+          set ftp:ssl-protect-data true
+          set ssl:verify-certificate $verify
+          set net:max-retries 2
+          set net:timeout 30
+          open -u "$FTP_USER","$FTP_PASSWORD" -p "${FTP_PORT:-21}" ftp://$FTP_HOST
+          mirror -R --verbose $keep dist/ "$FTP_PATH"
+          bye
+          LFTP
+          trap 'rm -f "$script"' EXIT
+          lftp -f "$script"
+
+      - name: Say what went out
+        if: success()
+        run: |
+          {
+            echo "### Deployed \`$(node -p "require('./package.json').version")\` to <https://www.danielhobi.ch/taoot/>"
+            echo
+            echo "$(find dist -type f | wc -l) files, $(du -sh dist | cut -f1) — added and overwritten only."
+            echo "\`gamefiles/\`, \`gamefiles.json\`, \`nightdive.mov\` and the DBGL archives were not touched."
+          } >> "$GITHUB_STEP_SUMMARY"

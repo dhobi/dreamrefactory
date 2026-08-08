@@ -197,8 +197,18 @@ separately from the pages, or a host carries fewer editions than the machine tha
 built them, regenerate the manifest where the tree actually lives:
 
 ```
-npx tsx tools/mkmanifest.ts /var/www/taoot /var/www/taoot   # outDir, gamefilesDir
+cd /var/www/taoot
+npx tsx …/tools/mkmanifest.ts . ./gamefiles .    # outDir, gamefilesDir, publicDir
 ```
+
+Run it **from inside the deployment**, with those relative paths: the keys are
+the walked paths as written, so an absolute `gamefilesDir` writes absolute keys
+and nothing resolves. The third argument is where the authored DF files
+(`lang.stg`, the intro movie) are — `public/` in a checkout, the deployment root
+here, because that is where `public/` is served from.
+
+The [deploy workflow](../reference/deploy.md) never uploads a manifest, for the
+same reason: the machine that builds the pages has no rip to describe.
 
 Two things to know before uploading: paths keep their case (`TITANIC1/data` beside
 `Titanic2/DATA`, and object stores are case-sensitive), and an edition is

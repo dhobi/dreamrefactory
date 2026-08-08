@@ -143,6 +143,7 @@ export default withMermaid(
             { text: "Tools", link: "/reference/tools" },
             { text: "Tests — the inventory", link: "/reference/tests" },
             { text: "Continuous integration", link: "/reference/ci" },
+            { text: "Releasing and deploying", link: "/reference/deploy" },
             { text: "The route", link: "/reference/route" },
           ],
         },

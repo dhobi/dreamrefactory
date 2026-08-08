@@ -29,6 +29,8 @@
  * answer to "what does it collect": whatever you can see in the box.
  */
 
+import { VERSION } from "./version";
+
 /** the port's own repository — the issue is about this port, never about the game */
 const ISSUE_URL = "https://github.com/dhobi/taoot-web/issues/new";
 
@@ -142,6 +144,8 @@ function body(page: BugReportPage): string {
     "### Where",
     "",
     `- **Room:** ${page.where() || "—"}`,
+    // which build this was, so a fixed bug can be told from a live one
+    `- **Port version:** ${VERSION}`,
     `- **Edition:** ${page.edition()}`,
     `- **Page:** ${window.location.href}`,
     `- **Browser:** ${navigator.userAgent}`,

@@ -228,6 +228,23 @@ CLI verification tool (dump structure + frames as PNG):
 npm run dump -- gamefiles/en/titanic2/DATA/b59.set out/
 ```
 
+## Releases
+
+The version is `version` in `package.json` — **0.9.0**, semver, shown in the top
+bar of every page and carried into a bug report. Tagging is what publishes:
+
+```
+npm version 0.9.1
+git push && git push --tags
+```
+
+`.github/workflows/deploy.yml` builds that commit and uploads `dist/` to
+www.danielhobi.ch/taoot over FTP. It only ever adds and overwrites — the CD rip,
+the DBGL archives, `nightdive.mov` and `gamefiles.json` on the host are never
+written over and never deleted. [Releasing and deploying](docs/reference/deploy.md)
+says why, and how to regenerate the manifest when the game data on the host
+changes.
+
 ## Game data
 
 Not distributable — supply it from your own copy, laid out one directory per

@@ -12,6 +12,7 @@
  */
 import { indexedToRGBA, paletteToRGBA } from "../src/df/image";
 import { installLanguageMenu } from "../src/lang-menu";
+import { installVersion } from "../src/version";
 import {
   chosenEdition,
   chosenEncoding,
@@ -720,6 +721,7 @@ $("exportBtn").addEventListener("click", () => {
 
 void installI18n();
 void installLanguageMenu();
+installVersion();
 // Which edition's files the landing screen lists, and which copy of a basename an
 // edit is written back into: the same row the play page and the collection carry
 // (src/editions.ts). A click reloads, and this page's beforeunload guard is what

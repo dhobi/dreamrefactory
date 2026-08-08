@@ -16,6 +16,9 @@ Lookup material — no narrative, come here when you need a specific name.
 - **[Continuous integration](ci.md)** — which suites can run on GitHub's
   machines and which need the self-hosted runner that has the CD rip, how that
   runner is set up, and what changes when the repository goes public.
+- **[Releasing and deploying](deploy.md)** — a release is a tag; where the
+  version number lives, and the four things on the host a deploy must never
+  write over.
 - **[The route](route.md)** — the twenty-seven segments and what each crosses,
   how much of the suite to run while you work, what driving each minigame costs,
   and the conventions a new segment will trip on.

@@ -45,6 +45,7 @@
  * menu shows for those codes.
  */
 import { installLanguageMenu } from "./lang-menu";
+import { installVersion } from "./version";
 import { chosenEdition, installEditionPicker, markEdition, rememberEdition } from "./editions";
 import { installI18n } from "./locales";
 import { showBooklet } from "./booklet";
@@ -52,6 +53,7 @@ import { siteUrl } from "./site";
 
 void installI18n();
 void installLanguageMenu();
+installVersion();
 
 /** the five editions with box/disc scans — Russian shipped too, but nothing
     of its box survives (README, and the download list further down) */

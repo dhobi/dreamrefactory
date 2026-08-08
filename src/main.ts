@@ -31,6 +31,7 @@ import { LangChooser, chooserOrder, preselectedEdition } from "./lang-chooser";
 import { GOG_URL, NIGHTDIVE_MOVIE, NightdiveIntro, Ownership, introPlaysFor } from "./nightdive";
 import { DEFAULT_LANGUAGE, EDITION_STORAGE_KEY, LANG_STAGE, editionName } from "./languages";
 import { installLanguageMenu } from "./lang-menu";
+import { installVersion } from "./version";
 import { gamefileManifest, gamefileSizes, installEditionPicker, markEdition } from "./editions";
 import { installI18n, t } from "./locales";
 import { installBugReport } from "./bug-report";
@@ -637,6 +638,7 @@ async function boot(): Promise<void> {
   // other five languages should not be shown the English it is about to replace
   document.body.classList.add("spoken");
   installLanguageMenu();
+  installVersion();
   // Which copy of the game is being played — above the stage, never hidden with
   // it: the same row the editors and the collection carry (src/editions.ts).
   void installEditionPicker(editionPicker);

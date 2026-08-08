@@ -8,7 +8,9 @@
  * in, a separate setting for a separate question (src/locales/index.ts).
  */
 import { installLanguageMenu } from "./lang-menu";
+import { installVersion } from "./version";
 import { installI18n } from "./locales";
 
 void installI18n();
 void installLanguageMenu();
+installVersion();
