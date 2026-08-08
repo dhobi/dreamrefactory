@@ -1,0 +1,247 @@
+import { Value, toNum, toStr, truthy } from "../interp";
+import { bearing } from "../geometry";
+import { BuiltinCtx } from "./context";
+import { packPoint, s16 } from "../point";
+
+/**
+ * Assorted scalar helpers that live outside any object script: string/word
+ * utilities (findword/putword/variable), number formatting + modulo, the
+ * memory/heap stubs, per-stage scratch params, and the packed-point geometry
+ * primitives (cameraxyz/playerxyz/calcdeg/calcdist) the cast library builds on.
+ */
+export function registerHelperBuiltins(ctx: BuiltinCtx): void {
+  const { session, interp, r } = ctx;
+
+  // string helper used by boot logic: findword("a,b,c", ",", 2) -> "b"
+  // word list = a string split on a separator; an EMPTY (or omitted) delimiter
+  // means the default separator, a space (CyberFlix convention). saveprops
+  // strings ("1 0 1 …", built by putword) round-trip through this.
+  const wordSep = (delim: Value) => {
+    const d = delim === undefined ? "" : toStr(delim);
+    return d === "" ? " " : d;
+  };
+  r("findword", (_i, [s, delim, idx]) => {
+    const parts = toStr(s ?? "").split(wordSep(delim));
+    return parts[(Number(idx) || 1) - 1] ?? "";
+  });
+  // putword(str, delim, idx, word): replace the idx-th (1-based) word, padding
+  // with empty words when idx is past the end so an empty string grows into a
+  // fixed-slot list (TAOOT's hideenigma/hidetrunk save each prop's visibility by slot).
+  r("putword", (_i, [s, delim, idx, word]) => {
+    const sep = wordSep(delim);
+    const i = Math.max(1, Number(idx) || 1) - 1;
+    const parts = toStr(s ?? "") === "" ? [] : toStr(s ?? "").split(sep);
+    while (parts.length <= i) parts.push("");
+    parts[i] = toStr(word ?? "");
+    return parts.join(sep);
+  });
+  r("stringlength", (_i, [s]) => toStr(s ?? "").length);
+  // variable(name[, val]): dynamic global access by computed name — getter with
+  // one arg, setter with two. TAOOT's blackjack tracks per-side state this way
+  // (variable(who @ "count") -> playercount/dealercount, variable(who @
+  // "downcard", card)). Reads/writes the same global table as named globals.
+  r("variable", (_i, [name, val]) => {
+    const key = toStr(name ?? "");
+    if (val === undefined) return interp.globals.get(key) ?? 0;
+    interp.globals.set(key, val);
+    return 0;
+  });
+
+  r("numtostring", (_i, [n]) => String(toNum(n ?? 0)));
+  r("lowmemory", () => 0); // we never simulate the CD-era low-memory path
+  // heapsize(): free memory in bytes. BOOTFILE defines its own lowmemory()
+  // (which shadows the builtin above) as `heapsize() < 6144000` — and every
+  // TAOOT setupsound() case for a memory-heavy deck (decka/deckb/decke/deckf/cargo)
+  // then loads the 11 kHz `.11k` bank instead of the full `.trk`, while still
+  // calling playnewtheme("<deck>.trk"). Left at 0, heapsize() reported "low
+  // memory", the .trk bank was never opened, and those rooms were silent.
+  // We run in a browser with ample memory: report plenty so the full path runs.
+  r("heapsize", () => 64 * 1024 * 1024);
+  // stageparam(idx[, val]): per-stage scratch parameters, getter/setter by arity
+  const stageParams = new Map<number, Value>();
+  r("stageparam", (_i, [idx, val]) => {
+    const k = toNum(idx ?? 0);
+    if (val === undefined) return stageParams.get(k) ?? 0;
+    stageParams.set(k, val);
+    return 0;
+  });
+
+  // helpers used around conversations that live outside any script.
+  // cameraxyz and playerxyz are the SAME primitive here: the original engine
+  // distinguished the player entity from the camera, but in a first-person
+  // game both read the camera/listener position. Registered under both names.
+  const listenerAxis = (axis: Value): Value => {
+    const lis = session.listener();
+    if (!lis) return 0;
+    switch (toNum(axis ?? 1)) {
+      case 1: return lis.x;
+      case 2: return lis.y;
+      case 4: return packPoint(lis.x, lis.y);
+      default: return 0;
+    }
+  };
+  r("cameraxyz", (_i, [axis]) => listenerAxis(axis));
+  // currentdeg(): the camera's current heading in the engine's 0..255 bearing
+  // space, or -1 when no set is loaded. It's the active view's rotation8 — the
+  // very value the world→screen projection turns with — so it composes with
+  // calcvectx/calcvecty: scripts place things relative to the player's facing,
+  // e.g. `calcvectx(currentdeg()+64, dist)`, `if currentdeg() > 128`. TI.EXE
+  // (0x408c50) returns the camera degree, or -1 if no scene is active.
+  r("currentdeg", () => {
+    const lis = session.listener();
+    return lis ? lis.deg & 0xff : -1;
+  });
+  // calcdeg(fromPacked, toPacked): bearing between two packed (x<<16|y)
+  // points in the engine's 0..255 angle space (turntodeg targets)
+  r("calcdeg", (_i, [from, to]) => {
+    const fx = (toNum(from ?? 0) >> 16) & 0xffff;
+    const fy = toNum(from ?? 0) & 0xffff;
+    const tx = (toNum(to ?? 0) >> 16) & 0xffff;
+    const ty = toNum(to ?? 0) & 0xffff;
+    return bearing(tx - fx, ty - fy);
+  });
+  // calcmod(a, b): non-negative modulo (TAOOT's bridge wheel getpropdeg maps
+  // the 0..255 wheel angle into the sprite's 0..4 rotation frames)
+  r("calcmod", (_i, [a, b]) => {
+    const m = toNum(b ?? 0);
+    if (m === 0) return 0;
+    return ((toNum(a ?? 0) % m) + m) % m;
+  });
+  // primitives behind the cast library's distance/facing helpers (TAOOT's
+  // realdist()):
+  // playerxyz(4) = the camera's packed ground position, calcdist between
+  // two packed (x<<16|y) points
+  r("playerxyz", (_i, [axis]) => listenerAxis(axis));
+  r("calcdist", (_i, [a, b]) => {
+    // halves decoded UNSIGNED here (not pointX/pointY): world coordinates are
+    // 0..65535 in this context and the TAOOT corpus never passes negative points
+    const ax = (toNum(a ?? 0) >> 16) & 0xffff;
+    const ay = toNum(a ?? 0) & 0xffff;
+    const bx = (toNum(b ?? 0) >> 16) & 0xffff;
+    const by = toNum(b ?? 0) & 0xffff;
+    return Math.round(Math.hypot(bx - ax, by - ay));
+  });
+
+  // calcvectx(angle, mag) / calcvecty(angle, mag): the (dx, dy) components of a
+  // vector of length `mag` pointing along the engine's 0..255 bearing `angle` —
+  // the inverse of calcdeg/bearing (so dx uses cos, dy uses sin). Scripts build
+  // world points with them, e.g. `playerxyz(1) + calcvectx(currentdeg(), dist)`
+  // / `playerxyz(2) + calcvecty(currentdeg(), dist)`, and add 64 (=90°) to the
+  // angle for the perpendicular.
+  //
+  // Recovered from TI.EXE (handlers 0x42670c/0x42672b → cores 0x43ad90/0x43adc0):
+  // the component is a signed fixed-point trig lookup, `table[angle & 0xff] *
+  // mag >> 14`, where the 256-entry tables (scale 2^14 = 16384) are loaded from
+  // the exe's "TRIG" resources — cos for x, sin for y. The core sign-extends the
+  // magnitude to 16 bits (movsx) before multiplying, and the caller sign-extends
+  // the 16-bit result (movsx ax); we reproduce both. The `>> 14` is a
+  // round-toward-zero divide, i.e. Math.trunc. The shipped tables equal
+  // round(16384·cos/sin) to within ±1 LSB, so we compute the entry directly.
+  const vecComponent =
+    (trig: (rad: number) => number) =>
+    (_i: unknown, [angle, mag]: Value[]) => {
+      const step = ((toNum(angle ?? 0) & 0xff) * 2 * Math.PI) / 256;
+      const entry = Math.round(16384 * trig(step)); // signed fixed-point table value
+      return s16(Math.trunc((entry * s16(toNum(mag ?? 0))) / 16384));
+    };
+  r("calcvectx", vecComponent(Math.cos));
+  r("calcvecty", vecComponent(Math.sin));
+
+  // currentcd([name]): the mounted CD volume. The original verified the named
+  // disc (TAOOT: "Titanic1"/"Titanic2") was in the drive and returned "" if absent;
+  // BOOTFILE's setpath() does `currentcd("Titanic1"); if currentcd()="" error`.
+  // The web build ships all data locally, so any requested disc is always
+  // "mounted": remember the last name and report it (never "") so boot proceeds.
+  let mountedCd = "";
+  r("currentcd", (_i, [name]) => {
+    if (name !== undefined) mountedCd = toStr(name);
+    return mountedCd;
+  });
+
+  // UI dialogs + quit — delegated to host hooks (browser wires alert/confirm/
+  // prompt; headless defaults are safe). notedialog: modal note (OK).
+  // questiondialog: yes/no, returns 1/0 (scripts do `if questiondialog(..)=false`).
+  // textdialog(prompt, initial): text entry, returns the string (debug tools).
+  r("notedialog", async (_i, [message]) => {
+    await session.onNoteDialog(toStr(message ?? ""));
+    return 0;
+  });
+  r("questiondialog", async (_i, [message]) =>
+    (await session.onQuestionDialog(toStr(message ?? ""))) ? 1 : 0,
+  );
+  r("textdialog", async (_i, [prompt, initial]) =>
+    session.onTextDialog(toStr(prompt ?? ""), toStr(initial ?? "")),
+  );
+  r("quit", async () => {
+    await session.onQuit();
+    return 0;
+  });
+
+  // machinetype(): host platform. Scripts branch `if machinetype() = "win"`; the
+  // web build is the Windows engine's descendant, so report "win".
+  r("machinetype", () => "win");
+  // tick(): milliseconds since start (TI.EXE timeGetTime). TAOOT's blackjack
+  // times the deal with `bjtime = tick(); if tick() - bjtime > 1200`. frame(): the
+  // monotonic rendered-frame counter (a conversation's attentionspan = frame()).
+  r("tick", () => session.clock.now);
+  r("frame", () => session.frameCounter);
+  // setparam(idx[, val]): per-set scratch parameters, getter/setter by arity —
+  // the set-level twin of stageparam.
+  const setParams = new Map<number, Value>();
+  r("setparam", (_i, [idx, val]) => {
+    const k = toNum(idx ?? 0);
+    if (val === undefined) return setParams.get(k) ?? 0;
+    setParams.set(k, val);
+    return 0;
+  });
+  // menuvisible([v]) / keyaborts([v]): the menu-bar visibility and the
+  // "keypresses abort the current action" flags. Boot sets both to `debugging`
+  // (0 in normal play). The web build has no native menu bar and its own input
+  // routing, so these just round-trip the flag for any getter.
+  let menuVisible = 0;
+  r("menuvisible", (_i, [v]) => {
+    if (v !== undefined) menuVisible = truthy(v) ? 1 : 0;
+    return menuVisible;
+  });
+  let keyAborts = 0;
+  r("keyaborts", (_i, [v]) => {
+    if (v !== undefined) keyAborts = truthy(v) ? 1 : 0;
+    return keyAborts;
+  });
+  // countbevels(): number of choice bevels on the active puppet screen (a
+  // conversation gates on `if countbevels() > 3`).
+  r("countbevels", () => session.puppet?.bevels.length ?? 0);
+
+  // path(n) / path(n, str): the engine's resource search-path table — 9 string
+  // slots (0..8). Slot 0 is the install root (engine-set); scripts fill 1..8 via
+  // BOOTFILE's setpath(), e.g. TAOOT's `path(1, path(0) @ "tour:")`, `path(3, mainpath @
+  // "data:")`, `path(7, mainpath @ "<room>:")`, and the original resolved game
+  // files against these Mac-style volume prefixes.
+  //
+  // Recovered from TI.EXE — getter 0x427fb0 (accepts n=0..8), setter 0x43dd70
+  // (accepts n=1..8 only; slot 0 is not script-writable), both over a 9 x
+  // 256-byte table at [0x4898b8]. The web build resolves files by basename and
+  // ignores these prefixes, so the table only needs to store and return what
+  // scripts set. The one logic consumer is BOOTFILE's CD-copy check
+  // `if substring(path(1), "titanic1:") = 1` (refuse to run off the CD): slot 0
+  // stays "", so path(1) is never the CD volume and the check passes, as on a
+  // hard-drive install.
+  const pathSlots: string[] = Array(9).fill("");
+  r("path", (_i, [n, str]) => {
+    const idx = toNum(n ?? 0);
+    if (str === undefined) return idx >= 0 && idx <= 8 ? pathSlots[idx] : "";
+    if (idx >= 1 && idx <= 8) {
+      const value = toStr(str);
+      pathSlots[idx] = value;
+      // The prefixes are not resolved literally (files are found by basename),
+      // but the VOLUME in them is the game telling us which CD is now mounted:
+      // TAOOT's setpath(1) writes "titanic1:data:" into slot 3, setpath(2) writes
+      // "titanic2:data:". 93 basenames ship on both discs — the public rooms in
+      // their pre- and post-sinking state — so the host has to follow the swap
+      // or half the game draws the wrong act's scenery.
+      const vol = /^titanic([12]):/i.exec(value);
+      if (vol) session.onDiscChange?.(Number(vol[1]) as 1 | 2);
+    }
+    return 0;
+  });
+}

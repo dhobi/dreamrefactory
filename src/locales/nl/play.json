@@ -1,0 +1,22 @@
+{
+  "docTitle": "Spelen — Titanic - Adventure Out Of Time RE",
+  "h1": "Bezig met starten",
+  "intro": "Spelbestanden worden geladen…",
+  "introSub": "Zoeken in de map <code>gamefiles/</code>",
+  "keys": "<b>←</b> <b>→</b> draaien &nbsp;·&nbsp; <b>↑</b> lopen &nbsp;·&nbsp; <b>M</b> kaart &nbsp;·&nbsp; <b>O</b> hotspots &nbsp;·&nbsp; <b>X</b> details",
+  "fullscreen": "⛶ Volledig scherm",
+  "fullscreenTitle": "Volledig scherm (4:3 met balken)",
+  "reportBug": "🪲 Bug melden",
+  "reportBugTitle": "Iets melden dat de port verkeerd doet",
+  "bugShotClipboard": "Het scherm staat op je klembord — plak het in het issue.",
+  "bugShotFile": "Je browser wilde het scherm niet kopiëren, het is gedownload — voeg de PNG toe aan het issue.",
+  "swipeLabel": "Vegen",
+  "swipeInvertTurn": "links/rechts omkeren",
+  "swipeInvertTurnTitle": "vegen van rechts naar links draait naar rechts, niet naar links",
+  "swipeInvertWalk": "vooruit omkeren",
+  "swipeInvertWalkTitle": "omlaag vegen loopt vooruit, niet omhoog vegen",
+  "savesClose": "Sluiten",
+  "savesNamePlaceholder": "naam van opgeslagen spel",
+  "savesSave": "Opslaan",
+  "savesUpload": "⬆ .ti uploaden"
+}

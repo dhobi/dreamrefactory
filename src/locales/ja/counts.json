@@ -1,0 +1,71 @@
+{
+  "unexportedEdits": {
+    "other": "未書き出しの変更 {n} 件"
+  },
+  "discardEdits": {
+    "other": "未書き出しの変更 {n} 件を破棄しますか？"
+  },
+  "containers": {
+    "other": "コンテナ {n} 個"
+  },
+  "flats": {
+    "other": "フラット {n} 個"
+  },
+  "clickableRegions": {
+    "other": "クリック可能な領域 {n} 個"
+  },
+  "withArt": {
+    "other": "（うち {n} 個に画像あり）"
+  },
+  "loopChunks": {
+    "other": "ループチャンク {n} 個"
+  },
+  "oneShots": {
+    "other": "単発音 {n} 個"
+  },
+  "steps": {
+    "other": "{n} ステップ"
+  },
+  "chunks": {
+    "other": "チャンク {n} 個"
+  },
+  "members": {
+    "other": "メンバー {n} 人"
+  },
+  "poses": {
+    "other": "姿勢 {n} 個"
+  },
+  "sprites": {
+    "other": "スプライト {n} 枚"
+  },
+  "props": {
+    "other": "小道具 {n} 個"
+  },
+  "states": {
+    "other": "状態 {n} 個"
+  },
+  "frames": {
+    "other": "フレーム {n} 枚"
+  },
+  "scenes": {
+    "other": "シーン {n} 個"
+  },
+  "views": {
+    "other": "視点 {n} 個"
+  },
+  "hotspots": {
+    "other": "ホットスポット {n} 個"
+  },
+  "roads": {
+    "other": "通路 {n} 本"
+  },
+  "waypoints": {
+    "other": "経由点 {n} 個"
+  },
+  "actorMarks": {
+    "other": "俳優マーク {n} 個"
+  },
+  "namedSounds": {
+    "other": "名前つきの音 {n} 個"
+  }
+}

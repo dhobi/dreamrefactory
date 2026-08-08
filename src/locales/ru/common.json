@@ -1,0 +1,13 @@
+{
+  "pickFromGamefiles": "или выберите файл из gamefiles/",
+  "pickFromGamefilesBig": "или выберите файл из gamefiles/ — большие заставки весят десятки мегабайт",
+  "loading": "загрузка {path}…",
+  "fetchFailed": "не удалось загрузить {path} ({status})",
+  "notReadable": "нечитаемый {ext}: {message}",
+  "notAnImage": "{file}: изображение не декодируется",
+  "notAScript": "(контейнер не декодируется как скрипт)",
+  "exported": "экспортирован {file} ({bytes} байт",
+  "exportedUnmodified": ", без изменений)",
+  "exportedWithEdits": ", изменений: {n} — {edits})",
+  "exportFailed": "самопроверка при экспорте не прошла: {message}"
+}

@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="collection.docTitle">Collection — Titanic - Adventure Out Of Time RE</title>
+    <!-- where the site root is from this page, for URLs built in TS (src/site.ts) -->
+    <meta name="site-root" content="../" />
+    <link rel="icon" type="image/png" href="/globe-mark.png" />
+    <link rel="stylesheet" href="/src/theme.css" />
+    <style>
+      /*
+       * The physical release, which this whole port otherwise has no room for:
+       * the printed box and the CD(s) inside it, and — underneath — how to run
+       * the 1996 DOS original itself rather than this reimplementation of it.
+       *
+       * Two sections, two different relationships with the truth. The box is a
+       * a real 3D object (src/collection.ts ports the old site's cover.js), so
+       * turning it is worth building even though nothing here plays; the disc
+       * is flat because a CD never had a second side worth spinning to. The
+       * offline half sends you OFF this site entirely — the seven archives are
+       * ~1 GB each and live at danielhobi.ch, never in this repository, for the
+       * same reason gamefiles/ is gitignored: no game data ships here.
+       *
+       * Sizes and filenames — `1.1 GB`, `taoot_de_offline.dbgl.zip` — are
+       * numbers and names read off a real file, the same kind of thing `.SHP`
+       * and `MAIN.STG` are elsewhere on this site. They are written directly
+       * below rather than through the catalogue, which is why they show up
+       * identically in all six languages: a translation that localised them
+       * would be describing a different download.
+       */
+
+      #collection {
+        padding: 1.2rem clamp(0.9rem, 4vw, 2rem) 3.5rem;
+        margin-top: 1.4rem;
+        width: 100%;
+        max-width: 46rem;
+      }
+      #collection section + section {
+        margin-top: 2.6rem;
+        padding-top: 2.2rem;
+        border-top: 1px solid var(--border);
+      }
+      #collection .intro {
+        font-size: 0.95rem;
+        color: var(--text-dim);
+        line-height: 1.6;
+        text-align: center;
+        max-width: 40rem;
+        margin: 0 auto;
+      }
+
+      /* ---- the edition picker ----
+         The site's own edition row (src/theme.css, built by src/editions.ts), over
+         this page's five scanned pressings. The endonyms come off
+         src/languages.ts — an endonym is an endonym, not a sentence this page
+         wrote, so it is never in the catalogue. Centred and given room to breathe
+         is this page's part: the play page and the editors sit theirs tighter. */
+      .editionPicker {
+        margin: 1.4rem 0 1.6rem;
+      }
+
+      /* ---- the viewer: box beside its disc(s) ---- */
+      .viewer {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 2.4rem;
+        margin-top: 0.4rem;
+      }
+      .boxColumn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.8rem;
+      }
+
+      /* The box itself: six faces of a preserve-3d cube, sized off custom
+         properties rather than a regenerated <style> block (the old site's
+         cover.js rewrote one on every resize) — one static rule below reads
+         --w/--h/--d with calc(), so only the properties change. */
+      #box {
+        --w: 260px;
+        --h: 360px;
+        --d: 60px;
+        width: var(--w);
+        height: var(--h);
+        perspective: 1200px;
+        cursor: grab;
+        touch-action: none;
+      }
+      #box:active {
+        cursor: grabbing;
+      }
+      /* the one focus ring the box needs — the global :focus-visible rule
+         already gives it one, this just keeps the glow off the cube's own
+         3D children */
+      #box:focus-visible {
+        outline-offset: 6px;
+      }
+      .boxInner {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        transform-style: preserve-3d;
+        transition: transform 420ms ease;
+      }
+      .face {
+        position: absolute;
+        overflow: hidden;
+        border-radius: 2px;
+        background: var(--inset);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+      }
+      .face img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      /* front/back are the box's own width × height; left/right are a strip
+         `depth` wide and full height (the spine); top/bottom are full width
+         and a strip `depth` tall — each centred on the box before its
+         transform pushes it out to the matching face. */
+      .face.front,
+      .face.back {
+        top: 0;
+        left: 0;
+        width: var(--w);
+        height: var(--h);
+      }
+      .face.left,
+      .face.right {
+        top: 0;
+        left: calc((var(--w) - var(--d)) / 2);
+        width: var(--d);
+        height: var(--h);
+      }
+      .face.top,
+      .face.bottom {
+        top: calc((var(--h) - var(--d)) / 2);
+        left: 0;
+        width: var(--w);
+        height: var(--d);
+      }
+      /* the six placements, ported from the old site's cover.js */
+      .face.front {
+        transform: translateZ(calc(var(--d) / 2));
+      }
+      .face.back {
+        transform: rotateZ(180deg) rotateX(-180deg) translateZ(calc(var(--d) / 2));
+      }
+      .face.right {
+        transform: rotateY(90deg) translateZ(calc(var(--w) / 2));
+      }
+      .face.left {
+        transform: rotateY(-90deg) translateZ(calc(var(--w) / 2));
+      }
+      .face.top {
+        transform: rotateX(90deg) translateZ(calc(var(--h) / 2)) rotateZ(180deg);
+      }
+      .face.bottom {
+        transform: rotateX(-90deg) translateZ(calc(var(--h) / 2));
+      }
+
+      .faceButtons {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.3rem;
+        max-width: 260px;
+      }
+      .faceButtons button {
+        font-size: 0.74rem;
+        padding: 0.24rem 0.5rem;
+      }
+      .faceButtons button.here {
+        border-color: var(--ice-500);
+        color: var(--frost);
+        background: color-mix(in srgb, var(--ice-400) 15%, transparent);
+      }
+
+      /* ---- the disc: flat, not a box ---- */
+      .discs {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.6rem;
+      }
+      .discImg {
+        width: 200px;
+        height: 200px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: var(--inset);
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.6),
+          0 14px 40px -16px rgba(0, 0, 0, 0.9);
+      }
+      .discImg img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      /* the two disc numbers, shown only when a second disc exists (not NL) —
+         plain digits, so there is nothing here for a catalogue to translate */
+      .discTabs {
+        display: flex;
+        gap: 0.3rem;
+      }
+      .discTabs button {
+        width: 1.9rem;
+        padding: 0.2rem 0;
+        font-family: var(--font-mono);
+      }
+      .discTabs button.here {
+        border-color: var(--ice-500);
+        color: var(--frost);
+        background: color-mix(in srgb, var(--ice-400) 15%, transparent);
+      }
+
+      .caption {
+        margin-top: 1.6rem;
+        text-align: center;
+        font-family: var(--font-display);
+        font-size: 1rem;
+        letter-spacing: 0.04em;
+        color: var(--text-bright);
+      }
+
+      /* ---- the booklet: two square pages, and a leaf that turns between them
+         The old site did this with jQuery and turn.js; src/booklet.ts does the
+         one thing anybody saw of them, which is the transform below. The book
+         is a fixed two-page frame rather than one that re-centres on the
+         covers: the turning leaf is positioned against the spine, and a spine
+         that moved when the book closed would take the leaf with it. */
+      .book {
+        --page: 300px;
+        position: relative;
+        display: flex;
+        width: calc(var(--page) * 2);
+        height: var(--page);
+        margin: 1.6rem auto 0;
+        perspective: 1800px;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      /* `display: flex` above outranks the UA sheet's [hidden] rule, the same
+         way the edition picker's does in src/theme.css */
+      .book[hidden] {
+        display: none;
+      }
+      .book:focus-visible {
+        outline-offset: 6px;
+      }
+      .leaf {
+        position: relative;
+        width: var(--page);
+        height: var(--page);
+      }
+      .leaf img,
+      .turning .side img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        background: var(--inset);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+      }
+      /* a cover is seen alone: the other half of the frame keeps the width so
+         the spine stays put, and shows nothing */
+      .leaf.blank img {
+        visibility: hidden;
+      }
+      /* the gutter — what makes two squares read as one booklet rather than as
+         two pictures side by side */
+      .book::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: calc(var(--page) - 10px);
+        width: 20px;
+        pointer-events: none;
+        background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.45), transparent);
+      }
+
+      .turning {
+        position: absolute;
+        top: 0;
+        width: var(--page);
+        height: var(--page);
+        transform-style: preserve-3d;
+        transition: transform 460ms ease-in-out; /* TURN_MS in src/booklet.ts */
+        z-index: 2;
+      }
+      /* forward turns pivot on the right page's inner edge, backward turns on
+         the left page's — in both cases the spine */
+      .turning.fwd {
+        left: var(--page);
+        transform-origin: left center;
+      }
+      .turning.back {
+        left: 0;
+        transform-origin: right center;
+      }
+      .turning .side {
+        position: absolute;
+        inset: 0;
+        backface-visibility: hidden;
+      }
+      /* the reverse of the sheet, pre-flipped so it reads the right way round
+         once the leaf has come to rest */
+      .turning .side.b {
+        transform: rotateY(180deg);
+      }
+
+      .bookControls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.7rem;
+        margin-top: 0.9rem;
+      }
+      .bookControls[hidden] {
+        display: none;
+      }
+      .bookControls button {
+        width: 2.1rem;
+        padding: 0.16rem 0;
+        font-size: 1.05rem;
+        line-height: 1.1;
+      }
+      /* page numbers, not a sentence — the same reasoning as the disc tabs */
+      .bookCount {
+        min-width: 7.5rem;
+        text-align: center;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        color: var(--text-mute);
+      }
+      .bookletNone {
+        margin: 1.6rem auto 0;
+        max-width: 34rem;
+        text-align: center;
+        font-size: 0.88rem;
+        color: var(--text-mute);
+        line-height: 1.6;
+      }
+
+      /* ---- play it offline ---- */
+      .offline h2,
+      .booklet h2 {
+        font-family: var(--font-display);
+        font-size: 1rem;
+        font-weight: normal;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--text-bright);
+        text-align: center;
+        margin: 0 0 0.2rem;
+      }
+      .offline > p {
+        font-size: 0.92rem;
+        color: var(--text-dim);
+        line-height: 1.6;
+        text-align: center;
+        max-width: 38rem;
+        margin: 0.6rem auto 0;
+      }
+      .steps {
+        max-width: 34rem;
+        margin: 1.4rem auto 0;
+        padding-left: 1.4rem;
+        color: var(--text);
+        font-size: 0.88rem;
+        line-height: 1.7;
+      }
+      .steps li + li {
+        margin-top: 0.4rem;
+      }
+      .offline h3 {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--text-mute);
+        text-align: center;
+        margin: 2rem 0 0.8rem;
+      }
+      .archives {
+        list-style: none;
+        margin: 0 auto;
+        padding: 0;
+        max-width: 30rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--panel);
+        overflow: hidden;
+      }
+      .archives li {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.8rem;
+        padding: 0.55rem 0.9rem;
+      }
+      .archives li + li {
+        border-top: 1px solid var(--border);
+      }
+      .archives .size {
+        flex: none;
+        font-family: var(--font-mono);
+        font-size: 0.76rem;
+        color: var(--text-mute);
+      }
+      .rights {
+        font-size: 0.78rem;
+        color: var(--text-mute);
+        line-height: 1.6;
+        text-align: center;
+        max-width: 36rem;
+        margin: 1.8rem auto 0;
+      }
+
+      /* A fixed-pixel cube does not get to push a phone sideways: shrink the
+         geometry itself at the same breakpoint the topbar drops its strapline,
+         rather than scaling a box whose layout size would stay the old one. */
+      @media (max-width: 560px) {
+        #box {
+          --w: 175px;
+          --h: 242px;
+          --d: 40px;
+        }
+        .faceButtons {
+          max-width: 175px;
+        }
+        .discImg {
+          width: 150px;
+          height: 150px;
+        }
+        .viewer {
+          gap: 1.4rem;
+        }
+        /* the booklet is two pages wide whatever else happens, so its page size
+           is what has to give — vw rather than a second fixed number, because
+           the narrow phones this rule is for are not all one width */
+        .book {
+          --page: min(43vw, 170px);
+        }
+      }
+    </style>
+  </head>
+  <body class="deep">
+    <header class="topbar">
+      <a class="brand" href="../" title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1996 release" data-i18n-attr="title:site.brandTitle">
+        <img class="brand-mark" src="/globe-mark.png" alt="" width="30" height="30" />
+        <span class="brand-text">
+          <b>Titanic</b>
+          <span>Adventure Out Of Time RE</span>
+        </span>
+      </a>
+      <nav class="topnav">
+        <a href="../play/" data-i18n="site.navPlay">Play</a>
+        <a href="../editors/" data-i18n="site.navEditors">Editors</a>
+        <a href="../collection/" class="here" data-i18n="site.navCollection">Collection</a>
+        <a href="https://dhobi.github.io/taoot-web/" data-i18n="site.navDocs">Docs</a>
+        <a href="https://github.com/dhobi/taoot-web" data-i18n="site.navSource">Source</a>
+      </nav>
+    </header>
+
+    <div id="collection">
+      <section class="release">
+        <h1 data-i18n="collection.h1">The Collection</h1>
+        <p class="intro" data-i18n="collection.intro"
+          >Here you will find scanned and published material about the game. At
+          the bottom of the page are the archives that let you play it offline in
+          several languages (DOSBox).</p
+        >
+
+        <!-- src/collection.ts appends the five endonym buttons here, off the
+             same src/languages.ts list the top bar's own language menu reads -->
+        <!-- a role="group" with no accessible name is an unnamed group, so the
+             label the sighted reader sees is the one it points at -->
+        <div class="editionPicker" id="editionPicker" role="group" aria-labelledby="editionLabel">
+          <span class="pickerLabel" id="editionLabel" data-i18n="site.editionLabel">Edition</span>
+        </div>
+
+        <div class="viewer">
+          <div class="boxColumn">
+            <!-- src/collection.ts fills this with the six faces of the
+                 currently-selected edition; nothing is mounted until then -->
+            <div id="box" class="box" tabindex="0"></div>
+            <div class="faceButtons">
+              <button type="button" data-face="front" data-i18n="collection.faceFront">Front</button>
+              <button type="button" data-face="back" data-i18n="collection.faceBack">Back</button>
+              <button type="button" data-face="left" data-i18n="collection.faceLeft">Left spine</button>
+              <button type="button" data-face="right" data-i18n="collection.faceRight">Right spine</button>
+              <button type="button" data-face="top" data-i18n="collection.faceTop">Top</button>
+              <button type="button" data-face="bottom" data-i18n="collection.faceBottom">Bottom</button>
+            </div>
+          </div>
+
+          <!-- src/collection.ts fills this with cd1 (and cd2's flip, where the
+               edition has one — not NL, a one-disc pressing) -->
+          <div id="discs" class="discs"></div>
+        </div>
+
+        <p class="caption" id="caption"></p>
+      </section>
+
+      <section class="booklet">
+        <h2 id="bookletHeading" data-i18n="collection.bookletHeading">The booklet</h2>
+        <p class="intro" data-i18n="collection.bookletIntro"
+          >Folded into the box was a 32-page booklet: the manual, the controls,
+          and several pages of period detail about the ship. Only the German
+          one was ever scanned, so this is the one edition that has it. Click
+          either half to turn a page.</p
+        >
+
+        <!-- src/booklet.ts fills this with the two halves of the current
+             spread, and lays a turning leaf over them while a page is in the
+             air; nothing is mounted until an edition with a scan is picked -->
+        <div id="book" class="book" tabindex="0" role="group" aria-labelledby="bookletHeading" hidden></div>
+
+        <div class="bookControls" id="bookControls" hidden>
+          <button type="button" id="bookPrev" aria-label="Previous pages" data-i18n-attr="aria-label:collection.bookletPrev">‹</button>
+          <!-- page numbers, written by src/booklet.ts; polite so that turning a
+               page says which two are now open rather than going by in silence -->
+          <span class="bookCount" id="bookCount" aria-live="polite"></span>
+          <button type="button" id="bookNext" aria-label="Next pages" data-i18n-attr="aria-label:collection.bookletNext">›</button>
+        </div>
+
+        <p class="bookletNone" id="bookletNone" hidden data-i18n="collection.bookletNone"
+          >This pressing's booklet was never scanned — only the German one is
+          here.</p
+        >
+      </section>
+
+      <section class="offline">
+        <h2 data-i18n="collection.offlineHeading">Play it offline</h2>
+        <p data-i18n="collection.offlineIntro"
+          >The 1996 game, not this port: the original DOS executable, run
+          through DOSBox behind a front end that manages the setup. Four steps
+          get it running.</p
+        >
+
+        <ol class="steps">
+          <li data-i18n-html="collection.step1"
+            >Download and install <a href="https://dbgl.org/">DBGL</a> (DOSBox
+            Game Launcher) — a front end for DOSBox.</li
+          >
+          <li data-i18n="collection.step2"
+            >Download one of the archives below. Do not unzip it — DBGL does
+            that itself.</li
+          >
+          <li data-i18n="collection.step3"
+            >In DBGL, choose Profiles → Import… and pick the file you
+            downloaded.</li
+          >
+          <li data-i18n="collection.step4">Select the imported profile and press Play.</li>
+        </ol>
+
+        <h3 data-i18n="collection.archivesHeading">The archives</h3>
+        <ul class="archives">
+          <li>
+            <a href="https://danielhobi.ch/taoot/taoot_en_offline.dbgl.zip">Titanic: Adventure out of time</a>
+            <span class="size">1.1 GB</span>
+          </li>
+          <li>
+            <a href="https://danielhobi.ch/taoot/taoot_en_demo_offline.dbgl.zip">Titanic: The lost mission</a>
+            <span class="size">324 MB</span>
+          </li>
+          <li>
+            <a href="https://danielhobi.ch/taoot/taoot_de_offline.dbgl.zip">Titanic: Wettlauf gegen die Zeit</a>
+            <span class="size">1.06 GB</span>
+          </li>
+          <li>
+            <a href="https://danielhobi.ch/taoot/taoot_fr_offline.dbgl.zip">Titanic: Une aventure hors du temps</a>
+            <span class="size">1.05 GB</span>
+          </li>
+          <li>
+            <a href="https://danielhobi.ch/taoot/taoot_ru_offline.dbgl.zip">Титаник: Прошлое можно изменить</a>
+            <span class="size">1.06 GB</span>
+          </li>
+          <li>
+            <a href="https://danielhobi.ch/taoot/taoot_ne_offline.dbgl.zip">Titanic: Avontuur in de tijd</a>
+            <span class="size">1.1 GB</span>
+          </li>
+          <li>
+            <a href="https://danielhobi.ch/taoot/taoot_jp_offline.dbgl.zip">タイタニック: Adventure out of time</a>
+            <span class="size">1.1 GB</span>
+          </li>
+        </ul>
+
+        <p class="rights" data-i18n-html="collection.rightsNote"
+          >Nightdive Studios is the publisher of Titanic: Adventure Out Of
+          Time; the English version is sold on
+          <a href="https://www.gog.com/game/titanic_adventure_out_of_time">GOG</a
+          >. The other languages have never been re-released.</p
+        >
+      </section>
+    </div>
+
+    <script type="module" src="/src/collection.ts"></script>
+  </body>
+</html>

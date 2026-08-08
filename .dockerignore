@@ -1,0 +1,26 @@
+# The build context for tools/runner/Dockerfile is the REPOSITORY ROOT, because
+# the Dockerfile COPYs tools/runner/runner.env. Without this file that context is
+# the whole working tree — including a ~7 GB CD rip and node_modules.
+#
+# BuildKit only transfers what a COPY actually asks for, so the build is fast
+# either way. This exists for the case that stops being true: someone adds a
+# `COPY . .` and silently bakes the rip into a layer that could be pushed to a
+# registry. Excluding it here makes that impossible rather than unlikely.
+
+gamefiles
+node_modules
+dist
+out
+dfet
+docs/.vitepress/cache
+docs/.vitepress/dist
+.git
+
+# never let a credential into a build context
+tools/runner/*.secret
+*.pem
+*.key
+
+# large local artefacts that no image needs
+public/nightdive.mov
+public/collection

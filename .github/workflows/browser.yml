@@ -1,0 +1,153 @@
+name: Browser suite
+
+# The same route as the playthrough, but through real mouse and keyboard events
+# against a live dev server — so it costs what the game costs, ~39 min for a
+# carried run. That is too long to sit on every pull request, so it is not on
+# `pull_request` by default: it runs nightly, on demand, or when a PR is given
+# the `full-run` label.
+
+on:
+  schedule:
+    # 02:00 UTC. Cron on GitHub is best-effort and can be delayed under load.
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      segments:
+        description: "SEGMENTS to run (blank = the gated set)"
+        required: false
+        default: ""
+      suite:
+        description: "which browser suite"
+        required: false
+        default: test:browser
+        type: choice
+        options:
+          - test:browser
+          - test:browser:playthrough
+          - test:browser:endgame
+          - test:browser:lang
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: browser-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    name: ${{ inputs.suite || 'test:browser' }}
+    # On `labeled`, only the one label starts a run — every other label edit on
+    # every PR would otherwise boot a 39-minute job. Forks are excluded for the
+    # same reason as in tests.yml: this runner holds the rip.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.label.name == 'full-run' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, linux, x64, taoot-gamefiles]
+    timeout-minutes: 90
+
+    env:
+      # NOT 5173. The runner shares a machine with whoever owns it, and 5173 is
+      # where a developer's own `npm run dev` lives — taking it would either
+      # fail the run or, worse, quietly test their working tree instead of this
+      # checkout. `--strictPort` makes the collision an error rather than a
+      # silent hop to the next free port.
+      TAOOT_CI_PORT: "5199"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # See tests.yml: checkout's `git clean -ffdx` removes ignored files, so
+      # the link is remade after it.
+      - name: Link the rip into the workspace
+        run: |
+          test -d "$TAOOT_GAMEFILES" || {
+            echo "::error::TAOOT_GAMEFILES ($TAOOT_GAMEFILES) is not a directory."
+            exit 1
+          }
+          ln -sfn "$TAOOT_GAMEFILES" gamefiles
+
+      - run: npm ci
+
+      # Three hosts to satisfy, so this asks rather than assumes:
+      #   * the container (tools/runner/) already carries browsers matched to the
+      #     locked Playwright version, and its user has no sudo — installing
+      #     would fail on apt, and would be pointless;
+      #   * a bare-metal host with sudo may still be missing the system
+      #     libraries, if setup-runner.sh's warm-up was skipped;
+      #   * a bare-metal host without sudo can at least fetch the browser.
+      - name: Ensure Playwright's Chromium
+        run: |
+          if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && [ -d "${PLAYWRIGHT_BROWSERS_PATH}" ]; then
+            echo "browsers come from the image: $PLAYWRIGHT_BROWSERS_PATH"
+          elif sudo -n true 2>/dev/null; then
+            npx playwright install --with-deps chromium
+          else
+            npx playwright install chromium
+          fi
+
+      # `vite preview` cannot serve this: the /gamefiles middleware is a
+      # `configureServer` hook (vite.config.ts), which only the dev server runs.
+      # Started via node directly rather than `npm run dev` so $! is vite's own
+      # pid — the cleanup step kills that pid and nothing else.
+      - name: Start the dev server
+        run: |
+          node node_modules/vite/bin/vite.js \
+            --port "$TAOOT_CI_PORT" --strictPort --host 127.0.0.1 \
+            > "$RUNNER_TEMP/vite.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/vite.pid"
+          for _ in $(seq 1 60); do
+            if curl -sf "http://127.0.0.1:$TAOOT_CI_PORT/" >/dev/null; then
+              echo "dev server up on $TAOOT_CI_PORT"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::dev server never answered on $TAOOT_CI_PORT"
+          cat "$RUNNER_TEMP/vite.log"
+          exit 1
+
+      - name: Run the suite
+        env:
+          APP_URL: http://127.0.0.1:${{ env.TAOOT_CI_PORT }}/
+          SEGMENTS: ${{ inputs.segments }}
+          SHOT_DIR: ${{ runner.temp }}/shots
+        run: |
+          # An EMPTY SEGMENTS is not the same as an unset one, and the
+          # difference is a silent pass. playthrough.ts reads it with `??`, so
+          # "" survives, splits to [""], filters to [] — nought segments — and
+          # then exits 0 with "PASSED — 0 beats over 0 segment(s)". The blank
+          # default of the `segments` input would land exactly there, so it is
+          # unset here and the suite falls back to its own gated 1..27.
+          if [ -z "${SEGMENTS:-}" ]; then
+            unset SEGMENTS
+            echo "segments: the gated set (1..27)"
+          else
+            echo "segments: $SEGMENTS"
+          fi
+          npm run ${{ inputs.suite || 'test:browser' }}
+
+      # Kill by recorded pid. Never `pkill -f vite` — on a shared machine that
+      # would take the owner's dev server with it.
+      - name: Stop the dev server
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/vite.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/vite.pid")" 2>/dev/null || true
+          fi
+
+      # A browser failure is a picture of a wrong screen; without it the log
+      # says only that a wait went unanswered.
+      - name: Upload screenshots and the server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/shots
+            ${{ runner.temp }}/vite.log
+          if-no-files-found: ignore
+          retention-days: 14

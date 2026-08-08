@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="home.docTitle">Titanic - Adventure Out Of Time RE</title>
+    <!-- where the site root is from this page, for URLs built in TS (src/site.ts) -->
+    <meta name="site-root" content="./" />
+    <link rel="icon" type="image/png" href="/globe-mark.png" />
+    <link rel="stylesheet" href="/src/theme.css" />
+    <style>
+      /*
+       * The front page: what this is, and one way in.
+       *
+       * It used to be the game page as well — the same document held the
+       * welcome text and the framebuffer, and the welcome was hidden the
+       * instant the boot had something to draw. So the sentence explaining
+       * that this is a re-implementation and not the 1996 release was on
+       * screen for exactly as long as the files took to load, and reading it
+       * meant racing the game. The two jobs are now two pages: this one says
+       * what you are looking at and then waits, /play/ boots (play/index.html).
+       *
+       * The one control here is the Play button, and it is brass — the sheet
+       * reserves brass for the thing that commits (src/theme.css), there is
+       * exactly one of them on the page, and it is the largest thing on it.
+       */
+
+      #home {
+        padding: 1.2rem clamp(0.9rem, 4vw, 2rem) 3rem;
+        margin-top: 1.4rem;
+        text-align: center;
+        width: 100%;
+        max-width: 54rem;
+      }
+
+      /*
+       * The globe, at the size it deserves on the one page that is only about
+       * what this is.
+       *
+       * The topbar carries the disc alone at 30px as an identity mark
+       * (globe-mark.png); this is the one place the logo is the subject rather
+       * than a label, so it gets the whole image — cast shadow included — and
+       * the title sits under it. Fluid rather than
+       * fixed (`clamp`) because the page is read on phones as well, and the
+       * source is 504x434, so even the top of that range is a downscale and never
+       * a stretch. `height: auto` with the intrinsic size still declared on the
+       * element keeps the aspect ratio and reserves the space before it loads, so
+       * the title does not jump.
+       *
+       * Same sphere shadow as the small mark, opened up a little: a sphere gets a
+       * sphere's glow, not a box's drop shadow (src/theme.css).
+       */
+      #home .hero-mark {
+        display: block;
+        width: clamp(8rem, 24vw, 14rem);
+        height: auto;
+        margin: 0 auto 0.6rem;
+        filter: drop-shadow(0 0 26px rgba(96, 192, 240, 0.3));
+      }
+      #home .intro {
+        font-size: 0.95rem;
+        color: var(--text-dim);
+        max-width: 40rem;
+        margin: 0 auto;
+        line-height: 1.6;
+      }
+
+      /* ---- the way in ---- */
+
+      .playrow {
+        margin-top: 2rem;
+      }
+      /* An anchor, not a button: it goes to a page, so it should behave like a
+         link does (middle-click, open in a new tab). It borrows the primary
+         button's brass and then goes a size larger — this is the only thing on
+         the page you can press. */
+      a.play {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.7rem;
+        padding: 0.75rem 2.4rem;
+        font-family: var(--font-display);
+        font-size: 1.2rem;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        text-decoration: none;
+        color: #180d00;
+        background: linear-gradient(to bottom, var(--brass-600), var(--brass-700));
+        border: 1px solid var(--brass-300);
+        border-radius: var(--radius);
+        /* the porthole glow, warmed: the one lit thing on a dark page */
+        box-shadow:
+          0 16px 44px -22px rgba(0, 0, 0, 0.95),
+          0 0 44px -14px rgba(216, 156, 36, 0.45);
+        transition:
+          background-color 110ms linear,
+          border-color 110ms linear,
+          transform 110ms ease-out;
+      }
+      a.play:hover {
+        background: linear-gradient(to bottom, var(--brass-400), var(--brass-600));
+        border-color: var(--brass-200);
+        color: #1c0f00;
+        transform: translateY(-1px);
+      }
+      a.play:active {
+        transform: none;
+      }
+      /* the triangle says "play" a second time, so it stays quiet */
+      a.play .glyph {
+        font-family: var(--font-ui);
+        font-size: 0.9rem;
+        letter-spacing: 0;
+        opacity: 0.75;
+      }
+      .playrow .note {
+        margin-top: 0.8rem;
+        font-size: 0.78rem;
+        color: var(--text-mute);
+      }
+
+      /* Who this stands on, in the small print at the foot of the one page that
+         is about what this is. Same weight as the collection page's rights note
+         (collection/index.html): the quietest thing on the page, and the last —
+         it is read once, not on the way to the game. */
+      .credits {
+        margin: 3rem auto 0;
+        max-width: 34rem;
+        font-size: 0.78rem;
+        line-height: 1.6;
+        color: var(--text-mute);
+      }
+    </style>
+  </head>
+  <body class="deep">
+    <header class="topbar">
+      <a class="brand" href="./" title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1996 release" data-i18n-attr="title:site.brandTitle">
+        <img class="brand-mark" src="/globe-mark.png" alt="" width="30" height="30" />
+        <span class="brand-text">
+          <b>Titanic</b>
+          <span>Adventure Out Of Time RE</span>
+        </span>
+      </a>
+      <nav class="topnav">
+        <a href="./play/" data-i18n="site.navPlay">Play</a>
+        <a href="./editors/" data-i18n="site.navEditors">Editors</a>
+        <a href="./collection/" data-i18n="site.navCollection">Collection</a>
+        <a href="https://dhobi.github.io/taoot-web/" data-i18n="site.navDocs">Docs</a>
+        <a href="https://github.com/dhobi/taoot-web" data-i18n="site.navSource">Source</a>
+      </nav>
+    </header>
+
+    <div id="home">
+      <!-- decorative: the <h1> below is the page's name for itself, so an alt
+           here would only make a screen reader say it twice -->
+      <img class="hero-mark" src="/globe.png" alt="" width="504" height="434" />
+      <h1 data-i18n="home.h1">Adventure Out Of Time RE</h1>
+      <div class="intro">
+        <span data-i18n-html="home.intro"
+          ><b>RE</b> is for reverse-engineered. This is not an emulation: it is a
+          version of CyberFlix's DreamFactory engine implemented in JavaScript
+          (TypeScript). Most of it already works, but this version is nowhere
+          near the maturity of the original engine.<br />Play around, try the
+          <a href="./editors/">editors</a> and report bugs straight to us on
+          <a href="https://github.com/dhobi/taoot-web/issues/new">GitHub</a
+          >.</span
+        >
+      </div>
+
+      <div class="playrow">
+        <a class="play" href="./play/"
+          ><span class="glyph">▶</span><span data-i18n="home.play">Play</span></a
+        >
+        <div class="note" data-i18n="home.playNote">Get straight to it!</div>
+      </div>
+
+      <p class="credits" data-i18n-html="home.credits"
+        >Made possible by <a href="https://github.com/M3tox/DFET">DFET</a> by
+        M3tox — built with the support of Claude Opus and Claude Fable.</p
+      >
+    </div>
+
+    <script type="module" src="/src/home.ts"></script>
+  </body>
+</html>

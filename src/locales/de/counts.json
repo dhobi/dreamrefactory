@@ -1,0 +1,94 @@
+{
+  "unexportedEdits": {
+    "one": "{n} nicht exportierte Änderung",
+    "other": "{n} nicht exportierte Änderungen"
+  },
+  "discardEdits": {
+    "one": "{n} nicht exportierte Änderung verwerfen?",
+    "other": "{n} nicht exportierte Änderungen verwerfen?"
+  },
+  "containers": {
+    "one": "{n} Container",
+    "other": "{n} Container"
+  },
+  "flats": {
+    "one": "{n} Flat",
+    "other": "{n} Flats"
+  },
+  "clickableRegions": {
+    "one": "{n} klickbare Region",
+    "other": "{n} klickbare Regionen"
+  },
+  "withArt": {
+    "one": "({n} mit Grafik)",
+    "other": "({n} mit Grafik)"
+  },
+  "loopChunks": {
+    "one": "{n} Schleifenblock",
+    "other": "{n} Schleifenblöcke"
+  },
+  "oneShots": {
+    "one": "{n} Einzelgeräusch",
+    "other": "{n} Einzelgeräusche"
+  },
+  "steps": {
+    "one": "{n} Schritt",
+    "other": "{n} Schritte"
+  },
+  "chunks": {
+    "one": "{n} Block",
+    "other": "{n} Blöcke"
+  },
+  "members": {
+    "one": "{n} Mitglied",
+    "other": "{n} Mitglieder"
+  },
+  "poses": {
+    "one": "{n} Pose",
+    "other": "{n} Posen"
+  },
+  "sprites": {
+    "one": "{n} Sprite",
+    "other": "{n} Sprites"
+  },
+  "props": {
+    "one": "{n} Requisite",
+    "other": "{n} Requisiten"
+  },
+  "states": {
+    "one": "{n} Zustand",
+    "other": "{n} Zustände"
+  },
+  "frames": {
+    "one": "{n} Einzelbild",
+    "other": "{n} Einzelbilder"
+  },
+  "scenes": {
+    "one": "{n} Szene",
+    "other": "{n} Szenen"
+  },
+  "views": {
+    "one": "{n} Ansicht",
+    "other": "{n} Ansichten"
+  },
+  "hotspots": {
+    "one": "{n} Hotspot",
+    "other": "{n} Hotspots"
+  },
+  "roads": {
+    "one": "{n} Weg",
+    "other": "{n} Wege"
+  },
+  "waypoints": {
+    "one": "{n} Wegpunkt",
+    "other": "{n} Wegpunkte"
+  },
+  "actorMarks": {
+    "one": "{n} Figurenmarke",
+    "other": "{n} Figurenmarken"
+  },
+  "namedSounds": {
+    "one": "{n} benanntes Geräusch",
+    "other": "{n} benannte Geräusche"
+  }
+}

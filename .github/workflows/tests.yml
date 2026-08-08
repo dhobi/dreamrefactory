@@ -1,0 +1,100 @@
+name: Tests
+
+# The gate every change crosses. Split in two because the suites are split in
+# two: most of them open the CD rip under `gamefiles/`, which is not in this
+# repository and never will be — so they can only run on the self-hosted runner
+# that has a copy. The rest run anywhere, and that is the half a fork's pull
+# request gets.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# A new push to the same branch supersedes the run in flight. `push` to master
+# is excluded from the grouping so two merges never cancel each other.
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Runs on GitHub's machines, for every pull request including forks': the
+  # suites that build their own fixtures with the write path (src/df/*-build.ts)
+  # instead of reading the game's files. 111 tests, ~15 s.
+  #
+  # The list below is the INVERSE of what it covers — the nine suites that do
+  # need the rip. Excluding is deliberate: a test file added later runs here by
+  # default, and if it turns out to need `gamefiles/` it fails loudly and gets
+  # added to this list. The other direction would have skipped it in silence.
+  # ---------------------------------------------------------------------------
+  portable:
+    name: suites that need no game files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Automatic suites, minus the nine that read the rip
+        run: |
+          npx vitest run --exclude 'tests/auto/{regression,savegame,re_builtins,interp,nav,text,audio-rates,sound-channels,shp-play-order}.ts'
+
+  # ---------------------------------------------------------------------------
+  # Runs on the self-hosted runner, which holds the rip. Everything the port's
+  # correctness claims actually bottom out in: the full automatic suite, then
+  # the playthrough.
+  # ---------------------------------------------------------------------------
+  full:
+    name: full auto suite + playthrough
+    # A fork's pull request must never reach the machine that holds the rip:
+    # `pull_request` checks out the PR's head, and that head is the fork's code.
+    # Same-repo branches only. (GitHub's own advice is to keep self-hosted
+    # runners off public repositories entirely; this condition plus "require
+    # approval for all external contributors" is what makes the pairing safe —
+    # see docs/reference/ci.md.)
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, taoot-gamefiles]
+    steps:
+      - uses: actions/checkout@v4
+
+      # `actions/checkout` cleans with `git clean -ffdx`, and -x takes IGNORED
+      # files too — so the link below is deleted on every run and has to be
+      # remade after the checkout, not before. Remaking it is instant; the 7 GB
+      # it points at never moves and is never copied into the workspace.
+      - name: Link the rip into the workspace
+        run: |
+          test -d "$TAOOT_GAMEFILES" || {
+            echo "::error::TAOOT_GAMEFILES ($TAOOT_GAMEFILES) is not a directory."
+            echo "It is set in the runner's .env — see docs/reference/ci.md."
+            exit 1
+          }
+          ln -sfn "$TAOOT_GAMEFILES" gamefiles
+          echo "editions present: $(ls gamefiles | tr '\n' ' ')"
+
+      # No setup-node here: the runner's own Node is used, so a run does not
+      # re-download a toolchain onto a machine that already has one.
+      - name: Report the toolchain
+        run: node --version && npm --version
+
+      - run: npm ci
+
+      - name: Automatic suite
+        run: npm test
+
+      # Timed by ticks and gestures rather than by wall clock, so this number is
+      # not a budget — it has come in anywhere from 77 s to 137 s on the same
+      # green code, which is why nothing here asserts on seconds.
+      - name: Playthrough
+        run: npm run test:playthrough

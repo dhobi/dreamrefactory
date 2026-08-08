@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="movies.docTitle">Movie Editor — Titanic - Adventure Out Of Time RE</title>
+    <!-- where the site root is from this page, for URLs built in TS (src/site.ts) -->
+    <meta name="site-root" content="../" />
+    <link rel="icon" type="image/png" href="/globe-mark.png" />
+    <link rel="stylesheet" href="./editor.css" />
+    <style>
+      button.on {
+        border-color: var(--ice-500);
+        color: var(--frost);
+      }
+
+      select {
+        max-width: 22em;
+      }
+      input[type="range"] {
+        accent-color: var(--ice-500);
+        flex: 1;
+        min-width: 12em;
+      }
+
+      /* ---- landing screen ---- */
+
+      #landing .intro {
+        max-width: 44rem;
+      }
+
+      #landing .row.movies {
+        margin-top: 1rem;
+        gap: 0.4rem;
+      }
+
+      #landing button.movie {
+        border-radius: 0;
+        padding: 0.2rem 0.6rem;
+      }
+
+      /* ---- editor ---- */
+
+      .section > .head {
+        flex-wrap: wrap;
+      }
+
+      #movieInfo {
+        font-size: 0.78rem;
+        color: var(--text-mute);
+        margin-top: 0.5rem;
+        line-height: 1.5;
+      }
+
+      /* preview */
+
+      #previewStack {
+        position: relative;
+        width: 512px;
+        max-width: 100%;
+        flex: none;
+      }
+      #preview,
+      #overlay {
+        image-rendering: pixelated;
+        width: 100%;
+        display: block;
+        border: 1px solid var(--border-strong);
+      }
+      #overlay {
+        position: absolute;
+        inset: 0;
+        border-color: transparent;
+        cursor: crosshair;
+      }
+      #previewSide {
+        min-width: 250px;
+      }
+
+      #scrub {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-top: 0.6rem;
+        font-size: 0.78rem;
+        color: var(--text-dim);
+        flex-wrap: wrap;
+      }
+      #frameLabel {
+        font-family: ui-monospace, monospace;
+        min-width: 6em;
+        text-align: right;
+      }
+      .readonly {
+        border: 1px solid var(--border-strong);
+        border-left: 2px solid var(--hull-300);
+        background: var(--inset);
+        padding: 0.4rem 0.6rem;
+        font-size: 0.75rem;
+        color: var(--text-dim);
+        line-height: 1.5;
+      }
+
+      /* rows */
+      .framerow,
+      .regionrow,
+      .audiorow {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.22rem 0;
+        border-top: 1px solid var(--border);
+        flex-wrap: wrap;
+      }
+      .framerow:first-child,
+      .regionrow:first-child,
+      .audiorow:first-child {
+        border-top: none;
+      }
+      .framerow.selected {
+        background: var(--inset);
+      }
+      .lead {
+        width: 2.6em;
+        flex: none;
+        text-align: right;
+        font-size: 0.75rem;
+        color: var(--text-mute);
+      }
+      .fname {
+        width: 8em;
+        flex: none;
+        font-family: ui-monospace, monospace;
+        font-size: 0.78rem;
+        color: var(--text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .badge {
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        border: 1px solid var(--border-strong);
+        border-radius: 2px;
+        padding: 0 0.3rem;
+        color: var(--text-dim);
+        white-space: nowrap;
+      }
+      .badge.anim {
+        border-color: var(--hull-300);
+        color: var(--ice-300);
+      }
+      input.ident {
+        width: 8.5em;
+        font-family: ui-monospace, monospace;
+        font-size: 0.78rem;
+      }
+      input.ident.short {
+        width: 6em;
+      }
+      input.num {
+        width: 4.2em;
+      }
+      #frames {
+        max-height: 26em;
+        overflow-y: auto;
+      }
+      #regions {
+        max-height: 22em;
+        overflow-y: auto;
+      }
+      #audio {
+        max-height: 18em;
+        overflow-y: auto;
+      }
+      #frameLogic {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.1rem;
+        align-items: center;
+        font-size: 0.8rem;
+        color: var(--text-dim);
+      }
+      #frameLogic label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      /* The edition row (shared chrome, src/theme.css): its own line under the
+         page title, above the landing screen and the editor both. `width: 100%`
+         because the page centres its children as a column — without it the row is
+         only as wide as its buttons and centring inside it moves nothing. */
+      #editionPicker {
+        width: 100%;
+        margin: 0.2rem 0 0.6rem;
+      }
+    </style>
+  </head>
+  <body class="work">
+    <header class="topbar">
+      <a class="brand" href="../" title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1996 release" data-i18n-attr="title:site.brandTitle">
+        <img class="brand-mark" src="/globe-mark.png" alt="" width="30" height="30" />
+        <span class="brand-text">
+          <b>Titanic</b>
+          <span>Adventure Out Of Time RE</span>
+        </span>
+      </a>
+      <nav class="topnav">
+        <a href="../play/" data-i18n="site.navPlay">Play</a>
+        <a href="../editors/" class="here" data-i18n="site.navEditors">Editors</a>
+        <a href="../collection/" data-i18n="site.navCollection">Collection</a>
+        <a href="https://dhobi.github.io/taoot-web/" data-i18n="site.navDocs">Docs</a>
+        <a href="https://github.com/dhobi/taoot-web" data-i18n="site.navSource">Source</a>
+      </nav>
+    </header>
+    <h1 data-i18n="movies.h1">Movie Editor</h1>
+
+    <!-- Which edition's files this page lists — the same control the play page
+         and the collection carry (src/editions.ts). Above the landing screen and
+         the editor both, so it is answerable whatever the page is showing; the
+         row hides itself when an install has only one edition in it. -->
+    <!-- a role="group" with no accessible name is an unnamed group, so the label
+         the sighted reader sees is the one it points at -->
+    <div class="editionPicker" id="editionPicker" role="group" aria-labelledby="editionLabel">
+      <span class="pickerLabel" id="editionLabel" data-i18n="site.editionLabel">Edition</span>
+    </div>
+
+    <div id="landing">
+      <div class="intro" data-i18n-html="movies.intro">
+        Load a DreamFactory <b>.MOV</b> — a cutscene, an item close-up, or a
+        clickable object. A movie is not a video: it is a <b>state machine of
+        frames</b>, each of which either takes an action or waits for a click on
+        one of its regions. Scrub the frames, follow the machine, click the
+        regions and see where they go, hear the audio, and edit the logic — the
+        action codes, the targets, the region rectangles, the action-frame slots.
+        Frame <b>art is read-only</b>: the frames are delta-encoded in one chain,
+        so replacing one would smear every frame after it.
+      </div>
+      <div class="row">
+        <button id="openBtn" class="primary" data-i18n="movies.open">📂 Open a .mov file…</button>
+      </div>
+      <div class="note" data-i18n="editors.dropNote">or drop a file anywhere on this page</div>
+      <div id="serverMovies"></div>
+      <input id="fileInput" type="file" accept=".mov,.MOV" />
+    </div>
+
+    <div id="editor">
+      <div class="section">
+        <div id="filebar">
+          <span class="name" id="fileName"></span>
+          <span class="stats" id="fileStats"></span>
+          <span class="spacer" style="flex: 1"></span>
+          <span id="dirty"></span>
+          <button id="exportBtn" class="primary" data-i18n="movies.export">⬇ Export .mov</button>
+          <button id="closeBtn" title="Close this movie" data-i18n="editors.close" data-i18n-attr="title:movies.closeTitle">✕ Close</button>
+        </div>
+        <div style="padding: 0 0.8rem 0.5rem"><span id="status"></span></div>
+      </div>
+
+      <div class="section">
+        <div class="head">
+          <span data-i18n="movies.playbackHead">Playback</span>
+          <span class="spacer"></span>
+          <!-- a film is a chain of segments; this picks which one everything
+               below shows and edits. Hidden for a single-segment movie. -->
+          <label id="segmentPick" hidden
+            ><span data-i18n="movies.segmentLabel">segment</span>
+            <select id="segmentSel"></select
+          ></label>
+          <button id="regionBtn" title="draw the frame's click regions over the picture" data-i18n="movies.regionsBtn" data-i18n-attr="title:movies.regionsBtnTitle">
+            ▦ Regions
+          </button>
+          <button id="playBtn" title="play the movie the way its own logic says" data-i18n="movies.followMachine" data-i18n-attr="title:movies.followMachineTitle">
+            ▶ Follow the machine
+          </button>
+        </div>
+        <div class="body">
+          <div id="previewWrap">
+            <div id="previewStack">
+              <canvas id="preview" width="512" height="384"></canvas>
+              <canvas id="overlay" width="512" height="384"></canvas>
+            </div>
+            <div id="previewSide">
+              <div>
+                <span data-i18n-html="movies.previewNote"><b>Click the picture</b> and the movie does what it would do with
+                that click — jump to a region's target frame, or report the exit
+                or the chain to another file. A click outside every region does
+                nothing, exactly as in game.</span>
+              </div>
+              <div id="previewInfo"></div>
+              <div class="readonly">
+                <span data-i18n-html="movies.readonlyNote">Frames are <b>delta-encoded in one chain</b>, so this page decodes
+                0…N to show frame N — going back replays the chain from the start.
+                It is also why art is read-only: a replaced frame would leave
+                everything after it decoding against a picture that is gone.</span>
+              </div>
+              <div><button id="pngExportBtn" data-i18n="movies.exportFramePng">⬇ Export this frame as PNG</button></div>
+            </div>
+          </div>
+          <div id="scrub">
+            <button id="prevBtn" title="the frame before this one" data-i18n-attr="title:movies.prevTitle">◀</button>
+            <input id="frameSlider" type="range" min="0" max="0" value="0" step="1" />
+            <button id="nextBtn" title="the frame after this one" data-i18n-attr="title:movies.nextTitle">▶</button>
+            <span id="frameLabel"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="head"><span data-i18n="movies.movieHead">Movie</span></div>
+        <div class="body">
+          <div class="fields">
+            <label title="the frame whose entry actionframe(1) reports" data-i18n-attr="title:movies.actionFrame1Title"
+              >actionframe(1) <select id="actionFrame1"></select
+            ></label>
+            <label title="the frame whose entry actionframe(2) reports" data-i18n-attr="title:movies.actionFrame2Title"
+              >actionframe(2) <select id="actionFrame2"></select
+            ></label>
+            <label
+              title="header flag bit 0 — all 218 movies in the corpus set it"
+              data-i18n-attr="title:movies.escAbortsTitle"
+              ><input type="checkbox" id="keySkips" />
+              <span data-i18n="movies.escAborts">ESC aborts this movie</span></label
+            >
+          </div>
+          <div id="movieInfo"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="head">
+          <span data-i18n="movies.frameHead">Frame</span>
+          <span class="spacer"></span>
+          <span class="plain" data-i18n="movies.frameLogicNote">the selected frame's own logic</span>
+        </div>
+        <div class="body"><div id="frameLogic"></div></div>
+      </div>
+
+      <div class="section">
+        <div class="head">
+          <span data-i18n="movies.clickRegionsHead">Click regions</span>
+          <span class="spacer"></span>
+          <span class="plain" id="regionsInfo"></span>
+        </div>
+        <div class="body" id="regions"></div>
+      </div>
+
+      <div class="section">
+        <div class="head">
+          <span data-i18n="editors.framesHead">Frames</span>
+          <span class="spacer"></span>
+          <label><input type="checkbox" id="onlyWaits" /> <span data-i18n="movies.onlyWaits">only frames that wait</span></label>
+          <label><span data-i18n="editors.filter">filter</span> <input type="text" id="frameFilter" style="width: 7em" /></label>
+          <span class="plain" id="framesInfo"></span>
+        </div>
+        <div class="body" id="frames"></div>
+      </div>
+
+      <div class="section">
+        <div class="head">
+          <span data-i18n="movies.audioHead">Audio</span>
+          <span class="spacer"></span>
+          <span class="plain" id="audioInfo"></span>
+        </div>
+        <div class="body" id="audio"></div>
+      </div>
+
+      <div class="section">
+        <div class="head">
+          <span data-i18n="editors.paletteHead">Palette</span>
+          <span class="spacer"></span>
+          <span class="plain" id="paletteInfo"></span>
+        </div>
+        <div class="body"><div id="palette"></div></div>
+      </div>
+    </div>
+
+    <script type="module" src="./mov-editor.ts"></script>
+  </body>
+</html>

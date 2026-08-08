@@ -1,0 +1,22 @@
+{
+  "docTitle": "Играть — Titanic - Adventure Out Of Time RE",
+  "h1": "Запуск",
+  "intro": "Загрузка файлов игры…",
+  "introSub": "Поиск в каталоге <code>gamefiles/</code>",
+  "keys": "<b>←</b> <b>→</b> поворот &nbsp;·&nbsp; <b>↑</b> идти &nbsp;·&nbsp; <b>M</b> карта &nbsp;·&nbsp; <b>O</b> активные зоны &nbsp;·&nbsp; <b>X</b> подробности",
+  "fullscreen": "⛶ Во весь экран",
+  "fullscreenTitle": "Во весь экран (4:3 с полями)",
+  "reportBug": "🪲 Сообщить об ошибке",
+  "reportBugTitle": "Сообщить о том, что порт делает неправильно",
+  "bugShotClipboard": "Снимок экрана скопирован в буфер обмена — вставьте его в issue.",
+  "bugShotFile": "Браузер не смог скопировать снимок, поэтому он скачан — приложите PNG к issue.",
+  "swipeLabel": "Свайп",
+  "swipeInvertTurn": "поменять лево/право",
+  "swipeInvertTurnTitle": "свайп справа налево поворачивает направо, а не налево",
+  "swipeInvertWalk": "поменять движение вперёд",
+  "swipeInvertWalkTitle": "вперёд идёт свайп вниз, а не вверх",
+  "savesClose": "Закрыть",
+  "savesNamePlaceholder": "имя сохранения",
+  "savesSave": "Сохранить",
+  "savesUpload": "⬆ Загрузить .ti"
+}

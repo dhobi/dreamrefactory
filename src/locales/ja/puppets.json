@@ -1,0 +1,23 @@
+{
+  "docTitle": "パペットエディタ — Titanic - Adventure Out Of Time RE",
+  "h1": "パペットエディタ",
+  "intro": "DreamFactory の <b>.PUP</b> 会話パペットを読み込みます — 重ね合わせで描かれる会話中の顔のクローズアップ（<code>SMETH1.PUP</code> など）。姿勢の画像、アンカー、字幕テキストといった構成要素を閲覧・編集し、再パックしたファイルを書き出します。",
+  "open": "📂 .pup ファイルを開く…",
+  "export": "⬇ .pup を書き出す",
+  "closeTitle": "このパペットを閉じる",
+  "previewHead": "プレビュー",
+  "stance": "姿勢",
+  "line": "セリフ",
+  "playLine": "▶ セリフを再生",
+  "previewNote": "選択した姿勢を、選択したセリフの開始ポーズで合成したものです。<b>セリフを再生</b>はそのセリフの animLogic（リップシンク、まばたき）を音声とともに実行します。",
+  "stanceLayersHead": "姿勢のレイヤー",
+  "anchorX": "アンカー x",
+  "dialogueHead": "ダイアログ",
+  "fileStats": "コンテナ {containers} 個 · セリフ {lines} 行 · スクリプト {scripts} 個 · 姿勢 {stances} 個（フレーム {frames} 枚）",
+  "frameInfo": "<b>{layer}</b> フレーム {i}、コンテナ @{loc} — {w}×{h} px、{bytes} バイト（パック後）",
+  "frameNotDecodable": "コンテナ @{loc}：フレームとしてデコードできません",
+  "artEdit": "画像 @{loc} ← {file}",
+  "artReplaced": "フレーム @{loc} を {file} に差し替えました（{w}×{h}）",
+  "dlgInfo": "{n} 行 — テキストは編集できます（最大 255 文字）",
+  "playThisLine": "このセリフをプレビューで選んで再生する"
+}

@@ -1,0 +1,737 @@
+/**
+ * MOV playback — full-screen cutscenes and interactive object close-ups.
+ *
+ * A movie owns the whole screen while it plays: it carries its own palette,
+ * its own click regions, its own event sounds and (for cutscenes) its own
+ * soundtrack. Playback is MODAL from the script's point of view: playmovie()
+ * blocks until the movie — and any sub-movies it chains to — has finished.
+ *
+ * The host viewer (viewer.ts) forwards clicks/ticks here while {@link playing}
+ * and paints {@link frame}; everything else about movies lives in this file.
+ */
+import { MovClickRegion, MovFile, MovFrame, MovSegment, readMovFile } from "./df/mov";
+import { NATIVE_FRAME_MS, TICK_MS, chooseFrameInterval, frameHoldMs } from "./df/mov-pace";
+import { Container } from "./df/container";
+import { decodeAudioContainer, resampleTo } from "./df/audio";
+import { FrameBuffer, decodeFrame, paletteToRGBA } from "./df/image";
+import { GameSession } from "./engine/session";
+import { PlayHandle } from "./engine/audio";
+
+/** one decoded movie frame, as indexed pixels */
+interface MovieImage {
+  pixels: Uint8Array;
+  width: number;
+  height: number;
+}
+
+/**
+ * How much of a cutscene's soundtrack to take beyond its predicted runtime.
+ *
+ * A film's runtime is `interval x frames` in theory and tick-quantised in
+ * practice, so the picture always runs a little long — ~1% on a 60 Hz screen,
+ * more with a dropped frame. 10% covers that with room to spare, and costs
+ * nothing on a bed whose authored order has no material left to give.
+ */
+const OVERRUN_MARGIN = 1.1;
+/** cross-movie call stack limit, matching TI.EXE */
+const MOVIE_CALL_DEPTH = 5;
+
+/** join PCM segments end to end, stopping at `cap` samples if one is given */
+function concat(parts: Float32Array[], cap = Infinity): Float32Array {
+  const total = Math.min(cap, parts.reduce((a, s) => a + s.length, 0));
+  const out = new Float32Array(total);
+  let off = 0;
+  for (const s of parts) {
+    if (off >= out.length) break;
+    out.set(s.subarray(0, out.length - off), off);
+    off += s.length;
+  }
+  return out;
+}
+
+export class MoviePlayer {
+  onLog: (line: string) => void = () => {};
+
+  /** active movie playback (cutscene / object close-up). The per-picture
+   *  fields (frames, meta, palette, interval…) are the CURRENT SEGMENT's —
+   *  a movie is a chain of them (MovFile.segments) and enterSegment() swaps
+   *  the lot when one segment's exit leads to the next. */
+  private active: {
+    fileName: string;
+    frames: MovieImage[];
+    /** frame types/regions/targets — the movie's own state machine */
+    meta: MovFrame[];
+    /** frame name (lowercase) -> index, for jump targets */
+    frameByName: Map<string, number>;
+    /** named event-sound chunks: name (lowercase) -> container location */
+    sounds: Map<string, number>;
+    containers: Container[];
+    hasRegions: boolean;
+    /** ESC may abort this movie (MOV header flag bit 0) — see {@link skip} */
+    keySkips: boolean;
+    palette: Uint8ClampedArray;
+    pos: number;
+    /** ms per frame; 0 = wait for clicks (click-through object movies) */
+    interval: number;
+    lastTick: number;
+    /** frame indices for actionframe(1)/(2) (-1 = none); see recordAction */
+    actionFrame1: number;
+    actionFrame2: number;
+    /** the whole file, for the segment chain */
+    mov: MovFile;
+    /** the segment on screen (mov.segments[segIdx]) */
+    seg: MovSegment;
+    segIdx: number;
+    /** tick() time the segment started at (0 until the first tick), the
+     *  clock the segment's cues are measured against */
+    segStartMs: number;
+    /** cues already fired this segment (they fire once, TI.EXE 0x44af59) */
+    cuesFired: Set<number>;
+  } | null = null;
+  /** cross-movie return stack (type-4 call / type-5 return, TI.EXE depth 5) */
+  private callStack: { movie: string; frame: number }[] = [];
+  /**
+   * Handles for the event sounds the movie has fired, so the end of the
+   * sequence can stop them. They play on the shared "sound" channel next to
+   * room ambience and sound loops, so the channel can't just be halted — the
+   * movie's own plays are stopped one by one.
+   */
+  private eventSounds: PlayHandle[] = [];
+  /**
+   * Resolver for the blocking playmovie() promise. Set by the top-level
+   * play() call and held pending across a whole chain of sub-movies
+   * (mainc -> pursopen …); only the final exit (finish) resolves it, so
+   * the script stays suspended until the entire sequence ends.
+   */
+  private resolveWhenDone: (() => void) | null = null;
+
+  constructor(
+    private readonly session: GameSession,
+    /** the movie sequence has fully ended — the host reveals the world */
+    private readonly onFinished: () => void,
+  ) {}
+
+  get playing(): boolean {
+    return this.active !== null;
+  }
+
+  /**
+   * The clip on screen, lowercase, or null.
+   *
+   * `playing` alone can't tell "the cutscene I was watching has ended" from
+   * "it ended and the script has already started the next one" — and a caller
+   * pressing ESC through a sequence of them has to know which, or it reads its
+   * own success as a failure.
+   */
+  get playingFile(): string | null {
+    return this.active?.fileName ?? null;
+  }
+
+  /**
+   * The regions of the frame playback is sitting on — empty unless the movie
+   * is a frame WITH regions, i.e. unless it is waiting modally for a click.
+   *
+   * `playing` can't answer "is the engine waiting for me?": it is just
+   * `active !== null`, which stays true for the whole time an interactive
+   * movie sits on a region frame. A harness driving a playthrough has to tell
+   * "still animating" from "waiting", and then know WHERE the exit is —
+   * clickableAt() only answers for a point you already guessed.
+   */
+  get waitingRegions(): readonly MovClickRegion[] {
+    const m = this.active;
+    if (!m || !m.hasRegions) return [];
+    return m.meta[Math.min(m.pos, m.meta.length - 1)]?.regions ?? [];
+  }
+
+  /**
+   * Which frame of the active clip is on screen, or -1 when none is.
+   *
+   * `frame` below mints a fresh object every call, so it cannot answer "the
+   * same picture as last time?" by identity — and an interactive movie PARKED
+   * on a region frame keeps `playing` true indefinitely while showing one
+   * unchanging image, which is exactly the case the renderer wants to stop
+   * redrawing (see SetViewer.render).
+   */
+  get framePos(): number {
+    const m = this.active;
+    return m ? Math.min(m.pos, m.frames.length - 1) : -1;
+  }
+
+  /** the frame to paint right now (with the movie's own palette and where on
+   *  the screen the segment says it sits — see MovSegment.originX), or null */
+  get frame(): (MovieImage & { palette: Uint8ClampedArray; originX: number; originY: number }) | null {
+    const m = this.active;
+    if (!m) return null;
+    const f = m.frames[Math.min(m.pos, m.frames.length - 1)];
+    return { ...f, palette: m.palette, originX: m.seg.originX, originY: m.seg.originY };
+  }
+
+  /**
+   * Play a movie MODALLY: resolves when the movie (and any chained sub-movie)
+   * finishes, so the calling script blocks. A chained continuation
+   * (resolveWhenDone already pending) reuses the outstanding promise rather
+   * than minting a new one — the original top-level call owns completion.
+   */
+  /** every movie this chain has loaded, for release when the chain ends */
+  private played = new Set<string>();
+
+  play(fileName: string, startFrame = 0): Promise<void> {
+    const chained = this.resolveWhenDone !== null;
+    // fresh top-level play: reset the action-frame set the script will query
+    if (!chained) this.session.movieActions.clear();
+    if (!this.load(fileName, startFrame)) {
+      // nothing to play — end the sequence (resolves any pending chain promise)
+      this.finish();
+      return Promise.resolve();
+    }
+    if (chained) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      this.resolveWhenDone = resolve;
+    });
+  }
+
+  /** parse + install a movie as the active one; false if unavailable/empty */
+  private load(fileName: string, startFrame = 0): boolean {
+    this.played.add(fileName.toLowerCase());
+    const data = this.session.files(fileName.toLowerCase());
+    if (!data) {
+      this.onLog(`playmovie: "${fileName}" not available`);
+      return false;
+    }
+    let mov;
+    try {
+      mov = readMovFile(data);
+    } catch (e) {
+      this.onLog(`playmovie: ${fileName}: ${(e as Error).message}`);
+      return false;
+    }
+    if (!mov.frames.length) return false;
+    return this.enterSegment(mov, fileName.toLowerCase(), 0, startFrame);
+  }
+
+  /**
+   * Install one segment of a movie as what is on screen. Segment 0 is how a
+   * movie starts; a later one is where a segment's type-1 exit leads
+   * (endSegment) — same picture pipeline, fresh palette/frames/cues, and the
+   * soundtrack rule from TI.EXE's segment reload (0x44956f): a segment that
+   * brings audio of its own replaces the bed, one that brings none INHERITS
+   * the playing one (tour.mov's 18 slide segments carry no audio — the
+   * narration bed from segment 0 plays across them all).
+   */
+  private enterSegment(mov: MovFile, fileName: string, segIdx: number, startFrame = 0): boolean {
+    const seg = mov.segments[segIdx];
+    // frames are delta-encoded per segment: decode all in order
+    const fb = new FrameBuffer();
+    const frames: MovieImage[] = [];
+    for (const f of seg.frames) {
+      const d = decodeFrame(mov.file.containers[f.locationFrame].data, fb);
+      frames.push({
+        pixels: fb.pixels.slice(0, d.width * d.height),
+        width: d.width,
+        height: d.height,
+      });
+    }
+    if (!frames.length) return false;
+
+    const hasRegions = seg.frames.some((f) => f.regions.length > 0);
+
+    // Movie soundtrack. Only the LOOP table is one (MovSegment.audioChunks —
+    // the engine's sole self-started audio): a scored bed, played under the
+    // whole segment, INCLUDING an interactive one. The main menu's theme
+    // lives here (playmode.mov: one 8 s chunk listed 4x, and no event sounds
+    // at all), as does playmore.mov's, the end credits' and the Smethells
+    // note's. Without this the menu sat in silence. The one-shot table is the
+    // EVENT-sound library — frame entries and region clicks (FAUCET.MOV's
+    // "Brook Babbling." + the tap clicks), fired by enter()/click() and by
+    // nothing else.
+    //
+    // The loop table is an `order` sequence
+    // over a handful of chunk records, and that sequence usually ends in a
+    // REPEATED tail — a bed that loops behind the animation (logo.mov's cybermix
+    // loops its 4th segment 20x behind the title). Two facts the pacing must
+    // respect:
+    //   * Segments can sit at DIFFERENT sample rates — intro stingers at
+    //     22050 Hz, looping beds at 11025 Hz (the per-chunk rate is a field in
+    //     the audio header; see docs/formats/audio.md). This is NOT the .11k
+    //     scheme — those are shorter songs swapped in on low-RAM machines, not a
+    //     downsample. We resample every segment UP to the highest rate present
+    //     so the concatenated buffer is coherent — an 11025 chunk left at 22050
+    //     would play at double speed (chipmunk).
+    //   * A looped tail must NOT stretch the video: pacing uses the UNIQUE
+    //     content length (each distinct chunk counted once). Otherwise logo.mov
+    //     spreads 318 frames over the ~86 s expanded loop — ~4 fps, the reported
+    //     "intro too slow".
+    let audioSec = 0;
+    let soundtrack: { rate: number; resampled: Float32Array[]; unique: Float32Array[] } | null = null;
+    if (seg.audioChunks.length && (!hasRegions || seg.audioLoops)) {
+      const decoded = seg.audioChunks.map((loc) => decodeAudioContainer(mov.file.containers[loc].data));
+      const rate = Math.max(...decoded.map((p) => p.sampleRate));
+      const resampled = decoded.map((p) => resampleTo(p.samples, p.sampleRate, rate));
+      const seen = new Set<number>();
+      const unique: Float32Array[] = [];
+      seg.audioChunks.forEach((loc, i) => {
+        if (seen.has(loc)) return;
+        seen.add(loc);
+        unique.push(resampled[i]);
+      });
+      audioSec = unique.reduce((a, s) => a + s.length, 0) / rate;
+      soundtrack = { rate, resampled, unique };
+    }
+
+    // an interactive movie paces on its own clock (or on clicks); only a
+    // cutscene's soundtrack sets the frame rate — and not even that when the
+    // frames loop, because then the soundtrack says how LONG rather than how fast
+    let interval = chooseFrameInterval(seg, frames.length, hasRegions ? 0 : audioSec, hasRegions);
+    // A later segment always plays itself out: its picture is mid-film, so
+    // "no step frames -> wait for clicks" (a close-up's shape) cannot apply.
+    // No shipped TAOOT segment needs this — they all step — it just refuses to hang.
+    if (!interval && segIdx > 0 && !hasRegions) interval = NATIVE_FRAME_MS;
+
+    // now that the frame interval is known, play the soundtrack (finish() stops
+    // the "voice" channel, so it can never outlive the movie). A segment that
+    // brings audio REPLACES whatever bed is playing (TI.EXE halts the bed
+    // channel before rewiring it, 0x449593); one that brings none fell through
+    // above and inherits the previous segment's, still running.
+    if (soundtrack) {
+      this.session.audio.halt("voice");
+      const { rate, resampled, unique } = soundtrack;
+      if (hasRegions) {
+        // Interactive: the movie sits on a frame for as long as the player
+        // takes to click — there is no runtime to cut the bed to. Play the
+        // DISTINCT chunks once and loop, the same way a theme bank's loop
+        // chunks are played (see AudioLibrary.theme), so the menu keeps its
+        // music however long the player leaves it up.
+        this.session.audio.play("voice", { sampleRate: rate, samples: concat(unique) }, { loop: true });
+      } else {
+        // Cutscene: concatenate the (resampled) chunks only up to the movie's
+        // own runtime, so a 20x loop tail doesn't allocate ~150 s of audio we
+        // halt at movie end anyway.
+        //
+        // ...but that runtime is a PREDICTION, and the film is not held to it.
+        // `interval x frames` assumes every frame arrives the instant it is due,
+        // while frames actually advance on ticks: the step is
+        // `now - lastTick >= interval`, so on a 60 Hz screen a 66 ms interval
+        // really costs ceil(66/16.7) x 16.7 = 66.7 ms, and a dropped frame costs
+        // a whole refresh more. Over TAOOT ocredits.mov's 1225 frames that is ~0.8 s of
+        // picture past the end of a bed cut to the prediction — reported as the
+        // fly-in to C73 losing its audio and carrying on silent for a second or
+        // two before the next scene's horn.
+        //
+        // So take a margin of the authored sequence beyond the prediction. It is
+        // free material for exactly the movies that need it (the bed comes from a
+        // LOOP table, whose repeats are there to be drawn on: ocredits' 53 entries
+        // hold 213.62 s over a 80.85 s film), and it continues the music the
+        // author wrote rather than jumping. `concat` stops at whatever the order
+        // actually holds, so a bed with nothing spare is simply unchanged.
+        const runtime = interval > 0 ? (interval * frames.length) / 1000 : audioSec;
+        const cap = Math.max(1, Math.ceil(runtime * OVERRUN_MARGIN * rate));
+        // ...and loop as the backstop, for a host slow enough to outrun even that.
+        // A loop-table bed is authored to repeat, and repeating a second of it
+        // beats a second of silence. finish() halts "voice" the moment the film
+        // really does end, so this can never outlive the movie.
+        this.session.audio.play(
+          "voice",
+          { sampleRate: rate, samples: concat(resampled, cap) },
+          seg.audioLoops ? { loop: true } : undefined,
+        );
+      }
+    }
+    const frameByName = new Map<string, number>();
+    seg.frames.forEach((f, i) => f.name && frameByName.set(f.name.toLowerCase(), i));
+    this.active = {
+      fileName,
+      frames,
+      meta: seg.frames,
+      frameByName,
+      sounds: seg.sounds,
+      containers: mov.file.containers,
+      hasRegions,
+      keySkips: seg.keySkips,
+      palette: paletteToRGBA(seg.paletteRaw, 256),
+      pos: Math.min(Math.max(startFrame, 0), frames.length - 1),
+      interval,
+      lastTick: 0,
+      actionFrame1: seg.actionFrame1 ? frameByName.get(seg.actionFrame1.toLowerCase()) ?? -1 : -1,
+      actionFrame2: seg.actionFrame2 ? frameByName.get(seg.actionFrame2.toLowerCase()) ?? -1 : -1,
+      mov,
+      seg,
+      segIdx,
+      segStartMs: 0,
+      cuesFired: new Set(),
+    };
+    this.recordAction(this.active.pos);
+    this.onLog(
+      `movie: ${fileName}${segIdx ? ` segment ${segIdx + 1}/${mov.segments.length}` : mov.segments.length > 1 ? ` (1/${mov.segments.length} segments)` : ""} (${frames.length} frames${audioSec ? `, ${audioSec.toFixed(1)}s audio` : ""}${hasRegions ? ", interactive" : ""})`,
+    );
+    return true;
+  }
+
+  /**
+   * A segment's exit: the next segment of the chain if one follows, the end
+   * of the movie if not. This is what a type-1 "exit" action really is — only
+   * the LAST segment's exit ends the film (module comment in df/mov.ts).
+   */
+  private endSegment(): void {
+    const m = this.active;
+    if (m && m.segIdx + 1 < m.mov.segments.length) {
+      this.enterSegment(m.mov, m.fileName, m.segIdx + 1);
+    } else {
+      this.finish();
+    }
+  }
+
+  /**
+   * Sticky-record the actionframe() bits as playback enters a frame: the
+   * script's `actionframe(1)`/`(2)` (session.movieActions) report whether this
+   * play passed through the movie's action-frame-1 / action-frame-2 (named in
+   * the movie header). TAOOT: turning the car light on lands on "lightson" -> 1;
+   * knocking at the purser window lands on "openit"/"endit" -> 1/2.
+   */
+  private recordAction(idx: number): void {
+    const m = this.active;
+    if (!m) return;
+    if (idx === m.actionFrame1) this.session.movieActions.add(1);
+    if (idx === m.actionFrame2) this.session.movieActions.add(2);
+  }
+
+  /**
+   * The current frame's click region under a point, or null. Shared by
+   * {@link click} and {@link clickableAt} so the hover cursor can never promise
+   * a click the movie wouldn't act on.
+   */
+  private regionAt(x: number, y: number): MovClickRegion | null {
+    const m = this.active;
+    if (!m || !m.hasRegions) return null;
+    const regions = m.meta[m.pos].regions;
+    if (!regions.length) return null; // animation in flight
+    // regions are picture-relative; the mouse is screen-relative, and the
+    // engine subtracts the segment's screen origin before testing (0x44ad08).
+    // (0,0) — i.e. a no-op — for every interactive movie in the corpus.
+    x -= m.seg.originX;
+    y -= m.seg.originY;
+    return (
+      regions.find(
+        (r) =>
+          x >= Math.min(r.x0, r.x1) && x <= Math.max(r.x0, r.x1) &&
+          y >= Math.min(r.y0, r.y1) && y <= Math.max(r.y0, r.y1),
+      ) ?? null
+    );
+  }
+
+  /**
+   * Would a click at this point do anything? Read-only counterpart of
+   * {@link click}, for the host's hover cursor.
+   *
+   * A click-through movie (no regions anywhere) advances on ANY click, but only
+   * while it is actually waiting for one — a timed movie (interval > 0) plays
+   * itself out and ignores clicks entirely.
+   */
+  clickableAt(x: number, y: number): boolean {
+    const m = this.active;
+    if (!m) return false;
+    if (!m.hasRegions) return m.interval === 0;
+    return !!this.regionAt(x, y);
+  }
+
+  /** click during a movie: only region frames react (modal wait) */
+  click(x: number, y: number): void {
+    const m = this.active;
+    if (!m) return;
+    // pure click-through movies (no regions anywhere): any click steps
+    if (!m.hasRegions) {
+      if (m.interval === 0) {
+        m.pos++;
+        if (m.pos >= m.frames.length) this.finish(true);
+      }
+      return;
+    }
+    const regions = m.meta[m.pos].regions;
+    if (!regions.length) return; // animation in flight
+    const region = this.regionAt(x, y);
+    this.onLog(
+      `movie click (${x},${y}) frame ${m.pos}${region ? ` -> type ${region.type} "${region.target || region.event}"` : " (no region hit)"}`,
+    );
+    if (!region) return;
+    if (region.sound) this.playSound(region.sound);
+    m.lastTick = 0;
+    this.action(region.type, region.target, region.event);
+  }
+
+  /**
+   * A key while the movie owns the screen. Returns true if it aborted it.
+   *
+   * A key during a movie is the movie's to interpret, not the host's and not
+   * the script's: the original has ONE event queue, and whichever modal loop
+   * is running pops from it (the main interactive loop takes anything, TI.EXE
+   * 0x431c43; a text prompt takes keys only, 0x440756; the movie loop takes
+   * keys and its own kinds, 0x44a16b). So while a movie plays, the key never
+   * reaches the script chain — the movie consumed it — and the abort rule
+   * lives here rather than at whatever routed the keystroke in.
+   *
+   * The rule (TI.EXE 0x44a460, the movie's key filter): the event must be a
+   * FRESH keydown carrying the 0x1fa0 marker — set for ESC and for any key
+   * held with Ctrl, which is {@link special} — and its character must be
+   * `.` (what the window proc translates ESC to) or `q`. Both land on the
+   * same instruction: `return movieHeader[0x18] & 1`, i.e. {@link
+   * MovFile.keySkips}. Ctrl+0..9 and Ctrl+T are the only other keys with
+   * cases and neither aborts; an auto-repeat is a different event kind and is
+   * ignored, so holding ESC down skips one movie, not the next as well.
+   *
+   * Aborting ends the whole SEQUENCE, not the clip: the original records
+   * state 2, and state 2 is what makes it clear the movie's next-segment
+   * pointer (0x4493a9) instead of following it. So this drops the return
+   * stack — a type-5 region has nothing to come back to once the sequence is
+   * over — and finishes, resolving the blocked playmovie() exactly as a
+   * natural end would. The frame's own action is NOT run: an abort is not the
+   * exit region being clicked, which matters for the close-ups whose exit
+   * chains to another movie.
+   *
+   * What the movie already did stands: the action-frame bits are recorded on
+   * ENTERING a frame (recordAction), so a movie skipped after passing its
+   * action frame still reports it to actionframe(), and one skipped before
+   * still doesn't — the same as pressing ESC at that moment in the original.
+   */
+  key(keyName: string, special = false): boolean {
+    const m = this.active;
+    if (!m) return false;
+    if (!special || (keyName !== "." && keyName !== "q")) return false;
+    if (!m.keySkips) return false;
+    this.onLog(`movie: ${m.fileName} skipped at frame ${m.pos}`);
+    this.finish(true);
+    return true;
+  }
+
+  /** event sounds live in the movie's own chunk table, banks as fallback */
+  private playSound(name: string): void {
+    const m = this.active;
+    if (!m) return;
+    const loc = m.sounds.get(name.toLowerCase());
+    const snd = loc !== undefined
+      ? decodeAudioContainer(m.containers[loc].data)
+      : this.session.audioLib.sound(name);
+    if (!snd) return;
+    // keep the handle: an event sound belongs to the movie that fired it and
+    // must die with it (see finish). Drop finished handles as we go so a long
+    // interactive movie doesn't accumulate them.
+    this.eventSounds = this.eventSounds.filter((h) => !h.done);
+    this.eventSounds.push(this.session.audio.play("sound", snd));
+  }
+
+  /** move playback to a frame, firing its entry sound (faucet on/off…) */
+  private enter(idx: number): void {
+    const m = this.active!;
+    m.pos = idx;
+    this.recordAction(idx);
+    const sound = m.meta[idx].sound;
+    if (sound) this.playSound(sound);
+  }
+
+  /**
+   * Apply a type-code action (region click or region-less frame). Codes from
+   * TI.EXE's movie loop: 1 exit · 2 goto target · 3 chain to event movie ·
+   * 4 call event movie (resume at target on return) · 5 return · 6/7 step.
+   */
+  private action(type: number, target: string, event: string): void {
+    const m = this.active!;
+    switch (type) {
+      case 2: {
+        const idx = m.frameByName.get(target.toLowerCase());
+        if (idx === undefined) {
+          this.onLog(`movie: no frame named "${target}"`);
+          this.finish();
+        } else {
+          this.enter(idx);
+        }
+        return;
+      }
+      case 3:
+      case 4: {
+        if (type === 4) {
+          const idx = m.frameByName.get(target.toLowerCase());
+          if (idx !== undefined && this.callStack.length < MOVIE_CALL_DEPTH) {
+            this.callStack.push({ movie: m.fileName, frame: idx });
+          }
+        }
+        this.chainTo(event);
+        return;
+      }
+      case 5: {
+        const ret = this.callStack.pop();
+        if (ret) this.chainTo(ret.movie, ret.frame);
+        else this.finish();
+        return;
+      }
+      case 6:
+        // stepping past the last frame is an authored error in TI.EXE ("Can't
+        // go to next frame."); treating it as the segment's exit is the
+        // lenient stand-in
+        if (m.pos + 1 < m.frames.length) this.enter(m.pos + 1);
+        else this.endSegment();
+        return;
+      case 7:
+        if (m.pos > 0) this.enter(m.pos - 1);
+        return;
+      default:
+        this.endSegment(); // 1 = exit (the SEGMENT — the movie only if it is the last)
+    }
+  }
+
+  /**
+   * Chain to the next movie in a sequence, keeping the blocking playmovie
+   * promise (resolveWhenDone) pending so the script stays suspended across the
+   * whole chain. Drop the current movie first so its region-less frame can't
+   * auto-advance again during the (possibly async) load of the next one. An
+   * empty target means there's nothing to chain to — end the sequence.
+   */
+  private chainTo(next: string, startFrame = 0): void {
+    this.active = null;
+    if (!next) {
+      this.finish();
+      return;
+    }
+    // reuses the pending resolveWhenDone (play() sees a chained continuation)
+    void this.session.onPlayMovie(next, startFrame);
+  }
+
+  /**
+   * Clock tick: self-paced movies advance region-less frames by running the
+   * frame's own auto-action. Returns the frame to draw, or null once the
+   * movie has ended (an advance may finish the sequence mid-tick).
+   */
+  tick(now: number): MovieImage | null {
+    const m = this.active;
+    if (!m) return null;
+    if (!m.segStartMs) m.segStartMs = now;
+    // Cues first, and OUTSIDE the self-pacing gate: a timed jump fires out of
+    // ANY wait — a hold, or a region frame's modal one (TI.EXE polls 0x44ae90
+    // from both wait loops). Each fires once, on the segment's own clock.
+    // TAOOT's tour.mov is the shipped case: its authored ship's-logo loop (frame 6,
+    // a backward goto) is left at tick 200 by the jump to "Name 12".
+    for (let c = 0; c < m.seg.cues.length; c++) {
+      const cue = m.seg.cues[c];
+      if (m.cuesFired.has(c) || now - m.segStartMs < cue.tick * TICK_MS) continue;
+      m.cuesFired.add(c);
+      const idx = m.frameByName.get(cue.target.toLowerCase());
+      this.onLog(`movie cue: tick ${cue.tick} -> "${cue.target}"${idx === undefined ? " (no such frame)" : ""}`);
+      if (idx !== undefined) {
+        m.lastTick = now;
+        this.enter(idx);
+      }
+    }
+    if (m.interval > 0 && m.meta[m.pos].regions.length === 0) {
+      if (!m.lastTick) m.lastTick = now;
+      // The FILM's own hold, not a rate we invented: max(frame, movie floor) —
+      // see mov-pace.frameHoldMs. `interval` still decides whether this movie is
+      // self-paced at all (0 = a click-through close-up).
+      const hold = frameHoldMs(m.seg, m.pos);
+      if (now - m.lastTick >= hold) {
+        // ...and a frame may be authored to wait for the SPOKEN LINE as well
+        // (flags bit 0). What it waits on is the original's VOICE channel, which
+        // is where `voicesound()` puts a line — in this port that is the movie's
+        // own event sounds, not the `"voice"` channel our soundtrack happens to be
+        // named after. Waiting on the soundtrack instead hangs the film outright:
+        // a loop-table bed is played looping and never reports done.
+        //
+        // TAOOT leave.mov's frame 68 is the case, and it is why that film's last line
+        // outlives its picture: frame 41 fires Morrow's "morrow2.83" (3.34 s) and
+        // the second-to-last frame holds until he has finished saying it.
+        if (m.meta[m.pos].waitsForVoice && this.eventSounds.some((h) => !h.done)) {
+          return m.frames[m.pos];
+        }
+        m.lastTick = now;
+        // run the region-less frame's own auto-action (step/chain/exit)
+        const f = m.meta[m.pos];
+        this.action(f.type, f.target, f.event);
+      }
+    }
+    return this.active ? this.active.frames[this.active.pos] : null;
+  }
+
+  /**
+   * The movie sequence has fully ended: reveal the world and unblock the script.
+   *
+   * `dismissed` = the player ended it outright (ESC, or clicking past the last
+   * frame of a click-through close-up). Together with whether the clip was
+   * INTERACTIVE at all, it decides whether the movie's spoken lines are cut —
+   * see below.
+   */
+  private finish(dismissed = false): void {
+    // read before dropping it: an interactive clip's lines are the player's to
+    // cut short, a cutscene's are not
+    const interactive = this.active?.hasRegions ?? false;
+    this.active = null;
+    this.callStack = [];
+    // Hand the chain's movies back. This is the safe moment and the only one: a
+    // type-5 region RETURNS to a movie played earlier in the chain (callStack),
+    // so nothing may be released until the whole sequence is over — which is
+    // exactly what being here means. The host drops their bytes; a movie the
+    // player opens again is a refetch away, and the big ones are cutscenes that
+    // are never opened again at all.
+    if (this.played.size) {
+      const names = [...this.played];
+      this.played.clear();
+      this.session.onMoviesDone?.(names);
+    }
+    // The soundtrack bed — halted with the film, which is TI.EXE's own teardown
+    // (0x449d40, the no-next-segment path: it stops the bed channel). This
+    // BRIEFLY worked the other way — the bed was left to outlive a film shorter
+    // than it, because the TAOOT demo's trailer.mov "looked good but was cut way too
+    // soon" at 9.8 s against 92 s of narration. That film was never 9.8 s: the
+    // port was playing 1 of its 13 SEGMENTS (MovFile.segments), and with the
+    // rest of the picture back the bed and the film end together, the way the
+    // engine says they do.
+    this.session.audio.halt("voice");
+    // ...and the event sounds, but only for a clip the PLAYER was driving. A
+    // frame-entry sound is often a full spoken line — TAOOT's LENIN.MOV fires Penny's
+    // "penny2.29" (3.5 s) on entering its middle frame — and an interactive clip
+    // is dismissed by a click that can land long before the line ends. The script
+    // then runs straight on to the next puppetspeak, so an unstopped line talks
+    // over Penny's next sentence. That is why this stop exists, and the OK button
+    // is the reason it cannot key off the click itself: clicking OK steps to a
+    // frame whose own auto-action exits a tick later, so the finish arrives from
+    // the clock. What is true of every such clip is that it HAS regions.
+    //
+    // A cutscene is the opposite case: nobody dismissed it, the film simply ran
+    // out, and the line was timed to play there — cutting it is the bug.
+    // leave.mov fires Morrow's "Tell them we did our best" (`morrow2.83`, 3.34 s)
+    // on entering frame 41 of 70, and the frame interval comes from the 5.57 s
+    // `cloop3` bed: frame 41 arrives at 3.26 s, the film ends at 5.57 s, and the
+    // line was cut with 1.03 s to run. Measured across the corpus, 16 of the 52
+    // region-less movies with audio fire a sound they leave no room for — and
+    // pacing the film to fit instead is no fix: conkdead.mov's 2.32 s splash
+    // lands 4 frames from the end, which would stretch a 4.55 s clip to 37.7 s.
+    // A splash fired on the last frame is MEANT to ring out past the picture.
+    if (dismissed || interactive) for (const h of this.eventSounds) h.stop();
+    this.eventSounds.length = 0;
+    // Reveal whatever the movie transitioned to. blackscreen() paints the
+    // screen black one-shot before an intro movie (TAOOT's bomb openstage:
+    // blackscreen -> playmovie("bombopen.mov") -> setvisible(false) with no
+    // blacktoscreen to follow); in our retained renderer that leaves fade.level
+    // pinned at 1, so the flat would stay black after the movie. Only ARM the
+    // reveal here: the script resumes from its playmovie() the moment we
+    // resolve below, and it usually has more to say about the screen (boot()
+    // opens the flat and plays the date caption under the black before
+    // advanceday fades in). session.tickFade lifts the black once the script
+    // has gone quiet without establishing a fade of its own.
+    //
+    // ...and the frozen frame a fade-out was holding is VOID. A movie owns the
+    // screen outright while it plays (SetViewer.screenOwner ranks it above a
+    // held fade, because it carries its own palette and its own pixels), so
+    // whatever picture a `screentoblack` froze before it is not what should
+    // come back afterwards. Leaving it deadlocks the reveal armed above:
+    // tickFade will not lift a black while a snapshot is held, and the only
+    // things that clear one are a `blacktoscreen` ramp, `blackscreen()` and
+    // `visualeffect` — none of which a script that ended on a movie need ever
+    // issue. TAOOT's demo trunk is the case: `transtoflat("trunk.stg")`
+    // screentoblacks (snapshot taken), opens the stage, plays `trnkopen.mov`
+    // and stops. The trunk was open, composited and 172k lit pixels in the
+    // framebuffer, behind a screen that stayed black for ever.
+    this.session.fade.snapshot = null;
+    this.session.fade.pendingReveal = true;
+    this.onFinished();
+    // release the script blocked in playmovie() (whole chain done)
+    const resolve = this.resolveWhenDone;
+    this.resolveWhenDone = null;
+    if (resolve) resolve();
+  }
+}

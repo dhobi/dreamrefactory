@@ -1,0 +1,67 @@
+# The simple way to keep the runner up.
+#
+#   docker compose -f tools/runner/compose.yml up -d --build
+#   docker compose -f tools/runner/compose.yml logs -f
+#
+# ONE CAVEAT, and it is the reason taoot-runner.service exists next to this file:
+# `restart: always` RESTARTS this container, which reuses its writable layer. So
+# a job is isolated from the HOST, but not from the job before it — leftovers in
+# /home/runner/runner/_work survive. For a runner only you can reach, that is
+# usually fine (checkout cleans the workspace anyway). If you want each job to
+# begin on a pristine filesystem, use the systemd unit instead: it does
+# `docker run --rm`, a brand new container every time.
+
+services:
+  runner:
+    build:
+      # The repository root — the Dockerfile COPYs tools/runner/runner.env.
+      context: ../..
+      dockerfile: tools/runner/Dockerfile
+    image: taoot-runner:latest
+    container_name: taoot-runner
+
+    # The PAT lives in a file you create yourself, next to this one:
+    #   printf 'GITHUB_PAT=github_pat_...\n' > tools/runner/runner.secret
+    #   chmod 600 tools/runner/runner.secret
+    # It is gitignored. Never put the token in this file.
+    env_file:
+      - runner.secret
+
+    environment:
+      TAOOT_GAMEFILES: /srv/taoot/gamefiles
+      RUNNER_LABELS: self-hosted,linux,x64,taoot-gamefiles
+      # RUNNER_NAME: taoot-box   # defaults to taoot-<container hostname>
+
+    volumes:
+      # The rip: READ-ONLY. Every suite only reads it, and a job that could
+      # write here could corrupt the thing the whole test suite compares
+      # against. Change the left side to wherever it actually lives.
+      - /srv/taoot/gamefiles:/srv/taoot/gamefiles:ro
+
+      # Optional: a persistent npm cache, so a fresh container does not
+      # re-download the dependency tree on every job. It is shared state between
+      # jobs by definition — worth it on a single-owner runner, drop it if you
+      # would rather have nothing carried over at all.
+      # - taoot-npm-cache:/home/runner/.npm
+
+    # NO docker socket. Mounting /var/run/docker.sock would hand any job root on
+    # the host and make every other line here pointless.
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Reaps the processes a test run leaves behind (browsers, vite).
+    init: true
+
+    # A carried browser run is ~40 min of Chromium; give it room but not the
+    # whole machine, so a runaway job cannot take the host down with it.
+    mem_limit: 6g
+    cpus: 4.0
+    # Playwright wants more than Docker's default 64 MB of shared memory.
+    shm_size: 1g
+
+    restart: always
+
+# volumes:
+#   taoot-npm-cache:

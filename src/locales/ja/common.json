@@ -1,0 +1,13 @@
+{
+  "pickFromGamefiles": "または gamefiles/ から選んでください",
+  "pickFromGamefilesBig": "または gamefiles/ から選んでください — 大きなカットシーンは数十メガバイトあります",
+  "loading": "{path} を読み込み中…",
+  "fetchFailed": "{path} を取得できませんでした（{status}）",
+  "notReadable": "読み込めない {ext} です：{message}",
+  "notAnImage": "{file}：画像としてデコードできません",
+  "notAScript": "（コンテナはスクリプトとしてデコードできません）",
+  "exported": "{file} を書き出しました（{bytes} バイト",
+  "exportedUnmodified": "、変更なし）",
+  "exportedWithEdits": "、変更 {n} 件：{edits}）",
+  "exportFailed": "書き出しの自己検査に失敗しました：{message}"
+}

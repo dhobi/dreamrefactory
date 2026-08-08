@@ -1,0 +1,23 @@
+{
+  "docTitle": "Puppen-Editor — Titanic - Adventure Out Of Time RE",
+  "h1": "Puppen-Editor",
+  "intro": "Eine DreamFactory-<b>.PUP</b>-Gesprächspuppe laden — die geschichteten Nahaufnahmen der sprechenden Köpfe (<code>SMETH1.PUP</code>, …). Ihre Bestandteile durchsehen und bearbeiten — Haltungsgrafik, Ankerpunkte, Untertiteltext — und dann die neu gepackte Datei exportieren.",
+  "open": "📂 Eine .pup-Datei öffnen…",
+  "export": "⬇ .pup exportieren",
+  "closeTitle": "Diese Puppe schließen",
+  "previewHead": "Vorschau",
+  "stance": "Haltung",
+  "line": "Zeile",
+  "playLine": "▶ Zeile abspielen",
+  "previewNote": "Die Komposition der gewählten Haltung in der Anfangspose der gewählten Zeile. <b>Zeile abspielen</b> führt die animLogic der Zeile aus (Lippensynchronität, Blinzeln), mit ihrem Sprachton.",
+  "stanceLayersHead": "Haltungsebenen",
+  "anchorX": "Anker x",
+  "dialogueHead": "Dialog",
+  "fileStats": "{containers} Container · {lines} Dialogzeilen · {scripts} Skripte · {stances} Haltungen ({frames} Einzelbilder)",
+  "frameInfo": "<b>{layer}</b> Einzelbild {i}, Container @{loc} — {w}×{h} px, {bytes} Bytes gepackt",
+  "frameNotDecodable": "Container @{loc}: nicht als Einzelbild dekodierbar",
+  "artEdit": "Grafik @{loc} ← {file}",
+  "artReplaced": "Einzelbild @{loc} durch {file} ersetzt ({w}×{h})",
+  "dlgInfo": "{n} Zeilen — Text ist bearbeitbar (max. 255 Zeichen)",
+  "playThisLine": "diese Zeile in der Vorschau auswählen und abspielen"
+}

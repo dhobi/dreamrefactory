@@ -1,0 +1,8 @@
+{
+  "docTitle": "Titanic - Adventure Out Of Time RE",
+  "h1": "Прошлое можно изменить RE",
+  "intro": "<b>RE</b> — значит reverse-engineered, «восстановленное». Это не эмуляция, а версия движка DreamFactory (CyberFlix), реализованная на JavaScript (TypeScript). Большая часть уже работает, но эта версия далеко не так зрела, как оригинальный движок.<br>Поиграйте, попробуйте <a href=\"./editors/\">редакторы</a> и сообщайте нам об ошибках прямо на <a href=\"https://github.com/dhobi/taoot-web/issues/new\">GitHub</a>.",
+  "play": "Играть",
+  "playNote": "Сразу к делу!",
+  "credits": "Стало возможным благодаря <a href=\"https://github.com/M3tox/DFET\">DFET</a> от M3tox — создано при поддержке Claude Opus и Claude Fable."
+}

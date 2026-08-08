@@ -1,0 +1,23 @@
+{
+  "docTitle": "Poppen-editor — Titanic - Adventure Out Of Time RE",
+  "h1": "Poppen-editor",
+  "intro": "Laad een DreamFactory <b>.PUP</b>-gesprekspop — de gelaagde close-ups van pratende hoofden (<code>SMETH1.PUP</code>, …). Blader door de onderdelen en bewerk ze — houdingsafbeeldingen, ankerpunten, ondertiteltekst — en exporteer daarna het opnieuw ingepakte bestand.",
+  "open": "📂 Een .pup-bestand openen…",
+  "export": "⬇ .pup exporteren",
+  "closeTitle": "Deze pop sluiten",
+  "previewHead": "Voorbeeld",
+  "stance": "houding",
+  "line": "regel",
+  "playLine": "▶ Regel afspelen",
+  "previewNote": "De compositie van de geselecteerde houding in de openingspose van de geselecteerde regel. <b>Regel afspelen</b> voert de animLogic van de regel uit (lipsynchronisatie, knipperen) met de bijbehorende stem.",
+  "stanceLayersHead": "Houdingslagen",
+  "anchorX": "anker x",
+  "dialogueHead": "Dialoog",
+  "fileStats": "{containers} containers · {lines} dialoogregels · {scripts} scripts · {stances} houdingen ({frames} beelden)",
+  "frameInfo": "<b>{layer}</b> beeld {i}, container @{loc} — {w}×{h} px, {bytes} bytes ingepakt",
+  "frameNotDecodable": "container @{loc}: niet als beeld te decoderen",
+  "artEdit": "afbeelding @{loc} ← {file}",
+  "artReplaced": "beeld @{loc} vervangen door {file} ({w}×{h})",
+  "dlgInfo": "{n} regels — tekst is bewerkbaar (max. 255 tekens)",
+  "playThisLine": "deze regel in het voorbeeld selecteren en afspelen"
+}

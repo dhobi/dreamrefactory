@@ -1,0 +1,71 @@
+# Portainer: Stacks -> Add stack -> Web editor. Paste this, then add ONE
+# environment variable below the editor:
+#
+#   GITHUB_PAT = github_pat_...
+#
+# a fine-grained PAT with "Administration: Read and write" on dhobi/taoot-web.
+# Putting it in Portainer's environment-variables box rather than in this text is
+# the whole reason the stack reads it as ${GITHUB_PAT}: the value stays out of the
+# stack definition, out of git, and out of anyone's clipboard history.
+#
+# Differences from compose.yml, and why this is a separate file:
+#
+#   * no `build:` — Portainer has no repository checkout to build from, so this
+#     pulls the published image instead.
+#   * no `env_file:` — that expects a file next to the compose file, which a
+#     web-editor stack does not have. Portainic env vars replace it.
+#   * RUNNER_EPHEMERAL=0 — the container STAYS UP and takes job after job. In
+#     ephemeral mode it exits after every job, and Portainer draws that as a
+#     container flapping every few minutes, which is indistinguishable at a
+#     glance from a crash loop. See the note on what that costs, below.
+#
+# Assumes standalone Docker, not Swarm. Under Swarm, `mem_limit`/`cpus` must be
+# rewritten as `deploy.resources.limits`.
+
+services:
+  runner:
+    image: danielhobi/taoot-runner:2.336.0
+    container_name: taoot-runner
+
+    environment:
+      # From Portainer's environment-variables box — never hardcoded here.
+      GITHUB_PAT: ${GITHUB_PAT}
+
+      # Stay up across jobs. Set to 1 for one-job-then-exit, which isolates each
+      # job's filesystem completely but makes this container restart constantly.
+      # Either way `actions/checkout` cleans the workspace per run, so what a 0
+      # actually carries over is the npm cache and anything written outside it.
+      RUNNER_EPHEMERAL: "0"
+
+      # MUST end in a directory named `gamefiles` — the entrypoint refuses to
+      # start otherwise. src/save-seed.ts matches shipped saves on a literal
+      # `gamefiles/` path segment, so `/srv/taoot-gamefiles` costs one red test.
+      TAOOT_GAMEFILES: /srv/taoot/gamefiles
+
+      RUNNER_LABELS: self-hosted,linux,x64,taoot-gamefiles
+      RUNNER_NAME: taoot-portainer
+
+    volumes:
+      # LEFT side is the path on the host — change it to wherever the rip lives.
+      # `:ro` because every suite only reads it, and a job that could write here
+      # could corrupt the thing the whole suite compares against.
+      - /srv/taoot/gamefiles:/srv/taoot/gamefiles:ro
+
+    # NO docker socket. Portainer makes it a one-line temptation; mounting
+    # /var/run/docker.sock hands any job root on the host and makes everything
+    # else here decorative.
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    init: true
+
+    # A carried browser run is ~40 minutes of Chromium. Room to work, but not the
+    # whole machine — a runaway job should not take the host down.
+    mem_limit: 6g
+    cpus: 4.0
+    # Playwright needs more than Docker's default 64 MB of shared memory.
+    shm_size: 1g
+
+    restart: always

@@ -1,0 +1,13 @@
+{
+  "pickFromGamefiles": "oder eine aus gamefiles/ wählen",
+  "pickFromGamefilesBig": "oder eine aus gamefiles/ wählen — die großen Zwischensequenzen sind zig Megabyte groß",
+  "loading": "lade {path}…",
+  "fetchFailed": "{path} konnte nicht geladen werden ({status})",
+  "notReadable": "keine lesbare {ext}: {message}",
+  "notAnImage": "{file}: kein dekodierbares Bild",
+  "notAScript": "(Container dekodiert nicht als Skript)",
+  "exported": "{file} exportiert ({bytes} Bytes",
+  "exportedUnmodified": ", unverändert)",
+  "exportedWithEdits": ", {n} Änderungen: {edits})",
+  "exportFailed": "Export-Selbsttest fehlgeschlagen: {message}"
+}

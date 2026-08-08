@@ -1,0 +1,66 @@
+# The runtime — how the port plays the game
+
+*Prerequisite: [Engine architecture](../02-engine-architecture.md).*
+
+The [format docs](../formats/README.md) answer one question: **what is in the
+bytes on disk**. This section answers the other one: **what the engine does
+with them at runtime** — the behaviour that DFET never needed and that was
+recovered from `TI.EXE` and from watching the real game.
+
+Keeping the two apart is deliberate. A format page should stay true as long as
+the 1996 files don't change (they won't); a runtime page describes living code
+that gets refactored. When a format doc used to carry runtime detail ("how the
+UI band is drawn", "how a cricket pans"), every refactor quietly made it stale.
+Now the format pages stick to bytes and link here for behaviour.
+
+## The pages
+
+Read in any order — each names its own prerequisites.
+
+1. **[Timing — the heartbeat, loops, crickets & walks](timing.md)** — the two
+   time bases, `makeloop`'s one-shot-that-re-arms model, positional ambient
+   sound, actor walks, and the game clock behind the pocketwatch.
+2. **[Stage & UI — flats, overlays and the click order](stage-ui.md)** — the
+   `StageController`: how a stage opens, the overlay stack behind the
+   inventory, and exactly who gets a click first.
+3. **[Characters — actors & puppets at runtime](characters.md)** — walking
+   CST sprites in the world and PUP conversation close-ups: facing math,
+   occlusion, speech pacing, subtitles and choice bevels.
+4. **[Audio at runtime — channels, banks & volumes](audio.md)** — the three
+   playback channels, how a name finds its bank, the two-slot `currentsound`
+   model, and the volume controls (including one deliberate divergence).
+5. **[Saving & loading at runtime](saves.md)** — what a save snapshot
+   contains, the load sequence that replays `initall`, and the in-browser
+   saved-games UI with its IndexedDB "file system".
+6. **[The browser host](host.md)** — the part that is neither format knowledge
+   nor recovered behaviour: the page and the cold boot it starts, the `SetViewer`
+   navigation state machine, the movie player, input wiring, and the developer
+   toolbar.
+7. **[Languages & the chooser](languages.md)** — one data tree per language, how
+   a bare filename resolves through two selectors (disc and language), the code
+   page a tree's text turns out to be in, and the language chooser: this port's
+   own DreamFactory stage, scripts and all.
+
+## Where the code lives
+
+| Subsystem | Source | Page |
+|-----------|--------|------|
+| Heartbeat, loops, crickets, walks | [`engine/scheduler.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/scheduler.ts), [`engine/clock.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/clock.ts) | [Timing](timing.md) |
+| Stage layer (STG at runtime) | [`engine/stage.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/stage.ts) | [Stage & UI](stage-ui.md) |
+| Actors (CST at runtime) | [`engine/actors.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/actors.ts), [`engine/geometry.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/geometry.ts) | [Characters](characters.md) |
+| Puppets (PUP at runtime) | [`engine/puppet.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/puppet.ts), [`puppet-view.ts`](https://github.com/dhobi/taoot-web/blob/master/src/puppet-view.ts) | [Characters](characters.md) |
+| Props (SHP at runtime) | [`engine/props.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/props.ts) | [Stage & UI](stage-ui.md), [SHP](../formats/shp.md) |
+| Audio channels + bank library | [`engine/audio.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/audio.ts) | [Audio](audio.md) |
+| Save/load orchestration | [`engine/saveload.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/saveload.ts) | [Saves](saves.md) |
+| Saved-games UI + storage | [`save-browser.ts`](https://github.com/dhobi/taoot-web/blob/master/src/save-browser.ts), [`save-store.ts`](https://github.com/dhobi/taoot-web/blob/master/src/save-store.ts), [`save-seed.ts`](https://github.com/dhobi/taoot-web/blob/master/src/save-seed.ts) | [Saves](saves.md) |
+| Navigation + rendering | [`viewer.ts`](https://github.com/dhobi/taoot-web/blob/master/src/viewer.ts), [`ring-cache.ts`](https://github.com/dhobi/taoot-web/blob/master/src/ring-cache.ts) | [Browser host](host.md) |
+| The screen everything composites into | [`screen-presenter.ts`](https://github.com/dhobi/taoot-web/blob/master/src/screen-presenter.ts), [`screen.ts`](https://github.com/dhobi/taoot-web/blob/master/src/screen.ts) | [Browser host](host.md) |
+| Movie playback | [`movie-player.ts`](https://github.com/dhobi/taoot-web/blob/master/src/movie-player.ts), [`df/mov-pace.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/mov-pace.ts) | [Browser host](host.md), [MOV](../formats/mov.md) |
+| Page + input | [`main.ts`](https://github.com/dhobi/taoot-web/blob/master/src/main.ts) | [Browser host](host.md) |
+| What a launch has to have in hand | [`engine/bootplan.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/bootplan.ts), [`host.ts`](https://github.com/dhobi/taoot-web/blob/master/src/host.ts) | [The boot plan](host.md#the-boot-plan-what-a-game-says-it-needs) |
+
+The interpreter itself — scopes, operators, the event chain — is a language
+topic and stays in **[the scripting doc](../03-scripting-language.md)**; the
+full command list is in the **[builtin reference](../reference/builtins.md)**.
+
+Start with the one everything else leans on: **[Timing](timing.md)**.

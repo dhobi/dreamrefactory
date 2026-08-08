@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    // the translations are JSON so a translator or a TMS can read them; the
+    // per-language index.ts asserts each one against Catalogue (src/locales/)
+    "resolveJsonModule": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "useDefineForClassFields": true
+  },
+  "include": ["src", "editors", "tools", "tests"]
+}

@@ -1,0 +1,13 @@
+{
+  "pickFromGamefiles": "of kies er een uit gamefiles/",
+  "pickFromGamefilesBig": "of kies er een uit gamefiles/ — de grote tussenfilmpjes zijn tientallen megabytes",
+  "loading": "{path} laden…",
+  "fetchFailed": "{path} kon niet worden opgehaald ({status})",
+  "notReadable": "geen leesbare {ext}: {message}",
+  "notAnImage": "{file}: geen decodeerbare afbeelding",
+  "notAScript": "(container decodeert niet als script)",
+  "exported": "{file} geëxporteerd ({bytes} bytes",
+  "exportedUnmodified": ", ongewijzigd)",
+  "exportedWithEdits": ", {n} wijzigingen: {edits})",
+  "exportFailed": "zelfcontrole bij export mislukt: {message}"
+}

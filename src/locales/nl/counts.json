@@ -1,0 +1,94 @@
+{
+  "unexportedEdits": {
+    "one": "{n} niet-geëxporteerde wijziging",
+    "other": "{n} niet-geëxporteerde wijzigingen"
+  },
+  "discardEdits": {
+    "one": "{n} niet-geëxporteerde wijziging weggooien?",
+    "other": "{n} niet-geëxporteerde wijzigingen weggooien?"
+  },
+  "containers": {
+    "one": "{n} container",
+    "other": "{n} containers"
+  },
+  "flats": {
+    "one": "{n} flat",
+    "other": "{n} flats"
+  },
+  "clickableRegions": {
+    "one": "{n} klikbaar gebied",
+    "other": "{n} klikbare gebieden"
+  },
+  "withArt": {
+    "one": "({n} met afbeelding)",
+    "other": "({n} met afbeelding)"
+  },
+  "loopChunks": {
+    "one": "{n} lusblok",
+    "other": "{n} lusblokken"
+  },
+  "oneShots": {
+    "one": "{n} los geluid",
+    "other": "{n} losse geluiden"
+  },
+  "steps": {
+    "one": "{n} stap",
+    "other": "{n} stappen"
+  },
+  "chunks": {
+    "one": "{n} blok",
+    "other": "{n} blokken"
+  },
+  "members": {
+    "one": "{n} lid",
+    "other": "{n} leden"
+  },
+  "poses": {
+    "one": "{n} houding",
+    "other": "{n} houdingen"
+  },
+  "sprites": {
+    "one": "{n} sprite",
+    "other": "{n} sprites"
+  },
+  "props": {
+    "one": "{n} rekwisiet",
+    "other": "{n} rekwisieten"
+  },
+  "states": {
+    "one": "{n} toestand",
+    "other": "{n} toestanden"
+  },
+  "frames": {
+    "one": "{n} beeld",
+    "other": "{n} beelden"
+  },
+  "scenes": {
+    "one": "{n} scène",
+    "other": "{n} scènes"
+  },
+  "views": {
+    "one": "{n} aanzicht",
+    "other": "{n} aanzichten"
+  },
+  "hotspots": {
+    "one": "{n} hotspot",
+    "other": "{n} hotspots"
+  },
+  "roads": {
+    "one": "{n} pad",
+    "other": "{n} paden"
+  },
+  "waypoints": {
+    "one": "{n} routepunt",
+    "other": "{n} routepunten"
+  },
+  "actorMarks": {
+    "one": "{n} acteursmarkering",
+    "other": "{n} acteursmarkeringen"
+  },
+  "namedSounds": {
+    "one": "{n} benoemd geluid",
+    "other": "{n} benoemde geluiden"
+  }
+}

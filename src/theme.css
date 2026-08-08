@@ -1,0 +1,693 @@
+/*
+ * The look, in one place: the palette the eleven pages share, the two densities
+ * they come in, and the handful of primitives (topbar, panel, control) that
+ * were being redrawn from scratch on every page.
+ *
+ * Where the colours come from
+ * ---------------------------
+ * From the logo, literally. `globe.png` is a blue-white globe with a brass
+ * porthole cut through it and an iceberg on open water behind the glass, and
+ * every value below was sampled out of it: the night side of the globe for the
+ * darks, the water and the ice for the mid and bright blues, the porthole ring
+ * for the brass. Nothing here is invented, which is why the mark sits on the
+ * page without looking pasted on.
+ *
+ * What the colours MEAN
+ * ---------------------
+ * The old sheet had one accent (a tan gold) doing every job at once — links,
+ * hover, focus, headings, the unsaved marker, the primary button — so a brass
+ * edge told you nothing about why it was brass. The palette is split by role
+ * instead, and the split is the whole design:
+ *
+ *   ice   — you can act on this. Links, hover, focus, selection, the live
+ *           control. Cool, and by far the most common accent.
+ *   brass — this changed, or this commits. The dirty marker, an edited field,
+ *           the one primary button on a screen. Rare on purpose: brass is the
+ *           only warm thing on a cold page, so it carries across a dense
+ *           editor without needing to be loud.
+ *   frost — content. Text, values, the numbers read off a file.
+ *
+ * Two densities
+ * -------------
+ * `body.deep` is the game: near-black water, chrome pulled back to hairlines,
+ * everything deferring to a 512x384 framebuffer that has its own palette and
+ * does not want the page arguing with it.
+ *
+ * `body.work` is the seven editors: panels lifted a step out of the water so
+ * grouping survives at high control density, tighter rhythm, and type that
+ * knows the difference between a label and a hex offset.
+ *
+ * Both draw on the same tokens; only the semantic layer under
+ * `body.deep`/`body.work` differs. A component written against `--panel` or
+ * `--accent` is correct on either surface.
+ */
+
+/* ---- palette: sampled from globe.png ---------------------------------- */
+
+:root {
+  /* Abyss — the globe's night side and the water under the iceberg. Blue-black
+     rather than neutral black: at these levels the hue is barely nameable, but
+     a page of it reads as water instead of as "off". */
+  --abyss-900: #00060f;
+  --abyss-850: #000a18;
+  --abyss-800: #000d1f;
+  --abyss-700: #01152c;
+  --abyss-600: #041e3c;
+  --abyss-500: #06294e;
+
+  /* Hull — the borders. Ice-tinted, so a divider is a lighter piece of the same
+     water rather than a grey line laid over it. */
+  --hull-500: #0a2d52;
+  --hull-400: #0e3a66;
+  --hull-300: #17507f;
+  --hull-200: #2a6c9e;
+
+  /* Ice — the iceberg through the glass. The interactive colour. */
+  --ice-600: #2b7fbc;
+  --ice-500: #3c9cd8;
+  --ice-400: #60c0f0;
+  --ice-300: #90ccf0;
+  --ice-200: #b4d8f0;
+  --ice-100: #cce4fc;
+  --frost: #e4f0fc;
+
+  /* Brass — the porthole ring. Warm, saturated, and used sparingly. */
+  --brass-700: #8a5c1a;
+  --brass-600: #b47824;
+  --brass-500: #c08424;
+  --brass-400: #d89c24;
+  --brass-300: #e4b424;
+  --brass-200: #f0cf7e;
+
+  /* The two states that are neither ice nor brass. */
+  --alarm: #ff5a4a;
+  --ok: #4fc98a;
+
+  /* Type. Georgia stays, but only where it earns it — the wordmark and page
+     titles, where the period is the point. Controls get the UI face so a dense
+     bar looks like a tool, and anything read off a file (offsets, sizes, hex,
+     decompiled script) gets mono, where column alignment is the whole job. */
+  /* Both stacks end in the same CJK families src/fonts.ts hands the canvas, for
+     the same reason: the lead faces carry no CJK at all, so a Japanese page
+     rendered without them falls through to whatever generic the browser keeps
+     — Georgia was drawing 日本語 as a per-glyph substitution. Naming the
+     families makes the page and the game text agree on a face instead of
+     each guessing separately. */
+  --font-display:
+    Georgia, "Iowan Old Style", "Times New Roman", "MS PGothic",
+    "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans CJK JP", "Noto Sans JP", serif;
+  --font-ui:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "MS PGothic",
+    "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans CJK JP", "Noto Sans JP", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* One rhythm for both surfaces; `work` tightens it below. */
+  --gap: 0.8rem;
+  --radius: 3px;
+  --radius-lg: 5px;
+
+  /* The porthole glow: the light the iceberg throws through the glass. Used on
+     the game canvas and on a focused control, and nowhere else — it is the one
+     effect in the sheet, so it stays meaningful. */
+  --glow: 0 0 0 1px rgba(96, 192, 240, 0.14), 0 0 34px -6px rgba(96, 192, 240, 0.32);
+
+  color-scheme: dark;
+}
+
+/* ---- semantic layer: the two densities -------------------------------- */
+
+body.deep,
+body.work {
+  --bg: var(--abyss-900);
+  --panel: var(--abyss-800);
+  --raised: var(--abyss-700);
+  --inset: var(--abyss-850);
+
+  --border: var(--hull-500);
+  --border-strong: var(--hull-400);
+  --border-hover: var(--hull-200);
+
+  --text: var(--ice-100);
+  --text-bright: var(--frost);
+  --text-dim: #7fa3c4;
+  --text-mute: #4f7a9c;
+
+  --accent: var(--ice-400);
+  --accent-quiet: var(--ice-600);
+  --mark: var(--brass-400);
+}
+
+/* The game: water all the way down, and as little chrome as the page can get
+   away with. Panels barely separate from the field — nothing beside the
+   framebuffer should read as a surface competing with it. */
+body.deep {
+  --bg: var(--abyss-900);
+  --panel: var(--abyss-850);
+  --raised: var(--abyss-800);
+  --text-dim: #7ba0c2;
+  --text-mute: #4a6f92;
+  --pad: 0.5rem 0.8rem;
+}
+
+/* The editors: the field comes up a step and panels come up two, because a
+   screen with forty controls on it needs grouping to survive without drawing a
+   box around everything. */
+body.work {
+  --bg: var(--abyss-850);
+  --panel: var(--abyss-700);
+  --raised: var(--abyss-600);
+  --inset: var(--abyss-900);
+  --border: var(--hull-400);
+  --border-strong: var(--hull-300);
+  --text-dim: #8fb0cd;
+  --text-mute: #5b81a4;
+  --gap: 0.65rem;
+  --pad: 0.4rem 0.7rem;
+}
+
+/* ---- page ------------------------------------------------------------- */
+
+/* Padding counts inside a declared width. Without this, `align-items: center`
+   on the body sizes the landing blocks to their max-content and a 54rem card
+   grid pushes a phone sideways. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  /* The water is not flat: a cold pool of light at the top, the way the globe
+     is lit. Fixed so it does not slide away as a long editor page scrolls. */
+  background-image: radial-gradient(
+    120% 70% at 50% -18%,
+    rgba(23, 80, 127, 0.35),
+    rgba(0, 0, 0, 0) 62%
+  );
+  background-attachment: fixed;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 2px;
+}
+a:hover {
+  color: var(--ice-300);
+}
+
+code,
+kbd,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+}
+
+::selection {
+  background: rgba(96, 192, 240, 0.28);
+  color: var(--frost);
+}
+
+/* One focus treatment everywhere, and it is the porthole glow. Keyboard users
+   get the same "this is lit" language the canvas uses. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- topbar: what makes eleven pages one product --------------------- */
+
+/*
+ * The game and the seven editors used to be unrelated pages that happened to
+ * share a stylesheet, joined by one sentence of body text. This is the thing
+ * they share: the mark, the title, and a way across.
+ */
+.topbar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  /* wrap rather than collide: on a phone the nav drops to its own line, and
+     the row gap is what keeps it off the wordmark's second line */
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  padding: 0.55rem clamp(0.8rem, 4vw, 2rem);
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--abyss-700) 82%, transparent),
+    color-mix(in srgb, var(--abyss-900) 82%, transparent)
+  );
+  backdrop-filter: blur(6px);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+/*
+ * The mark is a sphere; give it a sphere's shadow rather than a box's.
+ *
+ * The image is globe-mark.png — the disc alone, cropped square. globe.png
+ * carries a cast shadow that takes up its bottom third, so at 30px it would
+ * leave a ~20px sphere sitting over a blue smudge. The full logo belongs where
+ * it is large enough to read as one, which is the front page's hero.
+ */
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  filter: drop-shadow(0 0 10px rgba(96, 192, 240, 0.35));
+}
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+.brand-text b {
+  font-family: var(--font-display);
+  font-weight: normal;
+  font-size: 0.98rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+  white-space: nowrap;
+}
+.brand-text span {
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  white-space: nowrap;
+}
+
+.topnav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-wrap: wrap;
+}
+.topnav a {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.topnav a:hover {
+  color: var(--text-bright);
+  background: color-mix(in srgb, var(--ice-400) 9%, transparent);
+}
+/* The page you are on, marked in ice — it is a place, not an action. */
+.topnav a.here {
+  color: var(--ice-300);
+  border-color: color-mix(in srgb, var(--ice-400) 32%, transparent);
+  background: color-mix(in srgb, var(--ice-400) 10%, transparent);
+}
+
+/* ---- the language picker ------------------------------------------------
+   A <details> rather than a <select>: the list has to carry endonyms in six
+   scripts, and a native menu on a phone renders those in the OS font at the OS
+   size, which is neither this page's font nor legible next to it. Sits in the
+   nav and reads as one of its links until opened. */
+.langmenu {
+  position: relative;
+  /* The list below hangs from `right: 0`, so it opens LEFTWARDS out of the
+     trigger — which is off the screen entirely if the trigger is sitting at the
+     left edge. That is exactly what happens when .topnav wraps and the picker
+     lands alone on the last line: measured at 380px the list ran from x=-39, and
+     the menu read "ish / tsch / çais / кий".
+
+     Not a phone problem, which is why this is not in the media query below: the
+     nav wraps when its words stop fitting, and the words are translated. English
+     only breaks at 380px, German at 380 and 420, Russian — "Играть Редакторы
+     Коллекция Документация Исходный код" — at 480, 560 AND 620, where any
+     mobile breakpoint has long since stopped applying.
+
+     `margin-left: auto` puts the picker at the right end of whatever line it
+     lands on, which is where `right: 0` resolves inside the viewport. On a line
+     it shares with the nav links there is no free space to absorb, so it is a
+     no-op — the trigger does not move at any width where nothing was wrong. */
+  margin-left: auto;
+}
+.langmenu > summary {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+}
+.langmenu > summary::-webkit-details-marker {
+  display: none;
+}
+.langmenu > summary:hover,
+.langmenu[open] > summary {
+  color: var(--text-bright);
+  background: color-mix(in srgb, var(--ice-400) 9%, transparent);
+}
+.langmenu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.3rem);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 9rem;
+  padding: 0.25rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--ice-400) 26%, transparent);
+  background: var(--bg-panel, #0d1520);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 45%);
+}
+.langmenu-list button {
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  color: var(--text-dim);
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 0.34rem 0.55rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.langmenu-list button:hover {
+  color: var(--text-bright);
+  background: color-mix(in srgb, var(--ice-400) 12%, transparent);
+}
+/* the one being read, marked the way the current page is in the nav */
+.langmenu-list button.here {
+  color: var(--ice-300);
+}
+
+/* ---- the edition picker -------------------------------------------------
+   The flat, always-visible cousin of the menu above: one button per edition,
+   in front of the reader rather than behind a summary. The collection page
+   picks which pressing's box art to turn with it; the play page picks which
+   copy of the game to boot. Both build the buttons in TypeScript
+   (src/collection.ts, src/lang-menu.ts) into a container the page supplies with
+   its label, so only the label is markup.
+
+   Layout-neutral on purpose — where the control sits is the page's business, and
+   both of them put it somewhere different. */
+.editionPicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+/* `display: flex` above outranks the UA sheet's `[hidden] { display: none }`, and
+   the play page hides the row when an install has only one edition in it */
+.editionPicker[hidden] {
+  display: none;
+}
+.editionPicker .pickerLabel {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-mute);
+  margin-right: 0.3rem;
+}
+.editionPicker button {
+  font-size: 0.82rem;
+  padding: 0.32rem 0.8rem;
+}
+/* the edition being shown, marked as the current page is in the nav */
+.editionPicker button.here {
+  border-color: var(--ice-500);
+  color: var(--frost);
+  background: color-mix(in srgb, var(--ice-400) 15%, transparent);
+}
+
+/* On a phone the strapline is the first thing to go: the mark and the word
+   TITANIC already identify the page, and the four links have to stay on one
+   line to be worth having. */
+@media (max-width: 560px) {
+  .brand-text span {
+    display: none;
+  }
+  .brand-mark {
+    width: 26px;
+    height: 26px;
+  }
+  .topnav {
+    gap: 0;
+  }
+  .topnav a {
+    font-size: 0.74rem;
+    padding: 0.26rem 0.42rem;
+  }
+}
+
+/* ---- page title ------------------------------------------------------- */
+
+h1 {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: normal;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+  margin: 1.1rem 0 0.2rem;
+  text-align: center;
+}
+/* A short brass rule under the title: the porthole ring, reduced to a line.
+   It is the one purely decorative use of brass, and it is two pixels tall. */
+h1::after {
+  content: "";
+  display: block;
+  width: 3.2rem;
+  height: 2px;
+  margin: 0.55rem auto 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--brass-500),
+    var(--brass-300),
+    var(--brass-500),
+    transparent
+  );
+  opacity: 0.85;
+}
+
+/* ---- controls --------------------------------------------------------- */
+
+button {
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--radius);
+  transition:
+    border-color 90ms linear,
+    background-color 90ms linear,
+    color 90ms linear;
+}
+button:hover {
+  border-color: var(--border-hover);
+  color: var(--text-bright);
+  background: var(--abyss-500);
+}
+button:active {
+  background: var(--abyss-600);
+}
+button:disabled,
+button:disabled:hover {
+  color: var(--text-mute);
+  background: var(--panel);
+  border-color: var(--border);
+  cursor: default;
+}
+
+/* A toggle that is currently ON — ice, because it describes a live state you
+   can turn back off, not a change you have made to a file. */
+button.on {
+  border-color: var(--ice-500);
+  color: var(--frost);
+  background: color-mix(in srgb, var(--ice-400) 15%, transparent);
+}
+
+/* The one button on a screen that commits: start the game, export the file.
+   Brass, and there should never be two of them in view. */
+button.primary {
+  background: linear-gradient(to bottom, var(--brass-600), var(--brass-700));
+  color: #180d00;
+  border: 1px solid var(--brass-300);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.42rem 1.05rem;
+  border-radius: var(--radius);
+}
+button.primary:hover {
+  background: linear-gradient(to bottom, var(--brass-400), var(--brass-600));
+  color: #1c0f00;
+  border-color: var(--brass-200);
+}
+
+/* The rank between primary and plain: a real entry point, but not THE one. */
+button.state {
+  background: var(--raised);
+  border: 1px solid var(--hull-300);
+  color: var(--text);
+  font-size: 0.85rem;
+  padding: 0.36rem 0.8rem;
+}
+button.state:hover {
+  border-color: var(--ice-500);
+  color: var(--frost);
+}
+button.state.bold {
+  font-weight: 600;
+}
+
+button.mini {
+  padding: 0.05rem 0.34rem;
+  font-size: 0.76rem;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="search"],
+select {
+  background: var(--inset);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  padding: 0.2rem 0.42rem;
+  border-radius: var(--radius);
+}
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+  border-color: var(--ice-500);
+  outline: none;
+  box-shadow: var(--glow);
+}
+/* Numbers read off, or written into, a file: mono, so digits line up. */
+input[type="number"] {
+  font-family: var(--font-mono);
+}
+/* the file input is driven by a button; it is never shown */
+input[type="file"] {
+  display: none;
+}
+
+/* A field the user has changed but not yet exported. Brass — the one place the
+   old sheet already used it for exactly this, kept and made the rule. */
+input.edited {
+  border-color: var(--brass-400);
+  background: color-mix(in srgb, var(--brass-400) 9%, var(--inset));
+}
+
+/* ---- panels ----------------------------------------------------------- */
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+}
+.panel > .head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.42rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.17em;
+  color: var(--text-mute);
+}
+.panel > .body {
+  padding: 0.7rem 0.8rem;
+}
+
+/* ---- utilities -------------------------------------------------------- */
+
+.spacer,
+.grow {
+  flex: 1;
+}
+.grow {
+  min-width: 6em;
+}
+/* offsets, sizes, counts — anything read off the file */
+.meta {
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  color: var(--text-dim);
+}
+.dim {
+  color: var(--text-mute);
+  font-size: 0.8rem;
+}
+.note {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+/* ---- Japanese ---------------------------------------------------------- *
+
+   The sheet spaces its display type out — 0.24em on an h1, 0.17em on a section
+   head — because that tracking is what makes small caps read as a label rather
+   than as a word. It does the opposite to kana: Japanese is set solid, so the
+   same rule prises プレイ apart into three drifting glyphs, and there are no
+   capitals for `text-transform` to reach in the first place.
+
+   Selected off `<html lang>`, which src/locales/index.ts sets from the reader's
+   choice — so this is dead weight on the other five languages, and Cyrillic
+   keeps the tracking, which it wants as much as Latin does.
+
+   The list is every tracked rule that a `data-i18n` node actually lands in,
+   checked by walking a Japanese page and comparing each marked element's
+   letter-spacing against its own font-size. The band's own labels (.seclabel,
+   .save-group, .modal-head span) are not here: they are written by TypeScript
+   that has not been translated yet, so they hold no kana. They join the list
+   when their strings do. */
+:lang(ja) h1,
+:lang(ja) .brand-text b,
+:lang(ja) .brand-text span,
+:lang(ja) .topnav a,
+:lang(ja) .langmenu > summary,
+:lang(ja) .panel > .head,
+:lang(ja) .section > .head,
+:lang(ja) a.play {
+  letter-spacing: 0.04em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

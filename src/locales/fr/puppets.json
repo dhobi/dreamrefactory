@@ -1,0 +1,23 @@
+{
+  "docTitle": "Éditeur de marionnettes — Titanic - Adventure Out Of Time RE",
+  "h1": "Éditeur de marionnettes",
+  "intro": "Chargez une marionnette de dialogue DreamFactory <b>.PUP</b> — les gros plans en couches des têtes parlantes (<code>SMETH1.PUP</code>, …). Parcourez et modifiez ses éléments — images de posture, points d'ancrage, sous-titres — puis exportez le fichier réassemblé.",
+  "open": "📂 Ouvrir un fichier .pup…",
+  "export": "⬇ Exporter le .pup",
+  "closeTitle": "Fermer cette marionnette",
+  "previewHead": "Aperçu",
+  "stance": "posture",
+  "line": "réplique",
+  "playLine": "▶ Jouer la réplique",
+  "previewNote": "La composition de la posture sélectionnée dans la pose d'ouverture de la réplique sélectionnée. <b>Jouer la réplique</b> exécute l'animLogic de la réplique (synchronisation labiale, clignements) avec son audio.",
+  "stanceLayersHead": "Couches de posture",
+  "anchorX": "ancrage x",
+  "dialogueHead": "Dialogue",
+  "fileStats": "{containers} conteneurs · {lines} répliques · {scripts} scripts · {stances} postures ({frames} images)",
+  "frameInfo": "<b>{layer}</b> image {i}, conteneur @{loc} — {w}×{h} px, {bytes} octets compressés",
+  "frameNotDecodable": "conteneur @{loc} : non décodable comme image",
+  "artEdit": "image @{loc} ← {file}",
+  "artReplaced": "image @{loc} remplacée par {file} ({w}×{h})",
+  "dlgInfo": "{n} répliques — le texte est modifiable (255 caractères max.)",
+  "playThisLine": "sélectionner cette réplique dans l'aperçu et la jouer"
+}

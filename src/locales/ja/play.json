@@ -1,0 +1,22 @@
+{
+  "docTitle": "プレイ — Titanic - Adventure Out Of Time RE",
+  "h1": "起動中",
+  "intro": "ゲームファイルを読み込んでいます…",
+  "introSub": "<code>gamefiles/</code> ディレクトリを探しています",
+  "keys": "<b>←</b> <b>→</b> 旋回 &nbsp;·&nbsp; <b>↑</b> 前進 &nbsp;·&nbsp; <b>M</b> マップ &nbsp;·&nbsp; <b>O</b> ホットスポット &nbsp;·&nbsp; <b>X</b> 詳細",
+  "fullscreen": "⛶ 全画面",
+  "fullscreenTitle": "全画面（4:3 レターボックス）",
+  "reportBug": "🪲 不具合を報告",
+  "reportBugTitle": "この移植版がおかしい点を報告します",
+  "bugShotClipboard": "画面の画像をクリップボードにコピーしました — Issue に貼り付けてください。",
+  "bugShotFile": "ブラウザが画像をコピーできなかったため、ダウンロードしました — PNG を Issue に添付してください。",
+  "swipeLabel": "スワイプ",
+  "swipeInvertTurn": "左右を反転",
+  "swipeInvertTurnTitle": "右から左へのスワイプで左ではなく右に旋回します",
+  "swipeInvertWalk": "前進を反転",
+  "swipeInvertWalkTitle": "上ではなく下へのスワイプで前進します",
+  "savesClose": "閉じる",
+  "savesNamePlaceholder": "セーブ名",
+  "savesSave": "保存",
+  "savesUpload": "⬆ .ti をアップロード"
+}

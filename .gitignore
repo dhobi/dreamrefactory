@@ -1,0 +1,18 @@
+dist
+out
+node_modules
+gamefiles
+dfet
+docs/.vitepress/cache
+docs/.vitepress/dist
+# scratch probes run from the repo root (dotted so they sort out of the way);
+# they need to live here for module resolution, not in the history
+/.*.ts
+
+# built by `npm run mknightdive` from an animation this repository does not ship
+/public/nightdive.mov
+
+# the runner's PAT (tools/runner/compose.yml reads it as an env_file). A token
+# that can register runners must never be committable, so this is a pattern
+# rather than one name.
+/tools/runner/*.secret

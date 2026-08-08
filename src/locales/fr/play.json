@@ -1,0 +1,22 @@
+{
+  "docTitle": "Jouer — Titanic - Adventure Out Of Time RE",
+  "h1": "Démarrage",
+  "intro": "Chargement des fichiers du jeu…",
+  "introSub": "Recherche dans le répertoire <code>gamefiles/</code>",
+  "keys": "<b>←</b> <b>→</b> pivoter &nbsp;·&nbsp; <b>↑</b> avancer &nbsp;·&nbsp; <b>M</b> carte &nbsp;·&nbsp; <b>O</b> zones actives &nbsp;·&nbsp; <b>X</b> détails",
+  "fullscreen": "⛶ Plein écran",
+  "fullscreenTitle": "Plein écran (4:3 avec bandes)",
+  "reportBug": "🪲 Signaler un bug",
+  "reportBugTitle": "Signaler quelque chose que le portage rend mal",
+  "bugShotClipboard": "L'image de l'écran est dans le presse-papiers — collez-la dans le ticket.",
+  "bugShotFile": "Votre navigateur a refusé de copier l'image ; elle a été téléchargée — joignez le PNG au ticket.",
+  "swipeLabel": "Balayage",
+  "swipeInvertTurn": "inverser gauche/droite",
+  "swipeInvertTurnTitle": "un balayage de droite à gauche pivote à droite, pas à gauche",
+  "swipeInvertWalk": "inverser l'avance",
+  "swipeInvertWalkTitle": "un balayage vers le bas avance, et non un balayage vers le haut",
+  "savesClose": "Fermer",
+  "savesNamePlaceholder": "nom de la sauvegarde",
+  "savesSave": "Enregistrer",
+  "savesUpload": "⬆ Envoyer un .ti"
+}

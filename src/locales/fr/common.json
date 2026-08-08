@@ -1,0 +1,13 @@
+{
+  "pickFromGamefiles": "ou choisissez-en un dans gamefiles/",
+  "pickFromGamefilesBig": "ou choisissez-en un dans gamefiles/ — les grandes cinématiques font des dizaines de mégaoctets",
+  "loading": "chargement de {path}…",
+  "fetchFailed": "échec du chargement de {path} ({status})",
+  "notReadable": "{ext} illisible : {message}",
+  "notAnImage": "{file} : image non décodable",
+  "notAScript": "(le conteneur ne se décode pas comme un script)",
+  "exported": "{file} exporté ({bytes} octets",
+  "exportedUnmodified": ", non modifié)",
+  "exportedWithEdits": ", {n} modifications : {edits})",
+  "exportFailed": "échec de l'auto-vérification à l'export : {message}"
+}

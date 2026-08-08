@@ -1,0 +1,94 @@
+{
+  "unexportedEdits": {
+    "one": "{n} modification non exportée",
+    "other": "{n} modifications non exportées"
+  },
+  "discardEdits": {
+    "one": "Abandonner {n} modification non exportée ?",
+    "other": "Abandonner {n} modifications non exportées ?"
+  },
+  "containers": {
+    "one": "{n} conteneur",
+    "other": "{n} conteneurs"
+  },
+  "flats": {
+    "one": "{n} flat",
+    "other": "{n} flats"
+  },
+  "clickableRegions": {
+    "one": "{n} région cliquable",
+    "other": "{n} régions cliquables"
+  },
+  "withArt": {
+    "one": "({n} avec image)",
+    "other": "({n} avec image)"
+  },
+  "loopChunks": {
+    "one": "{n} bloc de boucle",
+    "other": "{n} blocs de boucle"
+  },
+  "oneShots": {
+    "one": "{n} son ponctuel",
+    "other": "{n} sons ponctuels"
+  },
+  "steps": {
+    "one": "{n} étape",
+    "other": "{n} étapes"
+  },
+  "chunks": {
+    "one": "{n} bloc",
+    "other": "{n} blocs"
+  },
+  "members": {
+    "one": "{n} membre",
+    "other": "{n} membres"
+  },
+  "poses": {
+    "one": "{n} posture",
+    "other": "{n} postures"
+  },
+  "sprites": {
+    "one": "{n} sprite",
+    "other": "{n} sprites"
+  },
+  "props": {
+    "one": "{n} accessoire",
+    "other": "{n} accessoires"
+  },
+  "states": {
+    "one": "{n} état",
+    "other": "{n} états"
+  },
+  "frames": {
+    "one": "{n} image",
+    "other": "{n} images"
+  },
+  "scenes": {
+    "one": "{n} scène",
+    "other": "{n} scènes"
+  },
+  "views": {
+    "one": "{n} vue",
+    "other": "{n} vues"
+  },
+  "hotspots": {
+    "one": "{n} zone active",
+    "other": "{n} zones actives"
+  },
+  "roads": {
+    "one": "{n} chemin",
+    "other": "{n} chemins"
+  },
+  "waypoints": {
+    "one": "{n} point de passage",
+    "other": "{n} points de passage"
+  },
+  "actorMarks": {
+    "one": "{n} marque d'acteur",
+    "other": "{n} marques d'acteurs"
+  },
+  "namedSounds": {
+    "one": "{n} son nommé",
+    "other": "{n} sons nommés"
+  }
+}

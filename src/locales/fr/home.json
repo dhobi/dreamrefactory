@@ -1,0 +1,8 @@
+{
+  "docTitle": "Titanic - Adventure Out Of Time RE",
+  "h1": "Une aventure hors du temps RE",
+  "intro": "<b>RE</b> pour rétro-ingénierie. Ceci n'est pas une émulation : c'est une version du moteur DreamFactory (CyberFlix) implémentée en JavaScript (TypeScript). L'essentiel fonctionne déjà, mais cette version est loin d'avoir la maturité du moteur d'origine.<br>Amusez-vous, essayez les <a href=\"./editors/\">éditeurs</a> et signalez-nous les bugs directement sur <a href=\"https://github.com/dhobi/taoot-web/issues/new\">GitHub</a>.",
+  "play": "Jouer",
+  "playNote": "Lancez-vous !",
+  "credits": "Rendu possible par <a href=\"https://github.com/M3tox/DFET\">DFET</a> de M3tox — réalisé avec le soutien de Claude Opus et Claude Fable."
+}
