@@ -20,9 +20,15 @@ export interface BankChunk {
    * {@link patchChunkIdentifier} renames it at.
    */
   idOffset: number;
+  /**
+   * The record's SECOND name field, read only when the caller asks for one —
+   * a MOV one-shot record carries the frame its sound carries the picture on to
+   * (see MovSegment.soundFollows). "" when absent or not asked for.
+   */
+  follow: string;
 }
 
-/** identifier field width of a TRK/SFX/11K chunk record (MOV uses 31) */
+/** identifier field width of a chunk record — the same 15 in TRK and in MOV */
 export const CHUNK_ID_FIELD = 15;
 /** the loop table's play-order field is a fixed 260 bytes: 130 i16 slots */
 export const LOOP_ORDER_MAX = 130;
@@ -69,7 +75,7 @@ export function readLoopTable(data: Uint8Array): LoopTable {
       r.skip(2); // bool + pad
       const idOffset = r.pos;
       const identifier = r.pstr(CHUNK_ID_FIELD);
-      records.push({ identifier, containerLoc, idOffset });
+      records.push({ identifier, containerLoc, idOffset, follow: "" });
     }
   }
   return { order, records };
@@ -83,11 +89,17 @@ export function readLoopChunks(data: Uint8Array): BankChunk[] {
 
 /**
  * The one-shot chunk table (the non-looping block): {i32 count} then `count`
- * records of {i32 unknown, i32 container loc, i16 bool+pad, char[idFieldSize+1]
- * id}. TRK banks use a 15-char id field; MOV soundtracks use 31. Records are
- * returned in file order; callers key/filter them as needed.
+ * records of {i32 unknown, i32 container loc, i16 bool+pad, char[16] id} —
+ * 26 bytes in a TRK/SFX bank. A MOV record is 42, the extra 16 being a second
+ * name field (`followFieldSize`, {@link BankChunk.follow}) that TI.EXE reads at
+ * record +0x1a. Records are returned in file order; callers key/filter them as
+ * needed.
  */
-export function readOneShotChunks(data: Uint8Array, idFieldSize: number): BankChunk[] {
+export function readOneShotChunks(
+  data: Uint8Array,
+  idFieldSize: number,
+  followFieldSize = 0,
+): BankChunk[] {
   const r = new BinaryReader(data);
   r.skip(4);
   const count = r.i16();
@@ -99,7 +111,8 @@ export function readOneShotChunks(data: Uint8Array, idFieldSize: number): BankCh
     r.skip(2); // bool + pad
     const idOffset = r.pos;
     const identifier = r.pstr(idFieldSize);
-    out.push({ identifier, containerLoc, idOffset });
+    const follow = followFieldSize ? r.pstr(followFieldSize) : "";
+    out.push({ identifier, containerLoc, idOffset, follow });
   }
   return out;
 }

@@ -19,7 +19,7 @@
 import { test, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { gamefilesRoot } from "../../tools/gamefiles";
+import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
 import { readMovFile } from "../../src/df/mov";
 
 const root = gamefilesRoot();
@@ -27,6 +27,15 @@ const demoMovies = join(root, "demo", "movies");
 const noDemo = !existsSync(join(demoMovies, "tour.mov"));
 
 const mov = (...p: string[]) => readMovFile(new Uint8Array(readFileSync(join(...p))));
+/**
+ * A film of the FULL GAME, by name — never by a hand-spelled path. One movies
+ * folder holds both `bedcards.mov` and `BRNCL.MOV`, so a `join()` of a guessed
+ * case reads as "the file isn't there" and quietly skips the test that wanted it.
+ */
+const enMov = (name: string) => {
+  const path = gamefiles(root, "en").resolve(name);
+  return path ? readMovFile(new Uint8Array(readFileSync(path))) : null;
+};
 
 test.skipIf(noDemo)("a movie is a chain of segments, and a segment can carry cues", () => {
   const tour = mov(demoMovies, "tour.mov");
@@ -71,10 +80,45 @@ test.skipIf(noDemo)("the letterboxed films name their own screen origin", () => 
   expect([tour.originX, tour.originY]).toEqual([0, 0]);
 });
 
+/**
+ * A one-shot sound may name the frame to jump to when it ENDS — the fourth fact,
+ * and the one that makes a spoken line able to carry the picture on by itself
+ * (TI.EXE 0x44ad39 arms it, 0x44a7f5 fires it, out of a region frame's modal wait
+ * included). It also settles the record layout: two 15-char name fields, not one
+ * 31-char one.
+ */
+test("a sound can name the frame that follows it", () => {
+  const cards = enMov("bedcards.mov");
+  if (!cards) return; // no full-game tree installed
+  // the pocket watch's monologue: five chunks over one still, then the silence
+  // that both cuts the line and ends the chain
+  expect([...cards.soundFollows]).toEqual([
+    ["01", "blah1"],
+    ["02", "blah2"],
+    ["03", "blah5"],
+    ["06", "blah6"],
+    ["07", "endwatch"],
+  ]);
+  // every follow-on names a real frame, and each of those frames plays the next
+  // chunk on entry — the chain is in the file, not in the port
+  for (const [sound, follow] of cards.soundFollows) {
+    const frame = cards.frames.find((f) => f.name.toLowerCase() === follow.toLowerCase());
+    expect(frame, `"${sound}" follows on to "${follow}"`).toBeDefined();
+    expect(cards.sounds.has(sound)).toBe(true);
+  }
+  // the field is 15 chars: BRNCL.MOV's own evidence, a name cut a character
+  // short of the word (2848 records across the six editions, none longer)
+  const burns = enMov("brncl.mov")!;
+  expect(burns.sounds.has("burns correctio")).toBe(true);
+  // ...and the movies that carry no chain say so rather than mis-reading the
+  // second field as part of the first
+  expect(burns.soundFollows.size).toBe(0);
+});
+
 // the full game ships multi-segment films too — the sinking montage above all
-const enMovies = join(root, "en", "TITANIC1", "movies");
-test.skipIf(!existsSync(join(enMovies, "leave.mov")))("leave.mov is the whole sinking montage", () => {
-  const leave = mov(enMovies, "leave.mov");
+test("leave.mov is the whole sinking montage", () => {
+  const leave = enMov("leave.mov");
+  if (!leave) return; // no full-game tree installed
   expect(leave.segments.length).toBe(10);
   expect(leave.segments.reduce((a, s) => a + s.frames.length, 0)).toBe(1628);
   // every segment ends in an authored exit — the chain, not a truncation
