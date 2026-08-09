@@ -22,7 +22,9 @@ import { ScriptInstance } from "../../src/engine/interp";
 import { DeferredAudioSink, NullAudioSink } from "../../src/engine/audio";
 import { projectPoint } from "../../src/engine/props";
 import { SetViewer } from "../../src/viewer";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { loadGame } from "../../src/engine/saveload";
 import { newHost, root } from "../harness";
 import { readBootPlan } from "../../src/engine/bootplan";
 import { EXTRA_EDITIONS } from "../../src/languages";
@@ -5748,5 +5750,88 @@ test("passcode off the end of a chain reaches the shop main (notebook setcursor)
     "notebook: out of reach, the main passcodes too and the cursor stays the plain arrow",
     close.far === "",
     `far=${JSON.stringify(close.far)}`,
+  );
+});
+
+// --- 82. a load and a restart both arrive from nowhere ----------------------
+// Two entry points that are not a walk between rooms, and both used to leave the
+// screen set up for the room the player was leaving.
+//
+// LOAD (#36). `changeset` records `oldset = currentset()` before it opens
+// anything, and the arriving room's `setupsound` opens with `if themetype
+// (currentset ()) = themetype (oldset) exitcode` — the guard that keeps a deck
+// theme playing as you walk. Load a save of the room you are ALREADY in and the
+// two are equal, so nothing scored the room; the load path had just halted the
+// theme, so that meant silence, and the host's startTheme fallback then played
+// the SET-NAMED bank. Measured over the shipped saves, reloading in place:
+// gstair3, bind, hallb and sqhall came back silent, and the London flat came
+// back playing `bedsit1.trk` — the BOMBING score, not the flat's radio.
+//
+// Which in bedsit1 is a lock, not a wrong tune: BEDSIT1.SET's `setcursor` gives
+// memory, paper, cabinet, obit, cards, mantle, poster and radio a `touch` cursor
+// only while `currenttheme (2) != "bedsit1.trk"`. The game's own first save
+// saves the room you start in, so loading it started the sirens and left only
+// the door and the landlady clickable.
+//
+// RESTART (#35). Quit is reached from the CTL panel, which is a flat — so
+// `transtoflat("ctl.stg")` has already pushed main.stg onto the overlay stack
+// and set `setVisible = false`, and the player quits instead of taking the
+// `transfromflat` that would put it back. The new game then opened its rooms
+// behind a room nobody could see: audio, loops and traffic over a white void.
+test("a load and a restart both arrive from nowhere", async () => {
+  // --- the load ---
+  const { session, viewer, logs } = await newHost();
+  let clock = 0;
+  const tick = async (n: number): Promise<void> => {
+    for (let i = 0; i < n; i++) { viewer()?.tick((clock += 50)); await drain(); }
+  };
+  await session.openSetFile("bedsit1.set");
+  await drain();
+  await tick(20);
+  const saves = gamefiles(root).savesDir();
+  const dir = saves ? join(saves, "1") : "";
+  const file = dir ? (readdirSync(dir).find((f) => f.startsWith("01 -")) ?? "") : "";
+  if (file) {
+    await loadGame(session, new Uint8Array(readFileSync(join(dir, file))));
+    await tick(60);
+    const theme = String(session.currentThemeName);
+    // setupsound's own two effects for this room: the radio as the theme, and
+    // the scene3 sfx loop it arms alongside
+    const sfxArmed = session.scheduler.loops.some(
+      (l) => l.kind === "scene" && String(l.handler) === "sfx",
+    );
+    // and the room's gate, asked the way the game asks it — hover each hotspot
+    const v = viewer()!;
+    const cursors: string[] = [];
+    for (const o of v.scene.views[v.viewIdx].objects) {
+      await v.hover(
+        Math.floor((o.startRegionX + o.endRegionX) / 2),
+        Math.floor((o.startRegionY + o.endRegionY) / 2),
+      );
+      await drain();
+      cursors.push(session.cursorName || "arrow");
+    }
+    check(
+      "load into the room you are standing in: the flat's radio, not the bombing score",
+      theme === "bedrad1.trk" && sfxArmed && cursors.length > 0 &&
+        cursors.every((c) => c === "touch"),
+      `theme=${theme} sfxLoop=${sfxArmed} cursors=${cursors.join(",") || "(no hotspots)"}`,
+    );
+  }
+  void logs;
+
+  // --- the restart ---
+  const { session: s2 } = await newHost();
+  await s2.openSetFile("bedsit1.set");
+  await drain();
+  await s2.runGlobal("transtoflat", ["ctl.stg"]);
+  await s2.settle(200);
+  const onPanel = s2.setVisible === false && s2.interp.globals.get("savestage1") === "main.stg";
+  await s2.prepareRestart();
+  check(
+    "quit from the save panel leaves the next game a screen it may draw on",
+    onPanel && s2.setVisible === true && s2.interp.globals.get("savestage1") === "",
+    `onPanel=${onPanel} setVisible=${s2.setVisible} ` +
+      `savestage1=${JSON.stringify(s2.interp.globals.get("savestage1"))}`,
   );
 });

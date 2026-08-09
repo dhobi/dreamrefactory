@@ -965,6 +965,20 @@ export class GameSession {
     this.fade.snapshot = null;
     this.fade.pendingReveal = false;
     this.fade.level = 1;
+    // And the SCREEN, because of where quit() is called from. The CTL panel is a
+    // flat: reaching Quit means `transtoflat("ctl.stg")` has already run, which
+    // pushed main.stg onto the overlay stack and set `setVisible = false`. The
+    // normal way back is `transfromflat`, which the player never gets to take —
+    // they quit instead. So the restarted game opened its rooms behind a room
+    // nobody was allowed to see: the flat's radio played, the landlady shouted
+    // and the traffic moved, over a white void where the picture should be, and
+    // only loading a save (whose own path does restore this) cleared it (#35).
+    //
+    // The stack goes with it. Those are the game's own `savestage1..3` globals,
+    // still remembering the finished game's main.stg, and a later transfromflat
+    // would pop one that belongs to nothing.
+    this.stageCtrl.resetOverlayStack();
+    this.setVisible = true;
     this.coreLoaded = false;
   }
 
