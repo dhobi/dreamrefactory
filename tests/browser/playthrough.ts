@@ -575,6 +575,50 @@ const waitFor = (page: Page, fn: string, what: string, timeout = 300_000) =>
 const settle = (page: Page, what: string) => waitFor(page, "dbg.viewer && dbg.viewer.quiescent", `${what} to settle`);
 
 /**
+ * Press past the nightdive intro, if this edition and this deployment have one.
+ *
+ * It runs BEFORE the boot — there is no viewer and no session set until the boot
+ * activates one — so every viewer-shaped predicate in this file is `undefined`
+ * while it is on screen, `rush`'s included. That is how a run came to spend its
+ * whole 300 s budget "stuck waiting for the boot menu" at a film that was itself
+ * waiting: the page had reached `nightdive.mov segment 2/2 (3 frames,
+ * interactive)`, which is the ownership question, and `rush` only presses Escape
+ * while `dbg.viewer.moviePlaying`, so it pressed nothing and watched.
+ *
+ * ESC is the honest answer and the safe one. The film's own doc calls
+ * `unanswered` "not a failure case — it is ESC", a player who has seen the
+ * question before pressing past it, and `main.ts` boots the game for
+ * `unanswered` exactly as for `owns`. Answering "wants" would navigate the page
+ * to gog.com, which is not somewhere a test run comes back from.
+ *
+ * Silent when there is no intro: a tree without `public/nightdive.mov`, or any
+ * edition but English, never opens one (src/nightdive.ts `introPlaysFor`) — and
+ * that is the shape this harness was written against, which is why it went so
+ * long without noticing.
+ */
+async function escapeIntro(page: Page): Promise<void> {
+  // it is fetched and opened before it appears, so give it a moment to show up;
+  // no intro at all is the common case and must not cost the run anything
+  const showed = await page
+    .waitForFunction("!!window.dbg && (!!window.dbg.intro || !!window.dbg.viewer)", null, { timeout: 20_000 })
+    .then(() => page.evaluate(() => !!(window as any).dbg.intro))
+    .catch(() => false);
+  if (!showed) return;
+  for (let press = 0; press < 20; press++) {
+    await page.keyboard.press("Escape");
+    const gone = await page
+      .waitForFunction("!window.dbg.intro", null, { timeout: 3_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (gone) {
+      mark(`   escaped the intro (${press + 1} press${press ? "es" : ""})`);
+      return;
+    }
+  }
+  throw new Error("the nightdive intro would not let go of Escape");
+}
+
+/**
  * A cutscene is on screen and is not asking anything — the one state ESC is for.
  * The same test as Navigator.rush's `showing`, in page terms; see that doc for
  * why a movie PARKED on its regions is never skipped.
@@ -872,6 +916,7 @@ async function loadCheckpoint(page: Page, name: string): Promise<boolean> {
   // diverged on globals the golden had never heard of.
   await page.goto(APP_URL);
   await page.waitForFunction(() => !!(window as any).dbg, null, { timeout: 20_000 });
+  await escapeIntro(page); // a reload replays it, so every checkpoint pays this too
   // Then play the boot, rather than loading over the top of it.
   //
   // The page boots itself now (src/main.ts, "Straight into the game"), so a fresh
@@ -1017,6 +1062,7 @@ async function main(): Promise<void> {
   await page.goto(APP_URL);
   await page.waitForFunction(() => !!(window as any).dbg, null, { timeout: 20_000 });
   mark("app up" + (REPAINT_CHECK ? " (repaint probe armed)" : ""));
+  await escapeIntro(page);
 
   // seed before anything runs: advanceday draws the arrival second at the very
   // end of the boot, and the bomb delay is drawn in the flat
