@@ -2458,10 +2458,29 @@ test("actor walking: morrow strolls to his next deck star", async () => {
   await session.interp.builtins.get("walktostar")!(
     session.interp, ["morrow", "morrow.2"], null as never, null as never,
   );
+  // A walk begins by TURNING, standing still, and the pose stays whatever the
+  // script left — the cast's own `endturn` is what makes it "walk", once the
+  // facing has come round (see Scheduler.serviceWalks).
+  const beganStanding = session.scheduler.isWalk("morrow") && morrow.poseName !== "walk";
+  const startedAt = morrow.worldX;
+  // the record's own turn phase is the thing to watch: `endturn` is a dispatch,
+  // so the POSE lands a microtask after the facing does
+  const turning = () => session.scheduler.walks.get("morrow")?.turnTo !== undefined;
+  let held = true;
+  let passes = 0;
+  // one SERVICE step an iteration (the step is 50 ms): a +100 tick would run two,
+  // and could finish the turn and move him inside a single loop pass
+  while (turning() && passes++ < 60) {
+    v.tick((clock += 50));
+    await drain();
+    if (morrow.worldX !== startedAt) held = false;
+  }
+  v.tick((clock += 100)); // let endturn's dispatch settle
+  await drain();
   check(
-    "walk starts: walk pose, facing travel, iswalk true",
-    session.scheduler.isWalk("morrow") && morrow.poseName === "walk",
-    `pose=${morrow.poseName} deg=${morrow.deg}`,
+    "walk starts by turning on the spot, and endturn hands over the walk pose",
+    beganStanding && held && passes > 1 && morrow.poseName === "walk",
+    `began=${beganStanding} turnPasses=${passes} stoodStill=${held} pose=${morrow.poseName} deg=${morrow.deg}`,
   );
   for (let i = 0; i < 4; i++) {
     v.tick((clock += 100));
@@ -2516,9 +2535,16 @@ test("actor walking: one service pass advances exactly actorspeed", async () => 
   await drain();
   // straight down +x, far enough that no pass can reach the end
   session.scheduler.startWalk("morrow", startX + 6000, startY, morrow.worldZ);
-  const per: number[] = [];
-  let last = startX;
-  for (let i = 0; i < 5; i++) {
+  // spend the turn phase first: a walk stands and turns before it moves, so the
+  // opening passes advance nobody and measuring them would measure the turn
+  let guard = 0;
+  while (morrow.worldX === startX && guard++ < 60) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
+  const per: number[] = [morrow.worldX - startX];
+  let last = morrow.worldX;
+  for (let i = 0; i < 4; i++) {
     session.tickTime((clock += 50));
     await drain();
     per.push(morrow.worldX - last);
@@ -2546,6 +2572,65 @@ test("actor walking: one service pass advances exactly actorspeed", async () => 
     "walk length is the floored integer distance, clamped to 1",
     diag === 5 && onTheSpot === 1,
     `3-4-5=${diag} zero=${onTheSpot}`,
+  );
+}
+);
+
+// --- 19c. a walk turns before it moves, at actorturn per pass ---------------
+// TI.EXE's walk record carries a facing target (+8, built at 0x4436d0); while it
+// is set the service steps the facing by the actor's `actorturn` the short way
+// round (0x445080) and returns without moving, and only when it lands does it
+// dispatch `endturn()` and begin the movement passes (0x443cfa).
+//
+// `stdturn` is 10 for every set in TAOOT, so a half-circle is 128/10 = 13 passes
+// — about 0.65 s of standing and turning before anyone sets off. The port used
+// to snap the facing and set the walk pose itself, both in the same tick.
+test("actor walking: a walk turns before it moves, at actorturn per pass", async () => {
+  const { session } = await newSession();
+  session.interp.globals.set("mission", 1);
+  await session.openSetFile("deckbd.set", "scene33", "view94");
+  const morrow = session.actorRuntime.get("morrow")!;
+  morrow.speed = 30;
+  morrow.turn = 10; // stdturn, for every set in the corpus
+  session.tickTime((clock += 50)); // the session's clock anchor
+  await drain();
+
+  // due east of him, so the target facing is 0 and he starts a half-turn away
+  morrow.deg = 128;
+  const startX = morrow.worldX;
+  session.scheduler.startWalk("morrow", startX + 6000, morrow.worldY, morrow.worldZ);
+  const degs: number[] = [];
+  let passes = 0;
+  while (morrow.worldX === startX && passes++ < 60) {
+    session.tickTime((clock += 50));
+    await drain();
+    degs.push(morrow.deg);
+  }
+  // 128 units at 10 a pass: 13 passes to arrive (the last one clamps rather than
+  // overshooting), and the 14th is the first that moves him
+  check(
+    "he turns 10 a pass, standing still, and only then sets off",
+    degs.slice(0, 13).join(",") === "118,108,98,88,78,68,58,48,38,28,18,8,0" && passes === 14,
+    `passes=${passes} degs=${degs.slice(0, 14).join(",")}`,
+  );
+
+  // the short way round, in both directions and across the wrap. Facing due east
+  // (target 0) from 250 is 6 units forwards and 250 back, so it goes forwards —
+  // and clamps on the target rather than overshooting to 4.
+  const turnFrom = (deg: number, tx: number, ty: number): number => {
+    session.scheduler.stopWalk("morrow");
+    morrow.deg = deg;
+    session.scheduler.startWalk("morrow", morrow.worldX + tx, morrow.worldY + ty, morrow.worldZ);
+    session.tickTime((clock += 50));
+    return morrow.deg;
+  };
+  const nearlyThere = turnFrom(250, 6000, 0); // target 0: 6 forwards -> clamps
+  const wrapsForward = turnFrom(250, 0, 6000); // target 64: 70 forwards -> 4, over the wrap
+  const goesBack = turnFrom(10, 0, -6000); // target 192: 182 forwards, 74 back -> 0
+  check(
+    "the facing takes the short way round and clamps on the target",
+    nearlyThere === 0 && wrapsForward === 4 && goesBack === 0,
+    `250->0 gave ${nearlyThere}, 250->64 gave ${wrapsForward}, 10->192 gave ${goesBack}`,
   );
 }
 );
