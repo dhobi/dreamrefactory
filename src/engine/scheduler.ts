@@ -262,7 +262,6 @@ export class Scheduler {
     for (const c of this.crickets) c.handle?.stop();
     this.crickets.length = 0;
     this.walks.clear();
-    this.pendingEndwalks.length = 0;
     this.loopFlags.clear();
     this.haltSounds();
   }
@@ -383,11 +382,10 @@ export class Scheduler {
         a.deg = turned;
         if (done) {
           w.turnTo = undefined;
-          // Dispatched at once, not queued behind the script in flight like an
-          // arrival (see fireEndwalks): the pose has to be right for the walk
-          // the caller is watching, and every `endturn` in the corpus is one
-          // `iswalk` test and an `actorpose` — no dispatch to re-enter. See #31,
-          // which is where the two rules become one.
+          // Dispatched at once, like the arrival below and like the original:
+          // the pose has to be right for the walk the caller is watching, and
+          // every `endturn` in the corpus is one `iswalk` test and an
+          // `actorpose`.
           void this.session.track(
             this.session.sendEvent("sendtoactor", key, "endturn", [], "walk"),
           );
@@ -426,67 +424,25 @@ export class Scheduler {
         arrived.push(key);
       }
     }
-    // fire each arrived actor's endwalk() — the arrival lifecycle handler.
-    // NPCs use it to face the player, resume an idle loop, or start the next
-    // leg of a patrol; without it walk-driven actors freeze after one leg.
-    // (Queued after the loop so a new walk it starts doesn't perturb this pass.)
+    // Fire each arrived actor's endwalk() — the arrival lifecycle handler. NPCs
+    // use it to face the player, resume an idle loop, or start the next leg of a
+    // patrol; without it walk-driven actors freeze after one leg.
+    //
+    // Dispatched at once, from inside whatever is running, exactly as TI.EXE's
+    // walk service does (0x443de3 sets actorstar and then dispatches). What
+    // makes that safe is the arrival STAR, not a rule in here: an engine-driven
+    // arrival lands on `"custom"` (see the walktoxyz builtin) and every endwalk
+    // in the corpus opens by returning on it, so `walktopuppet`'s approach walk
+    // runs no idle and starts no patrol. `"custom"` is compared in 29 script
+    // files; the port used to leave the old star in place, and the guard never
+    // fired — which is the whole of #10/#19/#21.
+    //
+    // (Fired after the loop so a new walk it starts doesn't perturb this pass.)
     for (const key of arrived) {
-      if (!this.pendingEndwalks.includes(key)) this.pendingEndwalks.push(key);
+      if (this.session.castScripts.get(key)?.script.codes.has("endwalk")) {
+        void this.session.track(this.session.sendEvent("sendtoactor", key, "endwalk", [], "walk"));
+      }
     }
-    this.fireEndwalks();
-  }
-
-  /** arrivals whose endwalk() has not been dispatched yet — see fireEndwalks */
-  private pendingEndwalks: string[] = [];
-
-  /**
-   * Dispatch the arrivals' endwalk(), but never INTO a script that is running.
-   *
-   * Same rule as fireDueLoops, and for the same reason: the original engine is
-   * single-threaded, so its service never re-enters a running script. An
-   * arrival that lands mid-script waits; it does not get lost.
-   *
-   * Skipping the wait is a softlock, not a cosmetic race, because the script
-   * that is running is usually the one that STARTED this walk. gang.cst's
-   * `walktopuppet` sends the character to you and then holds
-   * `while iswalk(who) forceupdate()`; firing endwalk from inside that wait runs
-   * the character's own idle handler in the middle of their own conversation:
-   *
-   *  - `maxidle`/`vladidle` call `hasattention`, whose claim (`curattention`) is
-   *    only released AFTER `sendtoactor(target, mousedown(0))` returns — so the
-   *    claim is still standing and `attentionspan` still stale, and it accosts
-   *    you again immediately. Each round nests one more `walktopuppet`: measured
-   *    in boil with Vlad, 13 accosts, 9 `vlad1.pup` opens and `dispatch cycle …
-   *    at depth 64` before the stack gave out. (Issues #19, #21.)
-   *  - decka's `endwalk` starts the next leg of Max's patrol instead, so
-   *    `iswalk(who)` never goes false, the wait never ends, and the conversation
-   *    never opens at all — the player is left holding `cursor("watch")` with
-   *    the dispatch still in flight. (Issue #10.)
-   *
-   * Deferred, the arrival lands after `walktopuppet` has set `actorstar(who,
-   * "custom")` and resumed the character, which is the state its own `endwalk`
-   * guard (`if actorstar(me) = "custom" → exitcode`) was written for.
-   */
-  private fireEndwalks(): void {
-    if (!this.pendingEndwalks.length || this.session.scriptBusy) return;
-    const due = this.pendingEndwalks
-      .splice(0)
-      // An arrival that has since been overtaken is not owed anything: the
-      // character is walking again (that walk will announce its own arrival), or
-      // the room went away — `reset()` empties the queue, so a load cannot land
-      // the previous room's arrivals in the new one. NOT gated on `actorvisible`,
-      // though: the original dispatches endwalk to a hidden actor too, and the
-      // cast's own handlers do that guarding (TAOOT's `morrowidle` re-arms from
-      // endwalk while Morrow is not on screen — tests/auto/regression.ts).
-      .filter(
-        (k) => !this.walks.has(k) && this.session.castScripts.get(k)?.script.codes.has("endwalk"),
-      );
-    if (!due.length) return;
-    this.session.track(
-      (async () => {
-        for (const k of due) await this.session.sendEvent("sendtoactor", k, "endwalk", [], "walk");
-      })(),
-    );
   }
 
   /**
