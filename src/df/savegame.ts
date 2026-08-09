@@ -55,6 +55,27 @@ const PROP_OWNER_OFF = 64;
  */
 const ACTOR_STRIDE = 160;
 const ACTOR_OWNER_OFF = 64;
+/**
+ * `actorvalue` — how many conversations you have had with this character, and
+ * the gate on whether they will approach you again.
+ *
+ * TAOOT's `runpuppet` ends every exchange with `actorvalue(target,
+ * actorvalue(target) + 1)`, and each character's idle reads it back:
+ * `if actorvalue(me) <= 0 → hasattention(4)`, else `clearattention()`. So a save
+ * that drops it reloads with everyone still remembering, and nobody ever walks
+ * up to you again for the rest of the session.
+ *
+ * A DWORD: TI.EXE's `actorvalue` getter (0x410be0) reads it with `mov ecx, dword
+ * ptr [esp+0x50]` against a record buffer at `esp+8`, i.e. record+0x48 of its
+ * RUNTIME struct — which is not this layout (runtime owner is at +144, saved
+ * owner at +64), so the offset here is measured rather than mapped: across all
+ * 78 shipped English saves this is the only per-character field that is zero in
+ * both fresh games, never decreases along a disk's save series, and moves with
+ * who has been spoken to — Morrow 0→1→3→5→8→13→21 over disk 1, Max 0→2→3, Vlad 0
+ * until the fight and 5 after. The word at +154 is 0 in every record of all 78,
+ * which is what makes reading and writing the full dword safe.
+ */
+const ACTOR_VALUE_OFF = 152;
 
 /**
  * The 32-byte variable-list node of the globals container (see decodeVarSlots
@@ -219,6 +240,8 @@ export interface SavedActor {
   name: string;
   /** `actorowner` at record+64 (e.g. "none", "sendgram", "enterwireless"). */
   owner: string;
+  /** `actorvalue` at record+152: conversations had — see {@link ACTOR_VALUE_OFF}. */
+  value: number;
 }
 
 export interface SaveGame {
@@ -458,7 +481,12 @@ function actorRecordAt(d: Uint8Array, o: number): SavedActor | null {
   if (!isPropName(name)) return null;
   const owner = pstrField(d, o + ACTOR_OWNER_OFF);
   if (!owner) return null;
-  return { name: name.toLowerCase(), owner: owner.toLowerCase() };
+  // the grid is located by name/owner alone — `value` is read from a record that
+  // has already been accepted, so a garbage field cannot make a non-record parse
+  const value = o + ACTOR_VALUE_OFF + 4 <= d.length
+    ? new DataView(d.buffer, d.byteOffset + o + ACTOR_VALUE_OFF, 4).getInt32(0, true)
+    : 0;
+  return { name: name.toLowerCase(), owner: owner.toLowerCase(), value };
 }
 
 /**
@@ -941,7 +969,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     }
   }
 
-  // actors: the same in-place write, one field per record. Only the owner — the
+  // actors: the same in-place write. The owner and the conversation count — the
   // rest of an actor record is where he is standing and what he is doing, which
   // a load rebuilds by running the room's own initactors.
   if (patch.actors?.length) {
@@ -960,6 +988,10 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
           continue;
         }
         writePstrField(d, off + ACTOR_OWNER_OFF, sa.owner);
+        if (off + ACTOR_VALUE_OFF + 4 <= d.length) {
+          new DataView(d.buffer, d.byteOffset + off + ACTOR_VALUE_OFF, 4)
+            .setInt32(0, Math.max(0, Math.trunc(sa.value)) | 0, true);
+        }
       }
     }
   }
