@@ -610,13 +610,17 @@ test("applyPatch writes actor owners that parse back", () => {
     scene: save.scene,
     view: save.view,
     actors: [
-      { name: "purs", owner: "foundcuff" },
-      { name: "morrow", owner: "enterwireless" },
+      { name: "purs", owner: "foundcuff", value: 4 },
+      { name: "morrow", owner: "enterwireless", value: 0 },
     ],
   });
   const re = parseSave(out);
   expect(re.actors.find((a) => a.name === "purs")?.owner).toBe("foundcuff");
   expect(re.actors.find((a) => a.name === "morrow")?.owner).toBe("enterwireless");
+  // actorvalue rides the same record, and zero is a value like any other — it is
+  // what a save taken before you met someone has to put back (issue #27)
+  expect(re.actors.find((a) => a.name === "purs")?.value).toBe(4);
+  expect(re.actors.find((a) => a.name === "morrow")?.value).toBe(0);
   // and the rest of the cast is left as the base had it
   expect(re.actors.length).toBe(save.actors.length);
   expect(re.actors.find((a) => a.name === "penny")?.owner).toBe(
@@ -640,6 +644,48 @@ test("snapshotSave and loadGame carry actorowner through a save", async () => {
   expect(await next.loadGame(bytes!)).toBe(true);
   await next.settle();
   expect(next.actorRuntime.get("purs")?.owner, "his errand survived the save").toBe("sendgram");
+});
+
+// The counterpart, and the one that shipped broken: a load has to UNDO a
+// conversation, not just carry one forward.
+//
+// TAOOT's `runpuppet` ends every exchange with `actorvalue(target,
+// actorvalue(target) + 1)`, and each character's idle gates the approach on it:
+// `if actorvalue(me) <= 0 → hasattention(4)`, else `clearattention()`. The count
+// lived only in the running session, so talking to someone and then loading a
+// save from BEFORE you met them left the count standing — they never walked up
+// again for the rest of the session, and clicking them opened the "we have met"
+// branch of their puppet instead of the introduction. Reported against both the
+// Vlad and the Max softlocks (#19, #21) and split out as #27.
+//
+// Both directions are asserted here: a raised count survives its own save, and a
+// save taken with a lower one puts it back.
+test("snapshotSave and loadGame carry actorvalue, in both directions", async () => {
+  const session = await newSession();
+  await session.loadGame(new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti"))));
+  await session.settle();
+  const vlad = session.actorRuntime.get("vlad");
+  expect(vlad, "the whole ship's company is loaded for the voyage").not.toBeNull();
+  expect(vlad!.value, "nobody has spoken to him this early").toBe(0);
+
+  // the save you take before meeting him, then the conversation
+  const before = session.snapshotSave();
+  vlad!.value = 3;
+  const after = session.snapshotSave();
+  expect(before).not.toBeNull();
+  expect(after).not.toBeNull();
+
+  const met = await newSession();
+  expect(await met.loadGame(after!)).toBe(true);
+  await met.settle();
+  expect(met.actorRuntime.get("vlad")?.value, "the conversations survived the save").toBe(3);
+
+  // and the load that has to undo it: the same session, having met him, loading
+  // the earlier file — which is exactly what the reporters did
+  met.actorRuntime.get("vlad")!.value = 9;
+  expect(await met.loadGame(before!)).toBe(true);
+  await met.settle();
+  expect(met.actorRuntime.get("vlad")?.value, "and a load before the meeting undoes it").toBe(0);
 });
 
 // ---- globals with no record in the base ----------------------------------
@@ -778,7 +824,10 @@ test("a patched save is still a well-formed container file", () => {
     strGlobals: new Map([["savedeck", "boil3"], ["hallside", "port"], ["handitem", "rubaiyat"]]),
     set: "boil", scene: "scene40", view: "view45",
     inventory: save.inventory.map((p) => (p.name === "rubaiyat" ? { ...p, owner: "frank" } : p)),
-    actors: [{ name: "purs", owner: "sendgram" }, { name: "vlad", owner: "help" }],
+    actors: [
+      { name: "purs", owner: "sendgram", value: 1 },
+      { name: "vlad", owner: "help", value: 2 },
+    ],
   });
   const raw = readSaveFile(out);
   expect(containersEqual(raw, readSaveFile(writeSaveFile(raw))), "re-emits identically").toBe(true);

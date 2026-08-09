@@ -76,22 +76,37 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
 }
 
 /**
- * Every loaded actor's `actorowner` — the story state the characters themselves
- * carry, which nothing was writing.
+ * Every loaded actor's `actorowner` and `actorvalue` — the story state the
+ * characters themselves carry, which nothing was writing.
  *
- * It is not decoration. TAOOT's Purser mission-2 errand is a ladder of his owner
+ * Neither is decoration. TAOOT's Purser mission-2 errand is a ladder of his owner
  * values, Morrow's permission to enter the wireless room is "enterwireless", and
  * the chief engineer's turbine job is `actorowner("csea")`. A save without them
  * reloads with the crew having forgotten the player: the Purser hands out the
  * telegram errand again and the ladder starts over.
  *
- * Owners only — an actor's position and animation are rebuilt by the room's own
- * `initactors` on load, and writing them back would fight it.
+ * `actorvalue` is the same kind of memory kept as a count. `runpuppet` ends every
+ * exchange with `actorvalue(target, actorvalue(target) + 1)`, and each idle gates
+ * on it — `if actorvalue(me) <= 0 → hasattention(4)`, else `clearattention()`. It
+ * lived only in the running session, so it survived a LOAD the one way it must
+ * not: talk to Vlad, reload a save from before you met him, and he still would
+ * not walk up to you, and clicking him opened the "we have met" branch of his
+ * puppet rather than the introduction. Reported against both #19 and #21.
+ *
+ * These two only — an actor's position and animation are rebuilt by the room's
+ * own `initactors` on load, and writing them back would fight it.
  */
 function actorSnapshot(session: GameSession): SavedActor[] {
   const out: SavedActor[] = [];
   for (const [name, a] of session.actorRuntime.actors) {
-    out.push({ name: name.toLowerCase(), owner: (String(a.owner) || "none").toLowerCase() });
+    // scripts only ever count with it, but `actorvalue` is a script value and a
+    // cast could put anything in one; a non-number saves as the fresh-game 0
+    const value = typeof a.value === "number" && Number.isFinite(a.value) ? a.value : 0;
+    out.push({
+      name: name.toLowerCase(),
+      owner: (String(a.owner) || "none").toLowerCase(),
+      value,
+    });
   }
   return out;
 }
@@ -365,17 +380,23 @@ async function restoreOpenWatch(session: GameSession): Promise<void> {
 }
 
 /**
- * Restore each character's `actorowner` from a save.
+ * Restore each character's `actorowner` and `actorvalue` from a save.
  *
  * Only actors whose cast is loaded exist to restore onto; the rest are dropped
  * silently, which is right — a cast that is not loaded has no state to be wrong,
  * and the one that matters in TAOOT (gang.cst, the whole ship's company) is
  * loaded for the whole voyage.
+ *
+ * Restoring the count is what makes a load UNDO a conversation, which is the
+ * whole point: it has to be written even when it is zero, or a save taken before
+ * you met someone would leave the running session's count standing.
  */
 function restoreActors(session: GameSession, actors: SavedActor[]): void {
   for (const sa of actors) {
     const a = session.actorRuntime.get(sa.name);
-    if (a) a.owner = sa.owner;
+    if (!a) continue;
+    a.owner = sa.owner;
+    a.value = sa.value;
   }
 }
 
