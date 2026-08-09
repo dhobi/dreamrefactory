@@ -278,7 +278,13 @@ export class Scheduler {
    */
   readonly walks = new Map<
     string,
-    { sx: number; sy: number; sz: number; dx: number; dy: number; dz: number; dist: number; progress: number; paused: boolean; arriveStar?: string }
+    {
+      sx: number; sy: number; sz: number;
+      dx: number; dy: number; dz: number;
+      dist: number; progress: number; paused: boolean; arriveStar?: string;
+      /** the facing to reach before moving; undefined once the turn is done */
+      turnTo?: number;
+    }
   >();
 
   /** arriveStar: the value actorstar() should report once the walk lands
@@ -294,15 +300,34 @@ export class Scheduler {
     // integer sqrt (0x435950, a truncating binary isqrt) and clamps the result
     // the same way (0x443781)
     const dist = Math.max(1, Math.floor(Math.hypot(dx, dy, dz)));
-    a.deg = bearing(dx, dy);
-    if (a.member.poses.some((p) => p.name === "walk")) {
-      a.poseName = "walk";
-      a.step = 0;
-    }
+    // The facing is a TARGET, not an assignment, and the pose is not ours to set
+    // — see the turn phase in serviceWalks and the endturn it ends on.
     this.walks.set(a.member.name, {
       sx: a.worldX, sy: a.worldY, sz: a.worldZ,
       dx, dy, dz, dist, progress: 0, paused: false, arriveStar,
+      turnTo: bearing(dx, dy),
     });
+  }
+
+  /**
+   * Step a 0..255 facing toward `target` by at most `by`, the short way round.
+   *
+   * TI.EXE's `0x445080`, which the walk service calls once per pass with the
+   * actor's `actorturn` and a wrap of 0xff: it compares "forwards the long way"
+   * against "backwards the short way" and takes the smaller, clamping on the
+   * target rather than overshooting it.
+   *
+   * `by` is floored at 1 so a cast that never ran `stdactor` cannot turn for
+   * ever. The original would spin there too — `stdturn` returns 10 for every set
+   * in TAOOT and nothing ships a zero — but a walk that never starts is a worse
+   * failure here than a character who turns a little faster than asked.
+   */
+  private stepDeg(cur: number, target: number, by: number): number {
+    const step = Math.max(1, Math.abs(Math.trunc(by)));
+    const diff = (target - cur) & 0xff;
+    if (diff === 0) return target;
+    if (diff <= step || 256 - diff <= step) return target;
+    return (cur + (diff < 128 ? step : -step)) & 0xff;
   }
 
   stopWalk(name: string): void {
@@ -330,6 +355,43 @@ export class Scheduler {
       const a = this.session.actorRuntime.get(key);
       if (!a) {
         this.walks.delete(key);
+        continue;
+      }
+      // A walk TURNS before it moves, and does not do both in one pass. The
+      // record carries a facing target (TI.EXE walk record +8, built at
+      // 0x4436d0); while it is set, the service steps the facing by the actor's
+      // `actorturn` and returns (0x443cfa), and only once it lands does it
+      // dispatch `endturn()` and let the movement passes begin.
+      //
+      // `stdturn` is 10 for every set in TAOOT, so a half-circle is 128/10 = 13
+      // passes — about 0.65 s of standing and turning before anyone sets off.
+      //
+      // The WALK POSE comes out of that dispatch rather than from here, because
+      // it is the cast's to choose and it is not always "walk":
+      //
+      //     code endturn ()
+      //         if iswalk (me)
+      //             if mission < 4 | tour
+      //                 actorpose (me, "walk")
+      //             else
+      //                 actorpose (me, "walklj")     ; life jackets, mission 4
+      //
+      // which the engine setting `poseName = "walk"` could not express at all.
+      if (w.turnTo !== undefined) {
+        const turned = this.stepDeg(a.deg, w.turnTo, a.turn);
+        const done = turned === w.turnTo;
+        a.deg = turned;
+        if (done) {
+          w.turnTo = undefined;
+          // Dispatched at once, not queued behind the script in flight like an
+          // arrival (see fireEndwalks): the pose has to be right for the walk
+          // the caller is watching, and every `endturn` in the corpus is one
+          // `iswalk` test and an `actorpose` — no dispatch to re-enter. See #31,
+          // which is where the two rules become one.
+          void this.session.track(
+            this.session.sendEvent("sendtoactor", key, "endturn", [], "walk"),
+          );
+        }
         continue;
       }
       // One service pass advances the actor's own `actorspeed` in world units —
