@@ -240,9 +240,42 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     const a = actor(n)!;
     a.starName = toStr(starName).toLowerCase();
   });
+  /**
+   * walktoxyz(actor, x, y, z): walk to a point that is not a star — and land on
+   * the `"custom"` sentinel, which is what tells a cast that the arrival was the
+   * ENGINE's and not a scripted move to a named place.
+   *
+   * TI.EXE's record builder (0x4436d0) stores `"custom"` in the walk record at
+   * +0x3e, and the arrival path copies that field into `actorstar` (0x443de3,
+   * actor+0x70) immediately before it dispatches `endwalk()`. The star-walk
+   * builder (0x443ac0) writes `"custom"` there too and only overwrites it with
+   * the destination for its named-star modes — so "arrived somewhere nobody
+   * named" is the default, and a name is the exception.
+   *
+   * The cast reads it constantly: `"custom"` is compared in 29 script files, and
+   * every `endwalk` in the corpus opens with the same guard —
+   *
+   *     code endwalk ()
+   *         actorpose (me, "stand")
+   *         if actorstar (me) = "custom"
+   *             exitcode
+   *         endif
+   *         … maxidle () / the decka patrol / vladidle ()
+   *
+   * so an engine-driven arrival is meant to run NO idle at all. Without the
+   * sentinel that guard never fired: `walktopuppet` walks a character to you with
+   * `moveactorxyz` -> `walktoxyz`, and their arrival re-armed the idle, which
+   * called `hasattention`, which accosted you again inside the conversation you
+   * were already having (#10/#19/#21).
+   *
+   * The mid-walk sentinel is deliberately NOT copied here. The original reports
+   * `"walktoxyz"` (and `"defer"` for star walks) while a walk is running, and
+   * neither string appears anywhere in the corpus — no script can tell. See #37
+   * for the one place it would be observable.
+   */
   r("walktoxyz", (_i, [n, x, y, z]) => {
     if (!actor(n)) return 0;
-    session.scheduler.startWalk(toStr(n), toNum(x ?? 0), toNum(y ?? 0), toNum(z ?? 0));
+    session.scheduler.startWalk(toStr(n), toNum(x ?? 0), toNum(y ?? 0), toNum(z ?? 0), "custom");
   });
   // walkonpath(actor, fromStar|"resume", toStar|point): walk from one star to
   // another. `from`="resume" keeps the current position; otherwise the actor

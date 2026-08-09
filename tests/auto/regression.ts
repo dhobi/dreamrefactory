@@ -5426,17 +5426,17 @@ test("actordist: a conversation reads as not present, so nobody accosts you mid-
 }
 );
 
-// --- 59d. An arrival must not run the arriving character's idle mid-script ----
+// --- 59d. An engine-driven arrival runs no idle ----------------------------
 // The guards above cover a conversation that is ALREADY open. This is the window
-// before it: `walktopuppet` sends the character to you and holds
-// `while iswalk(who) forceupdate()`, and the walk service used to dispatch their
-// `endwalk()` from inside that wait — into the very script that started the walk.
+// before it: `walktopuppet` walks the character to you with `moveactorxyz` ->
+// `walktoxyz` and holds `while iswalk(who) forceupdate()`, and their arrival used
+// to run their own idle inside that wait.
 //
-// `endwalk` runs the character's idle, the idle calls `hasattention`, and
-// `hasattention` only releases its claim (`curattention = ""`) AFTER
-// `sendtoactor(target, mousedown(0))` returns. So mid-approach the claim still
-// stands and `attentionspan` is still stale, and it accosts you again on the
-// spot, nesting one more `walktopuppet` each round.
+// `endwalk` runs the idle, the idle calls `hasattention`, and `hasattention` only
+// releases its claim (`curattention = ""`) AFTER `sendtoactor(target,
+// mousedown(0))` returns. So mid-approach the claim still stands and
+// `attentionspan` is still stale, and it accosts you again on the spot, nesting
+// one more `walktopuppet` each round.
 //
 // Measured before the fix, standing still and touching nothing: boil gave 13
 // `msg: vlad` (that line is `walktopuppet`'s own `message(who)`), 9 opens of
@@ -5445,13 +5445,18 @@ test("actordist: a conversation reads as not present, so nobody accosts you mid-
 // because `walktopuppet` recomputes a destination the character is already
 // standing on, so it is the same whatever `actorspeed` says.
 //
-// decka is the third face of it and the reason the rule has to be the engine's:
-// Max's `endwalk` there starts the next leg of his patrol instead, so
-// `iswalk(who)` never goes false, `walktopuppet` never reaches `runpuppet`, and
-// the player is left holding `cursor("watch")` with the dispatch still in
-// flight. TAOOT ships that patrol and it is clickable, so the original cannot be
-// dispatching endwalk into a running script either. (Issues #10, #19, #21.)
-test("actor arrival: endwalk waits for the script that started the walk", async () => {
+// decka is the third face of it: Max's `endwalk` there starts the next leg of his
+// patrol, so `iswalk(who)` never goes false, `walktopuppet` never reaches
+// `runpuppet`, and the player is left holding `cursor("watch")` with the dispatch
+// still in flight. (Issues #10, #19, #21.)
+//
+// What stops all three is the arrival STAR, which is where TAOOT put the guard:
+// a `walktoxyz` lands on `"custom"` and every `endwalk` in the corpus opens by
+// returning on it. The port used to leave the old star in place, so the guard
+// never fired. This test held with an engine-side rule instead (arrivals deferred
+// out of a running script) and holds identically with the sentinel — the A/B is
+// in #31; take the sentinel out and boil goes back to 5 accosts and decka hangs.
+test("actor arrival: an engine-driven arrival runs no idle", async () => {
   // room, character, and whether the player clicks them or just stands there
   const CASES: [string, string, boolean][] = [
     ["boil.set", "vlad", false],      // #19 — he comes to you
