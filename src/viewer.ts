@@ -1134,7 +1134,34 @@ export class SetViewer {
     // no-op on exit so navigation stays scoped to this gesture.
     this.armNavHooks();
     try {
-      return await this.clickDispatch(x, y);
+      // TRACKED, because a click is a script and the engine is single-threaded.
+      // Nothing else held the engine for the length of one: `session.track` is
+      // what `scriptBusy` counts, and a click went untracked — so while a
+      // hotspot's `spotmovie` sat modal on the screen, `inflight` was 0 and the
+      // scheduler read the engine as free and dispatched loops over it.
+      //
+      // Which is a softlock in the London flat (#33). The air raid arms
+      // `makeloop("scene", "scene1", "bomb", random (100))` the moment
+      // bombpoints passes 10 — so it comes due while you are still looking at
+      // whatever you clicked to score that point — and `bomb` -> `gotoship` ->
+      // the scene's `gotowin` turns you to the window with a bare
+      //
+      //     while currentview () != "view23"
+      //         currentscene ("right")
+      //         …
+      //     endwhile
+      //
+      // A movie owns the screen, so `currentscene()` cannot turn, so that view
+      // never comes round and the loop never ends: the sirens play (the loop
+      // that started them fired) over a room that has stopped answering, with
+      // the movie's watch cursor still up. Measured from the reporter's own
+      // standpoint, Scene3/View22, and from Scene2/View14; Scene1 escapes it
+      // because its `gotowin` is already on the window and never turns.
+      //
+      // `fireDueLoops` was always going to be the thing that fixed it — it has
+      // held firing on `scriptBusy` all along, and keeps counting down while it
+      // waits, so nothing is slowed. It simply was not being told.
+      return await this.session.track(this.clickDispatch(x, y), "click");
     } finally {
       this.disarmNavHooks();
     }

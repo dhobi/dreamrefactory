@@ -5835,3 +5835,69 @@ test("a load and a restart both arrive from nowhere", async () => {
       `savestage1=${JSON.stringify(s2.interp.globals.get("savestage1"))}`,
   );
 });
+
+// --- 83. a click holds the engine, so nothing dispatches over a movie -------
+// #33, the London flat's softlock. A click is a script, and the engine is
+// single-threaded — but a click went untracked, so while a hotspot's
+// `spotmovie` sat modal on the screen `scriptBusy` was false and the scheduler
+// read the engine as free.
+//
+// BEDSIT1.SET arms the air raid the instant bombpoints passes 10 —
+// `makeloop ("scene", "scene1", "bomb", random (100))` — so it comes due while
+// you are still looking at whatever you clicked to score that point. `bomb`
+// starts the sirens and hands off to the scene's `gotowin`, which turns you to
+// the window with a bare
+//
+//     while currentview () != "view23"
+//         currentscene ("right")
+//         …
+//     endwhile
+//
+// and a movie owns the screen, so `currentscene()` cannot turn, so that view
+// never comes round. The room stopped answering with the sirens playing over it
+// — measured from the reporter's own standpoint, Scene3/View22, and from
+// Scene2/View14. Scene1 escaped because its `gotowin` is already on the window.
+//
+// `fireDueLoops` has always held firing on `scriptBusy` and kept counting down
+// while it waits, so nothing is slowed by this — the scheduler simply was not
+// being told that a click was in flight.
+test("a click holds the engine: no loop dispatches over an open movie", async () => {
+  for (const [scene, view] of [["scene3", "view22"], ["scene2", "view14"]]) {
+    const { session, viewer } = await newHost();
+    let clock = 0;
+    const tick = async (n: number): Promise<void> => {
+      for (let i = 0; i < n; i++) { viewer()?.tick((clock += 50)); await drain(); }
+    };
+    session.modalMovies = true; // the browser's semantics: playmovie blocks
+    await session.openSetFile("bedsit1.set", scene, view);
+    await drain();
+    await tick(20);
+    const v = viewer()!;
+    const spot = v.scene.views[v.viewIdx].objects[0];
+    void v.click(
+      Math.floor((spot.startRegionX + spot.endRegionX) / 2),
+      Math.floor((spot.startRegionY + spot.endRegionY) / 2),
+    ).catch(() => {});
+    await tick(8);
+    const onMovie = !!viewer()?.moviePlaying;
+    const held = session.scriptBusy;
+
+    // arm the raid the way the score does, and let the SCHEDULER decide
+    session.interp.globals.set("bombpoints", -20000);
+    (session.interp.builtins.get("makeloop") as unknown as (
+      i: unknown, a: (string | number)[],
+    ) => void)(session.interp, ["scene", scene, "bomb", 5]);
+    await tick(60);
+
+    // bomb() is what starts the sirens; if it ran, it ran over the movie
+    const raidRanOverMovie = String(session.currentThemeName) === "bedsit1.trk";
+    const stillHere = session.currentSetName === "bedsit1" &&
+      viewer()?.scene.sceneName.toLowerCase() === scene;
+    check(
+      `${scene}/${view}: the air raid waits for the movie the player is watching`,
+      onMovie && held && !raidRanOverMovie && stillHere,
+      `onMovie=${onMovie} scriptBusy=${held} theme=${session.currentThemeName} ` +
+        `at=${session.currentSetName}/${viewer()?.scene.sceneName}`,
+    );
+  }
+});
