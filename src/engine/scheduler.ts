@@ -286,9 +286,10 @@ export class Scheduler {
     }
   >();
 
-  /** arriveStar: the value actorstar() should report once the walk lands
-   *  (walkonpath rides the "walkonpath" sentinel while moving, then settles
-   *  on the destination star so pacing loops can tell where the actor is). */
+  /** arriveStar: the walk record's destination name (TI.EXE +0x3e) — what
+   *  actorstar() settles on when the walk lands, and what walkdest() answers
+   *  while it runs. A walk rides a KIND sentinel meanwhile ("defer" for a named
+   *  walk, "walktoxyz" otherwise); the name only becomes visible on arrival. */
   startWalk(name: string, tx: number, ty: number, tz: number, arriveStar?: string): void {
     const a = this.session.actorRuntime.get(name);
     if (!a) return;
