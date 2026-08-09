@@ -413,10 +413,26 @@ export class SetViewer {
    * Fire the set's opening lifecycle (openset → openscene). Separate from
    * the constructor because handlers can suspend (delay) or change the set
    * again — the host awaits this from its onSetChange hook.
+   *
+   * A set does NOT bring a shop of its own name with it. Entering a room used
+   * to `openshopfile("<setname>.shp")` here, which is why every log in the game
+   * carries a line like `openshopfile: "gstair3.shp" not available` — for almost
+   * every room the file does not exist. Five do: boil, cargo, turk, wireless and
+   * bridge. Every one of those five is the close-up STAGE's shop, opened by that
+   * stage's own `openstage` and closed by its `closestage` (BOIL.STG 0001:3/9,
+   * and the same two lines in the other four) — never by the room.
+   *
+   * Opening them early put the close-up's controls into the room. They are
+   * SCREEN-space props that `openshop` parks at 256,192 and makes visible
+   * (BOIL.SHP: boilbag, boildoor, boilswitch), and the set view only kept them
+   * off screen because it draws boot-UI shops alone. Open any overlay — the CTL
+   * save panel — and that filter lifts: the coal-chute door and the cargo hold's
+   * painting crate drew over the menu in the panel's own palette and stayed
+   * clickable, and clicking the painting handed it to you in mission 1, which
+   * has no way back (#17, #18).
    */
   async start(): Promise<void> {
     await this.scripts.openSet();
-    await this.scripts.openShop(`${this.set.setName.toLowerCase()}.shp`);
     await this.scripts.openScene(this.sceneIdx);
   }
 
