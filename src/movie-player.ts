@@ -65,6 +65,10 @@ export class MoviePlayer {
     frameByName: Map<string, number>;
     /** named event-sound chunks: name (lowercase) -> container location */
     sounds: Map<string, number>;
+    /** sound name (lowercase) -> the frame it carries on to when it ends */
+    soundFollows: Map<string, string>;
+    /** the jump the sound now playing has armed — see {@link MoviePlayer.tick} */
+    soundJump: { frame: number; sound: PlayHandle } | null;
     containers: Container[];
     hasRegions: boolean;
     /** ESC may abort this movie (MOV header flag bit 0) — see {@link skip} */
@@ -344,6 +348,8 @@ export class MoviePlayer {
       meta: seg.frames,
       frameByName,
       sounds: seg.sounds,
+      soundFollows: seg.soundFollows,
+      soundJump: null,
       containers: mov.file.containers,
       hasRegions,
       keySkips: seg.keySkips,
@@ -514,7 +520,16 @@ export class MoviePlayer {
     // must die with it (see finish). Drop finished handles as we go so a long
     // interactive movie doesn't accumulate them.
     this.eventSounds = this.eventSounds.filter((h) => !h.done);
-    this.eventSounds.push(this.session.audio.play("sound", snd));
+    const handle = this.session.audio.play("sound", snd);
+    this.eventSounds.push(handle);
+    // ...and the sound may carry the picture on when it ends
+    // (MovSegment.soundFollows). Armed here and cleared by any sound that names
+    // no frame, exactly as the original stores the lookup unconditionally: that
+    // is how bedcards.mov's "sil" both cuts the watch's monologue and stops the
+    // chain when the player clicks away from it.
+    const follow = m.soundFollows.get(name.toLowerCase());
+    const frame = follow !== undefined ? m.frameByName.get(follow.toLowerCase()) : undefined;
+    m.soundJump = frame === undefined ? null : { frame, sound: handle };
   }
 
   /** move playback to a frame, firing its entry sound (faucet on/off…) */
@@ -617,6 +632,18 @@ export class MoviePlayer {
         m.lastTick = now;
         this.enter(idx);
       }
+    }
+    // A spoken line that names a follow-on frame comes due the same way, and for
+    // the same reason: the poll that fires it (TI.EXE 0x44a7f5) runs in both wait
+    // loops, so the jump leaves a region frame's modal wait as readily as a hold.
+    // The original asks whether the sound channel still carries the armed sound's
+    // NAME, which is why a line the player cut short jumps too — a stopped handle
+    // reads done here exactly as a finished one does.
+    if (m.soundJump && m.soundJump.sound.done) {
+      const { frame } = m.soundJump;
+      m.soundJump = null;
+      m.lastTick = now;
+      this.enter(frame);
     }
     if (m.interval > 0 && m.meta[m.pos].regions.length === 0) {
       if (!m.lastTick) m.lastTick = now;

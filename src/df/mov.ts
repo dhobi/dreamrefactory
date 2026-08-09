@@ -218,6 +218,26 @@ export interface MovSegment {
   /** named one-shot chunks (frame-entry and region-click event sounds,
    *  FAUCET.MOV's "Brook Babbling." among them), lowercase */
   sounds: Map<string, number>;
+  /**
+   * A one-shot sound may name the frame to jump to WHEN IT FINISHES: sound name
+   * (lowercase) -> frame name, from the second name field of its table record.
+   * That jump comes due out of any wait, a region frame's modal one included, so
+   * a spoken line can carry the picture on by itself (see {@link
+   * MoviePlayer.tick}).
+   *
+   * TI.EXE 0x44ad39: the frame's sound player ends by storing
+   * `findFrameByName(record + 0x1a)` in the pending-jump global and copying the
+   * sound's own name beside it; the poll every wait loop runs (0x44a7f5) compares
+   * that name against what the sound channel is playing and, once it no longer
+   * matches, makes the stored frame current. A sound with no follow-on clears the
+   * pending jump — which is what a movie interrupts its own chain with.
+   *
+   * TAOOT's `bedcards.mov` is the only user in the corpus, in all six editions:
+   * the pocket watch's monologue is five chunks over one still
+   * (01 -> "blah1" -> 02 … 07 -> "endwatch"), and without this the port played
+   * the first 7 s and sat there.
+   */
+  soundFollows: Map<string, string>;
   /** timed jumps, in file order — fired once each as the segment clock passes
    *  them (empty for every shipped movie but the demo's TOUR.MOV) */
   cues: MovCue[];
@@ -471,14 +491,24 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
   // single-chunk cutscenes it was built on, the chunk is ALSO frame 0's entry
   // sound, so the two are indistinguishable — until leave.mov's segment 2,
   // where the same rule played the smokestack falling at segment START and
-  // again at its authored frame 57. MOV records use a 31-char identifier
-  // field (TRK banks use 15).
+  // again at its authored frame 57.
+  //
+  // A record is 42 bytes and holds TWO 15-char name fields, not one 31-char
+  // one: the sound's own name, then the frame to jump to when it ends
+  // ({@link MovSegment.soundFollows} — TI.EXE reads the second at record +0x1a).
+  // Measured across all six editions: 2848 records, not one name longer than 15,
+  // and 212 exactly 15 — BRNCL.MOV's "Burns Correctio" is the field's own
+  // evidence, cut a character short of the word.
   const sounds = new Map<string, number>();
+  const soundFollows = new Map<string, string>();
   const oneShotLoc = audioLocation > 0 ? audioLocation + bias : 0;
   if (oneShotLoc > 0 && oneShotLoc < file.containers.length) {
-    const chunks = readOneShotChunks(file.containers[oneShotLoc].data, 31);
-    for (const { identifier, containerLoc } of chunks) {
-      if (identifier) sounds.set(identifier.toLowerCase(), containerLoc + bias);
+    const table = file.containers[oneShotLoc].data;
+    for (const c of readOneShotChunks(table, MOV_NAME_FIELD, MOV_NAME_FIELD)) {
+      if (!c.identifier) continue;
+      const key = c.identifier.toLowerCase();
+      sounds.set(key, c.containerLoc + bias);
+      if (c.follow) soundFollows.set(key, c.follow);
     }
   }
 
@@ -506,7 +536,7 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
       file, bias, width, height, originX, originY, paletteRaw, frames, actionFrame1, actionFrame2,
       flags, keySkips: (flags & 1) !== 0,
       minHoldTicks,
-      audioChunks, audioLoops, sounds, cues,
+      audioChunks, audioLoops, sounds, soundFollows, cues,
     },
     next,
   };

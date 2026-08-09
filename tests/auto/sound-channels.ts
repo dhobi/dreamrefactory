@@ -32,6 +32,8 @@ class TimedAudioSink implements AudioSink {
     at: number;
     seconds: number;
     loop: boolean;
+    /** an overlapping play shares the channel — the crickets, not the movies */
+    overlap: boolean;
     handle: PlayHandle;
   }[] = [];
   channelVolume: Record<AudioChannel, number> = { sound: 1, voice: 1, theme: 0.6 };
@@ -50,7 +52,7 @@ class TimedAudioSink implements AudioSink {
       },
       stop: () => (stopped = true),
     };
-    this.started.push({ channel, audio, at, seconds, loop: !!opts?.loop, handle });
+    this.started.push({ channel, audio, at, seconds, loop: !!opts?.loop, overlap: !!opts?.overlap, handle });
     return handle;
   }
   halt(): void {}
@@ -122,6 +124,61 @@ test("the bedsit landlady says her lines one after another", async () => {
       `${spoken[i].name} started at ${(spoken[i].at / 1000).toFixed(2)}s, over ${prev.name} which runs to ${(prev.ends / 1000).toFixed(2)}s`,
     ).toBeGreaterThanOrEqual(prev.ends / 1000);
   }
+});
+
+/**
+ * The pocket watch's monologue, all 27 s of it.
+ *
+ * A one-shot sound record can name the frame to jump to WHEN THE SOUND ENDS
+ * (MovSegment.soundFollows), and that jump comes due out of a region frame's
+ * modal wait as readily as out of a hold. `bedcards.mov` is the corpus's only
+ * user and needs it for all five chunks of the watch: one still picture, and
+ * `01 -> "blah1" -> 02 -> "blah2" -> 03 -> "blah5" -> 06 -> "blah6" -> 07 ->
+ * "endwatch"`. Without it the port played the first 6.97 s and sat on the frame
+ * for ever — reported as "missing voice line upon picking up watch, plays only
+ * first part of it".
+ *
+ * A clock-driven sink is the whole test: with the default one every chunk is
+ * finished the instant it starts, so all five would fire in five ticks and the
+ * one claim worth making — each waits for the one before — cannot be made.
+ */
+test("the watch's line carries the picture on, chunk by chunk", async () => {
+  const sink = new TimedAudioSink();
+  const { session, host } = await newHost({ sink });
+  await session.openSetFile("bedsit1.set");
+  const viewer = host.viewer!;
+  await run(viewer, sink, 500);
+
+  // the cards close-up, opened the way the room opens it: bedsit1's mousedown
+  // switches on `target` and spotmovies the matching film
+  const binding = session.currentBinding!;
+  void binding.fire(binding.main, "mousedown", ["cards"], "cards");
+  await run(viewer, sink, 1_000);
+  expect(viewer.movieFile, "the cards close-up is up").toBe("bedcards.mov");
+
+  // the watch, at the centre of its region (114,186-148,219) — the click the
+  // report came with, and action frame 2 of the film
+  await viewer.click(131, 202);
+  await run(viewer, sink, 30_000);
+
+  // the movie's own chunks are the non-overlapping plays; the room's crickets
+  // (the landlady, the traffic) overlap and legitimately talk over them
+  const spoken = sink.started.filter((p) => p.channel === "sound" && !p.overlap);
+  expect(
+    spoken.map((p) => Number(p.seconds.toFixed(2))),
+    "01, 02, 03, 06, 07 — then endwatch's second of silence, which is how the film cuts itself off",
+  ).toEqual([6.97, 6.73, 2.69, 7.2, 3.53, 1.02]);
+  for (let i = 1; i < spoken.length; i++) {
+    const prev = spoken[i - 1];
+    expect(
+      spoken[i].at,
+      `chunk ${i + 1} started at ${(spoken[i].at / 1000).toFixed(2)}s, over one running to ${((prev.at + prev.seconds * 1000) / 1000).toFixed(2)}s`,
+    ).toBeGreaterThanOrEqual(prev.at + prev.seconds * 1000);
+  }
+  // "endwatch" is a type-2 frame: the film lands back on the spread of cards,
+  // still waiting, so the player can pick up something else
+  expect(viewer.movieFile, "and the close-up is still open on the cards").toBe("bedcards.mov");
+  expect(viewer.movieRegions.length, "parked on frame1, whose ten hotspots are the cards").toBe(10);
 });
 
 /**

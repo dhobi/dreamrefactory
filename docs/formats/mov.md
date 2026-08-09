@@ -128,7 +128,7 @@ downstream has to know which segment it is looking at.
 | Frame table @ `0x87c` | one **42-byte record per frame**: the dirty rectangle's height/width (`+8`/`+10`), the art container (`+12`), the logic container (`+16`, **0 = the frame has none**) and the frame's `pstr(15)` name (`+26`). The i32 at `+0` is authoring metadata the engine never reads |
 | Frame image containers | the pictures, in the **SET delta codec** — see [image codec](image-codec.md) |
 | Loop-chunk table | the **looping soundtrack** — a scored bed, played under cutscenes *and* interactive movies. Its i32 at `+0` is the **loop-back order index**: the engine chains the loaded chunks by a next-pointer and wires the last order entry back to `order[loopBack]` (`0x4496c4`), so a bed's tail repeats forever (usually a short outro chunk looping under whatever follows) |
-| Non-looping chunk block | **named** one-shot audio chunks (42-byte records, 31-char names) — the movie's own sound library. The engine reads the name as 16 bytes at `+0xa` and a second 16-byte field at `+0x1a`: a **jump-frame name**, armed when the sound is played from a frame entry — when that sound stops being the one on the channel, playback jumps there (`0x44b3e2`/`0x44ae90`). No shipped movie uses the jump field |
+| Non-looping chunk block | **named** one-shot audio chunks (42-byte records) — the movie's own sound library. TWO `pstr(15)` name fields, not one 31-char one: the sound's own name at `+0xa`, and at `+0x1a` a **jump-frame name** — see below |
 
 ### The cue table: timed jumps
 
@@ -148,6 +148,29 @@ type-2 goto to frame 5) and escapes it with the single cue
 `tick 200 → "Name 12"` — 3.33 s of looping logo, then on with the tour.
 Without the cue, playback ping-pongs 5↔6 forever, which was exactly the
 reported symptom ("behaves normally at the beginning, then never advances").
+
+### A sound can name the frame that follows it — SOLVED
+
+The second name field of a one-shot record (`+0x1a`) is the frame playback jumps
+to **when that sound ends**, and it works like a cue: it comes due out of any
+wait, a region frame's modal one included. Playing a sound from a frame entry (or
+a region click) ends by arming it — `[0x48c58c] = findFrameByName(record+0x1a)`,
+with the sound's own name copied beside it at `0x48c500` (`0x44ad39`) — and the
+poll every wait loop runs compares that name against what the sound channel is
+playing; once it no longer matches, the stored frame becomes current
+(`0x44a7f5`). A sound whose field is empty stores −1, i.e. **clears** the pending
+jump, which is how a movie interrupts its own chain.
+
+`BEDCARDS.MOV` is the corpus's only user — 30 records across the six editions,
+all of them this one film — and it is load-bearing: the pocket watch's monologue
+is five chunks over ONE still picture, chained
+`01 → "blah1" → 02 → "blah2" → 03 → "blah5" → 06 → "blah6" → 07 → "endwatch"`,
+27.1 s in all. The port fired the first chunk and sat on the frame for ever
+("missing voice line upon picking up watch, plays only first part of it"). The
+watch frames also show what the clearing rule is for: every one of them carries
+an exit region and a whole-screen region to `endwatch`, whose entry sound is
+`sil` — a second of **silence** that both takes the channel from the line and
+disarms the chain, so clicking away really does shut the watch up.
 
 Because frames use the delta codec, a "patch" frame that only changes a small
 area still decodes to a **full 512×384 image**; the frame table's width/height
@@ -425,24 +448,31 @@ The flag bits at logic `+6`:
   `voicedone`, interruptibly). Rare and deliberate: one frame of `TOUR.MOV` (8) and
   one of `LEAVE.MOV` (68) — the latter being exactly why that film's last line
   outlives its picture, which the port had previously reproduced by hand.
-- **bit 2 — honour this frame's click regions** (tested at `0x449f9f`, right before
-  the region count at `+0x442`). The port does **not** gate on it: it reads the
-  region table whenever the container is long enough to hold one, and a frame with
-  regions waits. Nothing in the corpus has needed the distinction, so this is a
-  known difference rather than a modelled rule — `MovFrame` exposes bits 0 and 3
-  and no other.
+- **bit 2 — do not WAIT on this frame's click regions**: honour them only if a
+  click is already queued, else run the frame's own action and play on. Retail
+  `0x44979f`, right before the region count at `+0x442`: bit clear → the region
+  count stands and the frame waits modally; bit set → the count is zeroed unless
+  the event pump has a click in hand. It is an animation that can be clicked
+  through, not a picture that stops for one, and it is NOT rare —
+  **2028 frames across the six editions**, `CAMELSEE.MOV`/`CAMRIDE.MOV` (the Cairo
+  camel ride, every frame carrying the same skip rect) among them. The port does
+  not gate on it: it waits on any frame with regions, so a bit-2 animation
+  advances a frame per click instead of playing. A known difference, and a
+  standing one — `MovFrame` exposes bits 0 and 3 and no other.
 - **bit 3 — do not reset the deadline** to "now": add to the one already running, so
   a long film does not lose a frame's worth of time per frame. `OCREDITS.MOV` sets
   it on 1224 of its 1225 frames.
 
-**Which engine.** The retail `TI.EXE` (7 Oct 1996) consults audio nowhere in its
-movie code — measured: `sounddone`'s primitive has one caller, its poll has nine and
-all in the audio module, and the two audio state globals are referenced 28 times,
-none of them in the movie region. The **demo** ships its own build
-(`INSTALL/BIN/TI.EXE`, 18 Jul 1996, 448,512 bytes against the retail 461,312) and
-*that* is where the frame loop waits on the voice. The demo's movies were authored
-for it, and its dispatch tables sit at `0x427f58` (value) and `0x43e1d0` (action) if
-you need to go back in.
+**Which engine.** Both builds' movie loops consult audio, and this page said
+otherwise for a while on a bad measurement (a scan for `sounddone`'s callers, which
+is the wrong primitive — the movie code calls `voicedone`'s, `0x424cf0`). In the
+retail `TI.EXE` (7 Oct 1996) the voice wait is `0x44a0e0`, called from the frame
+body once the frame's own wait is over, and the sound-driven jump above polls the
+channel from every wait loop. The **demo** ships its own build
+(`INSTALL/BIN/TI.EXE`, 18 Jul 1996, 448,512 bytes against the retail 461,312) whose
+same routine sits at `0x44a8e0`; its dispatch tables are at `0x427f58` (value) and
+`0x43e1d0` (action) if you need to go back in. What is still true is that neither
+build derives a frame RATE from audio — the pacing is the authored holds, below.
 
 **Why it matters.** Deriving the rate from audio played the demo's `TRAILER.MOV` at
 **1.5 fps** (139 frames spread over 92 s of narration; that segment is authored at
