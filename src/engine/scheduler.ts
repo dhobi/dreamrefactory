@@ -8,8 +8,6 @@ const MAX_LOOPS = 32;
 const MAX_CRICKETS = 16;
 /** after a long stall (suspended tab) replay at most this many service steps */
 const MAX_CATCHUP_STEPS = 64;
-/** approximate walk speed: units per 50 ms step = actorspeed × this */
-const WALK_UNITS_PER_SPEED = 4;
 
 /**
  * One scheduled callback (makeloop). TI.EXE semantics: the countdown
@@ -291,7 +289,10 @@ export class Scheduler {
     const dx = tx - a.worldX;
     const dy = ty - a.worldY;
     const dz = tz - a.worldZ;
-    const dist = Math.max(1, Math.round(Math.hypot(dx, dy, dz)));
+    // floor, not round, and never below 1 — TI.EXE builds the record with its
+    // integer sqrt (0x435950, a truncating binary isqrt) and clamps the result
+    // the same way (0x443781)
+    const dist = Math.max(1, Math.floor(Math.hypot(dx, dy, dz)));
     a.deg = bearing(dx, dy);
     if (a.member.poses.some((p) => p.name === "walk")) {
       a.poseName = "walk";
@@ -330,9 +331,23 @@ export class Scheduler {
         this.walks.delete(key);
         continue;
       }
-      // APPROXIMATION (the exact TI stepping lives in fn 0x443730's per-type
-      // movers; stdspeed is per-set, so this constant only tunes overall pace)
-      w.progress += Math.max(1, a.speed) * WALK_UNITS_PER_SPEED;
+      // One service pass advances the actor's own `actorspeed` in world units —
+      // no scaling. Recovered from TI.EXE's straight-line mover (0x443e7c),
+      // which is this arithmetic exactly:
+      //
+      //     [walk+0x16] += actor[0x26]          ; progress += actorspeed
+      //     if (dist < progress) progress = dist
+      //     pos = start - delta * progress / dist
+      //     if (dist <= progress) -> arrival, endwalk()
+      //
+      // and its pass rate is ours: the master service (0x442550) ends by drawing
+      // a frame (0x439b80), which spins until `framerate` ticks have elapsed —
+      // 3 ticks by default, the 50 ms this loop already runs at.
+      //
+      // A ×4 approximation had stood here, so the whole cast moved at four times
+      // its scripted pace: Penny crossing the gym in 0.40 s against 1.60 s,
+      // Max pacing A-deck in 3.70 s a leg against 14.65 s. (User-reported.)
+      w.progress += Math.max(1, a.speed);
       const t = Math.min(1, w.progress / w.dist);
       a.worldX = Math.round(w.sx + w.dx * t);
       a.worldY = Math.round(w.sy + w.dy * t);

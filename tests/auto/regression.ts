@@ -2489,6 +2489,67 @@ test("actor walking: morrow strolls to his next deck star", async () => {
 }
 );
 
+// --- 19b. one service pass advances exactly actorspeed -------------------
+// TI.EXE's straight-line mover (0x443e7c) is four instructions of arithmetic:
+// `[walk+0x16] += actor[0x26]` (progress += actorspeed), clamp to the distance,
+// interpolate, arrive when the distance is reached. The pass rate is the 50 ms
+// this scheduler already runs at — the master service (0x442550) ends by drawing
+// a frame (0x439b80), which spins until `framerate` ticks have gone by, 3 by
+// default.
+//
+// A ×4 approximation stood here for a while and moved the whole cast at four
+// times its scripted pace — Penny crossing the gym in 0.40 s rather than 1.60,
+// Max pacing A-deck in 3.70 s a leg rather than 14.65 (issue #9). Pinning the
+// rule rather than the constant: the assertion is "a pass moves actorspeed",
+// which no rescaling can satisfy.
+test("actor walking: one service pass advances exactly actorspeed", async () => {
+  const { session } = await newSession();
+  session.interp.globals.set("mission", 1);
+  await session.openSetFile("deckbd.set", "scene33", "view94");
+  const morrow = session.actorRuntime.get("morrow")!;
+  morrow.speed = 30;
+  const startX = morrow.worldX;
+  const startY = morrow.worldY;
+  // a session's first tickTime only sets its clock anchor, so spend it here
+  // rather than measuring it as a pass that moved nobody
+  session.tickTime((clock += 50));
+  await drain();
+  // straight down +x, far enough that no pass can reach the end
+  session.scheduler.startWalk("morrow", startX + 6000, startY, morrow.worldZ);
+  const per: number[] = [];
+  let last = startX;
+  for (let i = 0; i < 5; i++) {
+    session.tickTime((clock += 50));
+    await drain();
+    per.push(morrow.worldX - last);
+    last = morrow.worldX;
+  }
+  check(
+    "each 50 ms pass moves one actorspeed of world units",
+    per.every((d) => d === 30),
+    `speed=${morrow.speed} per-pass=${per.join(",")}`,
+  );
+
+  // and the record's length is TI's truncating isqrt (0x435950), floored and
+  // never below 1 — so a 3-4-5 triangle is 5 units, and a walk to where you
+  // already stand still takes one pass rather than none
+  session.scheduler.stopWalk("morrow");
+  morrow.worldX = 0; morrow.worldY = 0; morrow.worldZ = 0;
+  morrow.speed = 1;
+  session.scheduler.startWalk("morrow", 3, 4, 0);
+  const legs = session.scheduler.walks.get("morrow")!;
+  const diag = legs.dist;
+  session.scheduler.stopWalk("morrow");
+  session.scheduler.startWalk("morrow", 0, 0, 0);
+  const onTheSpot = session.scheduler.walks.get("morrow")!.dist;
+  check(
+    "walk length is the floored integer distance, clamped to 1",
+    diag === 5 && onTheSpot === 1,
+    `3-4-5=${diag} zero=${onTheSpot}`,
+  );
+}
+);
+
 // --- 20. puppet frame cache is per-pup (switching characters, no overlap) --
 test("puppet frame cache is per-pup (switching characters, no overlap)", async () => {
   const { session, viewer } = await newSession();
