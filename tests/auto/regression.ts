@@ -3151,7 +3151,11 @@ test("walkonpath: sentinel while moving, dest on arrival, endwalk fires", async 
   const sentinel = morrow.starName === "walkonpath" && session.scheduler.isWalk("morrow");
   let guard = 0;
   while (session.scheduler.isWalk("morrow") && guard++ < 500) { v.tick((clock += 100)); await drain(); }
-  await drain(); // let the arrival endwalk() dispatch run
+  // let the arrival endwalk() dispatch run. It can take a further service pass:
+  // an arrival never dispatches INTO a script that is in flight, it waits for
+  // the next free pass (Scheduler.fireEndwalks) — which is the whole of the
+  // accost-softlock fix, and the walk slot is already freed either way.
+  for (let i = 0; i < 3; i++) { v.tick((clock += 100)); await drain(); }
   // on arrival: settles on the destination star + endwalk fired (morrowidle
   // reschedules itself as an actor loop — proof the arrival handler ran)
   const endwalkFired = session.scheduler.loops.some((l) => l.kind === "actor" && l.name === "morrow");
@@ -5282,6 +5286,82 @@ test("actordist: a conversation reads as not present, so nobody accosts you mid-
   session.puppetCtrl.closePuppetFile();
   const after = Number(await dist(session.interp, [who], site, frame));
   check("and the real distance is back once it closes", after === inTheRoom, `${who}=${after}`);
+}
+);
+
+// --- 59d. An arrival must not run the arriving character's idle mid-script ----
+// The guards above cover a conversation that is ALREADY open. This is the window
+// before it: `walktopuppet` sends the character to you and holds
+// `while iswalk(who) forceupdate()`, and the walk service used to dispatch their
+// `endwalk()` from inside that wait — into the very script that started the walk.
+//
+// `endwalk` runs the character's idle, the idle calls `hasattention`, and
+// `hasattention` only releases its claim (`curattention = ""`) AFTER
+// `sendtoactor(target, mousedown(0))` returns. So mid-approach the claim still
+// stands and `attentionspan` is still stale, and it accosts you again on the
+// spot, nesting one more `walktopuppet` each round.
+//
+// Measured before the fix, standing still and touching nothing: boil gave 13
+// `msg: vlad` (that line is `walktopuppet`'s own `message(who)`), 9 opens of
+// vlad1.pup and `dispatch cycle … at depth 64`; recept1c the same with Max. The
+// count is a stack ceiling, not a rate — every repeat walk is 1 unit long
+// because `walktopuppet` recomputes a destination the character is already
+// standing on, so it is the same whatever `actorspeed` says.
+//
+// decka is the third face of it and the reason the rule has to be the engine's:
+// Max's `endwalk` there starts the next leg of his patrol instead, so
+// `iswalk(who)` never goes false, `walktopuppet` never reaches `runpuppet`, and
+// the player is left holding `cursor("watch")` with the dispatch still in
+// flight. TAOOT ships that patrol and it is clickable, so the original cannot be
+// dispatching endwalk into a running script either. (Issues #10, #19, #21.)
+test("actor arrival: endwalk waits for the script that started the walk", async () => {
+  // room, character, and whether the player clicks them or just stands there
+  const CASES: [string, string, boolean][] = [
+    ["boil.set", "vlad", false],      // #19 — he comes to you
+    ["recept1c.set", "max", false],   // #21 — same, in the reception room
+    ["decka.set", "max", true],       // #10 — you click him, mid-patrol
+  ];
+  for (const [set, who, clicked] of CASES) {
+    const { session, logs } = await newHost();
+    session.interp.globals.set("mission", 1);
+    session.interp.globals.set("maxphase", 0);
+    await session.openSetFile(set);
+    await drain();
+    await session.sendEvent("sendtoactor", who, "setupactor", [set.replace(".set", "")], who);
+    await drain();
+
+    const a = session.actorRuntime.get(who)!;
+    const lis = session.listener()!;
+    const tick = async (n: number): Promise<void> => {
+      for (let i = 0; i < n; i++) {
+        session.tickTime((clock += 50));
+        await drain();
+      }
+    };
+    await tick(40); // let the room's idles arm
+
+    // stand them next to the camera — inside hotdist(), which is what arms the
+    // accost — and do it here rather than before the settle, because a patrol
+    // would have walked them off again
+    session.scheduler.stopWalk(who);
+    a.worldX = lis.x + 200;
+    a.worldY = lis.y + 200;
+    a.worldZ = lis.y + 200;
+
+    const from = logs.length;
+    if (clicked) void session.track(session.sendEvent("sendtoactor", who, "mousedown", [0], who));
+    await tick(600); // 30 s of standing still: ample for hasattention(4)
+    const said = logs.slice(from);
+    const accosts = said.filter((l) => l === `msg: ${who}`).length;
+    const puppets = said.filter((l) => l.startsWith("puppet opened")).length;
+    const cycles = said.filter((l) => l.includes("dispatch cycle")).length;
+    check(
+      `${set}: one approach, one conversation, no re-entry`,
+      accosts === 1 && puppets === 1 && cycles === 0 && !session.scheduler.isWalk(who),
+      `walktopuppet=${accosts} puppets=${puppets} cycles=${cycles} ` +
+        `stillWalking=${session.scheduler.isWalk(who)}`,
+    );
+  }
 }
 );
 
