@@ -281,6 +281,36 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // boat deck only puts Lady Georgia out for `actorowner("ga") != "rescued"`.
   await session.sendEvent("sendtocast", "gang.cst", "initactors", [], "loadgame");
   await session.sendEvent("sendtoshop", "inven.shp", "initprops", [], "loadgame");
+  // A load arrives from NOWHERE, and the room it arrives in has to be scored as
+  // such. `changeset` records `oldset = currentset()` BEFORE it opens anything,
+  // and the arriving room's `setupsound` opens with
+  //
+  //     if themetype (currentset ()) = themetype (oldset)
+  //         exitcode
+  //
+  // — the guard that keeps the deck theme playing as you walk from room to room.
+  // Load a save of the room you are ALREADY standing in and those two are equal,
+  // so setupsound scored nothing; and this path has just halted the theme, so
+  // "nothing" means silence, and the host's startTheme fallback then plays the
+  // SET-NAMED bank. Measured over the shipped saves, reloading in place: gstair3,
+  // bind, hallb and sqhall were left silent, and the London flat got `bedsit1.trk`
+  // — which is the BOMBING score, not the flat's radio (`bedrad1.trk`).
+  //
+  // In bedsit1 that is not just wrong music. The room gates its own hotspots on
+  // it (BEDSIT1.SET setcursor): memory, paper, cabinet, obit, cards, mantle,
+  // poster and radio only take a `cursor("touch")` while `currenttheme(2) !=
+  // "bedsit1.trk"`. So loading the game's own first save — "01 - April 14th,
+  // 1942", which saves the flat you start in — began the sirens and left nothing
+  // but the door and the landlady clickable (#36).
+  //
+  // Close the departing room HERE, which is what makes `currentset()` "none"
+  // before changeset reads it. Its own `closeset` still runs exactly once —
+  // changeset would have called the same `closesetfile` a moment later, and now
+  // skips it because there is nothing open. GameHost.coldBoot resets the same two
+  // fields for the same reason, one entry point over.
+  await session.currentBinding?.closeSet();
+  session.currentSetName = "none";
+  session.currentSetFile = "";
   await session.runGlobal("changeset", [save.set, save.scene, save.view]);
 
   // initall re-seeds DEFAULT inventory + interface for the mission; overwrite
