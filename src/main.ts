@@ -338,12 +338,25 @@ session.saveTemplate = () => {
   return saveTemplateFor(prefer);
 };
 
+/**
+ * The intro while it is on screen, and null the rest of the time — see
+ * {@link runNightdiveIntro} and the `intro` field of the debug handle below.
+ */
+let liveIntro: NightdiveIntro | null = null;
+
 // debug handle for the console and browser-automation tests (tests/browser/menu-movie.ts,
 // tests/browser/playthrough.ts). snapshotState/seededRng are handed out rather
 // than reimplemented page-side so a browser trace and a headless one are
 // produced by the same code and can be compared byte for byte.
+//
+// `intro` is here for the same reason `viewer` is: it is what is on screen, and
+// automation cannot drive what it cannot see. There is no viewer until the boot
+// activates a set, so during the intro EVERY viewer-shaped predicate is
+// undefined — which is exactly how the browser gate came to sit through its
+// whole 300 s budget "waiting for the boot menu" at a film that was waiting for
+// it (tests/browser/playthrough.ts, escapeIntro).
 Object.defineProperty(window, "dbg", {
-  get: () => ({ viewer: host.viewer, session, host, snapshotState, seededRng }),
+  get: () => ({ viewer: host.viewer, intro: liveIntro, session, host, snapshotState, seededRng }),
 });
 
 function refreshMap(): void {
@@ -437,6 +450,7 @@ async function runNightdiveIntro(): Promise<Ownership> {
   // no film served, no intro — a deployment that never ran the generator boots
   // exactly as it did before, with the boot text and its bar still up
   if (!(await intro.open(files))) return "unanswered";
+  liveIntro = intro;
   booting.style.display = "none";
   stage.style.display = "block";
 
@@ -466,6 +480,7 @@ async function runNightdiveIntro(): Promise<Ownership> {
 
   await intro.done;
   drawing = false;
+  liveIntro = null;
   screen.removeEventListener("pointerdown", onPointer);
   window.removeEventListener("keydown", onKey);
   const answer = intro.answer();
