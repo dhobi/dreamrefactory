@@ -2635,6 +2635,58 @@ test("actor walking: a walk turns before it moves, at actorturn per pass", async
 }
 );
 
+// --- 19d. an actorinstance() copy can be sent events -----------------------
+// `castScripts` is keyed by CAST MEMBER name and built once at cast load, so a
+// copy made by `actorinstance(src, dst)` had no entry at all: the very next line
+// of TAOOT's stoker setup,
+//
+//     actorinstance ("stok1", "stok" @ numtostring (count))
+//     sendtoactor ("stok" @ numtostring (count), setupactor ("boil"))
+//
+// found no chain and was dropped as `sendtoactor("stok3", setupactor(..)) —
+// target not loaded`. The copy was therefore never placed, never scaled and
+// never made visible: `stok1` is the only stoker who is a cast member, so the
+// boiler room ran with one man on the shovel line instead of up to ten
+// (user-reported, issue #16). The boat deck's lifeboat crowd is built the same
+// way, out of `life1`.
+//
+// A copy gets its OWN script instance sharing the source's parsed script — `me`
+// has to be the copy's name, because every line of the shared handler is written
+// against it (`actorpose(me, …)`, `makeloop("actor", me, "stokidle", …)`).
+test("actorinstance: a copy is placed and idles like the member it came from", async () => {
+  const { session, logs } = await newHost();
+  session.interp.globals.set("mission", 1);
+  const from = logs.length;
+  await session.openSetFile("boil.set"); // its openset sets stok1 up, and he spawns the rest
+  await drain();
+  for (let i = 0; i < 20; i++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
+  const stokers = [...session.actorRuntime.actors].filter(([n]) => n.startsWith("stok"));
+  const dropped = logs.slice(from).filter((l) => l.includes("target not loaded"));
+  // gang.cst 1323 forces the tenth (`if random (100) < 60 | count = 10`), so
+  // however the draws fall there is always more than one man down there
+  const ten = session.actorRuntime.get("stok10");
+  check(
+    "the shovel line is more than one man, and stok10 is always among them",
+    stokers.length > 1 && !!ten,
+    `${stokers.length} stokers: ${stokers.map(([n]) => n).join(", ")}`,
+  );
+  check(
+    "every copy was placed on its own star, visible and scaled",
+    stokers.every(([n, a]) => a.visible && a.starName === n && a.scale === 9000),
+    stokers.map(([n, a]) => `${n}@${a.starName} vis=${a.visible} scale=${a.scale}`).join(" "),
+  );
+  check(
+    "and each is running its own idle loop, not the member's",
+    stokers.every(([n]) => session.scheduler.isLoop("actor", n)),
+    stokers.map(([n]) => `${n}=${session.scheduler.isLoop("actor", n)}`).join(" "),
+  );
+  check("no event was dropped for want of a script", dropped.length === 0, dropped.join(" | "));
+}
+);
+
 // --- 20. puppet frame cache is per-pup (switching characters, no overlap) --
 test("puppet frame cache is per-pup (switching characters, no overlap)", async () => {
   const { session, viewer } = await newSession();

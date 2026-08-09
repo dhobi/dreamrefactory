@@ -1460,6 +1460,51 @@ export class GameSession {
   readonly castScripts = new Map<string, ScriptInstance>();
   private castMains = new Map<string, ScriptInstance | null>();
 
+  /**
+   * Give an `actorinstance(src, dst)` copy its own script, so events can reach
+   * it — a copy shares the source's sprite AND its behaviour.
+   *
+   * `castScripts` is keyed by CAST MEMBER name and built once at cast load, so a
+   * copy had no entry at all: `sendtoactor("stok3", setupactor("boil"))` found
+   * no chain and was dropped as "target not loaded", and the copy was therefore
+   * never placed, scaled or made visible. TAOOT's boiler rooms are one member
+   * (`stok1`) plus up to nine copies of him, so eight of the nine stokers were
+   * missing from the shovel line (user-reported). The lifeboat crowd on the boat
+   * deck is built the same way.
+   *
+   * A copy gets its OWN instance rather than a second reference to the source's:
+   * the two share the parsed script, but `me` comes from the instance's name, and
+   * every line of the shared handler is written against it — `actorpose(me, …)`,
+   * `makeloop("actor", me, "stokidle", …)`. Pointing the copy at the source's
+   * instance would make all ten stokers drive `stok1`.
+   */
+  instanceCastScript(src: string, dst: string): void {
+    const from = this.castScripts.get(src.toLowerCase());
+    if (!from) return;
+    const key = dst.toLowerCase();
+    const inst = new ScriptInstance(key, from.script);
+    inst.parent = from.parent; // the cast main: stdactor, endwalk, runpuppet
+    this.castScripts.set(key, inst);
+    this.instancedActors.add(key);
+  }
+
+  /**
+   * Drop the script of an `actordelete`d copy.
+   *
+   * Only a COPY's: a cast member deleted from the world keeps its script, which
+   * is what lets TAOOT's stokers put themselves back — `putdownactor` deletes
+   * stok2…stok10 and the next `setupactor` re-instances them from `stok1`, who
+   * was never a copy and must still answer.
+   */
+  dropInstancedScript(name: string): void {
+    const key = name.toLowerCase();
+    if (!this.instancedActors.delete(key)) return;
+    this.castScripts.delete(key);
+  }
+
+  /** which castScripts entries came from actorinstance() rather than a cast */
+  private instancedActors = new Set<string>();
+
   // ---- puppet mode (PUP conversation close-ups) ---------------------------
   // Conversation state + playback live in PuppetController, addressed directly
   // (`session.puppetCtrl.puppetSpeak(...)`). Only the active-conversation STATE
@@ -1508,6 +1553,13 @@ export class GameSession {
     const cast = this.actorRuntime.casts.get(key);
     if (cast) {
       for (const m of cast.cst.members) this.castScripts.delete(m.name);
+      // ...and the actorinstance() copies, which are not members and so are not
+      // on that list. removeCast below drops them from the world by cast; their
+      // scripts have to go with them or the next cast to use those names
+      // (stok2…stok10, life1…) inherits the old one.
+      for (const [name, a] of this.actorRuntime.actors) {
+        if (a.cast === cast) this.dropInstancedScript(name);
+      }
     }
     this.castMains.delete(key);
     this.actorRuntime.removeCast(key);

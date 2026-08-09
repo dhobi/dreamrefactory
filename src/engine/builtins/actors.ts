@@ -92,10 +92,22 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   // actorinstance(src, dst): spawn a new actor sharing src's cast sprite;
   // actordelete(name): remove one. TAOOT's gang cast fills its lifeboat crowd with
   // dozens of actorinstance("life1", "lifeN") calls, then places each.
-  r("actorinstance", (_i, [src, dst]) =>
-    session.actorRuntime.instance(toStr(src ?? ""), toStr(dst ?? "")),
-  );
-  r("actordelete", (_i, [n]) => session.actorRuntime.remove(toStr(n ?? "")));
+  r("actorinstance", (_i, [src, dst]) => {
+    const from = toStr(src ?? "");
+    const to = toStr(dst ?? "");
+    // no-op when `to` is already someone: the copy must not take over a live
+    // actor's script, and actorinstance itself leaves an existing one alone
+    if (!to || session.actorRuntime.get(to)) return;
+    session.actorRuntime.instance(from, to);
+    if (session.actorRuntime.get(to)) session.instanceCastScript(from, to);
+  });
+  r("actordelete", (_i, [n]) => {
+    const name = toStr(n ?? "");
+    session.actorRuntime.remove(name);
+    // a COPY's script goes with it; a cast member keeps its own, which is what
+    // lets TAOOT's stokers put themselves back (see dropInstancedScript)
+    session.dropInstancedScript(name);
+  });
   /**
    * Take a character off the screen — and with them, any claim they had on your
    * attention.
