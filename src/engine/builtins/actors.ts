@@ -1,6 +1,14 @@
 import { Value, toNum, toStr, truthy } from "../interp";
 import { accessorFamily, BuiltinCtx } from "./context";
-import { packPoint, pointX, pointY } from "../point";
+import { packPoint } from "../point";
+
+/**
+ * What `actorstar` reports while a named walk is running — TI.EXE's straight-line
+ * walk builder (0x443ac0) stamps it into actor+0x70 for both walktostar and
+ * walkonpath. It is a KIND, not a place: the destination only appears once the
+ * actor lands. No script in the corpus compares it.
+ */
+const WALK_DEFER = "defer";
 
 /**
  * Cast-actor (CST) commands: cast file open/close, the actor state
@@ -230,15 +238,33 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   r("indextocast", (_i, [idx]) => [...session.actorRuntime.casts.keys()][toNum(idx ?? 0) - 1] ?? "");
   // walking: straight-line motion at the actor's per-set speed, walk pose
   // cycling, facing the direction of travel (session.startWalk)
+  //
+  // Every builder stamps TWO strings, and they are not the same one: the walk
+  // record's destination (+0x3e, what the actor settles on when it lands, and
+  // what walkdest() reports meanwhile) and a mid-walk sentinel in `actorstar`
+  // (actor+0x70, saying what KIND of walk is running). A destination name is
+  // never visible in `actorstar` while the actor is still moving.
+  //
+  //   builder     used by                 mid-walk actorstar   record +0x3e
+  //   0x443ac0/1  walktostar              "defer"              the star name
+  //   0x443ac0/3  walkonpath              "defer"              the "to" star
+  //   0x4436d0    walktoxyz               "walktoxyz"          "custom"
+  //   0x4435c0    walktostar (track)      "walktostar"         —
+  //   0x4437f0    walkonpath (track)      "walkonpath"         —
+  //
+  // The last two are the track-following walkers, chosen only when the set has
+  // a path network to follow. We walk in straight lines and have no track, so
+  // 0x443ac0 is the builder we are — hence "defer" for both named walks.
   r("walktostar", (_i, [n, starName]) => {
     const star = findStar(starName);
     if (!actor(n) || !star) {
       log(`walktostar: ${toStr(n)} -> "${toStr(starName ?? "")}" not found`);
       return 0;
     }
-    session.scheduler.startWalk(toStr(n), star.positionX, star.positionZ, star.positionY);
-    const a = actor(n)!;
-    a.starName = toStr(starName).toLowerCase();
+    actor(n)!.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
+    session.scheduler.startWalk(
+      toStr(n), star.positionX, star.positionZ, star.positionY, toStr(starName).toLowerCase(),
+    );
   });
   /**
    * walktoxyz(actor, x, y, z): walk to a point that is not a star — and land on
@@ -268,25 +294,26 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
    * called `hasattention`, which accosted you again inside the conversation you
    * were already having (#10/#19/#21).
    *
-   * The mid-walk sentinel is deliberately NOT copied here. The original reports
-   * `"walktoxyz"` (and `"defer"` for star walks) while a walk is running, and
-   * neither string appears anywhere in the corpus — no script can tell. See #37
-   * for the one place it would be observable.
+   * Mid-walk this one says `"walktoxyz"`, not `"defer"` — 0x4436d0 is its own
+   * builder and stamps its own name. No script compares either string.
    */
   r("walktoxyz", (_i, [n, x, y, z]) => {
-    if (!actor(n)) return 0;
+    const a = actor(n);
+    if (!a) return 0;
+    a.starName = "walktoxyz"; // sentinel while moving; "custom" lands on arrival
     session.scheduler.startWalk(toStr(n), toNum(x ?? 0), toNum(y ?? 0), toNum(z ?? 0), "custom");
   });
-  // walkonpath(actor, fromStar|"resume", toStar|point): walk from one star to
-  // another. `from`="resume" keeps the current position; otherwise the actor
-  // teleports to `from` first. `to` is a star name, or a packed point (the
-  // value walkdest() returns — the talk-interrupt/resume path in TAOOT's GANG.CST
-  // saves the destination and resumes toward it). While walking, actorstar()
-  // reports the sentinel "walkonpath" (how the resume logic detects a path
-  // walk); on arrival it settles on the destination star.
+  // walkonpath(actor, fromStar|"resume", toStar): walk from one star to another.
+  // `from`="resume" keeps the current position; otherwise the actor teleports to
+  // `from` first. Every call in the corpus passes star names for both.
   r("walkonpath", (_i, [n, from, to]) => {
     const a = actor(n);
     if (!a) return 0;
+    const dest = findStar(to);
+    if (!dest) {
+      log(`walkonpath: star "${toStr(to ?? "")}" not found`);
+      return 0;
+    }
     if (toStr(from ?? "").toLowerCase() !== "resume") {
       const start = findStar(from);
       if (start) {
@@ -295,23 +322,10 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
         a.worldZ = start.positionY;
       }
     }
-    const dest = findStar(to);
-    let tx: number, ty: number, tz: number, arriveStar: string;
-    if (dest) {
-      tx = dest.positionX; ty = dest.positionZ; tz = dest.positionY;
-      arriveStar = toStr(to).toLowerCase();
-    } else if (to !== undefined && to !== "" && !isNaN(Number(to))) {
-      const pt = toNum(to); // packed (x<<16)|y from walkdest(); z stays current
-      tx = pointX(pt);
-      ty = pointY(pt);
-      tz = a.worldZ;
-      arriveStar = "walkonpath"; // no named destination; keep the sentinel
-    } else {
-      log(`walkonpath: star "${toStr(to ?? "")}" not found`);
-      return 0;
-    }
-    a.starName = "walkonpath"; // sentinel while moving
-    session.scheduler.startWalk(toStr(n), tx, ty, tz, arriveStar);
+    a.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
+    session.scheduler.startWalk(
+      toStr(n), dest.positionX, dest.positionZ, dest.positionY, toStr(to).toLowerCase(),
+    );
   });
   r("iswalk", (_i, [n]) => (n !== undefined && session.scheduler.isWalk(toStr(n)) ? 1 : 0));
   r("stopwalk", (_i, [n]) => {
@@ -322,10 +336,30 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   });
   r("countwalks", () => session.scheduler.walks.size);
   r("indextowalk", (_i, [idx]) => [...session.scheduler.walks.keys()][toNum(idx ?? 0) - 1] ?? "");
+  /**
+   * walkdest(actor): where a running walk is HEADED, by name — the walk record's
+   * +0x3e, the same field the arrival copies into `actorstar`. Not a position.
+   *
+   * TI.EXE's handler (0x4428e0) scans the 16-entry walk table at 0x48b150
+   * (stride 0x6e) for the record whose +0x2e matches the actor, and returns its
+   * +0x3e as a string; with no walk running it returns `"None"`.
+   *
+   * This is how a character resumes a patrol you interrupted. GANG.CST's
+   * `walktopuppet` is the only caller in the corpus:
+   *
+   *     if iswalk (who)
+   *         savestar = walkdest (who)          ← "max.2"
+   *         …
+   *     sendtoactor (who, moveactorstar (savestar))   → walktostar (me, savestar)
+   *
+   * so the value has to be something `walktostar` can resolve. We used to return
+   * a packed (x<<16)|y point here, which came back as the star name `"529465746"`
+   * and resolved to nothing — every walking character on every deck stood still
+   * for the rest of the set once you had talked to them (#41).
+   */
   r("walkdest", (_i, [n]) => {
     const w = session.scheduler.walks.get(toStr(n ?? "").toLowerCase());
-    if (!w) return 0;
-    return packPoint(w.sx + w.dx, w.sy + w.dy);
+    return w ? (w.arriveStar ?? "custom") : "None";
   });
 
   // turntodeg(name, deg): set an actor's facing (0..255). Grouped with the

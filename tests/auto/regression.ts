@@ -3284,8 +3284,9 @@ test("walkonpath: sentinel while moving, dest on arrival, endwalk fires", async 
   session.interp.builtins.get("walkonpath")!(
     session.interp, ["morrow", "morrow.1", "morrow.2"], null as never, null as never,
   );
-  // while walking, actorstar() reports the sentinel (resume detection)
-  const sentinel = morrow.starName === "walkonpath" && session.scheduler.isWalk("morrow");
+  // while walking, actorstar() reports the KIND of walk, never the destination
+  // (TI.EXE 0x443ac0 stamps "defer" for both walktostar and walkonpath)
+  const sentinel = morrow.starName === "defer" && session.scheduler.isWalk("morrow");
   let guard = 0;
   while (session.scheduler.isWalk("morrow") && guard++ < 500) { v.tick((clock += 100)); await drain(); }
   // let the arrival endwalk() dispatch run. It can take a further service pass:
@@ -3300,6 +3301,62 @@ test("walkonpath: sentinel while moving, dest on arrival, endwalk fires", async 
     "walkonpath: sentinel while moving, dest star on arrival, endwalk fires",
     sentinel && morrow.starName === "morrow.2" && endwalkFired,
     `sentinel=${sentinel} arrived=${morrow.starName} endwalkLoop=${endwalkFired}`,
+  );
+}
+);
+
+// --- 35b. walkdest() names the destination, so an interrupted patrol resumes -
+// GANG.CST's `walktopuppet` is the only caller of `walkdest` in the corpus, and
+// it is how a character you interrupt gets back to what they were doing:
+//
+//     if iswalk (who)
+//         savestar = walkdest (who)
+//         …
+//     sendtoactor (who, moveactorstar (savestar))   → walktostar (me, savestar)
+//
+// so whatever `walkdest` answers has to be a name `walktostar` can resolve. We
+// answered a packed (x<<16)|y point, which arrived as the star name
+// "529465746" — that literal is straight out of #41's report, and 0x1f8f0192 is
+// the pack of Max's decka destination. Every walking character on every deck
+// stood still for the rest of the set once you had talked to them.
+//
+// TI.EXE's handler (0x4428e0) returns the walk record's +0x3e — the same field
+// the arrival copies into `actorstar` — and "None" when no walk is running.
+test("walkdest names the destination, so an interrupted walk can resume", async () => {
+  const { session, viewer, logs } = await newHost();
+  session.interp.globals.set("mission", 1);
+  session.interp.globals.set("tour", 1);
+  await session.openSetFile("deckbd.set", "scene33", "view94");
+  const v = viewer();
+  const morrow = session.actorRuntime.get("morrow")!;
+  const walkto = session.interp.builtins.get("walktostar")!;
+  const dest = () =>
+    (session.interp.builtins.get("walkdest") as (i: unknown, a: string[]) => unknown)(
+      session.interp, ["morrow"],
+    );
+
+  const idle = dest(); // no walk running
+  await walkto(session.interp, ["morrow", "morrow.2"], null as never, null as never);
+  const walking = dest();
+  // mid-walk actorstar is the KIND, and walkdest is the WHERE — the two are
+  // different strings, which is the whole point of the record having both
+  const sentinel = morrow.starName === "defer";
+
+  // now do what walktopuppet does: stop them, then send them back with the
+  // saved value. This is the step that used to die on "not found".
+  session.scheduler.stopWalk("morrow");
+  const from = logs.length;
+  await walkto(session.interp, ["morrow", walking as string], null as never, null as never);
+  const resumed = session.scheduler.isWalk("morrow");
+  const complained = logs.slice(from).some((l) => l.includes("walktostar:"));
+
+  let guard = 0;
+  while (session.scheduler.isWalk("morrow") && guard++ < 500) { v.tick((clock += 100)); await drain(); }
+  check(
+    "walkdest: names the destination mid-walk, resolves back through walktostar",
+    idle === "None" && walking === "morrow.2" && sentinel && resumed && !complained,
+    `idle=${JSON.stringify(idle)} walking=${JSON.stringify(walking)} ` +
+      `sentinel=${morrow.starName} resumed=${resumed} complained=${complained}`,
   );
 }
 );
@@ -4669,7 +4726,7 @@ test("Sasha walks away down the hall (sasha.1 -> sasha.2)", async () => {
   session.interp.builtins.get("walkonpath")!(
     session.interp, ["sasha", "sasha.1", "sasha.2"], null as never, null as never,
   );
-  const walking = sasha.starName === "walkonpath" && session.scheduler.isWalk("sasha");
+  const walking = sasha.starName === "defer" && session.scheduler.isWalk("sasha");
   let guard = 0;
   while (session.scheduler.isWalk("sasha") && guard++ < 800) { v.tick((clock += 100)); await drain(); }
   await drain();
