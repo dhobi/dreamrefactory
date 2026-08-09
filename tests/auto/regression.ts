@@ -1012,12 +1012,26 @@ test("cross-set travel via stage gotospecial, globals persist", async () => {
 );
 
 // --- 6. props: shop loads, prop state machinery works (TURK) ---
+// turk.shp belongs to TURK.STG, which opens it in `openstage` and closes it in
+// `closestage` (0001:3 and 0001:8) — the ROOM must arrive without it. Five shops
+// share a room's name (boil, cargo, turk, wireless, bridge) and all five are
+// stage shops; entering the room used to open them anyway, which is how the
+// boiler's chute controls and the cargo hold's painting crate ended up drawn
+// over the save panel and clickable there (#17, #18).
 test("props: shop loads, prop state machinery works (TURK)", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("turk.set");
   void viewer();
+  check(
+    "the room does not bring the close-up stage's shop with it",
+    !session.propRuntime.shops.has("turk.shp") && !session.propRuntime.get("turkwater"),
+    `shops=${[...session.propRuntime.shops.keys()].join(",")}`,
+  );
+  // the stage does, through its own openstage
+  await session.runGlobal("transtoflat", ["turk.stg"]);
+  await session.settle(200);
   const p = session.propRuntime.get("turkwater");
-  check("turk.shp props loaded", !!p, session.propRuntime.shops.size + " shop(s)");
+  check("turk.shp props loaded by turk.stg", !!p, session.propRuntime.shops.size + " shop(s)");
   if (p) {
     p.visible = true;
     p.stateName = "run";
@@ -3550,30 +3564,63 @@ test("BOIL boiler chute: door opens, switch slides the gate + flips flat", async
 }
 );
 
-// --- 43. set view scopes screen props to persistent (boot) shops -----------
-// A set's auto-opened shop can be a STAGE shop with screen-space props (boil.shp
-// = the boiler flat controls). Those must not draw/click on the room's
-// navigation view — only the persistent UI shops (house/inven) may. Regression
-// for the "wrong overlay: clickable rubaiyat hiding place on Scene10/View31".
-test("set view scopes screen props to persistent (boot) shops", async () => {
-  const { session } = await newSession();
-  await session.openSetFile("boil.set");
-  const boilShop = session.propRuntime.shops.get("boil.shp");
-  const houseShop = session.propRuntime.shops.get("house.shp");
-  const bag = session.propRuntime.get("boilbag")!; // a boil.shp screen control
-  // a point inside boilbag's drawn rect
-  const st = bag.state()!;
-  const f = bag.shop.frame(st.frames[0]);
-  const px = bag.anchorX - f.posXraw + Math.floor(f.width / 2);
-  const py = bag.anchorY - f.posYraw + Math.floor(f.height / 2);
-  const hitAll = session.propRuntime.propAt(px, py, null, false); // stage overlay scope
-  const hitSetView = session.propRuntime.propAt(px, py, null, true); // set-view scope
-  check(
-    "set view: stage-shop screen props are excluded (draw + click); boot UI persists",
-    boilShop?.persistent === false && houseShop?.persistent === true &&
-      bag.visible === true && hitAll === bag && hitSetView !== bag,
-    `boilPersist=${boilShop?.persistent} housePersist=${houseShop?.persistent} hitAll=${hitAll?.group.name} hitSetView=${hitSetView?.group.name ?? null}`,
-  );
+// --- 43. a close-up's controls never reach the room, or the save panel ------
+// #17 and #18. Five rooms share their name with a shop — boil, cargo, turk,
+// wireless, bridge — and all five of those shops belong to the room's CLOSE-UP
+// STAGE, which opens them in `openstage` and closes them in `closestage`.
+// Entering the room opened them too, and `openshop` parks their controls at
+// screen 256,192 and makes them visible (BOIL.SHP: boilbag, boildoor,
+// boilswitch; CARGO.SHP: cargopainting, cargobag).
+//
+// In the room that was merely invisible, because the set view draws boot-UI
+// shops only. But that filter is the set view's, and the CTL save panel is not
+// the set view: opening it drew the coal-chute door and the painting crate over
+// the menu in the panel's own palette, and left them clickable. Clicking the
+// crate's painting ran the real `mousedown` and put the painting in your bag
+// during mission 1 — which is a softlock, since M2P1's crate is then empty and
+// Penny never moves off her cargo-hold clues.
+//
+// Assert both halves: the room arrives clean, the panel over it stays its own,
+// and the stage still gets its shop when you actually open the close-up.
+test("a close-up stage's controls reach neither the room nor the save panel", async () => {
+  for (const [set, stg, control] of [
+    ["boil.set", "boil.stg", "boildoor"],
+    ["cargo.set", "cargo.stg", "cargopainting"],
+  ]) {
+    const { session } = await newSession();
+    session.interp.globals.set("mission", 1);
+    await session.openSetFile(set);
+    await session.settle(200);
+    const roomClean = !session.propRuntime.shops.has(stg.replace(".stg", ".shp")) &&
+      !session.propRuntime.get(control);
+
+    // the save panel, which is where it showed: nothing of the close-up's may
+    // answer a hittest anywhere on it
+    await session.runGlobal("transtoflat", ["ctl.stg"]);
+    await session.settle(200);
+    let leaked = "";
+    for (let y = 4; y < 384 && !leaked; y += 6) {
+      for (let x = 4; x < 512; x += 6) {
+        const h = session.hitTestAt(x, y);
+        if (h.type === "prop" && h.name.toLowerCase().startsWith(stg.slice(0, 4))) {
+          leaked = `${h.name}@${x},${y}`;
+          break;
+        }
+      }
+    }
+    await session.runGlobal("transfromflat", []);
+    await session.settle(200);
+
+    // and the close-up itself still works — the stage opens its own shop
+    await session.runGlobal("transtoflat", [stg]);
+    await session.settle(200);
+    const stageHasIt = !!session.propRuntime.get(control)?.visible;
+    check(
+      `${set}: the close-up's controls belong to ${stg}, not to the room`,
+      roomClean && leaked === "" && stageHasIt,
+      `roomClean=${roomClean} leakedOverPanel=${leaked || "none"} onStage=${stageHasIt}`,
+    );
+  }
 }
 );
 
