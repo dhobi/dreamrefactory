@@ -6030,3 +6030,41 @@ test("a click inside a click gives the camera back to the script that owns it", 
     `closeup=${cameUp} ended facing ${v.scene.views[v.viewIdx]?.viewName}`,
   );
 });
+
+// --- 86. a message is logged once ------------------------------------------
+// `ctx.log` — what every builtin logs through — was
+//
+//     log: (l) => session.currentBinding?.onLog(l) ?? session.onLog(l)
+//
+// meaning to say "the open set's log, else the session's". `?.` guards the
+// CALL, not its result: with a set open the binding logged the line, the call
+// answered undefined because onLog is void, and `??` logged the same line again
+// through the session. Every `message()` in the game arrived twice in the
+// details pane (#49), while lines emitted straight through session.onLog
+// (`stage loaded:`, `movie:`) came once — which is the pattern in the reports.
+//
+// The reason no test ever saw it is this suite's own sink: the harness passes
+// `{ log: (l) => logs.push(l) }` and push answers the new LENGTH, which is not
+// nullish, so `??` short-circuited and the second call never happened. The
+// page's `log()` has a statement body and answers undefined, so a browser
+// always doubled. Hence a VOID sink below, and a count of calls rather than of
+// collected lines — a test written against the harness's sink passes either way.
+test("a message() reaches the log once, with a set open", async () => {
+  const { session } = await newHost();
+  await session.openSetFile("bedsit1.set", "scene2", "view14");
+  await drain();
+  const binding = session.currentBinding!;
+  const message = session.interp.builtins.get("message") as unknown as (
+    i: unknown, a: string[],
+  ) => Promise<void>;
+
+  for (const [name, wired] of [["a set open", true], ["no set open", false]] as const) {
+    let lines = 0;
+    session.onLog = () => { lines++; }; // void, as the page's own sink is
+    binding.onLog = () => { lines++; };
+    session.currentBinding = wired ? binding : null;
+    await message(session.interp, ["ACT -- a stage direction"]);
+    check(`one message() is one line (${name})`, lines === 1, `logged ${lines} times`);
+  }
+  session.currentBinding = binding;
+});
