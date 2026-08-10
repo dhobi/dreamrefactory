@@ -6451,3 +6451,76 @@ test("a scripted jump closes the door a turn would have closed", async () => {
     `door visible=${session.propRuntime.get("door")?.visible}`,
   );
 }, 60_000);
+
+// --- 92. a prop animation gets to the end of itself -------------------------
+// A prop animation is played by putting the prop in the moving state, spending a
+// FIXED budget of service passes on it, and then forcing the resting state.
+// BOIL.SHP's coal chute (`open` on its `boildoor`):
+//
+//     propview (me, "opening")
+//     for count = 1 to 11
+//         forceupdate ()
+//     endfor
+//     propview (me, "idleopen")
+//
+// `opening` holds 11 frames, so the budget is one frame per pass — censused over
+// gamefiles/en, 21 of the 33 sites shaped like this budget exactly as many passes
+// as the state has frames (or one fewer), and the rest an exact half or third,
+// which is a state holding one animation per degree.
+//
+// We ticked props at the camera's FRAME_MS (90 ms) against a 50 ms pass, so the
+// chute got 5 of its 11 frames before the script slammed it to `idleopen`: "move
+// slowly, then at about 60% of the animation jumps to the end" (#15).
+test("a prop animation reaches its last frames inside the script's budget", async () => {
+  const { session, viewer } = await newHost();
+  let clock = 0;
+  await session.openSetFile("boil.set", "scene12", "view25");
+  await drain();
+  const v = (): SetViewer => viewer()!;
+  const tick = (): void => { viewer()?.tick((clock += 50)); };
+  for (let i = 0; i < 80; i++) { tick(); await drain(); }
+
+  // the chute hotspot opens boil.stg, where the doors live as props
+  const spot = (v().scene.views[v().viewIdx].objects ?? [])[0];
+  await session.track(
+    v().press(
+      Math.floor((spot.startRegionX + spot.endRegionX) / 2),
+      Math.floor((spot.startRegionY + spot.endRegionY) / 2),
+    ),
+    "chute-click",
+  );
+  for (let i = 0; i < 200; i++) { tick(); await drain(); }
+  const door = session.propRuntime.get("boildoor");
+  check(
+    "the chute flat is up with the door closed",
+    session.stageName === "boil.stg" && door?.stateName === "idleclosed",
+    `stage=${session.stageName} door=${door?.stateName}`,
+  );
+  if (!door) return;
+
+  // the door is a prop on the flat, not a region: click where it is drawn
+  let at: { x: number; y: number } | null = null;
+  for (let y = 0; y < 384 && !at; y += 2) {
+    for (let x = 0; x < 512 && !at; x += 2) {
+      if (session.propRuntime.propAt(x, y) === door) at = { x, y };
+    }
+  }
+  check("the door is on screen to be clicked", !!at, "propAt never found it");
+  if (!at) return;
+
+  let deepest = -1;
+  void session.track(v().press(at.x, at.y), "door-click");
+  for (let i = 0; i < 250; i++) {
+    if (String(door.stateName).toLowerCase() === "opening") {
+      deepest = Math.max(deepest, door.frameIdx);
+    }
+    tick();
+    await drain();
+  }
+  check(
+    "the door opens all the way before the script forces it open",
+    deepest >= 9,
+    `the opening animation only reached frame ${deepest} of 11`,
+  );
+  check("...and ends up open", door.stateName === "idleopen", `state=${door.stateName}`);
+}, 60_000);
