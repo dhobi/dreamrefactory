@@ -1313,6 +1313,13 @@ export class GameSession {
    */
   navGestureActive = false;
   /**
+   * True while the SCHEDULER is driving navigation for a scene loop, as opposed
+   * to a player's keydown or click. Only a script's moves are deferred when one
+   * is already running (SetViewer.navigate): a script means every step it asks
+   * for, while a player leaning on a key means the one that lands.
+   */
+  navFromScript = false;
+  /**
    * Set by the nav hooks when any navigation (walk/turn/teleport) happens during
    * a gesture. Session-scoped (not per-viewer) so it survives a mid-gesture set
    * change: the walk fires on the new viewer but keyDown, running on the old

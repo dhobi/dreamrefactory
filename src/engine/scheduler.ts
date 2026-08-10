@@ -750,11 +750,13 @@ export class Scheduler {
       onSceneJump: this.session.onSceneJump,
       onViewJump: this.session.onViewJump,
       active: this.session.navGestureActive,
+      fromScript: this.session.navFromScript,
     };
     this.session.onNavigate = this.session.navDriver;
     this.session.onSceneJump = this.session.sceneJumpDriver;
     this.session.onViewJump = this.session.viewJumpDriver;
     this.session.navGestureActive = true;
+    this.session.navFromScript = true;
     try {
       await fn();
     } finally {
@@ -762,6 +764,7 @@ export class Scheduler {
       this.session.onSceneJump = prev.onSceneJump;
       this.session.onViewJump = prev.onViewJump;
       this.session.navGestureActive = prev.active;
+      this.session.navFromScript = prev.fromScript;
     }
   }
 }
