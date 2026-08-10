@@ -65,6 +65,18 @@
 export const ENGINE_STEP_MS = 50;
 
 /**
+ * One step of a `visualeffect` reveal, in ms — TI.EXE's OTHER clock.
+ *
+ * Its wipes are not paced against the service clock. `0x41de90` reads the OS
+ * millisecond timer and returns `(ms * 3) / 50` — ms/16.67, 60 per second — and
+ * the wipe pacer (0x43c600) spins until that counter reaches `timeBase + i` for
+ * strip i, one strip per tick. So the scrapbook's `visualeffect(wipeleft, 30)`
+ * runs in half a second; at the 50 ms engine step it would crawl for one and a
+ * half. Kept as a third of the step rather than 16.67 so the arithmetic is exact.
+ */
+export const WIPE_STEP_MS = ENGINE_STEP_MS / 3;
+
+/**
  * Wall time (ms) as SCRIPT TICKS — TI.EXE's `timeGetTime() * 3 / 50` at
  * 0x41de90, the 1/60 s unit above. That function is the engine's canonical
  * "what time is it": 53 call sites read it, `delay()` builds its deadline from

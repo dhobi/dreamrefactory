@@ -7,6 +7,7 @@
 import { test, expect } from "vitest";
 import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
 import { readSetFile, RIGHTTURNS, LEFTTURNS } from "../../src/df/set";
+import { WIPE_STEP_MS } from "../../src/engine/clock";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "../../src/df/image";
 import { readStgFile, readStgRegions } from "../../src/df/stg";
 import { MAP_EXIT_REGION, MAP_JUMPS, MAP_PAGE_BUTTONS, mapUsable } from "../playthrough/nav/mapjumps";
@@ -6607,3 +6608,70 @@ test("a prop with no state set reports its first state, not nothing", async () =
   }
   check("leaving the panel does not raise a door that is already up", !gateMoved, "boilgate animated");
 }, 60_000);
+
+// --- 94. a page turn is a wipe, not a cut ----------------------------------
+// `visualeffect(effect, steps)` says how the NEXT screen arrives, and every effect
+// but `plain` is a reveal. We drew them instantly, which is what left the ending
+// scrapbook cutting between pages instead of turning them (#12):
+//
+//     gotoflat (findword (worldwar1 (), ",", count))
+//     voicesound ("paper")
+//     visualeffect (wipeleft, 30)
+//     voicesound ("n." @ findword (worldwar1 (), ",", count))
+//     voicewait ()
+//
+// The pages that CONTINUE one picture ("11b", "33b", "51b" …) ask for
+// `visualeffect(plain, 0)` instead, so `plain` must stay the instant clear it
+// already was — it is also what the scripts use to cancel a pending effect before
+// a blacktoscreen, 184 of the corpus's 193 visualeffect calls.
+//
+// Stepped on the GAME clock, one step per engine pass, so a slow host takes the
+// same 30 passes as a fast one.
+test("visualeffect wipes over its step count, and plain does not", async () => {
+  const { session } = await newHost();
+  const effect = session.interp.builtins.get("visualeffect") as unknown as (
+    i: unknown, a: (string | number)[],
+  ) => void;
+  // stand in for the host's composite: a wipe holds the screen it is leaving
+  session.captureFrame = () => ({
+    rgba: new Uint8ClampedArray(512 * 384 * 4),
+    width: 512,
+    height: 384,
+  });
+
+  void effect(session.interp, ["plain", 0]);
+  check("plain starts no wipe", !session.wiping, `dir=${session.wipe.dir}`);
+
+  void effect(session.interp, ["wipeleft", 30]);
+  check("wipeleft starts one", session.wiping && session.wipe.dir === "left", `dir=${session.wipe.dir}`);
+  check("...over the steps it was given", session.wipe.steps === 30, `steps=${session.wipe.steps}`);
+
+  // One step per 60 Hz tick — TI.EXE's own wipe clock, not the 50 ms service
+  // pass: 0x41de90 returns (ms * 3) / 50 and the pacer waits for tick i. So the
+  // scrapbook's 30 steps take half a second.
+  let clock = 0;
+  for (let i = 0; i < 29; i++) session.tickWipe((clock += WIPE_STEP_MS));
+  check(
+    "29 ticks in, the reveal is not finished",
+    session.wiping && session.wipe.step === 29,
+    `step=${session.wipe.step} of ${session.wipe.steps}`,
+  );
+  session.tickWipe((clock += WIPE_STEP_MS));
+  check("the 30th ends it", !session.wiping, `step=${session.wipe.step} dir=${session.wipe.dir}`);
+  check(
+    "...half a second after it started, as in the original",
+    Math.round(30 * WIPE_STEP_MS) === 500,
+    `30 steps = ${30 * WIPE_STEP_MS} ms`,
+  );
+
+  void effect(session.interp, ["wiperight", 20]);
+  check("wiperight goes the other way", session.wipe.dir === "right", `dir=${session.wipe.dir}`);
+  // steps are clamped 1..1000 the way TI.EXE clamps them
+  session.endWipe();
+  void effect(session.interp, ["wipeleft", 99999]);
+  check("steps are capped at 1000", session.wipe.steps === 1000, `steps=${session.wipe.steps}`);
+  // an effect the corpus never asks for keeps the old instant reveal
+  session.endWipe();
+  void effect(session.interp, ["venetian", 20]);
+  check("an unused effect stays instant", !session.wiping, `dir=${session.wipe.dir}`);
+});

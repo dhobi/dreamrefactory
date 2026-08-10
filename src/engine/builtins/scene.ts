@@ -271,12 +271,58 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    * fade that then does the revealing. Lifting the black there would cancel the
    * fade-in on every overlay the game opens.
    */
-  r("visualeffect", (_i, [effect]) => {
-    if (toStr(effect ?? "plain").toLowerCase() === "plain") return;
+  r("visualeffect", (_i, [effect, steps]) => {
+    const name = toStr(effect ?? "plain").toLowerCase();
+    if (name === "plain") return;
     session.fade.queue.length = 0;
     session.fade.snapshot = null;
     session.fade.pendingReveal = false;
     session.fade.level = 0;
+    // A WIPE is animated, over `steps` engine passes (see GameSession.wipe).
+    //
+    // The screen being left is captured HERE, which is late enough to be right:
+    // the scripts change the screen first and ask for the effect second, and
+    // nothing has repainted in between — the change lands on the next frame.
+    // TAOOT's ending scrapbook turns its pages this way (narend.stg, 5 of the
+    // corpus's 9 reveals):
+    //
+    //     gotoflat (findword (worldwar1 (), ",", count))
+    //     voicesound ("paper")
+    //     visualeffect (wipeleft, 30)
+    //     voicesound ("n." @ findword (worldwar1 (), ",", count))
+    //     voicewait ()
+    //
+    // and the pages that are a CONTINUATION of one picture ("11b", "33b", "51b"
+    // …) ask for `visualeffect(plain, 0)` instead, so honouring the difference is
+    // what makes the flips land on the page turns and nowhere else (#12).
+    //
+    // Only the two wipes the corpus uses are animated. `venetian`, the irises and
+    // the scrolls are named in TI.EXE's vocabulary but no script asks for one, so
+    // they keep the old instant reveal rather than guessing at geometry.
+    if (name !== "wipeleft" && name !== "wiperight") return;
+    const from = session.captureFrame?.() ?? null;
+    if (!from) return;
+    session.wipe.from = from;
+    session.wipe.dir = name === "wipeleft" ? "left" : "right";
+    // clamped the way TI.EXE clamps it, 1..1000 (0x43df60..0x43df7a)
+    session.wipe.steps = Math.min(1000, Math.max(1, toNum(steps ?? 0) || 1));
+    session.wipe.step = 0;
+    session.wipe.lastTick = 0;
+    // The script WAITS for the reveal, as it does in the original: visualeffect
+    // performs the whole effect inside the command (0x43b480 off the back of a
+    // service pass) and its pacer spins until each strip's tick is due, so the
+    // statements after it run when the screen has finished arriving. For the
+    // scrapbook that is the difference between the narration starting under a
+    // turning page and starting on the page it belongs to.
+    //
+    // Bounded, and on the ENGINE's frame rather than a wall clock, for the same
+    // reasons walkAfterFade is: a host that stops ticking must not hang a script,
+    // and a poll on real milliseconds makes the headless oracle non-deterministic.
+    return (async () => {
+      const cap = session.wipe.steps * 4 + 60;
+      for (let i = 0; i < cap && session.wiping; i++) await session.nextFrame();
+      session.endWipe(); // gave up: never leave a reveal holding the screen
+    })();
   });
 
   for (const noop of [

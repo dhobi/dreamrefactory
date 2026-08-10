@@ -1893,6 +1893,7 @@ export class SetViewer {
     // "move slowly, then at about 60% of the animation jumps to the end".
     this.session.propRuntime.tick(now, ENGINE_STEP_MS);
     this.session.tickFade(now);
+    this.session.tickWipe(now);
     this.session.tickTime(now); // delay() clock + coarse loop/cricket service
     this.session.scheduler.serviceFrameLoops(); // smooth per-frame loops (sky drift, fence idle)
     if (this.movies.playing) {
@@ -1980,6 +1981,9 @@ export class SetViewer {
     sig.num(s.textOverlay.length);
     for (const e of s.textOverlay) sig.str(e.text).num(e.x).num(e.y).num(e.size).num(e.color);
     sig.bool(this.showHotspots).num(this.sceneIdx).num(this.viewIdx);
+    // a reveal moves the seam every pass while everything behind it stands still,
+    // so the step has to be in here or the frame is skipped as already-drawn
+    sig.num(s.wipe.step).str(s.wipe.dir);
     return sig;
   }
 
@@ -2137,6 +2141,7 @@ export class SetViewer {
     }
     const drew = this.paintWorldInto();
     if (!drew) return; // nothing to draw: leave the canvas as it stands
+    this.coverWithWipe();
     this.screen.frameValid = true;
     this.screen.blit(ctx);
     this.screen.drawTextOverlay(ctx, this.session.textOverlay);
@@ -2144,6 +2149,36 @@ export class SetViewer {
     // over a flat the hotspots belong to the room, so only when it is showing;
     // on the bare room there is nothing else they could belong to
     if (drew === "set" || this.session.viewShowing) this.drawHotspots(ctx);
+  }
+
+  /**
+   * A reveal in progress: put the part of the OLD screen back that the new one
+   * has not uncovered yet.
+   *
+   * The new screen is whatever was just painted, so the wipe is subtractive —
+   * only the leaving screen has to be held (`session.wipe.from`), and the arriving
+   * one needs no special handling at all. `wipeleft` uncovers from the right edge
+   * leftwards and `wiperight` from the left edge rightwards, which is the reading
+   * of the two names I could not settle from the disassembly: the effect ids are
+   * in TI.EXE's vocabulary (24012 wiperight, 24013 wipeleft) but not compared as
+   * plain immediates anywhere, and the whole corpus asks for only these two. If a
+   * side-by-side against the original shows them the other way round, the two
+   * branches here swap and nothing else moves.
+   */
+  private coverWithWipe(): void {
+    const w = this.session.wipe;
+    if (!this.session.wiping || !w.from) return;
+    const { rgba, width, height } = w.from;
+    // how much of the old screen is still standing, in columns
+    const kept = Math.max(0, Math.min(width, Math.round((width * (w.steps - w.step)) / w.steps)));
+    if (kept <= 0) return;
+    const srcX = w.dir === "left" ? 0 : width - kept;
+    const strip = this.screen.scratchFor(kept * height * 4);
+    for (let y = 0; y < height; y++) {
+      const from = (y * width + srcX) * 4;
+      strip.set(rgba.subarray(from, from + kept * 4), y * kept * 4);
+    }
+    this.screen.blitAt(strip, kept, height, w.dir === "left" ? 0 : width - kept, 0);
   }
 
   /**

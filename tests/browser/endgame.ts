@@ -68,6 +68,9 @@ const SAMPLE = `(() => {
     regions: v ? v.movieRegions.map((r) => ({ type: r.type, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 })) : [],
     fade: Number(s.fade.level.toFixed(2)), snap: !!s.fade.snapshot,
     reveal: !!s.fade.pendingReveal, busy: !!s.scriptBusy,
+    // the scrapbook turns its pages with visualeffect(wipeleft, 30) — half a
+    // second each, so a 500 ms sample catches one mid-turn (#12)
+    wipe: s.wipe && s.wipe.dir ? s.wipe.dir + ":" + s.wipe.step + "/" + s.wipe.steps : "",
     g: {
       mission: s.interp.globals.get("mission"), phase: s.interp.globals.get("phase"),
       clock: s.interp.globals.get("clock"), lockevents: s.interp.globals.get("lockevents"),
@@ -83,6 +86,7 @@ const log = (m: string) => console.log(`${stamp()} ${m}`);
 const line = (s: any) =>
   `set=${s.set} vis=${s.setVisible ? 1 : 0} stage=${s.stage} flat=${s.flat} movie=${s.movie || "-"} ` +
   `fade=${s.fade}${s.snap ? "+snap" : ""}${s.reveal ? "+reveal" : ""} busy=${s.busy ? 1 : 0} ` +
+  `${s.wipe ? `wipe=${s.wipe} ` : ""}` +
   `theme=${s.theme} loops=[${s.loops}] sndloops=[${s.soundLoops}] crickets=[${s.crickets}] ` +
   `sounding=[${s.sounding}] ` +
   `g=${JSON.stringify(s.g)}`;
@@ -230,6 +234,9 @@ async function main(): Promise<void> {
   const flats = new Set<string>();
   /** ambience still sounding after the boat deck was closed — see the verdict */
   const strays = new Set<string>();
+  /** page-turn reveals seen mid-flight — the scrapbook's flips (#12) */
+  const wipes = new Set<string>();
+  let wipeShot = false;
   const deadline = Date.now() + 12 * 60_000;
   let n = 1;
   let last = "";
@@ -266,6 +273,16 @@ async function main(): Promise<void> {
         if (played[played.length - 1] !== movie) played.push(movie);
       }
       if (s.stage === "narend.stg") flats.add(String(s.flat));
+      if (s.wipe) {
+        wipes.add(String(s.wipe).split(":")[0]);
+        // grab the seam itself the first time, so the reveal is verified by eye
+        // and not only by its counter (#12)
+        if (!wipeShot) {
+          wipeShot = true;
+          const c = await page.$("#screen");
+          if (c) await c.screenshot({ path: join(OUT, `wipe-${String(s.wipe).replace(/\W+/g, "_")}.png`) });
+        }
+      }
       if (n < 40) await shot(page, tag, s);
       else log(`--- ${tag}: ${line(s)}`);
     } else {
@@ -321,6 +338,7 @@ async function main(): Promise<void> {
   await shot(page, "99-after", await page.evaluate(SAMPLE).catch(() => ({ g: {} })));
   log(`clips played, in order: ${played.join(" -> ")}`);
   log(`narend flats: ${[...flats].join(", ")}`);
+  log(`page-turn wipes seen: ${[...wipes].join(", ") || "(none)"}`);
   log(`engine complaints: ${lines.filter((l) => /no theme|not available|error/i.test(l)).length}`);
 
   // -- the verdict ----------------------------------------------------------
