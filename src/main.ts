@@ -82,6 +82,7 @@ const bugNote = document.getElementById("bugNote") as HTMLSpanElement;
 const swipeOpts = document.getElementById("swipeOpts") as HTMLDivElement;
 const swipeInvertTurnBox = document.getElementById("swipeInvertTurn") as HTMLInputElement;
 const swipeInvertWalkBox = document.getElementById("swipeInvertWalk") as HTMLInputElement;
+const sharpLandingBox = document.getElementById("sharpLanding") as HTMLInputElement;
 /** where you are and what the engine is doing: the X pane, off by default */
 const details = document.getElementById("details") as HTMLDivElement;
 const scriptlog = document.getElementById("scriptlog") as HTMLPreElement;
@@ -942,6 +943,22 @@ function installSwipeOptions(): void {
   bindSwipeOption(swipeInvertWalkBox, SWIPE_INVERT_WALK_KEY, (on) => (swipeInvert.walk = on));
 }
 
+/**
+ * The picture setting under the screen, and its memory.
+ *
+ * Asked of everyone, unlike the swipe boxes: a right turn lands on the low-res
+ * standpoint for a moment before the settled view redraws sharp, which is what
+ * the original does (#68), and a player who would rather not see it can say so
+ * here. Unchecked is the original's behaviour, so the default costs nothing to
+ * anyone who never opens this bar.
+ */
+function installPictureOptions(): void {
+  bindSwipeOption(sharpLandingBox, SHARP_LANDING_KEY, (on) => (session.sharpLanding = on));
+}
+
+/** where the picture answer outlives the tab */
+const SHARP_LANDING_KEY = "taoot.picture.sharplanding";
+
 function bindSwipeOption(box: HTMLInputElement, key: string, apply: (on: boolean) => void): void {
   let stored: string | null = null;
   try {
@@ -962,6 +979,7 @@ function bindSwipeOption(box: HTMLInputElement, key: string, apply: (on: boolean
 }
 
 installSwipeOptions();
+installPictureOptions();
 
 /**
  * The arrow keys' own route, shared with the swipe handler: a full-screen overlay

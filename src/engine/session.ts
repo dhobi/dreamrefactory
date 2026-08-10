@@ -1320,6 +1320,20 @@ export class GameSession {
    */
   navFromScript = false;
   /**
+   * Player setting: land a right turn on the hi-res standpoint instead of the
+   * low-res one the ring ends with (SetViewer.turnFrameImage).
+   *
+   * OFF is the original's behaviour and so the default — a right turn sharpens as
+   * it settles, a left turn lands sharp, because that is how the two rings are
+   * shipped (#68). On is the opt-in for players who would rather never see the
+   * low-detail frame. It cannot make the turn ITSELF sharp: in-motion frames are
+   * quarter-resolution in both rings and have no hi-res twin.
+   *
+   * Lives on the session rather than the viewer because a `changeset` builds a
+   * fresh viewer and the setting has to outlive the room.
+   */
+  sharpLanding = false;
+  /**
    * Set by the nav hooks when any navigation (walk/turn/teleport) happens during
    * a gesture. Session-scoped (not per-viewer) so it survives a mid-gesture set
    * change: the walk fires on the new viewer but keyDown, running on the old

@@ -151,6 +151,13 @@ export const en = {
     swipeInvertTurnTitle: "a swipe from right to left turns right, not left" as Text,
     swipeInvertWalk: "invert forward" as Text,
     swipeInvertWalkTitle: "a swipe downwards walks on, not one upwards" as Text,
+    pictureLabel: "Picture" as Text,
+    sharpLanding: "always land sharp" as Text,
+    sharpLandingTitle:
+      "The game ships each standpoint twice, sharp and soft, and the original " +
+      "shows the soft one for a moment as a right turn lands (a left turn lands " +
+      "sharp). Tick this to skip that moment. The turn itself stays soft either " +
+      "way — no sharp version of the moving frames was ever made." as Text,
     // no key for the modal's heading: save-browser.ts always overwrites it with
     // "Load Game" or "Save Game", so the "Saved Games" in the markup is never
     // read. It gets translated when the TypeScript strings do.
