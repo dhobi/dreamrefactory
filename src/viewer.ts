@@ -901,10 +901,91 @@ export class SetViewer {
     return ring.find((f) => f.viewID === this.viewIdx && f.motionInfo > 0) ?? null;
   }
 
+  /**
+   * The hi-res twin of a standpoint frame, which is what a settled view is
+   * DRAWN from (#68).
+   *
+   * A scene ships each standpoint twice, and the two rings are not
+   * interchangeable: `motionInfo` is 1 (low-res standpoint) throughout the
+   * right-turn ring and 2 (hi-res) throughout the left-turn one. Measured over
+   * gamefiles/en: all 546 scenes of all 78 sets are shaped that way, all 3048
+   * standpoints have a twin, and `framePairID` names it (viewID agrees on every
+   * one). The hi-res art is 164.6 MB against the low-res 59.4 MB — 2.77x, at the
+   * same pixel dimensions, so it is detail rather than size.
+   *
+   * We drew the low-res one everywhere, because the settled frame came from the
+   * right-turn ring — which is why the whole game looked like it was permanently
+   * mid-turn. The original's asymmetry falls out of this for free: a right turn
+   * ends on its ring's low-res standpoint and visibly sharpens when it settles, a
+   * left turn ends on the hi-res one and never appears to change.
+   *
+   * Only the IMAGE comes from the twin. The camera still reads the right-turn
+   * ring's FrameInfo, which is safe because the twins carry identical position
+   * and rotation — measured, 0 of 3048 differ — and identical dimensions and Z
+   * layer, so nothing about projection or prop occlusion moves.
+   */
+  private hiResTwin(fi: FrameInfo): FrameInfo | null {
+    const ring = this.scene.turns[LEFTTURNS]?.frames ?? [];
+    return ring.find((f) => f.motionInfo === 2 && f.framePairID === fi.framePairID) ?? null;
+  }
+
+  /** the decoded image of a standpoint's hi-res twin, if it has one */
+  private hiResImage(fi: FrameInfo): CachedFrame | undefined {
+    const hi = this.hiResTwin(fi);
+    if (!hi) return undefined;
+    return this.rings.ensure(this.scene.turns[LEFTTURNS].frames).get(hi.frameContainerLoc);
+  }
+
+  /**
+   * The frames of a turn, with the landing standpoint's two versions in the
+   * order the original shows them (#68).
+   *
+   * A right turn's ring ends on the LOW-res standpoint and a left turn's on the
+   * hi-res one, so in the original a right turn lands soft and sharpens a beat
+   * later while a left turn lands sharp. Reproducing that needs the soft frame to
+   * be a frame of the animation: the settle runs inside the same tick that draws
+   * the last one (`startAnimation`'s done callback → showView), so a soft frame
+   * left at the end of the ring reaches the screen for exactly zero ticks. It
+   * went unnoticed while the settled view was drawn from the same low-res art —
+   * the two images were identical, so swallowing one changed nothing.
+   *
+   * So the soft standpoint is followed by its sharp twin, and the beat is one
+   * animation interval. `session.sharpLanding` is the opt-in that drops the soft
+   * frame instead, landing both directions sharp.
+   *
+   * `turnRing` stops at the first standpoint it reaches, so this touches the
+   * frame being landed on and never one the turn passes through. It cannot
+   * sharpen the turn ITSELF: in-motion frames are quarter-resolution in both
+   * rings (measured, bedsit1/Scene2: 100.0% and 99.9% of 2x2 pixel blocks flat,
+   * against 16.0% for a hi-res standpoint) and no sharp version of them shipped.
+   */
+  private turnFrames(ring: FrameInfo[], images: Map<number, CachedFrame>): CachedFrame[] {
+    const out: CachedFrame[] = [];
+    for (const fi of ring) {
+      const soft = images.get(fi.frameContainerLoc);
+      if (fi.motionInfo === 1) {
+        const sharp = this.hiResImage(fi);
+        if (sharp) {
+          if (!this.session.sharpLanding && soft) out.push(soft);
+          out.push(sharp);
+          continue;
+        }
+      }
+      if (soft) out.push(soft);
+    }
+    return out;
+  }
+
   /** the standpoint frame image of the current view */
   private standFrame(): CachedFrame | null {
     const fi = this.standFrameInfo();
     if (!fi) return null;
+    // the hi-res twin if this scene has one, else the standpoint we found
+    const hi = this.hiResTwin(fi);
+    if (hi) {
+      const img = this.rings.ensure(this.scene.turns[LEFTTURNS].frames).get(hi.frameContainerLoc);
+      if (img) return img;
+    }
     return this.rings.ensure(this.scene.turns[RIGHTTURNS].frames).get(fi.frameContainerLoc) ?? null;
   }
 
@@ -1144,9 +1225,7 @@ export class SetViewer {
     const ring = turnRing(this.scene, this.viewIdx, dir);
     if (!ring) return;
     const images = this.rings.ensure(this.scene.turns[dir].frames);
-    const frames = ring.frames
-      .map((fi) => images.get(fi.frameContainerLoc))
-      .filter((f): f is CachedFrame => !!f);
+    const frames = this.turnFrames(ring.frames, images);
     const target = ring.target;
     this.startAnimation(frames, pace, () => {
       const changed = target !== this.viewIdx;

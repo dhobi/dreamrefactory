@@ -6,7 +6,7 @@
  */
 import { test, expect } from "vitest";
 import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
-import { readSetFile } from "../../src/df/set";
+import { readSetFile, RIGHTTURNS, LEFTTURNS } from "../../src/df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "../../src/df/image";
 import { readStgFile, readStgRegions } from "../../src/df/stg";
 import { MAP_EXIT_REGION, MAP_JUMPS, MAP_PAGE_BUTTONS, mapUsable } from "../playthrough/nav/mapjumps";
@@ -211,10 +211,20 @@ test("viewer: moving around draws exactly the frames a full decode produces", as
   const runAnim = (): void => {
     for (let i = 0; i < 500 && v.busy; i++) step();
   };
-  /** the frame the CURRENT view is supposed to show, straight from the set */
+  /**
+   * The frame the CURRENT view is supposed to show, straight from the set: the
+   * HI-RES standpoint (#68). The right-turn ring's standpoints are motionInfo 1
+   * and the left-turn ring's are 2, paired by framePairID, and a settled view is
+   * drawn from the hi-res one — so this looks the twin up the same way the viewer
+   * does, and falls back to the low-res frame for a scene that has no twin.
+   */
   const expectedStand = (): string | undefined => {
-    const fi = v.scene.turns[0].frames.find((f) => f.viewID === v.viewIdx && f.motionInfo > 0);
-    return fi ? ref.get(fi.frameContainerLoc) : undefined;
+    const lo = v.scene.turns[0].frames.find((f) => f.viewID === v.viewIdx && f.motionInfo > 0);
+    if (!lo) return undefined;
+    const hi = v.scene.turns[1]?.frames.find(
+      (f) => f.motionInfo === 2 && f.framePairID === lo.framePairID,
+    );
+    return ref.get((hi ?? lo).frameContainerLoc);
   };
   const standOk: boolean[] = [];
   let walks = 0;
@@ -6194,5 +6204,101 @@ test("currentpuppet answers the puppet's name, so the Purser offers his own word
     captions.some((c) => /check something in/i.test(c)) &&
       !captions.some((c) => /Would you like something/i.test(c)),
     `bevels=${JSON.stringify(captions)}`,
+  );
+});
+
+// --- 89. a settled view is drawn sharp -------------------------------------
+// Every scene ships each standpoint TWICE: `motionInfo` is 1 (low-res) all
+// through the right-turn ring and 2 (hi-res) all through the left-turn one,
+// paired by `framePairID`. Measured over gamefiles/en, all 546 scenes of all 78
+// sets are shaped that way and all 3048 standpoints have a twin. The low-res
+// frames are half-resolution art doubled into the 512x264 buffer — 100.0% of
+// their 2x2 pixel blocks are flat, against 16.0% for a hi-res twin.
+//
+// We drew the low-res one for every settled view in the game, because the
+// settled frame came from the right-turn ring (#68).
+//
+// The asymmetry the original has, and this reproduces, follows from the rings: a
+// RIGHT turn ends on its ring's low-res standpoint and then sharpens as the view
+// settles, a LEFT turn ends on the hi-res frame and lands sharp already.
+// `session.sharpLanding` is the opt-in that skips the soft moment.
+test("a settled view is drawn from the hi-res standpoint", async () => {
+  const { session, viewer } = await newSession();
+  await session.openSetFile("bedsit1.set", "scene2", "view14");
+  const v = viewer()!;
+  let clock = 0;
+  const hash = (f: { pixels: Uint8Array; width: number; height: number } | null): string => {
+    if (!f) return "none";
+    let h = 0x811c9dc5;
+    const n = f.width * f.height;
+    for (let i = 0; i < n; i++) h = Math.imul(h ^ f.pixels[i], 0x01000193) >>> 0;
+    return h.toString(16);
+  };
+  /**
+   * Turn, and answer the last TWO frames the animation drew plus the settled
+   * frame. `prev` is where the soft landing beat shows up: the sharp frame is the
+   * animation's own last frame, so the soft one is the frame before it.
+   */
+  const turnAndWatch = (dir: number): { prev: string; landed: string; settled: string } => {
+    v.turn(dir);
+    let prev = "none";
+    let landed = "none";
+    for (let i = 0; i < 500 && v.busy; i++) {
+      const f = v.tick((clock += 100));
+      if (f && hash(f) !== landed) {
+        prev = landed;
+        landed = hash(f);
+      }
+    }
+    return { prev, landed, settled: hash(v.tick((clock += 100))) };
+  };
+
+  /** the two versions of the CURRENT standpoint, decoded straight from the set */
+  const standpoint = (): { lo: string; hi: string } => {
+    const lo = v.scene.turns[RIGHTTURNS].frames.find(
+      (f) => f.viewID === v.viewIdx && f.motionInfo > 0,
+    )!;
+    const hi = v.scene.turns[LEFTTURNS].frames.find(
+      (f) => f.motionInfo === 2 && f.framePairID === lo.framePairID,
+    )!;
+    const one = (loc: number): string => {
+      const fb = new FrameBuffer();
+      const d = decodeFrame(v.set.file.containers[loc].data, fb);
+      let h = 0x811c9dc5;
+      for (let i = 0; i < d.width * d.height; i++) h = Math.imul(h ^ fb.pixels[i], 0x01000193) >>> 0;
+      return h.toString(16);
+    };
+    return { lo: one(lo.frameContainerLoc), hi: one(hi.frameContainerLoc) };
+  };
+
+  const right = turnAndWatch(RIGHTTURNS);
+  const rightPt = standpoint();
+  check(
+    "a right turn ends up on the hi-res standpoint",
+    right.landed === rightPt.hi && right.settled === rightPt.hi,
+    `landed ${right.landed}, settled ${right.settled}, wanted ${rightPt.hi}`,
+  );
+  check(
+    "...one beat after the low-res one, which is what the original shows",
+    right.prev === rightPt.lo,
+    `the frame before the landing was ${right.prev}, wanted the low-res ${rightPt.lo}`,
+  );
+
+  const left = turnAndWatch(LEFTTURNS);
+  const leftPt = standpoint();
+  check(
+    "a left turn lands on the hi-res frame directly, with no soft beat",
+    left.landed === leftPt.hi && left.settled === leftPt.hi && left.prev !== leftPt.lo,
+    `landed ${left.landed}, settled ${left.settled}, prev ${left.prev}, wanted ${leftPt.hi}`,
+  );
+
+  // the opt-in: the soft beat is dropped, so a right turn lands sharp as well
+  session.sharpLanding = true;
+  const sharp = turnAndWatch(RIGHTTURNS);
+  const sharpPt = standpoint();
+  check(
+    "with sharpLanding on, a right turn lands sharp with no soft beat",
+    sharp.landed === sharpPt.hi && sharp.settled === sharpPt.hi && sharp.prev !== sharpPt.lo,
+    `landed ${sharp.landed}, settled ${sharp.settled}, prev ${sharp.prev}, wanted ${sharpPt.hi}`,
   );
 });

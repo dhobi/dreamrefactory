@@ -568,6 +568,19 @@
           >
         </div>
 
+        <!-- The one picture setting. Not in the swipe row above, which a desktop
+             never sees: this question is the mouse's as much as the finger's.
+             src/main.ts's installPictureOptions remembers the box. -->
+        <div class="bar">
+          <span class="seclabel" data-i18n="play.pictureLabel">Picture</span>
+          <label
+            title="The game ships each standpoint twice, sharp and soft, and the original shows the soft one for a moment as a right turn lands (a left turn lands sharp). Tick this to skip that moment. The turn itself stays soft either way — no sharp version of the moving frames was ever made."
+            data-i18n-attr="title:play.sharpLandingTitle"
+            ><input type="checkbox" id="sharpLanding" />
+            <span data-i18n="play.sharpLanding">always land sharp</span></label
+          >
+        </div>
+
         <div class="bar">
           <span class="keys" data-i18n-html="play.keys">
             <b>←</b> <b>→</b> turn &nbsp;·&nbsp; <b>↑</b> walk &nbsp;·&nbsp;
