@@ -6302,3 +6302,82 @@ test("a settled view is drawn from the hi-res standpoint", async () => {
     `landed ${sharp.landed}, settled ${sharp.settled}, prev ${sharp.prev}, wanted ${sharpPt.hi}`,
   );
 });
+
+// --- 90. the air raid gets its loop back from the traffic --------------------
+// Two scene loops sharing one (kind, name) key, and only one of them can be in
+// the table. BEDSIT1's air raid arms the turn-to-the-window on the scene you are
+// standing in:
+//
+//     mousedown: bombpoints > 10 -> makeloop ("scene", "scene1", "bomb", random (100))
+//     bomb:      stoploop ("scene", "all"); makeloop (..., "gotoship", 320)
+//     gotoship:  bombmebaby = true; sendtoscene (currentscene (), openscene ())
+//     openscene: makeloop ("scene", currentscene (), "gotowin", 10)
+//
+// and Scene3 — alone of the three — already runs a loop on that key: `sfx`, the
+// city traffic, re-arming itself every 2 passes at the top of its own handler.
+//
+// `fireNow` used to splice the whole due batch out of the table before running
+// any of it, so on the pass where both came due `sfx` re-armed AFTER `gotowin`
+// was armed and replaced it (makeloop clears the (kind, name) match first). The
+// sirens then played over a room that never turned, which is the softlock (#74,
+// and the half of #33 that #45 did not reach). TI.EXE clears one slot and runs
+// that handler to completion before looking at the next (0x442ae0), so a slot a
+// previous handler has replaced is simply not serviced.
+//
+// Driven the way a player gets there — the hotspot's own mousedown is what scores
+// the 11th point and arms the raid, so the click and the raid cannot be separated.
+test("the air raid still fires where the traffic loop shares its key", async () => {
+  for (const [scene, view] of [["scene3", "view22"], ["scene3", "view23"], ["scene2", "view14"]]) {
+    const { session, viewer } = await newHost();
+    let clock = 0;
+    await session.openSetFile("bedsit1.set", scene, view);
+    await drain();
+    const v = (): SetViewer => viewer()!;
+    const tick = (): void => { viewer()?.tick((clock += 50)); };
+    for (let i = 0; i < 40; i++) { tick(); await drain(); }
+
+    let reached = "";
+    const sent = session.sendEvent.bind(session);
+    (session as unknown as { sendEvent: unknown }).sendEvent = (
+      c: string, t: string, h: string, a: unknown[], e?: unknown,
+    ) => {
+      if (h === "advanceday") {
+        reached = `${v().scene.sceneName}/${v().scene.views[v().viewIdx].viewName}`;
+        return Promise.resolve(0);
+      }
+      return (sent as (...x: unknown[]) => Promise<unknown>)(c, t, h, a, e);
+    };
+
+    // one point short, so the click below is the one that arms the raid
+    session.interp.globals.set("bombpoints", 10);
+    const spot = (v().scene.views[v().viewIdx].objects ?? [])[0];
+    check(`${scene}/${view} has a hotspot to click`, !!spot, "no objects on this view");
+    if (!spot) continue;
+    void session.track(
+      v().press(
+        Math.floor((spot.startRegionX + spot.endRegionX) / 2),
+        Math.floor((spot.startRegionY + spot.endRegionY) / 2),
+      ),
+      "raid-probe-click",
+    );
+    for (let i = 0; i < 60; i++) { tick(); await drain(); }
+    // close the close-up the way ESC does — the public key path, since it is an
+    // interactive movie and sits there waiting to be clicked through otherwise
+    for (let r = 0; r < 25 && v().busy; r++) {
+      void v().keyDown(".", true);
+      for (let i = 0; i < 20; i++) { tick(); await drain(); }
+    }
+    check(
+      `${scene}/${view}: the click armed the raid`,
+      session.interp.globals.get("bombpoints") === -20000,
+      `bombpoints=${String(session.interp.globals.get("bombpoints"))}`,
+    );
+
+    for (let i = 0; i < 2000 && !reached; i++) { tick(); await drain(); }
+    check(
+      `the raid from ${scene}/${view} reaches the window and drops the bomb`,
+      reached === "Scene1/View31",
+      reached ? `bombed at ${reached}` : "the raid never landed (softlock)",
+    );
+  }
+}, 120_000);

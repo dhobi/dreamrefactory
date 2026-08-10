@@ -625,10 +625,40 @@ export class Scheduler {
    *  persistent one re-arms in its own handler (TI.EXE semantics, see GameLoop) */
   private fireNow(due: GameLoop[]): void {
     if (!due.length) return;
-    for (const l of due) this.loops.splice(this.loops.indexOf(l), 1);
     this.session.track(
       (async () => {
-        for (const l of due) await this.fireLoop(l);
+        for (const l of due) {
+          // Take each loop out of the table IMMEDIATELY BEFORE running it, not
+          // the whole batch up front, and skip one that is no longer there.
+          //
+          // TI.EXE services the table slot by slot (0x442ae0 per slot): it clears
+          // the slot, runs that handler to completion, and only then looks at the
+          // next slot. So a handler that `makeloop`s over a LATER slot — makeloop
+          // removes the (kind, name) match before appending, 0x4426e0 — means that
+          // slot is simply never serviced this pass.
+          //
+          // Pre-splicing the batch inverts that, and it is a softlock in the London
+          // flat (#74). BEDSIT1 Scene3 runs `sfx` on ("scene", "scene3") every 2
+          // passes, re-arming itself at the top of its own handler, and the air
+          // raid's `gotoship` arms `gotowin` on that SAME (kind, name) via the
+          // scene's openscene. Both come due on one pass, and with the batch
+          // already spliced out:
+          //
+          //   gotoship -> openscene -> makeloop(scene, scene3, gotowin, 10)
+          //                            (finds no sfx to replace: already spliced)
+          //   sfx      -> makeloop(scene, scene3, sfx, 2)
+          //                            (replaces gotowin, which never fires)
+          //
+          // so the sirens play over a room that never turns you to the window.
+          // Serviced in table order, `gotowin` replaces the sfx entry that is still
+          // in the table and sfx is skipped, which is what the original does.
+          // Measured from the reporter's standpoint, Scene3/View22: gotowin fires
+          // 10 passes after openscene and the raid ends in bombit.
+          const i = this.loops.indexOf(l);
+          if (i < 0) continue;
+          this.loops.splice(i, 1);
+          await this.fireLoop(l);
+        }
       })(),
     );
   }
