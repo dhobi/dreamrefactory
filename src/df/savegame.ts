@@ -218,14 +218,6 @@ export interface SavedProp {
 }
 
 /**
- * Globals never restored from the variable records. `clock` is the head node of
- * the variable list — its name pairs with the blob header instead of a real
- * DFValue (see {@link decodeVars}) — and its string value (the pending
- * clock-event script) is recovered from the location container instead.
- */
-export const STRING_GLOBALS = new Set(["clock"]);
-
-/**
  * A serialized actor's persistent state, from the actor container.
  *
  * `actorowner` is the one-word memory each character keeps of you, and it is a
@@ -259,7 +251,12 @@ export interface SaveGame {
   stage: string;
   /** facing direction word from the location container ("north"…), or "". */
   facing: string;
-  /** clock-event script name from the location container ("startdisk1"…), or "". */
+  /**
+   * The pending day event, as text — the head variable's value ("bedsit"…), or
+   * the game time as digits once calctime owns it ("1301"). "" if it didn't
+   * decode. A convenience read: {@link numGlobals}/{@link strGlobals} carry the
+   * same value with its real type, and that is what a load restores.
+   */
   clock: string;
   /** hallway facing ("port"/"star") — the last such token in the location
    * container's savestate stack, which is the current side. "" if none (a save
@@ -346,6 +343,17 @@ function decodeVarSlots(d: Uint8Array): { name: string; valueSlot: number }[] {
   }
   if (base < 0) return [];
   const out: { name: string; valueSlot: number }[] = [];
+  // The head node's own name pairs one stride BACK, into the blob header — the
+  // list is laid out [header][node 0]… and the pairing makes the header the
+  // head's DFValue. Its type/value land at header+20/+22, past the pool handle
+  // at +0x10, so they are real bytes and not a read off the front of the
+  // container. Measured across all 110 shipped saves (TAOOT: the head is
+  // `clock`): missions 0-3 read type 3 -> "bedsit", and every mission-4 save
+  // reads type 4 -> hrs*100+min, exactly what BOOTFILE's calctime writes there.
+  const headName = nameAt(base);
+  if (headName !== null && base - NODE_STRIDE + NODE_TYPE >= 0) {
+    out.push({ name: headName, valueSlot: base - NODE_STRIDE });
+  }
   for (let slot = base + NODE_STRIDE; slot + NODE_STRIDE <= d.length; slot += NODE_STRIDE) {
     const name = nameAt(slot);
     if (name === null || !vtableAt(slot - NODE_STRIDE)) continue;
@@ -590,12 +598,6 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   const actors =
     actorsIndex >= 0 ? walkActorGrid(raw.containers[actorsIndex].data).map((r) => r.actor) : [];
 
-  // clock event: the location stream token that names a script (…disk1 / silence
-  // / begins with a lowercase word and isn't a path/coord). Take the token right
-  // after the first disk path ("titanicN:").
-  let clock = "";
-  const diskIdx = location.findIndex((s) => /^titanic\d?:$/i.test(s));
-  if (diskIdx >= 0 && diskIdx + 1 < location.length) clock = location[diskIdx + 1];
   // facing: the last direction word in the stream.
   const facing = [...location].reverse().find((s) => DIRS.has(s.toLowerCase())) ?? "";
 
@@ -605,7 +607,6 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   const numGlobals = new Map<string, number>();
   const strGlobals = new Map<string, string>();
   for (const v of vars) {
-    if (STRING_GLOBALS.has(v.name)) continue;
     if (v.type === DFVALUE_STRING) {
       if (v.str !== null && !strGlobals.has(v.name)) strGlobals.set(v.name, v.str);
     } else if (!numGlobals.has(v.name)) numGlobals.set(v.name, v.num);
@@ -620,6 +621,11 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   // savedeck (the staircase deck-plan selector, "a".."g"/"bd") likewise; the
   // fallback derives it from the current hall/deck set when unambiguous.
   const savedeck = strGlobals.get("savedeck") ?? HALL_DECK[set.toLowerCase()] ?? "";
+
+  // clock, as text, for a caller that only wants to read it. The restore path
+  // does NOT use this: clock rides numGlobals/strGlobals like every other
+  // variable, so a mission-4 save puts back the NUMBER calctime left there.
+  const clock = strGlobals.get("clock") ?? (numGlobals.has("clock") ? String(numGlobals.get("clock")) : "");
 
   return {
     title, disk, set, scene, view, stage, facing, clock, hallside, savedeck,

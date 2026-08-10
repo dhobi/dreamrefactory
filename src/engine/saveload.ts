@@ -16,7 +16,6 @@
 import {
   SavedActor,
   SavedProp,
-  STRING_GLOBALS,
   applyPatch,
   parseSave,
   readSaveFile,
@@ -29,7 +28,7 @@ import type { GameSession } from "./session";
  * base save/template is available to patch. Overwrites the script globals
  * (numbers inline; strings as string-pool references) and the current
  * set/scene/view in a base save, leaving everything the loader ignores
- * untouched. `clock` is excluded — see {@link STRING_GLOBALS}.
+ * untouched.
  */
 export function snapshotSave(session: GameSession): Uint8Array | null {
   let base = session.lastSave;
@@ -48,7 +47,6 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
   const numGlobals = new Map<string, number>();
   const strGlobals = new Map<string, string>();
   for (const [name, val] of session.interp.globals) {
-    if (STRING_GLOBALS.has(name)) continue; // clock's record isn't writable
     // the port's own bookkeeping is not game state: `__propsinit` is a
     // once-guard on TAOOT's inven.shp initprops, and a save that carried it would tell
     // the next session that seeding had already happened
@@ -173,10 +171,14 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // restore from the variable records — see decodeVars for the format.
   for (const [k, v] of save.numGlobals) session.interp.globals.set(k, v);
   for (const [k, v] of save.strGlobals) session.interp.globals.set(k, v);
-  // `clock` is the variable-list head (no readable record); its pending
-  // clock-event script is recovered from the location container instead, so
-  // calctime() shows the saved time.
-  if (save.clock) session.interp.globals.set("clock", save.clock);
+  // `clock` rides those two maps with everything else. It is the variable-list
+  // HEAD, whose DFValue sits in the blob header (see decodeVarSlots), and the
+  // heuristic that used to guess it out of the location container's savestate
+  // stack read the FIRST day event ever pushed rather than the pending one —
+  // "startdisk1" on every save taken after the London flat. TAOOT's `advanceday`
+  // is a switch on this value, so a save loaded into the flat replayed the whole
+  // intro when the bombs went off (datebed.mov, mission=0) instead of advancing
+  // to the Titanic, and the restarted flat is the #36 lock all over again.
   // hallside/savedeck fall back to location-stack recovery when the record
   // didn't decode; without a valid side, halla's keydown guard error()s and
   // swallows every key — you couldn't leave the deck.
