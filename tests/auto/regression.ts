@@ -5901,3 +5901,55 @@ test("a click holds the engine: no loop dispatches over an open movie", async ()
     );
   }
 });
+
+// --- 84. a scripted camera move waits its turn -----------------------------
+// `walk()` and `turn()` both open with `if (this.busy) return`. That is right
+// for a player leaning on a key — the move that lands is the one that counts —
+// and wrong for a script, which means every step it asks for.
+//
+// BEDSIT1's air raid walks you to the window and then turns you to face it:
+//
+//     currentscene ("strait")
+//     for count = 1 to 10
+//         forceupdate ()
+//     endfor
+//     currentscene ("left")
+//
+// Ten passes is the budget the game allows the road. The roads out of Scene2
+// and Scene3 are 7 and 6 frames, and ours spends 2n+1 passes on n frames (the
+// walk animation runs at FRAME_MS = 90 ms against a 50 ms service step), so the
+// road was still moving when the turn arrived and the turn was dropped.
+//
+// The arrival view is right either way — from Scene3 you land on View37 and one
+// step LEFT is View31, the window — so the dropped turn is the whole of why you
+// watched the bombing from the wrong side of the room (#40).
+test("a scripted camera move waits for the one already running", async () => {
+  const { session, viewer } = await newHost();
+  let clock = 0;
+  await session.openSetFile("bedsit1.set", "scene3", "view22");
+  await drain();
+  for (let i = 0; i < 20; i++) { viewer()?.tick((clock += 50)); await drain(); }
+
+  let reached = "";
+  const os = session.sendEvent.bind(session);
+  (session as unknown as { sendEvent: unknown }).sendEvent = (
+    c: string, t: string, h: string, a: unknown[], e?: unknown,
+  ) => {
+    if (h === "advanceday") {
+      const v = viewer()!;
+      reached = reached || `${v.scene.sceneName}/${v.scene.views[v.viewIdx].viewName}`;
+      return Promise.resolve(0);
+    }
+    return (os as (...x: unknown[]) => Promise<unknown>)(c, t, h, a, e);
+  };
+  session.interp.globals.set("bombpoints", -20000);
+  (session.interp.builtins.get("makeloop") as unknown as (
+    i: unknown, a: (string | number)[],
+  ) => void)(session.interp, ["scene", "scene3", "bomb", 2]);
+  for (let i = 0; i < 1200 && !reached; i++) { viewer()?.tick((clock += 50)); await drain(); }
+  check(
+    "the air raid turns you to the window before it drops the bomb",
+    reached === "Scene1/View31",
+    `bombed while looking at ${reached || "(the raid never landed)"}`,
+  );
+});

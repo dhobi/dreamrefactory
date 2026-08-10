@@ -108,17 +108,41 @@ export class SetViewer {
    */
   private navigate = (dir: string): void => {
     this.session.navHappened = true;
-    if (dir === "strait") {
-      // A changeset earlier in this keydown chain (a door to another set) queues
-      // a blacktoscreen fade that is still draining now — screentoblack/
-      // blacktoscreen are non-blocking here, unlike TI.EXE's synchronous fade
-      // loop. walk() is gated by session.fading, so wait the fade out first;
-      // then walk into the arrived-in room (TAOOT: gstair3's staircase exit
-      // lands at recept1c's arrival scene, then walks into the reception hall).
-      if (this.session.fading) void this.session.track(this.walkAfterFade(), "walkAfterFade");
-      else this.walk();
-    } else if (dir === "left") this.turn(LEFTTURNS);
-    else if (dir === "right") this.turn(RIGHTTURNS);
+    // A move asked for while one is still running WAITS for it; it does not
+    // vanish. `walk()` and `turn()` both open with `if (this.busy) return`,
+    // which is right for a player leaning on a key and wrong for a script,
+    // because a script is not repeating itself — every call it makes is a step
+    // it means to take.
+    //
+    // BEDSIT1's air raid is where that shows. Its `gotowin` walks you to the
+    // window and then turns you to face it:
+    //
+    //     currentscene ("strait")
+    //     for count = 1 to 10
+    //         forceupdate ()
+    //     endfor
+    //     currentscene ("right")
+    //
+    // Ten passes is the budget the game allows the road, and the roads it walks
+    // are 6 and 7 frames. Ours spends 2n+1 passes on n frames — the walk/turn
+    // animation runs at FRAME_MS (90 ms) against a 50 ms service step — so the
+    // road was still moving when the turn came, and the turn was dropped. The
+    // arrival view is right either way: from Scene2 you land on View36 and one
+    // step RIGHT is View31, from Scene3 you land on View37 and one step LEFT is
+    // View31, and View31 is the window. Dropping the turn is what left you
+    // watching the bombing from the bed or the chair (#40).
+    //
+    // Deferring rather than re-timing FRAME_MS keeps every animation in the game
+    // at the speed it has, and it is host-independent: `forceupdate` is a 50 ms
+    // step headless and a real frame in the browser, so no fixed frame budget
+    // could have covered both.
+    if (this.session.navFromScript) {
+      // A player's move is untouched: it still drops when one is already
+      // running, which is what keeps a held key from stacking up turns.
+      void this.session.track(this.navigateAfterAnimation(dir), `navigate:${dir}`);
+      return;
+    }
+    this.navigateNow(dir);
   };
 
   /**
@@ -159,6 +183,44 @@ export class SetViewer {
       await this.session.nextFrame();
     }
     this.walk();
+  }
+
+  /**
+   * Let whatever is running finish, then make this move — see {@link navigate}
+   * for why a scripted move waits instead of being dropped.
+   *
+   * Waits on {@link busy}, not just the animation: a road arrival queues its own
+   * fade, and `turn()` is gated on the same flag, so waiting for the frames
+   * alone left the turn arriving one step too early and dropped all over again
+   * (measured: Scene2 stopped on View36 while Scene3 reached View31).
+   *
+   * Waits on the ENGINE's frame for the same reason {@link walkAfterFade} does:
+   * a wall-clock poll answers a question about game time and makes the headless
+   * oracle non-deterministic. Capped by the same tick budget, so an animation
+   * that never ends cannot hang the script that asked.
+   */
+  private async navigateAfterAnimation(dir: string): Promise<void> {
+    for (let i = 0; i < MAX_FADE_WAIT_TICKS && this.busy; i++) {
+      await this.session.nextFrame();
+    }
+    if (this.busy) return; // gave up; do not stack a move onto a stuck one
+    this.navigateNow(dir);
+  }
+
+  /** Perform the move — what {@link navigate} runs once it has decided nothing
+   *  is in the way. */
+  private navigateNow(dir: string): void {
+    if (dir === "strait") {
+      // A changeset earlier in this keydown chain (a door to another set) queues
+      // a blacktoscreen fade that is still draining now — screentoblack/
+      // blacktoscreen are non-blocking here, unlike TI.EXE's synchronous fade
+      // loop. walk() is gated by session.fading, so wait the fade out first;
+      // then walk into the arrived-in room (TAOOT: gstair3's staircase exit
+      // lands at recept1c's arrival scene, then walks into the reception hall).
+      if (this.session.fading) void this.session.track(this.walkAfterFade(), "walkAfterFade");
+      else this.walk();
+    } else if (dir === "left") this.turn(LEFTTURNS);
+    else if (dir === "right") this.turn(RIGHTTURNS);
   }
 
   /** buffered currentscene("sceneNNN") teleport target, consumed by the paired
