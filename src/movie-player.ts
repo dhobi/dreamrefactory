@@ -369,6 +369,33 @@ export class MoviePlayer {
     this.onLog(
       `movie: ${fileName}${segIdx ? ` segment ${segIdx + 1}/${mov.segments.length}` : mov.segments.length > 1 ? ` (1/${mov.segments.length} segments)` : ""} (${frames.length} frames${audioSec ? `, ${audioSec.toFixed(1)}s audio` : ""}${hasRegions ? ", interactive" : ""})`,
     );
+    // The frame a segment OPENS on is a frame entered, so its entry sound fires
+    // like any other — {@link enter} does both halves for every later frame and
+    // this used to do only the actionframe one, so the first frame's sound was
+    // the one sound in a film that never played.
+    //
+    // 55 start frames in 29 of the English tree's 275 movies carry one, and they
+    // are the ones that could hardly be anything else: `crowd1` on the bomb
+    // blast, `seagwaves` over the debris, `cave drips.SE` down the Red Jack
+    // shaft, `final.01` on all four endings, room tone opening each of
+    // leave.mov's and sink*.mov's ten segments, and the credits' `newtick` — the
+    // stopwatch tick the player hears over the opening titles, which is #51.
+    //
+    // The films are authored around it firing, which is the other half of the
+    // evidence. A `waitsForVoice` frame holds until the movie's own sounds are
+    // done, and where a segment has both, the two line up:
+    //
+    //     SAIL1-4.MOV   "sail1snd" 6.08s   holds at 6.67s
+    //     STACKDN/UP    "lstep1.SE" 0.19s  holds at 0.23s
+    //     TOPUP.MOV     "lstep3.SE" 0.14s  holds at 0.70s
+    //     leave.mov s3  "shipup"    6.13s  holds at 5.98s
+    //
+    // and the tour narration clips are the reason to be sure: tour2/tour8 open
+    // on a SPOKEN LINE (`burns_t.02`, `trask1.091a`) with 8 of their 9 frames
+    // waiting for voice. Without this they ran mute and 1.3 s long against a
+    // line of 8.5 s.
+    const startSound = this.active.meta[this.active.pos].sound;
+    if (startSound) this.playSound(startSound);
     return true;
   }
 
