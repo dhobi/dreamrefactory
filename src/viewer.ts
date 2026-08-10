@@ -1,6 +1,7 @@
 import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTURNS, roadsAt, turnRing } from "./df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "./df/image";
 import { ShpFrame } from "./df/shp";
+import { ENGINE_STEP_MS } from "./engine/clock";
 import { truthy } from "./engine/interp";
 import { SetScripts } from "./engine/setscripts";
 import { GameSession } from "./engine/session";
@@ -20,6 +21,45 @@ import { overlayFont } from "./fonts";
  */
 
 const FRAME_MS = 90; // ~11 fps for turn/walk animation, close to the original feel
+
+/**
+ * Frame interval for a move a SCRIPT asked for: one frame per service pass.
+ *
+ * A script that moves the camera does not watch it. BEDSIT1's air raid walks you
+ * to the window with a fixed budget and no wait (container 0005, from Scene2):
+ *
+ *     while currentview () != "view17"      <- the TURN loop waits properly
+ *         currentscene ("left")
+ *         while currentview () = "moving"
+ *             forceupdate ()
+ *         endwhile
+ *     endwhile
+ *     for count = 1 to 10                   <- the ROAD gets ten passes, no wait
+ *         forceupdate ()
+ *     endfor
+ *     currentscene ("strait")
+ *     for count = 1 to 10
+ *         forceupdate ()
+ *     endfor
+ *     currentscene ("right")
+ *     ...
+ *     bombit ()
+ *
+ * Ten passes for a road of 7 frames (Road4, Scene2->Scene1) or 6 (Road43,
+ * Scene3->Scene1) is the script author telling us what the original's rate was:
+ * one frame per pass, and a few passes' slack. At FRAME_MS a road spends 2n+1
+ * passes on n frames, so Scene2's 7-frame road wanted 15 and the turn after it
+ * came too late to land before `bombit` played bedex.mov (#40).
+ *
+ * A pass is 50 ms of game time in both hosts (ENGINE_STEP_MS; the scheduler
+ * counts steps out of the clock, so a browser's rAF and the headless pump agree)
+ * — which is why this is expressed in ms and not in host frames.
+ *
+ * Scoped to scripted moves only. A player's turn stays at FRAME_MS: the rate the
+ * game runs at when someone is looking at it is a feel decision that was made
+ * once, and a script's deadline is no reason to reopen it.
+ */
+const SCRIPT_FRAME_MS = ENGINE_STEP_MS;
 
 /** cap on ticks spent waiting for a transition fade before walking anyway */
 const MAX_FADE_WAIT_TICKS = 240;
@@ -105,6 +145,8 @@ export class SetViewer {
 
   private animation: CachedFrame[] | null = null;
   private animationPos = 0;
+  /** ms per frame for the animation in flight — see {@link SCRIPT_FRAME_MS} */
+  private animationPace = FRAME_MS;
   private animationDone: (() => void) | null = null;
   /**
    * currentscene(dir) turn/walk driver. Installed on `session.onNavigate` for
@@ -133,25 +175,23 @@ export class SetViewer {
     //     currentscene ("right")
     //
     // Ten passes is the budget the game allows the road, and the roads it walks
-    // are 6 and 7 frames. Ours spends 2n+1 passes on n frames — the walk/turn
-    // animation runs at FRAME_MS (90 ms) against a 50 ms service step — so the
-    // road was still moving when the turn came, and the turn was dropped. The
-    // arrival view is right either way: from Scene2 you land on View36 and one
-    // step RIGHT is View31, from Scene3 you land on View37 and one step LEFT is
-    // View31, and View31 is the window. Dropping the turn is what left you
-    // watching the bombing from the bed or the chair (#40).
+    // are 6 and 7 frames. The turn came while the road was still moving, and was
+    // dropped. The arrival view is right either way: from Scene2 you land on
+    // View36 and one step RIGHT is View31, from Scene3 you land on View37 and one
+    // step LEFT is View31, and View31 is the window. Dropping the turn is what
+    // left you watching the bombing from the bed or the chair (#40).
     //
-    // Deferring rather than re-timing FRAME_MS keeps every animation in the game
-    // at the speed it has, and it is host-independent: `forceupdate` is a 50 ms
-    // step headless and a real frame in the browser, so no fixed frame budget
-    // could have covered both.
+    // Waiting is half of it; the other half is the RATE the waited-for road runs
+    // at, which is why a scripted move is paced at SCRIPT_FRAME_MS — see there.
+    // Both are needed: at FRAME_MS the 7-frame road spent 15 of its 10 passes, so
+    // the deferred turn still landed after `bombit` had played bedex.mov.
     if (this.session.navFromScript) {
       // A player's move is untouched: it still drops when one is already
       // running, which is what keeps a held key from stacking up turns.
       void this.session.track(this.navigateAfterAnimation(dir), `navigate:${dir}`);
       return;
     }
-    this.navigateNow(dir);
+    this.navigateNow(dir, FRAME_MS);
   };
 
   /**
@@ -187,11 +227,11 @@ export class SetViewer {
    *   that, so the walk would go missing rather than come late. On rAF the cap
    *   means what its name says.
    */
-  private async walkAfterFade(): Promise<void> {
+  private async walkAfterFade(pace = FRAME_MS): Promise<void> {
     for (let i = 0; i < MAX_FADE_WAIT_TICKS && this.session.fading; i++) {
       await this.session.nextFrame();
     }
-    this.walk();
+    this.walk(pace);
   }
 
   /**
@@ -213,12 +253,13 @@ export class SetViewer {
       await this.session.nextFrame();
     }
     if (this.busy) return; // gave up; do not stack a move onto a stuck one
-    this.navigateNow(dir);
+    this.navigateNow(dir, SCRIPT_FRAME_MS);
   }
 
   /** Perform the move — what {@link navigate} runs once it has decided nothing
-   *  is in the way. */
-  private navigateNow(dir: string): void {
+   *  is in the way. `pace` is the ms per animation frame: {@link FRAME_MS} for a
+   *  player's move, {@link SCRIPT_FRAME_MS} for a script's (see there). */
+  private navigateNow(dir: string, pace: number): void {
     if (dir === "strait") {
       // A changeset earlier in this keydown chain (a door to another set) queues
       // a blacktoscreen fade that is still draining now — screentoblack/
@@ -226,10 +267,10 @@ export class SetViewer {
       // loop. walk() is gated by session.fading, so wait the fade out first;
       // then walk into the arrived-in room (TAOOT: gstair3's staircase exit
       // lands at recept1c's arrival scene, then walks into the reception hall).
-      if (this.session.fading) void this.session.track(this.walkAfterFade(), "walkAfterFade");
-      else this.walk();
-    } else if (dir === "left") this.turn(LEFTTURNS);
-    else if (dir === "right") this.turn(RIGHTTURNS);
+      if (this.session.fading) void this.session.track(this.walkAfterFade(pace), "walkAfterFade");
+      else this.walk(pace);
+    } else if (dir === "left") this.turn(LEFTTURNS, pace);
+    else if (dir === "right") this.turn(RIGHTTURNS, pace);
   }
 
   /** buffered currentscene("sceneNNN") teleport target, consumed by the paired
@@ -1096,7 +1137,7 @@ export class SetViewer {
   }
 
   /** dir: RIGHTTURNS or LEFTTURNS */
-  turn(dir: number): void {
+  turn(dir: number, pace = FRAME_MS): void {
     if (this.busy) return;
     // shared with the playthrough route planner (df/set.ts) so a planned turn and
     // the turn actually taken can never land on different standpoints
@@ -1107,7 +1148,7 @@ export class SetViewer {
       .map((fi) => images.get(fi.frameContainerLoc))
       .filter((f): f is CachedFrame => !!f);
     const target = ring.target;
-    this.startAnimation(frames, () => {
+    this.startAnimation(frames, pace, () => {
       const changed = target !== this.viewIdx;
       // update the facing BEFORE firing viewChanged so the scene's openscene
       // (a per-view event) sees the new currentview() in its guards
@@ -1130,7 +1171,7 @@ export class SetViewer {
     return roadsAt(this.set, this.globalViewID);
   }
 
-  walk(): void {
+  walk(pace = FRAME_MS): void {
     if (this.busy) return;
     const roads = this.availableRoads();
     if (!roads.length) return;
@@ -1140,7 +1181,7 @@ export class SetViewer {
     const frames = reg.frames
       .map((fi) => images.get(fi.frameContainerLoc))
       .filter((f): f is CachedFrame => !!f);
-    this.startAnimation(frames, () => {
+    this.startAnimation(frames, pace, () => {
       // arrival scene: the register's `destination` is the container index
       // of the arrival scene's view table; fall back to the scene owning the
       // road's far-end global view id
@@ -1699,13 +1740,14 @@ export class SetViewer {
     return this.session.cursorName;
   }
 
-  private startAnimation(frames: CachedFrame[], done: () => void): void {
+  private startAnimation(frames: CachedFrame[], pace: number, done: () => void): void {
     if (!frames.length) {
       done();
       return;
     }
     this.animation = frames;
     this.animationPos = 0;
+    this.animationPace = pace;
     this.animationDone = done;
     this.lastTick = 0;
   }
@@ -1722,7 +1764,7 @@ export class SetViewer {
     }
     if (this.animation) {
       if (!this.lastTick) this.lastTick = now;
-      if (now - this.lastTick >= FRAME_MS) {
+      if (now - this.lastTick >= this.animationPace) {
         this.lastTick = now;
         this.current = this.animation[this.animationPos++];
         if (this.animationPos >= this.animation.length) {
