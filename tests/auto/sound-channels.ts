@@ -260,3 +260,42 @@ test("a set's looping ambience stops when the set closes", async () => {
     expect(p.handle.done, "the ambience of a set that is gone must be silent").toBe(true);
   }
 });
+
+/**
+ * The frame a movie OPENS on is a frame entered, so its entry sound fires.
+ *
+ * `enter()` does both halves — record the actionframe bit, play the frame's own
+ * sound — for every frame playback moves to. Starting a segment did only the
+ * first, so the opening frame's sound was the one sound in a film that never
+ * played. 55 start frames across 29 of the English tree's 275 movies carry one.
+ *
+ * The credits are the report (#51): ocredits.mov frame 0 names `newtick`, the
+ * stopwatch tick over the opening titles, and it was silent. The tour clips are
+ * the proof that the films are authored around it firing — tour2.mov opens on a
+ * SPOKEN LINE (`burns_t.02`) and 8 of its 9 frames wait for voice, so without
+ * the sound it ran mute and 1.3 s long against a 4 s line.
+ */
+test("a movie's opening frame plays its entry sound", async () => {
+  // file, the start frame's sound, its length and rate
+  const cases: [string, string, number, number][] = [
+    ["ocredits.mov", "newtick", 3.99, 11025],
+    ["tour2.mov", "burns_t.02", 3.99, 22050],
+  ];
+  for (const [file, name, seconds, rate] of cases) {
+    const sink = new TimedAudioSink();
+    const { session, host } = await newHost({ sink });
+    await session.openSetFile("bedsit1.set");
+    await drain();
+    void session.onPlayMovie(file, 0);
+    // one tick's worth: the sound belongs to the frame the film opens on, so it
+    // must be running before any frame advance could have fired it
+    await run(host.viewer!, sink, 70);
+
+    // the movie's own chunks are the non-looping plays; the soundtrack loops
+    const oneShots = sink.started.filter((p) => !p.loop && p.channel === "sound");
+    expect(
+      oneShots.map((p) => `${p.seconds.toFixed(2)}s@${p.audio.sampleRate}`),
+      `${file} opens by playing "${name}"`,
+    ).toEqual([`${seconds.toFixed(2)}s@${rate}`]);
+  }
+});
