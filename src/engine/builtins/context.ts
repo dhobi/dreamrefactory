@@ -68,7 +68,26 @@ export function createBuiltinCtx(session: GameSession): BuiltinCtx {
     session,
     interp,
     r: interp.register.bind(interp),
-    log: (l) => session.currentBinding?.onLog(l) ?? session.onLog(l),
+    // The open set's own log, else the session's.
+    //
+    // NOT `session.currentBinding?.onLog(l) ?? session.onLog(l)`, which is what
+    // this line was: `?.` guards the CALL, not its result. With a set open the
+    // binding logged the line, the call answered undefined (onLog is void), and
+    // `??` then logged the same line AGAIN through the session. So every
+    // `message()` in the game arrived twice in the details pane (#49) — the
+    // reporter's `msg: ACT -- She explains why she's here.` twice, `msg: gaspen`
+    // twice — while lines emitted straight through `session.onLog` (`stage
+    // loaded:`, `movie:`) came once, which is the pattern in their logs.
+    //
+    // No headless test could catch it, by luck: the test harness's sink is
+    // `(l) => logs.push(l)`, and push answers the new LENGTH — not nullish, so
+    // `??` short-circuited and the second call never happened. main.ts's `log()`
+    // has a statement body and answers undefined, so a browser always doubled.
+    // Measured on one message() call: number-returning sink 1 line, void sink 2.
+    log: (l) => {
+      if (session.currentBinding) session.currentBinding.onLog(l);
+      else session.onLog(l);
+    },
     findStar: (name) => {
       const n = toStr(name ?? "").toLowerCase();
       return session.currentBinding?.set.actors.find((a) => a.identifier.toLowerCase() === n);
