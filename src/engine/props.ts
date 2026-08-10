@@ -33,6 +33,25 @@ export function frameIndexForDegree(st: PropState, deg: number): number {
   return best;
 }
 
+/**
+ * Is this state a SELECTOR — frames that are alternatives chosen by degree —
+ * rather than an animation to play?
+ *
+ * The format answers it: `PropState.animated` is true when the frames "form a real
+ * ANIMATION — it has a play script ... or its degrees repeat (one animation per
+ * variant)", and false when "the frames are deg-indexed SELECTOR variants". So a
+ * state that is not animated and carries one degree per frame has no sequence in
+ * it at all; the degree is the whole answer and `frameIdx` means nothing.
+ *
+ * Named once and asked in both places that need it: {@link
+ * PropInstance.currentFrameIdx}, which is what actually draws, and propview, which
+ * must not start an animation that does not exist. It replaces two spellings of
+ * the same guess — a `frames.length === 2` test and a `frames.length <= 2` one.
+ */
+export function isDegreeSelector(st: PropState): boolean {
+  return !st.animated && !!st.degrees && st.degrees.length === st.frames.length;
+}
+
 /** the largest stored degree that can still be a variant index, not an angle */
 const MAX_VARIANT_DEGREE = 8;
 
@@ -225,6 +244,22 @@ export class PropInstance {
 
   /** where `frameIdx` lands in `st.frames`/`st.refScales`, through the variant map */
   currentFrameIdx(st: PropState): number {
+    // A selector's frame IS its degree, whether or not a script ever named the
+    // state — see {@link isDegreeSelector}.
+    //
+    // The bomb puzzle is what found this. BOMB.STG opens the panel with
+    //
+    //     propvisible ("solenoid", true)
+    //     propxy ("solenoid", 256, 192)
+    //
+    // and no `propdeg` — it sets one for every switch but leaves the solenoid on
+    // the default 0, because 0 is the safe, de-energised state (`propdeg
+    // ("solenoid", 1)` is the arm, and `if propdeg ("solenoid") = 1` is what calls
+    // `boomer ()`). Its two frames carry degrees 1 and 0, in that order, so deg 0
+    // is the SECOND frame — and drawing `frameIdx` 0 showed the closed solenoid on
+    // a bomb with no power to it (#11). switch3's degrees are 0,1,2 in order, which
+    // is why the switches looked right and only the solenoid did not.
+    if (!this.frameOrder && isDegreeSelector(st)) return frameIndexForDegree(st, Number(this.deg) || 0);
     const i = Math.min(this.frameIdx, this.frameCount(st) - 1);
     return this.frameOrder ? this.frameOrder[i] : i;
   }

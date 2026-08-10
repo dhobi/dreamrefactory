@@ -1,5 +1,5 @@
 import { Value, toNum, toStr, truthy } from "../interp";
-import { degVariantFrames, frameIndexForDegree, playSequence } from "../props";
+import { degVariantFrames, frameIndexForDegree, isDegreeSelector, playSequence } from "../props";
 import { packPoint } from "../point";
 import { accessorFamily, BuiltinCtx } from "./context";
 
@@ -48,21 +48,23 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     p.stateName = toStr(v).toLowerCase();
     p.lastTick = 0;
     const st = p.state();
-    // A deg-selector prop holds its deg-matched frame instead of animating when
-    // EITHER (a) propdeg picked a frame in THIS same event (TAOOT's `signs` idiom
-    // `propdeg(dir); propview(dest)`, up to 10 directional variants), or (b) the
-    // prop already carries the degVariants flag and this is a small (<=2) variant
-    // state, or (c) — the fix — it is a 2-frame state that is NOT a real
-    // animation (PropState.animated: a play-order permutation, e.g. the wireless
-    // sender/breaker handles). Case (c) needs no prior propdeg, so the map/life/
-    // navarrow "dark"/"light" mission(0)/tour(1) pair holds its normal (deg-0)
-    // frame even on the load path, where initinterface's owned-item shortcut sets
-    // the view WITHOUT a propdeg — the map used to auto-animate to frame 1 (the
-    // tour icon). Real animations (3+ frame open/close swings, punch/dial
-    // sequences) are untouched and still play via the else branch.
+    // A prop holds a deg-matched frame instead of animating in two cases, and only
+    // one of them is a judgement call:
+    //
+    //  - the state is a SELECTOR — its frames are alternatives indexed by degree
+    //    and there is no sequence to play (isDegreeSelector, which the draw path
+    //    asks too). This is what keeps the map/life/navarrow "dark"/"light"
+    //    mission(0)/tour(1) pair on its normal frame even on the load path, where
+    //    initinterface's owned-item shortcut sets the view WITHOUT a propdeg — the
+    //    map used to auto-animate to frame 1, the tour icon.
+    //  - the state IS a variant animation (its degrees repeat) and propdeg chose
+    //    the variant in THIS same event: TAOOT's `signs` idiom `propdeg(dir);
+    //    propview(dest)`, up to 10 directional variants, wants the still frame.
+    //
+    // Real animations — 3+ frame open/close swings, punch and dial sequences —
+    // are untouched and play through the else branch.
     const degPicked = p.degVariants && p.degEvent === session.interp.currentEvent;
-    const twoFrameSelector = !!st && st.frames.length === 2 && !st.animated;
-    if (st && ((p.degVariants && (degPicked || st.frames.length <= 2)) || twoFrameSelector)) {
+    if (st && (isDegreeSelector(st) || (p.degVariants && (degPicked || st.frames.length <= 2)))) {
       // a raw frame index into st.frames, so no variant map may be in the way
       p.frameOrder = null;
       p.frameIdx = frameIndexForDegree(st, Number(p.deg) || 0);
