@@ -466,3 +466,44 @@ test("a translation is not a copy of the English", () => {
     expect(same / words.size, `${code} is ${Math.round((100 * same) / words.size)}% English`).toBeLessThan(0.2);
   }
 });
+
+// --- an element the code hides with `hidden` must actually be hidden ---------
+// `hidden` only works through the UA sheet's `[hidden] { display: none }`, and
+// ANY author `display` rule outranks it. So an element that main.ts toggles with
+// `.hidden` and that also carries its own `display` needs a paired
+// `[hidden] { display: none }` or the toggle is silently inert.
+//
+// `#netbusy` is the one that got away: the network spinner is `display: flex`,
+// `netbusy.hidden = true` never took it off the screen, and it turned for the
+// whole session over every room in the game (#55). The show/hide logic was
+// right — only its `false` case had ever been visible. Two other elements were
+// already carrying the paired rule with a comment saying exactly this
+// (`.editionPicker` in src/theme.css, `#help .bar` here), which is a good sign
+// this wants a test rather than a third comment.
+test("elements toggled with .hidden survive their own display rule", () => {
+  const html = readFileSync(join(ROOT, "play/index.html"), "utf8");
+  const style = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join("\n");
+  const main = readFileSync(join(ROOT, "src/main.ts"), "utf8");
+
+  // every id main.ts sets `.hidden` on
+  const toggled = new Set<string>();
+  for (const m of main.matchAll(/(\w+)\.hidden\s*=/g)) toggled.add(m[1]);
+  // …resolved back to the element id it was queried by
+  const idOf = new Map<string, string>();
+  for (const m of main.matchAll(/const\s+(\w+)\s*=\s*document\.getElementById\(\s*"([^"]+)"/g)) {
+    idOf.set(m[1], m[2]);
+  }
+
+  const offenders: string[] = [];
+  for (const name of toggled) {
+    const id = idOf.get(name);
+    if (!id) continue;
+    // does the page give this id a display of its own?
+    const rule = new RegExp(`#${id}\\s*\\{([^}]*)\\}`).exec(style);
+    const display = rule && /display\s*:\s*([\w-]+)/.exec(rule[1])?.[1];
+    if (!display || display === "none" || display === "block" || display === "inline") continue;
+    const paired = new RegExp(`#${id}\\[hidden\\]\\s*\\{[^}]*display\\s*:\\s*none`).test(style);
+    if (!paired) offenders.push(`#${id} is display:${display} with no #${id}[hidden] rule`);
+  }
+  expect(offenders, offenders.join("; ")).toEqual([]);
+});

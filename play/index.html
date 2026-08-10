@@ -127,6 +127,14 @@
         border-radius: 50%;
         animation: netspin 700ms linear infinite;
       }
+      /* Not redundant with the UA sheet, for the same reason `#help .bar[hidden]`
+         below is not: the `display: flex` above beats `[hidden] { display: none }`,
+         so `netbusy.hidden = true` (src/main.ts, every time the last fetch lands)
+         took nothing off the screen and the spinner turned for the whole session.
+         The show/hide logic was never visible — only its `false` case was. */
+      #netbusy[hidden] {
+        display: none;
+      }
       @keyframes netspin {
         to {
           transform: rotate(360deg);
