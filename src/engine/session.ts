@@ -11,7 +11,7 @@ import { ActorRuntime } from "./actors";
 import { PropRuntime } from "./props";
 import { seededRng } from "./rng";
 import { AudioLibrary, AudioSink } from "./audio";
-import { Clock, ENGINE_STEP_MS, ticksAt } from "./clock";
+import { Clock, ENGINE_STEP_MS, WIPE_STEP_MS, ticksAt } from "./clock";
 import { EventQueue } from "./input";
 import { Scheduler } from "./scheduler";
 import { PuppetController } from "./puppet";
@@ -207,6 +207,59 @@ export class GameSession {
      */
     pendingReveal: false,
   };
+  /**
+   * A reveal in progress: the screen the game is LEAVING, uncovered a step at a
+   * time by the screen it is arriving at (`visualeffect(wipeleft|wiperight, n)`).
+   *
+   * Held on the session for the same reason the fade is — a transition outlives
+   * the viewer that started it — and stepped on the game clock by
+   * {@link tickWipe}, so a slow host takes the same number of passes as a fast
+   * one rather than the same number of milliseconds.
+   *
+   * `from` is the old screen. The new one is whatever the viewer paints this
+   * frame, so nothing has to be captured twice or held in sync.
+   */
+  wipe = {
+    dir: "" as "" | "left" | "right",
+    /** steps already revealed, of `steps` */
+    step: 0,
+    steps: 0,
+    lastTick: 0,
+    from: null as { rgba: Uint8ClampedArray; width: number; height: number } | null,
+  };
+
+  get wiping(): boolean {
+    return this.wipe.dir !== "" && this.wipe.from !== null;
+  }
+
+  /**
+   * Advance a reveal. One step per WIPE_STEP_MS, which is NOT the engine pass.
+   *
+   * TI.EXE paces the strips against its own 60 Hz counter rather than the 50 ms
+   * service clock: `0x41de90` reads the OS millisecond timer and returns
+   * `(ms * 3) / 50`, i.e. ms/16.67, and the wipe's pacer (0x43c600) spins until
+   * that counter reaches `timeBase + i` for strip i. So a step is one 60 Hz tick
+   * and the scrapbook's `visualeffect(wipeleft, 30)` takes half a second, not the
+   * 1.5 s a 50 ms step would give it.
+   */
+  tickWipe(now: number): void {
+    const w = this.wipe;
+    if (!this.wiping) return;
+    if (!w.lastTick) w.lastTick = now - WIPE_STEP_MS;
+    while (this.wiping && now - w.lastTick >= WIPE_STEP_MS) {
+      w.lastTick += WIPE_STEP_MS;
+      if (++w.step >= w.steps) this.endWipe();
+    }
+  }
+
+  endWipe(): void {
+    this.wipe.dir = "";
+    this.wipe.from = null;
+    this.wipe.step = 0;
+    this.wipe.steps = 0;
+    this.wipe.lastTick = 0;
+  }
+
   /** host hook: snapshot the currently displayed frame for fade-outs */
   captureFrame: (() => { rgba: Uint8ClampedArray; width: number; height: number } | null) | null =
     null;
@@ -965,6 +1018,7 @@ export class GameSession {
     this.fade.snapshot = null;
     this.fade.pendingReveal = false;
     this.fade.level = 1;
+    this.endWipe(); // a reveal in flight belongs to the screen being thrown away
     // And the SCREEN, because of where quit() is called from. The CTL panel is a
     // flat: reaching Quit means `transtoflat("ctl.stg")` has already run, which
     // pushed main.stg onto the overlay stack and set `setVisible = false`. The
