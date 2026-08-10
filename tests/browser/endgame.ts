@@ -62,6 +62,9 @@ const SAMPLE = `(() => {
     sounding: sch.crickets.filter((c) => c.handle && !c.handle.done).map((c) => c.name),
     movie: v ? (v.movieFile || "") : "(no viewer)",
     moviePos: v && v.movies ? v.movies.framePos : -1,
+    // the boot menu parks here — sampled rather than waited on, so the restart's
+    // own clips can be recorded on the way (see the quit() half of the verdict)
+    awaitingInput: !!(v && v.awaitingInput),
     regions: v ? v.movieRegions.map((r) => ({ type: r.type, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 })) : [],
     fade: Number(s.fade.level.toFixed(2)), snap: !!s.fade.snapshot,
     reveal: !!s.fade.pendingReveal, busy: !!s.scriptBusy,
@@ -83,6 +86,46 @@ const line = (s: any) =>
   `theme=${s.theme} loops=[${s.loops}] sndloops=[${s.soundLoops}] crickets=[${s.crickets}] ` +
   `sounding=[${s.sounding}] ` +
   `g=${JSON.stringify(s.g)}`;
+
+/**
+ * Get to the boot menu, pressing a real Escape past whatever is in the way.
+ *
+ * A bare `waitForFunction` for `awaitingInput` could not do it on a machine that
+ * HAS the intro film. `public/nightdive.mov` is gitignored, so CI boots straight
+ * to the menu, and every local run sat through a 120 s timeout instead (#63).
+ *
+ * Three states to press past, which is why this is a poll rather than a wait:
+ *
+ * - the Nightdive intro. A MOV in its OWN MoviePlayer (src/nightdive.ts), so
+ *   `dbg.viewer` is still null and no viewer predicate can see it. It also only
+ *   appears once its 6 MB have been fetched, so a single check at t=0 finds
+ *   nothing — that is the trap this walked into first. ESC is what a player
+ *   presses; the film carries the skip flag, and pressing past the question is
+ *   "unanswered", not "no".
+ * - the boot's own clips, in the viewer, with no regions to wait on.
+ * - nothing yet: a fetch in flight, so wait.
+ */
+async function reachMenu(page: Page, budgetMs = 240_000): Promise<boolean> {
+  const at = (expr: string) =>
+    page
+      .evaluate(`(() => { const dbg = window.dbg; return !!(${expr}); })()`)
+      .catch(() => false) as Promise<boolean>;
+  const stop = Date.now() + budgetMs;
+  let skipped = "";
+  while (Date.now() < stop) {
+    if (await at("dbg.viewer && dbg.viewer.awaitingInput")) return true;
+    if (await at("dbg.intro")) {
+      if (skipped !== "the intro") log(`    skipping ${(skipped = "the intro")}`);
+      await page.keyboard.press("Escape");
+    } else if (await at("dbg.viewer && dbg.viewer.moviePlaying && dbg.viewer.movieRegions.length === 0")) {
+      const clip = String(await page.evaluate(() => (window as any).dbg.viewer?.movieFile ?? ""));
+      if (clip && clip !== skipped) log(`    skipping ${(skipped = clip)}`);
+      await page.keyboard.press("Escape");
+    }
+    await page.waitForTimeout(250);
+  }
+  return false;
+}
 
 async function shot(page: Page, name: string, s: any): Promise<void> {
   log(`--- ${name}: ${line(s)}`);
@@ -116,7 +159,7 @@ async function main(): Promise<void> {
     };
   }, SEED);
   log("booting…");
-  await page.waitForFunction("window.dbg.viewer && window.dbg.viewer.awaitingInput", null, { timeout: 120_000 });
+  if (!(await reachMenu(page))) throw new Error("the boot never reached the menu");
   const c = await page.$("#screen");
   const box = (await c!.boundingBox())!;
   await page.mouse.click(
@@ -246,12 +289,31 @@ async function main(): Promise<void> {
     await page.waitForTimeout(500);
   }
   if (!navigated) {
-    // the restart: logos, then the Play / Guided Tour menu — the main menu, in the
-    // SAME page, so `dbg` is the one we have been sampling all along
-    const back = await page
-      .waitForFunction("window.dbg.viewer && window.dbg.viewer.awaitingInput", null, { timeout: 180_000 })
-      .then(() => true)
-      .catch(() => false);
+    // The restart: logos, then the Play / Guided Tour menu — the main menu, in the
+    // SAME page, so `dbg` is the one we have been sampling all along.
+    //
+    // KEEP RECORDING while we wait for it. The loop above stops on `quiet > 6`,
+    // seven not-busy samples, and that comes due during logo.mov — so the clip
+    // the verdict asks for, playmode.mov, started after `played` had stopped
+    // growing. The run then failed with "quit() never came back to the boot
+    // menu" two lines under its own report that the menu was up and the final
+    // snapshot reading movie=playmode.mov (#63).
+    const back = await (async (): Promise<boolean> => {
+      const stop = Date.now() + 180_000;
+      while (Date.now() < stop) {
+        const s: any = await page.evaluate(SAMPLE).catch(() => null);
+        if (!s) return false;
+        const movie = String(s.movie || "");
+        if (movie && played[played.length - 1] !== movie) {
+          played.push(movie);
+          seen.add(movie);
+          log(`    after quit(): ${movie}`);
+        }
+        if (s.awaitingInput) return true;
+        await page.waitForTimeout(250);
+      }
+      return false;
+    })();
     log(`after quit(): ${back ? "the boot menu is up again" : "it restarted but no menu came"}`);
     const canvas = await page.$("#screen");
     if (canvas) await canvas.screenshot({ path: join(OUT, "98-main-menu.png") });
