@@ -338,6 +338,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // at mission 1, and it followed a load onto the sinking boat deck.
   await session.sendEvent("sendtoshop", "house.shp", "showinterface", [], "loadgame");
   await restoreOpenWatch(session);
+  relightNavArrow(session);
   // and the crew's memory of the player, AFTER the rebuild — `initactors` deals
   // the cast out for the mission and would otherwise have the last word. Owners
   // only: the room has just placed its people and must keep them.
@@ -409,6 +410,45 @@ async function restoreOpenWatch(session: GameSession): Promise<void> {
   }
   // the tail of the open animation: lid view "run", deg per mission.
   await session.sendEvent("sendtoprop", "watch", "run", [], "loadgame");
+}
+
+/**
+ * Put the nav arrow's lit-or-dark back in step with the rest of the band.
+ *
+ * The band has two looks and the player switches between them by clicking it:
+ * house.shp's `activateinterface` sets the lifebuoy, watch and map to their
+ * "light" view, shows the lamp and sets `propdeg("navarrow", 1)`;
+ * `deactivateinterface` sets all of them dark and the arrow back to 0. So the
+ * arrow is the one piece of the band whose lit state is a DEGREE rather than a
+ * view — the SHP bears that out, `navarrow` having green/red/yellow of two frames
+ * each where `life`, `watch` and `map` carry separate dark/light states.
+ *
+ * Which is why {@link HELD_BAND_PROPS} misses it. That set restores the band's
+ * look from the save by VIEW, and `initprops` above has just re-run
+ * `initinterface` — whose defaults include `propdeg("navarrow", 0)`. The four
+ * views come back lit and the arrow stays dark:
+ *
+ *     after loading "11 - Giving Book to purser"
+ *       life=light watch=light map=light lamp=visible     the band is lit
+ *       navarrow view=green deg=0                         the arrow is dark
+ *
+ * and every one of the 109 shipped saves records `life` as "light", because a
+ * save is taken from the CTL panel and the way in is a click on the lit
+ * lifebuoy — so this fired on every load there is (#4). Clicking the band put it
+ * right, which is the report's "cycling the active/inactive in the UI fixes it":
+ * activateinterface sets both halves at once.
+ *
+ * The lifebuoy is the state to read rather than a flag of our own: it is the
+ * piece those two routines move in lockstep with the arrow, and its view is
+ * restored from the file. Nothing here re-runs `activateinterface` itself, which
+ * would be the obvious move and is wrong — it ends in `voicesound("lighton")`,
+ * the click, and a load is not a click.
+ */
+function relightNavArrow(session: GameSession): void {
+  const arrow = session.propRuntime.get("navarrow");
+  if (!arrow) return;
+  const lit = String(session.propRuntime.get("life")?.stateName ?? "").toLowerCase() === "light";
+  arrow.deg = lit ? 1 : 0;
 }
 
 /**
