@@ -122,6 +122,7 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
     },
     theme: () => session.currentThemeName,
     conversing: () => v().conversing,
+    conversingWith: () => v().conversingWith,
     awaitingChoice: () => v().awaitingChoice,
     choices: () => v().choices,
     chooseBevel: async (index) => {

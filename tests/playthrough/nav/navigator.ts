@@ -132,6 +132,8 @@ export interface NavDriver {
   theme(): string;
   /** a conversation close-up is on screen (speaking or waiting on a choice) */
   conversing(): boolean;
+  /** who it is with — the open puppet's name, "" when nobody is on screen */
+  conversingWith(): string;
   /** it is parked on a choice */
   awaitingChoice(): boolean;
   /** the plaques on offer, in screen order */
@@ -562,6 +564,17 @@ export class Navigator {
    * state after every gesture — a walk's arrival facing is decided by the
    * engine, so a plan longer than its first gesture would be fiction.
    */
+  /**
+   * Name the conversation that is in the way. "a conversation is open in
+   * gstair3" leaves you to work out which of the four people in that room it
+   * was — and the run that reported it is over, so nobody can go and look. The
+   * engine knows (`currentpuppet()`), so say it.
+   */
+  private withWhom(): string {
+    const who = this.d.conversingWith();
+    return who ? `${who} is talking to you` : "a conversation is open";
+  }
+
   async faceStandpoint(views: string[], scenes: string[] = []): Promise<NavResult> {
     const goal = atStandpoint(views, scenes);
     const startedIn = this.d.setName();
@@ -577,7 +590,7 @@ export class Navigator {
       // A visible puppet makes SetViewer.busy true, so turn() and walk() refuse
       // — correctly; you don't wander off mid-sentence. Say so rather than
       // grinding out the gesture budget against a conversation.
-      return { ok: false, reason: `a conversation is open in ${startedIn}; answer it first`, gestures: this.count };
+      return { ok: false, reason: `${this.withWhom()} in ${startedIn}; answer it first`, gestures: this.count };
     }
     const flat = this.d.inFlat();
     if (flat) {
@@ -642,7 +655,7 @@ export class Navigator {
   async hunt(name: string): Promise<NavResult> {
     const startedIn = this.d.setName();
     if (this.d.conversing()) {
-      return { ok: false, reason: `a conversation is open in ${startedIn}; answer it first`, gestures: this.count };
+      return { ok: false, reason: `${this.withWhom()} in ${startedIn}; answer it first`, gestures: this.count };
     }
     // inside a flat, hunting means clicking what the flat shows — one click, no
     // walking, and a miss is a miss rather than a tour of the room behind it

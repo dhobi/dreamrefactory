@@ -854,6 +854,16 @@ export class SetViewer {
   }
 
   /**
+   * WHO is on screen — the open puppet's name (`currentpuppet()`), or "" when
+   * nobody is. The harness reports a conversation it could not get past, and
+   * "a conversation is open in gstair3" leaves you to guess which of the four
+   * people in that room it was; the name is already right here.
+   */
+  get conversingWith(): string {
+    return this.conversing ? (this.session.puppet?.name ?? "") : "";
+  }
+
+  /**
    * The engine is not going to move again on its own — the point at which a
    * scripted playthrough may take its next step or sample a state trace.
    *
