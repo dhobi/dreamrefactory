@@ -31,7 +31,20 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     // eraser prop is shown.
     if (p.visible && toStr(n).toLowerCase() === "messageboxclear") session.clearTextOverlay();
   });
-  acc("propview", "", (p) => p.stateName, (p, v) => {
+  // The getter answers the state the prop is actually IN, which for one no script
+  // has touched is its FIRST state — the same one `PropInstance.state()` resolves
+  // to and the engine draws. Answering "" there told scripts something the screen
+  // disagreed with, and BOIL.STG's OK button is where that shows: it tidies the
+  // boiler panel on the way out with
+  //
+  //     if propview ("boilgate") != "up"
+  //         sendtoprop ("boilgate", up ())
+  //     endif
+  //
+  // and `boilgate`'s first state IS "up" (BOIL.SHP), so the guard exists to do
+  // nothing when the big door is already up. Reading "" made it true every time,
+  // so leaving the panel played the big door's 13-frame raise for no reason (#15).
+  acc("propview", "", (p) => p.stateName || (p.state()?.identifier.toLowerCase() ?? ""), (p, v) => {
     p.stateName = toStr(v).toLowerCase();
     p.lastTick = 0;
     const st = p.state();

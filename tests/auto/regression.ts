@@ -6524,3 +6524,86 @@ test("a prop animation reaches its last frames inside the script's budget", asyn
   );
   check("...and ends up open", door.stateName === "idleopen", `state=${door.stateName}`);
 }, 60_000);
+
+// --- 93. a prop reports the state it is actually in -------------------------
+// `PropInstance.state()` resolves a prop no script has touched to its FIRST state,
+// and that is the one the engine draws. The `propview` GETTER answered "" instead,
+// so scripts were told something the screen disagreed with.
+//
+// BOIL.STG's Ok region is where that shows. It tidies the boiler panel up on the
+// way out of the flat:
+//
+//     if trackbut ("boilok", 256, 192)
+//         if propview ("boilswitch") = "idledown" & propview ("boildoor") = "idleopen"
+//             sendtoprop ("boilswitch", up ())
+//             sendtoprop ("boilgate", up ())
+//         endif
+//         if propview ("boildoor") = "idleopen"
+//             sendtoprop ("boildoor", close ())
+//         endif
+//         if propview ("boilgate") != "up"
+//             sendtoprop ("boilgate", up ())
+//         endif
+//
+// and `boilgate`'s first state IS "up" (BOIL.SHP: up 13 frames, down 13), so that
+// last guard is there to do NOTHING when the big door is already up. Reading ""
+// made it true every time, so leaving the panel played the big door's 13-frame
+// raise for no reason (#79, the other half of what #15 reported).
+test("a prop with no state set reports its first state, not nothing", async () => {
+  const { session, viewer } = await newHost();
+  let clock = 0;
+  await session.openSetFile("boil.set", "scene12", "view25");
+  await drain();
+  const v = (): SetViewer => viewer()!;
+  const tick = (): void => { viewer()?.tick((clock += 50)); };
+  for (let i = 0; i < 80; i++) { tick(); await drain(); }
+
+  const spot = (v().scene.views[v().viewIdx].objects ?? [])[0];
+  await session.track(
+    v().press(
+      Math.floor((spot.startRegionX + spot.endRegionX) / 2),
+      Math.floor((spot.startRegionY + spot.endRegionY) / 2),
+    ),
+    "chute-click",
+  );
+  for (let i = 0; i < 200; i++) { tick(); await drain(); }
+
+  // what the SCRIPT sees for a prop nothing has set: the first state
+  const propview = session.interp.builtins.get("propview") as unknown as (
+    i: unknown, a: (string | number)[],
+  ) => string;
+  check(
+    "propview answers the state the engine draws",
+    String(propview(session.interp, ["boilgate"])).toLowerCase() === "up",
+    `propview("boilgate") = "${String(propview(session.interp, ["boilgate"]))}"`,
+  );
+
+  // open the small control door, then leave with Ok: the big door must not move
+  const door = session.propRuntime.get("boildoor")!;
+  let at: { x: number; y: number } | null = null;
+  for (let y = 0; y < 384 && !at; y += 2) {
+    for (let x = 0; x < 512 && !at; x += 2) {
+      if (session.propRuntime.propAt(x, y) === door) at = { x, y };
+    }
+  }
+  if (!at) {
+    check("the control door is on screen", false, "propAt never found it");
+    return;
+  }
+  void session.track(v().press(at.x, at.y), "door-click");
+  for (let i = 0; i < 250; i++) { tick(); await drain(); }
+
+  const ok = session.stageCtrl.currentFlatRegions().find((r) => /^ok$/i.test(r.name))!;
+  let gateMoved = false;
+  void session.track(
+    v().press(Math.floor((ok.left + ok.right) / 2), Math.floor((ok.top + ok.bottom) / 2)),
+    "ok-click",
+  );
+  for (let i = 0; i < 300; i++) {
+    const g = session.propRuntime.get("boilgate");
+    if (g && g.frameIdx > 0) gateMoved = true;
+    tick();
+    await drain();
+  }
+  check("leaving the panel does not raise a door that is already up", !gateMoved, "boilgate animated");
+}, 60_000);
