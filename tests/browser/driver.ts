@@ -49,6 +49,9 @@ interface Mirror {
   /** the playing track — a late-landing consequence a route may need to wait on */
   theme: string;
   conversing: boolean;
+  /** WHO — the open puppet's name, "" when nobody is on screen. A blocked run
+   *  should name the person it could not get past, not just the room. */
+  conversingWith: string;
   awaitingChoice: boolean;
   choices: { text: string; id: number }[];
   movieRegions: { type: number; target: string; event: string; x0: number; y0: number; x1: number; y1: number }[];
@@ -98,6 +101,7 @@ const SAMPLE = `(() => {
     flat: v && !s.viewShowing && s.currentFlat ? s.currentFlat : null,
     theme: s.currentThemeName || "",
     conversing: !!(v && v.conversing),
+    conversingWith: (v && v.conversingWith) || "",
     awaitingChoice: !!(v && v.awaitingChoice),
     choices: v ? v.choices : [],
     movieRegions: v ? v.movieRegions.map((r) => ({
@@ -463,6 +467,7 @@ export async function browserDriver(page: Page, opts: BrowserDriverOptions = {})
 
     theme: () => m.theme,
     conversing: () => m.conversing,
+    conversingWith: () => m.conversingWith,
     awaitingChoice: () => m.awaitingChoice,
     choices: () => m.choices,
     chooseBevel: async (index) => {

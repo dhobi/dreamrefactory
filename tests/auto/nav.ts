@@ -69,6 +69,7 @@ function stubDriver(set: SetFile, effect: "dud" | "takes"): { d: NavDriver; clic
     inFlat: () => null,
     theme: () => "",
     conversing: () => false,
+    conversingWith: () => "",
     awaitingChoice: () => false,
     choices: () => [],
     handItem: () => "",
