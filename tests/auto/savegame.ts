@@ -963,3 +963,46 @@ test("the dev-server manifest's shipped saves are all recognised for seeding", (
     shippedSaves(["gamefiles/en/TITANIC1/data/notasave.ti"]).length === 0,
   );
 });
+
+/**
+ * #4 — a load left the band lit and its arrow dark.
+ *
+ * The band has two looks and a click switches them: house.shp's
+ * `activateinterface` puts the lifebuoy, watch and map on their "light" view,
+ * shows the lamp, and sets `propdeg("navarrow", 1)`; `deactivateinterface`
+ * darkens all four. The arrow is the only piece whose lit state is a DEGREE
+ * rather than a view — the SHP says so, `navarrow` carrying green/red/yellow of
+ * two frames each where `life`, `watch` and `map` have separate dark/light
+ * states — so {@link HELD_BAND_PROPS}, which restores the band's look by view,
+ * could not carry it, and `initprops`' re-run of `initinterface` had just set it
+ * to 0.
+ *
+ * All 109 shipped saves record `life` as "light" (a save is taken from the CTL
+ * panel, and the way in is a click on the lit lifebuoy), so this fired on every
+ * load there is.
+ */
+test("a load brings the nav arrow back as lit as the rest of the band", async () => {
+  const session = await newSession();
+  const deg = (n: string): number => Number(session.propRuntime.get(n)?.deg ?? -1);
+  const view = (n: string): string => String(session.propRuntime.get(n)?.stateName ?? "").toLowerCase();
+
+  for (const file of ["11 - Giving Book to purser.ti", "06 - Boiler Room.ti"]) {
+    await session.loadGame(new Uint8Array(readFileSync(savePath("1", file))));
+    await session.settle();
+    // the band came back lit — that is what the save records
+    check(`${file}: the band is lit`, view("life") === "light", `life=${view("life")}`);
+    check(`${file}: so is the arrow`, deg("navarrow") === 1, `navarrow deg=${deg("navarrow")}`);
+  }
+
+  // and the other way, so a rule that just wrote 1 would not pass: darken the
+  // band the way a click on it does, save, and the load must bring back a DARK
+  // arrow rather than a lit one.
+  await session.sendEvent("sendtoshop", "house.shp", "deactivateinterface", [], "test");
+  expect(view("life")).toBe("dark");
+  const dark = session.snapshotSave();
+  expect(dark).not.toBeNull();
+  await session.loadGame(dark!);
+  await session.settle();
+  check("a save taken with the band dark loads dark", view("life") === "dark" && deg("navarrow") === 0,
+    `life=${view("life")} navarrow deg=${deg("navarrow")}`);
+});
