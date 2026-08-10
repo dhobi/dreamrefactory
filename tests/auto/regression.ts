@@ -5953,3 +5953,80 @@ test("a scripted camera move waits for the one already running", async () => {
     `bombed while looking at ${reached || "(the raid never landed)"}`,
   );
 });
+
+// --- 85. a nested gesture gives the camera back -----------------------------
+// Gestures nest, and the pair that arms the camera for one did not account for
+// it. `press()` arms the viewer's nav hooks, runs the click, and disarms in a
+// `finally` — by writing no-ops, not by putting back what it found.
+//
+// A modal movie is dismissed by a click, and that click is a gesture of its own
+// (press -> clickDispatch -> movies.click) running while the script that OPENED
+// the movie is still suspended inside `spotmovie`. So the inner press disarmed
+// the outer press's hooks and the outer script came back to a dead camera.
+//
+// SCOT3's rope close-up is the one that shows it (#47). It turns you to Hacker
+// before he speaks:
+//
+//     spotmovie ("scotrope.mov")
+//     if mission = 3 & propowner ("rubiclue") = "frank" & hackphase = 0 & ...
+//         sendtoactor ("hack", setupactor ("scot3"))
+//         while currentview () != "view22"
+//             if currentview () != "moving"
+//                 currentscene ("right")
+//             endif
+//             forceupdate ()
+//         endwhile
+//         ...
+//         sendtoactor ("hack", mousedown (0))
+//
+// Dismiss the close-up and view22 never came round: 3000 service steps, 3022
+// turns asked for and not one attempted, the player still facing the rope with
+// the room no longer answering. With the hooks restored the turn lands on the
+// 12th ask and hack1.pup opens.
+//
+// The scheduler's own withNavDriversArmed has always been a save/restore pair.
+// This is that rule at the other entry point.
+test("a click inside a click gives the camera back to the script that owns it", async () => {
+  const { session, viewer } = await newHost();
+  session.modalMovies = true; // the browser's semantics: playmovie blocks
+  let clock = 0;
+  const tick = async (n: number): Promise<void> => {
+    for (let i = 0; i < n; i++) { viewer()?.tick((clock += 50)); await drain(); }
+  };
+  session.interp.globals.set("mission", 3);
+  session.interp.globals.set("hackphase", 0);
+  session.interp.globals.set("tour", 0);
+  await session.openSetFile("scot3.set", "scene13", "view25");
+  await drain();
+  await tick(20);
+  // Willie's first clue in hand — the guard the close-up's mousedown reads
+  await (session.interp.builtins.get("propowner") as unknown as (
+    i: unknown, a: string[],
+  ) => Promise<unknown>)(session.interp, ["rubiclue", "frank"]);
+
+  const v = viewer()!;
+  const rope = v.scene.views[v.viewIdx].objects[0];
+  void v.click(
+    Math.floor((rope.startRegionX + rope.endRegionX) / 2),
+    Math.floor((rope.startRegionY + rope.endRegionY) / 2),
+  ).catch(() => {});
+
+  // let the close-up come up, then dismiss it the way the player does: a real
+  // click on its exit region, which is a whole second gesture.
+  for (let i = 0; i < 60 && !v.moviePlaying; i++) await tick(1);
+  const cameUp = v.moviePlaying;
+  void v.press(457, 341).catch(() => {});
+
+  // the turn loop has 3000 service steps to reach the window on Hacker
+  let turned = "";
+  for (let i = 0; i < 3000 && !turned; i++) {
+    await tick(1);
+    const name = v.scene.views[v.viewIdx]?.viewName.toLowerCase();
+    if (name === "view22") turned = name;
+  }
+  check(
+    "dismissing the rope close-up leaves the script able to turn you to Hacker",
+    cameUp && turned === "view22",
+    `closeup=${cameUp} ended facing ${v.scene.views[v.viewIdx]?.viewName}`,
+  );
+});
