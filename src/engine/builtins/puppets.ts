@@ -11,7 +11,15 @@ export function registerPuppetBuiltins(ctx: BuiltinCtx): void {
 
   r("openpuppetfile", async (_i, [n]) => ((await session.puppetCtrl.openPuppetFile(toStr(n ?? ""))) ? 1 : 0));
   r("closepuppetfile", () => session.puppetCtrl.closePuppetFile());
-  r("currentpuppet", () => session.puppet?.name ?? "none");
+  // The puppet's OWN name (PupFile.pupName, container 0 +0x85E), not the file it
+  // came out of. TI.EXE's openpuppetfile copies that field into a static buffer
+  // and currentpuppet hands the buffer back (0x43f103 / 0x43ffba); answering
+  // "purs1.pup" where the original answers "purs1" is a value no script can
+  // match. TAOOT's inven.shp picks the wording for offering the item you are
+  // holding with `switch currentpuppet()` over "trask1"/"trask2"/"purs1"/"zeit1",
+  // so the Purser asked "Would you like something...?" — the switch's generic arm
+  // — instead of "I would like to check something in..." (#53).
+  r("currentpuppet", () => session.puppet?.pup.pupName || (session.puppet ? session.puppet.name : "none"));
   r("puppetspeak", (_i, [ident]) => session.puppetCtrl.puppetSpeak(toStr(ident ?? "")));
   r("puppetclear", () => session.puppetCtrl.puppetClear());
   // the bevel caption is a script string literal, so it is localised text and

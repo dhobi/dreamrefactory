@@ -133,6 +133,23 @@ export interface PupFile {
    * because that is how TI.EXE finds it (0x43f0d5).
    */
   bandLocation: number;
+  /**
+   * The puppet's own name, from container 0 offset `0x85E` (2142) — a 16-byte
+   * field between {@link bandLocation} at `0x85A` and the dialogue count at
+   * `0x86E`. This, NOT the file name, is what `currentpuppet()` answers:
+   * TI.EXE's openpuppetfile copies it into a static buffer
+   * (0x43f103, `strcpy(0x489ffc, container0 + 0x85E)`) and currentpuppet hands
+   * that buffer back (0x43ffba).
+   *
+   * 269 of the 316 puppets across every edition are called "untitled". The ones
+   * that are not are exactly the ones a script asks about: TAOOT's inven.shp
+   * offers the item you are holding with wording chosen by
+   * `switch currentpuppet()` over `"trask1"`, `"trask2"`, `"purs1"` and
+   * `"zeit1"` — and PURS1/TRASK1/TRASK2/ZEIT1 are precisely the four that carry
+   * a real name. Everyone else falls to that switch's generic arm, which is what
+   * the generic arm is for.
+   */
+  pupName: string;
   /** what the subtitles were decoded with, and what an edit re-encodes to */
   encoding: DfEncoding;
 }
@@ -239,6 +256,8 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
 
   r0.seek(0x85a);
   const bandLocation = r0.i32();
+  // the puppet's own name, in the 16 bytes before the dialogue count
+  const pupName = r0.pstr(15);
 
   return {
     file,
@@ -247,6 +266,7 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
     scripts,
     stances,
     bandLocation,
+    pupName,
     encoding,
   };
 }
