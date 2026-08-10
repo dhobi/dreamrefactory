@@ -370,10 +370,47 @@ export class SetViewer {
     if (targetScene < 0) return;
     const scene = this.set.scenes[targetScene];
     const v = scene.views.findIndex((vw) => vw.viewName.toLowerCase() === viewName.toLowerCase());
+    const changed = targetScene !== this.sceneIdx || (v >= 0 && v !== this.viewIdx);
     this.sceneIdx = targetScene;
     this.viewIdx = v >= 0 ? v : this.viewIdx;
     this.showView();
-    void this.session.track(this.refreshStandpointUi());
+    // A JUMP is a standpoint change and owes the same scene event a turn does.
+    //
+    // Boot's closescene is the only thing in the corpus that puts the shared
+    // `door` prop away:
+    //
+    //     code closescene ()
+    //         propview ("navarrow", "red")
+    //         if propvisible ("door")
+    //             sendtoprop ("door", initprop ())
+    //         endif
+    //
+    // One prop serves every doorway in the game (house.shp): `setupprop(where)`
+    // shows it in that doorway's state at a fixed screen position, and only
+    // closescene closes it again. So a jump that skipped the event left an open
+    // door drawn over a view it does not belong to — GSTAIR3's purser's office,
+    // which you leave with the door still open:
+    //
+    //     code dopurser ()
+    //         ... the office ...
+    //         currentscene ("scene14")
+    //         currentview ("view37")
+    //         blacktoscreen ("set", 10)
+    //
+    // and View37 is down the corridor, so the door hung in mid-air beside the
+    // stairs (#71). The jump stays inside Scene14, so it is the VIEW changing
+    // that owes the event, not the scene.
+    if (!changed) {
+      void this.session.track(this.refreshStandpointUi());
+      return;
+    }
+    void this.session.track(
+      (async () => {
+        await this.scripts.viewChanged(this.sceneIdx);
+        await this.refreshStandpointUi();
+      })(),
+      "jump-viewChanged",
+    );
   }
   private lastTick = 0;
   private current: CachedFrame | null = null;

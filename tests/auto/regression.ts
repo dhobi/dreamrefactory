@@ -6381,3 +6381,73 @@ test("the air raid still fires where the traffic loop shares its key", async () 
     );
   }
 }, 120_000);
+
+// --- 91. a jump puts the door away, like a turn does -------------------------
+// One prop named "door" serves every doorway in the game (house.shp container
+// 0660): `setupprop(where)` shows it in that doorway's state at a fixed screen
+// position, `initprop()` closes and hides it. The ONLY thing in the corpus that
+// closes it is boot's closescene, which every standpoint change owes:
+//
+//     code closescene ()
+//         propview ("navarrow", "red")
+//         if propvisible ("door")
+//             sendtoprop ("door", initprop ())
+//         endif
+//
+// A turn ran it and a scripted JUMP did not, and GSTAIR3 leaves the purser's
+// office by jumping — with the door you opened to get in still open:
+//
+//     code dopurser ()
+//         ... the office ...
+//         currentscene ("scene14")
+//         currentview ("view37")
+//
+// so an open door hung in mid-air down the corridor (#71). The jump stays inside
+// Scene14, so it is the view changing that owes the event.
+test("a scripted jump closes the door a turn would have closed", async () => {
+  const { session, viewer } = await newHost();
+  let clock = 0;
+  await session.openSetFile("gstair3.set", "scene14", "view36");
+  await drain();
+  const v = (): SetViewer => viewer()!;
+  const tick = (): void => { viewer()?.tick((clock += 50)); };
+  for (let i = 0; i < 60; i++) { tick(); await drain(); }
+  session.interp.globals.set("savedeck", "c");
+
+  // View36's one hotspot is the purser's office door: its mousedown runs
+  // sendtoprop("door", setupprop("gs3-purs"))
+  const spot = (v().scene.views[v().viewIdx].objects ?? [])[0];
+  check("View36 has the office door hotspot", spot?.identifier === "door", `got ${spot?.identifier}`);
+  await session.track(
+    v().press(
+      Math.floor((spot.startRegionX + spot.endRegionX) / 2),
+      Math.floor((spot.startRegionY + spot.endRegionY) / 2),
+    ),
+    "door-click",
+  );
+  for (let i = 0; i < 60; i++) { tick(); await drain(); }
+  const opened = session.propRuntime.get("door");
+  check(
+    "clicking it opens the door",
+    opened?.visible === true && opened?.stateName === "gs3-purs",
+    `visible=${opened?.visible} state=${opened?.stateName}`,
+  );
+
+  // leave the way dopurser does — currentscene/currentview, not a turn
+  const prev = v().armNavHooks();
+  session.onSceneJump("scene14");
+  session.onViewJump("view37");
+  v().disarmNavHooks(prev);
+  for (let i = 0; i < 120; i++) { tick(); await drain(); }
+
+  check(
+    "the jump landed at View37",
+    v().scene.views[v().viewIdx].viewName === "View37",
+    `at ${v().scene.sceneName}/${v().scene.views[v().viewIdx].viewName}`,
+  );
+  check(
+    "and the door is not still hanging there",
+    session.propRuntime.get("door")?.visible === false,
+    `door visible=${session.propRuntime.get("door")?.visible}`,
+  );
+}, 60_000);

@@ -473,7 +473,7 @@
     },
     "props": {
       "bag": "frank",
-      "door": "vis",
+      "door": "notvis",
       "fakeneck": "vlad",
       "invenhelp": "notvis",
       "light": "on",
