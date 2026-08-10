@@ -11,8 +11,9 @@ import { FrameBuffer, decodeFrame, paletteToRGBA } from "../../src/df/image";
 import { readStgFile, readStgRegions } from "../../src/df/stg";
 import { MAP_EXIT_REGION, MAP_JUMPS, MAP_PAGE_BUTTONS, mapUsable } from "../playthrough/nav/mapjumps";
 import { readMovFile } from "../../src/df/mov";
-import type { PupAnimFrame } from "../../src/df/pup";
+import { readPupFile, type PupAnimFrame, type PupDialogue } from "../../src/df/pup";
 import { readContainerFile } from "../../src/df/container";
+import { subtitled } from "../../src/engine/puppet";
 import type { CallExpr } from "../../src/engine/ast";
 import { sniffScript, scriptToText } from "../../src/df/script";
 import { parseScript } from "../../src/engine/parser";
@@ -6067,4 +6068,60 @@ test("a message() reaches the log once, with a set open", async () => {
     check(`one message() is one line (${name})`, lines === 1, `logged ${lines} times`);
   }
   session.currentBinding = binding;
+});
+
+// --- 87. a note is not a subtitle ------------------------------------------
+// TI.EXE consults a gate (0x440810) before it draws a spoken line's text
+// (0x441ef0, from the speak path at 0x4406d4), and the port drew the text
+// unconditionally. So the studio's own annotations were printed at the player:
+// `*RUBY.MOV: They say he smuggles art.` (#48).
+//
+// The gate's four ways to print nothing, and the offsets are our own parser's:
+//
+//     0x440828  movzx di, byte ptr [esi+0x18]   text length 0        (pup +24)
+//     0x440839  cmp byte ptr [esi+0x19], 0x2a   text[0] == '*'
+//     0x44084c  ...                             ident "idle 1".."idle 4" (+280)
+//     0x4408e9  cmp byte ptr [..+0x18], cl      all spaces (cl = 0x20)
+//
+// Asserted against the shipped puppets rather than against invented records,
+// and in BOTH directions — a rule that hid everything would pass half of it.
+test("a puppet line beginning with '*' is heard but not printed", async () => {
+  const { session } = await newHost();
+  const pup = readPupFile(session.files("penny1.pup")!, session.textEncoding());
+  const line = (id: string): PupDialogue => pup.dialogue.get(id)!;
+
+  // hidden: the studio note, with and without the colon the marker often lacks
+  check("*SASHA.MOV: is a note", !subtitled(line("penny1.070")));
+  check("*RUBY.MOV: is a note", !subtitled(line("penny1.079")));
+  check("*PLANS.MOV without a colon is still a note", !subtitled(line("penny1.113")));
+  // ...and an animation pose, whose text is an animator's label
+  check("an idle pose is not a line", !subtitled(line("idle 1")));
+
+  // shown: the lead-in that prompts Carlson to look, which the original subtitles
+  check("penny1.078 is a line", subtitled(line("penny1.078")));
+
+  // the whole corpus, both arms, so neither rule can quietly swallow the other
+  let shown = 0;
+  let hidden = 0;
+  for (const [, d] of pup.dialogue) (subtitled(d) ? shown++ : hidden++);
+  check("penny1.pup: 21 records are notes, the rest are lines",
+    hidden === 21 && shown === pup.dialogue.size - 21, `shown=${shown} hidden=${hidden}`);
+
+  // and it must reach the SCREEN, not just the predicate. puppetSpeak suspends
+  // for the line's length, so start it and read the subtitle it has just set
+  // rather than awaiting a sleep no tick in this test advances.
+  await session.puppetCtrl.openPuppetFile("penny1.pup");
+  const speak = async (id: string): Promise<string> => {
+    void session.puppetCtrl.puppetSpeak(id).catch(() => {});
+    await drain();
+    const shown = session.puppet?.subtitle ?? "(no puppet)";
+    session.puppet?.speakSkip?.();
+    await drain();
+    return shown;
+  };
+  const note = await speak("penny1.070");
+  check("a note prints nothing", note === "", `subtitle=${JSON.stringify(note)}`);
+  const said = await speak("penny1.078");
+  check("a line still prints", said.startsWith("I don't have any information"),
+    `subtitle=${JSON.stringify(said)}`);
 });

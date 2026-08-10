@@ -19,6 +19,51 @@ import type { GameSession } from "./session";
  */
 const PRESS_FLOOR_MS = (10 / 60) * 1000;
 
+/**
+ * Does this line's text get printed? TI.EXE 0x440810, the gate the speak path
+ * consults (0x4406d4) before 0x441ef0 draws the record's text field — and a
+ * record answers it for itself, which is why each edition gets what its own
+ * translators decided rather than a rule we impose on all six.
+ *
+ * Four ways to print nothing:
+ *
+ *     0x440828  movzx di, byte ptr [esi+0x18]   the text's Pascal length is 0
+ *     0x440839  cmp byte ptr [esi+0x19], 0x2a   its first character is '*'
+ *     0x44084c  ...                             the ident is "idle 1".."idle 4"
+ *     0x4408e9  cmp byte ptr [..+0x18], cl      every character is a space (0x20)
+ *
+ * +0x18 is the text field and +0x118 the ident, the same offsets df/pup.ts reads
+ * at +24 and +280.
+ *
+ * A leading '*' marks the text as a NOTE rather than a line, and the corpus says
+ * what kind. Of the 284 starred records in the English tree — all 284 of which
+ * have a voice recording, so the player always hears something — 169 are an
+ * `idle 1`..`idle 4` animation pose whose "text" is an animator's label
+ * (`*blink`, `*gesture`, `*idlespeak`), 104 are lines a script really speaks, and
+ * 11 are named by no `puppetspeak` at all. Of those 104, 95 carry a `*NAME.MOV`
+ * studio note and 9 are non-verbal or voice-over (`*TRADEMARK LAUGH`,
+ * `*HE DRINKS.`, `*SOUND OF CRASHING GLASS…`, `*Purser holds the cufflink.`,
+ * `*VO--Ahem...Excuse me.`).
+ *
+ * `*NAME.MOV` does NOT reliably mean "read over that movie". PENNY1's case 105
+ * runs `spotmovie("sasha.mov")` — which blocks — and speaks `penny1.079` and
+ * `penny1.071` after it has closed; case 106 speaks the same two with no movie
+ * anywhere near. The note is a leftover from when they were meant to be read
+ * over one, which is why the Japanese and Dutch translators simply deleted the
+ * prefixes (penny1.pup: 21 starred in English, 13 in Japanese, 8 in Dutch) and
+ * why those two editions show these lines and the other four do not (#48).
+ *
+ * NOT implemented: 0x440810 opens on `cmp word ptr [0x48a018], 0`, a runtime
+ * enable that suppresses every subtitle in the game when clear. Nothing in the
+ * port sets it, and nothing in the shipped corpus writes it.
+ */
+export function subtitled(line: PupDialogue): boolean {
+  if (!line.raw.length) return false;
+  if (line.raw.startsWith("*")) return false;
+  if (/^idle [1-4]$/i.test(line.ident)) return false;
+  return !/^ *$/.test(line.raw);
+}
+
 export class PuppetController {
   constructor(private readonly session: GameSession) {}
 
@@ -181,7 +226,9 @@ export class PuppetController {
       this.session.onLog(`puppetspeak: no line "${ident}" in ${p.name}`);
       return;
     }
-    p.subtitle = line.text;
+    // The line is always HEARD; whether its text is printed is a separate
+    // question, and one the record answers — see {@link subtitled}.
+    p.subtitle = subtitled(line) ? line.text : "";
     // the line's stance first, before a single frame of it is drawn: the layer
     // tables the animLogic records index are the ones it was animated against
     // (0x4406c7, before the playback loop). In a two-character puppet this is
