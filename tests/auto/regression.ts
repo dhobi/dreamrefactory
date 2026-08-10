@@ -8,6 +8,8 @@ import { test, expect } from "vitest";
 import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
 import { readSetFile, RIGHTTURNS, LEFTTURNS } from "../../src/df/set";
 import { WIPE_STEP_MS } from "../../src/engine/clock";
+import { readShpFile } from "../../src/df/shp";
+import { frameIndexForDegree, isDegreeSelector } from "../../src/engine/props";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "../../src/df/image";
 import { readStgFile, readStgRegions } from "../../src/df/stg";
 import { MAP_EXIT_REGION, MAP_JUMPS, MAP_PAGE_BUTTONS, mapUsable } from "../playthrough/nav/mapjumps";
@@ -6674,4 +6676,55 @@ test("visualeffect wipes over its step count, and plain does not", async () => {
   session.endWipe();
   void effect(session.interp, ["venetian", 20]);
   check("an unused effect stays instant", !session.wiping, `dir=${session.wipe.dir}`);
+});
+
+// --- 95. a degree selector shows the frame its degree names ------------------
+// A prop state is either an animation to play or a SELECTOR whose frames are
+// alternatives indexed by degree — `PropState.animated` says which, and for a
+// selector `frameIdx` means nothing at all (see isDegreeSelector).
+//
+// BOMB.STG opens the bomb panel with
+//
+//     propvisible ("solenoid", true)
+//     propxy ("solenoid", 256, 192)
+//
+// and NO propdeg, because the default 0 is the safe, de-energised state: the arm
+// is `propdeg ("solenoid", 1)` and `if propdeg ("solenoid") = 1` is what calls
+// `boomer ()`. The solenoid's two frames carry degrees 1 and 0 IN THAT ORDER, so
+// deg 0 is the second frame — and drawing frame 0 showed a closed solenoid on a
+// bomb with no power to it (#11). switch3's degrees are 0,1,2 in order, which is
+// why the switches looked right and only the solenoid did not.
+test("a prop with no propdeg shows the frame degree 0 names", async () => {
+  const { session } = await newHost();
+  const shp = readShpFile(new Uint8Array(readFileSync(gamefiles(root).resolve("bomb.shp")!)));
+  const sol = shp.groups.find((g) => g.name.toLowerCase() === "solenoid");
+  const st = sol?.states[0];
+  check("the solenoid is a two-frame selector", !!st && st.frames.length === 2, `${st?.frames.length} frames`);
+  if (!st) return;
+  check(
+    "...whose degrees are stored 1 then 0",
+    st.degrees?.join(",") === "1,0",
+    `degrees=${st.degrees?.join(",")}`,
+  );
+  check("...and it is not an animation", !st.animated && isDegreeSelector(st), `animated=${st.animated}`);
+
+  // degree 0 must name the SECOND frame, and that is what gets drawn
+  check(
+    "degree 0 selects the frame stored against it",
+    frameIndexForDegree(st, 0) === 1 && frameIndexForDegree(st, 1) === 0,
+    `deg0 -> ${frameIndexForDegree(st, 0)}, deg1 -> ${frameIndexForDegree(st, 1)}`,
+  );
+
+  // and through the runtime, with nothing but propvisible called on it
+  await session.stageCtrl.openStageFile("bomb.stg");
+  await drain();
+  const p = session.propRuntime.get("solenoid");
+  check("the bomb panel has a solenoid", !!p, "no solenoid prop");
+  if (!p) return;
+  const drawn = p.currentFrameIdx(p.state()!);
+  check(
+    "an untouched solenoid draws its safe frame, not frame 0",
+    drawn === 1,
+    `drawing frame index ${drawn}`,
+  );
 });
