@@ -226,6 +226,65 @@ test("loadGame restores globals + clock and travels to the saved room", async ()
   expect(session.interp.globals.get("clock")).toBe(save.clock);
 });
 
+/**
+ * `clock` is the variable list's HEAD, so its DFValue lives one stride back, in
+ * the blob header. Reading it out of the location container's savestate stack
+ * instead (the old heuristic: the token after the first "titanicN:" path) picked
+ * the FIRST day event ever pushed, which is "startdisk1" on every save in the
+ * game — including saves taken hours later. TAOOT's `advanceday` switches on
+ * this value, so a save loaded into the London flat replayed the whole intro
+ * when the bombs fell instead of sailing (#52).
+ *
+ * The shape below is the game's own: `advanceday`'s startdisk1 arm sets
+ * clock = "bedsit" and nothing overwrites it until the sinking, where calctime's
+ * `clock = hrs * 100 + min` takes the variable over as a NUMBER.
+ */
+test("parseSave reads clock from the variable-list head, not the savestate stack", () => {
+  let strings = 0;
+  let numbers = 0;
+  for (const path of allSaves()) {
+    const save = parseSave(new Uint8Array(readFileSync(path)));
+    const name = path.replace(/.*\//, "");
+    const mission = save.numGlobals.get("mission") ?? -1;
+    if (mission === 4) {
+      // the sinking: calctime owns the variable, and it reads back as the time
+      const clock = save.numGlobals.get("clock");
+      const hrs = save.numGlobals.get("hrs") ?? 0;
+      const min = save.numGlobals.get("min") ?? 0;
+      check(`${name} clock is numeric`, typeof clock === "number", `got ${clock}`);
+      // calctime rewrites it once a game-second, so it can trail `min` a little
+      check(`${name} clock ~ hrs*100+min`, Math.abs((clock ?? 0) - (hrs * 100 + min)) <= 5,
+        `clock=${clock} time=${hrs}:${min}`);
+      numbers++;
+    } else {
+      check(`${name} clock = "bedsit"`, save.clock === "bedsit", `got "${save.clock}"`);
+      strings++;
+    }
+  }
+  // guard the guard: both arms have to have actually run
+  expect(strings).toBeGreaterThan(60);
+  expect(numbers).toBeGreaterThan(20);
+});
+
+test("a save the port writes carries the clock it was taken at", async () => {
+  const session = await newSession();
+  const path = savePath("1", "01 - April 14th, 1942.ti");
+  await session.loadGame(new Uint8Array(readFileSync(path)));
+  await session.settle();
+  expect(session.interp.globals.get("clock")).toBe("bedsit");
+
+  // the head node's DFValue is writable too, so the value survives a snapshot —
+  // without it every save the port took would restore the pending day event of
+  // whatever base save it was patched from.
+  expect(parseSave(session.snapshotSave()!).clock).toBe("bedsit");
+
+  // and a numeric clock (the sinking) round-trips as a number, not as text
+  session.interp.globals.set("clock", 1337);
+  const re = parseSave(session.snapshotSave()!);
+  expect(re.numGlobals.get("clock")).toBe(1337);
+  expect(re.strGlobals.has("clock")).toBe(false);
+});
+
 test("parseSave recovers hallside from the location savestate stack", () => {
   // hallside is the last "port"/"star" token in the location container; verified
   // against each set's entry script. Cross-checked hall/deck saves:
@@ -277,6 +336,31 @@ test("loadGame from the control panel re-shows the room (no white screen)", asyn
   // a stale ctl.stg overlay frame must not linger to be popped later.
   await session.transFromFlat();
   expect(session.setVisible).toBe(true); // still in the room, nothing stale restored
+});
+
+/**
+ * #52, the whole of it. The London flat's air raid ends in
+ * `bombit() -> sendtostage (advanceday ())`, and `advanceday` is a switch on
+ * `clock`: "startdisk1" replays the intro in the flat, "bedsit" sails for the
+ * Titanic. A load that put back the wrong value therefore didn't misplay a
+ * detail — it sent the bombing back to the beginning, into a restarted flat
+ * with the sirens up and only the door alive (#36 again, one entry point over).
+ *
+ * Asserted on the branch rather than on the movies: what the arm does first is
+ * set `mission`, and the two arms disagree about it (0 in the flat, 1 at sea).
+ */
+test("the flat's air raid sails for the Titanic after a load, not back to the flat", async () => {
+  const session = await newSession();
+  await session.loadGame(new Uint8Array(readFileSync(savePath("1", "01 - April 14th, 1942.ti"))));
+  await session.settle();
+  expect(session.currentSetName).toBe("bedsit1");
+
+  // the last thing bombit() does, verbatim.
+  await session.sendEvent("sendtostage", session.stageName, "advanceday", [], "test");
+  await session.settle();
+
+  expect(session.interp.globals.get("mission")).toBe(1);
+  expect(session.currentSetName).not.toBe("bedsit1");
 });
 
 /**
