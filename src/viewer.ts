@@ -1870,7 +1870,28 @@ export class SetViewer {
 
   /** advance animation; returns the frame to draw this tick */
   tick(now: number): CachedFrame | null {
-    this.session.propRuntime.tick(now, FRAME_MS);
+    // A prop animates one frame per SERVICE PASS, not at the camera's rate.
+    //
+    // The scripts say so. A prop animation is played by putting the prop in the
+    // moving state, spending a fixed budget of passes on it and then forcing the
+    // resting state — BOIL.SHP's coal chute (its `open`):
+    //
+    //     propview (me, "opening")
+    //     for count = 1 to 11
+    //         forceupdate ()
+    //     endfor
+    //     propview (me, "idleopen")
+    //
+    // and `opening` holds 12 frames. Censused over gamefiles/en, 21 of the 33
+    // sites shaped like that budget exactly as many passes as the state has
+    // frames (or one fewer); the rest budget an exact half or third of the
+    // container's frames, which is a state holding one animation per degree, and
+    // one that budgets more has slack. Nothing budgets the 2n+1 that FRAME_MS
+    // (90 ms against a 50 ms pass) actually costs — at that rate the chute got
+    // through 6 of its 12 frames before the script slammed it to `idleopen`, so
+    // the door crawled and then jumped, which is #15 in the reporter's words:
+    // "move slowly, then at about 60% of the animation jumps to the end".
+    this.session.propRuntime.tick(now, ENGINE_STEP_MS);
     this.session.tickFade(now);
     this.session.tickTime(now); // delay() clock + coarse loop/cricket service
     this.session.scheduler.serviceFrameLoops(); // smooth per-frame loops (sky drift, fence idle)
