@@ -6125,3 +6125,56 @@ test("a puppet line beginning with '*' is heard but not printed", async () => {
   check("a line still prints", said.startsWith("I don't have any information"),
     `subtitle=${JSON.stringify(said)}`);
 });
+
+// --- 88. the puppet knows its own name -------------------------------------
+// `currentpuppet()` answered the FILE the conversation was loaded from. TI.EXE
+// answers the puppet's own name: openpuppetfile copies container 0 +0x85E into a
+// static buffer (0x43f103, `strcpy(0x489ffc, container0 + 0x85E)`) and
+// currentpuppet hands that buffer back (0x43ffba).
+//
+// "purs1.pup" is a value no script can match, and one script matches on it.
+// TAOOT's inven.shp chooses the wording for offering whatever you are holding:
+//
+//     switch currentpuppet ()
+//     case "purs1"
+//         puppetbevel ("I would like to check something in...", 55555)
+//     ...
+//     endswitch
+//     puppetbevel ("Would you like something...?", 55555)
+//
+// so the Purser — who takes items INTO the safe rather than being given them —
+// asked whether you would like something, off the generic arm (#53).
+//
+// 269 of the 316 puppets in the tree are called "untitled" and the four that are
+// not are exactly the four this switch names: PURS1, TRASK1, TRASK2, ZEIT1.
+test("currentpuppet answers the puppet's name, so the Purser offers his own wording", async () => {
+  const { session } = await newHost();
+  const current = (): string =>
+    String((session.interp.builtins.get("currentpuppet") as unknown as () => unknown)());
+
+  check("no conversation reads none", current() === "none", current());
+
+  // the four the corpus names, and one of the many it does not
+  for (const [file, want] of [
+    ["purs1.pup", "purs1"], ["trask1.pup", "trask1"],
+    ["zeit1.pup", "zeit1"], ["penny1.pup", "untitled"],
+  ] as const) {
+    await session.puppetCtrl.openPuppetFile(file);
+    check(`${file} is "${want}"`, current() === want, `got "${current()}"`);
+  }
+
+  // ...and the wording itself, off inven.shp's own switch. handflag=1 is the
+  // "nothing in hand yet" arm, which is where the Purser's line lives.
+  await session.openSetFile("gstair3.set");
+  await session.puppetCtrl.openPuppetFile("purs1.pup");
+  session.interp.globals.set("handflag", 1);
+  session.interp.globals.set("handitem", "");
+  await session.sendEvent("sendtoshop", "inven.shp", "addhandbevel", [], "test");
+  const captions = (session.puppet?.bevels ?? []).map((b) => b.text);
+  check(
+    "the Purser is asked to check something in, not offered something",
+    captions.some((c) => /check something in/i.test(c)) &&
+      !captions.some((c) => /Would you like something/i.test(c)),
+    `bevels=${JSON.stringify(captions)}`,
+  );
+});
