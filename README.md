@@ -230,19 +230,19 @@ npm run dump -- gamefiles/en/titanic2/DATA/b59.set out/
 
 ## Releases
 
-The version is `version` in `package.json` — **0.9.6**, semver, shown in the top
+The version is `version` in `package.json` — **0.9.7**, semver, shown in the top
 bar of every page and carried into a bug report. Tagging is what publishes, and
 `master` is protected (the two `tests.yml` jobs are required checks, admins
 included), so the bump goes through a pull request like anything else:
 
 ```
-git switch -c release/0.9.6
-npm version 0.9.6 --no-git-tag-version   # package.json + the lockfile
-git commit -am "Version 0.9.6" && git push -u origin release/0.9.6
+git switch -c release/0.9.7
+npm version 0.9.7 --no-git-tag-version   # package.json + the lockfile
+git commit -am "Version 0.9.7" && git push -u origin release/0.9.7
 gh pr create --fill && gh pr merge --rebase --delete-branch   # once checks are green
 
 git switch master && git pull
-git tag v0.9.6 && git push --tags
+git tag v0.9.7 && git push --tags
 ```
 
 The tag must sit on a commit whose `package.json` already says that version —
