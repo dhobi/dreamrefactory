@@ -39,6 +39,15 @@ interface ClutDim {
   amt: number;
 }
 
+/** The session's camera hooks as they stood before a gesture armed its own —
+ *  what {@link SetViewer.armNavHooks} hands back for the matching disarm. */
+export interface NavHooks {
+  onNavigate: (direction: string) => void;
+  onSceneJump: (scene: string) => void;
+  onViewJump: (view: string) => void;
+  active: boolean;
+}
+
 /**
  * Return a copy of `base` (an RGBA CLUT) with entries [lo..hi] blended toward
  * black by amt/255 — the engine's `mixclut(target,"black",lo,hi,amt)`. amt=255
@@ -238,29 +247,68 @@ export class SetViewer {
   };
 
   /**
-   * Arm this viewer's nav hooks on the session for the duration of a gesture.
-   * A `changeset` mid-gesture (a door to another set) builds a fresh viewer and
-   * re-arms on itself (see the host's activateSet), so the boot's default walk —
-   * `currentscene("strait")`, run later in the SAME keydown chain because the
-   * script passcodes — drives the arrived-in set (TAOOT: gstair3's
+   * Arm this viewer's nav hooks on the session for the duration of a gesture,
+   * and answer the hooks that were live so {@link disarmNavHooks} can put them
+   * back. A `changeset` mid-gesture (a door to another set) builds a fresh
+   * viewer and re-arms on itself (see the host's activateSet), so the boot's
+   * default walk — `currentscene("strait")`, run later in the SAME keydown chain
+   * because the script passcodes — drives the arrived-in set (TAOOT: gstair3's
    * grand-staircase exit teleports to recept1c's arrival scene, then walks into
    * the reception hall).
    */
-  armNavHooks(): void {
+  armNavHooks(): NavHooks {
+    const prev: NavHooks = {
+      onNavigate: this.session.onNavigate,
+      onSceneJump: this.session.onSceneJump,
+      onViewJump: this.session.onViewJump,
+      active: this.session.navGestureActive,
+    };
     this.pendingJumpScene = null;
     this.session.navGestureActive = true;
     this.session.onNavigate = this.navigate;
     this.session.onSceneJump = this.sceneJump;
     this.session.onViewJump = this.viewJump;
+    return prev;
   }
 
-  /** Restore the nav hooks to no-ops after a gesture, so navigation stays scoped
-   *  to keydown/click (arrival scripts calling currentscene() stay inert). */
-  disarmNavHooks(): void {
-    this.session.navGestureActive = false;
-    this.session.onNavigate = () => {};
-    this.session.onSceneJump = () => {};
-    this.session.onViewJump = () => {};
+  /**
+   * End a gesture's nav hooks, so navigation stays scoped to keydown/click and
+   * arrival scripts calling currentscene() stay inert.
+   *
+   * Put back what `armNavHooks` found rather than writing no-ops, because
+   * gestures NEST. A modal movie is dismissed by a click, and that click is a
+   * gesture of its own — press -> clickDispatch -> movies.click — running while
+   * the script that opened the movie is still suspended inside `spotmovie`. So
+   * the inner press used to tear down the outer press's hooks and hand the
+   * script back a dead camera for the rest of its life.
+   *
+   * That is #47, Scotland Road. SCOT3's rope close-up ends in
+   *
+   *     spotmovie ("scotrope.mov")
+   *     ...
+   *     while currentview () != "view22"
+   *         if currentview () != "moving"
+   *             currentscene ("right")
+   *         endif
+   *         forceupdate ()
+   *     endwhile
+   *
+   * to turn you to Hacker before he speaks. Dismiss the close-up and every
+   * `currentscene("right")` after it went to a no-op, so view22 never came
+   * round: the room stopped answering with the player still facing the rope —
+   * "as if waiting for Hacker to turn me and talk, but he never does". Measured
+   * headless: 3000 service steps, 1494 turns asked for and not one taken; with
+   * the hooks restored the turn lands on the 12th ask and hack1.pup opens.
+   *
+   * The scheduler's own {@link Scheduler.withNavDriversArmed} has always been a
+   * save/restore pair for this reason. This is the same rule at the other entry
+   * point.
+   */
+  disarmNavHooks(prev?: NavHooks): void {
+    this.session.navGestureActive = prev?.active ?? false;
+    this.session.onNavigate = prev?.onNavigate ?? (() => {});
+    this.session.onSceneJump = prev?.onSceneJump ?? (() => {});
+    this.session.onViewJump = prev?.onViewJump ?? (() => {});
   }
 
   /**
@@ -571,7 +619,7 @@ export class SetViewer {
       return true;
     }
     this.session.navHappened = false;
-    this.armNavHooks();
+    const prevHooks = this.armNavHooks();
     try {
       const consumed = await this.scripts.keyDown(this.sceneIdx, keyName);
       // navHappened is session-scoped so a mid-gesture changeset (a door to
@@ -579,7 +627,7 @@ export class SetViewer {
       // return consumed so the caller's default-walk fallback stays suppressed.
       return consumed || this.session.navHappened;
     } finally {
-      this.disarmNavHooks();
+      this.disarmNavHooks(prevHooks);
     }
   }
 
@@ -1133,12 +1181,12 @@ export class SetViewer {
               // swaps the viewer and re-arms on the new one (host activateSet,
               // keyed on navGestureActive); disarming writes the shared
               // session fields, so doing it through the old viewer is fine.
-              this.armNavHooks();
+              const prev = this.armNavHooks();
               try {
                 await this.scripts.closeScene(prevScene);
                 await this.scripts.openScene(sceneIdx);
               } finally {
-                this.disarmNavHooks();
+                this.disarmNavHooks(prev);
               }
               await this.refreshStandpointUi();
             })(),
@@ -1204,7 +1252,7 @@ export class SetViewer {
     // let mousedown handlers drive the camera via currentscene() (the bridge's
     // Morrow kick-out turns you to face him from the OK button); restored to a
     // no-op on exit so navigation stays scoped to this gesture.
-    this.armNavHooks();
+    const prevHooks = this.armNavHooks();
     try {
       // TRACKED, because a click is a script and the engine is single-threaded.
       // Nothing else held the engine for the length of one: `session.track` is
@@ -1235,7 +1283,7 @@ export class SetViewer {
       // waits, so nothing is slowed. It simply was not being told.
       return await this.session.track(this.clickDispatch(x, y), "click");
     } finally {
-      this.disarmNavHooks();
+      this.disarmNavHooks(prevHooks);
     }
   }
 
