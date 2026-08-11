@@ -21,8 +21,23 @@ The engine keeps time at two granularities, and scripts touch both:
 
 | Time base | Rate | What uses it |
 |-----------|------|--------------|
-| **Script tick** | 1 tick = **1/60 s** | `delay(n)` waits n×50/3 ms |
-| **Master heartbeat** | one service step every **50 ms** (20 Hz) | loops, crickets, walks, fades |
+| **Script tick** | 1 tick = **1/60 s** | `delay(n)` waits n×50/3 ms; one step of a screen ramp |
+| **Master heartbeat** | one service step every **50 ms** (20 Hz) | loops, crickets, walks |
+
+A **screen ramp** — a `visualeffect` reveal, and a `screentoblack` /
+`blacktoscreen` fade — is on the script tick, not the heartbeat, and that is not a
+detail: it is the difference between four seconds and twelve. Both spin on the same
+counter (`0x41de90`, `timeGetTime() × 3 / 50`) waiting for it to advance by one, so
+one step is one tick in both directions. `RAMP_STEP_MS` in `clock.ts` is that step,
+and it is written as `ENGINE_STEP_MS / 3` so the arithmetic stays exact.
+
+Fades were on the heartbeat here for a long time, which made every fade in the game
+three times slower than the original's. It shows only where a script asks for a long
+one, which is where it was reported from: losing the fistfight brings the engine room
+back over 240 steps — 4.0 s, against 12.0 s at the heartbeat. The engine room goes on
+fading in slowly for the rest of that game, and *that* part is faithful — the boot
+library's `restorescreen` picks the 240 out of `currentset () = "engine" &
+actorowner ("vlad") = "wonfight"`, and nothing ever clears `wonfight`.
 
 The heartbeat is `ENGINE_STEP_MS` in `clock.ts`. On every service step the
 scheduler processes, **in this order: walks, then crickets, then due loops** —
