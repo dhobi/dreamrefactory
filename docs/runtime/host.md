@@ -433,15 +433,25 @@ lands on a **prop** or a stage **button** takes the press at once and is never
 reclassified; a finger on a room surface keeps the old behaviour, because swiping the
 room is how a phone walks.
 
-A phone has no arrow keys either, so a swipe presses the one it points at:
-leftwards turns left, rightwards turns right, away from you walks on. Both axes
+A phone has no arrow keys either, so a swipe presses the one it points at
+([`swipeKey`](https://github.com/dhobi/taoot-web/blob/master/src/keys.ts), pure, so
+the rule is testable without a device): leftwards turns left, rightwards turns
+right, away from you walks on, back towards you sends `downarrow`. Both axes
 can be flipped, independently, from a row of two checkboxes under the screen that
 only a touch pointer is shown — a turn has a second reading with as much of a
 claim (the finger pushes the *scene*, the panorama convention), and which one
 feels right is a matter of the hand rather than of the game. The answers live in
-`localStorage` under `taoot.swipe.invertturn` / `taoot.swipe.invertwalk`. Down
-stays unbound either way, which is the keyboard's own asymmetry: `ArrowDown` is a
-plain `keyDown("downarrow")`, not a nav press.
+`localStorage` under `taoot.swipe.invertturn` / `taoot.swipe.invertwalk`.
+
+Down is a **plain key event** rather than a nav press, which is the keyboard's own
+asymmetry (`ArrowDown` goes to the script chain and nothing in the engine acts on
+it). It was left unbound entirely for a while on that reasoning, and the reasoning
+was half right: almost nothing reads `downarrow`. The exceptions are `SMSTACK2` and
+`SMSTACK3` views 43, 50, 54 and 56 — the false smokestack's ladder platforms, whose
+scene `keydown` is the only way down a level — and since the way out of the
+smokestack is at level 1, a player with no `downarrow` could climb the maze and
+never leave it. A soft-lock, not a missing convenience (#100). Binding it also
+makes "invert forward" swap a pair instead of moving walking onto a dead end.
 
 Three host-only keys: **M** toggles the deck-plan minimap, **O** the hotspot
 overlay, **X** the details pane under the bars — the scene/view readout and the

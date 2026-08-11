@@ -67,3 +67,47 @@ export function focusOwnsKey(target: EventTarget | null, key: string): boolean {
       return false;
   }
 }
+
+/**
+ * Which arrow a swipe means — the gesture half of the same question, and pure so
+ * the rule can be tested without a phone.
+ *
+ * Three of the four are the arrow keys' own reading of the two axes: leftwards
+ * turns left, rightwards turns right, away from you walks on. Each axis can be
+ * flipped on its own, because neither direction is self-evident (a turn has the
+ * panorama reading — the finger pushes the world, not the camera — and walking has
+ * the same argument in reverse), so both are checkboxes.
+ *
+ * The FOURTH used to be nothing at all, on the reasoning that `ArrowDown` is not a
+ * navigation key in the original either: it goes to the script chain like any other
+ * key, and almost nothing reads it. Almost. The exceptions are
+ * `SMSTACK2`/`SMSTACK3` views 43, 50, 54 and 56 — the false smokestack's ladder
+ * platforms, whose scene `keydown` is the only way down a level. The way OUT of the
+ * smokestack is at level 1, so a player with no `downarrow` could climb the maze
+ * and not leave it: a soft-lock rather than a missing convenience (#100).
+ *
+ * So down is bound, and bound to the plain key event rather than to a navigation
+ * press — exactly what the keyboard sends, so the ladder answers and everywhere
+ * else it is ignored. Inverting the walk axis swaps the pair, which is what
+ * inverting an axis should do and what it could not do while one end was unbound.
+ *
+ * A diagonal decides nothing: the winning axis has to beat the other by
+ * {@link SWIPE_AXIS_RATIO}, or the gesture means no key at all.
+ */
+export const SWIPE_AXIS_RATIO = 1.3;
+
+export type ArrowKey = "uparrow" | "downarrow" | "leftarrow" | "rightarrow";
+
+export function swipeKey(
+  dx: number,
+  dy: number,
+  invert: { turn: boolean; walk: boolean } = { turn: false, walk: false },
+): ArrowKey | null {
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  if (invert.turn) dx = -dx;
+  if (invert.walk) dy = -dy;
+  if (ay > ax * SWIPE_AXIS_RATIO) return dy < 0 ? "uparrow" : "downarrow";
+  if (ax > ay * SWIPE_AXIS_RATIO) return dx < 0 ? "leftarrow" : "rightarrow";
+  return null;
+}
