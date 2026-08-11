@@ -245,6 +245,11 @@ export class GameSession {
    * that counter reaches `timeBase + i` for strip i. So a step is one 60 Hz tick
    * and the scrapbook's `visualeffect(wipeleft, 30)` takes half a second, not the
    * 1.5 s a 50 ms step would give it.
+   *
+   * Left on the accumulator below rather than moved to {@link ticksAt} with the
+   * fade: driven from whole-ms clock readings a 30-strip wipe lands in 501 ms
+   * against the counter's own 484, so the rounding {@link tickFade} had to escape
+   * costs this one about a third of one strip. Not worth a re-record.
    */
   tickWipe(now: number): void {
     const w = this.wipe;

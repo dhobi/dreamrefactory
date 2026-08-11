@@ -181,7 +181,12 @@ export async function newPlaythrough(): Promise<Playthrough> {
     trace.push(snapshotState(session, v(), name));
   };
 
-  const driver = headlessDriver(host, { settle, pump, fire });
+  // ROUTELOG=1 — see the `log` field below for what this is for. It has to be
+  // handed to the DRIVER as well as returned on the Story: `Navigator.say` prints
+  // through `d.log`, and passing it only to the Story left the navigator's own
+  // lines (the plan, "arrived in x", "opening door") unprintable headless.
+  const routeLog = process.env.TAOOT_ROUTELOG ? (m: string) => console.log(`    ${m}`) : undefined;
+  const driver = headlessDriver(host, { settle, pump, fire }, routeLog);
   // the Story getters read live state — there is nothing to mirror in-process
   const global = (name: string) => session.interp.globals.get(name);
   return {
@@ -207,7 +212,7 @@ export async function newPlaythrough(): Promise<Playthrough> {
      * by eye in a browser ("which way did travel() actually go?") had no answer at
      * all here. `Navigator.travel` logs its plan through this.
      */
-    log: process.env.TAOOT_ROUTELOG ? (m: string) => console.log(`    ${m}`) : undefined,
+    log: routeLog,
     num: (name) => Number(global(name) ?? NaN),
     str: (name) => String(global(name) ?? ""),
     owns: (prop) => session.propRuntime.get(prop)?.owner === "frank",

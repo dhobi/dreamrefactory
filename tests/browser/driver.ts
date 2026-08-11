@@ -45,6 +45,8 @@ interface Mirror {
   actors: Record<string, string>;
   /** each character's ground position + visibility — see NavDriver.actorSpot */
   actorSpots: Record<string, { x: number; z: number; visible: boolean }>;
+  /** who is mid-walk — the scripts' own `iswalk`, see NavDriver.walking */
+  walking: string[];
   flat: string | null;
   /** the playing track — a late-landing consequence a route may need to wait on */
   theme: string;
@@ -90,6 +92,7 @@ const SAMPLE = `(() => {
   return {
     actors,
     actorSpots,
+    walking: [...s.scheduler.walks.keys()].map((n) => String(n).toLowerCase()),
     setFile: String(s.currentSetFile || s.currentSetName || "").toLowerCase(),
     // which CD's copy of a both-discs room is in play (host.files.activeDisc,
     // set by BOOTFILE's setpath(disk)) — the planner has to read the same one
@@ -421,6 +424,7 @@ export async function browserDriver(page: Page, opts: BrowserDriverOptions = {})
     propVisible: (name) => !!m.props[name.toLowerCase()]?.visible,
     propOwner: (name) => String(m.props[name.toLowerCase()]?.owner ?? ""),
     actorSpot: (name) => m.actorSpots[name.toLowerCase()] ?? null,
+    walking: (name) => m.walking.includes(name.toLowerCase()),
     propState: (name) => String(m.props[name.toLowerCase()]?.state ?? ""),
     propDeg: (name) => Number(m.props[name.toLowerCase()]?.deg ?? NaN),
     propValue: (name) => Number(m.props[name.toLowerCase()]?.value ?? NaN),

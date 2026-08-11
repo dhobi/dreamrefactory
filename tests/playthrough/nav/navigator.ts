@@ -53,6 +53,24 @@ export interface NavDriver {
    */
   actorSpot(name: string): { x: number; z: number; visible: boolean } | null;
   /**
+   * Is this character crossing the room right now — the script's own
+   * `iswalk(name)`.
+   *
+   * A route needs it because handlers are written against it. TURKSTRS.SET c7 is
+   * the one that refuses: the door to the Turkish bath hands the first knock to
+   * Morrow and then will not open at all while `iswalk("morrow")`, and
+   * `walktopuppet` sends whoever you just spoke to back to their star when the
+   * puppet closes — so the moment a conversation there ends is the one moment the
+   * door is guaranteed shut. HALLA.SET c277 reads the same guard and WAITS on it
+   * (`while iswalk("jay1") forceupdate()`), which is the same fact from the other
+   * side.
+   *
+   * Distinct from {@link actorSpot}: a walk TURNS before it moves (scheduler.ts),
+   * so for its first few passes a walking character is at the same coordinates as
+   * a standing one, and "has he moved" cannot tell them apart.
+   */
+  walking(name: string): boolean;
+  /**
    * A prop's current state name (`propview`), lowercase.
    *
    * The interface band is a state machine and its scripts read themselves in

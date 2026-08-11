@@ -101,6 +101,7 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
       const a = session.actorRuntime.get(name);
       return a ? { x: a.worldX, z: a.worldZ, visible: !!a.visible } : null;
     },
+    walking: (name) => session.scheduler.isWalk(name),
     propState: (name) => String(session.propRuntime.get(name)?.stateName ?? ""),
     propDeg: (name) => Number(session.propRuntime.get(name)?.deg ?? NaN),
     propValue: (name) => Number(session.propRuntime.get(name)?.value ?? NaN),

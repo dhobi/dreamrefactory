@@ -2007,6 +2007,27 @@ export async function segment12(s: Story): Promise<void> {
 const SMETH_DIRECTIONS: TalkPlan = { say: [101, 102, 103], otherwise: "last", maxTurns: 80 };
 
 /**
+ * What to say to Morrow at the Turkish bath door — MORROW1.PUP's `turkey()`.
+ *
+ * Three screens, and the ids repeat because the script reuses them: "I know
+ * Haderlitz is dead" (102) on the first, "May I investigate?" (102) on the
+ * second, and then a loop offering two questions that only add lines (101 who saw
+ * anything, 103 the wireless) against the one that ends it —
+ *
+ *     case 102
+ *         puppetspeak ("morrow1.105")
+ *         puppetspeak ("morrow1.106")
+ *         morrowphase = 1
+ *         exitcode
+ *
+ * `morrowphase = 1` is what the door is waiting for, so 102 three times is the
+ * whole exchange. Spelt out rather than left to `otherwise: "last"`, which
+ * happens to land on the same plaque on all three screens today and would answer
+ * something else entirely if a bevel were ever added below it.
+ */
+const MORROW_BATH_DOOR: TalkPlan = { say: [102, 102, 102], otherwise: "stop", maxTurns: 20 };
+
+/**
  * Travel, answering whoever stops us on the way.
  *
  * `answer` defaults to "say the last plaque", which for most interruptions is
@@ -2395,6 +2416,23 @@ export async function segment16(s: Story): Promise<void> {
  *
  * Penny's mission-3 phase-0 branch reads exactly this — `propowner("rubiclue") =
  * "none"` gets "go and find it" — so the clue is the phase's first object.
+ *
+ * Morrow is on the stairs on the way in, and he is not optional. `TURKSTRS.SET
+ * openset` places him for this mission alone (`mission = 3 & morrowphase = 0`),
+ * and c7 — the door to the bath — hands him the first knock rather than opening:
+ *
+ *     if actorvisible ("morrow") & morrowphase = 0
+ *         sendtoactor ("morrow", mousedown (0))
+ *         exitcode
+ *     endif
+ *     if iswalk ("morrow")
+ *         exitcode
+ *     endif
+ *     sendtoprop ("door", setupprop ("turkstrs-turk"))
+ *
+ * so the door stays shut until he has been spoken to. That is the scene the game
+ * wrote for the top of the mission: he has just heard there has been an accident,
+ * and {@link MORROW_BATH_DOOR} is the one plaque that ends it.
  */
 export async function segment17(s: Story): Promise<void> {
   const { nav, d, beat } = s;
@@ -2404,6 +2442,35 @@ export async function segment17(s: Story): Promise<void> {
   expect(s.num("phase")).toBe(0);
   expect(d.propOwner("rubiclue"), "nobody has the clue yet").toBe("none");
   expect(d.propOwner("gaspen"), "Penny's pen, from her debrief").toBe("frank");
+
+  // -- Morrow on the stairs --------------------------------------------------
+  const stairs = await travelPast(s, "turkstrs");
+  expect(stairs.ok, stairs.reason).toBe(true);
+  const bathDoor = await nav.faceStandpoint(["view16"], ["scene10"]);
+  expect(bathDoor.ok, bathDoor.reason).toBe(true);
+  expect(s.num("morrowphase"), "he has not been asked about the accident yet").toBe(0);
+  // knock, and it is Morrow who answers rather than the door
+  expect(await d.clickHotspot("door"), "knocked at the bath door").toBe(true);
+  await s.waitFor(() => d.conversing(), "Morrow to come over");
+  const accident = await nav.talk(MORROW_BATH_DOOR);
+  expect(accident.ok, accident.reason).toBe(true);
+  expect(s.num("morrowphase"), "he has given us leave to look around").toBe(1);
+
+  await beat("m3.0 Morrow on the Turkish bath stairs");
+
+  // `walktopuppet` walks whoever you spoke to BACK to the star they came from as
+  // the puppet closes (GANG.CST c1's tail: `actorstar(who, "custom")` then
+  // `moveactorstar(savestar)`), so the moment this conversation ends is the one
+  // moment c7's second guard is certain to refuse. Measured here: 3 service passes
+  // of turning and 20 of walking, 172 units back to his post.
+  //
+  // The route never waited for that, and until the fades were put right (#87) it
+  // got away with it. Measured on both bases: `iswalk("morrow")` is true the
+  // instant the conversation ends EITHER WAY — what differed is that a fade three
+  // times too long spent enough game time in the gestures after it for him to
+  // finish. So this wait is not a workaround for the clock fix; it is the leg
+  // finally saying what it was relying on.
+  await s.waitFor(() => !d.walking("morrow"), "Morrow to walk back to his post");
 
   // -- the Turkish bath ------------------------------------------------------
   const bath = await travelPast(s, "ebath");
