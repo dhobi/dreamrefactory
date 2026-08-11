@@ -79,11 +79,26 @@ had to stop leaning on. Three kinds of loss, all of them the original's too:
   (measured across four shipped saves: only the owner moves), so a load forgets it.
   `actorowner` was lost the same way until `SavedActor` learned it — which is what
   lets the Purser remember his errand across a checkpoint.
-- **Dropped for want of room.** The variable table is fixed-size, so globals that
-  do not fit are not written: the boiler and turbine simulations, `handitem`.
+- **Dropped for want of room.** The variable table is fixed-size, so globals the
+  base save has no record for and no free slot for are not written; they keep the
+  base's value, and the log says which ones.
+
+  How many depends entirely on *which* base, because a `.ti` holds the variable
+  list that existed when it was taken. Measured against the 163 globals the shipped
+  109 know between them, `1/01 - April 14th, 1942` — the first file in `save/1`,
+  and what the template picker used to hand a fresh playthrough — could hold 99 and
+  dropped **64**, among them the entire turbine puzzle (`boiler`, `turbine`,
+  `condensor`, `steamtank`, all four pressures), the smokestack maze
+  (`mazenumber`, `stacklevel`), the darkroom's plates, `stokerphase`, `troutmoney`,
+  `turkwater`, `fencelevel` and `stackmax`. Ranking the shipped saves by
+  [`globalsCapacity`](https://github.com/dhobi/taoot-web/blob/master/src/df/savegame.ts)
+  instead takes disk 1 to **44** dropped and disk 2 to **24**, and what is left is
+  blackjack-table and fistfight scratch that a load re-initialises anyway (#85).
 - **Inherited from the skeleton.** A patch-write starts from a *shipped* save, so
-  any slot nothing overwrites keeps that save's value — `oldset` "c73",
-  `deckc.trk` playing in the London bedsit, `clock` "startdisk1".
+  any slot nothing overwrites keeps that save's value — `oldset` "None", the
+  location container's facing and road, the interface band's own chrome memos.
+  (`clock` is not one of them: it is the variable list's head and a patch writes it
+  like any other global — measured, "bedsit" written and read back.)
 
 Everything else — loops, crickets, music, actor positions — is rebuilt by re-running
 the room's own `openset`/`openscene` at the restored progress, which is faithful and

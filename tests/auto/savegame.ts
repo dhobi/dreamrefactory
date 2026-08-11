@@ -12,11 +12,13 @@ import {
   writeSaveFile,
   parseSave,
   applyPatch,
+  globalsCapacity,
   type RawSaveFile,
 } from "../../src/df/savegame";
 import { readShpFile } from "../../src/df/shp";
 import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
-import { shippedSaves } from "../../src/save-seed";
+import { bestTemplate, shippedSaves } from "../../src/save-seed";
+import type { SaveEntry } from "../../src/save-store";
 import { GameSession } from "../../src/engine/session";
 import {
   NullAudioSink,
@@ -777,10 +779,11 @@ test("snapshotSave and loadGame carry actorvalue, in both directions", async () 
 // A `.ti` carries the variable list that existed when it was taken, and the engine
 // creates a global on first assignment — so an early save has no record for a
 // later one, and a patch had nothing to write into. `savedeck` and `hallside` are
-// missing from exactly the four pre-boarding saves of the 109 shipped, and
-// shippedSaveTemplate picks the first file in save/1, which is one of them: with
+// missing from exactly the four pre-boarding saves of the 109 shipped, and the
+// template picker used to take the first file in save/1, which is one of them: with
 // that template 12 of the 107 globals the engine holds at the end of mission 2
-// phase 0 were silently dropped.
+// phase 0 were silently dropped. (Which base is lent is now ranked by capacity —
+// see the two tests below.)
 test("applyPatch makes a record for a global the base has never held", () => {
   const path = savePath("1", "01 - April 14th, 1942.ti");
   const save = parseSave(new Uint8Array(readFileSync(path)));
@@ -800,6 +803,130 @@ test("applyPatch makes a record for a global the base has never held", () => {
   expect(re.numGlobals.get("mission")).toBe(save.numGlobals.get("mission"));
   expect(re.vars.length, "two records were made").toBe(save.vars.length + 2);
 });
+
+// ---- which base save gets lent to a fresh playthrough --------------------
+
+// The corpus's whole vocabulary: every global any shipped save holds, with the
+// type the first one to hold it used. This is the yardstick for "how much can a
+// base carry" — a session late in the game holds most of it.
+function corpusGlobals(): { num: Map<string, number>; str: Map<string, string> } {
+  const num = new Map<string, number>();
+  const str = new Map<string, string>();
+  for (const path of allSaves()) {
+    const s = parseSave(new Uint8Array(readFileSync(path)));
+    for (const [k, v] of s.numGlobals) if (!num.has(k) && !str.has(k)) num.set(k, (v || 0) + 1);
+    for (const [k, v] of s.strGlobals) if (!num.has(k) && !str.has(k)) str.set(k, v || "x");
+  }
+  return { num, str };
+}
+
+/** how many of `wanted` a patch of this base would have to leave behind */
+function dropCount(path: string, wanted: ReturnType<typeof corpusGlobals>): number {
+  const save = parseSave(new Uint8Array(readFileSync(path)));
+  const dropped: string[] = [];
+  applyPatch(save.raw, {
+    numGlobals: wanted.num, strGlobals: wanted.str,
+    set: save.set, scene: save.scene, view: save.view,
+    onDrop: (n) => dropped.push(n),
+  });
+  return dropped.length;
+}
+
+// `globalsCapacity` COUNTS the free slots rather than making the records, because
+// ranking 109 saves the other way costs 200 ms of a page load instead of 15. This
+// is what stops the count and the maker drifting apart: every shipped save, both
+// ways, same answer.
+test("the free-slot count agrees with actually making the records", () => {
+  for (const path of allSaves()) {
+    const save = parseSave(new Uint8Array(readFileSync(path)));
+    const counted = globalsCapacity(save.raw).free;
+    // make them, one at a time, until a patch reports the next one dropped
+    let made = 0;
+    let raw = save.raw;
+    for (let i = 0; i < counted + 3; i++) {
+      const names = new Map<string, number>();
+      for (let j = 0; j <= i; j++) names.set(`zzfree${j}`, j + 1);
+      let dropped = 0;
+      const out = applyPatch(raw, {
+        numGlobals: names, set: save.set, scene: save.scene, view: save.view,
+        onDrop: () => dropped++,
+      });
+      if (dropped) break;
+      made = i + 1;
+      void out;
+    }
+    check(`${path.split("/").slice(-2).join("/")}: ${counted} counted`, made === counted, `made ${made}`);
+  }
+});
+
+// The measurement behind ranking the templates (#85). What a base can hold is the
+// records it has plus the free slots a record can still be made in, and the spread
+// across the shipped 109 decides whether a puzzle survives a save.
+test("a late shipped save can carry far more globals than an early one", () => {
+  const wanted = corpusGlobals();
+  check(
+    "the corpus knows 163 globals between its saves",
+    wanted.num.size + wanted.str.size === 163,
+    `${wanted.num.size} numeric + ${wanted.str.size} string`,
+  );
+  const first = savePath("1", "01 - April 14th, 1942.ti");
+  const cap = globalsCapacity(new Uint8Array(readFileSync(first)));
+  check(
+    "the London flat save — the old pick — has 96 records and 3 free slots",
+    cap.records === 96 && cap.free === 3,
+    `${cap.records} records, ${cap.free} free`,
+  );
+  const worst = dropCount(first, wanted);
+  check("...so a patch of it drops 64 of the 163", worst === 64, `${worst} dropped`);
+  // and what it drops is not bookkeeping
+  const save = parseSave(new Uint8Array(readFileSync(first)));
+  for (const name of ["boiler", "turbine", "condensor", "mazenumber", "stacklevel", "picone"]) {
+    check(`...including ${name}`, !save.numGlobals.has(name) && !save.strGlobals.has(name));
+  }
+});
+
+// The picker itself: same folders, ranked rather than first-listed. Kept per disk
+// family because the `disk` field is not one a patch overwrites and the original
+// engine reads it to know which CD to ask for.
+test("the template picker lends the base that can hold the most", () => {
+  const entries: SaveEntry[] = allSaves().map((path) => {
+    const parts = path.split("/");
+    return {
+      path: `${parts[parts.length - 2]}/${parts[parts.length - 1]}`,
+      folder: parts[parts.length - 2],
+      name: parts[parts.length - 1].replace(/\.ti$/i, ""),
+      bytes: new Uint8Array(readFileSync(path)),
+      builtin: true,
+      mtime: 0,
+    };
+  });
+  check("the shipped saves are all there", entries.length === 109, `${entries.length} saves`);
+  const wanted = corpusGlobals();
+  const room = (b: Uint8Array) => {
+    const c = globalsCapacity(b);
+    return c.records + c.free;
+  };
+  for (const [disk, folders, want] of [
+    ["1", ["1", "ENDGAME1"], 44],
+    ["2", ["2", "ENDGAME2"], 24],
+  ] as [string, string[], number][]) {
+    const picked = bestTemplate(entries, folders);
+    check(`disk ${disk} gets a template`, !!picked);
+    if (!picked) continue;
+    // it is the roomiest of its family...
+    const best = Math.max(...entries.filter((e) => folders.includes(e.folder)).map((e) => room(e.bytes)));
+    check(
+      `disk ${disk}'s pick is the roomiest of its family`,
+      room(picked.bytes) === best,
+      `${picked.path} holds ${room(picked.bytes)}, best is ${best}`,
+    );
+    // ...and this is what a patch of it would have to leave behind
+    const [sub, file] = [picked.path.slice(0, picked.path.indexOf("/")), picked.path.slice(picked.path.indexOf("/") + 1)];
+    const drops = dropCount(savePath(sub, file), wanted);
+    check(`disk ${disk} drops ${want} of the 163`, drops === want, `${drops} dropped from ${picked.path}`);
+  }
+});
+
 
 // The whole point of the no-growth rule: a `.ti` describes its own storage — the
 // globals container is `20 + 32 × capacity` bytes (the u16 at +2) and the pool is

@@ -1183,7 +1183,8 @@ function refreshState(): void {
  *
  * This is what #22 is really asking for: the Report bug button can carry eight
  * lines and no state at all, because the issue travels as a URL under a 4000-byte
- * ceiling and one snapshot is 4376 bytes on its own. So the dump is an attachment,
+ * ceiling and one snapshot is 3234 bytes of state before the log it comes with. So
+ * the dump is an attachment,
  * and it is shaped like a golden trace (src/debug-panel.ts stateDump) so that a
  * reporter's paste can be diffed against a recorded playthrough.
  */

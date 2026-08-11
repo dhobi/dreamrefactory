@@ -69,7 +69,18 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
   // pool, and neither is grown — a save that outgrew its own header would not
   // load in the original engine (see poolIntern). So say what did not fit
   // instead of leaving it to be discovered as a global that "doesn't persist".
-  if (dropped.length) session.onLog(`savegame: not written — ${dropped.join(", ")}`);
+  //
+  // And say it about the GLOBALS, not about the save: the file is written and is
+  // perfectly loadable, and "savegame: not written" read as though it were not
+  // (#85 — "it says not written, but the save appears to have saved
+  // successfully"). What is lost is those variables, which keep the base's value.
+  if (dropped.length) {
+    session.onLog(
+      `savegame: written, but ${dropped.length} ` +
+        `global${dropped.length === 1 ? "" : "s"} did not fit its base save ` +
+        `and keep the base's value — ${dropped.join(", ")}`,
+    );
+  }
   return bytes;
 }
 

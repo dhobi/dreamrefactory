@@ -722,8 +722,11 @@ function recordOffsets(d: Uint8Array): Map<string, number> {
  * block it is copied into — and neither is something to find out about from a
  * corrupted DosBox session.
  *
- * Filling a FREE slot needs no such bet. Every shipped save has some (4 in the
- * template, 26 in one of the boiler saves): the array is allocated at `capacity`
+ * Filling a FREE slot needs no such bet. Most shipped saves have some (4 spare
+ * NODES in the London flat save, 26 in the smokestack one — which is 3 and 13 new
+ * *globals*, since the first one made costs two nodes and each after it one; see
+ * {@link globalsCapacity}, and note 11 of the 109 have none at all): the array is
+ * allocated at `capacity`
  * and the engine takes the next slot when a script assigns a new global — which
  * is precisely the gesture being reproduced here, at the same stride, inside the
  * same block, with the same length in the header. The file stays exactly the shape
@@ -768,6 +771,63 @@ function newVarRecord(container: { data: Uint8Array }, name: string): number {
   d[nameSlot + NODE_NAME] = name.length;
   for (let j = 0; j < name.length; j++) d[nameSlot + NODE_NAME + 1 + j] = name.charCodeAt(j) & 0xff;
   return valueSlot;
+}
+
+/**
+ * How many distinct globals a base save could carry if it were patched: the
+ * variables it already has a record for, plus the records that could still be
+ * made in the free tail of its node array.
+ *
+ * This is what makes one `.ti` a better structural template than another, and the
+ * spread across the shipped 109 is wide enough to decide a mission. Every save
+ * holds the variable list that existed when it was TAKEN, so an early save simply
+ * has no record for a later global — and the earliest are the ones a fresh
+ * playthrough was being handed. Against the 163 globals the shipped corpus knows
+ * between them:
+ *
+ *     1/01 - April 14th, 1942         96 records   holds  99   drops 64
+ *     1/25 - In Squash Court         121 records   holds 119   drops 44
+ *     ENDGAME2/01 - Found Notebook   126 records   holds 139   drops 24
+ *
+ * and `1/01` — the first file in `save/1`, which is what the template picker used
+ * to take — is the worst of the 109. What it dropped was not bookkeeping: the
+ * whole turbine puzzle (`boiler`, `turbine`, `condensor`, `steamtank`, the four
+ * pressures), the smokestack maze (`mazenumber`, `stacklevel`), the darkroom's
+ * plates (`picone`…`badthree`), `stokerphase`, `troutmoney`, `turkwater`,
+ * `fencelevel`, `stackmax`. See {@link SaveEntry} ranking in save-seed.ts.
+ *
+ * Answered by counting, not by making the records on a copy — ranking 109 saves
+ * costs 15 ms that way and 200 ms the other, which is real time on a page load.
+ * What keeps the count honest is {@link freeVarSlots} applying the same rule
+ * `newVarRecord` does, and the suite asserting the two agree on all 109.
+ */
+export function globalsCapacity(bytes: Uint8Array | RawSaveFile): { records: number; free: number } {
+  let raw: RawSaveFile;
+  try {
+    raw = bytes instanceof Uint8Array ? readSaveFile(bytes) : bytes;
+  } catch {
+    return { records: 0, free: 0 };
+  }
+  const gi = findGlobalsIndex(raw);
+  if (gi < 0) return { records: 0, free: 0 };
+  const d = raw.containers[gi].data;
+  return { records: recordOffsets(d).size, free: freeVarSlots(d) };
+}
+
+/**
+ * How many more variable records {@link newVarRecord} could make in this globals
+ * container — its own rule, counted instead of performed.
+ *
+ * That rule is: the new name goes two nodes past the last name's DFValue and the
+ * whole node has to fit. A record made that way leaves its own DFValue as the next
+ * dangling one, so every record after the first advances the frontier by a single
+ * node — which is why 4 spare nodes are 3 new globals and not 4.
+ */
+export function freeVarSlots(d: Uint8Array): number {
+  const slots = decodeVarSlots(d);
+  if (!slots.length) return 0;
+  const frontier = slots[slots.length - 1].valueSlot + 3 * NODE_STRIDE;
+  return frontier > d.length ? 0 : Math.floor((d.length - frontier) / NODE_STRIDE) + 1;
 }
 
 /**
@@ -925,7 +985,16 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       return true;
     };
     const offs = recordOffsets(containers[gi].data);
-    for (const [name, off] of offs) if (!writeVar(name, off)) patch.onDrop?.(name, "no pool room");
+    // A record the patch was not asked about is not a loss: the base keeps its own
+    // value, which is the whole design. Reporting one as dropped was noise that
+    // grew with the base — a session holding 100 globals patched onto a 126-record
+    // save would have complained about the other 26, and with the wrong reason
+    // ("no pool room"). Only a global we were given and could not store is news.
+    const asked = (name: string) => patch.numGlobals.has(name) || !!patch.strGlobals?.has(name);
+    for (const [name, off] of offs) {
+      if (!asked(name)) continue;
+      if (!writeVar(name, off)) patch.onDrop?.(name, "no pool room");
+    }
     // and the globals the base has no record for at all — a save from before the
     // engine had ever assigned them. Making the record is what stops `savedeck`
     // and `hallside` being dropped; the base's free slots are finite, so the ones

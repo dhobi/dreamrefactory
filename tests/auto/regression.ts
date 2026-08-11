@@ -4610,15 +4610,20 @@ test("fight M3: a knock-out ends the bout", async () => {
 
   g.set("vladpower", -60); // Vlad is spent
   await fire(session.sendEvent("sendtoprop", "vlad", "idle", [], "test"));
-  const won =
-    !!g.get("fightover") &&
-    ownerOf("vlad") === "lostfight" &&
-    session.stageName !== "fight.stg";
+  const won = ownerOf("vlad") === "lostfight" && session.stageName !== "fight.stg";
   check(
     "fight KO: dropping Vlad below -50 ends the bout as a player win and leaves the stage",
     won,
-    `fightover=${g.get("fightover")} owner=${ownerOf("vlad")} stage=${session.stageName}`,
+    `owner=${ownerOf("vlad")} stage=${session.stageName}`,
   );
+  // `fightover` is NOT among the outcomes: endfight sets it true and then
+  // `dumpglobal`s it four lines later, along with the rest of the bout's working
+  // set. What survives a fight is the actor's owner, which is what the room's
+  // openscene reads. (This check used to assert fightover was true, which only
+  // passed because dumpglobal was being read as a declaration — see #85.)
+  const scratch = ["playerpower", "vladpower", "fightover", "oldside", "firstpunch", "secondpunch", "thirdpunch"];
+  const left = scratch.filter((n) => g.has(n));
+  check("...and the bout's working globals are destroyed with it", left.length === 0, `still held: ${left.join(", ")}`);
 }
 );
 
@@ -7021,3 +7026,44 @@ test("a sendtoactor reaches the character, not the overlay prop of that name", a
     `visible=${vlad.visible} pose=${vlad.poseName} star=${vlad.starName}`,
   );
 }, 120_000);
+
+// --- 98. dumpglobal destroys, and the turbine puzzle says so ----------------
+// `dumpglobal x, y` reads like `global x, y` and does the opposite. Its 64 uses in
+// the corpus are all in a teardown, and TURBINE.STG carries the pair in one file:
+//
+//     code closestage ()              code initvalue ()
+//         …                               global coal, valve1, …
+//         dumpturbineglobals ()           coal = 50 …
+//
+// Read as a declaration, the puzzle's 18 working variables stayed in the session
+// for the rest of the game — which is what made a save report 37 globals it could
+// not store (#85; `coal`, `valve1..3`, `pump1`, `pump2` have a record in NONE of
+// the 109 shipped saves, because the original discards them the same way).
+test("closing the turbine puzzle destroys the globals it was working in", async () => {
+  const { session } = await newHost();
+  const g = session.interp.globals;
+  const PUZZLE = [
+    "coal", "valve1", "valve2", "valve3", "pump1", "pump2",
+    "boilpres", "valvpres", "seaspres", "condpres",
+    "boiler", "turbine", "steamtank", "condensor",
+    "condtemp", "boiltemp", "electricity", "electlag",
+  ];
+  await session.stageCtrl.openStageFile("turbine.stg");
+  await session.sendEvent("sendtostage", "turbine.stg", "initvalue", [], "test");
+  await drain();
+  const seeded = PUZZLE.filter((n) => g.has(n));
+  check(
+    "opening it seeds the working set",
+    g.get("coal") === 50 && g.get("boiler") === 100000 && seeded.length >= 10,
+    `${seeded.length} of ${PUZZLE.length} present, coal=${g.get("coal")}`,
+  );
+
+  // the stage's own teardown — nothing hand-written about which names go
+  await session.sendEvent("sendtostage", "turbine.stg", "dumpturbineglobals", [], "test");
+  await drain();
+  const left = PUZZLE.filter((n) => g.has(n));
+  check("closing it destroys every one of them", left.length === 0, `still held: ${left.join(", ")}`);
+  // ...and a read of a destroyed global is 0, exactly as one never assigned is
+  check("a destroyed global reads as 0", session.interp.globals.get("coal") === undefined
+    && Number(session.interp.globals.get("coal") ?? 0) === 0);
+});

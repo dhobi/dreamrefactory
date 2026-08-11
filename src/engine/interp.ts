@@ -243,15 +243,32 @@ export class Interpreter {
       case "noop":
         return NORMAL;
       case "decl":
-        if (st.kind === "global" || st.kind === "dumpglobal") {
-          for (const n of st.names) {
-            // `dumpglobal` is the author's "belongs in a saved game" marker;
-            // our save path serializes ALL globals (GameSession.snapshotSave),
-            // so both kinds declare a plain global here.
-            if (!this.globals.has(n)) this.globals.set(n, 0);
-          }
+        if (st.kind === "global") {
+          for (const n of st.names) if (!this.globals.has(n)) this.globals.set(n, 0);
+        } else if (st.kind === "dumpglobal") {
+          // `dumpglobal` DISCARDS the named globals — it is a statement, not a
+          // declaration, whatever its shape suggests. All 64 sites in the corpus
+          // sit in a teardown: `closeset`, `closestage`, `closeenigma`,
+          // `endfight`, or a `dump…globals()` helper called from one, and
+          // turbine.stg's exists for nothing else (`dumpturbineglobals` is four
+          // dumpglobal lines and no other statement, against `initvalue`'s plain
+          // `global` + assignment on the way in).
+          //
+          // bridge.stg's `monkey()` settles it, because its author worked around
+          // it: `arg = drifthappen`, then `dumpglobal drifthappen`, then every
+          // test against `arg`. Copying the value first is pointless unless the
+          // next line destroys it.
+          //
+          // The shipped saves agree from the other side: `coal`, `valve1..3`,
+          // `pump1`, `pump2` and `savenorth` — all dumped on a stage close — have
+          // a record in NONE of the 109, and reading them as declarations left
+          // them in the session for the rest of the game. Which is what made a
+          // save complain about 37 variables it could not store (#85), and what
+          // let a script read last time's value of a puzzle that had been reset.
+          for (const n of st.names) this.globals.delete(n);
         } else {
-          // local / dumplocal
+          // local (dumplocal too — no script in the corpus uses it, and a local
+          // dies with its frame anyway)
           for (const n of st.names) if (!frame.locals.has(n)) frame.locals.set(n, 0);
         }
         return NORMAL;
