@@ -638,10 +638,42 @@ export class GameSession {
     // `target` stays the caller's context.
     const OBJECT_ADDRESSEE = /^sendto(prop|actor|scene|flat)(fx)?$/;
     const evTarget = OBJECT_ADDRESSEE.test(cmd) ? targetName || callerName : callerName;
-    const { value, ran, passed, visited } = await this.runHandlerChain(chain, handler, args, (link) => ({
-      me: link.name,
-      target: evTarget,
-    }));
+    // A KEY event's chain ends at the boot library, because that is where the
+    // default movement lives: TAOOT's boot holds two keydown handlers and they are
+    // a pair. The first is the router — it maps the player's own movement keys
+    //
+    //     switch (arg)
+    //     case keynorth      arg = "uparrow"      ← "w" by default
+    //     case keywest       arg = "leftarrow"    ← "a"
+    //     case keyeast       arg = "rightarrow"   ← "d"
+    //     endswitch
+    //     sendtoscene (currentscene (), keydown (arg))
+    //
+    // and the second is what the re-routed event has to land on
+    // (`case "leftarrow": currentscene("left")`). Reaching it along THIS chain is
+    // what carries the mapped value; running the two boot handlers side by side
+    // instead — which is what we did — gave the second one the key the player
+    // actually pressed, so the arrows worked and the A/W/D bindings the control
+    // panel offers did nothing at all (#14).
+    //
+    // `isRunning` is what makes it safe: a script already running this handler
+    // further up the stack is refused, so the router cannot resolve its own
+    // re-route back into itself. That cycle is why the boot was kept off every
+    // fallback list, and it showed as an out-of-memory rather than a wrong answer
+    // — TAOOT's TURK scene134 has a script with no keydown of its own.
+    const keyEvent = handler === "keydown" || handler === "keyrepeat";
+    if (keyEvent) {
+      for (const b of this.bootScripts) {
+        if (!chain.includes(b) && !this.interp.isRunning(b, handler)) chain.push(b);
+      }
+    }
+    const { value, ran, passed, visited } = await this.runHandlerChain(
+      chain,
+      handler,
+      args,
+      (link) => ({ me: link.name, target: evTarget }),
+      !keyEvent,
+    );
     // `passcode` means "not mine, ask whoever holds me" — so a chain that ends on
     // one keeps going up the containment chain, exactly as a chain that had no
     // handler at all does. Only the LAST link matters: the loop above already
@@ -790,6 +822,16 @@ export class GameSession {
     handler: string,
     args: Value[],
     ctxFor: (link: ScriptInstance) => CallCtx,
+    /**
+     * Whether a link that RAN ends the walk. True for every event but the
+     * keyboard's, where the original's rule is different and the corpus shows it:
+     * `deckbd.set`'s keydown is a ladder of `if currentview() = "viewNN" & arg =
+     * "uparrow" … exitcode`, and for any other key it simply falls off the end. If
+     * that ended the walk, no arrow would ever reach the boot's default movement
+     * — so for a key event only `exitcode` stops the chain (see
+     * SetScripts.keyDown, which has always said this).
+     */
+    stopOnHandled = true,
   ): Promise<{ value: Value; ran: boolean; passed: boolean; visited: ScriptInstance[] }> {
     let value: Value = 0;
     let ran = false;
@@ -802,7 +844,8 @@ export class GameSession {
       const res = await this.interp.runHandler(link, handler, args, ctxFor(link));
       value = res.value;
       passed = res.passed;
-      if (this.interp.eventConsumed || (res.handled && !res.passed)) break;
+      if (this.interp.eventConsumed) break;
+      if (stopOnHandled && res.handled && !res.passed) break;
     }
     return { value, ran, passed, visited };
   }

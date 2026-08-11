@@ -331,6 +331,28 @@ and subtitle ink alike) and each movie segment's own palette all pass through it
 Nightdive intro and the language chooser do not, since neither is the original
 showing a room.
 
+### Which keys the page keeps
+
+The page's listener (`src/main.ts`) is the port's stand-in for TI.EXE's window proc,
+and the original translates **every printable key** through its VK table and hands it
+to the boot. So does this: past the page's own keys, a single character goes to
+`viewer.keyDown` — which is what makes the control panel's rebindable movement keys
+work at all (#14), and what lets a scene or flat bind a letter of its own (the deck
+map's deck letters, the panel's own key-capture).
+
+Kept by the page rather than passed on:
+
+| | |
+|---|---|
+| **F1–F9** | the display gamma, handled ahead of everything (below) |
+| **M / O / X** | the minimap, the hotspot overlay and the details pane |
+| anything with **Ctrl / Alt / Meta** | Ctrl+R has to reload; the original's Ctrl marker only ever mattered to its movie key filter |
+| a key typed into a page field | `focusOwnsKey` — typing stays typing |
+
+M/O/X are a deliberate deviation, and the one place it can bite: a player who rebinds
+a movement key to `m` will find the minimap takes it. Nothing else in the game binds
+those three.
+
 ### The brightness controls
 
 The original's are **F1–F9**: F1/F2 move all three exponents (the pair its manual

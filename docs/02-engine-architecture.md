@@ -213,11 +213,32 @@ a click goes — the port's transcription is the fallback for one that doesn't (
 The chain for a pointer event over a hotspot is **object → scene → set main
 → stage**, and off the end of it the event keeps climbing the **containment**
 chain — the file that holds the thing. Each level either handles the event (with an
-`exitcode`) or passes it on (`passcode`, or simply having no handler). Keyboard events go through
-an even longer chain that ends at the **boot** library's default movement
-logic — which is why a scene script can quietly steal the ↑ key to send you
-through a door instead of walking. The full event model is in the
-**[Scripting doc](03-scripting-language.md)**.
+`exitcode`) or passes it on (`passcode`, or simply having no handler). The full event
+model is in the **[Scripting doc](03-scripting-language.md)**.
+
+**A keyboard event is dispatched differently, in two ways that matter.**
+
+It starts at the **boot**, not at the scene: TAOOT's boot holds a `keydown` that is a
+*router* — it maps the player's own movement keys (`keynorth`/`keywest`/`keyeast`,
+W/A/D by default and rebindable from the control panel) onto the arrows and then
+re-routes with `sendtoscene(currentscene(), keydown(arg))`. Everything else the press
+reaches, it reaches along that re-route, which is what carries the **mapped** value:
+scene → set main → stage → the boot library's own `keydown`, the default that turns
+`"leftarrow"` into `currentscene("left")`. Dispatching the boot's two containers side
+by side instead handed the default the key the player actually pressed, so the arrows
+worked and the W/A/D bindings did nothing at all (#14).
+
+And a link that merely **finishes** does not end the walk — only `exitcode` does.
+`deckbd.set`'s `keydown` is the proof: a ladder of `if currentview() = "viewNN" & arg
+= "uparrow" … exitcode` that falls off the end for every other key. Under the pointer
+event's rule that would consume the press, and no arrow would ever reach the default
+movement. (This is also why a scene script can quietly steal ↑ to send you through a
+door instead of walking — it takes the key with an `exitcode`.)
+
+What keeps the router from resolving its own re-route back into itself is a
+re-entrancy check: a script already running a handler further up the dispatch stack
+is never given it again. Before that existed the boot had to be kept off every
+fallback list, and reaching it was an out-of-memory rather than a wrong answer.
 
 ## The heartbeat and timed events
 

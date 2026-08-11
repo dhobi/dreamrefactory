@@ -152,6 +152,26 @@ export class Interpreter {
   realYieldSeq: () => number = () => 0;
   private unknownLogged = new Set<string>();
   /**
+   * The (script, handler) pairs currently on the dispatch stack.
+   *
+   * "A script already running a handler must not be re-entered with it" is the
+   * invariant that keeps event ROUTERS from resolving an event back into
+   * themselves. TAOOT's boot is one: its `keydown` re-routes with
+   * `sendtoscene(currentscene(), keydown(arg))` and its `mousedown` with
+   * `sendtoactor(thename, mousedown(thepoint))`, so a target with no handler of
+   * its own would otherwise climb its containment chain into the very handler
+   * that dispatched it and go round again — the reported "dispatch cycle:
+   * boot1.mousedown at depth 64" and, before that, an out-of-memory in TURK
+   * scene134. The depth cap catches those; this is what stops them happening.
+   */
+  private readonly liveHandlers: { inst: ScriptInstance; handler: string }[] = [];
+
+  /** whether `inst` is already running `handler` further up the dispatch stack */
+  isRunning(inst: ScriptInstance, handler: string): boolean {
+    return this.liveHandlers.some((h) => h.inst === inst && h.handler === handler);
+  }
+
+  /**
    * Nested handler dispatch depth. The async interpreter has no natural
    * call-stack limit — a dispatch cycle in game data would allocate
    * promises until the tab dies. Legitimate nesting (TAOOT's double gstair
@@ -216,6 +236,7 @@ export class Interpreter {
     this.depth++;
     const prevEvent = this.currentEvent;
     this.currentEvent = ++this.handlerSeq;
+    this.liveHandlers.push({ inst, handler });
     try {
       const sig = await this.execBlock(block.body, frame);
       return {
@@ -224,6 +245,7 @@ export class Interpreter {
         handled: true,
       };
     } finally {
+      this.liveHandlers.pop();
       this.depth--;
       this.currentEvent = prevEvent;
       this.dispatchName = prevDispatch;
