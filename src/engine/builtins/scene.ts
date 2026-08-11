@@ -353,11 +353,28 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     r(dbg, () => {});
   }
 
-  // modifier-key probes — debug affordances (shift+click dumps a prop's script,
-  // option+click drags it). No hardware modifier state in the browser build, so
-  // always "not held": the debug branches guarded by `debugging & shiftkey()`
-  // stay dormant and the normal gameplay branch runs.
-  for (const key of ["shiftkey", "optionkey", "commandkey"]) {
+  /*
+   * The modifier-key probes.
+   *
+   * `shiftkey()` answers for real, and exactly one thing in the shipping game
+   * changes as a result. Census of the English tree: 383 probe calls across 248
+   * script containers, and all but FOUR are gated on `debugging` — which is
+   * assigned once in the whole corpus, `debugging = false` in BOOTFILE, so those
+   * stay as dormant as they were when this returned 0. Of the four ungated ones,
+   * three are `optionkey` (option-drag moves the cricket in Z, scales a smokestack
+   * prop, and opens `debugger()` in PHOTO.SHP) and the fourth is the one worth
+   * having: house.shp's "help" prop answers a shift-click with the game's own
+   * state readout, `notedialog("Mission=" @ … @ ", Phase=" @ …)`, with Maze and
+   * Level added in the three smokestack sets. That is #8, and it was never missing
+   * — only unreachable, because this said "not held".
+   *
+   * So the other two keep answering 0. Not for want of a browser event to read
+   * them from: nothing in the shipping game reaches them except those three
+   * dev tools, and "option-drag rescales the artwork" is not a thing a player
+   * should be able to do to their own game by accident.
+   */
+  r("shiftkey", () => (session.shiftDown ? 1 : 0));
+  for (const key of ["optionkey", "commandkey"]) {
     r(key, () => 0);
   }
 }
