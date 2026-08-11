@@ -14,6 +14,7 @@ import { NATIVE_FRAME_MS, TICK_MS, chooseFrameInterval, frameHoldMs } from "./df
 import { Container } from "./df/container";
 import { decodeAudioContainer, resampleTo } from "./df/audio";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "./df/image";
+import { displayPalette } from "./screen-gamma";
 import { GameSession } from "./engine/session";
 import { PlayHandle } from "./engine/audio";
 
@@ -353,7 +354,7 @@ export class MoviePlayer {
       containers: mov.file.containers,
       hasRegions,
       keySkips: seg.keySkips,
-      palette: paletteToRGBA(seg.paletteRaw, 256),
+      palette: displayPalette(paletteToRGBA(seg.paletteRaw, 256)),
       pos: Math.min(Math.max(startFrame, 0), frames.length - 1),
       interval,
       lastTick: 0,

@@ -1,5 +1,6 @@
 import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTURNS, roadsAt, turnRing } from "./df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "./df/image";
+import { displayPalette, screenGamma } from "./screen-gamma";
 import { ShpFrame } from "./df/shp";
 import { ENGINE_STEP_MS } from "./engine/clock";
 import { truthy } from "./engine/interp";
@@ -445,8 +446,8 @@ export class SetViewer {
     this.puppetView = new PuppetView(session);
     this.basePalette = paletteToRGBA(set.paletteRaw, set.colorCount);
     this.basePropPalette = paletteToRGBA(set.paletteRaw, 256);
-    this.palette = this.basePalette.slice();
-    this.propPalette = this.basePropPalette.slice();
+    this.palette = displayPalette(this.basePalette);
+    this.propPalette = displayPalette(this.basePropPalette);
     // clut/mixclut palette dimming (darkroom light switch etc.)
     session.onClut = (target, dim) => this.setClut(target, dim);
     this.scripts = new SetScripts(set, session);
@@ -838,8 +839,8 @@ export class SetViewer {
     if (t === "current") t = this.session.viewShowing ? "set" : "stage";
     if (t === "set") {
       this.setDim = dim;
-      this.palette = dim ? dimPalette(this.basePalette, dim) : this.basePalette.slice();
-      this.propPalette = dim ? dimPalette(this.basePropPalette, dim) : this.basePropPalette.slice();
+      this.palette = displayPalette(dim ? dimPalette(this.basePalette, dim) : this.basePalette);
+      this.propPalette = displayPalette(dim ? dimPalette(this.basePropPalette, dim) : this.basePropPalette);
     } else if (t === "stage") {
       this.stageDim = dim; // consumed by flatPalette() during render
     }
@@ -863,9 +864,23 @@ export class SetViewer {
     }
   }
 
-  /** the stage flat's effective palette, dimmed if a stage mixclut is active */
+  /**
+   * The stage flat's effective palette: dimmed if a stage mixclut is active, then
+   * through the display gamma — that order, for the reason in screen-gamma.ts.
+   *
+   * Memoised on the three things it depends on, because this runs on EVERY frame
+   * that draws a flat and both steps allocate. The flat's own decoded palette is a
+   * stable object per flat, so identity is a sound key for it.
+   */
+  private flatPal: { base: Uint8ClampedArray; dim: ClutDim | null; gamma: number;
+                     out: Uint8ClampedArray } | null = null;
   private flatPalette(base: Uint8ClampedArray): Uint8ClampedArray {
-    return this.stageDim ? dimPalette(base, this.stageDim) : base;
+    const g = screenGamma();
+    const hit = this.flatPal;
+    if (hit && hit.base === base && hit.dim === this.stageDim && hit.gamma === g) return hit.out;
+    const out = displayPalette(this.stageDim ? dimPalette(base, this.stageDim) : base);
+    this.flatPal = { base, dim: this.stageDim, gamma: g, out };
+    return out;
   }
 
   /** start looping background music if a theme bank is available */
@@ -2309,7 +2324,7 @@ export class SetViewer {
   renderMap(ctx: CanvasRenderingContext2D): void {
     const fb = new FrameBuffer();
     const d = decodeFrame(this.set.file.containers[this.set.mapLight].data, fb);
-    const pal = paletteToRGBA(this.set.paletteRaw, 256);
+    const pal = displayPalette(paletteToRGBA(this.set.paletteRaw, 256));
     ctx.canvas.width = d.width;
     ctx.canvas.height = d.height;
     const img = ctx.createImageData(d.width, d.height);
