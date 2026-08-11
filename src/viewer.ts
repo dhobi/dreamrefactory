@@ -639,7 +639,29 @@ export class SetViewer {
     return best;
   }
 
-  /** position at a named scene/view (case-insensitive), e.g. from changeset() */
+  /**
+   * Position at a named scene/view (case-insensitive) — and NOTHING else.
+   *
+   * No scene lifecycle: no closescene, no openscene, no `viewChanged`. That is
+   * right for its one caller in the engine, the constructor placing the camera at
+   * a set's start scene before {@link start} runs the lifecycle over it. It is
+   * also why this is not the scripted jump: `currentscene()`/`currentview()` as
+   * setters go through `onSceneJump`/`onViewJump` to {@link teleport}, which fires
+   * the event a standpoint change owes (#71 — the purser's door, left hanging down
+   * the corridor when it did not).
+   *
+   * Which makes it a trap for a TEST, and one that has already been walked into:
+   * 21 checks in the suite reach a state with this, and `openscene` is a per-VIEW
+   * event that 33 of the 51 shipped handlers gate on `currentview()`. So anything
+   * asserted about view-gated behaviour after a `jumpTo` is asserted against a
+   * state the game cannot arrive in. Diagnosing #88 that way produced a bug report
+   * (#96) for a defect that did not exist: the flag under test still held the value
+   * the set's opening `openScene` had left, because nothing here had recomputed it,
+   * and 200 further engine steps of watching it never would.
+   *
+   * A test that owes the lifecycle should drive the script path — `armNavHooks()`,
+   * then `onSceneJump`/`onViewJump` — the way the #71 regression test does.
+   */
   jumpTo(sceneName: string, viewName = ""): boolean {
     const s = this.set.scenes.findIndex(
       (sc) => sc.sceneName.toLowerCase() === sceneName.toLowerCase(),
