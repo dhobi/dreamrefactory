@@ -46,7 +46,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { refuseZeitelAgain, segment2, segment3, segment4, segment5, segment6, segment7, segment8, segment9, segment10, segment11, segment12, segment13, segment14, segment15, segment16, segment17, segment18, segment19, segment20, segment21, segment22, segment23, segment24, segment25, segment26, segment27 } from "../playthrough/segments";
 import { PLANT_GAUGES, PLANT_LEVELS } from "../playthrough/segments";
-import { isCoinFlip, isHarnessPaced } from "../playthrough/masks";
+import { isCoinFlip, isHarnessPaced } from "../../src/engine/masks";
 import { browserStory } from "./story";
 import { appUrl, type BrowserDriver } from "./driver";
 import { installRepaintProbe, readRepaintProbe, reportRepaint } from "./repaint";

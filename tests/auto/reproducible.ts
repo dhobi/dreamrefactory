@@ -73,7 +73,7 @@
  * original seeded its `rand()` from the clock, so its sequence is not a thing this
  * port could match even if it tried. What was bought is that an engine change with
  * no effect on what scripts ASK for now has no effect on what they GET — and the
- * headless golden can assert the coin flip again (tests/playthrough/masks.ts).
+ * headless golden can assert the coin flip again (src/engine/masks.ts).
  */
 import { describe, expect, test } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";

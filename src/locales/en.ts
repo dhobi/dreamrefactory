@@ -158,6 +158,19 @@ export const en = {
       "shows the soft one for a moment as a right turn lands (a left turn lands " +
       "sharp). Tick this to skip that moment. The turn itself stays soft either " +
       "way — no sharp version of the moving frames was ever made." as Text,
+    // The state list in the details pane (#22). Its CONTENTS are never
+    // translated — `neckphase 4` is a name out of the game's own tables and the
+    // same sentence in six languages — so only the words around it are here.
+    debugState: "state" as Text,
+    debugStateTitle:
+      "Every script global, and the six the game's own debug readout names" as Text,
+    debugAll: "all" as Text,
+    debugAllTitle: "Every global, not just the ones that have just moved" as Text,
+    debugFilter: "filter" as Text,
+    debugCopy: "⧉ Copy details" as Text,
+    debugCopyTitle: "Copy the state and the whole log, to attach to a bug report" as Text,
+    debugCopied: "State and log copied — paste them into the issue." as Text,
+    debugSaved: "Your browser would not copy, so the details were downloaded instead." as Text,
     // no key for the modal's heading: save-browser.ts always overwrites it with
     // "Load Game" or "Save Game", so the "Saved Games" in the markup is never
     // read. It gets translated when the TypeScript strings do.
