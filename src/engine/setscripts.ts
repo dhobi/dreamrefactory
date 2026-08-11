@@ -136,11 +136,28 @@ export class SetScripts {
    *     openscene handlers gate on currentview() and only act when you turn to face a particular
    *     view (HALLA's "Sasha walks down the hall" at view62; DECKBD's Max
    *     calling you over when you see him; etc.). Firing scene-entry openscene
-   *     only left all of those dead on turns. We run ONLY the scene script here
-   *     (not main/stage/boot): the boot openscene does per-scene-entry work
-   *     (nav-arrow rebuild, the mission-4 doomsday-clock tick) that must NOT
-   *     repeat on every turn. The view-gated scene handlers are self-guarded
-   *     (actorstar/actorowner/flag checks) so re-entry is idempotent.
+   *     only left all of those dead on turns. The view-gated scene handlers are
+   *     self-guarded (actorstar/actorowner/flag checks) so re-entry is idempotent.
+   *
+   * The chain here is scene script → SET MAIN, and stops there. Not stage or boot:
+   * the boot's openscene does per-scene-ENTRY work (nav-arrow rebuild, the
+   * mission-4 doomsday-clock tick) that must not repeat on every turn, which is
+   * why this used to stop at the scene script instead.
+   *
+   * Stopping one link short cost the smokestack maze (#88): its `openscene` is on
+   * the SET MAIN and reads the view — `blocked = pathblocked(currentscene(),
+   * currentview())` — and the set's `keydown` swallows `uparrow` while `blocked`.
+   * So the flag was computed for whichever view you entered the scene at and then
+   * never again: measured at maze 1 / level 3 (`blocks` = "2,6,"), turning around
+   * scene64 gave `blocked = 1` at view82, view79 AND view81, though only view82 is
+   * crated. Enter such a scene facing a clear road and every crate in it is
+   * walkable; enter facing a crate and none of it is.
+   *
+   * Extending the chain by one link is bounded by a census rather than by hope: of
+   * 50 sets in the English tree, exactly TWO define `openscene` on their main.
+   * This is one; the other is stair1c1's, which re-asserts `actorzclip` on the
+   * stairwell crowd keyed on `currentscene()` — idempotent by construction, and
+   * running it per view re-asserts a clip that was already right.
    */
   async viewChanged(sceneIdx = -1): Promise<void> {
     const interp = this.session.interp;
@@ -154,12 +171,16 @@ export class SetScripts {
       }
     }
     const scene = sceneIdx >= 0 ? this.sceneScripts[sceneIdx] : null;
-    if (scene) {
+    for (const inst of [scene, this.main]) {
+      if (!inst) continue;
       interp.eventConsumed = false;
       try {
-        await interp.runHandler(scene, "openscene", [], { me: scene.name, target: "" });
+        const res = await interp.runHandler(inst, "openscene", [], { me: inst.name, target: "" });
+        // handled and not passed on: the chain ends here, as it does on entry
+        // (fireLifecycle). A `passcode` carries on to the main — and no further.
+        if (res.handled && !res.passed) return;
       } catch (e) {
-        this.onLog(`script error in ${scene.name}.openscene (view change): ${(e as Error).message}`);
+        this.onLog(`script error in ${inst.name}.openscene (view change): ${(e as Error).message}`);
       }
     }
   }
