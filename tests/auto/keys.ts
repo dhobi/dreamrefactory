@@ -9,7 +9,7 @@
  */
 import { test, expect } from "vitest";
 import { parseHTML } from "linkedom";
-import { focusOwnsKey } from "../../src/keys";
+import { SWIPE_AXIS_RATIO, focusOwnsKey, swipeKey } from "../../src/keys";
 
 const { document } = parseHTML(`<!doctype html>
   <input id="filter" type="search">
@@ -102,4 +102,39 @@ test("the state list's own filter box is covered", () => {
   for (const key of ["m", "o", "x", "M", "O", "X"]) {
     expect(focusOwnsKey(box, key), `the filter keeps its ${key}`).toBe(true);
   }
+});
+
+// --- which arrow a swipe means (src/keys.ts) --------------------------------
+// Three of the four are the arrow keys' reading of the axes. The fourth used to be
+// nothing, on the reasoning that `ArrowDown` is not a navigation key in the original
+// either — but SMSTACK2/SMSTACK3 views 43/50/54/56 read it as "climb down a level",
+// and the way out of the smokestack is at level 1, so a touch-only player could
+// climb the maze and not leave it (#100).
+test("a swipe names the arrow it points at, down included", () => {
+  const D = 100;
+  expect(swipeKey(0, -D), "away from you walks on").toBe("uparrow");
+  expect(swipeKey(0, D), "and back towards you is the ladder down").toBe("downarrow");
+  expect(swipeKey(-D, 0), "leftwards turns left").toBe("leftarrow");
+  expect(swipeKey(D, 0), "rightwards turns right").toBe("rightarrow");
+});
+
+test("a diagonal decides nothing", () => {
+  expect(swipeKey(60, 60), "a clean diagonal").toBe(null);
+  expect(swipeKey(60, 70), "and one that only just leans").toBe(null);
+  // ...but a clear winner still wins, at exactly the ratio and above
+  expect(swipeKey(60, 60 * SWIPE_AXIS_RATIO + 1)).toBe("downarrow");
+  expect(swipeKey(60 * SWIPE_AXIS_RATIO + 1, 60)).toBe("rightarrow");
+});
+
+test("each axis inverts on its own, and the walk axis swaps a PAIR", () => {
+  const D = 100;
+  const walk = { turn: false, walk: true };
+  const turn = { turn: true, walk: false };
+  // the whole point of binding down: inverting walking now swaps two bindings
+  // rather than moving forward onto the unbound end
+  expect(swipeKey(0, -D, walk), "inverted, away from you goes down").toBe("downarrow");
+  expect(swipeKey(0, D, walk), "and towards you walks on").toBe("uparrow");
+  expect(swipeKey(-D, 0, walk), "with the turn axis untouched").toBe("leftarrow");
+  expect(swipeKey(-D, 0, turn), "and inverting THAT one alone").toBe("rightarrow");
+  expect(swipeKey(0, -D, turn), "leaves walking as it was").toBe("uparrow");
 });

@@ -37,7 +37,7 @@ import { installI18n, t } from "./locales";
 import { installBugReport } from "./bug-report";
 import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
 import { ChangeWatch, RowView, stateDump, stateView } from "./debug-panel";
-import { focusOwnsKey } from "./keys";
+import { focusOwnsKey, swipeKey } from "./keys";
 import { siteUrl, sitePath } from "./site";
 
 // ---------------------------------------------------------------------------
@@ -847,8 +847,6 @@ window.addEventListener("pointerup", (e) => {
  */
 /** CSS px a finger must travel before the gesture counts as a swipe */
 const SWIPE_MIN_PX = 48;
-/** how far the swipe's axis must beat the other one — a diagonal decides nothing */
-const SWIPE_AXIS_RATIO = 1.3;
 /** a finger still on the glass this long is holding a control, not swiping */
 const TAP_HOLD_MS = 220;
 /**
@@ -1001,34 +999,20 @@ window.addEventListener("pointercancel", (e) => {
 });
 
 /**
- * Where a swipe points is where you go: leftwards turns left, rightwards turns
- * right, away from you walks on down the corridor. That is the arrow keys' own
- * reading of the two axes, and it is the one the player gets without asking.
- *
- * Both axes can be flipped, and each on its own, because neither direction is
- * self-evident. A turn has a second reading with as much of a claim: the finger
- * takes hold of the scene and pushes it, so a swipe LEFT shoves the view
- * leftwards and brings what was on the right into frame — the panorama
- * convention (Street View, every photo viewer). Which of the two feels right
- * depends on whether the thumb thinks it is moving the camera or the world, and
- * that is a matter of the hand, not of the game. So it is a checkbox
- * ({@link installSwipeOptions}), and so is walking, for the same reason.
- *
- * Only three directions are bound either way. Down stays unbound, which is the
- * keyboard's own asymmetry — ArrowDown is a plain `keyDown("downarrow")`, not a
- * nav press — so inverting the walk axis moves forward onto a downward swipe and
- * leaves upward doing nothing, rather than swapping two bindings.
+ * Send the arrow a swipe means. Which arrow that is — and why each axis can be
+ * inverted — is {@link swipeKey}; this is only the dispatch, and the two halves
+ * differ: three of the four are navigation presses that the scripts may intercept,
+ * and DOWN is a plain key event, exactly as `ArrowDown` is on a keyboard.
  */
 function swipeArrow(dx: number, dy: number): void {
-  const ax = Math.abs(dx);
-  const ay = Math.abs(dy);
-  if (swipeInvert.turn) dx = -dx;
-  if (swipeInvert.walk) dy = -dy;
-  if (ay > ax * SWIPE_AXIS_RATIO) {
-    if (dy < 0) pressArrow("uparrow");
+  const key = swipeKey(dx, dy, swipeInvert);
+  const v = host.viewer;
+  if (!key || !v) return;
+  if (key === "downarrow") {
+    void session.track(v.keyDown("downarrow"));
     return;
   }
-  if (ax > ay * SWIPE_AXIS_RATIO) pressArrow(dx < 0 ? "leftarrow" : "rightarrow");
+  pressArrow(key);
 }
 
 /** how the player has asked the two swipe axes to read */
