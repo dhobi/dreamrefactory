@@ -6630,6 +6630,61 @@ test("the maze's crates block the road they are drawn on, whichever way you came
   check("and the crate cannot be walked through", where() === before, `walked to ${where()}`);
 }, 120_000);
 
+// --- 91c. jumpTo positions; only the SCRIPT's jump fires the event -----------
+// The distinction this suite depends on and had never stated. `jumpTo` is the
+// harness's way to stand somewhere — 21 checks in here use it — and it fires no
+// scene lifecycle at all. The scripted pair currentscene()/currentview() goes
+// through onSceneJump/onViewJump to teleport(), which does (#71).
+//
+// Getting those two confused while diagnosing #88 produced a bug report for a
+// defect that did not exist (#96): the flag under test still held what the set's
+// opening openScene had left, because a `jumpTo` had not recomputed it. The
+// sentinel is what tells those apart — 999 is a value no script can produce, so
+// surviving means "nothing ran" rather than "ran and answered 999".
+test("a jumpTo fires no scene event; the script's own jump does", async () => {
+  const { host, session } = await newHost();
+  const g = session.interp.globals;
+  let clock = 0;
+  g.set("tour", 0); g.set("mission", 3);
+  g.set("mazenumber", 1); g.set("stacklevel", 3); // walls up sections 2 and 6
+  await host.loadServerSet("smstack2.set");
+  const v = host.viewer!;
+  const settle = async (n = 60): Promise<void> => {
+    for (let i = 0; i < n; i++) { v.tick((clock += 50)); await drain(); }
+  };
+  await settle();
+  const where = () => `${session.currentSceneName()}/${session.currentViewName()}`.toLowerCase();
+  // the script's true()/false() are 1 and 0, so this flag is a number
+  const flag = () => Number(g.get("blocked"));
+  check("the set opened facing section 2, which is walled up", where() === "scene37/view47" && flag() === 1,
+    `${where()} blocked=${JSON.stringify(g.get("blocked"))}`);
+
+  // 1. the harness jump: it moves the camera and says nothing to the scripts
+  g.set("blocked", 999);
+  v.jumpTo("Scene64", "View81");
+  await settle();
+  check("jumpTo arrives", where() === "scene64/view81", `at ${where()}`);
+  check("…and fires no openscene, so nothing recomputed the flag", flag() === 999,
+    `blocked=${JSON.stringify(g.get("blocked"))} (999 means nothing ran)`);
+
+  // 2. the script's jump: the same destination, and the event a standpoint change
+  // owes. view81 is section 3, which this maze leaves open.
+  g.set("blocked", 999);
+  v.jumpTo("Scene37", "View47");
+  await settle();
+  const prev = v.armNavHooks();
+  session.onSceneJump("scene64");
+  session.onViewJump("view81");
+  v.disarmNavHooks(prev);
+  await settle(120);
+  check("a scripted jump arrives at the same place", where() === "scene64/view81", `at ${where()}`);
+  check(
+    "…and openscene ran there, against the view it ARRIVED at",
+    flag() === 0,
+    `blocked=${JSON.stringify(g.get("blocked"))} — 999 is "never ran", 1 is "read the view it left"`,
+  );
+}, 120_000);
+
 // --- 92. a prop animation gets to the end of itself -------------------------
 // A prop animation is played by putting the prop in the moving state, spending a
 // FIXED budget of service passes on it, and then forcing the resting state.
