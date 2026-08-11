@@ -6547,6 +6547,89 @@ test("a scripted jump closes the door a turn would have closed", async () => {
   );
 }, 60_000);
 
+// --- 91b. the smokestack maze's crates block the road they are drawn on ------
+// The same family as the test above — an openscene that a view change owes — and
+// the other end of the chain. SMSTACK2's openscene is on the SET MAIN, and all it
+// does is remember whether the road ahead is walled up:
+//
+//     code openscene ()
+//         blocked = pathblocked (currentscene (), currentview ())
+//
+//     code keydown (arg)
+//         if blocked & arg = "uparrow"
+//             exitcode
+//
+// `viewChanged` ran only the SCENE script, so on a turn the set main never spoke
+// and `blocked` kept the answer for whichever view you entered the scene at.
+// Measured at maze 1 / level 3 (`blocks` = "2,6,"): turning around scene64 gave
+// blocked=1 at view82 (right), view79 (no case at all) and view81 (section 3, not
+// in the list) — so entering a section facing a crate made all of it impassable,
+// and entering it facing a clear road made every crate in it walkable. The second
+// is what #88 reported: "I walked through crates which should not be possible".
+test("the maze's crates block the road they are drawn on, whichever way you came in", async () => {
+  const { host, session } = await newHost();
+  const g = session.interp.globals;
+  let clock = 0;
+  g.set("tour", 0); g.set("mission", 3);
+  // Set BEFORE the set opens: openset calls setupblocks(), so a maze arriving
+  // later is too late. Maze 1 / level 3 walls up sections 2 and 6.
+  g.set("mazenumber", 1); g.set("stacklevel", 3);
+  await host.loadServerSet("smstack2.set");
+  const v = host.viewer!;
+  const settle = async (n = 50): Promise<void> => {
+    for (let i = 0; i < n; i++) { v.tick((clock += 50)); await drain(); }
+  };
+  await settle();
+  check("the maze walls up the sections it was asked to", g.get("blocks") === "2,6,", `blocks=${JSON.stringify(g.get("blocks"))}`);
+
+  // The crates themselves: smstack.shp ships block1 and block2 only, and its
+  // openshop clones six more with propinstance(); the set then puts each blocked
+  // one on the star named "<set>.<section>".
+  const crate = (n: number) => session.propRuntime.get(`block${n}`);
+  const shown = [1, 2, 3, 4, 5, 6, 7, 8].filter((n) => crate(n)?.visible);
+  check("a crate stands in each walled-up section, and nowhere else", JSON.stringify(shown) === "[2,6]",
+    `visible=${JSON.stringify(shown)}`);
+  check("…on the set's own star for that section",
+    crate(2)?.starName === "2.2" && crate(6)?.starName === "2.6" && !!crate(6)?.worldSpace,
+    `block2=${crate(2)?.starName} block6=${crate(6)?.starName} world=${crate(6)?.worldSpace}`);
+
+  const where = () => `${session.currentSceneName()}/${session.currentViewName()}`.toLowerCase();
+  const blocked = () => (Number(g.get("blocked")) ? 1 : 0);
+  // pathblocked()'s own table for this set, section by section
+  check("the set opens facing the crate in section 2", where() === "scene37/view47" && blocked() === 1,
+    `${where()} blocked=${blocked()}`);
+
+  // A TURN: view50 has no case in pathblocked at all, so nothing is blocked there
+  await session.track(v.keyDown("leftarrow"));
+  await settle();
+  check("turning away from it clears the flag", where() === "scene37/view50" && blocked() === 0,
+    `${where()} blocked=${blocked()}`);
+
+  // and view48 is section 1, which this maze leaves open
+  await session.track(v.keyDown("leftarrow"));
+  await settle();
+  check("and an open road reads as open", where() === "scene37/view48" && blocked() === 0,
+    `${where()} blocked=${blocked()}`);
+
+  // so it can be walked, and the section beyond it reads for ITSELF
+  await session.track(v.keyDown("uparrow"));
+  await settle(80);
+  check("walking the open road arrives in the next section", where() === "scene63/view76",
+    `arrived at ${where()}`);
+  check("…which answers for its own view", blocked() === 0, `${where()} blocked=${blocked()}`);
+
+  // then turn back to a crate and confirm the road is shut
+  for (let i = 0; i < 6 && where() !== "scene37/view47"; i++) {
+    await session.track(v.keyDown(i < 2 ? "leftarrow" : "uparrow"));
+    await settle(80);
+  }
+  check("back at the crate", where() === "scene37/view47" && blocked() === 1, `${where()} blocked=${blocked()}`);
+  const before = where();
+  await session.track(v.keyDown("uparrow"));
+  await settle(80);
+  check("and the crate cannot be walked through", where() === before, `walked to ${where()}`);
+}, 120_000);
+
 // --- 92. a prop animation gets to the end of itself -------------------------
 // A prop animation is played by putting the prop in the moving state, spending a
 // FIXED budget of service passes on it, and then forcing the resting state.
