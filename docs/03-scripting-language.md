@@ -67,6 +67,18 @@ misbehave:
 - **Mixed-type `=` compares as text.** An uninitialised global variable is
   `0`, and scripts rely on `"uparrow" = 0` being *false*. So comparisons
   coerce to text.
+- **`dumpglobal` looks like a declaration and is a demolition.** `global x, y`
+  brings variables into scope; `dumpglobal x, y` *destroys* them. All 64 uses in
+  the corpus are in a teardown — `closeset`, `closestage`, `closeenigma`,
+  `endfight`, or a `dump…globals()` helper called from one — and
+  `TURBINE.STG`'s exists for nothing else: `dumpturbineglobals` is four
+  `dumpglobal` lines and no other statement, against `initvalue`'s plain
+  `global` + assignment on the way in. `BRIDGE.STG`'s `monkey()` proves it from
+  the author's side, because it works around it: `arg = drifthappen`, then
+  `dumpglobal drifthappen`, then every test against `arg` — a copy that is
+  pointless unless the next line destroys the original. The shipped saves agree
+  from the far side: `coal`, `valve1..3`, `pump1`, `pump2` and `savenorth` are
+  dumped on a stage close and have a record in **none** of the 109 (#85).
 - The original compiler emitted some **oddities** the parser must tolerate:
   `//` comment lines that tokenize as two division operators, unterminated
   blocks, dead statements before the first `case`, and the occasional

@@ -209,7 +209,7 @@ export interface RowPatch {
  * The panel polls, because the engine has no "a global changed" event to listen
  * for — so the list is rebuilt four times a second whether or not the game did
  * anything. Written the obvious way (`replaceChildren` with a fresh row per
- * variable) that discards and re-creates 161 elements every 250 ms for a screen
+ * variable) that discards and re-creates every one of 131 rows every 250 ms for a screen
  * that has not changed: the browser repaints the whole rail, a text selection in it
  * cannot survive one tick, and a reader watching one row watches it flicker.
  *
@@ -301,9 +301,10 @@ export class RowView {
  * Its shape is the goldens' (`formatTrace`), with the room and the log wrapped
  * around it, because that makes a reporter's paste directly comparable with a
  * recorded playthrough instead of merely readable. It is an ATTACHMENT rather than
- * something the Report button could carry: one snapshot is 4376 bytes on its own
- * and the issue body travels as a URL under a 4000-byte ceiling
- * (src/bug-report.ts).
+ * something the Report button could carry: the issue body travels as a URL under a
+ * 4000-byte ceiling, and one snapshot is 3234 bytes of state on its own (3333 at the
+ * fullest beat of the recorded route) — before the log it is pasted with, which runs
+ * to 1141 lines and 40 kB over a whole game (src/bug-report.ts).
  */
 export function stateDump(trace: StateTrace, log: readonly string[], head: string[] = []): string {
   return [

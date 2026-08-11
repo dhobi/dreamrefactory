@@ -3,8 +3,14 @@
  *
  * The fixture is a golden playthrough beat rather than a handful of made-up
  * variables, because the thing the panel has to survive is the SIZE of the real
- * table: 161 globals by the end of the game, of which a handful move between one
- * beat and the next. A synthetic fixture of six would prove none of that.
+ * table: 102 globals at the credits and 113 at its fullest, of which a handful move
+ * between one beat and the next. A synthetic fixture of six would prove none of
+ * that.
+ *
+ * Those counts used to be 161. They came down when `dumpglobal` was fixed to
+ * destroy what it names (#85) — the game tears its puzzles' working variables down
+ * as it leaves them, and a third of the table was scratch the session had been
+ * holding on to.
  */
 import { test, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
@@ -27,7 +33,7 @@ function endOfGame(): StateTrace {
 
 test("the game's own six come first, however big the table is", () => {
   const trace = endOfGame();
-  expect(Object.keys(trace.globals).length, "the real table").toBeGreaterThan(150);
+  expect(Object.keys(trace.globals).length, "the real table").toBeGreaterThan(90);
 
   const view = stateView(trace);
   // the spelling is the game's own dialog's, not the variable names
@@ -48,7 +54,7 @@ test("by default the list is what just moved, and says how much it is not showin
   const trace = endOfGame();
   const quiet = stateView(trace);
   expect(quiet.rest, "nothing has moved, so nothing is listed").toEqual([]);
-  expect(quiet.hidden, "…and the count says how many are sitting still").toBeGreaterThan(150);
+  expect(quiet.hidden, "…and the count says how many are sitting still").toBeGreaterThan(90);
 
   const moved = stateView(trace, { changed: new Set(["bombphase", "coalchute"]) });
   expect(moved.rest.map((r) => r.name)).toEqual(["bombphase", "coalchute"]);
@@ -135,8 +141,10 @@ test("a fresh game has nothing lit and nothing remembered", () => {
 
 /**
  * The dump is the artifact a report attaches. What matters is that it carries the
- * state at all: the issue body cannot, being a URL under a 4000-byte ceiling while
- * one snapshot is 4376 bytes on its own.
+ * state at all, and that it is a PASTE rather than a link: the issue body travels
+ * as a URL under a 4000-byte ceiling, and one snapshot is 3234 bytes of state on
+ * its own (3333 at the fullest beat of the route) — before the script log it is
+ * pasted with, which runs to 1141 lines and 40 kB over a whole game.
  */
 test("the dump carries the state, the room and the log", () => {
   const trace = endOfGame();
@@ -148,13 +156,13 @@ test("the dump carries the state, the room and the log", () => {
   expect(text).toContain("disc 2 mounted");
   // a global is a number OR a string — at the credits `mission` is "good"
   expect(text).toContain(`"mission": ${JSON.stringify(trace.globals.mission)}`);
-  expect(text.length, "bigger than an issue URL can hold, which is why it is a paste").toBeGreaterThan(4000);
+  expect(text.length, "a snapshot alone is most of an issue URL's whole budget").toBeGreaterThan(2500);
 });
 
 // --- the list keeps its element in step by touching only what differs --------
 // The panel POLLS, four times a second, because the engine has no "a global
 // changed" event to listen for. Rebuilt lists (`replaceChildren` and a fresh row
-// per variable) therefore discarded and re-made 161 elements every 250 ms for a
+// per variable) therefore discarded and re-made every one of 131 elements every 250 ms for a
 // screen that had not changed — the whole rail repainting, and no text selection
 // in it able to survive one tick. What these assert is the number that matters:
 // an update over a quiet game writes NOTHING.
@@ -247,7 +255,7 @@ test("the whole real table, twice, writes nothing the second time", () => {
   const { host, view } = list();
   const trace = endOfGame();
   const rows = stateView(trace, { all: true }).rest;
-  expect(rows.length, "the real thing, not a sample").toBeGreaterThan(150);
+  expect(rows.length, "the real thing, not a sample").toBeGreaterThan(120);
   view.apply(rows);
   expect(host.children.length).toBe(rows.length);
   expect(view.apply(stateView(trace, { all: true }).rest)).toEqual({

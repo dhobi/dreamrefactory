@@ -1090,8 +1090,8 @@ export class GameSession {
    * boot()'s variable initialization — scripts test these with != "" and
    * text-compares would treat the uninitialized 0 as "0". The NAMES are
    * TAOOT's boot globals (game knowledge the engine still carries; a title
-   * whose boot declares different globals seeds its own via `global`/
-   * `dumpglobal` declarations, and these extras are harmless to it).
+   * whose boot declares different globals seeds its own via its own `global`
+   * declarations, and these extras are harmless to it).
    *
    * One deliberate DIVERGENCE from the original: themevolume. TAOOT's own
    * boot sets 255 (full), but the ambient themes at full volume are wearing

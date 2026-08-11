@@ -471,9 +471,10 @@ sliding under it.
 the same function the playthrough goldens are recorded with, so what a reporter
 reads and what a golden compares are the same numbers. It is off until asked for
 (the `state` box, or `?debug=1` in the URL) and it answers **what just moved**
-rather than the whole table: 93 globals at boot and 161 by the credits, of which
-121 ever move, but the median number that changes between two story beats is 5 and
-the most ever is 30. `all` gives the table, a filter searches it, and the six the
+rather than the whole table: 93 globals at boot and 102 by the credits — 143
+distinct names over the whole route, of which 108 ever move — but the median number
+that changes between two story beats is 5 and the most ever is 30.
+`all` gives the table, a filter searches it, and the six the
 game's own HELP button answers with (`Mission`, `Phase`, `Letter`, `Necklace`, and
 `Maze`/`Level` in the smokestack) stay on top of both.
 
@@ -484,8 +485,8 @@ turned out to need the same answer. Without it the list was permanently `sec` an
 `clockcount` and nothing else.
 
 The list **patches** its rows rather than rebuilding them, because it polls (there
-is no "a global changed" event to listen for) and a rebuilt list threw away 161
-elements every 250 ms for a screen that had not changed. Measured with a
+is no "a global changed" event to listen for) and a rebuilt list threw away every
+row it had, four times a second, for a screen that had not changed. Measured with a
 MutationObserver: a room standing still costs **0 mutations** over 16 refresh
 ticks, one moved global costs 2 (its number and its highlight), and the only writes
 left under `all` are the pocketwatch's own.

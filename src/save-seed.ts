@@ -13,6 +13,7 @@
  */
 
 import { SaveEntry, deleteSave, displayName, getMeta, listSaves, putSave, setMeta } from "./save-store";
+import { globalsCapacity } from "./df/savegame";
 import { NEUTRAL, editionOfUrl } from "./files";
 import { siteUrl } from "./site";
 
@@ -96,6 +97,8 @@ export async function seedSaves(manifestPaths: string[], lang = NEUTRAL): Promis
     for (const entry of await listSaves()) {
       if (entry.builtin) await deleteSave(entry.path);
     }
+    // ...and the template ranking was about those files, not these
+    await setMeta(TEMPLATE_PICK, undefined);
   }
 
   let stored = 0;
@@ -129,18 +132,65 @@ export async function seedSaves(manifestPaths: string[], lang = NEUTRAL): Promis
 let tpl1: Uint8Array | null = null;
 let tpl2: Uint8Array | null = null;
 
-/** Cache one disk-1 and one disk-2 structural template from the seeded saves. */
+/**
+ * Which shipped save of a disk family to lend: the one that can carry the most
+ * globals ({@link globalsCapacity}), not the first one listed.
+ *
+ * A `.ti` holds the variable list that existed when it was taken, and a patch can
+ * only write a global the base has a record for or can make one for — so an early
+ * save is a poor template and the first file in `save/1` is the earliest there is.
+ * Measured against the 163 globals the shipped corpus knows between them, that
+ * pick could hold 99 and dropped 64, including the whole turbine puzzle, the
+ * smokestack maze number and level, and the darkroom's plates (#85). Ranking by
+ * capacity takes disk 1 to 44 dropped and disk 2 to 24 — the rest is blackjack and
+ * fistfight scratch, which a load re-initialises anyway.
+ *
+ * Still per disk family, and still preferring the matching one: the `disk` field
+ * (container 0 @256) is NOT one of the fields a patch overwrites, and a save has
+ * to be loadable by the original engine, which reads it to know which CD to ask
+ * for.
+ */
+export function bestTemplate(saves: SaveEntry[], folders: string[]): SaveEntry | null {
+  let best: SaveEntry | null = null;
+  let bestRoom = -1;
+  for (const s of saves) {
+    if (!s.builtin || !folders.includes(s.folder)) continue;
+    const { records, free } = globalsCapacity(s.bytes);
+    const room = records + free;
+    if (room > bestRoom) {
+      bestRoom = room;
+      best = s;
+    }
+  }
+  return best;
+}
+
+/** where the ranking's answer is remembered, so it is paid for once ever */
+const TEMPLATE_PICK = "template.pick";
+
+/**
+ * Cache one disk-1 and one disk-2 structural template from the seeded saves.
+ *
+ * The ranking reads 5 MB of `.ti` and decodes ~110 variable lists — 170 ms,
+ * measured — and this runs on every launch, off the critical path but on the same
+ * thread the game is booting on. So the ANSWER is stored (two entry paths) and the
+ * work is done once, on the launch that seeds the saves in the first place, where
+ * 170 ms sits behind 109 HTTP fetches and is nobody's problem.
+ */
 export async function loadTemplates(): Promise<void> {
   const saves = await listSaves();
-  const pick = (...folders: string[]): Uint8Array | null => {
-    for (const f of folders) {
-      const hit = saves.find((s) => s.builtin && s.folder === f);
-      if (hit) return hit.bytes;
-    }
-    return null;
-  };
-  tpl1 = pick("1", "ENDGAME1");
-  tpl2 = pick("2", "ENDGAME2");
+  const stored = await getMeta<{ d1?: string; d2?: string }>(TEMPLATE_PICK);
+  const byPath = (p: string | undefined) =>
+    p ? (saves.find((s) => s.builtin && s.path === p) ?? null) : null;
+  let d1 = byPath(stored?.d1);
+  let d2 = byPath(stored?.d2);
+  if (!d1 || !d2) {
+    d1 ??= bestTemplate(saves, ["1", "ENDGAME1"]);
+    d2 ??= bestTemplate(saves, ["2", "ENDGAME2"]);
+    if (d1 || d2) await setMeta(TEMPLATE_PICK, { d1: d1?.path, d2: d2?.path });
+  }
+  tpl1 = d1?.bytes ?? null;
+  tpl2 = d2?.bytes ?? null;
 }
 
 /**

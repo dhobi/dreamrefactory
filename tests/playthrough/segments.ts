@@ -3522,6 +3522,15 @@ export async function segment27(s: Story): Promise<void> {
     300_000,
   );
   expect(read, `narration unfinished — mission is still ${s.str("mission")}`).toBe(true);
+  // The three scoring flags, read HERE and not after the beat below, because
+  // narend's own closestage `dumpglobal`s them — one flag per artifact, all three
+  // down. `futures()` has seven arms and six of them are a war of some kind;
+  // all-false is "7,50,51,51b,52,53,54,proz", the only one that sets
+  // `mission = "good"` and plays the credits, and the only one this route was ever
+  // aiming at.
+  expect(s.num("onehappens"), "the Rubaiyat and the real necklace are ours").toBe(0);
+  expect(s.num("twohappens"), "and the painting, which was never let go of").toBe(0);
+  expect(s.num("revhappens"), "and the notebook, out of Zeitel's cabin").toBe(0);
   // `mission` is assigned one line BEFORE narend plays the last movie, and that
   // movie is the game's final image (boom.mov here — the worst of the seven).
   // Sampling between the two catches narend still open: `lockevents` up and
@@ -3560,13 +3569,8 @@ export async function segment27(s: Story): Promise<void> {
   // when it has finished reading the papers out — the same global the missions
   // counted in, which is the game's own last word on how it went.
   expect(s.str("mission"), "THE CREDITS — narend.stg's own last word on the run").toBe("good");
-  // The three flags are the scoring, one per artifact, and all three are down:
-  expect(s.num("onehappens"), "the Rubaiyat and the real necklace are ours").toBe(0);
-  expect(s.num("twohappens"), "and the painting, which was never let go of").toBe(0);
-  expect(s.num("revhappens"), "and the notebook, out of Zeitel's cabin").toBe(0);
-  // `futures()` has seven arms and six of them are a war of some kind. All-false is
-  // "7,50,51,51b,52,53,54,proz" — the only one that sets `mission = "good"` and
-  // plays the credits, and the only one this route was ever aiming at.
+  // (The three scoring flags are asserted further up, before narend's closestage
+  // destroys them — `mission` is what it leaves behind.)
 
   // -- and the credits, which are TURNED, not watched -------------------------
   // `credits.mov` looks like a cutscene and is not: measured, fourteen of its
