@@ -16,6 +16,7 @@ import {
   type RawSaveFile,
 } from "../../src/df/savegame";
 import { readShpFile } from "../../src/df/shp";
+import { readSetFile } from "../../src/df/set";
 import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
 import { bestTemplate, shippedSaves } from "../../src/save-seed";
 import type { SaveEntry } from "../../src/save-store";
@@ -1132,4 +1133,102 @@ test("a load brings the nav arrow back as lit as the rest of the band", async ()
   await session.settle();
   check("a save taken with the band dark loads dark", view("life") === "dark" && deg("navarrow") === 0,
     `life=${view("life")} navarrow deg=${deg("navarrow")}`);
+});
+
+/**
+ * The actor record, decoded from TI.EXE's own accessors rather than guessed at.
+ *
+ * The frame is the thing this pins: `0x410d00` string-compares the name at
+ * record+0x50, so the five string fields are the record's SECOND half and every
+ * numeric field sits BEFORE the name. Reading the frame the other way is what put
+ * `actorvalue` at name+152 — the same field one record along, so every character
+ * was restored with their neighbour's conversation count, and #86's "the record
+ * doesn't reliably hold a position" was really a read 80 bytes into the next
+ * record's heap pointers.
+ *
+ * Each assertion below is a range the whole corpus has to satisfy, because a range
+ * is what catches a re-based frame: shift these offsets by a record and `visible`
+ * stops being a boolean, `deg` leaves 0..255, and `speed`/`zclip` stop being the
+ * round numbers the scripts pass to them.
+ */
+test("the saved actor record decodes as TI.EXE's own accessors read it", () => {
+  const records = allSaves().flatMap((p) =>
+    parseSave(new Uint8Array(readFileSync(p))).actors.map((a) => ({ save: p, a })),
+  );
+  check(`the corpus has actor records (${records.length})`, records.length > 3000, `${records.length}`);
+
+  // actorvisible (0x40eec0 reads word[record+0] and tests > 0) — a flag, not a number
+  const vis = new Set(records.map((r) => (r.a.placement.visible ? 1 : 0)));
+  const noSet = records.filter((r) => r.a.placement.visible && !r.a.placement.set);
+  check("visible is a boolean, and nobody is visible without a set",
+    vis.size === 2 && noSet.length === 0, `${noSet.length} visible with no set`);
+
+  // actordeg (0x40e850) is a 0..255 facing; actorspeed (0x40ead0) and actorzclip
+  // (0x410c70) only ever hold values a script passed them
+  const degs = records.map((r) => r.a.placement.deg);
+  check("deg is a facing", Math.min(...degs) >= 0 && Math.max(...degs) <= 255,
+    `[${Math.min(...degs)}..${Math.max(...degs)}]`);
+  const speeds = [...new Set(records.map((r) => r.a.placement.speed))].sort((x, y) => x - y);
+  check("speed is one of the scripted actorspeed values",
+    speeds.every((s) => s >= 4 && s <= 45), `${speeds.join(",")}`);
+
+  // actorxyz 1/2/3 (0x40f285/97/a9): the acid test. Where a record names a star
+  // that really is a star of the set it also names, the position IS that star's —
+  // which no other framing of this record produces.
+  //
+  // The star tables are cached per set: there are 3465 records over 30 sets, and
+  // parsing a SET for each one is a minute of work for the same thirty answers.
+  const setStars = new Map<string, Map<string, { x: number; y: number; z: number }> | null>();
+  const starsOf = (name: string) => {
+    if (!setStars.has(name)) {
+      const bytes = name ? provider(`${name}.set`) : null;
+      setStars.set(name, bytes
+        ? new Map(readSetFile(bytes).actors.map((s) => [s.identifier.toLowerCase(),
+            { x: s.positionX, y: s.positionZ, z: s.positionY }]))
+        : null);
+    }
+    return setStars.get(name)!;
+  };
+  let tested = 0, matched = 0;
+  const off: string[] = [];
+  for (const { a } of records) {
+    const star = starsOf(a.placement.set)?.get(a.placement.star);
+    if (!star) continue;
+    tested++;
+    const p = a.placement;
+    if (p.x === star.x && p.y === star.y && p.z === star.z) matched++;
+    else if (off.length < 4) off.push(`${a.name} on ${p.star}`);
+  }
+  check(`positions were checkable (${tested})`, tested > 2000, `${tested}`);
+  // 2105/2122 measured. The rest are Max mid-patrol on the boat deck and one
+  // record parked on the `walktostar` sentinel — an actor genuinely off his star.
+  check("a record's xyz is its star's position, in the SET's own X,Z,Y order",
+    matched / tested > 0.98, `${matched}/${tested} exact; misses e.g. ${off.join(", ")}`);
+});
+
+/**
+ * `actorvalue` belongs to the record it sits in, 8 bytes before the name.
+ *
+ * The old offset produced a plausible-looking series and attributed it to the
+ * wrong character: 0→1→3→5→8→13→21 over disk 1 is Penny, who you report to after
+ * every errand, and it was being restored onto Morrow. Both series are asserted
+ * here, so getting the attribution backwards again fails rather than looking fine.
+ */
+test("actorvalue is attributed to the character whose record holds it", () => {
+  const series = (who: string): number[] =>
+    allSaves()
+      .filter((p) => /\/1\//.test(p) || /\\1\\/.test(p))
+      .sort()
+      .map((p) => parseSave(new Uint8Array(readFileSync(p))).actors.find((a) => a.name === who)?.value ?? -1)
+      .filter((v) => v >= 0);
+  const penny = series("penny");
+  const morrow = series("morrow");
+  check("Penny is the one talked to twenty-odd times",
+    Math.max(...penny) >= 20, `penny max ${Math.max(...penny)}`);
+  check("and Morrow is not", Math.max(...morrow) <= 5, `morrow max ${Math.max(...morrow)}`);
+  // neither may ever go backwards: the count only rises within one game
+  for (const [who, s] of [["penny", penny], ["morrow", morrow]] as const) {
+    const drops = s.filter((v, i) => i > 0 && v < s[i - 1]).length;
+    check(`${who}'s count never decreases along the disk`, drops === 0, `${drops} drops in ${s.join(",")}`);
+  }
 });
