@@ -25,17 +25,18 @@ import { GameHost } from "./host";
 import { loadTemplates, saveTemplateFor, seedSaves } from "./save-seed";
 import { browseForLoad, browseForSave } from "./save-browser";
 import { FileStore } from "./files";
-import { snapshotState } from "./engine/trace";
+import { StateTrace, snapshotState } from "./engine/trace";
 import { seededRng } from "./engine/rng";
 import { LangChooser, chooserOrder, preselectedEdition } from "./lang-chooser";
 import { GOG_URL, NIGHTDIVE_MOVIE, NightdiveIntro, Ownership, introPlaysFor } from "./nightdive";
 import { DEFAULT_LANGUAGE, EDITION_STORAGE_KEY, LANG_STAGE, editionName } from "./languages";
 import { installLanguageMenu } from "./lang-menu";
-import { installVersion } from "./version";
+import { VERSION, installVersion } from "./version";
 import { gamefileManifest, gamefileSizes, installEditionPicker, markEdition } from "./editions";
 import { installI18n, t } from "./locales";
 import { installBugReport } from "./bug-report";
 import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
+import { ChangeWatch, RowView, stateDump, stateView } from "./debug-panel";
 import { siteUrl, sitePath } from "./site";
 
 // ---------------------------------------------------------------------------
@@ -87,6 +88,18 @@ const sharpLandingBox = document.getElementById("sharpLanding") as HTMLInputElem
 /** where you are and what the engine is doing: the X pane, off by default */
 const details = document.getElementById("details") as HTMLDivElement;
 const scriptlog = document.getElementById("scriptlog") as HTMLPreElement;
+/** the pane's two homes: under the screen, and beside it on a wide window */
+const under = document.getElementById("under") as HTMLDivElement;
+const rail = document.getElementById("rail") as HTMLDivElement;
+/** the state list inside the pane, and what asks for it (#22) */
+const dbgStateOn = document.getElementById("dbgStateOn") as HTMLInputElement;
+const dbgState = document.getElementById("dbgState") as HTMLDivElement;
+const dbgSpine = document.getElementById("dbgSpine") as HTMLDivElement;
+const dbgRows = document.getElementById("dbgRows") as HTMLDivElement;
+const dbgFilter = document.getElementById("dbgFilter") as HTMLInputElement;
+const dbgAll = document.getElementById("dbgAll") as HTMLInputElement;
+const dbgCopy = document.getElementById("dbgCopy") as HTMLButtonElement;
+const dbgNote = document.getElementById("dbgNote") as HTMLSpanElement;
 /** the preload bar under the boot text, and the megabytes beside it */
 const preload = document.getElementById("preload") as HTMLDivElement;
 const preloadFill = document.getElementById("preloadFill") as HTMLDivElement;
@@ -231,7 +244,30 @@ function toggleDetails(): void {
   } catch {
     /* not remembering is survivable — the pane still holds for this tab */
   }
+  applyRail();
   if (!details.hidden) scriptlog.scrollTop = scriptlog.scrollHeight;
+}
+
+/**
+ * Which of its two homes the pane is in.
+ *
+ * Wide enough for the screen AND the pane, and it goes beside the screen; below
+ * that it stays under the bars where it has always been. The ELEMENT moves rather
+ * than being drawn twice, so X, the log, the state list and the scroll position
+ * are the same objects in both places and there is nothing to keep in step.
+ *
+ * The body's padding is what re-centres the screen in what is left, and it is only
+ * applied while the pane is actually up — padding the page for an invisible rail
+ * would move the game for nothing.
+ */
+const RAIL_FITS = "(min-width: 1480px)";
+
+function applyRail(): void {
+  const wide = window.matchMedia(RAIL_FITS).matches;
+  const home = wide ? rail : under;
+  if (details.parentElement !== home) home.appendChild(details);
+  rail.hidden = !wide || details.hidden;
+  document.body.classList.toggle("railed", wide && !details.hidden);
 }
 
 /** where the pane's open/shut answer outlives the tab */
@@ -309,6 +345,8 @@ const host = new GameHost(files, audioSink, {
     bootChatter = false;
     clearLog();
     details.hidden = !detailsWanted();
+    changeWatch.reset();
+    applyRail();
   },
   mapChanged: () => refreshMap(),
 });
@@ -1042,8 +1080,128 @@ function bindSwipeOption(box: HTMLInputElement, key: string, apply: (on: boolean
   });
 }
 
+/**
+ * The state list in the pane (#22), and what turns it on.
+ *
+ * Off by default and remembered, like the other three boxes: 161 variable names
+ * are an answer to a question a player did not ask, and the reader who did ask
+ * gets it back on the next launch. `?debug=1` in the URL is the same answer in a
+ * link — one thing to bookmark, for someone whose reason for opening the page at
+ * all is to find out what the game is doing.
+ *
+ * REFRESH_MS is 250 rather than a frame: the panel is a hundred rows of DOM and
+ * the game services itself every 50 ms (engine/clock.ts), so redrawing it in step
+ * with the engine would be four times the work for a list nobody can read that
+ * fast. It follows the fade and the room within a quarter second, which is the
+ * speed of the question being asked of it.
+ */
+const REFRESH_MS = 250;
+
+/** where the state box's answer outlives the tab */
+const DEBUG_STATE_KEY = "taoot.details.state";
+
+/** which globals moved lately, so the list can light them for a moment */
+const changeWatch = new ChangeWatch();
+
+/**
+ * The two lists, each keeping its element in step by touching only what differs.
+ *
+ * Rebuilt lists were the first version and the wrong one: the panel polls (the
+ * engine has no "a global changed" event), so `replaceChildren` threw away and
+ * re-made every row four times a second whether or not the game had done anything.
+ * See {@link RowView} — an update over a quiet game now writes nothing.
+ */
+const spineView = new RowView(dbgSpine, { row: "span", name: "span", value: "span" }, "");
+const rowsView = new RowView(dbgRows);
+
+function installDebugPanel(): void {
+  const asked = new URLSearchParams(window.location.search).get("debug") === "1";
+  if (asked) {
+    details.hidden = false;
+    try {
+      window.localStorage.setItem(DETAILS_OPEN_KEY, "1");
+      window.localStorage.setItem(DEBUG_STATE_KEY, "1");
+    } catch {
+      /* the link still works for this tab */
+    }
+  }
+  bindSwipeOption(dbgStateOn, DEBUG_STATE_KEY, (on) => {
+    dbgState.hidden = !on;
+    if (on) refreshState();
+  });
+  for (const el of [dbgFilter, dbgAll]) el.addEventListener("input", () => refreshState());
+  dbgCopy.addEventListener("click", () => void copyDetails());
+  window.setInterval(() => {
+    // Only while it can be read: the snapshot walks the globals, the props and the
+    // actors, and doing that four times a second behind a shut pane is work for
+    // no one.
+    if (details.hidden || dbgState.hidden) return;
+    refreshState();
+  }, REFRESH_MS);
+  window.matchMedia(RAIL_FITS).addEventListener("change", () => applyRail());
+  applyRail();
+}
+
+/** the snapshot the panel and the clipboard both read — the goldens' own */
+function liveState(): StateTrace {
+  return snapshotState(session, host.viewer ?? null, "live");
+}
+
+function refreshState(): void {
+  const trace = liveState();
+  const changed = changeWatch.update(trace.globals, performance.now());
+  const view = stateView(trace, {
+    filter: dbgFilter.value,
+    all: dbgAll.checked,
+    changed,
+  });
+  // `#hud` is left alone: the viewer owns it (it names the hotspot count too, and
+  // a bug report's title is read off it). The strip here says what the hud cannot
+  // — the six the game names, the theme, and the fade while there is one.
+  spineView.apply([...view.spine, ...view.head]);
+  // Said as a count rather than as a sentence: it is the answer to "is anything
+  // happening", and 156 variables sitting still IS the answer.
+  const rows = view.rest.length
+    ? view.rest
+    : [{ name: view.hidden ? `${view.hidden} unchanged` : "—", value: "", changed: false, quiet: true }];
+  rowsView.apply(rows);
+}
+
+/**
+ * The whole state and the whole log, on the clipboard.
+ *
+ * This is what #22 is really asking for: the Report bug button can carry eight
+ * lines and no state at all, because the issue travels as a URL under a 4000-byte
+ * ceiling and one snapshot is 4376 bytes on its own. So the dump is an attachment,
+ * and it is shaped like a golden trace (src/debug-panel.ts stateDump) so that a
+ * reporter's paste can be diffed against a recorded playthrough.
+ */
+async function copyDetails(): Promise<void> {
+  const text = stateDump(liveState(), logLines.lines, [
+    `taoot-web ${VERSION}`,
+    `edition: ${editionName(editionCode)} (gamefiles/${editionCode}/)`,
+    `browser: ${navigator.userAgent}`,
+  ]);
+  let said = t("play.debugCopied");
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // A browser that will not take the clipboard still gets to hand the file over
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "taoot-details.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+    said = t("play.debugSaved");
+  }
+  dbgNote.textContent = said;
+  window.setTimeout(() => (dbgNote.textContent = ""), BUG_NOTE_MS);
+}
+
 installSwipeOptions();
 installPictureOptions();
+installDebugPanel();
 
 /**
  * The arrow keys' own route, shared with the swipe handler: a full-screen overlay

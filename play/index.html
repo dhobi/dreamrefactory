@@ -282,6 +282,160 @@
         padding: 0.45rem 0.6rem;
       }
 
+      /* ---- the rail: the pane beside the screen instead of below it ----
+         #22 reported the details pane as "tiny, under the window (off screen at
+         1920px, 100% zoom)", and it was: four bars of controls put it about
+         1030 px down a 945 px-tall viewport, so at that window size it was never
+         on screen. On a window with room to spare the pane MOVES here instead
+         (src/main.ts installRail) — the same element, so one toggle and one
+         renderer serve both homes.
+
+         Fixed, and the body is padded by the same width while it is up, so the
+         screen re-centres in what is left rather than sliding under the rail.
+         That does move the game sideways when the pane opens, which is the
+         mockup in #22's own answer to where it should go, and it only ever
+         happens because the reader asked. */
+      #rail {
+        --rail-w: clamp(20rem, 28vw, 30rem);
+        position: fixed;
+        top: 3.2rem;
+        right: 0.7rem;
+        bottom: 0.7rem;
+        width: calc(var(--rail-w) - 1.4rem);
+        display: flex;
+        flex-direction: column;
+        z-index: 4;
+      }
+      /* `hidden` alone loses to the display above (see the paired-rule test in
+         tests/auto/locales.ts, and #55 for the spinner that turned all session) */
+      #rail[hidden] {
+        display: none;
+      }
+      /* The pane in the rail is a column that fills the height: the log takes
+         what it needs and the state list takes the rest, each scrolling itself. */
+      #rail #details {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1;
+        padding: 0.6rem 0.7rem;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+      #rail #hud {
+        text-align: left;
+        padding: 0 0 0.4rem;
+      }
+      /* With nothing under it the log takes the whole rail; with the state list
+         open it gives most of the height away, because the list is the longer
+         thing and the log is read at its tail. */
+      #rail #scriptlog {
+        flex: 1 1 auto;
+        max-height: none;
+      }
+      #rail #details:has(#dbgState:not([hidden])) #scriptlog {
+        flex: 0 1 auto;
+        max-height: 40%;
+        min-height: 4em;
+      }
+      #rail #dbgState {
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      /* Only where the screen still fits beside it: 1024 px of canvas plus a
+         20rem rail is 1344, and the padding leaves the canvas its 96vw ceiling
+         alone. Below this the pane stays under the screen, which is also what a
+         phone gets. */
+      @media (max-width: 1479px) {
+        #rail {
+          display: none;
+        }
+      }
+      body.railed {
+        padding-right: clamp(20rem, 28vw, 30rem);
+      }
+
+      /* ---- the state list ----
+         Names and numbers out of the game's own tables, so it is mono and it is
+         not translated: `neckphase 4` is the same sentence in six languages. */
+      #dbgBar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.3rem 0 0.4rem;
+        font-size: 0.78rem;
+        color: var(--text-mute);
+      }
+      #dbgState {
+        overflow-y: auto;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        line-height: 1.6;
+        margin-top: 0.5rem;
+        background: var(--inset);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.45rem 0.6rem;
+      }
+      #dbgState[hidden] {
+        display: none;
+      }
+      /* The six the game's own HELP button answers with — apart from the rest,
+         because they are the ones the game itself thinks locate a player. */
+      #dbgSpine {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.1rem 0.9rem;
+        color: var(--ice-300);
+        padding-bottom: 0.35rem;
+        border-bottom: 1px solid var(--border);
+      }
+      #dbgTools {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0;
+      }
+      #dbgTools input[type="search"] {
+        flex: 1;
+        min-width: 4rem;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        padding: 0.15rem 0.35rem;
+        color: var(--text);
+        background: var(--raised);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+      }
+      #dbgTools label {
+        font-family: var(--font-ui);
+        font-size: 0.72rem;
+        color: var(--text-mute);
+        white-space: nowrap;
+      }
+      #dbgRows .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        color: var(--ice-500);
+      }
+      #dbgRows .row b {
+        font-weight: normal;
+        color: var(--text-mute);
+      }
+      /* Brass for what has just moved: the palette's rule is that brass marks a
+         change and ice marks what is live (src/theme.css). */
+      #dbgRows .row.lit,
+      #dbgSpine .lit {
+        color: var(--brass-400);
+      }
+      #dbgRows .none,
+      #dbgState .quiet {
+        color: var(--text-mute);
+      }
+
       /* Everything under the screen shares one column, so that the bars and the
          details pane line up with each other and with the canvas. The pane is
          OUTSIDE #help rather than the last bar in it: #help is down until the
@@ -592,12 +746,45 @@
 
       <!-- X opens this once the game is up; before then, a logged line does
            (src/main.ts log), because a boot that never finishes has nothing
-           else to say for itself -->
+           else to say for itself.
+
+           Its home is here on a narrow window and #rail on a wide one — the
+           element is MOVED between the two (src/main.ts installRail), so there is
+           one pane, one toggle and one renderer either way. -->
       <div id="details" hidden>
         <div id="hud"></div>
+        <!-- what the pane can be asked for beyond the log. `state` is off by
+             default: 161 variable names are an answer to a question the player
+             did not ask, and #22 is from someone who did ask. -->
+        <div id="dbgBar">
+          <label data-i18n-attr="title:play.debugStateTitle" title="Every script global, and the six the game's own debug readout names"
+            ><input type="checkbox" id="dbgStateOn" />
+            <span data-i18n="play.debugState">state</span></label
+          >
+          <button id="dbgCopy" data-i18n="play.debugCopy" data-i18n-attr="title:play.debugCopyTitle" title="Copy the state and the whole log, to attach to a bug report">⧉ Copy details</button>
+          <span id="dbgNote" class="note"></span>
+        </div>
         <pre id="scriptlog"></pre>
+        <div id="dbgState" hidden>
+          <div id="dbgSpine"></div>
+          <div id="dbgTools">
+            <input id="dbgFilter" type="search" data-i18n-attr="placeholder:play.debugFilter" placeholder="filter" />
+            <label data-i18n-attr="title:play.debugAllTitle" title="Every global, not just the ones that have just moved"
+              ><input type="checkbox" id="dbgAll" />
+              <span data-i18n="play.debugAll">all</span></label
+            >
+          </div>
+          <div id="dbgRows"></div>
+        </div>
       </div>
     </div>
+
+    <!-- Where #details lives when the window is wide enough to hold it beside the
+         screen rather than below it. #22 reported the pane as "tiny, under the
+         window (off screen at 1920px, 100% zoom)" — which it was: it began about
+         1030 px down a 945 px-tall viewport, so at that window size it was never
+         on screen at all. Empty in the markup; main.ts moves the pane in. -->
+    <div id="rail" hidden></div>
 
     <div id="saveModal" class="modal">
       <div class="modal-box">

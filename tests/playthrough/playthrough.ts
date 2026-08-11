@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { StateTrace, formatTrace } from "../../src/engine/trace";
 import { Playthrough, checkpoint, newPlaythrough, resume, saveOf } from "./play";
 import { dialStops } from "./nav/dials";
-import { isHarnessPaced } from "./masks";
+import { isHarnessPaced } from "../../src/engine/masks";
 import { BEDSIT_OBJECTS, MENU_GAME, refuseZeitelAgain, segment1, segment2, segment3, segment4, segment5, segment6, segment7, segment8, segment9, segment10, segment11, segment12, segment13, segment14, segment15, segment16, segment17, segment18, segment19, segment20, segment21, segment22, segment23, segment24, segment25, segment26, segment27 } from "./segments";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -35,7 +35,7 @@ const golden = (n: string) => join(HERE, "golden", `playthrough-${n}.json`);
 /**
  * Globals that count how long the HARNESS dwelt, not what the game did — and
  * which this comparison therefore drops. The list and the measurements behind it
- * live in [masks.ts](./masks.ts), because the browser suite needs the SAME list
+ * live in [masks.ts](../../src/engine/masks.ts), because the browser suite needs the SAME list
  * and keeping a second copy here is what let the two drift apart: `lastsail` was
  * masked here and not there, so every browser segment from 13 on failed on a frame
  * stamp this file had already identified.

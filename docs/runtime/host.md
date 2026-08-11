@@ -20,6 +20,7 @@ is the recovered *Windows 95* around it.
 | [`files.ts`](https://github.com/dhobi/taoot-web/blob/master/src/files.ts) | `FileStore` — game files by lowercase basename, lazy dev-server fetching |
 | [`bug-report.ts`](https://github.com/dhobi/taoot-web/blob/master/src/bug-report.ts) | the Report bug button: a prefilled GitHub issue, and the screen on the clipboard |
 | [`log-buffer.ts`](https://github.com/dhobi/taoot-web/blob/master/src/log-buffer.ts) | the lines behind X, bounded — and the tail a bug report carries |
+| [`debug-panel.ts`](https://github.com/dhobi/taoot-web/blob/master/src/debug-panel.ts) | what state the game is in, as a list that patches rather than redraws |
 
 ## The split, and why it is where it is
 
@@ -458,6 +459,36 @@ reported as "resets on every set change". The page now resets on the two things
 that really start a game from nothing (the cold boot, and `quit()`'s return to
 the menu), and the pane's open/shut answer is remembered in `localStorage` under
 `taoot.details.open` alongside the swipe and picture ones.
+
+**Where the pane lives.** Beside the screen when the window is at least 1480 px
+wide, under the bars below that — the *element* moves between the two homes
+(`installRail`), so X, the log, the state list and the scroll position are the same
+objects either way and there is nothing to keep in step. The body is padded by the
+rail's width while it is up, so the screen re-centres in what is left instead of
+sliding under it.
+
+**What the state list is.** Every script global, rendered from `snapshotState` —
+the same function the playthrough goldens are recorded with, so what a reporter
+reads and what a golden compares are the same numbers. It is off until asked for
+(the `state` box, or `?debug=1` in the URL) and it answers **what just moved**
+rather than the whole table: 93 globals at boot and 161 by the credits, of which
+121 ever move, but the median number that changes between two story beats is 5 and
+the most ever is 30. `all` gives the table, a filter searches it, and the six the
+game's own HELP button answers with (`Mission`, `Phase`, `Letter`, `Necklace`, and
+`Maze`/`Level` in the smokestack) stay on top of both.
+
+The clock is excluded from "what just moved" by
+[`engine/masks.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/masks.ts) —
+the same predicate the trace comparisons drop, moved out of `tests/` when the panel
+turned out to need the same answer. Without it the list was permanently `sec` and
+`clockcount` and nothing else.
+
+The list **patches** its rows rather than rebuilding them, because it polls (there
+is no "a global changed" event to listen for) and a rebuilt list threw away 161
+elements every 250 ms for a screen that had not changed. Measured with a
+MutationObserver: a room standing still costs **0 mutations** over 16 refresh
+ticks, one moved global costs 2 (its number and its highlight), and the only writes
+left under `all` are the pocketwatch's own.
 
 The lines themselves live in a bounded buffer
 ([`log-buffer.ts`](https://github.com/dhobi/taoot-web/blob/master/src/log-buffer.ts)),

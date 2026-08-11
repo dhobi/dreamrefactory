@@ -1,6 +1,14 @@
 /**
- * Which globals a trace comparison must NOT compare, and why — in one place,
- * because there are two comparisons and they had drifted apart.
+ * Which globals are a COUNTER rather than the story, and why — in one place,
+ * because three things ask now and the first two had already drifted apart.
+ *
+ * It lives in `src/engine/` rather than beside the playthrough because the
+ * question turned out not to be a test's: the details pane's state list
+ * (src/debug-panel.ts) needs the same answer for a different reason. Its default
+ * view is "what just moved", and the pocketwatch's second hand moves every second,
+ * so without this list the reader's answer to "what is happening" was permanently
+ * `sec` and `clockcount` and nothing else. Same predicate, same measurements, one
+ * definition.
  *
  * The headless suite compares one host against its own recorded golden; the
  * browser suite compares a second host against that same golden. Both therefore

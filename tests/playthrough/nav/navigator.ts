@@ -19,7 +19,7 @@ import { TalkPlan, TalkResult, converse } from "./converse";
 import { DragDial, DragLever, setLever, turnDial } from "./dials";
 import { MAP_EXIT_REGION, MAP_JUMPS, MapJump, currentPage, jumpTo, mapUsable, pageButton } from "./mapjumps";
 import type { ActorSpot } from "./reach";
-import { isHarnessPaced } from "../masks";
+import { isHarnessPaced } from "../../../src/engine/masks";
 
 export interface NavDriver {
   /** the active set's data */
@@ -356,7 +356,7 @@ const HUNT_WATCH_MS = 1500;
  * Globals that move without anyone clicking anything, and so cannot be evidence
  * that a click did something.
  *
- * The harness-paced list is the same one the trace comparison drops (masks.ts) and
+ * The harness-paced list is the same one the trace comparison drops (src/engine/masks.ts) and
  * for a related reason — those count frames. The clock family is added here and not
  * there: `min`/`hrs`/`clock` are asserted by a golden precisely BECAUSE game time
  * advances on its own, which is exactly what disqualifies them here. A `min` that
