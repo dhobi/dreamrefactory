@@ -15,6 +15,7 @@
  */
 import {
   SavedActor,
+  SavedActorPatch,
   SavedProp,
   applyPatch,
   parseSave,
@@ -102,27 +103,48 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
  * not walk up to you, and clicking him opened the "we have met" branch of his
  * puppet rather than the introduction. Reported against both #19 and #21.
  *
- * These two only — for now. The record's other half (visible, set, star, pose,
- * xyz, deg, speed, zclip) is decoded but not written, so a load still rebuilds the
- * cast by running each room's own `initactors`; #86 is what that costs, and the
- * writer is the half that has to come first.
+ * And WHERE they were standing, which is the record's other half — set, star, pose,
+ * xyz, deg, speed, zclip and, the one that matters most, `actorvisible`. Nothing
+ * wrote it, so a load had to re-derive the cast by running each room's own
+ * `initactors` and letting the arriving room place whoever its scripts place. #86 is
+ * what that costs: only ENGINE.SET's Scene108 stands Vlad up, so a save taken one
+ * standpoint further along the catwalk reloaded without him and the fight could not
+ * happen. See {@link restoreActorPlacement} for the other half of this.
+ *
+ * The CROWD is deliberately left out. `setupgroup` makes the deck extras per room
+ * from EXTRA.CST, and the arriving room makes its own — which is why the shipped
+ * saves disagree about which of them exist at all (25 to 64 records, the named cast
+ * constant and the extras churning). Writing them would need slots the base template
+ * has not got; every one of the 109 does have a record for all 25 named characters.
  */
-type SavedActorState = Pick<SavedActor, "name" | "owner" | "value">;
-
-function actorSnapshot(session: GameSession): SavedActorState[] {
-  const out: SavedActorState[] = [];
+function actorSnapshot(session: GameSession): SavedActorPatch[] {
+  const out: SavedActorPatch[] = [];
   for (const [name, a] of session.actorRuntime.actors) {
     // scripts only ever count with it, but `actorvalue` is a script value and a
     // cast could put anything in one; a non-number saves as the fresh-game 0
     const value = typeof a.value === "number" && Number.isFinite(a.value) ? a.value : 0;
+    const crowd = a.cast.name.toLowerCase() !== GANG_CAST;
     out.push({
       name: name.toLowerCase(),
       owner: (String(a.owner) || "none").toLowerCase(),
       value,
+      placement: crowd
+        ? undefined
+        : {
+            visible: !!a.visible,
+            set: a.setName.toLowerCase(),
+            star: a.starName.toLowerCase(),
+            pose: a.poseName.toLowerCase(),
+            x: a.worldX, y: a.worldY, z: a.worldZ,
+            deg: a.deg, speed: a.speed, zclip: a.zclip,
+          },
     });
   }
   return out;
 }
+
+/** the cast file the named characters live in; everything else is crowd */
+const GANG_CAST = "gang.cst";
 
 /**
  * The current owner + view of every prop that is player state: TAOOT's
@@ -297,6 +319,13 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // above.) The saved owners are already in place, and openset reads them: the
   // boat deck only puts Lady Georgia out for `actorowner("ga") != "rescued"`.
   await session.sendEvent("sendtocast", "gang.cst", "initactors", [], "loadgame");
+  // …and then put the cast back where the SAVE left them, before the room opens.
+  // initactors has just hidden everybody, so this is the point at which the save
+  // gets to speak: it fills in every character, and the arriving room's own
+  // openset/openscene then re-places the ones it knows about, keeping the room the
+  // last word exactly as the note above describes. What is left over is the gap
+  // #86 reported — the people no script in the arriving standpoint mentions.
+  restoreActorPlacement(session, save.actors);
   await session.sendEvent("sendtoshop", "inven.shp", "initprops", [], "loadgame");
   // A load arrives from NOWHERE, and the room it arrives in has to be scored as
   // such. `changeset` records `oldset = currentset()` BEFORE it opens anything,
@@ -484,6 +513,49 @@ function restoreActors(session: GameSession, actors: SavedActor[]): void {
     if (!a) continue;
     a.owner = sa.owner;
     a.value = sa.value;
+  }
+}
+
+/**
+ * Put the cast back where the save left them — the other half of #86.
+ *
+ * Called AFTER `initactors` has put everybody down and BEFORE `changeset` opens the
+ * arriving room, which keeps the room the last word. That order is deliberate and it
+ * is the order the original ends up in (see the long note at the call site): the
+ * room's own `openset`/`openscene` re-places the people it knows about, and this
+ * fills in everyone it says nothing about — which is exactly the gap the issue is.
+ * Vlad on the engine-room catwalk is placed by Scene108 alone, so arriving at
+ * Scene109 or Scene110 used to arrive at nobody.
+ *
+ * Restoring `visible` verbatim is what makes this safe. The rule that suggests itself
+ * without it — "place anyone whose recorded set is the set being loaded" — would put
+ * back everybody who had ever passed through, because `putdownactor` hides a
+ * character without touching `actorset`; Smethells would be standing in C73 again
+ * after walking out of it.
+ *
+ * `scale` is not restored and must not be: it is derived from the position and the
+ * camera every frame (ActorRuntime.visibleActors), and a stale one would draw
+ * somebody at the wrong size for a frame.
+ */
+function restoreActorPlacement(session: GameSession, actors: SavedActor[]): void {
+  for (const sa of actors) {
+    const a = session.actorRuntime.get(sa.name);
+    if (!a) continue;
+    const p = sa.placement;
+    // A record with no set was never placed in this game — leave the actor as
+    // `initactors` left it rather than moving them to the origin.
+    if (!p.set) continue;
+    a.setName = p.set;
+    a.starName = p.star;
+    // an empty pose would draw nothing; the boot library's own default is "stand"
+    a.poseName = p.pose || "stand";
+    a.worldX = p.x;
+    a.worldY = p.y;
+    a.worldZ = p.z;
+    a.deg = p.deg & 0xff;
+    if (p.speed) a.speed = p.speed;
+    a.zclip = p.zclip;
+    a.visible = p.visible;
   }
 }
 

@@ -30,6 +30,7 @@ import {
 } from "../../src/engine/audio";
 import type { DecodedAudio } from "../../src/df/audio";
 import { SetViewer } from "../../src/viewer";
+import { newHost, drain } from "../harness";
 
 function check(name: string, ok: boolean, detail = ""): void {
   expect.soft(ok, `${name}${detail ? ` — ${detail}` : ""}`).toBe(true);
@@ -1231,4 +1232,103 @@ test("actorvalue is attributed to the character whose record holds it", () => {
     const drops = s.filter((v, i) => i > 0 && v < s[i - 1]).length;
     check(`${who}'s count never decreases along the disk`, drops === 0, `${drops} drops in ${s.join(",")}`);
   }
+});
+
+// ---- the cast comes back where you left them (#86) -------------------------
+
+/**
+ * A save taken on the engine-room catwalk reloads with Vlad still on it — and the
+ * fistfight still happens.
+ *
+ * Reported by a player who saved at `engine — Scene109 / View116`, walked on and
+ * "found nothing because I'm in the wrong phase". The engine room hands Vlad round
+ * three scenes and only one of them places him:
+ *
+ *   Scene108 openscene   at M3P1, `sendtoactor("vlad", setupactor("fight"))`
+ *   Scene108 keydown     walking on from view112 does `putdownactor()` — the game
+ *                        hides the distant sprite ON PURPOSE as you approach
+ *   Scene110 openscene   at M3P1, `sendtoactor("vlad", mousedown(0))` — the fight
+ *
+ * So the thing a load has to keep is not really his visibility, it is his POSITION:
+ * gang.cst's mousedown opens with `if realdist(me) < hotdist()`, and a load used to
+ * leave him at (0,0,0) with no set at all, from which Scene110's gesture reaches
+ * nobody and the phase never advances. Measured both ways at the moment of arriving
+ * at Scene110 — with the placement restored his `vlad1.pup` opens; without it he is
+ * at (0,0,0) and no puppet opens at all.
+ */
+test("a save on the catwalk reloads with Vlad where he was standing", async () => {
+  const { host, session } = await newHost();
+  let clock = 0;
+  const settle = async (n = 40): Promise<void> => {
+    for (let i = 0; i < n; i++) { host.viewer?.tick((clock += 50)); await drain(); }
+  };
+  // a shipped save purely to give the writer a base to patch, as in a browser
+  await session.loadGame(new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti"))));
+  await settle();
+  session.interp.globals.set("tour", 0);
+  session.interp.globals.set("mission", 3);
+  session.interp.globals.set("phase", 1);
+
+  // stand him up the one way the game does, then walk on — which is what hides him
+  await session.runGlobal("changeset", ["engine", "Scene108", "View112"]);
+  await settle();
+  const vlad = session.actorRuntime.get("vlad");
+  check("the catwalk's openscene stands him up", !!vlad?.visible && vlad.starName === "vlad1",
+    `visible=${vlad?.visible} star=${vlad?.starName}`);
+  void session.track(host.viewer!.pressNav("uparrow"));
+  await settle(60);
+  const at = {
+    set: vlad!.setName, star: vlad!.starName,
+    x: vlad!.worldX, y: vlad!.worldY, z: vlad!.worldZ, visible: vlad!.visible,
+  };
+  check("and walking on puts him down while keeping where he stood",
+    !at.visible && at.set === "engine" && at.x !== 0,
+    JSON.stringify(at));
+
+  const bytes = session.snapshotSave();
+  expect(bytes, "a save was written").not.toBeNull();
+
+  const two = await newHost();
+  let c2 = 0;
+  const settle2 = async (n = 40): Promise<void> => {
+    for (let i = 0; i < n; i++) { two.host.viewer?.tick((c2 += 50)); await drain(); }
+  };
+  expect(await two.session.loadGame(bytes!)).toBe(true);
+  await settle2();
+  const re = two.session.actorRuntime.get("vlad")!;
+  check("the load puts him back where the save had him",
+    re.setName === at.set && re.starName === at.star &&
+      re.worldX === at.x && re.worldY === at.y && re.worldZ === at.z,
+    `${re.setName}/${re.starName} (${re.worldX},${re.worldY},${re.worldZ}) vs ${JSON.stringify(at)}`);
+  check("and leaves him down, because that is how the save was taken",
+    re.visible === false, `visible=${re.visible}`);
+
+  // the consequence the report is actually about: walk on to where he is waiting
+  await two.session.runGlobal("changeset", ["engine", "Scene110", "View119"]);
+  await settle2(120);
+  check("arriving at Scene110 still starts the fight",
+    two.session.puppet?.visible === true && /vlad/.test(String(two.session.puppet?.name ?? "")),
+    `puppet=${two.session.puppet?.name ?? "(none)"}`);
+});
+
+/**
+ * …and restoring placement must not resurrect anyone.
+ *
+ * This is the half that needed `actorvisible`. `putdownactor` hides a character
+ * WITHOUT touching `actorset`, so "place anyone whose recorded set is the set being
+ * loaded" — the rule that suggests itself when you cannot read visibility — would
+ * put back everybody who had ever walked through the room; Smethells would be
+ * standing in C73 again after walking out of it. The flag is restored verbatim
+ * instead, which the test above also checks from the hidden side.
+ */
+test("the visible flag is what a load restores, not a guess from the set", () => {
+  const records = allSaves().flatMap((p) => parseSave(new Uint8Array(readFileSync(p))).actors);
+  const placed = records.filter((a) => a.placement.set);
+  const hidden = placed.filter((a) => !a.placement.visible);
+  // 1698 hidden against 560 visible, measured: three quarters of the records with a
+  // set in them are of somebody NOT on screen, which is the size of the mistake
+  // "recorded set means present" would have been.
+  check("most records with a set are of somebody who is not on screen",
+    hidden.length > placed.length / 2,
+    `${hidden.length} hidden of ${placed.length} placed`);
 });
