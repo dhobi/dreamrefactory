@@ -7,7 +7,7 @@
 import { test, expect } from "vitest";
 import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
 import { readSetFile, RIGHTTURNS, LEFTTURNS } from "../../src/df/set";
-import { WIPE_STEP_MS } from "../../src/engine/clock";
+import { RAMP_STEP_MS } from "../../src/engine/clock";
 import { readShpFile } from "../../src/df/shp";
 import { frameIndexForDegree, isDegreeSelector } from "../../src/engine/props";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "../../src/df/image";
@@ -6887,18 +6887,18 @@ test("visualeffect wipes over its step count, and plain does not", async () => {
   // pass: 0x41de90 returns (ms * 3) / 50 and the pacer waits for tick i. So the
   // scrapbook's 30 steps take half a second.
   let clock = 0;
-  for (let i = 0; i < 29; i++) session.tickWipe((clock += WIPE_STEP_MS));
+  for (let i = 0; i < 29; i++) session.tickWipe((clock += RAMP_STEP_MS));
   check(
     "29 ticks in, the reveal is not finished",
     session.wiping && session.wipe.step === 29,
     `step=${session.wipe.step} of ${session.wipe.steps}`,
   );
-  session.tickWipe((clock += WIPE_STEP_MS));
+  session.tickWipe((clock += RAMP_STEP_MS));
   check("the 30th ends it", !session.wiping, `step=${session.wipe.step} dir=${session.wipe.dir}`);
   check(
     "...half a second after it started, as in the original",
-    Math.round(30 * WIPE_STEP_MS) === 500,
-    `30 steps = ${30 * WIPE_STEP_MS} ms`,
+    Math.round(30 * RAMP_STEP_MS) === 500,
+    `30 steps = ${30 * RAMP_STEP_MS} ms`,
   );
 
   void effect(session.interp, ["wiperight", 20]);
@@ -7066,4 +7066,49 @@ test("closing the turbine puzzle destroys the globals it was working in", async 
   // ...and a read of a destroyed global is 0, exactly as one never assigned is
   check("a destroyed global reads as 0", session.interp.globals.get("coal") === undefined
     && Number(session.interp.globals.get("coal") ?? 0) === 0);
+});
+
+// --- 97. a fade runs on the ramp's clock, not the service pass ---------------
+// The same measurement as the wipe above, one function over. `screentoblack`
+// (0x43e550 -> 0x435b90) and `blacktoscreen` (0x43e5d0 -> 0x435be0) are one loop
+// twice: draw the blend for step di, then spin on 0x41de90 — the (ms * 3) / 50
+// tick counter — until it has advanced by one. One step, one 1/60 s tick.
+//
+// At the 50 ms service pass every fade in the game took three times as long as
+// the original's. Reported from the one place a script asks for a long one (#87):
+// losing the fistfight brings the engine room back over 240 steps.
+test("a fade takes one script tick a step, not one service pass", async () => {
+  const { session } = await newHost();
+  const cmd = (name: string) =>
+    session.interp.builtins.get(name) as unknown as (i: unknown, a: (string | number)[]) => void;
+  session.captureFrame = () => ({
+    rgba: new Uint8ClampedArray(512 * 384 * 4),
+    width: 512,
+    height: 384,
+  });
+  let clock = 0;
+  const run = (steps: number): number => {
+    session.fade.queue.length = 0;
+    session.fade.lastTick = 0;
+    session.fade.level = 1;
+    void cmd("blacktoscreen")(session.interp, ["set", steps]);
+    const started = clock;
+    for (let i = 0; i < steps * 4 && session.fading; i++) session.tickFade((clock += RAMP_STEP_MS));
+    return clock - started;
+  };
+  // the ordinary fade the whole game uses
+  const ten = run(10);
+  check(
+    "a 10-step fade is 10 ticks, a sixth of a second",
+    Math.round(ten) === Math.round(10 * RAMP_STEP_MS) && Math.round(ten) === 167,
+    `${Math.round(ten)} ms (the service pass would be ${10 * 50} ms)`,
+  );
+  // and restorescreen's slow one, the reported case
+  const long = run(240);
+  check(
+    "restorescreen's 240-step fade is four seconds, not twelve",
+    Math.round(long / 100) === 40,
+    `${(long / 1000).toFixed(2)} s`,
+  );
+  check("...and it finished", !session.fading && session.fade.level === 0, `level=${session.fade.level}`);
 });

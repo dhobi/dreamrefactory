@@ -5,8 +5,11 @@
  *    (0x41deb0) spins until `timeGetTime() >= start + n × 50/3` ms, and the
  *    tick counter it and the movie loop read (0x41de90) is
  *    `timeGetTime() × 3 / 50` — the same 16.667 ms unit.
- *  * the SERVICE PASS, 50 ms, below — what loops, crickets, walks and fades
- *    advance on.
+ *  * the SERVICE PASS, 50 ms, below — what loops, crickets and walks advance on.
+ *
+ * The paced screen ramps — a `visualeffect` reveal and a `screentoblack` /
+ * `blacktoscreen` fade — are on the SCRIPT TICK, not the service pass; see
+ * {@link RAMP_STEP_MS}.
  *
  * The viewer feeds real/virtual time into advance(); delay() suspends scripts
  * on sleep().
@@ -65,16 +68,35 @@
 export const ENGINE_STEP_MS = 50;
 
 /**
- * One step of a `visualeffect` reveal, in ms — TI.EXE's OTHER clock.
+ * One step of a paced screen ramp, in ms — TI.EXE's OTHER clock.
  *
- * Its wipes are not paced against the service clock. `0x41de90` reads the OS
+ * Neither of its ramps is paced against the service clock. `0x41de90` reads the OS
  * millisecond timer and returns `(ms * 3) / 50` — ms/16.67, 60 per second — and
- * the wipe pacer (0x43c600) spins until that counter reaches `timeBase + i` for
- * strip i, one strip per tick. So the scrapbook's `visualeffect(wipeleft, 30)`
- * runs in half a second; at the 50 ms engine step it would crawl for one and a
- * half. Kept as a third of the step rather than 16.67 so the arithmetic is exact.
+ * both spin on it for one step per tick:
+ *
+ *  * the WIPE pacer (0x43c600) waits until the counter reaches `timeBase + i` for
+ *    strip i. So the scrapbook's `visualeffect(wipeleft, 30)` runs in half a
+ *    second; at the 50 ms engine step it would crawl for one and a half.
+ *  * the FADE ramps — `screentoblack` (0x43e550 -> 0x435b90) and `blacktoscreen`
+ *    (0x43e5d0 -> 0x435be0) — are the same loop twice: `di = 1`, draw the blend
+ *    for step `di`, `inc ebx` and spin on 0x41de90 until the counter reaches it,
+ *    `inc di` while `di <= steps`. One step, one tick, in both directions.
+ *
+ * That second bullet was the 50 ms service pass here for a long time, which made
+ * every fade in the game three times as slow as the original's. It is only
+ * *noticeable* where a script asks for a long one, which is why it was reported from
+ * the one place that does (#87): losing the fistfight brings the engine room back
+ * over 240 steps — 4.0 s in the original, 12.0 s at the service pass — while the
+ * ordinary 10-step fade the rest of the game uses went 0.17 s -> 0.50 s.
+ *
+ * (The engine room keeps fading in slowly for the rest of that game, and *that* is
+ * the data's own doing: the boot library's `restorescreen` picks the 240 out of
+ * `currentset () = "engine" & actorowner ("vlad") = "wonfight"`, and nothing ever
+ * clears `wonfight`. Faithful, and four seconds rather than twelve.)
+ *
+ * Kept as a third of the step rather than 16.67 so the arithmetic is exact.
  */
-export const WIPE_STEP_MS = ENGINE_STEP_MS / 3;
+export const RAMP_STEP_MS = ENGINE_STEP_MS / 3;
 
 /**
  * Wall time (ms) as SCRIPT TICKS — TI.EXE's `timeGetTime() * 3 / 50` at

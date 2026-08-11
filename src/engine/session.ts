@@ -11,7 +11,7 @@ import { ActorRuntime } from "./actors";
 import { PropRuntime } from "./props";
 import { seededRng } from "./rng";
 import { AudioLibrary, AudioSink } from "./audio";
-import { Clock, ENGINE_STEP_MS, WIPE_STEP_MS, ticksAt } from "./clock";
+import { Clock, ENGINE_STEP_MS, RAMP_STEP_MS, ticksAt } from "./clock";
 import { EventQueue } from "./input";
 import { Scheduler } from "./scheduler";
 import { PuppetController } from "./puppet";
@@ -237,7 +237,7 @@ export class GameSession {
   }
 
   /**
-   * Advance a reveal. One step per WIPE_STEP_MS, which is NOT the engine pass.
+   * Advance a reveal. One step per RAMP_STEP_MS, which is NOT the engine pass.
    *
    * TI.EXE paces the strips against its own 60 Hz counter rather than the 50 ms
    * service clock: `0x41de90` reads the OS millisecond timer and returns
@@ -249,9 +249,9 @@ export class GameSession {
   tickWipe(now: number): void {
     const w = this.wipe;
     if (!this.wiping) return;
-    if (!w.lastTick) w.lastTick = now - WIPE_STEP_MS;
-    while (this.wiping && now - w.lastTick >= WIPE_STEP_MS) {
-      w.lastTick += WIPE_STEP_MS;
+    if (!w.lastTick) w.lastTick = now - RAMP_STEP_MS;
+    while (this.wiping && now - w.lastTick >= RAMP_STEP_MS) {
+      w.lastTick += RAMP_STEP_MS;
       if (++w.step >= w.steps) this.endWipe();
     }
   }
@@ -272,7 +272,8 @@ export class GameSession {
     return this.fade.queue.length > 0;
   }
 
-  /** advance the fade one 50 ms engine step at a time */
+  /** advance the fade one script tick at a time — the ramp's own clock in the
+   *  original, not the service pass ({@link RAMP_STEP_MS}) */
   tickFade(now: number): void {
     const f = this.fade;
     if (!f.queue.length) {
@@ -293,9 +294,14 @@ export class GameSession {
       return;
     }
     f.pendingReveal = false;
-    if (!f.lastTick) f.lastTick = now - ENGINE_STEP_MS;
-    while (f.queue.length && now - f.lastTick >= ENGINE_STEP_MS) {
-      f.lastTick += ENGINE_STEP_MS;
+    // Counted in the original's own tick numbers rather than by accumulating a
+    // 16.666… ms step: a step is 1/60 s exactly and the sum of thirds is not, so
+    // `now - lastTick >= step` fell a hair short about one call in five and lost
+    // that step — a 10-step fade took 12 ticks.
+    const tick = ticksAt(now);
+    if (!f.lastTick) f.lastTick = tick - 1;
+    while (f.queue.length && f.lastTick < tick) {
+      f.lastTick++;
       const ramp = f.queue[0];
       if (ramp.to === 0) f.snapshot = null; // fading back in reveals the live frame
       const delta = 1 / ramp.steps;
@@ -303,7 +309,12 @@ export class GameSession {
         ramp.to > f.level
           ? Math.min(ramp.to, f.level + delta)
           : Math.max(ramp.to, f.level - delta);
-      if (f.level === ramp.to) f.queue.shift();
+      // …and the level is thirds all over again: ten steps of 1/10 off 1 leave
+      // 1.4e-16, which is not `to` and cost an eleventh step to walk off
+      if (Math.abs(f.level - ramp.to) < delta / 2) {
+        f.level = ramp.to;
+        f.queue.shift();
+      }
     }
   }
 
