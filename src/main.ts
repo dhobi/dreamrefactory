@@ -791,6 +791,11 @@ screen.addEventListener("pointerdown", (e) => {
     return;
   }
   session.pointerDown = true;
+  // What the press CARRIED, for `shiftkey()` (engine/builtins/scene.ts). Taken
+  // here rather than tracked as live keyboard state because that is how the
+  // original asks: house.shp's HELP button reads it inside its own mousedown, so
+  // the question is what was held when the click happened.
+  session.shiftDown = e.shiftKey;
   void session.track(viewer.press(x, y), `press ${x},${y}`);
 });
 
@@ -806,6 +811,11 @@ window.addEventListener("pointerup", (e) => {
     return;
   }
   session.pointerDown = false;
+  // `shiftDown` is deliberately NOT cleared here. A press dispatch is async — it
+  // can be waiting on a movie or a walk when the button comes up — and the script
+  // that reads `shiftkey()` may not have run yet. It says what the last press
+  // carried until the next press says otherwise, which is the question scripts
+  // actually ask.
   host.viewer?.release(session.pointerX, session.pointerY);
 });
 

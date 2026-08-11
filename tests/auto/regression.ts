@@ -5099,6 +5099,85 @@ test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async 
 }
 );
 
+// --- SHIFT-clicking HELP raises the game's own state readout (#8) -----------
+// This was never missing, only unreachable. house.shp's "help" prop answers a
+// shift-click with `notedialog("Mission=" @ … @ ", Phase=" @ …)` — and our
+// `shiftkey()` was hard-wired to 0, so the branch could not be reached. Census of
+// the English tree behind that change: 383 modifier probes across 248 containers,
+// all but four gated on `debugging` (assigned once in the corpus, `debugging =
+// false` in BOOTFILE) — and three of the four ungated ones are `optionkey`, which
+// still answers 0.
+//
+// Driven as a CLICK on the button's own rect rather than by handing the handler its
+// event: what was broken was the modifier a press carries, so a test that sends the
+// handler its arguments would pass with the bug still in place.
+test("shift-clicking HELP raises the game's own readout, and a plain click does not", async () => {
+  const notes: string[] = [];
+  const { host, session } = await newHost();
+  session.onNoteDialog = (m) => void notes.push(m);
+  const g = session.interp.globals;
+  g.set("mission", 1); g.set("phase", 4); g.set("tour", 0);
+  await host.loadServerSet("c78.set");
+  await session.track(session.transToFlat("ctl.stg"));
+  const v = host.viewer!;
+  const region = (name: string) => {
+    const r = session.stageCtrl.flatRegion(session.currentFlat, name)!;
+    return { x: Math.round((r.left + r.right) / 2), y: Math.round((r.top + r.bottom) / 2) };
+  };
+  const help = region("help");
+  const under = session.propRuntime.propAt(help.x, help.y, null, false)?.group.name;
+  check("the HELP button's own sprite is what a click there lands on", under === "help", `propAt=${under}`);
+
+  // 1. shift held: the readout, in the original's own spelling. The same string as
+  // the screenshot in #8 — "Mission=1, Phase=4, Letter=0, Necklace=0" — and a
+  // dialog, as it is there: the game stopping to answer is the behaviour, and the
+  // details pane already carries a live version of the same six (src/debug-panel.ts).
+  session.shiftDown = true;
+  await session.track(v.click(help.x, help.y));
+  for (let i = 0; i < 12; i++) { v.tick((clock += 50)); await drain(); }
+  check(
+    "shift-click on HELP says where the player is",
+    notes.includes("Mission=1, Phase=4, Letter=0, Necklace=0"),
+    `dialogs=${JSON.stringify(notes)}`,
+  );
+
+  // 2. nothing held: the ordinary help behaviour, and no readout. The button plays
+  // help2w.mov, which is interactive and parks — hence `void`, and the movie is
+  // asserted by what the engine says rather than by waiting for it to end.
+  notes.length = 0;
+  session.shiftDown = false;
+  void session.track(v.click(help.x, help.y));
+  for (let i = 0; i < 12; i++) { v.tick((clock += 50)); await drain(); }
+  check("a plain click raises no readout", notes.length === 0, `dialogs=${JSON.stringify(notes)}`);
+}
+);
+
+// The same button in the smokestack, where the readout carries two more fields:
+// `if currentset() = "smstack1" | … ` adds Maze and Level, which are the two things
+// about that puzzle a player cannot see — which of the four mazes is live, and how
+// far up it they are.
+test("in the smokestack the readout names the maze and the level", async () => {
+  const notes: string[] = [];
+  const { host, session } = await newHost();
+  session.onNoteDialog = (m) => void notes.push(m);
+  const g = session.interp.globals;
+  g.set("mission", 3); g.set("phase", 2); g.set("tour", 0);
+  await host.loadServerSet("smstack1.set");
+  g.set("mazenumber", 2); g.set("stacklevel", 3);
+  await session.track(session.transToFlat("ctl.stg"));
+  const v = host.viewer!;
+  const r = session.stageCtrl.flatRegion(session.currentFlat, "help")!;
+  session.shiftDown = true;
+  await session.track(v.click(Math.round((r.left + r.right) / 2), Math.round((r.top + r.bottom) / 2)));
+  for (let i = 0; i < 12; i++) { v.tick((clock += 50)); await drain(); }
+  check(
+    "the smokestack readout carries the maze and the level",
+    notes.some((n) => n.includes("Maze=2") && n.includes("Level=3")),
+    `set=${session.currentSetName} dialogs=${JSON.stringify(notes)}`,
+  );
+}
+);
+
 // --- subtitles toggle + quiet-music default: subtitles are gated on
 //     puppetparam slot 7 (the CTL.STG subtoggle lever), and music starts very
 //     quiet with the theme lever synced to that low rest position. ---

@@ -1263,6 +1263,18 @@ export class GameSession {
   pointerY = 0;
   /** whether a mouse button is currently held (button() builtin) */
   pointerDown = false;
+  /**
+   * Whether SHIFT was held for the press being handled — the `shiftkey()` builtin.
+   *
+   * Snapshotted when the press arrives rather than tracked as live keyboard state,
+   * because that is how the original asks: `shiftkey()` is read INSIDE a mousedown
+   * handler (house.shp's HELP button), so what matters is the modifier the click
+   * carried and not whether the key happens to still be down two frames later.
+   *
+   * `optionkey()` and `commandkey()` stay 0 — see the census where they are
+   * registered (builtins/scene.ts).
+   */
+  shiftDown = false;
   /** engine time of the last `button()`/`stilldown()` — see {@link pollingInput} */
   private lastInputPoll = -Infinity;
   /** a script just read the button state: it owns this press (`button`, `stilldown`) */
