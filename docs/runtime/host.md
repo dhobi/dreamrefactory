@@ -331,6 +331,34 @@ and subtitle ink alike) and each movie segment's own palette all pass through it
 Nightdive intro and the language chooser do not, since neither is the original
 showing a room.
 
+### The brightness controls
+
+The original's are **F1–F9**: F1/F2 move all three exponents (the pair its manual
+names as Ctrl+F1/F2 — the code tests the virtual key alone, so Ctrl makes no
+difference), F3–F8 the channels one at a time, F9 resets. Each press is a factor of
+1.05, and **F1 is the brighten key** because it *divides* the exponent.
+
+Two things about where they sit:
+
+- **They are handled first, and unconditionally.** In `TI.EXE` the arms are in the
+  window proc ahead of the one that hands ordinary keys to scripts, so they work over
+  a playing movie and under a full-screen overlay stage. The port's listener
+  (`src/main.ts`) matches that — the only thing that takes precedence is the page's
+  own focus (`focusOwnsKey`), so typing in a field is still typing.
+- **Phones get a slider**, in the play page's Picture options, because the original's
+  answer here is keyboard-only. Its unit is one keypress — a notch is the same 1.05 —
+  so it is the same control rather than a second setting that drifts, and the keys
+  move the slider with them. Remembered under `taoot.picture.brightness`.
+
+**Four caches hold post-gamma bytes**, and a live change has to reach all of them or
+the picture changes in one place and not the others: the set/prop palettes, the stage
+flat memo, the puppet's composited stance, and each movie segment's baked palette.
+They all watch one integer — `screenGammaGeneration()` — rather than subscribing,
+because viewers and puppet views come and go and a listener list would have to be
+unsubscribed correctly at every teardown. The viewer rebuilds on the next `tick`, and
+replacing the palette arrays is also what makes it visible: `buildSignature` refs
+both by identity, so a new array *is* a repaint.
+
 **A `clut` on the surface the screen is showing is its own reveal.** In `TI.EXE` a
 fade *is* a palette ramp, so re-establishing the palette is what brings the picture
 back, and a script that dims into place need issue no `blacktoscreen` at all.

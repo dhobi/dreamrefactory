@@ -39,6 +39,16 @@ import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
 import { ChangeWatch, RowView, stateDump, stateView } from "./debug-panel";
 import { focusOwnsKey, swipeKey } from "./keys";
 import { siteUrl, sitePath } from "./site";
+import {
+  ALL_CHANNELS,
+  DEFAULT_SCREEN_GAMMA,
+  SCREEN_GAMMA_STEP,
+  type GammaChannels,
+  resetScreenGamma,
+  screenGamma,
+  setScreenGamma,
+  stepScreenGamma,
+} from "./screen-gamma";
 
 // ---------------------------------------------------------------------------
 // Audio: AudioContext must be created after a user gesture; the sink proxies
@@ -86,6 +96,9 @@ const swipeOpts = document.getElementById("swipeOpts") as HTMLDivElement;
 const swipeInvertTurnBox = document.getElementById("swipeInvertTurn") as HTMLInputElement;
 const swipeInvertWalkBox = document.getElementById("swipeInvertWalk") as HTMLInputElement;
 const sharpLandingBox = document.getElementById("sharpLanding") as HTMLInputElement;
+const brightnessRange = document.getElementById("brightness") as HTMLInputElement | null;
+const brightnessValue = document.getElementById("brightnessValue");
+const brightnessReset = document.getElementById("brightnessReset");
 /** where you are and what the engine is doing: the X pane, off by default */
 const details = document.getElementById("details") as HTMLDivElement;
 const scriptlog = document.getElementById("scriptlog") as HTMLPreElement;
@@ -1051,10 +1064,69 @@ function installSwipeOptions(): void {
  */
 function installPictureOptions(): void {
   bindSwipeOption(sharpLandingBox, SHARP_LANDING_KEY, (on) => (session.sharpLanding = on));
+  installBrightness();
 }
 
-/** where the picture answer outlives the tab */
+/** where the picture answers outlive the tab */
 const SHARP_LANDING_KEY = "taoot.picture.sharplanding";
+const BRIGHTNESS_KEY = "taoot.picture.brightness";
+
+/**
+ * The brightness slider — the touch half of the original's F1/F2.
+ *
+ * Its unit is ONE KEYPRESS: a notch is the same factor of 1.05 the original's keys
+ * apply, so 0 is what the game ships with and +/-12 is twelve presses either way.
+ * That keeps the two controls the same control rather than two settings that drift
+ * apart, and it is why the slider is not a percentage — there is no percentage to
+ * be had, the value is an exponent.
+ *
+ * Right is BRIGHTER, which means a lower exponent: `pow(c/255, g)` with g below 1
+ * lifts a colour, so the original's F1 (divide by 1.05) is its brighten key and F2
+ * its darken key. The slider hides that inversion rather than exposing it.
+ */
+function installBrightness(): void {
+  if (!brightnessRange) return;
+  const gammaFor = (steps: number): number => DEFAULT_SCREEN_GAMMA / Math.pow(SCREEN_GAMMA_STEP, steps);
+  /** the slider notch nearest the live gamma — how the keys move the slider */
+  const stepsFor = (g: number): number =>
+    Math.round(Math.log(DEFAULT_SCREEN_GAMMA / g) / Math.log(SCREEN_GAMMA_STEP));
+  const show = (): void => {
+    const g = screenGamma();
+    brightnessRange.value = String(stepsFor(g));
+    if (brightnessValue) brightnessValue.textContent = g.toFixed(2);
+  };
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(BRIGHTNESS_KEY);
+  } catch {
+    /* storage can be denied; the slider then starts at the default every launch */
+  }
+  const remembered = Number(stored);
+  if (stored !== null && Number.isFinite(remembered)) setScreenGamma(gammaFor(remembered));
+  show();
+  const store = (): void => {
+    try {
+      window.localStorage.setItem(BRIGHTNESS_KEY, brightnessRange.value);
+    } catch {
+      /* not remembering is survivable — the setting still holds for this tab */
+    }
+  };
+  brightnessRange.addEventListener("input", () => {
+    setScreenGamma(gammaFor(Number(brightnessRange.value)));
+    if (brightnessValue) brightnessValue.textContent = screenGamma().toFixed(2);
+    store();
+  });
+  brightnessReset?.addEventListener("click", () => {
+    resetScreenGamma();
+    show();
+    store();
+  });
+  // the keys move the same value, so the slider has to follow them
+  onScreenGammaShown = show;
+}
+
+/** set by {@link installBrightness} so the F-keys can refresh the slider */
+let onScreenGammaShown: (() => void) | null = null;
 
 function bindSwipeOption(box: HTMLInputElement, key: string, apply: (on: boolean) => void): void {
   let stored: string | null = null;
@@ -1253,7 +1325,45 @@ const DF_KEY: Record<string, string> = {
  */
 const isSpecialKey = (e: KeyboardEvent): boolean => e.key === "Escape" || e.ctrlKey;
 
+/**
+ * The original's display-gamma keys, by virtual key — TI.EXE's WM_KEYDOWN jump
+ * table at 0x41b118 (byte index 0x41b158, key = VK - 0x1b), whose F1-F9 arms all
+ * call 0x41b210 with a direction and one flag per colour channel.
+ *
+ * F1 BRIGHTENS and F2 darkens, which is the right way round even though it reads
+ * backwards: the value is an exponent, F1 divides it by 1.05, and a smaller
+ * exponent lifts a colour. The manual names the pair as Ctrl+F1/Ctrl+F2 — the code
+ * dispatches on the virtual key alone, with no Ctrl test on these arms, so Ctrl
+ * makes no difference and both work.
+ */
+const GAMMA_KEYS: Record<string, { up: boolean; ch: GammaChannels } | "reset"> = {
+  F1: { up: false, ch: ALL_CHANNELS },
+  F2: { up: true, ch: ALL_CHANNELS },
+  F3: { up: false, ch: [true, false, false] },
+  F4: { up: true, ch: [true, false, false] },
+  F5: { up: false, ch: [false, true, false] },
+  F6: { up: true, ch: [false, true, false] },
+  F7: { up: false, ch: [false, false, true] },
+  F8: { up: true, ch: [false, false, true] },
+  F9: "reset",
+};
+
 window.addEventListener("keydown", (e) => {
+  // The gamma keys go FIRST — before the viewer guard below, not after it, which is
+  // where they were until a browser check found F1 dead on the loading screen. In
+  // TI.EXE these arms sit in the window proc ahead of everything, so they work over
+  // a playing movie, under a full-screen overlay stage, and while the game is still
+  // coming up; the only thing that outranks them is the page's own focus, because
+  // typing in a field has to stay typing.
+  const gamma = GAMMA_KEYS[e.key];
+  if (gamma && !focusOwnsKey(e.target, e.key)) {
+    if (gamma === "reset") resetScreenGamma();
+    else stepScreenGamma(gamma.up, gamma.ch);
+    onScreenGammaShown?.();
+    // F1 is the browser's help key and F3 its find; the game had them first
+    e.preventDefault();
+    return;
+  }
   const v = host.viewer;
   if (!v) return;
   // Typed into something on the page, not at the game (src/keys.ts). This listens

@@ -78,7 +78,12 @@ Two consequences to keep in mind:
   entry of 200 the two orders give 109 and 139.
 - **The player can move it.** F1/F2 scale all three exponents down/up (the pair the
   manual names as Ctrl+F1/F2), F3–F8 the individual channels, F9 resets — each press
-  a factor of 1.05. See `src/screen-gamma.ts` for the jump table this comes out of.
+  a factor of 1.05. See `src/screen-gamma.ts` for the jump table this comes out of,
+  and [the host doc](../runtime/host.md#the-brightness-controls) for where the port
+  puts them.
+
+**F1 brightens and F2 darkens**, which reads backwards until you remember the value
+is an exponent: F1 divides it by 1.05, and a *smaller* exponent lifts a colour.
 
 ## Why images are "delta-encoded" (and why order matters)
 
