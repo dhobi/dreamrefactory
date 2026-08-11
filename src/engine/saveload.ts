@@ -319,13 +319,6 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // above.) The saved owners are already in place, and openset reads them: the
   // boat deck only puts Lady Georgia out for `actorowner("ga") != "rescued"`.
   await session.sendEvent("sendtocast", "gang.cst", "initactors", [], "loadgame");
-  // …and then put the cast back where the SAVE left them, before the room opens.
-  // initactors has just hidden everybody, so this is the point at which the save
-  // gets to speak: it fills in every character, and the arriving room's own
-  // openset/openscene then re-places the ones it knows about, keeping the room the
-  // last word exactly as the note above describes. What is left over is the gap
-  // #86 reported — the people no script in the arriving standpoint mentions.
-  restoreActorPlacement(session, save.actors);
   await session.sendEvent("sendtoshop", "inven.shp", "initprops", [], "loadgame");
   // A load arrives from NOWHERE, and the room it arrives in has to be scored as
   // such. `changeset` records `oldset = currentset()` BEFORE it opens anything,
@@ -357,6 +350,21 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   await session.currentBinding?.closeSet();
   session.currentSetName = "none";
   session.currentSetFile = "";
+  // NOW put the cast back where the save left them — after the departing room's
+  // teardown and before the arriving room opens.
+  //
+  // AFTER, because a `closeset` is entitled to put its own people down and one of
+  // them does exactly that: ENGINE.SET's is `sendtoactor("vlad", putdownactor())`.
+  // Restoring before it meant that loading a save of the engine room WHILE STANDING
+  // IN THE ENGINE ROOM undid the restore, and the arriving standpoint only re-places
+  // whoever its own scripts name — Scene109 has no script at all, so Vlad stayed
+  // down. That is the second half of #86, reported from `Scene109 / View116`.
+  //
+  // BEFORE the changeset, because the arriving room must still get the last word
+  // over the people it does place: Scene110's `openscene` sends Vlad a mousedown,
+  // which is the fistfight, and a restore landing after that would teleport him out
+  // of the walk it starts.
+  await restoreActorPlacement(session, save.actors);
   await session.runGlobal("changeset", [save.set, save.scene, save.view]);
 
   // initall re-seeds DEFAULT inventory + interface for the mission; overwrite
@@ -533,11 +541,34 @@ function restoreActors(session: GameSession, actors: SavedActor[]): void {
  * character without touching `actorset`; Smethells would be standing in C73 again
  * after walking out of it.
  *
- * `scale` is not restored and must not be: it is derived from the position and the
- * camera every frame (ActorRuntime.visibleActors), and a stale one would draw
- * somebody at the wrong size for a frame.
+ * `actorscale` is the one field that does NOT come out of the record, and it has to
+ * come from somewhere: `ActorRuntime.visibleActors` skips anything whose scale is 0,
+ * so a character restored without one is placed correctly, gates every script
+ * correctly — and is not drawn. (Measured: that was the OTHER half of #86, and the
+ * reason the reported symptom was "the state of the game is correct, I just don't
+ * see him".) The game's own source for it is `stdactor`, which does
+ *
+ *     actorscale (target, sendtocastfx ("gang.cst", stdscale (currentset ())))
+ *
+ * and `stdscale` is a pure function of the SET — a table of per-room constants. So
+ * this asks the cast the same question rather than duplicating that table here, and
+ * only for a character who has not been given one this session.
+ *
+ * The known exception is the stoker: gang.cst 1323 runs `stdactor(me)` and then
+ * overrides with `actorscale(me, 9000)`. He is not worth a special case, because
+ * arriving in the boiler room re-places him properly — the room's own scripts get
+ * the last word, which is the whole shape of this function's placement in the load.
  */
-function restoreActorPlacement(session: GameSession, actors: SavedActor[]): void {
+async function restoreActorPlacement(session: GameSession, actors: SavedActor[]): Promise<void> {
+  const stdscale = new Map<string, number>();
+  const scaleFor = async (set: string): Promise<number> => {
+    const hit = stdscale.get(set);
+    if (hit !== undefined) return hit;
+    const v = await session.sendEvent("sendtocastfx", "gang.cst", "stdscale", [set], "loadgame");
+    const n = typeof v === "number" && Number.isFinite(v) ? v : 0;
+    stdscale.set(set, n);
+    return n;
+  };
   for (const sa of actors) {
     const a = session.actorRuntime.get(sa.name);
     if (!a) continue;
@@ -556,6 +587,7 @@ function restoreActorPlacement(session: GameSession, actors: SavedActor[]): void
     if (p.speed) a.speed = p.speed;
     a.zclip = p.zclip;
     a.visible = p.visible;
+    if (a.scale <= 0) a.scale = await scaleFor(p.set);
   }
 }
 

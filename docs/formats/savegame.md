@@ -394,13 +394,18 @@ then **travel** to the saved set/scene/view (`initall` = changeset + initactors
 + initprops) and let the normal `openset`/`openscene` scripts rebuild the loops,
 props, crickets and music at the restored mission/phase.
 
-The **cast is put back from the file** rather than re-derived, in the gap between
-`initactors` (which has just hidden everybody) and the `changeset` that opens the
-arriving room: set, star, pose, position, facing, speed, zclip and `actorvisible`
-straight out of [the actor record](#the-actor-container-fixed-160-byte-actor-records).
-That order leaves the room the last word over the people its own scripts place, and
-fills in everyone they say nothing about — which is the gap
-[#86](https://github.com/dhobi/taoot-web/issues/86) reported. See
+The **cast is put back from the file** rather than re-derived: set, star, pose,
+position, facing, speed, zclip and `actorvisible` straight out of
+[the actor record](#the-actor-container-fixed-160-byte-actor-records). *Where* that
+happens in the load matters more than it looks — after the departing room's
+`closeset`, which is entitled to put its own people down, and before the `changeset`,
+so the arriving room keeps the last word over the ones it places. And `actorscale`
+does **not** come from the record; it comes from the game's own `stdscale`, without
+which a restored character is invisible even though every script can see them. Both
+points are worked through in
+[Saving & loading at runtime](../runtime/saves.md#loading-restore-globals-then-travel),
+and both were faults in the first pass at
+[#86](https://github.com/dhobi/taoot-web/issues/86). See
 `GameSession.loadGame` / `snapshotSave` in
 [`src/engine/session.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/session.ts)
 and the `savegame`/`opengame` builtins in

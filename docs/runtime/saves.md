@@ -65,12 +65,35 @@ does — restore the variables, then **replay the arrival**:
 5. Run the boot's **`initall(set, scene, view)`** — `changeset` +
    `initactors` + `initprops` — so the normal `openset`/`openscene` scripts
    rebuild props, loops, crickets and music *at the restored mission/phase*.
-6. **Put the cast back where the save left them**, in the gap between
-   `initactors` (which has just hidden everybody) and the `changeset` that opens
-   the arriving room. Set, star, pose, position, facing, speed, zclip and
-   `actorvisible` come straight out of [the actor record](#the-actor-record). The
-   order is the point: the room still gets the last word and re-places the people
-   its own scripts know about, and this fills in everyone they say nothing about.
+6. **Put the cast back where the save left them** — set, star, pose, position,
+   facing, speed, zclip and `actorvisible`, straight out of
+   [the actor record](#the-actor-record).
+
+   **Where** this happens in the sequence is the whole of it, and it is pinned
+   between two things that will otherwise undo it. It has to be **after the
+   departing room's `closeset`**, because a `closeset` is entitled to put its own
+   people down and one of them does exactly that — ENGINE.SET's is
+   `sendtoactor("vlad", putdownactor())` — so a restore before it is undone
+   whenever you load a save of the room you are already standing in. And it has to
+   be **before the `changeset`**, so the arriving room still gets the last word
+   over the people it does place: Scene110's `openscene` sends Vlad a mousedown,
+   which *is* the fistfight, and a restore landing after that would teleport him
+   out of the walk it starts. Everyone the arriving standpoint says nothing about
+   is what the save then fills in.
+
+   `actorscale` is the one field that does **not** come out of the record, and it
+   has to come from somewhere: `ActorRuntime.drawList` skips anything whose scale
+   is 0, so a character restored without one is placed correctly, gates every
+   script correctly — and is not drawn. That is worth stating plainly because it
+   was the second half of #86 and it produced a confusing symptom: *"the state of
+   the game is correct, I just don't see Vlad standing there."* The game's own
+   source is `stdactor` —
+   `actorscale(target, sendtocastfx("gang.cst", stdscale(currentset())))` — and
+   `stdscale` is a pure function of the set, a table of per-room constants, so the
+   loader asks the cast the same question instead of copying that table. (The
+   stoker is the known exception: gang.cst 1323 runs `stdactor` and then overrides
+   with 9000. Arriving in the boiler room re-places him properly, which is the
+   same "room gets the last word" rule doing its job.)
 7. Overwrite the default inventory `initall` seeded with the save's actual
    owner/view per prop. The four **band props** (`bag`, `watch`, `map`,
    `life`) are restored by possession only — their on-band appearance is
