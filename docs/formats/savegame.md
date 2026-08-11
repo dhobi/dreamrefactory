@@ -369,14 +369,40 @@ couldn't walk or leave the deck.
 
 The inventory container serializes the **runtime state of every loaded prop** —
 the `inven.shp` items first, then the interface/control-panel props — as an array
-of fixed **158-byte records**. Within each record the fields sit at constant
-offsets from the record start:
+of fixed **158-byte records**.
 
-| Offset | Field |
-|-------:|-------|
+**Every loaded prop, with no filtering**, is literally the rule. The writer
+(`0x413910`) walks the engine's live prop list — `+0x24` is a node's name, `+0x540`
+its next pointer — and copies one fixed-size record per node until the list runs
+out. Measured across the 109 shipped saves: **72 records in every single one**,
+exactly the two boot shops' props (`inven.shp`'s 28 then `house.shp`'s 44), in
+**one** order across all 109 files, none missing and no extras. So the original
+draws no distinction between an inventory item, a story object and a bit of
+interface furniture; a save taken with a room's own shop open would simply hold
+more records.
+
+Within each record the fields sit at constant offsets. As with the actor grid the
+record is the **live object dumped verbatim**, so the numeric fields come *before*
+the name and TI.EXE's own accessors give the frame — each fetches its record into a
+local buffer whose name field sits at `buffer+0x4e`:
+
+| Offset from name | Field |
+|-----------------:|-------|
+| −0x4e | i16 `propvisible` (`0x416f30`, `cmp word ptr [esp+8], 0` — >0 is shown) |
+| −0x36 | i16 `propdeg` (`0x4168a0`, `movsx ecx, word ptr [esp+0x20]`) |
 | +0 | prop name (Pascal string) |
-| +48 | current `propview` state — `"large"`, `"panel1"`, `"panel2"`, … |
-| +64 | `propowner` — `"frank"` = in Frank's possession, else `"none"`/`"vlad"`/`"purser"`/… |
+| +48 | current `propview` state (`0x416610`, `lea ecx, [esp+0x86]`) — `"large"`, `"panel1"`, … |
+| +64 | `propowner` (`0x4161c0`, `lea ecx, [esp+0x96]`) — `"frank"` = in Frank's possession, else `"none"`/`"vlad"`/`"purser"`/… |
+
+`view` and `owner` are 16 bytes apart, which is what fixes the name at `+0x4e` and
+makes the two empirically-recovered offsets (+48/+64) and the disassembly agree.
+Both string fields hold a length byte + up to 15 characters — the longest `owner`
+in the whole corpus is `"xxxfrank"` (8) and the longest `view` is
+`"deckbd-wireless"` at exactly 15.
+
+`propvisible` checks out by range against the corpus, on the one prop where it can
+be read against something independent: the baby is `visible = 1` in exactly the 3
+saves whose `propowner` is `"frank"` and `0` in all 106 others.
 
 The two disks differ in how a collected item is shown (disk 1 stows to `panel1`;
 disk 2 keeps it `large`), so the loader restores the raw `owner`+`view` verbatim
@@ -384,6 +410,27 @@ per item rather than interpreting them — the `inven.shp` scripts read exactly
 those fields to draw the bag and quick-slots. `decodeVars`' sibling
 `walkPropGrid` locks onto the 158-byte grid (the same anti-junk technique as the
 variable grid) and yields one `{name, view, owner}` per slot.
+
+### What we write back, and the one field we don't
+
+`applyPatch` overwrites `view` and `owner` **in place** in records the original
+wrote, and appends nothing: a prop with no record in the base is skipped, since a
+container cannot be grown here. `inventorySnapshot` offers every prop the engine
+has loaded, in the engine's own list order — the same rule as above, arrived at
+after a hand-kept list came up short twice (first the bag/pocketwatch/deck map,
+then `baby`; see [runtime/saves.md](../runtime/saves.md)).
+
+The **owner** is always written. The **view** only for props whose view we actually
+hold — the `inven.shp` items and the four band items the save owns the look of —
+because for the rest the game re-derives it per room (`setupsigns()` picks the
+destination sign from where you stand, `setuparrow()` recolours the nav arrow) and
+nothing in the port ever writes the field, so our live value is still the prop's
+*first* state. Measured against four saves spanning the game, our `owner` agrees
+with the file for **72 of 72** props while the `view` disagrees for **6–8** —
+`navtoggle`, `subtoggle`, `invenctl`, `lid`, `invenhelp`, `door`, `signs`,
+`wiremsg`. Writing ours there would replace a real reading by the original engine
+with a worse guess, so those keep the base's value and the load lets the room work
+them out, exactly as normal play does.
 
 ## How the web port loads a save
 

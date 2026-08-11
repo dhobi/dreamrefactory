@@ -28,8 +28,10 @@ writes:
 - every live script global (numbers inline; strings via the base's string
   pool — `clock` excluded, its record isn't writable),
 - the current **set / scene / view**,
-- the **inventory**: each `inven.shp` prop's owner + view, so possession
-  survives, and
+- the **props**: `propowner` for **every prop the engine has loaded**, in the
+  engine's own list order, plus `propview` for the ones whose view the save owns
+  (the `inven.shp` items and the four band props) — see
+  [Which props get written](#which-props-get-written), and
 - the **cast**: `actorowner` and `actorvalue` (what each character remembers of
   you) plus the whole placement half of [the actor record](#the-actor-record) —
   set, star, pose, position, facing, speed, zclip and `actorvisible`.
@@ -43,6 +45,54 @@ writes:
   never dropped for want of a slot.
 
 Everything the loader ignores stays byte-for-byte as the base had it.
+
+### Which props get written
+
+**Every one that is loaded**, because that is what the original does: its writer
+walks the engine's live prop list and copies one record per node with no filtering,
+which is why all 109 shipped saves carry exactly 72 records — `inven.shp`'s 28 then
+`house.shp`'s 44, one order across every file. `session.propRuntime.props` is the
+same list in the same order, so it is offered whole and `applyPatch` fills whatever
+the base has a record for.
+
+This was a hand-kept list twice, and **both times it was short**:
+
+- **the inventory shop alone**, which lost `bag`, `watch` and `map`.
+  `initinterface()` places the bag from `propowner("bag")`, so an unowned bag went
+  back on the C73 bed — and with it the trunk key, which `addbag()` is the only
+  source of. Loading your own mission-1 save left the trunk, and the Enigma machine
+  in it, permanently unopenable. Three names were added.
+- **plus those three**, which lost `baby`. It lives in `house.shp` rather than
+  `inven.shp` because it is drawn centre-screen instead of in a bag slot, and is the
+  only story object kept there. A mission-4 save reloaded with the child belonging
+  to whoever the *base template* said (`none`, for the disk-2 template a carried
+  game is lent), so `BX2.PUP` c6's opening `if propowner("baby") = "bx"` failed:
+  Beatrix answered with `findconk()` — "where's Andrew?" — while you stood there
+  holding Conkling's letter. `SHAHACK2.PUP` could not be given the child back
+  either (`gotbaby()` wants `propowner("baby") = "frank"`) and `dorescues()` never
+  promoted Shailagh to `rescued` (#107).
+
+So there is no list. Of `house.shp`'s 44 props only four ever carry story state
+across the whole corpus — `bag`, `map`, `watch` (`frank`×105) and `baby`
+(`bx`×16, `shay`×10, `frank`×3) — and the other 40 are chrome memos (`none` /
+`vis` / `notvis` / `on`), which is why writing all of them changes nothing but the
+one that was missing.
+
+**Possession is the only field that has to survive.** The record does carry
+`propvisible` (see [the format doc](../formats/savegame.md)), but nothing needs it
+restored, because `house.shp`'s `showinterface()` re-derives it:
+
+```
+if propowner ("baby") = "frank"
+	propvisible ("baby", true)
+endif
+```
+
+right beside the same treatment for the watch, the bag, the map and the held item.
+Measured after a load with only owner + view restored: `visible` is true for exactly
+the saves whose owner is `frank`, at `addbaby()`'s own (256,192) anchor, and the prop
+is in the draw list. The view is left to the room for the same reason — `setupsigns()`
+and `setuparrow()` compute the chrome from where you stand.
 
 ## Loading: restore globals, then travel
 
@@ -94,11 +144,14 @@ does — restore the variables, then **replay the arrival**:
    stoker is the known exception: gang.cst 1323 runs `stdactor` and then overrides
    with 9000. Arriving in the boiler room re-places him properly, which is the
    same "room gets the last word" rule doing its job.)
-7. Overwrite the default inventory `initall` seeded with the save's actual
-   owner/view per prop. The four **band props** (`bag`, `watch`, `map`,
-   `life`) are restored by possession only — their on-band appearance is
-   rebuilt by `initinterface` — and `handitem` is always cleared (you can't
-   be mid-drag after a load).
+7. Overwrite the default props `initall` seeded with the save's actual owner per
+   prop, and view where the save owns it. Every `house.shp` prop's **owner** comes
+   back, held item or chrome, because for the chrome the owner *is* the band's memo
+   (`hideinterface()` writes it, `showinterface()` reads it); for the chrome that is
+   *all* that comes back, since its look is worked out for the room. The four
+   **band props** (`bag`, `watch`, `map`, `life`) get their view too — the save owns
+   how the band looked. `handitem` is always cleared (you can't be mid-drag after a
+   load).
 
 **Prop and actor ownership is restored twice — before step 5 as well as after
 it.** `initall` runs the room's own `openset`, and those scripts read ownership to
@@ -147,9 +200,15 @@ much smaller than this page twice claimed:
   blackjack-table and fistfight scratch that a load re-initialises anyway (#85).
 - **Inherited from the skeleton.** A patch-write starts from a *shipped* save, so
   any slot nothing overwrites keeps that save's value — `oldset` "None", the
-  location container's facing and road, the interface band's own chrome memos.
-  (`clock` is not one of them: it is the variable list's head and a patch writes it
-  like any other global — measured, "bedsit" written and read back.)
+  location container's facing and road, and the `propview` of the chrome the port
+  never sets (`door`, `signs`, `wiremsg`, `navtoggle`, `subtoggle`, `invenctl`,
+  `lid`, `invenhelp`: 6–8 records per save, measured). Those are inherited *on
+  purpose* — the base's value is a real reading by the original engine and ours
+  would be the prop's first state, and the arriving room recomputes them regardless.
+  The chrome **owners** are no longer in this list: the band's memo is written like
+  any other `propowner`. (`clock` is not here either: it is the variable list's head
+  and a patch writes it like any other global — measured, "bedsit" written and read
+  back.)
 
 Everything else — loops, crickets, music — is rebuilt by re-running the room's own
 `openset`/`openscene` at the restored progress, which is faithful and still not the

@@ -276,6 +276,19 @@ export interface SavedProp {
 }
 
 /**
+ * What a writer offers for one prop record: the owner always, the view only when
+ * the caller actually models it.
+ *
+ * The split exists because the two fields are not equally knowable. `propowner`
+ * is script state and we hold all of it; `propview` is often re-derived per room
+ * by the game rather than stored — `setupsigns()` picks the destination sign from
+ * where you stand, `setuparrow()` recolours the nav arrow — and for those props we
+ * have no value worth writing. Leaving `view` out keeps the base save's, which is
+ * a real reading taken by the original engine rather than a guess of ours.
+ */
+export type SavedPropPatch = Pick<SavedProp, "name" | "owner"> & { view?: string };
+
+/**
  * A serialized actor's persistent state, from the actor container.
  *
  * `actorowner` is the one-word memory each character keeps of you, and it is a
@@ -785,10 +798,11 @@ export interface SavePatch {
   view: string;
   /**
    * Current prop state to write into the inventory container, by prop name.
-   * Captures the player's collected items (each prop's owner + view) — without
-   * it, a save would keep the base save's stale inventory.
+   * Captures the player's collected items (each prop's owner, and its view where
+   * the caller has one) — without it, a save would keep the base save's stale
+   * inventory. A prop with no record in the base is skipped, not appended.
    */
-  inventory?: SavedProp[];
+  inventory?: SavedPropPatch[];
   /**
    * The cast, written into the actor container.
    *
@@ -1166,8 +1180,13 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       const offs = new Map(walkPropGrid(d).map((r) => [r.prop.name, r.off]));
       for (const sp of patch.inventory) {
         const off = offs.get(sp.name.toLowerCase());
+        // A prop the base has no record for. The original writes one record per
+        // prop it has LOADED, so a save taken with a room's own shop open holds
+        // more than the 72 boot-shop ones — and a container cannot be grown here.
+        // Not a loss worth reporting: the caller offers every loaded prop and the
+        // extras are per-room furniture the arriving room rebuilds anyway.
         if (off === undefined) continue;
-        writePstrField(d, off + PROP_VIEW_OFF, sp.view);
+        if (sp.view !== undefined) writePstrField(d, off + PROP_VIEW_OFF, sp.view);
         writePstrField(d, off + PROP_OWNER_OFF, sp.owner);
       }
     }

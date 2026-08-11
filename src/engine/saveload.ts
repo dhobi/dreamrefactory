@@ -17,6 +17,7 @@ import {
   SavedActor,
   SavedActorPatch,
   SavedProp,
+  SavedPropPatch,
   applyPatch,
   parseSave,
   readSaveFile,
@@ -147,33 +148,55 @@ function actorSnapshot(session: GameSession): SavedActorPatch[] {
 const GANG_CAST = "gang.cst";
 
 /**
- * The current owner + view of every prop that is player state: TAOOT's
- * `inven.shp` collected items, and the `house.shp` interface band's held items
- * — the bag, the pocketwatch and the deck map (see {@link HELD_BAND_PROPS}).
+ * Every loaded prop's `propowner`, plus the `propview` of the ones whose view we
+ * actually hold — which is what the original writes, enumerated the way it
+ * enumerates them.
  *
- * The band items matter as much as the inventory, and writing only the shop was
- * a mission-breaking asymmetry: {@link loadGame} restores them (that is what
- * HELD_BAND_PROPS is for — shipped saves carry them), but nothing wrote them, so
- * a save taken mid-voyage came back with no bag. house.shp's initinterface()
- * places the bag from `propowner("bag")`, so an unowned bag is put back on the
- * C73 bed — and with it the trunk key, which `addbag()` is the only source of.
- * Loading your own save at mission 1 therefore left the trunk (and the Enigma
- * machine inside it) permanently unopenable.
+ * TI.EXE's save writer (0x413910) walks its live prop list — `+0x24` is the
+ * node's name, `+0x540` the next pointer — and copies one fixed-size record per
+ * node with no filtering at all. The corpus is unanimous: all 109 shipped saves
+ * hold exactly 72 records, precisely the two boot shops' props, in one single
+ * order across every file (inven.shp's groups then house.shp's, i.e. creation
+ * order), none missing and no extras. So the original has no notion of "player
+ * state" versus "chrome", and `session.propRuntime.props` — same contents, same
+ * order — is the same list.
+ *
+ * **This used to be a hand-kept list, and it was short twice.** First it was the
+ * inventory shop alone, which lost the bag, the pocketwatch and the deck map:
+ * house.shp's initinterface() places the bag from `propowner("bag")`, so an
+ * unowned bag went back on the C73 bed — and with it the trunk key, which
+ * `addbag()` is the only source of, leaving the trunk and the Enigma machine
+ * inside it permanently unopenable. Three names were added. Then it was short by
+ * `baby`, which is in house.shp rather than inven.shp because it is drawn
+ * centre-screen instead of in a bag slot, and is the only story object kept
+ * there: a save taken in mission 4 came back with the child belonging to whoever
+ * the base template said, so Beatrix would not trade Conkling's letter for it,
+ * the Hackers could not be given it back, and Shailagh was never rescued (#107).
+ * Hence no list — every prop, as the original does, so there is no third time.
+ *
+ * The VIEW is the one field we cannot match, and deliberately so. For an
+ * inventory item it is the slot the item sits in and we own it; for most of the
+ * band it is re-derived per room by the game itself (`setupsigns()` chooses the
+ * destination sign from where you stand, `setuparrow()` recolours the nav arrow)
+ * and our live value is still the prop's FIRST state, because nothing ever writes
+ * the field. Measured against four saves spanning the game, our owner agrees with
+ * the file for 72 of 72 props while the view disagrees for 6-8 of them —
+ * `navtoggle`, `subtoggle`, `invenctl`, `lid`, `invenhelp`, `door`, `signs`,
+ * `wiremsg`. Writing ours there would replace a real reading with a worse guess,
+ * so those keep the base's and the load re-derives them exactly as normal play
+ * does ({@link restoreProps} ignores them for the same reason).
  */
-function inventorySnapshot(session: GameSession): SavedProp[] {
-  const out: SavedProp[] = [];
-  const record = (name: string): void => {
-    const p = session.propRuntime.get(name);
-    if (!p) return;
+function inventorySnapshot(session: GameSession): SavedPropPatch[] {
+  const out: SavedPropPatch[] = [];
+  for (const [name, p] of session.propRuntime.props) {
+    const shop = p.shop?.name?.toLowerCase();
+    const ownView = shop === "inven.shp" || HELD_BAND_PROPS.has(name);
     out.push({
-      name: name.toLowerCase(),
-      view: (String(p.stateName) || "large").toLowerCase(),
+      name,
       owner: (String(p.owner) || "none").toLowerCase(),
+      ...(ownView ? { view: (String(p.stateName) || "large").toLowerCase() } : {}),
     });
-  };
-  for (const g of session.propRuntime.shops.get("inven.shp")?.shp.groups ?? []) record(g.name);
-  // only the held items: the rest of the band is chrome initinterface() rebuilds
-  for (const name of HELD_BAND_PROPS) record(name);
+  }
   return out;
 }
 
