@@ -19,6 +19,7 @@ import { PUP_LAYERS } from "./df/pup";
 import { subtitleFont, wrapText } from "./fonts";
 import { decodeShpFrame, ShpFrame } from "./df/shp";
 import { indexedToRGBA, paletteToRGBA } from "./df/image";
+import { displayChannel, displayPalette } from "./screen-gamma";
 import { GameSession } from "./engine/session";
 import type { DrawSignature } from "./engine/signature";
 import { SCREEN_W, SCREEN_H } from "./screen";
@@ -109,7 +110,10 @@ const FRAME_PEN = 3;
  */
 function clutColor(paletteRaw: Uint8Array, index: number): string {
   const b = index * 8;
-  return `rgb(${paletteRaw[b + 3] ?? 0}, ${paletteRaw[b + 5] ?? 0}, ${paletteRaw[b + 7] ?? 0})`;
+  // through the display gamma, like the art it sits on — otherwise the ink is the
+  // one thing on the puppet screen still at the raw palette's brightness
+  const ch = (o: number): number => displayChannel(paletteRaw[b + o] ?? 0);
+  return `rgb(${ch(3)}, ${ch(5)}, ${ch(7)})`;
 }
 
 export class PuppetView {
@@ -233,7 +237,7 @@ export class PuppetView {
           rgba.set(view.subarray(y * backdrop.width * 4, (y + 1) * backdrop.width * 4), y * W * 4);
         }
       }
-      const pal = paletteToRGBA(p.pup.paletteRaw, 256);
+      const pal = displayPalette(paletteToRGBA(p.pup.paletteRaw, 256));
       const stance = p.pup.stances[p.stanceIdx] ?? p.pup.stances[0];
       if (stance && state) {
         for (let l = 0; l < PUP_LAYERS.length; l++) {
@@ -317,7 +321,7 @@ export class PuppetView {
       }
     }
     const f = this.band.frame;
-    const pal = paletteToRGBA(p.pup.paletteRaw, 256);
+    const pal = displayPalette(paletteToRGBA(p.pup.paletteRaw, 256));
     const dx = BAND_ANCHOR_X - f.posXraw;
     const dy = BAND_ANCHOR_Y - f.posYraw;
     for (let yy = 0; yy < f.height; yy++) {

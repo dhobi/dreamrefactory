@@ -321,6 +321,16 @@ overlay (Courier New, colour 0 = black), the fade level, the optional hotspot
 overlay, and the deck-plan minimap. The `clut`/`mixclut` palette dims (the
 darkroom) rebuild the set/stage palettes through the same paths.
 
+Every one of those palettes then goes through the **display gamma** on its way to
+the canvas — `pow(c/255, 0.65) * 255` per channel, which is what TI.EXE puts between
+a palette and the screen (`src/screen-gamma.ts`, and
+[the codec doc](../formats/image-codec.md#the-palette-bytes-are-not-the-colours-you-draw)).
+It is the last step, after any `mixclut` dim, because in `TI.EXE` it is the only
+route to the hardware palette. The set, prop and flat palettes, the puppet CLUT (art
+and subtitle ink alike) and each movie segment's own palette all pass through it; the
+Nightdive intro and the language chooser do not, since neither is the original
+showing a room.
+
 **A `clut` on the surface the screen is showing is its own reveal.** In `TI.EXE` a
 fade *is* a palette ramp, so re-establishing the palette is what brings the picture
 back, and a script that dims into place need issue no `blacktoscreen` at all.

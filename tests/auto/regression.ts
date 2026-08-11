@@ -11,6 +11,7 @@ import { RAMP_STEP_MS } from "../../src/engine/clock";
 import { readShpFile } from "../../src/df/shp";
 import { frameIndexForDegree, isDegreeSelector } from "../../src/engine/props";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "../../src/df/image";
+import { DEFAULT_SCREEN_GAMMA, displayPalette, screenGamma } from "../../src/screen-gamma";
 import { readStgFile, readStgRegions } from "../../src/df/stg";
 import { MAP_EXIT_REGION, MAP_JUMPS, MAP_PAGE_BUTTONS, mapUsable } from "../playthrough/nav/mapjumps";
 import { readMovFile } from "../../src/df/mov";
@@ -1802,9 +1803,22 @@ test("clut/mixclut: the darkroom light switch dims the CABIN palette", async () 
   call("clut", ["black"]); // must NOT dim
   const afterBlack = bright();
   check(
-    "clut/mixclut: light switch dims the cabin (~6%), clut restores, clut(black) is a no-op",
-    lit > 100 && dark < lit * 0.15 && restored === lit && afterBlack === lit,
+    "clut/mixclut: the light switch dims the cabin, clut restores, clut(black) is a no-op",
+    lit > 100 && dark < lit * 0.25 && restored === lit && afterBlack === lit,
     `lit=${lit} dark=${dark} restored=${restored} afterBlack=${afterBlack}`,
+  );
+  // And by HOW much, which is the display gamma's doing and worth pinning rather
+  // than bounding loosely. `mixclut(…,240)` scales the CLUT by (255-240)/255 = 5.9%
+  // in the palette's own space; the screen then shows `pow(0.059, 0.65)` = 15.9% of
+  // the lit picture, because the gamma is applied AFTER the dim exactly as TI.EXE
+  // applies it after everything (see src/screen-gamma.ts). This test read ~6% while
+  // the port rendered the palette verbatim — the darkroom used to go almost pitch
+  // black where the original only drops it to a sixth (#115).
+  const predicted = Math.pow((255 - 240) / 255, screenGamma());
+  check(
+    "clut/mixclut: and the dim lands where the display gamma puts it",
+    Math.abs(dark / lit - predicted) < 0.02,
+    `dark/lit=${(dark / lit).toFixed(4)} vs pow(15/255, ${screenGamma()})=${predicted.toFixed(4)}`,
   );
 }
 );
@@ -7112,3 +7126,51 @@ test("a fade takes one script tick a step, not one service pass", async () => {
   );
   check("...and it finished", !session.fading && session.fade.level === 0, `level=${session.fade.level}`);
 });
+
+// --- 12d. the display gamma TI.EXE applies to every palette entry (#115).
+// The port used to hand each channel's byte to the canvas verbatim, i.e. gamma 1.0,
+// and was reported as "very dark in general". TI.EXE builds its hardware palette as
+// `pow(c/255, gamma) * 255` per channel with the exponent defaulting to 0.65
+// (0x419c9c, feeding AnimatePalette at 0x419da8), which BRIGHTENS — most of all in
+// the dark half of the range, which is most of this game.
+test("the display gamma matches TI.EXE's palette build", async () => {
+  check("the default exponent is the one TI.EXE ships", DEFAULT_SCREEN_GAMMA === 0.65,
+    `${DEFAULT_SCREEN_GAMMA}`);
+  check("and it is what a fresh session renders with", screenGamma() === DEFAULT_SCREEN_GAMMA,
+    `${screenGamma()}`);
+
+  // the curve itself, against values worked out from the disassembled formula
+  const want: [number, number][] = [
+    [0, 0], [16, 42], [32, 66], [64, 104], [96, 135], [128, 163], [160, 188],
+    [200, 218], [240, 245], [255, 255],
+  ];
+  const clut = new Uint8ClampedArray(256 * 4);
+  for (const [c] of want) { clut[c * 4] = c; clut[c * 4 + 1] = c; clut[c * 4 + 2] = c; }
+  const out = displayPalette(clut);
+  for (const [c, expected] of want) {
+    check(`gamma: ${c} -> ${expected}`, out[c * 4] === expected, `got ${out[c * 4]}`);
+  }
+  // 0 and 255 are fixed points, so paletteToRGBA's forced black and white survive
+  check("black stays black and white stays white", out[0] === 0 && out[255 * 4] === 255,
+    `${out[0]} / ${out[255 * 4]}`);
+  // alpha is not a colour
+  check("alpha is untouched", out[3] === clut[3], `${out[3]}`);
+
+  // and a real room comes out brighter than its palette bytes, which is the report
+  const { session, viewer } = await newSession();
+  await session.openSetFile("c78.set");
+  const v = viewer();
+  const shown = (v as unknown as { palette: Uint8ClampedArray }).palette;
+  const raw = paletteToRGBA(v.set.paletteRaw, v.set.colorCount);
+  let lifted = 0;
+  let dimmed = 0;
+  for (let i = 0; i < 128 * 4; i += 4) {
+    for (let k = 0; k < 3; k++) {
+      if (shown[i + k] > raw[i + k]) lifted++;
+      else if (shown[i + k] < raw[i + k]) dimmed++;
+    }
+  }
+  check("every non-extreme entry of a real room is lifted, none pushed down",
+    lifted > 300 && dimmed === 0, `lifted=${lifted} dimmed=${dimmed}`);
+}
+);

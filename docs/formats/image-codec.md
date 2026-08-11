@@ -45,6 +45,41 @@ bitmap writer):
 And one SET-specific rule worth remembering: **SET room frames only use the
 first 128 palette entries**; the full 256 are used for map/overview images.
 
+### The palette bytes are not the colours you draw
+
+`paletteToRGBA` gives you what is *on disc*. TI.EXE never puts that on screen: it
+builds its hardware palette through a per-channel power curve first, and only then
+hands the entries to `AnimatePalette`. The build (0x419c9c) is three instructions
+per channel — `fmul 1/255`, `pow` against the channel's exponent, `fmul 255` — i.e.
+
+```
+entry = pow(c / 255, gamma) * 255
+```
+
+and the exponent defaults to **0.65**. Below 1 means it **brightens**, most of all
+where this game spends its time:
+
+```
+in   16   32   64   96  128  160  200  240
+out  42   66  104  135  163  188  218  245
+```
+
+The port skipped this for a long time and drew the bytes verbatim, which is exactly
+why it was reported as "very dark in general" (#115). The curve now lives in
+`src/screen-gamma.ts`; `paletteToRGBA` deliberately stays raw, because it is also
+what the asset tools and `paletteBlock`'s round-trip test use, and a decoder that
+quietly brightened its output would be lying about the file.
+
+Two consequences to keep in mind:
+
+- **It is applied last.** TI.EXE's builder is the only route to the hardware
+  palette, so everything that tints a colour — `mixclut`'s blend toward black above
+  all — has already happened when it runs. Dim first, *then* gamma: on a half-dimmed
+  entry of 200 the two orders give 109 and 139.
+- **The player can move it.** F1/F2 scale all three exponents down/up (the pair the
+  manual names as Ctrl+F1/F2), F3–F8 the individual channels, F9 resets — each press
+  a factor of 1.05. See `src/screen-gamma.ts` for the jump table this comes out of.
+
 ## Why images are "delta-encoded" (and why order matters)
 
 The compression is not just "shrink each picture independently." Many rows and
