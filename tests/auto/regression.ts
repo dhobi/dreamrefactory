@@ -11,7 +11,19 @@ import { RAMP_STEP_MS } from "../../src/engine/clock";
 import { readShpFile } from "../../src/df/shp";
 import { frameIndexForDegree, isDegreeSelector } from "../../src/engine/props";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "../../src/df/image";
-import { DEFAULT_SCREEN_GAMMA, displayPalette, screenGamma } from "../../src/screen-gamma";
+import {
+  ALL_CHANNELS,
+  DEFAULT_SCREEN_GAMMA,
+  SCREEN_GAMMA_STEP,
+  type GammaChannels,
+  displayPalette,
+  resetScreenGamma,
+  screenGamma,
+  screenGammaGeneration,
+  screenGammas,
+  setScreenGamma,
+  stepScreenGamma,
+} from "../../src/screen-gamma";
 import { readStgFile, readStgRegions } from "../../src/df/stg";
 import { MAP_EXIT_REGION, MAP_JUMPS, MAP_PAGE_BUTTONS, mapUsable } from "../playthrough/nav/mapjumps";
 import { readMovFile } from "../../src/df/mov";
@@ -7172,5 +7184,99 @@ test("the display gamma matches TI.EXE's palette build", async () => {
   }
   check("every non-extreme entry of a real room is lifted, none pushed down",
     lifted > 300 && dimmed === 0, `lifted=${lifted} dimmed=${dimmed}`);
+}
+);
+
+// --- 12e. the original's own gamma keys, and the caches that hold a palette (#115).
+// TI.EXE's WM_KEYDOWN jump table (0x41b118) gives F1-F9 to 0x41b210: F1/F2 move all
+// three exponents, F3-F8 one channel each, F9 resets. F1 BRIGHTENS — it divides the
+// exponent by 1.05, and a smaller exponent lifts a colour.
+test("F1-F9 move the display gamma the way TI.EXE moves it", () => {
+  const start = screenGammas().slice() as [number, number, number];
+  try {
+    // F1/F2: all three together, and the pair is a round trip
+    stepScreenGamma(false, ALL_CHANNELS);
+    const brighter = screenGammas();
+    check("F1 lowers all three exponents (a lower exponent is brighter)",
+      brighter.every((g, i) => Math.abs(g - start[i] / SCREEN_GAMMA_STEP) < 1e-9),
+      JSON.stringify(brighter));
+    stepScreenGamma(true, ALL_CHANNELS);
+    check("F2 puts them back", screenGammas().every((g, i) => Math.abs(g - start[i]) < 1e-9),
+      JSON.stringify(screenGammas()));
+
+    // F3/F4 etc: one channel only, the other two untouched
+    for (const [label, ch] of [
+      ["red", [true, false, false]], ["green", [false, true, false]], ["blue", [false, false, true]],
+    ] as [string, GammaChannels][]) {
+      const before = screenGammas().slice();
+      stepScreenGamma(false, ch);
+      const after = screenGammas();
+      const moved = after.map((g, i) => g !== before[i]);
+      check(`the ${label} pair moves ${label} alone`,
+        moved.every((m, i) => m === ch[i]), `moved=${JSON.stringify(moved)}`);
+    }
+
+    // F9 puts everything back, whatever state the channels were left in
+    resetScreenGamma();
+    check("F9 resets all three to what the original ships with",
+      screenGammas().every((g) => g === DEFAULT_SCREEN_GAMMA), JSON.stringify(screenGammas()));
+
+    // and a change is observable to a cache holder, which is the only thing they watch
+    const gen = screenGammaGeneration();
+    stepScreenGamma(false, ALL_CHANNELS);
+    check("a change bumps the generation", screenGammaGeneration() > gen,
+      `${gen} -> ${screenGammaGeneration()}`);
+    const same = screenGammaGeneration();
+    setScreenGamma(screenGammas()[0]);
+    check("and setting the value it already has does not", screenGammaGeneration() === same,
+      `${same} -> ${screenGammaGeneration()}`);
+  } finally {
+    resetScreenGamma();
+  }
+});
+
+// A live change has to reach the palettes a room is already drawing with, or the
+// picture only changes at the next set. The viewer rebuilds them on the tick after
+// the generation moves — and replacing the arrays is also what makes the frame
+// cache (buildSignature refs both) repaint.
+test("moving the gamma repaints the room the player is standing in", async () => {
+  const { session, viewer } = await newSession();
+  await session.openSetFile("c78.set");
+  const v = viewer();
+  const peek = (): { palette: Uint8ClampedArray; propPalette: Uint8ClampedArray } =>
+    v as unknown as { palette: Uint8ClampedArray; propPalette: Uint8ClampedArray };
+  const sum = (p: Uint8ClampedArray): number => {
+    let s = 0;
+    for (let i = 0; i < 128 * 4; i++) s += p[i];
+    return s;
+  };
+  let clock = 0;
+  const lit = sum(peek().palette);
+  const wasPalette = peek().palette;
+  try {
+    stepScreenGamma(false, ALL_CHANNELS); // F1: brighter
+    check("nothing has moved until the next tick", peek().palette === wasPalette);
+    v.tick((clock += 50));
+    check("the tick after F1 rebuilt the set palette, brighter",
+      sum(peek().palette) > lit, `${lit} -> ${sum(peek().palette)}`);
+    check("and a NEW array, so the frame cache sees a repaint",
+      peek().palette !== wasPalette);
+    const brightened = sum(peek().palette);
+
+    resetScreenGamma(); // F9
+    v.tick((clock += 50));
+    check("F9 puts the room back exactly where it was",
+      sum(peek().palette) === lit, `${brightened} -> ${sum(peek().palette)} vs ${lit}`);
+
+    // the prop palette is the other half of the same room and must move with it
+    stepScreenGamma(false, ALL_CHANNELS);
+    const props = sum(peek().propPalette);
+    v.tick((clock += 50));
+    check("the prop palette moves with it", sum(peek().propPalette) > props,
+      `${props} -> ${sum(peek().propPalette)}`);
+  } finally {
+    resetScreenGamma();
+    v.tick((clock += 50));
+  }
 }
 );

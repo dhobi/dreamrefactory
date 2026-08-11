@@ -14,7 +14,7 @@ import { NATIVE_FRAME_MS, TICK_MS, chooseFrameInterval, frameHoldMs } from "./df
 import { Container } from "./df/container";
 import { decodeAudioContainer, resampleTo } from "./df/audio";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "./df/image";
-import { displayPalette } from "./screen-gamma";
+import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { GameSession } from "./engine/session";
 import { PlayHandle } from "./engine/audio";
 
@@ -75,6 +75,8 @@ export class MoviePlayer {
     /** ESC may abort this movie (MOV header flag bit 0) — see {@link skip} */
     keySkips: boolean;
     palette: Uint8ClampedArray;
+    /** the display gamma `palette` was built at — see the frame getter */
+    paletteGen: number;
     pos: number;
     /** ms per frame; 0 = wait for clicks (click-through object movies) */
     interval: number;
@@ -168,6 +170,15 @@ export class MoviePlayer {
     const m = this.active;
     if (!m) return null;
     const f = m.frames[Math.min(m.pos, m.frames.length - 1)];
+    // A segment bakes its palette once, so a brightness change made DURING a movie
+    // has to be picked up here — the original's F-keys are in the window proc and
+    // work over a playing movie, and a two-minute cutscene is exactly when someone
+    // reaches for them.
+    const gen = screenGammaGeneration();
+    if (m.paletteGen !== gen) {
+      m.palette = displayPalette(paletteToRGBA(m.seg.paletteRaw, 256));
+      m.paletteGen = gen;
+    }
     return { ...f, palette: m.palette, originX: m.seg.originX, originY: m.seg.originY };
   }
 
@@ -355,6 +366,7 @@ export class MoviePlayer {
       hasRegions,
       keySkips: seg.keySkips,
       palette: displayPalette(paletteToRGBA(seg.paletteRaw, 256)),
+      paletteGen: screenGammaGeneration(),
       pos: Math.min(Math.max(startFrame, 0), frames.length - 1),
       interval,
       lastTick: 0,

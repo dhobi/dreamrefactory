@@ -19,7 +19,7 @@ import { PUP_LAYERS } from "./df/pup";
 import { subtitleFont, wrapText } from "./fonts";
 import { decodeShpFrame, ShpFrame } from "./df/shp";
 import { indexedToRGBA, paletteToRGBA } from "./df/image";
-import { displayChannel, displayPalette } from "./screen-gamma";
+import { displayChannel, displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { GameSession } from "./engine/session";
 import type { DrawSignature } from "./engine/signature";
 import { SCREEN_W, SCREEN_H } from "./screen";
@@ -112,8 +112,8 @@ function clutColor(paletteRaw: Uint8Array, index: number): string {
   const b = index * 8;
   // through the display gamma, like the art it sits on — otherwise the ink is the
   // one thing on the puppet screen still at the raw palette's brightness
-  const ch = (o: number): number => displayChannel(paletteRaw[b + o] ?? 0);
-  return `rgb(${ch(3)}, ${ch(5)}, ${ch(7)})`;
+  const ch = (o: number, i: 0 | 1 | 2): number => displayChannel(paletteRaw[b + o] ?? 0, i);
+  return `rgb(${ch(3, 0)}, ${ch(5, 1)}, ${ch(7, 2)})`;
 }
 
 export class PuppetView {
@@ -224,7 +224,11 @@ export class PuppetView {
     // spoken (~30 records/s: lip sync, blinks, gestures), else the held
     // pose from the last record
     const state = this.session.puppetCtrl.puppetFrame();
-    const key = `${p.name}:${p.stanceIdx}:${clipY}:${state ? state.layers.map((l) => l.frame).join(",") : "-"}`;
+    // the display gamma is in the key because `rgba` below is post-gamma: without
+    // it, moving the brightness mid-conversation left the character at the old one
+    // until their next lip-sync frame changed the key by itself
+    const key = `${p.name}:${p.stanceIdx}:${clipY}:${screenGammaGeneration()}:${
+      state ? state.layers.map((l) => l.frame).join(",") : "-"}`;
     if (!this.image || this.image.key !== key) {
       // the character composites OVER the live scene view; a stance's
       // "background" layer that is one flat colour is a key-colour matte

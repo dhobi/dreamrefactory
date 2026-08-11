@@ -132,7 +132,7 @@ export const en = {
     intro: "Loading the game's files…" as Text,
     introSub: 'Looking in the <code>gamefiles/</code> directory' as Html,
     keys:
-      "<b>←</b> <b>→</b> turn &nbsp;·&nbsp; <b>↑</b> walk &nbsp;·&nbsp; <b>M</b> map &nbsp;·&nbsp; <b>O</b> hotspots &nbsp;·&nbsp; <b>X</b> details" as Html,
+      "<b>←</b> <b>→</b> turn &nbsp;·&nbsp; <b>↑</b> walk &nbsp;·&nbsp; <b>M</b> map &nbsp;·&nbsp; <b>O</b> hotspots &nbsp;·&nbsp; <b>X</b> details &nbsp;·&nbsp; <b>F1</b> <b>F2</b> brightness" as Html,
     fullscreen: "⛶ Fullscreen" as Text,
     fullscreenTitle: "Fullscreen (letterboxed 4:3)" as Text,
     reportBug: "🪲 Report a bug" as Text,
@@ -158,6 +158,13 @@ export const en = {
       "shows the soft one for a moment as a right turn lands (a left turn lands " +
       "sharp). Tick this to skip that moment. The turn itself stays soft either " +
       "way — no sharp version of the moving frames was ever made." as Text,
+    brightnessLabel: "Brightness" as Text,
+    brightnessTitle:
+      "The original brightens every colour before it draws it, and lets you move " +
+      "that with Ctrl+F1 and Ctrl+F2 — F1-F9 here, which also trim the colour " +
+      "channels one at a time. This slider is the same setting for a screen with " +
+      "no keyboard. Middle is what the game ships with." as Text,
+    brightnessReset: "default" as Text,
     // The state list in the details pane (#22). Its CONTENTS are never
     // translated — `neckphase 4` is a name out of the game's own tables and the
     // same sentence in six languages — so only the words around it are here.

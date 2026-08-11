@@ -175,6 +175,32 @@
         width: 180px;
       }
 
+      /* The brightness slider. Styled down on purpose: the rule this page is
+         built on is that nothing beside the canvas may be brighter than the
+         canvas, and a UA range control defaults to a saturated accent that
+         outshines the game. Brass rather than ice — this is a control you set
+         and leave, not something reporting for attention. */
+      #brightness {
+        accent-color: var(--brass-700);
+        width: 9rem;
+        max-width: 40vw;
+        vertical-align: middle;
+      }
+      /* ...and the groove it slides in, which a UA draws in near-white — the
+         brightest thing in the bar, in a page whose whole rule is that it isn't.
+         Only the UNFILLED side needs saying: `accent-color` above still paints
+         the filled side and the thumb. */
+      #brightness::-webkit-slider-runnable-track {
+        background: var(--hull-400);
+        border-radius: 2px;
+        height: 4px;
+      }
+      #brightness::-moz-range-track {
+        background: var(--hull-400);
+        border-radius: 2px;
+        height: 4px;
+      }
+
       /* ---- where the game says where you are, and what it is doing ----
          Both live in #details at the bottom of the bars, and both are off until
          X is pressed (src/main.ts): where you are standing and a script log are
@@ -722,9 +748,15 @@
           >
         </div>
 
-        <!-- The one picture setting. Not in the swipe row above, which a desktop
-             never sees: this question is the mouse's as much as the finger's.
-             src/main.ts's installPictureOptions remembers the box. -->
+        <!-- The picture settings. Not in the swipe row above, which a desktop
+             never sees: these questions are the mouse's as much as the finger's.
+             src/main.ts's installPictureOptions remembers both.
+
+             The brightness slider is the touch half of the original's own
+             control: TI.EXE puts it on F1/F2 (and the individual colour channels
+             on F3-F8, reset on F9), which a phone has no way to press. Both ends
+             move the same value, so a player who uses the keys sees the slider
+             follow. -->
         <div class="bar">
           <span class="seclabel" data-i18n="play.pictureLabel">Picture</span>
           <label
@@ -736,10 +768,31 @@
         </div>
 
         <div class="bar">
+          <span class="seclabel" data-i18n="play.brightnessLabel">Brightness</span>
+          <label
+            title="The original brightens every colour before it draws it, and lets you move that with Ctrl+F1 and Ctrl+F2 — F1-F9 here, which also trim the colour channels one at a time. This slider is the same setting for a screen with no keyboard. Middle is what the game ships with."
+            data-i18n-attr="title:play.brightnessTitle"
+            ><input
+              type="range"
+              id="brightness"
+              min="-12"
+              max="12"
+              step="1"
+              value="0"
+              aria-describedby="brightnessValue"
+            />
+            <span class="keys" id="brightnessValue">0.65</span></label
+          >
+          <button type="button" id="brightnessReset" data-i18n="play.brightnessReset">
+            default
+          </button>
+        </div>
+
+        <div class="bar">
           <span class="keys" data-i18n-html="play.keys">
             <b>←</b> <b>→</b> turn &nbsp;·&nbsp; <b>↑</b> walk &nbsp;·&nbsp;
             <b>M</b> map &nbsp;·&nbsp; <b>O</b> hotspots &nbsp;·&nbsp; <b>X</b>
-            details
+            details &nbsp;·&nbsp; <b>F1</b> <b>F2</b> brightness
           </span>
         </div>
       </div>

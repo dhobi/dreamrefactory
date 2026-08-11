@@ -1,6 +1,6 @@
 import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTURNS, roadsAt, turnRing } from "./df/set";
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "./df/image";
-import { displayPalette, screenGamma } from "./screen-gamma";
+import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { ShpFrame } from "./df/shp";
 import { ENGINE_STEP_MS } from "./engine/clock";
 import { truthy } from "./engine/interp";
@@ -872,15 +872,35 @@ export class SetViewer {
    * that draws a flat and both steps allocate. The flat's own decoded palette is a
    * stable object per flat, so identity is a sound key for it.
    */
-  private flatPal: { base: Uint8ClampedArray; dim: ClutDim | null; gamma: number;
+  private flatPal: { base: Uint8ClampedArray; dim: ClutDim | null; gen: number;
                      out: Uint8ClampedArray } | null = null;
   private flatPalette(base: Uint8ClampedArray): Uint8ClampedArray {
-    const g = screenGamma();
+    const gen = screenGammaGeneration();
     const hit = this.flatPal;
-    if (hit && hit.base === base && hit.dim === this.stageDim && hit.gamma === g) return hit.out;
+    if (hit && hit.base === base && hit.dim === this.stageDim && hit.gen === gen) return hit.out;
     const out = displayPalette(this.stageDim ? dimPalette(base, this.stageDim) : base);
-    this.flatPal = { base, dim: this.stageDim, gamma: g, out };
+    this.flatPal = { base, dim: this.stageDim, gen, out };
     return out;
+  }
+
+  /** the gamma the effective palettes were built at (see screen-gamma.ts) */
+  private paletteGen = screenGammaGeneration();
+  /**
+   * Rebuild the effective set/prop palettes when the player has moved the display
+   * gamma (F1-F9, or the brightness control).
+   *
+   * The bases stay raw, so this is the same expression `setClut` uses — dim first,
+   * then gamma. Replacing the arrays is also what makes the change VISIBLE:
+   * `buildSignature` refs both palettes by identity, so a new one is a repaint,
+   * and without that the picture would not change until the next camera move.
+   */
+  private refreshGamma(): void {
+    const gen = screenGammaGeneration();
+    if (gen === this.paletteGen) return;
+    this.paletteGen = gen;
+    const dim = this.setDim;
+    this.palette = displayPalette(dim ? dimPalette(this.basePalette, dim) : this.basePalette);
+    this.propPalette = displayPalette(dim ? dimPalette(this.basePropPalette, dim) : this.basePropPalette);
   }
 
   /** start looping background music if a theme bank is available */
@@ -1928,6 +1948,7 @@ export class SetViewer {
     // through 6 of its 12 frames before the script slammed it to `idleopen`, so
     // the door crawled and then jumped, which is #15 in the reporter's words:
     // "move slowly, then at about 60% of the animation jumps to the end".
+    this.refreshGamma();
     this.session.propRuntime.tick(now, ENGINE_STEP_MS);
     this.session.tickFade(now);
     this.session.tickWipe(now);

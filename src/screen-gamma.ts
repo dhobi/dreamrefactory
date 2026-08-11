@@ -43,12 +43,36 @@
 
 /** the exponent TI.EXE ships with, and what its F9 resets to */
 export const DEFAULT_SCREEN_GAMMA = 0.65;
-/** what one F1/F2 press is worth — 0x45a050 (up) is the reciprocal of 0x45a058 */
+/** what one keypress is worth — 0x45a050 (up) is the reciprocal of 0x45a058 */
 export const SCREEN_GAMMA_STEP = 1.05;
+/** the clamp either end of which is already unusable: 1.0 is the raw palette (what
+ *  #115 fixed) and 0.3 is washed out. Keeps a stored or fat-fingered value sane. */
+const MIN_GAMMA = 0.3;
+const MAX_GAMMA = 1.6;
 
-let gamma = DEFAULT_SCREEN_GAMMA;
-/** 256-entry lookup for the current gamma, rebuilt only when it changes */
-let ramp = buildRamp(gamma);
+/** which channels a change applies to — the three flags TI.EXE's 0x41b210 takes */
+export type GammaChannels = readonly [red: boolean, green: boolean, blue: boolean];
+/** all three together: the F1/F2 pair, and what a brightness control moves */
+export const ALL_CHANNELS: GammaChannels = [true, true, true];
+
+const gammas: [number, number, number] = [
+  DEFAULT_SCREEN_GAMMA, DEFAULT_SCREEN_GAMMA, DEFAULT_SCREEN_GAMMA,
+];
+const ramps: [Uint8Array, Uint8Array, Uint8Array] = [
+  buildRamp(gammas[0]), buildRamp(gammas[1]), buildRamp(gammas[2]),
+];
+/**
+ * Bumped on every change, and the ONLY thing cache holders have to watch.
+ *
+ * Every consumer of a palette caches it — the set and prop palettes, the stage
+ * flat memo, the puppet's composited stance, each movie segment — and all of them
+ * hold POST-gamma bytes, so a live change has to reach all four or the picture
+ * changes in one place and not the others. A generation counter rather than a
+ * subscription because instances come and go (a viewer per set, a puppet view per
+ * conversation) and a listener list would need unsubscribing correctly at every
+ * teardown to avoid holding them alive; comparing an integer cannot leak.
+ */
+let generation = 0;
 
 function buildRamp(g: number): Uint8Array {
   const out = new Uint8Array(256);
@@ -56,45 +80,87 @@ function buildRamp(g: number): Uint8Array {
   return out;
 }
 
+/** the three exponents, R/G/B — TI.EXE's 0x45b6f0 / +8 / +0x10 */
+export function screenGammas(): readonly [number, number, number] {
+  return gammas;
+}
+
+/** the brightness a single control shows: the three channels averaged, which is
+ *  the value itself whenever they have only ever been moved together */
 export function screenGamma(): number {
-  return gamma;
+  return (gammas[0] + gammas[1] + gammas[2]) / 3;
+}
+
+/** watch this to know a cached palette is stale ({@link generation}) */
+export function screenGammaGeneration(): number {
+  return generation;
+}
+
+/** Set the named channels to `g`. Silent no-op when nothing would change, so a
+ *  slider dragged within one rounding step does not invalidate every cache. */
+export function setScreenGamma(g: number, channels: GammaChannels = ALL_CHANNELS): void {
+  const next = Math.max(MIN_GAMMA, Math.min(MAX_GAMMA, Number.isFinite(g) ? g : DEFAULT_SCREEN_GAMMA));
+  let moved = false;
+  for (let i = 0; i < 3; i++) {
+    if (!channels[i] || gammas[i] === next) continue;
+    gammas[i] = next;
+    ramps[i] = buildRamp(next);
+    moved = true;
+  }
+  if (moved) generation++;
 }
 
 /**
- * Set the exponent. Clamped to a range either end of which is already unusable,
- * so a stored value from a future build cannot black the screen out: 1.0 is the
- * raw palette (what this fixed) and 0.3 is washed out.
+ * One keypress: multiply the named channels by 1.05, or divide by it.
+ *
+ * The direction is TI.EXE's first argument to 0x41b210 and the three flags are its
+ * other three, so F1 is `step(false, ALL_CHANNELS)` and F4 is `step(true, [true,
+ * false, false])` — the arms read as the disassembly does.
  */
-export function setScreenGamma(g: number): void {
-  const next = Math.max(0.3, Math.min(1.6, Number.isFinite(g) ? g : DEFAULT_SCREEN_GAMMA));
-  if (next === gamma) return;
-  gamma = next;
-  ramp = buildRamp(gamma);
+export function stepScreenGamma(up: boolean, channels: GammaChannels = ALL_CHANNELS): void {
+  let moved = false;
+  for (let i = 0; i < 3; i++) {
+    if (!channels[i]) continue;
+    const raw = up ? gammas[i] * SCREEN_GAMMA_STEP : gammas[i] / SCREEN_GAMMA_STEP;
+    const next = Math.max(MIN_GAMMA, Math.min(MAX_GAMMA, raw));
+    if (next === gammas[i]) continue;
+    gammas[i] = next;
+    ramps[i] = buildRamp(next);
+    moved = true;
+  }
+  if (moved) generation++;
+}
+
+/** F9: all three back to what the original ships with */
+export function resetScreenGamma(): void {
+  setScreenGamma(DEFAULT_SCREEN_GAMMA, ALL_CHANNELS);
 }
 
 /**
  * Apply the current gamma to an RGBA CLUT, returning a new table. Alpha is left
- * alone, and so are index 0 and index 255 in effect — the curve fixes 0 and 255 —
- * so `paletteToRGBA`'s forced black and white survive it.
+ * alone, and 0 and 255 are fixed points of the curve, so `paletteToRGBA`'s forced
+ * black and white survive it.
  *
  * Call this on the colour that is about to be drawn, AFTER any `mixclut` dim (see
- * the note above). A palette is 256 entries, so this is 768 table lookups against
- * the ~200k pixels it then colorizes: a rounding error, and the reason it is done
- * per palette rather than per pixel.
+ * the note at the top). A palette is 256 entries, so this is 768 table lookups
+ * against the ~200k pixels it then colorizes: the reason it is done per palette
+ * rather than per pixel.
  */
 export function displayPalette(clut: Uint8ClampedArray): Uint8ClampedArray {
   const out = new Uint8ClampedArray(clut.length);
+  const [r, g, b] = ramps;
   for (let i = 0; i < clut.length; i += 4) {
-    out[i] = ramp[clut[i]];
-    out[i + 1] = ramp[clut[i + 1]];
-    out[i + 2] = ramp[clut[i + 2]];
+    out[i] = r[clut[i]];
+    out[i + 1] = g[clut[i + 1]];
+    out[i + 2] = b[clut[i + 2]];
     out[i + 3] = clut[i + 3];
   }
   return out;
 }
 
-/** One channel through the curve — for the few places that read a colour out of a
- *  CLUT by hand rather than expanding the whole table (puppet subtitle ink). */
-export function displayChannel(c: number): number {
-  return ramp[Math.max(0, Math.min(255, c | 0))];
+/** One channel through its own curve — for the few places that read a colour out
+ *  of a CLUT by hand rather than expanding the whole table (puppet subtitle ink).
+ *  `ch` is 0/1/2 for R/G/B. */
+export function displayChannel(c: number, ch: 0 | 1 | 2): number {
+  return ramps[ch][Math.max(0, Math.min(255, c | 0))];
 }
