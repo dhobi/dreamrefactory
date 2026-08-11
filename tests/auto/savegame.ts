@@ -1413,3 +1413,120 @@ test("a save at Scene109 reloads with Vlad standing there, and drawn", async () 
     check(`loading from the ${from}: and he is in the draw list`, got.drawn, JSON.stringify(got));
   }
 });
+
+/**
+ * The writer enumerates props the way the original does: all of them.
+ *
+ * TI.EXE's save writer (0x413910) walks its live prop list and copies one record
+ * per node, no filtering — so all 109 shipped saves hold exactly 72 prop records,
+ * the two boot shops' props in creation order, none missing and no extras. This
+ * pins our side to the same rule, because the two times it has been a hand-kept
+ * list the list was short (the bag/watch/map, then the baby — see
+ * {@link inventorySnapshot} and the test below).
+ */
+test("a save offers every loaded prop, as the original enumerates them", async () => {
+  const { host, session } = await newHost();
+  let clock = 0;
+  const settle = async (n = 40): Promise<void> => {
+    for (let i = 0; i < n; i++) { host.viewer?.tick((clock += 50)); await drain(); }
+  };
+  const path = savePath("ENDGAME2", "08 - Boat Deck.ti");
+  const baseBytes = new Uint8Array(readFileSync(path));
+  await session.loadGame(baseBytes);
+  await settle();
+
+  const loaded = [...session.propRuntime.props.keys()];
+  const filed = parseSave(baseBytes).inventory.map((p) => p.name);
+  check("the engine holds the same props the original serialised", loaded.length === filed.length,
+    `ours ${loaded.length} vs the file's ${filed.length}`);
+  check("in the same order", loaded.join(",") === filed.join(","),
+    `first divergence at ${loaded.findIndex((n, i) => n !== filed[i])}`);
+
+  // and the round trip keeps every one of them, not a chosen few
+  const bytes = session.snapshotSave();
+  expect(bytes, "a save was written").not.toBeNull();
+  const back = parseSave(bytes!);
+  check("the written file still has a record per prop", back.inventory.length === filed.length,
+    `${back.inventory.length} of ${filed.length}`);
+  const wrong = back.inventory.filter((p) => {
+    const live = session.propRuntime.get(p.name);
+    return (String(live?.owner) || "none").toLowerCase() !== p.owner;
+  });
+  check("every owner in it is the live one", wrong.length === 0,
+    wrong.map((p) => `${p.name}=${p.owner}`).join(" "));
+});
+
+/**
+ * Beatrix trades the child for Conkling's letter after a save and a load (#107).
+ *
+ * `BX2.PUP` c6 opens on `if propowner("baby") = "bx"`, and `baby` lives in
+ * house.shp rather than inven.shp — it is drawn centre-screen, not in a bag slot —
+ * so the writer's old inven.shp-plus-three-band-items list never wrote it. A
+ * reload therefore took the value from the PATCH BASE, and for `mission >= 4`
+ * main.ts lends the disk-2 template, where the child belongs to nobody. Beatrix
+ * then ran `findconk()` — "where's Andrew?" — with the letter in your hand.
+ *
+ * Two details worth keeping, because both are why this read as a `deckbd2` bug:
+ *
+ *  - she still LOOKS like she is holding it. `gang.cst` c3's `endwalk()` chooses
+ *    the pose from `propowner("baby")` before the save, and the actor record
+ *    carries the pose (#86) — so the screen said one thing and the prop table
+ *    another.
+ *  - nothing needs her VISIBILITY of the child restored. house.shp's
+ *    `showinterface()` ends with `if propowner("baby") = "frank" →
+ *    propvisible("baby", true)`, so possession is the whole mechanism: the owner
+ *    is the one field that has to survive, and the rest follows from it.
+ */
+test("a mission-4 save reloads with the child still Beatrix's", async () => {
+  const template = new Uint8Array(readFileSync(
+    savePath("ENDGAME2", "01 - Found Notebook in False Smokestack.ti")));
+
+  const one = await newHost();
+  let c1 = 0;
+  const settle1 = async (n = 40): Promise<void> => {
+    for (let i = 0; i < n; i++) { one.host.viewer?.tick((c1 += 50)); await drain(); }
+  };
+  await one.session.loadGame(new Uint8Array(readFileSync(savePath("ENDGAME2", "08 - Boat Deck.ti"))));
+  await settle1();
+  // A CARRIED game is the case that broke: with no `lastSave` the writer patches
+  // the lent template, whose own value for the child is "none". Reaching the state
+  // by loading and then clearing lastSave is the same writer input as playing here.
+  one.session.lastSave = null;
+  one.session.saveTemplate = () => template;
+  check("Beatrix has the child before the save",
+    String(one.session.propRuntime.get("baby")?.owner) === "bx");
+
+  const bytes = one.session.snapshotSave();
+  expect(bytes, "a save was written").not.toBeNull();
+  check("and the save records that, rather than the template's owner",
+    parseSave(bytes!).inventory.find((p) => p.name === "baby")?.owner === "bx",
+    `template says ${parseSave(template).inventory.find((p) => p.name === "baby")?.owner}`);
+
+  const two = await newHost();
+  let c2 = 0;
+  const settle2 = async (n = 40): Promise<void> => {
+    for (let i = 0; i < n; i++) { two.host.viewer?.tick((c2 += 50)); await drain(); }
+  };
+  expect(await two.session.loadGame(bytes!), "the save loads").toBe(true);
+  await settle2();
+  check("the load gives the child back to Beatrix",
+    String(two.session.propRuntime.get("baby")?.owner) === "bx",
+    `owner=${two.session.propRuntime.get("baby")?.owner}`);
+
+  // the consequence, which is what was actually reported: hold the letter (what
+  // SHAHACK2.PUP's getbaby() hands over) and talk to her
+  await two.session.sendEvent("sendtoshop", "inven.shp", "addinven", ["conkletter"], "test");
+  await settle2(10);
+  two.logs.length = 0;
+  void two.session.track(
+    two.session.sendEvent("sendtoactor", "bx", "runpuppet", ["bx2.pup", ""], "test"));
+  await settle2(80);
+  // getbaby() opens with a stage direction and three plaques; findconk() — the
+  // branch the report saw — has no plaques at all
+  const said = two.logs.filter((l) => /^msg: ACT/.test(l));
+  check("she opens the trade rather than asking where Andrew is",
+    /gripping the baby/i.test(said.join(" ")), said.join(" | ") || "(she said nothing)");
+  check("and offers the answers getbaby() parks on",
+    (two.session.puppet?.bevels ?? []).length === 3,
+    JSON.stringify((two.session.puppet?.bevels ?? []).map((b) => b.id)));
+});
