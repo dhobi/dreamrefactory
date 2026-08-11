@@ -107,6 +107,35 @@ const ACTOR_OWNER_OFF = 64;
 const ACTOR_VALUE_OFF = ACTOR_RECORD_OFF + 0x48;
 
 /**
+ * The placement half of the record, all offsets from the NAME — the fields a load
+ * needs in order to put the cast back where the player left them rather than
+ * re-deriving them from each room's own scripts (#86).
+ *
+ * `visible` is the one that makes restoring safe at all: without it the only rule
+ * available was "place anyone whose recorded set is the set being loaded", which
+ * would resurrect everybody who had ever walked through that room, because
+ * `putdownactor` hides a character without touching `actorset`.
+ */
+const ACTOR_PLACEMENT = {
+  visible: ACTOR_RECORD_OFF + 0,
+  deg: ACTOR_RECORD_OFF + 24,
+  x: ACTOR_RECORD_OFF + 26,
+  y: ACTOR_RECORD_OFF + 28,
+  z: ACTOR_RECORD_OFF + 30,
+  speed: ACTOR_RECORD_OFF + 38,
+  zclip: ACTOR_RECORD_OFF + 76,
+} as const;
+/** a world coordinate as the record's i16, clamped rather than wrapped */
+function clampI16(n: number): number {
+  return Math.max(-32768, Math.min(32767, Math.trunc(n) || 0));
+}
+
+/** the three pstr fields between the name and the owner */
+const ACTOR_SET_OFF = 16;
+const ACTOR_STAR_OFF = 32;
+const ACTOR_POSE_OFF = 48;
+
+/**
  * The 32-byte variable-list node of the globals container (see decodeVarSlots
  * for the crucial name/value pairing): [+0/+4 heap ptrs][+8 name: len byte +
  * chars, 12 bytes][+20 DFValue vtable][+24 type u16][+26 value 16-bit].
@@ -295,6 +324,14 @@ export interface SavedActor {
     zclip: number;
   };
 }
+
+/**
+ * What a writer may say about one character: their memory of the player always,
+ * and their placement when the caller has one to give.
+ */
+export type SavedActorPatch = Pick<SavedActor, "name" | "owner" | "value"> & {
+  placement?: SavedActor["placement"];
+};
 
 export interface SaveGame {
   /** "Titanic 1.0" version string from container 0. */
@@ -565,22 +602,21 @@ function actorRecordAt(d: Uint8Array, o: number): SavedActor | null {
     if (p < 0 || p + (wide ? 4 : 2) > d.length) return 0;
     return wide ? view.getInt32(p, true) : view.getInt16(p, true);
   };
-  const rec = ACTOR_RECORD_OFF;
   return {
     name: name.toLowerCase(),
     owner: owner.toLowerCase(),
     value: num(ACTOR_VALUE_OFF, true),
     placement: {
-      visible: num(rec + 0) > 0,
-      set: pstrField(d, o + 16).toLowerCase(),
-      star: pstrField(d, o + 32).toLowerCase(),
-      pose: pstrField(d, o + 48).toLowerCase(),
-      deg: num(rec + 24),
-      x: num(rec + 26),
-      y: num(rec + 28),
-      z: num(rec + 30),
-      speed: num(rec + 38),
-      zclip: num(rec + 76),
+      visible: num(ACTOR_PLACEMENT.visible) > 0,
+      set: pstrField(d, o + ACTOR_SET_OFF).toLowerCase(),
+      star: pstrField(d, o + ACTOR_STAR_OFF).toLowerCase(),
+      pose: pstrField(d, o + ACTOR_POSE_OFF).toLowerCase(),
+      deg: num(ACTOR_PLACEMENT.deg),
+      x: num(ACTOR_PLACEMENT.x),
+      y: num(ACTOR_PLACEMENT.y),
+      z: num(ACTOR_PLACEMENT.z),
+      speed: num(ACTOR_PLACEMENT.speed),
+      zclip: num(ACTOR_PLACEMENT.zclip),
     },
   };
 }
@@ -754,15 +790,16 @@ export interface SavePatch {
    */
   inventory?: SavedProp[];
   /**
-   * Current `actorowner` and `actorvalue` per character, written into the actor
-   * container. Without it a save keeps the base's — which for a fresh template
-   * means every character back at "none", their errands forgotten.
+   * The cast, written into the actor container.
    *
-   * Only the two fields the writer writes, not a whole {@link SavedActor}: the
-   * record's `placement` half is decoded but not yet written, and asking a caller
-   * to supply a placement that goes nowhere would read as though it did (#86).
+   * `owner` and `value` are the characters' memory of the player, and without them
+   * a save keeps the base template's — every character back at "none", their
+   * errands forgotten. `placement` is optional because a caller may have nothing
+   * to say about where anybody is standing (a test patching one owner); when it is
+   * given, the whole placement half of the record is written, which is what lets a
+   * load put the cast back instead of re-deriving it from each room (#86).
    */
-  actors?: Pick<SavedActor, "name" | "owner" | "value">[];
+  actors?: SavedActorPatch[];
   /**
    * Told about any global that could not be written, and why.
    *
@@ -1136,17 +1173,34 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     }
   }
 
-  // actors: the same in-place write. The owner and the conversation count — the
-  // rest of an actor record is where he is standing and what he is doing, which
-  // a load rebuilds by running the room's own initactors.
+  // actors: the same in-place write — the memory of the player (owner, conversation
+  // count) and, when the caller supplies one, the whole placement half.
   if (patch.actors?.length) {
     const ai = findActorsIndex(raw, [findInventoryIndex(raw), gi, gi + 1]);
     if (ai >= 0) {
       const d = containers[ai].data;
+      const view = new DataView(d.buffer, d.byteOffset, d.byteLength);
       const offs = new Map(walkActorGrid(d).map((r) => [r.actor.name, r.off]));
+      /** a field at `at` bytes from the name; false when it falls outside the slice.
+       *  Every placement offset is NEGATIVE, so the lower bound matters as much as
+       *  the upper one — a container's first record can begin before the slice. */
+      const put = (at: number, value: number, wide = false): boolean => {
+        if (at < 0 || at + (wide ? 4 : 2) > d.length) return false;
+        if (wide) view.setInt32(at, value | 0, true);
+        else view.setInt16(at, value, true);
+        return true;
+      };
       for (const sa of patch.actors) {
         const off = offs.get(sa.name.toLowerCase());
-        if (off === undefined) continue;
+        if (off === undefined) {
+          // The crowd extras are the expected case and not a loss: `setupgroup`
+          // creates them per room from EXTRA.CST and the arriving room makes its
+          // own, which is why the shipped saves disagree about which exist (25 to
+          // 64 records). Every one of the 109 has a record for all 25 NAMED cast
+          // members, so a caller that only offers those is never dropped.
+          if (sa.placement?.visible) patch.onDrop?.(`actor(${sa.name})`, "no record in the base save");
+          continue;
+        }
         // the field is a length byte + 15 characters, and the longest owner any
         // script assigns is "readhackerclue" at 14 — but a truncated owner would
         // be a DIFFERENT rung of somebody's ladder, so refuse rather than trim
@@ -1155,14 +1209,30 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
           continue;
         }
         writePstrField(d, off + ACTOR_OWNER_OFF, sa.owner);
-        // negative offset: `actorvalue` sits 8 bytes BEFORE the name, so the lower
-        // bound matters as much as the upper one — the container's first record can
-        // begin before the slice we hold
-        const at = off + ACTOR_VALUE_OFF;
-        if (at >= 0 && at + 4 <= d.length) {
-          new DataView(d.buffer, d.byteOffset + at, 4)
-            .setInt32(0, Math.max(0, Math.trunc(sa.value)) | 0, true);
+        put(off + ACTOR_VALUE_OFF, Math.max(0, Math.trunc(sa.value)), true);
+        const p = sa.placement;
+        if (!p) continue;
+        // A name that will not fit is refused rather than trimmed, for the same
+        // reason as the owner: half a set name is a different room.
+        const tooLong = ([["set", p.set], ["star", p.star], ["pose", p.pose]] as const)
+          .find(([, v]) => v.length > 15);
+        if (tooLong) {
+          patch.onDrop?.(`actor${tooLong[0]}(${sa.name})`, `"${tooLong[1]}" is longer than the record's 15 characters`);
+          continue;
         }
+        writePstrField(d, off + ACTOR_SET_OFF, p.set);
+        writePstrField(d, off + ACTOR_STAR_OFF, p.star);
+        writePstrField(d, off + ACTOR_POSE_OFF, p.pose);
+        put(off + ACTOR_PLACEMENT.visible, p.visible ? 1 : 0);
+        put(off + ACTOR_PLACEMENT.deg, p.deg & 0xff);
+        // the coordinate fields are i16 in the original and the world is inside
+        // that range (measured over the corpus: x 0..18414, y 0..16336,
+        // z -2441..6800), but a clamp is cheaper than a wrapped position
+        put(off + ACTOR_PLACEMENT.x, clampI16(p.x));
+        put(off + ACTOR_PLACEMENT.y, clampI16(p.y));
+        put(off + ACTOR_PLACEMENT.z, clampI16(p.z));
+        put(off + ACTOR_PLACEMENT.speed, clampI16(p.speed));
+        put(off + ACTOR_PLACEMENT.zclip, clampI16(p.zclip));
       }
     }
   }

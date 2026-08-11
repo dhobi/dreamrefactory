@@ -87,17 +87,50 @@ file set; the notable fixed ones are 0 and 1.
 
 ## The actor container: fixed 160-byte actor records
 
-A DFObject looks the same here whether it is a prop or a character. The actor
-container is a grid of **160-byte** records — the prop grid's twin, two bytes
-wider — and the two fields that matter sit at the same offsets as the props':
+The actor container is a grid of **160-byte** records, and each one is **the live
+runtime struct dumped verbatim** — which is why the frame is the whole difficulty.
+It is tempting to read a record as beginning at its name, the way the prop grid
+does. It does not, and TI.EXE says so: `0x410d00` is the routine that fetches a
+record by name, and it computes the record with a stride of 160
+(`lea eax,[eax+eax*4]; shl eax,5`), string-compares against **`record+0x50`**, and
+then `rep movsd`s all 160 bytes to the caller.
 
-| Offset | Field |
-|-------:|-------|
-| +0 | actor (cast member) **name** |
-| +16 | the **set** the actor is in (`"deckbd"`, `"control"`, `"gym"`) |
-| +32 | a path or idle-script name, when it has one (`"zeitbdgossip"`, `"walkonpath"`) |
-| +48 | the current **action** (`"stand"` / `"walk"`) |
-| +64 | **`actorowner`** |
+So the **name is at +0x50**: the five string fields are the record's *second* half
+and every numeric field sits before them. Each accessor then reads its own field out
+of that copy, which is how the rest is mapped — the buffer is at `esp+8`, or
+`esp+0x10` for `actorxyz`:
+
+| Offset | Type | Field | Recovered from |
+|-------:|------|-------|----------------|
+| +0 | i16 | **`actorvisible`** — >0 is on screen | `0x40eec0` |
+| +24 | i16 | `actordeg`, 0..255 | `0x40e850` |
+| +26 / +28 / +30 | i16 | `actorxyz` 1/2/3 — the SET's own X, Z, Y order | `0x40f285/97/a9` |
+| +38 | i16 | `actorspeed` | `0x40ead0` |
+| +72 | i32 | `actorvalue` — conversations had | `0x410be0` |
+| +76 | i16 | `actorzclip` | `0x410c70` |
+| +80 | pstr | actor (cast member) **name** | the grid |
+| +96 | pstr | the **set** the actor is in (`"deckbd"`, `"control"`, `"gym"`) | |
+| +112 | pstr | `actorstar` — the spot they were put on, or a walk sentinel | |
+| +128 | pstr | `actorpose` (`"stand"` / `"walk"` / `"dead"`) | |
+| +144 | pstr | **`actorowner`** | |
+
+Every offset above is checked against all **3465 records of the 109 shipped saves**:
+`actorvisible` is only ever 0 or 1 and no visible record lacks a set; `deg` stays
+inside 0..255; `speed` and `zclip` only ever hold values a script passes to those
+commands. The decisive one is the position — for the 2122 records naming a star that
+really is a star of the set they also name, the coordinates are **that star's,
+exactly, in 2105 (99.2%)**. The 17 that differ are Max mid-patrol on the boat deck
+and one record parked on the `walktostar` sentinel, i.e. an actor genuinely not
+standing on his star. No other framing of these bytes produces that.
+
+Two conclusions were drawn from the wrong frame and are worth recording as traps.
+`actorvalue` was read at name+152 — which is `(name+160)−8`, the same field one
+record along — so every character was restored with their **neighbour's**
+conversation count, and that count gates whether anyone ever walks up to you again;
+the plausible series 0→1→3→5→8→13→21 belongs to Penny, not Morrow (his is 0→2→3).
+And the numeric half, read from the name, lands in the *next* record's heap pointers,
+which is what made the positions look like uninterpretable junk. **Validate a binary
+frame by range, not by whether the values look plausible.**
 
 `actorowner` is the one-word memory each character keeps of the player, and it
 is a story gate, not decoration: the Purser's whole mission-2 errand is a ladder
@@ -122,9 +155,16 @@ sits one actor stride from the last and a pair of variable names 64 bytes apart
 decodes as a perfect name/owner record. Three shipped saves (ENDGAME2 09/12/13)
 prefer it to their real actor container on record count alone, and a patch would
 then write actor owners over variable names — so the globals container, its pool
-and the prop container are excluded explicitly. Only the **owner** is restored on
-load; where an actor is standing and what he is doing are rebuilt by the room's
-own `initactors`.
+and the prop container are excluded explicitly.
+
+The whole record is written and restored: the memory of the player (owner, value)
+and the placement half. The **crowd extras are not**, and cannot be — `setupgroup`
+makes them per room from `EXTRA.CST`, so which of them exist varies from save to save
+(25 records to 64, the named cast constant and the extras churning) and a patch-write
+cannot grow the container. Every one of the 109 shipped saves does hold a record for
+all 25 named characters, so those never want for a slot. See
+[Saving & loading at runtime](../runtime/saves.md#the-actor-record) for what the load
+does with them, and why the arriving room still gets the last word.
 
 ## The globals container: 32-byte variable nodes + a string pool
 
@@ -352,7 +392,15 @@ port loads the way the game itself does: restore the **globals** (numbers and
 strings — the core story progress) and the **clock**, tear down the old room's timed state,
 then **travel** to the saved set/scene/view (`initall` = changeset + initactors
 + initprops) and let the normal `openset`/`openscene` scripts rebuild the loops,
-props, actors, crickets and music at the restored mission/phase. See
+props, crickets and music at the restored mission/phase.
+
+The **cast is put back from the file** rather than re-derived, in the gap between
+`initactors` (which has just hidden everybody) and the `changeset` that opens the
+arriving room: set, star, pose, position, facing, speed, zclip and `actorvisible`
+straight out of [the actor record](#the-actor-container-fixed-160-byte-actor-records).
+That order leaves the room the last word over the people its own scripts place, and
+fills in everyone they say nothing about — which is the gap
+[#86](https://github.com/dhobi/taoot-web/issues/86) reported. See
 `GameSession.loadGame` / `snapshotSave` in
 [`src/engine/session.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/session.ts)
 and the `savegame`/`opengame` builtins in
@@ -362,10 +410,11 @@ overwrites each `inven.shp` prop's owner + view with the player's actual
 collected items from the inventory container (`GameSession.restoreInventory`).
 
 Writing patches a base save (the last one loaded, or a host-supplied per-disk
-template) with the current globals, set/scene/view, **and** the live
-inventory (each `inven.shp` prop's owner + view, written back into the inventory
-container's fixed +48/+64 fields) — without which a save would keep the base's
-stale inventory.
+template) with the current globals, set/scene/view, the live inventory (each
+`inven.shp` prop's owner + view, written back into the inventory container's fixed
++48/+64 fields) — without which a save would keep the base's stale inventory — **and
+the cast**, both halves of each named character's record. The crowd extras are
+skipped, for the reasons in the actor-container section above.
 
 Back to the [format index](README.md), or on to how the running game uses
 this: **[Saving & loading at runtime](../runtime/saves.md)**.

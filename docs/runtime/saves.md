@@ -27,9 +27,20 @@ writes:
 
 - every live script global (numbers inline; strings via the base's string
   pool — `clock` excluded, its record isn't writable),
-- the current **set / scene / view**, and
+- the current **set / scene / view**,
 - the **inventory**: each `inven.shp` prop's owner + view, so possession
-  survives.
+  survives, and
+- the **cast**: `actorowner` and `actorvalue` (what each character remembers of
+  you) plus the whole placement half of [the actor record](#the-actor-record) —
+  set, star, pose, position, facing, speed, zclip and `actorvisible`.
+
+  The **crowd** is deliberately excluded. `setupgroup` makes the deck extras per
+  room from `EXTRA.CST` and the arriving room makes its own, which is why the
+  shipped saves disagree about which of them exist at all: 25 to 64 records, the
+  named cast constant and the extras churning. There would be nowhere to put them
+  anyway — a patch-write cannot grow the container — whereas every one of the 109
+  shipped saves *does* have a record for all 25 named characters, so those are
+  never dropped for want of a slot.
 
 Everything the loader ignores stays byte-for-byte as the base had it.
 
@@ -53,9 +64,14 @@ does — restore the variables, then **replay the arrival**:
    frames, reopen `main.stg`, and make the set visible.
 5. Run the boot's **`initall(set, scene, view)`** — `changeset` +
    `initactors` + `initprops` — so the normal `openset`/`openscene` scripts
-   rebuild props, actors, loops, crickets and music *at the restored
-   mission/phase*.
-6. Overwrite the default inventory `initall` seeded with the save's actual
+   rebuild props, loops, crickets and music *at the restored mission/phase*.
+6. **Put the cast back where the save left them**, in the gap between
+   `initactors` (which has just hidden everybody) and the `changeset` that opens
+   the arriving room. Set, star, pose, position, facing, speed, zclip and
+   `actorvisible` come straight out of [the actor record](#the-actor-record). The
+   order is the point: the room still gets the last word and re-places the people
+   its own scripts know about, and this fills in everyone they say nothing about.
+7. Overwrite the default inventory `initall` seeded with the save's actual
    owner/view per prop. The four **band props** (`bag`, `watch`, `map`,
    `life`) are restored by possession only — their on-band appearance is
    rebuilt by `initinterface` — and `handitem` is always cleared (you can't
@@ -73,20 +89,24 @@ about the world while it is opening, so the world has to be right before it open
 
 A faithful reload is not a snapshot of the running game, and the difference is worth
 naming because it is what the [playthrough](../verification.md#one-game-carried-not-a-chain-of-loads)
-had to stop leaning on. Three kinds of loss, all of them the original's too:
+had to stop leaning on. Three kinds of loss — the first of which has turned out to be
+much smaller than this page twice claimed:
 
-- **In the format, and not restored.** This was written down twice as "not in the
-  format at all" — first for `actorowner`, then for `actorvalue` — and both times the
-  field was there and the frame was wrong. The record is now decoded end to end (see
-  [the actor record](#the-actor-record) below): it carries the character's set, star,
-  pose, position, facing, speed, zclip **and whether they were on screen**, and none
-  of the second group is put back. A load runs `initactors` and lets each room's own
-  scripts place whoever they place, which is faithful to nothing in particular and is
-  what [#86](https://github.com/dhobi/taoot-web/issues/86) costs: Vlad is placed by
-  ENGINE.SET Scene108 alone, so a save taken one step further along the catwalk
-  reloads without him. Fixing it needs the writer first — a patch-write inherits the
-  base template's cast, so restoring placement before writing it would put back
-  somebody else's arrangement.
+- **Not in the format — but check the frame before believing that.** This page said
+  exactly that twice, first about `actorowner` and then about `actorvalue`, and both
+  times the field was there and *we* were reading the record 80 bytes out of position.
+  The genuine residue is now small: the crowd extras (above) and the scheduler's own
+  tables, which a load rebuilds from the arriving room rather than from the file.
+
+  What it used to cost is worth keeping as the worked example.
+  [#86](https://github.com/dhobi/taoot-web/issues/86): the engine room passes Vlad
+  between three scenes and only Scene108 places him, so a save taken further along
+  the catwalk came back with him at `(0,0,0)` and no set at all. His mousedown opens
+  `if realdist(me) < hotdist()`, so Scene110's `sendtoactor("vlad", mousedown(0))` —
+  the gesture that *is* the fistfight — reached nobody, and the player walked on into
+  the smokestack in the wrong phase with nothing to find. Measured at the moment of
+  arriving at Scene110: with the placement restored his `vlad1.pup` opens, without it
+  no puppet opens at all.
 - **Dropped for want of room.** The variable table is fixed-size, so globals the
   base save has no record for and no free slot for are not written; they keep the
   base's value, and the log says which ones.
