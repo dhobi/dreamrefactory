@@ -48,6 +48,10 @@ const MAX_FRAME_CATCHUP = 64;
  */
 const BOOT_UI_SHOPS = ["inven.shp", "house.shp"];
 
+/** the sendto* commands that address a CAST member, whoever else answers to the
+ *  name — see {@link GameSession.resolveEventTarget} */
+const ACTOR_ADDRESSEE = /^sendtoactor(fx)?$/;
+
 /**
  * Game-wide state that outlives individual sets: one interpreter (globals
  * persist across rooms), the boot script (the loaded title's standard library —
@@ -638,11 +642,39 @@ export class GameSession {
     return value;
   }
 
-  /** the script instance a sendto* command names, with per-command fallbacks
-   *  for targets that exist but carry no script of their own */
+  /**
+   * The script instance a sendto* command names, with per-command fallbacks for
+   * targets that exist but carry no script of their own.
+   *
+   * A name says nothing about WHAT it names, and two kinds of thing can answer
+   * to the same one: an overlay's prop and a character. The corpus has exactly
+   * two such collisions and both are a mini-game's opponent — `fight.shp`'s
+   * `vlad` and `fence.shp`'s `willie`, each a screen-space prop drawn over the
+   * room the cast member of that name is standing in. So the COMMAND has to pick
+   * the kind: `sendtoactor` means the character, whatever else is open.
+   *
+   * Without that it meant the prop, because both lookups below reach
+   * `propScripts` first. `fight.stg`'s `endfight` is where it showed (#84): it
+   * closes the fistfight with
+   *
+   *     actorowner ("vlad", "lostfight")                ← a builtin, resolves the actor
+   *     sendtoactor ("vlad", setupactor ("lostfight"))  ← went to the PROP
+   *
+   * and the fight overlay's prop has no `setupactor`, so the event was dropped
+   * without a word (a chain that runs nothing reports nothing). Vlad therefore
+   * kept the pose and position he had before the fight — standing, and turned to
+   * face you by the `vladidle` loop the moment `transfromflat` un-paused it —
+   * instead of lying on the catwalk. The losing branch's `putdownactor()` went
+   * the same way, which is why he was still on his feet after knocking you out
+   * too. Turning away and back looked like a cure because it re-fires the scene's
+   * own `openscene`, and by then `actorowner` — a builtin, which never had the
+   * problem — says `lostfight`.
+   */
   private resolveEventTarget(cmd: string, targetName: string, handler = ""): ScriptInstance | null {
     let inst =
-      this.currentBinding?.findInstance(targetName) ?? this.findGlobalInstance(targetName);
+      (ACTOR_ADDRESSEE.test(cmd) ? this.castScripts.get(targetName.toLowerCase()) : null) ??
+      this.currentBinding?.findInstance(targetName) ??
+      this.findGlobalInstance(targetName);
     if (!inst && cmd === "sendtostage") inst = this.stageScript;
     if (!inst && cmd === "sendtoboot") inst = this.boot;
     // a flat is contained in its stage: an event to a flat with no own script

@@ -6958,3 +6958,66 @@ test("a prop with no propdeg shows the frame degree 0 names", async () => {
     `drawing frame index ${drawn}`,
   );
 });
+
+// --- 96. a character and an overlay's prop can share a name ------------------
+// `sendtoactor` addresses the CAST, and it was reaching a prop of the same name:
+// the resolution order (`propScripts` before `castScripts`) let whatever shop was
+// open speak for a character.
+//
+// Two shops in the corpus collide, and both are a mini-game's opponent drawn as a
+// screen-space prop over the room he is standing in: fight.shp's `vlad` and
+// fence.shp's `willie`. Only the fistfight actually sends to the actor while its
+// overlay is up, and both of its endings do —
+//
+//     actorowner ("vlad", "lostfight")                 ← a builtin: the actor
+//     sendtoactor ("vlad", setupactor ("lostfight"))   ← went to the prop, silently
+//
+// so Vlad kept the pose he had before the fight and stayed on his feet after you
+// beat him (#84), and after knocking you out the losing branch's `putdownactor()`
+// was dropped the same way.
+test("a sendtoactor reaches the character, not the overlay prop of that name", async () => {
+  const { host, session } = await newHost();
+  const g = session.interp.globals;
+  let clock = 0;
+  const settle = async (n = 20): Promise<void> => {
+    for (let i = 0; i < n; i++) { host.viewer?.tick((clock += 50)); await drain(); }
+  };
+  g.set("tour", 0); g.set("mission", 3); g.set("phase", 1);
+  await session.runGlobal("changeset", ["engine", "Scene108", "View112"]);
+  await settle();
+  const vlad = session.actorRuntime.get("vlad");
+  check(
+    "the catwalk's openscene stands Vlad up for the fight",
+    !!vlad && vlad.visible && vlad.poseName === "stand" && vlad.starName === "vlad1",
+    `${vlad?.visible} ${vlad?.poseName} ${vlad?.starName}`,
+  );
+  if (!vlad) return;
+
+  // the fight overlay, opened the way the cast's own runfight() opens it
+  await session.runGlobal("transtoflat", ["fight.stg"]);
+  await settle();
+  check(
+    "the fight overlay brings a PROP called vlad, beside the cast member",
+    session.propScripts.has("vlad") && session.castScripts.has("vlad"),
+    `prop=${session.propScripts.has("vlad")} cast=${session.castScripts.has("vlad")}`,
+  );
+
+  // the prop side still works: the fight's own idle loop is dispatched to the
+  // prop's script, which clears the three punch globals on an idle pass
+  g.set("firstpunch", "held");
+  await settle(40);
+  check(
+    "…and sendtoprop still reaches the prop (its idle clears the punch memo)",
+    g.get("firstpunch") === "",
+    `firstpunch=${JSON.stringify(g.get("firstpunch"))}`,
+  );
+
+  // the actor side is the fix: endfight's own line, with the overlay still open
+  await session.sendEvent("sendtoactor", "vlad", "setupactor", ["lostfight"], "test");
+  await settle(5);
+  check(
+    "sendtoactor puts the CHARACTER down on the catwalk",
+    vlad.visible && vlad.poseName === "dead" && vlad.starName === "vlad2",
+    `visible=${vlad.visible} pose=${vlad.poseName} star=${vlad.starName}`,
+  );
+}, 120_000);

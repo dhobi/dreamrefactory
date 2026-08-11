@@ -204,6 +204,15 @@ there is no thing being addressed and the caller's context is what the handler
 reads. So the addressee for a thing, the caller for a shop, a cast, a stage, a
 puppet, the boot.
 
+**And the command says what KIND of thing** — which matters because a name can be
+claimed twice. Two shops in the corpus name a prop after a character, and both are
+a mini-game's opponent drawn as a screen-space sprite over the room he is standing
+in: `fight.shp`'s `vlad` and `fence.shp`'s `willie`. `sendtoactor("vlad", …)` has
+to reach the *cast member* even while the fistfight overlay is up, which is exactly
+where the fistfight ends — `endfight` puts Vlad down on the catwalk with
+`sendtoactor("vlad", setupactor("lostfight"))` and the prop has no such handler, so
+resolving the prop first dropped the line and left him standing (#84).
+
 ## The boot library = the standard library
 
 The **BOOTFILE**'s scripts are special: they define ~76 handlers that any
