@@ -102,11 +102,15 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
  * not walk up to you, and clicking him opened the "we have met" branch of his
  * puppet rather than the introduction. Reported against both #19 and #21.
  *
- * These two only — an actor's position and animation are rebuilt by the room's
- * own `initactors` on load, and writing them back would fight it.
+ * These two only — for now. The record's other half (visible, set, star, pose,
+ * xyz, deg, speed, zclip) is decoded but not written, so a load still rebuilds the
+ * cast by running each room's own `initactors`; #86 is what that costs, and the
+ * writer is the half that has to come first.
  */
-function actorSnapshot(session: GameSession): SavedActor[] {
-  const out: SavedActor[] = [];
+type SavedActorState = Pick<SavedActor, "name" | "owner" | "value">;
+
+function actorSnapshot(session: GameSession): SavedActorState[] {
+  const out: SavedActorState[] = [];
   for (const [name, a] of session.actorRuntime.actors) {
     // scripts only ever count with it, but `actorvalue` is a script value and a
     // cast could put anything in one; a non-number saves as the fresh-game 0

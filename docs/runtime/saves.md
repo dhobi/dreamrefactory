@@ -75,10 +75,18 @@ A faithful reload is not a snapshot of the running game, and the difference is w
 naming because it is what the [playthrough](../verification.md#one-game-carried-not-a-chain-of-loads)
 had to stop leaning on. Three kinds of loss, all of them the original's too:
 
-- **Not in the format.** `actorvalue` has no field in the actor record at all
-  (measured across four shipped saves: only the owner moves), so a load forgets it.
-  `actorowner` was lost the same way until `SavedActor` learned it — which is what
-  lets the Purser remember his errand across a checkpoint.
+- **In the format, and not restored.** This was written down twice as "not in the
+  format at all" — first for `actorowner`, then for `actorvalue` — and both times the
+  field was there and the frame was wrong. The record is now decoded end to end (see
+  [the actor record](#the-actor-record) below): it carries the character's set, star,
+  pose, position, facing, speed, zclip **and whether they were on screen**, and none
+  of the second group is put back. A load runs `initactors` and lets each room's own
+  scripts place whoever they place, which is faithful to nothing in particular and is
+  what [#86](https://github.com/dhobi/taoot-web/issues/86) costs: Vlad is placed by
+  ENGINE.SET Scene108 alone, so a save taken one step further along the catwalk
+  reloads without him. Fixing it needs the writer first — a patch-write inherits the
+  base template's cast, so restoring placement before writing it would put back
+  somebody else's arrangement.
 - **Dropped for want of room.** The variable table is fixed-size, so globals the
   base save has no record for and no free slot for are not written; they keep the
   base's value, and the log says which ones.
@@ -100,9 +108,48 @@ had to stop leaning on. Three kinds of loss, all of them the original's too:
   (`clock` is not one of them: it is the variable list's head and a patch writes it
   like any other global — measured, "bedsit" written and read back.)
 
-Everything else — loops, crickets, music, actor positions — is rebuilt by re-running
-the room's own `openset`/`openscene` at the restored progress, which is faithful and
-still not the same thing as continuing.
+Everything else — loops, crickets, music — is rebuilt by re-running the room's own
+`openset`/`openscene` at the restored progress, which is faithful and still not the
+same thing as continuing.
+
+### The actor record
+
+A cast record is **the live runtime struct, dumped verbatim**, 160 bytes on its own
+grid. The frame is the whole difficulty, and TI.EXE settles it: `0x410d00` fetches a
+record by name with a stride of 160 (`lea eax,[eax+eax*4]; shl eax,5`) and
+string-compares against **record+0x50**, then hands the caller all 160 bytes. So the
+name is *not* at +0 — the five string fields are the record's second half and every
+number sits before them. Reading it the other way round puts you 80 bytes into the
+next record's heap pointers, which is exactly where two wrong conclusions came from.
+
+Each accessor then reads its own field out of that copy (buffer at `esp+8`;
+`actorxyz` at `esp+0x10`):
+
+| offset | type | field | recovered from |
+|---|---|---|---|
+| +0 | i16 | `actorvisible` (>0 is visible) | `0x40eec0` |
+| +24 | i16 | `actordeg`, 0..255 | `0x40e850` |
+| +26/+28/+30 | i16 | `actorxyz` 1/2/3 — the SET's own X, Z, Y order | `0x40f285/97/a9` |
+| +38 | i16 | `actorspeed` | `0x40ead0` |
+| +72 | i32 | `actorvalue` | `0x410be0` |
+| +76 | i16 | `actorzclip` | `0x410c70` |
+| +80/+96/+112/+128/+144 | pstr | name · set · star · pose · `actorowner` | the grid itself |
+
+Checked against all **3465 records of the 109 shipped saves**: `visible` is only ever
+0 or 1 and no visible record lacks a set; `deg` stays inside 0..255; `speed` and
+`zclip` only ever hold values a script passes to those commands. The acid test is the
+position — for the 2122 records naming a star that really is a star of the set they
+also name, the coordinates are **that star's, exactly, in 2105 of them (99.2%)**. The
+17 that differ are Max mid-patrol on the boat deck and one record parked on the
+`walktostar` sentinel: an actor genuinely not standing on his star. No other framing
+of these bytes produces that.
+
+`actorvalue`'s offset is the cautionary one. It sat at name+152 — which is
+`(name + 160) − 8`, the same field one record along — so every character was restored
+with their **neighbour's** conversation count. It looked right because it produces a
+plausible series; that series (0→1→3→5→8→13→21 over disk 1) simply belongs to Penny,
+who you report to after every errand, and it was being handed to Morrow, whose own is
+0→2→3.
 
 ### The arriving room cannot be trusted to silence the last one
 

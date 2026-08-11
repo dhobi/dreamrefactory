@@ -39,21 +39,49 @@ const PROP_OWNER_OFF = 64;
  * Serialized ACTOR records — the cast's persistent state, on its own 160-byte
  * grid in a different container from the props.
  *
- * A DFObject looks the same here whether it is a prop or a character: the name
- * is at record+0 and the owner (`actorowner`) at record+64, exactly as in the
- * prop grid above. Between them a record carries the set the actor is in (+16),
- * sometimes a path or idle-script name (+32), and the current action (+48,
- * "stand"/"walk") — none of which is restored, because a load re-runs the room's
- * own `initactors` and those are what it rebuilds.
+ * **A record is the live runtime struct, dumped verbatim**, and TI.EXE's own
+ * accessors give the layout field for field. `0x410d00` is the one that fetches a
+ * record by name, and it settles both the stride and the frame:
  *
- * Recovered from the shipped saves by looking for a state the port was losing:
- * "12 - Sending Telegram for Jack Thayer.ti" holds `purs` at c2+3760 with
- * "sendgram" 64 bytes after it, and `morrow` → "enterwireless", `csea` →
- * "thanks1", `max` → "yofrank" on the same grid. The stride is what separates
- * this container from the prop one — 158 against 160 — since a walk at the wrong
- * stride drifts two bytes per record and fails on the second.
+ *     mov eax, [0x4605dc]           ; record index
+ *     lea eax, [eax + eax*4]        ; 5i
+ *     shl eax, 5                    ; 160i          <- the stride
+ *     lea ecx, [eax + ebx + 0x50]   ; &record[i] + 0x50
+ *     push ecx / push edi / call 0x435630            ; compare against the NAME
+ *     ...
+ *     mov ecx, 0x28 / rep movsd     ; hand the caller all 160 bytes
+ *
+ * so **the name is at +0x50, not at +0**: the five string fields are the record's
+ * SECOND half and the numeric fields are the first. Every accessor then reads its
+ * own field out of that 160-byte copy, which is how the rest is mapped — each one
+ * takes the buffer at `esp+8` (`actorxyz` at `esp+0x10`) and reads:
+ *
+ *     +0   i16  actorvisible   (0x40eec0, `cmp word ptr [esp+8], 0` — >0 is visible)
+ *     +24  i16  actordeg       (0x40e850, `movsx ecx, word ptr [esp+0x20]`)
+ *     +26  i16  actorxyz(1)    (0x40f285) — X
+ *     +28  i16  actorxyz(2)    (0x40f297) — Z in the SET's file order
+ *     +30  i16  actorxyz(3)    (0x40f2a9) — Y
+ *     +38  i16  actorspeed     (0x40ead0, `esp+0x2e`)
+ *     +72  i32  actorvalue     (0x410be0, `esp+0x50`)
+ *     +76  i16  actorzclip     (0x410c70, `esp+0x54`)
+ *     +80  pstr name           +96 set   +112 star   +128 pose   +144 actorowner
+ *
+ * Checked against all 3465 records of the 109 shipped saves: `visible` is only
+ * ever 0 or 1 and no visible record lacks a set; `deg` is 0..255; `speed` is one
+ * of {4,5,15,25,30,40,45} and `zclip` one of {-2000…1000, 20000} — in both cases
+ * exactly the values the scripts pass to those commands; and for the 2122 records
+ * whose star is a real star of their recorded set, (+26,+28,+30) equals that
+ * star's position **exactly in 2105 of them (99.2%)**. The 17 that differ are Max
+ * mid-patrol on the boat deck and one record parked on the `walktostar` sentinel,
+ * i.e. the cases where an actor is genuinely not standing on their star.
+ *
+ * The offsets below are named against the NAME field, because that is what
+ * {@link walkActorGrid} locks the grid onto — a record's own base is 80 bytes
+ * earlier ({@link ACTOR_RECORD_OFF}).
  */
 const ACTOR_STRIDE = 160;
+/** the name field's offset inside a record — the grid is located by it */
+const ACTOR_RECORD_OFF = -80;
 const ACTOR_OWNER_OFF = 64;
 /**
  * `actorvalue` — how many conversations you have had with this character, and
@@ -65,17 +93,18 @@ const ACTOR_OWNER_OFF = 64;
  * that drops it reloads with everyone still remembering, and nobody ever walks
  * up to you again for the rest of the session.
  *
- * A DWORD: TI.EXE's `actorvalue` getter (0x410be0) reads it with `mov ecx, dword
- * ptr [esp+0x50]` against a record buffer at `esp+8`, i.e. record+0x48 of its
- * RUNTIME struct — which is not this layout (runtime owner is at +144, saved
- * owner at +64), so the offset here is measured rather than mapped: across all
- * 78 shipped English saves this is the only per-character field that is zero in
- * both fresh games, never decreases along a disk's save series, and moves with
- * who has been spoken to — Morrow 0→1→3→5→8→13→21 over disk 1, Max 0→2→3, Vlad 0
- * until the fight and 5 after. The word at +154 is 0 in every record of all 78,
- * which is what makes reading and writing the full dword safe.
+ * A DWORD at record+0x48, i.e. **8 bytes BEFORE the name**. This was +152 for a
+ * long time, which is `(name + 160) - 8` — the same field one record along, so
+ * every character was restored with their neighbour's count. The disassembly had
+ * already been read correctly (record+0x48) and then rejected for not fitting a
+ * frame based at the name; the 80-byte shift that reconciles the two is the same
+ * one that puts "runtime owner at +144" and "saved owner at +64" in agreement.
+ *
+ * What made the old offset look right is that it produces a plausible series —
+ * only it belongs to the next record: 0→1→3→5→8→13→21 over disk 1 is **Penny's**,
+ * the character you report to after every errand, and Morrow's own is 0→2→3.
  */
-const ACTOR_VALUE_OFF = 152;
+const ACTOR_VALUE_OFF = ACTOR_RECORD_OFF + 0x48;
 
 /**
  * The 32-byte variable-list node of the globals container (see decodeVarSlots
@@ -230,10 +259,41 @@ export interface SavedProp {
 export interface SavedActor {
   /** actor (cast member) name, lowercased. */
   name: string;
-  /** `actorowner` at record+64 (e.g. "none", "sendgram", "enterwireless"). */
+  /** `actorowner` (e.g. "none", "sendgram", "enterwireless"). */
   owner: string;
-  /** `actorvalue` at record+152: conversations had — see {@link ACTOR_VALUE_OFF}. */
+  /** `actorvalue`: conversations had — see {@link ACTOR_VALUE_OFF}. */
   value: number;
+  /**
+   * Where the character was STANDING, and whether they were on screen.
+   *
+   * Read, not yet restored: a load re-runs `initactors` and lets each room's own
+   * scripts place whoever they place, which is why Vlad is missing from the engine
+   * room catwalk unless you re-enter by the one scene that stands him up (#86). The
+   * record has always carried the answer — see the layout note above for how each
+   * field was mapped and checked. Restoring it needs the WRITER to serialize these
+   * from the live cast first, or a load would put back the base template's
+   * arrangement instead of the player's.
+   */
+  placement: {
+    /** `actorvisible` — the whole of "was this character on screen". */
+    visible: boolean;
+    /** the set the character is in ("engine", "boil"), "" when never placed. */
+    set: string;
+    /** `actorstar` — the named spot they were put on, or a walk sentinel. */
+    star: string;
+    /** `actorpose` — "stand", "walk", "dead", "standlj"… */
+    pose: string;
+    /** `actorxyz` 1/2/3 — the SET's own X, Z, Y order. */
+    x: number;
+    y: number;
+    z: number;
+    /** `actordeg`, 0..255. */
+    deg: number;
+    /** `actorspeed` — world units per service pass. */
+    speed: number;
+    /** `actorzclip`. */
+    zclip: number;
+  };
 }
 
 export interface SaveGame {
@@ -483,18 +543,46 @@ function findInventoryIndex(raw: RawSaveFile): number {
   return bestN >= 10 ? best : -1;
 }
 
-/** Decode the actor record at offset `o`, or null if it isn't a valid one. */
+/**
+ * Decode the actor record whose NAME is at offset `o`, or null if it isn't one.
+ *
+ * `o` is the name rather than the record base because that is what the grid can be
+ * located by; every numeric field is therefore at a negative offset from it (see
+ * {@link ACTOR_RECORD_OFF}). The first record of a container can begin before
+ * offset 0 of the slice we hold, so each numeric read is bounds-checked and falls
+ * back to 0 — the grid is located by name and owner alone, so a field that cannot
+ * be read can never make a non-record parse as one.
+ */
 function actorRecordAt(d: Uint8Array, o: number): SavedActor | null {
   const name = pstrField(d, o);
   if (!isPropName(name)) return null;
   const owner = pstrField(d, o + ACTOR_OWNER_OFF);
   if (!owner) return null;
-  // the grid is located by name/owner alone — `value` is read from a record that
-  // has already been accepted, so a garbage field cannot make a non-record parse
-  const value = o + ACTOR_VALUE_OFF + 4 <= d.length
-    ? new DataView(d.buffer, d.byteOffset + o + ACTOR_VALUE_OFF, 4).getInt32(0, true)
-    : 0;
-  return { name: name.toLowerCase(), owner: owner.toLowerCase(), value };
+  const view = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  /** a field at `at` bytes from the NAME, 0 when it falls outside the slice */
+  const num = (at: number, wide = false): number => {
+    const p = o + at;
+    if (p < 0 || p + (wide ? 4 : 2) > d.length) return 0;
+    return wide ? view.getInt32(p, true) : view.getInt16(p, true);
+  };
+  const rec = ACTOR_RECORD_OFF;
+  return {
+    name: name.toLowerCase(),
+    owner: owner.toLowerCase(),
+    value: num(ACTOR_VALUE_OFF, true),
+    placement: {
+      visible: num(rec + 0) > 0,
+      set: pstrField(d, o + 16).toLowerCase(),
+      star: pstrField(d, o + 32).toLowerCase(),
+      pose: pstrField(d, o + 48).toLowerCase(),
+      deg: num(rec + 24),
+      x: num(rec + 26),
+      y: num(rec + 28),
+      z: num(rec + 30),
+      speed: num(rec + 38),
+      zclip: num(rec + 76),
+    },
+  };
 }
 
 /**
@@ -666,11 +754,15 @@ export interface SavePatch {
    */
   inventory?: SavedProp[];
   /**
-   * Current `actorowner` per character, written into the actor container. Without
-   * it a save keeps the base's — which for a fresh template means every character
-   * back at "none", their errands forgotten.
+   * Current `actorowner` and `actorvalue` per character, written into the actor
+   * container. Without it a save keeps the base's — which for a fresh template
+   * means every character back at "none", their errands forgotten.
+   *
+   * Only the two fields the writer writes, not a whole {@link SavedActor}: the
+   * record's `placement` half is decoded but not yet written, and asking a caller
+   * to supply a placement that goes nowhere would read as though it did (#86).
    */
-  actors?: SavedActor[];
+  actors?: Pick<SavedActor, "name" | "owner" | "value">[];
   /**
    * Told about any global that could not be written, and why.
    *
@@ -1063,8 +1155,12 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
           continue;
         }
         writePstrField(d, off + ACTOR_OWNER_OFF, sa.owner);
-        if (off + ACTOR_VALUE_OFF + 4 <= d.length) {
-          new DataView(d.buffer, d.byteOffset + off + ACTOR_VALUE_OFF, 4)
+        // negative offset: `actorvalue` sits 8 bytes BEFORE the name, so the lower
+        // bound matters as much as the upper one — the container's first record can
+        // begin before the slice we hold
+        const at = off + ACTOR_VALUE_OFF;
+        if (at >= 0 && at + 4 <= d.length) {
+          new DataView(d.buffer, d.byteOffset + at, 4)
             .setInt32(0, Math.max(0, Math.trunc(sa.value)) | 0, true);
         }
       }
