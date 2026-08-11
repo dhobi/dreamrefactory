@@ -7280,3 +7280,61 @@ test("moving the gamma repaints the room the player is standing in", async () =>
   }
 }
 );
+
+// --- 12f. the movement keys the control panel binds (#14).
+// CTL.STG offers three rebindable movement keys and BOOTFILE's boot() defaults them
+// to W/A/D (`keynorth`/`keywest`/`keyeast`). Nothing in the 808-file corpus READS
+// them except the boot's own keydown, which maps them to the arrows and re-routes
+// with `sendtoscene(currentscene(), keydown(arg))` — so the mapped value only
+// arrives if that re-route reaches the boot's OTHER keydown, the default that does
+// `case "leftarrow": currentscene("left")`. Running the two boot containers side by
+// side instead gave the default the raw key: the arrows worked and A/W/D did nothing.
+//
+// Turning is what this asserts, not walking: an arrow always changes the view, while
+// "w" (walk) can legitimately do nothing where there is no road.
+test("the bound movement keys turn the camera, like the arrows they map to", async () => {
+  const { session, viewer } = await newSession();
+  // boot() is what assigns the defaults — a session that skipped it has no bindings
+  await session.runGlobal("boot");
+  const v0 = viewer();
+  for (let i = 0; i < 120; i++) v0.tick((clock += 50));
+  check("boot() sets the default bindings",
+    session.interp.globals.get("keynorth") === "w" &&
+      session.interp.globals.get("keywest") === "a" &&
+      session.interp.globals.get("keyeast") === "d",
+    `north=${session.interp.globals.get("keynorth")} west=${session.interp.globals.get("keywest")} ` +
+      `east=${session.interp.globals.get("keyeast")}`);
+
+  await session.runGlobal("changeset", ["deckbd", "Scene33", "View99"]);
+  const v = viewer();
+  const settle = async (n = 60): Promise<void> => {
+    for (let i = 0; i < n; i++) { v.tick((clock += 50)); await drain(); }
+  };
+  await settle(80);
+  const view = (): string =>
+    String(v.scene?.views[(v as unknown as { viewIdx: number }).viewIdx]?.viewName).toLowerCase();
+  const press = async (k: string): Promise<string> => {
+    void session.track(v.keyDown(k));
+    await settle(60);
+    return view();
+  };
+
+  const start = view();
+  const viaLeft = await press("leftarrow");
+  check("the left arrow turns", viaLeft !== start, `${start} -> ${viaLeft}`);
+  await press("rightarrow"); // back
+  check("and the right arrow brings it back", view() === start, `now ${view()}`);
+  const viaA = await press("a");
+  check('"a" turns the same way the left arrow does', viaA === viaLeft, `${start} -> ${viaA} vs ${viaLeft}`);
+  await press("d");
+  check('"d" brings it back, like the right arrow', view() === start, `now ${view()}`);
+
+  // and a REBINDING — which is what the reporter tried second (J/I/L)
+  session.interp.globals.set("keywest", "j");
+  const viaJ = await press("j");
+  check('a rebound "j" turns left', viaJ === viaLeft, `${start} -> ${viaJ} vs ${viaLeft}`);
+  await press("d");
+  const viaOldA = await press("a");
+  check('and "a" does nothing once it is not bound', viaOldA === start, `${start} -> ${viaOldA}`);
+}
+);

@@ -1424,8 +1424,23 @@ window.addEventListener("keydown", (e) => {
     case "X":
       toggleDetails();
       break;
-    default:
-      return;
+    default: {
+      // Everything else goes to the game, because that is what the original does:
+      // TI.EXE's window proc translates every printable key through its VK table
+      // and hands it to the boot's keydown, which maps the player's movement
+      // bindings (`keynorth`/`keywest`/`keyeast` — A/W/D by default, rebindable
+      // from the control panel) and passes the rest to the scene. Dropping them
+      // here is why those bindings did nothing at all (#14); a letter no script
+      // wants is ignored by the scripts, which is not the same as never arriving.
+      //
+      // Modified presses stay the browser's — Ctrl+R has to reload, and the
+      // original's own Ctrl marker only ever mattered to its movie key filter.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const ch = e.key.length === 1 ? e.key.toLowerCase() : "";
+      if (!ch) return;
+      void session.track(v.keyDown(ch));
+      break;
+    }
   }
   e.preventDefault();
 });

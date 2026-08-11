@@ -286,11 +286,15 @@ export class SetScripts {
   async keyDown(sceneIdx: number, keyName: string): Promise<boolean> {
     const interp = this.session.interp;
     interp.eventConsumed = false;
-    // boot1 routes to the scene itself (sendtoscene); boot2 implements the
-    // default movement. Without a boot script, fall back to scene + main.
-    const chain = this.session.bootScripts.length
-      ? this.session.bootScripts
-      : [this.sceneScripts[sceneIdx], this.main];
+    // Only the ROUTER is dispatched here — the boot's own keydown, which maps the
+    // player's movement keys and then re-routes with `sendtoscene(currentscene(),
+    // keydown(arg))`. Everything else the press reaches, the scene and the boot's
+    // default movement included, it reaches along that re-route, which is what
+    // carries the MAPPED key (see Session.sendEvent). Running every boot container
+    // here instead gave the default the raw key and left the panel's A/W/D
+    // bindings dead (#14).
+    const router = this.session.bootScripts.find((b) => b.script.codes.has("keydown"));
+    const chain = router ? [router] : [this.sceneScripts[sceneIdx], this.main];
     for (const inst of chain) {
       if (!inst) continue;
       try {
