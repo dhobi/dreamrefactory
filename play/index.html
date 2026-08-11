@@ -175,30 +175,59 @@
         width: 180px;
       }
 
-      /* The brightness slider. Styled down on purpose: the rule this page is
-         built on is that nothing beside the canvas may be brighter than the
-         canvas, and a UA range control defaults to a saturated accent that
-         outshines the game. Brass rather than ice — this is a control you set
-         and leave, not something reporting for attention. */
-      #brightness {
-        accent-color: var(--brass-700);
-        width: 9rem;
-        max-width: 40vw;
-        vertical-align: middle;
+      /* The brightness presets: three segments rather than a slider, because a
+         slider is the wrong control for a thumb — this started as one and a
+         phone could not hit it. Three targets a finger can land on, each a
+         whole tap wide, and no dragging.
+
+         Styled down like everything else here: the rule this page is built on
+         is that nothing beside the canvas may be brighter than the canvas, so
+         the chosen segment is a brass hairline and a lift in text colour, not a
+         filled block. The radios themselves are hidden — they carry the state
+         and the keyboard semantics (a radio group is one arrow-key stop, which
+         is what this is), the labels carry the looks. */
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
       }
-      /* ...and the groove it slides in, which a UA draws in near-white — the
-         brightest thing in the bar, in a page whose whole rule is that it isn't.
-         Only the UNFILLED side needs saying: `accent-color` above still paints
-         the filled side and the thumb. */
-      #brightness::-webkit-slider-runnable-track {
-        background: var(--hull-400);
-        border-radius: 2px;
-        height: 4px;
+      .seg label {
+        margin: 0;
+        cursor: pointer;
+        /* 44px is the tap target a finger wants, and padding alone did not get
+           there (measured 35 at this font size) — so the height is asked for and
+           the text centred in it. */
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        padding: 0 0.75rem;
+        font-size: 0.78rem;
+        color: var(--text-mute);
+        border-left: 1px solid var(--border);
       }
-      #brightness::-moz-range-track {
-        background: var(--hull-400);
-        border-radius: 2px;
-        height: 4px;
+      .seg label:first-child {
+        border-left: 0;
+      }
+      .seg input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .seg label:hover {
+        color: var(--text-dim);
+      }
+      .seg input:checked + span {
+        color: var(--brass-500, var(--brass-700));
+      }
+      .seg label:has(input:checked) {
+        background: rgba(184, 120, 36, 0.1);
+        box-shadow: inset 0 -2px 0 var(--brass-700);
+      }
+      /* the focus ring has to be visible even though the input is not */
+      .seg label:has(input:focus-visible) {
+        outline: 1px solid var(--ice-400);
+        outline-offset: -1px;
       }
 
       /* ---- where the game says where you are, and what it is doing ----
@@ -769,23 +798,27 @@
 
         <div class="bar">
           <span class="seclabel" data-i18n="play.brightnessLabel">Brightness</span>
-          <label
-            title="The original brightens every colour before it draws it, and lets you move that with Ctrl+F1 and Ctrl+F2 — F1-F9 here, which also trim the colour channels one at a time. This slider is the same setting for a screen with no keyboard. Middle is what the game ships with."
+          <span
+            class="seg"
+            id="brightnessSeg"
+            role="group"
+            title="The original brightens every colour before it draws it, and lets you move that with Ctrl+F1 and Ctrl+F2 — F1-F9 here, which also trim the colour channels one at a time. These three are the same setting for a screen with no keyboard, six keypresses either side of what the game ships with."
             data-i18n-attr="title:play.brightnessTitle"
-            ><input
-              type="range"
-              id="brightness"
-              min="-12"
-              max="12"
-              step="1"
-              value="0"
-              aria-describedby="brightnessValue"
-            />
-            <span class="keys" id="brightnessValue">0.65</span></label
           >
-          <button type="button" id="brightnessReset" data-i18n="play.brightnessReset">
-            default
-          </button>
+            <label
+              ><input type="radio" name="brightness" value="darker" />
+              <span data-i18n="play.brightnessDarker">darker</span></label
+            >
+            <label
+              ><input type="radio" name="brightness" value="default" />
+              <span data-i18n="play.brightnessOriginal">original</span></label
+            >
+            <label
+              ><input type="radio" name="brightness" value="brighter" />
+              <span data-i18n="play.brightnessBrighter">brighter</span></label
+            >
+          </span>
+          <span class="keys" id="brightnessValue">0.65</span>
         </div>
 
         <div class="bar">

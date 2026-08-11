@@ -162,9 +162,11 @@ export const en = {
     brightnessTitle:
       "The original brightens every colour before it draws it, and lets you move " +
       "that with Ctrl+F1 and Ctrl+F2 — F1-F9 here, which also trim the colour " +
-      "channels one at a time. This slider is the same setting for a screen with " +
-      "no keyboard. Middle is what the game ships with." as Text,
-    brightnessReset: "default" as Text,
+      "channels one at a time. These three are the same setting for a screen with " +
+      "no keyboard, six keypresses either side of what the game ships with." as Text,
+    brightnessDarker: "darker" as Text,
+    brightnessOriginal: "original" as Text,
+    brightnessBrighter: "brighter" as Text,
     // The state list in the details pane (#22). Its CONTENTS are never
     // translated — `neckphase 4` is a name out of the game's own tables and the
     // same sentence in six languages — so only the words around it are here.
