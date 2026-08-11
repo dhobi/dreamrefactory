@@ -35,6 +35,7 @@ import { installVersion } from "./version";
 import { gamefileManifest, gamefileSizes, installEditionPicker, markEdition } from "./editions";
 import { installI18n, t } from "./locales";
 import { installBugReport } from "./bug-report";
+import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
 import { siteUrl, sitePath } from "./site";
 
 // ---------------------------------------------------------------------------
@@ -152,10 +153,8 @@ files.onBusyChange = (inFlight) => {
  * edition, the browser and the tail of the log already in it, and the screen on
  * the clipboard to paste — GitHub takes no image over a URL.
  *
- * The log is read back off the pane rather than kept in a second array: what the
- * player can open with X and what a report carries are then the same lines, and
- * `showStage` clearing the pane is also what keeps the boot's chatter out of a
- * report about the game.
+ * The tail comes off {@link logLines}, so what the player can open with X and
+ * what a report carries are the same lines by construction.
  */
 /** how long the word about the screenshot stands before the bar is a bar again */
 const BUG_NOTE_MS = 15_000;
@@ -167,11 +166,7 @@ installBugReport(bugBtn, {
   canvas: screen,
   where: () => hud.textContent ?? "",
   edition: () => `${editionName(editionCode)} (gamefiles/${editionCode}/)`,
-  log: (n) =>
-    (scriptlog.textContent ?? "")
-      .split("\n")
-      .filter((l) => l.trim())
-      .slice(-n),
+  log: (n) => logLines.tail(n),
   // said in the reader's language, and only here: the issue itself is English,
   // because it is read by whoever fixes it
   note: (how) => {
@@ -181,6 +176,20 @@ installBugReport(bugBtn, {
   },
 });
 
+/** the pane's contents — the pane renders these, and a bug report is their tail */
+const logLines = new LogBuffer(LOG_LINES_KEPT);
+
+/**
+ * Whether the lines in the pane belong to a BOOT rather than to a game.
+ *
+ * Raised by the two things that start a game from nothing — the page's own cold
+ * boot and `quit()`'s return to the main menu — and spent by the first
+ * {@link showStage} that follows, which is the moment the boot becomes a game.
+ * Everything else that shows the stage (every room the player walks into, a
+ * loaded save) leaves the pane alone.
+ */
+let bootChatter = true;
+
 /**
  * A line into the pane behind X.
  *
@@ -188,19 +197,53 @@ installBugReport(bugBtn, {
  * freed 3.2 MB` are the engine talking to itself, and the player did not ask.
  * BEFORE the stage comes up it opens on the first line, because a boot that
  * never finishes has nothing else to say for itself — the rest of the page at
- * that moment is the word "Starting". {@link GameHost} showStage shuts it again.
+ * that moment is the word "Starting". {@link showStage} shuts it again on the
+ * boot, and only on the boot.
  */
 function log(line: string): void {
+  // Asked BEFORE the line lands, or the answer is always "no": the new line has
+  // already made the pane taller than the scroll position accounts for. Reading
+  // something further up is a question of its own, and yanking the pane back
+  // down answers a different one. 4px, because a zoomed page makes these
+  // fractional.
+  const atTail = scriptlog.scrollHeight - scriptlog.scrollTop - scriptlog.clientHeight < 4;
+  const write = logLines.push(line);
   scriptlog.style.display = "block";
   if (stage.style.display === "none") details.hidden = false;
-  scriptlog.textContent += line + "\n";
-  scriptlog.scrollTop = scriptlog.scrollHeight;
+  if (write.repaint) scriptlog.textContent = logLines.text();
+  else scriptlog.textContent += line + "\n";
+  if (atTail) scriptlog.scrollTop = scriptlog.scrollHeight;
 }
 
-/** X: the scene readout and the log, both or neither */
+/** empty the pane — the boot's own chatter, kept out of the game that follows */
+function clearLog(): void {
+  logLines.clear();
+  scriptlog.textContent = "";
+  scriptlog.style.display = "none";
+}
+
+/** X: the scene readout and the log, both or neither. Remembered, so a player
+ *  who wants it open gets it open on the next launch too. */
 function toggleDetails(): void {
   details.hidden = !details.hidden;
+  try {
+    window.localStorage.setItem(DETAILS_OPEN_KEY, details.hidden ? "0" : "1");
+  } catch {
+    /* not remembering is survivable — the pane still holds for this tab */
+  }
   if (!details.hidden) scriptlog.scrollTop = scriptlog.scrollHeight;
+}
+
+/** where the pane's open/shut answer outlives the tab */
+const DETAILS_OPEN_KEY = "taoot.details.open";
+
+/** did the player leave the pane open last time? */
+function detailsWanted(): boolean {
+  try {
+    return window.localStorage.getItem(DETAILS_OPEN_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 // DreamFactory cursor names -> CSS cursors. The list is CLOSED, because the
@@ -254,11 +297,18 @@ const host = new GameHost(files, audioSink, {
     booting.style.display = "none";
     stage.style.display = "block";
     help.style.display = "block";
-    // the boot's own chatter has been read by whoever wanted it; the game gets
-    // a clean pane, shut until X asks for it
-    scriptlog.textContent = "";
-    scriptlog.style.display = "none";
-    details.hidden = true;
+    // The pane is reset by the BOOT, not by arriving somewhere. showStage runs on
+    // every set activation (GameHost.activateSet), so clearing here threw the log
+    // away and shut the pane the player had opened at every changeset — 28 rooms
+    // and at least 40 set changes over a full playthrough, which is #22's
+    // "resets on every set change" exactly. `bootChatter` is raised by the two
+    // entry points that really do start a game over (below), and this is the
+    // moment it is spent: the boot's own lines have been read by whoever wanted
+    // them, and the game gets a clean pane.
+    if (!bootChatter) return;
+    bootChatter = false;
+    clearLog();
+    details.hidden = !detailsWanted();
   },
   mapChanged: () => refreshMap(),
 });
@@ -301,6 +351,8 @@ session.onTextDialog = (prompt, initial) => window.prompt(prompt, initial) ?? ""
 // Untracked, or that settle would be waiting on itself.
 session.onQuit = () => {
   log("quit() — back to the main menu");
+  // a relaunch, so the next stage that comes up gets a clean pane
+  bootChatter = true;
   void session
     .nextFrame()
     .then(() => host.restart())
@@ -356,8 +408,20 @@ let liveIntro: NightdiveIntro | null = null;
 // undefined — which is exactly how the browser gate came to sit through its
 // whole 300 s budget "waiting for the boot menu" at a film that was waiting for
 // it (tests/browser/playthrough.ts, escapeIntro).
+//
+// `log` is here so a reader can follow the pane without scraping it: the lines as
+// an array, plus how many have rolled off the top, which is what the browser
+// gate's ENGINELOG needs to know where it got to.
 Object.defineProperty(window, "dbg", {
-  get: () => ({ viewer: host.viewer, intro: liveIntro, session, host, snapshotState, seededRng }),
+  get: () => ({
+    viewer: host.viewer,
+    intro: liveIntro,
+    session,
+    host,
+    snapshotState,
+    seededRng,
+    log: () => ({ lines: logLines.lines, dropped: logLines.dropped }),
+  }),
 });
 
 function refreshMap(): void {

@@ -1028,16 +1028,21 @@ async function main(): Promise<void> {
   // The rule it exists for: a standalone probe that reaches a flat with
   // `session.transToFlat(...)` is NOT faithful, because `hitTestAt` answers nothing
   // there. Drive the real route, in the page, rather than a state jumped to.
+  //
+  // Read off `dbg.log()` rather than scraped out of the element: the pane is a
+  // rolling buffer (src/log-buffer.ts), so past 5000 lines the oldest go and a
+  // reader counting lines in the DOM would skip a whole batch. `dropped` says how
+  // many left, so what has been seen stays an absolute count.
   const engineLog = process.env.ENGINELOG ? new RegExp(process.env.ENGINELOG, "i") : null;
   let logSeen = 0;
   const drainEngineLog = async (): Promise<void> => {
     if (!engineLog) return;
-    const text = await page
-      .evaluate(() => (document.getElementById("scriptlog") as HTMLPreElement | null)?.textContent ?? "")
-      .catch(() => "");
-    const lines = text.split("\n");
-    for (const line of lines.slice(logSeen)) if (engineLog.test(line)) mark(`  [engine] ${line}`);
-    logSeen = lines.length;
+    const got = await page
+      .evaluate(() => (window as any).dbg?.log?.() ?? { lines: [], dropped: 0 })
+      .catch(() => ({ lines: [] as string[], dropped: 0 }));
+    const from = Math.max(0, logSeen - got.dropped);
+    for (const line of got.lines.slice(from)) if (engineLog.test(line)) mark(`  [engine] ${line}`);
+    logSeen = got.dropped + got.lines.length;
   };
   // a route can take minutes per segment; if the page or browser goes away under
   // us, say so plainly instead of reporting it as the route failing

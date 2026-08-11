@@ -67,7 +67,8 @@ let clock = 0;
 // the previous room's scheduled work surviving an unscripted swap, and the
 // boot's session resources being re-established on every set change.
 test("host: set activation — theme, scheduler, and boot resources", async () => {
-  const { host, session, sink, viewer } = await newHost();
+  let stageShown = 0;
+  const { host, session, sink, viewer } = await newHost({ onShowStage: () => stageShown++ });
 
   // 1. the room's own theme, and no fallback blip before it. bedsit1's openset
   // -> setupsound plays bedrad1.trk (the flat's radio); the set-named bank
@@ -106,6 +107,18 @@ test("host: set activation — theme, scheduler, and boot resources", async () =
     `vis=${bag?.visible} ws=${bag?.worldSpace}`,
   );
   check("and a viewer is up for the last set", viewer().set.setName.toLowerCase() === "c73");
+
+  // 5. showStage fires on EVERY activation, not once per game — so nothing that
+  // belongs to a game may be reset by it. main.ts used to clear the details pane
+  // there, which threw the script log away and shut the pane the player had
+  // opened at every changeset (#22, "resets on every set change"): 28 rooms over
+  // a full playthrough. The page now resets on the boot instead, and this is the
+  // number that says why it had to.
+  check(
+    "the stage is shown once per set activation",
+    stageShown === 3,
+    `three sets activated, showStage fired ${stageShown}x`,
+  );
 }
 );
 

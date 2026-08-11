@@ -36,6 +36,11 @@ export async function newHost<S extends AudioSink = NullAudioSink>(
      * demo is a different cut of the game, not a translation of one.
      */
     edition?: string;
+    /**
+     * Every time the host says the stage is showing. The page hangs real work off
+     * this (src/main.ts), so how OFTEN it fires is part of the host's contract.
+     */
+    onShowStage?: () => void;
   } = {},
 ): Promise<{
   host: GameHost;
@@ -78,7 +83,7 @@ export async function newHost<S extends AudioSink = NullAudioSink>(
       },
     },
     sink,
-    { log: (l) => logs.push(l) },
+    { log: (l) => logs.push(l), showStage: () => opts.onShowStage?.() },
   );
   // Pre-boot, so a test that opens a room directly finds the boot library up. Only
   // for a tree the port's stand-in boot is FOR, which is the same question
