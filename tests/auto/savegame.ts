@@ -1332,3 +1332,84 @@ test("the visible flag is what a load restores, not a guess from the set", () =>
     hidden.length > placed.length / 2,
     `${hidden.length} hidden of ${placed.length} placed`);
 });
+
+/**
+ * The reported standpoint: a save at `engine — Scene109 / View116` with Vlad on his
+ * feet reloads with him STILL ON HIS FEET AND DRAWN.
+ *
+ * The first pass at #86 restored the placement in the wrong place and left out the
+ * one field that decides whether a sprite reaches the screen, so the reporter got
+ * "the state of the game is correct, I just don't see Vlad standing there" — the
+ * fight triggered, the man was invisible. Two distinct faults, one per load path:
+ *
+ *   loading INSIDE the engine room   the restore ran before `closeSet()`, and
+ *                                    ENGINE.SET's closeset is
+ *                                    `sendtoactor("vlad", putdownactor())` — so the
+ *                                    departing room undid it, and Scene109 has no
+ *                                    script of its own to put him back
+ *   loading from anywhere else       `actorvisible` survived but `actorscale` did
+ *                                    not, and `ActorRuntime.drawList` skips anything
+ *                                    whose scale is 0
+ *
+ * So this checks the DRAW LIST, not the flag: every gating condition in drawList has
+ * to pass, which is the only statement equivalent to "you can see him".
+ */
+test("a save at Scene109 reloads with Vlad standing there, and drawn", async () => {
+  // the player's file, built the way their save is: standing at Scene109/View116
+  // with Vlad placed on vlad1
+  const basePath = savePath("1", "03 - Found the Gymnasium.ti");
+  const baseBytes = new Uint8Array(readFileSync(basePath));
+  const parsed = parseSave(baseBytes);
+  const nums = new Map(parsed.numGlobals);
+  nums.set("mission", 3);
+  nums.set("phase", 1);
+  nums.set("tour", 0);
+  const file = applyPatch(readSaveFile(baseBytes), {
+    numGlobals: nums,
+    strGlobals: parsed.strGlobals,
+    set: "engine", scene: "scene109", view: "view116",
+    actors: [{
+      name: "vlad", owner: "none", value: 0,
+      placement: {
+        visible: true, set: "engine", star: "vlad1", pose: "stand",
+        x: 2359, y: 8106, z: 4143, deg: 2, speed: 30, zclip: 32,
+      },
+    }],
+  });
+  expect(parseSave(file).actors.find((a) => a.name === "vlad")?.placement.visible,
+    "the file records him standing").toBe(true);
+
+  /** load `file` after first standing in `from`, and answer "is Vlad drawn?" */
+  const loadFrom = async (from: "engine" | "gym"): Promise<{ visible: boolean; scale: number; drawn: boolean }> => {
+    const { host, session } = await newHost();
+    let clock = 0;
+    const settle = async (n = 40): Promise<void> => {
+      for (let i = 0; i < n; i++) { host.viewer?.tick((clock += 50)); await drain(); }
+    };
+    await session.loadGame(baseBytes);
+    await settle();
+    if (from === "engine") {
+      // the case the reporter was in: loading while standing in the room whose
+      // `closeset` puts Vlad down
+      session.interp.globals.set("tour", 0);
+      session.interp.globals.set("mission", 3);
+      session.interp.globals.set("phase", 1);
+      await session.runGlobal("changeset", ["engine", "Scene108", "View112"]);
+      await settle();
+    }
+    expect(await session.loadGame(file)).toBe(true);
+    await settle();
+    const a = session.actorRuntime.get("vlad")!;
+    const cam = host.viewer?.worldCamera() ?? null;
+    const drawn = !!cam && session.actorRuntime.drawList(cam).some((e) => e.a.member.name === "vlad");
+    return { visible: a.visible, scale: a.scale, drawn };
+  };
+
+  for (const from of ["engine", "gym"] as const) {
+    const got = await loadFrom(from);
+    check(`loading from the ${from}: he is visible`, got.visible, JSON.stringify(got));
+    // 5000 is the engine room's own stdscale, which is where this now comes from
+    check(`loading from the ${from}: he has a scale`, got.scale > 0, JSON.stringify(got));
+    check(`loading from the ${from}: and he is in the draw list`, got.drawn, JSON.stringify(got));
+  }
+});
