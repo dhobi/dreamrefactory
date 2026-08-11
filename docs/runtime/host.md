@@ -19,6 +19,7 @@ is the recovered *Windows 95* around it.
 | [`puppet-view.ts`](https://github.com/dhobi/taoot-web/blob/master/src/puppet-view.ts) | conversation rendering (see [Characters](characters.md)) |
 | [`files.ts`](https://github.com/dhobi/taoot-web/blob/master/src/files.ts) | `FileStore` — game files by lowercase basename, lazy dev-server fetching |
 | [`bug-report.ts`](https://github.com/dhobi/taoot-web/blob/master/src/bug-report.ts) | the Report bug button: a prefilled GitHub issue, and the screen on the clipboard |
+| [`log-buffer.ts`](https://github.com/dhobi/taoot-web/blob/master/src/log-buffer.ts) | the lines behind X, bounded — and the tail a bug report carries |
 
 ## The split, and why it is where it is
 
@@ -446,9 +447,27 @@ overlay, **X** the details pane under the bars — the scene/view readout and th
 script log, which are off until asked for, because a running game should say
 nothing the player did not ask about. The pane is opened by a log line *before*
 the stage appears, though: a boot that never finishes has nothing else to say
-for itself, and `showStage` shuts it again. A full-screen overlay stage with a
-`keydown` target consumes all keys itself — the wireless telegraph key needs raw
-letters, which is also what keeps X out of the Zeitel machine's way.
+for itself, and the first `showStage` shuts it again. A full-screen overlay stage
+with a `keydown` target consumes all keys itself — the wireless telegraph key
+needs raw letters, which is also what keeps X out of the Zeitel machine's way.
+
+**The first `showStage`, and only that one.** It fires on every set activation,
+so resetting the pane there emptied the log and shut it at every changeset — 28
+rooms and at least 40 set changes over a full playthrough, which is what #22
+reported as "resets on every set change". The page now resets on the two things
+that really start a game from nothing (the cold boot, and `quit()`'s return to
+the menu), and the pane's open/shut answer is remembered in `localStorage` under
+`taoot.details.open` alongside the swipe and picture ones.
+
+The lines themselves live in a bounded buffer
+([`log-buffer.ts`](https://github.com/dhobi/taoot-web/blob/master/src/log-buffer.ts)),
+not in the `<pre>`: the pane used to be its own storage and grew without end. A
+whole game is 1141 lines / 40 923 bytes, so the 5000-line cap is not a budget for
+playing — it is a ceiling for a session that never ends, where `movie click …`
+arrives once per click inside an interactive movie. Past the cap the oldest tenth
+goes at once, so a repaint costs once per batch rather than once per line, and
+`dropped` counts what left so a follower (the browser gate's `ENGINELOG`) can
+still tell where it got to.
 
 ### `quit()` goes back to the front door in place
 
