@@ -37,6 +37,7 @@ import { installI18n, t } from "./locales";
 import { installBugReport } from "./bug-report";
 import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
 import { ChangeWatch, RowView, stateDump, stateView } from "./debug-panel";
+import { focusOwnsKey } from "./keys";
 import { siteUrl, sitePath } from "./site";
 
 // ---------------------------------------------------------------------------
@@ -1270,6 +1271,11 @@ const isSpecialKey = (e: KeyboardEvent): boolean => e.key === "Escape" || e.ctrl
 window.addEventListener("keydown", (e) => {
   const v = host.viewer;
   if (!v) return;
+  // Typed into something on the page, not at the game (src/keys.ts). This listens
+  // on `window`, and the page's own keys are LETTERS — so without this, filtering
+  // the state list for "mission" toggled the minimap on the M and the hotspot
+  // overlay on the O, and sent all seven letters to the script chain besides.
+  if (focusOwnsKey(e.target, e.key)) return;
   // a full-screen overlay stage (the deck map) consumes all keys itself
   if (!session.viewShowing && session.stageCtrl.keydownTarget()) {
     const df = DF_KEY[e.key] ?? (e.key.length === 1 ? e.key.toLowerCase() : "");
