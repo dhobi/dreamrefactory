@@ -1530,3 +1530,57 @@ test("a mission-4 save reloads with the child still Beatrix's", async () => {
     (two.session.puppet?.bevels ?? []).length === 3,
     JSON.stringify((two.session.puppet?.bevels ?? []).map((b) => b.id)));
 });
+
+/**
+ * #125: a load is a RESTORE, not an arrival, and must not fire the arriving
+ * scene's entry event — which for one room is a trigger.
+ *
+ * Traced rather than guessed. `openscene` is dispatched from exactly one site
+ * (`0x407ea0`, which builds `sendtoscene("SceneNN", openscene())`); that site has
+ * exactly one caller (`0x4076d4`, inside `opensetfile`); and `opensetfile`'s
+ * implementation (`0x407590`) has exactly one caller — its own command stub at
+ * `0x43cad6`. So only a SCRIPT calling `opensetfile` can fire it, and the original's
+ * load never does: `ctl.stg`'s button is `opengame ("Titanic 1.0")` followed by
+ * nothing but a stage check, and `opengame`'s restore (`0x414080`) rebuilds the room
+ * through the engine's own set machinery without reaching the script runners.
+ *
+ * Ours arrives by running the game's own `changeset`, which fires both events. The
+ * scene half is what bites, because LOUNGE1C Scene45's is
+ *
+ *     if mission = 4 & actorvisible ("zeit") & currentview () = "view49"
+ *         sendtoactor ("zeit", mousedown (0))
+ *
+ * and `openset` has just made Zeitel visible. So the shipped save taken in front of
+ * him opened his conversation INSIDE the load — headless, that never returns,
+ * because it parks on his plaques. The reporter's own account of the original is
+ * that nothing happens until you move off the spot and back, which is this.
+ */
+test("loading in front of Zeitel does not start his conversation (#125)", async () => {
+  const one = await newHost();
+  const session = one.session;
+  let c = 0;
+  // Ticks rather than settle(): a conversation parked on plaques never settles, so
+  // settling is what turned the bug into a hang instead of a report.
+  const run = async (n = 60): Promise<void> => {
+    for (let i = 0; i < n; i++) { one.host.viewer?.tick((c += 50)); await drain(); }
+  };
+  const path = savePath("ENDGAME1", "05 - Traded Painting for Antidote with Zeitel.ti");
+  // The load has to RETURN. Before the fix it did not: the accost fired inside it.
+  await session.loadGame(new Uint8Array(readFileSync(path)));
+  await run();
+
+  expect(session.currentSetName).toBe("lounge1c");
+  const zeit = session.actorRuntime.get("zeit");
+  check("Zeitel is in the room, placed by the arriving room's openset",
+    !!zeit?.visible, `zeit=${zeit ? `visible=${zeit.visible}` : "(absent)"}`);
+  check("...and is not talking to us", !session.puppet?.visible,
+    `subtitle=${JSON.stringify(session.puppet?.subtitle ?? "")}`);
+  check("...so nothing is waiting for an answer", (session.puppet?.bevels ?? []).length === 0);
+
+  // and the trigger is not BROKEN, only unfired: the scene is still current, so
+  // the next real arrival at it runs openscene the ordinary way
+  void session.track(session.sendEvent("sendtoscene", "Scene45", "openscene", [], "test"));
+  await run(120);
+  check("a real arrival at the scene still fetches him",
+    !!session.puppet?.visible, `subtitle=${JSON.stringify(session.puppet?.subtitle ?? "")}`);
+});

@@ -86,6 +86,47 @@ export class GameSession {
    */
   suppressStageBootFallback = false;
 
+  /**
+   * A LOAD is in flight, so the arriving room must not fire its scene-entry event.
+   *
+   * A load is not an arrival, and in the original it is not even a script. Traced:
+   * `openscene` is dispatched from exactly one site (`0x407ea0`, which builds
+   * `sendtoscene("SceneNN", openscene())`); that site has exactly one caller
+   * (`0x4076d4`, inside `opensetfile`); and `opensetfile`'s implementation
+   * (`0x407590`) has exactly one caller — its own command stub, `0x43cad6`. So
+   * only a SCRIPT calling `opensetfile` can fire it. The load never does:
+   * `ctl.stg`'s button is `opengame ("Titanic 1.0")` and nothing after it but a
+   * stage check, and `opengame`'s restore (`0x414080`) rebuilds the room through
+   * the engine's own set machinery without ever reaching the script runners. So
+   * the original puts the room back from the FILE where we put it back by
+   * re-running the room, and the save format is shaped for its way: a prop record
+   * carries `view` and `visible` beside its owner, an actor record carries
+   * visibility, facing, position, speed and zclip.
+   *
+   * Ours arrives by running the game's `changeset`, which is how it got both
+   * events — and the scene half is a trigger. LOUNGE1C Scene45's is
+   *
+   *     if mission = 4 & actorvisible ("zeit") & currentview () = "view49"
+   *         sendtoactor ("zeit", mousedown (0))
+   *
+   * and `openset` has just made Zeitel visible, so loading the shipped save taken
+   * in front of him opened the conversation inside the load — measured as a
+   * headless load that never returns, because it parks on his plaques (#125).
+   * Moving off the spot and back still fires it, which is the reporter's own
+   * account of the original.
+   *
+   * Scoped to the SCENE event on purpose. The original fires neither, but ours
+   * cannot drop `openset` yet: it is what places the actors, scores the theme and
+   * dresses the props, and this port deliberately does NOT restore the fields that
+   * would replace it — `propvisible` and a prop's `view` are read from the file and
+   * thrown away, because `showinterface`, `setupsigns` and `setuparrow` re-derive
+   * them (docs/runtime/saves.md). That is sound only while the room still runs. A
+   * script-free restore is the faithful end state and it starts by reading those
+   * fields back; until then, narrowing to the half that is a TRIGGER fixes the bug
+   * without pretending the rest is done.
+   */
+  restoringSave = false;
+
   get boot(): ScriptInstance | null {
     return this.bootScripts[0] ?? null;
   }

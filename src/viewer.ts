@@ -622,6 +622,13 @@ export class SetViewer {
    */
   async start(): Promise<void> {
     await this.scripts.openSet();
+    // A load restores the room rather than arriving in it, and the original fires
+    // no scene entry for one — see GameSession.restoringSave. The scene is still
+    // recorded as current, so the first turn or step re-fires it normally.
+    if (this.session.restoringSave) {
+      this.scripts.lastSceneIdx = this.sceneIdx;
+      return;
+    }
     await this.scripts.openScene(this.sceneIdx);
   }
 
