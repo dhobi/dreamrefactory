@@ -55,6 +55,8 @@ interface Mirror {
    *  should name the person it could not get past, not just the room. */
   conversingWith: string;
   awaitingChoice: boolean;
+  /** a line is being spoken — the only state ESC skips (#131) */
+  speaking: boolean;
   choices: { text: string; id: number }[];
   movieRegions: { type: number; target: string; event: string; x0: number; y0: number; x1: number; y1: number }[];
   /** a movie owns the screen — animating OR parked on a region frame */
@@ -106,6 +108,7 @@ const SAMPLE = `(() => {
     conversing: !!(v && v.conversing),
     conversingWith: (v && v.conversingWith) || "",
     awaitingChoice: !!(v && v.awaitingChoice),
+    speaking: !!(v && v.speaking),
     choices: v ? v.choices : [],
     movieRegions: v ? v.movieRegions.map((r) => ({
       type: r.type, target: r.target, event: r.event, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1,
@@ -493,6 +496,15 @@ export async function browserDriver(page: Page, opts: BrowserDriverOptions = {})
       // a skip but an ABORT — the headless twin says why, and the same clip
       // (Penny's lenin.mov) is the one that pays for it.
       if (m.movieFile) {
+        await page.waitForTimeout(120);
+        await sync();
+        return;
+      }
+      // Only while a line is actually being spoken — see the headless twin: at a
+      // plaque ESC answers -1 and walks the player out (#131). Read from the page
+      // rather than the mirror, because the mirror is as old as the last sync and
+      // a conversation moves between lines faster than that.
+      if (!(await page.evaluate(() => !!(window as any).dbg?.viewer?.speaking))) {
         await page.waitForTimeout(120);
         await sync();
         return;

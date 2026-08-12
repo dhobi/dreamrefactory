@@ -419,18 +419,19 @@ export class PuppetController {
    * spoken or the choices are up. It takes only events carrying the 0x1fa0
    * marker — the key is ESC, or was held with Ctrl — which is `special`.
    *
+   * Both waits answer it, and they answer it DIFFERENTLY: a spoken line is
+   * skipped, a plaque is abandoned with -1. So a caller cannot hammer this key —
+   * see {@link SetViewer.speaking}, which is what the playthrough drivers aim
+   * with.
+   *
    * DEVIATION, deliberate: the original's wait pops EVERY key off the queue, so
    * an unmarked one is swallowed and the scripts never see it. This returns
    * false for those and lets them through, because nothing in the port needs
-   * them eaten and a conversation is not where to find out otherwise. The keys
-   * the filter does bind besides ESC — 0-9 for volume, T for subtitles — are #129.
+   * them eaten and a conversation is not where to find out otherwise.
    *
-   * NOT implemented, and its own issue: in the original ESC also answers the
-   * PLAQUE wait, which returns -1 to the script (0x4418a7) and is how a player
-   * walks out of a conversation. That changes where scenarios go, not just how
-   * fast they get there, so it is not folded in here. It is consumed and
-   * dropped rather than passed on, because passing it on would leave the skip
-   * flag standing over the next speech run.
+   * The one arm still unbound is `T`, and #129 says why: it sets the filter's
+   * out-param rather than acting, and of the three call sites only the movie loop
+   * reads it — so during a spoken line it does nothing in the original either.
    */
   key(name: string, special: boolean): boolean {
     const p = this.puppet;
@@ -440,7 +441,21 @@ export class PuppetController {
     // the filter answers 0 for them and the line plays on (see volumeKey)
     if (volumeKey(this.session, name)) return true;
     if (!special || name !== ".") return false;
-    if (p.speakSkip) this.skipLine();
+    if (p.speakSkip) {
+      this.skipLine();
+      return true;
+    }
+    // The PLAQUE wait answers ESC too, and its answer is -1 (0x4418a7) — which is
+    // how a player walks out of a conversation. Every one of the 516 puppetevent
+    // calls in the tree is `puppetevent (-1)` followed by a `switch` with a
+    // `case -1` arm, so this is a branch the authors wrote and nothing could
+    // reach until now (#131).
+    //
+    // Deliberately NOT setting the skip flag: unlike a spoken-line ESC this must
+    // not swallow what comes next, because the script's own -1 arm may have a
+    // parting line to say. TI.EXE agrees — the plaque pump's ESC path writes the
+    // -1 and returns without touching 0x48ac00.
+    p.eventWaiter?.(-1);
     return true;
   }
 
@@ -467,8 +482,12 @@ export class PuppetController {
       p.eventWaiter = (id) => {
         p.eventWaiter = null;
         // 0x43f767: the answered plaque is copied aside for the repeat, and the
-        // voice queue emptied — what the character says next is a new exchange
-        p.lastPlaque = { bevels: [...p.bevels], chosen: p.chosen };
+        // voice queue emptied — what the character says next is a new exchange.
+        // A plaque nobody answered (ESC, or the file closing under us) has no
+        // picked row, and must not inherit the last one's: `chosen` outlives its
+        // own plaque until the script's next puppetclear, so recording it here
+        // would frame a row of this list that was never touched.
+        p.lastPlaque = { bevels: [...p.bevels], chosen: id === -1 ? null : p.chosen };
         p.voiceQueue.length = 0;
         resolve(id);
       };

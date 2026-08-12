@@ -2601,6 +2601,72 @@ test("wavevolume() and the volume keys write one value", async () => {
 }
 );
 
+// --- 18b4. ESC at a plaque answers -1 and walks the player out -------------
+// The plaque wait takes ESC too, and its answer is -1 (0x4418a7). That is not a
+// spare value: every one of the 516 puppetevent calls in the tree is
+// `puppetevent (-1)` followed by a switch with a `case -1` arm — SMETH1's
+// `regular()` and `intro()` both `exitcode` there — so until now those were
+// branches the authors wrote and nothing could reach (#131).
+test("ESC at a dialogue plaque answers -1", async () => {
+  const { session, viewer } = await newSession();
+  await session.openSetFile("c73.set");
+  const v = viewer();
+  await session.puppetCtrl.openPuppetFile("smeth1.pup");
+  session.puppetCtrl.puppetBevel("What's mal de mer?", 101);
+  session.puppetCtrl.puppetBevel("Yes, just a touch.", 102);
+  const answered = session.puppetCtrl.puppetEvent();
+  check("the plaque is waiting", v.awaitingChoice && v.choices.length === 2);
+  // routed the way main.ts routes it, so this covers the wiring too
+  const consumed = await v.keyDown(".", true);
+  const arg = await answered;
+  check(
+    "ESC ends the wait with -1, and answers no bevel",
+    consumed && arg === -1 && !v.awaitingChoice && session.puppet?.chosen === null,
+    `consumed=${consumed} arg=${arg} awaiting=${v.awaitingChoice} chosen=${session.puppet?.chosen}`,
+  );
+  check(
+    "and does NOT leave the skip flag standing, so the -1 arm can still speak",
+    session.puppet?.interrupted === false,
+    `interrupted=${session.puppet?.interrupted}`,
+  );
+  // a plaque nobody answered has no picked row for a later repeat to frame
+  check(
+    "the abandoned plaque is remembered with no chosen row",
+    session.puppet?.lastPlaque?.chosen === null && session.puppet?.lastPlaque?.bevels.length === 2,
+    `lastPlaque=${JSON.stringify(session.puppet?.lastPlaque)}`,
+  );
+  session.puppetCtrl.closePuppetFile();
+
+  // ...and the same thing against the real script, because the value only
+  // matters if a scenario acts on it. SMETH1's `regular()` is `while true` around
+  // five bevels with `case -1: exitcode` — so an unanswered plaque is the ONLY way
+  // out of that loop, and the handler returning is the arm having run.
+  await session.puppetCtrl.openPuppetFile("smeth1.pup");
+  let ended = false;
+  const advice = session.track(
+    session.sendEvent("sendtopuppet", "before", "regular", [], "test").then(() => (ended = true)),
+  );
+  const pump = async (until: () => boolean, max = 3000): Promise<boolean> => {
+    for (let i = 0; i < max && !until(); i++) {
+      v.tick((clock += 100));
+      await drain();
+    }
+    return until();
+  };
+  const offered = await pump(() => v.awaitingChoice && v.choices.length === 5);
+  check("smeth1 regular() offers its five", offered, `choices=${v.choices.length}`);
+  await v.keyDown(".", true);
+  const unwound = await pump(() => ended);
+  check(
+    "the script's own `case -1: exitcode` runs — the while-true loop is left",
+    offered && unwound,
+    `ended=${ended}`,
+  );
+  session.puppetCtrl.closePuppetFile();
+  await advice.catch(() => {});
+}
+);
+
 // --- 18c. one ESC gets past the whole speech, not one line of it ----------
 // TI.EXE's skip is a FLAG, not a race: 0x440620 raises 0x48ac00, and every
 // following puppetspeak queues its line and returns without playing it
