@@ -575,11 +575,18 @@ async function runNightdiveIntro(): Promise<Ownership> {
     const { x, y } = canvasCoords(e);
     intro.click(x, y);
   };
-  // ESC only, and through the movie's own key filter — the marker is what that
-  // filter insists on, and the header flag is what decides (MoviePlayer.key)
+  // ESC and the volume digits, both through the movie's own key filter — the
+  // marker is what that filter insists on for the abort, and the header flag is
+  // what decides (MoviePlayer.key). The digits are here and not only in the
+  // in-game listener below because the logos and the menu ARE movies, played by
+  // this intro rather than by a viewer (there is none until a set opens), and the
+  // credits over a title screen are exactly where a player reaches for the volume.
   const onKey = (e: KeyboardEvent): void => {
     ensureAudio();
     if (e.key === "Escape") intro.key(".", true);
+    else if (e.key.length === 1 && e.key >= "0" && e.key <= "9" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!focusOwnsKey(e.target, e.key)) intro.key(e.key, false);
+    }
   };
   screen.addEventListener("pointerdown", onPointer);
   window.addEventListener("keydown", onKey);
@@ -1132,6 +1139,7 @@ function installBrightness(): void {
   // nothing selected when a press has landed between two
   onScreenGammaShown = show;
 }
+
 
 /** set by {@link installBrightness} so the F-keys can refresh the presets */
 let onScreenGammaShown: (() => void) | null = null;

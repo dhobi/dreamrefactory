@@ -208,11 +208,9 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   // channels — theme/music is governed separately by themevol below.
   r("wavevolume", (_i, [n]) => {
     if (n === undefined) return session.waveVolume;
-    session.waveVolume = Math.max(0, Math.min(9, Math.round(toNum(n))));
-    const g = session.waveVolume / 9;
-    session.audio.setChannelVolume("sound", g);
-    session.audio.setChannelVolume("voice", g);
-    return session.waveVolume;
+    // through the session's setter, which the digit keys and the page's own
+    // control also go through — see GameSession.setWaveVolume
+    return session.setWaveVolume(toNum(n));
   });
   // themevol(track[, vol]): theme (music) loudness, 0..255 — GETTER with one
   // argument, setter with two. TAOOT's CTL.STG slider sets the global

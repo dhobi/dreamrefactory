@@ -3,7 +3,7 @@
   "h1": "Bezig met starten",
   "intro": "Spelbestanden worden geladen…",
   "introSub": "Zoeken in de map <code>gamefiles/</code>",
-  "keys": "<b>←</b> <b>→</b> draaien &nbsp;·&nbsp; <b>↑</b> lopen &nbsp;·&nbsp; <b>Esc</b> regel overslaan &nbsp;·&nbsp; <b>M</b> kaart &nbsp;·&nbsp; <b>O</b> hotspots &nbsp;·&nbsp; <b>X</b> details &nbsp;·&nbsp; <b>F1</b> <b>F2</b> helderheid",
+  "keys": "<b>←</b> <b>→</b> draaien &nbsp;·&nbsp; <b>↑</b> lopen &nbsp;·&nbsp; <b>Esc</b> regel overslaan &nbsp;·&nbsp; <b>M</b> kaart &nbsp;·&nbsp; <b>O</b> hotspots &nbsp;·&nbsp; <b>X</b> details &nbsp;·&nbsp; <b>0</b>–<b>9</b> geluid &nbsp;·&nbsp; <b>F1</b> <b>F2</b> helderheid",
   "fullscreen": "⛶ Volledig scherm",
   "fullscreenTitle": "Volledig scherm (4:3 met balken)",
   "reportBug": "🪲 Bug melden",

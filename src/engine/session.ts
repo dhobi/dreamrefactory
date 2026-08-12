@@ -1288,6 +1288,23 @@ export class GameSession {
    */
   waveVolume = 9;
   /**
+   * Set it and apply it — the one place that does, because three things write it
+   * and they have to agree: the scripts' `wavevolume(n)` (TAOOT's CTL.STG dial),
+   * the digit keys during a line or a movie, and the play page's own control.
+   *
+   * TI.EXE has the same single funnel: `0x4249b0` is the setter, and its call
+   * sites are `wavevolume`'s own (0x43de4c) plus the ten digit arms in each of
+   * the two key filters (0x441dca.. and 0x44a4b1..) — twenty-one callers, one
+   * value. The reader `0x424980` answers `wavevolume()` and nothing else.
+   */
+  setWaveVolume(n: number): number {
+    this.waveVolume = Math.max(0, Math.min(9, Math.round(n)));
+    const g = this.waveVolume / 9;
+    this.audio.setChannelVolume("sound", g);
+    this.audio.setChannelVolume("voice", g);
+    return this.waveVolume;
+  }
+  /**
    * Theme (music) loudness as the scripts see it, 0..255 — what `themevol(track)`
    * reads back and `themevol(track, v)` writes. Held here because it has to be
    * READABLE: the getter used to answer nothing, and the scripts duck the score

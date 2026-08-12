@@ -199,11 +199,38 @@ Two consequences of *where* that code lives:
 - **It is an exchange, not a line.** The queue holds everything said since the last
   plaque, so "repeat" means the answer you just got, in full.
 
-Two deliberate gaps, both their own issues: ESC also answers the plaque wait in the
-original, returning −1 to the script and walking the player out of the conversation
+**0–9 set the volume**, and the line plays on. Those arms answer "not an interrupt"
+and call the wave-volume setter with their own digit (`0x441dca`…`0x441e48` →
+`0x4249b0`) — the same setter the scripts' `wavevolume(n)` uses, so the keys and
+TAOOT's own control-panel dial move one value. The **movie** filter's table
+(`0x44a584`/`0x44a544`) is byte-identical, so the digits work over a clip too, which
+is where a player most wants them.
+
+They are bound **bare here, and that is a deviation**. The window proc sets the
+`0x1fa0` marker from `GetKeyState(VK_CONTROL)` alone (`0x41ad08`), so every arm of
+both tables is a Ctrl chord in the original — and a browser reserves all ten of
+them: Ctrl+0 is zoom reset, Ctrl+1–9 switch tabs, and `preventDefault()` stops
+neither. #115's brightness keys had no such conflict (its manual said Ctrl+F1 but
+the code tested the virtual key alone, so bare F1 was faithful *and* reachable);
+here the two cannot both be had, so the digits are bare and the chord is simply
+unavailable. A player without a keyboard uses the game's own dial, which is why the
+page adds no control of its own
+([host](host.md#the-sound-keys-and-why-the-page-has-no-sound-control)).
+
+One gap left, its own issue: ESC also answers the **plaque** wait in the original,
+returning −1 to the script and walking the player out of the conversation
 (`0x4418a7`) — that moves where scenarios go, not just how fast, so it is not folded
-in here; and the filter binds **0–9** for volume and **T** for subtitles during a
-line (#129), neither of which is wired up.
+in here (#131). Every one of the 516 `puppetevent` calls in the tree passes `(-1)`
+and has a `case -1` arm, so that is 516 hand-written branches currently unreachable.
+
+**`T` is bound to nothing, on purpose.** It is the other arm both tables share, and
+it does not act — it sets the filter's out-param and answers "not an interrupt"
+(`0x441e54`). Of the three call sites only the movie loop reads that flag
+(`0x44a3e9`), so during a spoken line T does nothing in the original either. What it
+does over a clip is toggle an audio latch (`0x48c510`, `0x425080` to start and
+`0x424d80` to stop) whose stream is not yet identified — so it stays unbound until
+someone names it, rather than being guessed at as a subtitle toggle (which is what
+it was first mistaken for).
 
 One deviation on purpose: the original's waits swallow *every* key, so an unmarked
 one never reaches the scripts. The port passes those through, because nothing needs

@@ -16,6 +16,7 @@ import { decodeAudioContainer, resampleTo } from "./df/audio";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "./df/image";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { GameSession } from "./engine/session";
+import { volumeKey } from "./engine/puppet";
 import { PlayHandle } from "./engine/audio";
 
 /** one decoded movie frame, as indexed pixels */
@@ -540,6 +541,10 @@ export class MoviePlayer {
   key(keyName: string, special = false): boolean {
     const m = this.active;
     if (!m) return false;
+    // The movie filter's table (0x44a584/0x44a544) is byte-identical to the
+    // spoken line's, so the volume digits work over a clip too — which is where
+    // a player most wants them. They do not abort it: the arm answers 0.
+    if (volumeKey(this.session, keyName)) return true;
     if (!special || (keyName !== "." && keyName !== "q")) return false;
     if (!m.keySkips) return false;
     this.onLog(`movie: ${m.fileName} skipped at frame ${m.pos}`);

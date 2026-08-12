@@ -3,7 +3,7 @@
   "h1": "Запуск",
   "intro": "Загрузка файлов игры…",
   "introSub": "Поиск в каталоге <code>gamefiles/</code>",
-  "keys": "<b>←</b> <b>→</b> поворот &nbsp;·&nbsp; <b>↑</b> идти &nbsp;·&nbsp; <b>Esc</b> пропустить фразу &nbsp;·&nbsp; <b>M</b> карта &nbsp;·&nbsp; <b>O</b> активные зоны &nbsp;·&nbsp; <b>X</b> подробности &nbsp;·&nbsp; <b>F1</b> <b>F2</b> яркость",
+  "keys": "<b>←</b> <b>→</b> поворот &nbsp;·&nbsp; <b>↑</b> идти &nbsp;·&nbsp; <b>Esc</b> пропустить фразу &nbsp;·&nbsp; <b>M</b> карта &nbsp;·&nbsp; <b>O</b> активные зоны &nbsp;·&nbsp; <b>X</b> подробности &nbsp;·&nbsp; <b>0</b>–<b>9</b> звук &nbsp;·&nbsp; <b>F1</b> <b>F2</b> яркость",
   "fullscreen": "⛶ Во весь экран",
   "fullscreenTitle": "Во весь экран (4:3 с полями)",
   "reportBug": "🪲 Сообщить об ошибке",

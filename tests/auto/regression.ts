@@ -2523,6 +2523,84 @@ test("skipping a spoken line silences it, not just its subtitle", async () => {
 }
 );
 
+// --- 18b2. the volume digits, in both waits that take keys ----------------
+// The two key filters' jump tables are byte-identical (0x441ea0/0x441e60 for a
+// spoken line, 0x44a584/0x44a544 for a movie): `0`..`9` call the wave-volume
+// setter with their own value and answer "not an interrupt", so the line or the
+// clip carries on. Bound BARE here rather than as the original's Ctrl chords,
+// which a browser reserves for zoom and tab switching (#129).
+test("the volume digits set the wave volume without interrupting", async () => {
+  const { session, sink, viewer } = await newSession();
+  await session.openSetFile("c73.set");
+  const v = viewer();
+  const conversation = session.track(
+    (async () => {
+      await session.puppetCtrl.openPuppetFile("smeth1.pup");
+      await session.sendEvent("sendtopuppet", "before", "intro", [], "test");
+      session.puppetCtrl.closePuppetFile();
+    })(),
+  );
+  const pump = async (until: () => boolean, max = 3000): Promise<boolean> => {
+    for (let i = 0; i < max && !until(); i++) {
+      v.tick((clock += 100));
+      await drain();
+    }
+    return until();
+  };
+  const speaking = await pump(() => !!session.puppet?.subtitle);
+  const said = session.puppet?.subtitle ?? "";
+  sink.halts.length = 0;
+  // routed the way main.ts routes a digit: no marker, straight through keyDown
+  const consumed = await v.keyDown("3");
+  await drain();
+  check(
+    "a digit during a line sets the volume and leaves the line running",
+    speaking && consumed && session.waveVolume === 3 &&
+      session.puppet?.subtitle === said && !sink.halts.includes("voice"),
+    `consumed=${consumed} vol=${session.waveVolume} subtitle unchanged=${session.puppet?.subtitle === said} halts=${sink.halts}`,
+  );
+  // 0 is a real setting, not "unset" — the arm at 0x441dc8 passes 0
+  await v.keyDown("0");
+  await drain();
+  check(
+    "0 is silence, and it reaches both channels",
+    session.waveVolume === 0 && sink.channelVolume.voice === 0 && sink.channelVolume.sound === 0,
+    `vol=${session.waveVolume} voice=${sink.channelVolume.voice} sound=${sink.channelVolume.sound}`,
+  );
+  // and a letter is NOT a volume: the other 56 chars are the filter's ignored arm
+  await v.keyDown("x");
+  await drain();
+  check("a letter is not a volume", session.waveVolume === 0, `vol=${session.waveVolume}`);
+  session.puppetCtrl.closePuppetFile();
+  await conversation.catch(() => {});
+}
+);
+
+// --- 18b3. the scripts' wavevolume() is the same funnel as the keys --------
+// TI.EXE has one setter (0x4249b0) with twenty-one callers: wavevolume's own
+// site at 0x43de4c and the ten digit arms in each of the two key filters. This
+// port has one too (GameSession.setWaveVolume), and that is what keeps the
+// CTL.STG dial, the digit keys and the play page's slider from disagreeing.
+test("wavevolume() and the volume keys write one value", async () => {
+  const { session, sink } = await newSession();
+  await session.openSetFile("c73.set");
+  const wavevolume = session.interp.builtins.get("wavevolume")!;
+  const call = (...args: number[]) =>
+    wavevolume(session.interp, args, null as never, null as never);
+  await call(4);
+  check(
+    "the script setter drives the channels through the session",
+    session.waveVolume === 4 && Math.abs(sink.channelVolume.voice - 4 / 9) < 1e-9,
+    `vol=${session.waveVolume} voice=${sink.channelVolume.voice}`,
+  );
+  const readBack = await call();
+  check("and reads back what it wrote", Number(readBack) === 4, `read=${readBack}`);
+  session.setWaveVolume(99); // clamped: 0x4249b0's only inputs are the 0..9 arms
+  check("out of range clamps to the original's nine", session.waveVolume === 9,
+    `vol=${session.waveVolume}`);
+}
+);
+
 // --- 18c. one ESC gets past the whole speech, not one line of it ----------
 // TI.EXE's skip is a FLAG, not a race: 0x440620 raises 0x48ac00, and every
 // following puppetspeak queues its line and returns without playing it

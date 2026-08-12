@@ -3,7 +3,7 @@
   "h1": "Wird gestartet",
   "intro": "Spieldateien werden geladen…",
   "introSub": "Suche im <code>gamefiles/</code>-Verzeichnis",
-  "keys": "<b>←</b> <b>→</b> drehen &nbsp;·&nbsp; <b>↑</b> gehen &nbsp;·&nbsp; <b>Esc</b> Zeile überspringen &nbsp;·&nbsp; <b>M</b> Karte &nbsp;·&nbsp; <b>O</b> Hotspots &nbsp;·&nbsp; <b>X</b> Details &nbsp;·&nbsp; <b>F1</b> <b>F2</b> Helligkeit",
+  "keys": "<b>←</b> <b>→</b> drehen &nbsp;·&nbsp; <b>↑</b> gehen &nbsp;·&nbsp; <b>Esc</b> Zeile überspringen &nbsp;·&nbsp; <b>M</b> Karte &nbsp;·&nbsp; <b>O</b> Hotspots &nbsp;·&nbsp; <b>X</b> Details &nbsp;·&nbsp; <b>0</b>–<b>9</b> Ton &nbsp;·&nbsp; <b>F1</b> <b>F2</b> Helligkeit",
   "fullscreen": "⛶ Vollbild",
   "fullscreenTitle": "Vollbild (4:3 mit Balken)",
   "reportBug": "🪲 Fehler melden",
