@@ -388,7 +388,14 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // which is the fistfight, and a restore landing after that would teleport him out
   // of the walk it starts.
   await restoreActorPlacement(session, save.actors);
-  await session.runGlobal("changeset", [save.set, save.scene, save.view]);
+  // The arrival, with the scene-entry event muted for it (GameSession.restoringSave):
+  // a load is a restore, and the original's is not a script at all.
+  session.restoringSave = true;
+  try {
+    await session.runGlobal("changeset", [save.set, save.scene, save.view]);
+  } finally {
+    session.restoringSave = false;
+  }
 
   // initall re-seeds DEFAULT inventory + interface for the mission; overwrite
   // with the player's actual collected items, then rebuild the interface band.

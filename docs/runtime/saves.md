@@ -110,6 +110,39 @@ clears the *picture* and leaves the owner alone, so an empty hand brings HELP ba
 later. Reaching only for the picture is the whole trick: clear the memo instead and
 HELP is retired for the rest of the game (#123).
 
+## A load is not an arrival
+
+The original's load is not a script at all, and that turns out to matter. `openscene`
+is dispatched from exactly one site in `TI.EXE` (`0x407ea0`, which builds
+`sendtoscene("SceneNN", openscene())`); that site has one caller (`0x4076d4`, inside
+`opensetfile`); and `opensetfile`'s implementation has one caller — its own command
+stub. **Only a script calling `opensetfile` can fire a room's entry events**, and the
+load never does: `CTL.STG`'s button is `opengame ("Titanic 1.0")` with nothing after
+it but a stage check, and `opengame`'s restore rebuilds the room through the engine's
+own set machinery.
+
+So the original puts the room back **from the file**, where this port puts it back by
+re-running the room — it arrives by calling the game's own `changeset`, which fires
+`openset` and `openscene` like any other arrival. For one room that is a bug rather
+than a detail. `LOUNGE1C` Scene45's entry handler is a trigger:
+
+```
+if mission = 4 & actorvisible ("zeit") & currentview () = "view49"
+    sendtoactor ("zeit", mousedown (0))
+```
+
+and `openset` has just made Zeitel visible, so loading the shipped save taken in front
+of him opened his conversation *inside the load* — which headless never returns from,
+because it parks on his plaques (#125). The scene event is therefore muted for a load.
+Only that half: the original fires neither, but this port still needs `openset` to
+place the actors, score the theme and dress the props, because it deliberately does
+**not** restore the fields that would replace it (`propvisible` and a prop's `view`,
+above). The two halves are one decision — the original can skip the room because it
+reads the file; this port can skip those fields because it runs the room. A faithful
+script-free restore starts by reading them back, and would also have to reconstruct
+what the save's later containers hold and this loader ignores: the live `makeloop` and
+`makecricket` tables, the music and sound-loop state, and any parked conversation.
+
 ## Loading: restore globals, then travel
 
 `loadGame` deliberately does *not* try to reconstruct subsystems from the
