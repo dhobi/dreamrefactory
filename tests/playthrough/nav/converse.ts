@@ -44,11 +44,12 @@ export interface TalkResult {
 /**
  * Talk until the conversation closes or the plan runs out.
  *
- * Between choices the speaker is talking; a click skips the current line, which
- * is what a player does to move things along. The driver's `skipLine` is that
- * click, and it's also how a line that no longer has anything to offer ends.
+ * Between choices the speaker is talking; ESC skips the current line — and the
+ * rest of that speech run with it, which is what a player does to move things
+ * along. The driver's `skipLine` is that key, and it's also how a line that no
+ * longer has anything to offer ends.
  */
-/** clicks spent getting past spoken lines before we call the puppet stuck */
+/** ESCs spent getting past spoken lines before we call the puppet stuck */
 const MAX_SKIPS = 600;
 
 export async function converse(d: NavDriver, plan: TalkPlan = {}): Promise<TalkResult> {
@@ -88,7 +89,7 @@ export async function converse(d: NavDriver, plan: TalkPlan = {}): Promise<TalkR
     }
     if (!d.awaitingChoice()) {
       if (++skips > MAX_SKIPS) {
-        return { ok: false, picked, offered, reason: `${MAX_SKIPS} clicks and still no plaques offered` };
+        return { ok: false, picked, offered, reason: `${MAX_SKIPS} skips and still no plaques offered` };
       }
       await d.skipLine();
       continue;

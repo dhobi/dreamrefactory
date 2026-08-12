@@ -102,7 +102,8 @@ four commands:
 
 - **`puppetspeak(ident)`** — plays the line's voice audio and shows its
   subtitle, starts the facial animation, and **suspends the script** until the
-  line ends — racing the audio against a click, so clicking skips the line.
+  line ends — racing the audio against **ESC**, which is the only thing that
+  skips it ([below](#skipping-and-repeating)).
   The animation plays the line's per-tick records at ~33 ms each (the timing
   table [in the PUP](../formats/pup-cst.md)); a line with no audio is paced by
   text length (a second per ~15 **bytes as stored**, minimum 1 s), matching
@@ -126,7 +127,8 @@ four commands:
 - **`puppetbevel(text, …)`** — adds a **choice bevel** (a labelled plaque);
   **`puppetevent()`** then blocks until you click one and returns its index
   (or −1 immediately if there are none). That pair is the entire dialogue-
-  choice mechanism.
+  choice mechanism. A click that lands on the picture instead of a row is the
+  **repeat** ([below](#skipping-and-repeating)).
 - **`puppetparam(n, …)`** — engine-side toggles; slot 7 is "subtitles on",
   wired to the game's settings screen.
 
@@ -161,5 +163,50 @@ While a puppet is up, it eats clicks before everything else (see [the click
 priority chain](host.md#the-click-priority-chain)) — except when an overlay
 stage (the inventory, blackjack) [hides it](stage-ui.md#the-overlay-stack-transtoflat-transfromflat)
 to run its own input loop, and restores it afterwards.
+
+### Skipping and repeating
+
+The two waits a conversation sits in — `puppetspeak`'s and `puppetevent`'s — pop
+the event queue themselves in the original, so while one of them is running the
+scripts see no input at all. What each wait does with what it pops is the whole of
+this section, and the port had both halves wrong until #3.
+
+**Only ESC skips a line.** The wait's interrupt filter (`0x441d80`) drops any event
+that is not a KEY on its first instruction, and then requires the `0x1fa0` marker
+— the key is ESC, or was held with Ctrl. So a click on a talking character does
+nothing whatever, and the port's old click-to-skip was an invention.
+
+**And ESC skips the whole speech, not one line of it.** Skipping raises a flag
+(`0x48ac00`); every following `puppetspeak` queues its line and returns without
+playing it (`0x43f887`) until `puppetevent` lowers the flag again (`0x43f718`). One
+press per speech is the original's rate, which is also why a route that ESCs once
+gets straight to the plaques.
+
+**A click on the picture, while the choices are up, repeats the last exchange.**
+The plaque wait tests the point against the rect (0,0)–(W, H−120) — the screen
+above the answer band — before it looks at the rows at all (`0x44193f`). On a hit
+it takes the current choices down, puts the *previous* plaque back with the row you
+picked framed (`0x44199c`, `0x4419b5`), says your own line again if that row's text
+names a dialogue record (`0x441cb0` matches bevel text against the line table),
+replays the queued replies (`0x441a35`, at most three — `0x43f86d` caps the queue),
+and then restores the choices you were being offered.
+
+Two consequences of *where* that code lives:
+
+- **Stage directions do not come back.** Nothing in the replay path re-enters the
+  script, so the `message("ACT--…")` notes a scenario prints around a line are not
+  reprinted. Only what was heard is repeated.
+- **It is an exchange, not a line.** The queue holds everything said since the last
+  plaque, so "repeat" means the answer you just got, in full.
+
+Two deliberate gaps, both their own issues: ESC also answers the plaque wait in the
+original, returning −1 to the script and walking the player out of the conversation
+(`0x4418a7`) — that moves where scenarios go, not just how fast, so it is not folded
+in here; and the filter binds **0–9** for volume and **T** for subtitles during a
+line (#129), neither of which is wired up.
+
+One deviation on purpose: the original's waits swallow *every* key, so an unmarked
+one never reaches the scripts. The port passes those through, because nothing needs
+them eaten and a conversation is not the place to find out otherwise.
 
 Next: what all of this sounds like — **[Audio at runtime](audio.md)**.

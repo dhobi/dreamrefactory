@@ -259,9 +259,19 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
       return true;
     },
     skipLine: async () => {
-      // a click that misses every plaque skips the line being spoken
-      // (PuppetCtrl.puppetChoose: no bevel under the point -> speakSkip)
-      void session.track(v().click(4, 4));
+      // Nothing to skip while a movie owns the screen, and ESC there is not a
+      // skip but an ABORT (MoviePlayer.key). The old click was harmlessly eaten
+      // by the movie; the key is not, and a conversation that plays one in the
+      // middle of its lines (Penny's lenin.mov) would lose it. Let it run.
+      if (host.viewer?.movieFile) {
+        await ticks(3, "the movie to run on");
+        return;
+      }
+      // ESC, and only ESC — the same call main.ts makes, routed through the
+      // viewer so the route exercises the routing (PuppetCtrl.key). A click on
+      // the picture is the REPEAT now (#3), so the old `click(4, 4)` would ask
+      // the character to say it all again instead of getting past it.
+      void session.track(v().keyDown(".", true));
       await ticks(3, "the skip to register");
     },
     clickHotspot: async (id) => {

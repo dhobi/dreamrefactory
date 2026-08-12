@@ -3,7 +3,7 @@
   "h1": "Démarrage",
   "intro": "Chargement des fichiers du jeu…",
   "introSub": "Recherche dans le répertoire <code>gamefiles/</code>",
-  "keys": "<b>←</b> <b>→</b> pivoter &nbsp;·&nbsp; <b>↑</b> avancer &nbsp;·&nbsp; <b>M</b> carte &nbsp;·&nbsp; <b>O</b> zones actives &nbsp;·&nbsp; <b>X</b> détails &nbsp;·&nbsp; <b>F1</b> <b>F2</b> luminosité",
+  "keys": "<b>←</b> <b>→</b> pivoter &nbsp;·&nbsp; <b>↑</b> avancer &nbsp;·&nbsp; <b>Échap</b> passer la ligne &nbsp;·&nbsp; <b>M</b> carte &nbsp;·&nbsp; <b>O</b> zones actives &nbsp;·&nbsp; <b>X</b> détails &nbsp;·&nbsp; <b>F1</b> <b>F2</b> luminosité",
   "fullscreen": "⛶ Plein écran",
   "fullscreenTitle": "Plein écran (4:3 avec bandes)",
   "reportBug": "🪲 Signaler un bug",
