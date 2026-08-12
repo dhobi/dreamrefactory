@@ -1,7 +1,27 @@
 import { Value, toNum, toStr, truthy } from "../interp";
-import { degVariantFrames, frameIndexForDegree, isDegreeSelector, playSequence } from "../props";
+import {
+  degVariantFrames, frameIndexForDegree, isDegreeSelector, playSequence, type PropInstance,
+} from "../props";
 import { packPoint } from "../point";
 import { accessorFamily, BuiltinCtx } from "./context";
+
+/**
+ * A prop moving into world space, and dropping the screen-space frame pin on the
+ * way, because becoming a world prop changes what a frame MEANS: it stops being a
+ * selector index and becomes a choice made at draw time, from the prop's facing
+ * against the camera bearing. A pin from an earlier `propdeg` is stale.
+ *
+ * Reachable only since the boot library's default `initprop` became reachable: it
+ * does `propdeg (target, 0)` on every prop at set open, and SMOKE's card table
+ * takes its star AFTER that — so the table arrived already pinned to one of its 32
+ * views and stopped turning with the camera.
+ */
+function becomeWorldProp(p: PropInstance): void {
+  p.worldSpace = true;
+  p.frameLocked = false;
+  p.degVariants = false;
+  p.frameOrder = null;
+}
 
 /**
  * Prop (SHP "shop") commands: existence/visibility/state/placement getters and
@@ -125,7 +145,7 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
         default: return 0;
       }
     }
-    p.worldSpace = true;
+    becomeWorldProp(p); // see propstar
     p.worldX = toNum(x);
     p.worldY = toNum(y);
     p.worldZ = toNum(z ?? 0);
@@ -190,11 +210,25 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   acc("propdist", 0, (p) => p.dist, (p, v) => {
     p.dist = Number(v) || 0;
   });
-  // shop-scoped enumeration (me = the shop file inside its main script)
-  const myShop = (frame: { ctx: { me: string } }) =>
-    session.propRuntime.shops.get(frame.ctx.me.toLowerCase());
-  r("countprops", (_i, _a, _c, frame) => myShop(frame)?.shp.groups.length ?? 0);
-  r("indextoprop", (_i, [idx], _c, frame) => myShop(frame)?.shp.groups[Number(idx) - 1]?.name ?? "");
+  // ONE prop table, whoever asks: `countprops` is `mov ecx, [0x489f18]`
+  // (0x418660) and `indextoprop` bounds-checks that same dword before walking the
+  // table at [0x489f14] in 158-byte records (0x418710). No calling shop enters
+  // into it, and `countactors`/`indextoactor` are the byte-for-byte twins one
+  // table over ([0x489f08], 0x410610) — which is why the actor half always worked
+  // here and this one did not.
+  //
+  // Scoped to the CALLER's shop, every caller that is not itself a shop got 0:
+  // inven.shp's `initprops` asking for its own 28 worked, and the BOOTFILE asking
+  // walked nothing. That is both of `advanceday`'s reset loops — so a new game
+  // after a bad ending inherited every ownership the finished one had, from the
+  // items still in the bag to the painting still being Zeitel's (#89) — plus the
+  // CTL console's `allprops`/`countallprops`.
+  //
+  // The insertion order of `props` is the order the shops opened, which is the
+  // order TI.EXE appends them to its table.
+  r("countprops", () => session.propRuntime.props.size);
+  r("indextoprop", (_i, [idx]) =>
+    [...session.propRuntime.props.values()][toNum(idx ?? 0) - 1]?.group.name ?? "");
   r("error", (_i, args) => log(`script error(): ${args.map(String).join(", ")}`));
   acc("propvalue", 0, (p) => p.value, (p, v) => {
     p.value = v;
@@ -228,7 +262,7 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   acc("propstar", "", (p) => p.starName, (p, starName) => {
     const star = findStar(starName);
     if (star) {
-      p.worldSpace = true;
+      becomeWorldProp(p);
       p.worldX = star.positionX;
       p.worldY = star.positionZ;
       p.worldZ = star.positionY;

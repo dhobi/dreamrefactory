@@ -127,6 +127,27 @@ demo pick an entry point:
 | `"startdisk2"` | `mission = 4` | Disc 2 boots straight into the endgame |
 | `"endgame"` (not "good") | `mission = 1` | Loop back after a failed ending |
 
+Two of those arms do not just set a mission — they **put the world back** first, and
+the data does it rather than the engine, which is why the same eight lines appear
+twice:
+
+```
+size = countactors ()                size = countprops ()
+for count = 1 to size                for count = 1 to size
+    name = indextoactor (count)          name = indextoprop (count)
+    sendtoactor (name, resetactor ())    propowner (name, "none")
+endfor                               endfor
+resetgamevars ()                     resetpupvars ()
+```
+
+`resetgamevars` zeroes the seventeen story variables (`neckphase`, `bombphase`,
+`fencewins`, …) and `resetpupvars` the twenty-two per-character conversation phases;
+the two loops disown every actor and every prop. So a failed ending is not a fresh
+process — the loop back through `playmore.mov` and `bktoship.mov` is a **scripted**
+teardown, and anything it fails to reach follows you into the next game. When the
+prop loop walked nothing, the next game began with the previous one's inventory in
+the bag, the painting still Zeitel's and mission 2 unfinishable (#89).
+
 ## The scene-travel map
 
 The spine above is the *plot*. The **geography** — which room leads to which — is

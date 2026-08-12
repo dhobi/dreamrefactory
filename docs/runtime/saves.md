@@ -94,6 +94,22 @@ the saves whose owner is `frank`, at `addbaby()`'s own (256,192) anchor, and the
 is in the draw list. The view is left to the room for the same reason — `setupsigns()`
 and `setuparrow()` compute the chrome from where you stand.
 
+The HELP button is the clearest of the chrome memos, because two different things
+decide it. Its owner remembers whether HELP belongs on screen at all, and your hand
+decides whether it may be drawn right now:
+
+```
+if propowner ("invenhelp") = "vis" & handitem = ""
+	propvisible ("invenhelp", true)
+```
+
+Both draw at the left end of the band, so they cannot share it — which is why
+`addinven`, the one way anything reaches your hand, opens by taking HELP down
+(`sendtoprop ("invenhelp", initprop ())`) before putting the item where it was. It
+clears the *picture* and leaves the owner alone, so an empty hand brings HELP back
+later. Reaching only for the picture is the whole trick: clear the memo instead and
+HELP is retired for the rest of the game (#123).
+
 ## Loading: restore globals, then travel
 
 `loadGame` deliberately does *not* try to reconstruct subsystems from the
