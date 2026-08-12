@@ -114,6 +114,50 @@ level above this and is handled by the boot library's `changeset` /
 `gotospecial`; see [BOOTFILE](bootfile.md) and
 [the scripting doc](../03-scripting-language.md).
 
+## Stars, and the routes between them
+
+The actor register's records are a fixed **54 bytes**, and one record can hold
+**two** stars: the primary `{rotation8, X, Z, Y, id}` at `+4` and an optional
+nested secondary at `+30`. The tail that looks like leftover heap is not — HALLA's
+`sasha.1` record carries `sasha.2` there, and `ex1` carries `ex2`.
+
+A paired record may also carry the **walking route** between its two stars, as an
+i16 container ref at `+28` (the gap between the primary's identifier field and the
+secondary's `rotation8`; TI.EXE reads a dword there, which agrees only because
+every secondary `rotation8` in the corpus is 0). That container is a polyline:
+
+| Offset | Type | Field |
+|-------:|------|-------|
+| +0 | i32 | total route length, in world units |
+| +8 | i32 | point **count** |
+| +12 | 4×i16 | bounding box, `Zmin, Xmin, Zmax, Xmax` |
+| +20 | — | `count` × 8-byte points: `{i16 X, i16 Z, i16 Y, i16 distance-from-previous}` |
+
+The first point is the primary star and the last is the secondary, so everything
+between them is the authored detour. `walkonpath` is what walks it, in either
+direction — and where no route is authored, the straight line *is* the route. The
+whole corpus holds **six**, and only three bend:
+
+| Set | Route | Points | Route vs. straight line |
+|-----|-------|-------:|------------------------|
+| `deckbd` | `ga.1` → `ga.2` | 10 | 2508 vs 2257 units, up to 396 off the diagonal |
+| `scot3` | `hack1` → `hack2` | 9 | 8661 vs 6804, up to 2013 off |
+| `halla` | `sasha.1` → `sasha.2` | 5 | 2432 vs 1973, up to 581 off |
+| `b70`, `decka`, `halla` | `ga`, `max`, `ex1`→`ex2` | 2 | straight |
+
+Those three are the difference between walking the deck and walking through it —
+the per-point distances and the total are what let the walk service run the whole
+polyline on one progress scalar
+([characters at runtime](../runtime/characters.md)).
+
+Those distances are not a re-measure of the geometry, and cannot be: each is
+`TI.EXE`'s **truncating integer sqrt** (`0x435950`), which is a different function
+from rounding the real length down. HALLA's third leg spans 101 × 259, whose true
+length is 278.0004, and the file stores **277** — because 278² = 77284 overshoots
+77282. Every leg of all six routes matches that, and every header total is the
+exact sum of its own legs, so the writer uses the same arithmetic and a route
+round-trips byte for byte.
+
 ## The camera, and placing things in 3D
 
 Even though you only ever see pre-rendered stills, each view stores a real

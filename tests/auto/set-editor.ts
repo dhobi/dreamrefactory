@@ -17,7 +17,7 @@ import { FrameBuffer, decodeFrame, encodeFrame, encodeZLayer } from "../../src/d
 import { IN_MOTION, STANDPOINT, buildSetFile } from "../../src/df/set-build";
 import { compileScript } from "../../src/df/script-asm";
 import { sniffScript } from "../../src/df/script";
-import { LEFTTURNS, RIGHTTURNS, SetFile, readSetFile, roadsAt, turnRing } from "../../src/df/set";
+import { LEFTTURNS, RIGHTTURNS, SetFile, readSetFile, readStarPath, roadsAt, turnRing } from "../../src/df/set";
 import {
   OBJECT_ID_FIELD,
   SET_NAME_FIELD,
@@ -206,6 +206,9 @@ function buildTestSet(): TestSet {
         rotation8: 64,
         position: [7212, 10494, 251],
         secondary: { name: "sasha.2", rotation8: 96, position: [7300, 10600, 251] },
+        // a route with one bend, so the pair is walked round a corner rather than
+        // straight through it (#122)
+        path: [[7212, 10494, 251], [7212, 10600, 251], [7300, 10600, 251]],
       },
     ],
   });
@@ -343,6 +346,21 @@ test("set structure: the synthesized file reads back as a set", () => {
   expect(set.actors[1]).toMatchObject({ positionX: 7300, positionZ: 10600, rotation8: 96 });
   // each identifier's field runs up to whatever follows it in the record
   expect([set.actors[0].idLimit, set.actors[1].idLimit]).toEqual([17, 15]);
+
+  // ...and the route between the pair, which is a property of the RECORD rather
+  // than of either star (#122). The leg lengths are written with TI.EXE's
+  // truncating integer sqrt, so they are the file's own numbers and not a
+  // re-measure: 106 and 88 here, and the header total is their sum.
+  expect(set.starPaths).toEqual([{ a: "sasha.1", b: "sasha.2", container: set.starPaths[0].container }]);
+  const route = readStarPath(set.file.containers, set.starPaths[0].container);
+  expect(route).toEqual([
+    { x: 7212, y: 251, z: 10494, fromPrev: 0 },
+    { x: 7212, y: 251, z: 10600, fromPrev: 106 },
+    { x: 7300, y: 251, z: 10600, fromPrev: 88 },
+  ]);
+  // the ends are the two stars, so only the middle is the detour
+  expect([route[0].x, route[0].z]).toEqual([set.actors[0].positionX, set.actors[0].positionZ]);
+  expect([route[2].x, route[2].z]).toEqual([set.actors[1].positionX, set.actors[1].positionZ]);
 
   // every frame decodes to the image it was built from, on its own
   for (const [loc, px] of built.images) {

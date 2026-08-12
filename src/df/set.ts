@@ -144,6 +144,8 @@ export interface SetFile {
   scenes: Scene[];
   transitions: Transition[];
   actors: Actor[];
+  /** authored actor routes between paired stars — see {@link StarPath} */
+  starPaths: StarPath[];
 }
 
 export const RIGHTTURNS = 0;
@@ -379,6 +381,85 @@ function validStarId(s: string): boolean {
   return s.length >= 1 && s.length <= 20 && /^[A-Za-z0-9._-]+$/.test(s);
 }
 
+/**
+ * One authored walking route between a star record's two stars, and the
+ * container that holds it.
+ *
+ * A star record that carries a secondary may also carry a **path** between the
+ * pair, as an i16 container ref at record +28 — the gap between the primary's
+ * identifier field and the secondary's `rotation8`. TI.EXE reads it as a dword
+ * (`0x40a123`), which is only equivalent because every secondary `rotation8` in
+ * the corpus is 0; the two low bytes are the ref and this reads exactly those.
+ * A record with no path leaves it 0, and both of the original's lookups skip a
+ * zero — so an unpaired star can never match one.
+ */
+export interface StarPath {
+  /** the primary star's identifier (record +12) */
+  a: string;
+  /** the secondary's (record +38) */
+  b: string;
+  /** container holding the polyline — see {@link readStarPath} */
+  container: number;
+}
+
+/** one point of a {@link StarPath}: a world position and how far it is from the
+ *  point before it (0 for the first) */
+export interface StarPathPoint {
+  x: number;
+  y: number;
+  z: number;
+  /** distance from the previous point, as authored — TI.EXE walks the polyline
+   *  on ONE progress scalar and needs the per-leg lengths to place a position */
+  fromPrev: number;
+}
+
+/**
+ * The polyline a {@link StarPath} names: `{i32 total length, i32, i32 count}`, a
+ * `(Zmin, Xmin, Zmax, Xmax)` bounding box, then `count` × `{i16 X, Z, Y, i16
+ * distance-from-previous}` from offset 20.
+ *
+ * The first point is the `a` star and the last is `b`, so a two-point path is a
+ * straight line and everything between is the authored detour. HALLA's
+ * `sasha.1` → `sasha.2` is five points: out of the cabin door, two turns along
+ * the hall, then down it — which is why walking the straight line instead cut
+ * the corner of the wall (#122).
+ */
+export function readStarPath(containers: Container[], location: number): StarPathPoint[] {
+  const c = containers[location];
+  if (!c) return [];
+  const r = new BinaryReader(c.data);
+  r.seek(8);
+  const count = r.i32();
+  const points: StarPathPoint[] = [];
+  for (let i = 0; i < count; i++) {
+    r.seek(20 + i * 8);
+    const x = r.i16();
+    const z = r.i16();
+    const y = r.i16();
+    points.push({ x, y, z, fromPrev: r.i16() });
+  }
+  return points;
+}
+
+function readStarPaths(c: Container): StarPath[] {
+  const r = new BinaryReader(c.data);
+  const count = r.i32();
+  r.skip(4);
+  const paths: StarPath[] = [];
+  for (let i = 0; i < count; i++) {
+    const base = 8 + i * 54;
+    r.seek(base + 28);
+    const container = r.i16();
+    if (!container) continue;
+    const a = readActorAt(c.data, base + 4, 30 - 4 - ACTOR.identifier - 1);
+    const b = readActorAt(c.data, base + 30, 54 - 30 - ACTOR.identifier - 1);
+    if (validStarId(a.identifier) && validStarId(b.identifier)) {
+      paths.push({ a: a.identifier, b: b.identifier, container });
+    }
+  }
+  return paths;
+}
+
 function readActors(c: Container): Actor[] {
   // Each record is a fixed 54-byte slot. Its first 12 bytes hold the primary
   // actor (unknownInt, rotation8, X, Z, Y) followed by a length-prefixed
@@ -544,6 +625,7 @@ export function readSetFile(data: Uint8Array): SetFile {
     scenes,
     transitions: readTransitions(containers, transitionRegister),
     actors: readActors(containers[actorRegister]),
+    starPaths: readStarPaths(containers[actorRegister]),
   };
 }
 

@@ -6,7 +6,7 @@
  */
 import { test, expect } from "vitest";
 import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
-import { readSetFile, RIGHTTURNS, LEFTTURNS } from "../../src/df/set";
+import { readSetFile, readStarPath, RIGHTTURNS, LEFTTURNS } from "../../src/df/set";
 import { RAMP_STEP_MS } from "../../src/engine/clock";
 import { readShpFile } from "../../src/df/shp";
 import { frameIndexForDegree, isDegreeSelector } from "../../src/engine/props";
@@ -7861,5 +7861,110 @@ test("an item handed to you takes the HELP button down (#123)", async () => {
   await session.sendEvent("sendtoshop", "house.shp", "showinterface", [], "test");
   await session.settle();
   check("an empty hand brings HELP back", !!help.visible, `invenhelp visible=${help.visible}`);
+}
+);
+
+// --- 101. walkonpath walks the route the SET authored (#122) ------------------
+// A star record that pairs two stars can also carry a WALKING ROUTE between them:
+// an i16 container ref at record +28, holding `{i32 total, i32, i32 count}`, a
+// (Zmin,Xmin,Zmax,Xmax) box, then count × `{i16 X, Z, Y, distance-from-previous}`.
+// Nothing read it, so `walkonpath` drew the straight line between the endpoints
+// and actors cut through the scenery: Georgia crossed the second-class stairs on
+// the boat deck, and Sasha clipped the corner of a wall outside A14 instead of
+// stepping into the hall first (#122).
+//
+// The corpus authors six of these and three bend. Both reported cases are here,
+// and the third (scot3 hack1->hack2, nine points) comes with them. A two-point
+// path is a straight line and must stay one — halla's own ex1->ex2, the crowd
+// walkers' route, is one of those.
+test("walkonpath follows the SET's authored route, corners and all (#122)", async () => {
+  const { session } = await newHost();
+
+  // 1. the routes, as authored. Read from the data rather than asserted from a
+  // list: what matters is that a bend is a bend and a straight line is not.
+  const ROUTES: [string, string, string, number][] = [
+    ["deckbd.set", "ga.1", "ga.2", 10],
+    ["halla.set", "sasha.1", "sasha.2", 5],
+    ["scot3.set", "hack1", "hack2", 9],
+    ["halla.set", "ex1", "ex2", 2],
+  ];
+  for (const [file, a, b, points] of ROUTES) {
+    const set = readSetFile(provider(file)!);
+    const rec = set.starPaths.find((p) => p.a.toLowerCase() === a && p.b.toLowerCase() === b);
+    const pts = rec ? readStarPath(set.file.containers, rec.container) : [];
+    check(`${file}: ${a} -> ${b} is a ${points}-point route`, pts.length === points,
+      `${pts.length} points: ${pts.map((p) => `(${p.x},${p.z})`).join(" ")}`);
+    if (pts.length < 2) continue;
+    // the ends ARE the two stars, which is what makes the middle a detour
+    const starA = set.actors.find((s) => s.identifier.toLowerCase() === a)!;
+    const starB = set.actors.find((s) => s.identifier.toLowerCase() === b)!;
+    check(`${file}: and it runs from ${a} to ${b}`,
+      pts[0].x === starA.positionX && pts[0].z === starA.positionZ &&
+        pts[pts.length - 1].x === starB.positionX && pts[pts.length - 1].z === starB.positionZ,
+      `(${pts[0].x},${pts[0].z})->(${pts[pts.length - 1].x},${pts[pts.length - 1].z}) vs ` +
+        `(${starA.positionX},${starA.positionZ})->(${starB.positionX},${starB.positionZ})`);
+    // each stored distance is the leg it describes (this is what the one-scalar
+    // progress arithmetic in the walk service relies on)
+    const legs = pts.slice(1).every((p, i) =>
+      Math.abs(Math.hypot(p.x - pts[i].x, p.z - pts[i].z) - p.fromPrev) <= 2);
+    check(`${file}: every stored leg length matches its own geometry`, legs,
+      pts.map((p) => p.fromPrev).join(","));
+  }
+
+  // 2. Sasha's walk, in the engine. Her route leaves the cabin heading -X with Z
+  // held, then turns down the hall; the straight line to sasha.2 does neither.
+  await session.openSetFile("halla.set");
+  await session.openCastFile("gang.cst");
+  await session.settle();
+  const sasha = session.actorRuntime.get("sasha")!;
+  const set = session.currentBinding!.set;
+  const star = (n: string) => set.actors.find((s) => s.identifier.toLowerCase() === n)!;
+  const s1 = star("sasha.1");
+  const s2 = star("sasha.2");
+
+  // the script's own call (HALLA.SET 0436)
+  void (session.interp.builtins.get("walkonpath") as unknown as (
+    i: unknown, a: unknown[], c: unknown, f: unknown,
+  ) => unknown)(
+    session.interp, ["sasha", "sasha.1", "sasha.2"],
+    { me: "halla.set", target: "sasha" }, { ctx: { me: "halla.set", target: "sasha" } },
+  );
+  await drain();
+  check("the walk is running, and knows where it is headed",
+    session.scheduler.isWalk("sasha"), `walks=${[...session.scheduler.walks.keys()]}`);
+
+  // worldY is the ground plane's second axis (a star's positionZ); worldZ is
+  // height — the same pairing walktostar builds its record with.
+  const seen: { x: number; z: number }[] = [];
+  for (let i = 0; i < 4000 && session.scheduler.isWalk("sasha"); i++) {
+    session.scheduler.tickTime((clock += 50));
+    await drain();
+    seen.push({ x: sasha.worldX, z: sasha.worldY });
+  }
+  check("she arrives at sasha.2", sasha.worldX === s2.positionX && sasha.worldY === s2.positionZ,
+    `at (${sasha.worldX},${sasha.worldY}) want (${s2.positionX},${s2.positionZ})`);
+
+  // The straight line from sasha.1 to sasha.2 is the wall she used to clip. Every
+  // sample must be measurably off it — the route's own midpoints are 300+ units
+  // away, and a diagonal walk would hug it to within rounding.
+  const off = (p: { x: number; z: number }): number => {
+    const vx = s2.positionX - s1.positionX;
+    const vz = s2.positionZ - s1.positionZ;
+    const len = Math.hypot(vx, vz);
+    return Math.abs((p.x - s1.positionX) * vz - (p.z - s1.positionZ) * vx) / len;
+  };
+  const worst = Math.max(...seen.map(off));
+  check("her route leaves the straight line, by a wall's worth",
+    worst > 150, `furthest from the diagonal: ${Math.round(worst)} units over ${seen.length} samples`);
+
+  // And the first leg is the authored one: straight out of the door, the ground
+  // axis held, X falling. Sampled from where she actually sets off, because a walk
+  // TURNS before it moves and those first passes are her standing still.
+  const moving = seen.findIndex((p) => p.x !== s1.positionX || p.z !== s1.positionZ);
+  const early = seen.slice(moving, moving + 6);
+  check("the first leg holds the ground axis and moves in X, as authored",
+    moving >= 0 && early.length > 0 &&
+      early.every((p) => p.z === s1.positionZ) && early[early.length - 1].x < s1.positionX,
+    `sets off at sample ${moving}: ${early.map((p) => `(${p.x},${p.z})`).join(" ")}`);
 }
 );

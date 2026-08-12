@@ -69,6 +69,23 @@ script in the game ever emits that name.)
 Walking — who moves, how fast, and the `endwalk` chain that drives patrols —
 is the scheduler's job: see **[Timing](timing.md#walks)**.
 
+There are two ways to send one somewhere, and the difference is the scenery.
+`walktostar` walks the straight line, which is fine in an open room. `walkonpath`
+walks a **route the SET author drew** — a polyline hanging off the star record
+that pairs the two stars ([SET](../formats/set.md#stars-and-the-routes-between-them)),
+walked in either direction, and with `"resume"` as the start it is found by the
+destination alone. Six exist and three bend, but those three are the ones with
+something in the way: Georgia leaving you on the boat deck curves around the
+second-class stairs in ten points, Sasha steps out of A14 and turns down the hall
+in five, and the hacker's runs nine. Walking their straight lines instead took
+each of them through the scenery (#122).
+
+It is one walk, not a leg-by-leg chain: the route's container stores every point's
+distance from the one before *and* the total, so the service runs the whole
+polyline on the single progress scalar a straight walk uses — no leg re-fires
+`endturn`, and only the arrival fires `endwalk`. The facing is re-aimed per leg,
+because a route that turns corners has to.
+
 ### Characters who speak first
 
 Most conversations start with a click, but not all, and the exceptions are in

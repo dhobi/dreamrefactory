@@ -1,6 +1,7 @@
 import { Value, toNum, toStr, truthy } from "../interp";
 import { accessorFamily, BuiltinCtx } from "./context";
 import { packPoint } from "../point";
+import { readStarPath } from "../../df/set";
 
 /**
  * What `actorstar` reports while a named walk is running — TI.EXE's straight-line
@@ -303,18 +304,59 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     a.starName = "walktoxyz"; // sentinel while moving; "custom" lands on arrival
     session.scheduler.startWalk(toStr(n), toNum(x ?? 0), toNum(y ?? 0), toNum(z ?? 0), "custom");
   });
-  // walkonpath(actor, fromStar|"resume", toStar): walk from one star to another.
-  // `from`="resume" keeps the current position; otherwise the actor teleports to
-  // `from` first. Every call in the corpus passes star names for both.
+  /**
+   * walkonpath(actor, fromStar|"resume", toStar): walk the AUTHORED ROUTE
+   * between two stars, not the straight line between them.
+   *
+   * The route is in the SET, on the star record that pairs the two names — an
+   * i16 container ref holding the polyline (src/df/set.ts `StarPath`). Both of
+   * TI.EXE's lookups walk that table and both skip a record whose ref is 0, so
+   * an unpaired star never resolves:
+   *
+   *  - a named `from` matches the pair (`0x409fd0`), either way round — the
+   *    record is reversed when `from` is the secondary;
+   *  - `"resume"` matches on the DESTINATION alone (`0x40a0f0`), secondary first
+   *    (walk forward) then primary (walk reversed). This is the form the two
+   *    reported cases use — `walkonpath (me, "resume", "ga.2")` in gang.cst,
+   *    where Georgia has just finished talking and is already at the far end.
+   *
+   * With no route authored between the two, the straight line IS the answer: the
+   * corpus has six paths and three of them are two points.
+   */
   r("walkonpath", (_i, [n, from, to]) => {
     const a = actor(n);
     if (!a) return 0;
+    const toName = toStr(to ?? "").toLowerCase();
+    const fromName = toStr(from ?? "").toLowerCase();
     const dest = findStar(to);
     if (!dest) {
       log(`walkonpath: star "${toStr(to ?? "")}" not found`);
       return 0;
     }
-    if (toStr(from ?? "").toLowerCase() !== "resume") {
+    const set = session.currentBinding?.set;
+    const named = fromName !== "resume";
+    const rec = set?.starPaths.find((p) => {
+      const pa = p.a.toLowerCase();
+      const pb = p.b.toLowerCase();
+      return named
+        ? (pa === fromName && pb === toName) || (pb === fromName && pa === toName)
+        : pa === toName || pb === toName;
+    });
+    a.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
+    if (rec && set) {
+      // a star's (X, Z, Y) into the world triple a walk record uses: worldY is the
+      // ground plane's second axis and worldZ the height, as walktostar builds it
+      const points = readStarPath(set.file.containers, rec.container)
+        .map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev }));
+      // the polyline is stored a->b; walk it backwards when the destination is
+      // the `a` end (TI.EXE's second match arm in both lookups)
+      if (rec.a.toLowerCase() === toName) points.reverse();
+      if (points.length >= 2) {
+        session.scheduler.startWalkPath(toStr(n), points, toName);
+        return 0;
+      }
+    }
+    if (named) {
       const start = findStar(from);
       if (start) {
         a.worldX = start.positionX;
@@ -322,9 +364,8 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
         a.worldZ = start.positionY;
       }
     }
-    a.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
     session.scheduler.startWalk(
-      toStr(n), dest.positionX, dest.positionZ, dest.positionY, toStr(to).toLowerCase(),
+      toStr(n), dest.positionX, dest.positionZ, dest.positionY, toName,
     );
   });
   r("iswalk", (_i, [n]) => (n !== undefined && session.scheduler.isWalk(toStr(n)) ? 1 : 0));
