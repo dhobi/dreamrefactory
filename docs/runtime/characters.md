@@ -249,6 +249,47 @@ than hammered: it skips a line only while one is being spoken, and does somethin
 quite different the rest of the time. `SetViewer.speaking` is that aim, and both
 playthrough drivers now check it before pressing.
 
+### Idling while you read the choices
+
+The plaque wait is not idle. It carries **four timers inline** (`0x441780`), each one
+an `idle 1`..`idle 4` line on its own interval, and a slot that comes due plays its
+line through the same blocking play-and-wait a `puppetspeak` uses. So a character
+blinks, shifts, and eventually says something while you decide.
+
+**The intervals are per character**, read from the PUP's own header — four
+`[min, max]` tick pairs at `0x83A`/`0x84A`, immediately before `bandLocation`
+(`PupFile.idleTimers`) — and each firing re-draws its own with
+`min + rand(1 .. max-min)`. That is the argument for reading them rather than
+picking a constant: across the 55 PUPs in the tree slot 1, the blink, ranges from
+**65 to 200 ticks**, so Burns blinks half again as often as Asea, and Jones's second
+slot is set to blink speed so he fidgets.
+
+Slot 4 is the one with words in it and the rarest at 17–33 s — `bx2`'s is
+"Excuse me.". Its text still does not print: the subtitle gate rejects any record
+whose ident is `idle 1`..`idle 4` (`0x44084c`), so the nudge is heard and not read.
+
+**`puppetparam 8` is the switch, and it is the game's.** Of the 316 puppets in the
+tree exactly **four** turn it on, and each brackets one exchange with it — `zeit1`'s
+notebook, `bx2`'s `getbaby()`, `elev1` and `shahack2`. So a character fidgets where a
+designer asked for it and nowhere else, which is why the port defaults the slot off:
+that is what `TI.EXE` defaults it to.
+
+Two notes on how this port runs them:
+
+- **The draws come from the ambient stream, not the script one.** `TI.EXE` uses its
+  single `rand()`, so this is a deliberate deviation — and it is the crickets'
+  argument exactly (`GameSession.ambientRng`): these timers re-arm on the CLOCK, so
+  how many times they draw depends on how long a host dwells at a plaque, and moving
+  them re-values every script draw after them. That cost the Gorse/Jones coin its
+  determinism once already. Which arbitrary number an idle timer gets is unobservable
+  to any script; when the story's coin lands is not.
+- **A bevel click still answers while an idle line plays.** The original ignores the
+  mouse inside that wait, so the click would be dropped; for a 300 ms blink that is a
+  click a player would swear they made, and nothing is bought by losing it. ESC
+  during one *does* behave as the original does — it cuts the line and leaves the
+  conversation, because each timer tests the interrupt flag after its line and bails
+  to the −1 exit (`0x4417ab` and its three siblings).
+
 **`T` is bound to nothing, on purpose.** It is the other arm both tables share, and
 it does not act — it sets the filter's out-param and answers "not an interrupt"
 (`0x441e54`). Of the three call sites only the movie loop reads that flag

@@ -2667,6 +2667,69 @@ test("ESC at a dialogue plaque answers -1", async () => {
 }
 );
 
+// --- 18b5. characters fidget while you read the choices -------------------
+// TI.EXE's plaque wait carries four idle timers inline (0x441780), each one an
+// `idle N` line on its own interval out of the PUP header (0x83a/0x84a), seeded
+// with min + rand(1..max-min) and re-drawn every time it fires. `puppetparam 8`
+// is the switch and it is the GAME's: of the 316 puppets in the tree exactly four
+// turn it on, each bracketing one exchange (#132).
+test("idle timers fidget a character at a plaque, and only when asked", async () => {
+  const { session, sink, viewer } = await newSession();
+  await session.openSetFile("c73.set");
+  const v = viewer();
+  await session.puppetCtrl.openPuppetFile("smeth1.pup");
+  const timers = session.puppet!.pup.idleTimers;
+  check(
+    "the four intervals come out of the PUP, in ticks",
+    timers.length === 4 && timers.every((t) => t.minTicks > 0 && t.maxTicks >= t.minTicks) &&
+      timers[0].minTicks < timers[3].minTicks,
+    JSON.stringify(timers),
+  );
+  const voices = () => sink.calls.filter((c) => c.channel === "voice").length;
+  const pump = async (until: () => boolean, max = 4000): Promise<boolean> => {
+    for (let i = 0; i < max && !until(); i++) {
+      v.tick((clock += 50));
+      await drain();
+    }
+    return until();
+  };
+  // slot 8 clear is the default, and nothing must fidget
+  session.puppetCtrl.puppetBevel("one", 101);
+  const quiet = session.puppetCtrl.puppetEvent();
+  const before = voices();
+  await pump(() => false, 200); // ten game seconds — well past slot 1's ~2 s
+  check(
+    "with puppetparam 8 clear no slot is armed and nothing is said",
+    session.puppet?.idle.length === 0 && voices() === before,
+    `armed=${session.puppet?.idle.length} voices=${before}->${voices()}`,
+  );
+  session.puppetCtrl.puppetChoose(0);
+  await quiet;
+
+  // ...and with it set, the blink comes round on its own
+  session.puppetParams.set(8, 1);
+  session.puppetCtrl.puppetClear();
+  session.puppetCtrl.puppetBevel("one", 101);
+  const busy = session.puppetCtrl.puppetEvent();
+  check("all four slots arm", session.puppet?.idle.length === 4, `armed=${session.puppet?.idle.length}`);
+  const played = voices();
+  const fidgeted = await pump(() => voices() > played, 400);
+  check("a slot comes due and plays its line", fidgeted, `voices=${played}->${voices()}`);
+  check(
+    "and an idle line prints nothing — its ident is the subtitle gate (0x44084c)",
+    !session.puppet?.subtitle,
+    `subtitle=${JSON.stringify(session.puppet?.subtitle)}`,
+  );
+  // the plaque is still answerable: a click during an idle line is NOT dropped
+  // here, which is the one deliberate deviation in this path
+  session.puppetCtrl.puppetChoose(0);
+  const arg = await busy;
+  check("the choice still answers", arg === 101, `arg=${arg}`);
+  check("and the slots are disarmed with the plaque", session.puppet?.idle.length === 0);
+  session.puppetCtrl.closePuppetFile();
+}
+);
+
 // --- 18c. one ESC gets past the whole speech, not one line of it ----------
 // TI.EXE's skip is a FLAG, not a race: 0x440620 raises 0x48ac00, and every
 // following puppetspeak queues its line and returns without playing it
