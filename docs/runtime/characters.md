@@ -217,11 +217,37 @@ unavailable. A player without a keyboard uses the game's own dial, which is why 
 page adds no control of its own
 ([host](host.md#the-sound-keys-and-why-the-page-has-no-sound-control)).
 
-One gap left, its own issue: ESC also answers the **plaque** wait in the original,
-returning −1 to the script and walking the player out of the conversation
-(`0x4418a7`) — that moves where scenarios go, not just how fast, so it is not folded
-in here (#131). Every one of the 516 `puppetevent` calls in the tree passes `(-1)`
-and has a `case -1` arm, so that is 516 hand-written branches currently unreachable.
+**ESC also answers the plaque wait, with −1** (`0x4418a7`) — which is how a player
+walks out of a conversation. That value is not a spare: every one of the **516**
+`puppetevent` calls in the tree is `puppetevent (-1)` followed by a switch with a
+`case -1` arm, so it is a branch the authors wrote for every single prompt in the
+game. SMETH1's advice loop is the clearest case —
+
+```
+	while true
+		puppetclear ()
+		puppetbevel ("Say I want to find a person or a cabin…", 101)
+		… four more …
+		arg = puppetevent (-1)
+		switch arg
+		case -1
+			exitcode
+```
+
+— where an unanswered plaque is the *only* way out of that `while true`. Until #131
+those 516 arms were unreachable.
+
+Two things it deliberately does **not** do. It does not raise the skip flag, unlike
+a spoken-line ESC: the script's own −1 arm may have a parting line, and the original
+agrees — the plaque pump writes the −1 and returns without touching `0x48ac00`. And
+the abandoned plaque is remembered with **no** picked row, because `chosen` outlives
+its own list until the next `puppetclear`, so recording it would frame a row of this
+plaque that nobody touched.
+
+The consequence for anything *driving* the game is that ESC has to be aimed rather
+than hammered: it skips a line only while one is being spoken, and does something
+quite different the rest of the time. `SetViewer.speaking` is that aim, and both
+playthrough drivers now check it before pressing.
 
 **`T` is bound to nothing, on purpose.** It is the other arm both tables share, and
 it does not act — it sets the filter's out-param and answers "not an interrupt"

@@ -267,6 +267,15 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
         await ticks(3, "the movie to run on");
         return;
       }
+      // Only while a line is actually being spoken. ESC is no longer harmless
+      // elsewhere in a conversation: at a plaque it answers with -1 and walks the
+      // player out (#131), and this loop is called between exchanges as much as
+      // during them — so an unaimed press would abandon conversations the route is
+      // in the middle of. Checked as late as possible, right at the dispatch.
+      if (!v().speaking) {
+        await ticks(3, "a line to start");
+        return;
+      }
       // ESC, and only ESC — the same call main.ts makes, routed through the
       // viewer so the route exercises the routing (PuppetCtrl.key). A click on
       // the picture is the REPEAT now (#3), so the old `click(4, 4)` would ask

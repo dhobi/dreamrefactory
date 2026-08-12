@@ -1185,6 +1185,18 @@ export class SetViewer {
   }
 
   /**
+   * A LINE is being spoken right now — the only state ESC skips.
+   *
+   * Exposed because ESC is no longer harmless anywhere else in a conversation:
+   * at a plaque it answers with -1 and walks the player out (#131). So anything
+   * driving the game has to aim its skip rather than hammer it, and this is the
+   * aim. `speakSkip` is set for exactly the length of the race in `playLine`.
+   */
+  get speaking(): boolean {
+    return !!this.session.puppet?.speakSkip;
+  }
+
+  /**
    * WHO is on screen — the open puppet's name (`currentpuppet()`), or "" when
    * nobody is. The harness reports a conversation it could not get past, and
    * "a conversation is open in gstair3" leaves you to guess which of the four

@@ -49,7 +49,12 @@ export interface TalkResult {
  * along. The driver's `skipLine` is that key, and it's also how a line that no
  * longer has anything to offer ends.
  */
-/** ESCs spent getting past spoken lines before we call the puppet stuck */
+/**
+ * Turns of the skip loop before we call the puppet stuck — not all of them a
+ * keypress. `skipLine` presses ESC only while a line is actually being spoken
+ * (#131: at a plaque the same key abandons the conversation), and waits out the
+ * gaps, so this budget covers both.
+ */
 const MAX_SKIPS = 600;
 
 export async function converse(d: NavDriver, plan: TalkPlan = {}): Promise<TalkResult> {
