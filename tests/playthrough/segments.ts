@@ -305,7 +305,13 @@ export async function segment3(s: Story): Promise<void> {
   expect(d.inFlat()).toBeNull();
 
   // -- the trunk in the cabin ------------------------------------------------
-  const home = await nav.travel("c73");
+  // `travelPast`, because this leg is a COIN FLIP away from being interrupted.
+  // BOOTFILE 0002's `restorescreen` offers the Gorse/Joneses on arrival in
+  // recept1c, gstair2 or gstair3 (src/engine/masks.ts), the map's jump to c73
+  // lands in gstair3, and `jonesok` ends on `random(100) < 50`. So half of all
+  // hosts get stopped on this landing and half do not — this one does not and
+  // the CI runner does, which is how it was found rather than by reading.
+  const home = await travelPast(s, "c73");
   expect(home.ok, home.reason).toBe(true);
   const atTrunk = await nav.faceStandpoint(["view60", "view62", "view66"]);
   expect(atTrunk.ok, atTrunk.reason).toBe(true);
@@ -1342,7 +1348,9 @@ export async function segment7(s: Story): Promise<void> {
   expect(s.actorOwner("purs"), "his ladder starts at the bottom").toBe("none");
 
   // -- the Purser's office ---------------------------------------------------
-  const there = await nav.travel("gstair3");
+  // `travelPast`: gstair3 is one of the three rooms `restorescreen` offers the
+  // Gorse/Joneses in on arrival, on a `random(100) < 50` — see segment 3.
+  const there = await travelPast(s, "gstair3");
   expect(there.ok, there.reason).toBe(true);
   for (let flip = 0; flip < 4 && String(d.flow().savedeck) !== "c"; flip++) {
     const stairs = await nav.faceStandpoint(["view33"], ["scene13"]);
@@ -1532,7 +1540,9 @@ export async function segment9(s: Story): Promise<void> {
   expect(s.actorOwner("purs"), "he is waiting to hear it went").toBe("sentgram");
 
   // -- back to his office ----------------------------------------------------
-  const there = await nav.travel("gstair3");
+  // `travelPast`: gstair3 is one of the three rooms `restorescreen` offers the
+  // Gorse/Joneses in on arrival, on a `random(100) < 50` — see segment 3.
+  const there = await travelPast(s, "gstair3");
   expect(there.ok, there.reason).toBe(true);
   for (let flip = 0; flip < 4 && String(d.flow().savedeck) !== "c"; flip++) {
     const stairs = await nav.faceStandpoint(["view33"], ["scene13"]);
@@ -1596,7 +1606,9 @@ export async function segment9(s: Story): Promise<void> {
  */
 async function enterPursersOffice(s: Story): Promise<{ ok: boolean; reason?: string }> {
   const { nav, d } = s;
-  const there = await nav.travel("gstair3");
+  // `travelPast`: gstair3 is one of the three rooms `restorescreen` offers the
+  // Gorse/Joneses in on arrival, on a `random(100) < 50` — see segment 3.
+  const there = await travelPast(s, "gstair3");
   if (!there.ok) return there;
   for (let flip = 0; flip < 4 && String(d.flow().savedeck) !== "c"; flip++) {
     const stairs = await nav.faceStandpoint(["view33"], ["scene13"]);
@@ -2049,6 +2061,16 @@ async function travelPast(
     s.log?.(`someone stopped us on the way to ${dest}`);
     await nav.talk(answer);
     arrived = await nav.travel(dest);
+  }
+  // ...and whoever is talking when we get there. An interruption that lands ON
+  // ARRIVAL leaves the travel reporting success with a puppet still up, and then
+  // the caller's first faceStandpoint refuses instead — which is the same
+  // interruption reported as a different failure one line further down. The
+  // Gorse/Joneses are exactly that case: `restorescreen` offers them as the map
+  // jump lands, not on the walk in.
+  if (arrived.ok && d.conversing()) {
+    s.log?.(`someone was waiting for us in ${dest}`);
+    await nav.talk(answer);
   }
   return arrived;
 }
