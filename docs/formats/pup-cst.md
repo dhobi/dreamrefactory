@@ -49,9 +49,18 @@ use the [SHP transparent codec](shp.md)):
 
 | Where | Contents |
 |-------|----------|
-| Container 0 | palette @ `58`; **dialogue table**: count i16 @ `2158`, then **312-byte records** @ `2160` |
+| Container 0 | palette @ `58`; **idle intervals**: 4×i32 minima @ `2106` (`0x83A`) and 4×i32 maxima @ `2122` (`0x84A`); **answer band** container i32 @ `2138` (`0x85A`); **puppet name** pascal[16] @ `2142`; **dialogue table**: count i16 @ `2158`, then **312-byte records** @ `2160` |
 | Container 2 | **script table**: count i16 @ `22`, then 40-byte records @ `24` (`{i32 location, i32, pascal name[31]}`) |
 | Container 3 | **stance register**: up to 64 × i32 @ `22`, each pointing at a stance container |
+
+The **idle intervals** are the eight i32s before the band pointer: four
+`[min, max]` tick pairs, one per `idle 1`..`idle 4` line, at 60 ticks to the second.
+They are how often this character blinks and fidgets while a dialogue plaque is up —
+per character, and read rather than guessed because the values differ by design (slot
+1 ranges 65–200 ticks across the tree). 54 of the 55 PUPs have all four set; the
+demo's `dsmeth.pup` is the exception, and a zero pair never fires. What the engine
+does with them is
+[idling at a plaque](../runtime/characters.md#idling-while-you-read-the-choices).
 
 ### The dialogue table
 

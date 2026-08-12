@@ -150,6 +150,25 @@ export interface PupFile {
    * the generic arm is for.
    */
   pupName: string;
+  /**
+   * How often this character fidgets while you read the choices — four
+   * `[minTicks, maxTicks]` pairs, one per `idle 1`..`idle 4` line, at 60 ticks
+   * to the second.
+   *
+   * Eight i32s in container 0: the minima at `0x83A` + 4·i and the maxima at
+   * `0x84A` + 4·i, immediately before {@link bandLocation} at `0x85A`. TI.EXE's
+   * plaque wait reads all eight on entry and seeds each slot with
+   * `min + rand(1 .. max-min)` (`0x44165B`…`0x4416B7`, `0x435810` being the
+   * 1..n draw), then re-draws the interval every time the slot fires.
+   *
+   * They are per CHARACTER, which is the argument for reading them rather than
+   * picking a plausible constant: across the 55 PUPs in the tree, slot 1 — the
+   * blink — ranges from 65 to 200 ticks, so Burns blinks half again as often as
+   * Asea because someone decided he should, and Jones's second slot is set to
+   * blink-speed so he fidgets. 54 of the 55 have all four set; the demo's
+   * `dsmeth.pup` is the exception, and a zero pair simply never fires.
+   */
+  idleTimers: { minTicks: number; maxTicks: number }[];
   /** what the subtitles were decoded with, and what an edit re-encodes to */
   encoding: DfEncoding;
 }
@@ -254,6 +273,14 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
     stances.push({ location, layers });
   }
 
+  // the four idle intervals: minima then maxima, both 4×i32 (see idleTimers)
+  const idleTimers = [0, 1, 2, 3].map((i) => {
+    r0.seek(0x83a + i * 4);
+    const minTicks = r0.i32();
+    r0.seek(0x84a + i * 4);
+    return { minTicks, maxTicks: r0.i32() };
+  });
+
   r0.seek(0x85a);
   const bandLocation = r0.i32();
   // the puppet's own name, in the 16 bytes before the dialogue count
@@ -267,6 +294,7 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
     stances,
     bandLocation,
     pupName,
+    idleTimers,
     encoding,
   };
 }

@@ -1,5 +1,6 @@
 import { decodeAudioContainer } from "../df/audio";
 import { PupAnimFrame, PupDialogue, PupFile, readAnimLogic, readPupFile } from "../df/pup";
+import { ENGINE_STEP_MS } from "./clock";
 import { ScriptInstance, toStr } from "./interp";
 import type { GameSession } from "./session";
 
@@ -18,6 +19,33 @@ import type { GameSession } from "./session";
  * `GetTickCount() * 3 / 50`).
  */
 const PRESS_FLOOR_MS = (10 / 60) * 1000;
+
+/**
+ * The volume digits, shared by the two waits that take keys — the spoken-line
+ * filter (0x441d80) and the movie one (0x44a460), whose jump tables are
+ * byte-identical: `0`..`9` each call the wave-volume setter with their own value,
+ * and report "not an interrupt" so the line or the clip carries on.
+ *
+ * DEVIATION, and a forced one. The original requires the Ctrl marker on every arm
+ * of those tables (the window proc sets it from `GetKeyState(VK_CONTROL)` alone,
+ * 0x41ad08), so these are Ctrl+0..Ctrl+9 there. A browser cannot have them:
+ * Ctrl+0 is zoom reset and Ctrl+1..Ctrl+9 switch tabs, and `preventDefault()`
+ * does not stop either. #115's brightness keys had no such problem — the manual
+ * named Ctrl+F1 but the code tested the virtual key alone, so bare F1 was
+ * faithful AND reachable. Here the two disagree, so the digits are bound bare and
+ * the chord is simply unavailable (#129).
+ *
+ * NOT bound: `T`, the other arm these tables share. It sets the filter's
+ * out-param rather than acting, and of the three call sites only the movie loop
+ * reads it (0x44a3e9) — so during a spoken line it does nothing at all in the
+ * original either. What it does in a movie is toggle an audio latch (0x48c510)
+ * whose stream is unidentified, so it stays out until it is named.
+ */
+export function volumeKey(session: GameSession, name: string): boolean {
+  if (name.length !== 1 || name < "0" || name > "9") return false;
+  session.setWaveVolume(name.charCodeAt(0) - 0x30);
+  return true;
+}
 
 /**
  * Does this line's text get printed? TI.EXE 0x440810, the gate the speak path
@@ -53,37 +81,13 @@ const PRESS_FLOOR_MS = (10 / 60) * 1000;
  * prefixes (penny1.pup: 21 starred in English, 13 in Japanese, 8 in Dutch) and
  * why those two editions show these lines and the other four do not (#48).
  *
- * NOT implemented: 0x440810 opens on `cmp word ptr [0x48a018], 0`, a runtime
- * enable that suppresses every subtitle in the game when clear. Nothing in the
- * port sets it, and nothing in the shipped corpus writes it.
+ * 0x440810 opens on `cmp word ptr [0x48a018], 0`, a runtime enable that suppresses
+ * every subtitle in the game when clear — and that word is not a separate flag, it
+ * is puppetparam slot 7: the setter's ladder runs 0x48a00c + 2·(n-1) (0x440120…),
+ * so 0x48a018 is slot 7 and {@link GameSession.subtitlesOn} already reads it. The
+ * gate lives in PuppetView rather than here, which is why this function does not
+ * test it. (An earlier note called it unimplemented; it is not.)
  */
-/**
- * The volume digits, shared by the two waits that take keys — the spoken-line
- * filter (0x441d80) and the movie one (0x44a460), whose jump tables are
- * byte-identical: `0`..`9` each call the wave-volume setter with their own value,
- * and report "not an interrupt" so the line or the clip carries on.
- *
- * DEVIATION, and a forced one. The original requires the Ctrl marker on every arm
- * of those tables (the window proc sets it from `GetKeyState(VK_CONTROL)` alone,
- * 0x41ad08), so these are Ctrl+0..Ctrl+9 there. A browser cannot have them:
- * Ctrl+0 is zoom reset and Ctrl+1..Ctrl+9 switch tabs, and `preventDefault()`
- * does not stop either. #115's brightness keys had no such problem — the manual
- * named Ctrl+F1 but the code tested the virtual key alone, so bare F1 was
- * faithful AND reachable. Here the two disagree, so the digits are bound bare and
- * the chord is simply unavailable (#129).
- *
- * NOT bound: `T`, the other arm these tables share. It sets the filter's
- * out-param rather than acting, and of the three call sites only the movie loop
- * reads it (0x44a3e9) — so during a spoken line it does nothing at all in the
- * original either. What it does in a movie is toggle an audio latch (0x48c510)
- * whose stream is unidentified, so it stays out until it is named.
- */
-export function volumeKey(session: GameSession, name: string): boolean {
-  if (name.length !== 1 || name < "0" || name > "9") return false;
-  session.setWaveVolume(name.charCodeAt(0) - 0x30);
-  return true;
-}
-
 export function subtitled(line: PupDialogue): boolean {
   if (!line.raw.length) return false;
   if (line.raw.startsWith("*")) return false;
@@ -170,6 +174,12 @@ export class PuppetController {
     lastPlaque: { bevels: { text: string; id: number }[]; chosen: number | null } | null;
     /** a repeat is playing; a second click must not start another */
     repeating: boolean;
+    /**
+     * The idle-speech slots, live only while a plaque is up — see
+     * {@link runIdleSlots}. Empty when the character has none, or when
+     * puppetparam 8 is off, which is what the game switches them with.
+     */
+    idle: { line: PupDialogue; minTicks: number; maxTicks: number; dueAt: number }[];
     /** animLogic playback of the line being spoken (~30 records/s) */
     anim: { frames: PupAnimFrame[]; start: number } | null;
     /** layer state held between lines (the last played record) */
@@ -230,6 +240,7 @@ export class PuppetController {
       voiceQueue: [],
       lastPlaque: null,
       repeating: false,
+      idle: [],
       anim: null,
       pose,
       defaultPose: pose,
@@ -478,9 +489,10 @@ export class PuppetController {
     // a plaque is where a skip ends: the flag comes down before the wait (0x43f718)
     p.interrupted = false;
     if (!p.bevels.length) return Promise.resolve(-1);
-    return new Promise<number>((resolve) => {
+    const wait = new Promise<number>((resolve) => {
       p.eventWaiter = (id) => {
         p.eventWaiter = null;
+        p.idle.length = 0;
         // 0x43f767: the answered plaque is copied aside for the repeat, and the
         // voice queue emptied — what the character says next is a new exchange.
         // A plaque nobody answered (ESC, or the file closing under us) has no
@@ -492,6 +504,93 @@ export class PuppetController {
         resolve(id);
       };
     });
+    this.armIdleSlots(p);
+    void this.runIdleSlots(p);
+    return wait;
+  }
+
+  /**
+   * Seed the four idle-speech slots for the plaque about to go up — TI.EXE does
+   * this at the top of every plaque wait (0x4415be…0x4416b7), not once per file.
+   *
+   * Each slot is one `idle N` line and its own interval from the PUP header
+   * ({@link PupFile.idleTimers}); a slot whose line is missing or whose interval
+   * is unset never fires. `puppetparam 8` is the switch, and it is the game's:
+   * of the 316 puppets in the tree exactly four turn it on, and each brackets one
+   * exchange with it — zeit1's notebook, bx2's `getbaby()`, elev1 and shahack2 —
+   * so a character fidgets where a designer asked for it and nowhere else.
+   */
+  private armIdleSlots(p: NonNullable<PuppetController["puppet"]>): void {
+    p.idle.length = 0;
+    // 0x44162a: puppetparam 8 clear disables every slot outright
+    if (!(this.session.puppetParams.get(8) ?? 0)) return;
+    p.pup.idleTimers.forEach((t, i) => {
+      const line = p.pup.dialogue.get(`idle ${i + 1}`);
+      if (!line || t.minTicks <= 0 || t.maxTicks < t.minTicks) return;
+      p.idle.push({ line, ...t, dueAt: this.session.clock.now + this.nextIdleDelay(t) });
+    });
+  }
+
+  /**
+   * `min + rand(1 .. max-min)` ticks, as milliseconds — 0x4416b2's draw, and
+   * TickCount runs at 60 Hz (see {@link PRESS_FLOOR_MS}).
+   *
+   * Drawn from the AMBIENT stream, not the script one, and that is a deliberate
+   * deviation with a measurement behind it. TI.EXE draws these from its single
+   * `rand()`, so a faithful port would put them on `session.rng` — but they are
+   * re-armed on the CLOCK, which is exactly the shape that made the crickets a
+   * problem: how many times they draw depends on how long the host dwells at a
+   * plaque, and moving them re-values every script draw that follows. That cost
+   * the Gorse/Jones coin its determinism once already, and the fix was to split
+   * the streams ({@link GameSession.ambientRng}, where the 834-vs-838 measurement
+   * lives). Which arbitrary value an idle timer gets is unobservable to any
+   * script; when the story's coin lands is not.
+   */
+  private nextIdleDelay(t: { minTicks: number; maxTicks: number }): number {
+    const range = t.maxTicks - t.minTicks;
+    const draw = range > 0 ? Math.floor(this.session.ambientRng() * range) + 1 : 0;
+    return (t.minTicks + draw) * (1000 / 60);
+  }
+
+  /**
+   * Run the idle slots for as long as the plaque is up.
+   *
+   * TI.EXE's plaque wait is one loop counting ticks with the four timers inline
+   * (0x441780): a slot that comes due plays its line through the same blocking
+   * play-and-wait a `puppetspeak` uses (0x440620) and re-draws its interval. So an
+   * idle line genuinely holds the wait — which is why they are seconds apart and
+   * why slot 4, the only one with words in it ("Excuse me."), is the rarest.
+   *
+   * ESC during one abandons the conversation, because that is what the original
+   * does: each timer tests the interrupt flag after its line and bails out to the
+   * -1 exit (0x4417ab and its three siblings). The flag is left standing on that
+   * path, unlike the silent-plaque ESC — a line really was cut short.
+   *
+   * DEVIATION: a bevel click still answers while an idle line plays. The original
+   * ignores the mouse inside that wait, so the click would be dropped; for a
+   * 300 ms blink that is a click a player would swear they made, and nothing is
+   * bought by losing it.
+   */
+  private async runIdleSlots(p: NonNullable<PuppetController["puppet"]>): Promise<void> {
+    while (this.puppet === p && p.eventWaiter) {
+      await this.session.clock.sleep(ENGINE_STEP_MS);
+      if (this.puppet !== p || !p.eventWaiter) return;
+      // never over the top of a voice: a repeat is playing, or the script itself
+      // spoke while the plaque stood (the answered list stays up — see `chosen`)
+      if (p.repeating || p.speakSkip) continue;
+      const now = this.session.clock.now;
+      for (const slot of p.idle) {
+        if (now < slot.dueAt) continue;
+        slot.dueAt = now + this.nextIdleDelay(slot);
+        await this.playLine(p, slot.line);
+        if (this.puppet !== p) return;
+        if (p.interrupted) {
+          p.eventWaiter?.(-1); // 0x4417b3: the skip walks out of the conversation
+          return;
+        }
+        break; // one per pass, and `now` is stale after a line that took seconds
+      }
+    }
   }
 
   /**
