@@ -489,8 +489,20 @@ export async function browserDriver(page: Page, opts: BrowserDriverOptions = {})
       await sync();
     },
     skipLine: async () => {
-      await clickAt(4, 4);
-      // long enough for the click to reach the puppet, short enough that the
+      // Nothing to skip while a movie owns the screen, and Escape there is not
+      // a skip but an ABORT — the headless twin says why, and the same clip
+      // (Penny's lenin.mov) is the one that pays for it.
+      if (m.movieFile) {
+        await page.waitForTimeout(120);
+        await sync();
+        return;
+      }
+      // A real Escape at the window, the way a player skips a line, and the
+      // only thing that skips one: the original's wait drops any event that is
+      // not a key (#3), so the old `clickAt(4, 4)` is now the REPEAT and asked
+      // the character to say it all again — 600 of those and no plaques.
+      await page.keyboard.press("Escape");
+      // long enough for the key to reach the puppet, short enough that the
       // next line is skipped too rather than played out
       await page.waitForTimeout(120);
       await sync();

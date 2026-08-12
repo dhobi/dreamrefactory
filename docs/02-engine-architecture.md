@@ -240,6 +240,12 @@ re-entrancy check: a script already running a handler further up the dispatch st
 is never given it again. Before that existed the boot had to be kept off every
 fallback list, and reaching it was an out-of-memory rather than a wrong answer.
 
+And a press may never reach the chain at all, because two things are modal ahead of
+it: a **playing movie** and a **suspended conversation**. Both are places where the
+original's own wait loop is the one popping the event queue, so the key is answered
+there — ESC aborts the clip, ESC skips the line — and the scripts are never told
+([host](runtime/host.md#keys), [conversations](runtime/characters.md#skipping-and-repeating)).
+
 ## The heartbeat and timed events
 
 The engine has a **heartbeat** that ticks **20 times a second** — one service

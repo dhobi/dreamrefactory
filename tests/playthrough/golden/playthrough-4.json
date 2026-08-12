@@ -7,7 +7,7 @@
     "theme": "deckc.trk",
     "fade": 0,
     "globals": {
-      "attentionspan": 1571,
+      "attentionspan": 1463,
       "blocked": 0,
       "bombphase": 0,
       "bseaphase": 0,
@@ -123,7 +123,7 @@
     "theme": "turbpuz.trk",
     "fade": 0,
     "globals": {
-      "attentionspan": 2553,
+      "attentionspan": 2409,
       "blocked": 0,
       "boiler": 87500,
       "boilpres": 12500,
@@ -259,7 +259,7 @@
     "theme": "turbpuz.trk",
     "fade": 0,
     "globals": {
-      "attentionspan": 2553,
+      "attentionspan": 2409,
       "blocked": 0,
       "boiler": 24867,
       "boilpres": 2238,
@@ -395,7 +395,7 @@
     "theme": "engine.trk",
     "fade": 0,
     "globals": {
-      "attentionspan": 2553,
+      "attentionspan": 2409,
       "blocked": 0,
       "bombphase": 0,
       "bseaphase": 0,
@@ -409,7 +409,7 @@
       "clarisphase": 0,
       "clarisvalue": 0,
       "clock": "bedsit",
-      "clockcount": 7,
+      "clockcount": 13,
       "coalchute": "coal4",
       "conkphase": 0,
       "cseaphase": 0,

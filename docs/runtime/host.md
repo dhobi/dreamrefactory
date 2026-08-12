@@ -367,10 +367,12 @@ Two things about where they sit:
   a playing movie and under a full-screen overlay stage. The port's listener
   (`src/main.ts`) matches that — the only thing that takes precedence is the page's
   own focus (`focusOwnsKey`), so typing in a field is still typing.
-- **Phones get a slider**, in the play page's Picture options, because the original's
-  answer here is keyboard-only. Its unit is one keypress — a notch is the same 1.05 —
-  so it is the same control rather than a second setting that drifts, and the keys
-  move the slider with them. Remembered under `taoot.picture.brightness`.
+- **Phones get three presets** — darker / original / brighter — in the play page's
+  Picture options, because the original's answer here is keyboard-only. Their unit is
+  the keypress: a preset is ±6 notches of the same 1.05, so it is the same control
+  rather than a second setting that drifts, and the keys move the selection with them.
+  Remembered under `taoot.picture.brightness`. A slider shipped first and was wrong on
+  a phone — a 44 px target you can hit is worth more than granularity nobody wants.
 
 **Four caches hold post-gamma bytes**, and a live change has to reach all of them or
 the picture changes in one place and not the others: the set/prop palettes, the stage
@@ -410,7 +412,9 @@ The host's part of a click is short, and everything modal comes first:
 
 1. a **playing movie** (it owns the screen and its clicks, even over a suspended
    conversation);
-2. a **visible puppet** (bevel hit-test; a hidden puppet lets clicks through);
+2. a **visible puppet** (bevel hit-test on the answer band, and a
+   [repeat](characters.md#skipping-and-repeating) on the picture above it; a hidden
+   puppet lets clicks through);
 3. `lockevents` — the scripts freeze the world while the game is doing something
    to you, and BOOTFILE's own `mousedown` exitcodes on it in exactly this
    position, after the puppet branch, so a conversation still answers while
@@ -465,13 +469,19 @@ with the special-key marker set, which is exactly what TI.EXE's window proc
 does, and the decision belongs further down: `SetViewer.keyDown` gives a
 playing movie the key before anything else (the same precedence `click()`
 gives it), and `MoviePlayer.key` is what knows that a marked `.` means abort —
-see [escaping a movie](../formats/mov.md#escaping-a-movie). With no movie up
-the key just goes down the script chain and is ignored. This host has no
-"skip" verb of its own, deliberately.
+see [escaping a movie](../formats/mov.md#escaping-a-movie). Behind the movie sits
+a **suspended conversation**, which takes it for the same reason: in the original
+the puppet's own wait is the loop popping the event queue, so ESC reaches the line
+being spoken and not the scripts
+([skipping and repeating](characters.md#skipping-and-repeating)). With neither up,
+the key goes down the script chain and is ignored. This host has no "skip" verb of
+its own, deliberately — both the skips it forwards are the original's.
 
 A phone has no Escape, so **two taps in the same place within 320 ms** are
 forwarded as one — `keyDown(".", true)`, the identical route the key takes, so a
-live movie aborts and anything else ignores it exactly as the original does. Only
+live movie aborts, a spoken line is skipped, and anything else ignores it exactly
+as the original does. That gesture is also what makes a conversation playable on a
+phone at all, now that a click no longer skips a line. Only
 the *second* tap is swallowed: holding every tap back to see whether another
 follows would put 320 ms of lag on every press in the game, and during a clip —
 which is what this is for — the first tap reaches no region and does nothing. It

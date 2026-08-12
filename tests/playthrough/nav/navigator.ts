@@ -236,12 +236,12 @@ export interface NavDriver {
    */
   holdUntil(x: number, y: number, until: () => boolean, what: string): Promise<boolean>;
   /**
-   * Click past the line being spoken — and return as soon as the click has
+   * ESC past the line being spoken — and return as soon as the key has
    * registered, NOT when the room goes quiet.
    *
-   * The engine skips a line by racing it against a click (`puppetSpeak`'s
+   * The engine skips a line by racing it against ESC (`puppetSpeak`'s
    * speakSkip), which is what the original's players did to get to the plaques.
-   * Waiting for quiet after the click undoes the whole point: the script moves
+   * Waiting for quiet after the key undoes the whole point: the script moves
    * straight on to the next line, so a skip that settles skips exactly one line
    * and then sits through every remaining one. That cost minutes per
    * conversation in a browser, where lines play in real time.

@@ -2479,9 +2479,13 @@ test("puppets: SMETH1 conversation — speaks, choices, branching", async () => 
 
 // --- 18b. skipping a spoken line silences it. The other half of the movie
 // overlap above: PENNY2.PUP's Lenin beat is `puppetspeak(28)`, `puppetclear()`,
-// `spotmovie("lenin.mov")`. Click to skip line 28 and only the NEXT
-// puppetspeak would cut it (a non-overlapping play halts the channel) — but
-// what follows here is a movie, so the skipped line talked under it.
+// `spotmovie("lenin.mov")`. Skip line 28 and only the NEXT puppetspeak would
+// cut it (a non-overlapping play halts the channel) — but what follows here is
+// a movie, so the skipped line talked under it.
+//
+// It also pins WHAT skips: ESC, not a click. The original's wait drops any
+// event that is not a key on the filter's first instruction (0x441d80), so a
+// click on a talking character does nothing at all (#3).
 test("skipping a spoken line silences it, not just its subtitle", async () => {
   const { session, sink, viewer } = await newSession();
   await session.openSetFile("c73.set");
@@ -2502,12 +2506,128 @@ test("skipping a spoken line silences it, not just its subtitle", async () => {
   };
   const speaking = await pump(() => !!session.puppet?.subtitle);
   sink.halts.length = 0;
-  session.puppetCtrl.puppetChoose(-1); // a click during speech = skip the line
+  // a click on the picture while someone is talking: ignored, the line runs on
+  await v.click(4, 4);
+  await drain();
+  const survivedClick = !!session.puppet?.subtitle && !sink.halts.includes("voice");
+  // routed the way main.ts routes it, so this covers the wiring too
+  const consumed = await v.keyDown(".", true);
   await drain();
   check(
-    "the skip stops the voice, it doesn't just drop the subtitle",
-    speaking && sink.halts.includes("voice"),
-    `speaking=${speaking} halts=${sink.halts}`,
+    "a click does not skip a spoken line; ESC does, and stops the voice with it",
+    speaking && survivedClick && consumed && sink.halts.includes("voice"),
+    `speaking=${speaking} survivedClick=${survivedClick} consumed=${consumed} halts=${sink.halts}`,
+  );
+  session.puppetCtrl.closePuppetFile();
+  await conversation.catch(() => {});
+}
+);
+
+// --- 18c. one ESC gets past the whole speech, not one line of it ----------
+// TI.EXE's skip is a FLAG, not a race: 0x440620 raises 0x48ac00, and every
+// following puppetspeak queues its line and returns without playing it
+// (0x43f887) until puppetevent lowers the flag again (0x43f718). So the player
+// presses ESC once per speech, not once per sentence.
+test("one ESC gets past the whole speech run", async () => {
+  const { session, sink, viewer } = await newSession();
+  await session.openSetFile("c73.set");
+  const v = viewer();
+  const conversation = session.track(
+    (async () => {
+      await session.puppetCtrl.openPuppetFile("smeth1.pup");
+      await session.sendEvent("sendtopuppet", "before", "intro", [], "test");
+      session.puppetCtrl.closePuppetFile();
+    })(),
+  );
+  const pump = async (until: () => boolean, max = 3000): Promise<boolean> => {
+    for (let i = 0; i < max && !until(); i++) {
+      v.tick((clock += 100));
+      await drain();
+    }
+    return until();
+  };
+  const voices = () => sink.calls.filter((c) => c.channel === "voice").length;
+  const speaking = await pump(() => !!session.puppet?.subtitle);
+  const playedBefore = voices();
+  await v.keyDown(".", true); // one press, and only one
+  const gotPlaque = await pump(() => v.choices.length > 0);
+  // the queue is what proves the run had more to say: it holds every line
+  // spoken since the last plaque, skipped ones included (it caps at three)
+  const queued = session.puppet?.voiceQueue.length ?? 0;
+  check(
+    "one ESC reaches the plaque and none of the skipped lines is heard",
+    speaking && gotPlaque && queued > 1 && voices() === playedBefore,
+    `speaking=${speaking} plaque=${gotPlaque} queued=${queued} voices=${playedBefore}->${voices()}`,
+  );
+  check(
+    "the plaque lowers the flag again, so the next speech is heard",
+    session.puppet?.interrupted === false,
+    `interrupted=${session.puppet?.interrupted}`,
+  );
+  session.puppetCtrl.closePuppetFile();
+  await conversation.catch(() => {});
+}
+);
+
+// --- 18d. a click on the picture repeats the last exchange ----------------
+// The other half of #3. While the choices are up, a click above the answer band
+// puts the PREVIOUS plaque back with the row you picked framed (0x44199c,
+// 0x4419b5) and plays the queued replies again (0x441a35) — then restores the
+// choices you were being offered. Nothing re-enters the script, which is why a
+// scenario's stage directions do not come back with it.
+test("a click on the picture repeats the last exchange", async () => {
+  const { session, sink, viewer } = await newSession();
+  await session.openSetFile("c73.set");
+  const v = viewer();
+  const conversation = session.track(
+    (async () => {
+      await session.puppetCtrl.openPuppetFile("smeth1.pup");
+      await session.sendEvent("sendtopuppet", "before", "intro", [], "test");
+      session.puppetCtrl.closePuppetFile();
+    })(),
+  );
+  const pump = async (until: () => boolean, max = 3000): Promise<boolean> => {
+    for (let i = 0; i < max && !until(); i++) {
+      v.tick((clock += 100));
+      await drain();
+    }
+    return until();
+  };
+  const texts = () => v.choices.map((c) => c.text);
+  const skipTo = async (plaque: () => boolean): Promise<boolean> => {
+    for (let i = 0; i < 40 && !plaque(); i++) {
+      await v.keyDown(".", true);
+      if (await pump(plaque, 60)) break;
+    }
+    return plaque();
+  };
+  const first = await skipTo(() => v.choices.length > 0);
+  const firstTexts = texts();
+  const r = v.choiceRects[1];
+  await v.click(r.x + r.w / 2, r.y + r.h / 2);
+  const second = await skipTo(() => v.choices.length > 0 && texts().join() !== firstTexts.join());
+  const secondTexts = texts();
+  const voicesBefore = sink.calls.filter((c) => c.channel === "voice").length;
+  // the click the old build used to skip a line with: y=4 is the picture
+  await v.click(4, 4);
+  await drain();
+  const duringTexts = texts();
+  const framed = session.puppet?.chosen;
+  const replayed = await pump(
+    () => sink.calls.filter((c) => c.channel === "voice").length > voicesBefore,
+    200,
+  );
+  check(
+    "the repeat puts the answered plaque back up with the picked row framed",
+    first && second && duringTexts.join() === firstTexts.join() && framed === 1,
+    `first=${JSON.stringify(firstTexts)} during=${JSON.stringify(duringTexts)} framed=${framed}`,
+  );
+  check("the repeat says the queued lines again", replayed);
+  const restored = await pump(() => texts().join() === secondTexts.join());
+  check(
+    "and the choices you were being offered come back after it",
+    restored,
+    `wanted=${JSON.stringify(secondTexts)} got=${JSON.stringify(texts())}`,
   );
   session.puppetCtrl.closePuppetFile();
   await conversation.catch(() => {});

@@ -8,7 +8,7 @@ import { SetScripts } from "./engine/setscripts";
 import { GameSession } from "./engine/session";
 import { DrawSignature } from "./engine/signature";
 import { MoviePlayer } from "./movie-player";
-import { PuppetView } from "./puppet-view";
+import { PUPPET_ART_H, PuppetView } from "./puppet-view";
 import { CachedFrame, RingCache } from "./ring-cache";
 import { ScreenPresenter } from "./screen-presenter";
 import { SCREEN_W, SCREEN_H } from "./screen";
@@ -704,6 +704,11 @@ export class SetViewer {
       this.movies.key(keyName, special);
       return true;
     }
+    // A suspended conversation owns its keys the same way, and for the same
+    // reason: in the original the puppet's own wait is the loop popping the
+    // event queue, so ESC reaches the line being spoken and not the scripts.
+    // Ahead of the inputLocked gate below, which a suspended puppetspeak trips.
+    if (this.session.puppetCtrl.key(keyName, special)) return true;
     if (this.inputLocked) return false;
     // a full-screen overlay stage (TAOOT's deck map) handles keys itself — page
     // decks with arrows/letters — instead of the world turn/walk navigation
@@ -1533,7 +1538,8 @@ export class SetViewer {
     // suspended in puppetevent/puppetspeak — but only while it is shown; a
     // hidden puppet (blackjack table between prompts) lets clicks reach the flat
     if (this.session.puppet?.visible) {
-      this.session.puppetCtrl.puppetPress(this.puppetView.bevelAt(x, y));
+      // above the answer band = on the picture, which is the repeat (#3)
+      this.session.puppetCtrl.puppetPress(this.puppetView.bevelAt(x, y), y < PUPPET_ART_H);
       return;
     }
     // `lockevents` freezes the world: the scripts set it when the game is doing

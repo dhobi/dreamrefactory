@@ -113,8 +113,36 @@ export class PuppetController {
     press: { index: number; until: number } | null;
     /** puppetevent resolver — a bevel click ends the wait */
     eventWaiter: ((id: number) => void) | null;
-    /** click-to-skip resolver for the line currently being spoken */
+    /** ESC resolver for the line currently being spoken (see {@link skipLine}) */
     speakSkip: (() => void) | null;
+    /**
+     * ESC has been pressed and the current speech run is over (TI.EXE 0x48ac00).
+     *
+     * Skipping is not per line. Once the flag is up, every following
+     * `puppetspeak` queues its line and returns WITHOUT playing or waiting
+     * (0x43f887) — so one press gets you past the whole speech, not past one
+     * sentence of it. Only `puppetevent` lifts it (0x43f718), which is the
+     * original's way of saying "the skip ends where you get a say again".
+     *
+     * The plaque wait's four idle-speech timers read it too (0x4417ab and its
+     * three siblings), and a repeat clears it when it finishes (0x441a6c).
+     */
+    interrupted: boolean;
+    /**
+     * The lines spoken since the last `puppetevent`, at most three — TI.EXE's
+     * voice queue at 0x48a6e0 with its count at 0x48ac04, capped by
+     * `cmp cx, 3` at 0x43f86d. This is what a repeat replays.
+     */
+    voiceQueue: PupDialogue[];
+    /**
+     * The exchange before this one: the rows that were up and the one the player
+     * picked. `puppetevent` copies its plaque aside as it answers (0x43f767's
+     * 1304-byte `rep movsd` into 0x48ac08 — four bytes of count and chosen
+     * index, then five 260-byte rows), and the repeat puts it back on screen.
+     */
+    lastPlaque: { bevels: { text: string; id: number }[]; chosen: number | null } | null;
+    /** a repeat is playing; a second click must not start another */
+    repeating: boolean;
     /** animLogic playback of the line being spoken (~30 records/s) */
     anim: { frames: PupAnimFrame[]; start: number } | null;
     /** layer state held between lines (the last played record) */
@@ -170,6 +198,11 @@ export class PuppetController {
       press: null,
       eventWaiter: null,
       speakSkip: null,
+      // 0x43f2b0 zeroes the queue, its count and the interrupt flag on open
+      interrupted: false,
+      voiceQueue: [],
+      lastPlaque: null,
+      repeating: false,
       anim: null,
       pose,
       defaultPose: pose,
@@ -226,6 +259,22 @@ export class PuppetController {
       this.session.onLog(`puppetspeak: no line "${ident}" in ${p.name}`);
       return;
     }
+    // queued BEFORE the skip test, exactly as 0x43f866 queues ahead of 0x43f887:
+    // a line skipped past is still a line the character said, and a repeat says
+    // the whole batch back
+    if (p.voiceQueue.length < 3) p.voiceQueue.push(line);
+    if (p.interrupted) return; // ESC already ended this speech run — see `interrupted`
+    await this.playLine(p, line);
+  }
+
+  /**
+   * Say one line and wait it out: voice, subtitle, lip-sync.
+   *
+   * Split off {@link puppetSpeak} because a repeat replays from the queue and
+   * must NOT queue again — the original replays by calling the same play-and-wait
+   * (0x440620) that puppetspeak calls, one queue entry at a time (0x441a41).
+   */
+  private async playLine(p: NonNullable<PuppetController["puppet"]>, line: PupDialogue): Promise<void> {
     // The line is always HEARD; whether its text is printed is a separate
     // question, and one the record answers — see {@link subtitled}.
     p.subtitle = subtitled(line) ? line.text : "";
@@ -244,13 +293,15 @@ export class PuppetController {
       seconds = audio.samples.length / audio.sampleRate;
       this.session.audio.play("voice", audio);
     } catch (e) {
-      this.session.onLog(`puppetspeak ${ident}: ${(e as Error).message}`);
+      this.session.onLog(`puppetspeak ${line.ident}: ${(e as Error).message}`);
     }
     // lip-sync/gesture playback: the line's animLogic records run at
     // ~30/s alongside the voice; the last record stays as the idle pose
     const frames = readAnimLogic(p.pup, line.animLogicLocation);
     if (frames.length) p.anim = { frames, start: this.session.clock.now };
-    // a click skips the rest of the line
+    // ESC cuts the rest of the line short — and only ESC. A click cannot: the
+    // wait's filter (0x441d80) drops any event that is not a KEY on its first
+    // instruction, so the original has no click-to-skip at all. See {@link key}.
     await Promise.race([
       this.session.clock.sleep(seconds * 1000 + 150),
       new Promise<void>((resolve) => (p.speakSkip = resolve)),
@@ -333,34 +384,129 @@ export class PuppetController {
     p.bevels.push({ text, id });
   }
 
+  /**
+   * A key while the puppet is waiting — true if the wait consumed it.
+   *
+   * The original's filter (0x441d80) is reached from inside the two waits and
+   * nowhere else, so a key means something here only while a line is being
+   * spoken or the choices are up. It takes only events carrying the 0x1fa0
+   * marker — the key is ESC, or was held with Ctrl — which is `special`.
+   *
+   * DEVIATION, deliberate: the original's wait pops EVERY key off the queue, so
+   * an unmarked one is swallowed and the scripts never see it. This returns
+   * false for those and lets them through, because nothing in the port needs
+   * them eaten and a conversation is not where to find out otherwise. The keys
+   * the filter does bind besides ESC — 0-9 for volume, T for subtitles — are #129.
+   *
+   * NOT implemented, and its own issue: in the original ESC also answers the
+   * PLAQUE wait, which returns -1 to the script (0x4418a7) and is how a player
+   * walks out of a conversation. That changes where scenarios go, not just how
+   * fast they get there, so it is not folded in here. It is consumed and
+   * dropped rather than passed on, because passing it on would leave the skip
+   * flag standing over the next speech run.
+   */
+  key(name: string, special: boolean): boolean {
+    const p = this.puppet;
+    if (!p || !p.visible) return false;
+    if (!p.speakSkip && !p.eventWaiter) return false;
+    if (!special || name !== ".") return false;
+    if (p.speakSkip) this.skipLine();
+    return true;
+  }
+
+  /**
+   * ESC: end the line being spoken, and the rest of the speech run with it.
+   *
+   * Setting the flag is the whole of the second half — see {@link puppet.interrupted}.
+   */
+  skipLine(): void {
+    const p = this.puppet;
+    if (!p) return;
+    p.interrupted = true;
+    p.speakSkip?.();
+  }
+
   /** modal wait for a choice; resolves with the clicked bevel's id */
   puppetEvent(): Promise<number> {
     const p = this.puppet;
     if (!p) return Promise.resolve(-1);
+    // a plaque is where a skip ends: the flag comes down before the wait (0x43f718)
+    p.interrupted = false;
     if (!p.bevels.length) return Promise.resolve(-1);
     return new Promise<number>((resolve) => {
       p.eventWaiter = (id) => {
         p.eventWaiter = null;
+        // 0x43f767: the answered plaque is copied aside for the repeat, and the
+        // voice queue emptied — what the character says next is a new exchange
+        p.lastPlaque = { bevels: [...p.bevels], chosen: p.chosen };
+        p.voiceQueue.length = 0;
         resolve(id);
       };
     });
   }
 
   /**
-   * Viewer hook: the button went down over bevel index i (or -1 = off the rows).
+   * Say the last exchange again — the original's answer to a click on the
+   * picture while the choices are up (0x44197a).
+   *
+   * It is not a re-run of the script: nothing here re-enters it, so the stage
+   * directions a scenario prints around a line (`message("ACT--…")`) do not come
+   * back. What comes back is what was HEARD. And it is the exchange, not a line:
+   * the current rows come down, the ones you chose from go back up with your own
+   * row framed (0x44199c, 0x4419b5), your line is said again if the plaque's text
+   * names a dialogue record (0x441cb0 matches bevel text against the line table,
+   * 0x441ba0 speaks the hit), and then the queue of replies plays through.
+   */
+  private async repeatLastExchange(): Promise<void> {
+    const p = this.puppet;
+    if (!p || p.repeating) return;
+    const last = p.lastPlaque;
+    if (!last && !p.voiceQueue.length) return;
+    p.repeating = true;
+    const shown = { bevels: p.bevels, chosen: p.chosen };
+    p.bevels = last?.bevels ?? [];
+    p.chosen = last?.chosen ?? null;
+    try {
+      const mine = last?.chosen != null ? last.bevels[last.chosen] : undefined;
+      const line = mine ? this.linesByText(p).get(mine.text.toLowerCase().trim()) : undefined;
+      if (line) await this.playLine(p, line);
+      // 0x441a35: the first queued reply always plays; the flag is only read
+      // after one has finished, so ESC stops the NEXT one rather than this one
+      for (const queued of [...p.voiceQueue]) {
+        if (this.puppet !== p) return;
+        await this.playLine(p, queued);
+        if (p.interrupted) break;
+      }
+    } finally {
+      if (this.puppet === p) {
+        p.interrupted = false; // 0x441a6c
+        p.bevels = shown.bevels;
+        p.chosen = shown.chosen;
+        p.repeating = false;
+      }
+    }
+  }
+
+  /**
+   * Viewer hook: the button went down over bevel index i (or -1 = off the rows),
+   * `inPicture` when the point was above the answer band rather than in it.
    *
    * A press does not answer — it starts the tracker (see `press`), and only a
-   * release inside the same row does. A press with nothing to answer is the
-   * click that skips a spoken line.
+   * release inside the same row does. A press on the PICTURE is the repeat: the
+   * original tests the point against the rect (0,0)-(W, H-120), the screen above
+   * the band, before it reaches the rows (0x44193f), and only then against each
+   * row (0x441aa7). A press in the band but on no row does nothing either way.
    */
-  puppetPress(i: number): void {
+  puppetPress(i: number, inPicture = false): void {
     const p = this.puppet;
     if (!p) return;
     if (i >= 0 && i < p.bevels.length && p.eventWaiter) {
       p.press = { index: i, until: this.session.clock.now + PRESS_FLOOR_MS };
       return;
     }
-    p.speakSkip?.(); // click during speech: skip the line
+    // Only while the choices are up. During a spoken line the wait ignores the
+    // mouse outright, which is why this no longer skips — see {@link key}.
+    if (inPicture && p.eventWaiter) void this.repeatLastExchange();
   }
 
   /**
@@ -386,8 +532,8 @@ export class PuppetController {
   }
 
   /** press and release in one place — a synthetic click (tests, scripts) */
-  puppetChoose(i: number): void {
-    this.puppetPress(i);
+  puppetChoose(i: number, inPicture = false): void {
+    this.puppetPress(i, inPicture);
     this.puppetRelease(i);
   }
 }
