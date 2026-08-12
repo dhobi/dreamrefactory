@@ -68,7 +68,26 @@ const ROADS = { count: 4, first: 8, size: 12 } as const;
 
 /** the actor register: a count, then 54-byte records with a nested secondary */
 const ACTORS = { count: 0, first: 8, size: 54 } as const;
-const ACTOR = { rotation8: 4, x: 6, z: 8, y: 10, name: 12, secondary: 30 } as const;
+const ACTOR = { rotation8: 4, x: 6, z: 8, y: 10, name: 12, path: 28, secondary: 30 } as const;
+
+/** a star pair's walking route: a header, a (Z,X) box, then 8-byte points */
+const PATH = { total: 0, count: 8, box: 12, first: 20, size: 8 } as const;
+
+/**
+ * Truncating integer square root — TI.EXE's own (`0x435950`), and the reason a
+ * route's stored leg lengths are what they are.
+ *
+ * `Math.floor(Math.hypot(...))` is NOT the same function: `halla`'s third leg is
+ * 101×259, whose real length is 278.0004, and the file stores **277** because
+ * 278² = 77284 overshoots 77282. Verified against all six shipped routes — every
+ * leg matches this and every header total is the exact sum of its legs.
+ */
+function isqrt(n: number): number {
+  let r = Math.floor(Math.sqrt(n));
+  while (r > 0 && r * r > n) r--;
+  while ((r + 1) * (r + 1) <= n) r++;
+  return r;
+}
 
 /** the main scene register: 42 bytes a scene */
 const SCENE = { size: 42, map: 4, views: 10, right: 14, left: 18, script: 22, name: 26 } as const;
@@ -178,6 +197,18 @@ export interface SetBuildActor {
   position: [number, number, number];
   /** the nested secondary star a script can walk them to */
   secondary?: { name: string; rotation8: number; position: [number, number, number] };
+  /**
+   * The route `walkonpath` walks between this star and its {@link secondary} —
+   * `(x, z, y)` points from one to the other, ends included, so three points is
+   * one bend. Ignored without a secondary, since the route is a property of the
+   * PAIR and both of the original's lookups match on the two names.
+   *
+   * Leave it out and the pair is walked as a straight line, which is what three
+   * of the six shipped routes are. Give it the corners and characters go round the
+   * scenery instead of through it (#122) — see
+   * {@link readStarPath} for what gets written.
+   */
+  path?: [number, number, number][];
 }
 
 export interface SetBuildOptions {
@@ -355,6 +386,41 @@ export function buildSetFile(opts: SetBuildOptions): SetBuildResult {
         i16(d, at + ACTOR.secondary + 4, s.position[1]);
         i16(d, at + ACTOR.secondary + 6, s.position[2]);
         pstr(d, at + ACTOR.secondary + 8, s.name, NAME_FIELD);
+        // The route between the pair, in its own container, referenced by an i16
+        // in the two bytes before the secondary. Written only WITH a secondary and
+        // only for two points or more: a shorter one would be a route to nowhere,
+        // and a zero ref is how the file says "no route, walk the straight line".
+        if (a.path && a.path.length >= 2) {
+          const pts = a.path;
+          const p = new Uint8Array(PATH.first + pts.length * PATH.size);
+          let total = 0;
+          let minZ = Infinity, minX = Infinity, maxZ = -Infinity, maxX = -Infinity;
+          pts.forEach((q, k) => {
+            const o = PATH.first + k * PATH.size;
+            i16(p, o, q[0]);
+            i16(p, o + 2, q[1]);
+            i16(p, o + 4, q[2]);
+            let leg = 0;
+            if (k > 0) {
+              const prev = pts[k - 1];
+              const dx = q[0] - prev[0];
+              const dz = q[1] - prev[1];
+              const dy = q[2] - prev[2];
+              leg = isqrt(dx * dx + dz * dz + dy * dy);
+              total += leg;
+            }
+            i16(p, o + 6, leg);
+            minX = Math.min(minX, q[0]); maxX = Math.max(maxX, q[0]);
+            minZ = Math.min(minZ, q[1]); maxZ = Math.max(maxZ, q[1]);
+          });
+          i32(p, PATH.total, total);
+          i32(p, PATH.count, pts.length);
+          i16(p, PATH.box, minZ);
+          i16(p, PATH.box + 2, minX);
+          i16(p, PATH.box + 4, maxZ);
+          i16(p, PATH.box + 6, maxX);
+          i16(d, at + ACTOR.path, b.add(p));
+        }
       }
     });
     i32(c0, C0.actorRegister, b.add(d));

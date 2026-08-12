@@ -283,6 +283,15 @@ export class Scheduler {
       dist: number; progress: number; paused: boolean; arriveStar?: string;
       /** the facing to reach before moving; undefined once the turn is done */
       turnTo?: number;
+      /**
+       * An authored route instead of a straight line (`walkonpath`): the
+       * polyline's points with the cumulative distance to each. `dist` is the
+       * whole route's length, so the progress arithmetic below is unchanged —
+       * one scalar over the whole path, which is what the data is shaped for
+       * (each point stores its distance from the one before, and the container
+       * header stores the total).
+       */
+      path?: { x: number; y: number; z: number; cum: number }[];
     }
   >();
 
@@ -306,6 +315,62 @@ export class Scheduler {
       sx: a.worldX, sy: a.worldY, sz: a.worldZ,
       dx, dy, dz, dist, progress: 0, paused: false, arriveStar,
       turnTo: bearing(dx, dy),
+    });
+  }
+
+  /**
+   * `walkonpath`: walk an AUTHORED ROUTE rather than the straight line between
+   * two stars. `points` runs from where the actor sets off to the destination.
+   *
+   * The corpus holds six of these and only three bend, but those three are the
+   * whole of #122: Georgia's ten-point curve around the boat deck's structures
+   * (`deckbd` `ga.1`→`ga.2`), Sasha's five-point route out of the cabin and down
+   * the hall (`halla`), and the hacker's nine (`scot3`). Walking the straight
+   * line instead took Georgia through the second-class stairs and clipped Sasha
+   * through the corner of a wall.
+   *
+   * Modelled as one progress scalar over the whole polyline, because that is what
+   * the data is shaped for and what TI.EXE's record says: it keeps the same
+   * `progress` field a straight walk uses (+0x16), the path's own container header
+   * carries the TOTAL length and every point its distance from the one before, and
+   * the opening facing comes from the first two points (`0x444980` reads the path
+   * at +0x14 and +0x1c). So no leg re-dispatches `endturn` and only the arrival
+   * fires `endwalk` — one walk, as the script asked for.
+   */
+  startWalkPath(
+    name: string,
+    points: { x: number; y: number; z: number; fromPrev: number }[],
+    arriveStar?: string,
+  ): void {
+    const a = this.session.actorRuntime.get(name);
+    if (!a) return;
+    if (points.length < 2) {
+      const p = points[0];
+      if (p) this.startWalk(name, p.x, p.y, p.z, arriveStar);
+      return;
+    }
+    // The leg lengths come from the FILE, not from re-measuring the geometry: the
+    // author stored them with TI.EXE's truncating integer sqrt, so a re-measure
+    // disagrees by a unit here and there (halla's third leg is 277 stored against
+    // 278.0 computed) and the total would no longer match the header the original
+    // paces the whole route by.
+    const path: { x: number; y: number; z: number; cum: number }[] = [];
+    let cum = 0;
+    points.forEach((p, i) => {
+      if (i > 0) cum += p.fromPrev;
+      path.push({ x: p.x, y: p.y, z: p.z, cum });
+    });
+    const first = path[0];
+    const second = path[1];
+    a.worldX = first.x;
+    a.worldY = first.y;
+    a.worldZ = first.z;
+    this.walks.set(a.member.name, {
+      sx: first.x, sy: first.y, sz: first.z,
+      dx: 0, dy: 0, dz: 0,
+      dist: Math.max(1, Math.floor(cum)), progress: 0, paused: false, arriveStar,
+      turnTo: bearing(second.x - first.x, second.y - first.y),
+      path,
     });
   }
 
@@ -411,9 +476,27 @@ export class Scheduler {
       // Max pacing A-deck in 3.70 s a leg against 14.65 s. (User-reported.)
       w.progress += Math.max(1, a.speed);
       const t = Math.min(1, w.progress / w.dist);
-      a.worldX = Math.round(w.sx + w.dx * t);
-      a.worldY = Math.round(w.sy + w.dy * t);
-      a.worldZ = Math.round(w.sz + w.dz * t);
+      if (w.path) {
+        // Which leg the one progress scalar has reached, and how far along it.
+        // The facing is re-aimed per leg rather than only at the start: an
+        // authored route turns corners, and holding the opening bearing would
+        // walk the whole of Georgia's curve sideways.
+        const at = t * w.path[w.path.length - 1].cum;
+        let i = 1;
+        while (i < w.path.length - 1 && w.path[i].cum < at) i++;
+        const from = w.path[i - 1];
+        const to = w.path[i];
+        const leg = to.cum - from.cum;
+        const u = leg > 0 ? Math.min(1, Math.max(0, (at - from.cum) / leg)) : 1;
+        a.worldX = Math.round(from.x + (to.x - from.x) * u);
+        a.worldY = Math.round(from.y + (to.y - from.y) * u);
+        a.worldZ = Math.round(from.z + (to.z - from.z) * u);
+        a.deg = bearing(to.x - from.x, to.y - from.y);
+      } else {
+        a.worldX = Math.round(w.sx + w.dx * t);
+        a.worldY = Math.round(w.sy + w.dy * t);
+        a.worldZ = Math.round(w.sz + w.dz * t);
+      }
       a.step++; // walk pose cycle advances per service tick
       if (t >= 1) {
         this.walks.delete(key);
