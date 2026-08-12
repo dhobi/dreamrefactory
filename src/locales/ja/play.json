@@ -3,7 +3,7 @@
   "h1": "起動中",
   "intro": "ゲームファイルを読み込んでいます…",
   "introSub": "<code>gamefiles/</code> ディレクトリを探しています",
-  "keys": "<b>←</b> <b>→</b> 旋回 &nbsp;·&nbsp; <b>↑</b> 前進 &nbsp;·&nbsp; <b>Esc</b> セリフを飛ばす &nbsp;·&nbsp; <b>M</b> マップ &nbsp;·&nbsp; <b>O</b> ホットスポット &nbsp;·&nbsp; <b>X</b> 詳細 &nbsp;·&nbsp; <b>F1</b> <b>F2</b> 明るさ",
+  "keys": "<b>←</b> <b>→</b> 旋回 &nbsp;·&nbsp; <b>↑</b> 前進 &nbsp;·&nbsp; <b>Esc</b> セリフを飛ばす &nbsp;·&nbsp; <b>M</b> マップ &nbsp;·&nbsp; <b>O</b> ホットスポット &nbsp;·&nbsp; <b>X</b> 詳細 &nbsp;·&nbsp; <b>0</b>–<b>9</b> 音 &nbsp;·&nbsp; <b>F1</b> <b>F2</b> 明るさ",
   "fullscreen": "⛶ 全画面",
   "fullscreenTitle": "全画面（4:3 レターボックス）",
   "reportBug": "🪲 不具合を報告",

@@ -57,6 +57,33 @@ const PRESS_FLOOR_MS = (10 / 60) * 1000;
  * enable that suppresses every subtitle in the game when clear. Nothing in the
  * port sets it, and nothing in the shipped corpus writes it.
  */
+/**
+ * The volume digits, shared by the two waits that take keys — the spoken-line
+ * filter (0x441d80) and the movie one (0x44a460), whose jump tables are
+ * byte-identical: `0`..`9` each call the wave-volume setter with their own value,
+ * and report "not an interrupt" so the line or the clip carries on.
+ *
+ * DEVIATION, and a forced one. The original requires the Ctrl marker on every arm
+ * of those tables (the window proc sets it from `GetKeyState(VK_CONTROL)` alone,
+ * 0x41ad08), so these are Ctrl+0..Ctrl+9 there. A browser cannot have them:
+ * Ctrl+0 is zoom reset and Ctrl+1..Ctrl+9 switch tabs, and `preventDefault()`
+ * does not stop either. #115's brightness keys had no such problem — the manual
+ * named Ctrl+F1 but the code tested the virtual key alone, so bare F1 was
+ * faithful AND reachable. Here the two disagree, so the digits are bound bare and
+ * the chord is simply unavailable (#129).
+ *
+ * NOT bound: `T`, the other arm these tables share. It sets the filter's
+ * out-param rather than acting, and of the three call sites only the movie loop
+ * reads it (0x44a3e9) — so during a spoken line it does nothing at all in the
+ * original either. What it does in a movie is toggle an audio latch (0x48c510)
+ * whose stream is unidentified, so it stays out until it is named.
+ */
+export function volumeKey(session: GameSession, name: string): boolean {
+  if (name.length !== 1 || name < "0" || name > "9") return false;
+  session.setWaveVolume(name.charCodeAt(0) - 0x30);
+  return true;
+}
+
 export function subtitled(line: PupDialogue): boolean {
   if (!line.raw.length) return false;
   if (line.raw.startsWith("*")) return false;
@@ -409,6 +436,9 @@ export class PuppetController {
     const p = this.puppet;
     if (!p || !p.visible) return false;
     if (!p.speakSkip && !p.eventWaiter) return false;
+    // the volume digits first, because they are the arms that do NOT interrupt:
+    // the filter answers 0 for them and the line plays on (see volumeKey)
+    if (volumeKey(this.session, name)) return true;
     if (!special || name !== ".") return false;
     if (p.speakSkip) this.skipLine();
     return true;

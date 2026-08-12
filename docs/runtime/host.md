@@ -374,6 +374,37 @@ Two things about where they sit:
   Remembered under `taoot.picture.brightness`. A slider shipped first and was wrong on
   a phone — a 44 px target you can hit is worth more than granularity nobody wants.
 
+### The sound keys, and why the page has no sound control
+
+`wavevolume` 0..9. Two things move it and they go through one setter
+(`GameSession.setWaveVolume`), because `TI.EXE` funnels it the same way: `0x4249b0`
+has twenty-one callers, `wavevolume(n)`'s own site plus the ten digit arms in each of
+its two key filters.
+
+- **0–9 while a character is speaking or a clip is playing**, which is where those
+  filters live — see [skipping and repeating](characters.md#skipping-and-repeating)
+  for why they are bound bare rather than as the original's Ctrl chords. They work
+  over the logos and the menu too, which are movies played by the intro rather than
+  by a viewer.
+- **The game's own dial**, opened from the lifebuoy in the interface band. `CTL.STG`
+  c2 seeds it from the live value (`propdeg("volume", wavevolume())`) and
+  `HOUSE.SHP` c3's mousedown is a `while stilldown()` drag loop writing
+  `wavevolume(propdeg(me))` on every frame, closing with a `voicesound("volume")`
+  click.
+
+**The play page deliberately adds nothing here**, and that is the opposite of the
+brightness decision above. The difference is whether the game already answers the
+question: brightness has *no* in-game control at all — the F-keys are the whole of
+it, and a phone cannot press them, so the page had to supply presets. Volume has a
+dial, and it is a **drag**, which a finger does as well as a mouse. A slider on the
+page would have been a second control for a value the game already owns, drifting
+from the dial the moment a savegame or a script moved it.
+
+What that leaves uncovered is real and is the original's own gap: with a clip or a
+conversation on screen the band is not reachable, so a player without a keyboard
+cannot change the volume until it ends. `TI.EXE` leaves a mouse-only player in
+exactly that position.
+
 **Four caches hold post-gamma bytes**, and a live change has to reach all of them or
 the picture changes in one place and not the others: the set/prop palettes, the stage
 flat memo, the puppet's composited stance, and each movie segment's baked palette.

@@ -132,7 +132,7 @@ export const en = {
     intro: "Loading the game's files…" as Text,
     introSub: 'Looking in the <code>gamefiles/</code> directory' as Html,
     keys:
-      "<b>←</b> <b>→</b> turn &nbsp;·&nbsp; <b>↑</b> walk &nbsp;·&nbsp; <b>Esc</b> skip line &nbsp;·&nbsp; <b>M</b> map &nbsp;·&nbsp; <b>O</b> hotspots &nbsp;·&nbsp; <b>X</b> details &nbsp;·&nbsp; <b>F1</b> <b>F2</b> brightness" as Html,
+      "<b>←</b> <b>→</b> turn &nbsp;·&nbsp; <b>↑</b> walk &nbsp;·&nbsp; <b>Esc</b> skip line &nbsp;·&nbsp; <b>M</b> map &nbsp;·&nbsp; <b>O</b> hotspots &nbsp;·&nbsp; <b>X</b> details &nbsp;·&nbsp; <b>0</b>–<b>9</b> sound &nbsp;·&nbsp; <b>F1</b> <b>F2</b> brightness" as Html,
     fullscreen: "⛶ Fullscreen" as Text,
     fullscreenTitle: "Fullscreen (letterboxed 4:3)" as Text,
     reportBug: "🪲 Report a bug" as Text,
