@@ -93,6 +93,15 @@ stage in the game relies on, and nothing else was doing.
 `indextoprop`, `error`. See [SHP](../formats/shp.md) for the placement
 model (`propxy` screen-space vs `propxyz` world-space).
 
+`countprops`/`indextoprop` enumerate **one game-wide table** — the union of every
+open shop, in the order the shops opened — and not the asking script's own shop.
+TI.EXE keeps a single count at `0x489f18` and a single table at `0x489f14`
+(158-byte records), with `countactors`/`indextoactor` the byte-for-byte twins one
+table over at `0x489f08`. Nothing about the caller enters into it, which matters
+because the callers that are not themselves a shop are the interesting ones: both
+of `advanceday`'s world-reset loops, and the control panel's
+`allprops`/`countallprops`/`allactors`.
+
 ## Audio — `audio.ts`
 
 `voicesound`, `singlesound`, `multiplesound`, `dualsound`, `bothsound`,

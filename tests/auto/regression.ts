@@ -7665,3 +7665,201 @@ test("the bound movement keys turn the camera, like the arrows they map to", asy
   check('and "a" does nothing once it is not bound', viaOldA === start, `${start} -> ${viaOldA}`);
 }
 );
+
+// --- 99. a new game starts clean, because the BOOTFILE's reset loops run (#89)
+// The bad ending is not a dead end: `playmore.mov` offers another game, and
+// BOOTFILE `advanceday`'s failure arm walks the world back itself before dealing
+// mission 1 —
+//
+//     size = countprops ()
+//     for count = 1 to size
+//         name = indextoprop (count)
+//         propowner (name, "none")
+//     endfor
+//
+// — the same pair of loops the `startdisk1` arm runs. Both were dead here, and
+// only the prop half: `countprops` answered from the CALLING FRAME's shop, so
+// inven.shp asking got its own 28 and the BOOTFILE asking got 0. Zero iterations,
+// so every ownership from the finished game survived into the next one: the
+// reporter arrived in C-73 carrying the trunk key, the fake necklace, a telegram,
+// the painting and the notebook, with the map/bag/watch already dealt and an item
+// parked over the HELP button, and mission 2 unfinishable because the painting was
+// still Zeitel's and the car keys still in the void (#89).
+//
+// TI.EXE has ONE prop table and no notion of a calling shop: countprops is
+// `mov ecx, [0x489f18]` (0x418660) and indextoprop bounds-checks against that same
+// dword before walking the table at [0x489f14] in 158-byte records (0x418710) —
+// which is `propRuntime.props`, the union of every open shop, in the order they
+// opened. countactors/indextoactor are the byte-for-byte twins one table over
+// ([0x489f08], 0x410610) and were already global here, which is why the ACTOR
+// half of the same reset always worked.
+test("a new game after a bad ending starts with nothing carried (#89)", async () => {
+  const { session } = await newHost();
+  const g = session.interp.globals;
+  await session.openSetFile("c73.set"); // inven.shp + house.shp: 72 props
+  await drain();
+
+  // 1. the mechanism, from the frame that actually asks. The BOOTFILE is not a
+  // shop and never can be, so a shop-scoped answer is 0 for every boot caller —
+  // both reset loops, and the CTL console's allprops/countallprops/allactors.
+  const call = (name: string, args: unknown[], me: string): unknown =>
+    (session.interp.builtins.get(name) as unknown as (
+      i: unknown, a: unknown[], c: unknown, f: unknown,
+    ) => unknown)(session.interp, args, { me, target: "" }, { ctx: { me, target: "" } });
+  const known = session.propRuntime.props.size;
+  const fromBoot = Number(call("countprops", [], "bootfile"));
+  check(
+    "countprops() answers the whole table, whoever asks",
+    fromBoot === known && known > 0,
+    `${fromBoot} from the BOOTFILE vs ${known} props open ` +
+      `(${[...session.propRuntime.shops.keys()].join(" + ")})`,
+  );
+  const walked = Array.from({ length: fromBoot }, (_, i) => String(call("indextoprop", [i + 1], "bootfile")));
+  check(
+    "and indextoprop walks it, naming each prop once",
+    new Set(walked).size === known && !walked.includes(""),
+    `${new Set(walked).size} distinct of ${known}; first=${walked[0]} last=${walked[walked.length - 1]}`,
+  );
+
+  // 2. the outcome — the failure arm end to end. Its movies are stubbed and only
+  // its movies: leave.mov alone is 39 MB, and what they look like is the browser
+  // gate's job (tests/browser/endgame.ts). Everything that RESETS runs for real.
+  const played: string[] = [];
+  session.onPlayMovie = (name) => {
+    played.push(name);
+  };
+  // a finished game, dirty in every way the reporter's was
+  const DIRT: [string, string][] = [
+    ["painting", "zeit"], ["cufflink", "purs"], ["carkeys", "xxxfrank"],
+    ["notebook", "frank"], ["fakeneck", "frank"], ["trunkkey", "frank"],
+  ];
+  for (const [prop, owner] of DIRT) {
+    const p = session.propRuntime.get(prop);
+    if (p) p.owner = owner;
+  }
+  const dirtied = DIRT.filter(([n]) => !!session.propRuntime.get(n));
+  check("the finished game's ownerships are in place to be cleared",
+    dirtied.length === DIRT.length, `missing: ${DIRT.filter(([n]) => !session.propRuntime.get(n)).map(([n]) => n)}`);
+  // ...and the ACTOR half of the same reset, which failed for a different reason:
+  // the loop DID run 25 times (countactors was always global here), but
+  // `sendtoactor(name, resetactor())` resolved on the actor's own script, none of
+  // the 25 has a `resetactor`, and nothing walked on to the boot library that
+  // does. 25 no-ops, so who owned whom survived the ending too.
+  const purs = session.actorRuntime.get("purs");
+  const zeit = session.actorRuntime.get("zeit");
+  if (purs) { purs.owner = "cufflink"; purs.value = 3; }
+  if (zeit) { zeit.owner = "painting"; zeit.value = 1; }
+
+  const STORY: [string, number][] = [
+    ["neckphase", 3], ["letterphase", 2], ["zeitgossip", 1], ["metzeitel", 1],
+    ["fencewins", 4], ["smethphase", 5], ["pennyphase", 6], ["zeitelphase", 2],
+  ];
+  for (const [name, v] of STORY) g.set(name, v);
+  g.set("handitem", "realneck");
+  g.set("mission", 4); // anything but "good" takes the play-again arm
+  g.set("phase", 3);
+  g.set("clock", "endgame");
+
+  await session.runGlobal("advanceday");
+  await session.settle();
+  await drain();
+
+  check("the arm ran its own way through (bktoship.mov, then the new day)",
+    played.includes("bktoship.mov") && played.includes("datecab.mov"), played.join(" -> "));
+
+  // Every INVENTORY prop back to "none" — except the two the new game is dealt
+  // with, which inven.shp's own initprops() hands out at mission 1 (rubaiyat to
+  // the coal chute, the real necklace to Vlad). Asserting around those rather than
+  // excluding them: a reset that also wiped the fresh deal would be its own bug.
+  //
+  // inven.shp only. The other open shop is house.shp, the interface, and half of
+  // it keeps its STATE in the owner field rather than an owner — `navtoggle=on`,
+  // `light=off`, `invenhelp=notvis`. The loop walks those too (one table, and
+  // TI.EXE's has no idea which is which), and what puts them back is the arriving
+  // room's own `initinterface`.
+  const DEALT: Record<string, string> = { rubaiyat: "coal4", realneck: "vlad" };
+  const inven = [...session.propRuntime.props.entries()].filter(([, p]) => p.shop.name === "inven.shp");
+  const held = inven.filter(([n, p]) => p.owner !== "none" && p.owner !== "" && p.owner !== DEALT[n]);
+  check("no artifact is owned by anyone the new game did not deal it to",
+    held.length === 0 && inven.length > 0,
+    `${inven.length} inventory props; still held: ${held.map(([n, p]) => `${n}=${p.owner}`).join(" ") || "(none)"}`);
+  for (const [prop, owner] of Object.entries(DEALT)) {
+    const p = session.propRuntime.get(prop);
+    check(`and mission 1 is dealt: ${prop} is with ${owner}`, p?.owner === owner, `${prop}=${p?.owner}`);
+  }
+
+  const stillOwned = [purs, zeit].filter((a) => a && (a.owner !== "none" || a.value !== 0));
+  check("no actor still owns what the finished game left them holding",
+    stillOwned.length === 0,
+    stillOwned.map((a) => `${a!.member.name}=${a!.owner}/${a!.value}`).join(" "));
+
+  // resetgamevars/resetpupvars, which run in the same arm and are reached the
+  // same way — a stale `neckphase` is a mission that thinks it is half-done
+  const stale = STORY.filter(([n]) => Number(g.get(n) ?? 0) !== 0);
+  check("the story and puppet variables are back to zero",
+    stale.length === 0, stale.map(([n]) => `${n}=${g.get(n)}`).join(" "));
+  check("nothing is in the player's hand", (g.get("handitem") ?? "") === "", `handitem=${g.get("handitem")}`);
+  check("and it is mission 1 phase 0 in C-73",
+    g.get("mission") === 1 && g.get("phase") === 0 && session.currentSetName === "c73",
+    `mission=${g.get("mission")} phase=${g.get("phase")} set=${session.currentSetName}`);
+}
+);
+
+// --- 100. an item you are handed takes the HELP button down with it (#123) ----
+// `addinven` is how anything reaches your hand, and its FIRST line is the clear:
+//
+//     code addinven (newitem)
+//         sendtoprop ("invenhelp", initprop ())      <- HELP goes
+//         ...
+//         propxy (handitem, 94, 319)                 <- the item lands where it was
+//
+// Both draw at the left end of the interface band, which is why the order is not
+// decoration: the item is put exactly where HELP was. `invenhelp` has a script of
+// its own (setupprop/setcursor/mousedown) and no `initprop`, so the default in the
+// boot library is what has to answer — and nothing walked there. Georgia handed
+// over the fake necklace and it was drawn on top of a HELP button that should
+// already have gone (#123, reported from deckbd in M1P1).
+//
+// `showinterface` is the tell that this is a state and not a repaint: it brings
+// HELP back with `if propowner ("invenhelp") = "vis" & handitem = ""` — the owner
+// field remembers whether HELP belongs on screen at all, and the hand decides
+// whether it may show. So initprop must take the PICTURE down and leave the owner
+// alone, which is exactly what the boot's three lines do.
+test("an item handed to you takes the HELP button down (#123)", async () => {
+  const { session } = await newHost();
+  const g = session.interp.globals;
+  g.set("mission", 1);
+  g.set("phase", 0);
+  await session.openSetFile("c73.set");
+  await session.settle();
+
+  const help = session.propRuntime.get("invenhelp")!;
+  const item = session.propRuntime.get("fakeneck")!;
+  check("the default initprop is in the boot library, not in the prop",
+    !!help && session.bootScripts.some((b) => b.script.codes.has("initprop")),
+    `invenhelp=${!!help} boot=${session.bootScripts.map((b) => b.script.codes.has("initprop")).join(",")}`);
+  // the state the reporter was in: HELP up, nothing in hand
+  help.owner = "vis";
+  help.visible = true;
+  g.set("handitem", "");
+
+  // Georgia's line, verbatim (ga1.pup 0006:131)
+  await session.sendEvent("sendtoshop", "inven.shp", "addinven", ["fakeneck"], "ga1.pup");
+  await session.settle();
+  await drain();
+
+  check("the necklace is in hand", g.get("handitem") === "fakeneck" && item.owner === "frank",
+    `handitem=${g.get("handitem")} fakeneck=${item.owner}`);
+  check("HELP is no longer drawn", !help.visible, `invenhelp visible=${help.visible}`);
+  // ...and the owner is untouched, so showinterface can bring it back once your
+  // hand is empty again. Clearing it here would retire HELP for the rest of the game.
+  check("but HELP is still ON, for when your hand is empty again",
+    help.owner === "vis", `invenhelp owner=${help.owner}`);
+
+  // the pair, as showinterface reads it
+  g.set("handitem", "");
+  await session.sendEvent("sendtoshop", "house.shp", "showinterface", [], "test");
+  await session.settle();
+  check("an empty hand brings HELP back", !!help.visible, `invenhelp visible=${help.visible}`);
+}
+);

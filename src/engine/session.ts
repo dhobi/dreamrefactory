@@ -627,7 +627,7 @@ export class GameSession {
     callerName: string,
   ): Promise<Value> {
     const inst = this.resolveEventTarget(cmd, targetName, handler);
-    const chain = this.buildEventChain(cmd, inst);
+    const chain = this.buildEventChain(cmd, inst, handler);
     if (!chain.length) {
       this.onLog(`${cmd}("${targetName}", ${handler}(..)) — target not loaded`);
       return 0;
@@ -774,7 +774,11 @@ export class GameSession {
   }
 
   /** the ordered list of scripts the event traverses (exitcode stops it) */
-  private buildEventChain(cmd: string, inst: ScriptInstance | null): ScriptInstance[] {
+  private buildEventChain(
+    cmd: string,
+    inst: ScriptInstance | null,
+    handler = "",
+  ): ScriptInstance[] {
     const chain = inst ? [inst] : [];
     if (cmd === "sendtoscene" || cmd === "sendtoset") {
       const main = this.currentBinding?.main;
@@ -797,6 +801,45 @@ export class GameSession {
     // ONLY that boot-internal call.
     if (cmd === "sendtostage" && !this.suppressStageBootFallback) {
       for (const b of this.bootScripts) if (b !== inst && !chain.includes(b)) chain.push(b);
+    }
+    // A prop or an actor with NO script of its own still has the boot library
+    // behind it, and that is where a title keeps its defaults — written against
+    // `target`, because the boot is answering for something else:
+    //
+    //     code initprop ()                    code resetactor ()
+    //         propvisible (target, false)         actorowner (target, "none")
+    //         propvalue (target, 0)               actorvalue (target, 0)
+    //         propdeg (target, 0)                 initactor ()
+    //
+    // 70 of the 72 props two open shops give you rely on that default (only
+    // `door` and `signs` carry their own), and all 25 cast members rely on the
+    // other. A target WITH a script reaches them through containment below; a
+    // stub has no `inst` for containment to climb from, so the event died as
+    // "target not loaded" — the line the #89 report ends on. TAOOT ships one:
+    // `purs` is an actor record with an eight-byte script container, and
+    // `advanceday`'s reset loop sent him `resetactor()` to no effect, so the
+    // purser still held the cufflink in the next game.
+    //
+    // GATED on the boot actually HAVING the handler, the same rule the cast-main
+    // fallback is gated by: walking to the boot for a handler defined in NO
+    // script — TAOOT sends `playcrickets` and `initactor` to this same stub —
+    // buys nothing but await points, and those reordered the boat deck's crowd
+    // extras badly enough for two playthrough segments to record it.
+    //
+    // ...and on the boot not ALREADY RUNNING that handler, because the boot holds
+    // the click ROUTER as well as the defaults: `boot1.mousedown` hittests the
+    // point and re-sends to whatever is under it, so a stub actor's missing
+    // `mousedown` would resolve back into that router, which hittests the same
+    // unmoved point and sends again ("dispatch cycle: boot1.mousedown at depth
+    // 64", every click on a walker eaten). `isRunning` is the guard the keydown
+    // fallback above is built on, and it is the right one here rather than "did
+    // the boot dispatch this at all" — the boot dispatches the reset loop too,
+    // and that has to reach the boot's own default. Re-entering ONE handler is
+    // the cycle; one boot handler calling out to another is the library working.
+    if (!chain.length && (cmd === "sendtoprop" || cmd === "sendtoactor")) {
+      for (const b of this.bootScripts) {
+        if (b.script.codes.has(handler) && !this.interp.isRunning(b, handler)) chain.push(b);
+      }
     }
     return chain;
   }
@@ -888,7 +931,17 @@ export class GameSession {
     // did NOT originate: dispatched under a different outer handler, the
     // lifecycle helpers this exception exists for still resolve (closescene
     // sending putdownactor arrives with outerDispatch "closescene").
-    if (cmd === "sendtoactor" && this.interp.outerDispatch !== handler) {
+    //
+    // A PROP is the same case one command over, and was left out: `initprop`, the
+    // boot's default that hides a prop and zeroes it, is what 70 of the 72 props
+    // two open shops give you rely on — only `door` and `signs` carry their own.
+    // So `addinven`'s opening `sendtoprop ("invenhelp", initprop ())`, which takes
+    // the HELP button down before putting the item you were just handed in its
+    // place, reached nothing and the item was drawn on top of HELP (#123).
+    if (
+      (cmd === "sendtoactor" || cmd === "sendtoprop") &&
+      this.interp.outerDispatch !== handler
+    ) {
       for (const b of this.bootScripts) if (!libs.includes(b)) libs.push(b);
     }
     // A link the chain already ran must not run twice. It can be on both lists:

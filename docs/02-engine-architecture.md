@@ -240,6 +240,26 @@ re-entrancy check: a script already running a handler further up the dispatch st
 is never given it again. Before that existed the boot had to be kept off every
 fallback list, and reaching it was an out-of-memory rather than a wrong answer.
 
+The boot is also where a title keeps its **defaults**, which is the other half of why
+events walk that far. They are written against `target` rather than `me`, because the
+boot is answering on something else's behalf — `initprop` hides a prop and zeroes it,
+`resetactor` disowns an actor:
+
+```
+code initprop ()                    code resetactor ()
+    propvisible (target, false)         actorowner (target, "none")
+    propvalue (target, 0)               actorvalue (target, 0)
+    propdeg (target, 0)                 initactor ()
+```
+
+Almost everything relies on them: of the 72 props TAOOT's two always-open shops give
+you, only `door` and `signs` carry an `initprop` of their own, and no cast member in
+the tree carries a `resetactor`. So a prop or an actor answering nothing for an event
+is the normal case, not the broken one — and a **stub** target, with no script at all,
+still has to reach them. TAOOT ships one: the purser is an actor record with an
+eight-byte script container, and dropping his events as "target not loaded" is what
+left him holding the cufflink into the next game (#89).
+
 And a press may never reach the chain at all, because two things are modal ahead of
 it: a **playing movie** and a **suspended conversation**. Both are places where the
 original's own wait loop is the one popping the event queue, so the key is answered
