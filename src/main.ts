@@ -96,9 +96,8 @@ const swipeOpts = document.getElementById("swipeOpts") as HTMLDivElement;
 const swipeInvertTurnBox = document.getElementById("swipeInvertTurn") as HTMLInputElement;
 const swipeInvertWalkBox = document.getElementById("swipeInvertWalk") as HTMLInputElement;
 const sharpLandingBox = document.getElementById("sharpLanding") as HTMLInputElement;
-const brightnessRange = document.getElementById("brightness") as HTMLInputElement | null;
+const brightnessSeg = document.getElementById("brightnessSeg");
 const brightnessValue = document.getElementById("brightnessValue");
-const brightnessReset = document.getElementById("brightnessReset");
 /** where you are and what the engine is doing: the X pane, off by default */
 const details = document.getElementById("details") as HTMLDivElement;
 const scriptlog = document.getElementById("scriptlog") as HTMLPreElement;
@@ -1072,60 +1071,69 @@ const SHARP_LANDING_KEY = "taoot.picture.sharplanding";
 const BRIGHTNESS_KEY = "taoot.picture.brightness";
 
 /**
- * The brightness slider — the touch half of the original's F1/F2.
+ * The brightness presets — the touch half of the original's F1/F2.
  *
- * Its unit is ONE KEYPRESS: a notch is the same factor of 1.05 the original's keys
- * apply, so 0 is what the game ships with and +/-12 is twelve presses either way.
- * That keeps the two controls the same control rather than two settings that drift
- * apart, and it is why the slider is not a percentage — there is no percentage to
- * be had, the value is an exponent.
+ * Three of them, not a slider. This shipped as a slider first and a slider is the
+ * wrong control for a thumb: the value it sets is an exponent nobody can reason
+ * about, and hitting a 9rem groove on a phone is a drag gesture where a tap would
+ * do. Three named choices are one tap each, and the keys stay there for anyone who
+ * wants finer control.
  *
- * Right is BRIGHTER, which means a lower exponent: `pow(c/255, g)` with g below 1
- * lifts a colour, so the original's F1 (divide by 1.05) is its brighten key and F2
- * its darken key. The slider hides that inversion rather than exposing it.
+ * The offsets are counted in KEYPRESSES — six of the original's own 1.05 steps
+ * either side of the default — so the presets and F1/F2 are the same setting rather
+ * than two, and pressing the keys lands on a preset every sixth time. Neither end
+ * goes past 1.0, i.e. neither is darker than the palette bytes on disc: the darkest
+ * thing this offers is still a lift, which is what the original's default is.
  */
+const BRIGHTNESS_PRESETS: Record<string, number> = {
+  darker: -6,
+  default: 0,
+  brighter: 6,
+};
+
 function installBrightness(): void {
-  if (!brightnessRange) return;
+  if (!brightnessSeg) return;
+  const radios = [...brightnessSeg.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
   const gammaFor = (steps: number): number => DEFAULT_SCREEN_GAMMA / Math.pow(SCREEN_GAMMA_STEP, steps);
-  /** the slider notch nearest the live gamma — how the keys move the slider */
-  const stepsFor = (g: number): number =>
-    Math.round(Math.log(DEFAULT_SCREEN_GAMMA / g) / Math.log(SCREEN_GAMMA_STEP));
-  const show = (): void => {
+  /** the preset the live gamma IS, or "" when the keys have put it between two */
+  const presetNow = (): string => {
     const g = screenGamma();
-    brightnessRange.value = String(stepsFor(g));
-    if (brightnessValue) brightnessValue.textContent = g.toFixed(2);
+    for (const [name, steps] of Object.entries(BRIGHTNESS_PRESETS)) {
+      if (Math.abs(g - gammaFor(steps)) < 1e-6) return name;
+    }
+    return "";
+  };
+  const show = (): void => {
+    const now = presetNow();
+    for (const r of radios) r.checked = r.value === now;
+    if (brightnessValue) brightnessValue.textContent = screenGamma().toFixed(2);
   };
   let stored: string | null = null;
   try {
     stored = window.localStorage.getItem(BRIGHTNESS_KEY);
   } catch {
-    /* storage can be denied; the slider then starts at the default every launch */
+    /* storage can be denied; the presets then start at the default every launch */
   }
-  const remembered = Number(stored);
-  if (stored !== null && Number.isFinite(remembered)) setScreenGamma(gammaFor(remembered));
+  if (stored && stored in BRIGHTNESS_PRESETS) setScreenGamma(gammaFor(BRIGHTNESS_PRESETS[stored]));
   show();
-  const store = (): void => {
-    try {
-      window.localStorage.setItem(BRIGHTNESS_KEY, brightnessRange.value);
-    } catch {
-      /* not remembering is survivable — the setting still holds for this tab */
-    }
-  };
-  brightnessRange.addEventListener("input", () => {
-    setScreenGamma(gammaFor(Number(brightnessRange.value)));
-    if (brightnessValue) brightnessValue.textContent = screenGamma().toFixed(2);
-    store();
-  });
-  brightnessReset?.addEventListener("click", () => {
-    resetScreenGamma();
-    show();
-    store();
-  });
-  // the keys move the same value, so the slider has to follow them
+  for (const r of radios) {
+    r.addEventListener("change", () => {
+      if (!r.checked) return;
+      setScreenGamma(gammaFor(BRIGHTNESS_PRESETS[r.value] ?? 0));
+      show();
+      try {
+        window.localStorage.setItem(BRIGHTNESS_KEY, r.value);
+      } catch {
+        /* not remembering is survivable — the setting still holds for this tab */
+      }
+    });
+  }
+  // the keys move the same value, so the presets have to follow them — and show
+  // nothing selected when a press has landed between two
   onScreenGammaShown = show;
 }
 
-/** set by {@link installBrightness} so the F-keys can refresh the slider */
+/** set by {@link installBrightness} so the F-keys can refresh the presets */
 let onScreenGammaShown: (() => void) | null = null;
 
 function bindSwipeOption(box: HTMLInputElement, key: string, apply: (on: boolean) => void): void {
