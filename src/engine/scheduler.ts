@@ -483,6 +483,44 @@ export class Scheduler {
     return this.walks.has(name.toLowerCase());
   }
 
+  /**
+   * Is a TURN in flight — for one actor, or for anyone?
+   *
+   * `iswalk` cannot answer this and does not try to: TI.EXE's (`0x4427e0`) walks
+   * its 16-slot table at `0x48b150` in strides of `0x6e` and tests exactly two
+   * fields per slot, the occupied flag at `+0` and the actor name at `+0x2e`.
+   * Never the mode. So a turning actor reads as walking to every script, which is
+   * what `walktopuppet` relies on — and also what makes `if iswalk (me) exitcode`
+   * (gang.cst 0442, turkstrs.set 0007) refuse a click at someone mid-turn, in the
+   * original as much as here.
+   *
+   * A player answers that by clicking again. A test driver clicks once, so it
+   * needs to know when the sub-second window is open; nothing in the game does.
+   */
+  turning(name?: string): boolean {
+    if (name !== undefined) return !!this.walks.get(name.toLowerCase())?.turnOnly;
+    for (const w of this.walks.values()) if (w.turnOnly) return true;
+    return false;
+  }
+
+  /**
+   * Is ANYONE in motion — walking or turning?
+   *
+   * What a click-refusing guard actually keys off. `if iswalk (me) exitcode`
+   * cannot tell a turn from a journey and neither can the driver reading it: the
+   * outer `realdist (me) < hotdist ()` and the inner `iswalk` refusal are
+   * indistinguishable from outside, which is why the browser route logged "out of
+   * reach (hotdist)" for a seaman who was merely mid-stride and then turned the
+   * camera to compensate — landing on a different view from the headless golden.
+   *
+   * Waiting on this instead of on {@link turning} alone is what makes the two
+   * hosts click at the same moment: stationary. Nothing in the game asks the
+   * question, only the drivers.
+   */
+  anyoneMoving(): boolean {
+    return this.walks.size > 0;
+  }
+
   pauseWalk(name: string, paused: boolean): void {
     const w = this.walks.get(name.toLowerCase());
     if (w) w.paused = paused;

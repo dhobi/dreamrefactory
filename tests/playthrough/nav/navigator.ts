@@ -711,16 +711,33 @@ export class Navigator {
           gestures: this.count,
         };
       }
-      const before = this.clickStamp(name);
-      if (await this.d.clickThing(name)) {
+      // Two clicks from this standpoint before moving, because "nothing moved" has
+      // two causes and they are indistinguishable from out here. Out of reach is
+      // the positional one, and walking on is the answer to it. The other is
+      // TRANSIENT: `stdmouse`'s `realdist < hotdist` test is the outer gate and
+      // `if iswalk (me) exitcode` sits inside it (gang.cst 0442, turkstrs.set's
+      // bath door), so a character who happens to be mid-stride or mid-turn refuses
+      // the click and looks exactly like one standing too far away.
+      //
+      // Retrying in place is what a player does, and — the reason this is here —
+      // it does not MOVE THE CAMERA. Repositioning on a transient refusal is what
+      // made the browser answer View17 where the headless golden said View13 for
+      // the C-deck seaman: same route, same engine, different recovery. One extra
+      // click costs a fraction of a second when the target really is out of reach,
+      // and the sweep below still runs.
+      let took = false;
+      for (let attempt = 0; attempt < 2 && !took; attempt++) {
+        const before = this.clickStamp(name);
+        if (!(await this.d.clickThing(name))) break;
         this.count++;
         landed++;
-        if (await this.tookEffect(name, before)) {
-          this.say(`clicked ${name}${landed > 1 ? ` (after ${landed} clicks)` : ""}`);
-          return { ok: true, gestures: this.count };
-        }
-        this.say(`clicked ${name} and nothing moved — out of reach (hotdist); walking on`);
+        took = await this.tookEffect(name, before);
       }
+      if (took) {
+        this.say(`clicked ${name}${landed > 1 ? ` (after ${landed} clicks)` : ""}`);
+        return { ok: true, gestures: this.count };
+      }
+      if (landed) this.say(`clicked ${name} and nothing moved — out of reach (hotdist); walking on`);
       const at = this.d.at();
       visited.add(`${at.sceneIdx}:${at.viewIdx}`);
       const plan = planWithin(

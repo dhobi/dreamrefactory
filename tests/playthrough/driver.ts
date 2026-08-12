@@ -76,6 +76,25 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
     let i = 0;
     await p.pump(() => i++ >= n, what, n + 2);
   };
+  /**
+   * Wait, briefly, for the cast to be still before clicking at something.
+   *
+   * A character in motion refuses a click — `if iswalk (me) exitcode` (gang.cst
+   * 0442, turkstrs.set's bath door), and `iswalk` counts a TURN as motion
+   * (TI.EXE 0x4427e0 reads the slot's occupied flag and name, never the mode). A
+   * player clicks again; a driver clicks once, and segment 17's knock landed in
+   * that window and waited 40000 steps for a Morrow who had declined.
+   *
+   * Bounded and NEVER fatal: it moves when the click goes in, not whether it is
+   * retried, so a dead hotspot still fails the beat after it. Non-fatal matters —
+   * clicking the map while someone walks is perfectly legal, and an unbounded
+   * version stopped the route dead on exactly that.
+   */
+  const beStill = async (what: string): Promise<void> => {
+    for (let i = 0; i < 60 && session.scheduler.anyoneMoving(); i++) {
+      await ticks(1, `${what}: waiting for the cast to be still`);
+    }
+  };
   /** the engine's answers to the aiming questions (nav/aim.ts) */
   const aim = (): Aim => ({
     hitTest: (x, y) => session.hitTestAt(x, y),
@@ -138,6 +157,11 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
     clickThing: async (name) => {
       const at = aimAtThing(aim(), name);
       if (!at) return false;
+      // the same pre-click wait clickHotspot takes, and for the same reason — a
+      // character in motion refuses the click, and the browser twin must click at
+      // the same moment or the two hosts diverge on the recovery rather than on
+      // anything real (the C-deck seaman, browser View17 against golden View13)
+      await beStill(name);
       void session.track(v().click(at.x, at.y));
       await settle(`click ${name}`);
       return true;
@@ -286,6 +310,19 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
     clickHotspot: async (id) => {
       const at = aimAtHotspot(aim(), id);
       if (!at) return false;
+      // Let any turn finish first. A character mid-turn reads as WALKING to every
+      // script (see Scheduler.turning), and the handlers that put someone in front
+      // of you refuse the click while it does — `if iswalk (me) exitcode` in
+      // gang.cst 0442, and the same guard on turkstrs.set's bath door. The window
+      // is sub-second and a player just clicks again; this driver clicks once, so
+      // segment 17's knock landed in one and waited 40000 steps for a Morrow who
+      // had already declined.
+      //
+      // This changes WHEN the click goes in, never whether it is retried, so a
+      // hotspot that is genuinely dead still fails here rather than being papered
+      // over. Bounded, because an idle that turns forever must not hang the route —
+      // if the window never opens, click anyway and let the assertion speak.
+      await beStill(id);
       void session.track(v().click(at.x, at.y));
       await settle(`click ${id}`);
       return true;
