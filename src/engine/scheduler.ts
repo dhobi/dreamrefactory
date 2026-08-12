@@ -292,6 +292,16 @@ export class Scheduler {
        * header stores the total).
        */
       path?: { x: number; y: number; z: number; cum: number }[];
+      /**
+       * A `turntodeg` record: a facing target and NO mover. TI.EXE writes the
+       * mode at record +4 and a turn's is 0 where a straight walk's is 1 and
+       * `walkonpath`'s is 3, so the mode is what selects the mover — and a turn
+       * has none to select. It ends when the facing lands, firing neither
+       * `endturn` (whose handlers all gate on `iswalk`, and a turn is not a
+       * walk to be posed for) nor `endwalk` (which would re-arm the idle and,
+       * for a character on a patrol, re-target them).
+       */
+      turnOnly?: boolean;
     }
   >();
 
@@ -375,6 +385,71 @@ export class Scheduler {
   }
 
   /**
+   * `turntodeg`: turn an actor to face a bearing, over time.
+   *
+   * A turn is a WALK in the original — `0x443550` builds a record in the same
+   * table `iswalk` answers from, with the same shape a straight walk gets: the
+   * facing target at `+8` (this port's `turnTo`), the actor's current position,
+   * and `+0x3e` copied from the actor's CURRENT star (`actor+0x70`), so a turn
+   * does not change where anyone is going. Only the mode differs — 0 here
+   * against `walkonpath`'s 3.
+   *
+   * That is load-bearing for conversations, because `walktopuppet` (gang.cst 0001)
+   * waits on exactly that:
+   *
+   *     pauseloop ("actor", who, true)
+   *     turntodeg (who, calcdeg (actorxyz (who, 4), cameraxyz (4)))
+   *     while iswalk (who)  forceupdate ()  endwhile
+   *     runpuppet (pupname, pupmessage)
+   *
+   * Setting the facing outright — which is what this did — left `iswalk` false,
+   * so the wait never spun and `runpuppet` opened in the same breath: Zeitel took
+   * your approach in the first-class lounge without ever turning round, and the
+   * conversation began with his back to you (#124). 86 calls in the corpus reach
+   * here, most of them an idle loop facing the player.
+   *
+   * A turn to the facing the actor ALREADY has records nothing. That is what keeps
+   * the idles convergent: a completed turn fires `endwalk`, whose handlers re-arm
+   * the idle (`zeitidle`), which turns again — and the second turn asks for a
+   * bearing already held, so it stops there instead of recurring.
+   */
+  startTurn(name: string, deg: number): void {
+    const a = this.session.actorRuntime.get(name);
+    if (!a) return;
+    const target = deg & 0xff;
+    if ((a.deg & 0xff) === target) {
+      // nothing to turn: leave any running walk alone and record no turn
+      return;
+    }
+    // A JOURNEY IN PROGRESS keeps it, and the facing is set outright instead.
+    //
+    // One record per actor is all there is, so recording a turn over a running
+    // walk would discard its destination and deltas and strand whoever was
+    // walking. The scripted ways in already prevent the combination — the boot's
+    // `moveactorstar` runs `stoploop ("actor", target)` before `walktostar`, and
+    // `walktopuppet` opens with `pauseloop ("actor", who, true)`, both of which
+    // silence the idle that would otherwise turn someone mid-stride — so the
+    // original never has to answer this question. Where it does arise (a walk
+    // started without stopping the idle first) the old outright set is the
+    // conservative answer: it cannot cancel a journey, and no script waits on
+    // `iswalk` for a turn issued during a walk.
+    if (this.walks.has(a.member.name)) {
+      a.deg = target;
+      return;
+    }
+    this.walks.set(a.member.name, {
+      sx: a.worldX, sy: a.worldY, sz: a.worldZ,
+      dx: 0, dy: 0, dz: 0,
+      // 1, not 0: the mover divides by it. With no deltas the first movement pass
+      // after the turn lands on the arrival, which is the point — a turn goes
+      // nowhere and ends as soon as the facing does.
+      dist: 1, progress: 0, paused: false,
+      turnTo: target,
+      turnOnly: true,
+    });
+  }
+
+  /**
    * Step a 0..255 facing toward `target` by at most `by`, the short way round.
    *
    * TI.EXE's `0x445080`, which the walk service calls once per pass with the
@@ -446,6 +521,11 @@ export class Scheduler {
         const turned = this.stepDeg(a.deg, w.turnTo, a.turn);
         const done = turned === w.turnTo;
         a.deg = turned;
+        if (done && w.turnOnly) {
+          // a turn is over when the facing is: no mover, no arrival, no dispatch
+          this.walks.delete(key);
+          continue;
+        }
         if (done) {
           w.turnTo = undefined;
           // Dispatched at once, like the arrival below and like the original:

@@ -403,10 +403,13 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     return w ? (w.arriveStar ?? "custom") : "None";
   });
 
-  // turntodeg(name, deg): set an actor's facing (0..255). Grouped with the
-  // actor commands though the TAOOT corpus calls it near the geometry helpers.
+  // turntodeg(name, deg): turn an actor to face a bearing (0..255) over time,
+  // which in this engine is a WALK that goes nowhere — see Scheduler.startTurn for
+  // why that matters to every conversation that opens with someone turning round.
+  // Grouped with the actor commands though the TAOOT corpus calls it near the
+  // geometry helpers.
   r("turntodeg", (_i, [n, deg]) => {
     const a = actor(n);
-    if (a) a.deg = toNum(deg ?? 0) & 0xff;
+    if (a) session.scheduler.startTurn(toStr(n), toNum(deg ?? 0));
   });
 }
