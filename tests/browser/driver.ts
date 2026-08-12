@@ -57,6 +57,8 @@ interface Mirror {
   awaitingChoice: boolean;
   /** a line is being spoken — the only state ESC skips (#131) */
   speaking: boolean;
+  /** an actor is mid-turn, so a click at a character would be refused */
+  turning: boolean;
   choices: { text: string; id: number }[];
   movieRegions: { type: number; target: string; event: string; x0: number; y0: number; x1: number; y1: number }[];
   /** a movie owns the screen — animating OR parked on a region frame */
@@ -117,6 +119,10 @@ const SAMPLE = `(() => {
     movieFile: (v && v.movieFile) || null,
     scriptBusy: !!s.scriptBusy,
     quiescent: !!(v && v.quiescent),
+    // is anyone mid-TURN? A turning actor reads as walking to every script, and
+    // the handlers that bring someone over refuse a click while it does — see
+    // Scheduler.turning and the headless driver's clickHotspot
+    turning: !!s.scheduler.anyoneMoving(),
   };
 })()`;
 
@@ -400,6 +406,25 @@ export async function browserDriver(page: Page, opts: BrowserDriverOptions = {})
     opts.log?.(what);
   };
 
+  /**
+   * Wait for any turn in flight before clicking — the browser half of the same
+   * problem the headless driver has. A character mid-turn reads as WALKING to
+   * every script (TI.EXE's `iswalk`, `0x4427e0`, tests only the slot's occupied
+   * flag and its name — never the mode), and the handlers that bring someone over
+   * refuse the click while it does: `if iswalk (me) exitcode` in gang.cst 0442 and
+   * on turkstrs.set's bath door. A player clicks again; a driver clicks once.
+   *
+   * Bounded and non-fatal on purpose: this moves WHEN the click goes in, never
+   * whether it is retried, so a dead hotspot still fails the beat that follows.
+   */
+  const settleTurns = async (what: string): Promise<void> => {
+    try {
+      await waitInPage("!dbg.session.scheduler.anyoneMoving()", `the cast to be still before ${what}`, 3000);
+    } catch {
+      opts.log?.(`    someone is still turning; clicking ${what} anyway`);
+    }
+  };
+
   const setOf = (fileName: string, disc: 1 | 2): SetFile => {
     const key = `${disc}:${fileName}`;
     const cached = sets.get(key);
@@ -460,6 +485,7 @@ export async function browserDriver(page: Page, opts: BrowserDriverOptions = {})
     clickHotspot: async (id) => {
       const at = await aimHotspot(id);
       if (!at) return false;
+      await settleTurns(id);
       await clickAt(at.x, at.y);
       await settle(`click ${id}`);
       return true;
@@ -467,6 +493,7 @@ export async function browserDriver(page: Page, opts: BrowserDriverOptions = {})
     clickThing: async (name) => {
       const at = await aimThing(name);
       if (!at) return false;
+      await settleTurns(name);
       await clickAt(at.x, at.y);
       await settle(`click ${name}`);
       return true;

@@ -7968,3 +7968,89 @@ test("walkonpath follows the SET's authored route, corners and all (#122)", asyn
     `sets off at sample ${moving}: ${early.map((p) => `(${p.x},${p.z})`).join(" ")}`);
 }
 );
+
+// --- 102. a turn is a walk, so a conversation waits for it (#124) -------------
+// `turntodeg` set the facing outright. In the original it BUILDS A WALK RECORD
+// (0x443550) in the same table `iswalk` answers from — the facing target at +8,
+// the actor's own position, and mode 0 at +4 where a straight walk's is 1 and
+// walkonpath's is 3. A turn is a walk that goes nowhere.
+//
+// That is what every "turn round before you talk" moment in the game is built on,
+// because gang.cst's walktopuppet waits on exactly it:
+//
+//     pauseloop ("actor", who, true)
+//     turntodeg (who, calcdeg (actorxyz (who, 4), cameraxyz (4)))
+//     while iswalk (who)  forceupdate ()  endwhile
+//     runpuppet (pupname, pupmessage)
+//
+// With the facing set outright, `iswalk` was false the instant turntodeg returned,
+// the wait never spun, and runpuppet opened in the same breath: Zeitel took your
+// approach in the first-class lounge without turning round, and the conversation
+// began with his back to you (#124).
+//
+// Asserted on the mechanism rather than by running walktopuppet: its wait is a
+// synchronous `while ... forceupdate()` script loop, and headless has no real
+// frames for forceupdate to give up, so the loop cannot be driven from a test the
+// way a browser drives it. What broke and what is fixed is the state that loop
+// reads, and that is what this pins.
+test("turntodeg turns over time, and iswalk is true until it lands (#124)", async () => {
+  const { session, viewer } = await newSession();
+  session.interp.globals.set("mission", 4);
+  // NOT scene45/view49: that view is the accost trigger, and its conversation
+  // parks a headless run (which is #125, still open)
+  await session.openSetFile("lounge1c.set", "scene14", "view37");
+  await session.openCastFile("gang.cst");
+  await session.settle();
+  const v = viewer();
+  const zeit = session.actorRuntime.get("zeit")!;
+  const turn = (deg: number): void => {
+    void (session.interp.builtins.get("turntodeg") as unknown as (
+      i: unknown, a: unknown[], c: unknown, f: unknown,
+    ) => unknown)(session.interp, ["zeit", deg], { me: "test", target: "zeit" }, undefined);
+  };
+
+  // stop anything the room armed for him, so this measures the turn alone
+  session.scheduler.stopWalk("zeit");
+  zeit.deg = 0;
+  const away = zeit.deg;
+  turn(128); // face the other way: the longest turn there is
+
+  check("the turn registers as a walk, which is what walktopuppet waits on",
+    session.scheduler.isWalk("zeit"), `walks=${[...session.scheduler.walks.keys()]}`);
+  check("and it has not snapped round", zeit.deg === away, `deg=${zeit.deg}`);
+
+  // it arrives over several passes, at the actor's own turn rate
+  let passes = 0;
+  const degs: number[] = [];
+  while (session.scheduler.isWalk("zeit") && passes++ < 400) {
+    v.tick((clock += 50));
+    await drain();
+    degs.push(zeit.deg);
+  }
+  check("the facing comes round over many passes, not one",
+    passes > 4 && zeit.deg === 128,
+    `${passes} passes, deg ${away} -> ${zeit.deg}, turn rate ${zeit.turn}; first few ${degs.slice(0, 5).join(",")}`);
+  check("and the slot is freed when the facing lands", !session.scheduler.isWalk("zeit"));
+
+  // A turn goes NOWHERE: it must not move him, and must not land on a star or
+  // fire the arrival lifecycle — an endwalk would re-arm his idle, and for a
+  // character on a patrol it re-targets them (which is what stranded Morrow
+  // halfway to morrow.2 while this was being built).
+  const at = { x: zeit.worldX, y: zeit.worldY };
+  turn(0);
+  for (let i = 0; i < 400 && session.scheduler.isWalk("zeit"); i++) {
+    v.tick((clock += 50));
+    await drain();
+  }
+  check("a turn does not move the actor",
+    zeit.worldX === at.x && zeit.worldY === at.y,
+    `(${at.x},${at.y}) -> (${zeit.worldX},${zeit.worldY})`);
+  check("a turn does not put him in the walk pose", zeit.poseName !== "walk", `pose=${zeit.poseName}`);
+
+  // ...and a turn asked for the facing he already holds records nothing, which is
+  // what keeps the idles from recurring through each other
+  turn(zeit.deg);
+  check("a turn to the facing already held is not a walk at all",
+    !session.scheduler.isWalk("zeit"), `deg=${zeit.deg} walks=${[...session.scheduler.walks.keys()]}`);
+}
+);
