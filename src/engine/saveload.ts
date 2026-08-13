@@ -226,9 +226,11 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // restore from the variable records — see decodeVars for the format.
   for (const [k, v] of save.numGlobals) session.interp.globals.set(k, v);
   for (const [k, v] of save.strGlobals) session.interp.globals.set(k, v);
-  // `clock` rides those two maps with everything else. hallside/savedeck fall
-  // back to location-stack recovery when the record didn't decode; without a
-  // valid side, halla's keydown guard error()s and swallows every key.
+  // `clock` rides those two maps with everything else. hallside decodes from
+  // its record alone (the 4 shipped saves without one never entered a hall —
+  // measured; an unset side is what a fresh game has too); savedeck keeps a
+  // set-derived deck-letter fallback. Without a valid side, halla's keydown
+  // guard error()s and swallows every key.
   if (save.hallside) session.interp.globals.set("hallside", save.hallside);
   if (save.savedeck) session.interp.globals.set("savedeck", save.savedeck);
   // A save is taken from the CTL menu, which sets lockevents=1 to freeze world

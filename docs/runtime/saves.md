@@ -190,9 +190,10 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
 
 1. Parse and validate (`"Titanic 1.0"`; a foreign file is rejected with the
    original's error).
-2. Restore all number and string globals, plus `clock` and the
-   `hallside`/`savedeck` fallbacks recovered from the location container
-   (without a valid `hallside`, halla's `keydown` guard swallows every key).
+2. Restore all number and string globals, `clock` and `hallside` among them
+   (without a valid `hallside`, halla's `keydown` guard swallows every key;
+   `savedeck` keeps a set-derived deck-letter fallback for the four pre-boarding
+   saves that predate the variable).
 3. Force **`lockevents = 0`** — every save is taken from the CTL menu with
    world input frozen, so every save *carries* the freeze; a load returns you
    to interactive control.
@@ -317,8 +318,8 @@ much smaller than this page claimed three times over:
   instead takes disk 1 to **44** dropped and disk 2 to **24**, and what is left is
   blackjack-table and fistfight scratch that a load re-initialises anyway (#85).
 - **Inherited from the skeleton.** A patch-write starts from a *shipped* save, so
-  any slot nothing overwrites keeps that save's value — `oldset` "None", the
-  location container's facing and road, and the `propview` of a prop the port has
+  any slot nothing overwrites keeps that save's value — `oldset` "None", and the
+  `propview` of a prop the port has
   never set (an untouched prop is sitting in its file default, and `""` is not a
   reading). That list used to be the chrome the arriving room recomputed anyway
   (`door`, `signs`, `wiremsg`, `navtoggle`, `subtoggle`, `invenctl`, `lid`,

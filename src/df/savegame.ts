@@ -484,8 +484,6 @@ export interface SaveGame {
   view: string;
   /** current stage file (C1 @520), normally "main.stg". */
   stage: string;
-  /** facing direction word from the location container ("north"…), or "". */
-  facing: string;
   /**
    * The pending day event, as text — the head variable's value ("bedsit"…), or
    * the game time as digits once calctime owns it ("1301"). "" if it didn't
@@ -493,9 +491,10 @@ export interface SaveGame {
    * same value with its real type, and that is what a load restores.
    */
   clock: string;
-  /** hallway facing ("port"/"star") — the last such token in the location
-   * container's savestate stack, which is the current side. "" if none (a save
-   * outside any hallway; the value is only read inside hall sets). */
+  /** hallway facing ("port"/"star") from its variable record, or "". Only ever
+   * read inside hall sets. There is no fallback: the 4 shipped saves with no
+   * record (measured: exactly the pre-boarding ones, bedsit1/c73) never visited
+   * a hallway, so there is nothing to fall back TO. */
   hallside: string;
   /** staircase deck-plan selector ("a".."g"/"bd"), best-effort: derived from the
    * current hall set's deck when it is a hall/deck set, else "". Only read at the
@@ -508,8 +507,6 @@ export interface SaveGame {
   /** string globals to restore (type-3 records, decoded via the string pool):
    * name → value. Includes hallside, savedeck, handitem, savestage1-3… */
   strGlobals: Map<string, string>;
-  /** raw current-location Pascal strings (facing/road/coords/clock/set/stage/flat). */
-  location: string[];
   /** every prop serialized in the inventory container (inventory items + more). */
   inventory: SavedProp[];
   /** every actor serialized in the actor container, with its `actorowner`. */
@@ -526,8 +523,6 @@ export interface SaveGame {
   raw: RawSaveFile;
   /** index of the globals container within `raw.containers`. */
   globalsIndex: number;
-  /** index of the location container within `raw.containers`. */
-  locationIndex: number;
   /** index of the inventory (all-props) container within `raw.containers`. */
   inventoryIndex: number;
   /** index of the actor container within `raw.containers`. */
@@ -541,24 +536,6 @@ export interface SaveGame {
 /** Read a Pascal string at a fixed offset, or "" if it isn't a clean string. */
 function pstrField(d: Uint8Array, o: number): string {
   return pstrAtChecked(d, o, 1, 40) ?? "";
-}
-
-/** All Pascal strings in a blob (length byte + chars), min 1 char. Used for the
- * string-stream containers (location, open-file manifests). A byte that doesn't
- * start a clean string is skipped. */
-function pascalStream(d: Uint8Array): string[] {
-  const out: string[] = [];
-  let i = 0;
-  while (i < d.length) {
-    const s = pstrAtChecked(d, i, 1, 255);
-    if (s === null) {
-      i++;
-      continue;
-    }
-    out.push(s);
-    i += 1 + s.length;
-  }
-  return out;
 }
 
 /** Read the Pascal string ([u8 len][chars]) at `off` in the string pool, or
@@ -656,19 +633,6 @@ function findGlobalsIndex(raw: RawSaveFile): number {
   for (let i = 0; i < raw.containers.length; i++) {
     const s = latin1(raw.containers[i].data.subarray(0, raw.containers[i].data.length));
     if (s.includes("mission") && s.includes("playerdeath") && s.includes("clock")) return i;
-  }
-  return -1;
-}
-
-/** Locate the current-location container: the clean Pascal-string stream that
- * carries a comma coordinate list and a facing direction word. */
-function findLocationIndex(raw: RawSaveFile): number {
-  for (let i = 0; i < raw.containers.length; i++) {
-    if (raw.containers[i].data.length > 8192) continue;
-    const strs = pascalStream(raw.containers[i].data);
-    if (strs.some((s) => /^\d+,\d+,/.test(s)) && strs.some((s) => /^(north|south|east|west)$/i.test(s))) {
-      return i;
-    }
   }
   return -1;
 }
@@ -1008,8 +972,6 @@ function decodeTheme(raw: RawSaveFile, tracksIndex: number): SavedTheme | null {
   return { track: best.track, volume: best.volume, extras };
 }
 
-const DIRS = new Set(["north", "south", "east", "west"]);
-
 /** Hall/deck set → the deck-plan page it sits on (MAP.STG currentpage cases).
  * Used only as a sane fallback for the staircase deck selector on load. */
 const HALL_DECK: Record<string, string> = {
@@ -1038,13 +1000,11 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   const view = pstrField(c1, C1_VIEW);
 
   const globalsIndex = findGlobalsIndex(raw);
-  const locationIndex = findLocationIndex(raw);
   const inventoryIndex = findInventoryIndex(raw);
   // the string pool is the container right after the globals container — the
   // original loader reads them as a pair (pool handle stored at blob+0x10).
   const pool = globalsIndex >= 0 ? raw.containers[globalsIndex + 1]?.data : undefined;
   const vars = globalsIndex >= 0 ? decodeVars(raw.containers[globalsIndex].data, pool) : [];
-  const location = locationIndex >= 0 ? pascalStream(raw.containers[locationIndex].data) : [];
   const inventory =
     inventoryIndex >= 0
       ? walkPropGrid(raw.containers[inventoryIndex].data).map((r) => r.prop)
@@ -1064,9 +1024,6 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   const tracksIndex = findTracksIndex(raw);
   const theme = decodeTheme(raw, tracksIndex);
 
-  // facing: the last direction word in the stream.
-  const facing = [...location].reverse().find((s) => DIRS.has(s.toLowerCase())) ?? "";
-
   // Split the decoded variables by DFValue type: 2/4 = numbers (inline), 3 =
   // strings (decoded via the pool). First-wins on duplicate names — the engine's
   // lookup walks the list from the head. See docs/formats/savegame.md.
@@ -1078,11 +1035,16 @@ export function parseSave(bytes: Uint8Array): SaveGame {
     } else if (!numGlobals.has(v.name)) numGlobals.set(v.name, v.num);
   }
 
-  // hallside ("port"/"star") decodes from its variable record; fall back to the
-  // last side token in the location container's savestate stack (the current
-  // side) for a save whose record didn't decode.
-  let hallside = strGlobals.get("hallside") ?? "";
-  if (!hallside) for (const s of location) if (s === "port" || s === "star") hallside = s;
+  // hallside ("port"/"star") decodes from its variable record, and only from it.
+  // A pool-scanning fallback stood here for a long time, resting on a container
+  // that does not exist: the "location savestate stack" it walked was the string
+  // POOL (the heuristic locked onto it in 109 of 109 shipped saves — the pool
+  // holds the same facing/side/coordinate strings, in allocation order). And it
+  // never fired with a value: exactly 4 shipped saves lack the record, all
+  // pre-boarding (bedsit1/c73), and none of their pools hold a side token,
+  // because no hallway had ever been entered. An unset hallside is what a fresh
+  // game has until the first hall assigns one.
+  const hallside = strGlobals.get("hallside") ?? "";
 
   // savedeck (the staircase deck-plan selector, "a".."g"/"bd") likewise; the
   // fallback derives it from the current hall/deck set when unambiguous.
@@ -1094,10 +1056,10 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   const clock = strGlobals.get("clock") ?? (numGlobals.has("clock") ? String(numGlobals.get("clock")) : "");
 
   return {
-    title, disk, set, scene, view, stage, facing, clock, hallside, savedeck,
-    vars, numGlobals, strGlobals, location, inventory, actors,
+    title, disk, set, scene, view, stage, clock, hallside, savedeck,
+    vars, numGlobals, strGlobals, inventory, actors,
     loops, crickets, walks, theme, raw,
-    globalsIndex, locationIndex, inventoryIndex, actorsIndex,
+    globalsIndex, inventoryIndex, actorsIndex,
     schedulerIndex, tracksIndex,
   };
 }
