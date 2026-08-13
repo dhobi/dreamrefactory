@@ -2141,6 +2141,58 @@ test("the event queue: input made mid-gesture waits its turn", async () => {
 }
 );
 
+// --- 13e. a movie owns the queue: it flushes on the way in and on the way out -
+// User-reported (#5): clicking the sofa in c73 a few more times while its
+// close-up loaded re-opened the close-up once per impatient click — the clicks
+// were banked by the ordinary mid-gesture rule (13d) and then replayed into the
+// room the moment the movie closed. The original never lets them get that far:
+// `playmovie` reads the .MOV containers and calls flushevents unconditionally
+// before its playback loop (TI.EXE 0x449104), and flushes again at teardown
+// unless the film asked for any input to abort it (0x449330, header flags bit 3
+// — which nothing in TAOOT sets).
+test("a movie flushes the event queue on both sides (#5)", async () => {
+  const { session, viewer } = await newSession();
+  await session.openSetFile("c73.set");
+  const v = viewer();
+  const settle = () => {
+    for (let i = 0; i < 60 && v.moviePlaying; i++) v.tick((clock += 250));
+  };
+
+  // three impatient clicks on the sofa while its close-up fetches — exactly what
+  // SetViewer.clickDispatch banks whenever a gesture is already running
+  for (let i = 0; i < 3; i++) session.events.post({ kind: "mousedown", x: 453, y: 354 });
+  const banked = session.events.length;
+  const takenBefore = session.events.taken;
+  v.playMovie("c73sofa.mov");
+  const afterStart = session.events.length;
+  check(
+    "starting a movie discards what the load banked",
+    banked === 3 && afterStart === 0,
+    `banked=${banked} pending after start=${afterStart}`,
+  );
+
+  // ...and the click that dismisses it dies with it. c73sofa is three frames:
+  // the OK region on frame 1 advances to frame 2, whose own action exits.
+  settle();
+  const played = v.moviePlaying;
+  session.events.post({ kind: "mousedown", x: 453, y: 354 });
+  await v.click(456, 351);
+  settle();
+  // give the drain in tick() every chance to replay anything still waiting
+  for (let i = 0; i < 20; i++) {
+    v.tick((clock += 250));
+    await drain();
+  }
+  check(
+    "leaving a movie leaves nothing to replay into the room behind it",
+    played && !v.moviePlaying && session.events.length === 0 &&
+      session.events.taken === takenBefore,
+    `played=${played} stillPlaying=${v.moviePlaying} pending=${session.events.length} ` +
+      `taken=${session.events.taken} (was ${takenBefore})`,
+  );
+}
+);
+
 // --- 14. stage layer: main.stg UI, inventory pickup, inven1 flat ---
 test("stage layer: main.stg UI, inventory pickup, inven1 flat", async () => {
   const { session, viewer } = await newSession();

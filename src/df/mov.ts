@@ -183,10 +183,14 @@ export interface MovSegment {
    * Bit 0 ({@link keySkips}) is the one that matters: it lets ESC abort the
    * movie. Bit 2 selects an alternate frame blit (TI.EXE 0x438900 instead of
    * 0x438850); only bombhelp/aftwash/portwash/starwash set it and we don't
-   * distinguish the two paths. Bit 3 would let ANY key abort — no movie in the
-   * corpus sets it, and the engine flushes the pending key events at movie
-   * start unless it is set, which is why a key pressed BEFORE a movie began
-   * cannot skip it.
+   * distinguish the two paths. Bit 3 ({@link FLAG_ANY_INPUT_ABORTS}) lets any
+   * key or click abort the movie (tested at TI.EXE 0x44a13f, which peeks the
+   * event queue for a keydown or a mousedown and breaks the frame wait), and it
+   * is also what spares a movie the flush it otherwise does on its way out
+   * (0x449330). No movie in the corpus sets it: read across the whole tree, all
+   * 314 distinct (movie, segment flags) pairs are 0x01, 0x03 or 0x05. So in
+   * TAOOT both of the movie player's queue flushes always run, and a key pressed
+   * BEFORE a movie began cannot skip it.
    */
   flags: number;
   /**
@@ -336,6 +340,9 @@ export const MOV_NAME_FIELD = 15;
 
 /** header flag bit 0: ESC (and Ctrl+Q) aborts this movie */
 export const FLAG_KEY_SKIPS = 1;
+
+/** header flag bit 3: any key or click aborts, and the exit flush is skipped */
+export const FLAG_ANY_INPUT_ABORTS = 8;
 
 /** the action codes a frame or a region can carry, and what each does */
 export const MOV_ACTIONS: Record<number, string> = {
