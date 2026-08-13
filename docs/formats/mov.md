@@ -270,7 +270,9 @@ These are the non-obvious rules, verified against `MENU.MOV`, `TURKNMES.MOV`,
 `CURTAINS.MOV`, `BEDLAMP.MOV` and `FAUCET.MOV`:
 
 - **Interactive movies open as a silent still** and pause on region frames
-  (starting with the first). Clicks **outside** any region do nothing.
+  (starting with the first) — *unless* the frame sets [flags bit 2](#a-movie-carries-its-own-pacing-solved-out-of-the-demo-builds-engine),
+  which says "these regions are live but do not stop for them". Clicks
+  **outside** any region do nothing.
 - **A click plays the region's sound, then jumps** per its type. A target that
   is itself a region frame → a hard cut (the menu zoom toggle). A forward
   target, or no target with nothing left to pause on → the movie **closes
@@ -450,15 +452,39 @@ The flag bits at logic `+6`:
   outlives its picture, which the port had previously reproduced by hand.
 - **bit 2 — do not WAIT on this frame's click regions**: honour them only if a
   click is already queued, else run the frame's own action and play on. Retail
-  `0x44979f`, right before the region count at `+0x442`: bit clear → the region
-  count stands and the frame waits modally; bit set → the count is zeroed unless
-  the event pump has a click in hand. It is an animation that can be clicked
-  through, not a picture that stops for one, and it is NOT rare —
-  **2028 frames across the six editions**, `CAMELSEE.MOV`/`CAMRIDE.MOV` (the Cairo
-  camel ride, every frame carrying the same skip rect) among them. The port does
-  not gate on it: it waits on any frame with regions, so a bit-2 animation
-  advances a frame per click instead of playing. A known difference, and a
-  standing one — `MovFrame` exposes bits 0 and 3 and no other.
+  `0x44979f`, right before the region count at `+0x442`:
+
+  ```
+  0x44979f: test byte ptr [edx + 6], 4  ; bit 2
+  0x4497a3: mov  ecx, [ecx + 0x442]     ; the region COUNT
+  0x4497a9: je   0x4497b2               ; clear -> the count stands, wait modally
+  0x4497ab: test ax, ax                 ; set: has the pump a click in hand?
+  0x4497ae: jne  0x4497b2               ;   yes -> honour the region
+  0x4497b0: xor  ecx, ecx               ;   no  -> ZERO it: do not wait
+  0x4497b4: jg   0x4497da               ; count > 0 ? region path : frame's own action
+  ```
+
+  It is an animation that can be clicked through, not a picture that stops for
+  one, and it is NOT rare — **2028 frames across the six editions**, 2022 of them
+  carrying regions, in **seven** movies: `CAMELSEE.MOV` and `CAMRIDE.MOV` (the
+  Cairo camel ride, every frame carrying the same skip rect), `AFTWASH.MOV`,
+  `PORTWASH.MOV`, `STARWASH.MOV`, `SMFIRE.MOV` and `LOFIRE.MOV`.
+
+  **This is where their loops come from, and there is no "loop" field anywhere in
+  the format.** The cycle is authored as a plain backward `goto` on its last
+  frame — `CAMELSEE.MOV` frames 41..44 are each a type-2 to frame 1, and 41 is
+  the one the gallop actually reaches, so a lap is frames 1..41 and the three
+  after it are there for the late clicks below — and playback only ever reaches
+  that action by falling through the zeroed region count. Miss bit 2 and
+  the animation stops on its own first frame instead, which is what the port did
+  until [#172](https://github.com/dhobi/taoot-web/issues/172): the horses in the
+  gym showed one frame and then advanced a frame per click.
+
+  The regions on those frames are not decoration either. `CAMELSEE.MOV` gives
+  frames 2..44 one region each, targeting the **phase-matched** stop frame
+  (*N* → `HORSE N+44`), so a click during the run picks up the stopping animation
+  at the leg position the horses are actually in. Forty-three stop frames only
+  make sense for an animation that is *running* while its regions are live.
 - **bit 3 — do not reset the deadline** to "now": add to the one already running, so
   a long film does not lose a frame's worth of time per frame. `OCREDITS.MOV` sets
   it on 1224 of its 1225 frames.

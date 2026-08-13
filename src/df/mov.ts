@@ -113,6 +113,32 @@ export interface MovFrame {
    */
   holdsDeadline: boolean;
   /**
+   * Don't WAIT on this frame's click regions (flags bit 2) — honour them only if
+   * a click is already in hand, else run the frame's own action and play on. An
+   * animation you may click through, rather than a picture that stops for one.
+   *
+   * Retail `0x44979f`, right before the region count is read from `+0x442`:
+   *
+   * ```
+   * 0x44979f: test byte ptr [edx + 6], 4  ; bit 2
+   * 0x4497a3: mov  ecx, [ecx + 0x442]     ; the region COUNT
+   * 0x4497a9: je   0x4497b2               ; clear -> the count stands, wait modally
+   * 0x4497ab: test ax, ax                 ; set: has the pump a click?
+   * 0x4497ae: jne  0x4497b2               ;   yes -> honour the region
+   * 0x4497b0: xor  ecx, ecx               ;   no  -> ZERO it: do not wait
+   * 0x4497b4: jg   0x4497da               ; count > 0 ? region path : frame's own action
+   * ```
+   *
+   * 2028 frames across the six editions set it, 2022 of them carrying regions,
+   * in seven movies: `camelsee.mov` and `camride.mov` (the Cairo camel ride),
+   * `aftwash.mov`, `portwash.mov`, `starwash.mov`, `smfire.mov` and `lofire.mov`.
+   * Their loops are authored as a backward `goto` on the last frame of the cycle
+   * — `camelsee.mov` frames 41..44 each jump to frame 1, and 41 is the one the
+   * gallop reaches — which only runs because falling through the zeroed count
+   * lands on the frame's own action.
+   */
+  playsThroughRegions: boolean;
+  /**
    * Container holding this frame's logic — its type, its three names and its
    * region table. 0 (or a missing container) means the frame has none: a plain
    * animation frame, which plays and advances, and which no logic edit can
@@ -478,6 +504,7 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
       holdTicks,
       waitsForVoice: (frameFlags & 1) !== 0,
       holdsDeadline: (frameFlags & 8) !== 0,
+      playsThroughRegions: (frameFlags & 4) !== 0,
     });
   }
 

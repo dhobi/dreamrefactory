@@ -706,7 +706,15 @@ export class MoviePlayer {
       m.lastTick = now;
       this.enter(frame);
     }
-    if (m.interval > 0 && m.meta[m.pos].regions.length === 0) {
+    // A frame waits for a click only if it HAS regions and does not carry flags
+    // bit 2 — the original zeroes the region count on a bit-2 frame unless a
+    // click is already in hand (0x44979f), so playback falls through to the
+    // frame's own action and plays on. That is what makes the camel ride, the
+    // deck washes and the fires loop: the last frame of the cycle carries a
+    // backward `goto` nothing would ever reach if the frame stopped for its own
+    // click rect. See MovFrame.playsThroughRegions.
+    const waits = m.meta[m.pos].regions.length > 0 && !m.meta[m.pos].playsThroughRegions;
+    if (m.interval > 0 && !waits) {
       if (!m.lastTick) m.lastTick = now;
       // The FILM's own hold, not a rate we invented: max(frame, movie floor) —
       // see mov-pace.frameHoldMs. `interval` still decides whether this movie is

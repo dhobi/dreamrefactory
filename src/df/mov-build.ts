@@ -100,8 +100,9 @@ export interface MovBuildFrame extends Partial<MovAction> {
    * {@link noLogic}.
    */
   holdTicks?: number;
-  /** per-frame flag bits (0 wait for the spoken line · 3 don't reset the frame
-   *  deadline) — see MovFrame.waitsForVoice / holdsDeadline */
+  /** per-frame flag bits (0 wait for the spoken line · 2 don't wait on this
+   *  frame's regions · 3 don't reset the frame deadline) — see
+   *  MovFrame.waitsForVoice / playsThroughRegions / holdsDeadline */
   flags?: number;
   /** the picture, unless `hold` */
   art?: Uint8Array;
