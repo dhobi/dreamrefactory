@@ -111,6 +111,7 @@ export default withMermaid(
           items: [
             { text: "Overview", link: "/runtime/" },
             { text: "Timing — heartbeat, loops & crickets", link: "/runtime/timing" },
+            { text: "The sinking — mission 4's clock", link: "/runtime/sinking" },
             { text: "Stage & UI — flats & overlays", link: "/runtime/stage-ui" },
             { text: "Characters — actors & puppets", link: "/runtime/characters" },
             { text: "Audio — channels & volumes", link: "/runtime/audio" },
