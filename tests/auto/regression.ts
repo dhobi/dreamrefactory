@@ -35,6 +35,8 @@ import { sniffScript, scriptToText } from "../../src/df/script";
 import { parseScript } from "../../src/engine/parser";
 import { GameSession } from "../../src/engine/session";
 import { EventQueue, EVENT_CAPACITY } from "../../src/engine/input";
+import { PUPPET_ART_H } from "../../src/puppet-view";
+import { SCREEN_W } from "../../src/screen";
 import { ScriptInstance } from "../../src/engine/interp";
 import { DeferredAudioSink, NullAudioSink } from "../../src/engine/audio";
 import { projectPoint } from "../../src/engine/props";
@@ -2570,6 +2572,79 @@ test("skipping a spoken line silences it, not just its subtitle", async () => {
     speaking && survivedClick && consumed && sink.halts.includes("voice"),
     `speaking=${speaking} survivedClick=${survivedClick} consumed=${consumed} halts=${sink.halts}`,
   );
+  session.puppetCtrl.closePuppetFile();
+  await conversation.catch(() => {});
+}
+);
+
+// --- 18b1. #7: a fade over a conversation fades the picture as it IS -------
+// User-reported: with subtitles on, ending a conversation left the character's
+// lower body missing for the length of the fade — a gap exactly the height of
+// the caption bar, between the body and the interface band.
+//
+// TI.EXE has no snapshot: `screentoblack` (0x43e550 -> 0x435b90) dims the LIVE
+// screen `steps` times and returns, so it fades whatever the picture is at that
+// instant. The port freezes a copy instead, and was taking it from the last
+// PRESENTED composite — which is a frame stale, because a line ends by clearing
+// the subtitle and the script's screentoblack runs in the same tick before any
+// render. So the frozen copy still had the character clipped 40 px short for a
+// caption bar that lives only on the canvas, and the room showed through the
+// hole. Subtitles-only, because with them off nothing is ever clipped.
+test("a fade over a conversation captures the live picture, not a stale one (#7)", async () => {
+  const { session, viewer } = await newSession();
+  await session.openSetFile("gstair3.set");
+  const v = viewer();
+  const conversation = session.track(
+    (async () => {
+      await session.puppetCtrl.openPuppetFile("smeth1.pup");
+      await session.sendEvent("sendtopuppet", "before", "intro", [], "test");
+    })(),
+  );
+  const pump = async (until: () => boolean, max = 3000): Promise<boolean> => {
+    for (let i = 0; i < max && !until(); i++) {
+      v.tick((clock += 100));
+      await drain();
+    }
+    return until();
+  };
+  // the 40 rows the caption bar occupies — cut out of the character, not added
+  // below it (0x440981), which is why they are the rows that can end up empty
+  const SUBTITLE_H = 40;
+  const STRIP = SUBTITLE_H * SCREEN_W;
+  const blackInStrip = (rgba: Uint8ClampedArray): number => {
+    let n = 0;
+    for (let y = PUPPET_ART_H - SUBTITLE_H; y < PUPPET_ART_H; y++) {
+      for (let x = 0; x < SCREEN_W; x++) {
+        const d = (y * SCREEN_W + x) * 4;
+        if (rgba[d] === 0 && rgba[d + 1] === 0 && rgba[d + 2] === 0) n++;
+      }
+    }
+    return n;
+  };
+
+  const speaking = await pump(() => !!session.puppet?.subtitle);
+  const midLine = session.captureFrame!();
+  check(
+    "mid-line, the frozen picture carries the caption bar the player can see",
+    speaking && !!midLine && blackInStrip(midLine.rgba) === STRIP,
+    `speaking=${speaking} black=${midLine ? blackInStrip(midLine.rgba) : "no frame"}/${STRIP}`,
+  );
+
+  // the line ends: the subtitle clears and the character is whole again, which
+  // is the picture the original would have been dimming
+  const ended = await pump(() => !session.puppet?.subtitle);
+  const atExit = session.captureFrame!();
+  // strictly fewer than mid-line, so this cannot pass on a capture that simply
+  // ignores the conversation and hands back the same picture both times
+  check(
+    "once the line ends, the same rows are the character again, not a hole",
+    ended && !!atExit && !!midLine &&
+      blackInStrip(atExit.rgba) < blackInStrip(midLine.rgba) &&
+      blackInStrip(atExit.rgba) < STRIP / 2,
+    `ended=${ended} black=${atExit ? blackInStrip(atExit.rgba) : "no frame"}/${STRIP} ` +
+      `(mid-line ${midLine ? blackInStrip(midLine.rgba) : "?"})`,
+  );
+
   session.puppetCtrl.closePuppetFile();
   await conversation.catch(() => {});
 }
