@@ -2305,33 +2305,75 @@ export class SetViewer {
    * Its own method because a MOVIE needs it too. A clip is a rectangle painted
    * over the screen, not a screen of its own (see {@link paint}).
    */
+  /**
+   * Is this flat's view region a MATTE — one flat colour, a hole the room view
+   * is composited into — rather than artwork of its own? See the note in
+   * {@link paintWorldInto} for what it decides and why the test is on the
+   * pixels rather than on engine state.
+   *
+   * Memoised on the pixel array's identity: a flat is decoded once and kept, so
+   * identity is a sound key, and the scan bails on the first differing pixel —
+   * which for a real flat is within the first row or two.
+   */
+  private matteSeen: { pixels: Uint8Array; matte: boolean } | null = null;
+
+  private flatIsMatte(flat: { pixels: Uint8Array; width: number; height: number }): boolean {
+    if (this.matteSeen?.pixels === flat.pixels) return this.matteSeen.matte;
+    // PUPPET_ART_H is the interface-band split (SCREEN_H - BAND_H = 264) — the
+    // rows a room view occupies, which is exactly the region a matte fills.
+    let matte = flat.width >= SCREEN_W && flat.height >= PUPPET_ART_H;
+    if (matte) {
+      const first = flat.pixels[0];
+      scan: for (let y = 0; y < PUPPET_ART_H; y++) {
+        const row = y * flat.width;
+        for (let x = 0; x < SCREEN_W; x++) {
+          if (flat.pixels[row + x] !== first) {
+            matte = false;
+            break scan;
+          }
+        }
+      }
+    }
+    this.matteSeen = { pixels: flat.pixels, matte };
+    return matte;
+  }
+
   private paintWorldInto(): "flat" | "set" | null {
     // stage flat active: full 512×384 screen — flat image as background,
     // the set view composited into the top region, props over everything
     const flat = this.session.stageCtrl.flatImage();
     if (flat) {
-      // The room view is expected but is not there — a set change is in flight
-      // (GameHost.activateSet hands the departing room's bytes back before the
-      // arriving viewer exists, so there is nothing left to decode a frame
-      // from). Painting the flat on its own here exposes its own MATTE: main.stg
-      // fills the whole 512x264 view region with palette index 253, which in
-      // that flat's palette is (246,242,219) — a cream. That is the "white
-      // flash" of #146, measured off the report's own video at (247,241,222)
-      // and lasting 2.47 s, i.e. the length of the load rather than a frame.
+      // A MATTE must never be shown bare. main.stg fills its whole 512x264 view
+      // region with one palette index (253, which in that flat's own palette is
+      // (246,242,219) — a cream): it is a hole for the room view to be
+      // composited into, not a picture. Whenever there is no view to cover it,
+      // painting it is the "white flash" of #146 — measured off the report's
+      // video at (247,241,222), and reproduced walking gstair3 Scene50/View53
+      // into the next set, where 109 of 120 sampled frames were matte.
       //
-      // TI.EXE never has this state. `screentoblack` is a palette ramp
-      // (0x435b90; see the note in captureFrame), so the departing room's
-      // PIXELS stay in the framebuffer until the arriving room's overwrite
-      // them — a slow load just means you look at them for longer, and the
-      // matte is only ever uncovered for the instant between the flat being
-      // blitted and the view landing on top of it. Holding the screen is that
-      // behaviour: returning null leaves the canvas exactly as it stands.
+      // Two different windows uncover it, which is why fixing one did not fix
+      // the bug. `changeset` runs `closesetfile` FIRST — that sets
+      // currentSetName to "none", so viewShowing goes false while the departing
+      // room's frame is still in hand and the blit below is skipped — and then
+      // the host's load runs before the arriving viewer exists. The rule here
+      // covers both, and anything else that leaves the hole uncovered.
       //
-      // Note this is NOT "no flat to draw". A flat with the room hidden
-      // (`setvisible(false)` — the map, the CTL panel, an inventory) has
-      // viewShowing false and still paints normally; those flats carry their
-      // own full-screen art and have no matte to expose.
-      if (this.session.viewShowing && !this.current) return null;
+      // TI.EXE never shows it, and not because it is faster: `screentoblack` is
+      // a palette ramp (0x435b90; see the note in captureFrame), so the
+      // departing room's PIXELS stay in the framebuffer until the arriving
+      // room's overwrite them. The matte is only ever uncovered for the instant
+      // between the flat being blitted and the view landing on top of it.
+      // Holding the screen is that behaviour: returning null leaves the canvas
+      // exactly as it stands.
+      //
+      // Testing the FLAT rather than the engine's state is what makes this
+      // safe. `set === "none"` would also catch the endgame, where advanceday()
+      // closes the set and then transtoflat()s to the closing narration, which
+      // must keep painting. Measured across the 15 stage flats on disc 1,
+      // main.stg's view region is 100.0% one index and every other flat is
+      // 3.4%-22.4% — narend (the ending) is 4.9%, map 3.4%, ctl 7.7%. Only a
+      // hole looks like a hole.
+      if (!(this.session.viewShowing && this.current) && this.flatIsMatte(flat)) return null;
       this.screen.clearFrame();
       const flatPal = this.flatPalette(flat.palette);
       const fbuf = this.screen.scratchFor(flat.width * flat.height * 4);
