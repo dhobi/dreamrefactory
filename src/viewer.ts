@@ -404,13 +404,13 @@ export class SetViewer {
     // stairs (#71). The jump stays inside Scene14, so it is the VIEW changing
     // that owes the event, not the scene.
     if (!changed) {
-      void this.session.track(this.refreshStandpointUi());
+      // nothing was left, so only the arrival is owed — see viewSettled
+      void this.session.track(this.scripts.viewSettled(this.sceneIdx));
       return;
     }
     void this.session.track(
       (async () => {
         await this.scripts.viewChanged(this.sceneIdx);
-        await this.refreshStandpointUi();
       })(),
       "jump-viewChanged",
     );
@@ -1369,40 +1369,6 @@ export class SetViewer {
     return this.worldCamera();
   }
 
-  /**
-   * Recompute the nav-arrow colour for the current (settled) view by running
-   * the interface shop's setuparrow() (TAOOT: house.shp). Turns fire
-   * viewChanged(), which deliberately SKIPS boot's openscene — and setuparrow
-   * lives there — so without this an arrow left "red" by closescene() never
-   * updates after a turn (walks were fine because they run the full openScene).
-   * Called at movement END so the colour reflects where you ended up, not
-   * closescene's default.
-   */
-  private refreshNavArrow(): Promise<unknown> {
-    return this.session.sendEvent("sendtoprop", "navarrow", "setuparrow", [], "navarrow-refresh");
-  }
-
-  /**
-   * Rebuild the top-right destination sign for the current (settled) view by
-   * running the interface shop's setupsigns(). Same problem as the nav arrow:
-   * boot's closescene() hides the sign (initprop) on every scene event, but
-   * setupsigns lives in boot's openscene, which viewChanged() and same-scene walks skip —
-   * so without this the sign vanishes on a turn (or in-scene walk) and never
-   * comes back. setupsigns() re-hides then re-picks the sign for currentset()/
-   * currentview(), so it's safe to call at every movement END.
-   */
-  private refreshSigns(): Promise<unknown> {
-    return this.session.sendEvent("sendtoprop", "signs", "setupsigns", [], "signs-refresh");
-  }
-
-  /** movement-END housekeeping: the nav arrow and the destination sign are
-   *  always recomputed together for the settled standpoint (see the two
-   *  methods above for why the boot scripts don't do it themselves) */
-  private async refreshStandpointUi(): Promise<void> {
-    await this.refreshNavArrow();
-    await this.refreshSigns();
-  }
-
   /** dir: RIGHTTURNS or LEFTTURNS */
   turn(dir: number, pace = FRAME_MS): void {
     if (this.busy) return;
@@ -1423,9 +1389,6 @@ export class SetViewer {
         void this.session.track(
           (async () => {
             await this.scripts.viewChanged(this.sceneIdx);
-            // viewChanged runs closescene (→ arrow red, sign hidden) but not
-            // boot's openscene (→ setuparrow/setupsigns), so recompute both.
-            await this.refreshStandpointUi();
           })(),
         );
       }
@@ -1494,13 +1457,12 @@ export class SetViewer {
               } finally {
                 this.disarmNavHooks(prev);
               }
-              await this.refreshStandpointUi();
             })(),
           );
         } else {
-          // a walk that stays in the same scene fires no openscene, so the arrow
-          // and sign would keep the previous view's — recompute for the arrival.
-          void this.session.track(this.refreshStandpointUi());
+          // a walk that stays in the same scene runs no openScene above, but it
+          // is still an arrival, and `openscene` is a per-view event
+          void this.session.track(this.scripts.viewSettled(this.sceneIdx));
         }
       }
       this.showView();
