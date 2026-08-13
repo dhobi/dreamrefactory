@@ -24,6 +24,7 @@ import {
   SavedProp,
   SavedPropPatch,
   SaveGame,
+  SavePatch,
   ThemePatch,
   applyPatch,
   parseSave,
@@ -131,7 +132,7 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
  * original engine and dies looking up our scene in its register ("Fatal error
  * at line 4248 (code 2)" in DosBox — see SavePatch.setFile in df/savegame.ts).
  */
-function setFileSnapshot(session: GameSession): { file: string; actorRegister: number; sceneRegister: number; sceneCount: number } | undefined {
+function setFileSnapshot(session: GameSession): SavePatch["setFile"] {
   if (!session.currentSetFile) return undefined;
   const file = `${session.currentSetFile}.set`;
   const set = session.loadSet(file);
@@ -146,6 +147,9 @@ function setFileSnapshot(session: GameSession): { file: string; actorRegister: n
     // the register's record count is restored verbatim, never recomputed —
     // a smaller base set's count leaves later scenes unreachable (line 4248)
     sceneCount: set.scenes.length,
+    // the set's half of the CLUT the loader restores to the screen — without
+    // it a cross-room save comes back in the base room's colours
+    clut: set.paletteRaw,
   };
 }
 

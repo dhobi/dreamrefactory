@@ -78,7 +78,7 @@ all 109 shipped saves.
 
 | Container | Contents |
 |-----------|----------|
-| **0** | manifest, built on the stack: `"Titanic 1.0"` version (Pascal string @0), disk family `"Titanic1"`/`"Titanic2"` (@+0x104), nine 256-byte path slots (@+0x1fc — the *Save As* / tour directories), a 256×8 table (@+0xb08), the open-file count (@+0x130c), then one **260-byte record per open file** at +0x1310: the file's **old heap handle** (u32) followed by its path as a Pascal string (`titanic2:data:cargo.set`). The handle is not junk — it is the key every other container's file references resolve through, see [how the loader re-opens the room](#the-loader-re-opens-the-room-from-the-manifest-not-from-the-set-name) |
+| **0** | manifest, built on the stack: `"Titanic 1.0"` version (Pascal string @0), disk family `"Titanic1"`/`"Titanic2"` (@+0x104), nine 256-byte path slots (@+0x1fc — the *Save As* / tour directories), the **live CLUT** (@+0xb0c, 256 × {i16 index, i16 rgb[3]} — the loader copies it into the palette global and applies it, `0x414aa8..0x414b07`; the lower 128 entries are the open set's own palette table and a cross-room patch must replace them or the room comes back in the old room's colours), the open-file count (@+0x130c), then one **260-byte record per open file** at +0x1310: the file's **old heap handle** (u32) followed by its path as a Pascal string (`titanic2:data:cargo.set`). The handle is not junk — it is the key every other container's file references resolve through, see [how the loader re-opens the room](#the-loader-re-opens-the-room-from-the-manifest-not-from-the-set-name) |
 | **1** | current location, a fixed 786 bytes from `0x489d40`: stage file (@520, `"main.stg"`), the open **set file's old handle** (@544 — resolved through the manifest, above), set base (@596), scene (@612), view (@628), the set's **actor / main-scene register container refs** (@644 / @652) and the scene register's **record count** (@656 — the loader's scene lookup walks exactly this many records; equal to the set's scene count in all 109 shipped saves) |
 | **2** | the cast: n × 160-byte actor records — see [The actor container](#the-actor-container-fixed-160-byte-actor-records) |
 | **3** | open casts: n × 28 (two pointers, a u32, the `.cst` filename as a Pascal string) |
@@ -320,7 +320,22 @@ Two quirks:
 
 Each node's `+20..+27` is a serialized `DFValue`:
 
-- **type 2 / type 4 → number**, stored inline as the signed i16 at `+26`.
+- **type 2 → boolean**, stored inline as the 16-bit 0/1 at `+26`. This is what
+  a script's `true`/`false` produce, and it is **a distinct runtime type, not a
+  second spelling of number**: TI.EXE's boolean-taking commands demand exactly
+  tag 2 (`propvisible`'s argument fetch is `cmp word [esp], 2` at `0x416ed8`)
+  and its number-taking ones exactly tag 4 (~30 `cmp …, 4` → error-14 sites).
+  Feeding the wrong tag is the ignorable-but-endless DosBox dialog *"A
+  scripting error has occured … [Bad argument type.]"* (interpreter error 14 =
+  string 1100+14). This page used to say "type 2 / type 4 → number", and the
+  merged reading survived every corpus measurement because both carry an
+  inline 16-bit value — it took loading a port-written save in the real
+  engine, and bisecting the resulting dialog down to exactly ten `02→04` tag
+  bytes, to split them. The port's writer therefore **preserves a tag-2
+  record's tag** while the value stays 0/1 (its interpreter carries booleans
+  as numbers, so the tag is the only witness), and lets a non-boolean value
+  retype the record the way an assignment in the original would.
+- **type 4 → number**, stored inline as the signed i16 at `+26`.
 - **type 3 → string**: `+26` (unsigned) is the **byte offset of the string in
   the string-pool container** that follows the globals container. The pool is a
   block of `[len][chars]` entries, 2048 bytes in most saves and about 4100 in the

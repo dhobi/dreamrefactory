@@ -189,9 +189,16 @@ const NODE_NAME = 8;
 const NODE_VTABLE = 20;
 const NODE_TYPE = 24;
 const NODE_VALUE = 26;
-/** DFValue type tags (node +24): 2 and 4 are numbers with the value inline
- *  (signed 16-bit; the engine emits both — our writer tags 4), 3 is a string
- *  whose value is a byte offset into the string-pool container. */
+/** DFValue type tags (node +24): 2 is a BOOLEAN (`true`/`false` in scripts —
+ *  its value is still the inline 16-bit 0/1), 4 a number (signed 16-bit
+ *  inline), 3 a string whose value is a byte offset into the string-pool
+ *  container. 2 and 4 are distinct RUNTIME types, not two number spellings:
+ *  TI.EXE's boolean-taking commands check for exactly 2 (propvisible's
+ *  argument fetch, `cmp word [esp], 2` at 0x416ed8) and its number-taking
+ *  ones for exactly 4, and the wrong tag is the ignorable-but-endless DosBox
+ *  dialog "A scripting error has occured … [Bad argument type.]" — measured
+ *  by bisecting a port-written save down to exactly ten 02→04 tag bytes. */
+const DFVALUE_BOOLEAN = 2;
 const DFVALUE_STRING = 3;
 const DFVALUE_NUMBER_WRITTEN = 4;
 /**
@@ -236,6 +243,16 @@ const C1_SCENE_COUNT = 656;
 const C0_FILE_COUNT = 0x130c;
 const C0_FILE_RECORDS = 0x1310;
 const C0_FILE_STRIDE = 0x104;
+/** container 0 also carries the live CLUT: 256 × {i16 index, i16 rgb[3]} at
+ *  +0xb0c, which the loader copies straight into the palette global and
+ *  applies (0x414aa8..0x414b07) — the room comes back in whatever colours
+ *  this table holds, so a cross-room patch must bring the new set's palette
+ *  with it or the old room's stays on screen until the next set change.
+ *  Measured: the lower 128 entries equal the open set's own palette table
+ *  (SET c0+0xf2) at 1018/1024 bytes in the cargo base — the set owns 0..127
+ *  and the stage 128..255, so only the lower half is the set's to replace. */
+const C0_CLUT = 0xb0c;
+const C0_CLUT_SET_HALF = 128 * 8;
 
 const roundUp = (n: number, a: number) => Math.ceil(n / a) * a;
 
@@ -318,11 +335,13 @@ export function writeSaveFile(raw: RawSaveFile): Uint8Array {
 /** A serialized script variable (from the globals container). */
 export interface SavedVar {
   name: string;
-  /** DFValue type tag: 2/4 = number (value inline), 3 = string (value is a byte
-   * offset into the string-pool container that follows the globals container). */
+  /** DFValue type tag: 2 = boolean (0/1 inline), 4 = number (value inline),
+   * 3 = string (value is a byte offset into the string-pool container that
+   * follows the globals container). 2 and 4 are distinct runtime types —
+   * see the tag constants above for the TI.EXE checks that enforce it. */
   type: number;
-  /** the 16-bit payload: the number itself (type 2/4, signed), or the string's
-   * byte offset in the pool (type 3, unsigned). */
+  /** the 16-bit payload: the number/boolean itself (type 2/4, signed), or the
+   * string's byte offset in the pool (type 3, unsigned). */
   num: number;
   /** the decoded string for type-3 variables (from the pool), else null. Null
    * also when the pool is missing or the offset doesn't decode cleanly. */
@@ -1153,7 +1172,18 @@ export interface SavePatch {
    * writes the current set's register refs. Omitted, the base's values stand —
    * only safe when the base save is from the same set file.
    */
-  setFile?: { file: string; actorRegister: number; sceneRegister: number; sceneCount: number };
+  setFile?: {
+    file: string;
+    actorRegister: number;
+    sceneRegister: number;
+    sceneCount: number;
+    /** the set's raw 2048-byte palette table (SET c0+0xf2). Its lower 128
+     *  entries are written into the manifest's CLUT at +0xb0c — the loader
+     *  restores the screen palette from there, and without this a cross-room
+     *  save comes back in the base room's colours (the set owns entries
+     *  0..127; the stage's 128..255 keep the base's bytes). */
+    clut?: Uint8Array;
+  };
   /**
    * Current prop state to write into the inventory container, by prop name.
    * Captures the player's collected items (each prop's owner, and its view where
@@ -1508,8 +1538,18 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       const num = patch.numGlobals.get(name);
       if (num !== undefined) {
         const dv = view();
-        dv.setInt16(off + NODE_VALUE, Math.max(-32768, Math.min(32767, num | 0)), true);
-        dv.setUint16(off + NODE_TYPE, DFVALUE_NUMBER_WRITTEN, true);
+        const v = Math.max(-32768, Math.min(32767, num | 0));
+        // Type 2 is BOOLEAN, not a second number tag, and TI.EXE's commands
+        // check: propvisible's argument fetch is `cmp word [esp], 2` and a 4
+        // there is the DosBox scripting error "Bad argument type." (found by
+        // bisecting a port save down to exactly ten 02->04 tag bytes). The
+        // port's interpreter carries booleans as 0/1 numbers, so the
+        // boolean-ness survives only in the base record's tag: a tag-2 record
+        // stays tag 2 while the value is still boolean-shaped, and a real
+        // number retypes it, the way an assignment in the original would.
+        const keepBool = dv.getUint16(off + NODE_TYPE, true) === DFVALUE_BOOLEAN && (v === 0 || v === 1);
+        dv.setInt16(off + NODE_VALUE, v, true);
+        if (!keepBool) dv.setUint16(off + NODE_TYPE, DFVALUE_NUMBER_WRITTEN, true);
         return true;
       }
       const str = patch.strGlobals?.get(name);
@@ -1592,6 +1632,12 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       v1.setUint32(C1_ACTOR_REGISTER, patch.setFile.actorRegister, true);
       v1.setUint32(C1_SCENE_REGISTER, patch.setFile.sceneRegister, true);
       v1.setUint32(C1_SCENE_COUNT, patch.setFile.sceneCount, true);
+      // the set's half of the restored CLUT — without it the room comes back
+      // in the base room's colours until the next set change
+      const clut = patch.setFile.clut;
+      if (clut && c0.length >= C0_CLUT + C0_CLUT_SET_HALF) {
+        c0.set(clut.subarray(0, C0_CLUT_SET_HALF), C0_CLUT);
+      }
     }
   }
 

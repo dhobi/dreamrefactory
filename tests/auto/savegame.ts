@@ -1735,6 +1735,7 @@ test("a cross-room save re-paths the manifest's set record and register refs", (
       actorRegister: cargoSet.actorRegister,
       sceneRegister: cargoSet.mainSceneRegister,
       sceneCount: cargoSet.scenes.length,
+      clut: cargoSet.paletteRaw,
     },
   });
   const re = readSaveFile(out);
@@ -1760,6 +1761,10 @@ test("a cross-room save re-paths the manifest's set record and register refs", (
   expect(v1.getUint32(656, true)).toBe(cargoSet.scenes.length);
   const scene = cargoSet.scenes.find((sc) => sc.sceneName.toLowerCase() === "scene4");
   expect(scene, "the saved scene is in the re-opened set's register").toBeTruthy();
+  // the CLUT's set-owned half is the new room's palette (the loader restores
+  // the screen palette from c0+0xb0c — without this the cargo hold came back
+  // in the crew hallway's colours), and the stage's upper half is the base's
+  expect(c0.subarray(0xb0c, 0xb0c + 1024)).toEqual(cargoSet.paletteRaw.subarray(0, 1024));
   // and no other manifest record was touched
   const b0 = readSaveFile(bytes).containers[0].data;
   for (let r = 0; r < count; r++) {
@@ -1767,6 +1772,27 @@ test("a cross-room save re-paths the manifest's set record and register refs", (
     if (v0.getUint32(off, true) === setId) continue;
     expect(c0.subarray(off, off + 0x104), `record ${r} untouched`).toEqual(b0.subarray(off, off + 0x104));
   }
+});
+
+// Type tag 2 is BOOLEAN, not a second number spelling — TI.EXE's boolean-taking
+// commands check for exactly 2 (propvisible's argument fetch, cmp word [esp],2)
+// and flipping a boolean global's tag to 4 is the endless DosBox dialog
+// "[Bad argument type.]", found by bisecting a port save down to exactly ten
+// 02->04 tag bytes. The port's interpreter carries booleans as 0/1 numbers, so
+// the writer must keep a tag-2 record's tag while the value stays 0/1 — and let
+// a real number retype it, the way an assignment in the original would.
+test("a boolean global keeps its tag; a real number retypes it", () => {
+  const bytes = new Uint8Array(readFileSync(savePath("2", "20- Cargo Hold - looking for painting.ti")));
+  const save = parseSave(bytes);
+  expect(save.vars.find((v) => v.name === "tour")!.type, "the base holds tour as a boolean").toBe(2);
+  const tagOf = (out: Uint8Array, name: string) => parseSave(out).vars.find((v) => v.name === name)!.type;
+  const patch = (num: Map<string, number>) => applyPatch(parseSave(bytes).raw, {
+    numGlobals: num, set: save.set, scene: save.scene, view: save.view,
+  });
+  expect(tagOf(patch(new Map([["tour", 0]])), "tour"), "0 keeps the boolean tag").toBe(2);
+  expect(tagOf(patch(new Map([["tour", 1]])), "tour"), "1 keeps the boolean tag").toBe(2);
+  expect(tagOf(patch(new Map([["tour", 5]])), "tour"), "a real number retypes").toBe(4);
+  expect(tagOf(patch(new Map([["mission", 2]])), "mission"), "numbers stay numbers").toBe(4);
 });
 
 // A theme track the base never opened cannot be written (the container-0
