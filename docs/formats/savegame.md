@@ -99,10 +99,9 @@ pointers to its own three tables (`0x48bcd0` loops, `0x48b830` crickets,
 `0x48b150` walks), which the writer `memcpy`s into the file. The save *is* the
 live scheduler.
 
-(The `hallside`/`savedeck` fallbacks read a Pascal-string stream of facing,
-road, coordinates and set names — see [the location
-container](#the-location-container-is-a-savestate-stack-fallbacks). The writer's
-order above has no container of its own for it.)
+(There is **no location-stream container**. A "savestate stack" of facing, road,
+coordinate and set strings was long believed to have one — see
+[the container that wasn't there](#the-location-container-that-wasnt-there).)
 
 ## The actor container: fixed 160-byte actor records
 
@@ -255,9 +254,11 @@ after saving on the poop deck the shifted pairing reads `oldset="stair2c"`,
 
 Two quirks:
 
-- The **first** name in the list (`clock`) pairs with the blob header, which
-  holds no DFValue — it is not decodable here. (Its value, the pending
-  clock-event script, is recovered from the location container instead.)
+- The **first** name in the list (`clock`) pairs one stride BACK, into the blob
+  header, whose bytes past the pool handle turn out to be its real DFValue —
+  see `decodeVarSlots`, and the measurement in its comment (missions 0–3 read
+  type 3 → "bedsit"; every mission-4 save reads type 4 → `hrs*100+min`, exactly
+  what BOOTFILE's `calctime` writes there).
 - Names of 12–15 characters **overflow** the 12-byte name buffer and clobber
   the low bytes of their own node's vtable (`curattention`, `attentionspan`) —
   a DreamFactory quirk the engine tolerates; validation must skip the
@@ -403,20 +404,26 @@ checkpoint that dropped actor owners produced "Morrow has to be re-persuaded aft
 the mission rollover" — he does not, the save had forgotten him. And `zeitclue`
 vanishing quietly once cost a whole mission.
 
-### The location container is a savestate stack (fallbacks)
+### The location container that wasn't there
 
-The location container is a **stack of location snapshots** (the `savestage`
-checkpoints plus the current position), each a run of Pascal strings holding a
-set/flat name, coordinates, facing, and — for hallway snapshots — the side you
-were facing (`"port"`/`"star"`).
+This page used to describe a "location container": a clean Pascal-string stream of
+facing, road, coordinates and set names, read as a **stack of location snapshots**,
+with two loader fallbacks hanging off it (`hallside` from its last
+`"port"`/`"star"` token, `savedeck` from the hall set's deck letter). Decompiling
+the writer ended that: its fixed order emits no such container, and the heuristic
+that "found" one was locking onto the **string pool** — measured, in 109 of 109
+shipped saves — whose entries are the same facing/side/coordinate strings, in
+allocation order, because they are the string *globals'* values (`savestage1-3`
+and friends).
 
-`hallside` and `savedeck` now decode directly from their variable records; the
-loader keeps two location-stack fallbacks for saves whose record doesn't decode:
-the last `"port"`/`"star"` token in the stack (the most-recently-pushed = current
-side), and the current hall/deck set's deck letter. `hallside` matters because
-halla's `keydown` guard is `if hallside != "star" & hallside != "port" error()` —
-an invalid value makes `error()` swallow **every** key, so a loaded hall save
-couldn't walk or leave the deck.
+The fallbacks it fed also never fired. Exactly 4 shipped saves lack a decodable
+`hallside` record, all pre-boarding (bedsit1/c73), and none of their pools hold a
+side token, because no hallway had ever been entered — an unset `hallside` is what
+a fresh game has until the first hall assigns one. So `hallside` now decodes from
+its variable record alone (it still matters: halla's `keydown` guard is
+`if hallside != "star" & hallside != "port" error()`, which swallows **every** key
+on an invalid value), and `savedeck` keeps only the set-derived deck-letter
+fallback, which never depended on the phantom container.
 
 ## The inventory container: fixed 158-byte prop records
 
