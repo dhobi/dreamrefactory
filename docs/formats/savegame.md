@@ -121,17 +121,31 @@ of that copy, which is how the rest is mapped — the buffer is at `esp+8`, or
 | Offset | Type | Field | Recovered from |
 |-------:|------|-------|----------------|
 | +0 | i16 | **`actorvisible`** — >0 is on screen | `0x40eec0` |
+| +2 / +6 | ptr | the CST file and the member's data handle (rebuilt; `actorlock`'s unlock path `0x411ab0` locks +6 and re-reads container +14 from file +2) | `0x411ab0` |
+| +10 / +14 | u16 | the member's **logic / script container locations** in its CST — `logicLocation` and `logicLocation + 1`, 3101 of 3101 named-member records | the CST files |
+| +18 | i16 | **placed flag** — 1 iff the record names a set (2258/2258 vs 0/1207): assigned a place at least once, and `putdownactor` hides without clearing it | the corpus |
 | +24 | i16 | `actordeg`, 0..255 | `0x40e850` |
 | +26 / +28 / +30 | i16 | `actorxyz` 1/2/3 — the SET's own X, Z, Y order | `0x40f285/97/a9` |
+| +32 | i16 | **`actorturn`** — degrees per service pass while turning (`stdturn` = 10) | `0x410937` |
+| +34 | i16 | current **step** within the pose (the walk cycle's frame; < the count at +36 in 2959 of 3101) | the corpus |
+| +36 | i16 | **step count** of the current pose, cached (stand = 1, the gang's walk = 20 — matches the CST pose tables) | the CST files |
 | +38 | i16 | `actorspeed` | `0x40ead0` |
 | +42 | i16 | **`actorscale`** — 1000 is neutral | `0x40ea40` |
+| +46 | i16 | a **creation counter** — per save, member *k* of the cast reads base+*k* with the base growing monotonically over the session (save `1/01` reads 5,6,7…; late saves read 8125+). Engine bookkeeping, nothing to restore | the corpus |
 | +72 | i32 | `actorvalue` — conversations had | `0x410be0` |
 | +76 | i16 | `actorzclip` | `0x410c70` |
+| +78 | i16 | resource-**lock** flag (`actorlock` `0x411950`/`0x411ab0` pin/release the sprite data) | `0x41195a` |
 | +80 | pstr | actor (cast member) **name** | the grid |
 | +96 | pstr | the **set** the actor is in (`"deckbd"`, `"control"`, `"gym"`) | |
 | +112 | pstr | `actorstar` — the spot they were put on, or a walk sentinel | |
 | +128 | pstr | `actorpose` (`"stand"` / `"walk"` / `"dead"`) | |
 | +144 | pstr | **`actorowner`** | |
+
+With those, the record's numeric half has **no unexplained structure left**: what
+is not a restorable field is resource bookkeeping the loader rebuilds (the
+pointers, the lock, the container locations — implicit in the member's name) or
+animation scratch the next service pass overwrites (step, step count, the
+counter). Nothing here changes what a load restores.
 
 Every offset above is checked against all **3465 records of the 109 shipped saves**:
 `actorvisible` is only ever 0 or 1 and no visible record lacks a set; `deg` stays
@@ -449,9 +463,12 @@ local buffer whose name field sits at `buffer+0x4e`:
 | From the base | From the name | Type | Field |
 |--------------:|--------------:|------|-------|
 | +0 | −0x4e | i16 | `propvisible` (`0x416f30`, `cmp word ptr [esp+8], 0` — >0 is shown) |
+| +0x0a / +0x0e | −0x44 / −0x40 | u16 | the group's **logic / script container locations** in its SHP — `location` and `location + 1`, **7848 of 7848** records against the parsed boot shops. Rebuilt from the name on load |
 | +0x12 | −0x3c | i16 | `propis3d` (`0x417760`) — strictly 0/1 across the corpus |
 | +0x14 / +0x16 | −0x3a / −0x38 | i16 | `propxy` (`0x4175c0`): **+0x14 is the screen Y and +0x16 the X**. The interface band's props all read x = 256, y = 324 — the band anchor |
 | +0x18 | −0x36 | i16 | `propdeg` (`0x4168a0`, `movsx ecx, word ptr [esp+0x20]`) |
+| +0x20 | −0x2e | i16 | current **frame** within the view — a valid index in 7848 of 7848 (`0 ≤ frame < max(1, play length)`) |
+| +0x22 | −0x2c | i16 | **play length** of the current view: the frame count for a real animation, **1 for a deg-selector state** (which shows one frame) — 7404 of 7848; the misses cluster on states whose animated bit the engine decides at play time |
 | +0x24 | −0x2a | i16 | `propspeed` (`0x416b20`) — **4 in every record ever written**; nothing changes a prop's speed |
 | +0x26 | −0x28 | i16 | `propdist` — z-order, more negative = nearer |
 | +0x28 | −0x26 | i16 | `propscale` (`0x416a90`) — 10 distinct values in the corpus, about 1.1 per prop |
@@ -480,11 +497,15 @@ same kind of independent check from the open pocketwatch, whose four pieces read
 −6/−5/−5/−4 for lid/hrs/min/sec — exactly the z-order stack the watch's own `open()`
 assigns them, in that order.
 
-Still structured but unnamed: `+0x0a`/`+0x0e` (constant per prop across all 109 —
-resource ids), `+0x1a`–`+0x20`, `+0x22` ∈ {1,5,6,9,12}, `+0x30` (constant per prop,
-15 distinct values), and `+0x34`…`+0x42`, eight consecutive small words that look
-like two screen rects. The pointer columns are `+0x02`/`+0x04`, `+0x06`/`+0x08`
-(always `0x9f`/`0xa6` heap) and `+0x2c`.
+Still structured but unnamed — all engine bookkeeping, none of it restorable
+state: `+0x1a`–`+0x1e` (animation timing scratch — non-zero only on the two
+ever-animated big-scale props, the watch and the bag, with tick-sized values),
+`+0x30` (a per-prop constant across all 109 — 0 for the inventory items, small
+ordinals for some interface chrome; not the state index, not the shop-wide state
+ordinal, both tested), and `+0x34`…`+0x42`, eight consecutive small words that
+look like two screen rects (last-drawn bounds). The pointer columns are
+`+0x02`/`+0x04`, `+0x06`/`+0x08` (always `0x9f`/`0xa6` heap) and `+0x2c`. As with
+the actor record, everything a load could *use* is already named.
 
 The two disks differ in how a collected item is shown (disk 1 stows to `panel1`;
 disk 2 keeps it `large`), so the loader restores the raw `owner`+`view` verbatim
