@@ -210,6 +210,32 @@ const C1_STAGE = 520;
 const C1_SET = 596;
 const C1_SCENE = 612;
 const C1_VIEW = 628;
+/** container 1 also carries the open SET FILE's identity and shape, and the
+ *  original's loader restores the room from these three, not from the set
+ *  name: @544 is the set file's old heap handle, which the loader (0x41514a)
+ *  resolves through the container-0 manifest — the record whose first dword
+ *  matches yields the PATH that names the file to treat as the open set — and
+ *  @644/@652 are the set's actor/main-scene register container refs, which it
+ *  reads from that file to look up the saved scene and view names (0x43a0b0;
+ *  a scene the register lacks is the DosBox fatal at line 4248). Verified
+ *  against all 109 shipped saves: @544 matches exactly one manifest record,
+ *  its path names a set file holding the saved scene, and @644/@652 equal
+ *  that file's own register refs. */
+const C1_SETFILE_ID = 544;
+const C1_ACTOR_REGISTER = 644;
+const C1_SCENE_REGISTER = 652;
+/** the scene register's RECORD COUNT — restored verbatim, never recomputed:
+ *  the scene lookup walks exactly this many 42-byte records of the register
+ *  it just re-read (0x409e50 bounds itself by the global at 0x489fd0 = c1
+ *  @656). Equal to the open set's scene count in all 109 shipped saves; a
+ *  base from a smaller set leaves later scenes unreachable — the second way
+ *  a cross-room save died at line 4248. */
+const C1_SCENE_COUNT = 656;
+/** container 0 manifest: the open-file records — count at +0x130c, then
+ *  260-byte records of { old heap handle u32, path pstr } at +0x1310. */
+const C0_FILE_COUNT = 0x130c;
+const C0_FILE_RECORDS = 0x1310;
+const C0_FILE_STRIDE = 0x104;
 
 const roundUp = (n: number, a: number) => Math.ceil(n / a) * a;
 
@@ -416,6 +442,23 @@ export interface SavedTheme {
   /** how many MORE records the playing/looping lists held (positional sound
    *  loops a load does not restore — reported, not silently dropped). */
   extras: number;
+}
+
+/**
+ * What {@link SavePatch.theme} writes: the track plus its bank's own loop
+ * table, because the playing/looping lists must mirror the bank record for
+ * record — TI.EXE's resume indexes both by the bank's tables, not by the
+ * save's counts (see {@link SavePatch.theme} for the failure mode).
+ */
+export interface ThemePatch {
+  /** track file name as the open-tracks list names it, e.g. "cargo.trk". */
+  track: string;
+  /** record volume, 0..255 (the live theme volume; shipped saves hold 127/255). */
+  volume?: number;
+  /** the bank's loop records in table order: container location + identifier. */
+  chunks: { index: number; name: string }[];
+  /** the bank's play order, 1-based into `chunks` — becomes the looping list. */
+  order: number[];
 }
 
 /**
@@ -1098,6 +1141,20 @@ export interface SavePatch {
   scene: string;
   view: string;
   /**
+   * The current set FILE and its register container refs — required for a save
+   * taken in a DIFFERENT room than the base. TI.EXE's loader ignores the set
+   * NAME at C1 @596 when it re-opens the room: it resolves the set file id at
+   * C1 @544 through the container-0 manifest to a PATH, opens that file, and
+   * looks the saved scene/view up in the registers named by C1 @644/@652.
+   * A base from another room therefore re-opens the base's set, and the saved
+   * scene misses its register — TI.EXE dies with "Fatal error at line 4248
+   * (code 2)". Writing this re-paths the manifest record the set id resolves
+   * to (the id itself is left alone, so every other record still matches) and
+   * writes the current set's register refs. Omitted, the base's values stand —
+   * only safe when the base save is from the same set file.
+   */
+  setFile?: { file: string; actorRegister: number; sceneRegister: number; sceneCount: number };
+  /**
    * Current prop state to write into the inventory container, by prop name.
    * Captures the player's collected items (each prop's owner, and its view where
    * the caller has one) — without it, a save would keep the base save's stale
@@ -1126,15 +1183,31 @@ export interface SavePatch {
    */
   scheduler?: { loops: SavedLoop[]; crickets: SavedCricket[] };
   /**
-   * The playing theme's track file name ("deckbd.trk"), or null for a room
-   * scored silent. Written by emptying every track's playing/looping arrays
-   * (their descriptor counts and container lengths together, so they stay
-   * consistent) and then writing one playing + one looping record into the named
-   * track — IF the base has that track open; a theme track the base never opened
-   * is reported through {@link onDrop} (the container 0 manifest names the open
+   * The playing theme with its bank's loop table, or null for a room scored
+   * silent. Written by emptying every track's playing/looping arrays (their
+   * descriptor counts and container lengths together, so they stay consistent)
+   * and then writing the named track's lists the way TI.EXE's own writer does —
+   * IF the base has that track open; a theme track the base never opened is
+   * reported through {@link onDrop} (the container 0 manifest names the open
    * files, and this writer does not rewrite the manifest).
+   *
+   * The lists are NOT free-form, and an invented record is a crash in the
+   * original engine, not a quieter room. TI.EXE's post-load resume (0x414a70,
+   * called by `opengame` after the restore) pairs playing record *n* with the
+   * BANK's loop-table record *n* — the save record contributes only volume and
+   * pan — and then rebuilds the looping list by copying `playing[order[n]-1]`
+   * for every entry of the bank's play order, bounded by the bank's chunk
+   * count, not by the save's. A playing list shorter than the bank's tables is
+   * therefore an out-of-bounds read AND write on 104-byte-per-record heap
+   * blocks; the smashed heap surfaces as the DreamFactory fatal "Memory error
+   * at line 301 (code 2): Unknown compression format" (the codec lookup at
+   * 0x401539 reading a clobbered sound header). Measured against all 109
+   * shipped saves (111 live tracks, 2583 records, zero exceptions): playing =
+   * one record per loop-table record in table order, looping = one per
+   * play-order entry, `index` = the chunk's container location, +2 = 0,
+   * pan = 128, name = the chunk identifier verbatim.
    */
-  theme?: string | null;
+  theme?: ThemePatch | null;
   /**
    * Told about any global that could not be written, and why.
    *
@@ -1490,6 +1563,38 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     writePstrField(c1, C1_VIEW, patch.view);
   }
 
+  // the set FILE: re-path the manifest record the set id at C1 @544 resolves
+  // to, and write the set's register refs at C1 @644/@652 — the loader opens
+  // the room from these three, not from the set name (see SavePatch.setFile).
+  // The record keeps its old id and its directory prefix; only the basename
+  // after the last ":" changes, which is also all that distinguishes the
+  // shipped saves' set records from one another.
+  if (patch.setFile && c1.length >= C1_SCENE_REGISTER + 4) {
+    const c0 = containers[0].data;
+    const v0 = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);
+    const v1 = new DataView(c1.buffer, c1.byteOffset, c1.byteLength);
+    const setId = v1.getUint32(C1_SETFILE_ID, true);
+    const count = c0.length >= C0_FILE_COUNT + 4 ? v0.getUint32(C0_FILE_COUNT, true) : 0;
+    let recOff = -1;
+    for (let r = 0; r < count; r++) {
+      const off = C0_FILE_RECORDS + r * C0_FILE_STRIDE;
+      if (off + C0_FILE_STRIDE <= c0.length && v0.getUint32(off, true) === setId) { recOff = off; break; }
+    }
+    if (recOff < 0) {
+      patch.onDrop?.(`setFile(${patch.setFile.file})`, "the set id at C1 @544 matches no manifest record");
+    } else {
+      const len = c0[recOff + 4];
+      let path = "";
+      for (let j = 0; j < len; j++) path += String.fromCharCode(c0[recOff + 5 + j]);
+      const cut = path.lastIndexOf(":");
+      const newPath = path.slice(0, cut + 1) + patch.setFile.file.toLowerCase();
+      writePstrField(c0, recOff + 4, newPath, C0_FILE_STRIDE - 4 - 1);
+      v1.setUint32(C1_ACTOR_REGISTER, patch.setFile.actorRegister, true);
+      v1.setUint32(C1_SCENE_REGISTER, patch.setFile.sceneRegister, true);
+      v1.setUint32(C1_SCENE_COUNT, patch.setFile.sceneCount, true);
+    }
+  }
+
   // inventory: overwrite each named prop's view (record+48) and owner (record+64)
   // in place. Both are read at fixed offsets, so writing them as Pascal strings
   // there preserves the 158-byte grid (the value field trailing owner is ignored
@@ -1685,9 +1790,16 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     }
   }
 
-  // the theme: empty every track's playing/looping lists, then mark the named
-  // track's as playing. Counts and container lengths move together so the file
-  // stays the shape the original writes.
+  // the theme: empty every track's playing/looping lists, then write the named
+  // track's as ONE RECORD PER LOOP CHUNK, exactly the shape TI.EXE's writer
+  // dumps and — the part that is not optional — the shape its post-load resume
+  // assumes. The resume pairs playing record n with the bank's loop-table
+  // record n and rebuilds the looping list from the bank's play order over the
+  // playing array, so lists shorter than the bank's tables are read and
+  // written PAST their heap blocks in the original engine ("Memory error at
+  // line 301 (code 2): Unknown compression format" — see SavePatch.theme).
+  // Counts and container lengths move together so the file stays the shape the
+  // original writes.
   if (patch.theme !== undefined) {
     const ti = findTracksIndex(raw);
     if (ti < 0) {
@@ -1695,25 +1807,38 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     } else {
       const d = containers[ti].data;
       const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
-      const want = patch.theme?.toLowerCase() ?? null;
+      const want = patch.theme?.track.toLowerCase() ?? null;
+      const volume = patch.theme?.volume ?? 255;
+      // playing = the bank's loop records in table order; looping = the play
+      // order expanded over them. All shipped records: +2 = 0, pan = 128.
+      const soundRecord = (c: { index: number; name: string }): Uint8Array => {
+        const rec = new Uint8Array(SOUND_STRIDE);
+        const rdv = new DataView(rec.buffer);
+        rdv.setUint16(0, c.index, true);
+        rdv.setUint16(4, volume, true);
+        rdv.setUint16(6, 128, true);
+        writePstrField(rec, 8, c.name);
+        return rec;
+      };
+      const playing = patch.theme?.chunks ?? [];
+      const looping = (patch.theme?.order ?? [])
+        .map((v) => playing[v - 1])
+        .filter((c): c is { index: number; name: string } => c !== undefined);
+      const pack = (list: { index: number; name: string }[]): Uint8Array => {
+        const out = new Uint8Array(list.length * SOUND_STRIDE);
+        list.forEach((c, r) => out.set(soundRecord(c), r * SOUND_STRIDE));
+        return out;
+      };
       let written = false;
       for (let k = 0; k < d.length / TRACK_STRIDE; k++) {
         const name = pstrField(d, k * TRACK_STRIDE + TRACK_NAME_OFF).toLowerCase();
-        for (const [j, cOff] of ([[1, TRACK_COUNTS[1]], [2, TRACK_COUNTS[2]]] as const)) {
+        for (const [j, cOff, list] of (
+          [[1, TRACK_COUNTS[1], playing], [2, TRACK_COUNTS[2], looping]] as const
+        )) {
           const idx = ti + 1 + 3 * k + j;
-          if (name === want) {
-            // one playing + one looping record: the port scores at track
-            // granularity, so one record naming the track is what its own
-            // loader reads back; index 1, this track, full volume, centred.
-            const rec = new Uint8Array(SOUND_STRIDE);
-            const rdv = new DataView(rec.buffer);
-            rdv.setUint16(0, 1, true);
-            rdv.setUint16(2, k, true);
-            rdv.setUint16(4, 255, true);
-            rdv.setUint16(6, 128, true);
-            writePstrField(rec, 8, want.replace(/\.(trk|sfx)$/, ""));
-            containers[idx].data = rec;
-            dv.setInt16(k * TRACK_STRIDE + cOff, 1, true);
+          if (name === want && playing.length) {
+            containers[idx].data = pack([...list]);
+            dv.setInt16(k * TRACK_STRIDE + cOff, list.length, true);
             written = true;
           } else {
             containers[idx].data = new Uint8Array(0);
@@ -1721,8 +1846,10 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
           }
         }
       }
-      if (want && !written) {
+      if (want && playing.length && !written) {
         patch.onDrop?.(`theme(${want})`, "the base save has no such track open — the room will load silent");
+      } else if (want && !playing.length) {
+        patch.onDrop?.(`theme(${want})`, "the bank's loop table was not readable — the room will load silent");
       }
     }
   }
