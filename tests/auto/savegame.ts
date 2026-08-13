@@ -1102,9 +1102,9 @@ test("the dev-server manifest's shipped saves are all recognised for seeding", (
  * darkens all four. The arrow is the only piece whose lit state is a DEGREE
  * rather than a view — the SHP says so, `navarrow` carrying green/red/yellow of
  * two frames each where `life`, `watch` and `map` have separate dark/light
- * states — so {@link HELD_BAND_PROPS}, which restores the band's look by view,
- * could not carry it, and `initprops`' re-run of `initinterface` had just set it
- * to 0.
+ * states — so the old view-only band restore (`HELD_BAND_PROPS`, retired by
+ * #143) could not carry it, and `initprops`' re-run of `initinterface` had just
+ * set it to 0. It now rides the record's own `propdeg` like everything else.
  *
  * All 109 shipped saves record `life` as "light" (a save is taken from the CTL
  * panel, and the way in is a click on the lit lifebuoy), so this fired on every
