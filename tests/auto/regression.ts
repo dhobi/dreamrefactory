@@ -2242,13 +2242,83 @@ test("a set change holds the last frame instead of exposing the flat's matte (#1
   );
 
   // ...and a flat that legitimately owns the screen (setvisible(false) — the map,
-  // the CTL panel, an inventory) still paints, matte or no matte
+  // the CTL panel, an inventory) still paints. It has to be a REAL flat: main.stg
+  // with the room hidden is a bare matte, which is the bug itself (see 13g), so
+  // the distinction is drawn on the flat's own pixels rather than on setVisible.
   (session as never as { setVisible: boolean }).setVisible = false;
+  await session.stageCtrl.openStageFile("tour.stg");
   const flatOnly = (v as never as { paintWorldInto(): string | null }).paintWorldInto();
   check(
-    "a flat with the room hidden still paints on its own",
+    "a real flat with the room hidden still paints on its own",
     flatOnly === "flat" && !session.viewShowing,
     `drew=${flatOnly} viewShowing=${session.viewShowing}`,
+  );
+}
+);
+
+// --- 13g. #146 again: the matte must never be shown bare -------------------
+// The first fix (13f) guarded "the room is expected and there is no frame", and
+// missed the window that actually bites: `changeset` runs `closesetfile` FIRST,
+// which sets currentSetName to "none", so viewShowing goes false while the
+// departing room's frame is still in hand — the view blit is skipped and
+// main.stg's matte is bare for the whole crossing. Walking gstair3 Scene50/View53
+// into the next set, 109 of 120 painted frames were matte-coloured.
+//
+// The rule is now on the FLAT, not on engine state: a view region that is one
+// flat colour is a hole, and a hole is never drawn without something in it.
+test("a set crossing never shows the flat's matte (#146)", async () => {
+  const walk = async (setFile: string, scene: string, view: string) => {
+    const { session, viewer } = await newSession();
+    await session.openSetFile(setFile);
+    const v = viewer();
+    const step = async (): Promise<void> => {
+      v.tick((clock += 50));
+      await drain();
+    };
+    for (let i = 0; i < 400 && (v.busy || session.scriptBusy); i++) await step();
+    v.jumpTo(scene, view);
+    for (let i = 0; i < 400 && (v.busy || session.scriptBusy); i++) await step();
+    let bright = 0, painted = 0, held = 0, sawNoSet = false;
+    void session.track(v.pressNav("uparrow"));
+    for (let i = 0; i < 120; i++) {
+      await step();
+      if (session.currentSetName === "none") sawNoSet = true;
+      const drew = (viewer() as never as { paintWorldInto(): string | null }).paintWorldInto();
+      if (!drew) { held++; continue; }
+      painted++;
+      const buf = (viewer() as never as { screen: { frame: Uint8ClampedArray } }).screen.frame;
+      const d = (100 * SCREEN_W + 256) * 4;
+      if (buf[d] > 180 && buf[d + 1] > 180 && buf[d + 2] > 150) bright++;
+    }
+    return { bright, painted, held, sawNoSet };
+  };
+
+  const a = await walk("gstair3.set", "Scene50", "View53");
+  check(
+    "walking out of gstair3 Scene50/View53 paints no matte frame",
+    a.bright === 0 && a.sawNoSet && a.held > 0,
+    `bright=${a.bright} painted=${a.painted} held=${a.held} sawSetNone=${a.sawNoSet}`,
+  );
+  const b = await walk("gstair3.set", "Scene50", "View54");
+  check(
+    "...nor from View54, the other reported crossing",
+    b.bright === 0 && b.held > 0,
+    `bright=${b.bright} painted=${b.painted} held=${b.held}`,
+  );
+
+  // and the discriminator itself: only a hole looks like a hole. Measured over
+  // the 15 disc-1 stage flats, main.stg's view region is 100% one index and
+  // every other flat is 3.4%-22.4%, the ending (narend) among them.
+  const { session, viewer } = await newSession();
+  await session.openSetFile("gstair3.set");
+  const isMatte = (viewer() as never as { flatIsMatte(f: unknown): boolean }).flatIsMatte.bind(viewer());
+  const main = session.stageCtrl.flatImage()!;
+  await session.stageCtrl.openStageFile("tour.stg");
+  const tour = session.stageCtrl.flatImage()!;
+  check(
+    "main.stg reads as a matte and a real flat does not",
+    isMatte(main) === true && isMatte(tour) === false,
+    `main=${isMatte(main)} tour=${isMatte(tour)}`,
   );
 }
 );
