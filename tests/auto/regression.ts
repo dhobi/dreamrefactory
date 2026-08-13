@@ -6555,6 +6555,51 @@ test("a load and a restart both arrive from nowhere", async () => {
   );
 });
 
+// --- 82b. a load puts the watch and the bag back ON the band ----------------
+// The #143 restore reads the prop record verbatim — but `worldSpace` stayed the
+// port's own live flag, and the London flat (the boot's landing room) places
+// TAOOT's watch and bag as WORLD props (`setuprop`'s propxyz onto the cabin
+// furniture). Loading any post-boarding save then restored their band state
+// and never drew them: drawList skips world props, so the band came back with
+// no bag and no watch — no inventory and no pocketwatch, in every load taken
+// from a fresh boot. The record's own `propis3d` is the flag, so a load
+// restores it in both directions.
+test("a load restores propis3d: band props draw, furniture props stay world", async () => {
+  const { session } = await newHost();
+  await session.openSetFile("bedsit1.set");
+  await drain();
+  const watch = () => session.propRuntime.get("watch")!;
+  const bag = () => session.propRuntime.get("bag")!;
+  check(
+    "the flat places the watch and bag in the world first",
+    watch().worldSpace && bag().worldSpace,
+    `watch=${watch().worldSpace} bag=${bag().worldSpace}`,
+  );
+  const saves = gamefiles(root).savesDir();
+  const dir = saves ? join(saves, "1") : "";
+  const banded = dir ? (readdirSync(dir).find((f) => f.startsWith("10 -")) ?? "") : "";
+  const preBoarding = dir ? (readdirSync(dir).find((f) => f.startsWith("02 -")) ?? "") : "";
+  if (!banded || !preBoarding) return;
+  // a save with both in the band: they come back screen-space, anchored, lit
+  await loadGame(session, new Uint8Array(readFileSync(join(dir, banded))));
+  check(
+    "the band's watch and bag are screen props again",
+    !watch().worldSpace && !bag().worldSpace &&
+      watch().visible && bag().visible &&
+      watch().anchorX === 256 && watch().anchorY === 324,
+    `watch world=${watch().worldSpace} vis=${watch().visible} @${watch().anchorX},${watch().anchorY} ` +
+      `bag world=${bag().worldSpace} vis=${bag().visible}`,
+  );
+  // and the mirror: a save with the bag still on C73's floor puts it back in
+  // the world (its place re-derives from the room, as the original's does)
+  await loadGame(session, new Uint8Array(readFileSync(join(dir, preBoarding))));
+  check(
+    "the pre-boarding save's bag is a world prop again",
+    bag().worldSpace && bag().stateName === "small",
+    `world=${bag().worldSpace} view=${bag().stateName}`,
+  );
+});
+
 // --- 83. a click holds the engine, so nothing dispatches over a movie -------
 // #33, the London flat's softlock. A click is a script, and the engine is
 // single-threaded — but a click went untracked, so while a hotspot's

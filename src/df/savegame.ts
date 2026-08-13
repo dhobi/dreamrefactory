@@ -49,12 +49,16 @@ const PROP_RECORD_OFF = -0x4e;
  * `propdeg` +0x18 (0x4168a0), `propdist` +0x26 (the open pocketwatch's
  * lid/hrs/min/sec read −6/−5/−5/−4, exactly the z-order its `open()` assigns),
  * `propscale` +0x28 (0x416a90), `propvalue` +0x46 (0x416240), `propzclip`
- * +0x4a (0x4162d0). All verified by range across the 109 shipped saves'
- * 72-record grids. (`propspeed` +0x24 is 4 in every record ever written, and
- * `propis3d` +0x12 is script-derived — neither is worth carrying.)
+ * +0x4a (0x4162d0), `propis3d` +0x12 (0x417760) — 0/1 in every record, and it is
+ * what tells a world-placed prop from a screen-anchored one on load: TAOOT's
+ * watch/bag read 1 in exactly the 4 pre-boarding saves where they still lie on
+ * the cabin furniture, 0 in the other 105 where they sit in the band. All
+ * verified by range across the 109 shipped saves' 72-record grids.
+ * (`propspeed` +0x24 is 4 in every record ever written — not worth carrying.)
  */
 const PROP_FIELDS = {
   visible: PROP_RECORD_OFF + 0x00,
+  is3d: PROP_RECORD_OFF + 0x12,
   y: PROP_RECORD_OFF + 0x14,
   x: PROP_RECORD_OFF + 0x16,
   deg: PROP_RECORD_OFF + 0x18,
@@ -317,6 +321,9 @@ export interface SavedProp {
   owner: string;
   /** `propvisible` — shown right now. */
   visible: boolean;
+  /** `propis3d` — placed in the WORLD (propxyz) rather than on the screen. The
+   * one field that says whether the x/y anchor below is meaningful. */
+  is3d: boolean;
   /** screen anchor (propxy) — X at name−0x38, Y at name−0x3a. */
   x: number;
   y: number;
@@ -339,7 +346,7 @@ export interface SavedProp {
  * engine rather than a guess of ours.
  */
 export type SavedPropPatch = Pick<SavedProp, "name" | "owner"> &
-  Partial<Pick<SavedProp, "view" | "visible" | "x" | "y" | "deg" | "dist" | "scale" | "value" | "zclip">>;
+  Partial<Pick<SavedProp, "view" | "visible" | "is3d" | "x" | "y" | "deg" | "dist" | "scale" | "value" | "zclip">>;
 
 /**
  * One live `makeloop` slot from the loops table — the room's scheduled work
@@ -662,6 +669,7 @@ function propRecordAt(d: Uint8Array, o: number): SavedProp | null {
     view: view.toLowerCase(),
     owner: owner.toLowerCase(),
     visible: num(PROP_FIELDS.visible) > 0,
+    is3d: num(PROP_FIELDS.is3d) === 1,
     x: num(PROP_FIELDS.x),
     y: num(PROP_FIELDS.y),
     deg: num(PROP_FIELDS.deg),
@@ -1513,6 +1521,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
           else dv.setInt16(p, clampI16(value), true);
         };
         put(PROP_FIELDS.visible, sp.visible === undefined ? undefined : sp.visible ? 1 : 0);
+        put(PROP_FIELDS.is3d, sp.is3d === undefined ? undefined : sp.is3d ? 1 : 0);
         put(PROP_FIELDS.x, sp.x);
         put(PROP_FIELDS.y, sp.y);
         put(PROP_FIELDS.deg, sp.deg);
