@@ -112,7 +112,9 @@ function dimPalette(base: Uint8ClampedArray, dim: ClutDim): Uint8ClampedArray {
 export class SetViewer {
   readonly set: SetFile;
   private palette: Uint8ClampedArray;
-  /** full 256-entry set palette — props colorize through the set's CLUT */
+  /** full 256-entry set palette — props colorize through the set's CLUT. Only
+   *  its lower half is the set's own once a stage flat is up; see
+   *  {@link worldPalette} */
   private propPalette: Uint8ClampedArray;
   // Pristine baselines for the CLUT-mixing opcodes (clut/mixclut). `palette`
   // and `propPalette` above are the EFFECTIVE (possibly dimmed) versions the
@@ -912,6 +914,45 @@ export class SetViewer {
     if (hit && hit.base === base && hit.dim === this.stageDim && hit.gen === gen) return hit.out;
     const out = displayPalette(this.stageDim ? dimPalette(base, this.stageDim) : base);
     this.flatPal = { base, dim: this.stageDim, gen, out };
+    return out;
+  }
+
+  /**
+   * The CLUT the world sprites colorize through while a stage flat is
+   * composited with the room view — the set's own colours below
+   * {@link SetFile.colorCount}, the STAGE's above it.
+   *
+   * TI.EXE has one screen CLUT and the two halves of it come from different
+   * files. A set supplies only its own: measured over the 75 sets on the two
+   * discs, 72 draw their views from indices 0..127 alone and the three that
+   * stray (c73, lnghall on either disc) do so on under 0.06% of their pixels.
+   * Everything in the interface band lives in the half above: main.stg's flat
+   * art is entirely >=128 bar 499 pixels of index 0, and so is every HUD prop
+   * in house.shp — the pocketwatch, the bag, the deck map, the lifebuoy, the
+   * `light` plate and the nav arrow are all 97%-100% up there, while the props
+   * authored per room (house.shp's `door` and `plant`, and each room's own
+   * shop) are 48%-99.8% below it.
+   *
+   * Taking all 256 from the set looked equivalent because 74 of the 75 carry a
+   * byte-identical copy of main.stg's upper half. bridge.set is the one that
+   * does not — its copy is uniformly darker (median 0.82x the red channel) — so
+   * the band's `light` plate, a solid 251x120 rectangle, stopped matching the
+   * flat it is drawn over and the middle third of the band grew a seam down
+   * both sides of it (#158, reported in the guided tour and only ever there).
+   *
+   * Memoised like {@link flatPalette}, and on the same three things plus which
+   * stage's palette it composed: this runs on every frame that draws a band.
+   */
+  private worldPal: { stage: Uint8ClampedArray; dim: ClutDim | null; gen: number;
+                      out: Uint8ClampedArray } | null = null;
+  private worldPalette(stageBase: Uint8ClampedArray): Uint8ClampedArray {
+    const gen = screenGammaGeneration();
+    const hit = this.worldPal;
+    if (hit && hit.stage === stageBase && hit.dim === this.setDim && hit.gen === gen) return hit.out;
+    const composed = this.basePropPalette.slice();
+    composed.set(stageBase.subarray(this.set.colorCount * 4), this.set.colorCount * 4);
+    const out = displayPalette(this.setDim ? dimPalette(composed, this.setDim) : composed);
+    this.worldPal = { stage: stageBase, dim: this.setDim, gen, out };
     return out;
   }
 
@@ -2067,7 +2108,9 @@ export class SetViewer {
     sig.str(this.movies.playingFile ?? "").num(this.movies.framePos);
     sig.ref(this.current).ref(s.stageCtrl.flatImage());
     // CLUTs are replaced wholesale by setClut, never written through, so which
-    // array it is IS which colours they are; stageDim is applied at paint time
+    // array it is IS which colours they are; stageDim is applied at paint time.
+    // worldPalette's composition needs nothing more here — its other input is
+    // the flat, hashed by identity a line above.
     sig.ref(this.palette).ref(this.propPalette).ref(this.stageDim);
     // the world sprites, and the camera they are projected through
     const cam = this.activeCamera();
@@ -2387,7 +2430,10 @@ export class SetViewer {
         indexedToRGBA(f.pixels, f.width, f.height, this.palette, vbuf);
         this.screen.blitTop(vbuf, f.width, f.height);
       }
-      const propPal = this.session.viewShowing ? this.propPalette : flatPal;
+      // the band's props share the flat's half of the CLUT, the room's props the
+      // set's — one CLUT, two owners (see worldPalette). Without a room to
+      // composite there is no set half in play and the flat owns all of it.
+      const propPal = this.session.viewShowing ? this.worldPalette(flat.palette) : flatPal;
       // world sprites follow the motion-frame camera during movement too, so
       // actors/world props stay visible over the composited set region
       const cam = this.session.viewShowing ? this.activeCamera() : null;
