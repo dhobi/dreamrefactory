@@ -560,6 +560,31 @@ function openWatchSaves(): string[] {
   });
 }
 
+// `propis3d` is the record's world-vs-screen flag, and the loader restores it:
+// the LIVE flag is whatever the running game last did with the prop, and the
+// London flat — the boot's landing room — places the watch and bag as world
+// props, so a stale flag left a loaded band with its watch and bag restored but
+// never drawn (drawList skips world props). The corpus fixes the field's
+// meaning: 1 exactly while they still lie on the cabin furniture (unowned,
+// view "small" — the 4 pre-boarding saves), 0 once they sit in the band.
+test("propis3d is 1 exactly while the watch/bag still lie in the world", () => {
+  const saves = allSaves();
+  expect(saves.length).toBeGreaterThan(0);
+  let world = 0;
+  for (const path of saves) {
+    const inv = parseSave(new Uint8Array(readFileSync(path))).inventory;
+    for (const n of ["watch", "bag"]) {
+      const p = inv.find((q) => q.name === n);
+      if (!p) continue;
+      const onFurniture = p.owner === "none" && p.view === "small";
+      if (p.is3d) world++;
+      check(`${path}: ${n} is3d matches its place`, p.is3d === onFurniture,
+        `is3d=${p.is3d} view=${p.view} owner=${p.owner}`);
+    }
+  }
+  check("the pre-boarding saves are represented", world === 8, `${world} world records`);
+});
+
 test("17 shipped saves record the watch left open, and agree on the assembly", () => {
   const open = openWatchSaves();
   expect(open.length).toBe(17);

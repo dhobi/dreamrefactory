@@ -464,7 +464,7 @@ local buffer whose name field sits at `buffer+0x4e`:
 |--------------:|--------------:|------|-------|
 | +0 | −0x4e | i16 | `propvisible` (`0x416f30`, `cmp word ptr [esp+8], 0` — >0 is shown) |
 | +0x0a / +0x0e | −0x44 / −0x40 | u16 | the group's **logic / script container locations** in its SHP — `location` and `location + 1`, **7848 of 7848** records against the parsed boot shops. Rebuilt from the name on load |
-| +0x12 | −0x3c | i16 | `propis3d` (`0x417760`) — strictly 0/1 across the corpus |
+| +0x12 | −0x3c | i16 | `propis3d` (`0x417760`) — strictly 0/1 across the corpus. 1 = placed in the world (`propxyz`), so the x/y anchor below is stale; the loader restores this flag, since the live one is whatever the running game last did (TAOOT's watch/bag: 1 in exactly the 4 pre-boarding saves where they still lie on the cabin furniture, 0 in the 105 where they sit in the band) |
 | +0x14 / +0x16 | −0x3a / −0x38 | i16 | `propxy` (`0x4175c0`): **+0x14 is the screen Y and +0x16 the X**. The interface band's props all read x = 256, y = 324 — the band anchor |
 | +0x18 | −0x36 | i16 | `propdeg` (`0x4168a0`, `movsx ecx, word ptr [esp+0x20]`) |
 | +0x20 | −0x2e | i16 | current **frame** within the view — a valid index in 7848 of 7848 (`0 ≤ frame < max(1, play length)`) |

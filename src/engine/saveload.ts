@@ -183,6 +183,10 @@ function inventorySnapshot(session: GameSession): SavedPropPatch[] {
       owner: (String(p.owner) || "none").toLowerCase(),
       ...(view ? { view } : {}),
       visible: !!p.visible,
+      // `propis3d` — the record's own world-vs-screen flag, so the loader can
+      // tell whether the x/y below mean anything (TAOOT's watch/bag are world
+      // props on the cabin furniture until picked up, band props after)
+      is3d: p.worldSpace,
       // a world-space prop's place is its world xyz, which the room's own shop
       // re-creates; the record's x/y are the screen anchor and only meaningful
       // for the screen-space props (all 72 in the boot shops are)
@@ -430,7 +434,16 @@ function restoreProps(session: GameSession, inventory: SavedProp[]): void {
     p.owner = sp.owner;
     p.value = sp.value;
     p.visible = sp.visible;
-    if (!p.worldSpace) {
+    // world-vs-screen comes from the RECORD (`propis3d`), not from whatever the
+    // running game last did with the prop: the London flat and the two cabins
+    // place TAOOT's watch/bag in the world (`setuprop`'s propxyz), and a load
+    // taken after they moved to the band must put them back ON it — a stale
+    // worldSpace left the band's watch and bag restored but never drawn.
+    // A world prop's place is not in the record (no xyz); its room re-derives
+    // it, exactly as the original does — the 4 pre-boarding shipped saves are
+    // the measured case (watch/bag is3d=1, view=small).
+    p.worldSpace = sp.is3d;
+    if (!sp.is3d) {
       p.anchorX = sp.x;
       p.anchorY = sp.y;
     }
