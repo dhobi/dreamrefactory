@@ -80,6 +80,14 @@ export class SetScripts {
    * closescene closes any open door (sendtoprop("door", initprop())).
    */
   private async fireLifecycle(handler: string, sceneIdx: number): Promise<void> {
+    // A load fires NO lifecycle at all — not the departing room's closeset, not
+    // the arriving room's openset/openscene. The original's load rebuilds the
+    // room through the engine's set machinery without ever reaching the script
+    // runners (opengame's restore at 0x414080; see GameSession.restoringSave),
+    // and everything those scripts would produce comes out of the file instead
+    // (#143). The scene is still recorded as current, so the first turn or step
+    // re-fires openscene normally.
+    if (this.session.restoringSave) return;
     const interp = this.session.interp;
     const chain = [
       sceneIdx >= 0 ? this.sceneScripts[sceneIdx] : null,

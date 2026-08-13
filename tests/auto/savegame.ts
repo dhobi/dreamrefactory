@@ -506,7 +506,7 @@ test("snapshotSave captures a newly-collected item", async () => {
   photo.stateName = "panel1";
 
   const re = parseSave(session.snapshotSave()!);
-  expect(re.inventory.find((p) => p.name === "photo1")).toEqual({
+  expect(re.inventory.find((p) => p.name === "photo1")).toMatchObject({
     name: "photo1",
     view: "panel1",
     owner: "frank",
@@ -643,7 +643,7 @@ test("applyPatch inventory edits parse back", () => {
     inventory,
   });
   const re = parseSave(out);
-  expect(re.inventory.find((p) => p.name === "notebook")).toEqual({
+  expect(re.inventory.find((p) => p.name === "notebook")).toMatchObject({
     name: "notebook",
     view: "panel2",
     owner: "frank",
@@ -1372,7 +1372,7 @@ test("a save at Scene109 reloads with Vlad standing there, and drawn", async () 
       name: "vlad", owner: "none", value: 0,
       placement: {
         visible: true, set: "engine", star: "vlad1", pose: "stand",
-        x: 2359, y: 8106, z: 4143, deg: 2, speed: 30, zclip: 32,
+        x: 2359, y: 8106, z: 4143, deg: 2, speed: 30, scale: 5500, zclip: 32,
       },
     }],
   });
@@ -1583,4 +1583,87 @@ test("loading in front of Zeitel does not start his conversation (#125)", async 
   await run(120);
   check("a real arrival at the scene still fetches him",
     !!session.puppet?.visible, `subtitle=${JSON.stringify(session.puppet?.subtitle ?? "")}`);
+});
+
+// ---- the scheduler tables and the music (#143) -----------------------------
+
+// The loops/crickets/walks tables are TI.EXE's own service tables dumped
+// verbatim (32×42 / 16×74 / 16×110, always the last fixed-size triple), and the
+// playing theme is the one track whose playing/looping arrays are non-empty.
+// Ground truth is the boat-deck save taken mid-stroll: Lady Georgia walking
+// (the walk has a payload container), the party crickets armed, deckbd.trk
+// sounding.
+test("parseSave decodes the loop/cricket tables, the active walk and the theme", () => {
+  const save = parseSave(new Uint8Array(readFileSync(savePath("2", "05 - Talking with Max.ti"))));
+  expect(save.loops.length).toBeGreaterThan(0);
+  const max = save.loops.find((l) => l.name === "max");
+  expect(max, "Max's idle is armed").toBeTruthy();
+  expect(max!.kind).toBe("actor");
+  expect(max!.handler).toBe("maxidle");
+  const motor = save.crickets.find((c) => c.name === "motor");
+  expect(motor, "the deck's motor ambience is armed").toBeTruthy();
+  expect(motor!.set).toBe("deckbd");
+  expect(motor!.radius).toBe(3000);
+  expect(save.walks).toEqual([{ actor: "ga", type: 3, hasPayload: true }]);
+  expect(save.theme).toMatchObject({ track: "deckbd.trk" });
+});
+
+test("applyPatch writes the scheduler tables and theme, and they parse back", () => {
+  const bytes = new Uint8Array(readFileSync(savePath("2", "05 - Talking with Max.ti")));
+  const save = parseSave(bytes);
+  const out = applyPatch(save.raw, {
+    numGlobals: save.numGlobals,
+    set: save.set, scene: save.scene, view: save.view,
+    scheduler: {
+      loops: [{ kind: "actor", name: "max", handler: "maxidle", period: 7 }],
+      crickets: [{ name: "motor", set: "deckbd", x: 100, y: 200, radius: 3000, base: 5, jitter: -1, next: 5 }],
+    },
+    theme: "inven.trk",
+  });
+  const re = parseSave(out);
+  expect(re.loops).toEqual([{ kind: "actor", name: "max", handler: "maxidle", period: 7 }]);
+  expect(re.crickets).toEqual([
+    { name: "motor", set: "deckbd", x: 100, y: 200, radius: 3000, base: 5, jitter: -1, next: 5 },
+  ]);
+  // the walks table is zeroed — the base's mid-walk slot (and its payload) must
+  // not survive into a new save's moment
+  expect(re.walks).toEqual([]);
+  expect(re.theme).toMatchObject({ track: "inven.trk", extras: 0 });
+});
+
+// A theme track the base never opened cannot be written (the container-0
+// manifest names the open files and the patcher does not rewrite it): the save
+// is written, the drop is REPORTED, and the room loads silent rather than with
+// somebody else's music.
+test("a theme the base save has no track for is dropped, and said", () => {
+  const bytes = new Uint8Array(readFileSync(savePath("2", "05 - Talking with Max.ti")));
+  const save = parseSave(bytes);
+  const dropped: string[] = [];
+  const out = applyPatch(save.raw, {
+    numGlobals: save.numGlobals,
+    set: save.set, scene: save.scene, view: save.view,
+    scheduler: { loops: [], crickets: [] },
+    theme: "sink4.trk",
+    onDrop: (name) => dropped.push(name),
+  });
+  expect(dropped).toContain("theme(sink4.trk)");
+  expect(parseSave(out).theme).toBeNull();
+});
+
+// The full circle: load a shipped save, snapshot it, and the scheduler + music
+// state survive — which is what makes our own checkpoints restore their rooms
+// without re-running openset.
+test("snapshotSave carries the restored loops, crickets and theme", async () => {
+  const session = await newSession();
+  await session.loadGame(new Uint8Array(readFileSync(savePath("2", "05 - Talking with Max.ti"))));
+  await session.settle();
+  const re = parseSave(session.snapshotSave()!);
+  expect(re.theme).toMatchObject({ track: "deckbd.trk" });
+  const names = re.loops.map((l) => `${l.kind}/${l.name}:${l.handler}`);
+  expect(names).toContain("actor/max:maxidle");
+  expect(re.crickets.map((c) => c.name)).toContain("motor");
+  // the crowd extras now ride the actor container (appended when the base
+  // lacks a record), so a loaded crowd survives its own save
+  const extras = re.actors.filter((a) => !session.actorRuntime.casts.get("gang.cst")?.cst.members.some((m) => m.name.toLowerCase() === a.name));
+  expect(extras.length).toBeGreaterThan(0);
 });

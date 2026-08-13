@@ -1,36 +1,43 @@
 /**
  * Saving and loading `.ti` games, at the session level.
  *
+ * Loading RESTORES the engine from the file, the way the original does: TI.EXE's
+ * `opengame` (0x413860 → 0x414080) rebuilds the room through the engine's own
+ * set machinery without ever reaching the script runners — `openset` and
+ * `openscene` do not run on a load at all (#143, traced in the disassembly).
+ * Everything those scripts would re-derive comes out of the file instead: the
+ * cast (placement, scale, visibility), every prop's owner/view/position/z-order,
+ * the live `makeloop`/`makecricket` tables, and the playing theme.
+ *
  * Writing reproduces bytes by PATCHING a real save (the last one loaded, or a
  * shipped template) rather than serializing from scratch — see
- * docs/formats/savegame.md for why. Loading restores the script globals and
- * then travels into the saved room, letting the game's own openset/openscene
- * scripts rebuild everything else. The df/savegame.ts layer owns the byte
- * format (generic: every DreamFactory title's `.ti` shares it); this module
- * owns what the running game puts in and takes out, and THAT part is
- * TAOOT-specific by nature — which actor/prop owners are player state is a
- * fact about TAOOT's own scripts (its `actorowner`/`propowner` conventions,
- * the inven.shp/house.shp split below), not something the format declares. A
- * second title's save story would need its own actorSnapshot/inventorySnapshot.
+ * docs/formats/savegame.md for why. The df/savegame.ts layer owns the byte
+ * format (generic: every DreamFactory title's `.ti` shares it); this module owns
+ * what the running game puts in and takes out, and THAT part is TAOOT-specific
+ * by nature — which actor/prop owners are player state is a fact about TAOOT's
+ * own scripts, not something the format declares. A second title's save story
+ * would need its own actorSnapshot/inventorySnapshot.
  */
 import {
   SavedActor,
   SavedActorPatch,
   SavedProp,
   SavedPropPatch,
+  SaveGame,
   applyPatch,
   parseSave,
   readSaveFile,
 } from "../df/savegame";
 import { degVariantFrames, frameIndexForDegree, playSequence } from "./props";
+import { toNum } from "./interp";
 import type { GameSession } from "./session";
 
 /**
  * Produce the bytes of a save capturing the current progress, or null if no
- * base save/template is available to patch. Overwrites the script globals
- * (numbers inline; strings as string-pool references) and the current
- * set/scene/view in a base save, leaving everything the loader ignores
- * untouched.
+ * base save/template is available to patch. Overwrites the script globals, the
+ * current set/scene/view, every prop and actor record (both halves), the
+ * scheduler's loop/cricket tables and the playing theme — everything our own
+ * loader reads back, so a round-trip needs nothing from the room's scripts.
  */
 export function snapshotSave(session: GameSession): Uint8Array | null {
   let base = session.lastSave;
@@ -56,6 +63,12 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
     if (typeof val === "number") numGlobals.set(name, val);
     else if (typeof val === "string") strGlobals.set(name, val);
   }
+  // A walk in flight is not serialized (the original appends the walk's path as
+  // a payload container; this writer zeroes the walk table instead) — the
+  // actor's position is written, and their idle re-decides after the load.
+  for (const name of session.scheduler.walks.keys()) {
+    session.onLog(`savegame: ${name} is mid-walk — the walk is not saved, their position is`);
+  }
   const dropped: string[] = [];
   const bytes = applyPatch(base, {
     numGlobals,
@@ -65,6 +78,27 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
     view: session.currentViewName(),
     inventory: inventorySnapshot(session),
     actors: actorSnapshot(session),
+    scheduler: {
+      loops: session.scheduler.loops.map((l) => ({
+        kind: l.kind,
+        name: l.name,
+        handler: l.handler,
+        // the live countdown, mid-flight — the original dumps its service
+        // table verbatim, so the remaining ticks are what the field holds
+        period: l.count,
+      })),
+      crickets: session.scheduler.crickets.map((c) => ({
+        name: c.name,
+        set: c.setName,
+        x: c.x,
+        y: c.y,
+        radius: c.radius,
+        base: c.base,
+        jitter: c.jitter,
+        next: c.count,
+      })),
+    },
+    theme: session.currentThemeName !== "none" ? session.currentThemeName : null,
     onDrop: (name, why) => dropped.push(`${name} (${why})`),
   });
   // A base save has only so many free variable slots and only so much string
@@ -79,7 +113,7 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
   if (dropped.length) {
     session.onLog(
       `savegame: written, but ${dropped.length} ` +
-        `global${dropped.length === 1 ? "" : "s"} did not fit its base save ` +
+        `item${dropped.length === 1 ? "" : "s"} did not fit the base save ` +
         `and keep the base's value — ${dropped.join(", ")}`,
     );
   }
@@ -87,36 +121,19 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
 }
 
 /**
- * Every loaded actor's `actorowner` and `actorvalue` — the story state the
- * characters themselves carry, which nothing was writing.
+ * Every loaded actor's record, both halves: `actorowner` and `actorvalue` (the
+ * story state the characters themselves carry — the Purser's errand ladder,
+ * Morrow's wireless-room permission, each idle's "have we spoken" gate), and
+ * WHERE they stand — set, star, pose, xyz, deg, speed, scale, zclip and
+ * `actorvisible`. The load puts all of it back from the file instead of
+ * re-running each room's `initactors`/`openset` (#86, #143).
  *
- * Neither is decoration. TAOOT's Purser mission-2 errand is a ladder of his owner
- * values, Morrow's permission to enter the wireless room is "enterwireless", and
- * the chief engineer's turbine job is `actorowner("csea")`. A save without them
- * reloads with the crew having forgotten the player: the Purser hands out the
- * telegram errand again and the ladder starts over.
- *
- * `actorvalue` is the same kind of memory kept as a count. `runpuppet` ends every
- * exchange with `actorvalue(target, actorvalue(target) + 1)`, and each idle gates
- * on it — `if actorvalue(me) <= 0 → hasattention(4)`, else `clearattention()`. It
- * lived only in the running session, so it survived a LOAD the one way it must
- * not: talk to Vlad, reload a save from before you met him, and he still would
- * not walk up to you, and clicking him opened the "we have met" branch of his
- * puppet rather than the introduction. Reported against both #19 and #21.
- *
- * And WHERE they were standing, which is the record's other half — set, star, pose,
- * xyz, deg, speed, zclip and, the one that matters most, `actorvisible`. Nothing
- * wrote it, so a load had to re-derive the cast by running each room's own
- * `initactors` and letting the arriving room place whoever its scripts place. #86 is
- * what that costs: only ENGINE.SET's Scene108 stands Vlad up, so a save taken one
- * standpoint further along the catwalk reloaded without him and the fight could not
- * happen. See {@link restoreActorPlacement} for the other half of this.
- *
- * The CROWD is deliberately left out. `setupgroup` makes the deck extras per room
- * from EXTRA.CST, and the arriving room makes its own — which is why the shipped
- * saves disagree about which of them exist at all (25 to 64 records, the named cast
- * constant and the extras churning). Writing them would need slots the base template
- * has not got; every one of the 109 does have a record for all 25 named characters.
+ * The CROWD is included. `setupgroup` makes the deck extras per room from
+ * EXTRA.CST, which is why the shipped saves disagree about which of them exist
+ * (25 records to 64) — and why the file is the only witness once a load no
+ * longer re-runs the room that would remake them. A crowd record the base save
+ * lacks is APPENDED (the actor container has no self-declared capacity; TI.EXE's
+ * loader takes the count from the container's size — see applyPatch).
  */
 function actorSnapshot(session: GameSession): SavedActorPatch[] {
   const out: SavedActorPatch[] = [];
@@ -124,94 +141,72 @@ function actorSnapshot(session: GameSession): SavedActorPatch[] {
     // scripts only ever count with it, but `actorvalue` is a script value and a
     // cast could put anything in one; a non-number saves as the fresh-game 0
     const value = typeof a.value === "number" && Number.isFinite(a.value) ? a.value : 0;
-    const crowd = a.cast.name.toLowerCase() !== GANG_CAST;
     out.push({
       name: name.toLowerCase(),
       owner: (String(a.owner) || "none").toLowerCase(),
       value,
-      placement: crowd
-        ? undefined
-        : {
-            visible: !!a.visible,
-            set: a.setName.toLowerCase(),
-            star: a.starName.toLowerCase(),
-            pose: a.poseName.toLowerCase(),
-            x: a.worldX, y: a.worldY, z: a.worldZ,
-            deg: a.deg, speed: a.speed, zclip: a.zclip,
-          },
+      placement: {
+        visible: !!a.visible,
+        set: a.setName.toLowerCase(),
+        star: a.starName.toLowerCase(),
+        pose: a.poseName.toLowerCase(),
+        x: a.worldX, y: a.worldY, z: a.worldZ,
+        deg: a.deg, speed: a.speed, scale: a.scale, zclip: a.zclip,
+      },
     });
   }
   return out;
 }
 
-/** the cast file the named characters live in; everything else is crowd */
-const GANG_CAST = "gang.cst";
-
 /**
- * Every loaded prop's `propowner`, plus the `propview` of the ones whose view we
- * actually hold — which is what the original writes, enumerated the way it
- * enumerates them.
+ * Every loaded prop's record, both halves — the owner/view and the numeric
+ * fields (visible, screen anchor, deg, dist, scale, value, zclip) that say where
+ * and how it draws. The original writes exactly this (its writer walks the live
+ * prop list with no filtering), and the load reads it back instead of letting
+ * `showinterface`/`setupsigns`/`setuparrow` re-derive the band (#143).
  *
- * TI.EXE's save writer (0x413910) walks its live prop list — `+0x24` is the
- * node's name, `+0x540` the next pointer — and copies one fixed-size record per
- * node with no filtering at all. The corpus is unanimous: all 109 shipped saves
- * hold exactly 72 records, precisely the two boot shops' props, in one single
- * order across every file (inven.shp's groups then house.shp's, i.e. creation
- * order), none missing and no extras. So the original has no notion of "player
- * state" versus "chrome", and `session.propRuntime.props` — same contents, same
- * order — is the same list.
+ * **This used to be a hand-kept list, and it was short twice** (first the
+ * bag/pocketwatch/deck map, then `baby` — #107). Hence no list: every prop, as
+ * the original does, so there is no third time.
  *
- * **This used to be a hand-kept list, and it was short twice.** First it was the
- * inventory shop alone, which lost the bag, the pocketwatch and the deck map:
- * house.shp's initinterface() places the bag from `propowner("bag")`, so an
- * unowned bag went back on the C73 bed — and with it the trunk key, which
- * `addbag()` is the only source of, leaving the trunk and the Enigma machine
- * inside it permanently unopenable. Three names were added. Then it was short by
- * `baby`, which is in house.shp rather than inven.shp because it is drawn
- * centre-screen instead of in a bag slot, and is the only story object kept
- * there: a save taken in mission 4 came back with the child belonging to whoever
- * the base template said, so Beatrix would not trade Conkling's letter for it,
- * the Hackers could not be given it back, and Shailagh was never rescued (#107).
- * Hence no list — every prop, as the original does, so there is no third time.
- *
- * The VIEW is the one field we cannot match, and deliberately so. For an
- * inventory item it is the slot the item sits in and we own it; for most of the
- * band it is re-derived per room by the game itself (`setupsigns()` chooses the
- * destination sign from where you stand, `setuparrow()` recolours the nav arrow)
- * and our live value is still the prop's FIRST state, because nothing ever writes
- * the field. Measured against four saves spanning the game, our owner agrees with
- * the file for 72 of 72 props while the view disagrees for 6-8 of them —
- * `navtoggle`, `subtoggle`, `invenctl`, `lid`, `invenhelp`, `door`, `signs`,
- * `wiremsg`. Writing ours there would replace a real reading with a worse guess,
- * so those keep the base's and the load re-derives them exactly as normal play
- * does ({@link restoreProps} ignores them for the same reason).
+ * The VIEW is written only for a prop whose state a script has actually set
+ * (`stateName` non-empty): an untouched prop is still in its file default, and
+ * overwriting the base's real reading with "" would lose it.
  */
 function inventorySnapshot(session: GameSession): SavedPropPatch[] {
   const out: SavedPropPatch[] = [];
   for (const [name, p] of session.propRuntime.props) {
-    const shop = p.shop?.name?.toLowerCase();
-    const ownView = shop === "inven.shp" || HELD_BAND_PROPS.has(name);
+    const view = String(p.stateName ?? "").toLowerCase();
+    const value = typeof p.value === "number" && Number.isFinite(p.value) ? p.value : 0;
     out.push({
       name,
       owner: (String(p.owner) || "none").toLowerCase(),
-      ...(ownView ? { view: (String(p.stateName) || "large").toLowerCase() } : {}),
+      ...(view ? { view } : {}),
+      visible: !!p.visible,
+      // a world-space prop's place is its world xyz, which the room's own shop
+      // re-creates; the record's x/y are the screen anchor and only meaningful
+      // for the screen-space props (all 72 in the boot shops are)
+      ...(p.worldSpace ? {} : { x: p.anchorX, y: p.anchorY }),
+      deg: Number(p.deg) || 0,
+      dist: p.dist,
+      scale: p.scale,
+      value,
+      zclip: p.zclip,
     });
   }
   return out;
 }
 
 /**
- * Load a `.ti` save. Rather than reconstruct every subsystem from the save's
- * pointer-laden containers, we load the way the game itself does: restore the
- * script globals + clock, tear down the old room's timed state, then travel
- * into the saved set/scene/view and let the normal openset/openscene scripts
- * rebuild loops, props, actors, crickets and music at the restored progress.
- * Returns false (and logs) on a bad/foreign save. See docs/formats/savegame.md.
+ * Load a `.ti` save — by restoring the serialized engine, not by re-running the
+ * room. The original's load never reaches the script runners (see the module
+ * note), so neither does this: the departing room's `closeset` does not run, the
+ * arriving room's `openset`/`openscene` do not run (GameSession.restoringSave
+ * mutes the whole lifecycle), and everything they would produce comes from the
+ * file — cast, props, loops, crickets, music. The scene is still recorded as
+ * current, so the first turn or step re-fires `openscene` normally.
  *
- * The choreography below is TAOOT's own `initall` (BOOTFILE) taken apart step
- * by step, so its shop/cast names (inven.shp, house.shp, gang.cst) and globals
- * (hallside, savedeck, lockevents…) are that game's boot library, not engine
- * vocabulary — the same as {@link inventorySnapshot}/{@link actorSnapshot} above.
+ * Returns false (and logs) on a bad/foreign save. See docs/formats/savegame.md.
  */
 export async function loadGame(session: GameSession, bytes: Uint8Array): Promise<boolean> {
   let save;
@@ -231,47 +226,22 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // restore from the variable records — see decodeVars for the format.
   for (const [k, v] of save.numGlobals) session.interp.globals.set(k, v);
   for (const [k, v] of save.strGlobals) session.interp.globals.set(k, v);
-  // `clock` rides those two maps with everything else. It is the variable-list
-  // HEAD, whose DFValue sits in the blob header (see decodeVarSlots), and the
-  // heuristic that used to guess it out of the location container's savestate
-  // stack read the FIRST day event ever pushed rather than the pending one —
-  // "startdisk1" on every save taken after the London flat. TAOOT's `advanceday`
-  // is a switch on this value, so a save loaded into the flat replayed the whole
-  // intro when the bombs went off (datebed.mov, mission=0) instead of advancing
-  // to the Titanic, and the restarted flat is the #36 lock all over again.
-  // hallside/savedeck fall back to location-stack recovery when the record
-  // didn't decode; without a valid side, halla's keydown guard error()s and
-  // swallows every key — you couldn't leave the deck.
+  // `clock` rides those two maps with everything else. hallside/savedeck fall
+  // back to location-stack recovery when the record didn't decode; without a
+  // valid side, halla's keydown guard error()s and swallows every key.
   if (save.hallside) session.interp.globals.set("hallside", save.hallside);
   if (save.savedeck) session.interp.globals.set("savedeck", save.savedeck);
   // A save is taken from the CTL menu, which sets lockevents=1 to freeze world
   // input while the panel is up — so every save carries lockevents=1. A load
-  // returns you to interactive control, so drop it here (before initall, so a
-  // set whose openset legitimately re-locks input still wins). Left set, boot's
+  // returns you to interactive control, so drop it here. Left set, boot's
   // keydown handler exitcodes on every key: you can rotate (the host calls
   // viewer.turn() directly) but ArrowUp is swallowed and you cannot walk.
   session.interp.globals.set("lockevents", 0);
 
-  // drop the previous room's loops/crickets/walks/sounds — the new room's
-  // scripts rebuild them from scratch.
+  // drop the previous room's timed state; the file's tables are restored below.
   session.scheduler.reset();
-  // ...and its MUSIC and its SPEECH, which the scheduler does not own. A load is
-  // a day-advance in miniature, so it silences the same way advanceday() does
-  // (BOOTFILE 0002:148 halts the theme before opening the next day's room): the
-  // arriving room's openset -> setupsound starts from silence and decides the
-  // music alone. Leaving it to the destination is not enough, because setupsound
-  // sometimes deliberately scores nothing — arriving in C73 at mission 1 phase 0
-  // is scored by the Smethells knock, not by a deck theme — and then the room you
-  // LEFT keeps playing. Measured: start the game in the London flat, load a save
-  // from the CTL menu, and bedrad1.trk (whose loop chunks are the announcer) reads
-  // the news over the loaded room. `currentThemeName` has to come down with it or
-  // the session reports a theme the new room never chose, and transfromflat's
-  // overlay restore keys off exactly that value — closing a later overlay would
-  // put the flat's radio BACK. `voice` is the same hole one channel over: the
-  // scheduler doesn't touch it and puppet.ts only halts it on skip/stop, so a load
-  // taken mid-line let the speaker follow you into the next room.
-  session.audio.halt("theme");
-  session.currentThemeName = "none";
+  // ...and any speech mid-line — a voice does not follow a load into another
+  // room (puppet.ts only halts it on skip/stop, so it used to).
   session.audio.halt("voice");
   // reuse this save's skeleton as the base for the next savegame.
   session.lastSave = save.raw;
@@ -287,324 +257,127 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   await session.stageCtrl.closeStageFile();
   await session.stageCtrl.openStageFile("main.stg");
   session.setVisible = true;
-  // Put the departing room's band away, the way the CTL panel did on the way in
-  // (transtoflat -> sendtoshop(house.shp, hideinterface())). It is the half of
-  // the choreography that has to happen BEFORE the save's own memo is restored:
-  // hideinterface writes what is on screen NOW into the owners, and the restore
-  // below overwrites that with what the save recorded. Without it nothing ever
-  // hides a piece of chrome the loaded room has no business showing.
-  await session.sendEvent("sendtoshop", "house.shp", "hideinterface", [], "loadgame");
 
-  // Who owns what, BEFORE the room opens as well as after.
-  //
-  // `initall` runs the room's own `openset`/`openscene`, and those scripts READ
-  // ownership to decide what the room contains: c73 puts the ring on the table
-  // for `propowner("ring") = "trunk"`, the lit car hold branches on `carlights`,
-  // and in mission 4 the first-class lounge places Zeitel, whose idle then
-  // accosts anyone standing within `hotdist()` — and what he SAYS is chosen by
-  // `propowner("painting")`. Restore only after initall and every one of those
-  // reads the mission's defaults instead of the save.
-  //
-  // That is not theoretical: the endgame checkpoint taken next to Zeitel with the
-  // painting already traded to him made him open `poison()` — the branch for
-  // someone who has not traded yet — which parks on plaques, inside the load,
-  // and the load never returned. Restoring twice is cheap and the second pass is
-  // still needed, because initall's `inven.shp initprops` deals the mission's
-  // default inventory over the top (in mission 4 it hands the boat pass, the baby
-  // and the antidote back to Buick, Beatrix and Zeitel).
-  restoreProps(session, save.inventory);
-  restoreActors(session, save.actors);
-
-  // Navigate + rebuild the room — `initall`, taken apart, because the order it
-  // puts its three steps in only works on an engine that defers openset.
-  //
-  // `initall` is `changeset(...)`, then `sendtocast("gang.cst", initactors())`,
-  // then `sendtoshop("inven.shp", initprops())`. And `initactors` sends
-  // `initactor()` to EVERY character, which is `putdownactor()`, which is
-  // `actorvisible(target, false)` (BOOTFILE 0002:739). So the room is opened
-  // first and then everybody in it is put down — which cannot be what the
-  // original does, and is exactly what ours did: measured on
-  // "16 - Traded Boat Pass for Painting.ti", the boat deck came back with
-  // fourteen people on it for a frame and then empty, and re-running the set's
-  // own openset by hand put all fourteen back (out/endgame, load-probe).
-  //
-  // The difference is WHEN the arriving set's openset runs. Ours fires it inside
-  // `opensetfile`, so it lands in the middle of initall; TI.EXE must dispatch it
-  // after the script that opened the set has returned, which puts it after
-  // initactors and makes the room the last word. Deferring ours is an engine
-  // change for every changeset in the game; running initall's steps in the order
-  // the original ENDS UP in costs nothing and is what a load needs:
-  //
-  //   put the whole cast down · deal the mission's default inventory · open the
-  //   room, which places the people who belong in it
-  //
-  // (initall's own head — stoploop/stopwalk/stopcricket — is the scheduler reset
-  // above.) The saved owners are already in place, and openset reads them: the
-  // boat deck only puts Lady Georgia out for `actorowner("ga") != "rescued"`.
-  await session.sendEvent("sendtocast", "gang.cst", "initactors", [], "loadgame");
-  await session.sendEvent("sendtoshop", "inven.shp", "initprops", [], "loadgame");
-  // A load arrives from NOWHERE, and the room it arrives in has to be scored as
-  // such. `changeset` records `oldset = currentset()` BEFORE it opens anything,
-  // and the arriving room's `setupsound` opens with
-  //
-  //     if themetype (currentset ()) = themetype (oldset)
-  //         exitcode
-  //
-  // — the guard that keeps the deck theme playing as you walk from room to room.
-  // Load a save of the room you are ALREADY standing in and those two are equal,
-  // so setupsound scored nothing; and this path has just halted the theme, so
-  // "nothing" means silence, and the host's startTheme fallback then plays the
-  // SET-NAMED bank. Measured over the shipped saves, reloading in place: gstair3,
-  // bind, hallb and sqhall were left silent, and the London flat got `bedsit1.trk`
-  // — which is the BOMBING score, not the flat's radio (`bedrad1.trk`).
-  //
-  // In bedsit1 that is not just wrong music. The room gates its own hotspots on
-  // it (BEDSIT1.SET setcursor): memory, paper, cabinet, obit, cards, mantle,
-  // poster and radio only take a `cursor("touch")` while `currenttheme(2) !=
-  // "bedsit1.trk"`. So loading the game's own first save — "01 - April 14th,
-  // 1942", which saves the flat you start in — began the sirens and left nothing
-  // but the door and the landlady clickable (#36).
-  //
-  // Close the departing room HERE, which is what makes `currentset()` "none"
-  // before changeset reads it. Its own `closeset` still runs exactly once —
-  // changeset would have called the same `closesetfile` a moment later, and now
-  // skips it because there is nothing open. GameHost.coldBoot resets the same two
-  // fields for the same reason, one entry point over.
-  await session.currentBinding?.closeSet();
-  session.currentSetName = "none";
-  session.currentSetFile = "";
-  // NOW put the cast back where the save left them — after the departing room's
-  // teardown and before the arriving room opens.
-  //
-  // AFTER, because a `closeset` is entitled to put its own people down and one of
-  // them does exactly that: ENGINE.SET's is `sendtoactor("vlad", putdownactor())`.
-  // Restoring before it meant that loading a save of the engine room WHILE STANDING
-  // IN THE ENGINE ROOM undid the restore, and the arriving standpoint only re-places
-  // whoever its own scripts name — Scene109 has no script at all, so Vlad stayed
-  // down. That is the second half of #86, reported from `Scene109 / View116`.
-  //
-  // BEFORE the changeset, because the arriving room must still get the last word
-  // over the people it does place: Scene110's `openscene` sends Vlad a mousedown,
-  // which is the fistfight, and a restore landing after that would teleport him out
-  // of the walk it starts.
-  await restoreActorPlacement(session, save.actors);
-  // The arrival, with the scene-entry event muted for it (GameSession.restoringSave):
-  // a load is a restore, and the original's is not a script at all.
+  // The rebuild proper, with the script runners muted (restoringSave gates
+  // SetScripts.fireLifecycle): the whole point of #143 is that nothing below
+  // is a script.
   session.restoringSave = true;
   try {
-    await session.runGlobal("changeset", [save.set, save.scene, save.view]);
+    // The departing room is DETACHED, not closed: its closeset does not run (the
+    // original runs no scripts on a load — ENGINE.SET's closeset putting Vlad
+    // down mid-load was half of #86), its timed state died with the scheduler
+    // reset above, and the host releases its files when the new set activates.
+    session.currentSetName = "none";
+    session.currentSetFile = "";
+
+    // The cast, wholesale from the file — the original replaces its live actor
+    // list with the read container (0x4143d2), so first everything not in the
+    // file must go: instances are removed, members put down. Then every record
+    // is applied, re-instancing the crowd extras the file names.
+    resetCast(session);
+    restoreActors(session, save.actors);
+
+    // Every prop, both halves, from the file. This replaces the whole family of
+    // script re-runs the old load fought with: initprops' mission defaults, the
+    // house.shp openshop/initprops/showinterface dance, the hand-mirrored open
+    // pocketwatch (its lid/hrs/min/sec anchor and z-order are IN the record:
+    // x/y = the band anchor, dist = −6/−5/−5/−4), the nav arrow's lit deg (#4).
+    restoreProps(session, save.inventory);
+
+    // The scheduler tables, mid-count. This is what used to need the arriving
+    // room's openset: the idles that make characters act, the scene timers, the
+    // room's positional ambience.
+    for (const l of save.loops) session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period);
+    for (const c of save.crickets) {
+      session.scheduler.restoreCricket(c.name, c.set, c.x, c.y, c.radius, c.base, c.jitter, c.next);
+    }
+    // A walk in flight is dropped, and said: its record's arrival dispatch is
+    // not understood well enough to resume, the actor's position is already
+    // restored, and their idle loop (also restored) re-decides. 3 of the 109
+    // shipped saves carry one.
+    for (const w of save.walks) {
+      session.onLog(`loadgame: ${w.actor} was saved mid-walk — standing them at their saved position`);
+    }
+
+    // The music, from the file's track state — the track whose playing/looping
+    // arrays are non-empty is the live theme (measured: exactly one track in
+    // every shipped save; `savetheme`, the global, lags the file by up to a
+    // whole act in 91 of 109 and is NOT it). No setupsound re-score, no
+    // "currentset = none" guard games: the room comes back sounding as saved.
+    await restoreTheme(session, save);
+
+    // The arrival, through the engine's set machinery alone.
+    await session.openSetFile(`${save.set}.set`, save.scene, save.view);
   } finally {
     session.restoringSave = false;
   }
-
-  // initall re-seeds DEFAULT inventory + interface for the mission; overwrite
-  // with the player's actual collected items, then rebuild the interface band.
-  // The shipped initall only re-runs inven.shp's initprops, never house.shp's,
-  // so the band (whose initinterface() places bag/watch/map by propowner) is
-  // stale after a load — the bag/clock/map don't appear. Restore ownership
-  // first, then re-run house.shp openshop (band placement; pulls props out of
-  // any leftover C73-bed world space) + initprops (visibility per ownership),
-  // then re-apply the saved views over initinterface's dark defaults.
-  restoreProps(session, save.inventory);
-  await session.sendEvent("sendtoshop", "house.shp", "openshop", [], "loadgame");
-  await session.sendEvent("sendtoshop", "house.shp", "initprops", [], "loadgame");
-  restoreProps(session, save.inventory);
-  // The band comes back the way it goes away. A load happens from the CTL panel,
-  // which is a flat: `transtoflat` hid the band with `hideinterface()` and
-  // `transfromflat` puts it back with `showinterface()`, which shows each piece
-  // of chrome only if its memo (the owner, just restored from the save) says it
-  // was up. Our load path leaves the flat by hand and so never ran the second
-  // half — nothing hid the band and nothing consulted the save about it, so
-  // whatever the departing room had on screen stayed there. The Help button is
-  // the visible one: house.shp only ever sets it up in the London flat or in C73
-  // at mission 1, and it followed a load onto the sinking boat deck.
-  await session.sendEvent("sendtoshop", "house.shp", "showinterface", [], "loadgame");
-  await restoreOpenWatch(session);
-  relightNavArrow(session);
-  // and the crew's memory of the player, AFTER the rebuild — `initactors` deals
-  // the cast out for the mission and would otherwise have the last word. Owners
-  // only: the room has just placed its people and must keep them.
-  restoreActors(session, save.actors);
   return true;
 }
 
 /**
- * TAOOT's pocketwatch open dial: the lid and the three digit wheels, at the band's
- * anchor with the dist stack the watch's own `open()` gives them (HOUSE.SHP 0291
- * — lid furthest back, the seconds wheel nearest the front).
- *
- * These four are the one band state `showinterface()` cannot finish on its own.
- * It brings them BACK — `propvisible("lid"/"hrs"/"min"/"sec", true)` when
- * `propview("watch") = "run"` — but it never places them and never gives the lid
- * a state, because in normal play nothing has to: the only route to a visible lid
- * is the watch's `open()`, which places all four and then hands off to `run()`.
- * A load reaches the same screen without going through `open()`.
- *
- * Their view is deliberately left alone. `open()` doesn't set one either — the
- * wheels have a single state ("idle": 31 frames for the hours, 60 each for the
- * minutes and seconds) and `calctime` drives them by `propdeg`, not by view.
+ * Wipe the live cast before the file's records are applied: `actorinstance`
+ * copies are removed (script and all — the file names the copies IT had), and
+ * every cast member is put down and forgotten, exactly as if the engine's actor
+ * list had been replaced. A member the file has no record for stays reset —
+ * a record-less actor was never placed or spoken to in that game.
  */
-const WATCH_ASSEMBLY: readonly (readonly [name: string, dist: number])[] = [
-  ["lid", -6],
-  ["hrs", -5],
-  ["min", -5],
-  ["sec", -4],
-];
-/** the interface band's anchor, where `openshop` puts every piece of it. */
-const BAND_ANCHOR_X = 256;
-const BAND_ANCHOR_Y = 324;
-
-/**
- * Put an open pocketwatch back together after a load.
- *
- * 17 of the 109 shipped saves record `watch` view "run" — the watch left open
- * with its dial running, which is how the endgame is played, and every one of the
- * 17 is an endgame save. Restoring the band's views (see {@link HELD_BAND_PROPS})
- * is what lets that view survive `initinterface()`, but the dial alone is not the
- * watch: without this the lid and the three wheels come back visible, stateless
- * and unplaced — drawn at the default anchor in the middle of the screen at dist
- * 0 instead of stacked in the band.
- *
- * And a stateless lid is not merely ugly, it is a dead end. `watchidle()` returns
- * false while `propvisible("lid")` and `propview("lid") != "run"`, and every band
- * handler opens with `if not watchidle() exitcode` — so the bag, the map and the
- * lifebuoy all stop answering, and the lifebuoy is the way to the CTL panel. The
- * watch cannot even be shut again: its `mousedown` case "run" closes the lid only
- * `if propview("lid") = "run"`. A player loading one of the 17 got a game they
- * could not save, could not load out of, and could not open the bag in.
- *
- * The placement is mirrored from `open()` rather than restored from the file: the
- * save's prop records are 158 bytes and only the view (+48) and owner (+64) are
- * decoded, so whether the original restores an anchor and dist of its own is an
- * open question (TODO §11a). `run()` is dispatched rather than reimplemented,
- * because the lid's state and the deg that picks the mission's dial face are the
- * script's decision, not ours.
- */
-async function restoreOpenWatch(session: GameSession): Promise<void> {
-  const watch = session.propRuntime.get("watch");
-  if (String(watch?.stateName ?? "").toLowerCase() !== "run") return;
-  for (const [name, dist] of WATCH_ASSEMBLY) {
-    const p = session.propRuntime.get(name);
-    if (!p) continue;
-    p.anchorX = BAND_ANCHOR_X;
-    p.anchorY = BAND_ANCHOR_Y;
-    p.dist = dist;
+function resetCast(session: GameSession): void {
+  for (const [key, a] of [...session.actorRuntime.actors]) {
+    if (a.member.name.toLowerCase() !== key.toLowerCase()) {
+      session.actorRuntime.remove(key);
+      session.dropInstancedScript(key);
+      continue;
+    }
+    a.visible = false;
+    a.owner = "none";
+    a.value = 0;
+    a.setName = "";
+    a.starName = "";
+    a.poseName = "stand";
+    a.scale = 0;
   }
-  // the tail of the open animation: lid view "run", deg per mission.
-  await session.sendEvent("sendtoprop", "watch", "run", [], "loadgame");
 }
 
 /**
- * Put the nav arrow's lit-or-dark back in step with the rest of the band.
+ * Apply every actor record from the file: memory of the player (owner, value)
+ * and the placement half — set, star, pose, xyz, deg, speed, zclip, `visible`
+ * and `actorscale`.
  *
- * The band has two looks and the player switches between them by clicking it:
- * house.shp's `activateinterface` sets the lifebuoy, watch and map to their
- * "light" view, shows the lamp and sets `propdeg("navarrow", 1)`;
- * `deactivateinterface` sets all of them dark and the arrow back to 0. So the
- * arrow is the one piece of the band whose lit state is a DEGREE rather than a
- * view — the SHP bears that out, `navarrow` having green/red/yellow of two frames
- * each where `life`, `watch` and `map` carry separate dark/light states.
+ * `visible` verbatim is what makes wholesale restore safe: `putdownactor` hides
+ * a character without touching `actorset`, so "place anyone whose set matches"
+ * would resurrect everyone who ever passed through the room.
  *
- * Which is why {@link HELD_BAND_PROPS} misses it. That set restores the band's
- * look from the save by VIEW, and `initprops` above has just re-run
- * `initinterface` — whose defaults include `propdeg("navarrow", 0)`. The four
- * views come back lit and the arrow stays dark:
+ * `actorscale` comes from the record (+42) — the field that makes a restored
+ * character DRAWABLE (`visibleActors` skips scale 0), including the two script
+ * overrides `stdscale(set)` can't reproduce (the stoker's 9000, extra.cst's
+ * 2700). The old `sendtocastfx("gang.cst", stdscale(set))` round-trip is gone
+ * with it.
  *
- *     after loading "11 - Giving Book to purser"
- *       life=light watch=light map=light lamp=visible     the band is lit
- *       navarrow view=green deg=0                         the arrow is dark
- *
- * and every one of the 109 shipped saves records `life` as "light", because a
- * save is taken from the CTL panel and the way in is a click on the lit
- * lifebuoy — so this fired on every load there is (#4). Clicking the band put it
- * right, which is the report's "cycling the active/inactive in the UI fixes it":
- * activateinterface sets both halves at once.
- *
- * The lifebuoy is the state to read rather than a flag of our own: it is the
- * piece those two routines move in lockstep with the arrow, and its view is
- * restored from the file. Nothing here re-runs `activateinterface` itself, which
- * would be the obvious move and is wrong — it ends in `voicesound("lighton")`,
- * the click, and a load is not a click.
- */
-function relightNavArrow(session: GameSession): void {
-  const arrow = session.propRuntime.get("navarrow");
-  if (!arrow) return;
-  const lit = String(session.propRuntime.get("life")?.stateName ?? "").toLowerCase() === "light";
-  arrow.deg = lit ? 1 : 0;
-}
-
-/**
- * Restore each character's `actorowner` and `actorvalue` from a save.
- *
- * Only actors whose cast is loaded exist to restore onto; the rest are dropped
- * silently, which is right — a cast that is not loaded has no state to be wrong,
- * and the one that matters in TAOOT (gang.cst, the whole ship's company) is
- * loaded for the whole voyage.
- *
- * Restoring the count is what makes a load UNDO a conversation, which is the
- * whole point: it has to be written even when it is zero, or a save taken before
- * you met someone would leave the running session's count standing.
+ * A record whose name is not a live actor is a CROWD instance (`setupgroup`
+ * extras, the lifeboat line) — re-instanced from its cast member here, the same
+ * `actorinstance` gesture the scripts use, with the member found by the names'
+ * own convention (extras are `<member><suffix>`: brown1a1 ← brown1, stok4 ←
+ * stok1, life12 ← life1).
  */
 function restoreActors(session: GameSession, actors: SavedActor[]): void {
   for (const sa of actors) {
-    const a = session.actorRuntime.get(sa.name);
-    if (!a) continue;
+    let a = session.actorRuntime.get(sa.name);
+    if (!a) {
+      const src = instanceSource(session, sa.name);
+      if (!src) {
+        session.onLog(`loadgame: no cast member to re-instance "${sa.name}" from — dropped`);
+        continue;
+      }
+      session.actorRuntime.instance(src, sa.name);
+      session.instanceCastScript(src, sa.name);
+      a = session.actorRuntime.get(sa.name);
+      if (!a) continue;
+    }
     a.owner = sa.owner;
     a.value = sa.value;
-  }
-}
-
-/**
- * Put the cast back where the save left them — the other half of #86.
- *
- * Called AFTER `initactors` has put everybody down and BEFORE `changeset` opens the
- * arriving room, which keeps the room the last word. That order is deliberate and it
- * is the order the original ends up in (see the long note at the call site): the
- * room's own `openset`/`openscene` re-places the people it knows about, and this
- * fills in everyone it says nothing about — which is exactly the gap the issue is.
- * Vlad on the engine-room catwalk is placed by Scene108 alone, so arriving at
- * Scene109 or Scene110 used to arrive at nobody.
- *
- * Restoring `visible` verbatim is what makes this safe. The rule that suggests itself
- * without it — "place anyone whose recorded set is the set being loaded" — would put
- * back everybody who had ever passed through, because `putdownactor` hides a
- * character without touching `actorset`; Smethells would be standing in C73 again
- * after walking out of it.
- *
- * `actorscale` is the one field that does NOT come out of the record, and it has to
- * come from somewhere: `ActorRuntime.visibleActors` skips anything whose scale is 0,
- * so a character restored without one is placed correctly, gates every script
- * correctly — and is not drawn. (Measured: that was the OTHER half of #86, and the
- * reason the reported symptom was "the state of the game is correct, I just don't
- * see him".) The game's own source for it is `stdactor`, which does
- *
- *     actorscale (target, sendtocastfx ("gang.cst", stdscale (currentset ())))
- *
- * and `stdscale` is a pure function of the SET — a table of per-room constants. So
- * this asks the cast the same question rather than duplicating that table here, and
- * only for a character who has not been given one this session.
- *
- * The known exception is the stoker: gang.cst 1323 runs `stdactor(me)` and then
- * overrides with `actorscale(me, 9000)`. He is not worth a special case, because
- * arriving in the boiler room re-places him properly — the room's own scripts get
- * the last word, which is the whole shape of this function's placement in the load.
- */
-async function restoreActorPlacement(session: GameSession, actors: SavedActor[]): Promise<void> {
-  const stdscale = new Map<string, number>();
-  const scaleFor = async (set: string): Promise<number> => {
-    const hit = stdscale.get(set);
-    if (hit !== undefined) return hit;
-    const v = await session.sendEvent("sendtocastfx", "gang.cst", "stdscale", [set], "loadgame");
-    const n = typeof v === "number" && Number.isFinite(v) ? v : 0;
-    stdscale.set(set, n);
-    return n;
-  };
-  for (const sa of actors) {
-    const a = session.actorRuntime.get(sa.name);
-    if (!a) continue;
     const p = sa.placement;
     // A record with no set was never placed in this game — leave the actor as
-    // `initactors` left it rather than moving them to the origin.
+    // resetCast left them rather than moving them to the origin.
     if (!p.set) continue;
     a.setName = p.set;
     a.starName = p.star;
@@ -617,94 +390,55 @@ async function restoreActorPlacement(session: GameSession, actors: SavedActor[])
     if (p.speed) a.speed = p.speed;
     a.zclip = p.zclip;
     a.visible = p.visible;
-    if (a.scale <= 0) a.scale = await scaleFor(p.set);
+    if (p.scale > 0) a.scale = p.scale;
   }
 }
 
 /**
- * TAOOT's band props whose APPEARANCE the save owns: the bag, the pocketwatch,
- * the deck map and the lifebuoy. Their stored view is the band's lit-or-dark state
- * (and, for the watch, whether its dial is open), which no script recomputes on
- * a load — so it has to come back from the file.
- *
- * Everything else in the band is derived chrome whose look is worked out for the
- * room: the nav arrow's colour is road-computed by setuparrow(), the signs are
- * chosen by visdeg() from where you stand, and the lamp's own visibility is
- * decided by showinterface() from its owner. Those get their OWNER restored (for
- * chrome the owner IS the memo) and nothing else.
+ * The cast member a crowd record re-instances from: the longest name prefix
+ * that is a live actor, or that prefix + "1" (the member the numbered copies of
+ * a group are made from — stok4 ← stok1, life12 ← life1).
  */
-const HELD_BAND_PROPS = new Set(["bag", "watch", "map", "life"]);
+function instanceSource(session: GameSession, name: string): string | null {
+  for (let n = name.length - 1; n >= 2; n--) {
+    const prefix = name.slice(0, n);
+    for (const src of [prefix, `${prefix}1`]) {
+      if (src !== name && session.actorRuntime.get(src)) return src;
+    }
+  }
+  return null;
+}
 
 /**
- * Restore player-state props' owner + view from a save, overriding the defaults
- * `initprops` seeded: TAOOT's `inven.shp` inventory items and `house.shp`
- * interface band.
+ * Apply every prop record from the file: owner, view, and the numeric half —
+ * visibility, screen anchor, deg, z-order, scale, value, zclip.
  *
- * Possession (`owner === "frank"`) is what gates item use and what the band's
- * initinterface() checks to place the bag, watch and map — so it must be
- * restored, or a loaded game shows an empty band. For the band's derived chrome
- * the owner is not possession at all but the band's MEMO of what was on screen,
- * written by hideinterface() and read back by showinterface().
- *
- * The view is the inventory slot, or the band's lit-or-dark appearance
- * ({@link HELD_BAND_PROPS}); the bag/band redraw on the next flat-update tick
- * reads these fields. Set-specific props are not restored here — the openset
- * scripts rebuild them. No shipped save holds an in-hand item (`handitem` is
- * empty), so it's cleared.
+ * This is the read-back of the two fields the port used to parse and discard
+ * (`propvisible` and the view) plus the ones it never read at all, and it is
+ * what lets a load skip `showinterface`/`setupsigns`/`setuparrow`: the band's
+ * lit-or-dark, the nav arrow's colour AND its lit deg, the destination signs,
+ * the open pocketwatch's assembly (anchor + dist stack + wheel degs) all come
+ * back exactly as the original engine recorded them. The old special cases —
+ * HELD_BAND_PROPS, restoreOpenWatch, relightNavArrow — are this, generalized.
  */
 function restoreProps(session: GameSession, inventory: SavedProp[]): void {
-  if (!inventory.length) return;
   for (const sp of inventory) {
     const p = session.propRuntime.get(sp.name);
     if (!p) continue;
-    const shop = p.shop?.name?.toLowerCase();
-    if (shop === "house.shp") {
-      // Every band prop's OWNER comes back, held item or chrome, because for the
-      // chrome the owner IS the band's memo: `hideinterface()` writes each one's
-      // visibility into it ("vis"/"notvis") and `showinterface()` reads it back
-      // (HOUSE.SHP 0001). Skipping them left the memo belonging to whatever room
-      // the session was standing in — load a mission-4 save from the London flat
-      // and the flat's Help button, which the save records as "notvis", came back
-      // up on the boat deck. (Measured across the 109 shipped saves: `invenhelp`
-      // is "notvis" in 105 and "vis" in exactly the four earliest — the ones with
-      // no bag, watch or map yet, i.e. the London flat, which is where
-      // `initprops` sets Help up and the only place it belongs.) For chrome that
-      // is ALL that comes back: the nav arrow's colour is road-computed and the
-      // signs are chosen by where you stand, so a saved view would clobber what
-      // setuparrow()/visdeg() work out for the room.
-      if (!HELD_BAND_PROPS.has(sp.name)) {
-        p.owner = sp.owner;
-        continue;
-      }
-      // ...and for the four whose looks the save owns, the VIEW comes back too,
-      // through the same code as an inventory item (below).
-      //
-      // This used to restore possession only, on the reading that a loaded game
-      // should show the DARK band and that `initinterface()` — which sets
-      // bag "darkclosed", watch/map/life "dark" — was therefore the last word.
-      // That reading is wrong, and the shipped saves say so unanimously: the CTL
-      // panel is reached by clicking the lifebuoy, and clicking the lifebuoy is
-      // `activateinterface()`, so a save can only ever be taken with the band LIT.
-      // All 109 record `light` (the lamp) owner "on" and `life` view "light"; 105
-      // of them (every save past the London flat) record bag "lightclosed" and
-      // map "light". `showinterface()` restores the LAMP from its owner but never
-      // touches a view, so leaving initinterface's dark defaults in place put a
-      // lit lamp above a dark band — visible as the lifebuoy alone staying dark.
-      //
-      // It also loses the pocketwatch: `showinterface()` brings the open dial
-      // back only `if propview("watch") = "run"`, which 17 of the 109 saves
-      // record, and which initinterface had already overwritten with "dark".
-      // Our sequence restores before showinterface, so the view is there to read.
-      //
-      // Safe now in a way it was not: `map`/`life` "dark"/"light" are 2-frame
-      // deg-selector states (no play script, `animated` false), so the frame
-      // logic below HOLDS the deg-matched frame instead of animating — which is
-      // what once walked the map to its guided-tour icon on load.
-    } else if (shop !== "inven.shp") {
-      continue;
-    }
     p.owner = sp.owner;
-    // mimic propview(name, view): enter the state, reset its animation.
+    p.value = sp.value;
+    p.visible = sp.visible;
+    if (!p.worldSpace) {
+      p.anchorX = sp.x;
+      p.anchorY = sp.y;
+    }
+    p.deg = sp.deg;
+    p.dist = sp.dist;
+    if (sp.scale) p.scale = sp.scale;
+    p.zclip = sp.zclip;
+    // mimic propview(name, view): enter the state, reset its animation. The deg
+    // is already set, so a deg-selector state holds the right frame (the watch
+    // wheels come back showing the saved time, the arrow its saved colour).
     p.stateName = sp.view;
     p.lastTick = 0;
     p.frameLocked = false;
@@ -725,5 +459,35 @@ function restoreProps(session: GameSession, inventory: SavedProp[]): void {
       p.animating = !!st && p.frameCount(st) > 1;
     }
   }
-  session.interp.globals.set("handitem", "");
+}
+
+/**
+ * Put the music back from the file. The old path halted the theme and let the
+ * arriving room's `setupsound` re-score it, which needed `currentset` forced to
+ * "none" to beat the `themetype` guard and still left rooms silent where
+ * setupsound deliberately scores nothing (#36's flat, gstair3, bind…). The file
+ * simply says what was playing.
+ *
+ * What is NOT restored — and said: positional sound loops beyond the theme
+ * (`save.theme.extras`, e.g. the smokestack maze's wind — the maze re-arms them
+ * on the next movement), and the record's own channel volume (255 in every
+ * shipped theme record; the player's themevolume global is applied instead).
+ */
+async function restoreTheme(session: GameSession, save: SaveGame): Promise<void> {
+  session.audio.halt("theme");
+  session.currentThemeName = "none";
+  const t = save.theme;
+  if (!t) return;
+  await session.openTrackFile(t.track);
+  const theme = session.audioLib.theme(t.track);
+  if (!theme) {
+    session.onLog(`loadgame: saved theme "${t.track}" is not available — the room loads silent`);
+    return;
+  }
+  session.audio.play("theme", theme, { loop: true });
+  session.currentThemeName = t.track;
+  session.setThemeVolume(toNum(session.interp.globals.get("themevolume") ?? 255));
+  if (t.extras > 0) {
+    session.onLog(`loadgame: ${t.extras} additional saved sound loop(s) not restored (re-armed by the room)`);
+  }
 }

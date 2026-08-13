@@ -28,21 +28,34 @@ writes:
 - every live script global (numbers inline; strings via the base's string
   pool — `clock` excluded, its record isn't writable),
 - the current **set / scene / view**,
-- the **props**: `propowner` for **every prop the engine has loaded**, in the
-  engine's own list order, plus `propview` for the ones whose view the save owns
-  (the `inven.shp` items and the four band props) — see
-  [Which props get written](#which-props-get-written), and
+- the **props**: **every prop the engine has loaded**, in the engine's own list
+  order, and the whole record — `propowner` and `propview`, plus the numeric half
+  (`propvisible`, the screen anchor, `deg`, `dist`, `scale`, `value`, `zclip`) —
+  see [Which props get written](#which-props-get-written),
 - the **cast**: `actorowner` and `actorvalue` (what each character remembers of
   you) plus the whole placement half of [the actor record](#the-actor-record) —
-  set, star, pose, position, facing, speed, zclip and `actorvisible`.
+  set, star, pose, position, facing, speed, **scale**, zclip and `actorvisible` —
+  **the crowd included**.
 
-  The **crowd** is deliberately excluded. `setupgroup` makes the deck extras per
-  room from `EXTRA.CST` and the arriving room makes its own, which is why the
-  shipped saves disagree about which of them exist at all: 25 to 64 records, the
-  named cast constant and the extras churning. There would be nowhere to put them
-  anyway — a patch-write cannot grow the container — whereas every one of the 109
-  shipped saves *does* have a record for all 25 named characters, so those are
-  never dropped for want of a slot.
+  This page used to say the crowd was deliberately excluded, and the reason given
+  was that there is nowhere to put them: `setupgroup` makes the deck extras per
+  room from `EXTRA.CST`, the shipped saves disagree about which of them exist at
+  all (25 to 64 records), and a patch-write cannot grow a container. The last
+  clause was the wrong one. The actor container declares no capacity — TI.EXE's
+  loader duplicates the read container's handle straight into the actor-list
+  global, so the record count is implicit in the container's size — so a crowd
+  record the base lacks is simply **appended**. Since #143 that is not a nicety:
+  nothing re-runs `setupgroup` on a load, so the file is the only witness to who
+  was standing on that deck.
+
+- the **scheduler**: the live `makeloop` and `makecricket` tables, written over the
+  base's own (mid-count, so a loop reloads with the ticks it had left). The walks
+  table is **zeroed** — the port does not serialize a walk in flight, and it says
+  which character it left standing instead.
+- the **theme** that is playing, written into the track state
+  ([the track containers](../formats/savegame.md#the-track-containers-what-was-playing)),
+  not into `savetheme` — which is a different thing and lags the file in 91 of the
+  109 shipped saves.
 
 Everything the loader ignores stays byte-for-byte as the base had it.
 
@@ -78,8 +91,9 @@ across the whole corpus — `bag`, `map`, `watch` (`frank`×105) and `baby`
 `vis` / `notvis` / `on`), which is why writing all of them changes nothing but the
 one that was missing.
 
-**Possession is the only field that has to survive.** The record does carry
-`propvisible` (see [the format doc](../formats/savegame.md)), but nothing needs it
+**Possession used to be the only field that had to survive**, and the argument was
+a good one for as long as the load re-ran the room. The record does carry
+`propvisible` (see [the format doc](../formats/savegame.md)), and nothing needed it
 restored, because `house.shp`'s `showinterface()` re-derives it:
 
 ```
@@ -89,10 +103,23 @@ endif
 ```
 
 right beside the same treatment for the watch, the bag, the map and the held item.
-Measured after a load with only owner + view restored: `visible` is true for exactly
+Measured after a load with only owner + view restored: `visible` was true for exactly
 the saves whose owner is `frank`, at `addbaby()`'s own (256,192) anchor, and the prop
-is in the draw list. The view is left to the room for the same reason — `setupsigns()`
-and `setuparrow()` compute the chrome from where you stand.
+was in the draw list. The view was left to the room for the same reason —
+`setupsigns()` and `setuparrow()` compute the chrome from where you stand.
+
+**#143 took the room away, so the file has to carry the screen.** No
+`showinterface`, no `setupsigns`, no `setuparrow` — nothing re-derives anything —
+and the record turns out to have been holding the answer all along: `propvisible`,
+the screen anchor at `propxy`, `propdeg`, the `propdist` z-order, `propscale`,
+`propvalue` and `propzclip` are all written now and all read back. The open
+pocketwatch is the neat demonstration: its lid/hrs/min/sec pieces sit at the band
+anchor with dist −6/−5/−5/−4, exactly the stack its own `open()` builds, and the
+wheels come back showing the saved time because each one's `deg` picks its frame.
+The port used to hand-mirror that assembly on load (`restoreOpenWatch`), and
+re-light the nav arrow separately (`relightNavArrow`), and keep a `HELD_BAND_PROPS`
+list of the views a save was allowed to own. All three are gone: they were this,
+special-cased.
 
 The HELP button is the clearest of the chrome memos, because two different things
 decide it. Its owner remembers whether HELP belongs on screen at all, and your hand
@@ -121,33 +148,45 @@ load never does: `CTL.STG`'s button is `opengame ("Titanic 1.0")` with nothing a
 it but a stage check, and `opengame`'s restore rebuilds the room through the engine's
 own set machinery.
 
-So the original puts the room back **from the file**, where this port puts it back by
-re-running the room — it arrives by calling the game's own `changeset`, which fires
-`openset` and `openscene` like any other arrival. For one room that is a bug rather
-than a detail. `LOUNGE1C` Scene45's entry handler is a trigger:
+So the original puts the room back **from the file**. This port used to put it back
+by re-running the room — it arrived by calling the game's own `changeset`, which
+fires `openset` and `openscene` like any other arrival — and for one room that was a
+bug rather than a detail. `LOUNGE1C` Scene45's entry handler is a trigger:
 
 ```
 if mission = 4 & actorvisible ("zeit") & currentview () = "view49"
     sendtoactor ("zeit", mousedown (0))
 ```
 
-and `openset` has just made Zeitel visible, so loading the shipped save taken in front
-of him opened his conversation *inside the load* — which headless never returns from,
-because it parks on his plaques (#125). The scene event is therefore muted for a load.
-Only that half: the original fires neither, but this port still needs `openset` to
-place the actors, score the theme and dress the props, because it deliberately does
-**not** restore the fields that would replace it (`propvisible` and a prop's `view`,
-above). The two halves are one decision — the original can skip the room because it
-reads the file; this port can skip those fields because it runs the room. A faithful
-script-free restore starts by reading them back, and would also have to reconstruct
-what the save's later containers hold and this loader ignores: the live `makeloop` and
-`makecricket` tables, the music and sound-loop state, and any parked conversation.
+and `openset` had just made Zeitel visible, so loading the shipped save taken in
+front of him opened his conversation *inside the load* — which headless never
+returns from, because it parks on his plaques (#125). Muting the scene event was the
+first half of the answer, and the reason only half could be done then is worth
+keeping: the port still needed `openset` to place the actors, score the theme and
+dress the props, because it deliberately did **not** restore the fields that would
+replace it (`propvisible` and a prop's `view`). The two halves were one decision —
+the original can skip the room because it reads the file; the port could skip those
+fields because it ran the room. The way out was named at the time: a faithful
+script-free restore starts by reading them back, and also has to reconstruct what
+the save's later containers hold and the loader then ignored — the live `makeloop`
+and `makecricket` tables, the music and sound-loop state, and any parked
+conversation.
 
-## Loading: restore globals, then travel
+**#143 did exactly that.** Those containers are now
+[mapped](../formats/savegame.md#the-scheduler-containers-loops-crickets-and-walks)
+and read, and the parked conversation turned out not to be a container at all: it is
+the walks table plus its waypoint payload. So the port now matches the original —
+`GameSession.restoringSave` mutes the **whole** set lifecycle for the duration of a
+load (`closeset`, `openset`, `openscene`, `closescene`; the guard is one line at the
+top of `SetScripts.fireLifecycle`) and every one of those scripts' effects comes out
+of the file instead. The scene is still recorded as current, so the **first turn or
+step fires `openscene` normally** — which is also what the #125 reporter observed of
+the original: step off the spot and back, and the trigger runs.
 
-`loadGame` deliberately does *not* try to reconstruct subsystems from the
-save's pointer-laden containers. It loads the way the game itself effectively
-does — restore the variables, then **replay the arrival**:
+## Loading: restore the engine from the file
+
+`loadGame` restores the serialized engine and runs **no room script at all** — the
+original's own choreography (see [A load is not an arrival](#a-load-is-not-an-arrival)):
 
 1. Parse and validate (`"Titanic 1.0"`; a foreign file is rejected with the
    original's error).
@@ -157,71 +196,101 @@ does — restore the variables, then **replay the arrival**:
 3. Force **`lockevents = 0`** — every save is taken from the CTL menu with
    world input frozen, so every save *carries* the freeze; a load returns you
    to interactive control.
-4. Tear down timed state (`scheduler.reset()`), **silence the theme and voice
-   channels**, drop any pending
+4. Tear down timed state (`scheduler.reset()`), **silence the voice channel** (the
+   theme is halted and re-scored from the file at step 9), drop any pending
    [overlay-stack](stage-ui.md#the-overlay-stack-transtoflat-transfromflat)
    frames, reopen `main.stg`, and make the set visible.
-5. Run the boot's **`initall(set, scene, view)`** — `changeset` +
-   `initactors` + `initprops` — so the normal `openset`/`openscene` scripts
-   rebuild props, loops, crickets and music *at the restored mission/phase*.
-6. **Put the cast back where the save left them** — set, star, pose, position,
-   facing, speed, zclip and `actorvisible`, straight out of
-   [the actor record](#the-actor-record).
+5. **Mute the set lifecycle** (`GameSession.restoringSave`) for everything below.
+   The departing room is *detached*, not closed: its `closeset` does not run, its
+   timed state died with the scheduler reset, and the host releases its files when
+   the new set activates.
+6. **Put the cast back, wholesale.** The live actor list is wiped first —
+   `actorinstance` copies removed, cast members put down — because the original
+   replaces its list with the container it read, and then every record is applied:
+   owner and value, set, star, pose, position, facing, speed, `actorscale`, zclip
+   and `actorvisible`, straight out of [the actor record](#the-actor-record). A
+   record naming somebody who is not a live actor is a **crowd extra**, re-instanced
+   from its cast member by the names' own convention (`brown1a1` ← `brown1`,
+   `stok4` ← `stok1`, `life12` ← `life1`).
 
-   **Where** this happens in the sequence is the whole of it, and it is pinned
-   between two things that will otherwise undo it. It has to be **after the
-   departing room's `closeset`**, because a `closeset` is entitled to put its own
-   people down and one of them does exactly that — ENGINE.SET's is
-   `sendtoactor("vlad", putdownactor())` — so a restore before it is undone
-   whenever you load a save of the room you are already standing in. And it has to
-   be **before the `changeset`**, so the arriving room still gets the last word
-   over the people it does place: Scene110's `openscene` sends Vlad a mousedown,
-   which *is* the fistfight, and a restore landing after that would teleport him
-   out of the walk it starts. Everyone the arriving standpoint says nothing about
-   is what the save then fills in.
+   `actorvisible` verbatim is what makes wholesale restore safe at all:
+   `putdownactor` hides a character without touching `actorset`, so "place everyone
+   whose set matches" would resurrect everybody who ever walked through the room.
+7. **Put every prop back, both halves** — owner, view, and the numeric fields that
+   say where and how it draws. This one step replaces the whole family of script
+   re-runs the load used to negotiate with: `initprops`' mission defaults, the
+   `house.shp` `openshop`/`initprops`/`showinterface` dance, the hand-mirrored open
+   pocketwatch, the nav arrow's re-lighting. (`handitem` is no longer cleared by
+   hand either — it restores from its variable record like every global, and every
+   shipped save carries `""` there: a save is taken from the CTL panel, which you
+   cannot reach mid-drag.)
+8. **Restore the scheduler tables mid-count** — every `makeloop` with the ticks it
+   had left, every `makecricket` with its position, radius, period, jitter and time
+   to next fire. This is what used to need the arriving room's `openset`: the idles
+   that make characters act, the scene timers, the room's positional ambience.
+9. **Score the room from the file**: the track whose playing/looping arrays are
+   non-empty is the theme, and it is played at the player's `themevolume`.
+10. **Walks are dropped, and said so** — one log line per character. Their restored
+    position stands and their restored idle loop re-decides. Three of the 109
+    shipped saves carry a walk in flight.
+11. Open the saved set/scene/view through the engine's set machinery, still with the
+    lifecycle muted. The scene is recorded as current, so the first turn or step
+    fires `openscene` normally.
 
-   `actorscale` is the one field that does **not** come out of the record, and it
-   has to come from somewhere: `ActorRuntime.drawList` skips anything whose scale
-   is 0, so a character restored without one is placed correctly, gates every
-   script correctly — and is not drawn. That is worth stating plainly because it
-   was the second half of #86 and it produced a confusing symptom: *"the state of
-   the game is correct, I just don't see Vlad standing there."* The game's own
-   source is `stdactor` —
-   `actorscale(target, sendtocastfx("gang.cst", stdscale(currentset())))` — and
-   `stdscale` is a pure function of the set, a table of per-room constants, so the
-   loader asks the cast the same question instead of copying that table. (The
-   stoker is the known exception: gang.cst 1323 runs `stdactor` and then overrides
-   with 9000. Arriving in the boiler room re-places him properly, which is the
-   same "room gets the last word" rule doing its job.)
-7. Overwrite the default props `initall` seeded with the save's actual owner per
-   prop, and view where the save owns it. Every `house.shp` prop's **owner** comes
-   back, held item or chrome, because for the chrome the owner *is* the band's memo
-   (`hideinterface()` writes it, `showinterface()` reads it); for the chrome that is
-   *all* that comes back, since its look is worked out for the room. The four
-   **band props** (`bag`, `watch`, `map`, `life`) get their view too — the save owns
-   how the band looked. `handitem` is always cleared (you can't be mid-drag after a
-   load).
+### What the old sequence had to get right, and why it is gone
 
-**Prop and actor ownership is restored twice — before step 5 as well as after
-it.** `initall` runs the room's own `openset`, and those scripts read ownership to
-decide what the room holds. Zeitel's idle is one of them: it picks its line from
-`propowner("painting")`, and a checkpoint taken standing next to him with the
-painting already traded made him open the branch for someone who *hasn't* traded —
-which parks on plaques inside the load, so the load never returned. A room asks
-about the world while it is opening, so the world has to be right before it opens.
+The load used to run the boot's `initall(set, scene, view)` — `changeset` +
+`initactors` + `initprops` — and let the room's own scripts rebuild props, loops,
+crickets and music at the restored mission/phase. Three pieces of hard-won
+choreography went with that, and all three are worth keeping as history, because
+each is a real fact about the game's scripts:
+
+- **The cast restore was pinned between two scripts.** It had to be *after* the
+  departing room's `closeset`, because a `closeset` is entitled to put its own
+  people down and ENGINE.SET's does exactly that
+  (`sendtoactor("vlad", putdownactor())`) — so a restore before it was undone
+  whenever you loaded a save of the room you were already standing in. And it had to
+  be *before* the `changeset`, so the arriving room kept the last word over the
+  people it places: Scene110's `openscene` sends Vlad a mousedown, which *is* the
+  fistfight, and a restore landing after that would teleport him out of the walk it
+  starts. **Neither script runs during a load now**, so there is no window to hit:
+  the file places everybody, and the first `openscene` after the load is a normal
+  one, fired by a turn or a step.
+- **`actorscale` had to be re-derived.** `ActorRuntime.drawList` skips anything whose
+  scale is 0, so a character restored without one is placed correctly, gates every
+  script correctly — and is not drawn. That was the second half of #86, and it
+  produced a confusing symptom: *"the state of the game is correct, I just don't see
+  Vlad standing there."* The loader asked the cast the game's own question —
+  `actorscale(target, sendtocastfx("gang.cst", stdscale(currentset())))` — since
+  `stdscale` is a pure function of the set. It had a known exception: `gang.cst` 1323
+  runs `stdactor` and then overrides the stoker with 9000, and arriving in the boiler
+  room re-placed him properly. The record has carried the field all along, at +42,
+  and it carries the overrides too, so the derivation *and* its exception are gone.
+
+**Prop and actor ownership also had to be restored twice — before the `initall` as
+well as after it.** `initall` ran the room's own `openset`, and those scripts read
+ownership to decide what the room holds. Zeitel's idle is one of them: it picks its
+line from `propowner("painting")`, and a checkpoint taken standing next to him with
+the painting already traded made him open the branch for someone who *hasn't* traded
+— which parks on plaques inside the load, so the load never returned. A room asks
+about the world while it is opening, so the world had to be right before it opened.
+That is a permanent fact about the scripts and a good reason never to open a room
+mid-restore; the load no longer opens one.
 
 ### What a load is therefore *not*
 
 A faithful reload is not a snapshot of the running game, and the difference is worth
 naming because it is what the [playthrough](../verification.md#one-game-carried-not-a-chain-of-loads)
-had to stop leaning on. Three kinds of loss — the first of which has turned out to be
-much smaller than this page twice claimed:
+had to stop leaning on. Four kinds of loss — the first of which has turned out to be
+much smaller than this page claimed three times over:
 
 - **Not in the format — but check the frame before believing that.** This page said
-  exactly that twice, first about `actorowner` and then about `actorvalue`, and both
-  times the field was there and *we* were reading the record 80 bytes out of position.
-  The genuine residue is now small: the crowd extras (above) and the scheduler's own
-  tables, which a load rebuilds from the arriving room rather than from the file.
+  exactly that three times: first about `actorowner`, then about `actorvalue` — both
+  times the field was there and *we* were reading the record 80 bytes out of position
+  — and then about the crowd extras and the scheduler's own tables, which were in the
+  file too, in containers nobody had mapped yet. The residue that is genuinely left is
+  a walk in flight (the actor's position is restored, their walk is not) and the
+  positional sound loops beyond the theme, which the room re-arms on the next move.
 
   What it used to cost is worth keeping as the worked example.
   [#86](https://github.com/dhobi/taoot-web/issues/86): the engine room passes Vlad
@@ -249,19 +318,25 @@ much smaller than this page twice claimed:
   blackjack-table and fistfight scratch that a load re-initialises anyway (#85).
 - **Inherited from the skeleton.** A patch-write starts from a *shipped* save, so
   any slot nothing overwrites keeps that save's value — `oldset` "None", the
-  location container's facing and road, and the `propview` of the chrome the port
-  never sets (`door`, `signs`, `wiremsg`, `navtoggle`, `subtoggle`, `invenctl`,
-  `lid`, `invenhelp`: 6–8 records per save, measured). Those are inherited *on
-  purpose* — the base's value is a real reading by the original engine and ours
-  would be the prop's first state, and the arriving room recomputes them regardless.
-  The chrome **owners** are no longer in this list: the band's memo is written like
-  any other `propowner`. (`clock` is not here either: it is the variable list's head
-  and a patch writes it like any other global — measured, "bedsit" written and read
-  back.)
+  location container's facing and road, and the `propview` of a prop the port has
+  never set (an untouched prop is sitting in its file default, and `""` is not a
+  reading). That list used to be the chrome the arriving room recomputed anyway
+  (`door`, `signs`, `wiremsg`, `navtoggle`, `subtoggle`, `invenctl`, `lid`,
+  `invenhelp`: 6–8 records per save, measured), inherited *on purpose* because the
+  base's value was a real reading by the original engine and ours would be the
+  prop's first state. With no room to recompute them, the port now writes every view
+  it holds. The chrome **owners** were taken off this list earlier: the band's memo
+  is written like any other `propowner`. (`clock` is not here either: it is the
+  variable list's head and a patch writes it like any other global — measured,
+  "bedsit" written and read back.)
+- **A theme the base save never opened.** The container-0 manifest names the files
+  that were open and a patch does not rewrite it, so a save whose room is scored by a
+  track the base does not carry loses the music — reported, and the room loads
+  silent.
 
-Everything else — loops, crickets, music — is rebuilt by re-running the room's own
-`openset`/`openscene` at the restored progress, which is faithful and still not the
-same thing as continuing.
+Loops and crickets are no longer on this list at all, and the music only in the one
+case above: they come out of the file, mid-count, which is the difference between a
+faithful reload and one that merely re-derives a plausible room.
 
 ### The actor record
 
@@ -282,6 +357,7 @@ Each accessor then reads its own field out of that copy (buffer at `esp+8`;
 | +24 | i16 | `actordeg`, 0..255 | `0x40e850` |
 | +26/+28/+30 | i16 | `actorxyz` 1/2/3 — the SET's own X, Z, Y order | `0x40f285/97/a9` |
 | +38 | i16 | `actorspeed` | `0x40ead0` |
+| +42 | i16 | `actorscale` (1000 neutral; 0 places but never draws) | `0x40ea40` |
 | +72 | i32 | `actorvalue` | `0x410be0` |
 | +76 | i16 | `actorzclip` | `0x410c70` |
 | +80/+96/+112/+128/+144 | pstr | name · set · star · pose · `actorowner` | the grid itself |
@@ -304,24 +380,34 @@ who you report to after every errand, and it was being handed to Morrow, whose o
 
 ### The arriving room cannot be trusted to silence the last one
 
-Which is why step 4 halts the theme and voice channels itself rather than leaving
-it to step 5. `scheduler.reset()` owns loops, crickets, walks and the `sound`
-channel — not the music and not speech — and the tempting assumption is that the
-destination's `setupsound` will simply play over them. It does not always play
-anything: **`setupsound` sometimes scores a room deliberately silent** (arriving in
-C73 at mission 1 phase 0 is scored by the Smethells knock), and then the room you
+Which is why the load halts the theme and the voice channel itself rather than
+leaving it to the room. `scheduler.reset()` owns loops, crickets, walks and the
+`sound` channel — not the music and not speech — and the tempting assumption was
+that the destination's `setupsound` would simply play over them. It does not always
+play anything: **`setupsound` sometimes scores a room deliberately silent** (arriving
+in C73 at mission 1 phase 0 is scored by the Smethells knock), and then the room you
 *left* keeps playing. Start the game in the London flat, load from the CTL menu, and
 `bedrad1.trk` — whose loop chunks *are* the announcer — reads the news over the
 loaded room.
 
 `advanceday()` has always known this: it halts the theme before opening the next
 day's room (`BOOTFILE` 0002:148), and the dev-tools jump copied it. A load is the
-same manoeuvre and now silences the same way. `currentThemeName` comes down with the
+same manoeuvre and silences the same way. `currentThemeName` comes down with the
 theme, because [`transfromflat`'s overlay
 restore](stage-ui.md#the-overlay-stack-transtoflat-transfromflat) keys off that value
 — left stale, closing a later overlay would put the flat's radio *back*. `voice` is
 the same hole one channel over: nothing but a skip or a stop halts it, and a load is
 neither, so a load taken mid-line let the speaker follow you into the next room.
+
+**What plays afterwards is now the file's answer, not `setupsound`'s.** The load
+scores the room from the track state in the save, which retired a piece of
+scaffolding worth naming so nobody re-invents it: the re-score used to need
+`currentset` forced to `"none"` first, so that the room's own `themetype` guard —
+"don't restart the theme, we are already in this set" — would not decide there was
+nothing to do. And it still left silent every room `setupsound` deliberately scores
+silent (#36's London flat, `gstair3`, `bind`), because a room that scores nothing
+cannot tell you what was playing when you saved. The file can, and does: exactly one
+track carries playing/looping records, and it is the live theme.
 
 ## The saved-games UI
 

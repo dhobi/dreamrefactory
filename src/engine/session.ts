@@ -103,27 +103,23 @@ export class GameSession {
    * carries `view` and `visible` beside its owner, an actor record carries
    * visibility, facing, position, speed and zclip.
    *
-   * Ours arrives by running the game's `changeset`, which is how it got both
-   * events — and the scene half is a trigger. LOUNGE1C Scene45's is
+   * Ours used to arrive by running the game's `changeset`, which is how it got
+   * both events — and the scene half was a trigger. LOUNGE1C Scene45's is
    *
    *     if mission = 4 & actorvisible ("zeit") & currentview () = "view49"
    *         sendtoactor ("zeit", mousedown (0))
    *
-   * and `openset` has just made Zeitel visible, so loading the shipped save taken
-   * in front of him opened the conversation inside the load — measured as a
-   * headless load that never returns, because it parks on his plaques (#125).
-   * Moving off the spot and back still fires it, which is the reporter's own
-   * account of the original.
+   * and `openset` had just made Zeitel visible, so loading the shipped save taken
+   * in front of him opened the conversation inside the load (#125).
    *
-   * Scoped to the SCENE event on purpose. The original fires neither, but ours
-   * cannot drop `openset` yet: it is what places the actors, scores the theme and
-   * dresses the props, and this port deliberately does NOT restore the fields that
-   * would replace it — `propvisible` and a prop's `view` are read from the file and
-   * thrown away, because `showinterface`, `setupsigns` and `setuparrow` re-derive
-   * them (docs/runtime/saves.md). That is sound only while the room still runs. A
-   * script-free restore is the faithful end state and it starts by reading those
-   * fields back; until then, narrowing to the half that is a TRIGGER fixes the bug
-   * without pretending the rest is done.
+   * This flag now mutes the WHOLE set lifecycle (SetScripts.fireLifecycle):
+   * closeset, openset, openscene, closescene. The load restores from the file
+   * what those scripts would produce — the cast (with `actorscale` from the
+   * record), every prop's visible/view/anchor/deg/dist, the loop and cricket
+   * tables, the playing theme — which is the script-free restore #143 asked
+   * for. The scene is still recorded as current, so the first turn or step
+   * re-fires `openscene` normally, matching the original (the #125 reporter's
+   * own account: moving off the spot and back still fires it).
    */
   restoringSave = false;
 
