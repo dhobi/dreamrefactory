@@ -56,6 +56,25 @@ function concat(parts: Float32Array[], cap = Infinity): Float32Array {
 export class MoviePlayer {
   onLog: (line: string) => void = () => {};
 
+  /**
+   * ESC ends the SEGMENT rather than the sequence — off, and no shipped film
+   * turns it on.
+   *
+   * The original's rule is the whole sequence (see {@link key}): state 2 clears
+   * the next-segment pointer at `0x4493a9` instead of following it, and that is
+   * what every TAOOT film gets. But the Nightdive intro is a screen this port
+   * puts up on its own, not a film TI.EXE ever played — two segments, the film
+   * and then the ownership question — and there the two halves want different
+   * answers: press past the film you have seen before, but the question still
+   * has to be answered (issue #171).
+   *
+   * A per-player opt-in rather than a rule change, because the rule is right for
+   * everything the game ships. Combines with {@link MovFile.keySkips}, which is
+   * per SEGMENT: the intro's film sets it and its question does not, so ESC
+   * carries you from the one to the other and then stops mattering.
+   */
+  escapeSkipsSegment = false;
+
   /** active movie playback (cutscene / object close-up). The per-picture
    *  fields (frames, meta, palette, interval…) are the CURRENT SEGMENT's —
    *  a movie is a chain of them (MovFile.segments) and enterSegment() swaps
@@ -553,6 +572,8 @@ export class MoviePlayer {
    * ENTERING a frame (recordAction), so a movie skipped after passing its
    * action frame still reports it to actionframe(), and one skipped before
    * still doesn't — the same as pressing ESC at that moment in the original.
+   *
+   * {@link escapeSkipsSegment} is the one way out, and no shipped film takes it.
    */
   key(keyName: string, special = false): boolean {
     const m = this.active;
@@ -563,6 +584,11 @@ export class MoviePlayer {
     if (volumeKey(this.session, keyName)) return true;
     if (!special || (keyName !== "." && keyName !== "q")) return false;
     if (!m.keySkips) return false;
+    if (this.escapeSkipsSegment && m.segIdx + 1 < m.mov.segments.length) {
+      this.onLog(`movie: ${m.fileName} segment ${m.segIdx + 1} skipped at frame ${m.pos}`);
+      this.endSegment();
+      return true;
+    }
     this.onLog(`movie: ${m.fileName} skipped at frame ${m.pos}`);
     this.finish(true);
     return true;

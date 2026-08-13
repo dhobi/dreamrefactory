@@ -58,9 +58,11 @@ second segment whose two answers are the movie's own click regions and action
 frames — so the answer comes back through `actionframe()` like any other movie's
 does ([src/nightdive.ts](src/nightdive.ts)). English only because the question is
 drawn *into* the frames and there is no catalogue behind a picture; the other
-editions and the demo boot untouched. The film is somebody else's artwork, so the
-generator is committed and its output is not — no film served, no intro, and the
-boot is exactly what it was.
+editions and the demo boot untouched. Escape presses past the film; the question
+after it carries no skip flag and has to be answered. The film itself is built
+from NightDive's own heading animation and is committed alongside the generator,
+so a checkout has the intro and a deploy ships it — a deployment that removes the
+file still boots exactly as it did before.
 
 Which files exist is one manifest, `gamefiles.json`: a map of served path to
 byte size, walked live by the dev server ([vite.config.ts](vite.config.ts)),
@@ -251,8 +253,8 @@ nobody tagged.
 
 `.github/workflows/deploy.yml` builds that commit and uploads `dist/` to
 www.danielhobi.ch/taoot over FTP. It only ever adds and overwrites — the CD rip,
-the DBGL archives, `nightdive.mov` and `gamefiles.json` on the host are never
-written over and never deleted. [Releasing and deploying](docs/reference/deploy.md)
+the DBGL archives and `gamefiles.json` on the host are never written over and
+never deleted. [Releasing and deploying](docs/reference/deploy.md)
 says why, and how to regenerate the manifest when the game data on the host
 changes.
 

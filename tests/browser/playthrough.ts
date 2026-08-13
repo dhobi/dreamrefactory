@@ -48,7 +48,7 @@ import { refuseZeitelAgain, segment2, segment3, segment4, segment5, segment6, se
 import { PLANT_GAUGES, PLANT_LEVELS } from "../playthrough/segments";
 import { isCoinFlip, isHarnessPaced } from "../../src/engine/masks";
 import { browserStory } from "./story";
-import { appUrl, type BrowserDriver } from "./driver";
+import { appUrl, clickIntroYes, type BrowserDriver } from "./driver";
 import { installRepaintProbe, readRepaintProbe, reportRepaint } from "./repaint";
 import { installPropTrace, readPropTrace } from "./proptrace";
 
@@ -575,7 +575,7 @@ const waitFor = (page: Page, fn: string, what: string, timeout = 300_000) =>
 const settle = (page: Page, what: string) => waitFor(page, "dbg.viewer && dbg.viewer.quiescent", `${what} to settle`);
 
 /**
- * Press past the nightdive intro, if this edition and this deployment have one.
+ * Get past the nightdive intro, if this edition and this deployment have one.
  *
  * It runs BEFORE the boot — there is no viewer and no session set until the boot
  * activates one — so every viewer-shaped predicate in this file is `undefined`
@@ -585,16 +585,18 @@ const settle = (page: Page, what: string) => waitFor(page, "dbg.viewer && dbg.vi
  * interactive)`, which is the ownership question, and `rush` only presses Escape
  * while `dbg.viewer.moviePlaying`, so it pressed nothing and watched.
  *
- * ESC is the honest answer and the safe one. The film's own doc calls
- * `unanswered` "not a failure case — it is ESC", a player who has seen the
- * question before pressing past it, and `main.ts` boots the game for
- * `unanswered` exactly as for `owns`. Answering "wants" would navigate the page
- * to gog.com, which is not somewhere a test run comes back from.
+ * **Escape alone stopped being enough in #171.** It used to end the whole film,
+ * question included, and `main.ts` booted the game for `unanswered` exactly as
+ * for `owns` — so one press was the whole job. Now the film carries the skip flag
+ * and the question does not: Escape presses past the picture and lands ON the
+ * question, which is answered or it is still there. So this presses once and then
+ * clicks YES, the way a player does.
  *
- * Silent when there is no intro: a tree without `public/nightdive.mov`, or any
- * edition but English, never opens one (src/nightdive.ts `introPlaysFor`) — and
- * that is the shape this harness was written against, which is why it went so
- * long without noticing.
+ * YES rather than NO on purpose: "wants" navigates the page to gog.com, which is
+ * not somewhere a test run comes back from.
+ *
+ * Silent when there is no intro: any edition but English never opens one
+ * (src/nightdive.ts `introPlaysFor`).
  */
 async function escapeIntro(page: Page): Promise<void> {
   // it is fetched and opened before it appears, so give it a moment to show up;
@@ -604,18 +606,27 @@ async function escapeIntro(page: Page): Promise<void> {
     .then(() => page.evaluate(() => !!(window as any).dbg.intro))
     .catch(() => false);
   if (!showed) return;
-  for (let press = 0; press < 20; press++) {
-    await page.keyboard.press("Escape");
-    const gone = await page
-      .waitForFunction("!window.dbg.intro", null, { timeout: 3_000 })
-      .then(() => true)
-      .catch(() => false);
-    if (gone) {
-      mark(`   escaped the intro (${press + 1} press${press ? "es" : ""})`);
+
+  // one Escape to press past the film — then wait for the question's buttons to
+  // be the thing on screen. Without the press this just waits the film out, so a
+  // key that stopped working costs the run seconds rather than the whole budget.
+  await page.keyboard.press("Escape");
+  const asked = await page
+    .waitForFunction("!!window.dbg.intro && window.dbg.intro.regions().length > 0", null, { timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!asked) {
+    // it let go by itself: an older film whose question still carries the flag
+    if (await page.evaluate(() => !(window as any).dbg.intro)) {
+      mark("   escaped the intro (Escape ended it — pre-#171 film)");
       return;
     }
+    throw new Error("the nightdive intro never reached its question");
   }
-  throw new Error("the nightdive intro would not let go of Escape");
+
+  await clickIntroYes(page);
+  await page.waitForFunction("!window.dbg.intro", null, { timeout: 30_000 });
+  mark("   answered the intro (Escape past the film, then YES)");
 }
 
 /**

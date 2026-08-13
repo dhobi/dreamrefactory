@@ -10,19 +10,18 @@ name: Deploy
 #
 # ## This deploy never deletes anything
 #
-# The site is served from the same directory as four things that are not in
+# The site is served from the same directory as three things that are not in
 # `dist/` and never in this repository:
 #
 #   gamefiles/       the CD rip the host serves — ~7 GB, gitignored forever
 #   *.zip            the offline DBGL archives the collection page links to,
 #                    ~1 GB apiece
-#   nightdive.mov    the intro movie, gitignored, so a CI checkout lacks it
 #   gamefiles.json   the listing of the rip. A GitHub runner has no rip, so the
 #                    manifest THIS build writes holds ONE entry (`lang.stg`)
 #                    against the 4,137 the host serves — the play page would
 #                    offer nothing. It is deleted below rather than uploaded.
 #
-# So the mirror only ADDS and OVERWRITES, and the three that could be *written*
+# So the mirror only ADDS and OVERWRITES, and the two that could be *written*
 # over are excluded on top of that. There is deliberately no --delete and no
 # option to turn one on: a re-upload of a wrong file is a minute, and a deleted
 # 7 GB rip is not. Vite's asset names are content-hashed, so a superseded bundle
@@ -123,7 +122,7 @@ jobs:
           # Nothing in dist/ is named any of these, so this is the second lock
           # rather than the first: a build that somehow produced one of them
           # still cannot write it over the host's copy.
-          keep='--exclude-glob gamefiles.json --exclude-glob *.zip --exclude-glob nightdive.mov'
+          keep='--exclude-glob gamefiles.json --exclude-glob *.zip'
 
           # One connection rather than four: shared FTP accounts cap concurrent
           # logins, and 115 files / 37 MB does not need the parallelism.
@@ -156,5 +155,5 @@ jobs:
             echo "### Deployed \`$(node -p "require('./package.json').version")\` to <https://www.danielhobi.ch/taoot/>"
             echo
             echo "$(find dist -type f | wc -l) files, $(du -sh dist | cut -f1) — added and overwritten only."
-            echo "\`gamefiles/\`, \`gamefiles.json\`, \`nightdive.mov\` and the DBGL archives were not touched."
+            echo "\`gamefiles/\`, \`gamefiles.json\` and the DBGL archives were not touched."
           } >> "$GITHUB_STEP_SUMMARY"

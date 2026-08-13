@@ -32,7 +32,7 @@ import { chromium, Page } from "playwright";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { appUrl } from "./driver";
+import { appUrl, clickIntroYes } from "./driver";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, "..", "..", "out", "endgame");
@@ -95,17 +95,18 @@ const line = (s: any) =>
  * Get to the boot menu, pressing a real Escape past whatever is in the way.
  *
  * A bare `waitForFunction` for `awaitingInput` could not do it on a machine that
- * HAS the intro film. `public/nightdive.mov` is gitignored, so CI boots straight
- * to the menu, and every local run sat through a 120 s timeout instead (#63).
+ * HAS the intro film — which, since the film became a tracked file, is every
+ * machine including CI. It used to be gitignored, so CI booted straight to the
+ * menu and only local runs sat through a 120 s timeout (#63).
  *
  * Three states to press past, which is why this is a poll rather than a wait:
  *
  * - the Nightdive intro. A MOV in its OWN MoviePlayer (src/nightdive.ts), so
  *   `dbg.viewer` is still null and no viewer predicate can see it. It also only
  *   appears once its 6 MB have been fetched, so a single check at t=0 finds
- *   nothing — that is the trap this walked into first. ESC is what a player
- *   presses; the film carries the skip flag, and pressing past the question is
- *   "unanswered", not "no".
+ *   nothing — that is the trap this walked into first. ESC presses past the
+ *   FILM; since #171 the question that follows carries no skip flag, so it has
+ *   to be clicked — YES, because NO navigates to gog.com.
  * - the boot's own clips, in the viewer, with no regions to wait on.
  * - nothing yet: a fetch in flight, so wait.
  */
@@ -120,7 +121,10 @@ async function reachMenu(page: Page, budgetMs = 240_000): Promise<boolean> {
     if (await at("dbg.viewer && dbg.viewer.awaitingInput")) return true;
     if (await at("dbg.intro")) {
       if (skipped !== "the intro") log(`    skipping ${(skipped = "the intro")}`);
-      await page.keyboard.press("Escape");
+      // the question, once the film is past: click YES rather than press at a
+      // segment that no longer answers to the key (#171)
+      if (await at("dbg.intro.regions().length > 0")) await clickIntroYes(page);
+      else await page.keyboard.press("Escape");
     } else if (await at("dbg.viewer && dbg.viewer.moviePlaying && dbg.viewer.movieRegions.length === 0")) {
       const clip = String(await page.evaluate(() => (window as any).dbg.viewer?.movieFile ?? ""));
       if (clip && clip !== skipped) log(`    skipping ${(skipped = clip)}`);

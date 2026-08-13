@@ -325,7 +325,9 @@ function filmSegment(gif: GifImage): MovBuildSegment & { seconds: number; logoFr
     height: SCREEN_H,
     frames,
     minHoldTicks: floor,
-    keySkips: true, // ESC skips the intro, as it skips every shipped movie
+    // ESC presses past the film, as it presses past every shipped movie — but
+    // only as far as the question segment, which carries no skip flag of its own
+    keySkips: true,
     seconds: ticks.reduce((a, t) => a + Math.max(t, floor), 0) / TICKS_PER_SECOND,
     logoFrame: art[logoAt],
   };
@@ -455,9 +457,11 @@ function questionSegment(palette: Uint8Array, background: Uint8Array): MovBuildS
     height: SCREEN_H,
     minHoldTicks: 3,
     actionFrames: ["yes", "gog"],
-    // ESC past the question is an answer too — the page reads "no action frame
-    // recorded" as "not asked", and boots
-    keySkips: true,
+    // No skip flag: the question has to be ANSWERED. ESC pressed over the film
+    // lands here (MoviePlayer.escapeSkipsSegment) and then stops working, so the
+    // only ways on are the two buttons — which is issue #171, where ESC took the
+    // question with the film and booted the game unasked.
+    keySkips: false,
     frames: [
       {
         name: "ask",

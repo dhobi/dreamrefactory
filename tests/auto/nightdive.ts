@@ -196,15 +196,34 @@ test("a click outside both buttons answers nothing and does not end the movie", 
   expect(intro.regions().length).toBe(2);
 });
 
-test("ESC skips the whole thing, and skipping is not an answer", async () => {
+test("ESC presses past the FILM and lands on the question (#171)", async () => {
   const { intro } = await openIntro();
   intro.tick(0);
   // the movie's own key filter: the marker is what it insists on, and a plain
   // key is not it
   expect(intro.key("x")).toBe(false);
   expect(intro.key(".", true)).toBe(true);
-  await intro.done;
+  // it did NOT take the question with it — that is the bug this replaced, where
+  // one press booted the game without ever asking
+  expect(intro.regions().length).toBe(2);
   expect(intro.answer()).toBe("unanswered");
+});
+
+test("ESC over the QUESTION does nothing at all (#171)", async () => {
+  const { intro } = await openIntro();
+  let now = playToQuestion(intro);
+  // the question segment carries no skip flag, so the key filter turns it away
+  expect(intro.key(".", true)).toBe(false);
+  expect(intro.regions().length).toBe(2);
+  // and no amount of clock ends it either: it is answered, or it is on screen
+  for (let i = 0; i < 200; i++) intro.tick((now += 100));
+  expect(intro.regions().length).toBe(2);
+  expect(intro.answer()).toBe("unanswered");
+
+  // ...and the buttons still work, so it is a question and not a trap
+  const { x, y } = centre(intro, "yes");
+  intro.click(x, y);
+  expect(intro.answer()).toBe("owns");
 });
 
 test("closing hands the action-frame set back, so boot() can ask its own", async () => {
