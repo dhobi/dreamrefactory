@@ -257,7 +257,7 @@ c169 opens the engine-room door only `if cseahappy()`, which at that phase means
 `actorowner("csea") = "thanks2"` — trying the handle fetches the Chief Engineer
 instead, and what he wants is the turbine plant dialled a second time.
 
-### The endgame is a countdown, and no gesture advances it
+### The endgame is a countdown
 
 Mission 4 is a different kind of level, and almost nothing about missions 1–3
 transfers to it.
@@ -283,11 +283,15 @@ further under water — that is what the six `sink0..5` themes and movies are. A
 played, which is why hrs/min are identical in both hosts at every phase boundary
 even though the seconds between them never are.
 
-**Talking is what spends the clock.** `gang.cst prepuppet()` does `min = min + 2`
-at `mission = 4`, and `LNGHALL.SET doclaris()` and the smoking room's blackjack
-table each add their own two. The endgame is therefore a race driven by the
-player rather than only by the wall clock — the route reaches 13:15 after seven
-conversations.
+**Talking spends the clock, and so does walking.** `gang.cst prepuppet()` does
+`min = min + 2` at `mission = 4`, and `LNGHALL.SET doclaris()` and the smoking
+room's blackjack table each add their own two — the route reaches 13:15 after
+seven conversations. Movement costs too, and less obviously: BOOTFILE's
+`openscene()` has a `mission = 4` arm that adds a second every time you enter a
+scene *or turn to a new view*, throttled to one bump per 20 rendered frames. Spin
+in place in the original and the watch runs at **double** speed. So the endgame is
+a race driven by the player rather than by the wall clock, and navigating badly is
+itself a cost — see **[The sinking](runtime/sinking.md)** for the whole clock.
 
 **The sinking ship is a smaller ship.** `setpath(1)` puts mission 4 on disc 1,
 which carries 23 SET files against disc 2's 52: no `decka`, `recept1c`, `poop`,

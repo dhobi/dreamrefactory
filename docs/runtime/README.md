@@ -20,24 +20,28 @@ Read in any order — each names its own prerequisites.
 1. **[Timing — the heartbeat, loops, crickets & walks](timing.md)** — the two
    time bases, `makeloop`'s one-shot-that-re-arms model, positional ambient
    sound, actor walks, and the game clock behind the pocketwatch.
-2. **[Stage & UI — flats, overlays and the click order](stage-ui.md)** — the
+2. **[The sinking — how mission 4's clock runs](sinking.md)** — the one level
+   played against a clock, and why that clock counts engine passes rather than
+   seconds: the heartbeat, the conversations, the phase timetable's hold, and the
+   movement bump that makes turning in place cost you the ship.
+3. **[Stage & UI — flats, overlays and the click order](stage-ui.md)** — the
    `StageController`: how a stage opens, the overlay stack behind the
    inventory, and exactly who gets a click first.
-3. **[Characters — actors & puppets at runtime](characters.md)** — walking
+4. **[Characters — actors & puppets at runtime](characters.md)** — walking
    CST sprites in the world and PUP conversation close-ups: facing math,
    occlusion, speech pacing, subtitles and choice bevels.
-4. **[Audio at runtime — channels, banks & volumes](audio.md)** — the three
+5. **[Audio at runtime — channels, banks & volumes](audio.md)** — the three
    playback channels, how a name finds its bank, the two-slot `currentsound`
    model, and the volume controls (including one deliberate divergence).
-5. **[Saving & loading at runtime](saves.md)** — what a save snapshot contains,
+6. **[Saving & loading at runtime](saves.md)** — what a save snapshot contains,
    the script-free load that restores the engine from the file rather than
    re-running the room, and the in-browser saved-games UI with its IndexedDB
    "file system".
-6. **[The browser host](host.md)** — the part that is neither format knowledge
+7. **[The browser host](host.md)** — the part that is neither format knowledge
    nor recovered behaviour: the page and the cold boot it starts, the `SetViewer`
    navigation state machine, the movie player, input wiring, and the developer
    toolbar.
-7. **[Languages & the chooser](languages.md)** — one data tree per language, how
+8. **[Languages & the chooser](languages.md)** — one data tree per language, how
    a bare filename resolves through two selectors (disc and language), the code
    page a tree's text turns out to be in, and the language chooser: this port's
    own DreamFactory stage, scripts and all.
@@ -47,6 +51,7 @@ Read in any order — each names its own prerequisites.
 | Subsystem | Source | Page |
 |-----------|--------|------|
 | Heartbeat, loops, crickets, walks | [`engine/scheduler.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/scheduler.ts), [`engine/clock.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/clock.ts) | [Timing](timing.md) |
+| The mission-4 clock and its phase timetable | [`engine/scheduler.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/scheduler.ts) (`serviceGameClock`), [`engine/setscripts.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/setscripts.ts) (`openScene`/`viewChanged`) | [The sinking](sinking.md) |
 | Stage layer (STG at runtime) | [`engine/stage.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/stage.ts) | [Stage & UI](stage-ui.md) |
 | Actors (CST at runtime) | [`engine/actors.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/actors.ts), [`engine/geometry.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/geometry.ts) | [Characters](characters.md) |
 | Puppets (PUP at runtime) | [`engine/puppet.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/puppet.ts), [`puppet-view.ts`](https://github.com/dhobi/taoot-web/blob/master/src/puppet-view.ts) | [Characters](characters.md) |

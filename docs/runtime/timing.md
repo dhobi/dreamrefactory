@@ -190,14 +190,23 @@ is in flight.)
 
 The band's pocketwatch and the mission-4 sinking countdown run off the
 BOOTFILE's `calctime()` handler, which advances one game-second every **20
-calls**. The original engine called it from its `idle()` on every event-loop
-pass; the port calls it every **50 ms** of real time (= 20 calls per real
-second = the second hand ticks once a second), skipping while a script is
-mid-flight — the original likewise only ran it between events.
+calls** — 20 *calls*, not 20 milliseconds-worth. The original engine called it
+from its `idle()` on every event-loop pass; the port calls it every **50 ms** of
+the host's clock, skipping while a script is mid-flight — the original likewise
+only ran it between events. Since a pass is 50 ms, 20 calls is one real second
+and the second hand ticks once a second, but that is an equivalence rather than a
+definition, and things that add passes add clock.
 
-This service is **browser-only**: headless tests drive time explicitly through
-`tickTime(now)` and must not get wall-clock ticks, or the mission-4
-`advancephase()` chain would fire mid-test.
+It runs on **both hosts**, off whatever `now` reaches `tickTime` — wall time in
+the browser, the pumped virtual clock headless. It used to be browser-only, out of
+a fear that an auto-advancing clock would fire the mission-4 sinkmovie chain
+mid-test; the gate cost more than it bought, because `calctime` is also where
+`sinkflag` becomes `advancephase()`, so headless the ship never sank at all and
+the mission-4 goldens were traces of a ship sitting still.
+
+That is only the heartbeat. Mission 4 has three more things that move the clock —
+one of them is *walking around* — and the whole of it is
+**[The sinking](sinking.md)**.
 
 ## Poll loops and the runaway guard
 
