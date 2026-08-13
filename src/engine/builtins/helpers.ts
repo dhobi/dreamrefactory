@@ -2,6 +2,8 @@ import { Value, toNum, toStr, truthy } from "../interp";
 import { bearing } from "../geometry";
 import { BuiltinCtx } from "./context";
 import { packPoint, s16 } from "../point";
+import { decodeText, encodeText } from "../../df/text";
+import { latin1 } from "../../df/binary";
 
 /**
  * Assorted scalar helpers that live outside any object script: string/word
@@ -162,16 +164,31 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   // prompt; headless defaults are safe). notedialog: modal note (OK).
   // questiondialog: yes/no, returns 1/0 (scripts do `if questiondialog(..)=false`).
   // textdialog(prompt, initial): text entry, returns the string (debug tools).
+  //
+  // Every one of these is a LOCALISED script literal, so it has to be decoded
+  // out of the tree's bytes on the way to the host — the same step drawstring
+  // and puppetbevel take (builtins/pointer.ts). Without it the bytes reach
+  // `confirm()` one character each and the player is asked a question in
+  // mojibake: reported for Japanese (#105), and measured over the six shipped
+  // trees as 11 strings that carry high bytes — ja 6, ru 4, fr 1 — while en, de
+  // and nl happen to keep all 25 of theirs in ASCII.
+  const forHost = (v: Value): string => decodeText(toStr(v ?? ""), session.textEncoding());
   r("notedialog", async (_i, [message]) => {
-    await session.onNoteDialog(toStr(message ?? ""));
+    await session.onNoteDialog(forHost(message));
     return 0;
   });
   r("questiondialog", async (_i, [message]) =>
-    (await session.onQuestionDialog(toStr(message ?? ""))) ? 1 : 0,
+    (await session.onQuestionDialog(forHost(message))) ? 1 : 0,
   );
-  r("textdialog", async (_i, [prompt, initial]) =>
-    session.onTextDialog(toStr(prompt ?? ""), toStr(initial ?? "")),
-  );
+  // ...and back the other way for what the player TYPES, because the answer
+  // re-enters the game as script bytes: TAOOT's `propowner(me, textdialog(...))`
+  // names the cricket, and a name left in display characters would be decoded a
+  // second time when something drew it. 255 is a Pascal string's own ceiling,
+  // which is where the answer ends up once a save is written.
+  r("textdialog", async (_i, [prompt, initial]) => {
+    const typed = await session.onTextDialog(forHost(prompt), forHost(initial));
+    return latin1(encodeText(typed, session.textEncoding(), 255));
+  });
   r("quit", async () => {
     await session.onQuit();
     return 0;
