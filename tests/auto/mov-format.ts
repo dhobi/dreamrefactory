@@ -126,3 +126,66 @@ test("leave.mov is the whole sinking montage", () => {
   // full-screen, no letterbox
   expect([leave.width, leave.height, leave.originX, leave.originY]).toEqual([512, 384, 0, 0]);
 });
+
+/**
+ * Flags bit 2 — "these regions are live, but do not stop for them" (retail
+ * 0x44979f). The bug it caused, #172: the port waited on any frame carrying
+ * regions, so the gym's horses showed one frame of their gallop and then
+ * advanced a frame per click. There is no "loops forever" field in the format —
+ * the cycle is a plain backward goto that playback only reaches by falling
+ * through the region count the bit zeroes.
+ */
+test("camelsee.mov loops on a backward goto that bit 2 is what reaches", () => {
+  const camel = enMov("camelsee.mov");
+  if (!camel) return; // no full-game tree installed
+  expect(camel.segments.length).toBe(1);
+  expect(camel.frames.length).toBe(90);
+
+  // frame 0 is the still the movie opens on: regions, and NO bit 2, so it waits
+  expect(camel.frames[0].regions.length).toBe(2);
+  expect(camel.frames[0].playsThroughRegions).toBe(false);
+
+  // frames 1..43 are the gallop: one region each, every one of them bit 2
+  for (let i = 1; i <= 43; i++) {
+    expect(camel.frames[i].regions.length, `frame ${i} has its skip rect`).toBe(1);
+    expect(camel.frames[i].playsThroughRegions, `frame ${i} plays through`).toBe(true);
+  }
+
+  // ...and the tail of them jumps back to the first: the loop, with no flag
+  // anywhere in the file that says "loop". 41 is the one a lap reaches, so the
+  // cycle is frames 1..41; 42..44 carry the same goto and exist for the late
+  // clicks the phase-matched targets below need somewhere to land from.
+  for (let i = 41; i <= 44; i++) {
+    expect(camel.frames[i].type, `frame ${i} is the backward goto`).toBe(2);
+    expect(camel.frames[i].target).toBe(camel.frames[1].name);
+  }
+  // and nothing before 41 breaks the run
+  for (let i = 1; i <= 40; i++) expect(camel.frames[i].type, `frame ${i} advances`).toBe(6);
+
+  // the stop tail is regionless, so it plays itself out to the exit
+  for (let i = 45; i < 90; i++) expect(camel.frames[i].regions.length).toBe(0);
+
+  // each gallop frame's region targets the PHASE-MATCHED stop frame (N -> N+44),
+  // which is the file's own proof that the animation runs while they are live:
+  // one stop frame would do for a picture that parked
+  for (let i = 2; i <= 44; i++) {
+    expect(camel.frames[i].regions[0].target).toBe(camel.frames[i + 44].name);
+  }
+});
+
+test("bit 2 is the whole set of movies that play through their regions", () => {
+  const en = gamefiles(root, "en");
+  if (!en.resolve("camelsee.mov")) return; // no full-game tree installed
+  // Seven films, and no others: the Cairo camel ride, the three deck washes and
+  // the two fires. Anything new here is a movie whose timing just changed.
+  const expected = [
+    "aftwash.mov", "camelsee.mov", "camride.mov",
+    "lofire.mov", "portwash.mov", "smfire.mov", "starwash.mov",
+  ];
+  for (const name of expected) {
+    const m = enMov(name);
+    expect(m, name).not.toBeNull();
+    const through = m!.segments.flatMap((s) => s.frames).filter((f) => f.playsThroughRegions);
+    expect(through.length, `${name} sets bit 2`).toBeGreaterThan(0);
+  }
+});
