@@ -78,8 +78,8 @@ all 109 shipped saves.
 
 | Container | Contents |
 |-----------|----------|
-| **0** | manifest, built on the stack: `"Titanic 1.0"` version (Pascal string @0), disk family `"Titanic1"`/`"Titanic2"` (@+0x104), nine 256-byte path slots (@+0x1fc — the *Save As* / tour directories), a 256×8 table (@+0xb08), the open-file count (@+0x1308), then one **260-byte record per open file** (`.set`/`.trk`/`.shp` paths) |
-| **1** | current location, a fixed 786 bytes from `0x489d40`: stage file (@520, `"main.stg"`), set base (@596), scene (@612), view (@628) |
+| **0** | manifest, built on the stack: `"Titanic 1.0"` version (Pascal string @0), disk family `"Titanic1"`/`"Titanic2"` (@+0x104), nine 256-byte path slots (@+0x1fc — the *Save As* / tour directories), the **live CLUT** (@+0xb0c, 256 × {i16 index, i16 rgb[3]} — the loader copies it into the palette global and applies it, `0x414aa8..0x414b07`; the lower 128 entries are the open set's own palette table and a cross-room patch must replace them or the room comes back in the old room's colours), the open-file count (@+0x130c), then one **260-byte record per open file** at +0x1310: the file's **old heap handle** (u32) followed by its path as a Pascal string (`titanic2:data:cargo.set`). The handle is not junk — it is the key every other container's file references resolve through, see [how the loader re-opens the room](#the-loader-re-opens-the-room-from-the-manifest-not-from-the-set-name) |
+| **1** | current location, a fixed 786 bytes from `0x489d40`: stage file (@520, `"main.stg"`), the open **set file's old handle** (@544 — resolved through the manifest, above), set base (@596), scene (@612), view (@628), the set's **actor / main-scene register container refs** (@644 / @652) and the scene register's **record count** (@656 — the loader's scene lookup walks exactly this many records; equal to the set's scene count in all 109 shipped saves) |
 | **2** | the cast: n × 160-byte actor records — see [The actor container](#the-actor-container-fixed-160-byte-actor-records) |
 | **3** | open casts: n × 28 (two pointers, a u32, the `.cst` filename as a Pascal string) |
 | **4** | inventory — every loaded prop: **72 × 158** in every shipped save, inventory items first — see [The inventory container](#the-inventory-container-fixed-158-byte-prop-records) |
@@ -102,6 +102,44 @@ live scheduler.
 (There is **no location-stream container**. A "savestate stack" of facing, road,
 coordinate and set strings was long believed to have one — see
 [the container that wasn't there](#the-location-container-that-wasnt-there).)
+
+## The loader re-opens the room from the manifest, not from the set name
+
+The set base name at c1 @596 is written and restored, but it is **not what the
+loader opens**. `opengame`'s resume re-opens every file the container-0 manifest
+names, then (`0x41514a`) takes the set file's **old handle from c1 @544**, finds
+the manifest record whose first dword matches (`0x4153f0` — a miss is its own
+fatal, line 0x1127), and treats **that record's path** as the open set. It then
+reads the set's scene register from the container refs restored at **c1 @644 /
+@652** and looks the saved scene and view names up in it (`0x43a0b0`) — walking
+exactly **c1 @656** records, a count that is restored verbatim and never
+recomputed from the file it just read. A scene the walk doesn't reach raises
+error 10 → **"Fatal error at line 4248 (code 2)"**, and there are two ways to
+earn it: the manifest still pathing another room's set, and a base set with
+fewer scenes than the current one, whose smaller count hides the tail of the
+register (crew's 2 hid cargo's Scene4–6 — both happened, in that order, on the
+first DosBox loads). The casts, shops and tracks resolve the same way: each of
+their records leads with an old handle that is matched against the manifest
+(`0x4152e0` with the `ODCC`/`ODDP`/`GNOS`/`ODCS` type tags).
+
+Measured across all 109 shipped saves: c1 @544 matches exactly one manifest
+record, that record's path names a set file whose scene register contains the
+save's scene (the name compare is case-insensitive — the registers store
+`Scene10`, the saves `scene10`), and @644/@652 equal that file's own register
+refs from its container-0 header.
+
+The consequence for writing: a patch that changes the room **must re-path the
+manifest's set record and rewrite the register refs and the scene count**
+(`SavePatch.setFile` — the record's id is left alone so everything else still
+resolves). This was found the hard way: the port's first DosBox-tested save
+carried `crew.set` in the manifest and `cargo`/`scene4` in c1, so TI.EXE
+restored the crew hallway and died at line 4248 looking for a scene it could
+never have; the second, with the manifest fixed, kept crew's scene count of 2
+and died at the same line with cargo's Scene5 sitting unreachable at register
+index 4. (A correlation sweep of every u16/u32 in c1's tail against the sets'
+own facts — scene index, view index/ID/count, register record offsets,
+viewport — matches nothing else across the 109; @656 is the only set-shape
+field the blob restores.)
 
 ## The actor container: fixed 160-byte actor records
 
@@ -282,7 +320,22 @@ Two quirks:
 
 Each node's `+20..+27` is a serialized `DFValue`:
 
-- **type 2 / type 4 → number**, stored inline as the signed i16 at `+26`.
+- **type 2 → boolean**, stored inline as the 16-bit 0/1 at `+26`. This is what
+  a script's `true`/`false` produce, and it is **a distinct runtime type, not a
+  second spelling of number**: TI.EXE's boolean-taking commands demand exactly
+  tag 2 (`propvisible`'s argument fetch is `cmp word [esp], 2` at `0x416ed8`)
+  and its number-taking ones exactly tag 4 (~30 `cmp …, 4` → error-14 sites).
+  Feeding the wrong tag is the ignorable-but-endless DosBox dialog *"A
+  scripting error has occured … [Bad argument type.]"* (interpreter error 14 =
+  string 1100+14). This page used to say "type 2 / type 4 → number", and the
+  merged reading survived every corpus measurement because both carry an
+  inline 16-bit value — it took loading a port-written save in the real
+  engine, and bisecting the resulting dialog down to exactly ten `02→04` tag
+  bytes, to split them. The port's writer therefore **preserves a tag-2
+  record's tag** while the value stays 0/1 (its interpreter carries booleans
+  as numbers, so the tag is the only witness), and lets a non-boolean value
+  retype the record the way an assignment in the original would.
+- **type 4 → number**, stored inline as the signed i16 at `+26`.
 - **type 3 → string**: `+26` (unsigned) is the **byte offset of the string in
   the string-pool container** that follows the globals container. The pool is a
   block of `[len][chars]` entries, 2048 bytes in most saves and about 4100 in the
@@ -658,11 +711,11 @@ verifies rather than trusting the position. Each of the three arrays is a grid o
 
 | Offset | Type | Field |
 |-------:|------|-------|
-| +0 | u16 | index within the track |
-| +2 | u16 | track number |
+| +0 | u16 | the chunk's **container location in its bank** (`01 main` in CARGO.TRK lives at container 2, and its record reads 2) |
+| +2 | u16 | 0 in every playing/looping record; the registered arrays hold small ordinals |
 | +4 | u16 | volume (255 default) |
 | +6 | u16 | pan (128 = centre) |
-| +8 | pstr16 | sound name |
+| +8 | pstr16 | the chunk **identifier**, verbatim from the bank (`01 main`, `Boat Deck`, `doorlocked`) |
 
 The rest of the record is heap junk. Array 1 is the track's registered sounds
 (where volume/pan are the last play's — the positional `motor` cricket sits at
@@ -676,8 +729,40 @@ saves it lags the file's track state in **91** of them. The playing theme is the
 one track whose playing/looping arrays are non-empty — exactly one track in every
 shipped save. That is the value a load restores.
 
+### The playing/looping lists mirror the bank, record for record
+
+The two live lists are **not free-form**, and this page learning that cost a
+DosBox fatal. Measured across all 109 shipped saves (111 live tracks, 2583
+records, no exceptions): the playing list is **one record per loop-table record
+of the bank, in table order**, and the looping list is **one record per entry of
+the bank's play order**, each a copy of the playing record the order entry names.
+`idx` is the chunk's container location, `+2` is 0, pan is 128, and the name is
+the chunk identifier — the shipped cargo-hold save carries `01 main`…`11 end`,
+idx 2–12, counts `0, 11, 11`.
+
+The reason is the loader's other half. `opengame`'s post-restore resume
+(`0x414a70`) pairs playing record *n* with the **bank's own loop-table record
+*n*** — the save's record contributes only volume and pan — and then rebuilds
+the looping list by copying `playing[order[n] − 1]` for every entry of the
+bank's play order, **bounded by the bank's chunk count** (the u16 at
+`loop table + 0x10a`), not by the save's counts. The arrays were allocated from
+the descriptor counts at `+6`/`+8`, so a playing list shorter than the bank's
+tables is an out-of-bounds read *and* write on 104-byte-stride heap blocks. The
+port's writer once put a single invented record (`idx=1, name="cargo"`) there;
+TI.EXE allocated 104 bytes per list, copied eleven records through both, and
+the smashed heap surfaced as **"Memory error at line 301 (code 2): Unknown
+compression format"** — the codec-table lookup at `0x401539` (raise `0x435160`,
+error 999) reading a clobbered sound header. The port loaded the same file
+happily, which is exactly why [what is verified](#what-is-verified-and-what-is-not)
+insists a save has to load in the original engine, not only here.
+
+So `applyPatch` writes the lists from the bank itself: `SavePatch.theme` carries
+the loop records (container location + identifier) and the play order, supplied
+at save time by the open bank (`AudioLibrary.loopTable`), and the descriptor
+counts move with the container lengths as always.
+
 Writing it back has one real limit. `applyPatch` can empty every track's
-playing/looping arrays and mark one base track as playing (descriptor counts and
+playing/looping arrays and write one base track's lists (descriptor counts and
 container lengths move together, so the file keeps the shape the original writes),
 but it **cannot open a track the base save never had**: the container-0 manifest
 names the open files and the patcher does not rewrite the manifest. A theme whose
@@ -726,11 +811,14 @@ and the `savegame`/`opengame` builtins in
 
 **Writing is the same list from the other side**, since a round trip has to feed
 that loader. `snapshotSave` patches a base save (the last one loaded, or a
-host-supplied per-disk template) with the current globals, the set/scene/view, every
-loaded prop's full record, every actor's full record — **appending** one for a crowd
-extra the base save lacks — the scheduler's loop and cricket tables (walks zeroed),
-and the playing theme. Everything the loader ignores stays byte-for-byte as the base
-had it.
+host-supplied per-disk template) with the current globals, the set/scene/view **and
+the set file's manifest path + register refs** (see
+[the loader re-opens the room from the manifest](#the-loader-re-opens-the-room-from-the-manifest-not-from-the-set-name)),
+every loaded prop's full record, every actor's full record — **appending** one for a
+crowd extra the base save lacks — the scheduler's loop and cricket tables (walks
+zeroed), and the playing theme
+([one record per loop chunk of the bank](#the-playinglooping-lists-mirror-the-bank-record-for-record)).
+Everything the loader ignores stays byte-for-byte as the base had it.
 
 Back to the [format index](README.md), or on to how the running game uses
 this: **[Saving & loading at runtime](../runtime/saves.md)**.

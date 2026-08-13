@@ -17,6 +17,8 @@ import {
 } from "../../src/df/savegame";
 import { readShpFile } from "../../src/df/shp";
 import { readSetFile } from "../../src/df/set";
+import { readBankTables } from "../../src/df/banks";
+import { readContainerFile } from "../../src/df/container";
 import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
 import { bestTemplate, shippedSaves } from "../../src/save-seed";
 import type { SaveEntry } from "../../src/save-store";
@@ -1643,7 +1645,11 @@ test("applyPatch writes the scheduler tables and theme, and they parse back", ()
       loops: [{ kind: "actor", name: "max", handler: "maxidle", period: 7 }],
       crickets: [{ name: "motor", set: "deckbd", x: 100, y: 200, radius: 3000, base: 5, jitter: -1, next: 5 }],
     },
-    theme: "inven.trk",
+    theme: {
+      track: "deckbd.trk",
+      chunks: [{ index: 2, name: "01 main" }, { index: 3, name: "02 main" }],
+      order: [1, 2],
+    },
   });
   const re = parseSave(out);
   expect(re.loops).toEqual([{ kind: "actor", name: "max", handler: "maxidle", period: 7 }]);
@@ -1653,7 +1659,140 @@ test("applyPatch writes the scheduler tables and theme, and they parse back", ()
   // the walks table is zeroed — the base's mid-walk slot (and its payload) must
   // not survive into a new save's moment
   expect(re.walks).toEqual([]);
-  expect(re.theme).toMatchObject({ track: "inven.trk", extras: 0 });
+  expect(re.theme).toMatchObject({ track: "deckbd.trk", extras: 0 });
+});
+
+// The playing/looping lists are TI.EXE's contract, not a notepad: its post-load
+// resume pairs playing record n with the BANK's loop-table record n and rebuilds
+// the looping list from the bank's play order over the playing array, bounded by
+// the bank's tables — so the lists must be one record per chunk or the original
+// engine reads and writes past both heap blocks ("Memory error at line 301
+// (code 2): Unknown compression format" in DosBox, the codec lookup at 0x401539
+// choking on a clobbered header). The shipped cargo-hold save is the ground
+// truth: rewrite its own theme from the bank and every decoded field of every
+// record must come back exactly as TI.EXE's writer left it (measured across all
+// 109 shipped saves: idx = the chunk's container location, +2 = 0, pan = 128,
+// name = the chunk identifier, playing = table order, looping = play order).
+test("the theme is written as TI.EXE writes it: one record per loop chunk", () => {
+  const bytes = new Uint8Array(readFileSync(savePath("2", "20- Cargo Hold - looking for painting.ti")));
+  const save = parseSave(bytes);
+  const bank = readBankTables(readContainerFile(provider("cargo.trk")!));
+  const out = applyPatch(save.raw, {
+    numGlobals: save.numGlobals,
+    set: save.set, scene: save.scene, view: save.view,
+    theme: {
+      track: "cargo.trk",
+      chunks: bank.loopRecords.map((r) => ({ index: r.containerLoc, name: r.identifier })),
+      order: bank.loopOrder,
+    },
+  });
+  const re = readSaveFile(out);
+  const orig = readSaveFile(bytes);
+  // container 6 is the open-tracks list in this save; cargo.trk is track 2 and
+  // its playing/looping arrays are containers 14/15 (6 + 1 + 3·2 + {1,2})
+  const field = (d: Uint8Array, r: number, off: number) =>
+    new DataView(d.buffer, d.byteOffset + r * 104 + off, 2).getUint16(0, true);
+  const name = (d: Uint8Array, r: number) =>
+    Buffer.from(d.subarray(r * 104 + 9, r * 104 + 9 + d[r * 104 + 8])).toString("latin1");
+  for (const ci of [14, 15]) {
+    const a = re.containers[ci].data;
+    const b = orig.containers[ci].data;
+    expect(a.length, `container ${ci} record count`).toBe(b.length);
+    for (let r = 0; r * 104 < a.length; r++) {
+      for (const off of [0, 2, 4, 6]) {
+        expect(field(a, r, off), `c${ci} rec${r} field +${off}`).toBe(field(b, r, off));
+      }
+      expect(name(a, r), `c${ci} rec${r} name`).toBe(name(b, r));
+    }
+  }
+  // and the descriptor counts match the shipped save's (0 registered, 11, 11)
+  const dA = re.containers[6].data, dB = orig.containers[6].data;
+  for (const off of [4, 6, 8]) {
+    expect(field(dA, 0, 2 * 40 + off)).toBe(field(dB, 0, 2 * 40 + off));
+  }
+});
+
+// A save taken in a DIFFERENT room than its base must rewrite the set file's
+// identity, because TI.EXE's loader ignores the set NAME: it resolves the set
+// id at C1 @544 through the container-0 manifest to a PATH (0x41514a), opens
+// that file, and looks the saved scene up in the register containers named at
+// C1 @644/@652 (0x43a0b0) — a scene the register lacks is "Fatal error at line
+// 4248 (code 2)" in DosBox. The model is measured: in all 109 shipped saves the
+// id matches exactly one manifest record, its path names a set file holding the
+// saved scene, and @644/@652 are that file's own register refs. Here: the
+// crew-hallway save re-targeted to the cargo hold, then walked back exactly the
+// way the original loader walks it.
+test("a cross-room save re-paths the manifest's set record and register refs", () => {
+  const bytes = new Uint8Array(readFileSync(savePath("2", "20- Cargo Hold - looking for painting.ti")));
+  const save = parseSave(bytes);
+  expect(save.set).toBe("crew"); // the base really is another room
+  const cargoSet = readSetFile(provider("cargo.set")!);
+  const out = applyPatch(save.raw, {
+    numGlobals: save.numGlobals,
+    set: "cargo", scene: "scene4", view: "view33",
+    setFile: {
+      file: "cargo.set",
+      actorRegister: cargoSet.actorRegister,
+      sceneRegister: cargoSet.mainSceneRegister,
+      sceneCount: cargoSet.scenes.length,
+      clut: cargoSet.paletteRaw,
+    },
+  });
+  const re = readSaveFile(out);
+  const c0 = re.containers[0].data, c1 = re.containers[1].data;
+  const v0 = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);
+  const v1 = new DataView(c1.buffer, c1.byteOffset, c1.byteLength);
+  // resolve the set id the way 0x4153f0 does: manifest record with that id
+  const setId = v1.getUint32(544, true);
+  const count = v0.getUint32(0x130c, true);
+  let path = "";
+  for (let r = 0; r < count; r++) {
+    const off = 0x1310 + r * 0x104;
+    if (v0.getUint32(off, true) !== setId) continue;
+    path = Buffer.from(c0.subarray(off + 5, off + 5 + c0[off + 4])).toString("latin1");
+    break;
+  }
+  expect(path.split(":").pop()).toBe("cargo.set");
+  // the register refs and the register's record count are the cargo set's own —
+  // the count at @656 bounds the loader's scene lookup and is restored verbatim,
+  // so the base's smaller count (crew: 2 scenes) would hide cargo's Scene4-6
+  expect(v1.getUint32(644, true)).toBe(cargoSet.actorRegister);
+  expect(v1.getUint32(652, true)).toBe(cargoSet.mainSceneRegister);
+  expect(v1.getUint32(656, true)).toBe(cargoSet.scenes.length);
+  const scene = cargoSet.scenes.find((sc) => sc.sceneName.toLowerCase() === "scene4");
+  expect(scene, "the saved scene is in the re-opened set's register").toBeTruthy();
+  // the CLUT's set-owned half is the new room's palette (the loader restores
+  // the screen palette from c0+0xb0c — without this the cargo hold came back
+  // in the crew hallway's colours), and the stage's upper half is the base's
+  expect(c0.subarray(0xb0c, 0xb0c + 1024)).toEqual(cargoSet.paletteRaw.subarray(0, 1024));
+  // and no other manifest record was touched
+  const b0 = readSaveFile(bytes).containers[0].data;
+  for (let r = 0; r < count; r++) {
+    const off = 0x1310 + r * 0x104;
+    if (v0.getUint32(off, true) === setId) continue;
+    expect(c0.subarray(off, off + 0x104), `record ${r} untouched`).toEqual(b0.subarray(off, off + 0x104));
+  }
+});
+
+// Type tag 2 is BOOLEAN, not a second number spelling — TI.EXE's boolean-taking
+// commands check for exactly 2 (propvisible's argument fetch, cmp word [esp],2)
+// and flipping a boolean global's tag to 4 is the endless DosBox dialog
+// "[Bad argument type.]", found by bisecting a port save down to exactly ten
+// 02->04 tag bytes. The port's interpreter carries booleans as 0/1 numbers, so
+// the writer must keep a tag-2 record's tag while the value stays 0/1 — and let
+// a real number retype it, the way an assignment in the original would.
+test("a boolean global keeps its tag; a real number retypes it", () => {
+  const bytes = new Uint8Array(readFileSync(savePath("2", "20- Cargo Hold - looking for painting.ti")));
+  const save = parseSave(bytes);
+  expect(save.vars.find((v) => v.name === "tour")!.type, "the base holds tour as a boolean").toBe(2);
+  const tagOf = (out: Uint8Array, name: string) => parseSave(out).vars.find((v) => v.name === name)!.type;
+  const patch = (num: Map<string, number>) => applyPatch(parseSave(bytes).raw, {
+    numGlobals: num, set: save.set, scene: save.scene, view: save.view,
+  });
+  expect(tagOf(patch(new Map([["tour", 0]])), "tour"), "0 keeps the boolean tag").toBe(2);
+  expect(tagOf(patch(new Map([["tour", 1]])), "tour"), "1 keeps the boolean tag").toBe(2);
+  expect(tagOf(patch(new Map([["tour", 5]])), "tour"), "a real number retypes").toBe(4);
+  expect(tagOf(patch(new Map([["mission", 2]])), "mission"), "numbers stay numbers").toBe(4);
 });
 
 // A theme track the base never opened cannot be written (the container-0
@@ -1668,7 +1807,7 @@ test("a theme the base save has no track for is dropped, and said", () => {
     numGlobals: save.numGlobals,
     set: save.set, scene: save.scene, view: save.view,
     scheduler: { loops: [], crickets: [] },
-    theme: "sink4.trk",
+    theme: { track: "sink4.trk", chunks: [{ index: 2, name: "01 main" }], order: [1] },
     onDrop: (name) => dropped.push(name),
   });
   expect(dropped).toContain("theme(sink4.trk)");

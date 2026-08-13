@@ -1,6 +1,6 @@
 import { DFContainerFile, readContainerFile } from "../df/container";
 import { decodeAudioContainer, DecodedAudio, resampleTo } from "../df/audio";
-import { AudioBank, readAudioBank } from "../df/banks";
+import { AudioBank, readAudioBank, readBankTables } from "../df/banks";
 
 /**
  * Audio playback behind the script commands. Three channels, mirroring the
@@ -423,6 +423,24 @@ export class AudioLibrary {
   /** open banks that carry looping music (counttracks/indextotrack) */
   trackNames(): string[] {
     return [...this.banks.entries()].filter(([, b]) => b.bank.loopChunks.length).map(([k]) => k);
+  }
+
+  /**
+   * A bank's loop table for the save writer: the records in table order
+   * (container location + identifier) and the 1-based play order over them.
+   * The save's playing/looping lists must mirror these record for record —
+   * TI.EXE's post-load resume walks the bank's tables, not the save's counts
+   * (see SavePatch.theme in df/savegame.ts) — so the writer takes them from
+   * the bank itself rather than inventing records.
+   */
+  loopTable(name: string): { chunks: { index: number; name: string }[]; order: number[] } | null {
+    const found = this.find(name);
+    if (!found) return null;
+    const tables = readBankTables(found.entry.file);
+    return {
+      chunks: tables.loopRecords.map((r) => ({ index: r.containerLoc, name: r.identifier })),
+      order: tables.loopOrder,
+    };
   }
 
   /**

@@ -24,6 +24,8 @@ import {
   SavedProp,
   SavedPropPatch,
   SaveGame,
+  SavePatch,
+  ThemePatch,
   applyPatch,
   parseSave,
   readSaveFile,
@@ -76,6 +78,7 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
     set: session.currentSetFile,
     scene: session.currentSceneName(),
     view: session.currentViewName(),
+    setFile: setFileSnapshot(session),
     inventory: inventorySnapshot(session),
     actors: actorSnapshot(session),
     scheduler: {
@@ -98,7 +101,7 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
         next: c.count,
       })),
     },
-    theme: session.currentThemeName !== "none" ? session.currentThemeName : null,
+    theme: themeSnapshot(session),
     onDrop: (name, why) => dropped.push(`${name} (${why})`),
   });
   // A base save has only so many free variable slots and only so much string
@@ -118,6 +121,54 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
     );
   }
   return bytes;
+}
+
+/**
+ * The current set FILE with its register container refs. TI.EXE's loader
+ * re-opens the room from the manifest path the set id at C1 @544 resolves to
+ * and looks the saved scene/view up in the registers at C1 @644/@652 — the set
+ * NAME the port writes at C1 @596 is not what it opens. Without this, a save
+ * taken in a different room than its base re-opens the BASE's set in the
+ * original engine and dies looking up our scene in its register ("Fatal error
+ * at line 4248 (code 2)" in DosBox — see SavePatch.setFile in df/savegame.ts).
+ */
+function setFileSnapshot(session: GameSession): SavePatch["setFile"] {
+  if (!session.currentSetFile) return undefined;
+  const file = `${session.currentSetFile}.set`;
+  const set = session.loadSet(file);
+  if (!set) {
+    session.onLog(`savegame: ${file} is not readable — the base save's set file record is kept`);
+    return undefined;
+  }
+  return {
+    file,
+    actorRegister: set.actorRegister,
+    sceneRegister: set.mainSceneRegister,
+    // the register's record count is restored verbatim, never recomputed —
+    // a smaller base set's count leaves later scenes unreachable (line 4248)
+    sceneCount: set.scenes.length,
+    // the set's half of the CLUT the loader restores to the screen — without
+    // it a cross-room save comes back in the base room's colours
+    clut: set.paletteRaw,
+  };
+}
+
+/**
+ * The playing theme with its bank's loop table. The save's playing/looping
+ * lists must be one record per loop chunk — TI.EXE's post-load resume walks
+ * the BANK's tables and only takes volume/pan from the save's records, so a
+ * list shorter than the bank's runs off both heap blocks in the original
+ * engine (the DosBox "Memory error at line 301: Unknown compression format"
+ * fatal — see SavePatch.theme in df/savegame.ts). The chunks therefore come
+ * from the open bank itself; a bank the library cannot resolve is passed with
+ * empty chunks, which applyPatch writes as a silent room and reports.
+ */
+function themeSnapshot(session: GameSession): ThemePatch | null {
+  const name = session.currentThemeName;
+  if (name === "none") return null;
+  const table = session.audioLib.loopTable(name);
+  const volume = Math.max(0, Math.min(255, toNum(session.interp.globals.get("themevolume") ?? 255)));
+  return { track: name, volume, chunks: table?.chunks ?? [], order: table?.order ?? [] };
 }
 
 /**

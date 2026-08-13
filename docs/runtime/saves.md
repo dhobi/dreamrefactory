@@ -55,7 +55,11 @@ writes:
 - the **theme** that is playing, written into the track state
   ([the track containers](../formats/savegame.md#the-track-containers-what-was-playing)),
   not into `savetheme` — which is a different thing and lags the file in 91 of the
-  109 shipped saves.
+  109 shipped saves. The playing/looping lists are written **one record per loop
+  chunk of the bank**, taken from the open bank itself (`AudioLibrary.loopTable`):
+  TI.EXE's post-load resume walks the bank's tables against these lists and a
+  shorter one overruns its heap blocks in the original engine — see
+  [the lists mirror the bank](../formats/savegame.md#the-playinglooping-lists-mirror-the-bank-record-for-record).
 
 Everything the loader ignores stays byte-for-byte as the base had it.
 
