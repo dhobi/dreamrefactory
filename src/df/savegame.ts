@@ -27,13 +27,42 @@ const DATA_START = 1536;
 /** every container is aligned to this many bytes. */
 const ALIGN = 64;
 /**
- * Serialized prop records (the inventory container) sit on a fixed 158-byte grid
- * — the name is at record+0, the current view (propview state) at +48, and the
- * owner (propowner) at +64 — recovered empirically across all shipped saves.
+ * Serialized prop records (the inventory container) sit on a fixed 158-byte grid.
+ * Like the actor record, a prop record is the live struct dumped verbatim with
+ * the numeric fields FIRST: the name is at record+0x4e (TI.EXE's own accessors
+ * fetch a record into a stack buffer whose name field sits at buffer+0x4e), the
+ * current view (propview state) 48 bytes after the name and the owner
+ * (propowner) 64 after it. Offsets here are from the NAME, which is what
+ * {@link walkPropGrid} locks onto; the numeric half is at negative offsets.
  */
 const PROP_STRIDE = 158;
 const PROP_VIEW_OFF = 48;
 const PROP_OWNER_OFF = 64;
+/** the name field's offset inside a prop record (TI.EXE `propvisible` 0x416f30
+ *  reads record+0 out of a buffer whose name sits at +0x4e) */
+const PROP_RECORD_OFF = -0x4e;
+/**
+ * The numeric half of the prop record, mapped from TI.EXE's own getters (each
+ * fetches the record and reads its field at a fixed offset): `propvisible`
+ * +0 (0x416f30), `propxy` +0x14/+0x16 (0x4175c0 — +0x14 is the screen Y and
+ * +0x16 the X: the interface band's props all read (324, 256), the band anchor),
+ * `propdeg` +0x18 (0x4168a0), `propdist` +0x26 (the open pocketwatch's
+ * lid/hrs/min/sec read −6/−5/−5/−4, exactly the z-order its `open()` assigns),
+ * `propscale` +0x28 (0x416a90), `propvalue` +0x46 (0x416240), `propzclip`
+ * +0x4a (0x4162d0). All verified by range across the 109 shipped saves'
+ * 72-record grids. (`propspeed` +0x24 is 4 in every record ever written, and
+ * `propis3d` +0x12 is script-derived — neither is worth carrying.)
+ */
+const PROP_FIELDS = {
+  visible: PROP_RECORD_OFF + 0x00,
+  y: PROP_RECORD_OFF + 0x14,
+  x: PROP_RECORD_OFF + 0x16,
+  deg: PROP_RECORD_OFF + 0x18,
+  dist: PROP_RECORD_OFF + 0x26,
+  scale: PROP_RECORD_OFF + 0x28,
+  value: PROP_RECORD_OFF + 0x46,
+  zclip: PROP_RECORD_OFF + 0x4a,
+} as const;
 
 /**
  * Serialized ACTOR records — the cast's persistent state, on its own 160-byte
@@ -123,6 +152,17 @@ const ACTOR_PLACEMENT = {
   y: ACTOR_RECORD_OFF + 28,
   z: ACTOR_RECORD_OFF + 30,
   speed: ACTOR_RECORD_OFF + 38,
+  /**
+   * `actorscale` — confirmed three ways: the accessor (0x40ea40 reads
+   * `[esp+0x32]` of a buffer at esp+8 → record+42), the value distribution
+   * (4–6 round values per actor across the corpus, 1000 neutral), and the
+   * per-character clustering (about one scale per room, because `stdscale` is a
+   * per-room constant). It is the field that makes a restored character
+   * DRAWABLE — a scale of 0 places and gates correctly but never draws — and
+   * it carries the two script overrides `stdscale(set)` cannot reproduce
+   * (extra.cst 0003's 2700, gang.cst 1323's stoker at 9000).
+   */
+  scale: ACTOR_RECORD_OFF + 42,
   zclip: ACTOR_RECORD_OFF + 76,
 } as const;
 /** a world coordinate as the record's i16, clamped rather than wrapped */
@@ -260,33 +300,116 @@ export interface SavedVar {
 }
 
 /**
- * A serialized prop's persistent runtime state, from the inventory container.
- * The inventory container serializes every loaded prop (inventory items first);
- * for a load only the `inven.shp` props matter — their `owner` is who holds the
- * item ("frank" = in Frank's possession) and `view` is the propview state
- * ("large" / "panel1" / "panel2" — the inventory slot it sits in).
+ * A serialized prop's persistent runtime state, from the inventory container:
+ * every loaded prop (inventory items first, then the interface band). The
+ * `owner` is who holds the item ("frank" = in Frank's possession) or, for the
+ * band's chrome, the band's memo of what was on screen; `view` is the propview
+ * state; and the numeric half ({@link PROP_FIELDS}) is where and how it draws —
+ * which is what lets a load put the screen back instead of re-running the room's
+ * `showinterface`/`setupsigns`/`setuparrow` to re-derive it (#143).
  */
 export interface SavedProp {
   /** prop (inven.shp group) name, lowercased. */
   name: string;
-  /** current propview state at record+48 (e.g. "large", "panel1"). */
+  /** current propview state at name+48 (e.g. "large", "panel1"). */
   view: string;
-  /** propowner at record+64 (e.g. "frank", "none", "vlad", "purser"). */
+  /** propowner at name+64 (e.g. "frank", "none", "vlad", "purser"). */
   owner: string;
+  /** `propvisible` — shown right now. */
+  visible: boolean;
+  /** screen anchor (propxy) — X at name−0x38, Y at name−0x3a. */
+  x: number;
+  y: number;
+  /** `propdeg` — the deg-selector frame (nav arrow lit, the watch wheels). */
+  deg: number;
+  /** `propdist` — z-order, more negative = closer (the watch assembly's stack). */
+  dist: number;
+  /** `propscale`. */
+  scale: number;
+  /** `propvalue`. */
+  value: number;
+  /** `propzclip`. */
+  zclip: number;
 }
 
 /**
- * What a writer offers for one prop record: the owner always, the view only when
- * the caller actually models it.
- *
- * The split exists because the two fields are not equally knowable. `propowner`
- * is script state and we hold all of it; `propview` is often re-derived per room
- * by the game rather than stored — `setupsigns()` picks the destination sign from
- * where you stand, `setuparrow()` recolours the nav arrow — and for those props we
- * have no value worth writing. Leaving `view` out keeps the base save's, which is
- * a real reading taken by the original engine rather than a guess of ours.
+ * What a writer offers for one prop record: the owner always; the view and the
+ * numeric half when the caller holds them. A view the caller never modelled is
+ * left out and keeps the base save's — a real reading taken by the original
+ * engine rather than a guess of ours.
  */
-export type SavedPropPatch = Pick<SavedProp, "name" | "owner"> & { view?: string };
+export type SavedPropPatch = Pick<SavedProp, "name" | "owner"> &
+  Partial<Pick<SavedProp, "view" | "visible" | "x" | "y" | "deg" | "dist" | "scale" | "value" | "zclip">>;
+
+/**
+ * One live `makeloop` slot from the loops table — the room's scheduled work
+ * (idle loops, scene timers). The table is TI.EXE's own 32-slot service table
+ * (0x48bcd0, stride 42) dumped verbatim by the save writer; `period` is the live
+ * countdown in 50 ms service ticks, mid-flight.
+ */
+export interface SavedLoop {
+  /** loop kind — the record stores 1..4 for actor/prop/scene/flat (0x4449f0). */
+  kind: string;
+  /** who the loop belongs to (the actor/prop/scene name). */
+  name: string;
+  /** the handler script it fires. */
+  handler: string;
+  /** ticks remaining until it fires. */
+  period: number;
+}
+/** record kind tag ↔ name, from the `makeloop` builder's 0x4449f0. */
+const LOOP_KINDS = ["", "actor", "prop", "scene", "flat"] as const;
+
+/**
+ * One live `makecricket` slot from the crickets table (0x48b830, 16 × 74,
+ * dumped verbatim): a positional ambient one-shot with its re-arm state.
+ */
+export interface SavedCricket {
+  /** the cricket's sound name. */
+  name: string;
+  /** the set it was made in (record +0x2a — crickets are per-room ambience). */
+  set: string;
+  x: number;
+  y: number;
+  radius: number;
+  /** base re-arm period in ticks. */
+  base: number;
+  /** re-arm jitter; −1 = one-shot. */
+  jitter: number;
+  /** ticks remaining until the next fire (base + rand(jitter), mid-count). */
+  next: number;
+}
+
+/**
+ * One active walk slot from the walks table (0x48b150, 16 × 110). A walk's
+ * waypoint path is a separate payload container the writer appends per active
+ * slot with a non-null handle at +0x12 (the loader reads it back into +0x12) —
+ * parsed only far enough to say it exists: the port drops mid-flight walks on
+ * load (the actor's position is restored; their idle loop re-decides), and says
+ * so, rather than resuming a walk whose arrival dispatch is not understood.
+ */
+export interface SavedWalk {
+  actor: string;
+  type: number;
+  hasPayload: boolean;
+}
+
+/**
+ * The music that was PLAYING: the track whose playing/looping arrays are
+ * non-empty. Each open track serializes three arrays of 104-byte sound records
+ * (registered / playing / looping — index u16, track# u16, volume u16 (255
+ * default), pan u16 (128 centre), name pstr@+8); exactly one track carries
+ * playing records in every shipped save, and it is the live theme.
+ */
+export interface SavedTheme {
+  /** track file name, e.g. "deckbd.trk". */
+  track: string;
+  /** channel volume of the playing record, 0..255. */
+  volume: number;
+  /** how many MORE records the playing/looping lists held (positional sound
+   *  loops a load does not restore — reported, not silently dropped). */
+  extras: number;
+}
 
 /**
  * A serialized actor's persistent state, from the actor container.
@@ -333,6 +456,8 @@ export interface SavedActor {
     deg: number;
     /** `actorspeed` — world units per service pass. */
     speed: number;
+    /** `actorscale` (+42) — 1000 neutral; 0 places correctly but never draws. */
+    scale: number;
     /** `actorzclip`. */
     zclip: number;
   };
@@ -389,6 +514,14 @@ export interface SaveGame {
   inventory: SavedProp[];
   /** every actor serialized in the actor container, with its `actorowner`. */
   actors: SavedActor[];
+  /** the live `makeloop` table — the room's scheduled work, mid-count. */
+  loops: SavedLoop[];
+  /** the live `makecricket` table — the room's positional ambience. */
+  crickets: SavedCricket[];
+  /** active walk slots (mid-`walkto` characters; see {@link SavedWalk}). */
+  walks: SavedWalk[];
+  /** the playing theme, or null when the room was scored silent. */
+  theme: SavedTheme | null;
   /** the raw file, retained so the writer can reproduce untouched containers. */
   raw: RawSaveFile;
   /** index of the globals container within `raw.containers`. */
@@ -399,6 +532,10 @@ export interface SaveGame {
   inventoryIndex: number;
   /** index of the actor container within `raw.containers`. */
   actorsIndex: number;
+  /** index of the loops container (crickets/walks follow it), or -1. */
+  schedulerIndex: number;
+  /** index of the open-tracks list container (its 3 arrays per track follow), or -1. */
+  tracksIndex: number;
 }
 
 /** Read a Pascal string at a fixed offset, or "" if it isn't a clean string. */
@@ -541,14 +678,35 @@ function isPropName(s: string): boolean {
   return s.length >= 2 && s.length <= 20 && /^[a-z][a-z0-9]*$/i.test(s);
 }
 
-/** Decode the prop record at offset `o`, or null if it isn't a valid one. */
+/** Decode the prop record whose NAME is at offset `o`, or null if it isn't one.
+ *  The numeric half sits at negative offsets from the name (the record base is
+ *  0x4e bytes earlier), so each read is bounds-checked like the actor grid's. */
 function propRecordAt(d: Uint8Array, o: number): SavedProp | null {
   const name = pstrField(d, o);
   if (!isPropName(name)) return null;
   const view = pstrField(d, o + PROP_VIEW_OFF);
   const owner = pstrField(d, o + PROP_OWNER_OFF);
   if (!view || !owner) return null;
-  return { name: name.toLowerCase(), view: view.toLowerCase(), owner: owner.toLowerCase() };
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const num = (at: number, wide = false): number => {
+    const p = o + at;
+    if (p < 0 || p + (wide ? 4 : 2) > d.length) return 0;
+    return wide ? dv.getInt32(p, true) : dv.getInt16(p, true);
+  };
+  return {
+    name: name.toLowerCase(),
+    view: view.toLowerCase(),
+    owner: owner.toLowerCase(),
+    visible: num(PROP_FIELDS.visible) > 0,
+    x: num(PROP_FIELDS.x),
+    y: num(PROP_FIELDS.y),
+    deg: num(PROP_FIELDS.deg),
+    dist: num(PROP_FIELDS.dist),
+    scale: num(PROP_FIELDS.scale),
+    // the record's one u32 field (its getter reads a dword)
+    value: num(PROP_FIELDS.value, true),
+    zclip: num(PROP_FIELDS.zclip),
+  };
 }
 
 /**
@@ -629,6 +787,7 @@ function actorRecordAt(d: Uint8Array, o: number): SavedActor | null {
       y: num(ACTOR_PLACEMENT.y),
       z: num(ACTOR_PLACEMENT.z),
       speed: num(ACTOR_PLACEMENT.speed),
+      scale: num(ACTOR_PLACEMENT.scale),
       zclip: num(ACTOR_PLACEMENT.zclip),
     },
   };
@@ -688,6 +847,167 @@ function findActorsIndex(raw: RawSaveFile, exclude: number[]): number {
   return bestN >= 10 ? best : -1;
 }
 
+/** the three master service tables' fixed sizes: 32×42 loops, 16×74 crickets,
+ *  16×110 walks. The save writer (0x413910) dumps them verbatim, back to back,
+ *  right after the string pool — the triple is the fingerprint. */
+const LOOPS_SIZE = 32 * 42;
+const CRICKETS_SIZE = 16 * 74;
+const WALKS_SIZE = 16 * 110;
+
+/** Locate the loops table: the 1344/1184/1760 container triple (present, in
+ * this order, in every shipped save — the writer emits them unconditionally). */
+function findSchedulerIndex(raw: RawSaveFile): number {
+  for (let i = 0; i + 2 < raw.containers.length; i++) {
+    if (
+      raw.containers[i].data.length === LOOPS_SIZE &&
+      raw.containers[i + 1].data.length === CRICKETS_SIZE &&
+      raw.containers[i + 2].data.length === WALKS_SIZE
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/** Decode the live `makeloop` table (see {@link SavedLoop}). */
+function decodeLoops(d: Uint8Array): SavedLoop[] {
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const out: SavedLoop[] = [];
+  for (let s = 0; s + 42 <= d.length; s += 42) {
+    if (dv.getUint16(s, true) === 0) continue; // slot free
+    const kind = LOOP_KINDS[dv.getUint16(s + 4, true)];
+    const name = pstrField(d, s + 10);
+    const handler = pstrField(d, s + 26);
+    if (!kind || !name || !handler) continue; // junk in a free-but-nonzero slot
+    out.push({
+      kind,
+      name: name.toLowerCase(),
+      handler: handler.toLowerCase(),
+      period: dv.getUint32(s + 6, true),
+    });
+  }
+  return out;
+}
+
+/** Decode the live `makecricket` table (see {@link SavedCricket}). */
+function decodeCrickets(d: Uint8Array): SavedCricket[] {
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const out: SavedCricket[] = [];
+  for (let s = 0; s + 74 <= d.length; s += 74) {
+    if (dv.getUint16(s, true) === 0) continue;
+    const name = pstrField(d, s + 0x3a);
+    if (!name) continue;
+    out.push({
+      name: name.toLowerCase(),
+      set: pstrField(d, s + 0x2a).toLowerCase(),
+      x: dv.getInt16(s + 4, true),
+      y: dv.getInt16(s + 6, true),
+      radius: dv.getUint32(s + 8, true),
+      base: dv.getUint32(s + 0x0c, true),
+      jitter: dv.getInt32(s + 0x10, true),
+      next: dv.getUint32(s + 0x14, true),
+    });
+  }
+  return out;
+}
+
+/** Decode the active walk slots (see {@link SavedWalk}). */
+function decodeWalks(d: Uint8Array): SavedWalk[] {
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const out: SavedWalk[] = [];
+  for (let s = 0; s + 110 <= d.length; s += 110) {
+    if (dv.getUint16(s, true) === 0) continue;
+    const actor = pstrField(d, s + 0x2e);
+    if (!actor) continue;
+    out.push({
+      actor: actor.toLowerCase(),
+      type: dv.getUint16(s + 4, true),
+      hasPayload: dv.getUint32(s + 0x12, true) !== 0,
+    });
+  }
+  return out;
+}
+
+/** a track-list record's name field (pstr at +0x16 of the 40-byte descriptor). */
+const TRACK_STRIDE = 40;
+const TRACK_NAME_OFF = 0x16;
+/** the three per-track array counts (registered / playing / looping). */
+const TRACK_COUNTS = [4, 6, 8] as const;
+/** one 104-byte sound record: index u16, track# u16, volume u16, pan u16, name pstr@8. */
+const SOUND_STRIDE = 104;
+
+/**
+ * Locate the open-tracks list: the container of 40-byte descriptors whose names
+ * are audio banks and whose three per-descriptor counts match the sizes of the
+ * 3×n containers that follow it. Positionally it is container 6 in every
+ * shipped save, but the shape is cheap to verify so nothing relies on that.
+ */
+function findTracksIndex(raw: RawSaveFile): number {
+  for (let i = 2; i < raw.containers.length; i++) {
+    const d = raw.containers[i].data;
+    if (!d.length || d.length % TRACK_STRIDE) continue;
+    const n = d.length / TRACK_STRIDE;
+    if (i + 3 * n >= raw.containers.length) continue;
+    let ok = true;
+    for (let k = 0; k < n && ok; k++) {
+      const name = pstrField(d, k * TRACK_STRIDE + TRACK_NAME_OFF).toLowerCase();
+      if (!/\.(trk|sfx)$/.test(name)) ok = false;
+      const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+      for (const [j, off] of TRACK_COUNTS.entries()) {
+        const count = dv.getInt16(k * TRACK_STRIDE + off, true);
+        if (raw.containers[i + 1 + 3 * k + j].data.length !== count * SOUND_STRIDE) ok = false;
+      }
+    }
+    if (ok) return i;
+  }
+  return -1;
+}
+
+/**
+ * The playing theme, from the track whose playing/looping arrays are non-empty.
+ * One track carries them in 107 of the 109 shipped saves, and it is always the
+ * room's live theme — `savetheme`, the global, is NOT it: that records the
+ * theme to restore after an interlude and lags the file by up to a whole act in
+ * 91 of the 109. The two exceptions are the London-flat saves, where TWO tracks
+ * are live: bedrad1.trk's 15 radio-programme chunks (the audible score, and the
+ * one BEDSIT1.SET's hotspot gate demands — #36) and bedsit1.trk's 5 armed
+ * plane/bomb loops, waiting for the bombing. So the score is the live track
+ * with the MOST live records, and any other live track's sounds are counted as
+ * `extras` (reported by the loader, not restored — the room's own scripts
+ * re-arm them). The port scores a room at track granularity, which is also why
+ * a multi-chunk theme (decka.trk loops 11 ambience chunks at once) is one
+ * restore, not eleven.
+ */
+function decodeTheme(raw: RawSaveFile, tracksIndex: number): SavedTheme | null {
+  if (tracksIndex < 0) return null;
+  const d = raw.containers[tracksIndex].data;
+  const live: { track: string; volume: number; count: number; names: Set<string> }[] = [];
+  for (let k = 0; k < d.length / TRACK_STRIDE; k++) {
+    const track = pstrField(d, k * TRACK_STRIDE + TRACK_NAME_OFF).toLowerCase();
+    const names = new Set<string>();
+    let volume = 255;
+    let count = 0;
+    for (const j of [1, 2]) {
+      const arr = raw.containers[tracksIndex + 1 + 3 * k + j].data;
+      const dv = new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
+      for (let s = 0; s + SOUND_STRIDE <= arr.length; s += SOUND_STRIDE) {
+        if (!count) volume = dv.getUint16(s + 4, true);
+        count++;
+        names.add(pstrField(arr, s + 8).toLowerCase());
+      }
+    }
+    if (count) live.push({ track, volume, count, names });
+  }
+  if (!live.length) return null;
+  // the score is the busiest live track; a later track wins a tie (it was
+  // opened later, i.e. it is the room's own)
+  let best = live[0];
+  for (const t of live) if (t.count >= best.count) best = t;
+  let extras = 0;
+  for (const t of live) if (t !== best) extras += t.names.size;
+  return { track: best.track, volume: best.volume, extras };
+}
+
 const DIRS = new Set(["north", "south", "east", "west"]);
 
 /** Hall/deck set → the deck-plan page it sits on (MAP.STG currentpage cases).
@@ -735,6 +1055,15 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   const actors =
     actorsIndex >= 0 ? walkActorGrid(raw.containers[actorsIndex].data).map((r) => r.actor) : [];
 
+  // the scheduler tables (loops/crickets/walks) and the open-track sound state —
+  // what a load restores instead of re-running the room's openset (#143).
+  const schedulerIndex = findSchedulerIndex(raw);
+  const loops = schedulerIndex >= 0 ? decodeLoops(raw.containers[schedulerIndex].data) : [];
+  const crickets = schedulerIndex >= 0 ? decodeCrickets(raw.containers[schedulerIndex + 1].data) : [];
+  const walks = schedulerIndex >= 0 ? decodeWalks(raw.containers[schedulerIndex + 2].data) : [];
+  const tracksIndex = findTracksIndex(raw);
+  const theme = decodeTheme(raw, tracksIndex);
+
   // facing: the last direction word in the stream.
   const facing = [...location].reverse().find((s) => DIRS.has(s.toLowerCase())) ?? "";
 
@@ -766,8 +1095,10 @@ export function parseSave(bytes: Uint8Array): SaveGame {
 
   return {
     title, disk, set, scene, view, stage, facing, clock, hallside, savedeck,
-    vars, numGlobals, strGlobals, location, inventory, actors, raw,
+    vars, numGlobals, strGlobals, location, inventory, actors,
+    loops, crickets, walks, theme, raw,
     globalsIndex, locationIndex, inventoryIndex, actorsIndex,
+    schedulerIndex, tracksIndex,
   };
 }
 
@@ -814,6 +1145,26 @@ export interface SavePatch {
    * load put the cast back instead of re-deriving it from each room (#86).
    */
   actors?: SavedActorPatch[];
+  /**
+   * The live scheduler, written over the base's three service tables (they are
+   * fixed-size — 32×42 / 16×74 / 16×110 — so this never changes a container's
+   * length). The walks table is ZEROED: the port does not serialize mid-flight
+   * walks, and an active base slot would otherwise make the original loader read
+   * the slot's payload container, which is the previous save's moment. Any base
+   * payload containers become unreferenced trailing data, which the loader never
+   * reads.
+   */
+  scheduler?: { loops: SavedLoop[]; crickets: SavedCricket[] };
+  /**
+   * The playing theme's track file name ("deckbd.trk"), or null for a room
+   * scored silent. Written by emptying every track's playing/looping arrays
+   * (their descriptor counts and container lengths together, so they stay
+   * consistent) and then writing one playing + one looping record into the named
+   * track — IF the base has that track open; a theme track the base never opened
+   * is reported through {@link onDrop} (the container 0 manifest names the open
+   * files, and this writer does not rewrite the manifest).
+   */
+  theme?: string | null;
   /**
    * Told about any global that could not be written, and why.
    *
@@ -1177,6 +1528,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     const ii = findInventoryIndex(raw);
     if (ii >= 0) {
       const d = containers[ii].data;
+      const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
       const offs = new Map(walkPropGrid(d).map((r) => [r.prop.name, r.off]));
       for (const sp of patch.inventory) {
         const off = offs.get(sp.name.toLowerCase());
@@ -1188,6 +1540,25 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
         if (off === undefined) continue;
         if (sp.view !== undefined) writePstrField(d, off + PROP_VIEW_OFF, sp.view);
         writePstrField(d, off + PROP_OWNER_OFF, sp.owner);
+        // the numeric half — where and how the prop draws. Bounds-checked like
+        // the reader: the fields sit BEFORE the name and the first record's
+        // begin at offset 0 of the container.
+        const put = (at: number, value: number | undefined, wide = false): void => {
+          if (value === undefined) return;
+          const p = off + at;
+          if (p < 0 || p + (wide ? 4 : 2) > d.length) return;
+          if (wide) dv.setInt32(p, value | 0, true);
+          else dv.setInt16(p, clampI16(value), true);
+        };
+        put(PROP_FIELDS.visible, sp.visible === undefined ? undefined : sp.visible ? 1 : 0);
+        put(PROP_FIELDS.x, sp.x);
+        put(PROP_FIELDS.y, sp.y);
+        put(PROP_FIELDS.deg, sp.deg);
+        put(PROP_FIELDS.dist, sp.dist);
+        put(PROP_FIELDS.scale, sp.scale);
+        // propvalue is the record's one u32 (its getter reads a dword)
+        put(PROP_FIELDS.value, sp.value, true);
+        put(PROP_FIELDS.zclip, sp.zclip);
       }
     }
   }
@@ -1197,29 +1568,65 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
   if (patch.actors?.length) {
     const ai = findActorsIndex(raw, [findInventoryIndex(raw), gi, gi + 1]);
     if (ai >= 0) {
-      const d = containers[ai].data;
-      const view = new DataView(d.buffer, d.byteOffset, d.byteLength);
-      const offs = new Map(walkActorGrid(d).map((r) => [r.actor.name, r.off]));
       /** a field at `at` bytes from the name; false when it falls outside the slice.
        *  Every placement offset is NEGATIVE, so the lower bound matters as much as
-       *  the upper one — a container's first record can begin before the slice. */
+       *  the upper one — a container's first record can begin before the slice.
+       *  The view is fetched per write: appending a record replaces the array. */
       const put = (at: number, value: number, wide = false): boolean => {
+        const d = containers[ai].data;
         if (at < 0 || at + (wide ? 4 : 2) > d.length) return false;
+        const view = new DataView(d.buffer, d.byteOffset, d.byteLength);
         if (wide) view.setInt32(at, value | 0, true);
         else view.setInt16(at, value, true);
         return true;
       };
+      /**
+       * Grow the actor container by one blank record and answer its NAME offset.
+       *
+       * Growable where the globals blob is not: the actor container has no
+       * self-declared capacity — TI.EXE's save writer dumps the live actor-list
+       * handle and its loader (0x4143d2) stores the read container's handle
+       * straight back into the list global, so the record count is implicit in
+       * the container's size. The grid also starts at offset 0 in all 109
+       * shipped saves, so "the end of the last record" is just the length.
+       * This is what lets a save carry the crowd (`setupgroup`'s per-room
+       * extras), which a load must place from the file now that it no longer
+       * re-runs the room's own scripts (#143).
+       */
+      const append = (): number => {
+        const d = containers[ai].data;
+        const grid = walkActorGrid(d);
+        // the last record ends 80 bytes past its name (name at +0x50 of 160);
+        // records are back to back from 0, so that must be the length — refuse
+        // a container whose grid doesn't end there (unknown trailing bytes are
+        // not ours to bury)
+        const end = grid.length ? grid[grid.length - 1].off - ACTOR_RECORD_OFF : 0;
+        if (end !== d.length) return -1;
+        const grown = new Uint8Array(d.length + ACTOR_STRIDE);
+        grown.set(d, 0);
+        containers[ai].data = grown;
+        return d.length - ACTOR_RECORD_OFF; // the new record's NAME offset
+      };
+      const offs = new Map(walkActorGrid(containers[ai].data).map((r) => [r.actor.name, r.off]));
       for (const sa of patch.actors) {
-        const off = offs.get(sa.name.toLowerCase());
+        let off = offs.get(sa.name.toLowerCase());
         if (off === undefined) {
-          // The crowd extras are the expected case and not a loss: `setupgroup`
-          // creates them per room from EXTRA.CST and the arriving room makes its
-          // own, which is why the shipped saves disagree about which exist (25 to
-          // 64 records). Every one of the 109 has a record for all 25 NAMED cast
-          // members, so a caller that only offers those is never dropped.
-          if (sa.placement?.visible) patch.onDrop?.(`actor(${sa.name})`, "no record in the base save");
-          continue;
+          // No record in the base — the crowd extras, which `setupgroup` makes
+          // per room (the shipped saves hold 25 to 64 records for exactly this
+          // reason). Append one; a load places the crowd from the file now.
+          // Only a PLACED actor is worth a record: an unplaced one carries
+          // nothing a fresh instance doesn't.
+          if (!sa.placement?.set && sa.owner === "none" && !sa.value) continue;
+          const at = sa.name.length <= 15 && isPropName(sa.name) ? append() : -1;
+          if (at < 0) {
+            patch.onDrop?.(`actor(${sa.name})`, "no record in the base save and none appendable");
+            continue;
+          }
+          writePstrField(containers[ai].data, at, sa.name);
+          offs.set(sa.name.toLowerCase(), at);
+          off = at;
         }
+        const d = containers[ai].data;
         // the field is a length byte + 15 characters, and the longest owner any
         // script assigns is "readhackerclue" at 14 — but a truncated owner would
         // be a DIFFERENT rung of somebody's ladder, so refuse rather than trim
@@ -1251,7 +1658,100 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
         put(off + ACTOR_PLACEMENT.y, clampI16(p.y));
         put(off + ACTOR_PLACEMENT.z, clampI16(p.z));
         put(off + ACTOR_PLACEMENT.speed, clampI16(p.speed));
+        put(off + ACTOR_PLACEMENT.scale, clampI16(p.scale));
         put(off + ACTOR_PLACEMENT.zclip, clampI16(p.zclip));
+      }
+    }
+  }
+
+  // the scheduler: the three fixed-size service tables, written whole.
+  if (patch.scheduler) {
+    const si = findSchedulerIndex(raw);
+    if (si < 0) {
+      patch.onDrop?.("scheduler", "the base save has no loops/crickets/walks tables");
+    } else {
+      const loops = new Uint8Array(LOOPS_SIZE);
+      const ldv = new DataView(loops.buffer);
+      for (const [i, l] of patch.scheduler.loops.slice(0, 32).entries()) {
+        const kind = LOOP_KINDS.indexOf(l.kind as (typeof LOOP_KINDS)[number]);
+        if (kind <= 0 || l.name.length > 15 || l.handler.length > 15) {
+          patch.onDrop?.(`makeloop(${l.kind}, ${l.name})`, "kind or name not representable");
+          continue;
+        }
+        const s = i * 42;
+        ldv.setUint16(s, 1, true); // active; +2 stays 0 (not mid-service)
+        ldv.setUint16(s + 4, kind, true);
+        ldv.setUint32(s + 6, Math.max(1, l.period | 0), true);
+        writePstrField(loops, s + 10, l.name);
+        writePstrField(loops, s + 26, l.handler);
+      }
+      containers[si].data = loops;
+      const crickets = new Uint8Array(CRICKETS_SIZE);
+      const cdv = new DataView(crickets.buffer);
+      for (const [i, c] of patch.scheduler.crickets.slice(0, 16).entries()) {
+        if (c.name.length > 15 || c.set.length > 15) {
+          patch.onDrop?.(`makecricket(${c.name})`, "name not representable");
+          continue;
+        }
+        const s = i * 74;
+        cdv.setUint16(s, 1, true);
+        cdv.setInt16(s + 4, clampI16(c.x), true);
+        cdv.setInt16(s + 6, clampI16(c.y), true);
+        cdv.setUint32(s + 8, Math.max(0, c.radius | 0), true);
+        cdv.setUint32(s + 0x0c, Math.max(0, c.base | 0), true);
+        cdv.setInt32(s + 0x10, c.jitter | 0, true);
+        cdv.setUint32(s + 0x14, Math.max(0, c.next | 0), true);
+        // +0x18.. (listener position, distance, pan) are the service pass's own
+        // working state, recomputed when the cricket next fires; pan centred.
+        cdv.setUint16(s + 0x20, 128, true);
+        writePstrField(crickets, s + 0x2a, c.set);
+        writePstrField(crickets, s + 0x3a, c.name);
+      }
+      containers[si + 1].data = crickets;
+      // walks zeroed — see {@link SavePatch.scheduler}. Any payload containers
+      // the base carried become unreferenced tails the loader never reads.
+      containers[si + 2].data = new Uint8Array(WALKS_SIZE);
+    }
+  }
+
+  // the theme: empty every track's playing/looping lists, then mark the named
+  // track's as playing. Counts and container lengths move together so the file
+  // stays the shape the original writes.
+  if (patch.theme !== undefined) {
+    const ti = findTracksIndex(raw);
+    if (ti < 0) {
+      patch.onDrop?.("theme", "the base save has no open-tracks list");
+    } else {
+      const d = containers[ti].data;
+      const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+      const want = patch.theme?.toLowerCase() ?? null;
+      let written = false;
+      for (let k = 0; k < d.length / TRACK_STRIDE; k++) {
+        const name = pstrField(d, k * TRACK_STRIDE + TRACK_NAME_OFF).toLowerCase();
+        for (const [j, cOff] of ([[1, TRACK_COUNTS[1]], [2, TRACK_COUNTS[2]]] as const)) {
+          const idx = ti + 1 + 3 * k + j;
+          if (name === want) {
+            // one playing + one looping record: the port scores at track
+            // granularity, so one record naming the track is what its own
+            // loader reads back; index 1, this track, full volume, centred.
+            const rec = new Uint8Array(SOUND_STRIDE);
+            const rdv = new DataView(rec.buffer);
+            rdv.setUint16(0, 1, true);
+            rdv.setUint16(2, k, true);
+            rdv.setUint16(4, 255, true);
+            rdv.setUint16(6, 128, true);
+            writePstrField(rec, 8, want.replace(/\.(trk|sfx)$/, ""));
+            containers[idx].data = rec;
+            dv.setInt16(k * TRACK_STRIDE + cOff, 1, true);
+            written = true;
+          } else {
+            containers[idx].data = new Uint8Array(0);
+            dv.setInt16(k * TRACK_STRIDE + cOff, 0, true);
+          }
+        }
+      }
+      if (want && !written) {
+        patch.onDrop?.(`theme(${want})`, "the base save has no such track open — the room will load silent");
       }
     }
   }

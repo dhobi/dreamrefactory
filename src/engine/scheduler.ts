@@ -128,6 +128,28 @@ export class Scheduler {
     });
   }
 
+  /**
+   * Put a loop slot back EXACTLY as a save recorded it — mid-count, no
+   * replacement scan, and above all no RNG: `makeLoop` is for scripts, and a
+   * restore that drew from `ambientRng` would shift the ambient stream against
+   * a run that never loaded (the same hazard the seeded stream exists for).
+   */
+  restoreLoop(kind: string, name: string, handler: string, remaining: number): void {
+    if (this.loops.length >= MAX_LOOPS) {
+      this.session.onLog(`loadgame: loop table full (${MAX_LOOPS}), dropping ${kind}/${name}`);
+      return;
+    }
+    const count = Math.max(1, remaining);
+    this.loops.push({
+      kind: kind.toLowerCase(),
+      name: name.toLowerCase(),
+      handler: handler.toLowerCase(),
+      count,
+      period: count,
+      paused: false,
+    });
+  }
+
   stopLoop(kind: string, name: string): void {
     const k = kind.toLowerCase();
     const n = name.toLowerCase();
@@ -167,6 +189,31 @@ export class Scheduler {
       count: jitter >= 0 ? base + this.rand(jitter) : base,
       paused: false,
       setName: this.session.currentSetName,
+      handle: null,
+    });
+  }
+
+  /**
+   * Put a cricket slot back exactly as a save recorded it: the saved set (a
+   * cricket is per-room ambience and must NOT adopt the room the load happens
+   * to be leaving), the saved countdown (no `rand(jitter)` re-roll — see
+   * {@link restoreLoop} for why a restore must not draw), no sounding handle.
+   */
+  restoreCricket(name: string, set: string, x: number, y: number, radius: number, base: number, jitter: number, next: number): void {
+    if (this.crickets.length >= MAX_CRICKETS) {
+      this.session.onLog(`loadgame: cricket table full (${MAX_CRICKETS}), dropping ${name}`);
+      return;
+    }
+    this.crickets.push({
+      name: name.toLowerCase(),
+      x,
+      y,
+      radius: Math.max(1, radius),
+      base,
+      jitter,
+      count: next,
+      paused: false,
+      setName: set.toLowerCase(),
       handle: null,
     });
   }

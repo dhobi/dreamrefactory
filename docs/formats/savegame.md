@@ -58,32 +58,51 @@ Many records embed raw process pointers (`0x7c91056d`, `0x01d2…`, a DFValue
 vtable at `0x00431e0f`) that mean nothing on reload — the loader rebuilds them.
 Two consequences:
 
-- The **number and order of containers varies per save** (24 in an early save,
-  21 in another): a save serializes exactly the shops, tracks, casts and scenes
-  that happen to be open, so a busier room writes more containers.
+- The **number of containers varies per save** (24 in an early save, 21 in
+  another) but the **order does not**. The writer is a single routine
+  (`0x413910`, called by `savegame`'s implementation at `0x4137a0`) and it emits
+  its containers in one fixed sequence, below; the count varies by exactly
+  **(open files) + 3 × (open tracks) + (active walks carrying a waypoint
+  payload)**. All 109 shipped saves match that map positionally, with no
+  exceptions.
 - To *read* a save you skip the pointers and take the names, counts and values;
   to *write* one byte-compatibly you reproduce the meaningful bytes and may put
   anything (we use zeros) where the loader expects an ignored pointer.
 
 ## What each container holds
 
-Roles were recovered empirically (diffing the same record across many saves to
-separate stable structure from per-run pointers). Indices drift with the open-
-file set; the notable fixed ones are 0 and 1.
+The roles were first recovered empirically (diffing the same record across many
+saves to separate stable structure from per-run pointers); the order below is
+the writer's own, read out of `0x413910` and then checked positionally against
+all 109 shipped saves.
 
 | Container | Contents |
 |-----------|----------|
-| **0** | header block: `"Titanic 1.0"` version (Pascal string @0), disk family `"Titanic1"`/`"Titanic2"` (@256), the *Save As* / tour directory paths, and the open-file manifest (`.set`/`.trk`/`.shp` paths) |
-| **1** | current location: stage file (@520, `"main.stg"`), set base (@596), scene (@612), view (@628) — all at fixed offsets |
-| 2 / 3 | actor (CST) state + the cast file (`gang.cst`) — see [The actor container](#the-actor-container-fixed-160-byte-actor-records) |
-| 4 | inventory (all loaded props): the runtime state of every open prop, inventory items first — see [The inventory container](#the-inventory-container-fixed-158-byte-prop-records) |
-| 5 / 6 | open shops (`.shp`) / tracks (`.trk`) |
-| 7…(var) | per-shop prop runtime state (doors, switches, the smokestack puzzle…) |
-| (var) | music / sound-loop state |
+| **0** | manifest, built on the stack: `"Titanic 1.0"` version (Pascal string @0), disk family `"Titanic1"`/`"Titanic2"` (@+0x104), nine 256-byte path slots (@+0x1fc — the *Save As* / tour directories), a 256×8 table (@+0xb08), the open-file count (@+0x1308), then one **260-byte record per open file** (`.set`/`.trk`/`.shp` paths) |
+| **1** | current location, a fixed 786 bytes from `0x489d40`: stage file (@520, `"main.stg"`), set base (@596), scene (@612), view (@628) |
+| **2** | the cast: n × 160-byte actor records — see [The actor container](#the-actor-container-fixed-160-byte-actor-records) |
+| **3** | open casts: n × 28 (two pointers, a u32, the `.cst` filename as a Pascal string) |
+| **4** | inventory — every loaded prop: **72 × 158** in every shipped save, inventory items first — see [The inventory container](#the-inventory-container-fixed-158-byte-prop-records) |
+| **5** | open shops (`.shp`): n × 28, the same shape as the casts |
+| **6** | open tracks: n × 40-byte descriptors — see [The track containers](#the-track-containers-what-was-playing) |
+| 7 … 6+3n | **three containers per open track**, in descriptor order: the track's registered, playing and looping sound lists, 104 bytes per record. Counts come from the descriptor's `+4`/`+6`/`+8` |
 | **globals** | the script global variables — the core story progress (`clock`, `phase`, `mission`, `playerdeath`, every `…phase`/`…count`, the boiler pressures, the minigame state…) |
 | **globals + 1** | the globals' **string pool**: every string-valued variable's text, as `[len][chars]` entries. The loader reads the pair together (TI.EXE stores the pool handle at globals-blob `+0x10`) |
-| location | a clean Pascal-string stream: facing direction, road, ground coordinates, the current clock-event script, and the set/stage/flat names |
-| (var) | active loops (`makeloop`), positional crickets (`makecricket`), puppet/conversation state |
+| +2 | the **loops** table, verbatim: `0x540` = 32 × 42 |
+| +3 | the **crickets** table, verbatim: `0x4a0` = 16 × 74 |
+| +4 | the **walks** table, verbatim: `0x6e0` = 16 × 110 |
+| (var) | one **waypoint payload** container per active walk slot whose handle at `+0x12` is non-null — see [The scheduler containers](#the-scheduler-containers-loops-crickets-and-walks) |
+
+The three tables at the end are not a serialization of anything: `0x442530`
+sits directly in front of the master service pass `0x442550` and hands back
+pointers to its own three tables (`0x48bcd0` loops, `0x48b830` crickets,
+`0x48b150` walks), which the writer `memcpy`s into the file. The save *is* the
+live scheduler.
+
+(The `hallside`/`savedeck` fallbacks read a Pascal-string stream of facing,
+road, coordinates and set names — see [the location
+container](#the-location-container-is-a-savestate-stack-fallbacks). The writer's
+order above has no container of its own for it.)
 
 ## The actor container: fixed 160-byte actor records
 
@@ -106,6 +125,7 @@ of that copy, which is how the rest is mapped — the buffer is at `esp+8`, or
 | +24 | i16 | `actordeg`, 0..255 | `0x40e850` |
 | +26 / +28 / +30 | i16 | `actorxyz` 1/2/3 — the SET's own X, Z, Y order | `0x40f285/97/a9` |
 | +38 | i16 | `actorspeed` | `0x40ead0` |
+| +42 | i16 | **`actorscale`** — 1000 is neutral | `0x40ea40` |
 | +72 | i32 | `actorvalue` — conversations had | `0x410be0` |
 | +76 | i16 | `actorzclip` | `0x410c70` |
 | +80 | pstr | actor (cast member) **name** | the grid |
@@ -122,6 +142,18 @@ really is a star of the set they also name, the coordinates are **that star's,
 exactly, in 2105 (99.2%)**. The 17 that differ are Max mid-patrol on the boat deck
 and one record parked on the `walktostar` sentinel, i.e. an actor genuinely not
 standing on his star. No other framing of these bytes produces that.
+
+`actorscale` at **+42** is the late addition, and it is confirmed three ways: the
+accessor (`0x40ea40` reads `[esp+0x32]` of a buffer at `esp+8`, i.e. record+42),
+the value distribution (a handful of round values per actor, 1000 neutral), and
+the per-character clustering — about one scale per room, which is what `stdscale`
+being a table of per-room constants predicts. It is the field that makes a
+restored character **drawable**: a record put back with scale 0 is placed
+correctly and gates every script correctly, and is never drawn. It also carries
+the two script overrides `stdscale(currentset())` cannot reproduce (`gang.cst`
+1323's stoker at 9000, `extra.cst` 0003's 2700), which is why the port now reads
+it from the record and writes it back rather than asking the cast — see
+[Saving & loading at runtime](../runtime/saves.md#loading-restore-the-engine-from-the-file).
 
 Two conclusions were drawn from the wrong frame and are worth recording as traps.
 `actorvalue` was read at name+152 — which is `(name+160)−8`, the same field one
@@ -158,13 +190,22 @@ then write actor owners over variable names — so the globals container, its po
 and the prop container are excluded explicitly.
 
 The whole record is written and restored: the memory of the player (owner, value)
-and the placement half. The **crowd extras are not**, and cannot be — `setupgroup`
-makes them per room from `EXTRA.CST`, so which of them exist varies from save to save
-(25 records to 64, the named cast constant and the extras churning) and a patch-write
-cannot grow the container. Every one of the 109 shipped saves does hold a record for
-all 25 named characters, so those never want for a slot. See
+and the placement half — including, since #143, the **crowd extras**. This page
+used to say they were not written *and could not be*, because a patch-write cannot
+grow a container. That is true of the globals blob, which declares its own storage,
+and it is **not** true here: the actor container has no self-declared capacity at
+all. TI.EXE's save writer dumps the live actor-list handle, and its loader
+(`0x4143d2`) duplicates the read container's handle straight back into the
+actor-list global — so the record count is **implicit in the container's size**, and
+one more 160-byte record on the end is one more actor. Which is exactly why the
+shipped saves disagree about how many there are: `setupgroup` makes the deck extras
+per room from `EXTRA.CST`, and the corpus runs from 25 records to 64, the named cast
+constant and the extras churning. Every one of the 109 does hold a record for all 25
+named characters, so those never want for a slot; a crowd record the base save lacks
+is now **appended**. That mattered as soon as the load stopped re-running the room:
+the file is the only witness left to a crowd nobody is going to remake. See
 [Saving & loading at runtime](../runtime/saves.md#the-actor-record) for what the load
-does with them, and why the arriving room still gets the last word.
+does with them.
 
 ## The globals container: 32-byte variable nodes + a string pool
 
@@ -180,7 +221,7 @@ into (measured across all 109 shipped saves):
 | +0 | u16 | *unknown* — reads as a node count in `1/01` (96, against 96 names) and cannot be one in `1/04` (92, against the same 96). Never written |
 | +2 | u16 | node array **capacity**: `container length = 20 + 32 × capacity`, in all 109 |
 | +8 | u32 | the string pool's **allocation watermark** (next free offset) — exactly the end of the highest string any variable points at in 81 of the 109, and past it in the rest (an allocation whose variable was later overwritten) |
-| +12 | u32 | the string pool's **size** — 2048, and equal to the pool container's length, in all 109 |
+| +12 | u32 | the string pool's **size** — equal to the pool container's length in all 109, but *not* a constant: 8 of them hold 4102–4105 (`1/36 - Found the Notebook!`, `2/08 - Showing Pipe to Trask`, `ENDGAME1/10`, `ENDGAME2/10` among them) and the rest 2048. The engine does grow the pool, so a from-scratch writer may pick any size as long as the blob declares it |
 | +16 | u32 | the pool's heap pointer (rebuilt on load) |
 
 Each node's fields sit at fixed offsets:
@@ -229,7 +270,8 @@ Each node's `+20..+27` is a serialized `DFValue`:
 - **type 2 / type 4 → number**, stored inline as the signed i16 at `+26`.
 - **type 3 → string**: `+26` (unsigned) is the **byte offset of the string in
   the string-pool container** that follows the globals container. The pool is a
-  2048-byte block of `[len][chars]` entries — a *live engine structure saved and
+  block of `[len][chars]` entries, 2048 bytes in most saves and about 4100 in the
+  eight the engine grew it in — a *live engine structure saved and
   restored wholesale*, which is why the offsets stay valid across processes
   (this is how the original restores string variables; there is no rebuilt atom
   table).
@@ -240,7 +282,9 @@ satisfying the B59 knock's `letterphase = 2 | letterphase = 3`, so Conkling says
 *"Come in"* exactly as the original does), `neckphase=5`, `hrs/min/sec` =
 10:50:42 PM, `hallside="star"`, `savedeck="b"`, `newset="hallb"`,
 `oldset="stair1c1"`, `fusebox="1,1,1,1,1,"`, `coalchute="coal4"`,
-`savetheme="decka.trk"`, `handitem=""`.
+`savetheme="decka.trk"`, `handitem=""`. (`savetheme` is the theme to restore after
+an interlude, *not* what was playing — see
+[the track containers](#the-track-containers-what-was-playing).)
 
 **Loader policy** ([`parseSave`](https://github.com/dhobi/taoot-web/blob/master/src/df/savegame.ts)):
 `decodeVars` walks the grid with the shifted pairing and decodes both kinds —
@@ -252,7 +296,7 @@ occurrence (the engine's lookup walks the list from the head).
 targets the same shifted slot: numbers are written inline and tagged type 4,
 strings as a pool offset tagged type 3.
 
-### Writing must not lengthen a container
+### Writing must not lengthen this container
 
 The rule that governs both of the below: **a save has to load in the original
 engine, not only in this port.** The blob declares its own storage (capacity at
@@ -260,7 +304,13 @@ engine, not only in this port.** The blob declares its own storage (capacity at
 containers into them — so a container that has outgrown its own header is either
 truncated on load (the state silently lost) or copied past the end of its block.
 This port would never notice: it resolves a string by offset and walks nodes to
-the end of the container. So nothing here changes any container's length.
+the end of the container. So nothing here changes the globals pair's length.
+
+The rule is about **a header that declares its own storage**, not about save files
+in general — which is why
+[the actor container](#the-actor-container-fixed-160-byte-actor-records) *can* be
+grown a record at a time: it declares nothing, and TI.EXE's loader takes its record
+count from the container's size.
 
 - **A string the pool lacks** is allocated the way the original allocator does:
   inside the block, with the watermark bumped by `1 + len`. It starts at the
@@ -330,13 +380,16 @@ writing saves at all, so here is the split.
 **The one thing that needed more than shape** is whether the loader walks a
 *count*, which would make a record in a free slot invisible to it. It does not, and
 the files say so — [the u16 at +0 cannot be a
-length](#writing-must-not-lengthen-a-container).
+length](#writing-must-not-lengthen-this-container).
 
 **Not verified: TI.EXE's loader itself.** The design is built to need as little of
-it as possible — no container changes length, so no allocation-size assumption is
-made anywhere; a new string is written past every offset any record resolves to, so
-no record's value can change under it; and a new node is written at the same
-stride, with the same vtable, in space real saves also leave. The result *should*
+it as possible — no container that declares its own storage changes length, so no
+allocation-size assumption is made anywhere; a new string is written past every
+offset any record resolves to, so no record's value can change under it; and a new
+node is written at the same stride, with the same vtable, in space real saves also
+leave. The one container that *is* grown, the actor grid, is grown because the
+disassembly says its count comes from its size (`0x4143d2`) — a claim about the
+loader, and so on this list rather than off it. The result *should*
 be indistinguishable from a save the original wrote, and "should" is doing work in
 that sentence until someone loads `out/checkpoints/m2gram.ti` in DosBox — walk to
 the wireless room after it and the Purser should still be expecting his telegram
@@ -386,13 +439,26 @@ record is the **live object dumped verbatim**, so the numeric fields come *befor
 the name and TI.EXE's own accessors give the frame — each fetches its record into a
 local buffer whose name field sits at `buffer+0x4e`:
 
-| Offset from name | Field |
-|-----------------:|-------|
-| −0x4e | i16 `propvisible` (`0x416f30`, `cmp word ptr [esp+8], 0` — >0 is shown) |
-| −0x36 | i16 `propdeg` (`0x4168a0`, `movsx ecx, word ptr [esp+0x20]`) |
-| +0 | prop name (Pascal string) |
-| +48 | current `propview` state (`0x416610`, `lea ecx, [esp+0x86]`) — `"large"`, `"panel1"`, … |
-| +64 | `propowner` (`0x4161c0`, `lea ecx, [esp+0x96]`) — `"frank"` = in Frank's possession, else `"none"`/`"vlad"`/`"purser"`/… |
+| From the base | From the name | Type | Field |
+|--------------:|--------------:|------|-------|
+| +0 | −0x4e | i16 | `propvisible` (`0x416f30`, `cmp word ptr [esp+8], 0` — >0 is shown) |
+| +0x12 | −0x3c | i16 | `propis3d` (`0x417760`) — strictly 0/1 across the corpus |
+| +0x14 / +0x16 | −0x3a / −0x38 | i16 | `propxy` (`0x4175c0`): **+0x14 is the screen Y and +0x16 the X**. The interface band's props all read x = 256, y = 324 — the band anchor |
+| +0x18 | −0x36 | i16 | `propdeg` (`0x4168a0`, `movsx ecx, word ptr [esp+0x20]`) |
+| +0x24 | −0x2a | i16 | `propspeed` (`0x416b20`) — **4 in every record ever written**; nothing changes a prop's speed |
+| +0x26 | −0x28 | i16 | `propdist` — z-order, more negative = nearer |
+| +0x28 | −0x26 | i16 | `propscale` (`0x416a90`) — 10 distinct values in the corpus, about 1.1 per prop |
+| +0x46 | −0x08 | u32 | `propvalue` (`0x416240`) — 0 or 1 in the corpus |
+| +0x4a | −0x04 | i16 | `propzclip` (`0x4162d0`) — 7 distinct values |
+| +0x4e | +0 | pstr | prop **name** |
+| +0x7e | +48 | pstr | current `propview` state (`0x416610`, `lea ecx, [esp+0x86]`) — `"large"`, `"panel1"`, … |
+| +0x8e | +64 | pstr | `propowner` (`0x4161c0`, `lea ecx, [esp+0x96]`) — `"frank"` = in Frank's possession, else `"none"`/`"vlad"`/`"purser"`/… |
+
+The offsets that matter for reading are the ones from the **record base**, because
+that is what the getters use; the second column is the same field measured from the
+name, which is what [`walkPropGrid`](https://github.com/dhobi/taoot-web/blob/master/src/df/savegame.ts)
+locks the grid onto — so every numeric field is at a *negative* offset there, and
+every read of one is bounds-checked at both ends.
 
 `view` and `owner` are 16 bytes apart, which is what fixes the name at `+0x4e` and
 makes the two empirically-recovered offsets (+48/+64) and the disassembly agree.
@@ -402,71 +468,241 @@ in the whole corpus is `"xxxfrank"` (8) and the longest `view` is
 
 `propvisible` checks out by range against the corpus, on the one prop where it can
 be read against something independent: the baby is `visible = 1` in exactly the 3
-saves whose `propowner` is `"frank"` and `0` in all 106 others.
+saves whose `propowner` is `"frank"` and `0` in all 106 others. `propdist` gets the
+same kind of independent check from the open pocketwatch, whose four pieces read
+−6/−5/−5/−4 for lid/hrs/min/sec — exactly the z-order stack the watch's own `open()`
+assigns them, in that order.
+
+Still structured but unnamed: `+0x0a`/`+0x0e` (constant per prop across all 109 —
+resource ids), `+0x1a`–`+0x20`, `+0x22` ∈ {1,5,6,9,12}, `+0x30` (constant per prop,
+15 distinct values), and `+0x34`…`+0x42`, eight consecutive small words that look
+like two screen rects. The pointer columns are `+0x02`/`+0x04`, `+0x06`/`+0x08`
+(always `0x9f`/`0xa6` heap) and `+0x2c`.
 
 The two disks differ in how a collected item is shown (disk 1 stows to `panel1`;
 disk 2 keeps it `large`), so the loader restores the raw `owner`+`view` verbatim
 per item rather than interpreting them — the `inven.shp` scripts read exactly
 those fields to draw the bag and quick-slots. `decodeVars`' sibling
 `walkPropGrid` locks onto the 158-byte grid (the same anti-junk technique as the
-variable grid) and yields one `{name, view, owner}` per slot.
+variable grid) and yields one record per slot — name, view, owner and the whole
+numeric half.
 
-### What we write back, and the one field we don't
+### What we write back
 
-`applyPatch` overwrites `view` and `owner` **in place** in records the original
-wrote, and appends nothing: a prop with no record in the base is skipped, since a
-container cannot be grown here. `inventorySnapshot` offers every prop the engine
-has loaded, in the engine's own list order — the same rule as above, arrived at
-after a hand-kept list came up short twice (first the bag/pocketwatch/deck map,
-then `baby`; see [runtime/saves.md](../runtime/saves.md)).
+`applyPatch` overwrites a record **in place**, in records the original wrote: the
+two string fields (`view`, `owner`) and the whole numeric half — `visible`, the
+screen anchor, `deg`, `dist`, `scale`, `value` and `zclip`. A prop with no record
+in the base is skipped: unlike
+[the actor container](#the-actor-container-fixed-160-byte-actor-records), this one
+is not grown, and the extras it would take — the props of a room's own shop, on top
+of the two boot shops' 72 — are furniture that room rebuilds anyway.
+`inventorySnapshot` offers every prop the engine has loaded, in the engine's own
+list order — the same rule as above, arrived at after a hand-kept list came up
+short twice (first the bag/pocketwatch/deck map, then `baby`; see
+[runtime/saves.md](../runtime/saves.md)).
 
-The **owner** is always written. The **view** only for props whose view we actually
-hold — the `inven.shp` items and the four band items the save owns the look of —
-because for the rest the game re-derives it per room (`setupsigns()` picks the
-destination sign from where you stand, `setuparrow()` recolours the nav arrow) and
-nothing in the port ever writes the field, so our live value is still the prop's
-*first* state. Measured against four saves spanning the game, our `owner` agrees
-with the file for **72 of 72** props while the `view` disagrees for **6–8** —
-`navtoggle`, `subtoggle`, `invenctl`, `lid`, `invenhelp`, `door`, `signs`,
-`wiremsg`. Writing ours there would replace a real reading by the original engine
-with a worse guess, so those keep the base's value and the load lets the room work
-them out, exactly as normal play does.
+**This used to be `view` and `owner` only, and the rationale is worth keeping as
+history.** The argument was that the game re-derives the rest per room —
+`setupsigns()` picks the destination sign from where you stand, `showinterface()`
+re-derives `propvisible` from the owner, `setuparrow()` recolours the nav arrow —
+so writing our value over the original engine's reading would replace a real
+measurement with a worse guess. Measured against four saves spanning the game, our
+`owner` agreed with the file for **72 of 72** props while the `view` disagreed for
+**6–8** (`navtoggle`, `subtoggle`, `invenctl`, `lid`, `invenhelp`, `door`, `signs`,
+`wiremsg`) — a real disagreement, and at the time the room was going to overwrite
+those fields anyway, so the base's value was the better one to keep.
+
+#143 removed the premise. The load no longer runs `showinterface`, `setupsigns` or
+`setuparrow` — it runs no room script at all — so **the file's values *are* the
+restore**, and a field left unwritten is a field the base save gets to decide. The
+port therefore writes every one of them, and the disagreement above is now the
+port's own state being written where the room used to have the last word. The one
+field still withheld is a **`view` the port has never set**: an untouched prop is
+sitting in its file default and `""` is not a reading, so the base's stays.
+
+## The scheduler containers: loops, crickets and walks
+
+The last three fixed containers are the **master service pass's own tables,
+dumped verbatim**. `0x442530` sits directly in front of the service pass
+`0x442550` and hands back pointers to `0x48bcd0` (loops), `0x48b830` (crickets)
+and `0x48b150` (walks); the writer `memcpy`s all three, which is why their
+lengths are constants — 1344 / 1184 / 1760 — in every save. The triple is also
+the cheapest fingerprint for finding them:
+[`findSchedulerIndex`](https://github.com/dhobi/taoot-web/blob/master/src/df/savegame.ts)
+looks for three consecutive containers of exactly those sizes.
+
+There is **no separate "puppet container"**. The parked-conversation state this
+page used to list as an unknown is the walks table plus its per-walk payload —
+a character mid-`walkto` is the only "in-flight" thing the format carries.
+
+### The loop record — 42 bytes (`makeloop`, builder `0x442950`)
+
+| Offset | Type | Field |
+|-------:|------|-------|
+| +0 | u16 | active — the slot is free if 0 |
+| +2 | u16 | busy — in-service reentrancy flag; 0 in every shipped record |
+| +4 | u16 | **kind**: 1 = actor, 2 = prop, 3 = scene, 4 = flat (`0x4449f0`) |
+| +6 | u32 | period — ticks remaining, mid-count, on the engine's 50 ms service step |
+| +10 | pstr16 | name — the actor/prop/scene the loop belongs to |
+| +26 | pstr16 | handler script |
+
+It decodes cleanly in 109 of 109: `actor ga → gaidle`, `actor purs →
+playcrickets`, `scene scene49 → smethknock` at `per = 278`, the stoker's dig
+loops, the extras' `extraidle` — every record a real script at a sane countdown.
+This table is what a load used to have to rebuild by re-running the arriving
+room's `openset`: the idles that make characters act, and the scene timers.
+
+### The cricket record — 74 bytes (`makecricket`, builder `0x444130`)
+
+| Offset | Type | Field |
+|-------:|------|-------|
+| +0 / +2 | u16 | active / busy |
+| +4 / +6 | i16 | x / y |
+| +8 | u32 | radius |
+| +0xc | u32 | base period |
+| +0x10 | i32 | jitter (−1 = none, i.e. a one-shot) |
+| +0x14 | u32 | next fire = base + rand(jitter), mid-count |
+| +0x18 / +0x1a | i16 | listener x / y at make-time |
+| +0x1c | u32 | distance to the listener |
+| +0x20 | u16 | pan / angle (`0x444b70(dx, dy)`) |
+| +0x2a | pstr16 | the **set** it was made in (the global at `0x489f94`) |
+| +0x3a | pstr16 | cricket / sound name |
+
+The corpus holds 15 distinct crickets, all real room ambience: `party1` at
+(5683, 148) with `rad = 2000` in `deckbd2`, `piston3` at `rad = 7000`,
+`jit = −1` in `engine`, `citycricket` at `base = 45` in `bedsit1`. The four
+fields from `+0x18` on are the service pass's own working state — listener
+position, distance and pan at the moment the cricket last fired — and are
+recomputed the next time it does, which is why the port writes zeros there and
+a centred pan.
+
+### The walk record's payload
+
+A walk record is the 110 bytes mapped before (+4 type, +0xa deg, +0xc/+0xe/+0x10
+xyz, +0x16 progress, +0x2e actor), with one field that had no meaning until the
+writer was read: **`+0x12` is a handle to the walk's waypoint path**, and only
+type-3 walks have one. Each active slot with a non-null handle appends **one
+payload container** after the walks table:
+
+| Offset | Type | Field |
+|-------:|------|-------|
+| +0 | u32 | total path length |
+| +4 | u32 | *(unread)* |
+| +8 | u32 | **waypoint count** |
+| +12 | 8 bytes | the current segment |
+| +20… | count × 8 | waypoints: i16 x, y, z, u16 segment length |
+
+The container is the raw allocation, so a row or two of slack trails it. The
+loader (`0x4149bd`) `memcpy`s the walks table back and then, for each active
+slot with `+0x12 ≠ 0`, reads the next container and **stores the new handle back
+at `+0x12`** — which is what closes the round trip and also proves the payloads
+are in slot order.
+
+Exactly **3 of the 109** shipped saves carry one, and their trailing containers
+match: `1/20 - Meeting Conkling in his suite - B59` (36 bytes),
+`2/05 - Talking with Max` (108) and `2/33 - Got clue from Jack Hacker` (92). In
+`2/05` it is ga's 10 waypoints marching x = 4498 → 6787 at constant z — a
+mid-`walkto` across the boat deck, serialized.
+
+**The port does not resume a walk.** On load the actor's restored position
+stands and their restored idle loop re-decides; a dropped walk is logged rather
+than silently ignored. Symmetrically, the port's own saves **zero the walks
+table**, because a base slot left active would send the original's loader
+looking for a payload container that belongs to the previous save's moment.
+
+## The track containers: what was playing
+
+Container 6 lists the **open tracks** as 40-byte descriptors, and each descriptor
+is followed by three containers of its own further down the file:
+
+| Offset | Type | Field |
+|-------:|------|-------|
+| +0 | u32 | heap pointer |
+| +4 / +6 / +8 | u16 | the **three array counts**: registered / playing / looping |
+| +0xa / +0xe / +0x12 | u32 | the three arrays' heap pointers |
+| +0x16 | pstr16 | track name — `inven.trk`, `unilib.trk`, `cricket.sfx`, `deckbd.trk` |
+
+The counts match the following containers' record counts in every save, which is
+what
+[`findTracksIndex`](https://github.com/dhobi/taoot-web/blob/master/src/df/savegame.ts)
+verifies rather than trusting the position. Each of the three arrays is a grid of
+**104-byte sound records**:
+
+| Offset | Type | Field |
+|-------:|------|-------|
+| +0 | u16 | index within the track |
+| +2 | u16 | track number |
+| +4 | u16 | volume (255 default) |
+| +6 | u16 | pan (128 = centre) |
+| +8 | pstr16 | sound name |
+
+The rest of the record is heap junk. Array 1 is the track's registered sounds
+(where volume/pan are the last play's — the positional `motor` cricket sits at
+volume 9 / pan 0x8a, attenuated exactly as it was last audible); **arrays 2 and 3
+are the playing and looping lists**, and they are the answer to "what was this
+room sounding like": a boat-deck save carries `Boat Deck` in both.
+
+**`savetheme` is not the playing theme.** The script global of that name records
+the theme to restore *after* an interlude, and measured against all 109 shipped
+saves it lags the file's track state in **91** of them. The playing theme is the
+one track whose playing/looping arrays are non-empty — exactly one track in every
+shipped save. That is the value a load restores.
+
+Writing it back has one real limit. `applyPatch` can empty every track's
+playing/looping arrays and mark one base track as playing (descriptor counts and
+container lengths move together, so the file keeps the shape the original writes),
+but it **cannot open a track the base save never had**: the container-0 manifest
+names the open files and the patcher does not rewrite the manifest. A theme whose
+track is not in the base is dropped, reported through `SavePatch.onDrop`, and the
+room loads silent.
 
 ## How the web port loads a save
 
-Rather than reconstruct every subsystem from the pointer-laden containers, the
-port loads the way the game itself does: restore the **globals** (numbers and
-strings — the core story progress) and the **clock**, tear down the old room's timed state,
-then **travel** to the saved set/scene/view (`initall` = changeset + initactors
-+ initprops) and let the normal `openset`/`openscene` scripts rebuild the loops,
-props, crickets and music at the restored mission/phase.
+**It restores the engine from the file, and runs no room script at all.** That is
+what the original does — `opengame` (`0x413860` → the restore at `0x414080`)
+rebuilds the room through the engine's own set machinery and never reaches the
+script runners — and since #143 it is what this port does too. The port used to
+put the room back by *arriving* in it: restore the globals, then travel to the
+saved set/scene/view through `initall` (`changeset` + `initactors` + `initprops`)
+and let the normal `openset`/`openscene` scripts rebuild the loops, props, crickets
+and music at the restored mission/phase. That worked because the loader deliberately
+*didn't* restore the fields those scripts recompute; the two halves were one
+decision, and reading the remaining containers is what allowed both to be dropped.
+The history — and the bug that forced the question, a conversation opening *inside*
+a load ([#125](https://github.com/dhobi/taoot-web/issues/125)) — is in
+[Saving & loading at runtime](../runtime/saves.md#a-load-is-not-an-arrival).
 
-The **cast is put back from the file** rather than re-derived: set, star, pose,
-position, facing, speed, zclip and `actorvisible` straight out of
-[the actor record](#the-actor-container-fixed-160-byte-actor-records). *Where* that
-happens in the load matters more than it looks — after the departing room's
-`closeset`, which is entitled to put its own people down, and before the `changeset`,
-so the arriving room keeps the last word over the ones it places. And `actorscale`
-does **not** come from the record; it comes from the game's own `stdscale`, without
-which a restored character is invisible even though every script can see them. Both
-points are worked through in
-[Saving & loading at runtime](../runtime/saves.md#loading-restore-globals-then-travel),
-and both were faults in the first pass at
-[#86](https://github.com/dhobi/taoot-web/issues/86). See
-`GameSession.loadGame` / `snapshotSave` in
-[`src/engine/session.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/session.ts)
+What a load now takes out of the file:
+
+- the **globals**, numbers and strings, plus the `hallside`/`savedeck` fallbacks;
+- the **cast**, wholesale — the live actor list is wiped and every record applied,
+  including the crowd extras, which are re-instanced from their cast member by name
+  (`brown1a1` ← `brown1`, `stok4` ← `stok1`), and including `actorscale` from
+  [the record's +42](#the-actor-container-fixed-160-byte-actor-records);
+- every **prop**, both halves — owner and view, plus visible, the screen anchor,
+  `deg`, `dist`, `scale`, `value` and `zclip`, which is how the band's lit-or-dark,
+  the nav arrow's colour, the destination signs and the open pocketwatch's whole
+  assembly come back without `showinterface`/`setupsigns`/`setuparrow` running;
+- the **loop and cricket tables**, mid-count, straight into the scheduler;
+- the **theme**, from the track state rather than from `savetheme` or a re-score;
+- **walks are dropped**, with a log line naming the character (the actor's restored
+  position stands and their restored idle re-decides).
+
+The set/scene/view is then opened through the engine's set machinery with the whole
+lifecycle muted — no `closeset` on the way out, no `openset`/`openscene` on the way
+in. The scene is still recorded as current, so the first turn or step fires
+`openscene` normally. See
+[`loadGame`/`snapshotSave`](https://github.com/dhobi/taoot-web/blob/master/src/engine/saveload.ts)
 and the `savegame`/`opengame` builtins in
 [`src/engine/builtins/savegame.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/builtins/savegame.ts).
-`initall` seeds the *default* inventory for the mission, so the loader then
-overwrites each `inven.shp` prop's owner + view with the player's actual
-collected items from the inventory container (`GameSession.restoreInventory`).
 
-Writing patches a base save (the last one loaded, or a host-supplied per-disk
-template) with the current globals, set/scene/view, the live inventory (each
-`inven.shp` prop's owner + view, written back into the inventory container's fixed
-+48/+64 fields) — without which a save would keep the base's stale inventory — **and
-the cast**, both halves of each named character's record. The crowd extras are
-skipped, for the reasons in the actor-container section above.
+**Writing is the same list from the other side**, since a round trip has to feed
+that loader. `snapshotSave` patches a base save (the last one loaded, or a
+host-supplied per-disk template) with the current globals, the set/scene/view, every
+loaded prop's full record, every actor's full record — **appending** one for a crowd
+extra the base save lacks — the scheduler's loop and cricket tables (walks zeroed),
+and the playing theme. Everything the loader ignores stays byte-for-byte as the base
+had it.
 
 Back to the [format index](README.md), or on to how the running game uses
 this: **[Saving & loading at runtime](../runtime/saves.md)**.

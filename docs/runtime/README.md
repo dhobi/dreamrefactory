@@ -29,9 +29,10 @@ Read in any order — each names its own prerequisites.
 4. **[Audio at runtime — channels, banks & volumes](audio.md)** — the three
    playback channels, how a name finds its bank, the two-slot `currentsound`
    model, and the volume controls (including one deliberate divergence).
-5. **[Saving & loading at runtime](saves.md)** — what a save snapshot
-   contains, the load sequence that replays `initall`, and the in-browser
-   saved-games UI with its IndexedDB "file system".
+5. **[Saving & loading at runtime](saves.md)** — what a save snapshot contains,
+   the script-free load that restores the engine from the file rather than
+   re-running the room, and the in-browser saved-games UI with its IndexedDB
+   "file system".
 6. **[The browser host](host.md)** — the part that is neither format knowledge
    nor recovered behaviour: the page and the cold boot it starts, the `SetViewer`
    navigation state machine, the movie player, input wiring, and the developer

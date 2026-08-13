@@ -119,15 +119,15 @@ function assertTrace(trace: StateTrace[], file: string, n?: number): void {
  * The game the segments are played on — ONE session carried from segment to
  * segment, rather than a savegame round trip at every boundary.
  *
- * A `.ti` does not hold everything the running game does. `actorvalue` has no
- * field in the actor record at all (measured against four shipped saves: only
- * the owner changes across conversations), so every load forgets who you have
- * already spoken to; `actorowner` was lost the same way until SavedActor learned
- * it, which is why segment 7 carries a note about Morrow forgetting he let you
- * in. Loops, walks and the sub-minute clock are rebuilt by `initall` rather than
- * restored. None of that is wrong of the save format — the original reloads the
- * same way — but it means a chain of loads is not the same run a player makes,
- * and the route is supposed to be a player.
+ * A `.ti` holds much more than it used to — the whole actor record (owner,
+ * value, placement, scale), every prop's two halves, the loop/cricket tables
+ * and the playing theme all round-trip since #143 — but a load is still not
+ * the run a player makes: a walk in flight is dropped (the actor stands, their
+ * idle re-decides), positional sound loops beyond the theme re-arm on the next
+ * movement, and the sub-minute clock starts fresh. (The original resumes the
+ * walk — its payload container is understood but not trusted enough to drive;
+ * see docs/formats/savegame.md.) So a chain of loads is not the same run, and
+ * the route is supposed to be a player.
  *
  * So a segment continues the live game when the previous test left it standing
  * exactly where this one begins. It falls back to the checkpoint otherwise, and
