@@ -184,27 +184,34 @@ dispatches `calctime` every 50 ms of the host's clock, on both hosts — wall ti
 in the browser, the pumped virtual clock headless. It skips while a script is in
 flight and re-anchors, as the original's `idle()` only ran between events.
 
-The movement bump is **half implemented**, and the seam is
-[`SetScripts.viewChanged()`](https://github.com/dhobi/taoot-web/blob/master/src/engine/setscripts.ts):
-a turn fires the scene script's and the set main's `openscene`, but deliberately
-stops short of the **boot** scripts — which is where the clock bump lives. Walking
-into a new scene runs the full lifecycle and does bump. Measured over 20 seconds
-of engine time at `lounge1c` Scene14/View37:
+The movement bump fires on both kinds of arrival. It did not always: a turn used
+to run only the scene script's and the set main's `openscene` and stop short of
+the **boot** scripts, which is where the bump lives, so turning in place was free
+in the endgame ([#127](https://github.com/dhobi/taoot-web/issues/127)). The same
+boot handler also rebuilds the nav arrow and the destination sign, and those two
+*are* wanted on a turn — so `viewer.ts` re-derived them by hand instead. Two
+thirds of a script handler reimplemented in the engine with the third third
+missing; the fix was to run the handler and delete the re-derivations.
+`SetScripts.viewChanged()` now uses the same chain scene entry does, and
+`viewSettled()` is the arrival half on its own, for a movement that left nowhere.
+
+Measured over 20 seconds of engine time at `lounge1c` Scene14/View37:
 
 | | game seconds per real second |
 |---|---|
 | standing | 0.95 |
-| turning continuously | 0.85 — should be ≈ 2 |
-| entering a scene | +1 per scene (the bump fires; `secframe` advances) |
+| turning continuously | 1.00 (was 0.85) |
+| entering a scene | +1 per scene (`secframe` advances) |
 
-Turning is *slower* than standing rather than merely not faster, because the
-clock re-anchors while the turn's script work is in flight.
-
-The same boot `openscene` also rebuilds the nav arrow and the destination sign,
-and those two effects **are** wanted on a turn — so `viewer.ts` re-derives them by
-hand (`refreshNavArrow`, `refreshStandpointUi`) instead of letting the handler
-run. Two thirds of a script handler reimplemented in the engine, with the third
-third missing, is the shape of the bug: tracked as
-[#127](https://github.com/dhobi/taoot-web/issues/127).
+**Turning still is not the original's 2×, and the reason is `clockcount = 0`.**
+A bump does not add to the heartbeat, it *resets* it: the partial game-second in
+flight is discarded, so a bump arriving before `calctime` reaches 20 replaces that
+tick instead of joining it. Ours arrives before — the arrival is dispatched from
+the pass's service step and the clock is wound last — so the two cannibalise and
+the sum is one second per 20 frames rather than two. Reaching 2× needs the
+original's ordering within a pass, or a rendered-frame counter that outruns the
+pass rate during an animation; neither is settled from the videos in
+[#126](https://github.com/dhobi/taoot-web/issues/126), and guessing at a
+multiplier is worse than recording the gap.
 
 Next: the layer the watch is drawn into — **[Stage & UI](stage-ui.md)**.

@@ -5476,6 +5476,75 @@ test("actor putdownactor (boot lifecycle helper) hides the actor", async () => {
 
 // --- 69. Sasha walks away down the hall (sasha.1 -> sasha.2) -----------------
 // After the fuse subplot (neckphase 7) Sasha appears in his doorway (sasha.1);
+// --- #127: a turn owes the WHOLE openscene chain, boot included ---------------
+// `openscene` is a per-view event all the way down, and BOOTFILE's arm of it does
+// three things: setuparrow(), setupsigns() and — at mission 4 only — the sinking
+// clock's `sec = sec + 1`, throttled to one bump per 20 rendered frames via
+// `secframe`. viewChanged() used to stop after the set main, so a turn got none of
+// them: viewer.ts hand-rolled the first two as sendtoprops and nobody noticed the
+// third was gone, which made turning in place free in the endgame where the
+// original charges a second for it.
+test("a turn runs boot's openscene, so the sinking clock charges for it (#127)", async () => {
+  const turn = async (mission: number) => {
+    const { session, viewer } = await newSession();
+    await session.openSetFile("lounge1c.set", "scene14", "view37");
+    for (const [k, val] of [["mission", mission], ["phase", 0], ["hrs", 13], ["min", 0],
+                            ["sec", 0], ["clockcount", 0], ["secframe", 0],
+                            ["sinkflag", mission === 4 ? 1 : 0]] as const)
+      session.interp.globals.set(k, val);
+    const v = viewer();
+    const pump = async (n: number) => {
+      for (let i = 0; i < n; i++) { v.tick((clock += 50)); await drain(); }
+    };
+    const settle = async (n: number) => {
+      for (let i = 0; i < n && (v.busy || session.scriptBusy); i++) { v.tick((clock += 50)); await drain(); }
+    };
+    await settle(300);
+    // the throttle is `frame() - secframe >= 20`, so the clock has to have run a
+    // second before a bump is allowed at all
+    await pump(40);
+    const before = Number(session.interp.globals.get("sec"));
+    void session.track(v.pressNav("rightarrow"));
+    await settle(400);
+    await session.settle(50);
+    return {
+      secframe: Number(session.interp.globals.get("secframe")),
+      sec: Number(session.interp.globals.get("sec")),
+      before,
+      // setuparrow() picks a COLOUR (green road ahead / yellow door / red none),
+      // so what the turn owes is the same colour arriving at that view any other
+      // way would give
+      view: session.currentViewName?.() ?? "",
+      arrow: String(session.propRuntime.get("navarrow")?.stateName ?? ""),
+    };
+  };
+
+  const m4 = await turn(4);
+  check(
+    "turning in the endgame bumps the clock — boot's openscene ran",
+    m4.secframe > 0 && m4.sec > m4.before,
+    `secframe=${m4.secframe} sec ${m4.before}->${m4.sec}`,
+  );
+  // the arrow the turn produced is the arrow ENTERING at that view produces —
+  // the equivalence that used to be maintained by hand in viewer.ts
+  const { session: s2 } = await newSession();
+  await s2.openSetFile("lounge1c.set", "scene14", m4.view);
+  await s2.settle(50);
+  const entered = String(s2.propRuntime.get("navarrow")?.stateName ?? "");
+  check(
+    "...and the arrow it leaves is the one entering at that view gives",
+    m4.arrow !== "" && m4.arrow === entered,
+    `turned to ${m4.view} -> "${m4.arrow}", entered at ${m4.view} -> "${entered}"`,
+  );
+  const m1 = await turn(1);
+  check(
+    "outside mission 4 the same turn leaves the clock alone (the arm is gated)",
+    m1.secframe === 0,
+    `secframe=${m1.secframe} sec ${m1.before}->${m1.sec}`,
+  );
+}
+);
+
 // entering Scene52 facing View62 fires HALLA.SET openscene -> walkonpath(sasha,
 // sasha.1, sasha.2). sasha.2 lives in the actor table's nested SECONDARY slot
 // (record tail +32) — the fixed-41 skip used to drop it, so the star wasn't

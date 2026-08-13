@@ -147,10 +147,20 @@ export class SetScripts {
    *     only left all of those dead on turns. The view-gated scene handlers are
    *     self-guarded (actorstar/actorowner/flag checks) so re-entry is idempotent.
    *
-   * The chain here is scene script → SET MAIN, and stops there. Not stage or boot:
-   * the boot's openscene does per-scene-ENTRY work (nav-arrow rebuild, the
-   * mission-4 doomsday-clock tick) that must not repeat on every turn, which is
-   * why this used to stop at the scene script instead.
+   * The chain is the SAME one scene entry uses — scene script → set main → stage
+   * → boot ({@link fireLifecycle}) — because `openscene` is a per-view event all
+   * the way down, the boot's included.
+   *
+   * It used to stop after the set main, on the reasoning that the boot's arm does
+   * per-scene-ENTRY work that must not repeat on a turn. Both halves of that arm
+   * say otherwise. `setuparrow()`/`setupsigns()` are *per view* by construction —
+   * whether there is a road ahead is a property of where you are facing — and
+   * skipping them meant `closescene()` left the arrow red and the sign hidden
+   * after every turn, so `viewer.ts` re-derived both by hand. The other half is
+   * the mission-4 clock: `sec = sec + 1` per view arrival, throttled to one bump
+   * per 20 rendered frames, which is what makes the original's watch run at
+   * double speed while you spin in place (#127). Nobody re-derived that one, so
+   * turning was free in the endgame and the sinking clock ran slow.
    *
    * Stopping one link short cost the smokestack maze (#88): its `openscene` is on
    * the SET MAIN and reads the view — `blocked = pathblocked(currentscene(),
@@ -178,14 +188,29 @@ export class SetScripts {
         this.onLog(`script error in ${inst.name}.closescene: ${(e as Error).message}`);
       }
     }
+    await this.viewSettled(sceneIdx);
+  }
+
+  /**
+   * The ARRIVAL half on its own: re-run `openscene` for the view now being stood
+   * at, without the `closescene` that {@link viewChanged} runs first.
+   *
+   * For a movement that did not leave anywhere — a script cut onto the standpoint
+   * you are already on, a walk that stays in the scene. `closescene` is what puts
+   * the shared `door` prop away and reds the arrow, and firing it for an arrival
+   * that left nothing both races the boot walk's own lifecycle (see
+   * `SetViewer.teleport`) and closes a door that is legitimately open.
+   */
+  async viewSettled(sceneIdx = -1): Promise<void> {
+    const interp = this.session.interp;
     const scene = sceneIdx >= 0 ? this.sceneScripts[sceneIdx] : null;
-    for (const inst of [scene, this.main]) {
+    for (const inst of [scene, this.main, this.session.stageScript, ...this.session.bootScripts]) {
       if (!inst) continue;
       interp.eventConsumed = false;
       try {
         const res = await interp.runHandler(inst, "openscene", [], { me: inst.name, target: "" });
         // handled and not passed on: the chain ends here, as it does on entry
-        // (fireLifecycle). A `passcode` carries on to the main — and no further.
+        // (fireLifecycle). A `passcode` carries on to the next link.
         if (res.handled && !res.passed) return;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.openscene (view change): ${(e as Error).message}`);
