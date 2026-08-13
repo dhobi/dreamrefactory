@@ -9,7 +9,9 @@
  * The host viewer (viewer.ts) forwards clicks/ticks here while {@link playing}
  * and paints {@link frame}; everything else about movies lives in this file.
  */
-import { MovClickRegion, MovFile, MovFrame, MovSegment, readMovFile } from "./df/mov";
+import {
+  FLAG_ANY_INPUT_ABORTS, MovClickRegion, MovFile, MovFrame, MovSegment, readMovFile,
+} from "./df/mov";
 import { NATIVE_FRAME_MS, TICK_MS, chooseFrameInterval, frameHoldMs } from "./df/mov-pace";
 import { Container } from "./df/container";
 import { decodeAudioContainer, resampleTo } from "./df/audio";
@@ -355,6 +357,20 @@ export class MoviePlayer {
     }
     const frameByName = new Map<string, number>();
     seg.frames.forEach((f, i) => f.name && frameByName.set(f.name.toLowerCase(), i));
+    // Everything the player pressed while this was loading is DISCARDED, and the
+    // original is unambiguous about it: `playmovie` is one function that reads
+    // the .MOV containers and then calls flushevents unconditionally (TI.EXE
+    // 0x449104) immediately before the playback loop at 0x449200 — no ret or
+    // padding anywhere between the three. A multi-segment film gets it per
+    // segment, because the chain jumps back from 0x4494ba to 0x448bd8, upstream
+    // of the flush.
+    //
+    // This is the whole of issue #5. A close-up is slow to fetch, the player
+    // clicks the sofa three more times while it loads, those clicks queue (the
+    // ordinary rule — see EventQueue), and the drain in SetViewer.tick then
+    // replayed them into the room the moment the close-up closed, re-opening it
+    // once per banked click.
+    this.session.events.flush();
     this.active = {
       fileName,
       frames,
@@ -731,6 +747,14 @@ export class MoviePlayer {
     // read before dropping it: an interactive clip's lines are the player's to
     // cut short, a cutscene's are not
     const interactive = this.active?.hasRegions ?? false;
+    // ...and the other half of the movie's event-queue rule (TI.EXE 0x449330):
+    // on the way out it flushes again UNLESS the film wanted any input to abort
+    // it. So the click that dismissed a close-up dies with the close-up instead
+    // of reaching the room behind it. No TAOOT movie sets the bit, but read it
+    // rather than assume it — the same as keySkips (MovFile.flags).
+    if (this.active && !(this.active.seg.flags & FLAG_ANY_INPUT_ABORTS)) {
+      this.session.events.flush();
+    }
     this.active = null;
     this.callStack = [];
     // Hand the chain's movies back. This is the safe moment and the only one: a
