@@ -560,6 +560,26 @@ export class SetViewer {
     // screen yet, so fall back to the bare set frame. The screen outlives this
     // viewer, so mid-set-change the snapshot is still the room being left.
     session.captureFrame = () => {
+      // ...with one exception, and it is a conversation. TI.EXE has no snapshot
+      // at all: `screentoblack` (0x43e550 -> 0x435b90) dims the LIVE screen in
+      // place, `steps` times, and returns — so what it fades is whatever the
+      // picture is at that instant. The last presented composite is not that
+      // picture here, because a line ends by clearing the subtitle
+      // (PuppetController.puppetSpeak) and the script's screentoblack runs in
+      // the same tick, before any render: the buffer still holds the frame
+      // composited while the caption was up, with the character's lower 40 px
+      // clipped away for it (see PuppetView.composite). Fading that showed the
+      // room through a band across the character's waist for the whole ramp —
+      // subtitles-only, because with them off nothing is ever clipped. So
+      // rebuild the conversation screen from what is true NOW.
+      //
+      // Everything else keeps the stale frame deliberately, and must: a set
+      // change fades around `changeset`, so by the time the ramp runs the set
+      // underneath has already been replaced and only the buffer still holds
+      // the room being left.
+      if (this.session.puppet?.visible && !this.session.fade.snapshot) {
+        this.compositePuppetScreen();
+      }
       const shot = this.screen.capture();
       if (shot) return shot;
       const f = this.current;
@@ -2134,30 +2154,41 @@ export class SetViewer {
     return "world";
   }
 
+  /**
+   * Build the conversation screen into the framebuffer: the stage flat and its
+   * persistent props (TAOOT: the lifesaver, the watch, the held item) first,
+   * exactly as the flat path does, then the close-up over the view region above
+   * it. The answer rows are text drawn ON the interface band, so the band has to
+   * be under them; the original gets that for free, because its bevel redraw
+   * restores that strip of screen from a stored copy of the background before
+   * every DrawString.
+   *
+   * Split out of {@link paint} because {@link GameSession.captureFrame} needs it
+   * too — see the note there on why a fade-out over a conversation cannot use
+   * the frame that happens to be sitting in the buffer.
+   */
+  private compositePuppetScreen(): void {
+    this.screen.clearFrame();
+    const flat = this.session.stageCtrl.flatImage();
+    if (flat) {
+      const flatPal = this.flatPalette(flat.palette);
+      const fbuf = this.screen.scratchFor(flat.width * flat.height * 4);
+      indexedToRGBA(flat.pixels, flat.width, flat.height, flatPal, fbuf);
+      this.screen.blitTop(fbuf, flat.width, flat.height);
+      this.compositeWorld(this.screen.frame, SCREEN_W, SCREEN_H, flatPal, null);
+    }
+    const cur = this.current;
+    this.puppetView.composite(
+      this.screen.frame,
+      cur ? { pixels: cur.pixels, width: cur.width, height: cur.height, palette: this.palette } : null,
+    );
+    this.screen.frameValid = true;
+  }
+
   private paint(ctx: CanvasRenderingContext2D): void {
     const owner = this.screenOwner();
     if (owner === "puppet") {
-      // The answer rows are text drawn ON the interface band, so the band has
-      // to be under them: paint the stage flat and its persistent props (TAOOT:
-      // the lifesaver, the watch, the held item) first, exactly as the flat path
-      // does, then let the close-up own the view region above it. The original
-      // gets this for free — its bevel redraw restores that strip of screen
-      // from a stored copy of the background before every DrawString.
-      this.screen.clearFrame();
-      const flat = this.session.stageCtrl.flatImage();
-      if (flat) {
-        const flatPal = this.flatPalette(flat.palette);
-        const fbuf = this.screen.scratchFor(flat.width * flat.height * 4);
-        indexedToRGBA(flat.pixels, flat.width, flat.height, flatPal, fbuf);
-        this.screen.blitTop(fbuf, flat.width, flat.height);
-        this.compositeWorld(this.screen.frame, SCREEN_W, SCREEN_H, flatPal, null);
-      }
-      const cur = this.current;
-      this.puppetView.composite(
-        this.screen.frame,
-        cur ? { pixels: cur.pixels, width: cur.width, height: cur.height, palette: this.palette } : null,
-      );
-      this.screen.frameValid = true;
+      this.compositePuppetScreen();
       this.screen.blit(ctx);
       // the subtitle band and choice bevels sit UNDER the fade, as they did
       // when PuppetView drew them itself and the viewer faded afterwards

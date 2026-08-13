@@ -241,6 +241,21 @@ export class PuppetView {
           rgba.set(view.subarray(y * backdrop.width * 4, (y + 1) * backdrop.width * 4), y * W * 4);
         }
       }
+      // The caption bar's own black, in the PICTURE rather than only on the
+      // canvas. {@link drawOverlay} fills the same rect before it writes the
+      // text (0x441f5a's EraseRect), and painting it twice is idempotent — but
+      // the original has one screen surface, and everything that reads this
+      // buffer expecting the presented picture was getting the room backdrop
+      // through the caption instead. A fade-out taken mid-line is the case that
+      // showed it (SetViewer.captureFrame).
+      if (clipY < H) {
+        for (let i = clipY * W * 4; i < H * W * 4; i += 4) {
+          rgba[i] = 0;
+          rgba[i + 1] = 0;
+          rgba[i + 2] = 0;
+          rgba[i + 3] = 255;
+        }
+      }
       const pal = displayPalette(paletteToRGBA(p.pup.paletteRaw, 256));
       const stance = p.pup.stances[p.stanceIdx] ?? p.pup.stances[0];
       if (stance && state) {
