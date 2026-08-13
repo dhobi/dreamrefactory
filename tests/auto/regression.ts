@@ -2323,6 +2323,90 @@ test("a set crossing never shows the flat's matte (#146)", async () => {
 }
 );
 
+// --- 13h. #158: the band's lit plate belongs to the flat's half of the CLUT ---
+// User-reported as "the menu band is wrongly lit — a slightly lighter greyish
+// background", on the bridge and nowhere else. What lights the band is house.shp's
+// `light` prop, a SOLID 251x120 rectangle laid over the middle third of main.stg's
+// flat, and it only disappears into the flat because its corners are the same
+// marble the flat has there — the same palette INDICES, resolved through the same
+// CLUT.
+//
+// TI.EXE has one CLUT, filled from two files: a set supplies its own colours (72
+// of the 75 sets on the discs draw their views from 0..127 alone) and the stage
+// supplies the interface half above them, which is where every band pixel lives.
+// Reading all 256 from the set passed everywhere else because 74 of the 75 carry a
+// byte-identical copy of main.stg's upper half; bridge.set's copy is uniformly
+// darker, so on the bridge the plate stopped matching the flat and grew a seam
+// down both its sides.
+test("the lit band's plate matches the flat it is laid over (#158)", async () => {
+  const band = async (setFile: string) => {
+    const { session, viewer } = await newSession();
+    await session.openSetFile(setFile);
+    // what a first click on a dark band icon does: propvisible("light", true)
+    await session.sendEvent("sendtoshop", "house.shp", "activateinterface", [], "test");
+    const v = viewer();
+    const drew = (v as never as { paintWorldInto(): string | null }).paintWorldInto();
+    const buf = (v as never as { screen: { frame: Uint8ClampedArray } }).screen.frame;
+    const lum = (x: number, y: number): number => {
+      const d = (y * SCREEN_W + x) * 4;
+      return 0.299 * buf[d] + 0.587 * buf[d + 1] + 0.114 * buf[d + 2];
+    };
+    // the plate's own left and right edges: propxy(256, 324) less the frame's
+    // stored offset puts its 251 columns at x = 128..378
+    let seam = 0;
+    for (let y = 268; y < 380; y++) seam += Math.abs(lum(128, y) - lum(127, y)) + Math.abs(lum(378, y) - lum(379, y));
+    const flatPal = displayPalette(session.stageCtrl.flatImage()!.palette);
+    const setPal = displayPalette(paletteToRGBA(v.set.paletteRaw, 256));
+    const d = (264 * SCREEN_W + 128) * 4; // the plate's top-left pixel, index 131
+    return {
+      drew,
+      lit: session.propRuntime.get("light")?.visible === true,
+      seam: seam / 224,
+      corner: buf[d],
+      flat131: flatPal[131 * 4],
+      set131: setPal[131 * 4],
+      rows: buf.slice(264 * SCREEN_W * 4),
+    };
+  };
+
+  // the reported room, and one whose two CLUT halves already agreed
+  const bridge = await band("bridge.set");
+  const c73 = await band("c73.set");
+  check(
+    "both rooms drew a lit band",
+    bridge.drew === "flat" && bridge.lit && c73.drew === "flat" && c73.lit,
+    `bridge=${bridge.drew}/${bridge.lit} c73=${c73.drew}/${c73.lit}`,
+  );
+  check(
+    "bridge.set is the room whose CLUT halves disagree — the premise of the bug",
+    bridge.flat131 !== bridge.set131 && c73.flat131 === c73.set131,
+    `bridge flat=${bridge.flat131} set=${bridge.set131}; c73 flat=${c73.flat131} set=${c73.set131}`,
+  );
+  check(
+    "the plate resolves through the flat's half of the CLUT, not the set's",
+    bridge.corner === bridge.flat131 && c73.corner === c73.flat131,
+    `bridge corner=${bridge.corner} (flat ${bridge.flat131}, set ${bridge.set131}); c73 corner=${c73.corner}`,
+  );
+  check(
+    "so the bridge's band has no more of a seam than a room that never had one",
+    bridge.seam <= c73.seam + 0.01,
+    `bridge=${bridge.seam.toFixed(2)} c73=${c73.seam.toFixed(2)} mean |dLuma| across the plate's two edges`,
+  );
+  // The band is the same furniture in every room, so the two should now draw it
+  // near-identically. Not exactly: a handful of pixels at its very top edge are
+  // world sprites, which follow the room and are meant to differ. Bounded rather
+  // than pinned for that reason — the number it discriminates against is the
+  // recoloured plate, 30078 of the 61440.
+  let differing = 0;
+  for (let i = 0; i < bridge.rows.length; i += 4) if (bridge.rows[i] !== c73.rows[i]) differing++;
+  check(
+    "and the two rooms' bands agree everywhere but the world sprites over them",
+    differing < 200,
+    `${differing}/${bridge.rows.length / 4} band pixels differ between bridge and c73`,
+  );
+}
+);
+
 // --- 14. stage layer: main.stg UI, inventory pickup, inven1 flat ---
 test("stage layer: main.stg UI, inventory pickup, inven1 flat", async () => {
   const { session, viewer } = await newSession();
