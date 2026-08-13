@@ -139,7 +139,12 @@ export interface SetFile {
   mainScript: number;
   /** raw 2048-byte palette block ({i16 index, i16 rgb[3]} * 256) */
   paletteRaw: Uint8Array;
-  /** SET frames only use the first 128 palette entries */
+  /** How many of the 256 stored entries a set actually contributes to the screen
+   *  CLUT — 128, and TI.EXE's own bound rather than an observation about the art:
+   *  its palette-copy loop runs [0x48a00c, 0x48a00e) (0x440cc2), seeded 0 and
+   *  0x80 at startup (0x429723, 0x4296e4). A set fills entries 0..127 and the
+   *  stage owns the rest, which is why the bytes a set stores above 127 are
+   *  never read — and why one set's copy of them could quietly drift (#158). */
   colorCount: number;
   scenes: Scene[];
   transitions: Transition[];

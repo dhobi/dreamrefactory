@@ -923,9 +923,15 @@ export class SetViewer {
    * {@link SetFile.colorCount}, the STAGE's above it.
    *
    * TI.EXE has one screen CLUT and the two halves of it come from different
-   * files. A set supplies only its own: measured over the 75 sets on the two
-   * discs, 72 draw their views from indices 0..127 alone and the three that
-   * stray (c73, lnghall on either disc) do so on under 0.06% of their pixels.
+   * files. A set supplies only its own, and that is not an inference: the loop
+   * that copies a set's palette block (container 0 + 0xf2, 8 bytes an entry)
+   * runs from the entry in `0x48a00c` to the one in `0x48a00e` (0x440cc2), and
+   * the startup block seeds those with 0 and 0x80 (0x429723, 0x4296e4) — so
+   * `opensetfile` writes CLUT entries 0..127 and never touches the rest. It
+   * agrees with the art: of the 75 sets on the two discs, 72 draw their views
+   * from 0..127 alone and the three that stray (c73, lnghall on either disc) do
+   * so on under 0.06% of their pixels.
+   *
    * Everything in the interface band lives in the half above: main.stg's flat
    * art is entirely >=128 bar 499 pixels of index 0, and so is every HUD prop
    * in house.shp — the pocketwatch, the bag, the deck map, the lifebuoy, the
@@ -934,11 +940,12 @@ export class SetViewer {
    * shop) are 48%-99.8% below it.
    *
    * Taking all 256 from the set looked equivalent because 74 of the 75 carry a
-   * byte-identical copy of main.stg's upper half. bridge.set is the one that
-   * does not — its copy is uniformly darker (median 0.82x the red channel) — so
-   * the band's `light` plate, a solid 251x120 rectangle, stopped matching the
-   * flat it is drawn over and the middle third of the band grew a seam down
-   * both sides of it (#158, reported in the guided tour and only ever there).
+   * byte-identical copy of main.stg's upper half — dead bytes in TI.EXE, which
+   * is how one of them got to drift without anyone noticing. bridge.set is that
+   * one: its copy is uniformly darker (median 0.82x the red channel), so the
+   * band's `light` plate, a solid 251x120 rectangle, stopped matching the flat
+   * it is drawn over and the middle third of the band grew a seam down both
+   * sides of it (#158, reported in the guided tour and only ever there).
    *
    * Memoised like {@link flatPalette}, and on the same three things plus which
    * stage's palette it composed: this runs on every frame that draws a band.
