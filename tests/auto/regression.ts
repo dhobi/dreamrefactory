@@ -2195,6 +2195,64 @@ test("a movie flushes the event queue on both sides (#5)", async () => {
 }
 );
 
+// --- 13f. #146: a set change holds the screen, it does not show the matte ---
+// User-reported as a "white flash" climbing the grand staircase. It is neither
+// white nor a flash: main.stg's flat fills the whole 512x264 view region with
+// palette index 253, which in that flat's own palette is a cream — the matte the
+// room view is composited into. While a set change is in flight the departing
+// room's bytes are already handed back (GameHost.activateSet releases before the
+// arriving viewer exists), so there is no frame to cover it, and the matte was
+// painted for the length of the load — 2.47 s in the report's video, measured
+// there at (247,241,222).
+//
+// TI.EXE never has that state: screentoblack is a palette ramp, so the departing
+// room's pixels stay in the framebuffer until the arriving room's overwrite them.
+// Holding the screen is that behaviour.
+test("a set change holds the last frame instead of exposing the flat's matte (#146)", async () => {
+  const { session, viewer } = await newSession();
+  await session.openSetFile("gstair2.set");
+  const v = viewer();
+
+  // what the matte IS — the reason the flash was cream and not white
+  const flat = session.stageCtrl.flatImage()!;
+  const idx = flat.pixels[100 * flat.width + 256]; // inside the view region
+  const pal = displayPalette(flat.palette);
+  const matte = [pal[idx * 4], pal[idx * 4 + 1], pal[idx * 4 + 2]];
+  check(
+    "main.stg's view region is a solid cream matte, not black",
+    idx === 253 && matte[0] > 200 && matte[1] > 200 && matte[2] > 200,
+    `idx=${idx} rgb=(${matte.join(",")})`,
+  );
+
+  // the ordinary case still paints
+  const withView = (v as never as { paintWorldInto(): string | null }).paintWorldInto();
+  check(
+    "with a room view to composite, the flat path paints as before",
+    withView === "flat" && session.viewShowing,
+    `drew=${withView} viewShowing=${session.viewShowing}`,
+  );
+
+  // mid-set-change: the room is expected, the frame is gone
+  (v as never as { current: unknown }).current = null;
+  const midChange = (v as never as { paintWorldInto(): string | null }).paintWorldInto();
+  check(
+    "with the room expected but no frame, nothing is painted — the screen holds",
+    midChange === null && session.viewShowing,
+    `drew=${midChange} viewShowing=${session.viewShowing}`,
+  );
+
+  // ...and a flat that legitimately owns the screen (setvisible(false) — the map,
+  // the CTL panel, an inventory) still paints, matte or no matte
+  (session as never as { setVisible: boolean }).setVisible = false;
+  const flatOnly = (v as never as { paintWorldInto(): string | null }).paintWorldInto();
+  check(
+    "a flat with the room hidden still paints on its own",
+    flatOnly === "flat" && !session.viewShowing,
+    `drew=${flatOnly} viewShowing=${session.viewShowing}`,
+  );
+}
+);
+
 // --- 14. stage layer: main.stg UI, inventory pickup, inven1 flat ---
 test("stage layer: main.stg UI, inventory pickup, inven1 flat", async () => {
   const { session, viewer } = await newSession();

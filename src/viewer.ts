@@ -2310,6 +2310,28 @@ export class SetViewer {
     // the set view composited into the top region, props over everything
     const flat = this.session.stageCtrl.flatImage();
     if (flat) {
+      // The room view is expected but is not there — a set change is in flight
+      // (GameHost.activateSet hands the departing room's bytes back before the
+      // arriving viewer exists, so there is nothing left to decode a frame
+      // from). Painting the flat on its own here exposes its own MATTE: main.stg
+      // fills the whole 512x264 view region with palette index 253, which in
+      // that flat's palette is (246,242,219) — a cream. That is the "white
+      // flash" of #146, measured off the report's own video at (247,241,222)
+      // and lasting 2.47 s, i.e. the length of the load rather than a frame.
+      //
+      // TI.EXE never has this state. `screentoblack` is a palette ramp
+      // (0x435b90; see the note in captureFrame), so the departing room's
+      // PIXELS stay in the framebuffer until the arriving room's overwrite
+      // them — a slow load just means you look at them for longer, and the
+      // matte is only ever uncovered for the instant between the flat being
+      // blitted and the view landing on top of it. Holding the screen is that
+      // behaviour: returning null leaves the canvas exactly as it stands.
+      //
+      // Note this is NOT "no flat to draw". A flat with the room hidden
+      // (`setvisible(false)` — the map, the CTL panel, an inventory) has
+      // viewShowing false and still paints normally; those flats carry their
+      // own full-screen art and have no matte to expose.
+      if (this.session.viewShowing && !this.current) return null;
       this.screen.clearFrame();
       const flatPal = this.flatPalette(flat.palette);
       const fbuf = this.screen.scratchFor(flat.width * flat.height * 4);
