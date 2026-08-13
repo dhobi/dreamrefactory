@@ -21,6 +21,9 @@ function callBuiltin(session: GameSession, name: string, ...args: Value[]): Valu
   return interp.builtins.get(name)!(interp, args, { t: "call", name, args: [] } as never, null as never) as Value;
 }
 
+/** a latin1 string of the given bytes — what BinaryReader.pstr hands a script */
+const raw = (...bytes: number[]): string => String.fromCharCode(...bytes);
+
 function vectors() {
   const session = new GameSession(() => null, new NullAudioSink());
   const call = (name: string, ...args: Value[]) => Number(callBuiltin(session, name, ...args));
@@ -119,6 +122,52 @@ test("dialog builtins delegate to host hooks with the right return shapes", asyn
   expect(await (callBuiltin(session, "textdialog", "name?", "dflt") as unknown as Promise<string>)).toBe("dflt");
   await callBuiltin(session, "quit");
   expect(quit).toBe(1);
+});
+
+// #105: the player was asked "本当に終了しますか？" as
+// `◇{◇◇◇É◇±◇|◇\◇t◇g◇...` — a script literal's bytes reaching `confirm()` one
+// character each. The dialog builtins are the only player-facing text that was
+// not decoded out of the tree's code page on its way to the host; drawstring and
+// puppetbevel already were. Measured over the six shipped trees: 11 dialog
+// strings carry high bytes (ja 6, ru 4, fr 1) and 25 are pure ASCII, which is
+// why this was invisible in en/de/nl.
+test("dialog text is decoded out of the tree's code page (#105)", async () => {
+  const session = new GameSession(() => null, new NullAudioSink());
+  let asked = "";
+  let noted = "";
+  session.onQuestionDialog = (m) => {
+    asked = m;
+    return false;
+  };
+  session.onNoteDialog = (m) => void (noted = m);
+
+  // BOOTFILE's quit question in the Japanese tree, as the bytes it is stored as
+  const sjis = raw(0x96, 0x7b, 0x93, 0x96, 0x82, 0xc9, 0x8f, 0x49, 0x97, 0xb9,
+                   0x82, 0xb5, 0x82, 0xdc, 0x82, 0xb7, 0x82, 0xa9, 0x81, 0x48);
+  session.textEncoding = () => "shift_jis";
+  await callBuiltin(session, "questiondialog", sjis);
+  expect(asked, "the Japanese quit question reaches the host as Japanese").toBe("本当に終了しますか？");
+
+  // ...and the same defect in the Russian tree, which nobody reported
+  const cp1251 = raw(0xc2, 0xfb, 0x20, 0xf3, 0xe2, 0xe5, 0xf0, 0xe5, 0xed, 0xfb, 0x2c, 0x20,
+                     0xf7, 0xf2, 0xee, 0x20, 0xf5, 0xee, 0xf2, 0xe8, 0xf2, 0xe5, 0x20,
+                     0xe2, 0xfb, 0xe9, 0xf2, 0xe8, 0x3f);
+  session.textEncoding = () => "windows-1251";
+  await callBuiltin(session, "notedialog", cp1251);
+  expect(noted, "and the Russian one as Russian").toBe("Вы уверены, что хотите выйти?");
+
+  // French is Mac OS Roman, where the accent is one byte
+  session.textEncoding = () => "macintosh";
+  await callBuiltin(session, "notedialog", `jouer ${raw(0x88)} Titanic`);
+  expect(noted, "Mac OS Roman accents survive too").toBe("jouer à Titanic");
+
+  // What the player TYPES goes back the other way, because the answer re-enters
+  // the game as script bytes (TAOOT: `propowner(me, textdialog("cricket name"))`).
+  session.textEncoding = () => "shift_jis";
+  session.onTextDialog = () => "本当";
+  const typed = await (callBuiltin(session, "textdialog", "name?", "") as unknown as Promise<string>);
+  expect([...typed].map((c) => c.charCodeAt(0)), "the typed name comes back as Shift-JIS bytes")
+    .toEqual([0x96, 0x7b, 0x93, 0x96]);
 });
 
 test("headless dialog defaults are safe (question answers no, text returns default)", async () => {
