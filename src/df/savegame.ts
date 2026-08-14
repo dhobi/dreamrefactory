@@ -634,6 +634,10 @@ export interface SaveGame {
    * `extra.cst` in the rooms with a crowd. A load has to reopen these before it
    * restores the actors, because the crowd is instanced from them (#186). */
   castFiles: string[];
+  /** the audio banks that were open, in file order — every `.trk`/`.sfx` the
+   * open-tracks list names, not just the one that was playing. A load has to
+   * reopen these, because the loop table it restores plays out of them (#199). */
+  trackFiles: string[];
   /** the live `makeloop` table — the room's scheduled work, mid-count. */
   loops: SavedLoop[];
   /** the live `makecricket` table — the room's positional ambience. */
@@ -1203,6 +1207,27 @@ function findTracksIndex(raw: RawSaveFile): number {
 }
 
 /**
+ * Every open audio bank, in the order the list holds them.
+ *
+ * Not the same question as {@link decodeTheme}: that one asks which bank was
+ * SOUNDING, and a bank can be open with nothing playing out of it and still be
+ * the one a restored loop reaches for. The sinking's ambience is exactly that —
+ * `insddest.sfx` is open in the mission-4 saves with all three of its arrays
+ * empty, because BOOTFILE's `playcrickets` opens the bank once and then picks a
+ * random one-shot out of it on every tick (#199).
+ */
+function decodeTrackFiles(raw: RawSaveFile, tracksIndex: number): string[] {
+  if (tracksIndex < 0) return [];
+  const d = raw.containers[tracksIndex].data;
+  const out: string[] = [];
+  for (let k = 0; k < d.length / TRACK_STRIDE; k++) {
+    const name = pstrField(d, k * TRACK_STRIDE + TRACK_NAME_OFF).toLowerCase();
+    if (name) out.push(name);
+  }
+  return out;
+}
+
+/**
  * The playing theme, from the track whose playing/looping arrays are non-empty.
  * One track carries them in 107 of the 109 shipped saves, and it is always the
  * room's live theme — `savetheme`, the global, is NOT it: that records the
@@ -1310,6 +1335,7 @@ export function parseSave(bytes: Uint8Array): SaveGame {
         )
       : [];
   const tracksIndex = findTracksIndex(raw);
+  const trackFiles = decodeTrackFiles(raw, tracksIndex);
   const theme = decodeTheme(raw, tracksIndex);
 
   // Split the decoded variables by DFValue type: 2/4 = numbers (inline), 3 =
@@ -1345,7 +1371,7 @@ export function parseSave(bytes: Uint8Array): SaveGame {
 
   return {
     title, disk, set, scene, view, stage, clock, hallside, savedeck,
-    vars, numGlobals, strGlobals, inventory, actors, castFiles,
+    vars, numGlobals, strGlobals, inventory, actors, castFiles, trackFiles,
     loops, crickets, walks, theme, raw,
     globalsIndex, inventoryIndex, actorsIndex, castIndex,
     schedulerIndex, tracksIndex,
