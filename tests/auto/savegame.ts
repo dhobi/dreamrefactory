@@ -1874,6 +1874,41 @@ test("every shipped save's placed, visible characters are actually there (#186)"
   expect(checked).toBeGreaterThan(300);
 }, 300_000);
 
+/**
+ * A load drops a walk in flight — and has to stand the walker up, which it only
+ * claimed to do.
+ *
+ * User-reported against the #181 branch, in the room #181 was reported from:
+ * "we are placed in the Grand Staircase with Daisy walking on the same spot".
+ * Save 17 catches `cash` mid-`walktostar` (a type-1 straight line, no path
+ * payload), so the actor record restores her pose as `walk` — and once an actor
+ * in a walk pose steps through its play script whether a walk is running or not,
+ * a dropped walk leaves her treadmilling. The drop is a deviation we know about
+ * and log; this is the rest of it.
+ */
+test("a walk dropped on load leaves the walker STANDING, not treadmilling", async () => {
+  const { session, logs } = await newHost();
+  await drain();
+  const path = savePath("1", "17 - Looking up GQC for Daisy.ti");
+  const save = parseSave(new Uint8Array(readFileSync(path)));
+  // the premise: the file really does catch her mid-walk, in a walk pose
+  expect(save.walks).toEqual([{ actor: "cash", type: 1, hasPayload: false }]);
+  const record = save.actors.find((a) => a.name === "cash")!;
+  expect(record.placement).toMatchObject({ visible: true, set: "stair1c1", pose: "walk" });
+
+  expect(await session.loadGame(new Uint8Array(readFileSync(path)))).toBe(true);
+  const cash = session.actorRuntime.get("cash")!;
+  expect(cash.visible).toBe(true);
+  expect(cash.poseName).toBe("stand");
+  expect(logs.some((l) => /cash was saved mid-walk/.test(l)), "and it says so").toBe(true);
+
+  // ...and stays standing: a second of service passes must not move her along a
+  // cycle she is no longer in
+  const before = { x: cash.worldX, y: cash.worldY, step: cash.step };
+  for (let ms = 0; ms <= 1000; ms += 50) session.tickTime(ms);
+  expect({ x: cash.worldX, y: cash.worldY, step: cash.step }).toEqual(before);
+});
+
 test("the open-cast-file list decodes, and it is what the rooms with a crowd need", () => {
   const seen = new Map<string, number>();
   for (const path of allSaves()) {

@@ -368,7 +368,20 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     // not understood well enough to resume, the actor's position is already
     // restored, and their idle loop (also restored) re-decides. 3 of the 109
     // shipped saves carry one.
+    //
+    // ...and they are STOOD UP, which this only claimed to do before. The actor
+    // record restores the pose it was saved in, and that pose is `walk`; an
+    // actor in a walk pose steps through its play script whether a walk is
+    // running or not (#181), so what the drop left behind was Daisy treadmilling
+    // on the Grand Staircase in save 17. `stopWalk` stands an actor up
+    // everywhere else a walk ends, and a load is no different.
     for (const w of save.walks) {
+      const a = session.actorRuntime.get(w.actor);
+      if (a?.poseName.startsWith("walk")) {
+        const lj = `stand${a.poseName.slice(4)}`; // walklj -> standlj, walk -> stand
+        a.poseName = a.member.poses.some((p) => p.name === lj) ? lj : "stand";
+        a.step = 0;
+      }
       session.onLog(`loadgame: ${w.actor} was saved mid-walk — standing them at their saved position`);
     }
 

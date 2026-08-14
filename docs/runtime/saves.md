@@ -253,8 +253,16 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
 10. **Score the room from the file**: the track whose playing/looping arrays are
    non-empty is the theme, and it is played at the player's `themevolume`.
 11. **Walks are dropped, and said so** — one log line per character. Their restored
-    position stands and their restored idle loop re-decides. Three of the 109
-    shipped saves carry a walk in flight.
+    position stands, they are **stood up** out of the walk pose the record put them
+    in, and their restored idle loop re-decides. Three of the 109 shipped saves
+    carry a walk in flight. Standing them up is not cosmetic: an actor steps
+    through its pose's [play
+    script](../formats/pup-cst.md#the-play-script-says-how-long-a-picture-is-held)
+    whether a walk is running or not, so a dropped walk left in a walk pose is a
+    character treadmilling on the spot — which is what save 17 did on the Grand
+    Staircase. Resuming the walk instead is the faithful answer and is not done:
+    the record's fields are known (type, start, deltas, distance, progress, the
+    arrival star at +0x3E), its arrival dispatch is not.
 12. Open the saved set/scene/view through the engine's set machinery, still with the
     lifecycle muted. The scene is recorded as current, so the first turn or step
     fires `openscene` normally.
