@@ -117,6 +117,7 @@ export default withMermaid(
             { text: "Audio — channels & volumes", link: "/runtime/audio" },
             { text: "Saving & loading", link: "/runtime/saves" },
             { text: "The browser host", link: "/runtime/host" },
+            { text: "The low-memory game", link: "/runtime/low-memory" },
             { text: "Languages & the chooser", link: "/runtime/languages" },
           ],
         },

@@ -832,6 +832,22 @@
           <span class="keys" id="brightnessValue">0.65</span>
         </div>
 
+        <!-- The small game a 1996 machine got. Nothing here is ours: the box
+             makes heapsize() report under 6 MB and TAOOT's own scripts do the
+             rest (GameSession.lowMemory). Named for the condition rather than
+             for what it produces, because what it produces is the game's
+             answer and not ours — in this port everything it reaches is sound,
+             on the original it also turned two engine caches down. -->
+        <div class="bar">
+          <span class="seclabel" data-i18n="play.lowMemoryLabel">Low memory</span>
+          <label
+            title="A machine with under 6 MB of memory got a smaller game, and the game's own scripts decided that: the half-length deck and sinking themes, and no crowd around you on the boat deck. Tick this to hear that version. It takes effect in the next room."
+            data-i18n-attr="title:play.lowMemoryTitle"
+            ><input type="checkbox" id="lowMemory" />
+            <span data-i18n="play.lowMemory">the reduced 1996 mode</span></label
+          >
+        </div>
+
         <div class="bar">
           <span class="keys" data-i18n-html="play.keys">
             <b>←</b> <b>→</b> turn &nbsp;·&nbsp; <b>↑</b> walk &nbsp;·&nbsp;

@@ -404,6 +404,21 @@ appended (`SetViewer.standpointFrames`).
 None of the four touches the movement itself: in-motion frames are
 quarter-resolution in both rings and no sharp version of them was ever made.
 
+### The Low memory box
+
+The one setting on the page that the **game** decides rather than the port.
+`BOOTFILE` defines its own `lowmemory()` — shadowing the engine builtin of that
+name — as `heapsize() < 6144000`, and five script sites branch on it: half the
+themes are swapped for their shorter `.11k` twins and mission 4's boat deck loses
+its crowd. So the whole port-side implementation is one number, `heapsize()`
+answering 4 MB instead of 64 when `GameSession.lowMemory` is set. It is re-read per
+`openset`, so a change lands in the next room; remembered under
+`taoot.sound.lowmemory`.
+
+**[The low-memory game](low-memory.md)** is the whole account — the five sites,
+what `.11K` actually is (not 11 kHz), why the two engine params it also zeroes are
+invisible here, and where it is worth listening.
+
 ### The sound keys, and why the page has no sound control
 
 `wavevolume` 0..9. Two things move it and they go through one setter

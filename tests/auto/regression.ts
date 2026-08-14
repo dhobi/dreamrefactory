@@ -8808,3 +8808,46 @@ test("turntodeg turns over time, and iswalk is true until it lands (#124)", asyn
     !session.scheduler.isWalk("zeit"), `deg=${zeit.deg} walks=${[...session.scheduler.walks.keys()]}`);
 }
 );
+
+// --- 103. the small game a 1996 machine got (`lowmemory`) --------------------
+// Nothing in the engine decides this. BOOTFILE defines its own `lowmemory()` as
+// `heapsize() < 6144000` — under 6 MB free — and its `setupdecksound` then opens
+// the `.11k` bank instead of the `.trk` one while still asking for the theme by
+// its `.trk` name, because a `.11k` file calls itself by the name of the file it
+// stands in for (AudioLibrary.find). Despite the name they are not 11 kHz: same
+// codec, same 22050 Hz, about half the loop chunks.
+//
+// So the player-facing setting is one lie in one builtin (`heapsize`), and this
+// is the whole chain end to end: the box moves a number, the game's own scripts
+// open a different file, and the theme that comes out is half as long.
+test("the small-memory setting opens the game's own short themes", async () => {
+  const measure = async (low: boolean): Promise<{ banks: string[]; seconds: number; rate: number }> => {
+    const { session } = await newHost();
+    session.lowMemory = low;
+    // A-deck: BOOTFILE's setupdecksound case for gstair*/gym/vest*/wireless
+    await session.openSetFile("wireless.set");
+    const theme = session.audioLib.theme("decka.trk");
+    return {
+      banks: session.audioLib.bankNames,
+      seconds: theme ? theme.samples.length / theme.sampleRate : 0,
+      rate: theme?.sampleRate ?? 0,
+    };
+  };
+
+  const full = await measure(false);
+  check("off, the game opens the full A-deck bank",
+    full.banks.includes("decka.trk") && !full.banks.includes("decka.11k"),
+    `banks=${JSON.stringify(full.banks)}`);
+
+  const small = await measure(true);
+  check("on, it opens the .11k one instead",
+    small.banks.includes("decka.11k") && !small.banks.includes("decka.trk"),
+    `banks=${JSON.stringify(small.banks)}`);
+  // the point of the whole exercise: playnewtheme("decka.trk") still finds it
+  check("...and the theme still resolves by the .trk name the script asks for",
+    small.seconds > 0, `theme=${small.seconds}s`);
+  check("...and is about half as long, at the same rate",
+    small.seconds < full.seconds * 0.6 && small.rate === full.rate,
+    `${full.seconds.toFixed(1)}s -> ${small.seconds.toFixed(1)}s, ${full.rate}Hz -> ${small.rate}Hz`);
+}
+);
