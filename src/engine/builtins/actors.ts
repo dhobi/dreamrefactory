@@ -25,10 +25,43 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   r("opencastfile", async (_i, [n]) => ((await session.openCastFile(toStr(n ?? ""))) ? 1 : 0));
   r("closecastfile", (_i, [n]) => session.closeCastFile(toStr(n ?? "")));
   r("actorexists", (_i, [n]) => (actor(n) ? 1 : 0));
+
+  /**
+   * The accost trace, asked for alongside #180 — "can you log when we get the
+   * attention of a puppet, just to trace it?".
+   *
+   * `hasattention` is the only caller of `actordist` in the shipped corpus and
+   * it asks only about the actor `curattention` names, so this is not a distance
+   * readout: it is the accost clock starting and stopping. A character in view
+   * is counting down towards stopping you; one out of view has just had their
+   * count reset. Only CHANGES print — a claim held across a hundred idle passes
+   * says nothing until the answer moves — so the pane shows the two moments that
+   * matter and nothing between them.
+   */
+  const inView = new Map<string, boolean>();
+  const sight = (n: Value, dist: number): number => {
+    const who = toStr(n ?? "");
+    const seen = dist !== 32000;
+    if (who && inView.get(who) !== seen) {
+      inView.set(who, seen);
+      log(`sight: ${who} ${seen ? `in view (${dist})` : "out of view — attention clock reset"}`);
+    }
+    return dist;
+  };
   /**
    * actordist(name): ground distance from the actor to the camera; 32000 when
    * the actor isn't present/visible (the sentinel scripts test, `if
    * actordist(target) = 32000`). Mirrors propdist for cast actors.
+   *
+   * **"Present" means DRAWN, not near** — see {@link ActorRuntime.onScreen} for
+   * the gate and for #180, the report that showed the difference. The original
+   * does not measure a distance at all: 0x40e790 runs the actor→screen
+   * projection and reports the DEPTH it computed, or 32000 where it refused. We
+   * keep the ground distance, because the magnitude has no consumer — the only
+   * two callers in the whole corpus are `hasattention`, which compares it to
+   * 32000 and nothing else, and a `message()` in boot's idle that prints it —
+   * and a distance is the number a reader comparing it against `hotdist()`
+   * wants. The refusals are what carry the behaviour, and those we follow.
    *
    * **A close-up counts as not present**, and that is the one line of this that
    * isn't geometry. `setVisible` false means the room is not being drawn at all —
@@ -94,9 +127,20 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   r("actordist", (_i, [n]) => {
     const a = actor(n);
     const lis = session.listener();
-    if (!a || !a.visible || !lis || !session.setVisible) return 32000;
-    if (session.puppet?.visible) return 32000;
-    return Math.round(Math.hypot(a.worldX - lis.x, a.worldZ - lis.y));
+    if (!a || !a.visible || !lis || !session.setVisible) return sight(n, 32000);
+    if (session.puppet?.visible) return sight(n, 32000);
+    // OUT OF VIEW IS OUT OF REACH (#180). The original never measures a distance
+    // it could not draw: `actordist` answers 32000 whenever the actor→screen
+    // projection refuses, and an empty intersection with the view rectangle is
+    // one of the ways it refuses. See ActorRuntime.onScreen for the gates and
+    // for what leaving this one out cost.
+    const cam = session.activeCamera();
+    if (cam && !session.actorRuntime.onScreen(a, cam)) return sight(n, 32000);
+    // the GROUND pair is (worldX, worldY) — worldZ is the height (see propxyz,
+    // and projectPoint, which takes it as the third argument). Measuring across
+    // x and the HEIGHT put Cashmore 4101 from a standpoint she stands 4896 from,
+    // which is the wrong side of `hotdist("stair1c1")` = 4000.
+    return sight(n, Math.round(Math.hypot(a.worldX - lis.x, a.worldY - lis.y)));
   });
   // actorinstance(src, dst): spawn a new actor sharing src's cast sprite;
   // actordelete(name): remove one. TAOOT's gang cast fills its lifeboat crowd with
@@ -154,9 +198,15 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     const who = name.toLowerCase();
     if (!who) return;
     if (String(session.interp.globals.get("curattention") ?? "").toLowerCase() === who) {
-      session.interp.globals.set("curattention", "");
+      session.interp.setGlobal("curattention", "");
     }
   };
+  // ...and watch it, so the log says who has claimed you and when they let go.
+  // The engine knows this name already — everything above is about holding
+  // `clearattention()`'s invariant — and #180 is a report about a claim nobody
+  // could see being made. Paired with the `sight:` lines, the two questions a
+  // reader has ("who wants me?", "can they see me?") are both on the pane.
+  session.interp.watchGlobals.add("curattention");
   acc("actorvisible", 0, (a) => (a.visible ? 1 : 0), (a, v, n) => {
     a.visible = truthy(v);
     if (!a.visible) dropAttention(toStr(n));

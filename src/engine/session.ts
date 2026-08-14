@@ -8,6 +8,7 @@ import { parseScript } from "./parser";
 import { readCstFile } from "../df/cst";
 import { CallCtx, Frame, Interpreter, ScriptInstance, Value, toStr } from "./interp";
 import { ActorRuntime } from "./actors";
+import type { WorldCamera } from "./geometry";
 import { PropRuntime } from "./props";
 import { seededRng } from "./rng";
 import { AudioLibrary, AudioSink } from "./audio";
@@ -366,6 +367,9 @@ export class GameSession {
   ) {
     registerGameBuiltins(this); // core + game families, see builtins/index.ts
     this.interp.realYieldSeq = () => this.realYieldSeq;
+    // a watched global reads on the pane like the scripts' own message() lines
+    this.interp.onGlobalChange = (name, from, to) =>
+      this.onLog(`glob: ${name} = ${JSON.stringify(to)} (was ${JSON.stringify(from)})`);
   }
 
   /**
@@ -462,6 +466,22 @@ export class GameSession {
   readonly scheduler = new Scheduler(this);
   /** host hook: listener (camera) ground position + facing for crickets */
   listener: () => { x: number; y: number; deg: number } | null = () => null;
+  /**
+   * Host hook: the camera the world is being drawn through right now — the
+   * motion camera mid-turn, the standpoint's the rest of the time.
+   *
+   * The listener above is the same camera reduced to a ground position and a
+   * facing, which is all a cricket's falloff and pan need. `actordist` needs the
+   * whole thing, because the question it really asks is whether the actor would
+   * be DRAWN (see {@link ActorRuntime.onScreen}), and that is a projection.
+   *
+   * A session with no viewer — the unit tests that drive one directly — leaves
+   * this null, and `actordist` then falls back to the gates that do not need a
+   * camera. "Nobody has told me where the camera is" is not the same claim as
+   * "the actor is off screen", and answering the sentinel for it would make
+   * every character in a bare session permanently invisible to their own idle.
+   */
+  activeCamera: () => WorldCamera | null = () => null;
 
   /** scripts currently executing/suspended (delay) — input waits on these */
   private inflight = new Set<Promise<unknown>>();

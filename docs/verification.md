@@ -559,6 +559,45 @@ that would ask never runs. Same observable by starvation instead of by answer �
 and `hasattention` is the only caller of `actordist` in the shipped corpus, so no
 script can tell the two apart.
 
+**And a character could accost you from a deck below.** The paragraph above got
+`actordist`'s *shape* right — the answer is whatever the projection at `0x411180`
+says — and then ported only two of its refusals. The one left out is the last
+thing that routine does: it intersects the actor's sprite rectangle with the
+view's (`0x435300`) and refuses on an empty intersection. Out of view is out of
+reach, and nothing else in the accost path asks. The range gate the scripts do
+have is `realdist(me) < hotdist()`, which is a **ground** distance across a set —
+and `stair1c1` is one set holding two decks of the aft grand staircase, so Daisy
+Cashmore standing on the B-deck landing is 1956 units from the A-deck standpoint
+directly above her, well inside that room's 4000. She walked up through the floor
+and started talking (#180).
+
+The reporter measured seven standpoints in the original, and they settle it
+between them — six where nothing happens and one where she does accost:
+
+| standpoint | `realdist` | in range? | on screen? | original |
+|---|---|---|---|---|
+| Scene55/View74 | 1956 | yes | **no** | leaves you alone |
+| Scene56/View66 | 2268 | yes | **no** | leaves you alone |
+| Scene54/View69 | 228 | yes | **no** | leaves you alone |
+| Scene43/View47 | 2837 | yes | **no** | leaves you alone |
+| Scene23/View31 | 1086 | yes | **no** | leaves you alone |
+| Scene101/View102 | 4896 | **no** | yes | leaves you alone |
+| Scene43/View46 | 2837 | yes | yes | **accosts** |
+
+Distance alone predicts the wrong answer at five of the seven; distance plus the
+rectangle predicts all seven. Both gates are load-bearing and they are
+independent — the sixth row is the one range catches and sight does not.
+
+The same probe found `actordist` measuring across x and the **height** rather
+than the ground pair (`worldZ` where `worldY` belongs), which is why Scene101
+read 4101 for a standpoint 4896 away — the wrong side of `hotdist`. Nothing had
+ever noticed, because the only two callers in the corpus are `hasattention`,
+which compares the answer to 32000 and nothing else, and a `message()` in boot's
+`idle` that prints it. Worth recording that the original doesn't answer a ground
+distance at all: `0x411371` hands back the projected **depth** and caches it in
+the actor record at `+0x28`. We keep the distance, because it is the number a
+reader comparing against `hotdist()` wants and no script can tell.
+
 **`actorzclip` was read as a near-clip plane when it is an occlusion bias.** The
 draw list culled an actor whose projected depth was under their `zclip`, and the
 occlusion level then ignored `zclip` entirely — the same expression used for the

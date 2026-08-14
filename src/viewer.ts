@@ -480,6 +480,9 @@ export class SetViewer {
       const v = sc?.views[this.viewIdx];
       return v ? { x: sc.xAxisMap, y: sc.zAxisMap, deg: v.rotation8 } : null;
     };
+    // ...and the whole camera, for `actordist`: what it answers is whether the
+    // actor would be DRAWN through this camera, not how far away they are (#180).
+    session.activeCamera = () => this.activeCamera();
     // hittest(point): resolve a screen pixel to an object name + kind. Every
     // script that dispatches a click or a cursor switches on this (BOOTFILE's
     // mousedown and idle, INVEN.SHP's handleselect and its drop flow, HOUSE.SHP's

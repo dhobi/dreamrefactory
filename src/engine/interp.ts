@@ -87,6 +87,19 @@ export class ScriptInstance {
 
 export class Interpreter {
   readonly globals = new Map<string, Value>();
+  /**
+   * Globals whose every change is announced through {@link onGlobalChange} —
+   * a watch list, in the debugger's sense.
+   *
+   * The plot of this game lives entirely in script globals (see
+   * src/debug-panel.ts), so "why did that happen?" is nearly always "which
+   * global moved, and when?". The state pane answers it after the fact; this
+   * answers it in order, on the log, interleaved with the `msg:` lines the
+   * scripts print themselves. Nothing is watched unless something asks.
+   */
+  readonly watchGlobals = new Set<string>();
+  /** fired when a WATCHED global's value changes; the session routes it to the log */
+  onGlobalChange: (name: string, from: Value, to: Value) => void = () => {};
   readonly builtins = new Map<string, Builtin>();
   readonly specialForms = new Map<string, SpecialForm>();
   /**
@@ -460,8 +473,20 @@ export class Interpreter {
 
   setVar(name: string, v: Value, frame: Frame): void {
     if (frame.locals.has(name)) frame.locals.set(name, v);
-    else if (this.globals.has(name)) this.globals.set(name, v);
+    else if (this.globals.has(name)) this.setGlobal(name, v);
     else frame.locals.set(name, v);
+  }
+
+  /**
+   * Write a global, announcing it if it is watched. The engine's own few writes
+   * to the game's globals go through here too, so a watch sees the whole story
+   * and not just the half the scripts do (`curattention` is written by both —
+   * see `dropAttention` in builtins/actors.ts).
+   */
+  setGlobal(name: string, v: Value): void {
+    const from = this.globals.get(name) ?? "";
+    this.globals.set(name, v);
+    if (this.watchGlobals.has(name) && !valueEq(from, v)) this.onGlobalChange(name, from, v);
   }
 }
 

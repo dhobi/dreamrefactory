@@ -229,6 +229,44 @@ export class ActorRuntime {
   }
 
   /**
+   * Is this actor's sprite actually somewhere on the screen right now?
+   *
+   * The same question {@link drawList} and {@link rect} answer between them,
+   * asked as a predicate — and in the original it is literally the same code.
+   * `actordist` (0x40e790) does not measure anything itself: it runs the shared
+   * actor→screen projection at 0x411180 and answers 32000 whenever that
+   * REFUSES, so "not present" means "would not be drawn". Its gates, in order:
+   *
+   *   1. `actorvisible <= 0`                              (0x411190)
+   *   2. a set open, and the `setvisible` global nonzero  (0x489f58 / 0x489f5a)
+   *   3. the actor's own set name vs the current one      (strcmp at 0x435630)
+   *   4. behind the camera / outside the depth window     (0x411252, 0x411262)
+   *   5. **the sprite rectangle intersected with the view's** (0x435300) — and
+   *      an empty intersection is a refusal like any other.
+   *
+   * Step 5 is the one this port was missing, and #180 is what that costs: a
+   * character standing a deck below you, or behind your shoulder, is inside
+   * `hotdist()` all the same, so `cashidle` kept re-arming, `hasattention(6)`
+   * came due against a distance that was merely SHORT rather than VISIBLE, and
+   * Daisy Cashmore stopped you on the A-deck landing while she was down on B.
+   * The reporter's six standpoints in `stair1c1` all separate on this and
+   * nothing else — distance alone predicts the wrong answer at five of them.
+   *
+   * The depth window (step 4) is not ported: its two globals are screen-space
+   * constants of the original's own rasteriser and nothing in the corpus reads
+   * them. Everything the report turns on is the rectangle.
+   */
+  onScreen(a: ActorInstance, cam: WorldCamera): boolean {
+    if (!a.visible || a.scale <= 0) return false;
+    if (a.setName && a.setName !== this.currentSet) return false;
+    const proj = projectPoint(cam, a.worldX, a.worldY, a.worldZ);
+    if (!proj) return false; // behind the camera
+    const r = this.rect(a, proj, cam);
+    if (!r) return false; // no frame to draw
+    return r.x < cam.clipW && r.y < cam.clipH && r.x + r.w > 0 && r.y + r.h > 0;
+  }
+
+  /**
    * The depth an actor's sprite is OCCLUDED at — its own depth, biased by zclip.
    *
    * That bias is what `actorzclip` is for, and reading it as a near-clip plane
