@@ -9,7 +9,7 @@ export type { Occlusion } from "./geometry";
 
 /**
  * Runtime for cast characters ("actors"). Actors are world-space sprites
- * like propxyz props, but with 8 view directions per pose: the drawn frame
+ * like propxyz props, but with several stored views per pose: the drawn frame
  * depends on the actor's facing relative to the camera. Scripts drive them
  * with actorset/actorstar/actorxyz/actordeg/actorpose/actorvisible/
  * actorscale — the same getter/setter-by-arity pattern as props.

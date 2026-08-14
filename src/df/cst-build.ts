@@ -3,8 +3,8 @@
  * reader. See [`build.ts`](build.ts) for why these modules exist.
  *
  * A cast is the walking half of a character: members (`morrow`, `sasha`), each
- * with poses, each pose a grid of **steps × 8 directions** of transparent-codec
- * sprites. The 8 directions are the compass the runtime picks from when a
+ * with poses, each pose a grid of **steps × 8 views** of transparent-codec
+ * sprites. The 8 views are the compass the runtime picks from when a
  * character faces the camera one way or another, and a step is one frame of the
  * walk cycle.
  *

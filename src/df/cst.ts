@@ -6,7 +6,8 @@ import { DFContainerFile, patchContainerData, readContainerFile } from "./contai
  * characters, EXTRA.CST the background passengers. Each cast member has a
  * script (setupactor/idle/mousedown live there) and a list of image SETS
  * (poses): "stand"/"standlj"/"walk"..., each holding sprite frames in the
- * SHP transparent codec, 8 view directions per animation step.
+ * SHP transparent codec, and one picture per stored view of each animation
+ * step (usually eight around the compass, but see {@link CastFrame.angle}).
  *
  * Layout (validated against GANG.CST):
  *   container 0: palette @36 (256*8), puppet count i32 @0x938,
@@ -14,10 +15,11 @@ import { DFContainerFile, patchContainerData, readContainerFile } from "./contai
  *   logic container: script loc i32 @0x26, name pascal @0x2A,
  *                    set count i32 @0x5A, 32-byte set records @0x5E
  *                    (i32 set container + pascal name @+16)
- *   set container: frame count i32 @0x72, 44-byte records @0x76:
- *                  i32 frame container, i16 direction (0..7) @+10,
- *                  i16 flag @+12, padded size Y-first @+22, offset
- *                  Y-first @+26, depicted angle i16 (dir*0x2000) @+40,
+ *   set container: play script @0x2E with its length @0x70, frame count i32
+ *                  @0x72, 44-byte records @0x76:
+ *                  i32 frame container, i16 animation step @+8, i16 ordinal
+ *                  within the step @+10, padded size Y-first @+22, offset
+ *                  Y-first @+26, depicted angle i16 (0..255 space) @+40,
  *                  reference scale i16 @+42
  *
  * A member's logic container is the SAME record shape as a SHP prop group's
@@ -82,7 +84,7 @@ export interface CastPose {
    * and the reporter's side-by-side video shows exactly what that looks like:
    * the same walk, over the same ground, in the same time, with the feet going
    * twice as fast. `stok1`'s `dig` and `throw` are the other authored ones
-   * (14 steps over 8 pictures, the eighth never named).
+   * (14 steps over 7 pictures).
    */
   play: number[];
   frameCount: number;

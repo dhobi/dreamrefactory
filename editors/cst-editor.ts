@@ -404,10 +404,14 @@ function stopPlayback(): void {
 }
 
 /**
- * Cycle the pose's steps in the selected direction, at the cadence the walk
- * service uses (one step per 50 ms tick) and LOOPING, because that is what a
- * walk does: the scheduler advances `step` every tick for as long as the walk
- * runs and the runtime takes it modulo the step count.
+ * Play the pose the way the engine plays it: one step of its PLAY SCRIPT per
+ * 50 ms service pass, looping.
+ *
+ * Through the script, not through the pictures — the two are not the same
+ * length, and a preview that walks the pictures directly is the same bug the
+ * runtime had (#181). Every walk in the game lists its ten pictures twice, so a
+ * stride takes a second here as well; `stok1`'s `dig` is the same and every
+ * `stand` lists one step, which is why those do not offer a cycle at all.
  */
 $("playBtn").addEventListener("click", () => {
   if (playing) {
@@ -416,7 +420,7 @@ $("playBtn").addEventListener("click", () => {
     return;
   }
   const p = pose();
-  if (!p || p.steps.length < 2) {
+  if (!p || p.play.length < 2) {
     log(t("casts.singleStepNotCycle"));
     return;
   }
@@ -424,7 +428,8 @@ $("playBtn").addEventListener("click", () => {
   let raf = 0;
   $("playBtn").textContent = "◼ Stop";
   const step = (): void => {
-    stepIdx = Math.floor((performance.now() - start) / STEP_MS) % p.steps.length;
+    const at = Math.floor((performance.now() - start) / STEP_MS) % p.play.length;
+    stepIdx = p.play[at];
     const loc = p.steps[stepIdx]?.[dirIdx]?.location;
     drawScreen(loc ? frameAt(loc) : null);
     raf = requestAnimationFrame(step);
@@ -558,27 +563,33 @@ function buildPoses(): void {
     };
     row.appendChild(name);
 
+    // a pose CYCLES when its play script has more than one step, which is not
+    // the same question as how many pictures it stores: `stok1`'s `stand` keeps
+    // two and plays one of them for ever
+    const cycles = p.play.length > 1;
     const kind = document.createElement("span");
-    kind.className = "badge " + (p.steps.length > 1 ? "anim" : "sel");
-    kind.textContent = p.steps.length > 1 ? "cycle" : "stand";
-    kind.title =
-      p.steps.length > 1
-        ? t("casts.manySteps")
-        : t("casts.oneStep");
+    kind.className = "badge " + (cycles ? "anim" : "sel");
+    kind.textContent = cycles ? "cycle" : "stand";
+    kind.title = cycles ? t("casts.manySteps") : t("casts.oneStep");
     row.appendChild(kind);
 
     const meta = document.createElement("span");
     meta.className = "meta grow";
-    const holes = p.steps.reduce((n, s) => n + (8 - s.filter(Boolean).length), 0);
+    // a hole is a slot with no art behind it, not a step short of eight views —
+    // a pose stores as many views as it stores
+    const views = Math.max(0, ...p.steps.map((s) => s.length));
+    const holes = p.steps.reduce((n, s) => n + s.filter((f) => !f.location).length, 0);
     meta.textContent =
       t("counts.steps", { n: p.steps.length }) +
-      t("casts.byDirections") +
+      " × " +
+      t("counts.views", { n: views }) +
+      " · " +
       t("counts.sprites", { n: p.frameCount }) +
       (holes ? t("casts.missing", { n: holes }) : "") +
       t("casts.setContainer", { loc: p.location });
     row.appendChild(meta);
 
-    if (p.steps.length > 1) {
+    if (cycles) {
       const play = document.createElement("button");
       play.className = "mini";
       play.textContent = "▶";
