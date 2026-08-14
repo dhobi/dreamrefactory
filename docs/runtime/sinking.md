@@ -122,18 +122,26 @@ Measured in this port, one turn takes **10 rendered frames** and one road takes
 - **Standing still** — only the heartbeat: 20 passes per real second, one game
   second. **1×.**
 - **Turning continuously** — `openscene` fires every 10 frames, and the throttle
-  admits every *second* one: +1 second per 20 frames, which at 50 ms a frame is
-  +1 per real second, on top of the heartbeat's +1. **2×.**
+  admits every *second* one: a bump per 20 frames, which at 50 ms a frame is one
+  per real second. Whether that lands **on top of** the heartbeat's second or
+  **instead of** it is the whole question, because a bump also does
+  `clockcount = 0`. The video says on top (**2×**); the mechanism, worked through
+  below, says instead of (**1×**), and 1× is what this port does. See [the model,
+  derived](#the-model-derived--and-what-it-predicts).
 - **Walking a road** — each new standpoint is one `openscene`, and a road is
   longer than 20 frames, so essentially every road bumps: **+1 second per scene
   reached**, on top of real time.
 
-Those are exactly the rates measured off video of the original in
-[#126](https://github.com/dhobi/taoot-web/issues/126): the second hand moves
-about twice a second while spinning in place, and about one extra second per
-scene while travelling. The arithmetic and the observation were derived
-independently and agree, which is the best evidence available that this is the
-whole mechanism.
+The road figure is exactly the rate measured off video of the original in
+[#126](https://github.com/dhobi/taoot-web/issues/126) — about one extra second
+per scene while travelling — and the arithmetic and the observation were derived
+independently, which is the best evidence available that the bump is real and
+that its throttle is in frames.
+
+The turning figure is where the two part company. The same video shows the second
+hand moving about twice a second while spinning in place, and the mechanism as
+written gives once. That discrepancy is [#184](https://github.com/dhobi/taoot-web/issues/184),
+and it is worked through at the end of this page rather than papered over.
 
 The practical consequence for a player: **navigating badly costs you the ship.**
 Hunting for a character you cannot find burns clock faster than standing still
@@ -214,64 +222,99 @@ Measured over 20 seconds of engine time at `lounge1c` Scene14/View37:
 | turning continuously | 1.00 (was 0.85) |
 | entering a scene | +1 per scene (`secframe` advances) |
 
-**Turning still is not the original's 2×.** A bump does not add to the heartbeat,
-it *resets* it (`clockcount = 0`): the partial game-second in flight is discarded,
-so a bump arriving before `calctime` reaches 20 replaces that tick instead of
-joining it, and the sum is one second per 20 frames rather than two.
+**Turning still is not the video's 2×**, and the section below is why that is now
+a statement about the *original* rather than about this port. A bump does not add
+to the heartbeat, it *resets* it (`clockcount = 0`): the partial game-second in
+flight is discarded, so a bump arriving before `calctime` reaches 20 replaces that
+tick instead of joining it, and the sum is one second per 20 frames rather than
+two. The original orders those two the same way we do — its own `idle()` draws the
+frame before it winds the clock — so the mechanism it runs predicts 1× as well.
 
-### What the disassembly rules out
+### The model, derived — and what it predicts
 
 Two routes to 2× were on the table
 ([#184](https://github.com/dhobi/taoot-web/issues/184)): the original's *ordering
 within a pass*, or a frame counter that *outruns* the pass rate during an
-animation. TI.EXE settles the first one, in the negative.
+animation. The boot library settles the first, and the disassembly settles what
+it was blamed on. Both are dead, and the model that survives predicts what the
+port already does.
 
-`frame()` is the counter at `0x489efa`, and the only thing that moves it is the
-master pass's tail routine `0x439b80` — read straight off the `frame` handler at
-`0x4273b0`, which does nothing but `mov ecx, [0x489efa]`. That routine is:
+**`frame()` advances once per pass, whatever the engine then does.** It is the
+counter at `0x489efa` — read off the `frame` handler at `0x4273b0`, which does
+nothing but fetch it — and the only thing that moves it is `inc dword ptr
+[0x489efa]` at the head of the master pass's tail routine `0x439b80`, above the
+three-way branch that chooses how to draw. The pass itself is 50 ms, measured
+rather than assumed: `0x43A940` spins until `framerate` ticks have elapsed,
+`0x41DE90` is `GetTickCount() * 3 / 50` (60 ticks a second), and `framerate`
+defaults to 3 (`0x429643`, clamped 0..60 by its setter). Nothing in the shipped
+corpus calls `setframerate`. So 20 frames a second, and `frame() - secframe >= 20`
+admits a bump once a second at most.
+
+**The clock is wound after the frame is drawn — in the original as in this port.**
+The boot library's own `idle()` says so in two lines:
 
 ```
-0x439b80: inc  dword ptr [0x489efa]     ; frame++, BEFORE the branch
-0x439b86: cmp  word ptr [0x489fd8], 0
-0x439b8e: je   0x439ba8
-0x439b90: cmp  word ptr [0x489fda], 0
-0x439b98: je   0x439ba8
-0x439b9a: call 0x43a940                 ; ─┐
-0x439b9f: call 0x440520                 ;  │
-0x439ba7: ret                           ;  │
-0x439ba8: cmp  word ptr [0x489f58], 0   ;  ├─ three branches,
-0x439bb0: je   0x439bc0                 ;  │  mutually exclusive
-0x439bb2: cmp  dword ptr [0x48a520], 0  ;  │
-0x439bb9: jl   0x439bc0                 ;  │
-0x439bbb: jmp  0x43a440                 ; ─┤
-0x439bc0: call 0x43a860                 ; ─┘  the idle branch
-0x439bc8: ret
+code idle ()
+	...
+	forceupdate ()
+	calctime ()
+	idlecount = idlecount + 1
 ```
 
-Two consequences, and they are the useful part:
+`forceupdate()` *is* the master pass (the engine's handler tail-calls `0x442550`),
+so everything a pass dispatches — including the `openscene` a view change fires —
+has already happened when `calctime()` runs. That is the port's order too:
+`serviceStep()` and then `serviceGameClock()`.
 
-- **`frame()` advances on every pass, whatever the engine then does** — the
-  increment is above the branch.
-- **`calctime()` does not.** It is called from `idle()`, and `idle()` runs from one
-  branch only. `0x48a520` is the movement module's own state (20 of its 20 code
-  references sit inside `0x4399xx`–`0x43a8xx`), so while an animation is running
-  the engine takes `0x43a440` and never reaches `0x43a860`.
+**So the two are phase-locked, and the bump always lands first.** A bump sets
+`secframe = frame()` and `clockcount = 0` in the same breath, so both counters
+start from zero together and both come due 20 frames later. On that pass the bump
+runs inside `forceupdate` and zeroes `clockcount`; `calctime` then raises it to 1.
+The heartbeat never reaches 20 while you keep turning, and the bump does not add
+to it — it replaces it.
 
-So in the original, an animation **starves the heartbeat while the frames keep
-counting** — and `calctime` and the `openscene` bump can never run in the same
-pass, because they are on branches that exclude each other. There is no ordering
-to copy. That route is dead.
+`clockcount = 0` is not declared `global` in `openscene`, and it is a global
+write all the same: an undeclared name resolves to an existing global, which
+`clockcount` is by then (`calctime` declares it). `calctime`'s own undeclared
+`clock = hrs * 100 + min` is the same rule, and the shipped saves carry its
+result. This port resolves it identically (`Interp.setVar`).
 
-What survives is the second one, and it now has a concrete shape: **TI.EXE's
-`frame()` is a pass counter; ours is derived from wall time** at a fixed 20/second
-(`GameSession.advanceFrames`). If the original's main loop runs its pass faster
-while animating, its `frame()` outruns ours and the bumps come more often than
-once a second. That is where to pick this up — `0x43df8f` is the master pass's
-call site, immediately after a `0x4397b0(2)` delay whose behaviour under an
-animation is the open question.
+**The model therefore predicts +1 second per 20 frames — 1× — and that is what
+the port measures.** Not a bug reproduced: a mechanism reproduced.
 
-Until that is measured, the gap stands. Guessing at a multiplier would put a
-number in the endgame's clock that no evidence supports, and the clock is what
-the whole mission is scored against.
+### So where does the video's 2× come from?
+
+Unexplained, and honestly so. For the sum to be 2 the heartbeat has to survive a
+bump, and the only arrangement that allows it is `calctime` running *before* the
+bump on the colliding pass — which `idle()` rules out.
+
+The remaining candidate is that `frame()` outruns 20/second while the player is
+moving, which would bring the bumps in faster than the heartbeat can be starved.
+There is no evidence for it and some against: the throttle `0x43A940` is called
+from exactly two sites, one of them inside the normal world draw `0x43A860`, and
+every exit of the moving-player arm `0x43A440` that can be followed ends in that
+same draw. The arm advances one animation step per pass (`inc dword ptr
+[0x48A634]`, wrapped against the step count) — one step, one throttled frame.
+
+Two leads this page used to name are now closed:
+
+- **"`calctime` rides one arm of `0x439B80`."** It does not. `idle` is a script
+  event the message loop dispatches; nothing in `0x439B80` dispatches it, and
+  `0x43A860` is the ordinary world draw rather than "the idle branch".
+- **"`0x4397B0(2)` is a delay whose behaviour under an animation is the open
+  question."** It is not a delay. It is four instructions that raise the redraw
+  level at `0x48A630` to at least its argument — the flag `0x43A860` reads and
+  clears at the top of every draw.
+
+What would settle it is a **measurement of the original**, not more code: the
+second hand counted against a stopwatch in DosBox, standing still and then
+turning continuously, with the DosBox cycle setting written down. If turning
+really is 2× there and the mechanism above is what the engine runs, then one of
+the rates in it is not what it appears to be, and knowing which needs the
+original in front of you rather than the disassembly.
+
+Until then the gap stands and is not guessed at. Putting a multiplier here would
+put a number in the endgame's clock that no evidence supports, and the clock is
+what the whole mission is scored against.
 
 Next: the layer the watch is drawn into — **[Stage & UI](stage-ui.md)**.
