@@ -193,6 +193,27 @@ and 4 MB when the player has asked for
 `calcmod` is a **non-negative** modulo, recovered from `TI.EXE` — plain `%`
 breaks the compass math.
 
+`findword`/`putword` have **two modes**, and an empty delimiter is the second one
+rather than a default separator. With a delimiter the string is a word list split
+on it (`findword("a,b,c", ",", 2)` → `"b"`); with an **empty** delimiter the idx
+addresses a single CHARACTER. TI.EXE's own arm settles it — `findword`'s empty
+branch (`0x428c5f`) range-checks the idx against the source's length byte, writes
+a result of length 1, and copies `source[idx]` into it; out of range is `""`.
+`putword`'s (`0x428fc0`) is the counterpart: inside the string it inserts the word
+before character idx, one past the end it appends, further out it yields `""`.
+
+Reading that as "split on spaces" was
+[#199](https://github.com/dhobi/taoot-web/issues/199)'s second half. Three of
+TAOOT's own uses need the character rule: the wireless Morse tapper walks
+`for count = 1 to stringlength (sound)` and treats `" "` as a value, the keypad
+matches one typed letter against `findword ("thayer", "", stringlength
+(thayermess) + 1)` in a literal with no spaces, and `extra.cst`'s `setupactor`
+takes a crowd star apart by position (`"ex.a.1"` → letter `a`, number `1`) to name
+the instance `brown1a1`. It also decided whether a save the ORIGINAL wrote could
+be read back: the shipped saves carry `saveprops2 = "11111101100111110"`, dense,
+17 characters for the 17 indices the Enigma's `showX` reads, and every one of
+those `= "1"` tests failed against a space-joined reading.
+
 ## Saved games — `savegame.ts`
 
 `savegame`, `opengame` — see [Saving & loading](../runtime/saves.md).
