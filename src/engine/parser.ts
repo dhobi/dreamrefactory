@@ -103,8 +103,29 @@ class Parser {
   }
   /** consume a block closer; tolerate EOF (original scripts are sloppy) */
   private expectCloser(id: number, what: string): void {
-    if (this.atEnd()) return;
+    if (this.atEnd() || this.atCodeBoundary()) return;
     this.expectOp(id, what);
+  }
+  /**
+   * Is the next token the end of the handler, however deep we are inside it?
+   *
+   * `endcode` and the `code` that starts the NEXT handler bound a block
+   * absolutely — an `if`, `switch` or `while` still open when one arrives is
+   * closed by it rather than allowed to swallow what follows. The corpus needs
+   * this in exactly one place and needs it badly: SMETH1.PUP's `before` script
+   * has `stewardwell` opening two `switch`es and closing one, and without this
+   * that handler's last case ate the four handlers after it — `soundfx`,
+   * `idlespeaks`, `byesmeth` and `smethellslounger`. Which is why Smethells
+   * never turned you away from the first class lounge (#177): the `nolounge`
+   * branch called a handler that had been eaten.
+   *
+   * The same tolerance already existed one level up, for a handler ending in a
+   * bare `exitcode` with no `endcode` at all (TURBINE's `boilsound`); this is
+   * that rule applied at every depth instead of only at the top.
+   */
+  private atCodeBoundary(): boolean {
+    const t = this.peek();
+    return t?.kind === "op" && (t.id === OP.ENDCODE || t.id === OP.CODE);
   }
   /** skip the rest of the line (comments, unparseable noise) */
   private skipLine(): void {
@@ -161,6 +182,7 @@ class Parser {
     const stmts: Stmt[] = [];
     this.skipBreaks();
     while (!this.atEnd()) {
+      if (this.atCodeBoundary()) break; // see {@link atCodeBoundary}
       const t = this.peek();
       if (t?.kind === "op" && closers.includes(t.id)) break;
       stmts.push(this.parseStmt());

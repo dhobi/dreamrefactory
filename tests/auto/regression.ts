@@ -722,6 +722,89 @@ test.skipIf(noDemo)("engine: puppetspeak finds a line named by its subtitle", as
 }
 );
 
+// --- 0e2. a handler that never closes its switch ---------------------------
+// User-reported (#177): "Smethells is supposed to intercept you and tell you the
+// lounge is closed… I can open the door and attempt to walk through, but the
+// screen just fades to black and back", with `? smethellslounger()` — the port's
+// unknown-command marker — as the last line in the log.
+//
+// LNGHALL's door runs `sendtoactor("smeth", runpuppet("smeth1.pup", "nolounge"))`
+// for the whole of missions 1-3, and SMETH1.PUP's `before` script answers it with
+// `smethellslounger()`. Both live in the SAME script container, twenty lines
+// apart, and the call could not find the handler.
+//
+// The reason is eleven blocks earlier. `stewardwell` opens two `switch`es and
+// closes one — the author nested a second plaque inside `case 101` and never
+// wrote its `endswitch` (the source is not even indented for it) — so the outer
+// switch was still open when `endcode` arrived. The parser, looking for `case` or
+// `endswitch`, read straight through the handler boundary and ate the four
+// handlers that followed: `soundfx`, `idlespeaks`, `byesmeth` and
+// `smethellslounger`.
+//
+// So `endcode`, and the `code` that starts the next handler, close whatever is
+// still open. That tolerance already existed one level up, for a handler ending
+// in a bare `exitcode` with no `endcode` (TURBINE's `boilsound`); this is the
+// same rule at every depth. Measured across all six editions afterwards: every
+// declared handler in every script container is parsed, the only remaining
+// difference being gang.cst 1267, which really does declare `endwalk` twice.
+test("engine: an unclosed switch ends at endcode, not at the next handler", async () => {
+  const { session } = await newHost();
+  session.bootedByGame();
+  check("smeth1.pup opens", await session.puppetCtrl.openPuppetFile("smeth1.pup"));
+
+  // the shape, from the file itself — if this ever stops being true the rest of
+  // this test is checking nothing
+  const pup = session.puppet!.pup;
+  const before = pup.scripts.find((x) => x.name === "before")!;
+  const text = scriptToText(sniffScript(pup.file.containers[before.location].data)!);
+  const body = text.slice(text.indexOf("code stewardwell"));
+  const stewardwell = body.slice(0, body.indexOf("endcode"));
+  check(
+    "stewardwell opens two switches and closes one",
+    (stewardwell.match(/\bswitch\b/g) ?? []).length === 2 &&
+      (stewardwell.match(/\bendswitch\b/g) ?? []).length === 1,
+    stewardwell.slice(-120),
+  );
+
+  // ...and every handler declared in that container is reachable
+  const declared = (text.match(/^code +([a-z0-9_]+)/gim) ?? []).map((m) => m.split(/\s+/)[1].toLowerCase());
+  const parsed = parseScript(sniffScript(pup.file.containers[before.location].data)!).codes;
+  check(
+    "every handler after it survives the parse",
+    declared.every((n) => parsed.has(n)),
+    `missing: ${declared.filter((n) => !parsed.has(n)).join(", ")}`,
+  );
+  check("including the one the lounge door calls", parsed.has("smethellslounger"));
+
+  // the behaviour: the door's own message, answered. The reporter's log ended on
+  // `? smethellslounger()`, which is the marker a bound SET installs for an
+  // unresolved call (SetScripts) — no set is open here, so the test installs its
+  // own, or the check below would be one that cannot fail.
+  const unknown: string[] = [];
+  session.interp.onUnknown = (name) => unknown.push(name);
+  const inst = session.puppet!.scripts.get("before")!;
+  // `runyoself("nolounge")` speaks a line and then WAITS on a plaque, so it is
+  // fired rather than awaited — what matters is that it gets that far
+  void session.interp.runHandler(inst, "runyoself", ["nolounge"], { me: "smeth", target: "smeth" });
+  for (let i = 0; i < 120 && !session.puppet?.bevels.length; i++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
+  check(
+    "the lounge refusal resolves instead of reading as an unknown command",
+    !unknown.includes("smethellslounger"),
+    unknown.join(", "),
+  );
+  check(
+    "and Smethells puts his two choices up",
+    session.puppet?.bevels.length === 2,
+    JSON.stringify(session.puppet?.bevels),
+  );
+  session.puppet?.eventWaiter?.(-1); // walk out, so nothing is left suspended
+  await drain();
+}
+);
+
 // --- 0f. the four answers hittest gives a room ------------------------------
 // Every click and every cursor in the game is a `switch result()` over these, and
 // TI.EXE's own hittest (id 20070, 0x4277f0) answers in four zones: the sprite list

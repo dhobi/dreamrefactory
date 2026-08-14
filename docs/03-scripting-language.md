@@ -86,6 +86,19 @@ misbehave:
   shipped corpus — about 2,050 script containers across every file type
   (SET, STG, SHP, MOV, PUP, CST and the BOOTFILE).
 
+  **A handler's boundary outranks every block inside it.** `endcode`, and the
+  `code` that starts the next handler, close whatever is still open — because
+  "unterminated blocks" is not only a handler ending in a bare `exitcode`
+  (TURBINE's `boilsound`), it is also a `switch` that never gets its
+  `endswitch`. SMETH1.PUP's `stewardwell` nests a second plaque inside `case
+  101` and closes only the inner one, and a parser still hunting for `case` or
+  `endswitch` reads clean through `endcode` and eats the handlers that follow —
+  four of them there, one of which is why Smethells never turned you away from
+  the first class lounge ([#177](https://github.com/dhobi/taoot-web/issues/177)).
+  Measured across all six editions: every handler declared in every script
+  container is now parsed, the only exception being `gang.cst`'s container 1267,
+  which really does declare `endwalk` twice.
+
 ## The event model: objects, handlers, and the chain
 
 Every **object** in the game owns a script: the set, each scene, each prop,
