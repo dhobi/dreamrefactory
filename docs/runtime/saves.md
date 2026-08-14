@@ -474,4 +474,51 @@ in-app modal instead:
 Keystrokes inside the modal don't reach the game — typing a save name mustn't
 walk you down a corridor.
 
+### What the dialog does to the game behind it
+
+The original's dialog is not a thing drawn over the game; it is a thing drawn
+*instead of* it, and the game stops dead for its duration. Both levers reach the
+same wrapper (`0x420e40`, the only two callers being `opengame` at `0x4138c7`
+and `savegame` at `0x436f35`), and that wrapper:
+
+- **hides the game.** `0x420500` walks the window list at `0x486390` plus the
+  main window at `0x485c40`, `ShowWindow`s each of them away and forces the OS
+  cursor back on; `0x4205e0` puts them back after. So the black the *Open*
+  dialog sits in (#162) is not a frame the game painted — it is **no window at
+  all**. We have one canvas and cannot take it away, so `opengame` paints what
+  taking it away shows, and restores the panel exactly as it was if the player
+  cancels or picks a file we can't read.
+- **stops the world.** `GetOpenFileNameA` runs its own modal message loop, so
+  the game's loop does not run while the dialog is up: no service pass, no
+  frame counter, no `delay` expiring, no animation. `GameSession.freezeTime`
+  reproduces that by holding the one clock reading the viewer feeds the engine
+  (`gameTime`) — every timed thing downstream is a delta off it, so they all
+  stop together, and afterwards continue from where they stopped instead of
+  replaying the gap.
+- **goes quiet, without muting anything.** The wave device is opened with
+  `CALLBACK_FUNCTION` (`0x406843`), and the callback (`0x406e40`) only retires
+  finished headers on `WOM_DONE` — it never queues the next buffer. Refilling
+  is the game's own code, so a stopped game starves the device within a buffer
+  or two. Nothing in the dialog path mutes it: the only `waveOutPause` /
+  `waveOutRestart` in the binary are inside the submitter's own queue
+  bookkeeping. `freezeTime` therefore *suspends* the sink rather than halting
+  it — the theme picks up mid-bar, which is what starving and then feeding it
+  again sounds like.
+
+The load's own restore blacks the screen too, in engine code rather than in
+script: at `0x41420e`, partway through `0x414080`, it runs the same five calls
+in the same order with the same arguments that are the whole body of the
+`blackscreen` command (`0x43e650`), and only then rebuilds the palette and the
+loop tables. Nothing lifts that black — the room is simply drawn over it, which
+is why our `opengame` clears the fade level outright instead of ramping.
+
+The **save** lever needs none of this from us, because `CTL.STG`'s `saveme` does
+it in script: `screentoblack ("stage", 10)`, `blackscreen ()`, the stage swap,
+and `blacktoscreen ("stage", 10)` on the way back. It also brackets the write
+with `doloops (false)` … `doloops (true)` — un-pausing the world it was saved
+from, so the file records a **running** game rather than the control panel's
+frozen one. (Every flat freezes the world on entry: `transtoflat` opens with
+`pausewalk`/`pausecricket`/`pausetheloops (true)`, and the theme survives only
+because `keeptheme` lists `ctl.stg`.)
+
 Next: everything else the browser provides — **[The browser host](host.md)**.

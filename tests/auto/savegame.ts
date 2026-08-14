@@ -345,6 +345,95 @@ test("loadGame from the control panel re-shows the room (no white screen)", asyn
 });
 
 /**
+ * #162. TI.EXE puts the *Open* dialog up over nothing: the wrapper that calls
+ * `GetOpenFileNameA` (`0x420e40`) hides every one of the game's own windows
+ * first (`0x420500`) and shows them again after (`0x4205e0`), so what is behind
+ * the dialog is not a frame the game drew — it is no window at all. The restore
+ * then blacks the screen itself, in code (`0x41420e` runs `blackscreen`'s exact
+ * five calls), and lets the room be drawn over it.
+ *
+ * Driven through the panel's real "open" lever, which is the only caller of
+ * `opengame` in the game, so the cancel arm is the script's own.
+ */
+test("the load dialog holds a black screen, and the panel comes back on cancel (#162)", async () => {
+  const session = await newSession();
+  await session.loadGame(new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti"))));
+  await session.settle();
+  await session.transToFlat("ctl.stg");
+  await session.settle();
+  // the panel's own fade-in, drained the way the render loop drains it — a
+  // headless session never ticks the ramp, and this test is about what is
+  // holding the screen AFTER it is up.
+  session.fade.queue.length = 0;
+  session.fade.level = 0;
+
+  // the panel's own lever, reached the way HOUSE.SHP reaches it: the brass
+  // button is a prop, its script is a ctl.stg container, and the click travels
+  // `sendtobutton (currentflat (), name, fakemousedown (0))`. Arg 0 skips the
+  // eight-frame spark animation, which wants real frames.
+  const pull = () =>
+    session.stageCtrl.sendToButton(session.currentFlat, "open", "fakemousedown", [0], "open");
+
+  // cancelled: black while the dialog is up, and the panel back afterwards
+  // with no ramp left behind — the original never repainted it, it uncovered it.
+  let whileOpen = -1;
+  let frozen = false;
+  session.onLoadGame = async () => {
+    whileOpen = session.fade.level;
+    frozen = session.frozen;
+    return null;
+  };
+  await pull();
+  expect(whileOpen).toBe(1);
+  expect(frozen).toBe(true); // the world stops while the dialog owns the screen
+  expect(session.frozen).toBe(false);
+  expect(session.fade.level).toBe(0);
+  expect(session.fade.queue.length).toBe(0);
+  expect(session.stageName).toBe("ctl.stg"); // the lever's own cancel check
+
+  // a file we cannot read is a cancel too: the panel is still standing.
+  session.onLoadGame = async () => new Uint8Array([1, 2, 3, 4]);
+  await pull();
+  expect(session.fade.level).toBe(0);
+  expect(session.stageName).toBe("ctl.stg");
+
+  // and a real load ends on the loaded room, drawn — not on the black it was
+  // rebuilt behind.
+  whileOpen = -1;
+  session.onLoadGame = async () => {
+    whileOpen = session.fade.level;
+    return new Uint8Array(readFileSync(savePath("1", "06 - Boiler Room.ti")));
+  };
+  await pull();
+  await session.settle();
+  expect(whileOpen).toBe(1);
+  expect(session.stageName).toBe("main.stg");
+  expect(session.setVisible).toBe(true);
+  expect(session.fade.level).toBe(0);
+  expect(session.fade.queue.length).toBe(0);
+});
+
+/**
+ * The freeze itself. Every timed thing in the engine — the service pass,
+ * `delay`, the fade and wipe ramps, prop animation, movies — reads one clock,
+ * and the viewer hands it this. So holding it is the whole pause: nothing
+ * advances while the dialog is up, and what follows continues from where it
+ * stopped rather than replaying the gap.
+ */
+test("a frozen world does not live through the time the dialog took (#162)", () => {
+  const session = new GameSession(gamefiles(root).provider, new NullAudioSink());
+  expect(session.gameTime(1_000)).toBe(1_000);
+  session.freezeTime();
+  expect(session.frozen).toBe(true);
+  expect(session.gameTime(4_000)).toBe(1_000); // three seconds of dialog, no game time
+  expect(session.gameTime(9_000)).toBe(1_000);
+  session.thawTime();
+  expect(session.frozen).toBe(false);
+  expect(session.gameTime(9_000)).toBe(1_000); // picks up where it stopped...
+  expect(session.gameTime(9_500)).toBe(1_500); // ...and runs on unbroken
+});
+
+/**
  * #52, the whole of it. The London flat's air raid ends in
  * `bombit() -> sendtostage (advanceday ())`, and `advanceday` is a switch on
  * `clock`: "startdisk1" replays the intro in the flat, "bedsit" sails for the
@@ -381,6 +470,8 @@ class OrderedAudioSink implements AudioSink {
   setChannelVolume(channel: AudioChannel, volume: number): void {
     this.channelVolume[channel] = volume;
   }
+  /** nothing here is paced, so a freeze changes nothing to record */
+  setSuspended(): void {}
   play(channel: AudioChannel, _audio: DecodedAudio, opts?: PlayOpts): PlayHandle {
     this.events.push({ kind: "play", channel });
     let stopped = false;
