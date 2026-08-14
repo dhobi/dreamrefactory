@@ -113,7 +113,34 @@ the shipped data, not in the host:
   fires `sendtoactor(target, mousedown(0))` on itself — the character speaks up
   as though you had clicked them.
 
-That second one is worth knowing when a timing change looks harmless. The
+The second one has **two** gates, and only one of them is in the cast's own
+script. `hotdist()` is a ground distance across the whole set, so it is a coarse
+gate wherever a set holds more than one room: `stair1c1` is both decks of the aft
+grand staircase, and from the A-deck landing you are 1956 units from someone
+standing on B — inside its 4000, and through the floor. The other gate is inside
+`hasattention` itself, `if actordist(target) = 32000`, and it is not about
+distance at all: `actordist` answers that sentinel whenever the actor would not
+be **drawn**, which includes a sprite that lands nowhere on the screen. Out of
+view, the attention clock is reset rather than run down, so a character can only
+stop you if you could have seen them coming. Leaving that half out is #180 —
+Daisy Cashmore accosting from a deck below, with the player facing a wall.
+
+The engine says both halves on the log while they happen, which is the trace to
+reach for when a character speaks up and it isn't obvious why:
+
+```
+glob: curattention = "cash" (was 0)          ← she has claimed you
+sight: cash out of view — attention clock reset
+sight: cash in view (947)                    ← now she can see you; the clock runs
+msg: cash                                    ← walktopuppet: she accosts
+```
+
+The first line is a **watched global** (`Interpreter.watchGlobals`) — the game's
+plot lives entirely in globals, so any of them can be put on the log this way;
+`curattention` is the one the engine watches by default. The `sight:` lines are
+`actordist` changing its mind, and it only speaks on a change.
+
+The timing is worth knowing too, when a change to it looks harmless. The
 conversion is `(seconds * 60) / framerate()`, where `framerate()` is **ticks
 per displayed frame** against a 60 Hz base (which is why scripts pass 0 for
 "unthrottled" and 5 for the fight stage's slow frames). So `frame()` counts

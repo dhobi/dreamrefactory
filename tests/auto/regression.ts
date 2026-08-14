@@ -71,6 +71,30 @@ async function newSession(): Promise<{
   return newHost();
 }
 
+/**
+ * Stand an actor where the camera can SEE them: `dist` units dead ahead of the
+ * active camera, at eye height, visible and at a drawable scale.
+ *
+ * Three scenarios below need a character the accost machinery will look at, and
+ * since #180 that takes more than a short distance: `actordist` answers the
+ * 32000 not-present sentinel unless the actor's sprite actually lands on the
+ * screen. Placing them by hand near the LISTENER — which is a ground position,
+ * with no facing and no height — was enough while distance was the whole test
+ * and is not enough now, so the placement lives here once and is asserted.
+ */
+function standInView(session: GameSession, who: string, dist = 300): boolean {
+  const a = session.actorRuntime.get(who);
+  const cam = session.activeCamera();
+  if (!a || !cam) return false;
+  const rad = ((cam.deg & 0xff) / 256) * 2 * Math.PI;
+  a.visible = true;
+  if (a.scale <= 0) a.scale = 1000;
+  a.worldX = cam.x + Math.round(Math.cos(rad) * dist);
+  a.worldY = cam.y + Math.round(Math.sin(rad) * dist);
+  a.worldZ = cam.z;
+  return session.actorRuntime.onScreen(a, cam);
+}
+
 // one monotonic virtual clock for the whole suite (sessions each track their
 // own offsets; time must never run backwards for delay()/loop service)
 let clock = 0;
@@ -6416,7 +6440,7 @@ test("actordist: a flat over the room reads as not present, so hasattention re-a
   const site: CallExpr = { t: "call", name: "actordist", args: [] };
   const frame = { ctx: { me: "", target: "" }, locals: new Map() } as unknown as Parameters<typeof dist>[3];
   const who = [...(session.actorRuntime as unknown as { actors: Map<string, { visible: boolean }> }).actors.keys()][0];
-  (session.actorRuntime as unknown as { actors: Map<string, { visible: boolean }> }).actors.get(who)!.visible = true;
+  check(`${who} stands where the camera sees them`, standInView(session, who), who);
 
   const inTheRoom = Number(await dist(session.interp, [who], site, frame));
   session.setVisible = false; // what transtoflat() leaves behind it
@@ -6460,7 +6484,7 @@ test("actordist: a conversation reads as not present, so nobody accosts you mid-
   const frame = { ctx: { me: "", target: "" }, locals: new Map() } as unknown as Parameters<typeof dist>[3];
   const actors = (session.actorRuntime as unknown as { actors: Map<string, { visible: boolean }> }).actors;
   const who = [...actors.keys()][0];
-  actors.get(who)!.visible = true;
+  check(`${who} stands where the camera sees them`, standInView(session, who), who);
 
   const inTheRoom = Number(await dist(session.interp, [who], site, frame));
   check("a visible actor in the room has a real distance", inTheRoom !== 32000, `${who}=${inTheRoom}`);
@@ -6484,6 +6508,80 @@ test("actordist: a conversation reads as not present, so nobody accosts you mid-
   session.puppetCtrl.closePuppetFile();
   const after = Number(await dist(session.interp, [who], site, frame));
   check("and the real distance is back once it closes", after === inTheRoom, `${who}=${after}`);
+}
+);
+
+// --- 59c-bis. Out of view is out of reach ----------------------------------
+// The fourth face of the same guard, and the one a player meets first: a
+// character you simply cannot SEE must not stop you either (#180).
+//
+// Daisy Cashmore stands on the B-deck landing of `stair1c1`, and the room's two
+// decks are one set, so `realdist(me) < hotdist()` — the only range gate
+// `cashidle` has — is satisfied from the A-deck landing directly above her. She
+// walked up through the floor and started talking. What the original leans on is
+// the other gate, in `hasattention`: `actordist` runs the actor→screen
+// projection and answers 32000 wherever it refuses, and an empty intersection
+// with the view rectangle is a refusal (see ActorRuntime.onScreen).
+//
+// The reporter measured seven standpoints in the original against the port, and
+// they are the whole test — six where the original leaves you alone and one
+// where it accosts. Distance alone gets six of the seven WRONG (every one of
+// them is inside hotdist's 4000 for this room bar Scene101); distance plus the
+// projection gets all seven right, and the two gates are visible separately in
+// the numbers below.
+test("hasattention: a character you cannot see does not accost you (#180)", async () => {
+  // scene, view, on screen?, inside hotdist("stair1c1") = 4000?, what the original does
+  const SPOTS: [string, string, boolean, boolean, string][] = [
+    ["Scene55", "View74", false, true, "A deck, where the report was filed"],
+    ["Scene56", "View66", false, true, "A deck, the report's headline standpoint"],
+    ["Scene54", "View69", false, true, "A deck, right over her head"],
+    ["Scene43", "View47", false, true, "B deck, facing away from her"],
+    ["Scene23", "View31", false, true, "B deck, in front of her but facing aside"],
+    ["Scene101", "View102", true, false, "the forward side: in view, out of range"],
+    ["Scene43", "View46", true, true, "the corner facing her — the ONE that accosts"],
+  ];
+  const { session, viewer, logs } = await newHost();
+  session.interp.globals.set("mission", 1);
+  await session.openSetFile("stair1c1.set", "Scene55", "View74");
+  await drain();
+  await session.sendEvent("sendtoactor", "cash", "setupactor", ["stair1c1"], "cash");
+  await drain();
+
+  const cash = session.actorRuntime.get("cash")!;
+  check("Cashmore is in the room", cash.visible && cash.setName === "stair1c1", `set=${cash.setName}`);
+
+  const dist = session.interp.builtins.get("actordist")!;
+  const site: CallExpr = { t: "call", name: "actordist", args: [] };
+  const frame = { ctx: { me: "", target: "" }, locals: new Map() } as unknown as Parameters<typeof dist>[3];
+
+  for (const [scene, view, seen, inRange, note] of SPOTS) {
+    viewer().jumpTo(scene, view);
+    await drain();
+    const answer = Number(await dist(session.interp, ["cash"], site, frame));
+    const lis = session.listener()!;
+    const real = Math.round(Math.hypot(cash.worldX - lis.x, cash.worldY - lis.y));
+    check(
+      `${scene}/${view}: ${note}`,
+      (answer !== 32000) === seen && (real < 4000) === inRange,
+      `actordist=${answer} realdist=${real} (want ${seen ? "in view" : "out of view"}, ` +
+        `${inRange ? "in range" : "out of range"})`,
+    );
+  }
+
+  // ...and the trace the reporter asked for alongside the fix: who has claimed
+  // you, and whether they can see you. Both are on the pane, in the same place
+  // the scripts' own `msg:` lines are.
+  check(
+    "the log says who claimed your attention",
+    logs.some((l) => l.startsWith('glob: curattention = "cash"')),
+    logs.filter((l) => l.startsWith("glob:")).join(" | ") || "no glob: line",
+  );
+  check(
+    "...and that she cannot see you from there",
+    logs.some((l) => l.startsWith("sight: cash out of view")) &&
+      logs.some((l) => l.startsWith("sight: cash in view")),
+    logs.filter((l) => l.startsWith("sight:")).join(" | ") || "no sight: line",
+  );
 }
 );
 
@@ -6543,13 +6641,23 @@ test("actor arrival: an engine-driven arrival runs no idle", async () => {
     };
     await tick(40); // let the room's idles arm
 
-    // stand them next to the camera — inside hotdist(), which is what arms the
-    // accost — and do it here rather than before the settle, because a patrol
-    // would have walked them off again
+    // Stand them in front of the camera — inside hotdist() AND on screen, which
+    // is what arms the accost — and do it here rather than before the settle,
+    // because a patrol would have walked them off again.
+    //
+    // "On screen" is the half added by #180. The old placement put them 200
+    // units to the side at a height of `lis.y + 200` — thousands of units in the
+    // air, nowhere the camera looks — which was inside hotdist() and so used to
+    // arm the accost all the same. That is the bug this suite now refuses.
     session.scheduler.stopWalk(who);
-    a.worldX = lis.x + 200;
-    a.worldY = lis.y + 200;
-    a.worldZ = lis.y + 200;
+    check(`${set}: ${who} stands where the camera sees them`, standInView(session, who), who);
+    // 300 units ahead, because `hotdist("decka")` is the tightest in the game
+    // at 500 (gang.cst 0001) and the accost has to be inside it
+    check(
+      `${set}: ...and inside hotdist()`,
+      Math.hypot(a.worldX - lis.x, a.worldY - lis.y) < 500,
+      `realdist=${Math.round(Math.hypot(a.worldX - lis.x, a.worldY - lis.y))}`,
+    );
 
     const from = logs.length;
     if (clicked) void session.track(session.sendEvent("sendtoactor", who, "mousedown", [0], who));

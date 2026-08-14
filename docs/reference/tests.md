@@ -15,7 +15,7 @@ three different budgets — one directory each:
 
 | Category | Directory | Command | What it is |
 |----------|-----------|---------|------------|
-| **automatic** | `tests/auto/` | `npm test` | scenario + unit suites that jump to a state and probe it — 448 tests, run on every commit |
+| **automatic** | `tests/auto/` | `npm test` | scenario + unit suites that jump to a state and probe it — 449 tests, run on every commit |
 | **playthrough** | `tests/playthrough/` | `npm run test:playthrough` | the game *played* from the boot to the ending, asserting a recorded state trace — 27 segments plus 3 property tests, ~75 s |
 | **browser** | `tests/browser/` | `npm run test:browser` | the same route through real mouse and keyboard events against a live dev server, diffed against the same trace — ~39 min, because it costs what the game costs |
 
