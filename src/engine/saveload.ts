@@ -585,11 +585,30 @@ function restoreProps(session: GameSession, inventory: SavedProp[]): void {
 }
 
 /**
- * Put the music back from the file. The old path halted the theme and let the
+ * Put the sound back from the file: every bank that was open, then the theme
+ * that was playing out of one of them.
+ *
+ * The theme half replaced an older path that halted the music and let the
  * arriving room's `setupsound` re-score it, which needed `currentset` forced to
  * "none" to beat the `themetype` guard and still left rooms silent where
  * setupsound deliberately scores nothing (#36's flat, gstair3, bind…). The file
  * simply says what was playing.
+ *
+ * The BANKS are a separate question, and opening only the theme's was #199. A
+ * restored loop plays out of a bank that need not be sounding at the moment the
+ * save was taken: BOOTFILE's `playcrickets` opens `insddest.sfx` once when
+ * mission 4 starts and then picks a random one-shot out of it every few
+ * seconds, so the sinking's groaning metal is a live `makeloop` over a SILENT
+ * bank. Restoring the loop without the bank gave `countsounds` 0 →
+ * `indextosound` "" → `sound not found: ` on every tick, for the rest of the
+ * game: `setupsound` only re-opens it when `crickettype` changes, and lnghall,
+ * lounge1c and smoke are all "insd".
+ *
+ * The list is the file's own, like the cast files above, and `openTrackFile` is
+ * idempotent. A bank the PREVIOUS room had open and this save does not name is
+ * left open rather than closed — the original's `opengame` re-opens exactly its
+ * manifest and drops the rest, and ours accumulates (the load in #199 still had
+ * the London flat's bedsit1/bedrad1 mounted). Inert, and its own question.
  *
  * What is NOT restored — and said: positional sound loops beyond the theme
  * (`save.theme.extras`, e.g. the smokestack maze's wind — the maze re-arms them
@@ -599,6 +618,7 @@ function restoreProps(session: GameSession, inventory: SavedProp[]): void {
 async function restoreTheme(session: GameSession, save: SaveGame): Promise<void> {
   session.audio.halt("theme");
   session.currentThemeName = "none";
+  for (const bank of save.trackFiles) await session.openTrackFile(bank);
   const t = save.theme;
   if (!t) return;
   await session.openTrackFile(t.track);

@@ -1967,6 +1967,84 @@ test("every shipped save's placed, visible characters are actually there (#186)"
 }, 300_000);
 
 /**
+ * The room's ambience, over the whole corpus — issue #199.
+ *
+ * A save records every audio bank it had open, and only one of them is playing.
+ * The loader used to open that one — the theme — and the restored
+ * `makecricket`/`makeloop` tables then reached into banks that were not there:
+ * over the 18 shipped saves with a live cricket table, **49 of 50** cricket
+ * records could not resolve their sound from the theme's bank alone, and every
+ * one of them resolves from the banks the save names (measured both ways below,
+ * which is what keeps the second number from being a tautology).
+ *
+ * The sinking is where a player meets it (`insddest.sfx` is open, and silent, in
+ * every mission-4 save — a `.sfx` bank is NEVER the theme in any of the 109),
+ * and it does not heal: BOOTFILE's `setupsound` only re-opens the bank when
+ * `crickettype` changes, and lnghall, lounge1c and smoke are all "insd".
+ */
+test("a load reopens every bank the save had open, not just the theme's (#199)", async () => {
+  // one session, loads back to back — the same claim shape as #186 above
+  const { session } = await newHost();
+  await drain();
+  let checked = 0;
+  let themeOnly = 0;
+  for (const path of allSaves()) {
+    const bytes = new Uint8Array(readFileSync(path));
+    const save = parseSave(bytes);
+    if (!save.crickets.length) continue;
+    // a `.sfx` bank is open and NOT playing — the shape the old loader missed
+    expect.soft(save.trackFiles, path).toContain(save.theme?.track ?? "");
+    for (const t of save.trackFiles) if (t.endsWith(".sfx")) expect.soft(t, path).not.toBe(save.theme?.track);
+    expect.soft(await session.loadGame(bytes), path).toBe(true);
+    for (const c of session.scheduler.crickets) {
+      checked++;
+      if (!session.audioLib.sound(c.name)) themeOnly++;
+      check(`${path}: cricket "${c.name}"`, !!session.audioLib.sound(c.name), "no bank holds it");
+    }
+  }
+  expect(checked).toBeGreaterThan(40); // the corpus really does restore ambience
+  expect(themeOnly).toBe(0);
+});
+
+/**
+ * The sinking, from the report: load into lounge1c and the groaning metal is
+ * still there.
+ *
+ * `playcrickets` (BOOTFILE 0002) is a `makeloop` that picks a random one-shot
+ * out of `insddest.sfx` every few seconds — a live loop over a bank with nothing
+ * playing. With the bank missing, `countsounds` answers 0, `indextosound`
+ * answers "", and the log fills with `sound not found: ` — the EMPTY name is the
+ * signature, and it is what the report showed.
+ */
+test("the sinking's ambience survives a load into lounge1c (#199)", async () => {
+  const sink = new OrderedAudioSink();
+  const { session, logs } = await newHost({ sink });
+  await drain();
+  const bytes = new Uint8Array(readFileSync(savePath("ENDGAME2", "06 - 1st Class Lounge.ti")));
+  const save = parseSave(bytes);
+  expect(save.set).toBe("lounge1c");
+  expect(save.trackFiles).toContain("insddest.sfx");
+  expect(save.theme?.track).toBe("sink0.trk"); // the theme is the OTHER bank
+  expect(save.loops.some((l) => l.handler === "playcrickets")).toBe(true);
+
+  expect(await session.loadGame(bytes)).toBe(true);
+  expect(session.audioLib.bankNames).toContain("insddest.sfx");
+  expect(session.audioLib.soundNames("insddest.sfx").length).toBeGreaterThan(0);
+
+  // and the restored loop plays out of it: run the clock past its saved count
+  // (`300 / (phase + 1) + random (120)` ticks at most) and listen
+  logs.length = 0;
+  const before = sink.events.length;
+  let clock = 0;
+  for (let i = 0; i < 600; i++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
+  expect(logs.filter((l) => /sound not found/.test(l))).toEqual([]);
+  expect(sink.events.slice(before).some((e) => e.kind === "play" && e.channel === "sound")).toBe(true);
+});
+
+/**
  * A walk in flight comes back mid-stride.
  *
  * User-reported against the #181 branch, in the room #181 came from: "we are

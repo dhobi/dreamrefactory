@@ -87,7 +87,7 @@ all 109 shipped saves.
 | **3** | open casts: n × 28 (two pointers, a u32, the `.cst` filename as a Pascal string at +12). **A load has to reopen these** — the room's crowd is instanced from them and no `openset` runs to open them itself; see [The crowd comes from this container](#the-crowd-comes-from-this-container) |
 | **4** | inventory — every loaded prop: **72 × 158** in every shipped save, inventory items first — see [The inventory container](#the-inventory-container-fixed-158-byte-prop-records) |
 | **5** | open shops (`.shp`): n × 28, the same shape as the casts |
-| **6** | open tracks: n × 40-byte descriptors — see [The track containers](#the-track-containers-what-was-playing) |
+| **6** | open tracks: n × 40-byte descriptors. **A load has to reopen all of them**, not just the one that was playing — see [The track containers](#the-track-containers-what-was-playing) |
 | 7 … 6+3n | **three containers per open track**, in descriptor order: the track's registered, playing and looping sound lists, 104 bytes per record. Counts come from the descriptor's `+4`/`+6`/`+8` |
 | **globals** | the script global variables — the core story progress (`clock`, `phase`, `mission`, `playerdeath`, every `…phase`/`…count`, the boiler pressures, the minigame state…) |
 | **globals + 1** | the globals' **string pool**: every string-valued variable's text, as `[len][chars]` entries. The loader reads the pair together (TI.EXE stores the pool handle at globals-blob `+0x10`) |
@@ -815,6 +815,26 @@ volume 9 / pan 0x8a, attenuated exactly as it was last audible); **arrays 2 and 
 are the playing and looping lists**, and they are the answer to "what was this
 room sounding like": a boat-deck save carries `Boat Deck` in both.
 
+### An open bank is not a playing bank
+
+The descriptor list answers a *different* question from the playing/looping
+arrays, and reading only the second one was
+[#199](https://github.com/dhobi/taoot-web/issues/199). A bank can be open with
+all three of its arrays empty and still be the bank a restored `makeloop` or
+`makecricket` reaches into: BOOTFILE's `playcrickets` opens `insddest.sfx` once
+when mission 4 starts, then picks a random one-shot out of it every few seconds,
+so the sinking's groaning metal is a live loop over a silent bank.
+
+Measured over the corpus: a `.sfx` bank is **never** the playing theme in any of
+the 109 shipped saves, 33 of them hold one, and across the 18 with a live cricket
+table **49 of 50** cricket records cannot resolve their sound from the theme's
+bank alone. All 50 resolve from the banks the descriptor list names.
+
+It does not heal by walking, either. `setupsound` only calls `setupcrickets()`
+when `crickettype(currentset())` changes, and lnghall, lounge1c and smoke are all
+`"insd"` — so a load that skipped the bank spent the rest of the game logging
+`sound not found: ` with an **empty name** (`countsounds` 0 → `indextosound` "").
+
 **`savetheme` is not the playing theme.** The script global of that name records
 the theme to restore *after* an interlude, and measured against all 109 shipped
 saves it lags the file's track state in **91** of them. The playing theme is the
@@ -890,6 +910,9 @@ What a load now takes out of the file:
   `deg`, `dist`, `scale`, `value` and `zclip`, which is how the band's lit-or-dark,
   the nav arrow's colour, the destination signs and the open pocketwatch's whole
   assembly come back without `showinterface`/`setupsigns`/`setuparrow` running;
+- the **open audio banks** (container 6), every one of them — the restored loops
+  and crickets play out of banks that need not be sounding, see
+  [an open bank is not a playing bank](#an-open-bank-is-not-a-playing-bank);
 - the **loop and cricket tables**, mid-count, straight into the scheduler;
 - the **theme**, from the track state rather than from `savetheme` or a re-score;
 - **walks are dropped**, with a log line naming the character (the actor's restored

@@ -252,8 +252,17 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    had left, every `makecricket` with its position, radius, period, jitter and time
    to next fire. This is what used to need the arriving room's `openset`: the idles
    that make characters act, the scene timers, the room's positional ambience.
-10. **Score the room from the file**: the track whose playing/looping arrays are
-   non-empty is the theme, and it is played at the player's `themevolume`.
+10. **Reopen every audio bank the save had open, then score the room from the
+   file**: the track whose playing/looping arrays are non-empty is the theme, and
+   it is played at the player's `themevolume`. The *other* open banks matter as
+   much, and opening only the theme's was
+   [#199](https://github.com/dhobi/taoot-web/issues/199): step 9 just restored
+   loops and crickets that play out of banks with nothing sounding in them, so
+   the sinking's groaning metal came back as a live loop with no bank under it —
+   `sound not found: `, with an empty name, for the rest of the game. Across the
+   18 shipped saves with a cricket table, 49 of 50 cricket records cannot resolve
+   their sound from the theme's bank alone. See [an open bank is not a playing
+   bank](../formats/savegame.md#an-open-bank-is-not-a-playing-bank).
 11. **Walks come back mid-stride.** The walks table is TI.EXE's own service table,
     and its record carries the walk's origin, its deltas, its total distance, how
     far along it is and the star it lands on — so the walk is *restored*, not
@@ -335,6 +344,7 @@ much smaller than this page claimed three times over:
   file too, in containers nobody had mapped yet. The residue that is genuinely left is
   a walk in flight (the actor's position is restored, their walk is not) and the
   positional sound loops beyond the theme, which the room re-arms on the next move.
+  The open-bank list was the fourth ([#199](https://github.com/dhobi/taoot-web/issues/199)).
 
   What it used to cost is worth keeping as the worked example.
   [#86](https://github.com/dhobi/taoot-web/issues/86): the engine room passes Vlad
