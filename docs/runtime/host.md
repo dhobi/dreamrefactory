@@ -279,8 +279,11 @@ reference, so an eviction can never blank them.
 **Motion.** Turning walks the scene's ring to the next named view; walking
 takes the first available road and picks the **arrival view nearest the
 travel direction** (a road's endpoint view faces back along the road — see
-[SET](../formats/set.md)). Turn/walk animation paces at ~90 ms per frame
-(~11 fps, close to the original's feel). While animating, `currentview()`
+[SET](../formats/set.md)). Turn/walk animation paces at **50 ms per
+frame** — one frame per service pass, which is TI.EXE's own frame period
+(`framerate` defaults to 3 ticks of 50/3 ms, `0x429643`/`0x43a940`). It was 90 ms
+until a player reported that the original in DosBox moves visibly faster; it does,
+by 1.8x, and the rate was never a feel decision to make. While animating, `currentview()`
 returns the pseudo-view **`"moving"`** — scripts genuinely poll for it.
 `jumpTo` tolerates the shipped data's one stale view name by falling back to
 the nearest view by rotation.

@@ -14,7 +14,7 @@ itself starts on, taken apart into the pieces a room is made of.
 | Part | What you can do with it |
 |------|-------------------------|
 | the **set** | rename it — what a script's `changeset` asks for — and choose the scene/view a fresh load starts on, picked from the standpoints the set actually has |
-| a **scene** and its **views** | pick a scene, see every direction you can face from it with its rotation, camera height and standpoint frame, and rename either. **▶ Play turn** turns right the way the game does — the ring's frames at 90 ms each — and lands on the standpoint the ring ends at |
+| a **scene** and its **views** | pick a scene, see every direction you can face from it with its rotation, camera height and standpoint frame, and rename either. **▶ Play turn** turns right the way the game does — the ring's frames at 50 ms each — and lands on the standpoint the ring ends at |
 | the **hotspots** | the clickable regions of the selected view, drawn over the picture: rename one, or move/resize its rectangle by its four corners and watch the overlay follow. The rectangles are stored top/left/bottom/right and shown x-first |
 | the **frames** | both turn rings as thumbnails, standpoints marked; pick one to see it full size with its camera pose, export it as a PNG, or replace it |
 | the **roads** | rename a road, see the global view ids it joins and its waypoints, and walk it in either direction in the preview |
