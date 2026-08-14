@@ -763,11 +763,25 @@ match: `1/20 - Meeting Conkling in his suite - B59` (36 bytes),
 `2/05` it is ga's 10 waypoints marching x = 4498 → 6787 at constant z — a
 mid-`walkto` across the boat deck, serialized.
 
-**The port does not resume a walk.** On load the actor's restored position
-stands and their restored idle loop re-decides; a dropped walk is logged rather
-than silently ignored. Symmetrically, the port's own saves **zero the walks
-table**, because a base slot left active would send the original's loader
-looking for a payload container that belongs to the previous save's moment.
+**The port resumes a walk from all of this** — see [Loading, step
+11](../runtime/saves.md). The record holds the origin, the deltas, the distance
+and the progress, and a route holds its waypoints and its length here, so the
+walker sets off from where the save caught them with only what was left to run.
+Rebuilding the position from these fields lands on the actor record's own for
+every live slot in the corpus, which is what says they are read right.
+
+Two things to hold on to. The **type is which mover**, and only type 1 fills the
+record's movement words in: a type-0 turn has no mover, and a type-3 route keeps
+its length in the payload, so both leave those words holding whatever the slot
+held last (`hack`'s route claims a distance of −1422655421). And a walk that
+cannot be put back is **dropped and its walker stood up** — an actor steps
+through its pose's play script whether a walk is running or not, so a drop that
+left the walk pose alone leaves a character treadmilling.
+
+Symmetrically, the port's own saves **zero the walks table**, because a base slot
+left active would send the original's loader looking for a payload container that
+belongs to the previous save's moment. So a walk survives a shipped save and not
+one of ours — the asymmetry is deliberate and logged, not an oversight.
 
 ## The track containers: what was playing
 

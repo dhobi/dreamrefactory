@@ -28,7 +28,7 @@ jobs:
   # instead of reading the game's files — or, in save-original.ts's case, read
   # the one tracked fixture in tests/data/. 159 tests.
   #
-  # The list below is the INVERSE of what it covers — the nine suites that do
+  # The list below is the INVERSE of what it covers — the ten suites that do
   # need the rip. Excluding is deliberate: a test file added later runs here by
   # default, and if it turns out to need `gamefiles/` it fails loudly and gets
   # added to this list. The other direction would have skipped it in silence.
@@ -46,9 +46,9 @@ jobs:
 
       - run: npm ci
 
-      - name: Automatic suites, minus the nine that read the rip
+      - name: Automatic suites, minus the ten that read the rip
         run: |
-          npx vitest run --exclude 'tests/auto/{regression,savegame,re_builtins,interp,nav,text,audio-rates,sound-channels,shp-play-order}.ts'
+          npx vitest run --exclude 'tests/auto/{regression,savegame,re_builtins,interp,nav,text,audio-rates,sound-channels,shp-play-order,cst-play-order}.ts'
 
   # ---------------------------------------------------------------------------
   # Runs on the self-hosted runner, which holds the rip. Everything the port's

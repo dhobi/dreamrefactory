@@ -3,8 +3,8 @@
  * reader. See [`build.ts`](build.ts) for why these modules exist.
  *
  * A cast is the walking half of a character: members (`morrow`, `sasha`), each
- * with poses, each pose a grid of **steps × 8 directions** of transparent-codec
- * sprites. The 8 directions are the compass the runtime picks from when a
+ * with poses, each pose a grid of **steps × 8 views** of transparent-codec
+ * sprites. The 8 views are the compass the runtime picks from when a
  * character faces the camera one way or another, and a step is one frame of the
  * walk cycle.
  *
@@ -23,8 +23,20 @@ const C0 = { palette: 36, memberCount: 0x938, members: 0x93c, memberSize: 16 } a
 /** a member's logic container: script, name, then the pose table */
 const MEMBER = { script: 0x26, name: 0x2a, poseCount: 0x5a, poses: 0x5e, poseSize: 32, poseName: 16 } as const;
 
-/** a pose's set container: the slot count, then 44-byte slot records */
-const POSE = { count: 0x72, first: 0x76, size: 44, direction: 10, angle: 40, refScale: 42 } as const;
+/** a pose's set container: the play script, the slot count, 44-byte slot records */
+const POSE = {
+  play: 0x2e,
+  playCount: 0x70,
+  /** slots between {@link POSE.play} and the count that follows it */
+  maxPlay: (0x70 - 0x2e) / 2,
+  count: 0x72,
+  first: 0x76,
+  size: 44,
+  step: 8,
+  direction: 10,
+  angle: 40,
+  refScale: 42,
+} as const;
 
 /** the eight compass directions every step is stored in */
 export const CST_DIRECTIONS = 8;
@@ -90,6 +102,11 @@ export function buildCstFile(opts: CstBuildOptions): CstBuildResult {
 
   const poseBlock = (pose: CstBuildPose): ContainerRef => {
     const slots = pose.steps.flat();
+    if (pose.steps.length > POSE.maxPlay) {
+      throw new Error(
+        `cst: pose "${pose.name}" has ${pose.steps.length} steps, the play script holds ${POSE.maxPlay}`,
+      );
+    }
     for (const step of pose.steps) {
       if (step.length !== CST_DIRECTIONS) {
         throw new Error(
@@ -110,10 +127,24 @@ export function buildCstFile(opts: CstBuildOptions): CstBuildResult {
       const at = POSE.first + i * POSE.size;
       const direction = i % CST_DIRECTIONS;
       i32(d, at, loc);
+      // which animation step this picture belongs to. Not derivable from the
+      // record's position: a pose may store any number of views per step (the
+      // shipped `stok1` stores nine), so the engine reads it from here and the
+      // play script below names these numbers.
+      i16(d, at + POSE.step, Math.floor(i / CST_DIRECTIONS));
       i16(d, at + POSE.direction, direction);
       i16(d, at + POSE.angle, direction * ANGLE_PER_DIRECTION);
       i16(d, at + POSE.refScale, pose.refScale ?? 96);
     });
+    // The play script: each step once, in order. A pose with NO script draws
+    // nothing at all in the original — the lookup matches a step number against
+    // `script[0] - 1`, which is -1 in an unwritten table — so this is not
+    // optional, it is what makes a built cast a cast. Holding a picture for
+    // longer is what a repeat here does (the shipped walks list every step
+    // twice, at 50 ms a step); this writer states the plain one-pass-each pace
+    // it was handed, and does not invent holds.
+    i16(d, POSE.playCount, pose.steps.length);
+    pose.steps.forEach((_, s) => i16(d, POSE.play + 2 * s, s + 1));
     return b.add(d);
   };
 

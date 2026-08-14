@@ -433,17 +433,67 @@ export interface SavedCricket {
 }
 
 /**
- * One active walk slot from the walks table (0x48b150, 16 × 110). A walk's
- * waypoint path is a separate payload container the writer appends per active
- * slot with a non-null handle at +0x12 (the loader reads it back into +0x12) —
- * parsed only far enough to say it exists: the port drops mid-flight walks on
- * load (the actor's position is restored; their idle loop re-decides), and says
- * so, rather than resuming a walk whose arrival dispatch is not understood.
+ * One active walk slot from the walks table (0x48b150, 16 × 110) — the record
+ * TI.EXE's walk service reads, dumped verbatim, and enough of it to put the walk
+ * back mid-stride.
+ *
+ * The fields are the ones the mover touches (0x443E7C), at the offsets it reads
+ * them from:
+ *
+ *     +0x00 u16 active   +0x02 u16 paused   +0x04 i16 type   +0x08 i16 turn target
+ *     +0x0A i16 facing   +0x0C/0E/10 i16 start x/y/z         +0x12 i32 path payload
+ *     +0x16 i32 progress +0x1A/1E/22 i32 deltas              +0x26 i32 distance
+ *     +0x2E pstr actor   +0x3E pstr arrival star
+ *
+ * The deltas are SUBTRACTED — `pos = start - delta * progress / dist` — so the
+ * destination is `start - delta`, which is why {@link destX} exists rather than
+ * making every caller remember the sign.
+ *
+ * **The type is which mover, and only one of the three writes those words.** A
+ * type-0 slot is a `turntodeg` — a facing target, no movement at all — and a
+ * type-3 route keeps its waypoints AND its total length in the payload container
+ * hanging off +0x12. Both leave the movement words holding whatever the slot held
+ * last, so both read as nonsense (`vlad`'s distance is -202637146, `hack`'s
+ * -1422655421) and neither may be believed. Only type 1 fills them in.
+ *
+ * 16 slots live across 12 of the 109 shipped saves: 12 turns, one straight line,
+ * and three routes.
  */
 export interface SavedWalk {
   actor: string;
+  /** 0 = a `turntodeg` with no mover, 1 = a straight line, 3 = an authored route */
   type: number;
+  /** an authored route's waypoints hang off +0x12, in a payload container of
+   *  their own — see {@link path}, which is that container decoded */
   hasPayload: boolean;
+  paused: boolean;
+  /** the facing to reach before moving; negative once the turn is done */
+  turnTo: number;
+  /** the walk's own copy of the actor's facing (+0x0A) */
+  deg: number;
+  startX: number;
+  startY: number;
+  startZ: number;
+  /** where it is headed — `start - delta`, see the docblock */
+  destX: number;
+  destY: number;
+  destZ: number;
+  /** how far along, in the same world units as {@link dist} */
+  progress: number;
+  dist: number;
+  /** the arrival star (+0x3E) — what `actorstar` settles on when it lands */
+  star: string;
+  /**
+   * A type-3 route's waypoints, from its payload container: each point with the
+   * cumulative distance to it, so `path[last].cum` is {@link dist}.
+   *
+   * The container stores each point's distance from the one BEFORE it (the
+   * first's is 0) and the total at +0; this runs them up. Reconstructing the
+   * position from the route and {@link progress} lands on the actor record's
+   * own for all three shipped routes, which is what says the walk can be put
+   * back rather than dropped.
+   */
+  path?: { x: number; y: number; z: number; cum: number }[];
 }
 
 /**
@@ -1048,18 +1098,70 @@ function decodeCrickets(d: Uint8Array): SavedCricket[] {
   return out;
 }
 
-/** Decode the active walk slots (see {@link SavedWalk}). */
-function decodeWalks(d: Uint8Array): SavedWalk[] {
+/**
+ * One type-3 walk's waypoint payload: a total length @+0, a count @+8, and that
+ * many 8-byte `{i16 x, y, z, u16 distance from the previous point}` from +20.
+ * The container is a raw allocation, so slack trails the last point — the count
+ * is what bounds it, never the length.
+ */
+function decodeWalkPath(d: Uint8Array): SavedWalk["path"] {
+  if (d.length < 20) return undefined;
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const count = dv.getUint32(8, true);
+  if (count < 2 || 20 + count * 8 > d.length) return undefined;
+  const path: NonNullable<SavedWalk["path"]> = [];
+  let cum = 0;
+  for (let i = 0; i < count; i++) {
+    const o = 20 + i * 8;
+    cum += dv.getUint16(o + 6, true);
+    path.push({ x: dv.getInt16(o, true), y: dv.getInt16(o + 2, true), z: dv.getInt16(o + 4, true), cum });
+  }
+  // the running sum has to arrive at the total the header states, or these are
+  // not the waypoints we think they are
+  return cum === dv.getUint32(0, true) ? path : undefined;
+}
+
+/**
+ * Decode the active walk slots (see {@link SavedWalk}).
+ *
+ * `payloads` are the containers that follow the walks table, which the writer
+ * appends one per active slot carrying a route — in SLOT ORDER, which is what
+ * lets them be matched up positionally.
+ */
+function decodeWalks(d: Uint8Array, payloads: Uint8Array[]): SavedWalk[] {
   const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
   const out: SavedWalk[] = [];
   for (let s = 0; s + 110 <= d.length; s += 110) {
     if (dv.getUint16(s, true) === 0) continue;
     const actor = pstrField(d, s + 0x2e);
     if (!actor) continue;
+    const type = dv.getInt16(s + 4, true);
+    const path = dv.getUint32(s + 0x12, true) !== 0 ? decodeWalkPath(payloads.shift() ?? new Uint8Array()) : undefined;
+    const startX = dv.getInt16(s + 0x0c, true);
+    const startY = dv.getInt16(s + 0x0e, true);
+    const startZ = dv.getInt16(s + 0x10, true);
+    // ONLY the straight-line mover writes the movement words. A turn has no
+    // mover at all, and a route keeps its total length in its own payload
+    // container — both leave whatever the slot held last, which is how `hack`'s
+    // route comes to claim a distance of -1422655421 (see {@link SavedWalk})
+    const moves = type === 1;
     out.push({
       actor: actor.toLowerCase(),
-      type: dv.getUint16(s + 4, true),
+      type,
       hasPayload: dv.getUint32(s + 0x12, true) !== 0,
+      paused: dv.getUint16(s + 2, true) !== 0,
+      turnTo: dv.getInt16(s + 8, true),
+      deg: dv.getInt16(s + 0x0a, true),
+      startX, startY, startZ,
+      destX: moves ? startX - dv.getInt32(s + 0x1a, true) : startX,
+      destY: moves ? startY - dv.getInt32(s + 0x1e, true) : startY,
+      destZ: moves ? startZ - dv.getInt32(s + 0x22, true) : startZ,
+      // a route's progress IS written (it is the one movement word the path
+      // mover keeps in the record); its length comes from the payload header
+      progress: moves || path ? dv.getInt32(s + 0x16, true) : 0,
+      dist: path ? path[path.length - 1].cum : moves ? dv.getInt32(s + 0x26, true) : 0,
+      star: pstrField(d, s + 0x3e) ?? "",
+      path,
     });
   }
   return out;
@@ -1198,7 +1300,15 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   const schedulerIndex = findSchedulerIndex(raw);
   const loops = schedulerIndex >= 0 ? decodeLoops(raw.containers[schedulerIndex].data) : [];
   const crickets = schedulerIndex >= 0 ? decodeCrickets(raw.containers[schedulerIndex + 1].data) : [];
-  const walks = schedulerIndex >= 0 ? decodeWalks(raw.containers[schedulerIndex + 2].data) : [];
+  // the walks table, and the waypoint payloads that follow it — one per active
+  // slot with a route, in slot order (see decodeWalks)
+  const walks =
+    schedulerIndex >= 0
+      ? decodeWalks(
+          raw.containers[schedulerIndex + 2].data,
+          raw.containers.slice(schedulerIndex + 3).map((c) => c.data),
+        )
+      : [];
   const tracksIndex = findTracksIndex(raw);
   const theme = decodeTheme(raw, tracksIndex);
 

@@ -53,7 +53,12 @@ const dirtyEl = $("dirty");
  * preview here was playing every walk 32% slow while claiming to match the engine.
  */
 const STEP_MS = ENGINE_STEP_MS;
-/** the 8 stored directions, and what each one shows (0 = facing the viewer) */
+/**
+ * The compass, at the 32-apart spacing eight stored pictures give (0 = facing
+ * the viewer). Named from the picture's own depicted ANGLE rather than from its
+ * column, because a pose is not obliged to store eight: `stok1` stores nine and
+ * `life1` seventeen, both across the half circle 0..128 only.
+ */
 const DIRECTIONS = [
   "front",
   "front-left",
@@ -64,6 +69,7 @@ const DIRECTIONS = [
   "right",
   "front-right",
 ];
+const compassOf = (angle: number): string => DIRECTIONS[Math.round((angle & 0xff) / 32) & 7];
 /** where the preview puts the actor's world point */
 const GROUND_X = 256;
 const GROUND_Y = 300;
@@ -363,7 +369,7 @@ function renderPreview(): void {
         step: stepIdx + 1,
         steps: p.steps.length,
         dir: dirIdx,
-        compass: DIRECTIONS[dirIdx],
+        compass: compassOf(cf?.angle ?? dirIdx * 32),
       }) +
       (cf?.location
         ? t("casts.previewContainer", { loc: cf.location }) +
@@ -398,10 +404,14 @@ function stopPlayback(): void {
 }
 
 /**
- * Cycle the pose's steps in the selected direction, at the cadence the walk
- * service uses (one step per 50 ms tick) and LOOPING, because that is what a
- * walk does: the scheduler advances `step` every tick for as long as the walk
- * runs and the runtime takes it modulo the step count.
+ * Play the pose the way the engine plays it: one step of its PLAY SCRIPT per
+ * 50 ms service pass, looping.
+ *
+ * Through the script, not through the pictures — the two are not the same
+ * length, and a preview that walks the pictures directly is the same bug the
+ * runtime had (#181). Every walk in the game lists its ten pictures twice, so a
+ * stride takes a second here as well; `stok1`'s `dig` is the same and every
+ * `stand` lists one step, which is why those do not offer a cycle at all.
  */
 $("playBtn").addEventListener("click", () => {
   if (playing) {
@@ -410,7 +420,7 @@ $("playBtn").addEventListener("click", () => {
     return;
   }
   const p = pose();
-  if (!p || p.steps.length < 2) {
+  if (!p || p.play.length < 2) {
     log(t("casts.singleStepNotCycle"));
     return;
   }
@@ -418,7 +428,8 @@ $("playBtn").addEventListener("click", () => {
   let raf = 0;
   $("playBtn").textContent = "◼ Stop";
   const step = (): void => {
-    stepIdx = Math.floor((performance.now() - start) / STEP_MS) % p.steps.length;
+    const at = Math.floor((performance.now() - start) / STEP_MS) % p.play.length;
+    stepIdx = p.play[at];
     const loc = p.steps[stepIdx]?.[dirIdx]?.location;
     drawScreen(loc ? frameAt(loc) : null);
     raf = requestAnimationFrame(step);
@@ -552,27 +563,33 @@ function buildPoses(): void {
     };
     row.appendChild(name);
 
+    // a pose CYCLES when its play script has more than one step, which is not
+    // the same question as how many pictures it stores: `stok1`'s `stand` keeps
+    // two and plays one of them for ever
+    const cycles = p.play.length > 1;
     const kind = document.createElement("span");
-    kind.className = "badge " + (p.steps.length > 1 ? "anim" : "sel");
-    kind.textContent = p.steps.length > 1 ? "cycle" : "stand";
-    kind.title =
-      p.steps.length > 1
-        ? t("casts.manySteps")
-        : t("casts.oneStep");
+    kind.className = "badge " + (cycles ? "anim" : "sel");
+    kind.textContent = cycles ? "cycle" : "stand";
+    kind.title = cycles ? t("casts.manySteps") : t("casts.oneStep");
     row.appendChild(kind);
 
     const meta = document.createElement("span");
     meta.className = "meta grow";
-    const holes = p.steps.reduce((n, s) => n + (8 - s.filter(Boolean).length), 0);
+    // a hole is a slot with no art behind it, not a step short of eight views —
+    // a pose stores as many views as it stores
+    const views = Math.max(0, ...p.steps.map((s) => s.length));
+    const holes = p.steps.reduce((n, s) => n + s.filter((f) => !f.location).length, 0);
     meta.textContent =
       t("counts.steps", { n: p.steps.length }) +
-      t("casts.byDirections") +
+      " × " +
+      t("counts.views", { n: views }) +
+      " · " +
       t("counts.sprites", { n: p.frameCount }) +
       (holes ? t("casts.missing", { n: holes }) : "") +
       t("casts.setContainer", { loc: p.location });
     row.appendChild(meta);
 
-    if (p.steps.length > 1) {
+    if (cycles) {
       const play = document.createElement("button");
       play.className = "mini";
       play.textContent = "▶";
@@ -597,10 +614,13 @@ function buildPoses(): void {
 $<HTMLInputElement>("poseFilter").addEventListener("input", () => buildPoses());
 
 /**
- * The selected pose as a grid: one row per animation step, one column per view
- * direction. That is the shape the file stores (frames group 8 at a time) and
- * the shape that makes a hole visible — a step missing a direction shows as a
- * dash rather than silently falling back the way the runtime does.
+ * The selected pose as a grid: one row per animation step, one column per stored
+ * view. That is the shape the file stores, and the shape that makes a hole
+ * visible — a step short of a view shows as a dash rather than silently falling
+ * back the way the runtime does.
+ *
+ * The width is the WIDEST step's, not eight: `stok1` stores nine views and
+ * `life1` seventeen, and a fixed eight columns hid the rest.
  */
 function buildFrames(): void {
   const wrap = $("frames");
@@ -611,16 +631,18 @@ function buildFrames(): void {
     : "";
   if (!p) return;
 
+  const width = Math.max(1, ...p.steps.map((s) => s?.length ?? 0));
   const head = document.createElement("div");
   head.className = "gridrow head";
   head.appendChild(document.createElement("span"));
-  DIRECTIONS.forEach((label, d) => {
+  for (let d = 0; d < width; d++) {
     const cell = document.createElement("span");
     cell.className = "dirhead";
     cell.textContent = `${d}`;
-    cell.title = label;
+    const angle = p.steps.find((s) => s?.[d])?.[d]?.angle;
+    cell.title = angle === undefined ? `${d}` : `${compassOf(angle)} (${angle})`;
     head.appendChild(cell);
-  });
+  }
   wrap.appendChild(head);
 
   p.steps.forEach((step, s) => {
@@ -630,7 +652,7 @@ function buildFrames(): void {
     lead.className = "lead";
     lead.textContent = `${s}`;
     row.appendChild(lead);
-    for (let d = 0; d < 8; d++) {
+    for (let d = 0; d < width; d++) {
       const cf = step?.[d]?.location ? step[d] : undefined;
       const cell = document.createElement("div");
       cell.className =
@@ -653,7 +675,7 @@ function buildFrames(): void {
         c.style.width = c.style.height = "16px";
       }
       cell.title =
-        `step ${s}, direction ${d} (${DIRECTIONS[d]}) @${cf.location}` +
+        `step ${s}, view ${d} — ${compassOf(cf.angle)} (${cf.angle}) @${cf.location}` +
         (f ? ` — ${f.width}×${f.height}` : " — undecodable");
       cell.onclick = () => {
         stopPlayback();

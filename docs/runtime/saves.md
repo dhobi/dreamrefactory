@@ -58,7 +58,9 @@ writes:
 - the **scheduler**: the live `makeloop` and `makecricket` tables, written over the
   base's own (mid-count, so a loop reloads with the ticks it had left). The walks
   table is **zeroed** — the port does not serialize a walk in flight, and it says
-  which character it left standing instead.
+  which character it left standing instead. Note the asymmetry: a walk in a
+  SHIPPED save is now resumed on the way in (step 11 below), but one of ours is
+  still not written on the way out.
 - the **theme** that is playing, written into the track state
   ([the track containers](../formats/savegame.md#the-track-containers-what-was-playing)),
   not into `savetheme` — which is a different thing and lags the file in 91 of the
@@ -252,9 +254,29 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    that make characters act, the scene timers, the room's positional ambience.
 10. **Score the room from the file**: the track whose playing/looping arrays are
    non-empty is the theme, and it is played at the player's `themevolume`.
-11. **Walks are dropped, and said so** — one log line per character. Their restored
-    position stands and their restored idle loop re-decides. Three of the 109
-    shipped saves carry a walk in flight.
+11. **Walks come back mid-stride.** The walks table is TI.EXE's own service table,
+    and its record carries the walk's origin, its deltas, its total distance, how
+    far along it is and the star it lands on — so the walk is *restored*, not
+    restarted: the walker sets off from where the save caught them with only what
+    was left to run. Load save 17 and Daisy finishes crossing the Grand Staircase,
+    arrives on `cash1`, and her `endwalk` fires, which is what the original does.
+
+    The record's **type** says which mover, and only one of the three fills those
+    words in. A **type 0** is a `turntodeg` — a facing target, no movement — and a
+    **type 3** keeps its waypoints *and* its length in a payload container hanging
+    off `+0x12`. Both leave the movement words holding whatever the slot held last
+    (`hack`'s route claims a distance of −1422655421), so neither may be read.
+    All three resume: 16 slots live across 12 of the 109 shipped saves — 12 turns,
+    one straight line, and three routes, including Georgia's ten-point curve
+    around the boat deck's structures, which is put back on its own waypoints
+    rather than sent along the straight line they exist to avoid ([#122](https://github.com/dhobi/taoot-web/issues/122)).
+
+    A walk that cannot be put back is dropped, and its walker **stood up** out of
+    the walk pose the record put them in, with their restored idle loop left to
+    re-decide. That is not cosmetic: an actor steps through its pose's [play
+    script](../formats/pup-cst.md#the-play-script-says-how-long-a-picture-is-held)
+    whether a walk is running or not, so a drop that left the pose alone left a
+    character treadmilling on the spot.
 12. Open the saved set/scene/view through the engine's set machinery, still with the
     lifecycle muted. The scene is recorded as current, so the first turn or step
     fires `openscene` normally.

@@ -376,6 +376,50 @@ export class Scheduler {
   }
 
   /**
+   * Put a saved walk back in the table, mid-stride — the load's half of the
+   * walks service table (see SavedWalk in src/df/savegame.ts).
+   *
+   * Not expressible as a `startWalk`: that one measures from where the actor is
+   * standing NOW and starts the progress at zero, and a walk restored that way
+   * would set off from wherever the save happened to catch them with the whole
+   * distance still to run. The record carries its own origin and its own
+   * progress, so this seeds both.
+   *
+   * Keyed on the actor's own name rather than their cast member's, which is what
+   * `serviceWalks` looks back up — the two differ for an `actorinstance`, and the
+   * crowd (`ani1a2` and friends) is nothing but instances.
+   */
+  restoreWalk(
+    name: string,
+    w: {
+      turnOnly?: boolean;
+      paused?: boolean;
+      turnTo?: number;
+      sx: number; sy: number; sz: number;
+      dx: number; dy: number; dz: number;
+      dist: number; progress: number; arriveStar?: string;
+      path?: { x: number; y: number; z: number; cum: number }[];
+    },
+  ): boolean {
+    const key = name.toLowerCase();
+    if (!this.session.actorRuntime.get(key)) return false;
+    this.walks.set(key, {
+      sx: w.sx, sy: w.sy, sz: w.sz,
+      dx: w.dx, dy: w.dy, dz: w.dz,
+      path: w.path,
+      // a turn's distance is never read, but a zero here would make the mover's
+      // `progress / dist` a NaN the moment a turn was mistakenly given one
+      dist: Math.max(1, w.dist),
+      progress: w.progress,
+      paused: w.paused ?? false,
+      arriveStar: w.arriveStar,
+      turnTo: w.turnTo,
+      turnOnly: w.turnOnly,
+    });
+    return true;
+  }
+
+  /**
    * `walkonpath`: walk an AUTHORED ROUTE rather than the straight line between
    * two stars. `points` runs from where the actor sets off to the destination.
    *
@@ -662,7 +706,6 @@ export class Scheduler {
         a.worldY = Math.round(w.sy + w.dy * t);
         a.worldZ = Math.round(w.sz + w.dz * t);
       }
-      a.step++; // walk pose cycle advances per service tick
       if (t >= 1) {
         this.walks.delete(key);
         if (a.poseName === "walk") {
@@ -810,6 +853,12 @@ export class Scheduler {
     // the browser rather than crawling at the 20 Hz service rate. (Headless has one frame per
     // tick, so both paths fire once per tick and tests are unaffected.)
     this.fireDueLoops((l) => l.period > 1);
+    // Last, where the master service ends: TI.EXE's pass finishes by drawing a
+    // frame (0x442550 -> 0x439b80), and the actor animation advances at the head
+    // of that draw. Deliberately NOT in serviceFrameLoops — that path runs at the
+    // browser's display rate, and a walk cycle is paced by the 50 ms pass in the
+    // original, not by how fast the host can paint.
+    this.session.actorRuntime.advanceAnimation();
   }
 
   /**
