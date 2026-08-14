@@ -2203,6 +2203,32 @@ test("the event queue: input made mid-gesture waits its turn", async () => {
     `posted=${session.events.posted} taken=${session.events.taken} pending=${session.events.length}`,
   );
 
+  // The SAME burst on the movement letter. W/A/D are not a second way to walk in
+  // the original — they are the walk, and the arrows are its other name: TI.EXE
+  // queues in the window proc and pops in the main loop, both above any notion of
+  // which key it was, and BOOTFILE 0001's `keydown` only translates the letter
+  // afterwards, reading `keynorth`/`keywest`/`keyeast` (W/A/D by default, and
+  // rebindable from the control panel). The port kept its gate in `pressNav`,
+  // which only the three arrow NAMES reach, so this burst walked one room while
+  // the arrow burst above walked two.
+  viewer().jumpTo("Scene31", "View50");
+  // by hand because the harness never runs `code boot`, which is where BOOTFILE
+  // sets the three bindings (0001: `keynorth = "w"`)
+  session.interp.globals.set("keynorth", "w");
+  const wFrom = at();
+  const wTaken = session.events.taken;
+  for (let i = 0; i < 4; i++) {
+    void session.track(viewer().keyDown("w"));
+    viewer().tick((clock += 100));
+    await drain();
+  }
+  await settle();
+  check(
+    "the movement LETTER queues the same way the arrow does (w, not uparrow)",
+    at() === "Scene29/View42" && session.events.taken === wTaken + 1,
+    `${wFrom} -> ${at()} taken=${session.events.taken} (was ${wTaken})`,
+  );
+
   // a click made while the camera moves is kept too — what it then lands on is
   // whatever is under the cursor at that point, exactly as in the original
   viewer().jumpTo("Scene31", "View50");

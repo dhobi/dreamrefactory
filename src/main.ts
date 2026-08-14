@@ -1490,6 +1490,9 @@ window.addEventListener("keydown", (e) => {
       // from the control panel) and passes the rest to the scene. Dropping them
       // here is why those bindings did nothing at all (#14); a letter no script
       // wants is ignored by the scripts, which is not the same as never arriving.
+      // A letter pressed while a move is on screen is QUEUED, like an arrow — the
+      // gate is inside `keyDown`, above the mapping, where the original keeps it
+      // (#207). It was in the arrow-only path, so W/A/D were dropped mid-move.
       //
       // Modified presses stay the browser's — Ctrl+R has to reload, and the
       // original's own Ctrl marker only ever mattered to its movie key filter.

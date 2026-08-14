@@ -543,6 +543,20 @@ the game ever emits.
 not direct movement. **Space** is forwarded too (the boot's `keydown` opens the
 door you're facing).
 
+**A press made while a move is on screen is queued, not dropped** — one press per
+key stays pending however long the key is held, which is what walks a corridor
+instead of a room, and letting go leaves at most one more move to come (the
+queue's own policies are TI.EXE's, recovered in `engine/input.ts`). The gate is in
+`SetViewer.keyDown` and applies to **every** key, because that is where the
+original keeps it: its window proc posts and its main loop pops, both above any
+notion of *which* key it was, since the letter is only translated afterwards by
+BOOTFILE's `keydown` reading `keynorth`/`keywest`/`keyeast` — W/A/D by default and
+rebindable, so the engine cannot know which key means forward. The port had the
+gate in the arrow-only path, so pressing W during a walk was thrown away while ↑
+was kept: a burst of four Ws walked one room and four ↑s walked two (#207). A
+playing movie and a suspended conversation stay ahead of the queue, because both
+own their keys outright rather than deferring them.
+
 **Escape** is forwarded, not acted on. `DF_KEY` maps it to the character `"."`
 with the special-key marker set, which is exactly what TI.EXE's window proc
 does, and the decision belongs further down: `SetViewer.keyDown` gives a
