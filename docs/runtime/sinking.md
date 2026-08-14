@@ -59,6 +59,17 @@ So mission 4 begins at **13:00–13:03** with a random second, and the watch —
 12-hour face — shows it as 1:0X. Every run starts at a slightly different time,
 which is worth knowing before comparing two playthroughs' clocks.
 
+> **Fun fact: the game sinks the ship in the early afternoon.** `hrs = 13` is
+> 1 *pm*, in broad daylight. The real Titanic struck the iceberg at 11:40 pm on
+> 14 April 1912 and went under at 2:20 am on the 15th, so the timetable below —
+> 13:15 through 14:05 — runs the whole endgame twelve hours off the disaster it
+> is dramatising. Nothing in the game gives the mistake away: the watch face has
+> no am/pm, `propdeg` points the hour hand at the 1 either way, and the only
+> other consumer of `hrs` is the number `clock = hrs * 100 + min`, compared
+> against thresholds (1315 … 1405) that would have sorted just as well from
+> `hrs = 1` (115 … 205). Both halves of the day are free, and the authors
+> picked the wrong one.
+
 `sinkflag` is what arms the countdown: `calctime()` has two arms, and only the
 `sinkflag` one calls `advancephase()` or ever touches `min` and `hrs`. Outside
 mission 4 the watch's second hand sweeps and nothing else happens.
