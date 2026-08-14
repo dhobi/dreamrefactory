@@ -226,6 +226,38 @@ export function playUrl(base = process.env.APP_URL): URL {
   return url;
 }
 
+/**
+ * Answer the Nightdive intro's ownership question with YES, by a real click at
+ * the button's own rectangle.
+ *
+ * Since #171 the question segment carries no skip flag, so Escape gets a run past
+ * the FILM and no further — the question is answered or it is still on screen.
+ * YES rather than NO because "wants" navigates the page to gog.com, which is not
+ * somewhere a test run comes back from.
+ *
+ * The rectangle comes from the film through `NightdiveIntro.regions()` rather
+ * than being typed in here, so moving a button in the generator cannot quietly
+ * stop this clicking one. Shared because both browser suites have to get past
+ * the same screen.
+ */
+export async function clickIntroYes(page: Page): Promise<void> {
+  const point = await page.evaluate(() => {
+    const intro = (window as unknown as { dbg: { intro: null | { regions: () => { target: string; x0: number; y0: number; x1: number; y1: number }[] } } }).dbg.intro;
+    const r = intro?.regions().find((b) => b.target === "yes");
+    if (!r) return null;
+    const c = document.getElementById("screen") as HTMLCanvasElement;
+    const box = c.getBoundingClientRect();
+    const x = Math.round((r.x0 + r.x1) / 2);
+    const y = Math.round((r.y0 + r.y1) / 2);
+    return {
+      x: box.left + ((x + 0.5) / c.width) * box.width,
+      y: box.top + ((y + 0.5) / c.height) * box.height,
+    };
+  });
+  if (!point) throw new Error('the ownership question has no "yes" button');
+  await page.mouse.click(point.x, point.y);
+}
+
 export interface BrowserDriverOptions {
   /** how long a single wait may take before it is called stuck */
   timeout?: number;

@@ -52,10 +52,16 @@ export const GOG_URL = "https://www.gog.com/game/titanic_adventure_out_of_time";
 /**
  * What the player said.
  *
- * `unanswered` is not a failure case — it is ESC. The movie sets the skip flag
- * every shipped movie sets, so a player who has seen the question before can
- * press past the whole thing, and pressing past a question is not answering
- * "no". Only an action frame the movie actually entered counts.
+ * `unanswered` is not a failure case, and as of #171 it is no longer ESC either.
+ * The film carries the skip flag every shipped movie carries, so a player who
+ * has seen it before can press past it — but the question segment does not, and
+ * ESC lands there rather than taking it along (MoviePlayer.escapeSkipsSegment).
+ * So the question is answered or it is still on screen.
+ *
+ * What is left is the two paths where nothing was ever asked: no film served
+ * (`open()` answers false — a deployment without the asset boots as it always
+ * did) and any edition but English ({@link introPlaysFor}). Only an action frame
+ * the movie actually entered counts as an answer.
  */
 export type Ownership = "owns" | "wants" | "unanswered";
 
@@ -78,6 +84,11 @@ export class NightdiveIntro {
   constructor(private readonly session: GameSession) {
     this.movies = new MoviePlayer(session, () => {});
     this.movies.onLog = (l) => this.onLog(l);
+    // ESC presses past the FILM and lands on the question, instead of taking the
+    // question with it the way it would for a film the game ships. The question
+    // then has no skip flag of its own, so that is where ESC runs out — see
+    // MoviePlayer.escapeSkipsSegment and issue #171.
+    this.movies.escapeSkipsSegment = true;
   }
 
   /**

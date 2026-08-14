@@ -2,6 +2,7 @@ import { defineConfig, Plugin } from "vite";
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, normalize, resolve } from "node:path";
 import { MANIFEST_FILE, MANIFEST_URL, buildManifest } from "./tools/manifest";
+import { NIGHTDIVE_GIF, NIGHTDIVE_OUT, writeNightdiveMov } from "./tools/mknightdive";
 
 /** the port's version — package.json is the one place it is written; the pages
     read it back through `__APP_VERSION__` (src/version.ts) */
@@ -76,6 +77,46 @@ function gamefilesManifest(): Plugin {
   };
 }
 
+/**
+ * Compile `assets/nightdive.gif` into `public/nightdive.mov` — the English
+ * boot's intro film — whenever the source is newer than what was compiled last.
+ *
+ * The GIF is the tracked source and the MOV is generated, so the MOV is
+ * gitignored and nobody has to remember `npm run mknightdive`: a fresh clone
+ * builds it on the first `npm run dev` or `npm run build`, and the file that
+ * ships is the file the committed GIF produces.
+ *
+ * Into `public/` rather than emitted straight into `dist/`, for two reasons that
+ * both have to hold: Vite serves `public/` in dev (so the play page can fetch the
+ * film without a middleware of its own), and `tools/manifest.ts` scans `public/`
+ * for authored DF files. The page resolves every file through that manifest, so a
+ * film in `dist/` and absent from `gamefiles.json` is a film the boot cannot find.
+ *
+ * ~13 s from a 4.5 MB GIF, so it is mtime-gated rather than unconditional — an
+ * incremental build pays nothing. Delete the MOV to force it.
+ *
+ * **In `configResolved`, not `buildStart`, and that is load-bearing.** Vite
+ * indexes `public/` when it builds the dev server's middleware stack, which
+ * happens after config resolution but BEFORE `buildStart` — so a film written
+ * from `buildStart` exists on disk and still 404s into the SPA fallback for the
+ * life of that server. On a fresh clone that is silent: the page fetches
+ * `nightdive.mov`, gets `index.html`, fails to parse it as a MOV, and boots with
+ * no intro at all. Measured, after writing it the wrong way round first.
+ */
+function nightdiveMovie(): Plugin {
+  return {
+    name: "nightdive-movie",
+    configResolved(config) {
+      if (!existsSync(NIGHTDIVE_GIF)) return; // no source, no intro — a valid build
+      const source = statSync(NIGHTDIVE_GIF).mtimeMs;
+      const built = existsSync(NIGHTDIVE_OUT) ? statSync(NIGHTDIVE_OUT).mtimeMs : -1;
+      if (built >= source) return;
+      config.logger.info(`nightdive.mov is older than its GIF — compiling`);
+      config.logger.info(writeNightdiveMov().summary);
+    },
+  };
+}
+
 export default defineConfig({
   /**
    * Every URL the build emits is relative to the page that names it, so `dist/`
@@ -94,7 +135,7 @@ export default defineConfig({
   // substituted into the source text, so the version travels in the bundle and
   // no page has to fetch anything to know it
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
-  plugins: [gamefilesManifest()],
+  plugins: [nightdiveMovie(), gamefilesManifest()],
   server: {
     watch: {
       // gamefiles/ is a CD rip — ~7,800 files that the middleware above streams
