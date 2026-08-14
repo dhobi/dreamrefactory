@@ -203,15 +203,64 @@ Measured over 20 seconds of engine time at `lounge1c` Scene14/View37:
 | turning continuously | 1.00 (was 0.85) |
 | entering a scene | +1 per scene (`secframe` advances) |
 
-**Turning still is not the original's 2×, and the reason is `clockcount = 0`.**
-A bump does not add to the heartbeat, it *resets* it: the partial game-second in
-flight is discarded, so a bump arriving before `calctime` reaches 20 replaces that
-tick instead of joining it. Ours arrives before — the arrival is dispatched from
-the pass's service step and the clock is wound last — so the two cannibalise and
-the sum is one second per 20 frames rather than two. Reaching 2× needs the
-original's ordering within a pass, or a rendered-frame counter that outruns the
-pass rate during an animation; neither is settled from the videos in
-[#126](https://github.com/dhobi/taoot-web/issues/126), and guessing at a
-multiplier is worse than recording the gap.
+**Turning still is not the original's 2×.** A bump does not add to the heartbeat,
+it *resets* it (`clockcount = 0`): the partial game-second in flight is discarded,
+so a bump arriving before `calctime` reaches 20 replaces that tick instead of
+joining it, and the sum is one second per 20 frames rather than two.
+
+### What the disassembly rules out
+
+Two routes to 2× were on the table
+([#184](https://github.com/dhobi/taoot-web/issues/184)): the original's *ordering
+within a pass*, or a frame counter that *outruns* the pass rate during an
+animation. TI.EXE settles the first one, in the negative.
+
+`frame()` is the counter at `0x489efa`, and the only thing that moves it is the
+master pass's tail routine `0x439b80` — read straight off the `frame` handler at
+`0x4273b0`, which does nothing but `mov ecx, [0x489efa]`. That routine is:
+
+```
+0x439b80: inc  dword ptr [0x489efa]     ; frame++, BEFORE the branch
+0x439b86: cmp  word ptr [0x489fd8], 0
+0x439b8e: je   0x439ba8
+0x439b90: cmp  word ptr [0x489fda], 0
+0x439b98: je   0x439ba8
+0x439b9a: call 0x43a940                 ; ─┐
+0x439b9f: call 0x440520                 ;  │
+0x439ba7: ret                           ;  │
+0x439ba8: cmp  word ptr [0x489f58], 0   ;  ├─ three branches,
+0x439bb0: je   0x439bc0                 ;  │  mutually exclusive
+0x439bb2: cmp  dword ptr [0x48a520], 0  ;  │
+0x439bb9: jl   0x439bc0                 ;  │
+0x439bbb: jmp  0x43a440                 ; ─┤
+0x439bc0: call 0x43a860                 ; ─┘  the idle branch
+0x439bc8: ret
+```
+
+Two consequences, and they are the useful part:
+
+- **`frame()` advances on every pass, whatever the engine then does** — the
+  increment is above the branch.
+- **`calctime()` does not.** It is called from `idle()`, and `idle()` runs from one
+  branch only. `0x48a520` is the movement module's own state (20 of its 20 code
+  references sit inside `0x4399xx`–`0x43a8xx`), so while an animation is running
+  the engine takes `0x43a440` and never reaches `0x43a860`.
+
+So in the original, an animation **starves the heartbeat while the frames keep
+counting** — and `calctime` and the `openscene` bump can never run in the same
+pass, because they are on branches that exclude each other. There is no ordering
+to copy. That route is dead.
+
+What survives is the second one, and it now has a concrete shape: **TI.EXE's
+`frame()` is a pass counter; ours is derived from wall time** at a fixed 20/second
+(`GameSession.advanceFrames`). If the original's main loop runs its pass faster
+while animating, its `frame()` outruns ours and the bumps come more often than
+once a second. That is where to pick this up — `0x43df8f` is the master pass's
+call site, immediately after a `0x4397b0(2)` delay whose behaviour under an
+animation is the open question.
+
+Until that is measured, the gap stands. Guessing at a multiplier would put a
+number in the endgame's clock that no evidence supports, and the clock is what
+the whole mission is scored against.
 
 Next: the layer the watch is drawn into — **[Stage & UI](stage-ui.md)**.
