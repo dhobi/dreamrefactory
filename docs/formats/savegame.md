@@ -56,6 +56,9 @@ loader actually reads (header fields, position table, and each container's
 The containers are a **serialization of the engine's live C++ object graph**.
 Many records embed raw process pointers (`0x7c91056d`, `0x01d2…`, a DFValue
 vtable at `0x00431e0f`) that mean nothing on reload — the loader rebuilds them.
+They still have to be treated as pointers rather than as magic numbers, which is
+a lesson this format charged us for once: see
+[Finding the grid](#finding-the-grid-the-vtable-is-a-pointer).
 Two consequences:
 
 - The **number of containers varies per save** (24 in an early save, 21 in
@@ -282,7 +285,7 @@ Each node's fields sit at fixed offsets:
 | +0 | u32 | heap pointer (ignored) |
 | +4 | u32 | heap pointer (ignored) |
 | +8 | — | **name**: one length byte + characters, in a 12-byte buffer (trailing bytes are uninitialised) |
-| +20 | u32 | DFValue **vtable** `0x00431e0f` (constant — the reliable anchor for finding nodes) |
+| +20 | u32 | DFValue **vtable** — a raw code pointer, **not a constant**: `0x00431e0f` in all 109 shipped saves, `0x87c4596f` in a player's own (#179). It is still what the node grid is found by, but the value has to be read out of the file rather than matched against ours — see [Finding the grid](#finding-the-grid-the-vtable-is-a-pointer) |
 | +24 | u16 | **type tag** (2, 3 or 4) |
 | +26 | 16-bit | **value** |
 | +28 | … | trailing fields / padding |
@@ -303,6 +306,37 @@ stored at blob `+0x10` — and confirmed by same-session DosBox save pairs:
 after saving on the poop deck the shifted pairing reads `oldset="stair2c"`,
 `newset="poop"`; keyboard bindings decode as `keynorth="w"`, `keyeast="d"`,
 `keywest="a"`; `mainpath="titanic2:"`.)
+
+### Finding the grid: the vtable is a pointer
+
+The node array is located by the word at `+20`, because it is the one field
+whose value repeats across every node. What it is *not* is a format constant.
+It is the address of the DFValue vtable in the running engine, dumped along
+with the object, and it is only stable for as long as the engine is loaded at
+the same address.
+
+All 109 shipped saves read `0x00431e0f`, which made that look like a fact about
+the format for a long time. A save Nicholas Mischler made in his own DosBox
+reads `0x87c4596f` — the same game, somewhere else in memory. Matching the
+corpus's byte pattern found nothing in it, so the reader decoded **zero**
+variables, and a load applied an empty map: the right room opened with the
+previous game's mission, phase and every other global still in place (#179 —
+Trask still showing you the clock, a shawl in your hand three missions before it
+exists). Nothing about that announces itself as a parse failure, which is why it
+was reported as a room bug.
+
+So the grid is found by **agreement** instead: whatever address a session ran
+at, all of its nodes carry the same one, and the most common word at `+20`
+across the container wins by about a hundred to one. Nodes whose names are
+12–15 characters clobber their own vtable (see below) and are left out of the
+vote. `nodeVtable` in `src/df/savegame.ts`; the fixture and the regression are
+`tests/data/M4P0FCL.ti` and `tests/auto/save-original.ts`, the one save test
+that needs no copy of the rip.
+
+The **writer** reads the same value rather than stamping ours: a save the port
+writes patches the file that was loaded, so a record made for a new global goes
+into a grid that may be foreign. Stamped with the corpus's constant, that node
+is one neither reader ever finds again.
 
 Two quirks:
 
@@ -454,8 +488,8 @@ length](#writing-must-not-lengthen-this-container).
 it as possible — no container that declares its own storage changes length, so no
 allocation-size assumption is made anywhere; a new string is written past every
 offset any record resolves to, so no record's value can change under it; and a new
-node is written at the same stride, with the same vtable, in space real saves also
-leave. The one container that *is* grown, the actor grid, is grown because the
+node is written at the same stride, with the base's *own* vtable, in space real
+saves also leave. The one container that *is* grown, the actor grid, is grown because the
 disassembly says its count comes from its size (`0x4143d2`) — a claim about the
 loader, and so on this list rather than off it. The result *should*
 be indistinguishable from a save the original wrote, and "should" is doing work in
