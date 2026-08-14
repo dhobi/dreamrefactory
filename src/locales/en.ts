@@ -152,12 +152,20 @@ export const en = {
     swipeInvertWalk: "invert forward" as Text,
     swipeInvertWalkTitle: "a swipe downwards walks on, not one upwards" as Text,
     pictureLabel: "Picture" as Text,
-    sharpLanding: "always land sharp" as Text,
-    sharpLandingTitle:
+    // how a move lands on a standpoint (#75). The original's four-way asymmetry
+    // is the default; the other three are one reading each of "the same
+    // everywhere".
+    landingLabel: "landing" as Text,
+    landingTitle:
       "The game ships each standpoint twice, sharp and soft, and the original " +
-      "shows the soft one for a moment as a right turn lands (a left turn lands " +
-      "sharp). Tick this to skip that moment. The turn itself stays soft either " +
-      "way — no sharp version of the moving frames was ever made." as Text,
+      "shows the soft one for a moment as a right turn lands — a left turn and a " +
+      "walk land sharp. The other three give every direction the same landing. " +
+      "The movement itself stays soft whichever you pick: no sharp version of the " +
+      "moving frames was ever made." as Text,
+    landingOriginal: "original" as Text,
+    landingSharp: "always sharp" as Text,
+    landingTransition: "always transition" as Text,
+    landingSoft: "always soft" as Text,
     brightnessLabel: "Brightness" as Text,
     brightnessTitle:
       "The original brightens every colour before it draws it, and lets you move " +

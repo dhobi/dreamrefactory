@@ -374,6 +374,36 @@ Two things about where they sit:
   Remembered under `taoot.picture.brightness`. A slider shipped first and was wrong on
   a phone — a 44 px target you can hit is worth more than granularity nobody wants.
 
+### The picture setting
+
+The other control in the play page's Picture bar, and the one thing there that the
+original has no key for at all. Every standpoint ships **twice** — low-resolution in
+the right-turn ring, high-resolution in the left-turn one, paired by `framePairID`
+([set format](../formats/set.md)) — and the original's landings are not uniform:
+
+| a move that | ends on | so it |
+|---|---|---|
+| turns right | its ring's low-res standpoint | lands soft and sharpens a beat later |
+| turns left | the hi-res standpoint | lands sharp |
+| walks a road | an in-motion frame (all 722 registers in `gamefiles/en`) | lands sharp, with no soft frame to see |
+
+That asymmetry is what `original` reproduces, and it is the default. The other three
+make every direction agree — `sharp`, `transition` (soft for one beat, then sharp),
+and `soft`, which keeps the low-res standpoint for the settled view as well and so
+leaves the whole room at the resolution the port drew before #68. Remembered under
+`taoot.picture.landing`; a player who had ticked the old **always land sharp** box
+(`taoot.picture.sharplanding`) starts on `sharp`.
+
+The mechanism is one rule: **the animation's last frame is the one the settled view
+will be drawn from**, because `showView` runs in the tick that draws it. So a soft
+frame is only ever seen when a sharp one follows it in the same animation, and the
+beat is exactly one animation interval. `transition` is the only setting that has to
+lengthen an animation — a walk has no landing standpoint of its own, so one is
+appended (`SetViewer.standpointFrames`).
+
+None of the four touches the movement itself: in-motion frames are
+quarter-resolution in both rings and no sharp version of them was ever made.
+
 ### The sound keys, and why the page has no sound control
 
 `wavevolume` 0..9. Two things move it and they go through one setter

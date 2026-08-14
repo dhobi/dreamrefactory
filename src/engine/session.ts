@@ -53,6 +53,15 @@ const BOOT_UI_SHOPS = ["inven.shp", "house.shp"];
  *  name — see {@link GameSession.resolveEventTarget} */
 const ACTOR_ADDRESSEE = /^sendtoactor(fx)?$/;
 
+/** how a move lands on a standpoint — see {@link GameSession.pictureMode} */
+export type PictureMode = "original" | "sharp" | "transition" | "soft";
+
+/** the four, in the order the play page offers them */
+export const PICTURE_MODES: PictureMode[] = ["original", "sharp", "transition", "soft"];
+
+export const isPictureMode = (s: unknown): s is PictureMode =>
+  typeof s === "string" && (PICTURE_MODES as string[]).includes(s);
+
 /**
  * Game-wide state that outlives individual sets: one interpreter (globals
  * persist across rooms), the boot script (the loaded title's standard library —
@@ -1650,19 +1659,31 @@ export class GameSession {
    */
   navFromScript = false;
   /**
-   * Player setting: land a right turn on the hi-res standpoint instead of the
-   * low-res one the ring ends with (SetViewer.turnFrameImage).
+   * Player setting: which of a standpoint's two versions a move lands on
+   * (SetViewer.standpointFrames / SetViewer.standFrame).
    *
-   * OFF is the original's behaviour and so the default — a right turn sharpens as
-   * it settles, a left turn lands sharp, because that is how the two rings are
-   * shipped (#68). On is the opt-in for players who would rather never see the
-   * low-detail frame. It cannot make the turn ITSELF sharp: in-motion frames are
-   * quarter-resolution in both rings and have no hi-res twin.
+   * Every standpoint ships twice, low-res and hi-res (#68), and the original's
+   * landings are not uniform: a RIGHT turn ends on its ring's low-res frame and
+   * sharpens a beat later, a LEFT turn ends on the hi-res one, and a walk ends on
+   * an in-motion frame (measured: all 722 road registers in gamefiles/en do) and
+   * so lands sharp with no soft beat at all. `original` is that, and the default.
+   *
+   * The other three make every direction land the same way, which is #75 — the
+   * asymmetry reads as a bug to players who have watched it for years, and the
+   * quality change itself is what makes some people motion-sick:
+   *
+   *   - `sharp`      — no soft beat anywhere
+   *   - `transition` — soft for one beat, then sharp, in every direction
+   *   - `soft`       — the low-res standpoint, and it stays: the port's own
+   *                    behaviour before #68, which is what the engine drew
+   *
+   * None of them can touch the movement itself: in-motion frames are
+   * quarter-resolution in both rings and no hi-res version was ever made.
    *
    * Lives on the session rather than the viewer because a `changeset` builds a
    * fresh viewer and the setting has to outlive the room.
    */
-  sharpLanding = false;
+  pictureMode: PictureMode = "original";
   /**
    * Set by the nav hooks when any navigation (walk/turn/teleport) happens during
    * a gesture. Session-scoped (not per-viewer) so it survives a mid-gesture set
