@@ -59,10 +59,12 @@ frames — so the answer comes back through `actionframe()` like any other movie
 does ([src/nightdive.ts](src/nightdive.ts)). English only because the question is
 drawn *into* the frames and there is no catalogue behind a picture; the other
 editions and the demo boot untouched. Escape presses past the film; the question
-after it carries no skip flag and has to be answered. The film itself is built
-from NightDive's own heading animation and is committed alongside the generator,
-so a checkout has the intro and a deploy ships it — a deployment that removes the
-file still boots exactly as it did before.
+after it carries no skip flag and has to be answered. `assets/nightdive.gif` is
+NightDive's own heading animation and is the tracked **source**; the MOV is
+**generated** — a Vite plugin compiles it into `public/nightdive.mov` on the first
+dev server or build, so a fresh clone has the intro without anyone running the
+generator by hand, and the deploy ships it like `lang.stg`. Delete the GIF and the
+build is still valid: no film served, no intro, and the boot is what it was.
 
 Which files exist is one manifest, `gamefiles.json`: a map of served path to
 byte size, walked live by the dev server ([vite.config.ts](vite.config.ts)),

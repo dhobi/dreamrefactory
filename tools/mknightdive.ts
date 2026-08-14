@@ -510,18 +510,30 @@ export function buildNightdiveMov(gif: GifImage): { bytes: Uint8Array; seconds: 
   };
 }
 
-function main(): void {
-  const [gifPath, outArg] = process.argv.slice(2);
-  if (!gifPath) {
-    console.error("usage: tsx tools/mknightdive.ts <animation.gif> [outDir|outFile]");
-    process.exit(2);
-  }
-  const out = outArg
-    ? outArg.endsWith(".mov")
-      ? outArg
-      : (mkdirSync(outArg, { recursive: true }), join(outArg, OUT_NAME))
-    : join("public", OUT_NAME);
+/**
+ * The film's SOURCE, and where the build puts what it compiles it into.
+ *
+ * The GIF is NightDive's own heading animation, tracked because it is a source
+ * this repository cannot re-derive; the MOV is generated and gitignored, the way
+ * `dist/` is. `public/` because that is the directory Vite copies verbatim into
+ * `dist/` **and** the one `tools/manifest.ts` scans for authored DF files — the
+ * film has to be listed in `gamefiles.json` or the page cannot find it
+ * ({@link FileStore.urlFor} resolves through the manifest, not by guessing a URL).
+ */
+export const NIGHTDIVE_GIF = join("assets", "nightdive.gif");
+export const NIGHTDIVE_OUT = join("public", OUT_NAME);
 
+/**
+ * Compile the GIF into the film, and report it the way the CLI does.
+ *
+ * Shared with the Vite plugin that keeps `public/nightdive.mov` up to date (see
+ * vite.config.ts), so a build and a hand-run produce the same bytes by
+ * construction rather than by two programs agreeing.
+ */
+export function writeNightdiveMov(
+  gifPath = NIGHTDIVE_GIF,
+  out = NIGHTDIVE_OUT,
+): { bytes: number; summary: string } {
   const { bytes, seconds } = buildNightdiveMov(decodeGif(new Uint8Array(readFileSync(gifPath))));
   writeFileSync(out, bytes);
 
@@ -529,14 +541,28 @@ function main(): void {
   // printing: a file this program is happy with but readMovFile is not is a file
   // the game cannot play
   const mov = readMovFile(bytes);
-  console.log(
-    `${out}: ${(bytes.length / 1024 / 1024).toFixed(2)} MB, ${mov.segments.length} segments\n` +
+  return {
+    bytes: bytes.length,
+    summary:
+      `${out}: ${(bytes.length / 1024 / 1024).toFixed(2)} MB, ${mov.segments.length} segments\n` +
       `  film     ${basename(gifPath)} -> ${mov.frames.length} frames, ` +
       `${seconds.toFixed(1)} s at ${(TICKS_PER_SECOND / mov.minHoldTicks).toFixed(1)} fps\n` +
       `  question ${mov.segments[1].frames.length} frames, ` +
       `${mov.segments[1].frames[0].regions.length} regions, ` +
-      `action frames "${mov.segments[1].actionFrame1}" / "${mov.segments[1].actionFrame2}"`,
-  );
+      `action frames "${mov.segments[1].actionFrame1}" / "${mov.segments[1].actionFrame2}"` +
+      `, ESC ${mov.segments[1].keySkips ? "skips it" : "does NOT skip it"}`,
+  };
+}
+
+function main(): void {
+  const [gifArg, outArg] = process.argv.slice(2);
+  const gifPath = gifArg ?? NIGHTDIVE_GIF;
+  const out = outArg
+    ? outArg.endsWith(".mov")
+      ? outArg
+      : (mkdirSync(outArg, { recursive: true }), join(outArg, OUT_NAME))
+    : NIGHTDIVE_OUT;
+  console.log(writeNightdiveMov(gifPath, out).summary);
 }
 
 // a build script when run, a module when imported — the suite wants the builder

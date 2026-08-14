@@ -95,9 +95,10 @@ const line = (s: any) =>
  * Get to the boot menu, pressing a real Escape past whatever is in the way.
  *
  * A bare `waitForFunction` for `awaitingInput` could not do it on a machine that
- * HAS the intro film — which, since the film became a tracked file, is every
- * machine including CI. It used to be gitignored, so CI booted straight to the
- * menu and only local runs sat through a 120 s timeout (#63).
+ * HAS the intro film — which, since the build compiles one from the tracked GIF,
+ * is every machine including CI. The film used to be absent from a checkout, so
+ * CI booted straight to the menu and only local runs sat through a 120 s timeout
+ * (#63).
  *
  * Three states to press past, which is why this is a poll rather than a wait:
  *

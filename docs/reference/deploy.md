@@ -45,15 +45,17 @@ in it and never in this repository:
 | `gamefiles.json` | the listing of the rip | see below |
 
 `nightdive.mov` was a fourth until [#171](https://github.com/dhobi/taoot-web/issues/171).
-It is **tracked and deployed now**, like `lang.stg`: the intro is a file the pages
-need, and keeping it out of the repository meant the only copy that mattered lived
-on the host and could be replaced only by hand.
+It is **generated and deployed now**, and reaches the host like `lang.stg` does.
+The film is not in git — `assets/nightdive.gif` is, and a Vite plugin compiles the
+MOV into `public/` at build time (see the README). Keeping it out of the transfer
+had meant the only copy that mattered lived on the host, replaceable only by hand.
 
 So the mirror only **adds and overwrites**. There is no `--delete` and no option
 to turn one on: re-uploading a wrong file costs a minute, and a deleted 7 GB rip
 does not. Vite's asset filenames are content-hashed, so a superseded bundle is
-dead weight rather than a stale page — sweep `assets/` by hand if it ever
-matters. The two files that could in principle be *written* over are excluded
+dead weight rather than a stale page — sweep the deployed `assets/` by hand if it
+ever matters (the site's hashed bundles, not this repository's `assets/`, which
+holds build sources and is never uploaded). The two files that could in principle be *written* over are excluded
 from the transfer as well.
 
 ### Why the manifest is not uploaded
