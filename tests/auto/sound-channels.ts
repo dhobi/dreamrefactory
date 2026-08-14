@@ -41,6 +41,9 @@ class TimedAudioSink implements AudioSink {
   setChannelVolume(channel: AudioChannel, volume: number): void {
     this.channelVolume[channel] = volume;
   }
+  /** the test drives `now` by hand, so a freeze is the test simply not
+   *  advancing it — nothing to do here. */
+  setSuspended(): void {}
   play(channel: AudioChannel, audio: DecodedAudio, opts?: PlayOpts): PlayHandle {
     const seconds = audio.samples.length / audio.sampleRate;
     const at = this.now;

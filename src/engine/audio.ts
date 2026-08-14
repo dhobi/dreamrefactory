@@ -37,6 +37,15 @@ export interface AudioSink {
    * theme channel. Survives across individual plays on the channel.
    */
   setChannelVolume(channel: AudioChannel, volume: number): void;
+  /**
+   * Hold everything where it is, without ending it — the game paused, not the
+   * sound stopped. TI.EXE gets this for free: its wave device is fed by its own
+   * code (the `WOM_DONE` callback at `0x406e40` only retires finished headers,
+   * it never queues the next one), so anything that stops the engine — a modal
+   * file dialog owning the thread — drains the queue and goes quiet, and picks
+   * up mid-phrase when the engine runs again. Nothing mutes it; it starves.
+   */
+  setSuspended(on: boolean): void;
 }
 
 /**
@@ -70,6 +79,7 @@ export class DeferredAudioSink implements AudioSink {
   /** the real sink exists now: apply the volumes, start the held loops */
   attach(sink: AudioSink): void {
     this.real = sink;
+    if (this.suspended) sink.setSuspended(true);
     for (const [c, v] of this.volumes) sink.setChannelVolume(c, v);
     this.volumes.clear();
     for (const [c, h] of this.held) {
@@ -108,6 +118,14 @@ export class DeferredAudioSink implements AudioSink {
   setChannelVolume(channel: AudioChannel, volume: number): void {
     if (this.real) this.real.setChannelVolume(channel, volume);
     else this.volumes.set(channel, volume);
+  }
+
+  /** nothing is audible yet, so there is nothing to hold — but a real sink
+   *  attached mid-suspension must arrive suspended, not blaring. */
+  private suspended = false;
+  setSuspended(on: boolean): void {
+    this.suspended = on;
+    this.real?.setSuspended(on);
   }
 }
 
@@ -198,6 +216,13 @@ export class NullAudioSink implements AudioSink {
   isDone(): boolean {
     return true;
   }
+
+  /** whether the world is frozen — recorded, not acted on: this sink's plays
+   *  are already instantaneous. */
+  suspended = false;
+  setSuspended(on: boolean): void {
+    this.suspended = on;
+  }
 }
 
 /** browser sink; construct after a user gesture (AudioContext autoplay policy) */
@@ -247,7 +272,9 @@ export class WebAudioSink implements AudioSink {
     };
     const show = (): void => {
       this.pageHidden = false;
-      void this.ctx.resume().catch(() => {});
+      // ...unless the game itself is frozen: coming back to a tab must not
+      // start the music under a modal that is still up.
+      if (!this.gameSuspended) void this.ctx.resume().catch(() => {});
     };
     const onVisibility = (): void => (document.hidden ? hide() : show());
     document.addEventListener("visibilitychange", onVisibility);
@@ -270,6 +297,20 @@ export class WebAudioSink implements AudioSink {
 
   setChannelVolume(channel: AudioChannel, volume: number): void {
     this.gains[channel].gain.value = Math.max(0, Math.min(1, volume));
+  }
+
+  /**
+   * The world is frozen (a host modal owns the screen). Suspending the context
+   * is the same lever the page-hidden path takes, and for the same reason: it
+   * stops the context clock, so nothing *ends* while the game is not running
+   * and the theme picks up mid-bar. That is what the original does by accident
+   * — see {@link AudioSink.setSuspended}.
+   */
+  private gameSuspended = false;
+  setSuspended(on: boolean): void {
+    this.gameSuspended = on;
+    if (on) void this.ctx.suspend().catch(() => {});
+    else if (!this.pageHidden) void this.ctx.resume().catch(() => {});
   }
 
   play(channel: AudioChannel, audio: DecodedAudio, opts?: PlayOpts): PlayHandle {
@@ -298,9 +339,10 @@ export class WebAudioSink implements AudioSink {
     src.start();
     if (!opts?.overlap) this.playing[channel] = entry;
     // unblock a context the autoplay policy parked — but NOT one suspended
-    // because the page is away, or a sound started by some timer that outlived
-    // the frame loop would wake the whole mix back up in the background.
-    if (!this.pageHidden && this.ctx.state === "suspended") void this.ctx.resume();
+    // because the page is away or the world is frozen, or a sound started by
+    // some timer that outlived the frame loop would wake the whole mix back up
+    // in the background.
+    if (!this.pageHidden && !this.gameSuspended && this.ctx.state === "suspended") void this.ctx.resume();
     return {
       get done() {
         return entry.done;

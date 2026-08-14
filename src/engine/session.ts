@@ -616,6 +616,52 @@ export class GameSession {
     this.scheduler.tickTime(now);
   }
 
+  /** the host's last raw clock reading, and how much of it the game has slept through */
+  private rawNow = 0;
+  private frozenSince: number | null = null;
+  private frozenTotal = 0;
+
+  /**
+   * The host's clock as the GAME should see it: real time, less every stretch
+   * the world was frozen for. Every timed thing in the engine — the service
+   * pass, `delay`, the fade and wipe ramps, prop animation, movies — is a delta
+   * off this one reading, so holding it still holds all of them, and nothing
+   * needs a resume path or a catch-up cap: the deltas are simply zero while
+   * frozen and continue unbroken afterwards.
+   *
+   * TI.EXE freezes the same way and for the same reason, though it doesn't have
+   * to ask: `GetOpenFileNameA` runs its own modal message loop, so the game's
+   * loop is not running at all while the dialog is up — no service pass, no
+   * frame counter, no wave buffer refilled. See {@link freezeTime}.
+   */
+  gameTime(raw: number): number {
+    this.rawNow = raw;
+    return (this.frozenSince ?? raw) - this.frozenTotal;
+  }
+
+  get frozen(): boolean {
+    return this.frozenSince !== null;
+  }
+
+  /**
+   * Stop the world: hold the clock and suspend the sound, until {@link thawTime}.
+   *
+   * Nested calls are not tracked on purpose — the one caller is a host modal
+   * (`opengame`/`savegame`), and two of those cannot be up at once.
+   */
+  freezeTime(): void {
+    if (this.frozenSince !== null) return;
+    this.frozenSince = this.rawNow;
+    this.audio.setSuspended(true);
+  }
+
+  thawTime(): void {
+    if (this.frozenSince === null) return;
+    this.frozenTotal += this.rawNow - this.frozenSince;
+    this.frozenSince = null;
+    this.audio.setSuspended(false);
+  }
+
   /**
    * Advance frame() the way TI.EXE does — off the CLOCK, not off how often the
    * host happened to call us.

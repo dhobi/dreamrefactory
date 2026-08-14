@@ -1985,6 +1985,10 @@ export class SetViewer {
 
   /** advance animation; returns the frame to draw this tick */
   tick(now: number): CachedFrame | null {
+    // Real time in, game time out: while a host modal owns the screen the
+    // reading stops moving and every delta below it is zero, which is the
+    // original's own state under a blocking file dialog (GameSession.gameTime).
+    now = this.session.gameTime(now);
     // A prop animates one frame per SERVICE PASS, not at the camera's rate.
     //
     // The scripts say so. A prop animation is played by putting the prop in the
