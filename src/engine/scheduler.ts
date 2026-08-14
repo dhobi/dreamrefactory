@@ -376,6 +376,50 @@ export class Scheduler {
   }
 
   /**
+   * Put a saved walk back in the table, mid-stride — the load's half of the
+   * walks service table (see SavedWalk in src/df/savegame.ts).
+   *
+   * Not expressible as a `startWalk`: that one measures from where the actor is
+   * standing NOW and starts the progress at zero, and a walk restored that way
+   * would set off from wherever the save happened to catch them with the whole
+   * distance still to run. The record carries its own origin and its own
+   * progress, so this seeds both.
+   *
+   * Keyed on the actor's own name rather than their cast member's, which is what
+   * `serviceWalks` looks back up — the two differ for an `actorinstance`, and the
+   * crowd (`ani1a2` and friends) is nothing but instances.
+   */
+  restoreWalk(
+    name: string,
+    w: {
+      turnOnly?: boolean;
+      paused?: boolean;
+      turnTo?: number;
+      sx: number; sy: number; sz: number;
+      dx: number; dy: number; dz: number;
+      dist: number; progress: number; arriveStar?: string;
+      path?: { x: number; y: number; z: number; cum: number }[];
+    },
+  ): boolean {
+    const key = name.toLowerCase();
+    if (!this.session.actorRuntime.get(key)) return false;
+    this.walks.set(key, {
+      sx: w.sx, sy: w.sy, sz: w.sz,
+      dx: w.dx, dy: w.dy, dz: w.dz,
+      path: w.path,
+      // a turn's distance is never read, but a zero here would make the mover's
+      // `progress / dist` a NaN the moment a turn was mistakenly given one
+      dist: Math.max(1, w.dist),
+      progress: w.progress,
+      paused: w.paused ?? false,
+      arriveStar: w.arriveStar,
+      turnTo: w.turnTo,
+      turnOnly: w.turnOnly,
+    });
+    return true;
+  }
+
+  /**
    * `walkonpath`: walk an AUTHORED ROUTE rather than the straight line between
    * two stars. `points` runs from where the actor sets off to the destination.
    *

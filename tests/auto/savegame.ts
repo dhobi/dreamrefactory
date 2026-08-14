@@ -1631,7 +1631,8 @@ test("parseSave decodes the loop/cricket tables, the active walk and the theme",
   expect(motor, "the deck's motor ambience is armed").toBeTruthy();
   expect(motor!.set).toBe("deckbd");
   expect(motor!.radius).toBe(3000);
-  expect(save.walks).toEqual([{ actor: "ga", type: 3, hasPayload: true }]);
+  expect(save.walks.length).toBe(1);
+  expect(save.walks[0]).toMatchObject({ actor: "ga", type: 3, hasPayload: true, star: "ga.2" });
   expect(save.theme).toMatchObject({ track: "deckbd.trk" });
 });
 
@@ -1875,38 +1876,155 @@ test("every shipped save's placed, visible characters are actually there (#186)"
 }, 300_000);
 
 /**
- * A load drops a walk in flight — and has to stand the walker up, which it only
- * claimed to do.
+ * A walk in flight comes back mid-stride.
  *
- * User-reported against the #181 branch, in the room #181 was reported from:
- * "we are placed in the Grand Staircase with Daisy walking on the same spot".
- * Save 17 catches `cash` mid-`walktostar` (a type-1 straight line, no path
- * payload), so the actor record restores her pose as `walk` — and once an actor
- * in a walk pose steps through its play script whether a walk is running or not,
- * a dropped walk leaves her treadmilling. The drop is a deviation we know about
- * and log; this is the rest of it.
+ * User-reported against the #181 branch, in the room #181 came from: "we are
+ * placed in the Grand Staircase with Daisy walking on the same spot", and then,
+ * against the build that stood her still: "in the original, she walks back to
+ * the centre of the room".
+ *
+ * Save 17 catches `cash` mid-`walktostar` — a type-1 straight line, no payload —
+ * and the record carries everything the mover needs: start (6561, 5095, 4985),
+ * deltas the mover SUBTRACTS, distance 2203, progress 270, and `cash1` as the
+ * arrival star. Reconstructing the saved position from those lands on the actor
+ * record's own to within the integer division, which is what says the offsets
+ * are read right.
+ *
+ * The three shapes are not one thing: type 0 is a `turntodeg` whose movement
+ * words were never written, type 1 is the straight line, and type 3 is an
+ * authored route that keeps its waypoints AND its length in a payload container
+ * of its own. A walker that cannot be put back is stood up instead (an actor
+ * steps through its play script whether a walk is running or not, #181, so a
+ * drop that left the walk pose alone left them treadmilling).
  */
-test("a walk dropped on load leaves the walker STANDING, not treadmilling", async () => {
+test("a walk saved in flight resumes and finishes, and its walker arrives", async () => {
   const { session, logs } = await newHost();
   await drain();
   const path = savePath("1", "17 - Looking up GQC for Daisy.ti");
-  const save = parseSave(new Uint8Array(readFileSync(path)));
-  // the premise: the file really does catch her mid-walk, in a walk pose
-  expect(save.walks).toEqual([{ actor: "cash", type: 1, hasPayload: false }]);
-  const record = save.actors.find((a) => a.name === "cash")!;
-  expect(record.placement).toMatchObject({ visible: true, set: "stair1c1", pose: "walk" });
+  const bytes = new Uint8Array(readFileSync(path));
+  const save = parseSave(bytes);
 
-  expect(await session.loadGame(new Uint8Array(readFileSync(path)))).toBe(true);
+  // the premise, and the offsets: the record's own arithmetic has to reproduce
+  // the position the actor record was saved at
+  const w = save.walks[0];
+  expect(save.walks.length).toBe(1);
+  expect(w).toMatchObject({ actor: "cash", type: 1, hasPayload: false, star: "cash1", turnTo: -1 });
+  expect([w.startX, w.startY, w.startZ]).toEqual([6561, 5095, 4985]);
+  expect([w.destX, w.destY, w.destZ]).toEqual([5795, 7161, 4985]);
+  expect(w.dist).toBe(2203);
+  const record = save.actors.find((a) => a.name === "cash")!.placement;
+  expect(record.pose).toBe("walk");
+  const at = (s: number, d: number) => s + Math.trunc(((d - s) * w.progress) / w.dist);
+  expect(Math.abs(at(w.startX, w.destX) - record.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(at(w.startY, w.destY) - record.y)).toBeLessThanOrEqual(1);
+
+  expect(await session.loadGame(bytes)).toBe(true);
   const cash = session.actorRuntime.get("cash")!;
-  expect(cash.visible).toBe(true);
-  expect(cash.poseName).toBe("stand");
-  expect(logs.some((l) => /cash was saved mid-walk/.test(l)), "and it says so").toBe(true);
+  // she is walking, from where she was saved and not from the start of the walk
+  expect(session.scheduler.isWalk("cash")).toBe(true);
+  expect(cash.poseName).toBe("walk");
+  expect([cash.worldX, cash.worldY]).toEqual([record.x, record.y]);
+  expect(logs.some((l) => /cash was saved walking to "cash1" — resuming it/.test(l))).toBe(true);
 
-  // ...and stays standing: a second of service passes must not move her along a
-  // cycle she is no longer in
-  const before = { x: cash.worldX, y: cash.worldY, step: cash.step };
-  for (let ms = 0; ms <= 1000; ms += 50) session.tickTime(ms);
-  expect({ x: cash.worldX, y: cash.worldY, step: cash.step }).toEqual(before);
+  // ...and she gets there: 2203 units left at actorspeed 30 is under 4 s, so 8
+  // is room to spare without being a timeout dressed up as an assertion
+  let clock = 0;
+  for (let i = 0; i < 160; i++) session.tickTime((clock += 50));
+  expect(session.scheduler.isWalk("cash")).toBe(false);
+  expect([cash.worldX, cash.worldY, cash.worldZ]).toEqual([w.destX, w.destY, w.destZ]);
+  expect(cash.starName).toBe("cash1"); // the arrival star, which endwalk keys off
+  expect(cash.poseName).toBe("stand");
+});
+
+/**
+ * The corpus's own census of the walks table, which is what says the three
+ * shapes above are the only ones and how much of the table a load now covers.
+ */
+test("every live walk slot in the corpus is a turn, a line, or a route", () => {
+  const byType = new Map<number, number>();
+  let saves = 0;
+  for (const path of allSaves()) {
+    const walks = parseSave(new Uint8Array(readFileSync(path))).walks;
+    if (!walks.length) continue;
+    saves++;
+    for (const w of walks) {
+      byType.set(w.type, (byType.get(w.type) ?? 0) + 1);
+      // an authored route is the one shape that carries a payload, and the only
+      // one a load still drops
+      expect.soft(w.hasPayload, `${path}: ${w.actor}`).toBe(w.type === 3);
+      expect.soft(w.star, `${path}: ${w.actor}`).not.toBe("");
+      // a turn's movement words are garbage in the file; the decoder must not
+      // pass them on
+      // only the straight-line mover writes a real distance IN THE RECORD; a
+      // turn has none and a route's is in its payload, so the decoder must not
+      // pass the slot's stale value on
+      if (w.type === 0) expect.soft(w.dist, `${path}: ${w.actor}`).toBe(0);
+      else expect.soft(w.dist, `${path}: ${w.actor}`).toBeGreaterThan(0);
+      // a route's waypoints decode, and its progress is somewhere along them
+      expect.soft(!!w.path, `${path}: ${w.actor} path`).toBe(w.type === 3);
+      if (w.path) {
+        expect.soft(w.path.length, `${path}: ${w.actor}`).toBeGreaterThan(1);
+        expect.soft(w.path[w.path.length - 1].cum).toBe(w.dist);
+        expect.soft(w.progress).toBeGreaterThan(0);
+        expect.soft(w.progress).toBeLessThan(w.dist);
+      }
+    }
+  }
+  expect(saves).toBe(12);
+  expect([...byType].sort()).toEqual([[0, 12], [1, 1], [3, 3]]);
+});
+
+/**
+ * The three authored routes, put back on their own waypoints.
+ *
+ * A route is the shape that cannot be reconstructed from the record alone — its
+ * length is not even in it — so this is the assertion that says the payload was
+ * read and read right: rebuilding the position from the waypoints and the saved
+ * progress has to land on the actor record's own, and the walker has to arrive
+ * at the route's LAST point rather than cut the corner to it. `ga`'s ten-point
+ * curve around the boat deck's structures is the one that would show a straight
+ * line most plainly (#122).
+ */
+test("an authored route resumes on its waypoints, not on the straight line", async () => {
+  const { session } = await newHost();
+  await drain();
+  let clock = 0;
+  const routes = [
+    { file: ["2", "05 - Talking with Max.ti"], actor: "ga", points: 10, star: "ga.2" },
+    { file: ["1", "20 - Meeting Conkling in his suite - B59.ti"], actor: "jay1", points: 2, star: "ex2" },
+    { file: ["2", "33 - Got clue from Jack Hacker.ti"], actor: "hack", points: 9, star: "hack1" },
+  ] as const;
+  for (const r of routes) {
+    const bytes = new Uint8Array(readFileSync(savePath(r.file[0], r.file[1])));
+    const save = parseSave(bytes);
+    const w = save.walks.find((x) => x.actor === r.actor)!;
+    expect(w.type, r.actor).toBe(3);
+    expect(w.path!.length, r.actor).toBe(r.points);
+    expect(w.star, r.actor).toBe(r.star);
+
+    // the payload's own arithmetic, against the actor record it was saved beside
+    const at = w.path!.findIndex((p) => p.cum >= w.progress);
+    const from = w.path![Math.max(0, at - 1)];
+    const to = w.path![at];
+    const leg = to.cum - from.cum;
+    const u = leg > 0 ? (w.progress - from.cum) / leg : 1;
+    const rec = save.actors.find((a) => a.name === r.actor)!.placement;
+    expect(Math.abs(from.x + (to.x - from.x) * u - rec.x), `${r.actor} x`).toBeLessThanOrEqual(1);
+    expect(Math.abs(from.y + (to.y - from.y) * u - rec.y), `${r.actor} y`).toBeLessThanOrEqual(1);
+
+    expect(await session.loadGame(bytes)).toBe(true);
+    const a = session.actorRuntime.get(r.actor)!;
+    expect(session.scheduler.isWalk(r.actor), `${r.actor} resumed`).toBe(true);
+    expect([a.worldX, a.worldY], `${r.actor} starts where saved`).toEqual([rec.x, rec.y]);
+
+    // pumped until it lands, with a bound rather than a duration: `hack` has
+    // 8089 units left at `actorspeed` 11, which is 735 passes — a route is as
+    // long as the author drew it and no round number covers all three
+    for (let i = 0; i < 2000 && session.scheduler.isWalk(r.actor); i++) session.tickTime((clock += 50));
+    const end = w.path![w.path!.length - 1];
+    expect([a.worldX, a.worldY, a.worldZ], `${r.actor} arrives`).toEqual([end.x, end.y, end.z]);
+    expect(a.starName, `${r.actor} lands on its star`).toBe(r.star);
+  }
 });
 
 test("the open-cast-file list decodes, and it is what the rooms with a crowd need", () => {

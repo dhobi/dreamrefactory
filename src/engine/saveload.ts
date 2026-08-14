@@ -364,19 +364,47 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     for (const c of save.crickets) {
       session.scheduler.restoreCricket(c.name, c.set, c.x, c.y, c.radius, c.base, c.jitter, c.next);
     }
-    // A walk in flight is dropped, and said: its record's arrival dispatch is
-    // not understood well enough to resume, the actor's position is already
-    // restored, and their idle loop (also restored) re-decides. 3 of the 109
-    // shipped saves carry one.
+    // A walk in flight comes back mid-stride, because the original's does: load
+    // save 17 in TI.EXE and Daisy finishes crossing the Grand Staircase to the
+    // middle of the room. (User-reported, against a build that stood her still.)
     //
-    // ...and they are STOOD UP, which this only claimed to do before. The actor
-    // record restores the pose it was saved in, and that pose is `walk`; an
-    // actor in a walk pose steps through its play script whether a walk is
-    // running or not (#181), so what the drop left behind was Daisy treadmilling
-    // on the Grand Staircase in save 17. `stopWalk` stands an actor up
-    // everywhere else a walk ends, and a load is no different.
+    // The record carries its own origin, deltas, distance and progress — and an
+    // authored route carries its waypoints in a payload container of its own —
+    // so this is a restore and not a fresh `walktostar`: the walker sets off from
+    // where the save caught them with only what was left to run. See
+    // `Scheduler.restoreWalk`.
+    //
+    // A walk that cannot be put back is DROPPED and its walker stood up, which
+    // this only claimed to do before: the actor record restores the pose it was
+    // saved in, that pose is `walk`, and an actor steps through its play script
+    // whether a walk is running or not (#181) — so a drop that left the pose
+    // alone left them treadmilling.
     for (const w of save.walks) {
       const a = session.actorRuntime.get(w.actor);
+      const usable = w.type === 0 || w.type === 1 || (w.type === 3 && !!w.path);
+      const resumed =
+        !!a &&
+        usable &&
+        session.scheduler.restoreWalk(w.actor, {
+          // type 0 is a `turntodeg`: a facing target and no mover at all
+          turnOnly: w.type === 0,
+          paused: w.paused,
+          turnTo: w.turnTo >= 0 ? w.turnTo : undefined,
+          sx: w.startX, sy: w.startY, sz: w.startZ,
+          dx: w.destX - w.startX, dy: w.destY - w.startY, dz: w.destZ - w.startZ,
+          dist: w.dist,
+          progress: w.progress,
+          arriveStar: w.star || undefined,
+          path: w.path,
+        });
+      if (resumed) {
+        session.onLog(
+          w.type === 0
+            ? `loadgame: ${w.actor} was saved mid-turn — resuming it`
+            : `loadgame: ${w.actor} was saved walking to "${w.star}" — resuming it`,
+        );
+        continue;
+      }
       if (a?.poseName.startsWith("walk")) {
         const lj = `stand${a.poseName.slice(4)}`; // walklj -> standlj, walk -> stand
         a.poseName = a.member.poses.some((p) => p.name === lj) ? lj : "stand";
