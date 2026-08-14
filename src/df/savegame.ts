@@ -613,9 +613,53 @@ function poolStringAt(pool: Uint8Array, off: number): string | null {
   return pstrAtChecked(pool, off, 0, 255);
 }
 
+/**
+ * The DFValue vtable address THIS file's nodes were written with — read out of
+ * the file rather than assumed.
+ *
+ * The value is a raw code pointer the original engine dumped along with every
+ * node, so it is only a constant for as long as the engine is loaded at the same
+ * address. Our own corpus made that look safe: all 109 shipped saves read
+ * 0x00431e0f, so the byte pattern was the thing the node grid was located by. It
+ * is not safe — a save a player made in DosBox reads 0x87c4596f (#179), and a
+ * hardcoded pattern matches nothing in it, decodes zero variables, and loads a
+ * room with the PREVIOUS game's mission, phase and every other global still in
+ * place. Nothing announces that: the set opens, the characters are there, and
+ * they act on a mission that is not the one you saved.
+ *
+ * So the grid is located by AGREEMENT instead. Whatever address a session ran
+ * at, all of its nodes carry the same one, and the nodes are dense — the most
+ * common word at +20 across every offset that looks like a node is the vtable,
+ * by a margin of a hundred to one. Names of 12..15 chars overflow their 12-byte
+ * name field and clobber their own vtable's low bytes, so they are left out of
+ * the vote (and skipped byte-wise when matching, as before).
+ */
+function nodeVtable(d: Uint8Array): number | null {
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const votes = new Map<number, number>();
+  for (let o = 0; o + NODE_STRIDE <= d.length; o++) {
+    if (d[o + NODE_NAME] > 11) continue; // clobbers its own vtable — no vote
+    if (pstrAtChecked(d, o + NODE_NAME, 1, 11) === null) continue;
+    const vt = dv.getUint32(o + NODE_VTABLE, true);
+    votes.set(vt, (votes.get(vt) ?? 0) + 1);
+  }
+  let best: number | null = null;
+  let bestN = 0;
+  for (const [vt, n] of votes) {
+    if (n > bestN) {
+      bestN = n;
+      best = vt;
+    }
+  }
+  // one node's worth of coincidence is not a grid; a real list is ~100 nodes
+  return bestN >= 8 ? best : null;
+}
+
 /** the slot walk shared by {@link decodeVars} and {@link recordOffsets}. */
 function decodeVarSlots(d: Uint8Array): { name: string; valueSlot: number }[] {
-  const VT = [0x0f, 0x1e, 0x43, 0x00]; // the DFValue vtable 0x00431e0f, little-endian
+  const vt = nodeVtable(d);
+  if (vt === null) return [];
+  const VT = [vt & 0xff, (vt >>> 8) & 0xff, (vt >>> 16) & 0xff, (vt >>> 24) & 0xff];
   // the name field holds 1 length byte + up to 11 chars; names of 12..15 chars
   // spill into the vtable (see vtableAt)
   const nameAt = (slot: number): string | null => pstrAtChecked(d, slot + NODE_NAME, 1, 15);
@@ -1328,13 +1372,18 @@ function newVarRecord(container: { data: Uint8Array }, name: string): number {
   // against this node's DFValue too.
   if (nameSlot + NODE_STRIDE > container.data.length) return -1;
   const d = container.data;
+  // ...with the base's OWN vtable, not a constant: the pointer is whatever
+  // address the session that wrote this file ran at (see {@link nodeVtable}),
+  // and a node stamped with a different one is a node neither reader finds.
+  const vt = nodeVtable(d);
+  if (vt === null) return -1;
   // The vtable FIRST, then the name over the top of it. That order is the format's
   // own: the name field holds 1 length byte + 11 characters before it runs into the
   // vtable, and a longer name overflows into it — which is why `attentionspan` and
   // `curattention` sit on clobbered vtables in the shipped saves, and why reading
   // one skips the clobbered bytes. Writing the vtable last would win that collision
   // instead and truncate the name, which no real save does.
-  for (const [i, b] of [0x0f, 0x1e, 0x43, 0x00].entries()) d[nameSlot + NODE_VTABLE + i] = b;
+  for (let i = 0; i < 4; i++) d[nameSlot + NODE_VTABLE + i] = (vt >>> (8 * i)) & 0xff;
   d[nameSlot + NODE_NAME] = name.length;
   for (let j = 0; j < name.length; j++) d[nameSlot + NODE_NAME + 1 + j] = name.charCodeAt(j) & 0xff;
   return valueSlot;
