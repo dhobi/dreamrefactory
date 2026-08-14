@@ -7317,8 +7317,15 @@ test("currentpuppet answers the puppet's name, so the Purser offers his own word
 //
 // The asymmetry the original has, and this reproduces, follows from the rings: a
 // RIGHT turn ends on its ring's low-res standpoint and then sharpens as the view
-// settles, a LEFT turn ends on the hi-res frame and lands sharp already.
-// `session.sharpLanding` is the opt-in that skips the soft moment.
+// settles, a LEFT turn ends on the hi-res frame and lands sharp already. A WALK
+// is a third case: every road register in gamefiles/en (all 722) ends on an
+// in-motion frame, so a walk has no landing standpoint of its own and arrives
+// sharp.
+//
+// `session.pictureMode` is #75: the original's three-way split, and the three
+// ways of making every direction agree — always sharp, always soft-then-sharp,
+// always soft (the port's own pre-#68 picture, kept for players the quality
+// change makes motion-sick).
 test("a settled view is drawn from the hi-res standpoint", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("bedsit1.set", "scene2", "view14");
@@ -7389,15 +7396,118 @@ test("a settled view is drawn from the hi-res standpoint", async () => {
     `landed ${left.landed}, settled ${left.settled}, prev ${left.prev}, wanted ${leftPt.hi}`,
   );
 
-  // the opt-in: the soft beat is dropped, so a right turn lands sharp as well
-  session.sharpLanding = true;
-  const sharp = turnAndWatch(RIGHTTURNS);
-  const sharpPt = standpoint();
-  check(
-    "with sharpLanding on, a right turn lands sharp with no soft beat",
-    sharp.landed === sharpPt.hi && sharp.settled === sharpPt.hi && sharp.prev !== sharpPt.lo,
-    `landed ${sharp.landed}, settled ${sharp.settled}, prev ${sharp.prev}, wanted ${sharpPt.hi}`,
-  );
+  // #75: the other three settings, each asked of BOTH turns — the whole point of
+  // them is that the direction stops mattering. `beat` is whether the low-res
+  // frame gets its one interval on screen before the landing.
+  const beat: Record<string, boolean> = { sharp: false, transition: true, soft: false };
+  for (const mode of ["sharp", "transition", "soft"] as const) {
+    session.pictureMode = mode;
+    for (const dir of [RIGHTTURNS, LEFTTURNS]) {
+      const way = dir === RIGHTTURNS ? "right" : "left";
+      const got = turnAndWatch(dir);
+      const pt = standpoint();
+      const want = mode === "soft" ? pt.lo : pt.hi;
+      check(
+        `${mode}: a ${way} turn settles on the ${mode === "soft" ? "low" : "hi"}-res standpoint`,
+        got.landed === want && got.settled === want,
+        `landed ${got.landed}, settled ${got.settled}, wanted ${want}`,
+      );
+      check(
+        `${mode}: ...${beat[mode] ? "one beat after the low-res one" : "and never shows the low-res one"}`,
+        (got.prev === pt.lo) === beat[mode],
+        `the frame before the landing was ${got.prev}, the low-res one is ${pt.lo}`,
+      );
+    }
+  }
+  session.pictureMode = "original";
+});
+
+// --- 89b. and a walk lands the way the setting says too (#75) ---------------
+// A road is the third landing, and the odd one out: its register ends on an
+// in-motion frame rather than on a standpoint, so the original arrives sharp
+// with no soft moment at all — there is no soft frame in the animation to see.
+// "always transition" is therefore the only setting that has to ADD one, which
+// it does by ending the walk on the standpoint being walked to.
+test("a walk lands the way the picture setting says", async () => {
+  const { session, viewer } = await newSession();
+  await session.openSetFile("bedsit1.set");
+  const v = viewer()!;
+  let clock = 0;
+  const hash = (f: { pixels: Uint8Array; width: number; height: number } | null): string => {
+    if (!f) return "none";
+    let h = 0x811c9dc5;
+    const n = f.width * f.height;
+    for (let i = 0; i < n; i++) h = Math.imul(h ^ f.pixels[i], 0x01000193) >>> 0;
+    return h.toString(16);
+  };
+  /** the two versions of the CURRENT standpoint, hashed from the ring images */
+  const standpoint = (): { lo: string; hi: string } => {
+    const lo = v.scene.turns[RIGHTTURNS].frames.find(
+      (f) => f.viewID === v.viewIdx && f.motionInfo > 0,
+    )!;
+    const hi = v.scene.turns[LEFTTURNS].frames.find(
+      (f) => f.motionInfo === 2 && f.framePairID === lo.framePairID,
+    )!;
+    const one = (loc: number): string => {
+      const fb = new FrameBuffer();
+      const d = decodeFrame(v.set.file.containers[loc].data, fb);
+      let h = 0x811c9dc5;
+      for (let i = 0; i < d.width * d.height; i++) h = Math.imul(h ^ fb.pixels[i], 0x01000193) >>> 0;
+      return h.toString(16);
+    };
+    return { lo: one(lo.frameContainerLoc), hi: one(hi.frameContainerLoc) };
+  };
+  /** walk, and answer the last two frames drawn plus the settled one */
+  const walkAndWatch = async (): Promise<{ prev: string; landed: string; settled: string }> => {
+    v.walk();
+    let prev = "none";
+    let landed = "none";
+    for (let i = 0; i < 500 && (v.busy || session.scriptBusy); i++) {
+      const f = v.tick((clock += 100));
+      if (f && hash(f) !== landed) {
+        prev = landed;
+        landed = hash(f);
+      }
+      await drain();
+    }
+    return { prev, landed, settled: hash(v.tick((clock += 100))) };
+  };
+  // stand somewhere a road leaves from — a turn is enough in bedsit1
+  for (let i = 0; i < 8 && !v.availableRoads().length; i++) {
+    v.turn(RIGHTTURNS);
+    await runAnimations(v);
+  }
+  check("bedsit1 has a road to walk", v.availableRoads().length > 0, "no road from here");
+
+  const start = { scene: v.scene.sceneName, view: v.scene.views[v.viewIdx].viewName };
+  const back = async (): Promise<void> => {
+    v.jumpTo(start.scene, start.view);
+    await runAnimations(v);
+  };
+
+  for (const [mode, wantBeat] of [
+    ["original", false],
+    ["sharp", false],
+    ["transition", true],
+    ["soft", false],
+  ] as const) {
+    await back();
+    session.pictureMode = mode;
+    const got = await walkAndWatch();
+    const pt = standpoint();
+    const want = mode === "soft" ? pt.lo : pt.hi;
+    check(
+      `${mode}: a walk settles on the ${mode === "soft" ? "low" : "hi"}-res standpoint`,
+      got.settled === want,
+      `settled ${got.settled}, wanted ${want}`,
+    );
+    check(
+      `${mode}: ...${wantBeat ? "one beat after the low-res one" : "and never shows the low-res one on the way"}`,
+      (got.prev === pt.lo) === wantBeat,
+      `the frame before the landing was ${got.prev}, the low-res one is ${pt.lo}`,
+    );
+  }
+  session.pictureMode = "original";
 });
 
 // --- 90. the air raid gets its loop back from the traffic --------------------

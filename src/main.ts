@@ -21,6 +21,7 @@
  * editors and the browser suite cover what they were used for besides.
  */
 import { DeferredAudioSink, WebAudioSink } from "./engine/audio";
+import { isPictureMode } from "./engine/session";
 import { GameHost } from "./host";
 import { loadTemplates, saveTemplateFor, seedSaves } from "./save-seed";
 import { browseForLoad, browseForSave } from "./save-browser";
@@ -95,7 +96,7 @@ const bugNote = document.getElementById("bugNote") as HTMLSpanElement;
 const swipeOpts = document.getElementById("swipeOpts") as HTMLDivElement;
 const swipeInvertTurnBox = document.getElementById("swipeInvertTurn") as HTMLInputElement;
 const swipeInvertWalkBox = document.getElementById("swipeInvertWalk") as HTMLInputElement;
-const sharpLandingBox = document.getElementById("sharpLanding") as HTMLInputElement;
+const pictureModeSel = document.getElementById("pictureMode") as HTMLSelectElement;
 const brightnessSeg = document.getElementById("brightnessSeg");
 const brightnessValue = document.getElementById("brightnessValue");
 /** where you are and what the engine is doing: the X pane, off by default */
@@ -1062,20 +1063,54 @@ function installSwipeOptions(): void {
 /**
  * The picture setting under the screen, and its memory.
  *
- * Asked of everyone, unlike the swipe boxes: a right turn lands on the low-res
- * standpoint for a moment before the settled view redraws sharp, which is what
- * the original does (#68), and a player who would rather not see it can say so
- * here. Unchecked is the original's behaviour, so the default costs nothing to
- * anyone who never opens this bar.
+ * Asked of everyone, unlike the swipe boxes: the original's landings are not
+ * uniform — a right turn lands on the low-res standpoint for a moment before the
+ * settled view redraws sharp, a left turn and a walk land sharp already (#68) —
+ * and #75 asks for the three even readings of that as well. `original` is first
+ * and is the default, so the setting costs nothing to anyone who never opens
+ * this bar.
+ *
+ * The dropdown is BLURRED on change. A `<select>` owns the arrow keys while it
+ * has focus (`focusOwnsKey`), and picking a mode is done with a pointer, so
+ * leaving focus behind would leave the player unable to turn until they clicked
+ * the screen again. The old checkbox never had the problem — it owned only Space.
  */
 function installPictureOptions(): void {
-  bindSwipeOption(sharpLandingBox, SHARP_LANDING_KEY, (on) => (session.sharpLanding = on));
+  bindPictureMode();
   installBrightness();
 }
 
 /** where the picture answers outlive the tab */
+const PICTURE_MODE_KEY = "taoot.picture.landing";
+/** what the setting was called while it was a checkbox: `"1"` meant "always
+ *  sharp", and a player who ticked it keeps that answer */
 const SHARP_LANDING_KEY = "taoot.picture.sharplanding";
 const BRIGHTNESS_KEY = "taoot.picture.brightness";
+
+function bindPictureMode(): void {
+  if (!pictureModeSel) return;
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(PICTURE_MODE_KEY);
+    if (stored === null && window.localStorage.getItem(SHARP_LANDING_KEY) === "1") stored = "sharp";
+  } catch {
+    /* storage can be denied; the game then starts on the original every launch */
+  }
+  const mode = isPictureMode(stored) ? stored : "original";
+  session.pictureMode = mode;
+  pictureModeSel.value = mode;
+  pictureModeSel.addEventListener("change", () => {
+    const picked = pictureModeSel.value;
+    if (!isPictureMode(picked)) return;
+    session.pictureMode = picked;
+    pictureModeSel.blur(); // give the arrow keys back to the game (see above)
+    try {
+      window.localStorage.setItem(PICTURE_MODE_KEY, picked);
+    } catch {
+      /* not remembering is survivable — the setting still holds for this tab */
+    }
+  });
+}
 
 /**
  * The brightness presets — the touch half of the original's F1/F2.

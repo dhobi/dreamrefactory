@@ -45,8 +45,11 @@ test("the game's own keys still reach it from the canvas and the page", () => {
 
 /**
  * A checkbox is the case that must NOT be a blanket guard. Clicking one focuses it,
- * so if it swallowed the arrows too, ticking "always land sharp" would leave the
+ * so if it swallowed the arrows too, ticking "invert forward" would leave the
  * player unable to walk until they clicked the canvas again.
+ *
+ * A `<select>` genuinely does own the arrows and is left owning them; the play
+ * page's one dropdown gives focus back by blurring itself instead (src/keys.ts).
  */
 test("a checkbox owns only Space — the arrows still walk", () => {
   for (const id of ["box", "radio"]) {

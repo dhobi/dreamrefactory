@@ -1074,8 +1074,41 @@ export class SetViewer {
   /** the FrameInfo of the current view's standpoint (from the right-turn
    *  ring — every view has a stand frame there; vista views ride it too) */
   private standFrameInfo(): FrameInfo | null {
-    const ring = this.scene.turns[RIGHTTURNS].frames;
-    return ring.find((f) => f.viewID === this.viewIdx && f.motionInfo > 0) ?? null;
+    return this.standFrameInfoOf(this.scene, this.viewIdx);
+  }
+
+  /** the same question about a scene the player is not standing in yet — where a
+   *  road is about to arrive ({@link roadArrival}) */
+  private standFrameInfoOf(scene: Scene, viewIdx: number): FrameInfo | null {
+    const ring = scene.turns[RIGHTTURNS].frames;
+    return ring.find((f) => f.viewID === viewIdx && f.motionInfo > 0) ?? null;
+  }
+
+  /**
+   * Where a road register puts the player: the arrival scene and the view they
+   * face on getting there. Null when neither lookup finds a scene.
+   *
+   * The scene is the register's `destination`, which is the container index of
+   * the arrival scene's view table; the fallback is the scene owning the road's
+   * far-end global view id. The VIEW is not the road's endpoint view — that one
+   * faces back along the road — but the one nearest the direction of travel, so
+   * the player keeps facing the way they walked.
+   *
+   * Pure, and that is the point: {@link walk} needs the answer before the
+   * animation starts (to end it on the arrival standpoint) and again when the
+   * animation finishes, and one function means those two cannot disagree.
+   */
+  private roadArrival(
+    reg: { destination: number; frames: FrameInfo[] },
+    arriveViewID: number,
+  ): { sceneIdx: number; viewIdx: number } | null {
+    let sceneIdx = this.set.scenes.findIndex((s) => s.locationViews === reg.destination);
+    if (sceneIdx < 0) {
+      sceneIdx = this.set.scenes.findIndex((s) => s.views.some((vw) => vw.viewID === arriveViewID));
+    }
+    if (sceneIdx < 0) return null;
+    const travelDir = reg.frames[reg.frames.length - 1].axisX;
+    return { sceneIdx, viewIdx: this.nearestView(this.set.scenes[sceneIdx], travelDir) };
   }
 
   /**
@@ -1101,16 +1134,30 @@ export class SetViewer {
    * and rotation — measured, 0 of 3048 differ — and identical dimensions and Z
    * layer, so nothing about projection or prop occlusion moves.
    */
-  private hiResTwin(fi: FrameInfo): FrameInfo | null {
-    const ring = this.scene.turns[LEFTTURNS]?.frames ?? [];
+  private hiResTwin(fi: FrameInfo, scene: Scene = this.scene): FrameInfo | null {
+    const ring = scene.turns[LEFTTURNS]?.frames ?? [];
     return ring.find((f) => f.motionInfo === 2 && f.framePairID === fi.framePairID) ?? null;
   }
 
+  /** the low-res twin — the same pairing read the other way, for a frame taken
+   *  from the LEFT-turn ring (#75's "always soft" and "always transition") */
+  private lowResTwin(fi: FrameInfo, scene: Scene = this.scene): FrameInfo | null {
+    const ring = scene.turns[RIGHTTURNS]?.frames ?? [];
+    return ring.find((f) => f.motionInfo === 1 && f.framePairID === fi.framePairID) ?? null;
+  }
+
   /** the decoded image of a standpoint's hi-res twin, if it has one */
-  private hiResImage(fi: FrameInfo): CachedFrame | undefined {
-    const hi = this.hiResTwin(fi);
+  private hiResImage(fi: FrameInfo, scene: Scene = this.scene): CachedFrame | undefined {
+    const hi = this.hiResTwin(fi, scene);
     if (!hi) return undefined;
-    return this.rings.ensure(this.scene.turns[LEFTTURNS].frames).get(hi.frameContainerLoc);
+    return this.rings.ensure(scene.turns[LEFTTURNS].frames).get(hi.frameContainerLoc);
+  }
+
+  /** the decoded image of a standpoint's low-res twin, if it has one */
+  private lowResImage(fi: FrameInfo, scene: Scene = this.scene): CachedFrame | undefined {
+    const lo = this.lowResTwin(fi, scene);
+    if (!lo) return undefined;
+    return this.rings.ensure(scene.turns[RIGHTTURNS].frames).get(lo.frameContainerLoc);
   }
 
   /**
@@ -1127,8 +1174,8 @@ export class SetViewer {
    * the two images were identical, so swallowing one changed nothing.
    *
    * So the soft standpoint is followed by its sharp twin, and the beat is one
-   * animation interval. `session.sharpLanding` is the opt-in that drops the soft
-   * frame instead, landing both directions sharp.
+   * animation interval. {@link standpointFrames} is where the player's setting
+   * decides whether that beat happens in this direction (#75).
    *
    * `turnRing` stops at the first standpoint it reaches, so this touches the
    * frame being landed on and never one the turn passes through. It cannot
@@ -1139,31 +1186,69 @@ export class SetViewer {
   private turnFrames(ring: FrameInfo[], images: Map<number, CachedFrame>): CachedFrame[] {
     const out: CachedFrame[] = [];
     for (const fi of ring) {
-      const soft = images.get(fi.frameContainerLoc);
-      if (fi.motionInfo === 1) {
-        const sharp = this.hiResImage(fi);
-        if (sharp) {
-          if (!this.session.sharpLanding && soft) out.push(soft);
-          out.push(sharp);
+      const own = images.get(fi.frameContainerLoc);
+      if (fi.motionInfo > 0) {
+        const landing = this.standpointFrames(fi, own);
+        if (landing.length) {
+          out.push(...landing);
           continue;
         }
       }
-      if (soft) out.push(soft);
+      if (own) out.push(own);
     }
     return out;
   }
 
-  /** the standpoint frame image of the current view */
+  /**
+   * The frames an animation ends with to land on standpoint `fi`, under the
+   * player's picture setting (#75).
+   *
+   * The trailing frame is always the one the settled view will be drawn from, so
+   * that {@link showView} — which runs in the same tick that draws it — replaces
+   * it with an identical image and nothing flickers. A soft frame ahead of a
+   * sharp one is therefore the ONLY way to show the soft version at all, and it
+   * shows for exactly one animation interval.
+   *
+   * `own` is `fi`'s own image, which is low-res in the right-turn ring and hi-res
+   * in the left-turn one; the twin comes from the other ring by `framePairID`.
+   * Where a twin is missing (nothing in gamefiles/en is, but a set need not
+   * oblige) the pair collapses to whatever there is.
+   */
+  private standpointFrames(
+    fi: FrameInfo,
+    own: CachedFrame | undefined,
+    scene: Scene = this.scene,
+  ): CachedFrame[] {
+    const soft = fi.motionInfo === 1 ? own : this.lowResImage(fi, scene);
+    const sharp = fi.motionInfo === 2 ? own : this.hiResImage(fi, scene);
+    const both = (): CachedFrame[] => (soft && sharp ? [soft, sharp] : [(sharp ?? soft)!]);
+    if (!soft && !sharp) return [];
+    switch (this.session.pictureMode) {
+      case "sharp":
+        return [(sharp ?? soft)!];
+      case "soft":
+        return [(soft ?? sharp)!];
+      case "transition":
+        return both();
+      default:
+        // the original: a soft beat only where the ring itself ends on the
+        // low-res frame, which is the right-turn ring and nothing else
+        return fi.motionInfo === 1 ? both() : [(sharp ?? soft)!];
+    }
+  }
+
+  /**
+   * The standpoint frame image of the current view — hi-res, which is what a
+   * settled view is drawn from (#68), unless the player has asked for the
+   * low-res one everywhere, which is what "always soft" means: not a soft
+   * landing followed by a sharpen, but a room that stays soft (#75).
+   */
   private standFrame(): CachedFrame | null {
     const fi = this.standFrameInfo();
     if (!fi) return null;
-    // the hi-res twin if this scene has one, else the standpoint we found
-    const hi = this.hiResTwin(fi);
-    if (hi) {
-      const img = this.rings.ensure(this.scene.turns[LEFTTURNS].frames).get(hi.frameContainerLoc);
-      if (img) return img;
-    }
-    return this.rings.ensure(this.scene.turns[RIGHTTURNS].frames).get(fi.frameContainerLoc) ?? null;
+    const own = this.rings.ensure(this.scene.turns[RIGHTTURNS].frames).get(fi.frameContainerLoc);
+    if (this.session.pictureMode === "soft") return own ?? this.hiResImage(fi) ?? null;
+    return this.hiResImage(fi) ?? own ?? null;
   }
 
   private showView(): void {
@@ -1412,24 +1497,29 @@ export class SetViewer {
     const frames = reg.frames
       .map((fi) => images.get(fi.frameContainerLoc))
       .filter((f): f is CachedFrame => !!f);
-    this.startAnimation(frames, pace, () => {
-      // arrival scene: the register's `destination` is the container index
-      // of the arrival scene's view table; fall back to the scene owning the
-      // road's far-end global view id
-      let sceneIdx = this.set.scenes.findIndex((s) => s.locationViews === reg.destination);
-      if (sceneIdx < 0) {
-        sceneIdx = this.set.scenes.findIndex((s) =>
-          s.views.some((vw) => vw.viewID === arriveViewID),
-        );
+    // Worked out before the walk starts, not in the callback below, because
+    // "always transition" needs the standpoint being walked TO in order to end
+    // the animation on it. Both answers are pure functions of the register, so
+    // the callback reads the same ones rather than working them out again.
+    const arrival = this.roadArrival(reg, arriveViewID);
+    if (arrival && this.session.pictureMode === "transition") {
+      // A road ends on an IN-MOTION frame — measured, all 722 registers in
+      // gamefiles/en — so a walk has no landing standpoint of its own to soften
+      // and lands sharp in the original. Appending the pair gives it the beat a
+      // right turn has, which is what "every direction the same" asks for.
+      const scene = this.set.scenes[arrival.sceneIdx];
+      const fi = this.standFrameInfoOf(scene, arrival.viewIdx);
+      if (fi) {
+        const own = this.rings.ensure(scene.turns[RIGHTTURNS].frames).get(fi.frameContainerLoc);
+        frames.push(...this.standpointFrames(fi, own, scene));
       }
-      if (sceneIdx >= 0) {
+    }
+    this.startAnimation(frames, pace, () => {
+      if (arrival) {
+        const { sceneIdx } = arrival;
         const prevScene = this.sceneIdx;
         this.sceneIdx = sceneIdx;
-        // arrival view: keep facing the direction of travel — the road's
-        // endpoint view faces BACK along the road, so match the last walked
-        // frame's camera angle against the scene's view rotations instead
-        const travelDir = reg.frames[reg.frames.length - 1].axisX;
-        this.viewIdx = this.nearestView(this.scene, travelDir);
+        this.viewIdx = arrival.viewIdx;
         // lifecycle events fire AFTER arrival — openscene handlers check
         // currentview() (gstair's deck-transition scenes forward via
         // changeset from their openscene)

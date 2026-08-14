@@ -786,13 +786,24 @@
              on F3-F8, reset on F9), which a phone has no way to press. Both ends
              move the same value, so a player who uses the keys sees the
              selection follow. -->
+        <!-- Four landings, not a box: the original's own is asymmetric (a right
+             turn lands soft and sharpens, a left turn and a walk land sharp), and
+             #75 asks for the three uniform readings of it as well. A select
+             takes the arrow keys while it has focus, so src/main.ts blurs it on
+             change — otherwise picking a mode would leave the player unable to
+             turn until they clicked the screen. -->
         <div class="bar">
           <span class="seclabel" data-i18n="play.pictureLabel">Picture</span>
           <label
-            title="The game ships each standpoint twice, sharp and soft, and the original shows the soft one for a moment as a right turn lands (a left turn lands sharp). Tick this to skip that moment. The turn itself stays soft either way — no sharp version of the moving frames was ever made."
-            data-i18n-attr="title:play.sharpLandingTitle"
-            ><input type="checkbox" id="sharpLanding" />
-            <span data-i18n="play.sharpLanding">always land sharp</span></label
+            title="The game ships each standpoint twice, sharp and soft, and the original shows the soft one for a moment as a right turn lands — a left turn and a walk land sharp. The other three give every direction the same landing. The movement itself stays soft whichever you pick: no sharp version of the moving frames was ever made."
+            data-i18n-attr="title:play.landingTitle"
+            ><span data-i18n="play.landingLabel">landing</span>
+            <select id="pictureMode">
+              <option value="original" data-i18n="play.landingOriginal">original</option>
+              <option value="sharp" data-i18n="play.landingSharp">always sharp</option>
+              <option value="transition" data-i18n="play.landingTransition">always transition</option>
+              <option value="soft" data-i18n="play.landingSoft">always soft</option>
+            </select></label
           >
         </div>
 

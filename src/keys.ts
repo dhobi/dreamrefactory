@@ -21,9 +21,15 @@
  *
  * The rule is the ordinary one for a page with keyboard shortcuts: a control that
  * uses a key gets it, and the game gets the rest. A text field uses all of them; a
- * checkbox uses only Space; a button uses Space and Enter, and nothing else on the
- * page uses any — so the arrows still walk while a checkbox has focus, which
- * matters, because clicking one is how it gets focus in the first place.
+ * checkbox uses only Space; a button uses Space and Enter — so the arrows still
+ * walk while a checkbox has focus, which matters, because clicking one is how it
+ * gets focus in the first place.
+ *
+ * A `<select>` is the one control that takes the arrows, because that is how a
+ * dropdown is worked without a mouse, and the play page has one (the picture
+ * setting, #75). Nothing here can soften that without breaking the keyboard for
+ * the control itself, so the page hands focus back instead: `bindPictureMode`
+ * blurs the dropdown when the answer changes.
  */
 
 /** input types that take TEXT, as opposed to the ones that are a control */
