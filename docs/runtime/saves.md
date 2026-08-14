@@ -48,6 +48,13 @@ writes:
   nothing re-runs `setupgroup` on a load, so the file is the only witness to who
   was standing on that deck.
 
+  Writing them was only half of it. A crowd record is instanced from a cast
+  member, and that member lives in `extra.cst` — which the room's `openset`
+  opens and a load does not run. So the records were written faithfully and then
+  **dropped on the way back in**, 344 of them, until the load started reopening
+  the cast files the save names in container 3
+  ([#186](https://github.com/dhobi/taoot-web/issues/186)).
+
 - the **scheduler**: the live `makeloop` and `makecricket` tables, written over the
   base's own (mid-count, so a loop reloads with the ticks it had left). The walks
   table is **zeroed** — the port does not serialize a walk in flight, and it says
@@ -202,14 +209,24 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    world input frozen, so every save *carries* the freeze; a load returns you
    to interactive control.
 4. Tear down timed state (`scheduler.reset()`), **silence the voice channel** (the
-   theme is halted and re-scored from the file at step 9), drop any pending
+   theme is halted and re-scored from the file at step 10), drop any pending
    [overlay-stack](stage-ui.md#the-overlay-stack-transtoflat-transfromflat)
    frames, reopen `main.stg`, and make the set visible.
 5. **Mute the set lifecycle** (`GameSession.restoringSave`) for everything below.
    The departing room is *detached*, not closed: its `closeset` does not run, its
    timed state died with the scheduler reset, and the host releases its files when
    the new set activates.
-6. **Put the cast back, wholesale.** The live actor list is wiped first —
+6. **Reopen the cast files the save had open** (container 3 — `gang.cst` always,
+   plus `extra.cst` in the three rooms with a crowd), before a single record is
+   applied. The extras a room places are instanced from `extra.cst`, which the
+   room's own `openset` opens — and step 5 just muted that. Skipping this step
+   dropped 344 characters across 39 of the 109 shipped saves, in the endgame's
+   most populated rooms, with nothing but a log line to say so
+   ([#186](https://github.com/dhobi/taoot-web/issues/186); [the container's
+   story](../formats/savegame.md#the-crowd-comes-from-this-container)). The list
+   is the file's own rather than a guess from the set being entered, and
+   `opencastfile` is idempotent, so the boot cast costs nothing.
+7. **Put the cast back, wholesale.** The live actor list is wiped first —
    `actorinstance` copies removed, cast members put down — because the original
    replaces its list with the container it read, and then every record is applied:
    owner and value, set, star, pose, position, facing, speed, `actorscale`, zclip
@@ -221,7 +238,7 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    `actorvisible` verbatim is what makes wholesale restore safe at all:
    `putdownactor` hides a character without touching `actorset`, so "place everyone
    whose set matches" would resurrect everybody who ever walked through the room.
-7. **Put every prop back, both halves** — owner, view, and the numeric fields that
+8. **Put every prop back, both halves** — owner, view, and the numeric fields that
    say where and how it draws. This one step replaces the whole family of script
    re-runs the load used to negotiate with: `initprops`' mission defaults, the
    `house.shp` `openshop`/`initprops`/`showinterface` dance, the hand-mirrored open
@@ -229,16 +246,16 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    hand either — it restores from its variable record like every global, and every
    shipped save carries `""` there: a save is taken from the CTL panel, which you
    cannot reach mid-drag.)
-8. **Restore the scheduler tables mid-count** — every `makeloop` with the ticks it
+9. **Restore the scheduler tables mid-count** — every `makeloop` with the ticks it
    had left, every `makecricket` with its position, radius, period, jitter and time
    to next fire. This is what used to need the arriving room's `openset`: the idles
    that make characters act, the scene timers, the room's positional ambience.
-9. **Score the room from the file**: the track whose playing/looping arrays are
+10. **Score the room from the file**: the track whose playing/looping arrays are
    non-empty is the theme, and it is played at the player's `themevolume`.
-10. **Walks are dropped, and said so** — one log line per character. Their restored
+11. **Walks are dropped, and said so** — one log line per character. Their restored
     position stands and their restored idle loop re-decides. Three of the 109
     shipped saves carry a walk in flight.
-11. Open the saved set/scene/view through the engine's set machinery, still with the
+12. Open the saved set/scene/view through the engine's set machinery, still with the
     lifecycle muted. The scene is recorded as current, so the first turn or step
     fires `openscene` normally.
 

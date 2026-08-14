@@ -1831,3 +1831,59 @@ test("snapshotSave carries the restored loops, crickets and theme", async () => 
   const extras = re.actors.filter((a) => !session.actorRuntime.casts.get("gang.cst")?.cst.members.some((m) => m.name.toLowerCase() === a.name));
   expect(extras.length).toBeGreaterThan(0);
 });
+
+/**
+ * The crowd, over the whole corpus — issue #186.
+ *
+ * A room's extras are not in the boot cast: `lounge1c`, `smoke` and `deckbd2`
+ * each `opencastfile("extra.cst")` from their `openset`, and a load runs no
+ * openset (#143). The save records what was open (`SaveGame.castFiles`), and a
+ * load that ignored it dropped every crowd record it could not find a source
+ * for — 714 log lines and 344 characters that should have been standing there,
+ * across the 109 shipped saves.
+ *
+ * The assertion is the one that would have caught it: `restoreActors` LOGS a
+ * drop rather than failing, so a suite that only checks the load returns true
+ * sees nothing wrong.
+ */
+test("every shipped save's placed, visible characters are actually there (#186)", async () => {
+  const saves = allSaves();
+  expect(saves.length).toBeGreaterThan(0);
+  let checked = 0;
+  // ONE session for all 109, loaded one after another. Cheaper than a boot per
+  // save, and a stronger claim than a fresh one would make: a load has to leave
+  // the previous game's cast behind it, which is the half of #186 that a single
+  // load cannot show.
+  const { session, logs } = await newHost();
+  await drain();
+  for (const path of saves) {
+    const bytes = new Uint8Array(readFileSync(path));
+    const save = parseSave(bytes);
+    logs.length = 0;
+    expect.soft(await session.loadGame(bytes), path).toBe(true);
+    // a record with no set was never placed, and an invisible one is putdown —
+    // neither is a character the room owes you
+    for (const a of save.actors) {
+      if (!a.placement.set || !a.placement.visible) continue;
+      checked++;
+      check(`${path}: ${a.name}`, session.actorRuntime.get(a.name) !== undefined, "not restored");
+    }
+    check(path, !logs.some((l) => /no cast member to re-instance/.test(l)), "dropped a crowd record");
+  }
+  // the corpus really does place a crowd — an assertion over nothing would pass
+  expect(checked).toBeGreaterThan(300);
+}, 300_000);
+
+test("the open-cast-file list decodes, and it is what the rooms with a crowd need", () => {
+  const seen = new Map<string, number>();
+  for (const path of allSaves()) {
+    const save = parseSave(new Uint8Array(readFileSync(path)));
+    // container 3 in every shipped save, and every record names a .cst
+    expect.soft(save.castIndex, path).toBe(3);
+    expect.soft(save.castFiles[0], path).toBe("gang.cst"); // the boot cast, always
+    seen.set(save.castFiles.join(","), (seen.get(save.castFiles.join(",")) ?? 0) + 1);
+  }
+  // exactly two lists exist: the boot cast, and the boot cast plus the crowd
+  expect([...seen.keys()].sort()).toEqual(["gang.cst", "gang.cst,extra.cst"]);
+  expect(seen.get("gang.cst,extra.cst")).toBeGreaterThan(0);
+});

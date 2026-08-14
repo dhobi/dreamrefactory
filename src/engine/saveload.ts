@@ -327,6 +327,22 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     session.currentSetName = "none";
     session.currentSetFile = "";
 
+    // The cast FILES the save had open, before any record is applied. A room's
+    // crowd is not in the boot cast: lounge1c, smoke and deckbd2 each
+    // `opencastfile("extra.cst")` from their openset, and a load runs no openset
+    // (#143) — so the eight members the extras are instanced from were missing,
+    // and restoreActors dropped every crowd record it could not find a source
+    // for. 344 of them, across 39 of the 109 shipped saves (#186).
+    //
+    // The list is the file's own (SaveGame.castFiles), not a guess from the set
+    // being entered: the save records what was open, which is exactly the
+    // question, and `openCastFile` is idempotent so the boot cast costs nothing.
+    //
+    // A cast file the PREVIOUS room had open and this save does not name is left
+    // open rather than closed. It is inert: resetCast puts every member down, and
+    // a member the file has no record for stays that way.
+    for (const file of save.castFiles) await session.openCastFile(file);
+
     // The cast, wholesale from the file — the original replaces its live actor
     // list with the read container (0x4143d2), so first everything not in the
     // file must go: instances are removed, members put down. Then every record

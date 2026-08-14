@@ -580,6 +580,10 @@ export interface SaveGame {
   inventory: SavedProp[];
   /** every actor serialized in the actor container, with its `actorowner`. */
   actors: SavedActor[];
+  /** the cast files that were open, in file order — `gang.cst` always, plus
+   * `extra.cst` in the rooms with a crowd. A load has to reopen these before it
+   * restores the actors, because the crowd is instanced from them (#186). */
+  castFiles: string[];
   /** the live `makeloop` table — the room's scheduled work, mid-count. */
   loops: SavedLoop[];
   /** the live `makecricket` table — the room's positional ambience. */
@@ -596,6 +600,8 @@ export interface SaveGame {
   inventoryIndex: number;
   /** index of the actor container within `raw.containers`. */
   actorsIndex: number;
+  /** index of the open-cast-file list container, or -1. */
+  castIndex: number;
   /** index of the loops container (crickets/walks follow it), or -1. */
   schedulerIndex: number;
   /** index of the open-tracks list container (its 3 arrays per track follow), or -1. */
@@ -925,6 +931,59 @@ function findActorsIndex(raw: RawSaveFile, exclude: number[]): number {
   return bestN >= 10 ? best : -1;
 }
 
+/**
+ * The list of OPEN CAST FILES — one 28-byte record per `opencastfile` still in
+ * force, laid out like every other list the engine dumps:
+ * `[+0/+4 heap ptrs][+8 u32][+12 name: len byte + chars]`.
+ *
+ * This is what a load needs and used to go without. A room's crowd is not in
+ * its own cast file: `lounge1c.set`, `smoke.set` and `deckbd2.set` each
+ * `opencastfile("extra.cst")` from their `openset`, and a load runs no openset
+ * (#143). So the eight members the extras are instanced from — `life1 bruce1
+ * jim1 jay1 brown1 paul1 ani1 molly1` — were never loaded, `instanceSource`
+ * found nothing to instance from, and every crowd record was dropped: 344 of
+ * them across 39 of the 109 shipped saves, in the three most populated rooms of
+ * the endgame (#186).
+ *
+ * The file said so all along. 47 of the 109 carry a second record here and it is
+ * `extra.cst` in every one — the same 47 that carry crowd records resolving to
+ * nothing, which is what identifies the container.
+ */
+const CAST_STRIDE = 28;
+const CAST_NAME = 12;
+
+/**
+ * Locate the open-cast-file list: a container that is a whole number of 28-byte
+ * records and whose every record names a `.cst`.
+ *
+ * "Every record" is what makes it safe. Container 0 mentions the same file names
+ * (it is the open-resource list, in a different shape) but its length is not a
+ * multiple of the stride, and a partial match is rejected rather than trimmed.
+ */
+function findCastIndex(raw: RawSaveFile): number {
+  for (let i = 0; i < raw.containers.length; i++) {
+    const d = raw.containers[i].data;
+    if (d.length < CAST_STRIDE || d.length % CAST_STRIDE !== 0) continue;
+    let ok = true;
+    for (let o = 0; o < d.length && ok; o += CAST_STRIDE) {
+      const name = pstrAtChecked(d, o + CAST_NAME, 1, 12);
+      ok = name !== null && /^[a-z0-9_]+\.cst$/i.test(name);
+    }
+    if (ok) return i;
+  }
+  return -1;
+}
+
+/** Decode the open-cast-file list (see {@link CAST_STRIDE}), lowercased. */
+function decodeCastFiles(d: Uint8Array): string[] {
+  const out: string[] = [];
+  for (let o = 0; o + CAST_STRIDE <= d.length; o += CAST_STRIDE) {
+    const name = pstrAtChecked(d, o + CAST_NAME, 1, 12);
+    if (name) out.push(name.toLowerCase());
+  }
+  return out;
+}
+
 /** the three master service tables' fixed sizes: 32×42 loops, 16×74 crickets,
  *  16×110 walks. The save writer (0x413910) dumps them verbatim, back to back,
  *  right after the string pool — the triple is the fingerprint. */
@@ -1129,6 +1188,11 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   const actors =
     actorsIndex >= 0 ? walkActorGrid(raw.containers[actorsIndex].data).map((r) => r.actor) : [];
 
+  // which cast files were open — the crowd is instanced from them, and a load
+  // runs no openset to reopen them (#186).
+  const castIndex = findCastIndex(raw);
+  const castFiles = castIndex >= 0 ? decodeCastFiles(raw.containers[castIndex].data) : [];
+
   // the scheduler tables (loops/crickets/walks) and the open-track sound state —
   // what a load restores instead of re-running the room's openset (#143).
   const schedulerIndex = findSchedulerIndex(raw);
@@ -1171,9 +1235,9 @@ export function parseSave(bytes: Uint8Array): SaveGame {
 
   return {
     title, disk, set, scene, view, stage, clock, hallside, savedeck,
-    vars, numGlobals, strGlobals, inventory, actors,
+    vars, numGlobals, strGlobals, inventory, actors, castFiles,
     loops, crickets, walks, theme, raw,
-    globalsIndex, inventoryIndex, actorsIndex,
+    globalsIndex, inventoryIndex, actorsIndex, castIndex,
     schedulerIndex, tracksIndex,
   };
 }
