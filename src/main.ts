@@ -97,6 +97,7 @@ const swipeOpts = document.getElementById("swipeOpts") as HTMLDivElement;
 const swipeInvertTurnBox = document.getElementById("swipeInvertTurn") as HTMLInputElement;
 const swipeInvertWalkBox = document.getElementById("swipeInvertWalk") as HTMLInputElement;
 const pictureModeSel = document.getElementById("pictureMode") as HTMLSelectElement;
+const lowMemoryBox = document.getElementById("lowMemory") as HTMLInputElement;
 const brightnessSeg = document.getElementById("brightnessSeg");
 const brightnessValue = document.getElementById("brightnessValue");
 /** where you are and what the engine is doing: the X pane, off by default */
@@ -1078,6 +1079,10 @@ function installSwipeOptions(): void {
 function installPictureOptions(): void {
   bindPictureMode();
   installBrightness();
+  // Its own row and its own question: this one is the GAME's setting, not the
+  // page's — the box only changes what `heapsize()` answers, and TAOOT's own
+  // scripts decide what that is worth (GameSession.lowMemory).
+  bindSwipeOption(lowMemoryBox, LOW_MEMORY_KEY, (on) => (session.lowMemory = on));
 }
 
 /** where the picture answers outlive the tab */
@@ -1086,6 +1091,8 @@ const PICTURE_MODE_KEY = "taoot.picture.landing";
  *  sharp", and a player who ticked it keeps that answer */
 const SHARP_LANDING_KEY = "taoot.picture.sharplanding";
 const BRIGHTNESS_KEY = "taoot.picture.brightness";
+/** and where the low-memory row's one answer does */
+const LOW_MEMORY_KEY = "taoot.sound.lowmemory";
 
 function bindPictureMode(): void {
   if (!pictureModeSel) return;

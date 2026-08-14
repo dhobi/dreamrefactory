@@ -1685,6 +1685,35 @@ export class GameSession {
    */
   pictureMode: PictureMode = "original";
   /**
+   * Player setting: report a 1996 machine's free RAM, so the GAME turns itself
+   * down (`heapsize`, in builtins/helpers.ts).
+   *
+   * Nothing in the engine reads this. BOOTFILE defines its own `lowmemory()` as
+   * `heapsize() < 6144000` — under 6 MB — and five script sites branch on it:
+   *
+   *   - `setupdecksound` / `setupsinksound` open the `.11k` bank instead of the
+   *     `.trk` one. Despite the name these are not 11 kHz: same codec, same
+   *     22050 Hz, roughly HALF the loop chunks (decka 11 → 6, deckb 17 → 8,
+   *     decke 20 → 10). They are the short versions of the songs, and each one
+   *     calls itself by its `.trk` name inside, which is how the following
+   *     `playnewtheme("decka.trk")` still finds it (see AudioLibrary.find).
+   *   - `setupboatdeck` skips `crowdcrickets()` — five positional party loops
+   *     around the boat deck's `life*` stars, so mission 4 loses its crowd.
+   *   - `openset` and `MAP.STG`'s `openstage` zero `setparam`/`stageparam` 1 and
+   *     2. Those are engine cache knobs, not anything you can see: in TI.EXE
+   *     they live at 0x489f5c/0x489f5e and are read only in the set-open path
+   *     (0x43aa30), where 2 gates a look-ahead load and 1 picks between two
+   *     otherwise identical loaders that differ in whether the last reference
+   *     dropped frees the resource. The port has its own LRU and warms its own
+   *     rings, so they stay the scratch words they already were.
+   *
+   * So in the port everything it reaches is sound, and the page still names the
+   * row for the CONDITION rather than for the result: what a small machine got
+   * is the game's answer, not ours, and it is not the same answer everywhere.
+   * `lowmemory()` is re-read per `openset`, so a change lands in the next room.
+   */
+  lowMemory = false;
+  /**
    * Set by the nav hooks when any navigation (walk/turn/teleport) happens during
    * a gesture. Session-scoped (not per-viewer) so it survives a mid-gesture set
    * change: the walk fires on the new viewer but keyDown, running on the old

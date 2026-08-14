@@ -185,9 +185,11 @@ String and math utilities plus host probes: `findword`, `putword`,
 `stageparam`, `setparam`, `tick`, `frame`, `menuvisible`, `keyaborts`,
 `countbevels`, `path`, `notedialog`, `questiondialog`, `textdialog`, `quit`,
 and the environment probes `machinetype` (returns `"win"`), `currentcd`,
-`lowmemory` (0) and `heapsize` — pinned to 64 MB so the BOOTFILE's RAM check
-takes the full-quality `.trk` path instead of
-[the low-memory `.11k` one](../formats/audio.md#_11k-the-low-memory-swap-in).
+`lowmemory` (0) and `heapsize` — 64 MB, so the BOOTFILE's RAM check takes the
+full-quality `.trk` path instead of
+[the low-memory `.11k` one](../formats/audio.md#_11k-the-low-memory-swap-in),
+and 4 MB when the player has asked for
+[the small 1996 game](../runtime/host.md#the-small-game-a-1996-machine-got).
 `calcmod` is a **non-negative** modulo, recovered from `TI.EXE` — plain `%`
 breaks the compass math.
 

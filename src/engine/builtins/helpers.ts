@@ -11,6 +11,11 @@ import { latin1 } from "../../df/binary";
  * memory/heap stubs, per-stage scratch params, and the packed-point geometry
  * primitives (cameraxyz/playerxyz/calcdeg/calcdist) the cast library builds on.
  */
+
+/** what `heapsize()` answers for a player who asked for the small game: under
+ *  BOOTFILE's own 6144000 threshold, and not by a hair (GameSession.lowMemory) */
+const SMALL_1996_HEAP = 4 * 1024 * 1024;
+
 export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   const { session, interp, r } = ctx;
 
@@ -50,15 +55,20 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   });
 
   r("numtostring", (_i, [n]) => String(toNum(n ?? 0)));
-  r("lowmemory", () => 0); // we never simulate the CD-era low-memory path
+  r("lowmemory", () => 0); // the engine's own probe; BOOTFILE shadows it (below)
   // heapsize(): free memory in bytes. BOOTFILE defines its own lowmemory()
   // (which shadows the builtin above) as `heapsize() < 6144000` — and every
   // TAOOT setupsound() case for a memory-heavy deck (decka/deckb/decke/deckf/cargo)
   // then loads the 11 kHz `.11k` bank instead of the full `.trk`, while still
   // calling playnewtheme("<deck>.trk"). Left at 0, heapsize() reported "low
   // memory", the .trk bank was never opened, and those rooms were silent.
-  // We run in a browser with ample memory: report plenty so the full path runs.
-  r("heapsize", () => 64 * 1024 * 1024);
+  //
+  // We run in a browser with ample memory, so the honest answer is plenty and
+  // the full path runs. The player can ask for the other one — the short themes
+  // and the crowdless boat deck a 1996 machine got — and then the number has to
+  // be the LIE that produces it, because the branch belongs to the game's
+  // scripts and not to us (GameSession.lowMemory).
+  r("heapsize", () => (session.lowMemory ? SMALL_1996_HEAP : 64 * 1024 * 1024));
   // stageparam(idx[, val]): per-stage scratch parameters, getter/setter by arity
   const stageParams = new Map<number, Value>();
   r("stageparam", (_i, [idx, val]) => {

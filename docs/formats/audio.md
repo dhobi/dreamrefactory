@@ -54,6 +54,14 @@ How a requested name finds its bank at runtime is
 > of RAM, it loads the smaller 11K songs instead of the full TRK ones. (Yes,
 > under 6 MB. It was 1996.)
 
+Measured over the ten banks the scripts swap: same codec, same 22050 Hz, about
+**half the loop chunks** — decka 11 → 6, deckb 17 → 8, decke 20 → 10, cargo 11 → 6
+(`sink3` is the one that is byte-identical in both). Each `.11k` bank's
+`trackName` field names the `.trk` it stands in for, which is what makes
+`opentrackfile("decka.11k")` followed by `playnewtheme("decka.trk")` work at all.
+The port lets a player ask for this deliberately — see
+[the small game a 1996 machine got](../runtime/host.md#the-small-game-a-1996-machine-got).
+
 ## The chunk header and the two codecs
 
 Each audio chunk begins with a small header. The fields that matter:

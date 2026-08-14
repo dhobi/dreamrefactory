@@ -175,6 +175,16 @@ export const en = {
     brightnessDarker: "darker" as Text,
     brightnessOriginal: "original" as Text,
     brightnessBrighter: "brighter" as Text,
+    // the small game a 1996 machine got — the game's own scripts do all of it
+    // (GameSession.lowMemory), so the row is named for the CONDITION rather than
+    // for the result, which is the game's answer and not ours
+    lowMemoryLabel: "Low memory" as Text,
+    lowMemory: "the reduced 1996 mode" as Text,
+    lowMemoryTitle:
+      "A machine with under 6 MB of memory got a smaller game, and the game's " +
+      "own scripts decided that: the half-length deck and sinking themes, and no " +
+      "crowd around you on the boat deck. Tick this to hear that version. It " +
+      "takes effect in the next room." as Text,
     // The state list in the details pane (#22). Its CONTENTS are never
     // translated — `neckphase 4` is a name out of the game's own tables and the
     // same sentence in six languages — so only the words around it are here.
