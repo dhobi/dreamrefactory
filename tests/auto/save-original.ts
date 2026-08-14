@@ -94,6 +94,18 @@ test("the room the reporter saved in", () => {
   expect(save.theme?.track).toBe("sink0.trk");
 });
 
+test("it names the cast files it had open, crowd included (#186)", () => {
+  const save = parseSave(SAVE);
+  // the reporter was in the first class lounge, which opens extra.cst from its
+  // openset — and a load runs no openset, so this list is the only record of it
+  expect(save.castIndex).toBe(3);
+  expect(save.castFiles).toEqual(["gang.cst", "extra.cst"]);
+  // the eight members the lounge's diners are instanced from live in that file;
+  // the records naming them are the ones a load used to drop
+  const crowd = save.actors.filter((a) => /^(paul1|brown1|jim1|bruce1|jay1)/.test(a.name));
+  expect(crowd.length).toBeGreaterThan(5);
+});
+
 // --- loading it -------------------------------------------------------------
 
 /**

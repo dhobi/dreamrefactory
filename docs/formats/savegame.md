@@ -84,7 +84,7 @@ all 109 shipped saves.
 | **0** | manifest, built on the stack: `"Titanic 1.0"` version (Pascal string @0), disk family `"Titanic1"`/`"Titanic2"` (@+0x104), nine 256-byte path slots (@+0x1fc — the *Save As* / tour directories), the **live CLUT** (@+0xb0c, 256 × {i16 index, i16 rgb[3]} — the loader copies it into the palette global and applies it, `0x414aa8..0x414b07`; the lower 128 entries are the open set's own palette table and a cross-room patch must replace them or the room comes back in the old room's colours), the open-file count (@+0x130c), then one **260-byte record per open file** at +0x1310: the file's **old heap handle** (u32) followed by its path as a Pascal string (`titanic2:data:cargo.set`). The handle is not junk — it is the key every other container's file references resolve through, see [how the loader re-opens the room](#the-loader-re-opens-the-room-from-the-manifest-not-from-the-set-name) |
 | **1** | current location, a fixed 786 bytes from `0x489d40`: stage file (@520, `"main.stg"`), the open **set file's old handle** (@544 — resolved through the manifest, above), set base (@596), scene (@612), view (@628), the set's **actor / main-scene register container refs** (@644 / @652) and the scene register's **record count** (@656 — the loader's scene lookup walks exactly this many records; equal to the set's scene count in all 109 shipped saves) |
 | **2** | the cast: n × 160-byte actor records — see [The actor container](#the-actor-container-fixed-160-byte-actor-records) |
-| **3** | open casts: n × 28 (two pointers, a u32, the `.cst` filename as a Pascal string) |
+| **3** | open casts: n × 28 (two pointers, a u32, the `.cst` filename as a Pascal string at +12). **A load has to reopen these** — the room's crowd is instanced from them and no `openset` runs to open them itself; see [The crowd comes from this container](#the-crowd-comes-from-this-container) |
 | **4** | inventory — every loaded prop: **72 × 158** in every shipped save, inventory items first — see [The inventory container](#the-inventory-container-fixed-158-byte-prop-records) |
 | **5** | open shops (`.shp`): n × 28, the same shape as the casts |
 | **6** | open tracks: n × 40-byte descriptors — see [The track containers](#the-track-containers-what-was-playing) |
@@ -105,6 +105,50 @@ live scheduler.
 (There is **no location-stream container**. A "savestate stack" of facing, road,
 coordinate and set strings was long believed to have one — see
 [the container that wasn't there](#the-location-container-that-wasnt-there).)
+
+### The crowd comes from this container
+
+Container 3 was mapped early and read late, and the gap cost the game its extras.
+
+A room's crowd is not in the boot cast. `gang.cst` is opened once at boot and
+holds the 25 named characters; the eight members the extras are instanced from —
+`life1 bruce1 jim1 jay1 brown1 paul1 ani1 molly1` — live in **`extra.cst`**, which
+`lounge1c.set`, `smoke.set` and `deckbd2.set` each `opencastfile` from their own
+`openset`.
+
+A load runs no `openset` ([#143](https://github.com/dhobi/taoot-web/issues/143)).
+So the file was never opened, the crowd records had no cast member to be
+re-instanced from, and `restoreActors` dropped every one of them. Measured across
+the 109 shipped English saves:
+
+| | |
+|---|---|
+| saves listing `extra.cst` here | **47 of 109** |
+| saves restoring a room with **placed, visible** characters that resolved to nothing | **39 of 109** |
+| such records | **344** |
+
+Worst case `ENDGAME1/09 - Traded letter for Baby` (deckbd2), 39 records. The three
+affected sets are the most populated rooms of the endgame, so a loaded game was
+visibly emptier than the game that was saved.
+
+The identification is the correlation: the 47 saves whose container 3 carries a
+second record carry `extra.cst` in **every** one, and they are exactly the 47 with
+crowd records that resolve to nothing. Reopening what the list names fixes all
+344 ([#186](https://github.com/dhobi/taoot-web/issues/186)).
+
+Two things worth keeping in mind:
+
+- **The list is the file's, not a guess from the set being entered.** The save
+  records what was open, which is precisely the question being asked.
+- **A cast file the previous room had open and the save does not name is left
+  open**, not closed. It is inert — `resetCast` puts every member down, and a
+  member the file has no record for stays down.
+
+It went unnoticed because `restoreActors` *logs* a drop rather than failing, and
+the saves the suite leant on hardest are in rooms that only ever need `gang.cst`.
+The regression added with the fix is the assertion that would have caught it:
+every record with a set and `visible`, in every shipped save, has to resolve to a
+live actor after the load.
 
 ## The loader re-opens the room from the manifest, not from the set name
 
@@ -822,6 +866,8 @@ a load ([#125](https://github.com/dhobi/taoot-web/issues/125)) — is in
 What a load now takes out of the file:
 
 - the **globals**, numbers and strings, plus the `hallside`/`savedeck` fallbacks;
+- the **open cast files** (container 3), reopened before any record is applied —
+  see [the crowd](#the-crowd-comes-from-this-container);
 - the **cast**, wholesale — the live actor list is wiped and every record applied,
   including the crowd extras, which are re-instanced from their cast member by name
   (`brown1a1` ← `brown1`, `stok4` ← `stok1`), and including `actorscale` from

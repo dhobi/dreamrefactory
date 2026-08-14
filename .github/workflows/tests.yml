@@ -26,7 +26,7 @@ jobs:
   # Runs on GitHub's machines, for every pull request including forks': the
   # suites that build their own fixtures with the write path (src/df/*-build.ts)
   # instead of reading the game's files — or, in save-original.ts's case, read
-  # the one tracked fixture in tests/data/. 158 tests.
+  # the one tracked fixture in tests/data/. 159 tests.
   #
   # The list below is the INVERSE of what it covers — the nine suites that do
   # need the rip. Excluding is deliberate: a test file added later runs here by
