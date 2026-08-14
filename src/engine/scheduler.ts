@@ -662,7 +662,6 @@ export class Scheduler {
         a.worldY = Math.round(w.sy + w.dy * t);
         a.worldZ = Math.round(w.sz + w.dz * t);
       }
-      a.step++; // walk pose cycle advances per service tick
       if (t >= 1) {
         this.walks.delete(key);
         if (a.poseName === "walk") {
@@ -810,6 +809,12 @@ export class Scheduler {
     // the browser rather than crawling at the 20 Hz service rate. (Headless has one frame per
     // tick, so both paths fire once per tick and tests are unaffected.)
     this.fireDueLoops((l) => l.period > 1);
+    // Last, where the master service ends: TI.EXE's pass finishes by drawing a
+    // frame (0x442550 -> 0x439b80), and the actor animation advances at the head
+    // of that draw. Deliberately NOT in serviceFrameLoops — that path runs at the
+    // browser's display rate, and a walk cycle is paced by the 50 ms pass in the
+    // original, not by how fast the host can paint.
+    this.session.actorRuntime.advanceAnimation();
   }
 
   /**

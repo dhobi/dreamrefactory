@@ -148,21 +148,43 @@ container**:
 | `0x5A` | i32 | pose count |
 | `0x5E` | — | 32-byte **pose records**: `{i32 set container, … , pascal name @+16}` (`"stand"`, `"walk"`, …) |
 
-Each pose's set container holds the sprite frames: a count i32 @ `0x72`, then
-**44-byte frame records** @ `0x76`:
+A pose's set container **is a [SHP state container](shp.md)** — same offsets,
+same meanings — so it carries a play script @ `0x2E` with its length @ `0x70`,
+a frame count i32 @ `0x72`, and **44-byte frame records** @ `0x76`:
 
 | Offset | Type | Field |
 |-------:|------|-------|
 | +0 | i32 | frame image container ([transparent codec](shp.md)) |
-| +10 | i16 | **direction** 0..7 (45° apart; 0 = facing the viewer) |
+| +8 | i16 | which **animation step** this picture belongs to — what the play script names |
+| +10 | i16 | the record's ordinal within its step |
 | +22 | — | padded size, **Y-first** |
 | +26 | — | draw offset, **Y-first** |
-| +40 | i16 | depicted angle in the engine's 0..255 space (= direction × 32) |
+| +40 | i16 | **depicted angle** in the engine's 0..255 space |
 | +42 | i16 | **reference scale** for depth scaling (uniformly 96 in GANG.CST) |
 
-Frames group as `steps[step][direction]` — every animation step exists in
-**8 view directions**, and a standing pose is a single step. Which of the
-eight you see, and how big, is the runtime's job.
+So a pose is **animation steps, each holding one picture per depicted view**.
+Usually eight views 32 apart, all the way round the compass — but not always,
+and nothing may assume it: `stok1`'s four poses store nine 16 apart and
+`life1`'s `stand` seventeen 8 apart, each covering only the half circle 0..128
+(a character who is only ever seen from one side, drawn at two or four times the
+angular resolution), and `willie`'s `dead` stores exactly one, at 192. The
+runtime picks the angularly closest to the actor's facing relative to the
+camera — never a slot index.
+
+### The play script says how long a picture is held
+
+`0x70` holds a step count and `0x2E` that many 1-based step numbers, in the
+order they are shown. It is a play **list**, not a permutation: repeating an
+entry is how the format holds a picture for more than one 50 ms pass, and this
+is the same table a [prop state](shp.md) uses for the same purpose.
+
+Every walk in the game draws ten pictures and lists twenty steps —
+`1,1,2,2,…,10,10` — so a full stride takes a second, not half of one. Reading
+the pictures and ignoring the script is what made the port's cast look like it
+was "trying to moon walk" (#181): the same ground, in the same time, with the
+feet going twice as fast. `stok1`'s `dig` and `throw` are the only other
+authored scripts (14 steps over 7 pictures); every `stand` in the game lists one
+step, which is what makes a still pose still.
 
 Here's where it connects back to [SET](set.md): the sprite is scaled by the
 camera projection and depth-tested against the frame's
@@ -177,7 +199,7 @@ it should be behind.
 - **[the puppet editor](../editors/puppets.md)** (`/editors/puppets.html`) — a PUP's
   stances, dialogue and animLogic in a browser page.
 - **[the cast editor](../editors/casts.md)** (`/editors/casts.html`) — a CST's members
-  and poses as a step × direction grid, with the walk cycle played at the
+  and poses as a step × view grid, with the walk cycle played at the
   engine's tick and the depth scale that keeps feet on the floor.
 
 ## Related structures in the SET

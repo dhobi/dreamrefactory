@@ -41,9 +41,13 @@ actorowner ("vlad") = "wonfight"`, and nothing ever clears `wonfight`.
 
 The heartbeat is `ENGINE_STEP_MS` in `clock.ts`. On every service step the
 scheduler processes, **in this order: walks, then crickets, then due loops** —
-the master service order observed in `TI.EXE`. After a long stall (a suspended
-browser tab), catch-up is capped at **64 steps** so the whole gap isn't
-replayed as a burst.
+the master service order observed in `TI.EXE` — and then advances every actor
+one step along its pose's [play
+script](../formats/pup-cst.md#the-play-script-says-how-long-a-picture-is-held),
+which is where the original's pass ends too (`0x442550` closes by drawing a
+frame, and the animation advances at the head of that draw). After a long stall
+(a suspended browser tab), catch-up is capped at **64 steps** so the whole gap
+isn't replayed as a burst.
 
 ## `makeloop`: a loop that isn't a loop
 
@@ -171,15 +175,24 @@ talking over herself; see
 
 ## Walks
 
-`walktostar` / `walktoxyz` / `walkonpath` give an actor a straight-line walk
-serviced on the heartbeat: **4 world units × the actor's `actorspeed` per
-50 ms step** (an explicit approximation of `TI.EXE`'s walk stepping at
-`0x443260`/`0x443730`). While walking:
+`walktostar` / `walktoxyz` / `walkonpath` give an actor a walk serviced on the
+heartbeat: **the actor's own `actorspeed` in world units per 50 ms step**, not
+scaled — that is `TI.EXE`'s straight-line mover at `0x443E7C` verbatim, and its
+pass rate is ours. (A ×4 approximation stood here once and moved the whole cast
+at four times its scripted pace.) While walking:
 
-- the actor faces its travel direction (`bearing(dx, dy)`),
-- its pose switches to `walk`, and back to `stand` on arrival,
+- the actor **turns before it moves**, stepping the facing by `actorturn` and
+  dispatching `endturn` when it lands — the cast's own `endturn` is what
+  chooses the walk pose (`walk`, or `walklj` once the life jackets are on);
+- the engine puts the pose back to `stand` on arrival, and nowhere else;
 - `iswalk` reports it, `walkdest` exposes the goal, and `stopwalk` /
   `pausewalk` interrupt.
+
+How fast the legs move is **not** this: it is the pose's [play
+script](../formats/pup-cst.md#the-play-script-says-how-long-a-picture-is-held),
+which every actor steps through once per pass whether it is walking or not. The
+two are independent in the original too, which is what let #181 arrive at the
+right place at the right time with the feet going twice as fast.
 
 One walk per actor. On arrival the scheduler fires the actor's **`endwalk`**
 handler — that's how patrol scripts chain legs: each `endwalk` starts the next

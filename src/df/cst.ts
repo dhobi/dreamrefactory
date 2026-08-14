@@ -31,8 +31,19 @@ import { DFContainerFile, patchContainerData, readContainerFile } from "./contai
 
 export interface CastFrame {
   location: number;
+  /** the record's ordinal within its step — informational; the ANGLE is what
+   *  the runtime picks by, and a pose is not obliged to store eight of these */
   direction: number;
-  /** depicted facing in the engine's 0..255 angle space (direction * 32) */
+  /**
+   * Depicted facing in the engine's 0..255 angle space.
+   *
+   * Usually `direction * 32`: eight pictures around the whole compass. Three
+   * poses in the corpus are not, and they are why nothing may assume it —
+   * `stok1`'s four store nine pictures 16 apart and `life1`'s `stand` seventeen
+   * 8 apart, each covering only the HALF circle 0..128 (a character who is only
+   * ever seen from one side, drawn at two or four times the angular resolution),
+   * and `willie`'s `dead` stores exactly one, at 192.
+   */
   angle: number;
   /** reference scale for depth scaling (like the SHP state header's 180) */
   refScale: number;
@@ -43,8 +54,37 @@ export interface CastFrame {
 export interface CastPose {
   name: string;
   location: number;
-  /** frames[step][direction] — stand poses have a single step */
+  /**
+   * The pose's pictures grouped by the animation step they belong to — the step
+   * number the frame record carries at +8, which is what {@link play} names.
+   *
+   * A group holds one record per depicted facing, in stored order and NOT
+   * indexed by direction: see {@link CastFrame.angle} for the three poses that
+   * store nine and seventeen of them. Indexing this by `direction & 7` aliased
+   * those onto each other, so `life1` — the mission-4 lifeboat crowd — drew the
+   * back half of its compass for the front.
+   */
   steps: CastFrame[][];
+  /**
+   * The pose's PLAY SCRIPT: 0-based indices into {@link steps}, in the order
+   * they are shown. Never empty — a pose with no usable table falls back to its
+   * steps in stored order.
+   *
+   * A pose container IS a SHP state container (see the module docblock), so this
+   * is the same table {@link PropState.playOrder} reads, at the same offsets: a
+   * step count at +112 and that many 1-based indices from +46. And it is a play
+   * LIST, not a permutation — repeating an entry is how the format HOLDS a
+   * picture for more than one pass.
+   *
+   * That holding is the whole of #181. Every walk in the game draws ten pictures
+   * and lists twenty steps — `1,1,2,2,…,10,10` — so a walker's legs move at half
+   * the service rate. The port cycled the ten pictures directly, one per pass,
+   * and the reporter's side-by-side video shows exactly what that looks like:
+   * the same walk, over the same ground, in the same time, with the feet going
+   * twice as fast. `stok1`'s `dig` and `throw` are the other authored ones
+   * (14 steps over 8 pictures, the eighth never named).
+   */
+  play: number[];
   frameCount: number;
   /** byte offset of this 32-byte record in the member's logic container —
    *  where the pose name is stored (edit target, see {@link patchPoseName}) */
@@ -82,11 +122,19 @@ const LOGIC = {
   poseName: 16,
 } as const;
 
-/** a pose's set container: the frame records, 8 view directions per step */
+/** a pose's set container: the play script, then the frame records */
 const POSE = {
+  /** the play script's 1-based step indices (see {@link CastPose.play}) */
+  play: 0x2e,
+  playCount: 0x70,
+  /** slots between {@link POSE.play} and the count that follows it */
+  maxPlay: (0x70 - 0x2e) / 2,
   frameCount: 0x72,
   frames: 0x76,
   frameSize: 44,
+  /** which animation step this picture belongs to — what {@link POSE.play}'s
+   *  entries are matched against (TI.EXE 0x4115a2) */
+  frameStep: 8,
   frameDirection: 10,
   frameAngle: 40,
   frameRefScale: 42,
@@ -129,15 +177,36 @@ export function readCstFile(data: Uint8Array): CstFile {
         const base = POSE.frames + fi * POSE.frameSize;
         rs.seek(base);
         const location = rs.i32();
+        rs.seek(base + POSE.frameStep);
+        const step = rs.i16();
         rs.seek(base + POSE.frameDirection);
         const direction = rs.i16();
         rs.seek(base + POSE.frameAngle);
         const angle = rs.i16();
         const refScale = rs.i16();
-        const step = Math.floor(fi / 8);
-        (steps[step] ??= [])[direction & 7] = { location, direction, angle, refScale, record: base };
+        if (step < 0) continue;
+        (steps[step] ??= []).push({ location, direction, angle, refScale, record: base });
       }
-      poses.push({ name: poseName.toLowerCase(), location: setLoc, steps, frameCount, record });
+      for (let si = 0; si < steps.length; si++) steps[si] ??= [];
+      // the play script, read after the steps so it can be checked against them:
+      // a table naming a picture the pose does not have is not evidence about
+      // anything, and the corpus has one (`qwerty`, one step over no frames)
+      rs.seek(POSE.playCount);
+      const playCount = Math.max(0, Math.min(rs.i16(), POSE.maxPlay));
+      const play: number[] = [];
+      for (let pi = 0; pi < playCount; pi++) {
+        rs.seek(POSE.play + 2 * pi);
+        play.push(rs.i16() - 1);
+      }
+      const usable = play.length > 0 && play.every((v) => v >= 0 && v < steps.length);
+      poses.push({
+        name: poseName.toLowerCase(),
+        location: setLoc,
+        steps,
+        play: usable ? play : steps.map((_, i) => i),
+        frameCount,
+        record,
+      });
     }
     members.push({ name: name.toLowerCase(), logicLocation, scriptLocation, poses });
   }

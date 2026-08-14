@@ -35,16 +35,27 @@ family](../reference/builtins.md): a world position (`actorxyz` /
 default `stand`), a scale, a speed for [walks](timing.md#walks), and an
 owner/value pair scripts use as scratch state.
 
-### Which of the 8 sprites do you see?
+### Which sprite do you see, and when does it change?
 
-Each pose animation step has **8 directional frames** (a CST stores them 45°
-apart). The one drawn is *not* picked from the actor's facing alone — it's the
-facing **relative to the bearing from the actor to the camera**, because which
-side of someone you see depends on where *you* stand. Sprite direction 0 is
-"facing the viewer": an actor looking straight at the camera shows frame 0
-wherever you are. Get the reference backwards (camera→actor instead of
-actor→camera) and every character shows their back at the wrong moments —
-one of those bugs the regression tests now pin down.
+A pose animation step holds one picture **per depicted view** — usually eight
+45° apart, though [three poses in the corpus do
+not](../formats/pup-cst.md#cst--the-body-that-scales-with-distance). The one
+drawn is *not* picked from the actor's facing alone — it's the facing **relative
+to the bearing from the actor to the camera**, because which side of someone you
+see depends on where *you* stand, and the engine keeps whichever stored view is
+angularly closest to it. A view depicted at angle 0 is "facing the viewer": an
+actor looking straight at the camera shows it wherever you are. Get the
+reference backwards (camera→actor instead of actor→camera) and every character
+shows their back at the wrong moments — one of those bugs the regression tests
+now pin down.
+
+*When* it changes is the pose's own **[play
+script](../formats/pup-cst.md#the-play-script-says-how-long-a-picture-is-held)**,
+and the engine's part is three instructions: every actor moves one step along it
+per 50 ms service pass, wrapping at the script's length. Every actor, not only
+the ones walking — that is how the stoker shovels. A `stand` lists one step and
+so never changes; a `walk` lists twenty for ten pictures, which is what makes a
+stride take a second.
 
 ### Size and occlusion
 

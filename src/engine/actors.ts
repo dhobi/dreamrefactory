@@ -24,7 +24,11 @@ export class ActorInstance {
   /** facing, 0..255 like the camera */
   deg = 0;
   poseName = "stand";
-  /** animation step within the pose (walk cycles advance this) */
+  /**
+   * How far into the current pose's PLAY SCRIPT the actor is — an index into
+   * {@link CastPose.play}, not into its pictures. TI.EXE keeps it in the actor
+   * record at +0x22, with the script's length cached beside it at +0x24.
+   */
   step = 0;
   scale = 0;
   zclip = 0;
@@ -92,6 +96,12 @@ interface DrawEntry {
  */
 const ACTOR_SCALE_CORRECTION = 1;
 
+/** how far apart two 0..255 facings are, the short way round (TI.EXE 0x444d40) */
+function angleApart(a: number, b: number): number {
+  const d = (a - b) & 0xff;
+  return Math.min(d, 256 - d);
+}
+
 export class ActorRuntime {
   readonly actors = new Map<string, ActorInstance>();
   readonly casts = new Map<string, LoadedCast>();
@@ -136,28 +146,60 @@ export class ActorRuntime {
   }
 
   /**
-   * The sprite frame for an actor as seen from the camera. TI.EXE (actor
-   * draw fn at 0x411235): the view angle is the actor's facing relative
-   * to the BEARING from the camera to the actor — which side of a person
-   * you see depends on where you stand, not where you look. The engine
-   * keeps the frame record whose depicted angle (direction × 32, in the
-   * 0..255 angle space) is angularly closest; /32 rounding is equivalent.
+   * Advance every actor one step through its pose's play script — TI.EXE
+   * 0x411030, three instructions at the head of the frame draw:
+   *
+   *     mov ax, [ebp+0x22]      ; the step
+   *     inc ax
+   *     cmp [ebp+0x24], ax      ; the play script's length
+   *     jg  keep
+   *     mov [ebp+0x22], 0       ; wrap
+   *
+   * EVERY actor, not only the ones walking, and only ever ONCE per service pass:
+   * the draw it heads is the tail of the master service (0x442550 -> 0x439b80),
+   * and the two draw paths that are not that one pass a flag saying "do not
+   * advance" (0x43abd1). A still pose comes to the same thing anyway — every
+   * `stand` in the game has a one-step script — but `stok1`'s `dig` and `throw`
+   * do not, and the port used to advance only walkers, so the stoker shovelled
+   * one frozen frame of coal.
+   */
+  advanceAnimation(): void {
+    for (const a of this.actors.values()) {
+      const n = a.pose()?.play.length ?? 0;
+      if (n > 0) a.step = (a.step + 1) % n;
+    }
+  }
+
+  /**
+   * The sprite frame for an actor as seen from the camera — TI.EXE's frame
+   * search at 0x4114e0, which is one loop over the step's records keeping the
+   * angularly closest, first one winning a tie (0x4115ba's `jge` skips equals).
    */
   private frameFor(a: ActorInstance, cam: WorldCamera): ShpFrame | null {
     const pose = a.pose();
-    if (!pose || !pose.steps.length) return null;
-    const step = pose.steps[a.step % pose.steps.length];
-    if (!step) return null;
+    if (!pose || !pose.play.length) return null;
+    // through the play script, which is what says how long a picture is HELD —
+    // TI.EXE 0x411588, `poseContainer[0x2e + step*2] - 1` matched against the
+    // frame record's own step number. See {@link CastPose.play} for #181.
+    const step = pose.steps[pose.play[a.step % pose.play.length]];
+    if (!step?.length) return null;
     // which side you see depends on where you STAND relative to the actor, so
-    // the reference is the bearing from the actor to the CAMERA. Sprite dir 0
-    // (angle 0) is the front (face toward viewer): when the actor faces the
-    // camera (deg == actor→camera bearing) rel is 0 → dir 0. (Using camera→
-    // actor here inverted it: facing you showed the back, and walkers moonwalked.)
+    // the reference is the bearing from the actor to the CAMERA. Angle 0 is the
+    // front (face toward viewer): when the actor faces the camera (deg == actor→
+    // camera bearing) rel is 0. (Using camera→actor here inverted it: facing you
+    // showed the back, and walkers moonwalked.)
     const camBearing = bearing(cam.x - a.worldX, cam.y - a.worldY);
     const rel = (a.deg - camBearing) & 0xff;
-    const dir = Math.round(rel / 32) & 7;
-    const cf = step[dir] ?? step.find((f) => !!f);
-    return cf ? a.cast.frame(cf.location) : null;
+    let cf = step[0];
+    let best = angleApart(cf.angle, rel);
+    for (const f of step) {
+      const d = angleApart(f.angle, rel);
+      if (d < best) {
+        best = d;
+        cf = f;
+      }
+    }
+    return a.cast.frame(cf.location);
   }
 
   /**
@@ -168,8 +210,7 @@ export class ActorRuntime {
    */
   private refScale(a: ActorInstance): number {
     const pose = a.pose();
-    const cf = pose?.steps[0]?.find((f) => !!f);
-    return cf?.refScale || 96;
+    return pose?.steps[0]?.[0]?.refScale || 96;
   }
 
   /** visible actors of the current set, far to near */
