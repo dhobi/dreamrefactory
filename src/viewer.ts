@@ -743,6 +743,27 @@ export class SetViewer {
     // event queue, so ESC reaches the line being spoken and not the scripts.
     // Ahead of the inputLocked gate below, which a suspended puppetspeak trips.
     if (this.session.puppetCtrl.key(keyName, special)) return true;
+    // A press made while a move is already running is QUEUED, not dropped (see
+    // {@link EventQueue}) — that is what makes holding a movement key walk a
+    // corridor instead of one room. It is posted coalescing, so a held key keeps
+    // exactly one press pending however long it is held, and letting go leaves at
+    // most one more move to come. Queued counts as consumed: the caller's default
+    // walk/turn must not also run, or the press would happen twice.
+    //
+    // EVERY key, not just the movement arrows, because that is where the original
+    // keeps its queue: TI.EXE's window proc posts the record and the main loop
+    // pops it, both of them above any notion of WHICH key it was — BOOTFILE 0001's
+    // `keydown` only translates the letter afterwards, and it reads the bindings,
+    // so the key that means "walk forward" is whatever the control panel last set
+    // (`keynorth`/`keywest`/`keyeast`, W/A/D by default). The port had this gate
+    // in `pressNav` instead, which only the three arrow names ever reach, so W/A/D
+    // pressed during a turn or a walk were dropped while the arrows were kept.
+    // The movie and the conversation above are deliberately ahead of it: both own
+    // their keys outright (ESC aborts a clip), so those are consumed, not deferred.
+    if (this.movingCamera) {
+      this.session.events.post({ kind: "keydown", key: keyName, special }, { coalesce: true });
+      return true;
+    }
     if (this.inputLocked) return false;
     // a full-screen overlay stage (TAOOT's deck map) handles keys itself — page
     // decks with arrows/letters — instead of the world turn/walk navigation
@@ -797,20 +818,16 @@ export class SetViewer {
    * The engine default only runs when nothing consumed the key, which is how a
    * set with no boot (the dev set picker) still walks and turns.
    *
-   * A press made while a move is already running is QUEUED, not dropped (see
-   * {@link EventQueue}) — that is what makes holding a movement key walk a
-   * corridor instead of one room. It is posted coalescing, so a held key keeps
-   * exactly one press pending however long it is held, and letting go leaves at
-   * most one more move to come. A movie or a conversation is NOT this case: both
-   * consume keys themselves (ESC aborts a clip), so those go straight through.
+   * A press made while a move is already running is QUEUED, not dropped — that
+   * lives in {@link keyDown} now, so the movement LETTERS queue the same way.
    */
   async pressNav(key: "uparrow" | "leftarrow" | "rightarrow"): Promise<void> {
     // NOTE (measured, and left alone deliberately): a press made while a FADE is
-    // ramping — and nothing else is — is DROPPED. This queue asks `movingCamera`
-    // (a camera move or a script in flight) while `keyDown` refuses on
-    // `inputLocked`, and the two differ by exactly `session.fading`: a press in
-    // that gap misses the queue, is refused by keyDown, and then finds `walk()`
-    // gated on the same fade. Nothing anywhere says so.
+    // ramping — and nothing else is — is DROPPED. The queue in `keyDown` asks
+    // `movingCamera` (a camera move or a script in flight) and the refusal just
+    // below it asks `inputLocked`, and the two differ by exactly
+    // `session.fading`: a press in that gap misses the queue, is refused, and
+    // then finds `walk()` gated on the same fade. Nothing anywhere says so.
     //
     // It is a real infidelity — TI.EXE's fade is a synchronous loop INSIDE the
     // handler, so the press waits in the OS buffer and the main loop pops it
@@ -829,10 +846,6 @@ export class SetViewer {
     // browser suite reported "pressing up at View120 did not take us into the
     // stack" 120 s later. The tell was accidental: adding 1.5 s of
     // instrumentation before the press made it land.
-    if (this.movingCamera && !this.movies.playing && !this.session.puppet?.visible) {
-      this.session.events.post({ kind: "keydown", key, special: false }, { coalesce: true });
-      return;
-    }
     if (await this.keyDown(key)) return;
     if (key === "uparrow") this.walk();
     else this.turn(key === "leftarrow" ? LEFTTURNS : RIGHTTURNS);

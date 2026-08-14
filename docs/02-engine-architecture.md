@@ -228,6 +228,14 @@ scene → set main → stage → the boot library's own `keydown`, the default t
 by side instead handed the default the key the player actually pressed, so the arrows
 worked and the W/A/D bindings did nothing at all (#14).
 
+That mapping is a *script*, so everything above it is key-blind — and the
+[event queue](runtime/host.md#keys) is above it. TI.EXE posts the record in its
+window proc and pops it in the main loop, both of them before any script has said
+what the key means, so a press made mid-move waits its turn whether the player
+made it with an arrow or with the letter they bound. The port kept its queue in
+the arrow path instead, one level *below* where the original keeps it, and the
+letters were dropped while the arrows were kept (#207).
+
 And a link that merely **finishes** does not end the walk — only `exitcode` does.
 `deckbd.set`'s `keydown` is the proof: a ladder of `if currentview() = "viewNN" & arg
 = "uparrow" … exitcode` that falls off the end for every other key. Under the pointer
