@@ -189,7 +189,7 @@ and the environment probes `machinetype` (returns `"win"`), `currentcd`,
 full-quality `.trk` path instead of
 [the low-memory `.11k` one](../formats/audio.md#_11k-the-low-memory-swap-in),
 and 4 MB when the player has asked for
-[the small 1996 game](../runtime/host.md#the-small-game-a-1996-machine-got).
+[the low-memory game](../runtime/low-memory.md).
 `calcmod` is a **non-negative** modulo, recovered from `TI.EXE` — plain `%`
 breaks the compass math.
 

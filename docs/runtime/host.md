@@ -404,43 +404,20 @@ appended (`SetViewer.standpointFrames`).
 None of the four touches the movement itself: in-motion frames are
 quarter-resolution in both rings and no sharp version of them was ever made.
 
-### The small game a 1996 machine got
+### The Low memory box
 
-The **Low memory** row's one box, and the only setting on the page that the **game**
-decides rather than the port. `BOOTFILE` defines its own `lowmemory()` — shadowing the engine
-builtin of that name — as `heapsize() < 6144000`, under 6 MB free, and five script
-sites branch on it:
-
-| site | what it does when memory is short |
-|---|---|
-| `setupdecksound` | opens `decka.11k` instead of `decka.trk` (same for deckb/decke/deckf/cargo) |
-| `setupsinksound` | opens `sink<phase>.11k` |
-| `setupboatdeck` | skips `crowdcrickets()` — five positional party loops round the boat deck's `life*` stars, so mission 4 loses its crowd |
-| `openset` | `setparam(1, 0)`, `setparam(2, 0)` |
-| `MAP.STG openstage` | `stageparam(1, 0)`, `stageparam(2, 0)` |
-
-So the whole port-side implementation is one number: `heapsize()` answers 4 MB
-instead of 64 when `GameSession.lowMemory` is set, and TAOOT does the rest. It is
-re-read per `openset`, so a change lands in the next room. Remembered under
+The one setting on the page that the **game** decides rather than the port.
+`BOOTFILE` defines its own `lowmemory()` — shadowing the engine builtin of that
+name — as `heapsize() < 6144000`, and five script sites branch on it: half the
+themes are swapped for their shorter `.11k` twins and mission 4's boat deck loses
+its crowd. So the whole port-side implementation is one number, `heapsize()`
+answering 4 MB instead of 64 when `GameSession.lowMemory` is set. It is re-read per
+`openset`, so a change lands in the next room; remembered under
 `taoot.sound.lowmemory`.
 
-Two things about it that are not what the names suggest:
-
-- **`.11k` is not 11 kHz.** Same codec (v40, 8-bit), same 22050 Hz — it is about
-  **half the loop chunks**: decka 11 → 6, deckb 17 → 8, decke 20 → 10, cargo 11 → 6.
-  Measured end to end, the A-deck theme goes from **72.1 s to 37.4 s**. And a `.11k`
-  bank's `trackName` field says `decka.trk`, which is why the script can open
-  `decka.11k` and then `playnewtheme("decka.trk")` — see
-  [how a name finds its bank](audio.md#the-library-how-a-name-finds-a-sound).
-- **The two params are invisible.** In `TI.EXE` they are words at `0x489f5c` and
-  `0x489f5e`, read only in the set-open path (`0x43aa30`): param 2 gates a look-ahead
-  load, param 1 picks between two otherwise identical loaders that differ in whether
-  the last reference dropped frees the resource. Cache knobs, not picture. The port
-  has its own LRU (`ring-cache.ts`) and warms its own rings, so it leaves them as the
-  scratch words `setparam` already stored. Everything the box reaches in this port is
-  therefore sound — which is exactly why the row is named for the *condition* and not
-  for the result: what a small machine got is the game's answer, and it differs by
-  where you are standing.
+**[The low-memory game](low-memory.md)** is the whole account — the five sites,
+what `.11K` actually is (not 11 kHz), why the two engine params it also zeroes are
+invisible here, and where it is worth listening.
 
 ### The sound keys, and why the page has no sound control
 

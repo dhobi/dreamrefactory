@@ -124,6 +124,9 @@ around it. Overview: **[the runtime section](runtime/README.md)**.
   and the in-browser saved-games UI.
 - **[The browser host](runtime/host.md)** — the page and the boot it runs, the
   viewer, the screen everything composites into, the movie player, and input.
+- **[The low-memory game](runtime/low-memory.md)** — the smaller version of
+  itself the game shipped with, what its own `lowmemory()` switches off, and why
+  `.11K` is not 11 kHz.
 - **[Languages & the chooser](runtime/languages.md)** — one data tree per
   language, the two selectors a bare filename resolves through, the code page
   its text turns out to be in, and the chooser this port wrote as a real

@@ -41,7 +41,11 @@ Read in any order — each names its own prerequisites.
    nor recovered behaviour: the page and the cold boot it starts, the `SetViewer`
    navigation state machine, the movie player, input wiring, and the developer
    toolbar.
-8. **[Languages & the chooser](languages.md)** — one data tree per language, how
+8. **[The low-memory game](low-memory.md)** — the smaller version of itself the
+   game shipped with: what `BOOTFILE`'s own `lowmemory()` switches off, why
+   `.11K` is not 11 kHz, and the one number the port moves to let a player hear
+   it.
+9. **[Languages & the chooser](languages.md)** — one data tree per language, how
    a bare filename resolves through two selectors (disc and language), the code
    page a tree's text turns out to be in, and the language chooser: this port's
    own DreamFactory stage, scripts and all.
@@ -57,6 +61,7 @@ Read in any order — each names its own prerequisites.
 | Puppets (PUP at runtime) | [`engine/puppet.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/puppet.ts), [`puppet-view.ts`](https://github.com/dhobi/taoot-web/blob/master/src/puppet-view.ts) | [Characters](characters.md) |
 | Props (SHP at runtime) | [`engine/props.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/props.ts) | [Stage & UI](stage-ui.md), [SHP](../formats/shp.md) |
 | Audio channels + bank library | [`engine/audio.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/audio.ts) | [Audio](audio.md) |
+| The `heapsize` answer the game's `lowmemory()` reads | [`engine/builtins/helpers.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/builtins/helpers.ts) | [The low-memory game](low-memory.md) |
 | Save/load orchestration | [`engine/saveload.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/saveload.ts) | [Saves](saves.md) |
 | Saved-games UI + storage | [`save-browser.ts`](https://github.com/dhobi/taoot-web/blob/master/src/save-browser.ts), [`save-store.ts`](https://github.com/dhobi/taoot-web/blob/master/src/save-store.ts), [`save-seed.ts`](https://github.com/dhobi/taoot-web/blob/master/src/save-seed.ts) | [Saves](saves.md) |
 | Navigation + rendering | [`viewer.ts`](https://github.com/dhobi/taoot-web/blob/master/src/viewer.ts), [`ring-cache.ts`](https://github.com/dhobi/taoot-web/blob/master/src/ring-cache.ts) | [Browser host](host.md) |
