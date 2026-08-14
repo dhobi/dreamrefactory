@@ -3529,6 +3529,42 @@ test("actorinstance: a copy is placed and idles like the member it came from", a
 }
 );
 
+// --- the crowd's names come out of its star, one character at a time --------
+// `extra.cst`'s setupactor takes a crowd star apart by POSITION:
+//
+//     number = findword (where, "", 6)        where = "ex.a.1"
+//     letter = findword (where, "", 4)
+//     center = "ex." @ letter @ ".cen"
+//     name   = me @ letter @ number           -> "brown1a1"
+//
+// which only works because an empty delimiter means the idx-th character. While
+// it meant "split on spaces", both came back empty: every extra of a group was
+// named after the member itself, so `actorinstance` made one copy where the room
+// wanted three, and each of them looked for a star called "ex..cen" —
+// `starxyz: no star "ex..cen" in lounge1c`, fourteen times, which is what the
+// #199 report showed alongside the sound it was really about.
+test("the crowd is named and placed from its star (findword by character)", async () => {
+  const { session, logs } = await newHost();
+  const from = logs.length;
+  await session.openSetFile("lounge1c.set"); // its openset builds up to 14 extras
+  await drain();
+  const extras = [...session.actorRuntime.actors].filter(([, a]) => a.starName.startsWith("ex."));
+  const missing = logs.slice(from).filter((l) => /starxyz: no star/.test(l));
+  check("the room really does place a crowd", extras.length > 1, `${extras.length} extras`);
+  check(
+    "each is named <member><letter><number>, from its own star",
+    extras.every(([n, a]) => n === `${a.member.name.toLowerCase()}${a.starName[3]}${a.starName[5]}`),
+    extras.map(([n, a]) => `${n}@${a.starName}`).join(" "),
+  );
+  check(
+    "and each stands on a star of its own, visible",
+    new Set(extras.map(([, a]) => a.starName)).size === extras.length && extras.every(([, a]) => a.visible),
+    extras.map(([n, a]) => `${n}@${a.starName} vis=${a.visible}`).join(" "),
+  );
+  check("no star lookup missed", missing.length === 0, missing.join(" | "));
+}
+);
+
 // --- 20. puppet frame cache is per-pup (switching characters, no overlap) --
 test("puppet frame cache is per-pup (switching characters, no overlap)", async () => {
   const { session, viewer } = await newSession();
@@ -4292,27 +4328,52 @@ test("substring(haystack, needle) is a 1-based find, not a slice", async () => {
 );
 
 // --- 40. putword/findword round-trip (save/restore prop lists) --------------
-// hideenigma/hidetrunk save each prop's visibility into a space-delimited slot
-// string via putword, then showX reads it back with findword. An empty
-// delimiter means the default separator (a space).
+// hideenigma/hidetrunk save each prop's visibility into a slot string via
+// putword, then showX reads it back with findword.
+//
+// An empty delimiter is CHARACTER mode, not a default separator of space — the
+// arm at TI.EXE 0x428c5f returns a one-character result, `source[idx]`, and ""
+// when the idx falls outside the string (see the builtin). The shipped saves are
+// the corroboration: they carry `saveprops2 = "11111101100111110"`, dense, 17
+// characters for the 17 indices the scripts read back, and the space-joined form
+// this test used to assert matched none of them.
 test("putword/findword round-trip (save/restore prop lists)", async () => {
   const { session } = await newSession();
   const put = session.interp.builtins.get("putword")!;
   const find = session.interp.builtins.get("findword")!;
   const B = session.interp;
-  // build "1 0 1" by setting slots 1..3 from an empty string (grows w/ padding)
+  const P = (s: unknown, d: string, i: number, w: string) =>
+    put(B, [s as never, d, i, w], null as never, null as never);
+  const F = (s: string, d: string, i: number) => find(B, [s, d, i], null as never, null as never);
+
+  // the shape every saveprops in the game is built with: from "", one slot per
+  // pass, which is the append arm throughout
   let s: any = "";
-  s = put(B, [s, "", 1, "1"], null as never, null as never);
-  s = put(B, [s, "", 2, "0"], null as never, null as never);
-  s = put(B, [s, "", 3, "1"], null as never, null as never);
-  const readBack = [1, 2, 3].map((i) => find(B, [s, "", i], null as never, null as never));
-  // overwrite a middle slot; commas still work as an explicit delimiter
-  const s2 = put(B, [s, "", 2, "1"], null as never, null as never);
-  const csv = find(B, ["a,b,c", ",", 2], null as never, null as never);
+  for (const [i, bit] of ["1", "0", "1"].entries()) s = P(s, "", i + 1, bit);
+  const readBack = [1, 2, 3].map((i) => F(s, "", i));
+  check("putword builds the dense string the original wrote", s === "101", `s="${s}"`);
+  check("findword reads it back a character at a time", readBack.join("") === "101", readBack.join(","));
+
+  // out of range both ways, and the one-past-the-end append that builds it
+  check("findword past the end is empty", F("101", "", 4) === "" && F("101", "", 0) === "", "");
+  check("putword past one-past-the-end is empty", P("101", "", 5, "1") === "", `${P("101", "", 5, "1")}`);
+
+  // inside the string putword INSERTS rather than replaces (0x428fc0 memmoves
+  // the tail right and writes the word in front of it, deleting nothing). No
+  // script takes this arm — they all build from "" — but the rule is the rule.
+  check("putword inside the string inserts", P("101", "", 2, "1") === "1101", `${P("101", "", 2, "1")}`);
+
+  // an explicit delimiter is unchanged: real word lists, still split on it
+  check("an explicit delimiter still splits", F("a,b,c", ",", 2) === "b", `${F("a,b,c", ",", 2)}`);
+  check("and putword replaces that word", P("a,b,c", ",", 2, "z") === "a,z,c", `${P("a,b,c", ",", 2, "z")}`);
+
+  // the three uses in the game that settle it without the disassembly
+  check("the keypad's letter", F("thayer", "", 3) === "a", `${F("thayer", "", 3)}`);
+  check("the morse tapper's space survives", F("- .", "", 2) === " ", `"${F("- .", "", 2)}"`);
   check(
-    "putword/findword round-trip (empty delim = space; explicit delim works)",
-    s === "1 0 1" && readBack.join("") === "101" && s2 === "1 1 1" && csv === "b",
-    `s="${s}" read=${readBack.join("")} s2="${s2}" csv=${csv}`,
+    "a crowd star comes apart by position",
+    F("ex.a.1", "", 4) === "a" && F("ex.a.1", "", 6) === "1",
+    `${F("ex.a.1", "", 4)}/${F("ex.a.1", "", 6)}`,
   );
 }
 );

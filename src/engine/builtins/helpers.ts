@@ -19,27 +19,63 @@ const SMALL_1996_HEAP = 4 * 1024 * 1024;
 export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   const { session, interp, r } = ctx;
 
-  // string helper used by boot logic: findword("a,b,c", ",", 2) -> "b"
-  // word list = a string split on a separator; an EMPTY (or omitted) delimiter
-  // means the default separator, a space (CyberFlix convention). saveprops
-  // strings ("1 0 1 …", built by putword) round-trip through this.
-  const wordSep = (delim: Value) => {
-    const d = delim === undefined ? "" : toStr(delim);
-    return d === "" ? " " : d;
-  };
+  // findword("a,b,c", ",", 2) -> "b": a word list is a string split on a
+  // separator, and the idx is 1-based.
+  //
+  // An EMPTY delimiter is a mode of its own — the idx-th CHARACTER — and not,
+  // as this used to have it, a default separator of space. TI.EXE says so
+  // outright: `findword`'s implementation (0x428b20 → the body at 0x428b6d)
+  // branches on the delimiter's length byte, and the empty arm at 0x428c5f is
+  //
+  //     cmp dword [esp+0x12], 1        ; idx < 1?
+  //     mov al, byte [0x489928]        ; length of the source
+  //     cmp eax, dword [esp+0x12]      ; length < idx?
+  //     mov byte [0x489c38], 1         ; result is ONE character long
+  //     mov al, byte [eax + 0x489928]  ; source[idx]  (Pascal string: [0] is the length)
+  //
+  // — one character, or "" when the idx falls outside the string. Three of
+  // TAOOT's own uses are unambiguous without the disassembly: the wireless
+  // Morse tapper walks `for count = 1 to stringlength (sound)` and treats " "
+  // as a legal value, the keypad matches one typed letter against
+  // `findword ("thayer", "", stringlength (thayermess) + 1)` in a literal with
+  // no spaces at all, and `extra.cst`'s `setupactor` takes a crowd star apart
+  // by position — `letter = findword (where, "", 4)`, `number = findword
+  // (where, "", 6)` over "ex.a.1" — to name the instance `brown1a1` (#199).
+  const charMode = (delim: Value) => delim === undefined || toStr(delim) === "";
   r("findword", (_i, [s, delim, idx]) => {
-    const parts = toStr(s ?? "").split(wordSep(delim));
-    return parts[(Number(idx) || 1) - 1] ?? "";
+    const str = toStr(s ?? "");
+    const i = Number(idx) || 0;
+    if (charMode(delim)) return i >= 1 && i <= str.length ? str[i - 1] : "";
+    return str.split(toStr(delim))[(i || 1) - 1] ?? "";
   });
-  // putword(str, delim, idx, word): replace the idx-th (1-based) word, padding
-  // with empty words when idx is past the end so an empty string grows into a
-  // fixed-slot list (TAOOT's hideenigma/hidetrunk save each prop's visibility by slot).
+  // putword(str, delim, idx, word): replace the idx-th (1-based) word. With an
+  // empty delimiter it is the character-wise counterpart, and TI.EXE's arm
+  // (0x428fc0, and the out-of-range tail at 0x429045) has three cases: inside
+  // the string it INSERTS the word before character idx (memmove the tail right
+  // by the word's length, then write it — nothing is deleted); one past the end
+  // it appends (`0x4356e0`, which appends its first argument to its second);
+  // anywhere further out it yields "".
+  //
+  // Only the append arm is ever taken here. Every `saveprops` in the game is
+  // built the same way — `saveprops = ""` and then `for count = 1 to N`, one
+  // slot per pass (photo.shp, wireless.shp, and the trunk/enigma pair) — which
+  // is why the strings the original wrote are dense: the shipped saves carry
+  // `saveprops2 = "11111101100111110"`, 17 characters for the 17 indices the
+  // scripts read back. The old space-joined form ("1 0 1 …") round-tripped
+  // through our own findword and matched nothing in a save the original wrote.
   r("putword", (_i, [s, delim, idx, word]) => {
-    const sep = wordSep(delim);
-    const i = Math.max(1, Number(idx) || 1) - 1;
-    const parts = toStr(s ?? "") === "" ? [] : toStr(s ?? "").split(sep);
-    while (parts.length <= i) parts.push("");
-    parts[i] = toStr(word ?? "");
+    const str = toStr(s ?? "");
+    const w = toStr(word ?? "");
+    const i = Number(idx) || 0;
+    if (charMode(delim)) {
+      if (i >= 1 && i <= str.length) return str.slice(0, i - 1) + w + str.slice(i - 1);
+      return i === str.length + 1 ? str + w : "";
+    }
+    const sep = toStr(delim);
+    const at = Math.max(1, i || 1) - 1;
+    const parts = str === "" ? [] : str.split(sep);
+    while (parts.length <= at) parts.push("");
+    parts[at] = w;
     return parts.join(sep);
   });
   r("stringlength", (_i, [s]) => toStr(s ?? "").length);
