@@ -523,9 +523,12 @@ export async function browserDriver(page: Page, opts: BrowserDriverOptions = {})
       return true;
     },
     clickThing: async (name) => {
+      // settle first, THEN aim — the headless twin's ordering, and for its reason
+      // (tests/playthrough/driver.ts): a pixel picked before the cast stops moving
+      // can be off the character by the time the click goes in.
+      await settleTurns(name);
       const at = await aimThing(name);
       if (!at) return false;
-      await settleTurns(name);
       await clickAt(at.x, at.y);
       await settle(`click ${name}`);
       return true;

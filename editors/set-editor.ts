@@ -47,8 +47,9 @@ const editor = $("editor");
 const statusEl = $("status");
 const dirtyEl = $("dirty");
 
-/** the turn/walk animation rate the game plays at (see src/viewer.ts) */
-const FRAME_MS = 90;
+/** the turn/walk animation rate the game plays at: one frame per 50 ms service
+ *  pass, which is TI.EXE's own frame period (src/viewer.ts FRAME_MS) */
+const FRAME_MS = 50;
 /** decoded frames held at once; a ring of 512×264 frames is ~135 KB each */
 const RING_BUDGET_BYTES = 64 * 1024 * 1024;
 

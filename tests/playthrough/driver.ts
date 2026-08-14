@@ -155,13 +155,23 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
       await ticks(2, "the reply to start");
     },
     clickThing: async (name) => {
-      const at = aimAtThing(aim(), name);
-      if (!at) return false;
       // the same pre-click wait clickHotspot takes, and for the same reason — a
       // character in motion refuses the click, and the browser twin must click at
       // the same moment or the two hosts diverge on the recovery rather than on
       // anything real (the C-deck seaman, browser View17 against golden View13)
+      //
+      // AIM AFTER IT, not before. The wait exists so the click lands on a settled
+      // cast, and aiming first threw that away: the pixel was picked while people
+      // were still moving, and a character who so much as TURNS in the meantime
+      // (every gang.cst idle does, every 20 passes) leaves the aimed pixel on the
+      // room behind them. Segment 14 is where it showed — Smethells in recept1c,
+      // aimed at and then clicked past, the click landing on the painting hotspot
+      // instead and `spotmovie("recpaint.mov")` eating the gesture. It only ever
+      // depended on which pass the click fell on, which is why the 90 ms frame
+      // pace hid it and the original's 50 ms did not.
       await beStill(name);
+      const at = aimAtThing(aim(), name);
+      if (!at) return false;
       void session.track(v().click(at.x, at.y));
       await settle(`click ${name}`);
       return true;

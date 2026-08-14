@@ -48,8 +48,9 @@ const editor = $("editor");
 const statusEl = $("status");
 const dirtyEl = $("dirty");
 
-/** the cadence props animate at — PropRuntime.tick's frameMs (src/viewer.ts) */
-const FRAME_MS = 90;
+/** the cadence props animate at — PropRuntime.tick's frameMs, which the viewer
+ *  has always passed as ENGINE_STEP_MS; this said 90 and was never the game's */
+const FRAME_MS = 50;
 /** where a prop draws before any propxy: the centre of the 512×384 screen */
 const DEFAULT_ANCHOR_X = 256;
 const DEFAULT_ANCHOR_Y = 192;

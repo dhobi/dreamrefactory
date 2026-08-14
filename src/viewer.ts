@@ -21,13 +21,21 @@ import { overlayFont } from "./fonts";
  * live in {@link RingCache}, a ring (turn circle / road direction) at a time.
  */
 
-const FRAME_MS = 90; // ~11 fps for turn/walk animation, close to the original feel
-
 /**
- * Frame interval for a move a SCRIPT asked for: one frame per service pass.
+ * Frame interval for turn and walk animation: one frame per service pass.
  *
- * A script that moves the camera does not watch it. BEDSIT1's air raid walks you
- * to the window with a fixed budget and no wait (container 0005, from Scene2):
+ * This was 90 ms for a long time — "~11 fps, close to the original feel" — and
+ * the feel it was close to was a guess. The original's rate is not a matter of
+ * taste, it is a number in the binary: the frame throttle (`0x43a940`) spins
+ * until `now >= lastFrame + [0x489efe]`, the tick source (`0x41de90`) is
+ * `timeGetTime() * 3 / 50` so a tick is 50/3 ms, and `[0x489efe]` — what
+ * `framerate()` reads and `framerate(n)` writes — defaults to **3**
+ * (`0x429643`). Three ticks is **50 ms a frame, 20 fps**, which is
+ * {@link ENGINE_STEP_MS}: one frame per service pass, exactly.
+ *
+ * The scripts corroborate it twice, because a script that moves something does
+ * not watch it — it spends a fixed budget of passes and then forces the resting
+ * state. BEDSIT1's air raid (container 0005, from Scene2):
  *
  *     while currentview () != "view17"      <- the TURN loop waits properly
  *         currentscene ("left")
@@ -38,29 +46,23 @@ const FRAME_MS = 90; // ~11 fps for turn/walk animation, close to the original f
  *     for count = 1 to 10                   <- the ROAD gets ten passes, no wait
  *         forceupdate ()
  *     endfor
- *     currentscene ("strait")
- *     for count = 1 to 10
- *         forceupdate ()
- *     endfor
- *     currentscene ("right")
- *     ...
- *     bombit ()
  *
  * Ten passes for a road of 7 frames (Road4, Scene2->Scene1) or 6 (Road43,
- * Scene3->Scene1) is the script author telling us what the original's rate was:
- * one frame per pass, and a few passes' slack. At FRAME_MS a road spends 2n+1
- * passes on n frames, so Scene2's 7-frame road wanted 15 and the turn after it
- * came too late to land before `bombit` played bedex.mov (#40).
+ * Scene3->Scene1): one frame per pass and a few passes' slack. At 90 ms a road
+ * spent 2n+1 passes on n frames, so the 7-frame road wanted 15, and the turn
+ * after it landed after `bombit` had played bedex.mov (#40). BOIL.SHP's coal
+ * chute is the same shape and the same arithmetic (see `tick`, #15).
  *
- * A pass is 50 ms of game time in both hosts (ENGINE_STEP_MS; the scheduler
- * counts steps out of the clock, so a browser's rAF and the headless pump agree)
- * — which is why this is expressed in ms and not in host frames.
- *
- * Scoped to scripted moves only. A player's turn stays at FRAME_MS: the rate the
- * game runs at when someone is looking at it is a feel decision that was made
- * once, and a script's deadline is no reason to reopen it.
+ * So it is one constant now, not two. A scripted move used to be paced at 50 ms
+ * and a player's at 90 — the split existed only because #40 had to be fixed
+ * without reopening the feel decision, and the feel decision turns out to have
+ * been the guess. A player's turn was 1.8x slower than the original's: measured
+ * over every shipped set, 66% of turns hold one in-motion frame between adjacent
+ * standpoints and 33% hold two, so a press was ~270 ms where TI.EXE takes ~150.
+ * (User-reported: "when the real game TI.EXE is run in DosBox, the player
+ * movement feels much faster".)
  */
-const SCRIPT_FRAME_MS = ENGINE_STEP_MS;
+const FRAME_MS = ENGINE_STEP_MS;
 
 /** cap on ticks spent waiting for a transition fade before walking anyway */
 const MAX_FADE_WAIT_TICKS = 240;
@@ -148,7 +150,7 @@ export class SetViewer {
 
   private animation: CachedFrame[] | null = null;
   private animationPos = 0;
-  /** ms per frame for the animation in flight — see {@link SCRIPT_FRAME_MS} */
+  /** ms per frame for the animation in flight — see {@link FRAME_MS} */
   private animationPace = FRAME_MS;
   private animationDone: (() => void) | null = null;
   /**
@@ -184,10 +186,10 @@ export class SetViewer {
     // step LEFT is View31, and View31 is the window. Dropping the turn is what
     // left you watching the bombing from the bed or the chair (#40).
     //
-    // Waiting is half of it; the other half is the RATE the waited-for road runs
-    // at, which is why a scripted move is paced at SCRIPT_FRAME_MS — see there.
-    // Both are needed: at FRAME_MS the 7-frame road spent 15 of its 10 passes, so
-    // the deferred turn still landed after `bombit` had played bedex.mov.
+    // Waiting is half of it; the other half is the RATE the waited-for road
+    // runs at — see {@link FRAME_MS}. Both are needed: at the 90 ms this used to
+    // pace at, the 7-frame road spent 15 of its 10 passes, so the deferred turn
+    // still landed after `bombit` had played bedex.mov.
     if (this.session.navFromScript) {
       // A player's move is untouched: it still drops when one is already
       // running, which is what keeps a held key from stacking up turns.
@@ -256,12 +258,12 @@ export class SetViewer {
       await this.session.nextFrame();
     }
     if (this.busy) return; // gave up; do not stack a move onto a stuck one
-    this.navigateNow(dir, SCRIPT_FRAME_MS);
+    this.navigateNow(dir, FRAME_MS);
   }
 
   /** Perform the move — what {@link navigate} runs once it has decided nothing
-   *  is in the way. `pace` is the ms per animation frame: {@link FRAME_MS} for a
-   *  player's move, {@link SCRIPT_FRAME_MS} for a script's (see there). */
+   *  is in the way. `pace` is the ms per animation frame ({@link FRAME_MS}); it
+   *  stays a parameter because a transition's walk sets its own. */
   private navigateNow(dir: string, pace: number): void {
     if (dir === "strait") {
       // A changeset earlier in this keydown chain (a door to another set) queues
@@ -2095,11 +2097,13 @@ export class SetViewer {
     // sites shaped like that budget exactly as many passes as the state has
     // frames (or one fewer); the rest budget an exact half or third of the
     // container's frames, which is a state holding one animation per degree, and
-    // one that budgets more has slack. Nothing budgets the 2n+1 that FRAME_MS
-    // (90 ms against a 50 ms pass) actually costs — at that rate the chute got
-    // through 6 of its 12 frames before the script slammed it to `idleopen`, so
-    // the door crawled and then jumped, which is #15 in the reporter's words:
-    // "move slowly, then at about 60% of the animation jumps to the end".
+    // one that budgets more has slack. Nothing budgets the 2n+1 that a 90 ms
+    // frame against a 50 ms pass would cost — at that rate the chute got through
+    // 6 of its 12 frames before the script slammed it to `idleopen`, so the door
+    // crawled and then jumped, which is #15 in the reporter's words: "move
+    // slowly, then at about 60% of the animation jumps to the end". A prop has
+    // always animated a frame per pass here; the CAMERA joined it in {@link
+    // FRAME_MS}.
     this.refreshGamma();
     this.session.propRuntime.tick(now, ENGINE_STEP_MS);
     this.session.tickFade(now);
