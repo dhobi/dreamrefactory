@@ -2249,6 +2249,12 @@ export class SetViewer {
    * asserts the pixels match what was left on the canvas.
    */
   render(ctx: CanvasRenderingContext2D): void {
+    // Nothing repaints while the screen is HELD — see screenOwner. Returning
+    // before shouldPaint deliberately leaves the cached signature alone, so the
+    // first frame after the hold still differs from the last one painted and
+    // composites; skipping through shouldPaint instead would cache the held
+    // picture's signature and could strand it on the canvas.
+    if (this.screenOwner() === "held") return;
     if (this.screen.shouldPaint(this.buildSignature(ctx))) this.paint(ctx);
   }
 
@@ -2265,11 +2271,29 @@ export class SetViewer {
    * kept the screen and penote.mov played, clickable, behind a black rectangle.
    * The full game has the same shape twice: the darkroom's
    * `playmovie("photobox.mov")` (PHOTO.STG 0012) and the wireless portrait
-   * (WIRELESS.SHP 0120), whose `clut("black")` is a no-op here precisely because
-   * it is normally paired with the `blackscreen()` that is missing there.
+   * (WIRELESS.SHP 0120).
+   *
+   * **held** is the frame after a movie, and it is the one state in which the
+   * screen belongs to nobody. `playmovie` in TI.EXE returns having freed its
+   * buffers and restored nothing (`0x448b00`'s exit path, `0x44969e`–
+   * `0x4496c7`): the clip's last frame is simply still in the framebuffer, and
+   * the palette is still the clip's, until a script says otherwise. Ours handed
+   * the screen straight back to `world` on the frame the movie ended, and with
+   * the script resuming a rAF later that is one fully-lit frame of the room
+   * between a movie and whatever the script does next — #209, measured at
+   * exactly one 16 ms frame of the un-bombed apartment between `bedex.mov` and
+   * `ocredits.mov`. `fade.pendingReveal` already means precisely "a movie ended
+   * and nothing has said what the screen should look like", so it is also the
+   * answer to "is the screen still the movie's": hold until the script draws
+   * (`blackscreen`, `clut`, either fade — all of which clear it) or falls quiet
+   * (tickFade). The boot is the long case and it is the original's: `boot()`
+   * plays `playmode.mov` and then loads the cast, four shops and a stage before
+   * `advanceday` reaches `datebed.mov`, with no screen statement in between, so
+   * the menu's last frame is what stays up through the load.
    */
-  screenOwner(): "movie" | "puppet" | "faded" | "world" {
+  screenOwner(): "movie" | "puppet" | "faded" | "world" | "held" {
     if (this.movies.frame) return "movie";
+    if (this.session.fade.pendingReveal) return "held";
     // a conversation close-up replaces the world display, but only while shown:
     // puppetvisible(false) keeps the puppet loaded and reveals the flat behind it
     // (the blackjack table between "play again?" prompts)
