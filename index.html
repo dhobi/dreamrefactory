@@ -130,6 +130,95 @@
         line-height: 1.6;
         color: var(--text-mute);
       }
+
+      /*
+       * Buy Me a Coffee's own button, rebuilt in the page.
+       *
+       * Upstream ships it as a <script> from cdnjs.buymeacoffee.com that writes
+       * the markup at runtime and pulls Cookie off Google Fonts. Both are
+       * declined here: this site has no third-party script and no third-party
+       * font on any page, it is built to run from any subdirectory of any host
+       * (vite.config.ts's `base`), and a footer button is not worth a network
+       * dependency that can hang the page or watch who reads it. What follows is
+       * the same button, and the widget's data attributes read straight across —
+       * `data-color`, `data-font-color` and the rest are its own colour knobs,
+       * so a button in the host's palette is a configuration of it rather than a
+       * departure from it:
+       *
+       *   data-color        --raised   the surface, one step up from the page
+       *   data-outline-color --border-strong
+       *   data-font-color   --accent   the ice the whole site links in
+       *   data-coffee-color #FFDD00    the cup, and the ONE thing left at brand
+       *                                strength: it is the mark, it is the only
+       *                                warm note down here, and at 17px it is
+       *                                the size of a letter
+       *   data-font         Cookie     public/cookie.woff2, below
+       *
+       * The mark's own linework is #0D0C22 — drawn to sit on a yellow button,
+       * and on this one it disappeared into the surface, leaving the cup a
+       * yellow blob with its lid and steam missing. public/bmc-logo.svg carries
+       * those strokes in --brass-600 instead: the cup stays one warm object
+       * rather than half ice and half yellow, and brass is the colour this
+       * page already gives the porthole ring and the rule under the title.
+       *
+       * In brand yellow the whole thing read as a placard on a dark page and
+       * pulled the eye off the Play button; in the page's own blue it reads as
+       * part of the footer, which is where an ask belongs. Smaller than
+       * upstream's 51px for the same reason.
+       */
+
+      /* Cookie by Ania Kruk, SIL Open Font License 1.1 — the licence travels
+         with the font at public/cookie-OFL.txt. Latin subset, 14 KB, served
+         from this origin: the first and only web font the site loads, and it
+         loads only on this page. `swap` so a slow font never holds the button
+         back — the fallback is the page's own display face. */
+      @font-face {
+        font-family: "Cookie";
+        src: url("/cookie.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      a.bmc {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3em;
+        margin-top: 1.1rem;
+        padding: 0.1rem 0.8rem;
+        border: 1px solid var(--border-strong);
+        /* the widget's own 5px, which is also the sheet's --radius-lg */
+        border-radius: var(--radius-lg);
+        background: var(--raised);
+        color: var(--accent);
+        font-family: "Cookie", var(--font-display);
+        font-size: 1.05rem;
+        line-height: 1.85;
+        letter-spacing: 0.02em;
+        text-decoration: none;
+        transition:
+          border-color 110ms linear,
+          color 110ms linear,
+          transform 110ms ease-out;
+      }
+      /* the same step every other link on the site takes on hover */
+      a.bmc:hover {
+        border-color: var(--border-hover);
+        color: var(--ice-300);
+        transform: translateY(-1px);
+      }
+      a.bmc:active {
+        transform: none;
+      }
+      /* Cookie is a script face: its baseline sits high in the box, so the cup
+         is centred on the line box and then nudged to the letters' optical
+         centre rather than the box's. */
+      a.bmc img {
+        height: 1.15em;
+        width: auto;
+        position: relative;
+        top: -0.06em;
+      }
     </style>
   </head>
   <body class="deep">
@@ -177,6 +266,17 @@
       <p class="credits" data-i18n-html="home.credits"
         >Made possible by <a href="https://github.com/M3tox/DFET">DFET</a> by
         M3tox — built with the support of Claude Opus and Claude Fable.</p
+      >
+
+      <!-- Buy Me a Coffee's button, English in all six languages: it is the
+           brand's own wording in the brand's own face, and Cookie carries the
+           Latin alphabet only — a Japanese label in it would fall back to
+           another font and stop being the button. The cup is decorative; the
+           words beside it are the link's name. -->
+      <a class="bmc" href="https://buymeacoffee.com/danielhobi"
+        ><img src="/bmc-logo.svg" alt="" width="35" height="50" /><span
+          >Buy me a coffee</span
+        ></a
       >
     </div>
 
