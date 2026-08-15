@@ -67,7 +67,7 @@ Three groups are **deliberately inert**, each for a recovered reason:
 
 | Group | Names | Why |
 |-------|-------|-----|
-| Visual transitions (21) | `plain`, `nodraw`, `barndoorclose`/`open`, `irisclose`/`open`, `scrolldown`/`up`/`right`/`left` (sic: `scrolleft`), `venetian`, `wipedown`/`up`/`right`/`left`, `turnright`/`left`/`up`/`down`, `turnhalfleft`/`right` | behave as instant — visual polish for later; the fades that gate logic (`screentoblack`…) are real |
+| Visual transitions (21) | `plain`, `nodraw`, `barndoorclose`/`open`, `irisclose`/`open`, `scrolldown`/`up`/`right`/`left` (sic: `scrolleft`), `venetian`, `wipedown`/`up`/`right`/`left`, `turnright`/`left`/`up`/`down`, `turnhalfleft`/`right` | behave as instant — visual polish for later; the fades that gate logic (`screentoblack`…) are real, and they [block the script](../runtime/timing.md) for their `steps` ticks the way the original's do |
 | Debugger family (14) | `propscript`, `buttonscript`, `scenescript`, `flatscript`, `stagescript`, `bootscript`, `postscript`, `setscript`, `paintingscript`, `puppetscript`, `castscript`, `actorscript`, `shopscript`, `serverscript` | opened the in-engine script editor; in every shipping build of `TI.EXE` the editor flag is clear and they no-op |
 | Modifier keys (3) | `shiftkey`, `optionkey`, `commandkey` | always 0, keeping `if debugging & shiftkey()` debug branches dormant |
 

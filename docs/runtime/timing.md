@@ -31,6 +31,15 @@ counter (`0x41de90`, `timeGetTime() × 3 / 50`) waiting for it to advance by one
 one step is one tick in both directions. `RAMP_STEP_MS` in `clock.ts` is that step,
 and it is written as `ENGINE_STEP_MS / 3` so the arithmetic stays exact.
 
+The waiting is a **busy-wait inside the command**, with no message pump and no
+service pass in it, so a fade suspends the interpreter for its whole length — a
+`screentoblack(x, 10)` is 167 ms during which the script does not advance. Ours
+returned immediately for a long time, which is what let a conversation's first
+line start under a screen that was still black
+([#6](https://github.com/dhobi/taoot-web/issues/6)); the two fade builtins now
+`await Clock.sleep(steps × 50/3)`, the same primitive `delay(n)` uses. See
+[the host doc](host.md) for the rest of the transition machinery.
+
 Fades were on the heartbeat here for a long time, which made every fade in the game
 three times slower than the original's. It shows only where a script asks for a long
 one, which is where it was reported from: losing the fistfight brings the engine room

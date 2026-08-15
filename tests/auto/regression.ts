@@ -37,7 +37,7 @@ import { GameSession } from "../../src/engine/session";
 import { EventQueue, EVENT_CAPACITY } from "../../src/engine/input";
 import { PUPPET_ART_H } from "../../src/puppet-view";
 import { SCREEN_W } from "../../src/screen";
-import { ScriptInstance } from "../../src/engine/interp";
+import { ScriptInstance, type Value } from "../../src/engine/interp";
 import { DeferredAudioSink, NullAudioSink } from "../../src/engine/audio";
 import { projectPoint } from "../../src/engine/props";
 import { SetViewer } from "../../src/viewer";
@@ -8980,5 +8980,132 @@ test("the small-memory setting opens the game's own short themes", async () => {
   check("...and is about half as long, at the same rate",
     small.seconds < full.seconds * 0.6 && small.rate === full.rate,
     `${full.seconds.toFixed(1)}s -> ${small.seconds.toFixed(1)}s, ${full.rate}Hz -> ${small.rate}Hz`);
+}
+);
+
+// --- 104. the transitions: a fade blocks, and a movie's last frame holds -----
+//
+// Both halves of what TI.EXE does between two screens, and both were reported.
+//
+// `screentoblack` / `blacktoscreen` (12050/12049 at 0x43e550/0x43e5d0) reach a
+// palette lerp whose loop — 0x435b90 and 0x435be0 — BUSY-WAITS one 60 Hz tick
+// per step on 0x41de90, with no message pump and no service pass inside it. The
+// interpreter is frozen for the whole ramp, so the statement after a fade cannot
+// run until the fade is done. Ours queued the ramp and returned.
+//
+// `gang.cst`'s `prepuppet` is where that showed:
+//
+//     screentoblack ("current", 10)      blacktoscreen ("puppet", 10)
+//     openpuppetfile (pupname)           quiettheme ()
+//     visualeffect (plain, 0)          / / ...and only THEN, in runpuppet:
+//                                        sendtopuppet ("boot script", ...)
+//
+// The boot script is what speaks the first line, and it is two statements after
+// a fade that is supposed to have finished. #6: "when starting a conversation
+// with anyone, they begin speaking their lines before the fade in completes".
+test("engine: a conversation's first line waits for the fade-in (#6)", async () => {
+  const { host, session } = await newHost();
+  session.modalMovies = true; // this pump is a frame source — see the cold boot above
+  await session.ensureBooted();
+  await session.openSetFile("c73.set");
+  const viewer = host.viewer!;
+
+  let clock = 0;
+  const seen: { level: number; queued: number; lines: number }[] = [];
+  const pump = async (until: () => boolean, max = 4000): Promise<boolean> => {
+    for (let i = 0; i < max && !until(); i++) {
+      viewer.tick((clock += RAMP_STEP_MS));
+      await drain();
+      seen.push({
+        level: session.fade.level,
+        queued: session.fade.queue.length,
+        lines: session.puppet?.voiceQueue.length ?? 0,
+      });
+    }
+    return until();
+  };
+
+  // the steward, opened through the game's own runpuppet — prepuppet, the boot
+  // script, postpuppet, all of it
+  void session.track(
+    session.sendEvent("sendtoactor", "smeth", "runpuppet", ["smeth1.pup", "door"], "test"),
+  );
+  const spoke = await pump(() => (session.puppet?.voiceQueue.length ?? 0) > 0);
+  check("smeth1.pup opens and says something", spoke,
+    `puppet=${session.puppet?.name ?? "none"} lines=${session.puppet?.voiceQueue.length ?? 0}`);
+
+  // the premise: a fade really did run. Without this the ordering below is
+  // vacuously true and the test would survive the bug it exists for.
+  check("prepuppet's screentoblack took the screen all the way down",
+    seen.some((s) => s.level === 1), `levels=${[...new Set(seen.map((s) => s.level))].join(",")}`);
+
+  const firstLine = seen.findIndex((s) => s.lines > 0);
+  const at = seen[firstLine];
+  check("...and by the first line the fade-in has finished — not black, not still ramping",
+    !!at && at.level === 0 && at.queued === 0,
+    `tick ${firstLine}: level=${at?.level} queued=${at?.queued}`);
+}
+);
+
+// The other half. `playmovie` frees its buffers and restores NOTHING (0x448b00,
+// exit path 0x44969e-0x4496c7): the clip's last frame is still in the
+// framebuffer and its palette is still installed, until a script says otherwise.
+// We handed the screen back to `world` on the frame the movie ended, and since
+// the script resumes a rAF later that is one fully-lit frame of the room in
+// between — measured in a browser at exactly one 16 ms frame of the un-bombed
+// London flat between `bedex.mov` and `ocredits.mov` (#209).
+//
+// THE SYMPTOM IS BROWSER-ONLY and this test does not reproduce it: headless, the
+// script resumes from `playmovie` inside the same drain the movie ended in, so no
+// frame falls between the two and there is nothing to see. It was measured with a
+// Playwright probe sampling screenOwner() per rAF, which is where the 16 ms above
+// comes from. What is testable here is the decision that makes the browser right
+// — who owns the screen the instant a movie is over — so that is what this pins,
+// along with the four things a script can say to take it back.
+test("engine: the screen after a movie is the movie's, until a script draws (#209)", async () => {
+  const { host, session } = await newHost();
+  session.modalMovies = true;
+  await session.ensureBooted();
+  await session.openSetFile("bedsit1.set");
+  const viewer = host.viewer!;
+
+  let clock = 0;
+  const play = async (name: string): Promise<void> => {
+    const done = session.track(viewer.playMovie(name));
+    for (let i = 0; i < 4000 && viewer.moviePlaying; i++) {
+      viewer.tick((clock += 66));
+      await drain();
+    }
+    await done;
+  };
+  // the screen builtins read only their args, so the call site and frame a real
+  // dispatch would hand them are not needed here
+  const say = (name: string, ...args: Value[]) =>
+    session.interp.builtins.get(name)!(session.interp, args, null as never, null as never);
+
+  await play("datebed.mov");
+  // no tick since it ended: this is the state the script resumes into
+  check("a finished movie leaves the screen nobody's — pendingReveal armed",
+    session.fade.pendingReveal, `pending=${session.fade.pendingReveal}`);
+  check("...and until something draws, the screen is still the movie's",
+    viewer.screenOwner() === "held", `owner=${viewer.screenOwner()}`);
+
+  // Every way a script says what the screen should look like ends the hold. The
+  // first two are the pair the transition idiom always uses (`blackscreen` clears
+  // the buffer, `clut("black")` makes every later draw invisible); the fades are
+  // the ramps either side of it.
+  for (const [name, call] of [
+    ["blackscreen", () => say("blackscreen")],
+    ["clut(\"black\")", () => say("clut", "black")],
+    ["screentoblack", () => say("screentoblack", "current", 10)],
+    ["blacktoscreen", () => say("blacktoscreen", "set", 10)],
+  ] as const) {
+    await play("datebed.mov");
+    if (viewer.screenOwner() !== "held") { check(`${name}: the hold was not armed`, false); continue; }
+    void call();
+    check(`${name} takes the screen back off the movie`,
+      viewer.screenOwner() !== "held", `owner=${viewer.screenOwner()}`);
+    session.fade.queue.length = 0; // the ramps, unticked here — see the note in savegame.ts
+  }
 }
 );

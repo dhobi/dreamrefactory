@@ -170,25 +170,62 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   ]) {
     r(t, () => t);
   }
-  // screen fades — gotospecial wraps set changes in screentoblack/
-  // blacktoscreen; without them stair transitions look like nothing moved
-  // (each of these is the script saying what the screen should look like, so
-  // it cancels a movie's pending reveal — see session.tickFade)
-  r("screentoblack", (_i, [, steps]) => {
-    if (!session.fade.snapshot) session.fade.snapshot = session.captureFrame?.() ?? null;
-    session.fade.queue.push({ to: 1, steps: Math.max(1, Number(steps) || 10) });
+  /**
+   * screentoblack(surface, steps) / blacktoscreen(surface, steps) — the fades,
+   * and they BLOCK.
+   *
+   * `gotospecial` wraps set changes in the pair; without them stair transitions
+   * look like nothing moved. Each is also the script saying what the screen
+   * should look like, so it cancels a movie's pending reveal — see
+   * {@link GameSession.tickFade}.
+   *
+   * Blocking is the part that was missing, and it is not a detail. In TI.EXE
+   * both are a linear lerp between the named surface's palette and the black
+   * one, `steps` increments, and the loop (`0x435b90` / `0x435be0`, reached
+   * through `0x43e550` / `0x43e5d0`) BUSY-WAITS one 60 Hz tick per step on the
+   * engine's own clock (`0x41de90`, `timeGetTime() * 3 / 50`) with no message
+   * pump and no scheduler pass inside it. The interpreter is frozen for the
+   * whole ramp, so the statement AFTER a fade cannot run until the fade is over.
+   *
+   * Ours queued the ramp and returned, and the game noticed. `gang.cst`'s
+   * `prepuppet` is `screentoblack("current", 10)`, `openpuppetfile`,
+   * `visualeffect(plain, 0)`, `blacktoscreen("puppet", 10)` — and only then does
+   * `runpuppet` send the puppet its boot script, which is what speaks the first
+   * line. With the fade non-blocking the line started while the screen was still
+   * black and rode the ramp up: #6, "actors begin speaking before fade-in".
+   *
+   * Sleeping the script tick (the same unit and the same primitive `delay(n)`
+   * uses) rather than awaiting the queue: the ramp advances one step per tick
+   * from the tick it is pushed on, so `steps` ticks is always long enough, and a
+   * ramp that is somehow starved cannot wedge the script behind it forever.
+   *
+   * And blocking is conditional on a frame source, on exactly the test
+   * `playmovie` below uses and for exactly its reason: a host that does not
+   * advance the clock never ticks the ramp, so awaiting one would deadlock on
+   * the first transition. A bare `GameSession` is that host — several savegame
+   * tests drive the game's own `transtoflat` with no viewer attached and clear
+   * `fade.queue` by hand afterwards — and there the fades stay what they were,
+   * a level set and nothing waited on.
+   */
+  const fade = async (to: 0 | 1, steps: unknown): Promise<void> => {
+    const n = Math.max(1, Number(steps) || 10);
+    if (to === 1 && !session.fade.snapshot) {
+      session.fade.snapshot = session.captureFrame?.() ?? null;
+    }
+    session.fade.queue.push({ to, steps: n });
     session.fade.pendingReveal = false;
-  });
-  r("blacktoscreen", (_i, [, steps]) => {
-    session.fade.queue.push({ to: 0, steps: Math.max(1, Number(steps) || 10) });
-    session.fade.pendingReveal = false;
-  });
-  r("blackscreen", () => {
+    if (session.hasRealFrames || session.modalMovies) await session.clock.sleep((n * 50) / 3);
+  };
+  r("screentoblack", (_i, [, steps]) => fade(1, steps));
+  r("blacktoscreen", (_i, [, steps]) => fade(0, steps));
+  /** the screen is black from this instant — no ramp, nothing left running */
+  const blackNow = (): void => {
     session.fade.queue.length = 0;
     session.fade.snapshot = null;
     session.fade.level = 1;
     session.fade.pendingReveal = false;
-  });
+  };
+  r("blackscreen", blackNow);
   // currenttheme([layer]): the looping theme currently playing (the layer arg
   // selects a mix channel in TI.EXE; we track a single theme, so it's ignored).
   r("currenttheme", () => session.currentThemeName);
@@ -232,9 +269,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   // lookup-table effect. mixclut blends a palette range toward a colour (the
   // TAOOT corpus only ever uses "black" — a dim-to-dark), clut(target) restores the normal
   // palette. Drives the darkroom light switch (mixclut "set" darkens the cabin,
-  // clut "set" brings it back) and various stage/current fades. clut("black")
-  // is the ONE exception: it's always paired with blackscreen() in the movie
-  // transition path, so it stays a no-op (the black is drawn by blackscreen).
+  // clut "set" brings it back) and various stage/current fades.
   r("mixclut", (_i, [target, color, lo, hi, amt]) => {
     if (toStr(color ?? "").toLowerCase() !== "black") return; // only black-mix exists in the corpus
     session.onClut(toStr(target ?? ""), {
@@ -243,9 +278,26 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
       amt: toNum(amt ?? 0),
     });
   });
+  /**
+   * `clut(name)` INSTALLS a palette, right now — `0x43dfd0` resolves the name
+   * through the same table the fades use and hands it to `0x4363e0`, which is
+   * also the call the last step of a `blacktoscreen` ramp makes. So `clut` is
+   * the un-ramped fade, and `clut("black")` is the un-ramped `screentoblack`:
+   * the all-black palette, from this instant, until something installs another.
+   *
+   * That is load-bearing and it used to be a no-op here, on the reasoning that
+   * `blackscreen()` is always beside it. Not always: `transtoflat`'s `rub.stg`
+   * arm is `playmovie("rub.mov")` then `clut("black")` with no `blackscreen`
+   * anywhere, and the black it leaves is what the stage is revealed FROM two
+   * lines later. The pairing is also not redundant where it does occur — in the
+   * original `blackscreen` clears the buffer and `clut("black")` makes every
+   * subsequent draw invisible, which is how the scripts hold a screen black
+   * across a set or stage swap that keeps repainting underneath.
+   */
   r("clut", (_i, [target]) => {
     const t = toStr(target ?? "").toLowerCase();
-    if (t === "black" || t === "") return; // no-op: paired with blackscreen()
+    if (t === "") return;
+    if (t === "black") return blackNow();
     session.onClut(t, null);
   });
   /**

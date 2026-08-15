@@ -302,8 +302,8 @@ audit finds exactly three `openscene` handlers that move the camera and no
 `closescene` that does.
 
 **Rendering** asks one question per frame — `screenOwner()`: **movie**, **puppet**,
-**faded**, **world** — instead of the three if-chains in an order nothing enforced
-that it used to be. A movie is first, which is the rule the input path already
+**held**, **faded**, **world** — instead of the three if-chains in an order nothing
+enforced that it used to be. A movie is first, which is the rule the input path already
 kept, and the two had drifted: the puppet branch had been taught to yield to a
 movie and the fade branch never had. A movie carries its own palette and its own
 pixels, so a fade the script left standing is not a layer over it — it is applied
@@ -314,9 +314,22 @@ and `blackscreen()` is the one thing that drops the held snapshot — so the not
 played, clickable, behind a black rectangle. `TI.EXE` settles what the black *is*:
 `screentoblack` (id 12050 at `0x43e550`) is a blocking ramp that dims `steps` times
 and returns, leaving nothing behind, so the black is simply what was last drawn and
-the next thing to draw the screen owns it. Our persistent fade level is a fair
-model of the ramp and a wrong model of what follows it. The shipped game has the
+the next thing to draw the screen owns it. The shipped game has the
 same shape twice (the darkroom's `photobox.mov`, the wireless portrait).
+
+**held** is that last sentence made into a state: nobody owns the screen between a
+movie ending and the next thing that draws. `playmovie` frees its buffers and
+restores nothing (`0x448b00`, exit path `0x44969e`–`0x4496c7`) — the clip's final
+frame is still in the framebuffer and its palette is still installed. Ours handed
+the screen back to `world` on the frame the movie ended, and since the script
+resumes a rAF later, that was one fully-lit frame of the room in between: measured
+at exactly one 16 ms frame of the un-bombed London flat between `bedex.mov` and
+`ocredits.mov` ([#209](https://github.com/dhobi/taoot-web/issues/209)). While held
+the renderer composites nothing at all, which is the whole of what the original
+does. It is also why the boot looks right: `boot()` plays `playmode.mov` and then
+loads the cast, four shops and a stage before `advanceday` reaches `datebed.mov`,
+with no screen statement anywhere in between — so the menu's last frame is what
+stays up through the load, in `TI.EXE` and now here.
 
 Within `world`, the path is: stage flat (with the set view composited in when
 visible, then world sprites, then props) → bare set. On top: the persistent `drawstring` text
@@ -475,15 +488,42 @@ room in early.
 
 `blackscreen()` is a **one-shot** paint in the original and a retained level
 here, so a movie that ends over it would leave the screen black forever. The
-end of a movie therefore only *arms* a reveal; the black is lifted a frame
-later, and only once **no script dispatch is in flight** — the script that
-played the movie almost always has more to say about the screen (the boot
-opens the flat and plays the date caption under the black before
-`advanceday`'s `blacktoscreen` fades it in), and any `blackscreen` /
-`screentoblack` / `blacktoscreen` it runs cancels the pending reveal. Revealing
-at movie end instead flashed the fully-lit room between the menu and the
-fade-in. A flat whose intro movie is followed by no fade at all (the bomb's
-`openstage`) still gets its reveal, as soon as the script falls quiet.
+end of a movie therefore only *arms* a reveal; the black is lifted once **no
+script dispatch is in flight** — the script that played the movie almost always
+has more to say about the screen — and any `blackscreen` / `clut` /
+`screentoblack` / `blacktoscreen` it runs cancels the pending reveal instead. A
+flat whose intro movie is followed by no fade at all (the bomb's `openstage`)
+still gets its reveal, as soon as the script falls quiet. That same armed flag is
+what `screenOwner` reads to answer **held** above, and the two readings are one
+fact: until the script says what the screen should look like, the screen is still
+the movie's.
+
+**The fades BLOCK, and that is not a detail.** `screentoblack` and
+`blacktoscreen` are a linear lerp between the named surface's palette and the
+black one, and the loop that runs it (`0x435b90` / `0x435be0`) busy-waits one
+60 Hz tick per step on `0x41de90` with no message pump and no scheduler pass
+inside it. The interpreter is frozen for the whole ramp, so the statement after a
+fade cannot run until the fade is over. Ours queued the ramp and returned, and
+the game noticed: `gang.cst`'s `prepuppet` is `screentoblack("current", 10)`,
+`openpuppetfile`, `visualeffect(plain, 0)`, `blacktoscreen("puppet", 10)`, and
+only then does `runpuppet` send the puppet its boot script — which is what speaks
+the first line. With the fade non-blocking the line started while the screen was
+still black and rode the ramp up
+([#6](https://github.com/dhobi/taoot-web/issues/6)). They now `await`
+`Clock.sleep` for `steps` script ticks, the same primitive and the same unit
+`delay(n)` uses.
+
+**And `clut(name)` installs a palette**, right now: `0x43dfd0` resolves the name
+through the table the fades share and hands it to `0x4363e0` — the very call the
+last step of a `blacktoscreen` ramp makes. So `clut` is the un-ramped fade, and
+`clut("black")` is the un-ramped `screentoblack`. It was a no-op here on the
+reasoning that `blackscreen()` is always beside it; not always — `transtoflat`'s
+`rub.stg` arm is `playmovie("rub.mov")` then `clut("black")` with no
+`blackscreen` anywhere, and that black is what the stage is revealed *from* two
+lines later. Where the pair does occur it is not redundant either: `blackscreen`
+clears the buffer and `clut("black")` makes every subsequent draw invisible,
+which is how the scripts hold a screen black across a swap that keeps repainting
+underneath.
 
 ### The click priority chain
 

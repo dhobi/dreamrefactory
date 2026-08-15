@@ -634,6 +634,17 @@ export async function segment4(s: Story): Promise<void> {
   const engineRoom = await travelPast(s, "control");
   expect(engineRoom.ok, engineRoom.reason).toBe(true);
   expect(s.actorOwner("csea"), "he has not been asked anything yet").toBe("none");
+  // Stand somewhere DEFINITE before speaking to him. `travelPast` leaves you at
+  // whichever standpoint the last road arrived on, and WHICH one that is depends
+  // on the camera's rotation when the walk lands (a road's arrival view is the
+  // one nearest the travel direction) — so it is timing-sensitive, and the two
+  // hosts had only ever agreed on it by luck. They stopped: browser
+  // Scene10/View13 against headless Scene11/View25, over four beats that record
+  // where you are standing while the turbine flat is up. He is reachable from
+  // both, and `hunt` clicks him from wherever it finds him, so pinning the
+  // standpoint costs the route nothing and makes the beat the route's own.
+  const stood = await nav.faceStandpoint(["view25"], ["scene11"]);
+  expect(stood.ok, stood.reason).toBe(true);
 
   const met = await nav.hunt("csea");
   expect(met.ok, met.reason).toBe(true);
@@ -651,7 +662,12 @@ export async function segment4(s: Story): Promise<void> {
   // to "helpme". So the click that started the conversation goes on to open the
   // flat as soon as it ends, and there is nothing to click a second time.
   await s.waitFor(() => d.inFlat() === "Turbine 1", "the turbine room to open");
-  expect(s.actorOwner("csea"), "he has handed the plant over to you").toBe("helping");
+  // `actorowner(me, "helping")` is the line AFTER `transtoflat` in that handler,
+  // and transtoflat ends on `blacktoscreen("stage", 10)` — a fade that blocks the
+  // script for its ten ticks, the way TI.EXE's does. So the flat is current, and
+  // then visible, before the owner flips: waited for rather than asserted on the
+  // first frame the stage exists.
+  await s.waitFor(() => s.actorOwner("csea") === "helping", "the plant to be handed over");
   await beat("m1.2 at the turbine controls");
 
   // -- the six settings ------------------------------------------------------
@@ -781,7 +797,10 @@ export async function segment5(s: Story): Promise<void> {
     const faced = await nav.faceStandpoint([view], [scene]);
     expect(faced.ok, faced.reason).toBe(true);
     expect(await d.clickHotspot(coal), `${coal}'s bunker opens`).toBe(true);
-    expect(d.inFlat(), "the bunker flat is up").toBe("boil 1");
+    // ...and the flat arrives a fade later than the click: `transtoflat` blacks
+    // the screen out and back in, and both ramps block the script for their ten
+    // ticks the way TI.EXE's do.
+    await s.waitFor(() => d.inFlat() === "boil 1", "the bunker flat to come up");
   };
 
   /**
@@ -812,6 +831,11 @@ export async function segment5(s: Story): Promise<void> {
   const asked = await nav.talk({ say: [101, 102, 101, 101], maxTurns: 40 });
   expect(asked.ok, asked.reason).toBe(true);
   expect(s.actorOwner("vlad"), "he will take a favour now").toBe("help");
+  // The last line being over is not the room being back: `postpuppet` still has
+  // to close the puppet and fade the set in, and both of its ramps block the
+  // script for their ten ticks the way TI.EXE's do. A click into that third of a
+  // second finds no room to click — `clickHotspot` cannot even see the coal.
+  await d.settled("the conversation to be put away");
 
   // -- the book, out of coal4 and into coal2 ---------------------------------
   await openBunker("scene13", "view21", "coal4");
@@ -2704,7 +2728,9 @@ export async function segment21(s: Story): Promise<void> {
   // Segment 4's one-gesture note applies unchanged: the click that held the
   // conversation goes on to read the "helpme" it just set and opens the flat.
   await s.waitFor(() => d.inFlat() === "Turbine 1", "the turbine room to open");
-  expect(s.actorOwner("csea"), "the plant is ours again").toBe("helping");
+  // ...and segment 4's note on the OWNER applies unchanged too: it is set on the
+  // line after `transtoflat`, which ends on a fade that blocks.
+  await s.waitFor(() => s.actorOwner("csea") === "helping", "the plant to be handed over");
   // -- the six settings, again -----------------------------------------------
   // And they really do have to be set again, which is a fact about the SAVE
   // rather than about the plant: the twelve plant globals have no record in the
