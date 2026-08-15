@@ -368,7 +368,7 @@ export class Scheduler {
     const dist = Math.max(1, Math.floor(Math.hypot(dx, dy, dz)));
     // The facing is a TARGET, not an assignment, and the pose is not ours to set
     // — see the turn phase in serviceWalks and the endturn it ends on.
-    this.walks.set(a.member.name, {
+    this.walks.set(name.toLowerCase(), {
       sx: a.worldX, sy: a.worldY, sz: a.worldZ,
       dx, dy, dz, dist, progress: 0, paused: false, arriveStar,
       turnTo: bearing(dx, dy),
@@ -386,8 +386,11 @@ export class Scheduler {
    * progress, so this seeds both.
    *
    * Keyed on the actor's own name rather than their cast member's, which is what
-   * `serviceWalks` looks back up — the two differ for an `actorinstance`, and the
-   * crowd (`ani1a2` and friends) is nothing but instances.
+   * `serviceWalks` looks back up — the two differ for an `actorinstance` (the
+   * instance shares its source's member object), and the crowd (`ani1a2` and
+   * friends) is nothing but instances. The start functions key the same way
+   * since #212; they used to file an instance's walk under its SOURCE, so the
+   * mover stepped the wrong character and `iswalk(instance)` answered false.
    */
   restoreWalk(
     name: string,
@@ -466,7 +469,7 @@ export class Scheduler {
     a.worldX = first.x;
     a.worldY = first.y;
     a.worldZ = first.z;
-    this.walks.set(a.member.name, {
+    this.walks.set(name.toLowerCase(), {
       sx: first.x, sy: first.y, sz: first.z,
       dx: 0, dy: 0, dz: 0,
       dist: Math.max(1, Math.floor(cum)), progress: 0, paused: false, arriveStar,
@@ -524,11 +527,11 @@ export class Scheduler {
     // started without stopping the idle first) the old outright set is the
     // conservative answer: it cannot cancel a journey, and no script waits on
     // `iswalk` for a turn issued during a walk.
-    if (this.walks.has(a.member.name)) {
+    if (this.walks.has(name.toLowerCase())) {
       a.deg = target;
       return;
     }
-    this.walks.set(a.member.name, {
+    this.walks.set(name.toLowerCase(), {
       sx: a.worldX, sy: a.worldY, sz: a.worldZ,
       dx: 0, dy: 0, dz: 0,
       // 1, not 0: the mover divides by it. With no deltas the first movement pass

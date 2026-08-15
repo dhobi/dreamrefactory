@@ -3555,6 +3555,50 @@ test("actorinstance: a copy is placed and idles like the member it came from", a
 }
 );
 
+/**
+ * A walk started on an actorinstance belongs to the INSTANCE (#212).
+ *
+ * The start functions used to key the walks table on `a.member.name` — the
+ * SOURCE cast member for an instance, since `instance()` shares the source's
+ * member object — so `stok10`'s turn was filed under `stok1`: the mover stepped
+ * the wrong character's facing, `iswalk("stok10")` answered false while the
+ * walk ran, and `stopWalk("stok10")` missed the record. The crowd is nothing
+ * but instances and `extraidle` turns them constantly, so this fired routinely;
+ * and since #191 the writer persists the table, so the mis-key outlived the
+ * session. `restoreWalk` was already keyed right — its docblock said so — which
+ * is what made the start functions the odd ones out.
+ */
+test("a walk started on an actorinstance is the instance's, not its source's (#212)", async () => {
+  const { session } = await newHost();
+  session.interp.globals.set("mission", 1);
+  await session.openSetFile("boil.set");
+  await drain();
+  for (let i = 0; i < 20; i++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
+  const ten = session.actorRuntime.get("stok10")!;
+  const one = session.actorRuntime.get("stok1")!;
+  session.scheduler.pauseLoop("actor", "stok10", true);
+  session.scheduler.pauseLoop("actor", "stok1", true);
+  const srcDeg = one.deg;
+  const target = (ten.deg + 128) & 0xff;
+  session.scheduler.startTurn("stok10", target);
+  expect(session.scheduler.isWalk("stok10"), "the record is filed under the instance").toBe(true);
+  expect(session.scheduler.isWalk("stok1"), "and not under its source member").toBe(false);
+  for (let i = 0; i < 20 && session.scheduler.turning("stok10"); i++) session.tickTime((clock += 50));
+  expect(ten.deg, "the instance turned").toBe(target);
+  expect(one.deg, "the source did not").toBe(srcDeg);
+  expect(session.scheduler.isWalk("stok10"), "and the turn ended").toBe(false);
+  // the walk starter files the same way, and stopWalk through the instance's
+  // own name reaches the record
+  session.scheduler.startWalk("stok10", ten.worldX + 500, ten.worldY, ten.worldZ);
+  expect(session.scheduler.isWalk("stok10"), "the walk is the instance's").toBe(true);
+  expect(session.scheduler.isWalk("stok1"), "not the source's").toBe(false);
+  session.scheduler.stopWalk("stok10");
+  expect(session.scheduler.isWalk("stok10"), "and stopWalk reaches it").toBe(false);
+});
+
 // --- the crowd's names come out of its star, one character at a time --------
 // `extra.cst`'s setupactor takes a crowd star apart by POSITION:
 //
