@@ -56,11 +56,21 @@ writes:
   ([#186](https://github.com/dhobi/taoot-web/issues/186)).
 
 - the **scheduler**: the live `makeloop` and `makecricket` tables, written over the
-  base's own (mid-count, so a loop reloads with the ticks it had left). The walks
-  table is **zeroed** — the port does not serialize a walk in flight, and it says
-  which character it left standing instead. Note the asymmetry: a walk in a
-  SHIPPED save is now resumed on the way in (step 11 below), but one of ours is
-  still not written on the way out.
+  base's own (mid-count, so a loop reloads with the ticks it had left), and the
+  **walks** table with them ([#191](https://github.com/dhobi/taoot-web/issues/191)).
+  A walk in flight is written as the record TI.EXE's own mover reads — the origin,
+  the deltas it *subtracts*, the distance, the progress and the arrival star — and a
+  `walkonpath` **appends a container** for its waypoints, one per type-3 slot in slot
+  order, with `+0x12` set non-zero to say it has one. That is the one thing a patch
+  writes that does not fit a slot the base already has; the base's own payloads are
+  dropped with it, because they belong to the base's moment. Measured over the corpus,
+  the walks table is the last container in all 109 shipped saves bar the 3 that carry
+  a payload, so this only ever appends past the end.
+
+  The round trip used to be **asymmetric** — a walk in a shipped save was resumed on
+  the way in (step 11 below) and one of ours was lost on the way out, so saving
+  mid-conversation-approach reloaded to a character parked where they happened to be.
+  Both halves are ours, which is why nothing in the port noticed.
 - the **theme** that is playing, written into the track state
   ([the track containers](../formats/savegame.md#the-track-containers-what-was-playing)),
   not into `savetheme` — which is a different thing and lags the file in 91 of the
@@ -231,8 +241,9 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
 7. **Put the cast back, wholesale.** The live actor list is wiped first —
    `actorinstance` copies removed, cast members put down — because the original
    replaces its list with the container it read, and then every record is applied:
-   owner and value, set, star, pose, position, facing, speed, `actorscale`, zclip
-   and `actorvisible`, straight out of [the actor record](#the-actor-record). A
+   owner and value, set, star, pose, position, facing, speed, `actorturn`,
+   `actorscale`, zclip and `actorvisible`, straight out of
+   [the actor record](#the-actor-record). A
    record naming somebody who is not a live actor is a **crowd extra**, re-instanced
    from its cast member by the names' own convention (`brown1a1` ← `brown1`,
    `stok4` ← `stok1`, `life12` ← `life1`).
@@ -319,6 +330,23 @@ each is a real fact about the game's scripts:
   runs `stdactor` and then overrides the stoker with 9000, and arriving in the boiler
   room re-placed him properly. The record has carried the field all along, at +42,
   and it carries the overrides too, so the derivation *and* its exception are gone.
+- **`actorturn` was in the record and nobody carried it.** Only a script ever sets it
+  — every room passes `stdturn` from its own `openset`, and a load runs none — so a
+  restored character kept the runtime's `0` and turned at `stepDeg`'s floor of 1
+  instead of 10. A half-circle went from 13 service passes to 128, which is most
+  visible in `walktopuppet`: the conversation waits on `iswalk`, so an approach became
+  seconds of somebody rotating on the spot before a word was said. The field is at
+  +32 and takes exactly two values over the 3465 shipped records — **16**, the
+  engine's default at creation (every record that names no set, and 51 placed ones no
+  room ever set), and **10**, `stdturn`, for the other 2207 placed ones — so it is
+  restored verbatim rather than re-derived: the file already knows which one a
+  character had. The runtime's own creation default is 16 for the same reason — the
+  port used to start actors at 0, so a save carried a value no shipped record has,
+  and the crowd extras (`setupgroup` instances no room ever passes `stdturn`) turned
+  at the floor rate in play, which the recorded playthrough traces had faithfully
+  memorized as if it were the game. Found while writing the walks table
+  ([#191](https://github.com/dhobi/taoot-web/issues/191)), being the same shape of gap
+  as the crowd and the open banks.
 
 **Prop and actor ownership also had to be restored twice — before the `initall` as
 well as after it.** `initall` ran the room's own `openset`, and those scripts read
@@ -341,10 +369,12 @@ much smaller than this page claimed three times over:
   exactly that three times: first about `actorowner`, then about `actorvalue` — both
   times the field was there and *we* were reading the record 80 bytes out of position
   — and then about the crowd extras and the scheduler's own tables, which were in the
-  file too, in containers nobody had mapped yet. The residue that is genuinely left is
-  a walk in flight (the actor's position is restored, their walk is not) and the
+  file too, in containers nobody had mapped yet. The open-bank list was the fourth
+  ([#199](https://github.com/dhobi/taoot-web/issues/199)), and the walk in flight was
+  the fifth — its record was in the file all along, and the writer's half of it
+  ([#191](https://github.com/dhobi/taoot-web/issues/191)) needed the format to grow a
+  container rather than fill a slot. The residue that is genuinely left is the
   positional sound loops beyond the theme, which the room re-arms on the next move.
-  The open-bank list was the fourth ([#199](https://github.com/dhobi/taoot-web/issues/199)).
 
   What it used to cost is worth keeping as the worked example.
   [#86](https://github.com/dhobi/taoot-web/issues/86): the engine room passes Vlad
@@ -410,6 +440,7 @@ Each accessor then reads its own field out of that copy (buffer at `esp+8`;
 | +0 | i16 | `actorvisible` (>0 is visible) | `0x40eec0` |
 | +24 | i16 | `actordeg`, 0..255 | `0x40e850` |
 | +26/+28/+30 | i16 | `actorxyz` 1/2/3 — the SET's own X, Z, Y order | `0x40f285/97/a9` |
+| +32 | i16 | `actorturn` — degrees per pass while turning (10 = `stdturn`, 16 the default) | `0x410937` |
 | +38 | i16 | `actorspeed` | `0x40ead0` |
 | +42 | i16 | `actorscale` (1000 neutral; 0 places but never draws) | `0x40ea40` |
 | +72 | i32 | `actorvalue` | `0x410be0` |
