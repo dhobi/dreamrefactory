@@ -33,7 +33,16 @@ export class ActorInstance {
   scale = 0;
   zclip = 0;
   speed = 0;
-  turn = 0;
+  /**
+   * `actorturn` — degrees of facing per service pass while turning. 16, not 0:
+   * it is TI.EXE's creation default, measured over the save corpus (the field
+   * takes exactly two values across all 3465 shipped actor records — 16 for
+   * every record no room ever set, 10 where a room passed `stdturn`), and the
+   * save writer dumps this field verbatim, so a 0 here would put a value in our
+   * saves that no shipped record has — and one TI.EXE's turn stepper, which has
+   * no floor, would spin on forever (#191 review).
+   */
+  turn = 16;
   /**
    * Free-form script storage, and "none" until a script puts something there.
    *

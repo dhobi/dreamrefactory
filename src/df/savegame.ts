@@ -94,6 +94,7 @@ const PROP_FIELDS = {
  *     +26  i16  actorxyz(1)    (0x40f285) — X
  *     +28  i16  actorxyz(2)    (0x40f297) — Z in the SET's file order
  *     +30  i16  actorxyz(3)    (0x40f2a9) — Y
+ *     +32  i16  actorturn      (0x410937) — degrees per pass while turning
  *     +38  i16  actorspeed     (0x40ead0, `esp+0x2e`)
  *     +72  i32  actorvalue     (0x410be0, `esp+0x50`)
  *     +76  i16  actorzclip     (0x410c70, `esp+0x54`)
@@ -156,6 +157,25 @@ const ACTOR_PLACEMENT = {
   y: ACTOR_RECORD_OFF + 28,
   z: ACTOR_RECORD_OFF + 30,
   speed: ACTOR_RECORD_OFF + 38,
+  /**
+   * `actorturn` (0x410937) — degrees of facing per service pass while turning.
+   *
+   * Only a SCRIPT ever sets this (it is an accessor and nothing else writes it),
+   * and a load runs no `openset` to set it again (#143) — so a restored actor
+   * used to keep the runtime's own `0`, and `stepDeg`'s floor of 1 turned every
+   * character at a tenth of their proper rate for the rest of the session. The
+   * turn is sub-second in the original and several seconds long that way, which
+   * is most visible in `walktopuppet`: the conversation waits on `iswalk`, so the
+   * character stands there rotating before anyone speaks.
+   *
+   * The field takes exactly two values over the 3465 shipped records, and they
+   * separate cleanly: **16** is the engine's default at creation (every one of
+   * the 1207 records that names no set, plus 51 placed ones no room ever set),
+   * and **10** is `stdturn`, which is what every room passes and what the other
+   * 2207 placed records hold. So this is restored verbatim rather than defaulted
+   * to `stdturn` — the file already knows which of the two a character had.
+   */
+  turn: ACTOR_RECORD_OFF + 32,
   /**
    * `actorscale` — confirmed three ways: the accessor (0x40ea40 reads
    * `[esp+0x32]` of a buffer at esp+8 → record+42), the value distribution
@@ -464,7 +484,11 @@ export interface SavedWalk {
   /** 0 = a `turntodeg` with no mover, 1 = a straight line, 3 = an authored route */
   type: number;
   /** an authored route's waypoints hang off +0x12, in a payload container of
-   *  their own — see {@link path}, which is that container decoded */
+   *  their own — see {@link path}, which is that container decoded. The
+   *  DECODER's report, and only that: the writer derives the payload decision
+   *  from {@link type} and {@link path} and never reads this field, so the rule
+   *  "payload ⇔ type 3" has one owner (a type-3 patch without waypoints is
+   *  dropped through onDrop, not written as a shape no shipped save has). */
   hasPayload: boolean;
   paused: boolean;
   /** the facing to reach before moving; negative once the turn is done */
@@ -575,6 +599,9 @@ export interface SavedActor {
     deg: number;
     /** `actorspeed` — world units per service pass. */
     speed: number;
+    /** `actorturn` (+32) — degrees of facing per pass while turning; 10 is
+     *  `stdturn`, 16 the engine's default before a room sets one. */
+    turn: number;
     /** `actorscale` (+42) — 1000 neutral; 0 places correctly but never draws. */
     scale: number;
     /** `actorzclip`. */
@@ -925,6 +952,7 @@ function actorRecordAt(d: Uint8Array, o: number): SavedActor | null {
       y: num(ACTOR_PLACEMENT.y),
       z: num(ACTOR_PLACEMENT.z),
       speed: num(ACTOR_PLACEMENT.speed),
+      turn: num(ACTOR_PLACEMENT.turn),
       scale: num(ACTOR_PLACEMENT.scale),
       zclip: num(ACTOR_PLACEMENT.zclip),
     },
@@ -1045,6 +1073,46 @@ const LOOPS_SIZE = 32 * 42;
 const CRICKETS_SIZE = 16 * 74;
 const WALKS_SIZE = 16 * 110;
 
+/**
+ * One 110-byte walk slot's field offsets — the record TI.EXE's mover reads
+ * (0x443E7C), shared by {@link decodeWalks} and the writer in {@link applyPatch}
+ * the way {@link ACTOR_PLACEMENT} and PROP_FIELDS are, so an offset correction
+ * is one edit and the round trip cannot fall out of step for a field the
+ * 16-slot corpus happens not to exercise. See {@link SavedWalk} for what each
+ * field means and which mover writes it.
+ */
+const WALK_SLOT = {
+  active: 0x00, // u16
+  paused: 0x02, // u16
+  type: 0x04, // i16 — which mover: 0 turn, 1 line, 3 route
+  turnTo: 0x08, // i16 — facing target; -1 once the turn is done
+  deg: 0x0a, // i16 — the walk's own copy of the facing
+  x: 0x0c, // i16 ×3 — the origin
+  y: 0x0e,
+  z: 0x10,
+  payload: 0x12, // u32 — waypoint container handle, non-zero = has one
+  progress: 0x16, // i32
+  dx: 0x1a, // i32 ×3 — the deltas the mover SUBTRACTS
+  dy: 0x1e,
+  dz: 0x22,
+  dist: 0x26, // i32 — only the line mover writes it
+  actor: 0x2e, // pstr
+  star: 0x3e, // pstr — the arrival star
+} as const;
+
+/**
+ * What a walk slot's `+0x12` gets when it has a waypoint payload.
+ *
+ * The shipped values are DOS heap addresses TI.EXE allocated (0xa6b4b0,
+ * 0xa6c1f0, 0xa6d820 — one per shipped route), and they are not a pointer this
+ * writer has to forge: the loader at 0x4149bd reads the NEXT container and
+ * stores the new handle straight back over this word, so the field is a flag
+ * that says "I have one" and the container ORDER is what matches payloads to
+ * slots. This is one of the real ones, kept so a save we write is shaped like a
+ * save TI.EXE wrote.
+ */
+const WALK_PATH_HANDLE = 0xa6b4b0;
+
 /** Locate the loops table: the 1344/1184/1760 container triple (present, in
  * this order, in every shipped save — the writer emits them unconditionally). */
 function findSchedulerIndex(raw: RawSaveFile): number {
@@ -1126,6 +1194,62 @@ function decodeWalkPath(d: Uint8Array): SavedWalk["path"] {
 }
 
 /**
+ * Build one type-3 walk's waypoint payload — {@link decodeWalkPath} backwards.
+ *
+ * The container is written at its exact size (20 + 8n): the shipped ones are
+ * raw allocations and two of the three are exactly that, the third trailing a
+ * row of slack, and the count is what bounds the read in either engine.
+ *
+ * The block is the SAME structure as the set file's authored path (see
+ * `readStarPath` in src/df/set.ts) — the runtime copy `walkonpath` makes of it,
+ * points snapped to the live stars, reversed when the walker starts from the
+ * `b` end, leg lengths and total recomputed to match. So the two header fields
+ * past the count are the authored container's: `+4` is 0 in every authored path
+ * and every shipped payload, and **`+12..+19` is the path's bounding box** —
+ * (Zmin, Xmin, Zmax, Xmax) in the set file's axis naming, which in this
+ * decoder's terms is (min y, min x, max y, max x). TI.EXE copies the box
+ * verbatim and never updates it when it snaps or reverses the points, which is
+ * why the shipped boxes fit their AUTHORED polylines exactly (checked against
+ * `ga.1→ga.2` and `hack1→hack2` in the set files, byte-identical at +12) and
+ * miss the runtime ones by the width of the snap.
+ *
+ * This writer computes the box over the points it is writing — exact where the
+ * original's is stale. Nothing reads it on a resume: the mover's position
+ * function (0x444d70, the payload's only reader once a walk is in flight) reads
+ * the total, the count and the points, never +4 or the box; the box serves the
+ * path LOOKUP at `walkonpath` start, which queries the set's own registry and
+ * never a save's payload. Written right anyway, because now it can be.
+ */
+function encodeWalkPath(path: NonNullable<SavedWalk["path"]>): Uint8Array {
+  const d = new Uint8Array(20 + path.length * 8);
+  const dv = new DataView(d.buffer);
+  dv.setUint32(8, path.length, true);
+  dv.setInt16(12, clampI16(Math.min(...path.map((p) => p.y))), true);
+  dv.setInt16(14, clampI16(Math.min(...path.map((p) => p.x))), true);
+  dv.setInt16(16, clampI16(Math.max(...path.map((p) => p.y))), true);
+  dv.setInt16(18, clampI16(Math.max(...path.map((p) => p.x))), true);
+  let prev = 0;
+  let total = 0;
+  for (const [i, p] of path.entries()) {
+    const o = 20 + i * 8;
+    dv.setInt16(o, clampI16(p.x), true);
+    dv.setInt16(o + 2, clampI16(p.y), true);
+    dv.setInt16(o + 4, clampI16(p.z), true);
+    // each point stores its distance from the one BEFORE it (the first's is 0)
+    const leg = Math.min(0xffff, Math.max(0, (p.cum - prev) | 0));
+    dv.setUint16(o + 6, leg, true);
+    prev = p.cum;
+    total += leg;
+  }
+  // the total is the SUM OF THE LEGS AS WRITTEN, not the last cum as given:
+  // decodeWalkPath (and, one has to assume, the original's own pacing) holds the
+  // header to the legs' running sum, so a clamp that fired above must land in
+  // the total too or the payload comes back unreadable from our own file
+  dv.setUint32(0, total, true);
+  return d;
+}
+
+/**
  * Decode the active walk slots (see {@link SavedWalk}).
  *
  * `payloads` are the containers that follow the walks table, which the writer
@@ -1136,14 +1260,17 @@ function decodeWalks(d: Uint8Array, payloads: Uint8Array[]): SavedWalk[] {
   const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
   const out: SavedWalk[] = [];
   for (let s = 0; s + 110 <= d.length; s += 110) {
-    if (dv.getUint16(s, true) === 0) continue;
-    const actor = pstrField(d, s + 0x2e);
+    if (dv.getUint16(s + WALK_SLOT.active, true) === 0) continue;
+    const actor = pstrField(d, s + WALK_SLOT.actor);
     if (!actor) continue;
-    const type = dv.getInt16(s + 4, true);
-    const path = dv.getUint32(s + 0x12, true) !== 0 ? decodeWalkPath(payloads.shift() ?? new Uint8Array()) : undefined;
-    const startX = dv.getInt16(s + 0x0c, true);
-    const startY = dv.getInt16(s + 0x0e, true);
-    const startZ = dv.getInt16(s + 0x10, true);
+    const type = dv.getInt16(s + WALK_SLOT.type, true);
+    const path =
+      dv.getUint32(s + WALK_SLOT.payload, true) !== 0
+        ? decodeWalkPath(payloads.shift() ?? new Uint8Array())
+        : undefined;
+    const startX = dv.getInt16(s + WALK_SLOT.x, true);
+    const startY = dv.getInt16(s + WALK_SLOT.y, true);
+    const startZ = dv.getInt16(s + WALK_SLOT.z, true);
     // ONLY the straight-line mover writes the movement words. A turn has no
     // mover at all, and a route keeps its total length in its own payload
     // container — both leave whatever the slot held last, which is how `hack`'s
@@ -1152,19 +1279,19 @@ function decodeWalks(d: Uint8Array, payloads: Uint8Array[]): SavedWalk[] {
     out.push({
       actor: actor.toLowerCase(),
       type,
-      hasPayload: dv.getUint32(s + 0x12, true) !== 0,
-      paused: dv.getUint16(s + 2, true) !== 0,
-      turnTo: dv.getInt16(s + 8, true),
-      deg: dv.getInt16(s + 0x0a, true),
+      hasPayload: dv.getUint32(s + WALK_SLOT.payload, true) !== 0,
+      paused: dv.getUint16(s + WALK_SLOT.paused, true) !== 0,
+      turnTo: dv.getInt16(s + WALK_SLOT.turnTo, true),
+      deg: dv.getInt16(s + WALK_SLOT.deg, true),
       startX, startY, startZ,
-      destX: moves ? startX - dv.getInt32(s + 0x1a, true) : startX,
-      destY: moves ? startY - dv.getInt32(s + 0x1e, true) : startY,
-      destZ: moves ? startZ - dv.getInt32(s + 0x22, true) : startZ,
+      destX: moves ? startX - dv.getInt32(s + WALK_SLOT.dx, true) : startX,
+      destY: moves ? startY - dv.getInt32(s + WALK_SLOT.dy, true) : startY,
+      destZ: moves ? startZ - dv.getInt32(s + WALK_SLOT.dz, true) : startZ,
       // a route's progress IS written (it is the one movement word the path
       // mover keeps in the record); its length comes from the payload header
-      progress: moves || path ? dv.getInt32(s + 0x16, true) : 0,
-      dist: path ? path[path.length - 1].cum : moves ? dv.getInt32(s + 0x26, true) : 0,
-      star: pstrField(d, s + 0x3e) ?? "",
+      progress: moves || path ? dv.getInt32(s + WALK_SLOT.progress, true) : 0,
+      dist: path ? path[path.length - 1].cum : moves ? dv.getInt32(s + WALK_SLOT.dist, true) : 0,
+      star: pstrField(d, s + WALK_SLOT.star) ?? "",
       path,
     });
   }
@@ -1448,14 +1575,27 @@ export interface SavePatch {
   actors?: SavedActorPatch[];
   /**
    * The live scheduler, written over the base's three service tables (they are
-   * fixed-size — 32×42 / 16×74 / 16×110 — so this never changes a container's
-   * length). The walks table is ZEROED: the port does not serialize mid-flight
-   * walks, and an active base slot would otherwise make the original loader read
-   * the slot's payload container, which is the previous save's moment. Any base
-   * payload containers become unreferenced trailing data, which the loader never
-   * reads.
+   * fixed-size — 32×42 / 16×74 / 16×110 — so writing them never changes a
+   * container's length).
+   *
+   * `walks` is the one table that can grow the FILE, because a `walkonpath`
+   * keeps its waypoints in a payload container of its own (see
+   * {@link SavedWalk} and docs/formats/savegame.md). Each type-3 slot appends
+   * one, in SLOT ORDER, and the slot's `+0x12` is set non-zero to say it has
+   * one — the loader (0x4149bd) reads the next container and stores the new
+   * handle back over the old, so the value is a flag and the ORDER is what
+   * carries the meaning. The base's own payloads are ALWAYS dropped, walks
+   * passed or not: they belong to the base's moment, and leaving them would
+   * hand a new save's slot the previous one's route. Measured over the corpus,
+   * the walks table is the last container in all 109 shipped saves except the
+   * 3 that carry a payload, so this only ever appends past the end.
+   *
+   * Omitted (`walks` undefined) or empty, the table is ZEROED — the two spell
+   * the same thing and write the same bytes: no walk is in flight. That is what
+   * this did for every caller before #191, minus the base tails, which no
+   * zeroed slot can reach anyway.
    */
-  scheduler?: { loops: SavedLoop[]; crickets: SavedCricket[] };
+  scheduler?: { loops: SavedLoop[]; crickets: SavedCricket[]; walks?: SavedWalk[] };
   /**
    * The playing theme with its bank's loop table, or null for a room scored
    * silent. Written by emptying every track's playing/looping arrays (their
@@ -2029,6 +2169,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
         put(off + ACTOR_PLACEMENT.y, clampI16(p.y));
         put(off + ACTOR_PLACEMENT.z, clampI16(p.z));
         put(off + ACTOR_PLACEMENT.speed, clampI16(p.speed));
+        put(off + ACTOR_PLACEMENT.turn, clampI16(p.turn));
         put(off + ACTOR_PLACEMENT.scale, clampI16(p.scale));
         put(off + ACTOR_PLACEMENT.zclip, clampI16(p.zclip));
       }
@@ -2079,9 +2220,69 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
         writePstrField(crickets, s + 0x3a, c.name);
       }
       containers[si + 1].data = crickets;
-      // walks zeroed — see {@link SavePatch.scheduler}. Any payload containers
-      // the base carried become unreferenced tails the loader never reads.
-      containers[si + 2].data = new Uint8Array(WALKS_SIZE);
+      const walks = new Uint8Array(WALKS_SIZE);
+      const wdv = new DataView(walks.buffer);
+      const payloads: Uint8Array[] = [];
+      let slot = 0;
+      for (const w of patch.scheduler.walks ?? []) {
+        // the table is 16 fixed slots, and a walk past them is LOST, not queued —
+        // say so, the way every other unwritable item here is said (#191 review:
+        // the corpus itself shows 12 concurrent turns in one save, so a crowded
+        // room can genuinely reach the wall)
+        if (slot >= 16) {
+          patch.onDrop?.(`walk(${w.actor})`, "the walks table holds 16 slots");
+          continue;
+        }
+        if (w.actor.length > 15 || w.star.length > 15) {
+          patch.onDrop?.(`walk(${w.actor})`, "actor or arrival star not representable");
+          continue;
+        }
+        // a route without its waypoints is a slot claiming the path mover with
+        // nothing behind it — a shape no shipped save has (hasPayload ⇔ type 3
+        // across the corpus) and neither loader is specified for. The caller's
+        // hasPayload is not consulted: it is the DECODER's report, and this is
+        // the one place the rule is enforced (#191 review).
+        const path = w.type === 3 ? w.path : undefined;
+        if (w.type === 3 && (!path || path.length < 2)) {
+          patch.onDrop?.(`walk(${w.actor})`, "a route with no waypoints");
+          continue;
+        }
+        const s = slot++ * 110;
+        wdv.setUint16(s + WALK_SLOT.active, 1, true);
+        wdv.setUint16(s + WALK_SLOT.paused, w.paused ? 1 : 0, true);
+        wdv.setInt16(s + WALK_SLOT.type, w.type, true);
+        // the facing TARGET, and -1 once the turn is done — which is what all
+        // three shipped routes carry, and what the loader reads back as "no turn"
+        wdv.setInt16(s + WALK_SLOT.turnTo, w.turnTo, true);
+        wdv.setInt16(s + WALK_SLOT.deg, w.deg & 0xff, true);
+        wdv.setInt16(s + WALK_SLOT.x, clampI16(w.startX), true);
+        wdv.setInt16(s + WALK_SLOT.y, clampI16(w.startY), true);
+        wdv.setInt16(s + WALK_SLOT.z, clampI16(w.startZ), true);
+        wdv.setInt32(s + WALK_SLOT.progress, w.progress | 0, true);
+        // the deltas are SUBTRACTED — `pos = start - delta * progress / dist`
+        // (see {@link SavedWalk}) — so what goes in the record is start - dest,
+        // and a caller holding dest - start has the sign the mover does not
+        wdv.setInt32(s + WALK_SLOT.dx, (w.startX - w.destX) | 0, true);
+        wdv.setInt32(s + WALK_SLOT.dy, (w.startY - w.destY) | 0, true);
+        wdv.setInt32(s + WALK_SLOT.dz, (w.startZ - w.destZ) | 0, true);
+        wdv.setInt32(s + WALK_SLOT.dist, w.dist | 0, true);
+        writePstrField(walks, s + WALK_SLOT.actor, w.actor);
+        writePstrField(walks, s + WALK_SLOT.star, w.star);
+        // a route's waypoints go in a container of their own, and +0x12 says so
+        if (path) {
+          wdv.setUint32(s + WALK_SLOT.payload, WALK_PATH_HANDLE, true);
+          payloads.push(encodeWalkPath(path));
+        }
+      }
+      containers[si + 2].data = walks;
+      // The payloads follow the walks table, one per type-3 slot in slot order —
+      // and the base's own payloads go UNCONDITIONALLY, walks passed or not:
+      // they belong to the base's moment (dropping them is the whole reason the
+      // table used to be zeroed, see {@link SavePatch.scheduler}), the zeroed
+      // table references none, and one behaviour means `walks: []` and an
+      // omitted `walks` produce the same bytes (#191 review).
+      containers.length = si + 3;
+      for (const p of payloads) containers.push({ id: containers.length, data: p });
     }
   }
 

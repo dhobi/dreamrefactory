@@ -1490,7 +1490,7 @@ test("a save at Scene109 reloads with Vlad standing there, and drawn", async () 
       name: "vlad", owner: "none", value: 0,
       placement: {
         visible: true, set: "engine", star: "vlad1", pose: "stand",
-        x: 2359, y: 8106, z: 4143, deg: 2, speed: 30, scale: 5500, zclip: 32,
+        x: 2359, y: 8106, z: 4143, deg: 2, speed: 30, turn: 10, scale: 5500, zclip: 32,
       },
     }],
   });
@@ -2194,6 +2194,342 @@ test("an authored route resumes on its waypoints, not on the straight line", asy
     expect([a.worldX, a.worldY, a.worldZ], `${r.actor} arrives`).toEqual([end.x, end.y, end.z]);
     expect(a.starName, `${r.actor} lands on its star`).toBe(r.star);
   }
+});
+
+/**
+ * `actorturn` is in the record, and a load has to carry it.
+ *
+ * Nothing but a script ever sets it — it is an accessor, and every room passes
+ * `stdturn` from its own `openset` — and a load runs no `openset` (#143). So a
+ * restored character kept the runtime's `0` and turned at `stepDeg`'s floor of 1
+ * instead of 10: a half-circle went from 13 service passes to 128. It is most
+ * visible in `walktopuppet`, which waits on `iswalk` before anyone speaks, so the
+ * approach became seconds of a character rotating on the spot.
+ *
+ * Found while writing the walks table (#191) and fixed with it, being the same
+ * family as the crowd (#186) and the open banks (#199): state that `openset` used
+ * to re-derive, in the file all along, in a field nobody had carried across.
+ *
+ * The census is what says +32 is this field and not something else: over the 3465
+ * shipped records it takes exactly TWO values, and they separate on whether the
+ * record was ever placed.
+ */
+test("a load restores actorturn, and a restored character turns at speed", async () => {
+  // the corpus census — two values, splitting on placement
+  const hist = new Map<string, number>();
+  for (const path of allSaves()) {
+    for (const a of parseSave(new Uint8Array(readFileSync(path))).actors) {
+      hist.set(`${a.placement.turn}/${a.placement.set ? "placed" : "unplaced"}`,
+        (hist.get(`${a.placement.turn}/${a.placement.set ? "placed" : "unplaced"}`) ?? 0) + 1);
+    }
+  }
+  // 16 is the engine's default at creation, 10 is `stdturn` — and NOTHING else
+  expect([...hist].sort()).toEqual([["10/placed", 2207], ["16/placed", 51], ["16/unplaced", 1207]]);
+
+  const { session } = await newHost();
+  await drain();
+  expect(await session.loadGame(new Uint8Array(readFileSync(savePath("2", "05 - Talking with Max.ti"))))).toBe(true);
+  const max = session.actorRuntime.get("max")!;
+  expect(max.turn, "restored from the record, not left at 0").toBe(10);
+
+  // and it is the rate the turn actually runs at: measured, the facing steps
+  // exactly 10 a tick and a half-circle lands on the 14th (the documented 128/10
+  // = 13 turning passes, after a first tick that arms rather than steps). At the
+  // old floor of 1 it took 128 of them, so 20 is a bound that passes now and
+  // could not have before — his idle silenced meanwhile, since `maxidle` re-aims
+  // him at the camera on its own period.
+  session.scheduler.pauseLoop("actor", "max", true);
+  const target = (max.deg + 128) & 0xff;
+  session.scheduler.startTurn("max", target);
+  let clock = 0;
+  let ticks = 0;
+  for (; ticks < 20 && session.scheduler.turning("max"); ticks++) session.tickTime((clock += 50));
+  expect(session.scheduler.turning("max"), "the half-circle lands").toBe(false);
+  expect(ticks, "in 13 turning passes, not 128").toBe(14);
+  expect(max.deg).toBe(target);
+
+  // and our own writer carries it back out
+  expect(parseSave(session.snapshotSave()!).actors.find((a) => a.name === "max")!.placement.turn).toBe(10);
+});
+
+// ---- the writer's half of the walks table (#191) ---------------------------
+
+/**
+ * The round trip was ASYMMETRIC, and this is the census that says it no longer
+ * is.
+ *
+ * #189 taught the loader to resume a walk; the writer still zeroed the table, so
+ * a walk taken in one of OUR saves was lost — load save 17 and Daisy finishes
+ * crossing the Grand Staircase, save that same moment through our own writer and
+ * reload, and she is standing still. It shows the moment a player saves
+ * mid-conversation-approach, because `walktopuppet` is a walk and it is how most
+ * characters reach you.
+ *
+ * Every live slot in the corpus is written back and read again: 16 of them
+ * across 12 saves, all three shapes (12 turns, one line, three routes), which is
+ * the same census the decoder's own test above pins. Re-writing the file's own
+ * walks is the strongest claim available without running TI.EXE — the expected
+ * bytes are the ones the original wrote.
+ */
+test("applyPatch writes every walk shape back, and the whole corpus round-trips", () => {
+  let saves = 0;
+  const byType = new Map<number, number>();
+  for (const path of allSaves()) {
+    const save = parseSave(new Uint8Array(readFileSync(path)));
+    if (!save.walks.length) continue;
+    saves++;
+    for (const w of save.walks) byType.set(w.type, (byType.get(w.type) ?? 0) + 1);
+    const out = applyPatch(save.raw, {
+      numGlobals: save.numGlobals,
+      set: save.set, scene: save.scene, view: save.view,
+      scheduler: { loops: save.loops, crickets: save.crickets, walks: save.walks },
+    });
+    expect.soft(parseSave(out).walks, path).toEqual(save.walks);
+  }
+  expect(saves).toBe(12);
+  expect([...byType].sort()).toEqual([[0, 12], [1, 1], [3, 3]]);
+});
+
+/**
+ * The structural half: a route's waypoints are a CONTAINER, and appending one is
+ * the thing `applyPatch` had never had to do for the scheduler tables.
+ *
+ * Everything else a patch writes fits a slot the base already has. A live walk
+ * does not — so the payloads are appended past the walks table, one per type-3
+ * slot IN SLOT ORDER, which is the only thing that matches a payload to its
+ * slot (the loader at 0x4149bd reads them in sequence and stores each new handle
+ * back over `+0x12`). Measured over the corpus, the walks table is the last
+ * container in all 109 shipped saves bar the 3 carrying a payload, so this only
+ * ever appends past the end.
+ *
+ * The base here is 2/05, which HAS a payload — `ga`'s ten-point curve — and it
+ * must not survive into a new save's moment. That is what the zeroing was
+ * protecting against and what the writer now has to handle itself.
+ */
+test("applyPatch appends one waypoint container per route, in slot order (#191)", () => {
+  const save = parseSave(new Uint8Array(readFileSync(savePath("2", "05 - Talking with Max.ti"))));
+  const base = save.raw.containers.length;
+  const route = (actor: string, star: string, pts: { x: number; y: number; z: number; cum: number }[]) => ({
+    actor, star, type: 3, hasPayload: true, paused: false, turnTo: -1, deg: 0,
+    startX: pts[0].x, startY: pts[0].y, startZ: pts[0].z,
+    destX: pts[0].x, destY: pts[0].y, destZ: pts[0].z,
+    progress: 10, dist: pts[pts.length - 1].cum, path: pts,
+  });
+  const two = [
+    route("max", "max1", [{ x: 10, y: 20, z: 30, cum: 0 }, { x: 110, y: 20, z: 30, cum: 100 }]),
+    route("ga", "ga.2", [{ x: 1, y: 2, z: 3, cum: 0 }, { x: 4, y: 5, z: 6, cum: 7 }, { x: 8, y: 9, z: 10, cum: 20 }]),
+  ];
+  const raw = readSaveFile(applyPatch(save.raw, {
+    numGlobals: save.numGlobals, set: save.set, scene: save.scene, view: save.view,
+    scheduler: { loops: save.loops, crickets: save.crickets, walks: two },
+  }));
+  // the base's own payload is GONE — one appended per route, not three
+  expect(raw.containers.length).toBe(base + 1);
+  // exact sizes: 20 bytes of header, then 8 per waypoint
+  expect(raw.containers.slice(-2).map((c) => c.data.length)).toEqual([20 + 2 * 8, 20 + 3 * 8]);
+  // the header past the count is the authored path structure's: +4 zero, and
+  // +12 the bounding box — (Zmin, Xmin, Zmax, Xmax) in the set file's naming,
+  // (min y, min x, max y, max x) in the decoder's — computed over the points.
+  // TI.EXE copies an authored box verbatim and never updates it, which is how
+  // the field went unidentified: the shipped payloads' boxes fit their authored
+  // polylines, not their snapped runtime ones (see encodeWalkPath).
+  const box = (c: { data: Uint8Array }) => {
+    const dv = new DataView(c.data.buffer, c.data.byteOffset);
+    return [dv.getUint32(4, true), dv.getInt16(12, true), dv.getInt16(14, true), dv.getInt16(16, true), dv.getInt16(18, true)];
+  };
+  expect(box(raw.containers[base - 1])).toEqual([0, 20, 10, 20, 110]);
+  expect(box(raw.containers[base])).toEqual([0, 2, 1, 9, 8]);
+  // ids stay the index, which is what every one of the 109 shipped saves holds
+  raw.containers.forEach((c, i) => expect.soft(c.id, `container ${i}`).toBe(i));
+  // and they come back paired with the slots that own them, in order
+  const re = parseSave(writeSaveFile(raw));
+  expect(re.walks.map((w) => w.actor)).toEqual(["max", "ga"]);
+  expect(re.walks.map((w) => w.path?.length)).toEqual([2, 3]);
+  expect(re.walks[1].path).toEqual(two[1].path);
+
+  // a patch with NO walks still zeroes, and drops the base's stale payload the
+  // same way a patch WITH walks does — one behaviour, so `walks: []` and an
+  // omitted `walks` cannot produce different bytes for the same meaning
+  const quietRaw = readSaveFile(applyPatch(save.raw, {
+    numGlobals: save.numGlobals, set: save.set, scene: save.scene, view: save.view,
+    scheduler: { loops: save.loops, crickets: save.crickets },
+  }));
+  expect(parseSave(writeSaveFile(quietRaw)).walks).toEqual([]);
+  expect(quietRaw.containers.length).toBe(base - 1); // ga's stale payload is gone
+
+  // a lost walk is SAID, whatever loses it: the 17th of a 16-slot table, and a
+  // route claiming the path mover with no waypoints behind it (a shape no
+  // shipped save has — the census pins hasPayload ⇔ type 3) — both drop through
+  // onDrop the way every other unwritable item does (#191 review)
+  const dropped: string[] = [];
+  const turn = (i: number) => ({
+    actor: `t${i}`, star: "spot", type: 0, hasPayload: false, paused: false,
+    turnTo: 1, deg: 0, startX: 0, startY: 0, startZ: 0, destX: 0, destY: 0, destZ: 0,
+    progress: 0, dist: 0,
+  });
+  const over = parseSave(applyPatch(save.raw, {
+    numGlobals: save.numGlobals, set: save.set, scene: save.scene, view: save.view,
+    scheduler: {
+      loops: [], crickets: [],
+      walks: [...Array.from({ length: 17 }, (_, i) => turn(i)), { ...turn(99), type: 3, path: undefined }],
+    },
+    onDrop: (n, why) => dropped.push(`${n}: ${why}`),
+  }));
+  expect(over.walks.length).toBe(16);
+  expect(dropped).toContain("walk(t16): the walks table holds 16 slots");
+  expect(dropped).toContain("walk(t99): the walks table holds 16 slots");
+  const malformed = parseSave(applyPatch(save.raw, {
+    numGlobals: save.numGlobals, set: save.set, scene: save.scene, view: save.view,
+    scheduler: { loops: [], crickets: [], walks: [{ ...turn(0), type: 3, path: undefined }] },
+    onDrop: (n, why) => dropped.push(`${n}: ${why}`),
+  }));
+  expect(malformed.walks).toEqual([]);
+  expect(dropped).toContain("walk(t0): a route with no waypoints");
+});
+
+/**
+ * The full circle, which is the bug as a player meets it: save mid-walk in the
+ * port, reload, and the walker is still walking.
+ *
+ * Both shapes that move, because they fail differently — a straight line lives
+ * entirely in the 110-byte record, and a route's length is not even in it. The
+ * position after the reload has to be the position before it (not the start of
+ * the walk, which is what a re-issued `walktostar` would give), and the walker
+ * has to still arrive.
+ *
+ * NOT verified here: that TI.EXE reads what we write. Our own suite passing
+ * proves only that we agree with ourselves, and a slot with a payload handle is
+ * exactly the shape that took five DosBox fatals to get right for the shipped
+ * saves — see the issue.
+ */
+test("a walk saved by our own writer resumes — the round trip is symmetric (#191)", async () => {
+  const { session, logs } = await newHost();
+  await drain();
+  let clock = 0;
+  const cases = [
+    { file: ["1", "17 - Looking up GQC for Daisy.ti"], actor: "cash", star: "cash1", type: 1, points: undefined },
+    { file: ["2", "05 - Talking with Max.ti"], actor: "ga", star: "ga.2", type: 3, points: 10 },
+  ] as const;
+  for (const c of cases) {
+    const shipped = new Uint8Array(readFileSync(savePath(c.file[0], c.file[1])));
+    expect(await session.loadGame(shipped)).toBe(true);
+    // WALK ON FIRST, so the moment being saved is not the base's own.
+    //
+    // The base a snapshot patches is the save that was loaded, and these two
+    // both carry the walk already — so a writer that did nothing at all would
+    // leak the base's slot through and pass every assertion below. Twenty
+    // passes puts the walker somewhere the base does not know about, which is
+    // what makes the position check bite.
+    for (let i = 0; i < 20; i++) session.tickTime((clock += 50));
+    const before = session.actorRuntime.get(c.actor)!;
+    const at = [before.worldX, before.worldY, before.worldZ];
+    expect(session.scheduler.isWalk(c.actor), `${c.actor} is still under way`).toBe(true);
+    const wasAt = parseSave(shipped).walks.find((x) => x.actor === c.actor)!.progress;
+
+    // the save OUR writer takes of that moment
+    const mine = session.snapshotSave();
+    expect(mine, `${c.actor}: a save was written`).toBeTruthy();
+    const w = parseSave(mine!).walks.find((x) => x.actor === c.actor);
+    expect(w, `${c.actor}: the walk is in the file`).toBeTruthy();
+    expect(w!.type, `${c.actor} type`).toBe(c.type);
+    expect(w!.star, `${c.actor} star`).toBe(c.star);
+    expect(w!.path?.length, `${c.actor} waypoints`).toBe(c.points);
+    // OUR moment, not the base's
+    expect(w!.progress, `${c.actor} progress moved on`).toBeGreaterThan(wasAt);
+
+    logs.length = 0;
+    expect(await session.loadGame(mine!)).toBe(true);
+    const after = session.actorRuntime.get(c.actor)!;
+    expect(session.scheduler.isWalk(c.actor), `${c.actor} is still walking`).toBe(true);
+    expect([after.worldX, after.worldY, after.worldZ], `${c.actor} from where saved`).toEqual(at);
+    expect(logs.some((l) => new RegExp(`${c.actor} was saved walking to "${c.star}" — resuming it`).test(l))).toBe(true);
+
+    // and she still gets there — the bound is `hack`'s worst case from the
+    // route test above, a route being as long as the author drew it
+    for (let i = 0; i < 2000 && session.scheduler.isWalk(c.actor); i++) session.tickTime((clock += 50));
+    expect(session.scheduler.isWalk(c.actor), `${c.actor} arrives`).toBe(false);
+    expect(after.starName, `${c.actor} lands on its star`).toBe(c.star);
+  }
+});
+
+/**
+ * A TURN in flight survives too, which is the shape the issue is actually about.
+ *
+ * 12 of the 16 live slots in the corpus are type 0, because `walktopuppet`
+ * (gang.cst 0001) opens with one and it is how most characters reach you:
+ *
+ *     turntodeg (who, calcdeg (actorxyz (who, 4), cameraxyz (4)))
+ *     while iswalk (who)  forceupdate ()  endwhile
+ *     runpuppet (pupname, pupmessage)
+ *
+ * A turn is a walk to `iswalk` (it tests the slot's occupied flag and its actor
+ * name, never the mode — see `Scheduler.turning`), so a save taken inside that
+ * `while` used to reload with the record gone and the conversation's own wait
+ * already over.
+ *
+ * Started here rather than loaded from a shipped save, which makes it the one
+ * case that cannot be vacuous: no base save carries a turn for this actor, so
+ * every byte read back is one this writer put there. A turn is also sub-second —
+ * `stdturn` is 10 for every set in TAOOT — so the window is a few passes wide and
+ * the save has to catch it mid-flight.
+ */
+test("a turn in flight survives our own save, and still lands (#191)", async () => {
+  const { session } = await newHost();
+  await drain();
+  // 2/05, where `max` is standing idle — `startTurn` refuses to record over a
+  // walk already in flight (one slot per actor is all there is, so a turn taken
+  // over a journey would discard its destination), so a base whose own table
+  // already holds one for him would quietly keep ITS turn and test nothing
+  expect(await session.loadGame(new Uint8Array(readFileSync(savePath("2", "05 - Talking with Max.ti"))))).toBe(true);
+  expect(session.scheduler.isWalk("max"), "max is standing to begin with").toBe(false);
+  const max = session.actorRuntime.get("max")!;
+  // silence his idle for the moment being saved, exactly as `walktopuppet` does:
+  // `maxidle` re-aims him at the camera on its own period, and a turn issued over
+  // one already in flight sets the facing outright rather than recording it (see
+  // `startTurn`), so an unpaused idle makes the pre-save state a race
+  session.scheduler.pauseLoop("actor", "max", true);
+  // half a circle from where he stands, which is 128/10 = 13 passes of turning
+  const target = (max.deg + 128) & 0xff;
+  session.scheduler.startTurn("max", target);
+  let clock = 0;
+  for (let i = 0; i < 3; i++) session.tickTime((clock += 50));
+  expect(session.scheduler.turning("max"), "caught mid-turn").toBe(true);
+  const facing = max.deg;
+  expect(facing, "and it has turned some of the way").not.toBe(target);
+
+  const w = parseSave(session.snapshotSave()!).walks.find((x) => x.actor === "max");
+  expect(w, "the turn is in the file").toBeTruthy();
+  // type 0 is the turn, and the target is the field a turn is FOR
+  expect(w!.type).toBe(0);
+  expect(w!.turnTo).toBe(target);
+  expect(w!.hasPayload, "a turn has no waypoints").toBe(false);
+  // the CURRENT star, not "": TI.EXE's turn builder copies the actor's own star
+  // into +0x3e ("a turn does not change where anyone is going"), all 12 shipped
+  // type-0 slots carry one, and its arrival sets `actorstar` from the field —
+  // an empty one would be a shape no save TI.EXE ever wrote (#191 review)
+  expect(w!.star).toBe(max.starName);
+  expect(w!.star).not.toBe("");
+
+  expect(await session.loadGame(session.snapshotSave()!)).toBe(true);
+  const re = session.actorRuntime.get("max")!;
+  expect(session.scheduler.turning("max"), "still turning after the reload").toBe(true);
+  expect(re.deg, "from the facing it had reached").toBe(facing);
+
+  // ...and it finishes the turn it was saved in the middle of. His idle has to be
+  // silenced again to see that, and for a reason worth stating: a load restores
+  // the loop table with every loop RUNNING, because a paused one is not a field
+  // the record has — so `maxidle` comes back armed and re-aims him at the camera
+  // on its own period, which is the room working and not the turn failing. Pause
+  // it and what is left is the restored record, which lands where it was going.
+  session.scheduler.pauseLoop("actor", "max", true);
+  // 20 ticks, DELIBERATELY tight: the record's `actorturn` is 10, so the
+  // half-circle lands inside 14 — while a load that dropped the field back to
+  // the runtime default would take ~13 at 16, and one that zeroed it would
+  // treadmill at `stepDeg`'s floor of 1 for 128. The tight bound is what makes
+  // this fail if the actorturn restore (the sibling test below) ever regresses.
+  for (let i = 0; i < 20 && session.scheduler.turning("max"); i++) session.tickTime((clock += 50));
+  expect(session.scheduler.turning("max"), "the turn ends").toBe(false);
+  expect(re.deg, "on the target it was saved heading for").toBe(target);
 });
 
 test("the open-cast-file list decodes, and it is what the rooms with a crowd need", () => {

@@ -23,6 +23,7 @@ import {
   SavedActorPatch,
   SavedProp,
   SavedPropPatch,
+  SavedWalk,
   SaveGame,
   SavePatch,
   ThemePatch,
@@ -65,12 +66,6 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
     if (typeof val === "number") numGlobals.set(name, val);
     else if (typeof val === "string") strGlobals.set(name, val);
   }
-  // A walk in flight is not serialized (the original appends the walk's path as
-  // a payload container; this writer zeroes the walk table instead) — the
-  // actor's position is written, and their idle re-decides after the load.
-  for (const name of session.scheduler.walks.keys()) {
-    session.onLog(`savegame: ${name} is mid-walk — the walk is not saved, their position is`);
-  }
   const dropped: string[] = [];
   const bytes = applyPatch(base, {
     numGlobals,
@@ -100,6 +95,7 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
         jitter: c.jitter,
         next: c.count,
       })),
+      walks: walkSnapshot(session),
     },
     theme: themeSnapshot(session),
     onDrop: (name, why) => dropped.push(`${name} (${why})`),
@@ -109,15 +105,16 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
   // load in the original engine (see poolIntern). So say what did not fit
   // instead of leaving it to be discovered as a global that "doesn't persist".
   //
-  // And say it about the GLOBALS, not about the save: the file is written and is
+  // And say it about the ITEMS, not about the save: the file is written and is
   // perfectly loadable, and "savegame: not written" read as though it were not
   // (#85 — "it says not written, but the save appears to have saved
-  // successfully"). What is lost is those variables, which keep the base's value.
+  // successfully"). What becomes of a dropped item differs by kind — a global
+  // keeps the base's value, a dropped walk is simply absent (#191) — so the
+  // per-item reason is the message and the sentence claims nothing more.
   if (dropped.length) {
     session.onLog(
       `savegame: written, but ${dropped.length} ` +
-        `item${dropped.length === 1 ? "" : "s"} did not fit the base save ` +
-        `and keep the base's value — ${dropped.join(", ")}`,
+        `item${dropped.length === 1 ? "" : "s"} could not be carried — ${dropped.join(", ")}`,
     );
   }
   return bytes;
@@ -172,11 +169,65 @@ function themeSnapshot(session: GameSession): ThemePatch | null {
 }
 
 /**
+ * The walks table: every walk in flight, as the record TI.EXE's mover reads
+ * (#191).
+ *
+ * This used to be a log line saying the walk was lost. The loader half arrived
+ * first (#189) — a shipped save that catches someone mid-stride puts them back
+ * on their own route — so the round trip was asymmetric: load save 17 and Daisy
+ * finishes crossing the Grand Staircase, save that same moment through our own
+ * writer and reload, and she is standing still. It shows the moment a player
+ * saves mid-conversation-approach, because `walktopuppet` is a walk and it is
+ * how most characters reach you.
+ *
+ * Three shapes, and the TYPE is which mover the original selects: a `turntodeg`
+ * is 0 (a facing target and no movement at all), a straight line is 1, and an
+ * authored `walkonpath` is 3 and carries its waypoints in a payload container.
+ *
+ * Two sign conventions have to be crossed here. The mover SUBTRACTS its deltas,
+ * so the record's destination is `start - delta` while the scheduler holds
+ * `dest - start`; applyPatch takes destinations and does that flip itself. And
+ * `turnTo` is a number in the record where the scheduler has an absent one, -1
+ * being what all three shipped routes carry for a turn already finished.
+ */
+function walkSnapshot(session: GameSession): SavedWalk[] {
+  const out: SavedWalk[] = [];
+  for (const [name, w] of session.scheduler.walks) {
+    const a = session.actorRuntime.get(name);
+    const path = w.path?.map((p) => ({ ...p }));
+    const type = w.turnOnly ? 0 : path && path.length > 1 ? 3 : 1;
+    out.push({
+      actor: name,
+      type,
+      hasPayload: type === 3,
+      paused: w.paused,
+      turnTo: w.turnTo ?? -1,
+      // the walk's own copy of the facing, which the record carries at +0x0a;
+      // the actor's is the live one and the walk is stepping it
+      deg: a?.deg ?? 0,
+      startX: w.sx, startY: w.sy, startZ: w.sz,
+      destX: w.sx + w.dx, destY: w.sy + w.dy, destZ: w.sz + w.dz,
+      progress: Math.round(w.progress),
+      dist: w.dist,
+      // A TURN has no arrival, so the scheduler holds no star for one — but the
+      // record does: TI.EXE's turn builder (0x443550) copies the actor's CURRENT
+      // star into +0x3e, "so a turn does not change where anyone is going", and
+      // all 12 shipped type-0 slots carry one. An empty star here would be a
+      // shape no save TI.EXE ever wrote, and its arrival path sets `actorstar`
+      // from the field unconditionally (#191 review).
+      star: w.arriveStar ?? (w.turnOnly ? a?.starName ?? "" : ""),
+      path,
+    });
+  }
+  return out;
+}
+
+/**
  * Every loaded actor's record, both halves: `actorowner` and `actorvalue` (the
  * story state the characters themselves carry — the Purser's errand ladder,
  * Morrow's wireless-room permission, each idle's "have we spoken" gate), and
- * WHERE they stand — set, star, pose, xyz, deg, speed, scale, zclip and
- * `actorvisible`. The load puts all of it back from the file instead of
+ * WHERE they stand — set, star, pose, xyz, deg, speed, `actorturn`, scale, zclip
+ * and `actorvisible`. The load puts all of it back from the file instead of
  * re-running each room's `initactors`/`openset` (#86, #143).
  *
  * The CROWD is included. `setupgroup` makes the deck extras per room from
@@ -202,7 +253,7 @@ function actorSnapshot(session: GameSession): SavedActorPatch[] {
         star: a.starName.toLowerCase(),
         pose: a.poseName.toLowerCase(),
         x: a.worldX, y: a.worldY, z: a.worldZ,
-        deg: a.deg, speed: a.speed, scale: a.scale, zclip: a.zclip,
+        deg: a.deg, speed: a.speed, turn: a.turn, scale: a.scale, zclip: a.zclip,
       },
     });
   }
@@ -502,6 +553,12 @@ function restoreActors(session: GameSession, actors: SavedActor[]): void {
     a.worldZ = p.z;
     a.deg = p.deg & 0xff;
     if (p.speed) a.speed = p.speed;
+    // `actorturn`, guarded the way `speed` is: only a script ever sets it and a
+    // load runs no `openset` to set it again, so without this every restored
+    // character turned at `stepDeg`'s floor of 1 instead of the 10 the file
+    // records — a sub-second turn stretched to several seconds, and a
+    // `walktopuppet` approach spent them rotating before anyone spoke.
+    if (p.turn) a.turn = p.turn;
     a.zclip = p.zclip;
     a.visible = p.visible;
     if (p.scale > 0) a.scale = p.scale;

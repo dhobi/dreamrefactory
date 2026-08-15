@@ -211,7 +211,7 @@ of that copy, which is how the rest is mapped — the buffer is at `esp+8`, or
 | +18 | i16 | **placed flag** — 1 iff the record names a set (2258/2258 vs 0/1207): assigned a place at least once, and `putdownactor` hides without clearing it | the corpus |
 | +24 | i16 | `actordeg`, 0..255 | `0x40e850` |
 | +26 / +28 / +30 | i16 | `actorxyz` 1/2/3 — the SET's own X, Z, Y order | `0x40f285/97/a9` |
-| +32 | i16 | **`actorturn`** — degrees per service pass while turning (`stdturn` = 10) | `0x410937` |
+| +32 | i16 | **`actorturn`** — degrees per service pass while turning. Exactly two values over the 3465 records: **16** (the engine's default at creation — every record naming no set, plus 51 placed ones) and **10** (`stdturn`, the other 2207 placed). Carried by the port since [#191](https://github.com/dhobi/taoot-web/issues/191); before that a load left it 0 and every restored character turned ten times too slowly | `0x410937` |
 | +34 | i16 | current **step** within the pose (the walk cycle's frame; < the count at +36 in 2959 of 3101) | the corpus |
 | +36 | i16 | **step count** of the current pose, cached (stand = 1, the gang's walk = 20 — matches the CST pose tables) | the CST files |
 | +38 | i16 | `actorspeed` | `0x40ead0` |
@@ -746,10 +746,22 @@ payload container** after the walks table:
 | Offset | Type | Field |
 |-------:|------|-------|
 | +0 | u32 | total path length |
-| +4 | u32 | *(unread)* |
+| +4 | u32 | *(unread; 0 in every authored path and every shipped payload)* |
 | +8 | u32 | **waypoint count** |
-| +12 | 8 bytes | the current segment |
+| +12 | 4 × i16 | the path's **bounding box** — (Zmin, Xmin, Zmax, Xmax), see below |
 | +20… | count × 8 | waypoints: i16 x, y, z, u16 segment length |
+
+The block is the set file's **authored path structure**, verbatim — the same
+`{total, 0, count, bbox, points}` that `readStarPath` (src/df/set.ts) reads out
+of a star record's path container. `walkonpath` COPIES the authored block and
+adjusts the points: snapped to the live stars' positions, reversed when the
+walker starts from the `b` end (2/33's `hack` walks his authored path
+backwards), legs and total recomputed to match. **The box is copied unchanged**,
+which is why the shipped payloads' boxes fit their authored polylines exactly —
+byte-identical at +12 with `deckbd`'s `ga.1→ga.2` and `scot3`'s `hack1→hack2` —
+and miss their own runtime points by the width of the snap. It reads as noise
+until the two files are put side by side; this page called it "the current
+segment" for as long as they weren't.
 
 The container is the raw allocation, so a row or two of slack trails it. The
 loader (`0x4149bd`) `memcpy`s the walks table back and then, for each active
@@ -778,10 +790,42 @@ cannot be put back is **dropped and its walker stood up** — an actor steps
 through its pose's play script whether a walk is running or not, so a drop that
 left the walk pose alone leaves a character treadmilling.
 
-Symmetrically, the port's own saves **zero the walks table**, because a base slot
-left active would send the original's loader looking for a payload container that
-belongs to the previous save's moment. So a walk survives a shipped save and not
-one of ours — the asymmetry is deliberate and logged, not an oversight.
+**The port writes one too** ([#191](https://github.com/dhobi/taoot-web/issues/191)).
+It used to zero the walks table instead, because a base slot left active would send
+the original's loader looking for a payload container belonging to the previous
+save's moment — correct for as long as we wrote nothing, and an asymmetry a player
+met the moment they saved mid-conversation-approach (`walktopuppet` is a walk, and
+it is how most characters reach you).
+
+What writing one takes, beyond filling the slot:
+
+- **The payload is appended**, one per type-3 slot, in slot order — the order being
+  the only thing that matches a payload to its slot. This is the single field a save
+  patch writes that does not fit a slot the base already has; every other one does.
+  The base's own payloads are dropped rather than left as tails, which is what the
+  zeroing was protecting against.
+- **`+0x12` is a flag, not a pointer to forge.** The shipped values are DOS heap
+  addresses TI.EXE allocated (`0xa6b4b0`, `0xa6c1f0`, `0xa6d820`), and the loader
+  stores its own handle back over the word, so any non-zero value does. The port
+  writes one of the real ones, so a save it writes is shaped like a save TI.EXE wrote.
+- **Every header field is written with its meaning, including the box.** `+4` is 0
+  everywhere. `+12` is the bounding box above; the port computes it over the points
+  it writes — exact where TI.EXE's own copy is stale. And the box is provably inert
+  on a resume: the mover's position function (`0x444d70`, reached from the walk
+  service's type-3 branch at `0x443f14`) reads the total, the count and the
+  waypoints, and never touches `+4` or `+12` — in either of its branches, mid-path
+  interpolation or arrival. The box serves the path lookup at `walkonpath` START,
+  which queries the set's own registry, never a save's payload.
+
+All 16 live slots across the 12 shipped saves that have one are written back and read
+again unchanged — all three shapes. That is the strongest claim available without
+running the original: the expected bytes are the ones TI.EXE wrote. It is not the
+same as TI.EXE reading ours — **which DosBox has now said**: one save per shape,
+written by this writer mid-flight and opened in TI.EXE — `cash` mid-`walktostar` on
+the Grand Staircase, `ga` mid-`walkonpath` across the boat deck (the appended
+waypoint container, box and all — the shape the shipped-save writer's five DosBox
+fatals said to fear), `max` mid-`turntodeg` — and all three resumed and finished
+their walks in the original engine (#191).
 
 ## The track containers: what was playing
 
