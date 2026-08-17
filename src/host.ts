@@ -671,21 +671,36 @@ export class GameHost {
   }
 
   /**
+   * The theme's share of the cold-boot mix, 0..255.
+   *
+   * A field rather than a constant because one page wants it off: the speedrun
+   * workbench plays the same twenty seconds of a room a hundred times over while
+   * a route is tuned, and the music is the part of that which stops being
+   * atmosphere and starts being a drill. Set before {@link coldBoot}; the boot
+   * itself assigns `themevolume = 255` on the way through, so this is applied
+   * after it, which is what {@link startAtHalfMix} is for.
+   *
+   * The SFX and voice channels are untouched — a route reads the game by its
+   * sounds (a door, a line ending) as much as by its picture.
+   */
+  themeMix = 128;
+
+  /**
    * Start a cold boot at a 50% mix, whichever edition is booting.
    *
-   * Theme via themevolume (128/255 ≈ 0.5, which setupsound's themevol()
-   * re-applies), sampled sound/voice via the channel gains, with the 0..9 wave
-   * dial parked mid so the settings panel reads back ~half. Both callers set it
-   * BEFORE the music can start — which for the full game is before the room
-   * opens, and for an edition that starts on a menu stage is before its own
-   * `boot()` runs.
+   * Theme via themevolume ({@link themeMix}/255 ≈ 0.5, which setupsound's
+   * themevol() re-applies), sampled sound/voice via the channel gains, with the
+   * 0..9 wave dial parked mid so the settings panel reads back ~half. Both
+   * callers set it BEFORE the music can start — which for the full game is
+   * before the room opens, and for an edition that starts on a menu stage is
+   * before its own `boot()` runs.
    */
   private startAtHalfMix(): void {
-    this.session.interp.globals.set("themevolume", 128);
+    this.session.interp.globals.set("themevolume", this.themeMix);
     this.session.waveVolume = 5;
     // the theme through the session, so a script reading `themevol(track)` back
     // sees the half mix rather than the untouched 255 default
-    this.session.setThemeVolume(128);
+    this.session.setThemeVolume(this.themeMix);
     for (const ch of ["sound", "voice"] as const) {
       this.session.audio.setChannelVolume(ch, 0.5);
     }

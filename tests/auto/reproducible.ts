@@ -107,6 +107,27 @@ const WALL_CLOCK = /\b(setTimeout|setInterval|Date\.now|performance\.now|new Dat
  *   about the browser; nothing in the game waits on it, and the engine steps on
  *   through either way.
  */
+/**
+ * Directories under `src/` that are not the engine and are not held to its rules.
+ *
+ * `src/speedrun/` is the speedrun harness — a parser, a driver and a run loop
+ * that play the game through real input and TIME it. Reading the wall clock is
+ * not a leak there, it is the entire job: a speedrun's headline number is
+ * seconds, its per-action budgets are real-world timeouts, and `performance.now`
+ * is how both are taken. Nothing in it is reachable from the engine, no golden is
+ * compared against anything it produces, and the run it drives is deliberately
+ * unseeded — so the determinism this file protects is not a property it has or
+ * needs.
+ *
+ * It lives under `src/` rather than `tests/` for one reason: the in-page
+ * workbench (`/speedrun/`) is part of the built site and cannot import from the
+ * test tree. That is a packaging fact, not a claim that it is engine code.
+ *
+ * The engine's own reproducibility is untouched by this exemption — the rule
+ * still covers every file the game actually runs.
+ */
+const NOT_THE_ENGINE = new Set(["speedrun"]);
+
 const CLOCK_ALLOWED = new Set([
   "main.ts",
   "host.ts",
@@ -114,6 +135,21 @@ const CLOCK_ALLOWED = new Set([
   "save-seed.ts",
   "booklet.ts",
   "bug-report.ts",
+  // The workbench page and its editor — the same exemption as `src/speedrun/`
+  // above and for the same reason, but they are files rather than a directory
+  // because they are entry points: `speedrun/index.html` loads them by name.
+  // What they read the clock for is a resume record stamped so a stale one
+  // cannot make the page run itself, and a poll waiting for the game to come
+  // back up after a reload. Neither is reachable from the engine.
+  "speedrun-page.ts",
+  "speedrun-editor.ts",
+  // The workbench's input display, for a third reason of its own: what it times
+  // is how long a key stays LIT, and that has to be the wall clock precisely
+  // because it is not part of the game. A flash paced on `session.clock` would
+  // freeze mid-glow whenever the run paused, stopped or sat on a modal — the
+  // states someone stares at the display hardest in. It draws nothing the engine
+  // reads and holds nothing the engine waits for.
+  "speedrun-inputs.ts",
 ]);
 
 /**
@@ -127,8 +163,10 @@ const OFF_STREAM_RANDOM = /\bMath\.random\s*\(/;
 function* walk(dir: string): Generator<string> {
   for (const e of readdirSync(dir)) {
     const p = join(dir, e);
-    if (statSync(p).isDirectory()) yield* walk(p);
-    else if (p.endsWith(".ts")) yield p;
+    if (statSync(p).isDirectory()) {
+      if (NOT_THE_ENGINE.has(e)) continue;
+      yield* walk(p);
+    } else if (p.endsWith(".ts")) yield p;
   }
 }
 

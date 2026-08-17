@@ -232,6 +232,167 @@ CLI verification tool (dump structure + frames as PNG):
 npm run dump -- gamefiles/en/titanic2/DATA/b59.set out/
 ```
 
+### The speedrun
+
+`tests/speedrun/` is not a test and gates nothing. It plays the game against
+the clock, and it is driven by a **sheet** — one action per line, in text, so a
+route is tuned by editing data rather than TypeScript:
+
+```
+npm run dev
+npm run speedrun                 # run it, print the splits
+npm run speedrun:watch           # the same run in a real window, not slowed down
+npm run speedrun:lint            # parse the sheet and say nothing else
+npm run speedrun -- --verbs      # every verb a sheet may use
+```
+
+The route lives in [`tests/speedrun/run.sheet.txt`](tests/speedrun/run.sheet.txt):
+
+```
+skipMovie(until: awaiting)      # hammer ESC, but never at a movie that is ASKING
+closeUp(memory, by: esc)        # click it; the points are banked before the film
+left(x3)                       # View14 -> View18 -> View13 -> View17
+talk(purser[1,3,5])            # open a conversation and answer it by bevel id
+mapJump(gstair3, deck: b)       # the deck plan, as literal clicks
+wait(global.phase == 1, budget: 60000)
+split(flat scored)             # a stopwatch split; does nothing to the game
+```
+
+Every action is a call. Positional arguments first, then named ones; `xN` inside
+the brackets repeats it; `#` comments to the end of the line and `;` separates
+actions on one line. A value that needs a comma of its own is quoted
+(`wait(js == "a, b")`).
+
+Two things separate it from `tests/browser/playthrough.ts`, which stays exactly
+as it is and remains the diff target for the headless oracle. First, the waits:
+the browser suite pays a flat grace before every settle and then waits for full
+quiescence, because a gesture landing a frame early is a divergence it would
+have to explain. A speedrun compares nothing, so each action waits on the
+minimum precondition instead (`wait=none|taken|ready|quiet`), and clicks are
+buffered against the engine's own event queue rather than serialised.
+
+Second, and the reason it is careful rather than merely fast: **keys are not
+buffered across a fade.** `SetViewer.keyDown` queues on `movingCamera` but
+refuses on `inputLocked`, and the two differ by exactly `session.fading` — a
+press in that gap is silently discarded (the long note on `pressNav` in
+`src/viewer.ts`). Pressing earlier than anything else ever has means meeting
+that gap constantly, so every key is gated, and `left`/`right`/`up` confirm the
+standpoint actually changed and press again if it did not.
+
+The run is **human-legal**: every gesture is a real Playwright mouse or keyboard
+event at the canvas, nothing writes to the engine, `framerate()` is untouched and
+no fade is collapsed. The one concession is the seed, so that the smokestack
+draws the same maze each time and two runs are comparable; `--noseed` opts out
+and the report says which it was.
+
+The report gives wall clock *and* `session.frameCounter`. Tune against frames —
+they are immune to machine load — and quote the seconds.
+
+**The workbench.** `/speedrun/` is an unlisted page — nothing links to it, it is
+not in the top bar, it carries `noindex` — that puts an editor under the game:
+write a sheet, press Play, watch it play, read which line broke. It is the play
+page duplicated rather than the play page reused, because the two are meant to
+diverge; the workbench has no need of the memory or picture options, and it skips
+the Nightdive film (`<meta name="skip-intro">`) because it is reloaded to get a
+clean game far more often than it is opened to play one.
+
+It shares the parser, the action table and the run loop with the CLI
+(`src/speedrun/`), so a sheet cannot mean one thing there and another here. What
+differs is only delivery: the CLI drives real OS-level input over Playwright,
+while the page synthesizes `PointerEvent`/`KeyboardEvent` against the canvas.
+`main.ts` never asks `isTrusted`, so the engine cannot tell — but the synthetic
+path skips the browser's real input pipeline, so **the page is a previewer and
+the CLI is the clock of record**. Measured over the boot and the London flat the
+two agree to within 1% on engine frames (216 against 218) and about 6% on wall
+clock, which is the useful way round: same game, slightly different stopwatch.
+
+`pause()` is a breakpoint: the run stops and the pointer lands on the line
+*after* it, because a breakpoint you cannot get past is a deadlock rather than a
+tool. The CLI has nobody to press Resume, so it steps over one with a note —
+which is what makes it safe to leave breakpoints in a sheet while a leg is being
+worked on and still time the whole thing under `npm run speedrun`.
+
+The workbench booted with the **music off** for a while (`<meta
+name="mute-theme">`, applied as the cold boot's theme mix) on the grounds that the
+same twenty seconds of a room play a hundred times over while a route is tuned.
+It plays the music now: a run is read by its sound as much as by its picture, and
+the theme is part of knowing where you are. The tag still works if you want it
+back — one line in `speedrun/index.html`'s head.
+
+**Record mode** is the other half of writing one. Arm it and every key and click
+you make at the game is written into the sheet at the caret, one action per line:
+`left()`, `space()`, `key(e)`, and a click as `click(memory)` when the engine's
+own hit test can name what was under it or `clickAt(x, y)` when it cannot — the
+same division the hand-written sheet makes, because a movie region has no name to
+aim at. It watches and never intercepts: capture-phase listeners, no
+`preventDefault`, so the game plays exactly as it would with record off. A run's
+own gestures are filtered out by `isTrusted`, the one bit script cannot forge, so
+pressing Play while armed does not fill the sheet with a copy of itself; and
+typing in the editor is filtered by the engine's own `focusOwnsKey`, so writing a
+sheet is not recorded as playing one.
+
+Where the next action lands is held by the page rather than read off the caret,
+and that is not a refinement — recording means clicking on the game, clicking on
+the game blurs the textarea, and a blurred textarea has no caret. The offset is
+advanced by exactly what was inserted and re-adopted from the caret whenever the
+editor is actually touched, so "put the cursor there and record into it" still
+works. A red band marks it, for the same reason: the thing it replaces is
+invisible for the whole of a recording session.
+
+**The sheet is a program, and the pointer is where it is.** Sheets are the
+user's — several of them, named, kept in localStorage, autosaved — because a
+route gets tried three ways and a leg gets pulled out to be worked on alone, and
+with one box those are the same box. The **execution pointer** says where Play
+would start; Pause leaves it, Stop and reaching the end put it back to the top,
+and a failure leaves it on the line that broke so a fix can be retried from
+itself. It is a LINE and not an index into a parse, so it survives the editing
+that goes on between runs.
+
+**Checkpoints.** A run sheet is tuned a leg at a time, and nobody debugging the
+walk to the gym wants to replay the London flat and four minutes of crossing
+first. `save(m1p1)` writes a checkpoint — the engine's own `.ti`, through
+`snapshotSave`/`loadSavedGame`, not a parallel mechanism — and the workbench puts
+a chip on the row above the editor for every checkpoint that exists: click the
+name to restore that game AND move the pointer to the line after its `save()`,
+the ✕ to forget it. The list comes off storage rather than off the sheet, so a
+`save()` that has just run shows up without a reload and a point made from a
+scratch sheet is not hidden.
+
+`reset()` is the same idea for the earliest state there is — the beginning,
+which needs no `save()` to exist. It is a reload, because only a reload is
+honestly a cold boot (re-running `coldBoot` over a played game would leave that
+game's globals, cast, open shops and scheduler tables underneath), and it is
+idempotent: on a page that has just loaded it does nothing, so it costs a
+replayable sheet nothing to open with it. The workbench shows it as a chip
+beside the checkpoints and the CLI simply reloads the page mid-run.
+
+That pairing is why a checkpoint is the only jump the page allows. The game's
+state and the pointer are one fact: a pointer you could drop anywhere would let
+you run a sheet from a place the game was never brought to, and the run that
+followed would be nonsense that takes an expert to recognise.
+
+`save()` settles before it snapshots, and that is the verb's correctness rather
+than a nicety — `snapshotSave` reads the live engine at the instant it is called,
+so a save taken one action after a click whose script is still running records a
+game that had taken the bag but not yet been given it. Measured, saving at the
+same point with and without the settle and reloading each: `held=[trunkkey,bag,map]`
+either way carried, `held=[map]` loaded without it.
+
+Times measured from a checkpoint are not run times, and the reason is in the
+file format: a `.ti`'s variable table is fixed-size so globals that do not fit
+are dropped, `actorvalue` has no record at all, and the room is rebuilt by
+re-running its own `openset`/`openscene` at the restored progress. Faithful —
+the original reloads the same way — but a game reached by loading is not the game
+a player would be standing in. Route with it, time with the full sheet. Measured:
+reloading at `m1p0` comes back in c73's Scene49/View52, the set's rebuilt
+opening, rather than the Scene51/View63 the save was taken in; and the watch
+comes back owned by nobody.
+
+The pathfinding verbs (`travel`, `hunt`, `stand`) exist only in the CLI — they
+run the real `Navigator`, which parses `.SET` files off disk. The page says so
+rather than pretending. That is no great loss: all three are escape hatches that
+print the literal gestures they used precisely so a sheet can stop needing them.
+
 ## Releases
 
 The version is `version` in `package.json` — **0.9.17**, semver, shown in the top

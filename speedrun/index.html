@@ -1,0 +1,1492 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Speedrun — Titanic - Adventure Out Of Time RE</title>
+    <!-- Unlisted on purpose: nothing links here, it is not in the top bar, and
+         search engines are told to leave it alone. It is a workbench for tuning
+         a run sheet, reached by typing the URL, which is the right amount of
+         hidden for a tool rather than a feature. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- No nightdive.mov here: this page is reloaded to get a clean game far
+         more often than it is opened to play one, and seven seconds of film and
+         an ownership question in front of every reboot is the whole cost of
+         tuning a route. Read by src/main.ts (skipsIntro); the play page has no
+         such tag and still plays it. The sheet's own `intro()` verb becomes a
+         no-op here, which it already handles — it returns the moment there is
+         no intro on screen. -->
+    <meta name="skip-intro" content="1" />
+    <!-- English, always: a route is a sequence of clicks and bevels in ONE
+         edition's data, so there is no picker here and the game's own language
+         chooser never opens (src/main.ts pinnedEdition). -->
+    <meta name="edition" content="en" />
+    <!-- where the site root is from this page, for URLs built in TS (src/site.ts) -->
+    <meta name="site-root" content="../" />
+    <link rel="icon" type="image/png" href="/globe-mark.png" />
+    <link rel="stylesheet" href="/src/theme.css" />
+    <style>
+      /*
+       * The game page. Nothing introduces it and nothing asks anything of you:
+       * arriving here IS the decision — the welcome and the Play button are the
+       * front page (index.html), and this page settles a language and cold
+       * boots. The shared sheet (src/theme.css) carries the palette, the topbar
+       * and the controls; what is left here is the one thing only this page has
+       * — a 512x384 framebuffer and the bars that sit under it.
+       *
+       * The rule this page is built on: nothing beside the canvas may be
+       * brighter than the canvas. The game draws in its own 1996 palette and
+       * the page's job is to be the dark water around the porthole, so the
+       * chrome here is hairlines and dim text, and the only lit thing on the
+       * screen is the screen.
+       */
+
+      /* ---- the porthole: the framebuffer and its rim ---- */
+
+      #stage {
+        position: relative;
+        margin-top: 0.9rem;
+      }
+
+      /* The renderer always presents a fixed 512x384 (4:3) framebuffer — see
+         src/screen.ts. `aspect-ratio` derives the height from the element's own
+         width instead of from the image inside it, so the layout no longer
+         reflows when a scene switches between a full-screen flat and a bare
+         room view. 1024px is a crisp 2x integer scale of 512x384; use the
+         Fullscreen button to fit the screen to the display instead. */
+      #screen {
+        image-rendering: pixelated;
+        aspect-ratio: 4 / 3;
+        width: 1024px;
+        max-width: 96vw;
+        background: #000;
+        display: block;
+        /* The canvas keeps its own gestures: a phone has no arrow keys, so a
+           swipe across the screen is how you walk and turn (see the swipe
+           handler in main.ts). Without this the browser claims a vertical drag
+           for scrolling and the walk-forward swipe never arrives. Scoped to the
+           canvas on purpose — the page around it scrolls normally. */
+        touch-action: none;
+        /* The rim, and the reason the logo works as a mark for this page: a
+           brass hairline with the iceberg's light bleeding past it. The glow is
+           outside the frame, so it never touches a game pixel. */
+        border: 1px solid var(--brass-700);
+        border-radius: 2px;
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.9),
+          0 0 0 2px rgba(184, 120, 36, 0.16),
+          0 0 60px -12px rgba(96, 192, 240, 0.4),
+          0 18px 60px -20px rgba(0, 0, 0, 0.9);
+      }
+
+      /* Fullscreen: letterbox the 4:3 screen inside a black field. The stage
+         (not the canvas) is fullscreened so the minimap overlay comes along and
+         the bar colour stays ours. The rim and its glow come off here — at
+         fullscreen the game IS the porthole and does not need a frame drawn
+         around it. */
+      #stage:fullscreen {
+        display: grid;
+        grid-template-areas: "screen";
+        place-items: center;
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        background: #000;
+      }
+      #stage:fullscreen #screen {
+        grid-area: screen;
+        width: min(100vw, calc(100vh * 4 / 3));
+        height: min(100vh, calc(100vw * 3 / 4));
+        max-width: none;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      /* keep the map overlay pinned to the SCREEN's corner, not the viewport's,
+         by sharing the screen's grid cell instead of #stage's padding box —
+         `start`, matching the left it takes at any other size (below) */
+      #stage:fullscreen #minimap {
+        grid-area: screen;
+        position: static;
+        justify-self: start;
+        align-self: start;
+        margin: 10px;
+      }
+
+      /* The waiting-on-the-network mark. Ice, like the preload bar, because it
+         is the live thing on the screen; small, because it reports a wait and
+         does not ask to be looked at. No words: it sits over 1996 artwork, and a
+         spinner needs no translating.
+
+         The bottom right, alone: the input display took that corner for a while
+         and this had to be given a z-index to stay visible under it. Both are
+         back in corners of their own. */
+      /* The plate is not decoration: the frame underneath is whatever the game
+         last drew, which is as often a white flat as it is black, so the mark
+         carries its own ground the way the minimap does. */
+      #netbusy {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--hull-400);
+        border-radius: 50%;
+        background: rgba(0, 6, 15, 0.72);
+        box-shadow: 0 6px 22px -8px rgba(0, 0, 0, 0.9);
+        pointer-events: none;
+      }
+      #netbusy span {
+        display: block;
+        width: 14px;
+        height: 14px;
+        box-sizing: border-box;
+        border: 2px solid rgba(255, 255, 255, 0.22);
+        border-top-color: var(--ice-400);
+        border-radius: 50%;
+        animation: netspin 700ms linear infinite;
+      }
+      /* Not redundant with the UA sheet: the `display: flex` above beats
+         `[hidden] { display: none }`, so `netbusy.hidden = true` (src/main.ts,
+         every time the last fetch lands) took nothing off the screen and the
+         spinner turned for the whole session. The show/hide logic was never
+         visible — only its `false` case was. */
+      #netbusy[hidden] {
+        display: none;
+      }
+      @keyframes netspin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      /* A reader who has asked for less motion still needs to know it is
+         waiting, so the mark stays and breathes instead of turning. */
+      @media (prefers-reduced-motion: reduce) {
+        #netbusy span {
+          animation: netpulse 1.4s ease-in-out infinite;
+          border-color: var(--ice-400);
+        }
+        @keyframes netpulse {
+          50% {
+            opacity: 0.25;
+          }
+        }
+      }
+      /* same corner trick as the minimap's, so it tracks the SCREEN fullscreen */
+      #stage:fullscreen #netbusy {
+        grid-area: screen;
+        position: static;
+        justify-self: end;
+        align-self: end;
+        margin: 12px;
+      }
+
+      /* ---- the input display (src/speedrun-inputs.ts) ---- */
+
+      /* Pinned to the SCREEN's corner: #stage is the positioned ancestor and is
+         exactly the canvas's box, so the keys sit inside the picture at any
+         window width rather than drifting with the page.
+
+         TOP RIGHT. #minimap takes the top left on this page rather than the
+         top right it has on the play page, so the two never meet; #netbusy keeps
+         the bottom right to itself. */
+      #inputs {
+        position: absolute;
+        right: 12px;
+        top: 12px;
+        /* the whole point: a click goes through to the game underneath */
+        pointer-events: none;
+        /* it is over a moving picture, so it needs a ground of its own to stay
+           readable — dark enough to sit on a lit room, transparent enough not to
+           be a hole in one */
+        background: rgba(0, 6, 15, 0.55);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 6px 7px;
+        line-height: 0; /* the SVG is the box; no text leading under it */
+      }
+      /* Keeping a key's SIZE while dropping two thirds of the keys made this too
+         small to catch out of the corner of the eye — which is the one thing it
+         has to do, since the picture is what is being watched and the keys are
+         glanced at. So the keys are bigger than the play page's rather than the
+         same: 282px over 160 units is 1.76 apiece, half again the 1.17 that
+         matched the old crowded layout. It is vector, so this is a CSS number
+         and not an integer scale like the canvas's. */
+      #inputs .sr-keys {
+        width: 282px;
+        height: auto;
+      }
+      /* A key at rest: the same hairline the page draws everything else with.
+         Nothing here is brighter than the canvas until it is pressed — the rule
+         the whole site is built on, and the reason a lit key reads at all. */
+      #inputs .cap rect,
+      #inputs .cap path {
+        fill: rgba(10, 20, 34, 0.72);
+        stroke: var(--border-strong);
+        stroke-width: 0.6;
+        transition: fill 90ms linear, stroke 90ms linear;
+      }
+      #inputs .cap text {
+        fill: var(--text-mute);
+        font-family: var(--font-mono);
+        font-size: 7px;
+        transition: fill 90ms linear;
+      }
+      /* Pressed: brass, which is what this page uses for "this has happened".
+         No transition on the way IN — a press is an event and should appear at
+         once; the fade is on the way out, which is what makes a fast sequence
+         readable as separate presses rather than as one flicker. */
+      #inputs .cap.on rect,
+      #inputs .cap.on .lmb {
+        fill: rgba(184, 120, 36, 0.85);
+        stroke: var(--brass-500, var(--brass-700));
+        transition: none;
+      }
+      #inputs .cap.on text {
+        fill: var(--ice-100, #fff);
+        transition: none;
+      }
+      /* Only the LEFT button lights: the shell and the right button stay where
+         they were, so what the display says is "the button the game reads was
+         pressed" and not "the mouse did something". */
+      #inputs .cap.mouse.on > rect,
+      #inputs .cap.mouse.on .rmb {
+        fill: rgba(10, 20, 34, 0.72);
+        stroke: var(--border-strong);
+      }
+      #inputs .cap.mouse.on > rect {
+        stroke: var(--brass-500, var(--brass-700));
+      }
+
+      /* Top LEFT here, where the play page has it top right: that corner is the
+         input display's on this page. Both are drawn OVER the room for whoever
+         is watching, and the map is the one that is stopped on and read, so it
+         takes the corner an eye goes to first. */
+      #minimap {
+        position: absolute;
+        left: 10px;
+        top: 10px;
+        image-rendering: pixelated;
+        border: 1px solid var(--hull-400);
+        border-radius: 2px;
+        background: rgba(0, 6, 15, 0.72);
+        box-shadow: 0 6px 22px -8px rgba(0, 0, 0, 0.9);
+        display: none;
+        width: 180px;
+      }
+
+      /* The brightness presets: three segments rather than a slider, because a
+         slider is the wrong control for a thumb — this started as one and a
+         phone could not hit it. Three targets a finger can land on, each a
+         whole tap wide, and no dragging.
+
+         Styled down like everything else here: the rule this page is built on
+         is that nothing beside the canvas may be brighter than the canvas, so
+         the chosen segment is a brass hairline and a lift in text colour, not a
+         filled block. The radios themselves are hidden — they carry the state
+         and the keyboard semantics (a radio group is one arrow-key stop, which
+         is what this is), the labels carry the looks. */
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .seg label {
+        margin: 0;
+        cursor: pointer;
+        /* 44px is the tap target a finger wants, and padding alone did not get
+           there (measured 35 at this font size) — so the height is asked for and
+           the text centred in it. */
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        padding: 0 0.75rem;
+        font-size: 0.78rem;
+        color: var(--text-mute);
+        border-left: 1px solid var(--border);
+      }
+      .seg label:first-child {
+        border-left: 0;
+      }
+      .seg input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .seg label:hover {
+        color: var(--text-dim);
+      }
+      .seg input:checked + span {
+        color: var(--brass-500, var(--brass-700));
+      }
+      .seg label:has(input:checked) {
+        background: rgba(184, 120, 36, 0.1);
+        box-shadow: inset 0 -2px 0 var(--brass-700);
+      }
+      /* the focus ring has to be visible even though the input is not */
+      .seg label:has(input:focus-visible) {
+        outline: 1px solid var(--ice-400);
+        outline-offset: -1px;
+      }
+
+      /* ---- where the game says where you are, and what it is doing ----
+         Both live in #details at the bottom of the bars, and both are off until
+         X is pressed (src/main.ts): where you are standing and a script log are
+         answers to questions the player has not asked, and the rule this page is
+         built on is that the only lit thing on the screen is the screen. */
+
+      #hud {
+        font-size: 0.85rem;
+        color: var(--text-dim);
+        min-height: 1.2em;
+        text-align: center;
+        padding: 0 1rem;
+      }
+
+      /* ---- what stands here until the screen does (src/main.ts) ----
+         Held only while the files are being found and read, and left up for
+         good when there are none — so it has to read as both "starting" and
+         "this is as far as it gets". */
+
+      /* The boot text says "starting" — in the reader's language or not at all.
+         The pages carry their English inline, and a catalogue arrives over a
+         dynamic import a beat later (src/locales/index.ts), so a German reader was
+         reading "Starting" for ~200 ms first. Hidden, not undrawn: it keeps its
+         space, so nothing moves when the words arrive. `body.spoken` is set by
+         main.ts's boot() the moment installI18n has had its say, which for an
+         English reader is the same tick — nothing is fetched in that case. */
+      #booting {
+        visibility: hidden;
+        padding: 1.2rem clamp(0.9rem, 4vw, 2rem) 3rem;
+        margin-top: 1.4rem;
+        text-align: center;
+        width: 100%;
+        max-width: 54rem;
+      }
+      body.spoken #booting {
+        visibility: visible;
+      }
+      #booting .intro {
+        font-size: 0.95rem;
+        color: var(--text-dim);
+        max-width: 40rem;
+        margin: 0 auto;
+        line-height: 1.6;
+      }
+      #booting .intro .sub {
+        display: block;
+        margin-top: 0.7rem;
+        font-size: 0.82rem;
+        color: var(--text-mute);
+      }
+      /* The preload bar: ice, because it is the live thing on the page — brass is
+         for what has changed or commits. A hairline track and a 3px fill; the
+         numbers under it are mono, being read off the wire. */
+      #preload {
+        margin: 1.4rem auto 0;
+        width: 22rem;
+        max-width: 80%;
+      }
+      #preloadTrack {
+        height: 3px;
+        background: var(--inset);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      #preloadFill {
+        height: 100%;
+        width: 0;
+        background: linear-gradient(to right, var(--ice-600), var(--ice-400));
+        transition: width 140ms linear;
+      }
+      #preloadNum {
+        margin-top: 0.4rem;
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        color: var(--text-mute);
+        text-align: center;
+      }
+
+      /* ---- the script log, and the bars of controls ---- */
+
+      #details {
+        padding-top: 0.5rem;
+      }
+      #scriptlog {
+        display: none;
+        max-height: 8em;
+        overflow-y: auto;
+        width: 100%;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        line-height: 1.5;
+        color: var(--ice-500);
+        margin: 0.5rem 0 0;
+        background: var(--inset);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.45rem 0.6rem;
+      }
+
+      /* ---- the rail: the pane beside the screen instead of below it ----
+         #22 reported the details pane as "tiny, under the window (off screen at
+         1920px, 100% zoom)", and it was: four bars of controls put it about
+         1030 px down a 945 px-tall viewport, so at that window size it was never
+         on screen. On a window with room to spare the pane MOVES here instead
+         (src/main.ts installRail) — the same element, so one toggle and one
+         renderer serve both homes.
+
+         Fixed, and the body is padded by the same width while it is up, so the
+         screen re-centres in what is left rather than sliding under the rail.
+         That does move the game sideways when the pane opens, which is the
+         mockup in #22's own answer to where it should go, and it only ever
+         happens because the reader asked. */
+      #rail {
+        --rail-w: clamp(20rem, 28vw, 30rem);
+        position: fixed;
+        top: 3.2rem;
+        right: 0.7rem;
+        bottom: 0.7rem;
+        width: calc(var(--rail-w) - 1.4rem);
+        display: flex;
+        flex-direction: column;
+        z-index: 4;
+      }
+      /* `hidden` alone loses to the display above (see the paired-rule test in
+         tests/auto/locales.ts, and #55 for the spinner that turned all session) */
+      #rail[hidden] {
+        display: none;
+      }
+      /* The pane in the rail is a column that fills the height: the log takes
+         what it needs and the state list takes the rest, each scrolling itself. */
+      #rail #details {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1;
+        padding: 0.6rem 0.7rem;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+      #rail #hud {
+        text-align: left;
+        padding: 0 0 0.4rem;
+      }
+      /* With nothing under it the log takes the whole rail; with the state list
+         open it gives most of the height away, because the list is the longer
+         thing and the log is read at its tail. */
+      #rail #scriptlog {
+        flex: 1 1 auto;
+        max-height: none;
+      }
+      #rail #details:has(#dbgState:not([hidden])) #scriptlog {
+        flex: 0 1 auto;
+        max-height: 40%;
+        min-height: 4em;
+      }
+      #rail #dbgState {
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      /* Only where the screen still fits beside it: 1024 px of canvas plus a
+         20rem rail is 1344, and the padding leaves the canvas its 96vw ceiling
+         alone. Below this the pane stays under the screen, which is also what a
+         phone gets. */
+      @media (max-width: 1479px) {
+        #rail {
+          display: none;
+        }
+      }
+      body.railed {
+        padding-right: clamp(20rem, 28vw, 30rem);
+      }
+
+      /* ---- the state list ----
+         Names and numbers out of the game's own tables, so it is mono and it is
+         not translated: `neckphase 4` is the same sentence in six languages. */
+      #dbgBar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.3rem 0 0.4rem;
+        font-size: 0.78rem;
+        color: var(--text-mute);
+      }
+      #dbgState {
+        overflow-y: auto;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        line-height: 1.6;
+        margin-top: 0.5rem;
+        background: var(--inset);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.45rem 0.6rem;
+      }
+      #dbgState[hidden] {
+        display: none;
+      }
+      /* The six the game's own HELP button answers with — apart from the rest,
+         because they are the ones the game itself thinks locate a player. */
+      #dbgSpine {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.1rem 0.9rem;
+        color: var(--ice-300);
+        padding-bottom: 0.35rem;
+        border-bottom: 1px solid var(--border);
+      }
+      #dbgTools {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0;
+      }
+      #dbgTools input[type="search"] {
+        flex: 1;
+        min-width: 4rem;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        padding: 0.15rem 0.35rem;
+        color: var(--text);
+        background: var(--raised);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+      }
+      #dbgTools label {
+        font-family: var(--font-ui);
+        font-size: 0.72rem;
+        color: var(--text-mute);
+        white-space: nowrap;
+      }
+      #dbgRows .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        color: var(--ice-500);
+      }
+      #dbgRows .row b {
+        font-weight: normal;
+        color: var(--text-mute);
+      }
+      /* Brass for what has just moved: the palette's rule is that brass marks a
+         change and ice marks what is live (src/theme.css). */
+      #dbgRows .row.lit,
+      #dbgSpine .lit {
+        color: var(--brass-400);
+      }
+      #dbgRows .none,
+      #dbgState .quiet {
+        color: var(--text-mute);
+      }
+
+      /* Everything under the screen shares one column, so that the details pane
+         lines up with the canvas. The play page has a bar of settings here as
+         well; this one does not (see the markup below). */
+      #under {
+        width: 1024px;
+        max-width: 96vw;
+        margin-top: 0.6rem;
+        padding-bottom: 3rem;
+      }
+      /* ---- saved-games modal (src/save-browser.ts) ---- */
+
+      .modal {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 4, 10, 0.76);
+        backdrop-filter: blur(3px);
+      }
+      .modal-box {
+        width: 520px;
+        max-width: 92vw;
+        max-height: 82vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--panel);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-lg);
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.6),
+          0 24px 70px -18px rgba(0, 0, 0, 0.9),
+          0 0 70px -30px rgba(96, 192, 240, 0.35);
+        color: var(--text);
+      }
+      .modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.7rem 0.9rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .modal-head span {
+        font-family: var(--font-display);
+        font-size: 0.92rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text-bright);
+      }
+      .modal-head button {
+        background: none;
+        border: none;
+        color: var(--text-mute);
+        font-size: 1rem;
+        cursor: pointer;
+        padding: 0.1rem 0.4rem;
+      }
+      .modal-head button:hover {
+        color: var(--frost);
+        background: none;
+      }
+      .save-list {
+        overflow-y: auto;
+        padding: 0.4rem 0.9rem 0.6rem;
+        flex: 1;
+      }
+      .save-empty {
+        color: var(--text-mute);
+        font-size: 0.85rem;
+        padding: 1.4rem 0.2rem;
+        text-align: center;
+      }
+      .save-group {
+        font-size: 0.64rem;
+        text-transform: uppercase;
+        letter-spacing: 0.17em;
+        color: var(--text-mute);
+        margin: 0.8rem 0 0.3rem;
+      }
+      .save-row {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+      }
+      .save-name {
+        flex: 1;
+        text-align: left;
+        background: none;
+        border: 1px solid transparent;
+        color: var(--text);
+        font-family: var(--font-ui);
+        font-size: 0.85rem;
+        cursor: pointer;
+        padding: 0.3rem 0.45rem;
+        border-radius: var(--radius);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .save-name:hover {
+        background: color-mix(in srgb, var(--ice-400) 12%, transparent);
+        border-color: var(--ice-600);
+        color: var(--frost);
+      }
+      .save-icon {
+        background: var(--raised);
+        border: 1px solid var(--border-strong);
+        color: var(--text-dim);
+        font-size: 0.78rem;
+        cursor: pointer;
+        padding: 0.2rem 0.45rem;
+        border-radius: var(--radius);
+      }
+      .save-icon:hover {
+        border-color: var(--ice-500);
+        color: var(--frost);
+      }
+      .modal-foot {
+        border-top: 1px solid var(--border);
+        padding: 0.7rem 0.9rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .save-newrow {
+        display: flex;
+        gap: 0.4rem;
+      }
+      .save-newrow input {
+        flex: 1;
+        font-size: 0.85rem;
+        padding: 0.3rem 0.5rem;
+      }
+      .modal-foot button {
+        font-size: 0.85rem;
+        padding: 0.3rem 0.8rem;
+      }
+
+      /* ---- the speedrun panel ----
+         Everything above this is the play page, duplicated. What follows is the
+         only thing this page adds: a sheet to paste, controls to run it, and the
+         splits as they land. Same palette rule as the rest — the brightest thing
+         on screen is still the screen. */
+
+      #srpanel {
+        max-width: 1024px;
+        margin: 1rem auto 3rem;
+        padding: 0 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+      }
+
+      /* ---- one column, or two ----
+         Under the screen on a narrow window, beside it on a wide one. The sheet
+         is READ WHILE THE RUN PLAYS — you watch the game do what the line said —
+         and stacked, those two things cannot be looked at together: the editor
+         starts below a 768 px-tall canvas, so watching means scrolling away from
+         the text and vice versa.
+
+         The break is 1500px because that is what the pair actually needs: 1024
+         for the screen (a crisp 2x of 512x384 — the canvas is `pixelated`, and
+         shrinking it to fit a column would make every pixel a different size),
+         plus a gap, plus a column wide enough for `wait(js=...)` lines. Below
+         that there is no room for two, and the stacked layout is not a fallback
+         — it is the right answer for the window. */
+      #srlayout {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        min-width: 0;
+      }
+      #srgame {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      @media (min-width: 1500px) {
+        #srlayout {
+          flex-direction: row;
+          align-items: flex-start;
+          justify-content: center;
+          gap: 1.4rem;
+          padding: 0 0.7rem;
+          box-sizing: border-box;
+        }
+        /* the screen's own width, held whether or not the game has booted, so
+           the columns do not jump sideways when #booting gives way to #stage */
+        #srgame {
+          flex: 0 0 1024px;
+          width: 1024px;
+        }
+        #srpanel {
+          flex: 1 1 26rem;
+          min-width: 0;
+          max-width: 42rem;
+          margin: 0.9rem 0 3rem;
+          /* Stay put while the page scrolls. The panel is the thing being
+             worked in and the screen is the thing being watched; scrolling to
+             the splits should not carry either off the top. */
+          position: sticky;
+          top: 0.7rem;
+          max-height: calc(100vh - 1.4rem);
+          overflow: auto;
+        }
+        /* The debug rail is `position: fixed` at the right edge, so with the
+           pane open it would draw straight over the sheet. It is only there when
+           #details is in it, which is why this is a :has() and not a margin. */
+        body:has(#rail:not([hidden])) #srlayout {
+          padding-right: clamp(20rem, 28vw, 30rem);
+        }
+      }
+      #srpanel h2 {
+        font-size: 0.9rem;
+        margin: 0;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        opacity: 0.7;
+      }
+      /* ---- the sheet editor ----
+         A <pre> painted under a transparent <textarea>, scrolled in step, plus
+         a line-number gutter (src/speedrun-editor.ts). The three must share
+         font, size, line-height and padding EXACTLY or the coloured text drifts
+         out from under the real one. */
+      .sr-editor {
+        position: relative;
+        display: grid;
+        grid-template-columns: 3ch minmax(0, 1fr);
+        /* A DEFINITE height, and both parts of that matter. The row must be
+           `minmax(0, 1fr)` or it sizes to the content — a 500-line sheet then
+           makes the editor 500 lines tall and the PAGE scrolls instead of the
+           editor, which breaks the gutter's whole purpose. And the height has
+           to be a length rather than a min-height for the same reason: the
+           children can only scroll against something definite. */
+        grid-template-rows: minmax(0, 1fr);
+        height: 26rem;
+        border: 1px solid var(--hull-400);
+        border-radius: 3px;
+        background: #05070b;
+        overflow: hidden;
+        resize: vertical;
+      }
+      .sr-editor > * {
+        font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+        padding: 0.7rem 0;
+        margin: 0;
+        border: 0;
+        tab-size: 2;
+      }
+      .sr-gutter {
+        grid-area: 1 / 1;
+        padding-right: 0.6rem;
+        text-align: right;
+        color: #3d4650;
+        overflow: hidden;
+        white-space: pre;
+        user-select: none;
+        border-right: 1px solid #161c24;
+      }
+      .sr-highlight,
+      #srsheet {
+        grid-area: 1 / 2;
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+        white-space: pre;
+        overflow: auto;
+        min-width: 0;
+      }
+      .sr-highlight {
+        pointer-events: none;
+        color: #b9c2cc;
+      }
+      #srsheet {
+        background: transparent;
+        /* the text itself is drawn by the layer underneath; only the caret and
+           the selection come from the textarea */
+        color: transparent;
+        caret-color: var(--brass-500, #c89b4a);
+        resize: none;
+        outline: none;
+      }
+      #srsheet::selection { background: rgba(184, 120, 36, 0.28); }
+      .sr-editor:focus-within { outline: 1px solid var(--brass-700); }
+
+      /* ---- the execution pointer ----
+         Where Play would start. Drawn twice on purpose: a lit gutter number,
+         which is exact, and a band across the line, which is findable — a
+         500-line sheet is mostly off screen, and a number you have to hunt for
+         is not an answer to "where am I". Behind the text and pointer-inert, so
+         it cannot take a click meant for the editor. */
+      .sr-cursor {
+        position: absolute;
+        left: 3ch;
+        right: 0;
+        pointer-events: none;
+        /* NOT the shared padding of `.sr-editor > *` above. That rule is there so
+           the three TEXT layers line up to the pixel, and a band is not one of
+           them — it is an overlay whose height is set to exactly one line
+           (src/speedrun-editor.ts). Taking 0.7rem top and bottom with
+           `box-sizing: border-box` meant the padding and borders alone came to
+           24.4px, which is more than the 18.6px line asked for, so the height was
+           clamped up to them: a band a third taller than its line, hanging above
+           it. */
+        padding: 0;
+        background: rgba(200, 155, 74, 0.11);
+        border-top: 1px solid rgba(200, 155, 74, 0.28);
+        border-bottom: 1px solid rgba(200, 155, 74, 0.28);
+        box-sizing: border-box;
+        z-index: 0;
+      }
+      .sr-gutter span.cur {
+        color: var(--brass-500, #c89b4a);
+        font-weight: 700;
+      }
+      /* The RECORD point, in the Record button's red so the two read as one
+         thing. It is not decoration: the caret is the browser's and the browser
+         hides it the moment the textarea blurs, which is the first thing
+         clicking on the game does. This is what is left to look at. */
+      .sr-cursor.rec {
+        background: rgba(232, 117, 111, 0.1);
+        border-top: 1px dashed rgba(232, 117, 111, 0.5);
+        border-bottom: 1px dashed rgba(232, 117, 111, 0.5);
+      }
+      .sr-gutter span.rec {
+        color: #e8756f;
+        font-weight: 700;
+      }
+
+      /* the palette. Live code is the brightest thing here; prose recedes; a
+         DRAFT line has to read as neither. */
+      .sr-highlight .v { color: #7fb3d5; }            /* verb */
+      .sr-highlight .k { color: #c89b4a; }            /* named argument */
+      .sr-highlight .q { color: #6fae9f; }            /* condition — a question about the world */
+      .sr-highlight .n { color: #b58ac9; }            /* number */
+      .sr-highlight .s { color: #8fbf7f; }            /* quoted string */
+      .sr-highlight .b { color: #b58ac9; }            /* bevel list */
+      .sr-highlight .p { color: #55606c; }            /* punctuation */
+      .sr-highlight .c { color: #4d5a4a; font-style: italic; }  /* comment */
+      .sr-highlight .d { color: #6b5a3a; opacity: 0.75; }       /* #| draft */
+      .sr-highlight .d .v,
+      .sr-highlight .d .k,
+      .sr-highlight .d .q,
+      .sr-highlight .d .n,
+      .sr-highlight .d .s,
+      .sr-highlight .d .b,
+      .sr-highlight .d .p,
+      .sr-highlight .d .c { color: inherit; font-style: normal; }
+      #srrow { display: flex; gap: 0.45rem; align-items: center; flex-wrap: wrap; }
+      /* The transport and the info button: drawn, not typed.
+         
+         These were ▶ ⏸ ⏹ ● ⓘ, and as characters they can only ever look like a
+         set by accident. Each comes from whichever installed font happens to
+         carry it — often not the same one twice in a row — so their weight,
+         their size within the em and their baseline all disagree, and the record
+         dot came out so much smaller than the rest that it needed a font-size of
+         its own to keep up. None of that is fixable without shipping a webfont,
+         which this site does not do for anything (system stacks only, and no
+         request off the origin at all).
+
+         So they are inline SVG on one 24-unit grid, sized here in one place and
+         filled with `currentColor` — which is what keeps the record dot's red
+         and every hover and disabled rule below working on the drawing exactly
+         as they worked on the glyph. */
+      #srrow button.icon {
+        min-width: 2rem;
+        padding: 0.3rem 0.45rem;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #srrow button.icon svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+        fill: currentColor;
+      }
+      /* pushed to the end of the row: it is not one of the sheet's controls,
+         it is the manual */
+      #srhelp { margin-left: auto; }
+      /* The dot is red at rest as well, but dimmed: a record control that is only
+         red once armed reads as some other button until you press it. It needs
+         no size of its own now that it is drawn rather than typed — the circle
+         is on the same grid as the triangle and the square. */
+      #srrec { color: rgba(232, 117, 111, 0.55); }
+      /* Armed. Red rather than the page's brass, because this is the one control
+         that writes into the sheet while you are looking at the game instead of
+         at it — it has to be visible out of the corner of an eye. */
+      #srrec.on {
+        color: #e8756f;
+        border-color: #e8756f;
+        background: rgba(232, 117, 111, 0.12);
+      }
+
+      /* ---- the part row ----
+         Loading a leg, not running one — so these are quieter than Run and
+         Stop below the editor, and read as tabs rather than as controls. */
+      #srparts { display: flex; gap: 0.35rem; align-items: baseline; flex-wrap: wrap; }
+      #srparts button {
+        font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+        padding: 0.25rem 0.6rem;
+        opacity: 0.8;
+      }
+      #srparts button:hover { opacity: 1; }
+      #srparts button.full { font-weight: 600; opacity: 1; }
+      /* a leg whose starting savegame has not been made in this browser yet.
+         Still loadable — reading it is most of what it is for — but it cannot
+         run until the leg before it has, and saying so beforehand beats a
+         failure four seconds in. */
+      /* the two rows above the editor share a shape: a quiet label, then chips */
+      #srsheets {
+        display: flex;
+        gap: 0.35rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      #srsheets button {
+        font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+        padding: 0.25rem 0.6rem;
+        opacity: 0.8;
+      }
+      #srsheets button:hover { opacity: 1; }
+      #srsheets .sep,
+      #srparts .sep {
+        opacity: 0.4;
+        padding: 0 0.15rem;
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      /* ---- checkpoint chips ----
+         Two different things happen inside one chip — GO THERE and FORGET IT —
+         and the pair has to read as one object with two halves rather than as
+         two loose buttons that happen to be adjacent. So: one border around
+         both, a hairline between them, and different hover colours, because
+         the only thing worse than not knowing which half you are about to
+         press is finding out afterwards. */
+      /* chip styling is shared by both rows */
+      #srsheets .chip,
+      #srparts .chip {
+        display: inline-flex;
+        align-items: stretch;
+        border: 1px solid var(--hull-400);
+        border-radius: 3px;
+        overflow: hidden;
+        background: var(--abyss-800, #000d1f);
+      }
+      #srsheets .chip button,
+      #srparts .chip button {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        padding: 0.25rem 0.55rem;
+        opacity: 0.9;
+      }
+      #srsheets .chip button:hover,
+      #srparts .chip button:hover {
+        opacity: 1;
+        color: var(--brass-500, #c89b4a);
+        background: rgba(200, 155, 74, 0.14);
+      }
+      #srsheets .chip .rename,
+      #srsheets .chip .drop,
+      #srparts .chip .drop {
+        border-left: 1px solid var(--hull-400);
+        padding: 0.25rem 0.42rem;
+        opacity: 0.45;
+        font-size: 0.7rem;
+      }
+      #srsheets .chip .drop:hover,
+      #srparts .chip .drop:hover {
+        color: #e0928f;
+        background: rgba(224, 146, 143, 0.16);
+      }
+      /* The beginning, as a checkpoint. It stands with the saved ones because it
+         is one, and apart from them because nothing wrote it. */
+      #srparts .chip.reset {
+        border-style: dashed;
+        border-color: var(--hull-300, #1d5183);
+      }
+      #srparts .chip.reset button { opacity: 0.7; }
+
+      /* the sheet actually in the box */
+      #srsheets .chip.on {
+        border-color: var(--brass-700, #8a6a2f);
+        background: rgba(200, 155, 74, 0.1);
+      }
+      #srsheets .chip.on > button:first-child { color: var(--brass-500, #c89b4a); font-weight: 600; }
+
+      /* ---- the checkpoints, as a timeline ----
+         They are milestones on a route and they are drawn as one now: a line
+         running left to right through a node per checkpoint, in the order the
+         RUN reaches them (src/speedrun-page.ts savedPoints — the sheet's own
+         `save()` order, not the alphabet). Nothing about what they DO changed;
+         this is the same chip with a wrapper around it.
+
+         The column gap is 0 because the connector supplies the spacing itself —
+         it is a drawn segment of a fixed width, and a gap on top of it would
+         leave the line short of the next node. The row gap is real, for when
+         there are enough checkpoints to wrap. */
+      #srparts .sr-points {
+        display: flex;
+        align-items: center;
+        column-gap: 0;
+        row-gap: 0.4rem;
+        flex-wrap: wrap;
+      }
+      #srparts .ms {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        margin-left: 18px;
+      }
+      /* the track between this node and the one before it */
+      #srparts .ms::before {
+        content: "";
+        position: absolute;
+        left: -18px;
+        top: 50%;
+        width: 18px;
+        height: 1px;
+        background: var(--hull-400);
+      }
+      /* the node itself, sitting on the track at the chip's leading edge */
+      #srparts .ms::after {
+        content: "";
+        position: absolute;
+        left: -6px;
+        top: 50%;
+        width: 5px;
+        height: 5px;
+        margin-top: -2.5px;
+        border-radius: 50%;
+        background: var(--hull-300, #1d5183);
+        border: 1px solid var(--abyss-800, #000d1f);
+      }
+      /* The origin. Filled brass rather than hull, because it is the one stop
+         that is always there and always reachable — the run starts at it. */
+      #srparts .ms.origin::after {
+        background: var(--brass-700, #8a6a2f);
+      }
+      /* a milestone under the pointer lights its own node, so the thing you are
+         about to press and the place it stands for are the same object */
+      #srparts .ms:hover::after {
+        background: var(--brass-500, #c89b4a);
+      }
+      #srparts .chip {
+        display: inline-flex;
+        align-items: stretch;
+        border: 1px solid var(--hull-400);
+        border-radius: 3px;
+        overflow: hidden;
+        background: var(--abyss-800, #000d1f);
+      }
+      #srparts .chip button {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        padding: 0.25rem 0.55rem;
+        opacity: 0.9;
+      }
+      #srparts .chip button:hover {
+        opacity: 1;
+        color: var(--brass-500, #c89b4a);
+        background: rgba(200, 155, 74, 0.14);
+      }
+      #srparts .chip .drop {
+        border-left: 1px solid var(--hull-400);
+        padding: 0.25rem 0.42rem;
+        opacity: 0.45;
+        font-size: 0.7rem;
+      }
+      #srparts .chip .drop:hover {
+        color: #e0928f;
+        background: rgba(224, 146, 143, 0.16);
+      }
+      /* destructive and wholesale, so it sits apart from the chips and quieter
+         than any of them until it is pointed at */
+      #srparts button.points {
+        opacity: 0.5;
+        margin-left: 0.3rem;
+      }
+      #srparts button.points:hover { opacity: 1; color: #e0928f; border-color: #e0928f; }
+      #srstatus {
+        font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+        min-height: 1.55em;
+        opacity: 0.85;
+        word-break: break-word;
+        white-space: pre-wrap;
+      }
+      #srstatus.bad { color: #e0928f; }
+      #srstatus.good { color: #8fd0a4; }
+      /* The stopwatch. Big enough to read from where the game is being watched
+         rather than from where the sheet is being typed, and tabular so the
+         digits do not shuffle as they count. Quiet at rest, brass while the run
+         is live — the same "this is happening" colour the record button and the
+         pressed keys use. */
+      #srclock {
+        font: 1.5rem/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.02em;
+        color: var(--text-mute);
+        border-top: 1px solid var(--hull-400);
+        padding-top: 0.5rem;
+        transition: color 120ms linear;
+      }
+      #srclock.live { color: var(--brass-500, #c89b4a); }
+
+      #srsplits {
+        font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+        padding-top: 0.35rem;
+      }
+      #srsplits table { width: 100%; border-collapse: collapse; }
+      /* The headings, in the quiet uppercase this page labels everything else
+         with (see .sep on the rows above the editor) — a column heading is a
+         label, and it must not compete with the numbers under it. */
+      #srsplits th {
+        font-weight: normal;
+        font-size: 0.68rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.4;
+        text-align: left;
+        padding: 0 0 0.25rem;
+        border-bottom: 1px solid var(--hull-400);
+      }
+      #srsplits th.n { text-align: right; padding-left: 1rem; }
+      #srsplits tbody tr:first-child td { padding-top: 0.25rem; }
+      #srsplits td { padding: 0.06rem 0; }
+      #srsplits td.n { text-align: right; opacity: 0.7; font-variant-numeric: tabular-nums; padding-left: 1rem; }
+      #srsplits tr.total td { border-top: 1px solid var(--hull-400); padding-top: 0.3rem; opacity: 1; }
+      /* The legend. Generated from the action table at load (see
+         src/speedrun-page.ts) rather than written out here, so it cannot drift
+         from what the parser actually accepts. English only and on purpose:
+         this is a workbench, not part of the translated site. */
+      /* The legend is a modal now (the save browser's own .modal / .modal-box
+         chrome, so there is one dialog look on this page and not two); what is
+         left here is what the CONTENT inside it reads like. */
+      #srlegend { font-size: 0.78rem; }
+      #srlegendbody {
+        padding: 0.8rem 0.9rem 1rem;
+        overflow: auto; /* .modal-box caps the height; the list scrolls inside it */
+      }
+      #srlegend h3 {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 0.55;
+        margin: 0.9rem 0 0.35rem;
+      }
+      #srlegend h3:first-child { margin-top: 0; }
+      /* Signature over description, not beside it. Two columns were fine when
+         the term was one word (`closeup`); now that it is the whole call —
+         `closeUp(memory, by: esc)  ·  ok: by:` — a `max-content` column takes
+         most of a panel that is only 26rem wide beside the game, and leaves the
+         help wrapping one word to a line. */
+      #srlegend dl { margin: 0; }
+      #srlegend dt {
+        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: var(--brass-500, #c89b4a);
+        margin-top: 0.5rem;
+      }
+      #srlegend dt:first-child { margin-top: 0; }
+      #srlegend dd {
+        margin: 0 0 0 1rem;
+        opacity: 0.7;
+        line-height: 1.5;
+        font-size: 0.76rem;
+      }
+      #srlegend p.n { opacity: 0.5; line-height: 1.55; margin: 0.5rem 0 0; }
+
+      #srcaveat {
+        font-size: 0.72rem;
+        opacity: 0.45;
+        line-height: 1.6;
+        border-top: 1px solid var(--hull-400);
+        padding-top: 0.5rem;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body class="deep">
+    <header class="topbar">
+      <a class="brand" href="../" title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1996 release" data-i18n-attr="title:site.brandTitle">
+        <img class="brand-mark" src="/globe-mark.png" alt="" width="30" height="30" />
+        <span class="brand-text">
+          <b>Titanic</b>
+          <span>Adventure Out Of Time RE</span>
+        </span>
+      </a>
+      <nav class="topnav">
+        <a href="../play/" class="here" data-i18n="site.navPlay">Play</a>
+        <a href="../editors/" data-i18n="site.navEditors">Editors</a>
+        <a href="../collection/" data-i18n="site.navCollection">Collection</a>
+        <a href="https://dhobi.github.io/taoot-web/" data-i18n="site.navDocs">Docs</a>
+        <a href="https://github.com/dhobi/taoot-web" data-i18n="site.navSource">Source</a>
+      </nav>
+    </header>
+
+
+    <!-- Where #details lives when the window is wide enough to hold it beside the
+         screen rather than below it. #22 reported the pane as "tiny, under the
+         window (off screen at 1920px, 100% zoom)" — which it was: it began about
+         1030 px down a 945 px-tall viewport, so at that window size it was never
+         on screen at all. Empty in the markup; main.ts moves the pane in.
+
+         It and the save modal are both `position: fixed`, so where they sit in
+         the markup decides nothing about where they draw. They are up here, out
+         of #srlayout, only because that wrapper is a two-COLUMN box below and
+         neither of them belongs in a column. -->
+    <div id="rail" hidden></div>
+
+    <div id="saveModal" class="modal">
+      <div class="modal-box">
+        <div class="modal-head">
+          <span id="saveModalTitle">Saved Games</span>
+          <button id="saveModalClose" data-i18n-attr="title:play.savesClose" title="Close">✕</button>
+        </div>
+        <div id="saveList" class="save-list"></div>
+        <div class="modal-foot">
+          <div id="saveNewRow" class="save-newrow">
+            <input id="saveNameInput" type="text" data-i18n-attr="placeholder:play.savesNamePlaceholder" placeholder="save name" />
+            <button id="saveConfirmBtn" data-i18n="play.savesSave">Save</button>
+          </div>
+          <div>
+            <button id="saveUploadBtn" data-i18n="play.savesUpload">⬆ Upload .ti</button>
+            <input id="saveUploadInput" type="file" accept=".ti" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- The game and the sheet, in that order. One column on a narrow window,
+         two once there is room for both — see #srlayout in the stylesheet. -->
+    <div id="srlayout">
+      <div id="srgame">
+    <div id="booting">
+      <h1 data-i18n="play.h1">Starting</h1>
+      <div class="intro">
+        <span data-i18n="play.intro">Loading the game's files…</span>
+        <span class="sub" data-i18n-html="play.introSub"
+          >Looking in the <code>gamefiles/</code> directory</span
+        >
+      </div>
+
+      <!-- the preload bar (src/main.ts showPreload): bytes as they land, so the
+           wait in front of the game is a wait you can watch. Numbers only —
+           there is nothing here for the catalogue to translate. -->
+      <div id="preload" hidden>
+        <div id="preloadTrack"><div id="preloadFill"></div></div>
+        <div id="preloadNum"></div>
+      </div>
+    </div>
+
+    <div id="stage" style="display: none">
+      <canvas id="screen" width="512" height="384"></canvas>
+      <canvas id="minimap"></canvas>
+      <!-- The game is waiting on the network. Nothing draws during a fetch —
+           the frame loop has no new frame to present — so on a slow link the
+           canvas simply holds whatever it had, and a room change reads as a
+           hang at whatever the last frame happened to be: a white flat, black,
+           a half-finished fade. Raised by src/main.ts off FileStore's in-flight
+           count, and only once the wait is long enough to be felt. -->
+      <div id="netbusy" hidden aria-hidden="true"><span></span></div>
+      <!-- What the run is pressing (src/speedrun-inputs.ts). Over the game
+           rather than beside it, because it is read WHILE the picture moves —
+           a key lighting is the only thing that tells you the arrow was sent
+           and not something the engine did on its own.
+
+           `pointer-events: none` so the canvas underneath keeps every gesture:
+           wherever it is parked it covers part of a room a hand-played click
+           may well want to land in. -->
+      <div id="inputs" aria-hidden="true"></div>
+    </div>
+
+    <!-- Everything under the screen, in the order it is wanted: what you press,
+         then how a swipe reads, then which keys there are, and last the two
+         readouts that answer nothing the player asked (X). -->
+    <div id="under">
+      <!-- No #help bar here. The play page's is fullscreen, a bug button, the
+           swipe options and the picture/brightness/low-memory rows — questions
+           about how the game should look and feel to a person playing it, and
+           this page is a workbench where a route is timed. Its own controls are
+           the ones src/speedrun-page.ts builds below the canvas. src/main.ts
+           runs the game on both pages and finds none of these elements here,
+           which it is written to tolerate. -->
+
+      <!-- X opens this once the game is up; before then, a logged line does
+           (src/main.ts log), because a boot that never finishes has nothing
+           else to say for itself.
+
+           Its home is here on a narrow window and #rail on a wide one — the
+           element is MOVED between the two (src/main.ts installRail), so there is
+           one pane, one toggle and one renderer either way. -->
+      <div id="details" hidden>
+        <div id="hud"></div>
+        <!-- what the pane can be asked for beyond the log. `state` is off by
+             default: 161 variable names are an answer to a question the player
+             did not ask, and #22 is from someone who did ask. -->
+        <div id="dbgBar">
+          <label data-i18n-attr="title:play.debugStateTitle" title="Every script global, and the six the game's own debug readout names"
+            ><input type="checkbox" id="dbgStateOn" />
+            <span data-i18n="play.debugState">state</span></label
+          >
+          <button id="dbgCopy" data-i18n="play.debugCopy" data-i18n-attr="title:play.debugCopyTitle" title="Copy the state and the whole log, to attach to a bug report">⧉ Copy details</button>
+          <span id="dbgNote" class="note"></span>
+        </div>
+        <pre id="scriptlog"></pre>
+        <div id="dbgState" hidden>
+          <div id="dbgSpine"></div>
+          <div id="dbgTools">
+            <input id="dbgFilter" type="search" data-i18n-attr="placeholder:play.debugFilter" placeholder="filter" />
+            <label data-i18n-attr="title:play.debugAllTitle" title="Every global, not just the ones that have just moved"
+              ><input type="checkbox" id="dbgAll" />
+              <span data-i18n="play.debugAll">all</span></label
+            >
+          </div>
+          <div id="dbgRows"></div>
+        </div>
+      </div>
+    </div>
+      </div>
+      <!-- /#srgame -->
+
+    <section id="srpanel">
+      <h2>Speedrun sheet</h2>
+      <!-- The user's own sheets, then a chip per checkpoint `save()` has
+           written. Both built at load and repainted as things change
+           (src/speedrun-page.ts) — a save that has just run gets its chip
+           without a reload. -->
+      <div id="srsheets" hidden></div>
+      <div id="srparts" hidden></div>
+      <textarea id="srsheet" spellcheck="false" placeholder="# paste a run sheet here — same grammar as tests/speedrun/run.sheet.txt
+intro()
+skipMovie(until: awaiting)
+clickAt(266, 254)
+wait(nomovie, faded)
+split(boot)"></textarea>
+      <!-- Play resumes from the execution pointer; Pause leaves it where it is;
+           Stop puts it back at the top. Nothing else moves it except a
+           checkpoint, which moves the GAME at the same time.
+
+           The three are a transport, so they are drawn as one: a player's
+           ▶/⏸/⏹ rather than three words. What they do to a sheet is what those
+           glyphs already mean to everyone, and the row beside them is verbs
+           (Check, Clear, Record) which are not a transport and stay words.
+           Every icon button carries a `title` and an `aria-label`, because a
+           glyph is not a name. -->
+      <div id="srrow">
+        <button id="srrun" class="icon" type="button" title="Play" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6.2 18.6 12 9 17.8Z"/></svg></button>
+        <button id="srpause" class="icon" type="button" disabled title="Pause" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8.4 6.3h2.9v11.4H8.4zm4.3 0h2.9v11.4h-2.9z"/></svg></button>
+        <button id="srstop" class="icon" type="button" title="Stop — put the pointer back at the top" aria-label="Stop"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="7.15" y="7.15" width="9.7" height="9.7" rx="1.4"/></svg></button>
+        <button id="srcheck" type="button">Check</button>
+        <button id="srclear" type="button">Clear</button>
+        <!-- Record watches the real input you make at the game and writes the
+             line that would have made it. Passive: it never intercepts, so the
+             game plays exactly as it would with this off. A red dot, which is
+             what a record button is; the word is in the tooltip and the state is
+             in the colour (see #srrec.on). -->
+        <button id="srrec" class="icon" type="button" title="Record — write what you do at the game into the sheet" aria-label="Record"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="5"/></svg></button>
+        <!-- The legend used to be a <details> under this row, open or shut. It
+             is ~40 verbs and their options: shut it said nothing, open it pushed
+             the status, the splits and the caveat off the bottom of a panel that
+             is 26rem wide beside the game. A reference that long is looked UP,
+             so it is behind this and comes back as a modal. -->
+        <button id="srhelp" class="icon" type="button" title="What the commands mean" aria-label="What the commands mean"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.4a8.6 8.6 0 1 0 0 17.2 8.6 8.6 0 0 0 0-17.2Zm0 1.9a6.7 6.7 0 1 1 0 13.4 6.7 6.7 0 0 1 0-13.4Z"/><circle cx="12" cy="8.1" r="1.15"/><rect x="11.05" y="10.4" width="1.9" height="6.4" rx=".95"/></svg></button>
+      </div>
+      <div id="srlegend" class="modal">
+        <div class="modal-box">
+          <div class="modal-head">
+            <span>What the commands mean</span>
+            <button id="srlegendclose" type="button" title="Close" aria-label="Close">✕</button>
+          </div>
+          <div id="srlegendbody"></div>
+        </div>
+      </div>
+      <div id="srstatus"></div>
+      <!-- The stopwatch: seconds since Play, counting (src/speedrun-page.ts).
+           Above the splits because it is what the splits are readings OF — while
+           a leg with no split in it runs, this is the only thing on the page
+           that moves. It keeps its last reading when the run stops. -->
+      <div id="srclock">0.0s</div>
+      <div id="srsplits"></div>
+      <p id="srcaveat">
+        A previewer, not the clock of record. Its input events are synthetic, so
+        they skip the browser's real input pipeline and the same sheet finishes
+        faster here than it does under Playwright. Tune here; take the time with
+        <code>npm run speedrun</code>. The pathfinding verbs
+        (<code>travel</code>, <code>hunt</code>, <code>stand</code>) need the
+        Node runner and will say so.
+      </p>
+    </section>
+    </div>
+    <!-- /#srlayout -->
+
+    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/speedrun-page.ts"></script>
+  </body>
+</html>

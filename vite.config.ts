@@ -158,6 +158,10 @@ export default defineConfig({
       input: {
         main: resolve("index.html"),
         play: resolve("play/index.html"),
+        // The speedrun workbench: the play page plus a sheet to drive it with.
+        // Unlisted — nothing links to it and it carries `noindex` — but built,
+        // because a tool that only exists on a dev server is a tool nobody uses.
+        speedrun: resolve("speedrun/index.html"),
         collection: resolve("collection/index.html"),
         editors: resolve("editors/index.html"),
         puppets: resolve("editors/puppets.html"),

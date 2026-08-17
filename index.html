@@ -57,6 +57,60 @@
         margin: 0 auto 0.6rem;
         filter: drop-shadow(0 0 26px rgba(96, 192, 240, 0.3));
       }
+
+      /*
+       * The globe answering the Konami code, on its way to the speedrun
+       * workbench (src/konami.ts, src/home.ts).
+       *
+       * Two beats of brass and back, because brass is the sheet's colour for
+       * "this commits" (src/theme.css) and leaving is what the code does. No
+       * text: every word on this site is a key in six locale files
+       * (tests/auto/locales.ts), and the animation says the same thing in none.
+       *
+       * The page waits for THIS animation to finish before it navigates, so the
+       * duration here is the length of the pause. Turn it off under
+       * prefers-reduced-motion and the jump becomes immediate rather than
+       * becoming a stall — nothing is running, so there is nothing to wait for.
+       */
+      @keyframes hero-unlock {
+        0%,
+        100% {
+          transform: scale(1);
+          filter: drop-shadow(0 0 26px rgba(96, 192, 240, 0.3));
+        }
+        50% {
+          transform: scale(1.12);
+          filter: drop-shadow(0 0 70px var(--brass-500)) saturate(1.6) brightness(1.55);
+        }
+      }
+      /*
+       * The same beat with the movement taken out, for `prefers-reduced-motion`.
+       *
+       * NOT `animation: none`. The first version of this did that, and the
+       * result was a front page that teleported: measured, 810 ms from the last
+       * key to the navigation normally and 29 ms under reduced motion, which
+       * reads as a broken link rather than as a considered absence. What the
+       * setting asks to be spared is VESTIBULAR motion — the scale — and a
+       * brightness change is not that. So the cue stays and the movement goes,
+       * and the pause before leaving is the same length for everybody.
+       */
+      @keyframes hero-unlock-still {
+        0%,
+        100% {
+          filter: drop-shadow(0 0 26px rgba(96, 192, 240, 0.3));
+        }
+        50% {
+          filter: drop-shadow(0 0 70px var(--brass-500)) saturate(1.6) brightness(1.55);
+        }
+      }
+      #home .hero-mark.unlocked {
+        animation: hero-unlock 380ms ease-in-out 2;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #home .hero-mark.unlocked {
+          animation-name: hero-unlock-still;
+        }
+      }
       #home .intro {
         font-size: 0.95rem;
         color: var(--text-dim);

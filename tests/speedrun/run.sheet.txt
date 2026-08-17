@@ -1,0 +1,1116 @@
+# =====================================================================
+# THE SPEEDRUN — Titanic: Adventure Out of Time, any%
+#
+#   npm run speedrun            run it, print the splits
+#   npm run speedrun:watch      the same run in a real window
+#   npm run speedrun:lint       parse this file and say nothing else
+#   npm run speedrun -- --verbs what may appear on a line here
+#
+# One action per line. `#` is a comment, `;` separates actions on a line,
+# `xN` repeats, `a, b, c` is one action per argument, `key: value` is an
+# option. Every line takes `wait:`, `after:`, `budget:` and `gap:` — see
+# --verbs. Tune against the FRAMES column of the report, not the seconds.
+#
+# STATUS: VALIDATED through mission 1 phase 1 — cold boot to Penny in the
+# gym, unseeded. Everything below `split(m1p1 penny)` is LIVE but not yet
+# validated: it runs, and it will stop somewhere. That is how it gets
+# settled — the report names the first line that fails and prints where
+# the game was standing when it did. Every `travel(...)` still in it is
+# the pathfinder rather than a route, is Playwright-only, and is flagged
+# in the report as time being given away.
+#
+# `save(name)` writes a checkpoint. The workbench shows one button per
+# checkpoint that exists and jumps the game there, so a leg can be worked
+# on without replaying the London flat first — and a `load(name)` line
+# does the same thing from inside a sheet.
+# =====================================================================
+
+reset()
+
+# The Nightdive film, English edition only. A no-op in the workbench, which
+# boots with `<meta name="skip-intro">` — and NOT optional under `npm run
+# speedrun`, which drives the real /play/: without it the film is on screen,
+# there is no viewer to ask, and the line below sat out its whole 90 s having
+# sent 0 presses. One ESC lands ON the ownership question, which since #171
+# carries no skip flag and has to be answered; YES, because "wants" navigates
+# the page to gog.com and a run does not come back from there.
+intro()
+
+skipMovie(until: awaiting)
+clickAt(266, 254)
+skipMovie(until: quiet)
+split(boot)
+closeUp(memory, by: esc)
+
+left(x3)
+click(cards)
+
+wait(asking)
+clickAt(169, 311)
+wait(asking)
+clickAt(255, 190)
+wait(asking)
+clickAt(131, 202)
+wait(asking)
+clickAt(255, 190)
+wait(asking)
+clickAt(457, 352)
+
+wait(global.bombpoints < 0)
+split(flat scored)
+
+wait(theme == bedsit1.trk)
+up()
+right()
+skipMovie(until: set == c73, budget: 30000)
+
+wait(global.mission == 1)
+split(aboard)
+save(m1p0)
+click(bag)
+up()
+space()
+wait(talking)
+bailOut()
+wait(owns.map)
+settle()
+left(x3)
+click(watch)
+
+split(m1p0 smethells)
+save(m1p0map)
+
+# --- M1P1: Penny in the gym ------------------------------------------
+mapJump(gstair1, deck: bd)
+left(); up(); left()
+door()
+right()
+door()
+wait(set == gym)
+face(View47)
+settle()
+
+wait(visible.penny)
+accost(penny)
+say([102,101,103], otherwise: last)
+wait(global.phase == 1)
+split(m1p1 penny)
+save(m1p1)
+
+left(x3)
+door()
+right(x3)
+up()
+up()
+right()
+right()
+up()
+right()
+up()
+up()
+left()
+accost(max)
+# MAX1.PUP `tocafe` 101 "Yes, I'll come with you" (5 lines)
+say([101], otherwise: last, maxturns: 30)
+settle()
+bailOut()
+click(pipe)
+settle()
+click(cigspipe)
+settle()
+click(ok)
+settle()
+split(max pipe)
+save(m1p1cig)
+
+# --- M1P2: the Turkish bath ------------------------------------------
+mapJump(turkstrs, deck: f)
+door()
+up(x2)
+click(water)
+settle()
+click(knob)
+settle()
+click(ok)
+right()
+up()
+left()
+up()
+click(mirror)
+settle()
+esc()
+wait(global.phase == 2)
+
+# --- M1P3: the engines -----------------------------------------------
+# There is no G-deck plan — MAP.STG tops out with stair2c on F — so G is
+# WALKED from there, down past Penny's cabin and on to the engine room.
+mapJump(stair2c, deck: f)
+door()
+up()
+right()
+up()
+left()
+up()
+left()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+door()
+right(x2)
+up(x3)
+left()
+up(x2)
+door()
+up(x2)
+save(m1p1turb1)
+space()
+wait(talking)
+say([101, 102, 103], otherwise: last, maxturns: 30)
+settle()
+
+# turbine
+dial(valve3, 7)
+dial(valve1, 10)
+dial(valve2, 10)
+dial(pump1, 15) 
+dial(pump2, 7)
+dial(slider, 7)
+wait(global.electlag > 75)
+click(exit)
+wait(talking)
+bailOut()
+wait(global.phase == 3)
+split(m1p3 turbine)
+save(m1p1turb2)
+settle()
+
+door()
+left(x2)
+up()
+right(x2)
+up(x3)
+right()
+up()
+left()
+door()
+up(x2)
+door()
+up(x2)
+door()
+up(x2)
+right()
+save(m1p1switchrub)
+up()
+left(x2)
+click(coal4)
+settle()
+click(boildoor)
+settle()
+click(boilrubaiyat)
+settle()
+click(ok)
+settle()
+right()
+up()
+left()
+
+click(coal5)
+settle()
+click(boildoor)
+settle()
+click(boilbag)
+settle()
+click(rubaiyat)
+settle()
+click(ok, wait: none)
+holdAt(150, 250)
+click(boildoor)
+settle()
+click(ok)
+settle()
+left()
+up()
+right()
+up()
+
+left()
+wait(visible.vlad)
+accost(vlad)
+say([101,102,102,101], otherwise: last, maxturns: 40)
+up(x2)
+door()
+up()
+up()
+door()
+up()
+up()
+door()
+mapJump(gstair2, deck: a)
+save(m1p1package)
+bailOut()
+up(x2)
+right()
+up(x2)
+door()
+up(x3)
+
+left()
+up()
+right()
+space()
+wait(talking)
+# SASHA1.PUP: vladfood 101 "I'm looking for a Mr. Barbicon", then
+# want 102 "I'm to receive a package. For Vlad." -> changeset
+say([101,102], otherwise: last, maxturns: 40)
+
+# Back to vlad
+mapJump(stair2c, deck: f)
+door()
+up()
+right()
+up()
+left()
+up()
+left()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+door()
+right(x2)
+up(x3)
+left()
+up(x2)
+door()
+up(x2)
+door()
+left(x2)
+up()
+right(x2)
+up(x3)
+right()
+up()
+left()
+door()
+up(x2)
+door()
+up(x2)
+door()
+up()
+click(vlad)
+settle()
+say([101], otherwise: last, maxturns: 30)
+up()
+right()
+up()
+left()
+up()
+left()
+click(coal5)
+settle()
+click(boildoor)
+settle()
+click(boilrubaiyat)
+settle()
+click(ok)
+settle()
+wait(owns.rubaiyat)
+split(rubaiyat)
+left()
+up()
+right()
+up()
+left()
+up(x2)
+door()
+up()
+up()
+door()
+up()
+up()
+door()
+save(m1p1penny)
+# --- M2P0: report to Penny -------------------------------------------
+# PENNY1.PUP `m1p4`: 101 "Here is the Rubaiyat." -> propowner, then
+# 109 "What do I do now?" -> propowner, sendtoshop, ADVANCEPHASE
+mapJump(stair2c, deck: f)
+door()
+up(x2)
+left()
+space()
+wait(talking)
+say([101,109], otherwise: last, maxturns: 40)
+wait(global.mission == 2)
+split(m2p0 report)
+
+# --- Telegram ---------------------------------------------------------
+# One topic, then out — see the Purser note under Cufflink below.
+# PURS1.PUP `check` 102 is the single topic slot; `thayer` 101 "Could I help?"
+# -> addinven, sendtoshop, actorowner is the one that hands over the errand.
+save(m1p1thayer)
+mapJump(gstair3, deck: c)
+right()
+up()
+click(door)
+up()
+click(door)
+wait(talking)
+say([102,101], otherwise: last)
+settle()
+esc()
+mapJump(gstair1, deck: bd) 
+right()
+up(x2)
+left()
+up()
+right()
+door()
+left()
+door()
+right(x3)
+up(x3)
+left(x3)
+click(morrow)
+wait(talking)
+# MORROW1.PUP `intobridge` 104 "May I visit the wireless office?" (1 line) —
+# the short way in; `wireless` 999 is the same door with four lines in front
+talk(morrow[103,101,101,103,103,102,999], otherwise: last, maxturns: 30)
+left()
+up()
+left(x2)
+door()
+save(m1p1thayersend)
+click(wireless)
+settle()
+wireless(sender, on) 
+wireless(breaker, tx)
+wireless(tuner, tx)
+click(tapper)
+key(e)
+settle()
+click(ok)
+settle()
+click(ok)
+
+split(telegram)
+save(m1p1thayersent)
+
+# --- Cufflink ---------------------------------------------------------
+# THE PURSER IS ONE BEVEL, VISITED SEVERAL TIMES. PURS1.PUP `check` offers a
+# single topic slot — bevel 102 — whose text switches on actorowner("purs"):
+mapJump(gstair3, deck: c)
+right()
+up()
+click(door)
+up()
+click(door)
+wait(talking)
+say([102], otherwise: last)   # the cargo manifest, 2 pages
+settle()
+clickAt(260, 320)
+settle()
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(430, 233)
+clickAt(454, 355)
+esc()
+left(x2)
+click(door)
+up()
+click(door)
+wait(talking)
+# `getlink` 102 "Can I find the cufflink for you?" -> actorowner = findcuff
+say([102,102], otherwise: last)
+settle()
+esc()
+
+
+mapJump(recept1c, deck: d)
+up()
+right()
+click(cufflink1)
+settle()
+click(cuffcuff)
+settle()
+click(ok)
+settle()
+mapJump(gstair3, deck: c)
+right()
+up()
+click(door)
+up()
+click(door)
+wait(talking)
+say([102,], otherwise: last)   # foundcuff -> the car keys
+bailOut()
+settle()
+clickAt(159, 178)
+settle()
+click(door)
+clickAt(190, 182)
+settle()
+esc()
+
+wait(owns.carkeys)
+split(cufflink)
+save(m1p1carkeys)
+
+# --- M2P1: the cargo hold ---------------------------------------------
+mapJump(gstair2, deck: a)
+left(x2)
+door()
+left(x2)
+up()
+left()
+up()
+left(x2)
+up(x2)
+right(x2)
+up()
+up()
+right()
+up()
+door()
+up()
+right(x2)
+door()
+up()
+space()
+wait(talking)
+bailOut()
+settle()
+up(x3)
+right(x2)
+door()
+up()
+right()
+click(car)
+settle()
+clickAt(138, 184)
+settle()
+clickAt(446, 352)
+settle()
+left(x2)
+click(crate)
+settle()
+click(cargopainting)
+settle()
+click(ok)
+wait(global.phase == 1)
+split(m2p1 painting)
+save(m2p1 painting)
+settle()
+left()
+up()
+door()
+left(x2)
+up(x3)
+door()
+
+# --- Fencing ----------------------------------------------------------
+mapJump(gstair3, deck: c)
+right()
+click(smeth)
+wait(talking)
+say([101], otherwise: last, maxturns: 30)
+mapJump(recept1c, deck: d)
+save(m2p1 fencing)
+left(x2)
+up(x3)
+left()
+door()
+left()
+up(x4)
+left()
+up()
+right()
+door()
+up(x2)
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+save(m2p1 fencingstart)
+click(door)
+up()
+wait(talking)
+# LOSING IS THE FAST WAY, and the scripts say why. Willie only hands the ring
+# over at `fencewins = 2` — two won bouts — but SMETH1.PUP retrieves it for you
+# on `propowner("ring") = "willie" & fencecount >= 1 & fencewins < 2`. So one
+# deliberately lost round is worth two won ones.
+#
+# WILFENC1 `fence`: 103 "The Colonel is correct, I'm an excellent fencer" sets
+# fencelevel = 5, the hardest, so he finishes you quickest (101 would set 25).
+# `startplay`: 102 "My foil, please" hands you the foil and starts the bout.
+say([103,102], otherwise: last, maxturns: 30)
+# The bout is a light gun like the fight, and the technique is to throw nothing
+# at all: no defending, get hit until it is over.
+settle()
+hammer(startfence, until: global.fencecount == 1, budget: 90000)
+# postgame speaks, then `playagain` asks again — 102 "No, I've got to go."
+bailOut()
+split(fencing)
+save(m2p1 fencingstop)
+
+# --- M2P2 / M2P3: the ring, then Claris -------------------------------
+mapJump(recept1c, deck: d)
+click(smeth)
+wait(talking)
+bailOut()
+wait(global.phase == 2)
+left(x2)
+up(x3)
+left()
+door()
+left()
+up(x3)
+right()
+up()
+right()
+space()
+wait(talking)
+# CLARIS1.PUP: talk 101, then the `ring` sets — 101 "Do you recognize this
+# ring?", 101, 101, then 102 "Yes, here it is." -> sendtoshop
+say([101,101,101, 102], otherwise: last)
+wait(global.phase == 3)
+split(m2p3 claris)
+
+# --- M3P0: report -----------------------------------------------------
+mapJump(stair2c, deck: f)
+door()
+up(x2)
+left()
+space()
+wait(talking)
+say([600], otherwise: last, maxturns: 30)
+wait(global.mission == 3)
+split(m3p0 report)
+save(m3p0 report)
+
+# --- The three clues --------------------------------------------------
+mapJump(turkstrs, deck: f)
+click(door)
+wait(talking)
+say([102,102,102], otherwise: last, maxturns: 30)
+settle()
+wait(!walking.morrow)
+door()
+up(x2)
+left(x2)
+door()
+up(x2)
+right()
+door()
+up()
+click(willie)
+settle()
+click(rubclueclue)
+settle()
+click(ok)
+
+# first clue
+mapJump(stair2c, deck: e)
+up()
+door()
+right()
+up()
+left()
+click(hitrope)
+settle()
+esc()
+wait(talking)
+say([101,101,104])
+save(m3p0 clue)
+
+mapJump(stair1c1, deck: b)
+up(x2)
+door()
+up()
+right()
+up(x2)
+click(willzeittable)
+settle()
+click(cigscigs)
+settle()
+click(ok)
+save(m3p0 cigs)
+
+settle()
+mapJump(stair1c1, deck: a)
+left()
+up(x2)
+left(x2)
+door()
+click(max)
+wait(talking)
+say([102], otherwise: last, maxturns: 30)
+wait(global.phase == 1)
+split(m3p1 clues)
+save(m3p0 funnel)
+
+# --- M3P2: the fight --------------------------------------------------
+mapJump(stair2c, deck: f)
+door()
+up()
+right()
+up()
+left()
+up()
+left()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+door()
+right(x2)
+up(x3)
+left()
+up(x2)
+door()
+up(x2)
+save(m3p0turb1)
+space()
+wait(talking)
+say([101], otherwise: last, maxturns: 30)
+settle()
+
+# turbine
+dial(valve3, 7)
+dial(valve1, 10)
+dial(valve2, 10)
+dial(pump1, 15) 
+dial(pump2, 7)
+dial(slider, 7)
+wait(global.electlag > 75)
+click(exit)
+wait(talking)
+bailOut()
+
+split(m3p0 turbine)
+save(m3p0turb2)
+settle()
+door()
+left(x2)
+up()
+right(x2)
+up()
+left(x2)
+up()
+left()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+save(m3p0 fight)
+up()
+wait(talking)
+bailOut()
+# FIGHT.STG is a light gun: the stage mousedown hands the click to the `fists`
+combo([256,300], [256,210], [256,100], until: global.vladpower < -50, budget: 30000)
+wait(noflat)
+wait(global.phase == 2)
+split(m3p2 fight)
+settle()
+# --- M4P0: the smokestack ---------------------------------------------
+save(m3p0 smokestack)
+up()
+up()
+# climbStack reads mazenumber and solves whichever of the four was drawn — one
+# of the sixteen (maze, entry) pairs is a dead end, so the entry is chosen
+# rather than taken in order.
+climbStack()
+save(m3p0 smokestackdone)
+stand(view55, set: smstack3)
+click(notebook)
+wait(talking)
+say([101,101,101,101,101], otherwise: last, maxturns: 30)
+wait(global.mission == 4)
+split(m4p0 smokestack)
+
+# =====================================================================
+# MISSION 4 — the ship is sinking, and the clock is a countdown
+#
+# `advanceday()` for `clock = "startdisk2"` is the whole handover, and it is
+# worth reading because it decides everything below: `playmovie("datehit.mov")`
+# (12 frames), then `initall("c73", "scene51", "view63")` — mission 4 opens in
+# Frank's cabin, facing the wrong way — then `hrs = 13`, `min = random(4)` and
+# `sinkflag = true`, which is what turns calctime into a countdown.
+#
+# TWO THINGS ARE DIFFERENT HERE AND BOTH COST TIME.
+#
+#   1. THE MAP IS GONE. `MAP.STG mapdisabled()` returns true outright at
+#      `mission = 4`, before it looks at the bag, the watch or the room. So
+#      there is no `mapJump` in this whole section and every hop is walked.
+#      The `travel(...)` lines below are the pathfinder rather than a route:
+#      Playwright-only, flagged in the report as time given away, and there to
+#      be replaced by the literal lines it prints — the same way everything
+#      above `split(m4p0 smokestack)` got settled.
+#
+#   2. TALKING SPENDS THE CLOCK. `gang.cst prepuppet()` does `min = min + 2` at
+#      mission 4 and `doclaris()` does its own, so a conversation is two game
+#      minutes and seven of them is a phase. At 13:15 `advancephase()` calls
+#      `sinkmovie()`, which closes the set, plays sink1.mov (236 frames) and
+#      re-opens the set under your feet. Nothing here breaks if that lands
+#      mid-leg, but it is paid wherever it lands — hence four conversations in
+#      the whole mission and not one more.
+# =====================================================================
+
+skipMovie(until: set == c73)
+settle()
+save(m4p0 cabin)
+
+# --- M4P0: Penny at the cabin door ------------------------------------
+# The same standpoint and the same gesture as the steward in mission 1: space
+# is the boot script's "the door in front of me", and `c73.set` c9's mousedown
+# takes it. The door does not open — the `mission = 4 & pennyphase = 0` branch
+# opens it, runs penny2.pup, puts the door back with `initprop()` and ends on
+# `flushevents()`, so the press is spent on her and not on the doorway.
+#
+# `afterberg()` HAS NO PLAQUES. It is ~20 puppetspeaks with one
+# `spotmovie("lenin.mov")` (3 frames) in the middle, so there is nothing to
+# answer — and nothing to bail out of either. bailOut() would be fatal to the
+# leg rather than merely rude: ESC answers -1, and `pennyphase = 1` is the very
+# LAST line of the puppet. Until it is 1 the cabin door keeps running her
+# instead of opening, and the run is locked in Frank's cabin.
+stand(view55, set: c73)
+space()
+wait(talking)
+say(otherwise: first, maxturns: 20)
+wait(global.pennyphase == 1)
+split(m4p0 penny)
+save(m4p0 penny)
+
+# --- M4P0: Zeitel's cabin — the notebook, and the bomb we do not defuse
+# The notebook has been Zeitel's since the top of the smokestack, and it had to
+# be: handing it over is the only exit from mission 3. So this is a recovery,
+# and `c59.set` c105's openscene charges for it — walk into SCENE 12 and it
+# sets `bombphase = 1`, calls `setupactor("zeit", "c59")`, turns the camera
+# onto him and locks the door (`c59.set` c54 answers `doorlocked` while
+# `bombphase = 1`). His zeit2.pup c59() puts the notebook DOWN where you can
+# see it and offers three bevels that are all 104, so the answer cannot matter.
+#
+# openscene ends with `sendtoactor("zeit", mousedown(0))` — it clicks him FOR
+# you — and measured, that call does not land; the identical dispatch a few
+# frames later does. accost() covers both: it returns immediately if he is
+# already talking, and clicks him if he is not.
+#
+# THE LAST TURN IS THE AMBUSH'S, NOT OURS. `stand(view29, set: c59)` was the
+# obvious way to write the walk and it cannot work: `stand` walks the road into
+# Scene12 — which is what springs openscene — and then does its confirming
+# `face(view29)` into a script that is already turning the camera itself
+# (`while currentview() != "view29": currentscene("right")`) with the engine
+# locked behind it. The ArrowRight is not slow, it is unacceptable; measured,
+# it sat out its whole budget at `c59 Scene12/View29 · talking to zeit2.pup ·
+# script busy`, one turn past a camera that had already arrived. So: walk in,
+# then WAIT for openscene to finish moving the camera, and never press into it.
+#
+# The walk itself is the planner's own transcript for `travel(c59)`, taken from
+# the report and written out — out of Frank's cabin, along C deck, in at
+# Zeitel's door — so this leg runs in the workbench too.
+door()
+right()
+up(x4)
+right()
+door()
+face(view25)
+up()
+wait(global.bombphase == 1)
+wait(view == view29)
+accost(zeit, patience: 15000)
+say(otherwise: last, maxturns: 20)
+
+# The notebook first, because it is the only thing in this room the ending
+# reads: NAREND.STG `rushrev()` is `propowner("notebook") != "frank"` and
+# nothing else. If the click ever misses from this standpoint, `hunt(notebook)`
+# is the escape hatch.
+click(notebook)
+wait(owns.notebook)
+
+# THE BOMB IS NOT DEFUSED. IT IS GIVEN UP ON, AND THE GAME PAYS FOR IT.
+#
+# Defusing it is three switches in one order and then 58 turns of an 11-step
+# loop while the dial hand sweeps 0..57 — a minute of real time spent watching
+# a timer run out, for a key that opens one door. Giving up is four gestures.
+#
+# `hitok()` opens `if unibomdoor = 1: boomer()`, and `openstage()` sets
+# `unibomdoor = 1`. So clicking OK on an untouched board is an immediate
+# `boomer()`: bombblow.mov, then bombhelp.mov — and bombhelp.mov is not a
+# cutscene, it is the game’s own help screen, twelve pages of "pics" with
+# TRYAGAIN and GIVEUP in the corner. Its header names `giveup` as
+# actionframe(1), and boomer's tail is:
+#
+#     if actionframe (1)
+#         sendtoshop ("inven.shp", addinven ("bombkey"))
+#         transfromflat ()
+#
+# — so clicking GIVEUP hands over the bomb key and leaves the flat, and
+# clicking TRYAGAIN (or letting the movie end anywhere else) runs
+# `closestage(); openstage()` and puts the whole board back. The key is all the
+# door wants: c54 dumps it from the bag and does `setupprop("door",
+# "c59-hallc")`. `bombphase = 2` was set by the click INTO the flat, so the
+# lock is already off by the time we get here.
+#
+# Nothing is lost by blowing it up. `boomer()` never touches `playerdeath`, and
+# the closing narration scores four ownerships — rubaiyat, realneck, painting,
+# notebook — of which the bomb is none.
+#
+# AND IT IS NOT IN THIS VIEW. The ambush leaves you on Scene12/View29, because
+# that is the end of Road38 and openscene turns you to it by hand; the bomb
+# hotspot is the only object on Scene12/View31, two standpoints round the same
+# ring. Measured as `nothing called "bomb" is clickable from here · clickable
+# here: nothing`, which is the room telling the truth — the notebook above is a
+# PROP and reachable from anywhere in the scene, the bomb is a view object and
+# is not.
+face(view31)
+click(bomb)
+wait(global.bombphase == 2)
+# AND THEN WAIT, because `bombphase = 2` is not the flat being open. c107's
+# mousedown sets it and only THEN runs `transtoflat("bomb.stg")`, whose
+# `openstage()` ends on `playmovie("bombopen.mov")` — 22 frames of the casing
+# being opened. An OK click sent the instant the global flips lands inside that
+# clip and is eaten by it, and the symptom is a leg that looks like it did
+# nothing: flat "Bomb 1", no movie, no script running, nothing parked, which is
+# precisely what the failure printed.
+settle()
+clickAt(465, 352, wait: none)
+# `boomer()` is ~30 ticks of fade and then 79 frames of bombblow.mov before
+# bombhelp.mov parks, which is close enough to ten seconds to lose a race.
+movieRegion(giveup, budget: 60000)
+wait(noflat)
+wait(owns.bombkey)
+split(m4p0 notebook)
+save(m4p0 notebook)
+
+# Tempting and NOT safe: bombblow.mov is 79 frames of pure cutscene and ESCs
+# away, but bombhelp.mov parks on its regions on frame 0 and also carries the
+# skip flag, so a hammer that is one press late skips the help screen instead
+# of the explosion — which is `closestage(); openstage()`, the board back, and
+# the leg to run again. Worth measuring one day against the ~5 s it buys.
+#| skipMovie(until: asking)
+
+# Out, and this one did not need the planner: c59 is three scenes on two roads
+# (Road37 Scene10/View20 <-> Scene11/View21, Road38 Scene11/View25 <->
+# Scene12/View29) and the only `door` object in the set is on Scene11/View26 —
+# c54, the one that dumps the bomb key and does `setupprop("door",
+# "c59-hallc")`. So the way out is the way in, backwards.
+face(view29)
+up()
+face(view26)
+door()
+
+# --- M4P0: the shawl, in the lounge doorway ---------------------------
+# Clariss Limehouse is in the doorway and cannot be walked past. `LNGHALL.SET`
+# c5's keydown at view12 is the way into the lounge, and at
+# `mission = 4 & clarisphase = 0` it runs `doclaris()` instead of the trip: her
+# puppet opens, she is somewhere else entirely, and she gives you a shawl.
+#
+# Two presses, and they are different presses. The keydown wants
+# `propvisible("door")`, so space opens the lounge door FIRST; the up arrow is
+# then the one `doclaris()` eats. And `clarisdream()` needs BOTH of its
+# questions answered before it lets go — `while f1 = 0 | f2 = 0`, one flag per
+# bevel id — so 101 and then 102, in that order, and neither may be skipped.
+#
+# We never go INTO the lounge. Zeitel is in there for `phase < 2` with a bottle
+# of antidote and a trade for the painting, and that trade is the one thing in
+# mission 4 that can lose the ending: `givepaint()` is a `while f2 < 2` loop
+# with no good way out, and the painting is `twohappens`. The shawl is in the
+# doorway; the door stays shut.
+# The planner's own transcript for `travel(lnghall)`, written out: out of
+# Zeitel's corridor, up the second-class stair to B, along and up again to A,
+# and in at the lounge hall. 29 gestures, and the pair of `space, up` at each
+# end are the two doors — folded into `door()`, which is those same two presses
+# plus the settle every other door in this sheet does.
+right()
+up()
+door()
+left(x2)
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right(x2)
+up()
+right(x2)
+up()
+right()
+up()
+door()
+face(view16)
+stand(view12, set: lnghall)
+space()
+up()
+wait(talking)
+say([101,102], otherwise: first, maxturns: 20)
+wait(owns.shawl)
+wait(global.clarisphase == 1)
+split(m4p0 shawl)
+save(m4p0 shawl)
+
+# --- M4P0: down to Vlad, and the necklace for the shawl ---------------
+# `inven.shp initprops` deals the real necklace to Vlad at the start of the
+# game and this run never took it off him, so it is still his — and
+# NAREND.STG's `worldwar1()` reads `propowner("realneck")`, which makes this
+# the difference between the war happening and not. vlad2.pup's `tradevlad()`
+# is the only way it comes back, and it wants the shawl.
+#
+# `TURB.SET openset` places him for `mission = 4` and only while
+# `propowner("shawl") != "vlad"` — so this is a one-shot: the moment the trade
+# goes through he is not set up in that room again.
+#
+# Six plaques, and the chain is worth writing down because five of them are
+# 101 and the sixth is not:
+#
+#   101  "He's dead?"                      turb()      — both bevels are 101
+#   101  "I can help you into first class" shawl()     — 102 is refusing him
+#   101  "Wear this shawl…"                tradevlad() — the only bevel
+#   101  "You are being foolish"                       — 102 is "Farewell"
+#   101  "The real necklace."              what he holds, listed by ownership
+#   103  "I want the real necklace."       103 IS the necklace; 101 would be
+#                                          the Rubaiyat and 102 the notebook,
+#                                          and neither is offered because both
+#                                          are already ours
+#
+# That last plaque is why the list ends in 103 rather than 101: the ids in
+# `tradevlad()`'s final switch are the ITEM, not the position, and only the
+# bevels for things Vlad actually holds are drawn.
+#
+# AND THE WAY DOWN IS OVER THE BOAT DECK, WHICH IS THE ONE PLACE THIS ROUTE
+# MUST NOT WALK CARELESSLY. There is no other way: the graph's only descent
+# from A deck is decka -> the boat deck -> stair2c, and `travel(turb)` took it
+# and walked straight into the Gorse-Joneses — `gave up reaching view266 in
+# deckbd2 · talking to jones2.pup`. That is not a wrong turn, it is the ENDING
+# being offered early, and the planner cannot know to refuse it: it pathfinds
+# for reachable, and Scene44 is on the shortest way.
+#
+# So the crossing is written by hand, and it is a question of WHICH SCENE.
+# DECKBD2.SET c1012 watches exactly two standpoints — Scene44/View211 and
+# View212 — and Scene44 is avoidable:
+#
+#     veststbd -> deckbd2 arrives at Scene36, and 36 -> 151 -> 150 -> 48 -> 47
+#     is four roads to View266, the stair2c door, with Scene44 nowhere on it.
+#
+#     vestport -> deckbd2 arrives at Scene322, and from there the SHORTEST way
+#     to Scene47 is 322 -> 152 -> 44 -> 45 -> 46 -> 47 — five roads straight
+#     through the ambush. So the door matters: starboard, not port.
+#
+# `stand` plans over `viewer.set` in memory and picks the fewest roads, which
+# from Scene36 is the safe chain above. That is why this is a `stand` and not a
+# `travel`: same walk, and it can be reasoned about before it is run.
+travel(veststbd)
+door()
+stand(view266, set: deckbd2)
+door()
+travel(turb)
+# AND HE IS AT THE BOTTOM OF IT. TURB.SET is three levels and twelve scenes on
+# one chain of roads, and the arrival from hallf2c is at the TOP:
+#
+#   Scene82 -> 81 -> 52 -> 51 -> 14 -> 13 -> 10 -> 11 -> Scene12
+#
+# The set's own actor table puts vlad at (2943, -1604, 12982), and measured
+# against each scene's map origin that is dy 2320 below the entry level, dy 1064
+# below Scene13/14, and dy 0 — the same floor — for Scenes 10, 11 and 12. By
+# horizontal distance Scene12 is 530 away from him and every landing above it is
+# 1100 or more with a storey on top, against a `hotdist()` of 1700 in this room
+# (reach.ts). So he is reachable from exactly one part of the room.
+#
+# That is why the first two tries failed and why neither failure said so:
+# `accost` only turns, and turned the whole ring at Scene82 nine roads away;
+# `hunt` walks, and gave up after 44 standpoints at Scene13/View30 — one storey
+# up and just outside his reach. Both reported `cast: sasha, vlad`, which is
+# true and unhelpful. Walk down first, then he is 530 units away and a turn is
+# all it takes.
+stand(view16, set: turb)
+accost(vlad, turns: 8, patience: 15000)
+wait(talking)
+say([101,101,101,101,101,103], otherwise: first, maxturns: 20)
+wait(owns.realneck)
+split(m4p0 necklace)
+save(m4p0 necklace)
+
+# --- M4P1: the boat deck, and the way off the ship --------------------
+# `DECKBD2.SET` c1012's keydown: press up at View211 or View212 with
+# `phase < 3`, `jonesphase = 0` and `frame() - jonesframe > 2000`, and the set
+# runs jones2.pup — the Gorse-Joneses accost you in lifejackets, unruffled —
+# and answering "Yes, I'll get on the boat" sets `clock = "endgame"`, which the
+# SAME handler reads on the next line and takes to `advanceday()`.
+#
+# The frame gate is a poll and not a state: `jonesframe` is assigned nowhere
+# else in the corpus, so it is 0, and `frame()` counts displayed frames from
+# the start of the session. A carried run arrives here in the tens of
+# thousands and they turn up on the first press; a run resumed from a
+# checkpoint has to spend 2000 frames first, and until it has, the press is an
+# ordinary walk along the boat deck. If that happens the fix is more presses,
+# not a longer budget.
+#
+# The deck is also crowded and `hotdist()` here is 500, the tightest in the
+# game, so a walk can still be stopped by Morrow or a steward on the way to
+# the rail.
+travel(deckbd2)
+stand(view211, set: deckbd2)
+up()
+wait(talking)
+say([101], otherwise: last, maxturns: 20)
+wait(global.jonesphase == 1)
+wait(global.clock == endgame)
+split(m4p1 lifeboat)
+
+# THE ENDING RUNS FROM HERE ON ITS OWN and is not written down yet:
+# `advanceday()` plays leave.mov and debris.mov, then `transtoflat("narend.stg")`
+# reads the closing papers out one voicewait at a time, assigns "good" or "bad"
+# over `mission`, and finishes on credits.mov — which is fourteen pages that
+# are TURNED, not watched, and then `quit()`. A run that wants a timed ending
+# needs a page-turning loop here.
