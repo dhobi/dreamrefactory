@@ -400,7 +400,22 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
         .map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev }));
       // the polyline is stored a->b; walk it backwards when the destination is
       // the `a` end (TI.EXE's second match arm in both lookups)
-      if (rec.a.toLowerCase() === toName) points.reverse();
+      if (rec.a.toLowerCase() === toName) {
+        points.reverse();
+        // A point's `fromPrev` is the length of the leg BEHIND it, so reversing
+        // the polyline has to carry each length one point along — the leg that
+        // used to arrive at a point is the one that now leaves it. Reversing the
+        // array alone pairs every leg with the wrong length: SCOT3's nine-point
+        // route out of Scotland Road walked its 3983-unit hallway as though it
+        // were 856 (4.65x too fast), its corners at 0.29x and 0.45x, and its
+        // last leg to the door with a stored length of ZERO — the hacker
+        // teleporting the final 752 units. Reported as "first too fast down the
+        // hallway, then too slow in the corner, then too fast and too slow
+        // reaching the door" (#224); the route's total came out 4678 against
+        // the 8661 its own container header declares.
+        for (let i = points.length - 1; i > 0; i--) points[i].fromPrev = points[i - 1].fromPrev;
+        points[0].fromPrev = 0;
+      }
       if (points.length >= 2) {
         session.scheduler.startWalkPath(toStr(n), points, toName);
         return 0;

@@ -9170,3 +9170,79 @@ test("blackjack: the deal plays its swing, at the deck's own variant", async () 
     `frames=${JSON.stringify(dusty)}`);
 }
 );
+
+// --- 106. a route walked BACKWARDS keeps its own leg lengths (#224) ----------
+//
+// Reported: after the rope clue in Scotland Road the hacker "walks away in a
+// very broken way. First too fast down the hallway, then too slow in the corner,
+// then too fast and too slow reaching the door", against an original whose walk
+// down that hall is one constant speed.
+//
+// GANG.CST's hacker leaves with `walkonpath (me, "resume", "hack1")`, and SCOT3
+// authors that route the other way round — nine points, hack1 -> hack2 — so it
+// is walked reversed. A point's `fromPrev` is the length of the leg BEHIND it,
+// which means reversing the array of points alone hands every leg the length of
+// its neighbour: the hallway's 3983 units were paced as 856 (4.65x too fast),
+// the corners at 0.29x and 0.45x, and the last leg to the door was left with a
+// stored length of ZERO, so the hacker covered its 752 units in one pass. The
+// route's total came out 4678 against the 8661 its own container header
+// declares, which is the check that says it in one number.
+//
+// One progress scalar over the whole polyline is right (see startWalkPath); it
+// is only right if the legs it is spent against are the real ones.
+test("a route walked backwards keeps its own leg lengths (#224)", async () => {
+  const { session } = await newHost();
+  await session.openSetFile("scot3.set");
+  await session.openCastFile("gang.cst");
+  await session.settle();
+  const hack = session.actorRuntime.get("hack")!;
+  const set = session.currentBinding!.set;
+  const star = (n: string) => set.actors.find((s) => s.identifier.toLowerCase() === n)!;
+  const to = star("hack1");
+  // the room's own entry (SCOT3.SET 0110): standing on hack2, at the hall's
+  // speed and scale
+  await session.sendEvent("sendtoactor", "hack", "setupactor", ["scot3"], "test");
+  await session.settle();
+
+  // the script's own call (GANG.CST 0258 mousedown, after the puppet)
+  void (session.interp.builtins.get("walkonpath") as unknown as (
+    i: unknown, a: unknown[], c: unknown, f: unknown,
+  ) => unknown)(
+    session.interp, ["hack", "resume", "hack1"],
+    { me: "scot3.set", target: "hack" }, { ctx: { me: "scot3.set", target: "hack" } },
+  );
+  await drain();
+
+  const seen: { x: number; y: number }[] = [{ x: hack.worldX, y: hack.worldY }];
+  for (let i = 0; i < 4000 && session.scheduler.isWalk("hack"); i++) {
+    session.scheduler.tickTime((clock += 50));
+    await drain();
+    seen.push({ x: hack.worldX, y: hack.worldY });
+  }
+  check("he arrives at hack1", hack.worldX === to.positionX && hack.worldY === to.positionZ,
+    `at (${hack.worldX},${hack.worldY}) want (${to.positionX},${to.positionZ})`);
+
+  // Every pass covers the same ground: `progress += actorspeed`, once per 50 ms.
+  // Sampled between the first move and the last (a walk turns before it moves,
+  // and the arrival pass is a part-step onto the star).
+  const steps: number[] = [];
+  for (let i = 1; i < seen.length; i++) {
+    steps.push(Math.hypot(seen[i].x - seen[i - 1].x, seen[i].y - seen[i - 1].y));
+  }
+  const moving = steps.filter((d) => d > 0);
+  const paced = moving.slice(0, -1);
+  const fastest = Math.max(...paced);
+  const slowest = Math.min(...paced);
+  check("he walks the whole route at one speed",
+    fastest - slowest <= 2,
+    `steps ranged ${slowest.toFixed(1)}..${fastest.toFixed(1)} units over ${paced.length} passes`);
+  check("...his actorspeed's worth of it, every pass",
+    Math.abs(fastest - hack.speed) <= 2,
+    `speed=${hack.speed} fastest step=${fastest.toFixed(1)}`);
+  // 8661 units at his speed, and no leg skipped: the count is the route's own
+  // length divided by the pace, not a shortened 4678-unit version of it
+  check("...for as long as the route the set authored is",
+    Math.abs(moving.length - 8661 / hack.speed) <= 2,
+    `${moving.length} passes at speed ${hack.speed}, want ~${Math.round(8661 / hack.speed)}`);
+}
+);
