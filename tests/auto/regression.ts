@@ -9109,3 +9109,64 @@ test("engine: the screen after a movie is the movie's, until a script draws (#20
   }
 }
 );
+
+// --- 105. the blackjack deal plays its swing, not its first frame ------------
+//
+// Reported (#223): "Riveria's dealing animation is not playing as intended. It
+// appears to start on the first frame, waits on it, then displays the last frame
+// when it would be played. The intermediate frames of hand moving the card to
+// the table doesn't appear."
+//
+// BLKJACK.STG's `take` deals a card with
+//
+//     propview ("buick", "deal")
+//     if playingcards = "dust"  propdeg ("buick", 1)  else  propdeg ("buick", 0)
+//     for count = 1 to 19 / forceupdate () / endfor
+//     propview ("buick", "idle")
+//
+// and `deal` stores the swing TWICE — a clean deck and a dusty one, degrees
+// [0,0,0,0,1,1,1,1,0,1], with a play script written against the variant
+// (0,0,0,0,1,1,1,1,…,4,4,4,4). So the propdeg is choosing which deck is dealt,
+// not which picture is shown, and this port's frame pin — right for a selector,
+// which is what propdeg usually addresses — stopped the animation dead on both
+// halves of the idiom: the propdeg itself, and the NEXT card's propview, which
+// found degVariants set from within the same event.
+test("blackjack: the deal plays its swing, at the deck's own variant", async () => {
+  const { session } = await newSession();
+  await session.openSetFile("smoke.set");
+  await session.openShop("blkjack.shp");
+  const buick = session.propRuntime.get("buick")!;
+  const call = (name: string, args: (string | number)[]): void => {
+    (session.interp.builtins.get(name) as (i: unknown, a: (string | number)[]) => void)(
+      session.interp,
+      args,
+    );
+  };
+  // one card, `take`'s own choreography and its own budget of 19 service passes
+  const deal = (deg: number): number[] => {
+    call("propview", ["buick", "deal"]);
+    call("propdeg", ["buick", deg]);
+    const shown: number[] = [];
+    for (let i = 0; i < 19; i++) {
+      shown.push(buick.currentFrameIdx(buick.state()!));
+      session.propRuntime.tick((clock += 50), 50);
+    }
+    return shown;
+  };
+  const clean = deal(0);
+  // the second card of the hand: same event, degVariants already set
+  const dusty = deal(1);
+  const pictures = (a: number[]) => new Set(a).size;
+
+  check("the deal animates instead of holding its first picture",
+    pictures(clean) >= 4, `frames=${JSON.stringify(clean)}`);
+  check("...through the clean deck's own frames, and ending on its last",
+    clean.every((i) => [0, 1, 2, 3, 8].includes(i)) && clean[clean.length - 1] === 8,
+    `frames=${JSON.stringify(clean)}`);
+  check("the card after it animates too (the propdeg before it is not a pin)",
+    pictures(dusty) >= 4, `frames=${JSON.stringify(dusty)}`);
+  check("...and a dusty deck deals the dusty deck's pictures",
+    dusty.every((i) => [4, 5, 6, 7, 9].includes(i)) && dusty[dusty.length - 1] === 9,
+    `frames=${JSON.stringify(dusty)}`);
+}
+);
