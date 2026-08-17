@@ -414,6 +414,31 @@ test("the load dialog holds a black screen, and the panel comes back on cancel (
 });
 
 /**
+ * The SAME black, on the other way in.
+ *
+ * The test above drives `opengame`, the panel's own lever, which clears the
+ * level itself when `loadGame` returns. `GameHost.loadSavedGame` is the host's
+ * entry point for a `.ti` — what the saves modal calls, and what a page that
+ * restores a game without going through the CTL panel calls — and it did not.
+ * So a game loaded that way restored correctly and then sat behind a
+ * full-screen black: the right room, the right standpoint, nothing on screen.
+ *
+ * Asserted on the host rather than the session because the missing line is the
+ * host's: `loadGame` blacking the screen is faithful (TI.EXE's restore runs
+ * `blackscreen`'s five calls before rebuilding the palette), and every caller
+ * owes the room the reveal afterwards.
+ */
+test("a save loaded through the host lifts whatever fade was holding the screen", async () => {
+  const { host, session } = await newHost();
+  // whatever the page was showing when it decided to restore — here, held black
+  session.fade.level = 1;
+  await host.loadSavedGame(new Uint8Array(readFileSync(savePath("1", "06 - Boiler Room.ti"))));
+  await session.settle();
+  expect(session.setVisible).toBe(true);
+  expect(session.fade.level).toBe(0);
+});
+
+/**
  * The freeze itself. Every timed thing in the engine — the service pass,
  * `delay`, the fade and wipe ramps, prop animation, movies — reads one clock,
  * and the viewer hands it this. So holding it is the whole pause: nothing
