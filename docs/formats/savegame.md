@@ -82,7 +82,7 @@ all 109 shipped saves.
 | Container | Contents |
 |-----------|----------|
 | **0** | manifest, built on the stack: `"Titanic 1.0"` version (Pascal string @0), disk family `"Titanic1"`/`"Titanic2"` (@+0x104), nine 256-byte path slots (@+0x1fc — the *Save As* / tour directories), the **live CLUT** (@+0xb0c, 256 × {i16 index, i16 rgb[3]} — the loader copies it into the palette global and applies it, `0x414aa8..0x414b07`; the lower 128 entries are the open set's own palette table and a cross-room patch must replace them or the room comes back in the old room's colours), the open-file count (@+0x130c), then one **260-byte record per open file** at +0x1310: the file's **old heap handle** (u32) followed by its path as a Pascal string (`titanic2:data:cargo.set`). The handle is not junk — it is the key every other container's file references resolve through, see [how the loader re-opens the room](#the-loader-re-opens-the-room-from-the-manifest-not-from-the-set-name) |
-| **1** | current location, a fixed 786 bytes from `0x489d40`: stage file (@520, `"main.stg"`), the open **set file's old handle** (@544 — resolved through the manifest, above), set base (@596), scene (@612), view (@628), the set's **actor / main-scene register container refs** (@644 / @652) and the scene register's **record count** (@656 — the loader's scene lookup walks exactly this many records; equal to the set's scene count in all 109 shipped saves) |
+| **1** | current location, a fixed 786 bytes from `0x489d40`: the **frame counter** (@442 — see [below](#the-frame-counter-c1-442)), stage file (@520, `"main.stg"`), the open **set file's old handle** (@544 — resolved through the manifest, above), set base (@596), scene (@612), view (@628), the set's **actor / main-scene register container refs** (@644 / @652) and the scene register's **record count** (@656 — the loader's scene lookup walks exactly this many records; equal to the set's scene count in all 109 shipped saves) |
 | **2** | the cast: n × 160-byte actor records — see [The actor container](#the-actor-container-fixed-160-byte-actor-records) |
 | **3** | open casts: n × 28 (two pointers, a u32, the `.cst` filename as a Pascal string at +12). **A load has to reopen these** — the room's crowd is instanced from them and no `openset` runs to open them itself; see [The crowd comes from this container](#the-crowd-comes-from-this-container) |
 | **4** | inventory — every loaded prop: **72 × 158** in every shipped save, inventory items first — see [The inventory container](#the-inventory-container-fixed-158-byte-prop-records) |
@@ -187,6 +187,34 @@ index 4. (A correlation sweep of every u16/u32 in c1's tail against the sets'
 own facts — scene index, view index/ID/count, register record offsets,
 viewport — matches nothing else across the 109; @656 is the only set-shape
 field the blob restores.)
+
+## The frame counter (c1 @442)
+
+Container 1 is a verbatim dump of the 786 bytes at `0x489d40`, and the loader
+copies all 786 back — but not blindly. Before the copy (`0x4142b2`) it stashes
+**three 146-byte windows** of the live block on the stack — `[+0, +146)`,
+`[+146, +292)`, `[+292, +438)` — along with the dwords at `+778` and `+782`, and
+puts them all back afterwards (`0x41431b..0x414365`). So the range the *file*
+actually gets to restore is exactly **`[438, 778)`**, and the first thing in it
+is the engine's displayed-**frame counter**, `0x489efa − 0x489d40` = **@442**.
+(`framerate` is the dword after it, @446. It reads 3 in all 109 shipped saves:
+the scripts that change it — the fencing stage, the turbine — put it back before
+the player can reach the save menu.)
+
+The counter is what `frame()` answers with (`0x4273b0` fetches it; `0x439b80`
+bumps it once per pass, 20 a second — see
+[timing](../runtime/timing.md#framerate-and-frame-paced-by-the-clock-not-by-the-display)),
+and restoring it is what makes an absolute frame stamp in a global mean
+anything after a load. BOOTFILE's `advancephase` writes `paintframe = frame()`
+when mission 2 opens and BINL.SET's cargo crate asks
+`frame() - paintframe > 10000`, so a counter that kept running from the
+*session's* start rather than the *saved game's* declared the ten minutes over
+the instant the save came back — the painting gone, on a save taken with it
+still in the crate
+([#221](https://github.com/dhobi/taoot-web/issues/221)). Measured across the
+corpus: the counter rises monotonically along each numbered series (disc 1:
+64 → 32469 → … → 346349) and no [frame stamp](#how-wide-is-the-value-32-bits)
+in the globals ever exceeds its own save's.
 
 ## The actor container: fixed 160-byte actor records
 
@@ -331,8 +359,8 @@ Each node's fields sit at fixed offsets:
 | +8 | — | **name**: one length byte + characters, in a 12-byte buffer (trailing bytes are uninitialised) |
 | +20 | u32 | DFValue **vtable** — a raw code pointer, **not a constant**: `0x00431e0f` in all 109 shipped saves, `0x87c4596f` in a player's own (#179). It is still what the node grid is found by, but the value has to be read out of the file rather than matched against ours — see [Finding the grid](#finding-the-grid-the-vtable-is-a-pointer) |
 | +24 | u16 | **type tag** (2, 3 or 4) |
-| +26 | 16-bit | **value** |
-| +28 | … | trailing fields / padding |
+| +26 | i32 | **value** (see [How wide is the value?](#how-wide-is-the-value-32-bits)) |
+| +30 | … | trailing padding |
 
 ### The crucial subtlety: a name pairs with the PREVIOUS node's value
 
@@ -413,7 +441,7 @@ Each node's `+20..+27` is a serialized `DFValue`:
   record's tag** while the value stays 0/1 (its interpreter carries booleans
   as numbers, so the tag is the only witness), and lets a non-boolean value
   retype the record the way an assignment in the original would.
-- **type 4 → number**, stored inline as the signed i16 at `+26`.
+- **type 4 → number**, stored inline as the signed i32 at `+26`.
 - **type 3 → string**: `+26` (unsigned) is the **byte offset of the string in
   the string-pool container** that follows the globals container. The pool is a
   block of `[len][chars]` entries, 2048 bytes in most saves and about 4100 in the
@@ -421,6 +449,37 @@ Each node's `+20..+27` is a serialized `DFValue`:
   restored wholesale*, which is why the offsets stay valid across processes
   (this is how the original restores string variables; there is no rebuilt atom
   table).
+
+### How wide is the value? 32 bits
+
+A word was read here for a long time, and nothing in the game's own story state
+minds: a phase, a count, a clock reading and a pool offset all fit in 16 bits,
+and the boolean tag carries 0/1. What does not fit is the other thing a script
+can put in a variable — a **`frame()` reading**. The counter runs at 20 Hz, so it
+leaves 32767 behind after 27 minutes of play, and TAOOT stamps four globals with
+it: `paintframe`, `lastsail`, `jonesframe` and `secframe`.
+
+The node has room for the full dword — the value field runs `+26..+30` inside a
+32-byte node, and TI.EXE's `frame` handler (`0x4273b0`) writes one:
+`mov ecx, [0x489efa]` / `mov [eax+2], ecx`. The corpus settles it. Across all
+109 shipped saves the high word at `+28` is **0 in every string (3380 records)
+and every boolean (1015)**, and non-zero in exactly six numbers — every one of
+which reads as noise truncated to a word and as the obvious thing at full width:
+
+| Variable | i32 | as i16 |
+|----------|----:|-------:|
+| `lowmemory` | 6144000 (a byte count — 6 MB) | −16384 |
+| `condensor` | 40000 | −25536 |
+| `paintframe` | 165697 | −30911 |
+| `lastsail` | 156350 … 314751 | assorted |
+| `jonesframe` | 337079 | 9399 |
+| `secframe` | 347697 … 352610 | assorted |
+
+and each of the frame stamps lands a few hundred to a few thousand frames below
+its own save's [frame counter](#the-frame-counter-c1-442), which is the
+relationship the game reads them for. Truncating `paintframe` is what stopped
+the cargo hold's ten-minute painting timer from surviving a save
+([#221](https://github.com/dhobi/taoot-web/issues/221)).
 
 With the corrected pairing, save 20 ("Meeting Conkling in his suite") decodes
 completely and self-consistently: `mission=2`, `letterphase=3` (a plain number —

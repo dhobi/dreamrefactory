@@ -202,7 +202,7 @@ const ACTOR_POSE_OFF = 48;
 /**
  * The 32-byte variable-list node of the globals container (see decodeVarSlots
  * for the crucial name/value pairing): [+0/+4 heap ptrs][+8 name: len byte +
- * chars, 12 bytes][+20 DFValue vtable][+24 type u16][+26 value 16-bit].
+ * chars, 12 bytes][+20 DFValue vtable][+24 type u16][+26 value 32-bit].
  */
 const NODE_STRIDE = 32;
 const NODE_NAME = 8;
@@ -210,7 +210,7 @@ const NODE_VTABLE = 20;
 const NODE_TYPE = 24;
 const NODE_VALUE = 26;
 /** DFValue type tags (node +24): 2 is a BOOLEAN (`true`/`false` in scripts —
- *  its value is still the inline 16-bit 0/1), 4 a number (signed 16-bit
+ *  its value is still the inline 0/1), 4 a number (signed 32-bit
  *  inline), 3 a string whose value is a byte offset into the string-pool
  *  container. 2 and 4 are distinct RUNTIME types, not two number spellings:
  *  TI.EXE's boolean-taking commands check for exactly 2 (propvisible's
@@ -258,6 +258,30 @@ const C1_SCENE_REGISTER = 652;
  *  base from a smaller set leaves later scenes unreachable — the second way
  *  a cross-room save died at line 4248. */
 const C1_SCENE_COUNT = 656;
+/**
+ * The engine's displayed-FRAME COUNTER — `frame()`'s own counter at `0x489efa`,
+ * saved and restored with the rest of container 1.
+ *
+ * Container 1 is a verbatim 786-byte dump of `0x489d40`, and the loader
+ * (0x4142b2..0x414365) copies all 786 bytes back — but not blindly: it first
+ * stashes three 146-byte windows of the LIVE block ([+0, +146), [+146, +292),
+ * [+292, +438)) plus the dwords at +778/+782 on the stack, and puts them back
+ * after the copy. So exactly `[438, 778)` comes out of the FILE, and the frame
+ * counter, at 0x489efa − 0x489d40 = **442**, is inside it. (`framerate` is the
+ * dword right after, at 446; it is 3 in all 109 shipped saves, because the
+ * scripts that change it — the fencing stage, the turbine — put it back before
+ * the player can reach the save menu.)
+ *
+ * Restoring it is what makes an absolute frame stamp in a global mean anything
+ * after a load: BINL.SET's cargo crate asks `frame() - paintframe > 10000` and
+ * BOOTFILE stamps `paintframe = frame()` when mission 2 opens, so a counter
+ * that kept running from the *session's* start rather than the *game's* said
+ * the ten minutes were up the moment the save came back (#221). Measured across
+ * the shipped saves: the counter rises monotonically along each numbered series
+ * (disc 1: 64 → 32469 → … → 346349) and every frame stamp in the globals sits a
+ * few hundred to a few thousand frames below it.
+ */
+const C1_FRAME = 442;
 /** container 0 manifest: the open-file records — count at +0x130c, then
  *  260-byte records of { old heap handle u32, path pstr } at +0x1310. */
 const C0_FILE_COUNT = 0x130c;
@@ -630,6 +654,9 @@ export interface SaveGame {
   view: string;
   /** current stage file (C1 @520), normally "main.stg". */
   stage: string;
+  /** the engine's displayed-frame counter (C1 @442) — what `frame()` reads, and
+   * the scale every frame stamp in {@link numGlobals} was written on. */
+  frame: number;
   /**
    * The pending day event, as text — the head variable's value ("bedsit"…), or
    * the game time as digits once calctime owns it ("1301"). "" if it didn't
@@ -793,17 +820,31 @@ function decodeVarSlots(d: Uint8Array): { name: string; valueSlot: number }[] {
  *
  * The blob is a small header followed by 32-byte list nodes. Each node's fields
  * sit at fixed offsets: [+0/+4 heap ptrs][+8 name: len byte + chars][+20 DFValue
- * vtable 0x00431e0f][+24 type u16][+26 value 16-bit]. The crucial subtlety
+ * vtable 0x00431e0f][+24 type u16][+26 value 32-bit]. The crucial subtlety
  * (recovered by decompiling TI.EXE's writer and cross-checking same-session
  * DosBox save pairs): the C++ object is laid out [DFValue][links][name], so the
  * DFValue in node k belongs to the name in node k+1 — a node's name pairs with
  * the PREVIOUS node's value. The first name ("clock", the list head) pairs with
  * the header, which holds no DFValue, so it is not decodable here.
  *
- * Value semantics by type tag: 2 and 4 = a number, inline (signed 16-bit);
+ * Value semantics by type tag: 2 and 4 = a number, inline (signed 32-bit);
  * 3 = a string, the value being its byte offset in the pool ([len][chars]).
  * The pool is a live engine structure saved and restored wholesale, which is
  * why the offsets stay valid across processes.
+ *
+ * **The number is 32 bits wide, not 16** ([#221](https://github.com/dhobi/taoot-web/issues/221)).
+ * A word was read here for a long time, which is right for every variable the
+ * game keeps a phase or a count in and wrong for the handful it keeps a FRAME
+ * STAMP in. The node has room for it — the value field runs +26..+30 inside a
+ * 32-byte node — and the corpus settles it: across all 109 shipped saves the
+ * high word is 0 in every string (3380 records) and every boolean (1015), and
+ * non-zero in exactly six numbers, all of which read as nonsense truncated to a
+ * word and as the obvious thing at full width — `lowmemory` = 6144000 (a byte
+ * count), `condensor` = 40000, and the four frame stamps `secframe`,
+ * `lastsail`, `jonesframe`, `paintframe`, each landing a few hundred frames
+ * below the save's own frame counter ({@link SaveGame.frame}). Reading
+ * `paintframe` as a word is what stopped the cargo-hold painting timer from
+ * surviving a save.
  *
  * Names up to 15 chars overflow the 12-byte name field and clobber the low
  * bytes of their own node's vtable (a DreamFactory quirk the original engine
@@ -816,7 +857,7 @@ function decodeVars(d: Uint8Array, pool?: Uint8Array): SavedVar[] {
     const type = dv.getUint16(valueSlot + NODE_TYPE, true);
     const num = type === DFVALUE_STRING
       ? dv.getUint16(valueSlot + NODE_VALUE, true)
-      : dv.getInt16(valueSlot + NODE_VALUE, true);
+      : dv.getInt32(valueSlot + NODE_VALUE, true);
     const str = type === DFVALUE_STRING && pool ? poolStringAt(pool, num) : null;
     vars.push({ name, type, num, str });
   }
@@ -1425,6 +1466,10 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   const set = pstrField(c1, C1_SET);
   const scene = pstrField(c1, C1_SCENE);
   const view = pstrField(c1, C1_VIEW);
+  const frame =
+    c1.length >= C1_FRAME + 4
+      ? new DataView(c1.buffer, c1.byteOffset, c1.byteLength).getUint32(C1_FRAME, true)
+      : 0;
 
   const globalsIndex = findGlobalsIndex(raw);
   const inventoryIndex = findInventoryIndex(raw);
@@ -1497,7 +1542,7 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   const clock = strGlobals.get("clock") ?? (numGlobals.has("clock") ? String(numGlobals.get("clock")) : "");
 
   return {
-    title, disk, set, scene, view, stage, clock, hallside, savedeck,
+    title, disk, set, scene, view, stage, frame, clock, hallside, savedeck,
     vars, numGlobals, strGlobals, inventory, actors, castFiles, trackFiles,
     loops, crickets, walks, theme, raw,
     globalsIndex, inventoryIndex, actorsIndex, castIndex,
@@ -1530,6 +1575,10 @@ export interface SavePatch {
   set: string;
   scene: string;
   view: string;
+  /** the engine's displayed-frame counter (C1 @442). Written on the same scale
+   * as the frame stamps in {@link numGlobals}, because the game subtracts one
+   * from the other; omitted leaves the base's. */
+  frame?: number;
   /**
    * The current set FILE and its register container refs — required for a save
    * taken in a DIFFERENT room than the base. TI.EXE's loader ignores the set
@@ -1927,7 +1976,11 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       const num = patch.numGlobals.get(name);
       if (num !== undefined) {
         const dv = view();
-        const v = Math.max(-32768, Math.min(32767, num | 0));
+        // 32 bits, the node's full value field — see decodeVars. A word here
+        // clamped `paintframe`/`secframe`/`lastsail` to 32767 the moment a
+        // session ran past 27 minutes, which is where every frame stamp in a
+        // real playthrough lives (#221).
+        const v = Math.max(-0x80000000, Math.min(0x7fffffff, num | 0));
         // Type 2 is BOOLEAN, not a second number tag, and TI.EXE's commands
         // check: propvisible's argument fetch is `cmp word [esp], 2` and a 4
         // there is the DosBox scripting error "Bad argument type." (found by
@@ -1937,7 +1990,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
         // stays tag 2 while the value is still boolean-shaped, and a real
         // number retypes it, the way an assignment in the original would.
         const keepBool = dv.getUint16(off + NODE_TYPE, true) === DFVALUE_BOOLEAN && (v === 0 || v === 1);
-        dv.setInt16(off + NODE_VALUE, v, true);
+        dv.setInt32(off + NODE_VALUE, v, true);
         if (!keepBool) dv.setUint16(off + NODE_TYPE, DFVALUE_NUMBER_WRITTEN, true);
         return true;
       }
@@ -1946,7 +1999,10 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       const p = poolIntern(containers[gi].data, containers[gi + 1], str);
       if (p < 0) return false;
       const dv = view();
-      dv.setUint16(off + NODE_VALUE, p, true);
+      // the whole field, so a node that used to hold a wide number (a frame
+      // stamp) doesn't keep its high word behind the new pool offset — a
+      // string's high word is 0 in all 3380 shipped string records
+      dv.setUint32(off + NODE_VALUE, p, true);
       dv.setUint16(off + NODE_TYPE, DFVALUE_STRING, true);
       return true;
     };
@@ -1990,6 +2046,11 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     writePstrField(c1, C1_SET, patch.set);
     writePstrField(c1, C1_SCENE, patch.scene);
     writePstrField(c1, C1_VIEW, patch.view);
+  }
+  // ...and the frame counter beside them, so the game's frame stamps still
+  // measure from the same zero when the save is read back (C1_FRAME).
+  if (patch.frame !== undefined && c1.length >= C1_FRAME + 4) {
+    new DataView(c1.buffer, c1.byteOffset, c1.byteLength).setUint32(C1_FRAME, patch.frame >>> 0, true);
   }
 
   // the set FILE: re-path the manifest record the set id at C1 @544 resolves

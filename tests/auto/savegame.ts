@@ -573,6 +573,78 @@ test("snapshotSave after a load reproduces the restored progress", async () => {
   expect(re.numGlobals.get("neckphase")).toBe(save.numGlobals.get("neckphase"));
 });
 
+// ---------------------------------------------------------------------------
+// The frame counter and the stamps that measure against it (#221)
+// ---------------------------------------------------------------------------
+
+/**
+ * A handful of globals hold an ABSOLUTE `frame()` reading — `paintframe` (the
+ * ten minutes you have to reach the cargo-hold painting), `lastsail`,
+ * `jonesframe`, `secframe` — and the game only ever reads them back as
+ * `frame() - stamp`. Both halves therefore have to survive a save: the stamp,
+ * which needs the node's full 32-bit value field, and the counter itself, which
+ * container 1 carries at @442.
+ */
+test("a shipped save's frame stamps sit just under its own frame counter", () => {
+  const stampNames = ["paintframe", "lastsail", "jonesframe", "secframe"];
+  let wide = 0;
+  for (const path of allSaves()) {
+    const save = parseSave(new Uint8Array(readFileSync(path)));
+    const name = path.replace(/.*\//, "");
+    for (const stamp of stampNames) {
+      const v = save.numGlobals.get(stamp);
+      if (v === undefined || v === 0) continue; // never stamped in this game
+      check(`${name} ${stamp} <= frame`, v <= save.frame, `${stamp}=${v} frame=${save.frame}`);
+      if (v > 32767) wide++;
+    }
+  }
+  // guard the guard: the point of the 32-bit read is the stamps a word cannot
+  // hold, and the corpus has to actually contain some
+  expect(wide).toBeGreaterThan(20);
+});
+
+test("a number too wide for a word round-trips through a patch", () => {
+  const path = savePath("1", "13 - Recovering the Painting from Cargo Hold.ti");
+  const save = parseSave(new Uint8Array(readFileSync(path)));
+  // the save's own value, read at full width rather than clamped to 32767
+  expect(save.numGlobals.get("paintframe")).toBe(165697);
+  expect(save.frame).toBe(171071);
+
+  const numGlobals = new Map(save.numGlobals);
+  numGlobals.set("paintframe", 200000);
+  const re = parseSave(applyPatch(save.raw, {
+    numGlobals, set: save.set, scene: save.scene, view: save.view, frame: 210000,
+  }));
+  expect(re.numGlobals.get("paintframe")).toBe(200000);
+  expect(re.frame).toBe(210000);
+  // a boolean beside it keeps its tag and its value
+  expect(re.numGlobals.get("mission")).toBe(save.numGlobals.get("mission"));
+});
+
+/**
+ * The report (#221): save in front of the crate with the painting still there,
+ * come back to that save later in the same session, and the painting is gone —
+ * BINL.SET's `frame() - paintframe > 10000` was measuring from the browser tab's
+ * start rather than from the saved game's.
+ */
+test("loadGame puts the frame counter back where the save left it", async () => {
+  const session = await newSession();
+  const path = savePath("1", "13 - Recovering the Painting from Cargo Hold.ti");
+  await session.loadGame(new Uint8Array(readFileSync(path)));
+  await session.settle();
+  const stamp = session.interp.globals.get("paintframe") as number;
+  // the saved game is 5374 frames past the stamp — four and a half minutes of
+  // the ten, not the eternity a session-long counter reports
+  expect(session.frameCounter - stamp).toBe(171071 - 165697);
+
+  // and a save the port takes carries both halves on, unchanged by the trip
+  session.frameCounter += 4000;
+  session.interp.globals.set("paintframe", 169000);
+  const re = parseSave(session.snapshotSave()!);
+  expect(re.frame).toBe(175071);
+  expect(re.numGlobals.get("paintframe")).toBe(169000);
+});
+
 test("loadGame rejects a non-save / foreign file", async () => {
   const session = await newSession();
   expect(await session.loadGame(new Uint8Array([1, 2, 3, 4]))).toBe(false);
