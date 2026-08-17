@@ -491,6 +491,26 @@ export class GameHost {
       return;
     }
     await this.session.loadGame(bytes);
+    // AND UNCOVER THE ROOM THE RESTORE JUST BUILT.
+    //
+    // The fade belongs to the SESSION, deliberately — it outlives the viewers, so
+    // that a transition can hold the screen across a set change. That is exactly
+    // what makes it a hazard here: whatever was holding the screen when the page
+    // decided to restore is still holding it afterwards, and a restored room has
+    // nothing to reveal FROM. Nothing else will lift it either — `loadGame`
+    // navigates and rebuilds, it does not paint — so the game comes up correct
+    // and invisible: the right room, the right standpoint, a black screen.
+    //
+    // The engine's own load lever does not have this problem, and the difference
+    // is instructive. `opengame` blacks the screen ITSELF before asking for bytes
+    // (blackTheScreen, builtins/savegame.ts) precisely because TI.EXE's file
+    // dialog is a modal loop with the game's windows hidden behind it — and
+    // having put that black up, it takes it down. This path never put one up, so
+    // it inherited whatever was there.
+    //
+    // Cleared and not ramped, for the same reason the builtin gives: there is
+    // nothing to reveal from. The room is already painted underneath.
+    this.session.fade.level = 0;
   }
 
   /**
