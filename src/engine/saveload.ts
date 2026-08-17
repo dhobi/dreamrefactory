@@ -73,6 +73,10 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
     set: session.currentSetFile,
     scene: session.currentSceneName(),
     view: session.currentViewName(),
+    // the frame counter, on the same scale as the frame stamps the globals
+    // above carry (`paintframe`, `lastsail`, `secframe`) — the game reads the
+    // two as a difference, so one without the other is meaningless (#221)
+    frame: session.frameCounter,
     setFile: setFileSnapshot(session),
     inventory: inventorySnapshot(session),
     actors: actorSnapshot(session),
@@ -339,6 +343,14 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // guard error()s and swallows every key.
   if (save.hallside) session.interp.globals.set("hallside", save.hallside);
   if (save.savedeck) session.interp.globals.set("savedeck", save.savedeck);
+  // The displayed-frame counter, which the original restores with the rest of
+  // container 1 (see C1_FRAME). It is not decoration: several of the globals
+  // just restored are absolute frame stamps, and the game only ever reads them
+  // as `frame() - stamp` — the cargo hold's ten minutes to reach the painting
+  // (#221), the deck's Jones cooldown, the boot clock's own heartbeat. Left
+  // counting from the browser tab's start instead of the saved game's, every
+  // one of those deadlines was already long past the moment the save loaded.
+  session.frameCounter = save.frame;
   // A save is taken from the CTL menu, which sets lockevents=1 to freeze world
   // input while the panel is up — so every save carries lockevents=1. A load
   // returns you to interactive control, so drop it here. Left set, boot's
