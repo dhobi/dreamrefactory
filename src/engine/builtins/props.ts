@@ -83,8 +83,18 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     //
     // Real animations — 3+ frame open/close swings, punch and dial sequences —
     // are untouched and play through the else branch.
+    //
+    // ...and so is a state that holds ONE ANIMATION PER DEGREE (`variant`): the
+    // deg names which sequence plays, so there is a sequence either way and
+    // nothing to hold. Nothing that wants the still frame is caught by it —
+    // `signs` stores one frame per direction and a 2-frame icon two, while a
+    // variant split needs two or more GROUPS of two or more frames — and
+    // without it the second card of a blackjack hand froze on its first
+    // picture, the deal before it having set degVariants inside the same event
+    // (#223).
+    const variant = st ? degVariantFrames(st, Number(p.deg) || 0) : null;
     const degPicked = p.degVariants && p.degEvent === session.interp.currentEvent;
-    if (st && (isDegreeSelector(st) || (p.degVariants && (degPicked || st.frames.length <= 2)))) {
+    if (st && (isDegreeSelector(st) || (p.degVariants && !variant && (degPicked || st.frames.length <= 2)))) {
       // a raw frame index into st.frames, so no variant map may be in the way
       p.frameOrder = null;
       p.frameIdx = frameIndexForDegree(st, Number(p.deg) || 0);
@@ -97,7 +107,7 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
       // TAOOT's map's 12-frame close is six normal frames and six for the guided tour.
       // Play only the variant this prop's deg selects; null for every ordinary
       // state, which then animates across all its frames exactly as before.
-      p.frameOrder = st ? playSequence(st, degVariantFrames(st, Number(p.deg) || 0)) : null;
+      p.frameOrder = st ? playSequence(st, variant) : null;
       // entering a state plays its frames once (a door opens and holds open); a
       // single-frame state has nothing to animate. A prop only made visible
       // (never propview'd) keeps animating=false and holds frame 0.
@@ -198,6 +208,34 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     // not suppress a real animation. See PropInstance.degEvent.
     p.degEvent = session.interp.currentEvent;
     const st = p.state();
+    // ...unless the state being played is one ANIMATION PER DEGREE, in which
+    // case the deg names the animation and not a frame of it. TI.EXE's propdeg
+    // is a field write (prop record +0x18) and stops nothing; the frame pin
+    // below is this port's way of drawing a selector, and a state that is
+    // MID-SEQUENCE is the one case where it is plainly the wrong reading —
+    // there is a sequence, the prop is playing it, and the answer to "which
+    // frames" is the variant.
+    //
+    // BLKJACK.STG's `take` is the case that found it. It deals a card with
+    //
+    //     propview ("buick", "deal")
+    //     if playingcards = "dust"  propdeg ("buick", 1)  else  propdeg ("buick", 0)
+    //     for count = 1 to 19 / forceupdate () / endfor
+    //     propview ("buick", "idle")
+    //
+    // and `deal` stores the hand-to-table swing twice — a clean deck (degrees
+    // 0) and a dusty one (degrees 1), interleaved, with a play script written
+    // in terms of the VARIANT (indices 0..4 against five frames each). Pinned
+    // by the propdeg, Riveria held the first picture for all nineteen passes
+    // and the card simply appeared on the table (#223).
+    const variant = st && p.animating ? degVariantFrames(st, Number(v) || 0) : null;
+    if (variant) {
+      // swap the variant under the animation, mid-flight: every variant of a
+      // state is the same length (degVariantFrames requires it) and the play
+      // script maps through it, so frameIdx keeps its meaning
+      p.frameOrder = playSequence(st!, variant);
+      return;
+    }
     if (st && st.frames.length) {
       // a raw index again, so drop any variant map the current state installed
       p.frameOrder = null;
