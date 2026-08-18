@@ -95,7 +95,20 @@ It is one walk, not a leg-by-leg chain: the route's container stores every point
 distance from the one before *and* the total, so the service runs the whole
 polyline on the single progress scalar a straight walk uses — no leg re-fires
 `endturn`, and only the arrival fires `endwalk`. The facing is re-aimed per leg,
-because a route that turns corners has to.
+because a route that turns corners has to. Nobody is teleported onto the head of
+the route either: the walk records where the actor is standing and the first
+*movement* pass — after the turn — is what puts them on the polyline.
+
+`"resume"` is the form that matters for a character you have talked to, and it
+does more than look the route up loosely. It **cuts the route down to the part
+still ahead of them**: nearest point, their own position written over it,
+everything before it dropped, every remaining leg re-measured. That is what makes
+the word true. `walktopuppet` stands whoever you clicked in front of the camera
+for the conversation and then puts them back on their route with it — recognising
+a route walk by the `"walkonpath"` that `actorstar` reports while one runs, the
+only mid-walk sentinel any script reads — so without the trim they snapped back to
+where the route begins, both at the conversation's end and every time you
+interrupted the walk itself (#230).
 
 ### Characters who speak first
 

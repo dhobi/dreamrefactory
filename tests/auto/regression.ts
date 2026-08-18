@@ -5806,7 +5806,9 @@ test("Sasha walks away down the hall (sasha.1 -> sasha.2)", async () => {
   session.interp.builtins.get("walkonpath")!(
     session.interp, ["sasha", "sasha.1", "sasha.2"], null as never, null as never,
   );
-  const walking = sasha.starName === "defer" && session.scheduler.isWalk("sasha");
+  // "walkonpath" while it runs, not "defer": that is the sentinel TI.EXE's route
+  // builder stamps and the one `walktopuppet` reads back (#230)
+  const walking = sasha.starName === "walkonpath" && session.scheduler.isWalk("sasha");
   let guard = 0;
   while (session.scheduler.isWalk("sasha") && guard++ < 800) { v.tick((clock += 100)); await drain(); }
   await drain();
@@ -8806,6 +8808,15 @@ test("walkonpath follows the SET's authored route, corners and all (#122)", asyn
   const star = (n: string) => set.actors.find((s) => s.identifier.toLowerCase() === n)!;
   const s1 = star("sasha.1");
   const s2 = star("sasha.2");
+  // Standing on sasha.1, which HALLA.SET's openscene makes a CONDITION of the
+  // call (`& actorstar ("sasha") = "sasha.1"`). Placing her is the test's job
+  // since #230: a route walk no longer teleports the actor onto its head, it
+  // leaves them where they are and the first movement pass puts them on it —
+  // TI.EXE builds the record with the actor's own position (0x4437f0) and reads
+  // every later one out of the route.
+  sasha.worldX = s1.positionX;
+  sasha.worldY = s1.positionZ;
+  sasha.worldZ = s1.positionY;
 
   // the script's own call (HALLA.SET 0436)
   void (session.interp.builtins.get("walkonpath") as unknown as (
@@ -9244,5 +9255,118 @@ test("a route walked backwards keeps its own leg lengths (#224)", async () => {
   check("...for as long as the route the set authored is",
     Math.abs(moving.length - 8661 / hack.speed) <= 2,
     `${moving.length} passes at speed ${hack.speed}, want ~${Math.round(8661 / hack.speed)}`);
+}
+);
+
+// --- 107. an interrupted route resumes where it was left (#230) -------------
+//
+// Reported, continuing #224: "at the conversation's end, Jack appears to
+// jump/teleport to the first star he's to walk to", and "when interrupted in the
+// midst of the walk, Jack will reset to the start of the walk" — against an
+// original where "Jack turns and begins walking after the conversation, and
+// resumes where he left off when interrupted".
+//
+// Both are one missing step. `walkonpath (me, "resume", "hack1")` (gang.cst 0258
+// mousedown, and again out of `walktopuppet` when the walk itself is what you
+// interrupted) does not merely LOOK a route up more loosely than the named form:
+// TI.EXE's resume lookup ends by calling 0x40a200, which cuts the route down to
+// the part still ahead of the actor — nearest point, actor's own position
+// written over it, everything before it dropped, every remaining leg re-measured.
+// The named lookup (0x409fd0) never calls it. Without it the route always begins
+// at its own first point, and since the mover reads position out of the ROUTE,
+// the actor is standing there on the next pass however far away they were.
+//
+// `walktopuppet` is what puts them far away: it stands the character in front of
+// the camera for the conversation, and it is also what re-issues the walk, on the
+// mid-walk sentinel this test checks last.
+test("an interrupted route resumes where it was left (#230)", async () => {
+  const { session } = await newHost();
+  await session.openSetFile("scot3.set");
+  await session.openCastFile("gang.cst");
+  await session.settle();
+  const hack = session.actorRuntime.get("hack")!;
+  const set = session.currentBinding!.set;
+  const star = (n: string) => set.actors.find((s) => s.identifier.toLowerCase() === n)!;
+  const to = star("hack1");
+  const walkonpath = (from: string, dest: string): void => {
+    void (session.interp.builtins.get("walkonpath") as unknown as (
+      i: unknown, a: unknown[], c: unknown, f: unknown,
+    ) => unknown)(
+      session.interp, ["hack", from, dest],
+      { me: "scot3.set", target: "hack" }, { ctx: { me: "scot3.set", target: "hack" } },
+    );
+  };
+  /** run the walk out, reporting where he went */
+  const run = async (passes: number): Promise<{ x: number; y: number }[]> => {
+    const seen: { x: number; y: number }[] = [{ x: hack.worldX, y: hack.worldY }];
+    for (let i = 0; i < passes && session.scheduler.isWalk("hack"); i++) {
+      session.scheduler.tickTime((clock += 50));
+      await drain();
+      seen.push({ x: hack.worldX, y: hack.worldY });
+    }
+    return seen;
+  };
+  // the room's own entry (SCOT3.SET 0110): standing on hack2, the far end of the
+  // nine-point route SCOT3 authors hack1 -> hack2
+  await session.sendEvent("sendtoactor", "hack", "setupactor", ["scot3"], "test");
+  await session.settle();
+
+  // 1. THE CONVERSATION'S END. `walktopuppet` has walked him off the route to
+  // stand in front of the camera — `playerxyz + calcvect (currentdeg, hotdist/6)`
+  // — and gang.cst's mousedown then resumes the route. He must set off from
+  // there, not from the route's head 4000-odd units up Scotland Road.
+  const aside = { x: hack.worldX + 260, y: hack.worldY - 180 };
+  hack.worldX = aside.x;
+  hack.worldY = aside.y;
+  walkonpath("resume", "hack1");
+  await drain();
+  check("the call itself moves nobody",
+    hack.worldX === aside.x && hack.worldY === aside.y,
+    `stood at (${aside.x},${aside.y}), call left him at (${hack.worldX},${hack.worldY})`);
+  const away = await run(4000);
+  const firstMove = away.find((p, i) => i > 0 && (p.x !== away[0].x || p.y !== away[0].y))!;
+  check("...and he walks OUT of where he stood, one step",
+    Math.hypot(firstMove.x - aside.x, firstMove.y - aside.y) <= hack.speed + 1,
+    `first move (${firstMove.x},${firstMove.y}) is ` +
+    `${Math.hypot(firstMove.x - aside.x, firstMove.y - aside.y).toFixed(0)} from (${aside.x},${aside.y})`);
+  check("he still arrives at hack1",
+    hack.worldX === to.positionX && hack.worldY === to.positionZ,
+    `at (${hack.worldX},${hack.worldY}) want (${to.positionX},${to.positionZ})`);
+
+  // 2. INTERRUPTED MID-WALK. Walk part of the route, stop him where the click
+  // would have (`stopwalk (who)` in walktopuppet), and resume: what is left to
+  // walk is what was left, not the whole route again.
+  await session.sendEvent("sendtoactor", "hack", "setupactor", ["scot3"], "test");
+  await session.settle();
+  walkonpath("resume", "hack1");
+  await drain();
+  check("a route walk says what KIND of walk it is, while it runs",
+    hack.starName === "walkonpath",
+    `actorstar(hack) = "${hack.starName}" — walktopuppet's saveonpath reads this`);
+  await run(60);
+  const whole = session.scheduler.walks.get("hack")!;
+  const left = whole.dist - whole.progress;
+  const stopped = { x: hack.worldX, y: hack.worldY };
+  check("...and he is under way, part of the route behind him",
+    left > 0 && left < whole.dist * 0.95,
+    `${left} of ${whole.dist} left`);
+  session.scheduler.stopWalk("hack");
+  walkonpath("resume", "hack1");
+  await drain();
+  check("the resumed walk does not put him back at the start",
+    hack.worldX === stopped.x && hack.worldY === stopped.y,
+    `stopped at (${stopped.x},${stopped.y}), resumed at (${hack.worldX},${hack.worldY})`);
+  const again = session.scheduler.walks.get("hack")!;
+  // Same ground still to cover, to within the re-measure: the resumed route's
+  // first leg is a new one (his position to the next point) that the truncating
+  // isqrt rounds down, where the interrupted walk was partway along an authored
+  // leg.
+  check("...and what it has left to walk is what was left",
+    Math.abs(again.dist - left) <= hack.speed,
+    `resumed with ${again.dist} to walk, ${left} was outstanding`);
+  await run(4000);
+  check("...and it still ends at hack1",
+    hack.worldX === to.positionX && hack.worldY === to.positionZ,
+    `at (${hack.worldX},${hack.worldY}) want (${to.positionX},${to.positionZ})`);
 }
 );

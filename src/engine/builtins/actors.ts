@@ -1,15 +1,101 @@
 import { Value, toNum, toStr, truthy } from "../interp";
 import { accessorFamily, BuiltinCtx } from "./context";
 import { packPoint } from "../point";
-import { readStarPath } from "../../df/set";
+import { isqrt, readStarPath } from "../../df/set";
 
 /**
- * What `actorstar` reports while a named walk is running — TI.EXE's straight-line
- * walk builder (0x443ac0) stamps it into actor+0x70 for both walktostar and
- * walkonpath. It is a KIND, not a place: the destination only appears once the
- * actor lands. No script in the corpus compares it.
+ * What `actorstar` reports while a straight-line walk to a named star is running
+ * — TI.EXE's walk builder (0x443ac0) stamps it into actor+0x70. It is a KIND,
+ * not a place: the destination only appears once the actor lands. No script in
+ * the corpus compares it; see {@link WALK_ON_PATH} for the one that is compared.
  */
 const WALK_DEFER = "defer";
+
+/**
+ * What `actorstar` reports while an AUTHORED ROUTE is being walked — TI.EXE's
+ * star-path builder (`0x4437f0`) stamps this into actor+0x70 instead, and it is
+ * the one mid-walk sentinel a script does read:
+ *
+ *     if iswalk (who)
+ *         savestar = walkdest (who)
+ *         if actorstar (who) = "walkonpath"
+ *             saveonpath = true
+ *         endif
+ *         stopwalk (who)
+ *     …
+ *     if saveonpath = true
+ *         actorstar (who, "resume")
+ *         walkonpath (who, "resume", savestar)
+ *     else
+ *         actorstar (who, "custom")
+ *         sendtoactor (who, moveactorstar (savestar))
+ *
+ * — `walktopuppet` (gang.cst 0001), the single comparison of the word in the
+ * whole corpus. It is how a conversation you started mid-route puts the walker
+ * back on the ROUTE afterwards rather than sending them at the destination in a
+ * straight line, and the port stamping "defer" here left that branch dead: the
+ * hacker was interrupted in Scotland Road and resumed as a straight line, and
+ * Georgia's curve around the boat deck (the whole of #122) would have gone back
+ * through the second-class stairs.
+ */
+const WALK_ON_PATH = "walkonpath";
+
+/** one point of a route as the walker holds it: a world position and the length
+ *  of the leg BEHIND it (0 for the first) */
+interface RoutePoint { x: number; y: number; z: number; fromPrev: number }
+
+/**
+ * Cut an authored route down to the part of it still ahead of an actor —
+ * TI.EXE's `0x40a200`, which the `"resume"` lookup (`0x40a0f0`) calls on the
+ * copy it just made, and which the named lookup (`0x409fd0`) does not call at
+ * all. It is the whole difference between the two forms, and the whole meaning
+ * of the word: `"resume"` walks the route FROM WHERE YOU ARE.
+ *
+ * Four steps, in the original's order:
+ *
+ *  1. find the point nearest the actor (its own truncating integer sqrt, first
+ *     minimum wins);
+ *  2. if that is the LAST point, take the one before it instead — a route has to
+ *     keep a leg to walk (`0x40a2c0`);
+ *  3. overwrite that point with the ACTOR'S OWN POSITION and drop everything
+ *     before it (a `memmove` down over the head, and the count with it);
+ *  4. re-measure every remaining leg from the geometry and re-total the header,
+ *     because the first one is a new length nobody authored.
+ *
+ * Without it a resumed route restarts at its own first point, and since the
+ * mover reads the position out of the route and not out of the actor, the actor
+ * is simply somewhere else on the next pass. Both halves of #230 are that:
+ *
+ *  - `walktopuppet` stands the hacker in front of the camera for the
+ *    conversation, so the `walkonpath (me, "resume", "hack1")` that follows it
+ *    (gang.cst 0258 mousedown) threw him back to `hack2` — 4000-odd units up
+ *    Scotland Road — before he set off;
+ *  - interrupt the walk itself and the same call restarted the route from the
+ *    top, so he re-walked the hallway he had already walked.
+ *
+ * Against an original where "Jack turns and begins walking after the
+ * conversation, and resumes where he left off when interrupted".
+ */
+function resumeFrom(points: RoutePoint[], x: number, y: number, z: number): RoutePoint[] {
+  let best = 0;
+  let bestDist = Infinity;
+  points.forEach((p, i) => {
+    const d = isqrt((x - p.x) ** 2 + (y - p.y) ** 2 + (z - p.z) ** 2);
+    if (bestDist > d) {
+      bestDist = d;
+      best = i;
+    }
+  });
+  if (points.length - best === 1) best = points.length - 2;
+  const rest = points.slice(best).map((p) => ({ ...p }));
+  rest[0] = { x, y, z, fromPrev: 0 };
+  for (let i = 1; i < rest.length; i++) {
+    const p = rest[i];
+    const q = rest[i - 1];
+    p.fromPrev = isqrt((p.x - q.x) ** 2 + (p.y - q.y) ** 2 + (p.z - q.z) ** 2);
+  }
+  return rest;
+}
 
 /**
  * Cast-actor (CST) commands: cast file open/close, the actor state
@@ -370,6 +456,10 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
    *    reported cases use — `walkonpath (me, "resume", "ga.2")` in gang.cst,
    *    where Georgia has just finished talking and is already at the far end.
    *
+   * And `"resume"` is not just a laxer LOOKUP — it TRIMS the route it found to
+   * where the actor is standing (`0x40a200`, called on the way out of that
+   * lookup and only from it). See {@link resumeFrom}.
+   *
    * With no route authored between the two, the straight line IS the answer: the
    * corpus has six paths and three of them are two points.
    */
@@ -392,11 +482,10 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
         ? (pa === fromName && pb === toName) || (pb === fromName && pa === toName)
         : pa === toName || pb === toName;
     });
-    a.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
     if (rec && set) {
       // a star's (X, Z, Y) into the world triple a walk record uses: worldY is the
       // ground plane's second axis and worldZ the height, as walktostar builds it
-      const points = readStarPath(set.file.containers, rec.container)
+      let points = readStarPath(set.file.containers, rec.container)
         .map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev }));
       // the polyline is stored a->b; walk it backwards when the destination is
       // the `a` end (TI.EXE's second match arm in both lookups)
@@ -416,11 +505,15 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
         for (let i = points.length - 1; i > 0; i--) points[i].fromPrev = points[i - 1].fromPrev;
         points[0].fromPrev = 0;
       }
+      // "resume" begins where the actor IS, not where the route does
+      if (!named && points.length >= 2) points = resumeFrom(points, a.worldX, a.worldY, a.worldZ);
       if (points.length >= 2) {
+        a.starName = WALK_ON_PATH; // the kind of walk, until the arrival names the star
         session.scheduler.startWalkPath(toStr(n), points, toName);
         return 0;
       }
     }
+    a.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
     if (named) {
       const start = findStar(from);
       if (start) {

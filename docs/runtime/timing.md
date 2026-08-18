@@ -205,8 +205,10 @@ right place at the right time with the feet going twice as fast.
 
 One walk per actor. On arrival the scheduler fires the actor's **`endwalk`**
 handler — that's how patrol scripts chain legs: each `endwalk` starts the next
-walk. (`walkonpath` shows up as the arrival sentinel while a star-to-star walk
-is in flight.)
+walk. Meanwhile `actorstar` reports the KIND of walk running rather than a place:
+`"walkonpath"` for an authored route, `"walktoxyz"` for a walk to a bare point,
+`"defer"` for the straight line to a star. The destination only appears there
+when the actor lands on it.
 
 ## The game clock
 

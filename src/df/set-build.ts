@@ -25,6 +25,7 @@
 import { ContainerBuilder, checkName, emptyScript, f64, i16, i32, paletteBlock, pstr } from "./build";
 import { ContainerRef, DFContainerFile, writeContainerFile } from "./container";
 import { encodeFrame, encodeZLayer } from "./image";
+import { isqrt } from "./set";
 
 /** container 0 (the SCDO chunk) — the reader's own C0 table */
 const C0 = {
@@ -72,22 +73,6 @@ const ACTOR = { rotation8: 4, x: 6, z: 8, y: 10, name: 12, path: 28, secondary: 
 
 /** a star pair's walking route: a header, a (Z,X) box, then 8-byte points */
 const PATH = { total: 0, count: 8, box: 12, first: 20, size: 8 } as const;
-
-/**
- * Truncating integer square root — TI.EXE's own (`0x435950`), and the reason a
- * route's stored leg lengths are what they are.
- *
- * `Math.floor(Math.hypot(...))` is NOT the same function: `halla`'s third leg is
- * 101×259, whose real length is 278.0004, and the file stores **277** because
- * 278² = 77284 overshoots 77282. Verified against all six shipped routes — every
- * leg matches this and every header total is the exact sum of its legs.
- */
-function isqrt(n: number): number {
-  let r = Math.floor(Math.sqrt(n));
-  while (r > 0 && r * r > n) r--;
-  while ((r + 1) * (r + 1) <= n) r++;
-  return r;
-}
 
 /** the main scene register: 42 bytes a scene */
 const SCENE = { size: 42, map: 4, views: 10, right: 14, left: 18, script: 22, name: 26 } as const;
