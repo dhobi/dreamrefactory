@@ -1,5 +1,5 @@
 import { SetFile } from "../df/set";
-import { ScriptInstance, Value } from "./interp";
+import { Frame, ScriptInstance, Value } from "./interp";
 import type { GameSession } from "./session";
 
 /** resolves sibling game files (turk.shp etc.) by lowercase basename */
@@ -235,6 +235,8 @@ export class SetScripts {
     paintName: string,
     handler: string,
     args: Value[],
+    /** the frame the `sendtopainting` was written in — see {@link Frame.dispatch} */
+    parent?: Frame,
   ): Promise<boolean> {
     const sceneIdx = this.set.scenes.findIndex(
       (s) => s.sceneName.toLowerCase() === sceneName.toLowerCase(),
@@ -247,7 +249,7 @@ export class SetScripts {
       (o) => o.identifier.toLowerCase() === paintName.toLowerCase(),
     );
     if (objIdx < 0) return false;
-    return this.fireChain(sceneIdx, viewIdx, objIdx, handler, paintName, args);
+    return this.fireChain(sceneIdx, viewIdx, objIdx, handler, paintName, args, parent);
   }
 
   /**
@@ -264,6 +266,7 @@ export class SetScripts {
     handler: string,
     identifier: string,
     args: Value[] = [identifier],
+    parent?: Frame,
   ): Promise<boolean> {
     const interp = this.session.interp;
     interp.eventConsumed = false;
@@ -279,7 +282,7 @@ export class SetScripts {
         const res = await interp.runHandler(inst, handler, args, {
           me: inst.name,
           target: identifier,
-        });
+        }, parent);
         if (interp.eventConsumed || (res.handled && !res.passed)) return true;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.${handler}: ${(e as Error).message}`);

@@ -9370,3 +9370,94 @@ test("an interrupted route resumes where it was left (#230)", async () => {
     `at (${hack.worldX},${hack.worldY}) want (${to.positionX},${to.positionZ})`);
 }
 );
+
+// --- 108. a press consumed while another chain is in flight stays consumed (#232)
+//
+// Reported: "by holding the forward input, it is occasionally possible to force
+// oneself through crates in the smokestack… my guess is a mistiming: the
+// continued movement is processed before the game can tell movement that you're
+// supposed to be blocked."
+//
+// The block is computed in time — `blocked` reads 1 at the crate on every one of
+// those passes (that was #88, and it holds). What fails is the CONSUMPTION.
+// SMSTACK2's set main is the whole of the crate:
+//
+//     code keydown (arg)
+//         if blocked & arg = "uparrow"
+//             exitcode
+//
+// and `exitcode` only counts when the frame is a handler OF THE EVENT BEING
+// DISPATCHED — otherwise every routine that ends in one would eat the player's
+// press (see Interpreter.eventConsumed). The port answered "which event" from a
+// single interpreter-wide field, set by `runHandler` when its depth counter read
+// zero. That counter is shared, and the port runs more than one chain at a time:
+// `serviceGameClock` dispatches `calctime` through `trackIdle` PRECISELY so the
+// heartbeat does not read as a busy player script, so a press drained on the same
+// tick begins while calctime is still suspended at an await, sees depth > 0, and
+// never names its own event. Every `exitcode` in that chain then compared itself
+// against "calctime", quietly declined to consume, and the chain ran on into the
+// boot library's default move — `currentscene ("strait")`, a walk through the
+// crate.
+//
+// Intermittent exactly as reported: it needs the heartbeat mid-flight at the
+// instant the press is dispatched, which is most of the time when a key is HELD,
+// because that is when a press is waiting in the queue to be drained on the very
+// tick boundary the heartbeat fires on.
+test("a press consumed while another chain is in flight stays consumed (#232)", async () => {
+  const { host, session } = await newHost();
+  const g = session.interp.globals;
+  let clock = 0;
+  g.set("tour", 0); g.set("mission", 3);
+  // maze 1 / level 3 walls up sections 2 and 6; the set opens facing section 2
+  g.set("mazenumber", 1); g.set("stacklevel", 3);
+  await host.loadServerSet("smstack2.set");
+  const v = () => host.viewer!;
+  const where = () => `${session.currentSceneName()}/${session.currentViewName()}`.toLowerCase();
+  const settle = async (n = 40): Promise<void> => {
+    for (let i = 0; i < n; i++) { v().tick((clock += 50)); await drain(); }
+  };
+  await settle();
+  check("standing at the crate, and it knows it",
+    where() === "scene37/view47" && Number(g.get("blocked")) === 1,
+    `${where()} blocked=${g.get("blocked")}`);
+
+  // 1. THE MECHANISM, on its own. `calctime` is what the heartbeat dispatches;
+  // leave it suspended and send the press while it is.
+  const heartbeat = session.runGlobal("calctime");
+  await session.sendEvent("sendtoscene", session.currentSceneName(), "keydown", ["uparrow"], "test");
+  check("the set's exitcode consumes the press it was dispatched for",
+    session.interp.eventConsumed,
+    "eventConsumed was false — the chain would run on into the boot's default move");
+  await heartbeat;
+  await settle();
+
+  // 2. THE SYMPTOM, deterministically. A press made while the camera was moving
+  // is QUEUED (that is what makes a held key walk a corridor), and the drain
+  // happens on a tick — after `tickTime` has fired the heartbeat on that same
+  // tick. One queued press at the crate is the whole bug.
+  const before = where();
+  session.events.post({ kind: "keydown", key: "uparrow", special: false }, { coalesce: true });
+  await settle(60);
+  check("a QUEUED press at the crate does not walk through it", where() === before,
+    `queued press took us ${before} -> ${where()}`);
+
+  // 3. THE REPORTER'S GESTURE. Turn to the open road (section 1) and hold the
+  // key: the walk goes 1 -> 8 -> 7 and must stop at the crate in section 6.
+  for (let i = 0; i < 2; i++) { await session.track(v().keyDown("leftarrow")); await settle(); }
+  check("facing the open road", where() === "scene37/view48" && Number(g.get("blocked")) === 0,
+    `${where()} blocked=${g.get("blocked")}`);
+  const visited: string[] = [where()];
+  for (let i = 0; i < 400; i++) {
+    void session.track(v().pressNav("uparrow"));       // the auto-repeat of a held key
+    v().tick((clock += 50));
+    await drain();
+    if (where() !== visited[visited.length - 1]) visited.push(where());
+  }
+  await settle(120);
+  if (where() !== visited[visited.length - 1]) visited.push(where());
+  // section 6 is scene66/view73 — the far side of it is scene39, and reaching
+  // scene39 means the crate was walked through
+  check("the held key stops at the crate instead of forcing through it",
+    where() === "scene66/view73" && !visited.includes("scene39/view57"),
+    `held up and ended at ${where()} via ${visited.filter((w) => !w.endsWith("/moving")).join(" -> ")}`);
+}, 120_000);

@@ -1,6 +1,6 @@
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "../df/image";
 import { StgFile, StgRegion, readStgFile, readStgRegions } from "../df/stg";
-import { ScriptInstance, Value, toStr } from "./interp";
+import { Frame, ScriptInstance, Value, toStr } from "./interp";
 import type { GameSession } from "./session";
 
 /**
@@ -175,6 +175,8 @@ export class StageController {
     handler: string,
     args: Value[],
     callerName: string,
+    /** the frame a script sent it from — see {@link GameSession.sendEvent} */
+    parent?: Frame,
   ): Promise<Value> {
     const stg = this.stageFile;
     if (!stg) return 0;
@@ -196,7 +198,7 @@ export class StageController {
       const res = await this.session.interp.runHandler(inst, handler, args, {
         me: region.name,
         target: region.name,
-      });
+      }, parent);
       return res.value;
     }
     // The region's own script doesn't define this handler — resolve it up the
@@ -217,7 +219,7 @@ export class StageController {
       const res = await this.session.interp.runHandler(lib, handler, args, {
         me: region.name,
         target: region.name,
-      });
+      }, parent);
       return res.value;
     }
     return 0;

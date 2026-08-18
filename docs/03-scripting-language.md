@@ -160,6 +160,23 @@ a set `keydown` that exitcodes *there* is overriding the default move on purpose
 Same name, same event, consumed — while a helper routine and a foreign event are
 neither.
 
+**Which event a frame belongs to is carried by the frame**, not by the
+interpreter, because this port runs more than one chain at a time and the original
+never does. TI.EXE's main loop pops one event and runs it to completion; here the
+heartbeat overlaps a player's press deliberately — `serviceGameClock` dispatches
+`calctime` so that it does *not* count as a busy script, or a press posted while it
+settled would sit in the queue — so a press drained on the same tick begins while
+`calctime` is still suspended at an `await`. Answering "which event?" from one
+interpreter-wide field set at nesting depth zero therefore gave the press
+`calctime`'s name, every `exitcode` in its chain compared against the wrong event
+and quietly declined to consume, and the chain ran on into the boot library's
+default move. That is how a held key walked through the smokestack crates
+([#232](https://github.com/dhobi/taoot-web/issues/232)): `SMSTACK2`'s set main is
+nothing but `if blocked & arg = "uparrow" exitcode`, and the flag was right every
+time — it was the *consumption* that was lost. Each frame now carries the name its
+own chain was dispatched under, inherited across routine calls and `sendto*`
+re-routes alike, so two chains in flight cannot answer for one another.
+
 **A `passcode` off the *end* of a chain keeps climbing.** `passcode` means "not
 mine, ask whoever holds me", and that is as true of the last link as of any other:
 when a chain runs out on one, the event carries on up the **containment** chain —

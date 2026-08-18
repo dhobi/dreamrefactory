@@ -749,6 +749,17 @@ export class GameSession {
     handler: string,
     args: Value[],
     callerName: string,
+    /**
+     * The frame the `sendto*` was written in, when a SCRIPT is doing the sending.
+     * The re-routed event stays part of that chain, which is what keeps
+     * `exitcode` meaning the same thing on both sides of a re-route: boot's
+     * keydown router forwards the press with `sendtoscene(currentscene(),
+     * keydown(arg))` and a set keydown that exitcodes there IS consuming the
+     * press, while an `openset` that fires `sendtoactor(…, setupactor())` is not
+     * consumed by setupactor's own exitcode. Absent — the host, the scheduler, a
+     * click — this is a new chain of its own. See {@link Frame.dispatch}.
+     */
+    parent?: Frame,
   ): Promise<Value> {
     const inst = this.resolveEventTarget(cmd, targetName, handler);
     const chain = this.buildEventChain(cmd, inst, handler);
@@ -797,6 +808,7 @@ export class GameSession {
       args,
       (link) => ({ me: link.name, target: evTarget }),
       !keyEvent,
+      parent,
     );
     // `passcode` means "not mine, ask whoever holds me" — so a chain that ends on
     // one keeps going up the containment chain, exactly as a chain that had no
@@ -809,7 +821,7 @@ export class GameSession {
     // the shop main's distance-gated `cursor("touch")`. Without this the passcode
     // was a dead end and the notebook had no cursor at all.
     if ((!ran || passed) && inst) {
-      return this.resolveViaContainment(cmd, inst, handler, args, evTarget, value, visited);
+      return this.resolveViaContainment(cmd, inst, handler, args, evTarget, value, visited, parent);
     }
     return value;
   }
@@ -999,6 +1011,9 @@ export class GameSession {
      * SetScripts.keyDown, which has always said this).
      */
     stopOnHandled = true,
+    /** the frame this chain is being run FROM, if a script is running it — see
+     *  {@link sendEvent} and {@link Frame.dispatch} */
+    parent?: Frame,
   ): Promise<{ value: Value; ran: boolean; passed: boolean; visited: ScriptInstance[] }> {
     let value: Value = 0;
     let ran = false;
@@ -1008,7 +1023,7 @@ export class GameSession {
       if (!link || !link.script.codes.has(handler)) continue;
       ran = true;
       visited.push(link);
-      const res = await this.interp.runHandler(link, handler, args, ctxFor(link));
+      const res = await this.interp.runHandler(link, handler, args, ctxFor(link), parent);
       value = res.value;
       passed = res.passed;
       if (this.interp.eventConsumed) break;
@@ -1039,6 +1054,8 @@ export class GameSession {
     evTarget: string,
     fallback: Value = 0,
     visited: ScriptInstance[] = [],
+    /** the frame the `sendto*` was written in — see {@link sendEvent} */
+    parent?: Frame,
   ): Promise<Value> {
     const libs: ScriptInstance[] = [];
     for (let p = inst.parent; p; p = p.parent) libs.push(p);
@@ -1054,7 +1071,9 @@ export class GameSession {
     // demo ships that exact actor — so the fallback is for events the boot
     // did NOT originate: dispatched under a different outer handler, the
     // lifecycle helpers this exception exists for still resolve (closescene
-    // sending putdownactor arrives with outerDispatch "closescene").
+    // sending putdownactor arrives on a chain dispatched as "closescene").
+    // The event is the SENDING FRAME's, not an interpreter-wide "outermost
+    // dispatch" — chains overlap; see Frame.dispatch.
     //
     // A PROP is the same case one command over, and was left out: `initprop`, the
     // boot's default that hides a prop and zeroes it, is what 70 of the 72 props
@@ -1064,7 +1083,7 @@ export class GameSession {
     // place, reached nothing and the item was drawn on top of HELP (#123).
     if (
       (cmd === "sendtoactor" || cmd === "sendtoprop") &&
-      this.interp.outerDispatch !== handler
+      parent?.dispatch !== handler
     ) {
       for (const b of this.bootScripts) if (!libs.includes(b)) libs.push(b);
     }
@@ -1078,6 +1097,8 @@ export class GameSession {
       handler,
       args,
       () => ({ me: inst.name, target: evTarget }),
+      true,
+      parent,
     );
     return res.ran ? res.value : fallback;
   }
@@ -1090,8 +1111,13 @@ export class GameSession {
     paint: string,
     handler: string,
     args: Value[],
+    /** the frame a script sent it from — see {@link sendEvent} */
+    parent?: Frame,
   ): Promise<boolean> {
-    return this.currentBinding?.paintingEvent(scene, view, paint, handler, args) ?? Promise.resolve(false);
+    return (
+      this.currentBinding?.paintingEvent(scene, view, paint, handler, args, parent) ??
+      Promise.resolve(false)
+    );
   }
 
   /** parse a script container into an instance bound to `owner` */
