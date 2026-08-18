@@ -67,6 +67,10 @@ export async function newHost<S extends AudioSink = NullAudioSink>(
       // the disk index is synchronous; the host only needs a promise
       load: async (name) => index.provider(name),
       setDisc: (disc) => index.setDisc(disc),
+      // the host skips a redundant swap on this, and `setpath` writes three
+      // volume-prefixed slots per call — so without it a single disc change
+      // logged three times and dropped the shared files three times
+      activeDisc: () => index.activeDisc(),
       // TAOOT_LANG picks the tree; the host turns it into the code page the
       // tree's subtitles are stored in, exactly as the browser side does
       activeEdition: () => activeLanguage(root, opts.edition) ?? "",

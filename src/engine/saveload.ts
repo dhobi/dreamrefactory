@@ -73,6 +73,11 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
     set: session.currentSetFile,
     scene: session.currentSceneName(),
     view: session.currentViewName(),
+    // The CD in play, which the skeleton being patched cannot be trusted for:
+    // it is a shipped save or the last one loaded, and the story crosses back to
+    // disc 1 at mission 4 without either changing. "" is a game that has mounted
+    // no volume at all, and keeps the base's field. See SavePatch.disk.
+    disk: session.mountedCd || undefined,
     // the frame counter, on the same scale as the frame stamps the globals
     // above carry (`paintframe`, `lastsail`, `secframe`) — the game reads the
     // two as a difference, so one without the other is meaningless (#221)
@@ -308,6 +313,58 @@ function inventorySnapshot(session: GameSession): SavedPropPatch[] {
 }
 
 /**
+ * Put back the DISC the save was taken on — the half of a load that is not game
+ * state at all but where that state's files live.
+ *
+ * 93 basenames ship on both CDs, the public rooms once per act, and **70 of them
+ * differ byte for byte** — 19 of those are `.set` rooms. Which copy the engine
+ * reads is `setpath(disk)`'s to say, and BOOTFILE only ever calls it on a story
+ * transition (`advanceday`: disc 1 for the 1942 prologue, disc 2 the moment you
+ * board, disc 1 again when the iceberg is struck) or when the tour starts. A load
+ * is none of those, so nothing re-stated it and the file store stayed wherever the
+ * session happened to be — disc 1 after a cold boot, which is 78 of the 109
+ * shipped saves opening the wrong act's rooms.
+ *
+ * The save says so itself. `setpath` mounts its volume by label —
+ * `currentcd("Titanic2")` — and that label is the first thing in the file
+ * (container 0 @256, {@link SaveGame.disk}); the original's own loader restores
+ * the whole resource path table with it, `titanic2:data:` and all, which is
+ * visible in the bytes of every shipped save. Matching it against the volumes the
+ * game's own `setpath` names ({@link GameSession.discVolumes}) keeps the disc
+ * order the game's, not a `titanic([12])` regex's.
+ *
+ * What it looked like: the vestibule door out of `veststbd` view18 (#231). Disc
+ * 2's copy of that room sends you to `deckbd scene36/view110`, the promenade
+ * outside the door; disc 1's older copy still names `scene379`, a scene deckbd
+ * does not have — and an unresolvable scene falls back to the set's FIRST, which
+ * in deckbd is the `Scene30` stub whose whole openscene is
+ * `gotospecial ("decka", "scene354", "view357")`. So the player was handed
+ * straight through the boat deck and out the other side onto A deck, having been
+ * in deckbd for one frame. (Both engines fall back the same way — TI.EXE's scene
+ * lookup at 0x409e50 returns "not found" and 0x40a880 adopts record 0 — so the
+ * fallback was never the bug; reading the wrong disc's room was.)
+ */
+function mountSavedDisc(session: GameSession, disk: string): void {
+  if (!disk) return;
+  const disc = session.discVolumes.indexOf(disk.trim().toLowerCase()) + 1;
+  if (disc === 1 || disc === 2) {
+    session.onDiscChange?.(disc);
+    // and it is now the mounted one, as far as the game is concerned — the
+    // original restores the whole path table and its CD with it, and the next
+    // save has to say which disc it was taken on (SavePatch.disk)
+    session.mountedCd = disk;
+    return;
+  }
+  // A single-volume game has no disc to put back and says so with no volumes at
+  // all (the demo). A volume this game does not mount is worth a line: it means
+  // the save came from another title's tree, and every both-discs room it opens
+  // will be whichever copy happens to be selected.
+  if (session.discVolumes.length) {
+    session.onLog(`loadgame: saved on "${disk}", which is not a disc this game mounts`);
+  }
+}
+
+/**
  * Load a `.ti` save — by restoring the serialized engine, not by re-running the
  * room. The original's load never reaches the script runners (see the module
  * note), so neither does this: the departing room's `closeset` does not run, the
@@ -330,6 +387,8 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     session.onLog(`opengame: saved game is from a different version ("${save.title}")`);
     return false;
   }
+  // The DISC, before anything reads a byte off one. See mountSavedDisc.
+  mountSavedDisc(session, save.disk);
 
   // script globals: numbers (mission/phase/counters/puzzles) and strings
   // (hallside, savedeck, handitem, fusebox, savestage/saveflat stack, …) both

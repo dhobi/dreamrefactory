@@ -2642,3 +2642,134 @@ test("the open-cast-file list decodes, and it is what the rooms with a crowd nee
   expect([...seen.keys()].sort()).toEqual(["gang.cst", "gang.cst,extra.cst"]);
   expect(seen.get("gang.cst,extra.cst")).toBeGreaterThan(0);
 });
+
+// --- a load mounts the disc the save was taken on (#231) --------------------
+//
+// 93 basenames ship on both CDs — the public rooms, once per act — and 70 of
+// them differ byte for byte, 19 of those being `.set` rooms. Which copy the
+// engine reads is `setpath(disk)`'s to say, and BOOTFILE only ever calls it on a
+// story transition (`advanceday`) or when the tour starts. A LOAD is neither, so
+// nothing re-stated it and the file store stayed on whatever disc the session was
+// already on — disc 1 after a cold boot, which is 78 of the 109 shipped saves
+// opening the wrong act's rooms.
+//
+// The save says which disc itself: `setpath` mounts its volume by label
+// (`currentcd("Titanic2")`), and that label is container 0 @256 — the original's
+// loader restores the whole resource path table with it, `titanic2:data:` and
+// all, which is in the bytes of every shipped save.
+//
+// Reported as the vestibule door (#231): disc 2's `veststbd` sends you to
+// `deckbd scene36/view110`, the promenade outside the door, and disc 1's older
+// copy still names `scene379`, a scene deckbd does not have — so the fallback to
+// the set's first scene took over, and deckbd's first scene is a stub whose whole
+// openscene is `gotospecial ("decka", "scene354", "view357")`. The player was
+// handed through the boat deck and out onto A deck without stopping.
+test("a load mounts the disc the save was taken on, and the doors lead where they should (#231)", async () => {
+  const { session, viewer, logs } = await newHost();
+  // Mission 1 — aboard, so `setpath(2)` has run in any real playthrough. A cold
+  // boot has not run it: the session is on disc 1, where bedsit1 and the boot
+  // library live.
+  const ok = await session.loadGame(
+    new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti"))),
+  );
+  await session.settle();
+  check("the save loads, in mission 1", ok && session.interp.globals.get("mission") === 1,
+    `ok=${ok} mission=${session.interp.globals.get("mission")}`);
+  check("...and loading it mounted disc 2",
+    logs.some((l) => /disc 2 .* mounted/.test(l)),
+    `disc lines: ${JSON.stringify(logs.filter((l) => /disc/.test(l)))}`);
+
+  // The room the report is about, and the door out of it. `propvisible("door")`
+  // gates the whole branch, so the door is opened the way a player opens it.
+  await session.openSetFile("veststbd.set", "scene17", "view18");
+  await session.settle();
+  let v = viewer();
+  check("standing at the starboard vestibule's outer door",
+    session.currentSetName === "veststbd" &&
+      v.scene.sceneName.toLowerCase() === "scene17" &&
+      v.scene.views[v.viewIdx].viewName.toLowerCase() === "view18",
+    `${session.currentSetName} ${v.scene.sceneName}/${v.scene.views[v.viewIdx].viewName}`);
+  const obj = v.scene.views[v.viewIdx].objects.find((o) => /door/i.test(o.identifier))!;
+  await v.click(
+    Math.floor((obj.startRegionX + obj.endRegionX) / 2),
+    Math.floor((obj.startRegionY + obj.endRegionY) / 2),
+  );
+  await session.settle();
+  check("the door opens", session.propRuntime.get("door")?.visible === true);
+
+  await v.keyDown("uparrow");
+  await session.settle();
+  v = viewer();
+  const where = `${session.currentSetName} ${v.scene.sceneName}/${v.scene.views[v.viewIdx].viewName}`;
+  check("through it is the boat deck, outside that very door",
+    session.currentSetName === "deckbd" &&
+      v.scene.sceneName.toLowerCase() === "scene36" &&
+      v.scene.views[v.viewIdx].viewName.toLowerCase() === "view110",
+    `landed in ${where} (decka means the disc-1 room's dead scene name sent us on)`);
+  // and it is the reciprocal of the way back: deckbd Scene36's own keydown sends
+  // view111 to veststbd scene17/view19
+  check("...and not merely passing through it",
+    logs.filter((l) => /opensetfile/.test(l)).at(-1) ===
+      'opensetfile("deckbd.set", "scene36", "view110")',
+    `last opens: ${JSON.stringify(logs.filter((l) => /opensetfile/.test(l)).slice(-3))}`);
+});
+
+test("every shipped save names a disc its own setpath mounts", async () => {
+  const { session } = await newHost();
+  const volumes = session.discVolumes;
+  check("the boot names two volumes", volumes.length === 2, volumes.join(","));
+  for (const path of allSaves()) {
+    const save = parseSave(new Uint8Array(readFileSync(path)));
+    const disc = volumes.indexOf(save.disk.trim().toLowerCase()) + 1;
+    // setpath's own rule, which is the only place the mapping is stated: disc 1
+    // for the 1942 prologue (mission 0) and for mission 4, disc 2 from the moment
+    // you board until the iceberg, and disc 2 for the tour.
+    const mission = save.numGlobals.get("mission") ?? -1;
+    const tour = save.numGlobals.get("tour") ?? 0;
+    const want = tour ? 2 : mission === 0 || mission === 4 ? 1 : 2;
+    expect.soft(disc, `${path} (disk="${save.disk}" mission=${mission} tour=${tour})`).toBe(want);
+  }
+});
+
+// --- a save says which disc it was taken on (#231) --------------------------
+//
+// The other half of the disc a load mounts: the field it reads has to be true.
+// A save is written by patching a skeleton — a shipped save, or the last one
+// loaded — and `disk` (container 0 @256) was one of the few fields the patch left
+// alone, so a save inherited whichever disc that skeleton came off. The reachable
+// way to write a wrong one is the story's own: load a mission-3 save, play on into
+// mission 4, and save. `advanceday` crosses back to disc 1 there (`setpath(1)`)
+// and the skeleton still said disc 2.
+test("a save names the disc it was taken on, across the mission-4 crossing (#231)", async () => {
+  const { session, logs } = await newHost();
+  await session.loadGame(new Uint8Array(readFileSync(savePath("1", "25 - In Squash Court.ti"))));
+  await session.settle();
+  check("loaded on disc 2, where the middle of the story is",
+    session.mountedCd === "Titanic2", `currentcd() = "${session.mountedCd}"`);
+  const before = parseSave(session.snapshotSave()!);
+  check("a save taken there says so", before.disk === "Titanic2", `disk="${before.disk}"`);
+
+  // the crossing, through the boot's own setpath rather than a stand-in for it
+  session.interp.globals.set("mission", 4);
+  await session.sendEvent("sendtostage", "", "setpath", [1], "test");
+  await session.settle();
+  check("setpath(1) mounts disc 1", session.mountedCd === "Titanic1",
+    `currentcd() = "${session.mountedCd}" | ${JSON.stringify(logs.filter((l) => /disc/.test(l)))}`);
+  const after = parseSave(session.snapshotSave()!);
+  check("...and a save taken after it says disc 1, not the skeleton's disc 2",
+    after.disk === "Titanic1", `disk="${after.disk}" mission=${after.numGlobals.get("mission")}`);
+  check("...while everything else about it still round-trips",
+    after.numGlobals.get("mission") === 4 && after.set === before.set,
+    `mission=${after.numGlobals.get("mission")} set=${after.set}`);
+
+  // and loading it leaves disc 1 in play. A fresh session is already there (the
+  // cold boot's own setpath(1)), so the assertion is that nothing moved it OFF —
+  // which is exactly what the mission-3 skeleton's stale label used to do.
+  const bytes = session.snapshotSave()!;
+  const { session: reloaded, logs: reloadLogs } = await newHost();
+  check("reloading it leaves disc 1 in play",
+    (await reloaded.loadGame(bytes)) &&
+      reloaded.mountedCd === "Titanic1" &&
+      !reloadLogs.some((l) => /disc 2 .* mounted/.test(l)),
+    `currentcd() = "${reloaded.mountedCd}" | ${JSON.stringify(reloadLogs.filter((l) => /disc/.test(l)))}`);
+});

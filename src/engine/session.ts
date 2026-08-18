@@ -208,6 +208,18 @@ export class GameSession {
   onDiscChange: ((disc: 1 | 2) => void) | null = null;
 
   /**
+   * The CD volume the game has mounted, by its own label — what `currentcd()`
+   * answers, set by BOOTFILE's `setpath` (`currentcd("Titanic2")`) and by a load
+   * putting back the disc its save names.
+   *
+   * On the session rather than inside the builtin because a SAVE carries it
+   * (container 0 @256) and both halves need it: a load reads it to know which
+   * disc to mount, and a save writes it so the file says which disc it was taken
+   * on. "" until the boot mounts one — a single-volume game never does.
+   */
+  mountedCd = "";
+
+  /**
    * Host hook: a movie sequence has fully ended and these are the files it
    * played. A movie is the one resource a game finishes with — TAOOT ships 275
    * of them, 328 MB, and the largest are one-shot cutscenes — so the host gives
@@ -1147,6 +1159,19 @@ export class GameSession {
     if (this.plan) return this.plan;
     const bytes = this.files("bootfile");
     return (this.plan = bytes ? readBootPlan(bytes) : EMPTY_BOOT_PLAN);
+  }
+
+  /**
+   * The CD volumes this game's boot mounts, in disc order — `["titanic1",
+   * "titanic2"]`, read off its own `setpath` ({@link BootPlan.volumes}). Empty
+   * for a single-volume game.
+   *
+   * Public because a SAVE names the volume it was taken on, by the very label
+   * `setpath` mounts it under, and a load has to put that disc back before it
+   * reads a byte (see `loadGame`).
+   */
+  get discVolumes(): readonly string[] {
+    return this.bootPlan().volumes;
   }
 
   /**

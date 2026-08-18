@@ -28,6 +28,12 @@ writes:
 - every live script global (numbers inline; strings via the base's string
   pool — `clock` excluded, its record isn't writable),
 - the current **set / scene / view**,
+- the **CD in play**, by the label `setpath` mounted it under (container 0 @256).
+  The base cannot be trusted for this — it is a shipped save, or the last one
+  loaded, and the story crosses back to disc 1 at mission 4 without either of
+  them changing — so a save written after that crossing used to claim the disc it
+  had come *from*. It matters at both ends: the original engine asks for that CD
+  by name, and a load in this port mounts it (step 2 below),
 - the **props**: **every prop the engine has loaded**, in the engine's own list
   order, and the whole record — `propowner` and `propview`, plus the numeric half
   (`propvisible`, the screen anchor, `deg`, `dist`, `scale`, `value`, `zclip`) —
@@ -213,32 +219,43 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
 
 1. Parse and validate (`"Titanic 1.0"`; a foreign file is rejected with the
    original's error).
-2. Restore all number and string globals, `clock` and `hallside` among them
+2. **Mount the disc the save was taken on**, before a byte is read off one. 93
+   basenames ship on both CDs — the public rooms, once per act — and 70 of them
+   differ byte for byte, 19 being `.set` rooms; which copy the engine reads is
+   `setpath(disk)`'s to say, and `BOOTFILE` only calls it on a story transition or
+   when the tour starts. A load is neither. The file names its own disc by the
+   label `setpath` mounts it under (`currentcd("Titanic2")`, container 0 @256),
+   matched against the volumes this game's own `setpath` names. Without it a load
+   stayed on whatever disc the session was already on — disc 1 after a cold boot,
+   which is 78 of the 109 shipped saves opening the wrong act's rooms, and is how
+   the starboard vestibule door came out on A deck
+   ([#231](https://github.com/dhobi/taoot-web/issues/231)).
+3. Restore all number and string globals, `clock` and `hallside` among them
    (without a valid `hallside`, halla's `keydown` guard swallows every key;
    `savedeck` keeps a set-derived deck-letter fallback for the four pre-boarding
    saves that predate the variable).
-3. Force **`lockevents = 0`** — every save is taken from the CTL menu with
+4. Force **`lockevents = 0`** — every save is taken from the CTL menu with
    world input frozen, so every save *carries* the freeze; a load returns you
    to interactive control.
-4. Tear down timed state (`scheduler.reset()`), **silence the voice channel** (the
-   theme is halted and re-scored from the file at step 10), drop any pending
+5. Tear down timed state (`scheduler.reset()`), **silence the voice channel** (the
+   theme is halted and re-scored from the file at step 11), drop any pending
    [overlay-stack](stage-ui.md#the-overlay-stack-transtoflat-transfromflat)
    frames, reopen `main.stg`, and make the set visible.
-5. **Mute the set lifecycle** (`GameSession.restoringSave`) for everything below.
+6. **Mute the set lifecycle** (`GameSession.restoringSave`) for everything below.
    The departing room is *detached*, not closed: its `closeset` does not run, its
    timed state died with the scheduler reset, and the host releases its files when
    the new set activates.
-6. **Reopen the cast files the save had open** (container 3 — `gang.cst` always,
+7. **Reopen the cast files the save had open** (container 3 — `gang.cst` always,
    plus `extra.cst` in the three rooms with a crowd), before a single record is
    applied. The extras a room places are instanced from `extra.cst`, which the
-   room's own `openset` opens — and step 5 just muted that. Skipping this step
+   room's own `openset` opens — and step 6 just muted that. Skipping this step
    dropped 344 characters across 39 of the 109 shipped saves, in the endgame's
    most populated rooms, with nothing but a log line to say so
    ([#186](https://github.com/dhobi/taoot-web/issues/186); [the container's
    story](../formats/savegame.md#the-crowd-comes-from-this-container)). The list
    is the file's own rather than a guess from the set being entered, and
    `opencastfile` is idempotent, so the boot cast costs nothing.
-7. **Put the cast back, wholesale.** The live actor list is wiped first —
+8. **Put the cast back, wholesale.** The live actor list is wiped first —
    `actorinstance` copies removed, cast members put down — because the original
    replaces its list with the container it read, and then every record is applied:
    owner and value, set, star, pose, position, facing, speed, `actorturn`,
@@ -251,7 +268,7 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    `actorvisible` verbatim is what makes wholesale restore safe at all:
    `putdownactor` hides a character without touching `actorset`, so "place everyone
    whose set matches" would resurrect everybody who ever walked through the room.
-8. **Put every prop back, both halves** — owner, view, and the numeric fields that
+9. **Put every prop back, both halves** — owner, view, and the numeric fields that
    say where and how it draws. This one step replaces the whole family of script
    re-runs the load used to negotiate with: `initprops`' mission defaults, the
    `house.shp` `openshop`/`initprops`/`showinterface` dance, the hand-mirrored open
@@ -259,11 +276,11 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    hand either — it restores from its variable record like every global, and every
    shipped save carries `""` there: a save is taken from the CTL panel, which you
    cannot reach mid-drag.)
-9. **Restore the scheduler tables mid-count** — every `makeloop` with the ticks it
+10. **Restore the scheduler tables mid-count** — every `makeloop` with the ticks it
    had left, every `makecricket` with its position, radius, period, jitter and time
    to next fire. This is what used to need the arriving room's `openset`: the idles
    that make characters act, the scene timers, the room's positional ambience.
-10. **Reopen every audio bank the save had open, then score the room from the
+11. **Reopen every audio bank the save had open, then score the room from the
    file**: the track whose playing/looping arrays are non-empty is the theme, and
    it is played at the player's `themevolume`. The *other* open banks matter as
    much, and opening only the theme's was
@@ -274,7 +291,7 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    18 shipped saves with a cricket table, 49 of 50 cricket records cannot resolve
    their sound from the theme's bank alone. See [an open bank is not a playing
    bank](../formats/savegame.md#an-open-bank-is-not-a-playing-bank).
-11. **Walks come back mid-stride.** The walks table is TI.EXE's own service table,
+12. **Walks come back mid-stride.** The walks table is TI.EXE's own service table,
     and its record carries the walk's origin, its deltas, its total distance, how
     far along it is and the star it lands on — so the walk is *restored*, not
     restarted: the walker sets off from where the save caught them with only what
@@ -297,7 +314,7 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
     script](../formats/pup-cst.md#the-play-script-says-how-long-a-picture-is-held)
     whether a walk is running or not, so a drop that left the pose alone left a
     character treadmilling on the spot.
-12. Open the saved set/scene/view through the engine's set machinery, still with the
+13. Open the saved set/scene/view through the engine's set machinery, still with the
     lifecycle muted. The scene is recorded as current, so the first turn or step
     fires `openscene` normally.
 
