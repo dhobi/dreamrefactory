@@ -419,6 +419,27 @@ export interface StarPathPoint {
 }
 
 /**
+ * Truncating integer square root — TI.EXE's own (`0x435950`), and the reason a
+ * route's stored leg lengths are what they are.
+ *
+ * `Math.floor(Math.hypot(...))` is NOT the same function: `halla`'s third leg is
+ * 101×259, whose real length is 278.0004, and the file stores **277** because
+ * 278² = 77284 overshoots 77282. Verified against all six shipped routes — every
+ * leg matches this and every header total is the exact sum of its legs.
+ *
+ * Lives beside the route rather than in the writer because the ENGINE measures
+ * with it too: a `"resume"` walk re-measures the legs of the route it trims (see
+ * the walkonpath builtin), and a length that disagreed by a unit would pace that
+ * walk differently from the authored one.
+ */
+export function isqrt(n: number): number {
+  let r = Math.floor(Math.sqrt(n));
+  while (r > 0 && r * r > n) r--;
+  while ((r + 1) * (r + 1) <= n) r++;
+  return r;
+}
+
+/**
  * The polyline a {@link StarPath} names: `{i32 total length, i32, i32 count}`, a
  * `(Zmin, Xmin, Zmax, Xmax)` bounding box, then `count` × `{i16 X, Z, Y, i16
  * distance-from-previous}` from offset 20.

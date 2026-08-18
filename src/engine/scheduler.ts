@@ -453,11 +453,13 @@ export class Scheduler {
       if (p) this.startWalk(name, p.x, p.y, p.z, arriveStar);
       return;
     }
-    // The leg lengths come from the FILE, not from re-measuring the geometry: the
+    // The leg lengths arrive with the points and are not re-measured here: the
     // author stored them with TI.EXE's truncating integer sqrt, so a re-measure
-    // disagrees by a unit here and there (halla's third leg is 277 stored against
-    // 278.0 computed) and the total would no longer match the header the original
-    // paces the whole route by.
+    // with `Math.hypot` disagrees by a unit here and there (halla's third leg is
+    // 277 stored against 278.0 computed) and the total would no longer match the
+    // header the original paces the whole route by. A `"resume"` walk arrives
+    // having re-measured its own — with that same isqrt, and because trimming
+    // the route gave its first leg a length nobody authored.
     const path: { x: number; y: number; z: number; cum: number }[] = [];
     let cum = 0;
     points.forEach((p, i) => {
@@ -466,11 +468,15 @@ export class Scheduler {
     });
     const first = path[0];
     const second = path[1];
-    a.worldX = first.x;
-    a.worldY = first.y;
-    a.worldZ = first.z;
+    // No teleport onto the head of the route. TI.EXE's builder (0x4437f0) records
+    // the actor's CURRENT position and leaves them standing on it; the mover
+    // (0x443eff -> 0x444d70) reads every later position out of the route, so the
+    // first movement pass is what puts them on it — after the turn, not before
+    // it. Snapping here moved them a pass early and, for a `"resume"` walk, to
+    // the wrong place entirely: the route's own first point rather than the one
+    // resumeFrom had just trimmed it to (#230).
     this.walks.set(name.toLowerCase(), {
-      sx: first.x, sy: first.y, sz: first.z,
+      sx: a.worldX, sy: a.worldY, sz: a.worldZ,
       dx: 0, dy: 0, dz: 0,
       dist: Math.max(1, Math.floor(cum)), progress: 0, paused: false, arriveStar,
       turnTo: bearing(second.x - first.x, second.y - first.y),
