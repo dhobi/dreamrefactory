@@ -832,6 +832,47 @@
           <span class="keys" id="brightnessValue">0.65</span>
         </div>
 
+        <!-- How fast a move the PLAYER asked for animates (#222). Not a feel
+             decision reopened: `original` is the rate measured out of TI.EXE
+             (#205) and is the default. The original has this knob itself and
+             calls it `framerate` — 6 ticks is slow, its own shipped value is 3,
+             and `framerate(0)` means "don't wait", which is what instant is.
+             The row exists because 20 fps of low-res transition makes some
+             players motion-sick, and the ask was either a slower walk or none.
+
+             Radios, like the brightness row and unlike the picture dropdown: a
+             radio owns only Space (src/keys.ts), so the arrows still turn while
+             one has focus and nothing has to be blurred. src/main.ts's
+             installMovement remembers the answer and writes the ms readout. -->
+        <div class="bar">
+          <span class="seclabel" data-i18n="play.movementLabel">Movement</span>
+          <span
+            class="seg"
+            id="movementSeg"
+            role="group"
+            title="How long each frame of a turn or a walk is held — your own moves only, never the ones a script makes for you. The original holds a frame for 50 ms and that is what `original` is; the others are the same move played out slower or faster, over the same frames. `instant` holds none of them: the picture goes straight to where you are standing next, which is the setting to reach for if the movement makes you queasy."
+            data-i18n-attr="title:play.movementTitle"
+          >
+            <label
+              ><input type="radio" name="movement" value="slow" />
+              <span data-i18n="play.movementSlow">slow</span></label
+            >
+            <label
+              ><input type="radio" name="movement" value="original" />
+              <span data-i18n="play.movementOriginal">original</span></label
+            >
+            <label
+              ><input type="radio" name="movement" value="fast" />
+              <span data-i18n="play.movementFast">fast</span></label
+            >
+            <label
+              ><input type="radio" name="movement" value="instant" />
+              <span data-i18n="play.movementInstant">instant</span></label
+            >
+          </span>
+          <span class="keys" id="movementValue">50 ms</span>
+        </div>
+
         <!-- The small game a 1996 machine got. Nothing here is ours: the box
              makes heapsize() report under 6 MB and TAOOT's own scripts do the
              rest (GameSession.lowMemory). Named for the condition rather than

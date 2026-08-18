@@ -21,7 +21,7 @@
  * editors and the browser suite cover what they were used for besides.
  */
 import { DeferredAudioSink, WebAudioSink } from "./engine/audio";
-import { isPictureMode } from "./engine/session";
+import { isMoveSpeed, isPictureMode, MOVE_SPEED_MS } from "./engine/session";
 import { GameHost } from "./host";
 import { loadTemplates, saveTemplateFor, seedSaves } from "./save-seed";
 import { browseForLoad, browseForSave } from "./save-browser";
@@ -100,6 +100,8 @@ const pictureModeSel = document.getElementById("pictureMode") as HTMLSelectEleme
 const lowMemoryBox = document.getElementById("lowMemory") as HTMLInputElement;
 const brightnessSeg = document.getElementById("brightnessSeg");
 const brightnessValue = document.getElementById("brightnessValue");
+const movementSeg = document.getElementById("movementSeg");
+const movementValue = document.getElementById("movementValue");
 /** where you are and what the engine is doing: the X pane, off by default */
 const details = document.getElementById("details") as HTMLDivElement;
 const scriptlog = document.getElementById("scriptlog") as HTMLPreElement;
@@ -1079,6 +1081,7 @@ function installSwipeOptions(): void {
 function installPictureOptions(): void {
   bindPictureMode();
   installBrightness();
+  installMovement();
   // Its own row and its own question: this one is the GAME's setting, not the
   // page's — the box only changes what `heapsize()` answers, and TAOOT's own
   // scripts decide what that is worth (GameSession.lowMemory).
@@ -1091,6 +1094,9 @@ const PICTURE_MODE_KEY = "taoot.picture.landing";
  *  sharp", and a player who ticked it keeps that answer */
 const SHARP_LANDING_KEY = "taoot.picture.sharplanding";
 const BRIGHTNESS_KEY = "taoot.picture.brightness";
+/** and where the movement row's answer does (#222) — its own namespace and
+ *  not the picture one, because what it changes is the moving and not the look */
+const MOVEMENT_KEY = "taoot.move.speed";
 /** and where the low-memory row's one answer does */
 const LOW_MEMORY_KEY = "taoot.sound.lowmemory";
 
@@ -1182,6 +1188,55 @@ function installBrightness(): void {
   onScreenGammaShown = show;
 }
 
+/**
+ * The movement speed — how long a frame of the player's OWN turn or walk is
+ * held (#222).
+ *
+ * Four segments and no slider, for the reason {@link installBrightness} gives
+ * and for one more: the values are not a continuum. `original` is the rate
+ * measured out of TI.EXE (#205) and there is no reading of "a bit off it" that
+ * anyone wants; what the request asked for was a slower walk, a faster one, or
+ * none at all. `instant` is the last of those, and it is the original's own
+ * `framerate(0)` — "don't wait".
+ *
+ * The readout beside them is the number itself, like the brightness row's
+ * gamma, so the choice is never mystery meat: a player can see that "fast" is
+ * 25 ms a frame and that "instant" holds no frame at all. It carries no words,
+ * so it needs no translation.
+ *
+ * Radios rather than the picture row's `<select>`, so nothing has to be blurred
+ * afterwards: a radio owns only Space (src/keys.ts), and the arrows stay the
+ * game's while one has focus — which matters here more than anywhere, because
+ * the arrows are the very thing this setting is about.
+ */
+function installMovement(): void {
+  if (!movementSeg) return;
+  const radios = [...movementSeg.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+  const show = (): void => {
+    for (const r of radios) r.checked = r.value === session.moveSpeed;
+    if (movementValue) movementValue.textContent = `${MOVE_SPEED_MS[session.moveSpeed]} ms`;
+  };
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(MOVEMENT_KEY);
+  } catch {
+    /* storage can be denied; the game then starts on the original every launch */
+  }
+  if (isMoveSpeed(stored)) session.moveSpeed = stored;
+  show();
+  for (const r of radios) {
+    r.addEventListener("change", () => {
+      if (!r.checked || !isMoveSpeed(r.value)) return;
+      session.moveSpeed = r.value;
+      show();
+      try {
+        window.localStorage.setItem(MOVEMENT_KEY, r.value);
+      } catch {
+        /* not remembering is survivable — the setting still holds for this tab */
+      }
+    });
+  }
+}
 
 /** set by {@link installBrightness} so the F-keys can refresh the presets */
 let onScreenGammaShown: (() => void) | null = null;

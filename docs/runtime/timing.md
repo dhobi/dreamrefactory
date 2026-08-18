@@ -145,6 +145,11 @@ holds for `framerate` ticks of real time rather than for that many
 intended on a 120 Hz panel. `hasattention()` (characters who speak up after you
 linger four seconds) and every scripted animation loop hang off this.
 
+The play page offers the same dial to the player, for their own turns and walks
+only: **Movement** is `framerate` in four steps — 6 ticks, the shipped 3, 1.5, and
+`framerate(0)`'s *don't wait* — see [the browser host](host.md#the-movement-setting).
+It is a separate value from `session.frameRate`, which scripts write.
+
 The **pumped-clock host is the exception**: headless has no displayed frames, so
 one `forceupdate` *is* one frame there and the counter still advances per call.
 That keeps the oracle deterministic — see [Tests](../reference/tests.md).
