@@ -200,10 +200,12 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   // BOOTFILE's setpath() does `currentcd("Titanic1"); if currentcd()="" error`.
   // The web build ships all data locally, so any requested disc is always
   // "mounted": remember the last name and report it (never "") so boot proceeds.
-  let mountedCd = "";
+  //
+  // Remembered on the SESSION (not in this closure) because a save carries the
+  // answer — see GameSession.mountedCd.
   r("currentcd", (_i, [name]) => {
-    if (name !== undefined) mountedCd = toStr(name);
-    return mountedCd;
+    if (name !== undefined) session.mountedCd = toStr(name);
+    return session.mountedCd;
   });
 
   // UI dialogs + quit — delegated to host hooks (browser wires alert/confirm/

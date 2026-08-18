@@ -297,6 +297,10 @@ const C0_FILE_STRIDE = 0x104;
  *  and the stage 128..255, so only the lower half is the set's to replace. */
 const C0_CLUT = 0xb0c;
 const C0_CLUT_SET_HALF = 128 * 8;
+/** container 0 @256: the CD VOLUME this game was saved on, as a pstr — the very
+ *  label `setpath` mounts it by (`currentcd("Titanic2")`), and what the original's
+ *  loader restores the resource path table from. See {@link SavePatch.disk}. */
+const C0_DISK = 256;
 
 const roundUp = (n: number, a: number) => Math.ceil(n / a) * a;
 
@@ -1575,6 +1579,25 @@ export interface SavePatch {
   set: string;
   scene: string;
   view: string;
+  /**
+   * The CD volume in play, by the label `setpath` mounts it under
+   * ({@link SaveGame.disk}, container 0 @256). Omitted leaves the base's.
+   *
+   * A save is written by patching a skeleton — a shipped save, or the last one
+   * loaded — and this field is one the patch used to leave alone, so a save
+   * inherited whichever disc that skeleton came off. It is not decoration: it
+   * says which CD the save's rooms are to be read from, to the original engine
+   * (which asks for that disc by name) and to this port (whose load mounts it —
+   * see mountSavedDisc). 93 basenames ship on both, 70 of them differing byte for
+   * byte, so a mislabelled save opens the wrong act's rooms. The reachable way to
+   * write one was to load a mission-3 save and play on into mission 4: the story
+   * crosses back to disc 1 there and the skeleton still said disc 2.
+   *
+   * Written into the field the base already has and never past it — every label
+   * in the corpus is the same eight characters, and what follows the pstr in
+   * container 0 is process junk this port does not otherwise disturb.
+   */
+  disk?: string;
   /** the engine's displayed-frame counter (C1 @442). Written on the same scale
    * as the frame stamps in {@link numGlobals}, because the game subtracts one
    * from the other; omitted leaves the base's. */
@@ -2051,6 +2074,16 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
   // measure from the same zero when the save is read back (C1_FRAME).
   if (patch.frame !== undefined && c1.length >= C1_FRAME + 4) {
     new DataView(c1.buffer, c1.byteOffset, c1.byteLength).setUint32(C1_FRAME, patch.frame >>> 0, true);
+  }
+
+  // the CD the save is taken on (see SavePatch.disk). Same-or-shorter than the
+  // label already there, so the write cannot reach past the field the base
+  // defines: the pstr's own length byte is the only bound container 0 gives us.
+  if (patch.disk !== undefined) {
+    const c0 = containers[0].data;
+    const room = c0.length > C0_DISK ? c0[C0_DISK] : 0;
+    if (patch.disk.length <= room) writePstrField(c0, C0_DISK, patch.disk, room);
+    else patch.onDrop?.(`disk(${patch.disk})`, `longer than the ${room}-byte label it replaces`);
   }
 
   // the set FILE: re-path the manifest record the set id at C1 @544 resolves
