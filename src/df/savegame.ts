@@ -2092,6 +2092,22 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
   // The record keeps its old id and its directory prefix; only the basename
   // after the last ":" changes, which is also all that distinguishes the
   // shipped saves' set records from one another.
+  //
+  // KEEPING THE PREFIX IS SAFE, including across a disc boundary, and it is
+  // worth saying why because the record looks like it should matter: a save
+  // written after the story crosses back to disc 1 at mission 4 inherits its
+  // skeleton's `titanic2:data:` and so names the wrong volume for the room it
+  // points at. The original does not read it. Its loader resolves the handle to
+  // this path (0x4153f0, walking the same records at +0x1310) and then hands the
+  // buffer to 0x42bc20, which strips everything up to and including the LAST
+  // ":" — reducing `titanic2:data:deckbd2.set` to `deckbd2.set` — before
+  // 0x429e30 opens it. What it opens is therefore a BASENAME resolved through
+  // the resource path table, exactly as a script's own `opensetfile("deckbd2.set")`
+  // is, and which disc that finds is settled by the mounted volume: the CD named
+  // at container 0 @256, which `SavePatch.disk` above keeps true. Verified
+  // against the corpus too — no shipped save names the volume it was not taken
+  // on, so the original never has to rely on this, but nothing reads the field
+  // either way.
   if (patch.setFile && c1.length >= C1_SCENE_REGISTER + 4) {
     const c0 = containers[0].data;
     const v0 = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);

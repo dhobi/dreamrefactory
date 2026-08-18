@@ -175,6 +175,16 @@ save's scene (the name compare is case-insensitive — the registers store
 `Scene10`, the saves `scene10`), and @644/@652 equal that file's own register
 refs from its container-0 header.
 
+**Only the basename of that path is read.** Between finding the record and
+opening the file, the resolver hands the buffer to `0x42bc20`, which strips
+everything up to and including the LAST `":"` — `titanic2:data:cargo.set` becomes
+`cargo.set` — and `0x429e30` opens *that*, through the resource path table, in the
+same call the engine uses for a script's own `opensetfile("cargo.set")`. So the
+volume and directory a record carries are decoration: which disc the file comes
+off is settled by the mounted CD (container 0 @256), not by the prefix. Which is
+why a patch may keep the base's prefix even when the story has crossed to the
+other disc since — it names the wrong volume and nothing reads it.
+
 The consequence for writing: a patch that changes the room **must re-path the
 manifest's set record and rewrite the register refs and the scene count**
 (`SavePatch.setFile` — the record's id is left alone so everything else still
