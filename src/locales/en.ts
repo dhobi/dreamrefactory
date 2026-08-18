@@ -175,6 +175,22 @@ export const en = {
     brightnessDarker: "darker" as Text,
     brightnessOriginal: "original" as Text,
     brightnessBrighter: "brighter" as Text,
+    // how fast the player's OWN moves animate (#222). `original` is the rate
+    // measured out of TI.EXE (#205) and the default; the row exists because 20
+    // fps of low-res transition makes some players motion-sick, and the
+    // original's own `framerate(0)` — "don't wait" — is what `instant` is.
+    movementLabel: "Movement" as Text,
+    movementTitle:
+      "How long each frame of a turn or a walk is held — your own moves only, " +
+      "never the ones a script makes for you. The original holds a frame for 50 " +
+      "ms and that is what `original` is; the others are the same move played " +
+      "out slower or faster, over the same frames. `instant` holds none of them: " +
+      "the picture goes straight to where you are standing next, which is the " +
+      "setting to reach for if the movement makes you queasy." as Text,
+    movementSlow: "slow" as Text,
+    movementOriginal: "original" as Text,
+    movementFast: "fast" as Text,
+    movementInstant: "instant" as Text,
     // the small game a 1996 machine got — the game's own scripts do all of it
     // (GameSession.lowMemory), so the row is named for the CONDITION rather than
     // for the result, which is the game's answer and not ours

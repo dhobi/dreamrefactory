@@ -283,7 +283,9 @@ travel direction** (a road's endpoint view faces back along the road — see
 frame** — one frame per service pass, which is TI.EXE's own frame period
 (`framerate` defaults to 3 ticks of 50/3 ms, `0x429643`/`0x43a940`). It was 90 ms
 until a player reported that the original in DosBox moves visibly faster; it does,
-by 1.8x, and the rate was never a feel decision to make. While animating, `currentview()`
+by 1.8x, and the rate was never a feel decision to make. A player may move their
+OWN moves off it — see [the Movement setting](#the-movement-setting) — and a
+script's stay here whatever they choose. While animating, `currentview()`
 returns the pseudo-view **`"moving"`** — scripts genuinely poll for it.
 `jumpTo` tolerates the shipped data's one stale view name by falling back to
 the nearest view by rotation.
@@ -419,6 +421,53 @@ appended (`SetViewer.standpointFrames`).
 
 None of the four touches the movement itself: in-motion frames are
 quarter-resolution in both rings and no sharp version of them was ever made.
+
+### The Movement setting
+
+How long a frame of the player's **own** turn or walk is held. Four segments, and
+the numbers are not the port's invention — three of them are values the original's
+own `framerate` could be given (`0x489efe`, ticks of 50/3 ms between frames; see
+[Timing](timing.md#framerate-and-frame-paced-by-the-clock-not-by-the-display)):
+
+| setting | a frame lasts | which is |
+|---|---|---|
+| `slow` | 100 ms | `framerate(6)` |
+| `original` | **50 ms** | `framerate(3)` — TI.EXE's shipped value, and the default |
+| `fast` | 25 ms | 1.5 ticks: the one the original could not have asked for |
+| `instant` | nothing at all | `framerate(0)`, which the original documents as *don't wait* |
+
+The rate itself is still not a matter of taste — getting it wrong by 1.8× is what
+[#205](https://github.com/dhobi/taoot-web/pull/205) was, and `original` is the
+measured number. What this adds is the choice: the request
+([#222](https://github.com/dhobi/taoot-web/issues/222)) is from players who find
+20 fps of low-res transition makes them motion-sick and want either a slower walk
+or, like Myst, no transition to watch. Remembered under `taoot.move.speed`.
+
+Two things are deliberately outside it:
+
+- **A script's move keeps the engine's rate**, whatever the player has chosen
+  (`SetViewer.navigate` passes `FRAME_MS`, the player's path passes
+  `SetViewer.playerPace`). Scripts budget *passes* for the moves they ask for and
+  then carry on without waiting — BEDSIT1's air raid gives a 7-frame road ten
+  passes — so a `slow` player would put the air raid back where
+  [#40](https://github.com/dhobi/taoot-web/issues/40) found it.
+- **`session.frameRate`**, the script-side `framerate()`, stays separate. Scripts
+  *write* it (the fight stage asks for 5; the turbine drag loops drop it and put
+  it back), and a preference a script can overwrite on the way past is not a
+  preference.
+
+`instant` needed one change to the frame loop rather than just a smaller number.
+`tick` drew at most one animation frame per call, which is faithful — the original's
+throttle waits out the period and then draws exactly one, so a machine that cannot
+keep up stretches the move instead of dropping frames from it — but it also puts a
+floor under the pace at whatever the host ticks: 50 ms headless, one display refresh
+in a browser. `0` would have meant "a frame every rAF", which is neither instant nor
+the same speed on a 60 Hz and a 120 Hz panel; `25` would have been 33 ms at 60 Hz.
+So below the engine step the tick now advances by **elapsed time** and draws only the
+frame it lands on. At or above the step nothing changed, frames are still never
+skipped, and `instant` falls out of it: the whole ring is spent on one tick, the
+settle runs inside that same tick, and the only picture that reaches the screen is
+the standpoint arrived at.
 
 ### The Low memory box
 

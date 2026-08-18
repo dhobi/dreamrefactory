@@ -62,6 +62,45 @@ export const PICTURE_MODES: PictureMode[] = ["original", "sharp", "transition", 
 export const isPictureMode = (s: unknown): s is PictureMode =>
   typeof s === "string" && (PICTURE_MODES as string[]).includes(s);
 
+/** how fast a move the PLAYER asked for animates — see {@link MOVE_SPEED_MS} */
+export type MoveSpeed = "slow" | "original" | "fast" | "instant";
+
+/**
+ * The four, in the order the play page offers them, and what each one costs a
+ * frame (#222).
+ *
+ * The original has this knob itself and calls it `framerate`: the frame throttle
+ * (`0x43a940`) waits `[0x489efe]` ticks of 50/3 ms between frames, `framerate(n)`
+ * writes that word clamped to 0..60, and its shipped value is **3** — the 50 ms
+ * that `original` is and that {@link ENGINE_STEP_MS} names. So three of these
+ * four are values TI.EXE could have been given: 6 ticks is `slow`, 3 is
+ * `original`, and 0 is `framerate(0)`, which the original documents as "don't
+ * wait" — `instant` is that, not an invention of the port's. `fast` at 25 ms is
+ * the one that is ours: it is 1.5 ticks, a rate the original had no way to ask
+ * for (2 ticks is 33 ms, 1 is 17), and it is here because the request named it.
+ *
+ * Not `session.frameRate`, which is the same number for the script side and is
+ * deliberately a different one: scripts WRITE it (the fight stage asks for 5,
+ * the turbine drag loops drop it and put it back), and a player's preference is
+ * not something a script may overwrite on the way past.
+ *
+ * Scripted camera moves are not paced by any of this — they stay at the engine
+ * step, because the scripts budget passes for them and a slow player would break
+ * that arithmetic. See `SetViewer.navigate`.
+ */
+export const MOVE_SPEED_MS: Record<MoveSpeed, number> = {
+  slow: 2 * ENGINE_STEP_MS,
+  original: ENGINE_STEP_MS,
+  fast: ENGINE_STEP_MS / 2,
+  instant: 0,
+};
+
+/** the four, in the order the play page offers them */
+export const MOVE_SPEEDS: MoveSpeed[] = ["slow", "original", "fast", "instant"];
+
+export const isMoveSpeed = (s: unknown): s is MoveSpeed =>
+  typeof s === "string" && (MOVE_SPEEDS as string[]).includes(s);
+
 /**
  * Game-wide state that outlives individual sets: one interpreter (globals
  * persist across rooms), the boot script (the loaded title's standard library —
@@ -1735,6 +1774,27 @@ export class GameSession {
    * fresh viewer and the setting has to outlive the room.
    */
   pictureMode: PictureMode = "original";
+  /**
+   * Player setting: how fast a move the PLAYER asked for animates (#222).
+   *
+   * The rate itself is not a preference — it is a number in the binary, and
+   * getting it wrong by 1.8x is what #205 was (see `SetViewer.FRAME_MS`).
+   * `original` is that number and the default, so nothing here reopens it. What
+   * this adds is the choice the ORIGINAL also offered, under the name
+   * `framerate`: the request (#222) is from players who get motion-sick at 20
+   * fps and want either a slower walk or no transition at all, and "no
+   * transition" is `framerate(0)`, which TI.EXE already means by it.
+   *
+   * Only the player's own moves. A script's stay at the engine step whatever
+   * this says, because the scripts budget passes for the moves they ask for —
+   * BEDSIT1's air raid gives a 7-frame road ten passes and no wait — so a slow
+   * player would put the air raid back where #40 found it. See
+   * `SetViewer.navigate` / `SetViewer.playerPace`.
+   *
+   * Lives on the session for the reason {@link pictureMode} does: a `changeset`
+   * builds a fresh viewer and the setting has to outlive the room.
+   */
+  moveSpeed: MoveSpeed = "original";
   /**
    * Player setting: report a 1996 machine's free RAM, so the GAME turns itself
    * down (`heapsize`, in builtins/helpers.ts).

@@ -7,7 +7,7 @@
 import { test, expect } from "vitest";
 import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
 import { readSetFile, readStarPath, RIGHTTURNS, LEFTTURNS } from "../../src/df/set";
-import { RAMP_STEP_MS } from "../../src/engine/clock";
+import { ENGINE_STEP_MS, RAMP_STEP_MS } from "../../src/engine/clock";
 import { readShpFile } from "../../src/df/shp";
 import { frameIndexForDegree, isDegreeSelector } from "../../src/engine/props";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "../../src/df/image";
@@ -9461,3 +9461,127 @@ test("a press consumed while another chain is in flight stays consumed (#232)", 
     where() === "scene66/view73" && !visited.includes("scene39/view57"),
     `held up and ended at ${where()} via ${visited.filter((w) => !w.endsWith("/moving")).join(" -> ")}`);
 }, 120_000);
+
+
+// --- movement speed: the player's pace is theirs, the script's is the game's --
+// #222 asks for the transition rate to be a choice — motion sickness at one end
+// ("Carlson isn't sprinting everywhere"), Myst-style snapping at the other. #205
+// had just finished proving the rate is NOT a matter of taste (50 ms a frame is
+// `framerate`'s shipped 3 ticks of 50/3 ms), so the two only coexist because the
+// default IS that number and the choice is the player's own moves alone.
+//
+// Three things have to hold, and each one is a way the feature could be wrong:
+//
+//  1. the pace is the pace. A turn at `slow` takes twice the ticks a turn at
+//     `original` does, and one at `fast` takes half — which is only possible
+//     because a sub-step pace may spend more than one frame on a tick (a
+//     headless tick is 50 ms; 25 ms a frame is two of them). `instant` spends
+//     the whole ring on ONE tick.
+//  2. `instant` never draws a frame of the ring. The settle runs inside the tick
+//     that draws the animation's last frame, so the only picture that reaches
+//     the screen is the standpoint arrived at.
+//  3. a SCRIPT's move is untouched by any of it. BEDSIT1's air raid budgets ten
+//     passes for a 7-frame road and does not wait; at `slow` that road would
+//     want twenty and the turn after it would land after the bomb, which is
+//     exactly the #40 the pace split was invented to stop.
+test("movement speed: the player's pace is theirs, a script's is the game's (#222)", async () => {
+  const { session, viewer } = await newSession();
+  await session.openSetFile("bedsit1.set", "scene2", "view14");
+  const v = viewer();
+  const anyv = v as unknown as { animation: { pixels: Uint8Array }[] | null };
+  const hash = (f: { pixels: Uint8Array; width: number; height: number } | null): string => {
+    if (!f) return "none";
+    let h = 0x811c9dc5;
+    const n = f.width * f.height;
+    for (let i = 0; i < n; i++) h = Math.imul(h ^ f.pixels[i], 0x01000193) >>> 0;
+    return h.toString(16);
+  };
+
+  /**
+   * One right turn at the current setting, ticked at the engine step — which is
+   * what the headless host runs at, so the counts below are the browser's too
+   * for any pace at or above it.
+   *
+   * `ticks` counts the FIRST tick as well, and that one never draws: it is where
+   * the animation's clock starts (`lastTick`), so every count here is n+1.
+   */
+  const turnRight = (): { ticks: number; frames: number; drawn: string[]; landed: number } => {
+    v.turn(RIGHTTURNS);
+    const frames = anyv.animation?.length ?? 0;
+    const drawn: string[] = [];
+    let ticks = 0;
+    while (anyv.animation && ticks < 500) {
+      ticks++;
+      const f = v.tick((clock += ENGINE_STEP_MS));
+      const h = hash(f);
+      if (h !== drawn[drawn.length - 1]) drawn.push(h);
+    }
+    return { ticks, frames, drawn, landed: v.viewIdx };
+  };
+
+  const from = v.viewIdx;
+  session.moveSpeed = "original";
+  const orig = turnRight();
+  check("the ring is worth measuring", orig.frames >= 2 && orig.landed !== from,
+    `frames=${orig.frames} ${from} -> ${orig.landed}`);
+  check("original: one frame a tick, which is what it has always been",
+    orig.ticks === orig.frames + 1, `${orig.ticks} ticks for ${orig.frames} frames`);
+
+  // back to where we started, so every speed turns the same ring
+  const backTo = (idx: number): void => {
+    for (let i = 0; i < 12 && v.viewIdx !== idx; i++) {
+      v.turn(LEFTTURNS);
+      for (let n = 0; n < 500 && anyv.animation; n++) v.tick((clock += ENGINE_STEP_MS));
+    }
+  };
+
+  backTo(from);
+  session.moveSpeed = "slow";
+  const slow = turnRight();
+  check("slow: 100 ms a frame is two ticks each, and the same frames",
+    slow.frames === orig.frames && slow.ticks === 2 * orig.frames + 1 && slow.landed === orig.landed,
+    `${slow.ticks} ticks for ${slow.frames} frames -> ${slow.landed}`);
+
+  backTo(from);
+  session.moveSpeed = "fast";
+  const fast = turnRight();
+  check("fast: 25 ms a frame is two frames a tick, and the same landing",
+    fast.frames === orig.frames && fast.ticks === Math.ceil(orig.frames / 2) + 1 &&
+      fast.landed === orig.landed,
+    `${fast.ticks} ticks for ${fast.frames} frames -> ${fast.landed}`);
+
+  backTo(from);
+  session.moveSpeed = "instant";
+  const now = turnRight();
+  check("instant: the whole ring on one tick, landing where the others landed",
+    now.frames === orig.frames && now.ticks === 1 && now.landed === orig.landed,
+    `${now.ticks} ticks for ${now.frames} frames -> ${now.landed}`);
+  // and what that one tick DREW is the standpoint, not a frame of the turn:
+  // `showView` runs inside it. The settled picture is what the next tick shows.
+  const settled = hash(v.tick((clock += ENGINE_STEP_MS)));
+  check("instant: no frame of the turn ever reaches the screen",
+    now.drawn.length === 1 && now.drawn[0] === settled,
+    `drew ${now.drawn.length} picture(s): ${now.drawn.join(", ")} settled=${settled}`);
+
+  // 3. the script's move keeps the engine's rate, at the setting most likely to
+  // wreck it. `navDriver` is the hook the scheduler arms around a scene loop.
+  backTo(from);
+  session.moveSpeed = "instant";
+  const prev = v.armNavHooks();
+  session.navFromScript = true;
+  try {
+    session.navDriver("right");
+  } finally {
+    session.navFromScript = false;
+    v.disarmNavHooks(prev);
+  }
+  const scripted = anyv.animation?.length ?? 0;
+  let scriptTicks = 0;
+  while (anyv.animation && scriptTicks < 500) {
+    scriptTicks++;
+    v.tick((clock += ENGINE_STEP_MS));
+  }
+  check("a scripted move still spends one pass a frame, whatever the player asked for",
+    scripted === orig.frames && scriptTicks === orig.frames + 1,
+    `${scriptTicks} ticks for ${scripted} frames at moveSpeed=${session.moveSpeed}`);
+});

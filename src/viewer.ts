@@ -5,7 +5,7 @@ import { ShpFrame } from "./df/shp";
 import { ENGINE_STEP_MS } from "./engine/clock";
 import { truthy } from "./engine/interp";
 import { SetScripts } from "./engine/setscripts";
-import { GameSession } from "./engine/session";
+import { GameSession, MOVE_SPEED_MS } from "./engine/session";
 import { DrawSignature } from "./engine/signature";
 import { MoviePlayer } from "./movie-player";
 import { PUPPET_ART_H, PuppetView } from "./puppet-view";
@@ -61,6 +61,12 @@ import { overlayFont } from "./fonts";
  * standpoints and 33% hold two, so a press was ~270 ms where TI.EXE takes ~150.
  * (User-reported: "when the real game TI.EXE is run in DosBox, the player
  * movement feels much faster".)
+ *
+ * It is one constant again and not two, but a player may now ask for a different
+ * one for their OWN moves — see {@link SetViewer.playerPace} and
+ * `GameSession.moveSpeed` (#222). This stays what a SCRIPT's move is paced at,
+ * whatever they ask for, because the paragraphs above are what a script's move
+ * has to be paced at.
  */
 const FRAME_MS = ENGINE_STEP_MS;
 
@@ -196,8 +202,22 @@ export class SetViewer {
       void this.session.track(this.navigateAfterAnimation(dir), `navigate:${dir}`);
       return;
     }
-    this.navigateNow(dir, FRAME_MS);
+    this.navigateNow(dir, this.playerPace);
   };
+
+  /**
+   * ms per animation frame for a move the PLAYER asked for — their own setting
+   * (#222), which is {@link FRAME_MS} unless they have moved it.
+   *
+   * Read per move rather than held, so a change lands on the next press instead
+   * of in the next room, and so a `changeset` (which builds a whole new viewer)
+   * has nothing to carry over: the answer lives on the session.
+   *
+   * A SCRIPT's move does not come through here. See {@link navigate}.
+   */
+  private get playerPace(): number {
+    return MOVE_SPEED_MS[this.session.moveSpeed];
+  }
 
   /**
    * Let the transition fade finish (the render/tick loop drains it), then walk.
@@ -232,7 +252,7 @@ export class SetViewer {
    *   that, so the walk would go missing rather than come late. On rAF the cap
    *   means what its name says.
    */
-  private async walkAfterFade(pace = FRAME_MS): Promise<void> {
+  private async walkAfterFade(pace: number): Promise<void> {
     for (let i = 0; i < MAX_FADE_WAIT_TICKS && this.session.fading; i++) {
       await this.session.nextFrame();
     }
@@ -1472,8 +1492,10 @@ export class SetViewer {
     return this.worldCamera();
   }
 
-  /** dir: RIGHTTURNS or LEFTTURNS */
-  turn(dir: number, pace = FRAME_MS): void {
+  /** dir: RIGHTTURNS or LEFTTURNS. `pace` defaults to the PLAYER's rate: every
+   *  caller that omits it is standing in for a keypress (the arrow fallback in
+   *  {@link pressNav}, the headless drivers, the route planner). */
+  turn(dir: number, pace = this.playerPace): void {
     if (this.busy) return;
     // shared with the playthrough route planner (df/set.ts) so a planned turn and
     // the turn actually taken can never land on different standpoints
@@ -1502,7 +1524,8 @@ export class SetViewer {
     return roadsAt(this.set, this.globalViewID);
   }
 
-  walk(pace = FRAME_MS): void {
+  /** see {@link turn} for what an omitted `pace` means */
+  walk(pace = this.playerPace): void {
     if (this.busy) return;
     const roads = this.availableRoads();
     if (!roads.length) return;
@@ -2129,15 +2152,40 @@ export class SetViewer {
     }
     if (this.animation) {
       if (!this.lastTick) this.lastTick = now;
-      if (now - this.lastTick >= this.animationPace) {
-        this.lastTick = now;
+      // ONE frame a tick, normally — and more than one only when the pace asks
+      // for a frame more often than the host ticks (#222).
+      //
+      // At the engine step or slower, one a tick is what the original does: its
+      // throttle (`0x43a940`) waits out the period and then draws exactly one
+      // frame, so a machine that cannot keep up stretches the move rather than
+      // dropping frames out of it, and every host we have ticks at least that
+      // often (50 ms headless, the display's refresh in a browser). A stutter is
+      // then a late frame, not a missing one, which is what it was before this.
+      //
+      // Below the step there is no tick to hang each frame on: `fast` wants a
+      // frame every 25 ms and headless offers one every 50, `instant` wants all
+      // of them now. So time decides instead, and the frames it passes over are
+      // simply not drawn. That is the whole of what "faster than the host" can
+      // mean, and the duration stays exact either way — which is the part a
+      // player asked to be able to change.
+      const pace = this.animationPace;
+      const catchUp = pace < ENGINE_STEP_MS;
+      while (this.animation && now - this.lastTick >= pace) {
+        // count the interval off rather than restarting it, so a pace that does
+        // not divide the tick (25 ms against a 16.7 ms rAF) does not drift long
+        this.lastTick = catchUp && pace > 0 ? this.lastTick + pace : now;
         this.current = this.animation[this.animationPos++];
         if (this.animationPos >= this.animation.length) {
           const done = this.animationDone!;
           this.animation = null;
           this.animationDone = null;
+          // The settle runs INSIDE this tick, so it is the settled standpoint
+          // that reaches the screen and not the animation's last frame — see
+          // {@link standpointFrames}. At `instant` that is the whole effect:
+          // the ring is walked in one tick and only the arrival is ever drawn.
           done();
         }
+        if (!catchUp) break;
       }
       return this.current;
     }
