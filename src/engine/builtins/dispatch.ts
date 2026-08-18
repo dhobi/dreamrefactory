@@ -47,7 +47,7 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
       // resolution + containment-chain forwarding live on the session
       // (shared with makeloop firing)
       const args = await ip.evalArgs(deferred.args, frame);
-      return session.sendEvent(cmd, targetName, deferred.name, args, frame.ctx.me);
+      return session.sendEvent(cmd, targetName, deferred.name, args, frame.ctx.me, frame);
     });
   }
 
@@ -67,7 +67,7 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
         return 0;
       }
       const args = await ip.evalArgs(deferred.args, frame);
-      return (await session.sendToPainting(scene, view, paint, deferred.name, args)) ? 1 : 0;
+      return (await session.sendToPainting(scene, view, paint, deferred.name, args, frame)) ? 1 : 0;
     });
   }
 
@@ -85,7 +85,7 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
         return 0;
       }
       const args = await ip.evalArgs(deferred.args, frame);
-      return session.stageCtrl.sendToButton(flat, name, deferred.name, args, frame.ctx.me);
+      return session.stageCtrl.sendToButton(flat, name, deferred.name, args, frame.ctx.me, frame);
     });
   }
 

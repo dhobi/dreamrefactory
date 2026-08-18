@@ -67,6 +67,30 @@ export class Frame {
      * {@link Interpreter.eventConsumed}.
      */
     readonly handler = "",
+    /**
+     * The event THIS CHAIN was dispatched under — the outermost handler's name,
+     * inherited by every frame the chain goes on to run (a routine it calls, a
+     * `sendtoscene` it re-routes through). What `exitcode` compares {@link
+     * handler} against.
+     *
+     * On the frame rather than on the interpreter, because the interpreter runs
+     * more than one chain at a time and a single field cannot say which. The
+     * heartbeat is the one that overlaps by design — `serviceGameClock`
+     * dispatches `calctime` through `trackIdle` precisely so it does NOT read as
+     * a busy player script, so a press drained on the same tick begins while
+     * calctime is still suspended at an await. A shared field set only at depth 0
+     * therefore never got set for that press at all: it still said "calctime",
+     * every `exitcode` in the press's chain compared against the wrong name and
+     * quietly stopped consuming, and the chain ran on into the engine default.
+     *
+     * That is #232 — SMSTACK2's `keydown` is nothing but
+     * `if blocked & arg = "uparrow" exitcode`, so the crate stopped stopping you
+     * and a held key walked you through it. Intermittent by construction: it
+     * needed the heartbeat to be mid-flight at the instant the press was
+     * dispatched, which is most of the time when a key is HELD and the queue is
+     * drained on the tick boundary the heartbeat also fires on.
+     */
+    readonly dispatch = handler,
   ) {}
 }
 
@@ -141,19 +165,8 @@ export class Interpreter {
    * event, consumed — while a helper routine or a foreign event is neither.
    */
   eventConsumed = false;
-  /**
-   * The handler name the outermost in-flight dispatch was made under — what
-   * `exitcode` compares its own frame against. Set by {@link runHandler} at
-   * depth 0, so the chain runners do not each have to declare it, and restored
-   * on the way out.
-   */
-  private dispatchName: string | null = null;
-  /** the outermost in-flight dispatch's handler name, for the chain runners:
-   *  an event must not resolve back INTO the boot library when the boot
-   *  library is what dispatched it (see session.resolveViaContainment) */
-  get outerDispatch(): string | null {
-    return this.dispatchName;
-  }
+  // Which event a frame is part of lives on the FRAME ({@link Frame.dispatch}),
+  // not here: chains overlap, and one field cannot answer for two of them.
   /**
    * A monotonic counter of real rendered-frame yields. The while-loop guard
    * reads it to tell an interactive loop that waits on the user (crank play,
@@ -231,21 +244,28 @@ export class Interpreter {
     handler: string,
     args: Value[],
     ctx: CallCtx,
+    /**
+     * The frame this dispatch is being made FROM, when it is being made from
+     * inside a running handler — a routine call, or a `sendto*` re-route. The
+     * new frame joins that chain and answers to its event ({@link
+     * Frame.dispatch}); with no parent this IS a new chain, which is what every
+     * entry from outside a script is (a press, a click, a lifecycle, a loop, the
+     * heartbeat).
+     */
+    parent?: Frame,
   ): Promise<{ value: Value; passed: boolean; handled: boolean }> {
     const block = inst.script.codes.get(handler);
     if (!block) return { value: 0, passed: true, handled: false };
     if (this.depth >= 64) {
       throw new Error(`dispatch cycle: ${inst.name}.${handler} at depth ${this.depth}`);
     }
-    const frame = new Frame(inst, ctx, handler);
+    // The outermost handler names the event for everything under it, so a chain
+    // runner does not have to declare it and a re-route (sendtoscene(…,
+    // keydown(arg))) keeps the name it already had — see Frame.dispatch.
+    const frame = new Frame(inst, ctx, handler, parent?.dispatch ?? handler);
     for (let i = 0; i < block.params.length; i++) {
       frame.locals.set(block.params[i], args[i] ?? 0);
     }
-    // the outermost handler names the event for everything under it, so a chain
-    // runner does not have to declare it and a re-route (sendtoscene(…,
-    // keydown(arg))) keeps the name it already had — see eventConsumed
-    const prevDispatch = this.dispatchName;
-    if (this.depth === 0) this.dispatchName = handler;
     this.depth++;
     const prevEvent = this.currentEvent;
     this.currentEvent = ++this.handlerSeq;
@@ -261,7 +281,6 @@ export class Interpreter {
       this.liveHandlers.pop();
       this.depth--;
       this.currentEvent = prevEvent;
-      this.dispatchName = prevDispatch;
     }
   }
 
@@ -365,7 +384,7 @@ export class Interpreter {
       case "exitcode":
         // only for the event this frame IS a handler of — a routine or another
         // event ending in exitcode is not the player's event being consumed
-        if (frame.handler === this.dispatchName) this.eventConsumed = true;
+        if (frame.handler === frame.dispatch) this.eventConsumed = true;
         return { s: "exitcode" };
       case "passcode":
         return { s: "passcode" };
@@ -435,7 +454,7 @@ export class Interpreter {
     // only for names that aren't engine commands (no opcode id)
     if (call.id === undefined && frame.script.script.codes.has(call.name)) {
       const args = await this.evalArgs(call.args, frame);
-      return (await this.runHandler(frame.script, call.name, args, frame.ctx)).value;
+      return (await this.runHandler(frame.script, call.name, args, frame.ctx, frame)).value;
     }
     const special = this.specialForms.get(call.name);
     if (special) return special(this, call.args, frame);
@@ -445,12 +464,12 @@ export class Interpreter {
     if (call.id === undefined) {
       for (let p = frame.script.parent; p; p = p.parent) {
         if (p.script.codes.has(call.name)) {
-          return (await this.runHandler(p, call.name, args, frame.ctx)).value;
+          return (await this.runHandler(p, call.name, args, frame.ctx, frame)).value;
         }
       }
       for (const inst of this.fallbackScripts) {
         if (inst.script.codes.has(call.name)) {
-          return (await this.runHandler(inst, call.name, args, frame.ctx)).value;
+          return (await this.runHandler(inst, call.name, args, frame.ctx, frame)).value;
         }
       }
     }
