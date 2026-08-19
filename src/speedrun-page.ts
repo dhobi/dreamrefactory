@@ -54,6 +54,7 @@
  * which is worth writing down so nobody later "fixes" it.
  */
 import { parseSheet, describeSheet, type Step } from "./speedrun/sheet";
+import { siteUrl } from "./site";
 import { VERBS, CONDITIONS, UNIVERSAL_HELP, interruptible } from "./speedrun/actions";
 import { pageDriver, saveKey, parseSaveKey, SAVE_PREFIX, Aborted } from "./speedrun/page-driver";
 import { Paused } from "./speedrun/driver";
@@ -1339,10 +1340,21 @@ function checkpoints(): { el: HTMLDivElement; refresh(): void } {
 let repoSheet: string | null = null;
 
 async function start(): Promise<void> {
-  // Served as a static file in dev; a built site need not carry it, and a 404 is
-  // an ordinary answer rather than an error worth shouting about.
+  /*
+   * Published beside this page by the `run-sheet` plugin (vite.config.ts) — in
+   * dev as middleware, in a build as an emitted asset, at the same path either
+   * way.
+   *
+   * Through `siteUrl` and not as "/speedrun/…", which is the bug this line used
+   * to have and the exact one src/site.ts exists to prevent: a leading slash is
+   * a path off the HOST's root, so on a site served from a subdirectory it
+   * asked danielhobi.ch/tests/… instead of danielhobi.ch/taoot/tests/…. In dev
+   * the two roots are the same, so it worked everywhere it was tested and
+   * nowhere it was deployed — and silently, because a missing sheet just means
+   * no button.
+   */
   try {
-    const res = await fetch("/tests/speedrun/run.sheet.txt");
+    const res = await fetch(siteUrl("speedrun/run.sheet.txt"));
     if (!res.ok) throw new Error(String(res.status));
     repoSheet = await res.text();
   } catch {
