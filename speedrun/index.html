@@ -1174,6 +1174,33 @@
         margin-left: 0.3rem;
       }
       #srparts button.points:hover { opacity: 1; color: #e0928f; border-color: #e0928f; }
+      /* ---- the cache warmup (src/cache-warmup.ts) ---- */
+      #srwarmbar { margin-top: 0.55rem; }
+      #srwarmtrack {
+        height: 3px;
+        background: var(--inset);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      #srwarmfill {
+        height: 100%;
+        width: 0;
+        background: linear-gradient(to right, var(--ice-600), var(--ice-400));
+        transition: width 140ms linear;
+      }
+      #srwarmnum {
+        margin-top: 0.35rem;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        color: var(--text-mute);
+      }
+      /* Warming. The same on-state as the record dot's, in ice rather than red:
+         it is running, it is not urgent, and it is stopped by the same button. */
+      #srwarm.on {
+        color: var(--ice-400, #8fb8d0);
+        border-color: var(--ice-400, #8fb8d0);
+      }
       #srstatus {
         font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
         min-height: 1.55em;
@@ -1445,6 +1472,12 @@ split(boot)"></textarea>
         <button id="srstop" class="icon" type="button" title="Stop — put the pointer back at the top" aria-label="Stop"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="7.15" y="7.15" width="9.7" height="9.7" rx="1.4"/></svg></button>
         <button id="srcheck" type="button">Check</button>
         <button id="srclear" type="button">Clear</button>
+        <!-- Pull the whole English tree through the browser cache before a run,
+             so the route is timed against memory rather than against the wire
+             (src/cache-warmup.ts). A word rather than a glyph: it is not a
+             transport control and it is not something to press by accident —
+             it is 1.2 GB. -->
+        <button id="srwarm" type="button" title="Fetch every file of the English edition so the run is not waiting on the network">Warm cache</button>
         <!-- Record watches the real input you make at the game and writes the
              line that would have made it. Passive: it never intercepts, so the
              game plays exactly as it would with this off. A red dot, which is
@@ -1457,6 +1490,16 @@ split(boot)"></textarea>
              is 26rem wide beside the game. A reference that long is looked UP,
              so it is behind this and comes back as a modal. -->
         <button id="srhelp" class="icon" type="button" title="What the commands mean" aria-label="What the commands mean"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.4a8.6 8.6 0 1 0 0 17.2 8.6 8.6 0 0 0 0-17.2Zm0 1.9a6.7 6.7 0 1 1 0 13.4 6.7 6.7 0 0 1 0-13.4Z"/><circle cx="12" cy="8.1" r="1.15"/><rect x="11.05" y="10.4" width="1.9" height="6.4" rx=".95"/></svg></button>
+      </div>
+      <!-- The warmup's bar. Ice like the play page's preload bar and for the
+           same reason — it is the live thing on the panel, and brass here is
+           for what has changed or commits. Hidden until there is something to
+           report; it keeps its final reading afterwards, because "how long did
+           that take and how fast was it" is the question asked immediately
+           after it finishes. -->
+      <div id="srwarmbar" hidden>
+        <div id="srwarmtrack"><div id="srwarmfill"></div></div>
+        <div id="srwarmnum"></div>
       </div>
       <div id="srlegend" class="modal">
         <div class="modal-box">

@@ -150,6 +150,12 @@ const CLOCK_ALLOWED = new Set([
   // states someone stares at the display hardest in. It draws nothing the engine
   // reads and holds nothing the engine waits for.
   "speedrun-inputs.ts",
+  // The cache warmer, which measures a NETWORK: bytes per second off the wire,
+  // over a sliding window of real seconds. There is no game-clock version of
+  // that number — the engine is not even running while it works — and what it
+  // reports is thrown away as soon as it is read. It fetches, counts and
+  // discards; nothing it produces reaches a session or a golden.
+  "cache-warmup.ts",
 ]);
 
 /**
