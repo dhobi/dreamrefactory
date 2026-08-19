@@ -817,7 +817,7 @@ save(m4p0 cabin)
 # leg rather than merely rude: ESC answers -1, and `pennyphase = 1` is the very
 # LAST line of the puppet. Until it is 1 the cabin door keeps running her
 # instead of opening, and the run is locked in Frank's cabin.
-stand(view55, set: c73)
+up()
 space()
 wait(talking)
 say(otherwise: first, maxturns: 20)
@@ -826,42 +826,14 @@ split(m4p0 penny)
 save(m4p0 penny)
 
 # --- M4P0: Zeitel's cabin — the notebook, and the bomb we do not defuse
-# The notebook has been Zeitel's since the top of the smokestack, and it had to
-# be: handing it over is the only exit from mission 3. So this is a recovery,
-# and `c59.set` c105's openscene charges for it — walk into SCENE 12 and it
-# sets `bombphase = 1`, calls `setupactor("zeit", "c59")`, turns the camera
-# onto him and locks the door (`c59.set` c54 answers `doorlocked` while
-# `bombphase = 1`). His zeit2.pup c59() puts the notebook DOWN where you can
-# see it and offers three bevels that are all 104, so the answer cannot matter.
-#
-# openscene ends with `sendtoactor("zeit", mousedown(0))` — it clicks him FOR
-# you — and measured, that call does not land; the identical dispatch a few
-# frames later does. accost() covers both: it returns immediately if he is
-# already talking, and clicks him if he is not.
-#
-# THE LAST TURN IS THE AMBUSH'S, NOT OURS. `stand(view29, set: c59)` was the
-# obvious way to write the walk and it cannot work: `stand` walks the road into
-# Scene12 — which is what springs openscene — and then does its confirming
-# `face(view29)` into a script that is already turning the camera itself
-# (`while currentview() != "view29": currentscene("right")`) with the engine
-# locked behind it. The ArrowRight is not slow, it is unacceptable; measured,
-# it sat out its whole budget at `c59 Scene12/View29 · talking to zeit2.pup ·
-# script busy`, one turn past a camera that had already arrived. So: walk in,
-# then WAIT for openscene to finish moving the camera, and never press into it.
-#
-# The walk itself is the planner's own transcript for `travel(c59)`, taken from
-# the report and written out — out of Frank's cabin, along C deck, in at
-# Zeitel's door — so this leg runs in the workbench too.
 door()
 right()
 up(x4)
 right()
 door()
-face(view25)
 up()
 wait(global.bombphase == 1)
-wait(view == view29)
-accost(zeit, patience: 15000)
+wait(talking)
 say(otherwise: last, maxturns: 20)
 
 # The notebook first, because it is the only thing in this room the ending
@@ -870,54 +842,14 @@ say(otherwise: last, maxturns: 20)
 # is the escape hatch.
 click(notebook)
 wait(owns.notebook)
-
-# THE BOMB IS NOT DEFUSED. IT IS GIVEN UP ON, AND THE GAME PAYS FOR IT.
-#
-# Defusing it is three switches in one order and then 58 turns of an 11-step
-# loop while the dial hand sweeps 0..57 — a minute of real time spent watching
-# a timer run out, for a key that opens one door. Giving up is four gestures.
-#
-# `hitok()` opens `if unibomdoor = 1: boomer()`, and `openstage()` sets
-# `unibomdoor = 1`. So clicking OK on an untouched board is an immediate
-# `boomer()`: bombblow.mov, then bombhelp.mov — and bombhelp.mov is not a
-# cutscene, it is the game’s own help screen, twelve pages of "pics" with
-# TRYAGAIN and GIVEUP in the corner. Its header names `giveup` as
-# actionframe(1), and boomer's tail is:
-#
-#     if actionframe (1)
-#         sendtoshop ("inven.shp", addinven ("bombkey"))
-#         transfromflat ()
-#
-# — so clicking GIVEUP hands over the bomb key and leaves the flat, and
-# clicking TRYAGAIN (or letting the movie end anywhere else) runs
-# `closestage(); openstage()` and puts the whole board back. The key is all the
-# door wants: c54 dumps it from the bag and does `setupprop("door",
-# "c59-hallc")`. `bombphase = 2` was set by the click INTO the flat, so the
-# lock is already off by the time we get here.
-#
-# Nothing is lost by blowing it up. `boomer()` never touches `playerdeath`, and
-# the closing narration scores four ownerships — rubaiyat, realneck, painting,
-# notebook — of which the bomb is none.
-#
-# AND IT IS NOT IN THIS VIEW. The ambush leaves you on Scene12/View29, because
-# that is the end of Road38 and openscene turns you to it by hand; the bomb
-# hotspot is the only object on Scene12/View31, two standpoints round the same
-# ring. Measured as `nothing called "bomb" is clickable from here · clickable
-# here: nothing`, which is the room telling the truth — the notebook above is a
-# PROP and reachable from anywhere in the scene, the bomb is a view object and
-# is not.
-face(view31)
+left(x2)
 click(bomb)
+settle()
+esc()
 wait(global.bombphase == 2)
-# AND THEN WAIT, because `bombphase = 2` is not the flat being open. c107's
-# mousedown sets it and only THEN runs `transtoflat("bomb.stg")`, whose
-# `openstage()` ends on `playmovie("bombopen.mov")` — 22 frames of the casing
-# being opened. An OK click sent the instant the global flips lands inside that
-# clip and is eaten by it, and the symptom is a leg that looks like it did
-# nothing: flat "Bomb 1", no movie, no script running, nothing parked, which is
-# precisely what the failure printed.
 settle()
 clickAt(465, 352, wait: none)
+skipMovie(until: awaiting)
 # `boomer()` is ~30 ticks of fade and then 79 frames of bombblow.mov before
 # bombhelp.mov parks, which is close enough to ten seconds to lose a race.
 movieRegion(giveup, budget: 60000)
@@ -925,46 +857,11 @@ wait(noflat)
 wait(owns.bombkey)
 split(m4p0 notebook)
 save(m4p0 notebook)
-
-# Tempting and NOT safe: bombblow.mov is 79 frames of pure cutscene and ESCs
-# away, but bombhelp.mov parks on its regions on frame 0 and also carries the
-# skip flag, so a hammer that is one press late skips the help screen instead
-# of the explosion — which is `closestage(); openstage()`, the board back, and
-# the leg to run again. Worth measuring one day against the ~5 s it buys.
-#| skipMovie(until: asking)
-
-# Out, and this one did not need the planner: c59 is three scenes on two roads
-# (Road37 Scene10/View20 <-> Scene11/View21, Road38 Scene11/View25 <->
-# Scene12/View29) and the only `door` object in the set is on Scene11/View26 —
-# c54, the one that dumps the bomb key and does `setupprop("door",
-# "c59-hallc")`. So the way out is the way in, backwards.
-face(view29)
+right(x2)
 up()
-face(view26)
 door()
 
 # --- M4P0: the shawl, in the lounge doorway ---------------------------
-# Clariss Limehouse is in the doorway and cannot be walked past. `LNGHALL.SET`
-# c5's keydown at view12 is the way into the lounge, and at
-# `mission = 4 & clarisphase = 0` it runs `doclaris()` instead of the trip: her
-# puppet opens, she is somewhere else entirely, and she gives you a shawl.
-#
-# Two presses, and they are different presses. The keydown wants
-# `propvisible("door")`, so space opens the lounge door FIRST; the up arrow is
-# then the one `doclaris()` eats. And `clarisdream()` needs BOTH of its
-# questions answered before it lets go — `while f1 = 0 | f2 = 0`, one flag per
-# bevel id — so 101 and then 102, in that order, and neither may be skipped.
-#
-# We never go INTO the lounge. Zeitel is in there for `phase < 2` with a bottle
-# of antidote and a trade for the painting, and that trade is the one thing in
-# mission 4 that can lose the ending: `givepaint()` is a `while f2 < 2` loop
-# with no good way out, and the painting is `twohappens`. The shawl is in the
-# doorway; the door stays shut.
-# The planner's own transcript for `travel(lnghall)`, written out: out of
-# Zeitel's corridor, up the second-class stair to B, along and up again to A,
-# and in at the lounge hall. 29 gestures, and the pair of `space, up` at each
-# end are the two doors — folded into `door()`, which is those same two presses
-# plus the settle every other door in this sheet does.
 right()
 up()
 door()
@@ -982,15 +879,10 @@ right()
 up()
 right()
 up()
-right(x2)
-up()
-right(x2)
-up()
 right()
 up()
 door()
-face(view16)
-stand(view12, set: lnghall)
+up()
 space()
 up()
 wait(talking)
@@ -1001,116 +893,209 @@ split(m4p0 shawl)
 save(m4p0 shawl)
 
 # --- M4P0: down to Vlad, and the necklace for the shawl ---------------
-# `inven.shp initprops` deals the real necklace to Vlad at the start of the
-# game and this run never took it off him, so it is still his — and
-# NAREND.STG's `worldwar1()` reads `propowner("realneck")`, which makes this
-# the difference between the war happening and not. vlad2.pup's `tradevlad()`
-# is the only way it comes back, and it wants the shawl.
-#
-# `TURB.SET openset` places him for `mission = 4` and only while
-# `propowner("shawl") != "vlad"` — so this is a one-shot: the moment the trade
-# goes through he is not set up in that room again.
-#
-# Six plaques, and the chain is worth writing down because five of them are
-# 101 and the sixth is not:
-#
-#   101  "He's dead?"                      turb()      — both bevels are 101
-#   101  "I can help you into first class" shawl()     — 102 is refusing him
-#   101  "Wear this shawl…"                tradevlad() — the only bevel
-#   101  "You are being foolish"                       — 102 is "Farewell"
-#   101  "The real necklace."              what he holds, listed by ownership
-#   103  "I want the real necklace."       103 IS the necklace; 101 would be
-#                                          the Rubaiyat and 102 the notebook,
-#                                          and neither is offered because both
-#                                          are already ours
-#
-# That last plaque is why the list ends in 103 rather than 101: the ids in
-# `tradevlad()`'s final switch are the ITEM, not the position, and only the
-# bevels for things Vlad actually holds are drawn.
-#
-# AND THE WAY DOWN IS OVER THE BOAT DECK, WHICH IS THE ONE PLACE THIS ROUTE
-# MUST NOT WALK CARELESSLY. There is no other way: the graph's only descent
-# from A deck is decka -> the boat deck -> stair2c, and `travel(turb)` took it
-# and walked straight into the Gorse-Joneses — `gave up reaching view266 in
-# deckbd2 · talking to jones2.pup`. That is not a wrong turn, it is the ENDING
-# being offered early, and the planner cannot know to refuse it: it pathfinds
-# for reachable, and Scene44 is on the shortest way.
-#
-# So the crossing is written by hand, and it is a question of WHICH SCENE.
-# DECKBD2.SET c1012 watches exactly two standpoints — Scene44/View211 and
-# View212 — and Scene44 is avoidable:
-#
-#     veststbd -> deckbd2 arrives at Scene36, and 36 -> 151 -> 150 -> 48 -> 47
-#     is four roads to View266, the stair2c door, with Scene44 nowhere on it.
-#
-#     vestport -> deckbd2 arrives at Scene322, and from there the SHORTEST way
-#     to Scene47 is 322 -> 152 -> 44 -> 45 -> 46 -> 47 — five roads straight
-#     through the ambush. So the door matters: starboard, not port.
-#
-# `stand` plans over `viewer.set` in memory and picks the fewest roads, which
-# from Scene36 is the safe chain above. That is why this is a `stand` and not a
-# `travel`: same walk, and it can be reasoned about before it is run.
-travel(veststbd)
+left(x3)
+up()
 door()
-stand(view266, set: deckbd2)
+left(x2)
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+left()
 door()
-travel(turb)
-# AND HE IS AT THE BOTTOM OF IT. TURB.SET is three levels and twelve scenes on
-# one chain of roads, and the arrival from hallf2c is at the TOP:
-#
-#   Scene82 -> 81 -> 52 -> 51 -> 14 -> 13 -> 10 -> 11 -> Scene12
-#
-# The set's own actor table puts vlad at (2943, -1604, 12982), and measured
-# against each scene's map origin that is dy 2320 below the entry level, dy 1064
-# below Scene13/14, and dy 0 — the same floor — for Scenes 10, 11 and 12. By
-# horizontal distance Scene12 is 530 away from him and every landing above it is
-# 1100 or more with a storey on top, against a `hotdist()` of 1700 in this room
-# (reach.ts). So he is reachable from exactly one part of the room.
-#
-# That is why the first two tries failed and why neither failure said so:
-# `accost` only turns, and turned the whole ring at Scene82 nine roads away;
-# `hunt` walks, and gave up after 44 standpoints at Scene13/View30 — one storey
-# up and just outside his reach. Both reported `cast: sasha, vlad`, which is
-# true and unhelpful. Walk down first, then he is 530 units away and a turn is
-# all it takes.
-stand(view16, set: turb)
-accost(vlad, turns: 8, patience: 15000)
+door()
+right(x3)
+up(x4)
+right()
+door()
+# 2nd class staircase
+save(m4p0 stairdown)
+right(x2)
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
 wait(talking)
-say([101,101,101,101,101,103], otherwise: first, maxturns: 20)
-wait(owns.realneck)
-split(m4p0 necklace)
-save(m4p0 necklace)
-
-# --- M4P1: the boat deck, and the way off the ship --------------------
-# `DECKBD2.SET` c1012's keydown: press up at View211 or View212 with
-# `phase < 3`, `jonesphase = 0` and `frame() - jonesframe > 2000`, and the set
-# runs jones2.pup — the Gorse-Joneses accost you in lifejackets, unruffled —
-# and answering "Yes, I'll get on the boat" sets `clock = "endgame"`, which the
-# SAME handler reads on the next line and takes to `advanceday()`.
-#
-# The frame gate is a poll and not a state: `jonesframe` is assigned nowhere
-# else in the corpus, so it is 0, and `frame()` counts displayed frames from
-# the start of the session. A carried run arrives here in the tens of
-# thousands and they turn up on the first press; a run resumed from a
-# checkpoint has to spend 2000 frames first, and until it has, the press is an
-# ordinary walk along the boat deck. If that happens the fix is more presses,
-# not a longer budget.
-#
-# The deck is also crowded and `hotdist()` here is 500, the tightest in the
-# game, so a walk can still be stopped by Morrow or a steward on the way to
-# the rail.
-travel(deckbd2)
-stand(view211, set: deckbd2)
+say([101])
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right(x2)
+up()
+door()
+# vlad
+up()
+right()
+up()
+left()
+up()
+left()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+right()
+up()
+door()
+right(x2)
+up(x2)
+left(x2)
+up()
+right()
+up()
+right(x2)
+up()
+right(x2)
+up()
+right(x2)
+settle()
+click(vlad)
+click(vlad)
+wait(talking)
+say([101,101,101,101,101,103])
+settle()
+save(m4p0 stairup)
+# and up we go again
+up()
+left(x2)
+up()
+left(x2)
+up()
+left()
+up()
+right()
+up()
+up()
+left()
+door()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+right()
+up()
+right()
+up()
+left()
+up()
+door()
+up()
+left()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+wait(talking)
+bailOut()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+left()
+up()
+right()
+right()
+save(m4p0 end)
+door()
+right()
+up()
+right(x8)
+left(x12)
 up()
 wait(talking)
-say([101], otherwise: last, maxturns: 20)
-wait(global.jonesphase == 1)
-wait(global.clock == endgame)
-split(m4p1 lifeboat)
+say([101])
 
-# THE ENDING RUNS FROM HERE ON ITS OWN and is not written down yet:
-# `advanceday()` plays leave.mov and debris.mov, then `transtoflat("narend.stg")`
-# reads the closing papers out one voicewait at a time, assigns "good" or "bad"
-# over `mission`, and finishes on credits.mov — which is fourteen pages that
-# are TURNED, not watched, and then `quit()`. A run that wants a timed ending
-# needs a page-turning loop here.
+# THE ENDING RUNS FROM HERE ON ITS OWN
