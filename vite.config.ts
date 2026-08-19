@@ -103,6 +103,59 @@ function gamefilesManifest(): Plugin {
  * `nightdive.mov`, gets `index.html`, fails to parse it as a MOV, and boots with
  * no intro at all. Measured, after writing it the wrong way round first.
  */
+/**
+ * The repository's own run sheet, published beside the workbench page.
+ *
+ * `speedrun/index.html` offers a "Copy the full run" button that starts you from
+ * the route in `tests/speedrun/run.sheet.txt` rather than from an empty
+ * textarea — and it only draws that button if the fetch succeeds, so on a built
+ * site it silently was not there. Two reasons, and both had to be fixed:
+ * `tests/` is source and nothing copied the file into `dist/`, and the fetch
+ * named it from the HOST's root, which is only the site's root in dev.
+ *
+ * So it is served here in dev and emitted at build, at ONE path either way —
+ * `speedrun/run.sheet.txt`, next to the page that reads it — which the page then
+ * resolves through `siteUrl` like everything else it fetches (src/site.ts).
+ *
+ * The file stays in `tests/` because that is where it is run from
+ * (`npm run speedrun`) and where every reference to it points. It is one file
+ * copied at build time rather than a module the page imports, which keeps the
+ * page out of the test tree; the alternative — moving it under `src/` and
+ * inlining it with `?raw` — buys a compile-time guarantee that it exists and
+ * costs every path that names it today.
+ */
+const SHEET_SRC = "tests/speedrun/run.sheet.txt";
+const SHEET_URL = "/speedrun/run.sheet.txt";
+
+function runSheet(): Plugin {
+  return {
+    name: "run-sheet",
+    configureServer(server) {
+      server.middlewares.use(SHEET_URL, (_req, res, next) => {
+        if (!existsSync(SHEET_SRC)) return next();
+        res.setHeader("content-type", "text/plain; charset=utf-8");
+        // it is edited constantly; a cached copy is worse than a fetch
+        res.setHeader("cache-control", "no-store");
+        res.end(readFileSync(SHEET_SRC));
+      });
+    },
+    /**
+     * Emitted rather than written, so it lands under `dist/` wherever the build
+     * puts things and shows up in the build log with everything else. `fileName`
+     * and not `name`, because this one must NOT be content-hashed: the page asks
+     * for it by the path above.
+     */
+    generateBundle() {
+      if (!existsSync(SHEET_SRC)) return; // no sheet, no button — a valid build
+      this.emitFile({
+        type: "asset",
+        fileName: "speedrun/run.sheet.txt",
+        source: readFileSync(SHEET_SRC, "utf8"),
+      });
+    },
+  };
+}
+
 function nightdiveMovie(): Plugin {
   return {
     name: "nightdive-movie",
@@ -135,7 +188,7 @@ export default defineConfig({
   // substituted into the source text, so the version travels in the bundle and
   // no page has to fetch anything to know it
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
-  plugins: [nightdiveMovie(), gamefilesManifest()],
+  plugins: [nightdiveMovie(), gamefilesManifest(), runSheet()],
   server: {
     watch: {
       // gamefiles/ is a CD rip — ~7,800 files that the middleware above streams
