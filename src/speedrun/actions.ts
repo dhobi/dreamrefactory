@@ -1358,14 +1358,40 @@ export const ACTIONS: Record<string, Action> = {
       await converse(c, c.step.bevels ?? [], (c.step.opts.otherwise as "stop" | "first" | "last") ?? "stop");
     },
   },
+  /**
+   * Answer a conversation — one that is open, or one that is about to be.
+   *
+   * `patience:` is the whole difference between answering a person you walked
+   * up to and answering a person who walks up to YOU, and a literal route
+   * through a populated ship needs the second.
+   *
+   * A puppet does not open on the frame the gesture lands. `STAIR2C.SET
+   * runcsea()` dispatches `sendtoactor("csea", mousedown(0))` and the officer
+   * becomes visible some frames later; a `say` placed immediately after the
+   * move samples `conversing`, sees false, reports "said nothing" and returns —
+   * and the NEXT move then cannot be pressed at all, because by then he is
+   * talking and the engine refuses the key. Measured three times on the
+   * second-class stair, each time one gesture past where the answer was put.
+   *
+   * So `patience` is "wait this long for someone to start, then answer them",
+   * and its absence is "answer whoever is talking NOW". It is not a default:
+   * waiting costs its full budget wherever nobody speaks, so it belongs on the
+   * one line that expects an interruption and nowhere else.
+   */
   say: {
     args: [0, 0],
     bevels: true,
     wait: "none",
-    opts: ["otherwise", "maxturns"],
+    opts: ["otherwise", "maxturns", "patience"],
     sig: "say([102,101])",
-    help: "answer a conversation that is already open — say([1,3,5])",
-    run: async (c) => converse(c, c.step.bevels ?? [], (c.step.opts.otherwise as "stop" | "first" | "last") ?? "stop"),
+    help: "answer a conversation — say([1,3,5]), or say(patience: 3000) for one that is still arriving",
+    run: async (c) => {
+      const patience = Number(c.step.opts.patience ?? 0);
+      if (patience > 0 && !(await c.d.evaluate<boolean>(predicate("talking")))) {
+        if (await c.d.tryHold(predicate("talking"), patience)) c.say("waited for them to start");
+      }
+      return converse(c, c.step.bevels ?? [], (c.step.opts.otherwise as "stop" | "first" | "last") ?? "stop");
+    },
   },
   skiplines: {
     args: [0, 0],

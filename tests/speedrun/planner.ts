@@ -100,6 +100,22 @@ export const playwrightPlanner: PlannerFn = async (c, method, target) => {
      * more; only the mirror still thought so.
      */
     await nd.sync();
+    /**
+     * AND LEAVE A MARK IN THE TRANSCRIPT, because the transcript is the point of
+     * this file and an interruption is the one thing in it that the recorded
+     * gestures cannot show.
+     *
+     * The proxy above records what the NAVIGATOR does — turns, walks, clicks.
+     * The answer given here goes through the speedrun's own driver instead, so
+     * it leaves no trace, and the printed literal came out as one unbroken run
+     * of 118 arrow presses with a conversation invisibly in the middle of it.
+     * Pasted into a sheet that way it cannot work: the steward opens his puppet
+     * partway down and every remaining press is refused by a busy engine.
+     *
+     * So the line that answers him is printed where he appears. What comes out
+     * is a walk somebody can actually paste.
+     */
+    lines.push(`say(otherwise: first)   # ${who} stops you here`);
     await c.d.settle("quiet", "the interruption to finish closing", c.budget);
     c.say(`${who} stopped us on the way; bailed and carried on`);
     result = await go();
