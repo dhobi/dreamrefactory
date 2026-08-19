@@ -62,6 +62,9 @@ import {
   runSheet, stepsFrom, pointerAfter, TOP,
   type Pointer, type RunResult, type Split,
 } from "./speedrun/runner";
+import { gamefileSizes } from "./editions";
+import { editionOfUrl, NEUTRAL } from "./files";
+import { formatBytes, formatEta, formatRate, warmCache, warmupList } from "./cache-warmup";
 import { attachEditor } from "./speedrun-editor";
 import { attachRecorder } from "./speedrun-recorder";
 import { attachInputMonitor } from "./speedrun-inputs";
@@ -75,6 +78,10 @@ const stopBtn = $<HTMLButtonElement>("srstop");
 const checkBtn = $<HTMLButtonElement>("srcheck");
 const clearBtn = $<HTMLButtonElement>("srclear");
 const recBtn = $<HTMLButtonElement>("srrec");
+const warmBtn = $<HTMLButtonElement>("srwarm");
+const warmBar = $<HTMLDivElement>("srwarmbar");
+const warmFill = $<HTMLDivElement>("srwarmfill");
+const warmNum = $<HTMLDivElement>("srwarmnum");
 const sheetsEl = $<HTMLDivElement>("srsheets");
 const pointsEl = $<HTMLDivElement>("srparts");
 const statusEl = $<HTMLDivElement>("srstatus");
@@ -353,6 +360,8 @@ const where = (): string => (pointer.line === 1 && !pointer.skip ? "the top" : `
  * ------------------------------------------------------------------ */
 
 let running: AbortController | null = null;
+/** the cache warmup in flight, if there is one — see the section at the bottom */
+let warming: AbortController | null = null;
 /** the run in flight, so it can be waited out rather than merely cancelled */
 let inFlight: Promise<void> = Promise.resolve();
 /** a Pause, as opposed to a Stop — the difference is only what happens after */
@@ -380,14 +389,24 @@ let inStep: string | null = null;
 let stopping = false;
 
 function setButtons(live: boolean): void {
-  playBtn.disabled = live;
+  // A warmup and a run are mutually exclusive, and that is a measurement
+  // decision rather than a technical one: a route timed while 1.13 GB is coming
+  // down the same link is not a reading of the route.
+  playBtn.disabled = live || !!warming;
+  recBtn.disabled = !!warming;
+  warmBtn.disabled = live;
   pauseBtn.disabled = !live;
   // The glyph is ▶ either way — a transport does not relabel itself — so the
   // difference between starting at the top and carrying on from the pointer is
-  // said in the tooltip, which is also what a screen reader reads.
+  // said in the tooltip, which is also what a screen reader reads. A control
+  // greyed out for a reason on the OTHER side of the panel says the reason
+  // there too, rather than leaving somebody clicking a dead button.
   const what = pointer.line === 1 && !pointer.skip ? "Play" : "Resume";
-  playBtn.title = what;
+  playBtn.title = warming ? "Waiting for the cache warmup to finish" : what;
   playBtn.setAttribute("aria-label", what);
+  warmBtn.title = live
+    ? "Not while a run is going — it would be measured against the download"
+    : "Fetch every file of the English edition so the run is not waiting on the network";
 }
 
 /**
@@ -1331,6 +1350,104 @@ function checkpoints(): { el: HTMLDivElement; refresh(): void } {
   refresh();
   return { el, refresh };
 }
+
+/* ------------------------------------------------------------------ *
+ * Warming the cache
+ * ------------------------------------------------------------------ */
+
+/**
+ * "Warm cache": fetch the whole English tree once so the run that follows is
+ * timed against the browser's cache rather than against the network (#147).
+ *
+ * The workbench is where this matters most and where it is least defensible
+ * anywhere else — 1.2 GB fetched on purpose, for a page nobody arrives at by
+ * accident. A player gets the file when the room needs it, which is right for
+ * playing; a route gets run fifty times, and the first of those fifty is the one
+ * where a 34 MB set lands in the middle of a walk and the leg looks broken.
+ *
+ * ENGLISH, ALWAYS — the same `<meta name="edition">` the page pins the game to
+ * (src/main.ts pinnedEdition), read here rather than shared because the two want
+ * different things from it and neither should have to know the other asked. A
+ * route is a sequence of clicks in one tree's data; warming a second tree would
+ * be a gigabyte fetched for a game this page will not boot.
+ *
+ * The edition's own files plus the edition-NEUTRAL ones, which is not a detail:
+ * `lang.stg` and `nightdive.mov` sit outside every tree and the boot reads both
+ * (src/files.ts NEUTRAL).
+ */
+const warmEdition = (): string =>
+  document.querySelector('meta[name="edition"]')?.getAttribute("content")?.toLowerCase() ?? "en";
+
+function showWarm(p: {
+  bytes: number;
+  total: number;
+  done: number;
+  files: number;
+  failed: number;
+  rate: number;
+}): void {
+  warmBar.hidden = false;
+  warmFill.style.width = `${p.total ? Math.round((p.bytes / p.total) * 100) : 0}%`;
+  const left = p.files - p.done;
+  const eta = p.rate > 0 && p.bytes < p.total ? formatEta((p.total - p.bytes) / p.rate) : "";
+  warmNum.textContent = [
+    `${formatBytes(p.bytes)} / ${formatBytes(p.total)}`,
+    formatRate(p.rate),
+    eta,
+    left ? `${left} file${left === 1 ? "" : "s"} left` : "",
+    p.failed ? `${p.failed} missing` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+async function warmup(): Promise<void> {
+  // A second press is Stop. The button is the same button because the thing it
+  // controls is the same thing — and a warmup somebody stops is finished, not
+  // failed: what came down stays in the cache.
+  if (warming) {
+    warming.abort();
+    return;
+  }
+  const edition = warmEdition();
+  const sizes = await gamefileSizes();
+  const files = warmupList(
+    sizes,
+    (path) => {
+      const e = editionOfUrl(path);
+      return e === edition || e === NEUTRAL;
+    },
+    siteUrl,
+  );
+  if (!files.length) {
+    // No manifest, or a manifest with no such tree in it. Both are real — a
+    // deployment regenerates `gamefiles.json` against the data it actually
+    // uploaded (tools/mkmanifest.ts) — and neither is worth a bar.
+    say(`nothing to warm: no ${edition} files in the manifest`, "bad");
+    return;
+  }
+
+  warming = new AbortController();
+  warmBtn.classList.add("on");
+  warmBtn.textContent = "Stop warming";
+  setButtons(!!running);
+  say(`warming ${files.length} files (${formatBytes(files.reduce((n, f) => n + f.bytes, 0))})…`);
+  try {
+    const end = await warmCache(files, { signal: warming.signal, onProgress: showWarm });
+    showWarm(end);
+    const what = `${formatBytes(end.bytes)} across ${end.done} files`;
+    if (end.stopped) say(`warmup stopped — ${what} is cached and stays cached`);
+    else if (end.failed) say(`warmed ${what}, ${end.failed} could not be fetched`, "bad");
+    else say(`warmed ${what} — the run is not waiting on the network now`, "good");
+  } finally {
+    warming = null;
+    warmBtn.classList.remove("on");
+    warmBtn.textContent = "Warm cache";
+    setButtons(!!running);
+  }
+}
+
+warmBtn.addEventListener("click", () => void warmup());
 
 /* ------------------------------------------------------------------ *
  * Boot
