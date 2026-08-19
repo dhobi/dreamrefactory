@@ -85,19 +85,31 @@ const stage = document.getElementById("stage") as HTMLDivElement;
 const screen = document.getElementById("screen") as HTMLCanvasElement;
 const minimap = document.getElementById("minimap") as HTMLCanvasElement;
 const hud = document.getElementById("hud") as HTMLDivElement;
-const help = document.getElementById("help") as HTMLDivElement;
-/** which copy of the game is being played, as buttons (src/lang-menu.ts) */
-const editionPicker = document.getElementById("editionPicker") as HTMLDivElement;
-const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement;
-const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement;
+/**
+ * The bar of settings under the screen, and everything in it.
+ *
+ * All optional, and that is not defensiveness — this module runs on TWO pages.
+ * /play/ carries the bar; the speedrun workbench (/speedrun/, which loads this
+ * same file to have a game at all) carries none of it, because fullscreen, a bug
+ * button, the swipe options and the picture/brightness/low-memory rows are
+ * questions about how the game should look to somebody playing it, and that page
+ * is a stopwatch. So every one of these is asked for and may not be there, and
+ * each use below says so rather than trusting the markup it happens to be in.
+ */
+const help = document.getElementById("help");
+/** which copy of the game is being played, as buttons (src/lang-menu.ts).
+ *  Absent on /speedrun/: a route is timed against one edition, English. */
+const editionPicker = document.getElementById("editionPicker");
+const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
+const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
 /** where the bug button says what became of the screenshot */
-const bugNote = document.getElementById("bugNote") as HTMLSpanElement;
+const bugNote = document.getElementById("bugNote");
 /** which way a swipe reads — its own row, hidden unless the pointer is a finger */
-const swipeOpts = document.getElementById("swipeOpts") as HTMLDivElement;
-const swipeInvertTurnBox = document.getElementById("swipeInvertTurn") as HTMLInputElement;
-const swipeInvertWalkBox = document.getElementById("swipeInvertWalk") as HTMLInputElement;
-const pictureModeSel = document.getElementById("pictureMode") as HTMLSelectElement;
-const lowMemoryBox = document.getElementById("lowMemory") as HTMLInputElement;
+const swipeOpts = document.getElementById("swipeOpts");
+const swipeInvertTurnBox = document.getElementById("swipeInvertTurn") as HTMLInputElement | null;
+const swipeInvertWalkBox = document.getElementById("swipeInvertWalk") as HTMLInputElement | null;
+const pictureModeSel = document.getElementById("pictureMode") as HTMLSelectElement | null;
+const lowMemoryBox = document.getElementById("lowMemory") as HTMLInputElement | null;
 const brightnessSeg = document.getElementById("brightnessSeg");
 const brightnessValue = document.getElementById("brightnessValue");
 const movementSeg = document.getElementById("movementSeg");
@@ -132,12 +144,12 @@ const mapCtx = minimap.getContext("2d")!;
 // leave the minimap overlay behind. The 4:3 fit lives in index.html's
 // `#stage:fullscreen` rules — the framebuffer is a fixed 512×384 either way
 // (src/screen.ts), so nothing in the renderer cares.
-fsBtn.addEventListener("click", () => {
+fsBtn?.addEventListener("click", () => {
   if (document.fullscreenElement) void document.exitFullscreen();
   else void stage.requestFullscreen().catch((e) => log(`fullscreen: ${e.message}`));
 });
 document.addEventListener("fullscreenchange", () => {
-  fsBtn.textContent = document.fullscreenElement ? "⛶ Exit fullscreen" : "⛶ Fullscreen";
+  if (fsBtn) fsBtn.textContent = document.fullscreenElement ? "⛶ Exit fullscreen" : "⛶ Fullscreen";
 });
 
 /** every game file the page has seen, plus the dev-server manifest */
@@ -192,19 +204,23 @@ const BUG_NOTE_MS = 15_000;
 /** which copy of the game is running — settled by initServerBrowser, for reports */
 let editionCode = DEFAULT_LANGUAGE;
 
-installBugReport(bugBtn, {
-  canvas: screen,
-  where: () => hud.textContent ?? "",
-  edition: () => `${editionName(editionCode)} (gamefiles/${editionCode}/)`,
-  log: (n) => logLines.tail(n),
-  // said in the reader's language, and only here: the issue itself is English,
-  // because it is read by whoever fixes it
-  note: (how) => {
-    bugNote.textContent =
-      how === "clipboard" ? t("play.bugShotClipboard") : t("play.bugShotFile");
-    window.setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
-  },
-});
+// no button on /speedrun/, and nothing to report from a stopwatch
+if (bugBtn) {
+  installBugReport(bugBtn, {
+    canvas: screen,
+    where: () => hud.textContent ?? "",
+    edition: () => `${editionName(editionCode)} (gamefiles/${editionCode}/)`,
+    log: (n) => logLines.tail(n),
+    // said in the reader's language, and only here: the issue itself is English,
+    // because it is read by whoever fixes it
+    note: (how) => {
+      if (!bugNote) return;
+      bugNote.textContent =
+        how === "clipboard" ? t("play.bugShotClipboard") : t("play.bugShotFile");
+      window.setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
+    },
+  });
+}
 
 /** the pane's contents — the pane renders these, and a bug report is their tail */
 const logLines = new LogBuffer(LOG_LINES_KEPT);
@@ -349,7 +365,7 @@ const host = new GameHost(files, audioSink, {
   showStage: () => {
     booting.style.display = "none";
     stage.style.display = "block";
-    help.style.display = "block";
+    if (help) help.style.display = "block";
     // The pane is reset by the BOOT, not by arriving somewhere. showStage runs on
     // every set activation (GameHost.activateSet), so clearing here threw the log
     // away and shut the pane the player had opened at every changeset — 28 rooms
@@ -564,6 +580,66 @@ async function runLangChooser(available: string[]): Promise<string | null> {
  * this page is not where the player is going, which is the caller's business and
  * not the film's.
  */
+/**
+ * Does this page want the film at all?
+ *
+ * The play page does; the speedrun workbench does not, and says so with
+ * `<meta name="skip-intro">`. The reason is what that page is for: the film is
+ * seven seconds and a question in front of every reboot, and tuning a route
+ * means rebooting constantly — the workbench is reloaded to get a clean game
+ * far more often than it is opened to play one.
+ *
+ * A page-level fact and not a URL parameter, deliberately, because it is a
+ * property of the page rather than of a visit: `/speedrun/` should behave the
+ * same however it was reached. The declaration is in the markup for the same
+ * reason `site-root` is — you can see it by looking at the page.
+ *
+ * Skipping leaves the ownership question `unanswered`, which is not a new state
+ * to handle: it is already how every non-English edition and every deployment
+ * with no film served boots. See {@link Ownership}.
+ */
+const skipsIntro = (): boolean => !!document.querySelector('meta[name="skip-intro"]');
+
+/**
+ * Does this page want the music off?
+ *
+ * `<meta name="mute-theme">`, and NO PAGE CURRENTLY SAYS IT. The speedrun
+ * workbench did — the same twenty seconds of a room play a hundred times over
+ * while a route is tuned, and at that repetition a theme stops being
+ * atmosphere — and it was taken back out, because a run is read by its sound as
+ * much as by its picture and the music is part of knowing where you are.
+ *
+ * Kept because it is one line to say again (in `speedrun/index.html`'s head)
+ * and because the question it answers is a real one for any page that runs the
+ * game on a loop. It only ever touched the THEME mix: SFX and voice were left
+ * alone, since `skipLines` and `wait(talking)` are about those.
+ *
+ * A page-level fact and not a control, for the same reason as the film above:
+ * it would be a property of what a page is for, not of a visit. The CTL panel's
+ * theme lever is the per-session answer either way.
+ */
+const mutesTheme = (): boolean => !!document.querySelector('meta[name="mute-theme"]');
+
+/**
+ * Which copy of the game this PAGE plays, if it is not a question.
+ *
+ * `<meta name="edition" content="en">`, and the speedrun workbench is the page
+ * that says it. A route is a sequence of standpoints, clicks and dialogue
+ * bevels in one edition's data; timing it against another tree is not a slower
+ * run of the same route, it is a different route that happens to parse. So the
+ * workbench does not offer the picker and does not open the game's own language
+ * chooser — it plays English and says so in the markup.
+ *
+ * A page-level fact, like the film and the music above, and it outranks all
+ * three of the ordinary answers (`?edition=`, the remembered choice, the
+ * chooser) rather than joining them: "always" is the whole point, and a stored
+ * preference from some visit to /play/ leaking in here would move a route's
+ * data out from under it. An edition the install does not have is ignored, so a
+ * tree that was never ripped cannot leave the page with nothing to boot.
+ */
+const pinnedEdition = (): string | null =>
+  document.querySelector('meta[name="edition"]')?.getAttribute("content")?.toLowerCase() ?? null;
+
 async function runNightdiveIntro(): Promise<Ownership> {
   const intro = new NightdiveIntro(session);
   intro.onLog = log;
@@ -631,6 +707,11 @@ async function resolveEdition(): Promise<{ code: string; asked: boolean }> {
   const installed = files.availableEditions();
   if (!installed.length) return { code: DEFAULT_LANGUAGE, asked: false };
 
+  // a page that names its edition is not asking — see pinnedEdition
+  const pinned = pinnedEdition();
+  if (pinned && installed.includes(pinned)) return { code: pinned, asked: false };
+  if (pinned) log(`this page asks for the ${pinned} edition, which is not installed`);
+
   let remembered: string | null = null;
   try {
     remembered = window.localStorage.getItem(EDITION_STORAGE_KEY);
@@ -680,7 +761,7 @@ async function initServerBrowser(): Promise<void> {
   // and the row says what actually booted, which is not always what the picker
   // guessed: it is drawn before this resolves, and its guess for a reader who has
   // never chosen is their UI language, while the game's own door is the chooser.
-  markEdition(editionPicker, code);
+  if (editionPicker) markEdition(editionPicker, code);
   editionCode = code; // and a bug report says which copy it was about
   log(`edition: ${editionName(code)} (gamefiles/${code}/)`);
 
@@ -741,7 +822,7 @@ async function initServerBrowser(): Promise<void> {
   // bar is not suppressed for it the way it is for the chooser: the bar lives
   // inside #booting, which the intro takes down only once it has a picture, so a
   // deployment with no film served still shows the bytes arriving.
-  const intro: Promise<Ownership> = introPlaysFor(code)
+  const intro: Promise<Ownership> = introPlaysFor(code) && !skipsIntro()
     ? runNightdiveIntro()
     : Promise.resolve("unanswered");
   const loading = host.preload({ sizeOf, onProgress: asked ? undefined : showPreload });
@@ -758,6 +839,9 @@ async function initServerBrowser(): Promise<void> {
   booting.style.display = "none";
   stage.style.display = "";
   ensureAudio(); // a no-op until a gesture has happened, and free to call early
+  // before the boot, because the boot is where the mix is set and where the
+  // first room's setupsound starts playing into it
+  if (mutesTheme()) host.themeMix = 0;
   await session.track(host.coldBoot(), "coldBoot");
 }
 
@@ -783,7 +867,7 @@ async function boot(): Promise<void> {
   installVersion();
   // Which copy of the game is being played — above the stage, never hidden with
   // it: the same row the editors and the collection carry (src/editions.ts).
-  void installEditionPicker(editionPicker);
+  if (editionPicker) void installEditionPicker(editionPicker);
   await initServerBrowser();
 }
 void boot();
@@ -1058,6 +1142,7 @@ const SWIPE_INVERT_WALK_KEY = "taoot.swipe.invertwalk";
 function installSwipeOptions(): void {
   const touchable = navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
   if (!touchable) return;
+  if (!swipeOpts || !swipeInvertTurnBox || !swipeInvertWalkBox) return;
   swipeOpts.hidden = false;
   bindSwipeOption(swipeInvertTurnBox, SWIPE_INVERT_TURN_KEY, (on) => (swipeInvert.turn = on));
   bindSwipeOption(swipeInvertWalkBox, SWIPE_INVERT_WALK_KEY, (on) => (swipeInvert.walk = on));
@@ -1085,7 +1170,7 @@ function installPictureOptions(): void {
   // Its own row and its own question: this one is the GAME's setting, not the
   // page's — the box only changes what `heapsize()` answers, and TAOOT's own
   // scripts decide what that is worth (GameSession.lowMemory).
-  bindSwipeOption(lowMemoryBox, LOW_MEMORY_KEY, (on) => (session.lowMemory = on));
+  if (lowMemoryBox) bindSwipeOption(lowMemoryBox, LOW_MEMORY_KEY, (on) => (session.lowMemory = on));
 }
 
 /** where the picture answers outlive the tab */
