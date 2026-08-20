@@ -7,7 +7,7 @@
     "theme": "deckd.trk",
     "fade": 0,
     "globals": {
-      "attentionspan": 9539,
+      "attentionspan": 9535,
       "blocked": 0,
       "bombphase": 0,
       "bseaphase": 0,
@@ -21,7 +21,7 @@
       "clarisphase": 0,
       "clarisvalue": 0,
       "clock": "bedsit",
-      "clockcount": 9,
+      "clockcount": 0,
       "coalchute": "coal4",
       "conkphase": 0,
       "cseaphase": 0,
@@ -135,7 +135,7 @@
     "theme": "decka.trk",
     "fade": 0,
     "globals": {
-      "attentionspan": 9539,
+      "attentionspan": 9535,
       "blocked": 0,
       "bombphase": 0,
       "bseaphase": 0,
@@ -149,7 +149,7 @@
       "clarisphase": 0,
       "clarisvalue": 0,
       "clock": "bedsit",
-      "clockcount": 12,
+      "clockcount": 2,
       "coalchute": "coal4",
       "conkphase": 0,
       "cseaphase": 0,
@@ -248,10 +248,12 @@
     },
     "actors": {
       "bruce1a1": "ex.a.1",
+      "bruce1b1": "ex.b.1",
       "csea": "thanks1",
       "ga": "b70",
       "max": "yofrank",
       "molly1a2": "ex.a.2",
+      "molly1b2": "ex.b.2",
       "morrow": "enterwireless",
       "purs": "left2",
       "vlad": "help"
