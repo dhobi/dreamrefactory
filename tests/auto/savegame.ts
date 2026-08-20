@@ -321,6 +321,70 @@ test("loadGame restores a valid hallside so hall navigation isn't guarded off", 
   expect(typeof session.interp.globals.get("hallside")).toBe("string");
 });
 
+test("loadGame closes a conversation that was open when it was pressed", async () => {
+  // #254, reported off the workbench: mid-conversation with the Gorse-Joneses,
+  // load a Turbine Room checkpoint, and they come along for the ride. A
+  // conversation is SESSION state — SetViewer.conversing is
+  // `session.puppet?.visible` — so the room it was opened in has nothing to do
+  // with it and rebuilding the viewer does not close it.
+  //
+  // Unreachable through the engine's own load lever, which is why it survived
+  // this long: `opengame` is the CTL panel's and the panel does not open with a
+  // conversation up. The workbench's checkpoint chips call the host's load
+  // directly, at any moment, so they can.
+  const session = await newSession();
+  await session.loadGame(new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti"))));
+  await session.settle();
+
+  expect(await session.puppetCtrl.openPuppetFile("ga2.pup")).toBe(true);
+  expect(session.puppet?.visible).toBe(true);
+
+  await session.loadGame(new Uint8Array(readFileSync(savePath("1", "06 - Boiler Room.ti"))));
+  await session.settle();
+
+  expect(session.currentSetFile).toBe("boil"); // the load itself still happened
+  expect(session.puppet).toBe(null); // and took the close-up with it
+});
+
+test("loadGame gives up a film that was playing", async () => {
+  // The hook, at the choke point both load paths share: the in-game `opengame`
+  // builtin calls session.loadGame directly, the workbench's checkpoint chips
+  // reach it through GameHost.loadSavedGame.
+  const session = await newSession();
+  await session.loadGame(new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti"))));
+  await session.settle();
+
+  let asked = 0;
+  session.onAbandonMovie = () => void asked++;
+  await session.loadGame(new Uint8Array(readFileSync(savePath("1", "06 - Boiler Room.ti"))));
+  await session.settle();
+  expect(asked).toBe(1);
+});
+
+test("loadSavedGame gives up the film BEFORE it throws the viewer away", async () => {
+  // The ordering is the whole test. GameHost.loadSavedGame replaces the viewer
+  // before it calls session.loadGame, so a film abandoned from inside the load
+  // reaches a fresh player with nothing playing — and the real one keeps its
+  // promise for ever. Measured against a live page before this was right: the
+  // promise was still unsettled six seconds after the load.
+  const { host, session, viewer } = await newHost();
+  await host.loadSavedGame(new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti"))));
+  await session.settle();
+
+  let settled = false;
+  const film = Promise.resolve(session.onPlayMovie("logo.mov", 0)).then(() => (settled = true));
+  await drain();
+  await drain();
+  if (!viewer().moviePlaying) return; // no full tree installed, or nothing to play
+
+  await host.loadSavedGame(new Uint8Array(readFileSync(savePath("1", "06 - Boiler Room.ti"))));
+  await session.settle();
+  // a race, because the failure mode is a promise that never settles: awaiting
+  // it outright would hang the run instead of failing it
+  await Promise.race([film, new Promise((r) => setTimeout(r, 2000))]);
+  expect(settled).toBe(true);
+});
+
 test("loadGame from the control panel re-shows the room (no white screen)", async () => {
   const session = await newSession();
   // reach a normal room first so there's an in-game stage under the overlay.

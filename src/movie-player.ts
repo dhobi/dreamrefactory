@@ -777,6 +777,32 @@ export class MoviePlayer {
    * INTERACTIVE at all, it decides whether the movie's spoken lines are cut —
    * see below.
    */
+  /**
+   * Give up the film because the GAME is being replaced.
+   *
+   * A load is a film's ESC as far as the film is concerned: nobody is going to
+   * watch the rest of it, and the one thing that must not happen is the thing
+   * that used to. A `MoviePlayer` belongs to a `SetViewer`, a load builds a new
+   * viewer, and nothing disposes the old one — so the film stopped being ticked
+   * (the viewer forwards those) while `resolveWhenDone` stayed pending for ever.
+   * The script that called `playmovie()` was awaiting that promise inside a
+   * tracked dispatch, so `session.scriptBusy` never came back down: the game
+   * looked locked and the workbench's own `load()` — which waits for `quiet` —
+   * could never finish. Measured with a real load over `logo.mov`: the promise
+   * was still unsettled six seconds later.
+   *
+   * `finish(true)` and not a teardown of its own, because the dismissal path is
+   * already the right one and already thought through — it flushes the event
+   * queue the way TI.EXE does, hands the chain's bytes back (a cutscene is tens
+   * of megabytes), halts the bed and, for a film somebody cut short, its event
+   * sounds. `dismissed` is exactly true here: nobody let this one finish.
+   */
+  abandon(): void {
+    if (!this.active && !this.resolveWhenDone) return;
+    this.onLog(`movie: ${this.active?.fileName ?? "sequence"} abandoned — the game was replaced`);
+    this.finish(true);
+  }
+
   private finish(dismissed = false): void {
     // read before dropping it: an interactive clip's lines are the player's to
     // cut short, a cutscene's are not

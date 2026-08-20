@@ -265,6 +265,18 @@ export class GameSession {
    * their bytes back here rather than waiting for a cache budget to force it.
    */
   onMoviesDone: ((names: string[]) => void) | null = null;
+
+  /**
+   * Host hook: end whatever film is on screen, because the game under it is
+   * being replaced (see MoviePlayer.abandon).
+   *
+   * A hook and not a call, for the same reason `onPlayMovie` is one: a film is
+   * played by a `SetViewer` and this session deliberately holds no reference to
+   * one — the viewer is rebuilt mid-transition and what lives here is what
+   * outlives that (the fade, the wipe). A headless session leaves it null and
+   * loses nothing, having never played a film.
+   */
+  onAbandonMovie: (() => void) | null = null;
   /** host hook: actually load + display a set (async in the browser) */
   onSetChange: (fileName: string, sceneName: string, viewName: string) => void | Promise<void> =
     () => {};

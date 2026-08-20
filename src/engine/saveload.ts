@@ -422,6 +422,58 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // ...and any speech mid-line — a voice does not follow a load into another
   // room (puppet.ts only halts it on skip/stop, so it used to).
   session.audio.halt("voice");
+  /*
+   * ...AND THE CONVERSATION, if one is open.
+   *
+   * #254: loaded a Turbine Room checkpoint from the middle of a conversation
+   * with the Gorse-Joneses and they came along for the ride. A conversation is
+   * SESSION state — `SetViewer.conversing` is `session.puppet?.visible` and
+   * nothing more — so it does not belong to the room being left and rebuilding
+   * the viewer does not shake it off. Nothing here used to clear it, and the
+   * close-up stayed on screen over whatever room the file named.
+   *
+   * The engine's own load lever cannot reach this, which is why it went unseen:
+   * `opengame` is the CTL panel's, and you cannot open the CTL panel with a
+   * conversation up. The workbench's checkpoint chips call the host's load
+   * directly and at any moment (src/speedrun-page.ts), so they can.
+   *
+   * `closePuppetFile` answers the script's pending `puppetevent` with -1 — the
+   * same "nothing was chosen" a plaque's ESC gives — so the conversation script
+   * unwinds instead of waiting for a bevel nobody will ever press. NOT preceded
+   * by a `settle()`, unlike prepareRestart's teardown: the workbench loads
+   * inside `session.track(...)`, so a load that awaited the in-flight dispatches
+   * would be waiting for itself (the same trap host.ts records for `restart`).
+   */
+  session.puppetCtrl.closePuppetFile();
+  /*
+   * ...and a page turn caught in the middle of itself.
+   *
+   * `prepareRestart` puts it exactly right: a reveal in flight belongs to the
+   * screen being thrown away. `session.wipe.from` is a CAPTURED FRAME of the
+   * screen the wipe started on, and it keeps being drawn over whatever is
+   * underneath until the animation runs out — so a load taken mid-wipe paints
+   * the room it came from across the room it went to.
+   *
+   * The ending is where this is reachable, because the ending is made of wipes:
+   * narend.stg's scrapbook turns every one of its pages with
+   * `visualeffect(wipeleft, 30)` (see the corpus quoted in builtins/scene.ts),
+   * so during the closing narration there is almost always one running.
+   */
+  session.endWipe();
+  /*
+   * ...and the film, if one is on screen.
+   *
+   * The third of the three things a load used to leave behind, and the only one
+   * that hung rather than merely showed: see MoviePlayer.abandon for what it
+   * costs. Reachable from the workbench the same way the others are — a
+   * checkpoint chip pressed during a cutscene — and the ending is full of them:
+   * leave.mov, debris.mov and prozac.mov bracket narend.stg's slideshow, so most
+   * of the closing narration has a film or a page-turn in flight.
+   *
+   * Through the hook because a film belongs to the viewer and this does not know
+   * about viewers; null in a headless session, which has none.
+   */
+  session.onAbandonMovie?.();
   // reuse this save's skeleton as the base for the next savegame.
   session.lastSave = save.raw;
 

@@ -176,6 +176,10 @@ export class GameHost {
       for (const name of names) freed += this.files.evict?.(name) ?? 0;
       if (freed > 1048576) this.ui.log(`movies done: freed ${(freed / 1048576).toFixed(1)} MB`);
     };
+    // A load replaces the viewer the film is playing on, and the film has to be
+    // told: `this.current` and not a captured viewer, so it always names the one
+    // holding the screen now.
+    this.session.onAbandonMovie = () => this.current?.abandonMovie();
     // the boot's setpath(disk) -> which CD's copy of a both-discs room we read
     this.session.onDiscChange = (disc) => {
       if (this.files.activeDisc?.() === disc) return;
@@ -478,6 +482,18 @@ export class GameHost {
       this.ui.hud(`not a valid saved game: ${(e as Error).message}`);
       return;
     }
+    // THE FILM FIRST, because the next line throws its viewer away.
+    //
+    // `session.loadGame` asks for this too (it is the choke point both load
+    // paths share — the in-game `opengame` builtin calls it directly), and by
+    // the time it runs on THIS path the viewer holding the film is already gone:
+    // `loadServerSet` below replaces `this.current`, so the hook would reach a
+    // fresh player with nothing playing and the abandoned film would keep its
+    // promise for ever. Doing it here as well is not redundant, it is the only
+    // moment on this path when the right player is still reachable —
+    // `MoviePlayer.abandon` is a no-op when nothing is playing, so the second
+    // call costs nothing.
+    this.current?.abandonMovie();
     // skipOpen: the room's resources and a viewer, but NOT its openset — that
     // runs from the changeset inside loadGame, at the RESTORED mission and
     // phase. Opening it here ran it twice, the first time on whatever game was
