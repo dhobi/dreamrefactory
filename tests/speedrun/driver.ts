@@ -26,7 +26,7 @@
  * **1. Waits are per-action, not universal.** {@link WaitMode} — `none` fires and
  * returns, `taken` waits only until the engine has consumed the press, `ready`
  * waits only until it would accept another, `quiet` is the old full settle. A
- * sheet picks per line with `wait=`, which is most of what tuning a speedrun
+ * sheet picks per line with `wait:`, which is most of what tuning a speedrun
  * actually is.
  *
  * **2. Clicks are buffered.** A press made while a script is in flight is QUEUED
@@ -34,7 +34,7 @@
  * the shipped premovie/playmovie/postmovie call no `flushevents()`). So a
  * speedrun can post the next click before the last one has been acted on and let
  * the engine catch up, which is exactly what a player mashing through a known
- * route does. `wait=none` is that.
+ * route does. `wait: none` is that.
  *
  * **3. Keys are NOT buffered across a fade.** This is the one place where going
  * faster is wrong rather than merely risky, and it is already written down in the
@@ -95,7 +95,7 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
   const defaultGap = opts.gap ?? 16;
   const log = opts.log ?? (() => {});
 
-  /** ms actually spent inside `after=` padding, so the report can call it dead */
+  /** ms actually spent inside `after:` padding, so the report can call it dead */
   let paddedMs = 0;
 
   const evaluate = <T>(expr: string): Promise<T> => page.evaluate(expr) as Promise<T>;
@@ -156,7 +156,7 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
       [x, y],
     );
 
-  /** the wait half of every gesture, and the only thing a `wait=` option moves */
+  /** the wait half of every gesture, and the only thing a `wait:` option moves */
   const settle = async (mode: WaitMode, what: string, budget = timeout): Promise<void> => {
     if (mode === "none") return;
     if (mode === "taken") return hold(QUEUE_EMPTY, `${what} to be taken`, budget);
@@ -179,13 +179,13 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
     hold,
     tryHold,
     evaluate,
-    /** ms spent in `after=` padding — dead time, reported as such */
+    /** ms spent in `after:` padding — dead time, reported as such */
     padded: () => paddedMs,
 
     /**
      * A key press, gated so it cannot be eaten by a fade.
      *
-     * The gate is BEFORE the press and is not skippable by `wait=none`: `wait`
+     * The gate is BEFORE the press and is not skippable by `wait: none`: `wait`
      * says how much of the CONSEQUENCE to wait for, never whether the gesture is
      * allowed to be thrown away. See {@link KEY_SAFE}.
      */

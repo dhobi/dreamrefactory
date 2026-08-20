@@ -131,17 +131,6 @@ export function playSequence(st: PropState, variant: number[] | null): number[] 
 const DEFAULT_ANCHOR_X = 256;
 const DEFAULT_ANCHOR_Y = 192;
 
-/**
- * Persistent-shop props that are STANDPOINT-bound navigation overlays, not true
- * HUD (TAOOT's house.shp: the open-door image and the destination signs). They belong to the
- * spot you are standing on, so during a turn/walk they must NOT keep drawing at
- * their fixed screen anchor (they'd float "position:absolute" over the rotating
- * scene). Boot's closescene resets exactly these two on a view change
- * (BOOTFILE closescene: initprop on "door"/"signs"); the nav arrow is kept
- * (merely recoloured), so it — and the interface band — still draw mid-motion.
- */
-const MOTION_OVERLAY_PROPS = new Set(["door", "signs"]);
-
 export class PropInstance {
   visible = false;
   stateName = "";
@@ -388,12 +377,19 @@ export class PropRuntime {
    * Visible screen-space props with a drawable frame, back-to-front. In the
    * set view (persistentOnly) only boot-UI shops qualify, so a set/stage
    * shop's screen props don't bleed onto the room (the boiler flat controls).
+   *
+   * There used to be a third filter here hiding house.shp's `door`/`signs`
+   * overlays during a turn/walk, so the standpoint-bound door image didn't
+   * float "position:absolute" over the rotating scene. It was a patch over the
+   * departure `closescene` firing at arrival instead of at the move's start:
+   * boot's closescene is what puts exactly those two props away, and now that
+   * it runs before the first motion frame (SetViewer.departScene, from the
+   * TI.EXE disassembly), there is nothing left to suppress.
    */
-  private drawList(persistentOnly = false, hideMotionOverlays = false): PropInstance[] {
+  private drawList(persistentOnly = false): PropInstance[] {
     return [...this.props.values()]
       .filter((p) => p.visible && !p.worldSpace && p.state()?.frames.length)
       .filter((p) => !persistentOnly || p.shop.persistent)
-      .filter((p) => !hideMotionOverlays || !MOTION_OVERLAY_PROPS.has(p.group.name.toLowerCase()))
       .sort((a, b) => b.dist - a.dist);
   }
 
@@ -407,7 +403,7 @@ export class PropRuntime {
    * Deliberately hashes EVERY prop rather than {@link drawList}'s selection: it
    * is cheaper than sorting a copy of the map, and it means the filters
    * themselves (visible, worldSpace, shop.persistent, the caller's
-   * persistentOnly/hideMotionOverlays) can change without this having to know
+   * persistentOnly) can change without this having to know
    * they did. Over-hashing only ever costs a redraw that was not needed;
    * under-hashing costs a frame that IS needed, which is why the invisible ones
    * still contribute their `visible` bit.
@@ -543,7 +539,6 @@ export class PropRuntime {
     cam: WorldCamera | null = null,
     persistentScreenOnly = false,
     occ: Occlusion | null = null,
-    hideMotionOverlays = false,
   ): void {
     // world-space props first (they belong to the scene), far to near
     if (cam) {
@@ -570,7 +565,7 @@ export class PropRuntime {
         }
       }
     }
-    for (const p of this.drawList(persistentScreenOnly, hideMotionOverlays)) {
+    for (const p of this.drawList(persistentScreenOnly)) {
       if (p.anchorY < minAnchorY) continue;
       const st = p.state()!;
       const f = p.shop.frame(p.currentFrame(st));

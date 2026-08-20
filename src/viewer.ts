@@ -1497,6 +1497,81 @@ export class SetViewer {
     return this.worldCamera();
   }
 
+  /**
+   * TI.EXE's movement lifecycle, in ITS order — the disassembled currentscene
+   * setter (0x407b70), which is what boot's default keydown calls for every
+   * turn and walk:
+   *
+   *   1. `closescene` fires when the move STARTS — before the first frame,
+   *      with the departing view still current (0x407cbb, ahead of the
+   *      animation at 0x407cfd);
+   *   2. the frames play (currentview() answers "moving");
+   *   3. `openscene` fires when the motion SETTLES, after the view globals
+   *      update (the turn settle's 0x43a612, the walk settle's 0x43a835).
+   *
+   * Both halves are dispatched as a Scene Message at the current scene
+   * (0x408000 synthesizes `"<scene>", closescene()` and sends it there), so
+   * both run the FULL chain — scene → set main → stage → boot.
+   *
+   * Firing closescene at arrival instead held the departed standpoint's state
+   * across the whole animation, which was three bugs wearing one cause: the
+   * walk out of gstair2's Scene64 kept its openscene's actorzclip(-8100) in
+   * force so the stairwell crowd was erased for every road frame (the original
+   * restores -1500 before the first one); boot's door/signs cleanup ran one
+   * paint too late, blipping the open door and its destination plaque onto the
+   * arrival view for exactly one frame; and the nav arrow carried the departed
+   * view's colour through every move.
+   *
+   * Fired, not awaited — the interpreter is async and a synchronous host loop
+   * must still see the animation start this tick. In a real host the chain
+   * resolves in the microtasks before the next paint, which is all the fix
+   * needs. Two divergences from TI.EXE, both accepted: it CANCELS the move if
+   * a closescene handler jumps the scene (0x407ce6) — no shipped closescene
+   * navigates, so the cancel is not modelled — and a closescene that waits on
+   * frames (HALLA's jay-walk spin) overlaps the animation here instead of
+   * holding it. {@link settleScene} chains the arrival openscene on this
+   * promise so the pair cannot run out of order even then.
+   */
+  private departScene(label: string): Promise<void> {
+    return this.session.track(this.scripts.closeScene(this.sceneIdx), label);
+  }
+
+  /**
+   * The arrival half: fire `openscene` for the settled scene, after the
+   * departure's closescene has finished (see {@link departScene} for the
+   * ordering evidence). `openScene` rather than `viewSettled` because the
+   * departure's closeScene cleared `lastSceneIdx`, and the arrival is what
+   * puts it back for closesetfile's implicit closescene.
+   *
+   * The arrival scripts DRIVE THE CAMERA in the original —
+   * currentscene()/currentview() are unconditional setters there — so the nav
+   * hooks are armed around the dispatch the way keydown and press do around
+   * theirs. Only three openscene handlers in the whole TAOOT corpus set the
+   * camera, and each one needs it live: the demo's grand-staircase deck warps
+   * (gstair2 Scene64/Scene65, `changeset(theset); currentscene(thescene);
+   * currentview(theview)` — the demo build's script style; the full game
+   * passes the pair INSIDE changeset instead) and C59's Zeitel entry, which
+   * turns you to face him with a currentscene("right") loop. With the hooks
+   * dark, the warps' changeset still fired but the jumps were dropped, and
+   * every deck-b/c climb landed at the arriving set's DEFAULT scene. A
+   * changeset in the chain swaps the viewer and re-arms on the new one (host
+   * activateSet, keyed on navGestureActive); disarming writes the shared
+   * session fields, so doing it through the old viewer is fine.
+   */
+  private settleScene(departure: Promise<void>, sceneIdx: number, label: string): void {
+    void this.session.track(
+      departure.then(async () => {
+        const prev = this.armNavHooks();
+        try {
+          await this.scripts.openScene(sceneIdx);
+        } finally {
+          this.disarmNavHooks(prev);
+        }
+      }),
+      label,
+    );
+  }
+
   /** dir: RIGHTTURNS or LEFTTURNS. `pace` defaults to the PLAYER's rate: every
    *  caller that omits it is standing in for a keypress (the arrow fallback in
    *  {@link pressNav}, the headless drivers, the route planner). */
@@ -1509,19 +1584,16 @@ export class SetViewer {
     const images = this.rings.ensure(this.scene.turns[dir].frames);
     const frames = this.turnFrames(ring.frames, images);
     const target = ring.target;
+    // departure closescene BEFORE the first frame — see departScene. TI.EXE
+    // fires it for every turn command, ring wrap included (0x407cbb runs for
+    // left/right/strait alike), so no `changed` gate here or on the arrival.
+    const departure = this.departScene("turn-closescene");
     this.startAnimation(frames, pace, () => {
-      const changed = target !== this.viewIdx;
-      // update the facing BEFORE firing viewChanged so the scene's openscene
-      // (a per-view event) sees the new currentview() in its guards
+      // update the facing BEFORE firing openscene — a per-view event — so its
+      // handlers see the new currentview() in their guards
       this.viewIdx = target;
       this.showView();
-      if (changed) {
-        void this.session.track(
-          (async () => {
-            await this.scripts.viewChanged(this.sceneIdx);
-          })(),
-        );
-      }
+      this.settleScene(departure, this.sceneIdx, "turn-openscene");
     });
   }
 
@@ -1545,6 +1617,38 @@ export class SetViewer {
     // the animation on it. Both answers are pure functions of the register, so
     // the callback reads the same ones rather than working them out again.
     const arrival = this.roadArrival(reg, arriveViewID);
+    // A register's END rows are bookkeeping the original never PRESENTS. Every
+    // register opens with a motionInfo-1 STANDPOINT record (972 of 972 in
+    // gamefiles/en, both discs) — the "from here" row, not a motion frame —
+    // and TI.EXE consumes both ends off screen: the first beat plays inside
+    // the keypress (0x439e10 shows frame 0 before the gesture returns) and the
+    // last inside the settle that replaces it with the arrival view (0x43a6cd).
+    // Never being seen is how their pose copies went stale on the disc: 92 of
+    // 1944 end rows record a height that disagrees with the standpoint they
+    // stand on — gstair2's Road58.0/Road62.0/Road61.0 carry the UPPER landing's
+    // 7645 against the A-deck's 5976 (#253), gstair3 mirrors it, and stair2c's
+    // reused flight is off by whole decks. The port does present those beats,
+    // one tick each, which pasted the crowd 140–210 px down the frame for
+    // exactly one frame (shift = 256 * Δy / depth).
+    //
+    // So each end borrows its standpoint's HEIGHT — the departure end from the
+    // view being stood on (whose camera is on screen at that instant), the
+    // arrival end from the view the settle is about to show. Height only, and
+    // ends only: a no-op for the 1851 rows that already agree, and the interior
+    // frames keep their own per-frame heights so a stair road still ramps
+    // continuously. Cloned, not patched — the CachedFrames are shared with the
+    // ring cache.
+    if (frames.length) {
+      const pinHeight = (frame: CachedFrame, stand: FrameInfo | null): CachedFrame =>
+        !frame.cam || !stand || frame.cam.z === stand.posY16
+          ? frame
+          : { ...frame, cam: { ...frame.cam, z: stand.posY16 } };
+      frames[0] = pinHeight(frames[0], this.standFrameInfo());
+      const arrive = arrival
+        ? this.standFrameInfoOf(this.set.scenes[arrival.sceneIdx], arrival.viewIdx)
+        : null;
+      frames[frames.length - 1] = pinHeight(frames[frames.length - 1], arrive);
+    }
     if (arrival && this.session.pictureMode === "transition") {
       // A road ends on an IN-MOTION frame — measured, all 722 registers in
       // gamefiles/en — so a walk has no landing standpoint of its own to soften
@@ -1557,50 +1661,21 @@ export class SetViewer {
         frames.push(...this.standpointFrames(fi, own, scene));
       }
     }
+    // The departing scene's closescene fires BEFORE the first road frame —
+    // see departScene for the disassembly. This is what restores gstair2
+    // Scene64's actorzclip(-1500) ahead of the walk out, so the stairwell
+    // crowd stays drawn during the move as it does in the original.
+    const departure = this.departScene("walk-closescene");
     this.startAnimation(frames, pace, () => {
       if (arrival) {
-        const { sceneIdx } = arrival;
-        const prevScene = this.sceneIdx;
-        this.sceneIdx = sceneIdx;
+        this.sceneIdx = arrival.sceneIdx;
         this.viewIdx = arrival.viewIdx;
-        // lifecycle events fire AFTER arrival — openscene handlers check
-        // currentview() (gstair's deck-transition scenes forward via
-        // changeset from their openscene)
-        if (sceneIdx !== prevScene) {
-          void this.session.track(
-            (async () => {
-              // The arrival scripts DRIVE THE CAMERA in the original —
-              // currentscene()/currentview() are unconditional setters there —
-              // so arm the nav hooks around this lifecycle the way keydown and
-              // press do around theirs. Only three openscene handlers in the
-              // whole TAOOT corpus set the camera, and each one needs it live:
-              // the demo's grand-staircase deck warps (gstair2 Scene64/Scene65,
-              // `changeset(theset); currentscene(thescene); currentview(theview)`
-              // — the demo build's script style; the full game passes the pair
-              // INSIDE changeset instead) and C59's Zeitel entry, which turns
-              // you to face him with a currentscene("right") loop. With the
-              // hooks dark, the warps' changeset still fired but the jumps
-              // were dropped, and every deck-b/c climb landed at the arriving
-              // set's DEFAULT scene — the reported "wrong location" walking
-              // forward from gstair2 Scene50/View53. A changeset in the chain
-              // swaps the viewer and re-arms on the new one (host activateSet,
-              // keyed on navGestureActive); disarming writes the shared
-              // session fields, so doing it through the old viewer is fine.
-              const prev = this.armNavHooks();
-              try {
-                await this.scripts.closeScene(prevScene);
-                await this.scripts.openScene(sceneIdx);
-              } finally {
-                this.disarmNavHooks(prev);
-              }
-            })(),
-          );
-        } else {
-          // a walk that stays in the same scene runs no openScene above, but it
-          // is still an arrival, and `openscene` is a per-view event
-          void this.session.track(this.scripts.viewSettled(this.sceneIdx));
-        }
       }
+      // openscene at the settled scene — after the indices update, so its
+      // handlers see the new currentview() (gstair's deck-transition scenes
+      // forward via changeset from their openscene). A walk that stays in the
+      // same scene owes it too: openscene is a per-view event.
+      this.settleScene(departure, this.sceneIdx, "walk-openscene");
       this.showView();
     });
   }
@@ -2628,9 +2703,9 @@ export class SetViewer {
    * suppressed while animating — anchored to the standpoint, they'd float
    * over the rotating scene — by restricting the draw to persistent shops
    * mid-motion. The standpoint-bound interface overlays (house.shp's open
-   * door / signs) are persistent too, so `animating` also drops those via
-   * hideMotionOverlays — else the open door stayed glued to the screen
-   * (position:absolute) while the room turned behind it.
+   * door / signs) are persistent too, but need no special case: boot's
+   * closescene puts exactly those two away, and it runs before the first
+   * motion frame ({@link departScene}), as it does in the original.
    */
   private compositeWorld(
     data: Uint8ClampedArray,
@@ -2646,7 +2721,6 @@ export class SetViewer {
       data, width, height, palette, -Infinity, cam,
       this.animating || this.session.viewShowing,
       this.occlusion(),
-      this.animating,
     );
   }
 

@@ -135,47 +135,29 @@ export class SetScripts {
   }
 
   /**
-   * View change within a scene (turning). Two things happen:
-   *  1. the BOOT defaults of closescene run — closes open doors/signs, resets
-   *     the nav arrow — WITHOUT the scene script's own scene-exit logic (sounds
-   *     etc. keep running across a turn);
-   *  2. the current scene's own openscene re-fires. In DreamFactory openscene
-   *     is a per-VIEW event, not per-scene: in the TAOOT corpus 33 of 51 shipped
-   *     openscene handlers gate on currentview() and only act when you turn to face a particular
-   *     view (HALLA's "Sasha walks down the hall" at view62; DECKBD's Max
-   *     calling you over when you see him; etc.). Firing scene-entry openscene
-   *     only left all of those dead on turns. The view-gated scene handlers are
-   *     self-guarded (actorstar/actorowner/flag checks) so re-entry is idempotent.
+   * The lifecycle a JUMP owes — `SetViewer.teleport`'s cross-view cut. The
+   * BOOT defaults of closescene run (closes open doors/signs, reds the nav
+   * arrow — #71's mid-air door is what firing nothing looked like), then the
+   * full openscene chain for the view now being stood at.
    *
-   * The chain is the SAME one scene entry uses — scene script → set main → stage
-   * → boot ({@link fireLifecycle}) — because `openscene` is a per-view event all
-   * the way down, the boot's included.
+   * A turn or walk no longer comes through here: TI.EXE's movement fires the
+   * full closescene chain at the move's START and the full openscene chain at
+   * its settle (see `SetViewer.departScene` for the disassembly), so the
+   * viewer's turn()/walk() call closeScene/openScene directly. What this keeps
+   * from that era is the evidence that `openscene` is a per-VIEW event, which
+   * is why every settle re-fires it:
    *
-   * It used to stop after the set main, on the reasoning that the boot's arm does
-   * per-scene-ENTRY work that must not repeat on a turn. Both halves of that arm
-   * say otherwise. `setuparrow()`/`setupsigns()` are *per view* by construction —
-   * whether there is a road ahead is a property of where you are facing — and
-   * skipping them meant `closescene()` left the arrow red and the sign hidden
-   * after every turn, so `viewer.ts` re-derived both by hand. The other half is
-   * the mission-4 clock: `sec = sec + 1` per view arrival, throttled to one bump
-   * per 20 rendered frames, which is what makes the original's watch run at
-   * double speed while you spin in place (#127). Nobody re-derived that one, so
-   * turning was free in the endgame and the sinking clock ran slow.
-   *
-   * Stopping one link short cost the smokestack maze (#88): its `openscene` is on
-   * the SET MAIN and reads the view — `blocked = pathblocked(currentscene(),
-   * currentview())` — and the set's `keydown` swallows `uparrow` while `blocked`.
-   * So the flag was computed for whichever view you entered the scene at and then
-   * never again: measured at maze 1 / level 3 (`blocks` = "2,6,"), turning around
-   * scene64 gave `blocked = 1` at view82, view79 AND view81, though only view82 is
-   * crated. Enter such a scene facing a clear road and every crate in it is
-   * walkable; enter facing a crate and none of it is.
-   *
-   * Extending the chain by one link is bounded by a census rather than by hope: of
-   * 50 sets in the English tree, exactly TWO define `openscene` on their main.
-   * This is one; the other is stair1c1's, which re-asserts `actorzclip` on the
-   * stairwell crowd keyed on `currentscene()` — idempotent by construction, and
-   * running it per view re-asserts a clip that was already right.
+   *  - 33 of 51 shipped openscene handlers gate on currentview() and only act
+   *    when you come to face a particular view (HALLA's "Sasha walks down the
+   *    hall" at view62; DECKBD's Max calling you over when you see him). The
+   *    view-gated handlers are self-guarded (actorstar/actorowner/flag
+   *    checks), so re-entry is idempotent.
+   *  - BOOTFILE's arm does setuparrow(), setupsigns() and the mission-4
+   *    sinking clock's `sec = sec + 1` — the last is what makes the original's
+   *    watch run at double speed while you spin in place (#127).
+   *  - The smokestack maze's openscene is on the SET MAIN and reads the view —
+   *    `blocked = pathblocked(currentscene(), currentview())` — and the set's
+   *    keydown swallows `uparrow` while `blocked` (#88).
    */
   async viewChanged(sceneIdx = -1): Promise<void> {
     const interp = this.session.interp;
@@ -195,11 +177,13 @@ export class SetScripts {
    * The ARRIVAL half on its own: re-run `openscene` for the view now being stood
    * at, without the `closescene` that {@link viewChanged} runs first.
    *
-   * For a movement that did not leave anywhere — a script cut onto the standpoint
-   * you are already on, a walk that stays in the scene. `closescene` is what puts
-   * the shared `door` prop away and reds the arrow, and firing it for an arrival
-   * that left nothing both races the boot walk's own lifecycle (see
-   * `SetViewer.teleport`) and closes a door that is legitimately open.
+   * For a jump that did not leave anywhere — a script cut onto the standpoint
+   * you are already on. `closescene` is what puts the shared `door` prop away
+   * and reds the arrow, and firing it for an arrival that left nothing both
+   * races the boot walk's own lifecycle (see `SetViewer.teleport`) and closes
+   * a door that is legitimately open. (Turns and walks fire their own
+   * closescene at the move's start — `SetViewer.departScene` — and settle
+   * through openScene, so this is the jump path's half only.)
    */
   async viewSettled(sceneIdx = -1): Promise<void> {
     const interp = this.session.interp;

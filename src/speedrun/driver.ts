@@ -15,7 +15,7 @@
  * The interface is the seam, and it is narrow on purpose. Two observations make
  * it possible at all:
  *
- * **Every question is already a string of JavaScript.** `wait set == c73` compiles
+ * **Every question is already a string of JavaScript.** `wait(set == c73)` compiles
  * to an expression over `window.dbg` (actions.ts, `predicate`), and both hosts
  * can evaluate one — Playwright ships it over the wire, the page just runs it. So
  * the whole condition system ports with no work.
@@ -126,7 +126,7 @@ export interface SpeedrunDriver {
   /**
    * A key press, gated so it cannot be eaten by a fade.
    *
-   * The gate is BEFORE the press and is not skippable by `wait=none`: `wait` says
+   * The gate is BEFORE the press and is not skippable by `wait: none`: `wait` says
    * how much of the CONSEQUENCE to wait for, never whether the gesture is allowed
    * to be thrown away. See {@link KEY_SAFE}.
    */
