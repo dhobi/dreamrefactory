@@ -59,7 +59,7 @@ export interface Step {
   verb: string;
   /** positional arguments, in order */
   args: string[];
-  /** `key=value` options, keys lowercased */
+  /** `key: value` options, keys lowercased */
   opts: Record<string, string>;
   /** the bevel list from `who[1,3,5]`, if the action carried one */
   bevels?: number[];

@@ -76,6 +76,7 @@ const sheetEl = $<HTMLTextAreaElement>("srsheet");
 const playBtn = $<HTMLButtonElement>("srrun");
 const pauseBtn = $<HTMLButtonElement>("srpause");
 const stopBtn = $<HTMLButtonElement>("srstop");
+const stepBtn = $<HTMLButtonElement>("srstep");
 const checkBtn = $<HTMLButtonElement>("srcheck");
 const clearBtn = $<HTMLButtonElement>("srclear");
 const recBtn = $<HTMLButtonElement>("srrec");
@@ -233,7 +234,12 @@ function renderLegend(): void {
   // it. `sig` carries the camelCase spelling — the table is keyed lowercase, so
   // taking the key would print `clickat`, which is not a thing anyone types.
   const verbs = Object.entries(VERBS).map(([name, spec]) => {
-    const opts = spec.opts?.length ? `  ·  ${spec.opts.map((o) => `${o}=`).join(" ")}` : "";
+    // `name:` and not `name=`. The grammar took an equals until it didn't (see
+    // the named-argument regex in src/speedrun/sheet.ts, which now rejects one
+    // by hand precisely because every sheet ever written is full of them), and
+    // the one place still printing the old shape was the manual that tells a
+    // first-time reader what to type.
+    const opts = spec.opts?.length ? `  ·  ${spec.opts.map((o) => `${o}:`).join(" ")}` : "";
     return [(spec.sig ?? `${name}()`) + opts, spec.help] as [string, string];
   });
 
@@ -403,6 +409,11 @@ function setButtons(live: boolean): void {
   // decision rather than a technical one: a route timed while 1.13 GB is coming
   // down the same link is not a reading of the route.
   playBtn.disabled = live || !!warming;
+  // With Play, and for its reasons: both start the run, and neither may while
+  // one is going or while the cache is coming down. Step is the one control
+  // whose tooltip does not change with the pointer — "the next single action" is
+  // true at the top and in the middle alike.
+  stepBtn.disabled = live || !!warming;
   recBtn.disabled = !!warming;
   warmBtn.disabled = live;
   pauseBtn.disabled = !live;
@@ -441,7 +452,30 @@ async function stopRun(): Promise<void> {
  * is edited between runs and the pointer is a place in the TEXT — so the steps
  * it names are whatever is written there now.
  */
-function playSheet(): Promise<void> {
+/**
+ * Run the next single action, then stop.
+ *
+ * Everything about it is Play — same parse, same pointer, same loop, same
+ * driver — with the Pause asked for in advance. Sharing that path rather than
+ * having a quiet second one matters for the reason the runner is shared between
+ * the two hosts: a Step that meant something subtly different from "Play, then
+ * Pause" would be a way to see behaviour the real run does not have.
+ *
+ * The last action of a sheet is the one case where nothing follows it to pause
+ * before, so it finishes the run and the pointer goes back to the top — which is
+ * what reaching the end means, stepped or played.
+ */
+function stepSheet(): Promise<void> {
+  return playSheet(true);
+}
+
+/**
+ * @param once run a single ACTION and pause again — see {@link stepSheet}. A
+ * parameter and not a flag beside `paused`: `start()` plays a resumed sheet on
+ * its own at the bottom of this file, and a flag that outlived a Step it never
+ * got to spend would make that reload single-step instead.
+ */
+function playSheet(once = false): Promise<void> {
   const all = parse();
   if (!all) return Promise.resolve();
   const todo = stepsFrom(all, pointer);
@@ -451,11 +485,11 @@ function playSheet(): Promise<void> {
     say("nothing left below the pointer — back to the top", "good");
     return Promise.resolve();
   }
-  inFlight = playing(all, todo);
+  inFlight = playing(all, todo, once);
   return inFlight;
 }
 
-async function playing(all: Step[], todo: Step[]): Promise<void> {
+async function playing(all: Step[], todo: Step[], once = false): Promise<void> {
   const canvas = document.getElementById("screen") as HTMLCanvasElement | null;
   if (!canvas) return say("no #screen canvas on this page", "bad");
   if (!(window as unknown as { dbg?: unknown }).dbg) {
@@ -504,6 +538,20 @@ async function playing(all: Step[], todo: Step[]): Promise<void> {
         inStep = null;
         if (!stopping) setPointer(pointerAfter(all, t.step));
         remark();
+        // A Step: one action, and that was it. Asking for the Pause HERE rather
+        // than aborting is what makes a Step a whole action — the next `onStep`
+        // honours it before pressing anything, so the pointer left behind names
+        // an action that has not started rather than one half-done.
+        //
+        // One ACTION, not one line: `left(); up(); left()` stops after the
+        // first, because `pointerAfter` above has already counted it and the
+        // pointer's `skip` is what carries "which of the three" (see Pointer in
+        // src/speedrun/runner.ts). The machinery for stopping between two
+        // actions on a line was built for Pause; this only asks for it.
+        if (once) {
+          paused = true;
+          pauseWanted = true;
+        }
       },
       onSplit: (s) => {
         live.push(s);
@@ -638,6 +686,7 @@ clearBtn.addEventListener("click", () => {
 });
 
 playBtn.addEventListener("click", () => void playSheet());
+stepBtn.addEventListener("click", () => void stepSheet());
 pauseBtn.addEventListener("click", () => {
   paused = true;
   // Only a verb that merely WATCHES may be cut off where it stands; anything
