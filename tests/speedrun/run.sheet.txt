@@ -179,13 +179,31 @@ say([101, 102, 103], otherwise: last, maxturns: 30)
 settle()
 
 # turbine
+# THREE DIALS, NOT SIX — and the three missing lines are the route, not an
+# omission. `initvalue()` sets all six of the plant's globals to 50 and the ONLY
+# thing that ever publishes a deg to one is the dial's own `while stilldown()`
+# loop, so a dial nobody touches drives 50 no matter where openstage scattered
+# its face. valve1, valve2 and pump2 all want roughly 50 anyway, so they are
+# left alone and cost nothing. Do not "fix" this by adding them back.
+#
+# What the other three are for: valve3 is the boiler's outlet and therefore the
+# boiler's level (a third full, for boiltemp), pump1 is the condensor's and
+# therefore the condensor's (half full, for condtemp), and the coal lever puts
+# `coal` on 68 against an ideal 70. That settles the gauge at 16 of 19 against a
+# gate of 14 — one step less margin than the six-dial setting and about a third
+# of the gestures.
 dial(valve3, 7)
-dial(valve1, 10)
-dial(valve2, 10)
-dial(pump1, 15) 
-dial(pump2, 7)
+dial(pump1, 15)
 dial(slider, 7)
-wait(global.electlag > 75)
+# Now keep hold of a valve while the plant spins up. `changedone()` runs one
+# `iterateone()` per FRAME inside a dial's `while stilldown()` loop and only once
+# every ten engine steps otherwise, so holding one is the plant's own
+# fast-forward — 30x — and the dial does not move because the cursor does not
+# (`limiter` returns the deg unchanged on delt = 0). It has to be one of the
+# THREE WE SET: the loop republishes `valve3 = degtonum(propdeg(me))` every turn,
+# so holding valve1 would push its random deg over the 50 we are relying on.
+# The gate is `propdeg("electrical") > 13`, which is electlag 74.
+hold(valve3, until: global.electlag > 73)
 click(exit)
 wait(talking)
 bailOut()
@@ -716,13 +734,31 @@ say([101], otherwise: last, maxturns: 30)
 settle()
 
 # turbine
+# THREE DIALS, NOT SIX — and the three missing lines are the route, not an
+# omission. `initvalue()` sets all six of the plant's globals to 50 and the ONLY
+# thing that ever publishes a deg to one is the dial's own `while stilldown()`
+# loop, so a dial nobody touches drives 50 no matter where openstage scattered
+# its face. valve1, valve2 and pump2 all want roughly 50 anyway, so they are
+# left alone and cost nothing. Do not "fix" this by adding them back.
+#
+# What the other three are for: valve3 is the boiler's outlet and therefore the
+# boiler's level (a third full, for boiltemp), pump1 is the condensor's and
+# therefore the condensor's (half full, for condtemp), and the coal lever puts
+# `coal` on 68 against an ideal 70. That settles the gauge at 16 of 19 against a
+# gate of 14 — one step less margin than the six-dial setting and about a third
+# of the gestures.
 dial(valve3, 7)
-dial(valve1, 10)
-dial(valve2, 10)
-dial(pump1, 15) 
-dial(pump2, 7)
+dial(pump1, 15)
 dial(slider, 7)
-wait(global.electlag > 75)
+# Now keep hold of a valve while the plant spins up. `changedone()` runs one
+# `iterateone()` per FRAME inside a dial's `while stilldown()` loop and only once
+# every ten engine steps otherwise, so holding one is the plant's own
+# fast-forward — 30x — and the dial does not move because the cursor does not
+# (`limiter` returns the deg unchanged on delt = 0). It has to be one of the
+# THREE WE SET: the loop republishes `valve3 = degtonum(propdeg(me))` every turn,
+# so holding valve1 would push its random deg over the 50 we are relying on.
+# The gate is `propdeg("electrical") > 13`, which is electlag 74.
+hold(valve3, until: global.electlag > 73)
 click(exit)
 wait(talking)
 bailOut()

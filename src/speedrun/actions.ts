@@ -1167,6 +1167,76 @@ export const ACTIONS: Record<string, Action> = {
     },
   },
 
+  /**
+   * Take hold of a NAMED prop and keep holding it until something is true.
+   *
+   * {@link holdat}'s twin, aimed by the engine's own hit test rather than by
+   * pixels — which is the whole difference, because the things worth holding are
+   * dials and a dial is wherever its shop drew it.
+   *
+   * WHY A ROUTE WANTS THIS. Some of this game's scripts are simulations that only
+   * run while you are touching them, and the turbine plant is the one that named
+   * this verb. Every one of TURBINE.SHP's five dials is
+   *
+   *     while stilldown ()
+   *         propdeg (me, limiter (orig, newd))
+   *         valve1 = sendtostagefx (degtonum (propdeg (me)))
+   *         sendtostage (changedone ())          <- one iterateone() per FRAME
+   *         forceupdate ()
+   *     endwhile
+   *
+   * and `changedone` is the plant's entire clock: one `iterateone()`, a redraw,
+   * and `makeloop("flat", …, "changedone", 10)` to come back in ten engine steps.
+   * So the plant advances twice a second when nobody is touching it and once per
+   * frame when somebody is. Holding a valve is therefore the game's own
+   * fast-forward — the difference between watching the gauge climb and having
+   * climbed it — and it is the plant's own script doing it, so a run that uses it
+   * is still a run a person could have done.
+   *
+   * A HOLD IS NOT A DRAG. `limiter` hands back the deg untouched when the cursor
+   * has not moved (`delt = 0`), and the cursor does not move here, so the dial
+   * stays on the number the `dial()` before it set while the loop body goes on
+   * republishing that number to the plant. Nothing is re-aimed and nothing is
+   * disturbed; only time passes, and faster.
+   *
+   * `until` is REQUIRED, where {@link holdat}'s is optional. That verb's default —
+   * hold until the poll loop lets go — describes a press that something was
+   * ALREADY waiting for. Here the press is what starts the loop, so "the loop let
+   * go" cannot become true while we are still holding it, and defaulting to it
+   * would spend the whole budget every time and then call it a failure.
+   *
+   *     hold(valve1, until: global.electlag > 73)   # spin the plant up to the gate
+   */
+  hold: {
+    args: [1, 1],
+    wait: "quiet",
+    opts: ["until"],
+    sig: "hold(valve1, until: global.electlag > 73)",
+    help:
+      "grab a named prop and HOLD the button until a condition holds — for the " +
+      "scripts that only advance while you are touching them, like the turbine's dials",
+    run: async (c) => {
+      const name = c.step.args[0];
+      const goal = c.step.opts.until;
+      if (!goal) {
+        throw new Error(
+          `hold(${name}) needs an until: — a hold with no condition has nothing to ` +
+            `wait for, since the press is what starts the loop it is waiting on`,
+        );
+      }
+      const at = await c.d.aim("thing", name);
+      if (!at) throw new Error(`no "${name}" on screen to take hold of`);
+      const r = await c.d.holdAt(at.x, at.y, { until: condition(goal) }, c.budget);
+      if (!r.held) {
+        throw new Error(
+          `held ${name} for ${c.budget} ms and ${goal} never came true — is it ` +
+            `something holding ${name} can actually bring about?`,
+        );
+      }
+      await c.d.settle(c.wait, `the hold on ${name}`, c.budget);
+    },
+  },
+
   // -- movies ---------------------------------------------------------------
   skipmovie: {
     args: [0, 0],
