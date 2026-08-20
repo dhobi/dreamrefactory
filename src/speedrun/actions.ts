@@ -7,7 +7,7 @@
  *
  * ## The two altitudes
  *
- * Almost everything here is LITERAL: `up` is one ArrowUp, `click cards` is one
+ * Almost everything here is LITERAL: `up` is one ArrowUp, `click(cards)` is one
  * click at the pixel the engine's own hit test says is `cards`. A literal sheet
  * costs nothing at runtime — no planning, no hunting, no round trips beyond the
  * gesture itself — and it is deterministic, which is what makes a time
@@ -16,7 +16,7 @@
  * The exception is `travel`, and it exists to be temporary. It runs the real
  * {@link Navigator} — the same pathfinder the playthrough suite uses — and then
  * PRINTS THE GESTURES IT MADE as sheet lines you can paste back in. That is the
- * bootstrap loop: write `travel turb`, run it, take the eight literal lines it
+ * bootstrap loop: write `travel(turb)`, run it, take the eight literal lines it
  * emits, replace the `travel` with them, and shave from there. The planner aims
  * for reachable, not shortest, so a `travel` left in a finished sheet is time
  * being given away — the report flags every one for that reason.
@@ -87,10 +87,10 @@ export function interruptible(verb: string): boolean {
 /**
  * Compile a sheet-level condition into a page-side expression.
  *
- * Sheets should not contain JavaScript. `wait set == c73` is the thing a route
+ * Sheets should not contain JavaScript. `wait(set == c73)` is the thing a route
  * author actually means and survives a refactor of the engine's internals; a
  * hand-written `dbg.session.currentSetFile.startsWith(...)` does neither. The
- * `js=` form is kept as the escape hatch for a condition nobody anticipated, and
+ * `js ==` form is kept as the escape hatch for a condition nobody anticipated, and
  * its use is the signal that a shorthand is missing.
  */
 /**
@@ -810,7 +810,7 @@ const WORLD = `(() => {
 /**
  * A movement key, confirmed by the world actually moving.
  *
- * `wait=ready` is not enough for these and cannot be made enough. The turn
+ * `wait: ready` is not enough for these and cannot be made enough. The turn
  * animation does not start until the next rAF, so `quiescent` is still true from
  * BEFORE the press for a frame or two — a driver that waits on it reads the old
  * state, calls the gesture done, and walks on. Measured here at the very first
@@ -825,7 +825,7 @@ const WORLD = `(() => {
  * constantly.
  *
  * So: press, then wait for the {@link WORLD} to change, and press again if it
- * does not — which is what a player who saw nothing happen does. `confirm=no`
+ * does not — which is what a player who saw nothing happen does. `confirm: no`
  * opts out for the rare press that is deliberately expected to change nothing.
  */
 /**
@@ -1011,7 +1011,7 @@ export const ACTIONS: Record<string, Action> = {
    *     leg that is going straight on to another gesture and does not need the
    *     room to be finished.
    *
-   * `confirm=no` passes through to the walk, for the rare door you expect to
+   * `confirm: no` passes through to the walk, for the rare door you expect to
    * stand still in.
    */
   door: {
@@ -1292,7 +1292,7 @@ export const ACTIONS: Record<string, Action> = {
       //
       // NOT the default, and `cards` is why: its +3/+3 are paid for PASSING
       // THROUGH the frames named in the movie's header, which an abort skips. Any
-      // object whose film you have to watch has to keep by=ok.
+      // object whose film you have to watch has to keep by: ok.
       //
       // The wait is the whole technique. A close-up is fetched over HTTP, so for
       // a moment after the click there is no film yet and an ESC sent then lands
@@ -1624,7 +1624,7 @@ export const ACTIONS: Record<string, Action> = {
         await c.d.tryHold(IDLE, Math.min(patience, 8000));
         const at = await c.d.aim("thing", who);
         if (at) {
-          // wait=none, deliberately. A click that OPENS a conversation is not
+          // wait: none, deliberately. A click that OPENS a conversation is not
           // consumed in the ordinary way: the puppet suspends holding the
           // engine, and the press can sit in `GameSession.events` for as long
           // as the conversation lasts. Waiting for the queue to drain therefore
@@ -2298,7 +2298,7 @@ export const ACTIONS: Record<string, Action> = {
        * the other — through `view70`, a standpoint that exists only in smstack2 —
        * and reported turning a ring that was never going to contain it.
        *
-       * `set=` is the guard. It costs a word and it turns "the walk went
+       * `set:` is the guard. It costs a word and it turns "the walk went
        * somewhere strange" into "you are not where you think you are", which is
        * the fact that actually needed reporting: something before this line did
        * not finish.
@@ -2464,7 +2464,7 @@ export const ACTIONS: Record<string, Action> = {
    * snapshot patches, whose slots keep the base's values wherever the live game
    * had nothing to say. So the band came back empty and the file looked fine.
    *
-   * `wait=none` opts out, for a sheet that means to catch a moving game.
+   * `wait: none` opts out, for a sheet that means to catch a moving game.
    */
   save: {
     args: [1, 1],

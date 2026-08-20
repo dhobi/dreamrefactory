@@ -253,7 +253,7 @@ function renderLegend(): void {
     `<code>wait(set == c73, budget: 90000)</code>, <code>talk(purser[1,3,5])</code>. ` +
     `<code>#</code> comments to end of line, <code>;</code> separates actions on ` +
     `one line, <code>xN</code> inside the brackets repeats it N times, and a value ` +
-    `needing a comma of its own is quoted: <code>wait(js="a, b")</code>.</p>`;
+    `needing a comma of its own is quoted: <code>wait(js == "a, b")</code>.</p>`;
 }
 renderLegend();
 

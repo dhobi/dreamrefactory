@@ -30,7 +30,7 @@
  *     `talk(purser[1,3,5])` is one conversation with three answers
  *
  * A value that needs a comma or a bracket of its own is quoted:
- * `wait(js="a, b")`.
+ * `wait(js == "a, b")`.
  *
  * Calls and not bare words because the two things a sheet does most are pass
  * arguments and pass none, and the older grammar made those look alike: `click
