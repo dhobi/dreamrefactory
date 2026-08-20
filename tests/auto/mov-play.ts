@@ -48,6 +48,36 @@ function run(player: MoviePlayer, ticks: number, from = 0): number[] {
   return seen;
 }
 
+test("abandon() releases the script blocked in playmovie()", async () => {
+  // #254's third half. A MoviePlayer belongs to a SetViewer, a load builds a new
+  // one, and nothing disposes the old — so the film stopped being ticked while
+  // the promise `playmovie()` was awaiting stayed pending for ever, and
+  // `session.scriptBusy` never came back down.
+  const o = open("camelsee.mov");
+  if (!o) return;
+  const { player } = o;
+
+  let settled = false;
+  const film = player.play("camelsee.mov").then(() => (settled = true));
+  expect(player.playing).toBe(true);
+  await Promise.resolve();
+  expect(settled).toBe(false); // still watching
+
+  player.abandon();
+  await film;
+  expect(settled).toBe(true);
+  expect(player.playing).toBe(false);
+});
+
+test("abandon() is a no-op when no film is playing", () => {
+  const o = open("camelsee.mov");
+  if (!o) return;
+  // it is called on every load, most of which happen over a room — so the
+  // quiet case has to cost nothing rather than throw
+  expect(() => o.player.abandon()).not.toThrow();
+  expect(o.player.playing).toBe(false);
+});
+
 test("camelsee.mov: the horses gallop, and keep galloping", () => {
   const o = open("camelsee.mov");
   if (!o) return;

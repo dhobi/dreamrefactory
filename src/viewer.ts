@@ -897,6 +897,11 @@ export class SetViewer {
     return this.movies.play(fileName, startFrame);
   }
 
+  /** the game is being replaced under this viewer — see MoviePlayer.abandon */
+  abandonMovie(): void {
+    this.movies.abandon();
+  }
+
   /**
    * clut(target)/mixclut(target,…) host hook. `dim` null = restore the target's
    * normal palette (clut), a spec = darken it (mixclut). "current" resolves to
