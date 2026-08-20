@@ -722,12 +722,18 @@ that really start a game from nothing (the cold boot, and `quit()`'s return to
 the menu), and the pane's open/shut answer is remembered in `localStorage` under
 `taoot.details.open` alongside the swipe and picture ones.
 
-**Where the pane lives.** Beside the screen when the window is at least 1480 px
-wide, under the bars below that — the *element* moves between the two homes
-(`installRail`), so X, the log, the state list and the scroll position are the same
-objects either way and there is nothing to keep in step. The body is padded by the
-rail's width while it is up, so the screen re-centres in what is left instead of
-sliding under it.
+**Where the pane lives.** In the page, as the last column of the row that holds
+the screen — beside it when the window is at least 1480 px wide (1740 px on the
+speedrun page, which has the run sheet as a column of its own between them), and
+stacked under everything below that. Nothing moves the element and nothing is
+padded around it: the row wraps, so a window that is over the break but short of
+holding every column drops the pane to its own line rather than squeezing what is
+beside it.
+
+It used to be a `position: fixed` rail at the right edge with the body padded by
+the rail's width. #249 is what that cost: the speedrun page padded its own layout
+for the rail as well, so at 1920 with the pane open the page gave away ~960 px to
+a 480 px pane and the run sheet was left a few pixels wide.
 
 **What the state list is.** Every script global, rendered from `snapshotState` —
 the same function the playthrough goldens are recorded with, so what a reporter

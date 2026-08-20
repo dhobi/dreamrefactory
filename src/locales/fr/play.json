@@ -36,6 +36,7 @@
   "lowMemoryLabel": "Mémoire faible",
   "lowMemory": "le mode réduit de 1996",
   "lowMemoryTitle": "Une machine disposant de moins de 6 Mo de mémoire recevait un jeu plus petit, et ce sont les scripts du jeu eux-mêmes qui en décidaient : les thèmes de pont et de naufrage réduits de moitié, et plus de foule autour de vous sur le pont des embarcations. Cochez pour entendre cette version. Elle prend effet dans la salle suivante.",
+  "debugHeading": "Détails",
   "debugState": "état",
   "debugStateTitle": "Toutes les variables du script, et les six que nomme l'affichage de débogage du jeu",
   "debugAll": "toutes",

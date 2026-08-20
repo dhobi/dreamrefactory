@@ -68,6 +68,7 @@ import { formatBytes, formatEta, formatRate, warmCache, warmupList } from "./cac
 import { attachEditor } from "./speedrun-editor";
 import { attachRecorder } from "./speedrun-recorder";
 import { attachInputMonitor } from "./speedrun-inputs";
+import { installColumnOrder } from "./speedrun-columns";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -184,15 +185,19 @@ function renderSplits(splits: Split[], total?: { ms: number; frames: number }): 
       );
     })
     .join("");
+  // A `tfoot`, not the last row of the body: it is a summary of the rows and not
+  // one of them, and the table is a scrollport with its head pinned (see
+  // #srsplits) — so the total pins to the bottom of it the same way, and the
+  // number the run is judged on is on screen wherever the splits are scrolled to.
   const totalRow = total
-    ? `<tr class="total"><td>TOTAL</td><td class="n">${ms(total.ms)}</td>` +
+    ? `<tfoot><tr class="total"><td>TOTAL</td><td class="n">${ms(total.ms)}</td>` +
       `<td class="n">${ms(total.ms)}</td>` +
-      `<td class="n">${total.frames}f</td><td class="n"></td></tr>`
+      `<td class="n">${total.frames}f</td><td class="n"></td></tr></tfoot>`
     : "";
   const head =
     `<thead><tr><th>split</th><th class="n">time</th><th class="n">elapsed</th>` +
     `<th class="n">frames</th><th class="n">actions</th></tr></thead>`;
-  splitsEl.innerHTML = `<table>${head}<tbody>${rows}${totalRow}</tbody></table>`;
+  splitsEl.innerHTML = `<table>${head}<tbody>${rows}</tbody>${totalRow}</table>`;
 }
 
 const escape = (s: string): string =>
@@ -267,10 +272,15 @@ renderLegend();
  * reason: the arrows and Space belong to the game unless something is genuinely
  * being typed into.
  */
-$<HTMLElement>("srpanel").addEventListener("click", (e) => {
-  const el = (e.target as HTMLElement)?.closest?.("button");
-  if (el && (e as MouseEvent).detail > 0) el.blur();
-});
+// Both sections, because the panel is two now (#srpanel and #srtimer in
+// speedrun/index.html): a control that lands in the timer's column has to lose
+// focus for the same reason one in the sheet's does.
+for (const section of ["srpanel", "srtimer"]) {
+  $<HTMLElement>(section).addEventListener("click", (e) => {
+    const el = (e.target as HTMLElement)?.closest?.("button");
+    if (el && (e as MouseEvent).detail > 0) el.blur();
+  });
+}
 
 /**
  * The legend, opened and shut.
@@ -751,6 +761,11 @@ attachInputMonitor({
   canvas: document.getElementById("screen") as HTMLCanvasElement,
   mount: document.getElementById("inputs") as HTMLDivElement,
 });
+
+// Which of the two panels comes first, dragged by its heading and remembered.
+// Installed early, before anything is drawn into either of them: the sections
+// are MOVED, and moving one after the fact would be a visible jump.
+installColumnOrder();
 
 function setRecording(on: boolean): void {
   recorder.set(on);

@@ -36,6 +36,7 @@
   "lowMemoryLabel": "Wenig Speicher",
   "lowMemory": "die reduzierte Fassung von 1996",
   "lowMemoryTitle": "Ein Rechner mit weniger als 6 MB Speicher bekam ein kleineres Spiel, und das entschieden die Skripte des Spiels selbst: die halb so langen Decks- und Untergangsthemen und keine Menschenmenge um einen herum auf dem Bootsdeck. Hier lässt sich diese Fassung hören. Sie greift im nächsten Raum.",
+  "debugHeading": "Details",
   "debugState": "Zustand",
   "debugStateTitle": "Alle Skriptvariablen, und die sechs, die die spieleigene Debug-Anzeige nennt",
   "debugAll": "alle",

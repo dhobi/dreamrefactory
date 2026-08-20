@@ -186,23 +186,25 @@
 
       /* ---- the input display (src/speedrun-inputs.ts) ---- */
 
-      /* Pinned to the SCREEN's corner: #stage is the positioned ancestor and is
-         exactly the canvas's box, so the keys sit inside the picture at any
-         window width rather than drifting with the page.
+      /* In the Timer section, BESIDE the picture rather than over it. It used to
+         be `position: absolute` in the canvas's top-right corner — inside the
+         picture, which is where something read while the picture moves belongs,
+         at the cost of covering part of a room a hand-played click may want.
 
-         TOP RIGHT. #minimap takes the top left on this page rather than the
-         top right it has on the play page, so the two never meet; #netbusy keeps
-         the bottom right to itself. */
+         Out here it needs the opposite of what it needed in there. Over 1996
+         artwork it carried a translucent dark ground so it stayed readable on a
+         lit room, and its keys were outlined dark because the art behind them is
+         bright. On the page's own near-black there is nothing to hold back from
+         — a dark key outlined darker is simply invisible — so the ground is the
+         inset box this site draws every readout in, and the caps come up two
+         steps of hull to where they can be seen against it. */
       #inputs {
-        position: absolute;
-        right: 12px;
-        top: 12px;
-        /* the whole point: a click goes through to the game underneath */
-        pointer-events: none;
-        /* it is over a moving picture, so it needs a ground of its own to stay
-           readable — dark enough to sit on a lit room, transparent enough not to
-           be a hole in one */
-        background: rgba(0, 6, 15, 0.55);
+        /* The cap face and its edge, named once. The mouse's "only the left
+           button lights" rules below have to put a cap BACK to its rest colours,
+           and two copies of a literal are two things to keep in step. */
+        --cap-face: var(--raised);
+        --cap-edge: var(--hull-300);
+        background: var(--inset);
         border: 1px solid var(--border);
         border-radius: var(--radius);
         padding: 6px 7px;
@@ -214,9 +216,16 @@
          glanced at. So the keys are bigger than the play page's rather than the
          same: 282px over 160 units is 1.76 apiece, half again the 1.17 that
          matched the old crowded layout. It is vector, so this is a CSS number
-         and not an integer scale like the canvas's. */
+         and not an integer scale like the canvas's.
+
+         That number is now a ratio and not a size: the drawing takes the whole
+         column, so what 282 fixes is the SHAPE — 160 user units wide, drawn at
+         whatever 100% of the column happens to be. The SVG has a viewBox, so one
+         property does all of it: the contents are USER UNITS, and the 7px text
+         and the 0.6 strokes below are 7 and 0.6 of them, scaled by the width the
+         column gives. */
       #inputs .sr-keys {
-        width: 282px;
+        width: 50%;
         height: auto;
       }
       /* A key at rest: the same hairline the page draws everything else with.
@@ -224,13 +233,13 @@
          the whole site is built on, and the reason a lit key reads at all. */
       #inputs .cap rect,
       #inputs .cap path {
-        fill: rgba(10, 20, 34, 0.72);
-        stroke: var(--border-strong);
+        fill: var(--cap-face);
+        stroke: var(--cap-edge);
         stroke-width: 0.6;
         transition: fill 90ms linear, stroke 90ms linear;
       }
       #inputs .cap text {
-        fill: var(--text-mute);
+        fill: var(--text-dim);
         font-family: var(--font-mono);
         font-size: 7px;
         transition: fill 90ms linear;
@@ -254,8 +263,8 @@
          pressed" and not "the mouse did something". */
       #inputs .cap.mouse.on > rect,
       #inputs .cap.mouse.on .rmb {
-        fill: rgba(10, 20, 34, 0.72);
-        stroke: var(--border-strong);
+        fill: var(--cap-face);
+        stroke: var(--cap-edge);
       }
       #inputs .cap.mouse.on > rect {
         stroke: var(--brass-500, var(--brass-700));
@@ -414,11 +423,23 @@
 
       /* ---- the script log, and the bars of controls ---- */
 
+      /* The X pane. A column of #srlayout on a wide window and a block of the
+         stack on a narrow one, so it carries the screen's width here and is
+         overridden there.
+
+         The padding is #srpanel's and #srtimer's, exactly: they inset their
+         contents 0.5rem sideways and nothing from the top, and this had it the
+         other way round — which put the DETAILS heading 8px below its
+         neighbours' and 8px to the left of them, in a row where all three are
+         read as one line of headings. */
       #details {
-        padding-top: 0.5rem;
+        width: 1024px;
+        max-width: 96vw;
+        padding: 0 0.5rem;
       }
       #scriptlog {
         display: none;
+        min-height: 250px;
         max-height: 8em;
         overflow-y: auto;
         width: 100%;
@@ -431,80 +452,6 @@
         border: 1px solid var(--border);
         border-radius: var(--radius);
         padding: 0.45rem 0.6rem;
-      }
-
-      /* ---- the rail: the pane beside the screen instead of below it ----
-         #22 reported the details pane as "tiny, under the window (off screen at
-         1920px, 100% zoom)", and it was: four bars of controls put it about
-         1030 px down a 945 px-tall viewport, so at that window size it was never
-         on screen. On a window with room to spare the pane MOVES here instead
-         (src/main.ts installRail) — the same element, so one toggle and one
-         renderer serve both homes.
-
-         Fixed, and the body is padded by the same width while it is up, so the
-         screen re-centres in what is left rather than sliding under the rail.
-         That does move the game sideways when the pane opens, which is the
-         mockup in #22's own answer to where it should go, and it only ever
-         happens because the reader asked. */
-      #rail {
-        --rail-w: clamp(20rem, 28vw, 30rem);
-        position: fixed;
-        top: 3.2rem;
-        right: 0.7rem;
-        bottom: 0.7rem;
-        width: calc(var(--rail-w) - 1.4rem);
-        display: flex;
-        flex-direction: column;
-        z-index: 4;
-      }
-      /* `hidden` alone loses to the display above (see the paired-rule test in
-         tests/auto/locales.ts, and #55 for the spinner that turned all session) */
-      #rail[hidden] {
-        display: none;
-      }
-      /* The pane in the rail is a column that fills the height: the log takes
-         what it needs and the state list takes the rest, each scrolling itself. */
-      #rail #details {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        flex: 1;
-        padding: 0.6rem 0.7rem;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-      }
-      #rail #hud {
-        text-align: left;
-        padding: 0 0 0.4rem;
-      }
-      /* With nothing under it the log takes the whole rail; with the state list
-         open it gives most of the height away, because the list is the longer
-         thing and the log is read at its tail. */
-      #rail #scriptlog {
-        flex: 1 1 auto;
-        max-height: none;
-      }
-      #rail #details:has(#dbgState:not([hidden])) #scriptlog {
-        flex: 0 1 auto;
-        max-height: 40%;
-        min-height: 4em;
-      }
-      #rail #dbgState {
-        flex: 1 1 auto;
-        min-height: 0;
-      }
-      /* Only where the screen still fits beside it: 1024 px of canvas plus a
-         20rem rail is 1344, and the padding leaves the canvas its 96vw ceiling
-         alone. Below this the pane stays under the screen, which is also what a
-         phone gets. */
-      @media (max-width: 1479px) {
-        #rail {
-          display: none;
-        }
-      }
-      body.railed {
-        padding-right: clamp(20rem, 28vw, 30rem);
       }
 
       /* ---- the state list ----
@@ -587,15 +534,6 @@
         color: var(--text-mute);
       }
 
-      /* Everything under the screen shares one column, so that the details pane
-         lines up with the canvas. The play page has a bar of settings here as
-         well; this one does not (see the markup below). */
-      #under {
-        width: 1024px;
-        max-width: 96vw;
-        margin-top: 0.6rem;
-        padding-bottom: 3rem;
-      }
       /* ---- saved-games modal (src/save-browser.ts) ---- */
 
       .modal {
@@ -726,34 +664,64 @@
         padding: 0.3rem 0.8rem;
       }
 
-      /* ---- the speedrun panel ----
+      /* ---- the speedrun panels ----
          Everything above this is the play page, duplicated. What follows is the
          only thing this page adds: a sheet to paste, controls to run it, and the
          splits as they land. Same palette rule as the rest — the brightest thing
-         on screen is still the screen. */
+         on screen is still the screen.
 
-      #srpanel {
+         TWO sections, not one: #srpanel is what a run is written in and #srtimer
+         is what a run produced. They were one column, which meant the clock and
+         the splits sat under 26rem of editor and four rows of controls — read by
+         scrolling away from the thing that was being timed. As sections they are
+         columns of #srlayout in their own right, the way the canvas and the X
+         pane are, so the row places them and the row wraps them. */
+
+      #srpanel,
+      #srtimer {
+        /* Stacked, both fill the screen's column. Asked for rather than left to
+           fit-content: #srlayout centres its items, so a section is only as wide
+           as what is in it — and the splits table's five columns were what used
+           to hold the single panel open to 1024. With the table in its own
+           section the sheet's would have shrunk to the editor's 676. In the row
+           below, `flex-basis` supersedes this. */
+        width: 100%;
         max-width: 1024px;
-        margin: 1rem auto 3rem;
+        margin: 1rem auto 0;
         padding: 0 0.5rem;
         display: flex;
         flex-direction: column;
         gap: 0.6rem;
       }
 
-      /* ---- one column, or two ----
-         Under the screen on a narrow window, beside it on a wide one. The sheet
-         is READ WHILE THE RUN PLAYS — you watch the game do what the line said —
-         and stacked, those two things cannot be looked at together: the editor
-         starts below a 768 px-tall canvas, so watching means scrolling away from
-         the text and vice versa.
+      /* ---- one column, or two, or three ----
+         The screen, the sheet, and the X pane. Stacked in that order on a narrow
+         window, beside each other on a wide one. The sheet is READ WHILE THE RUN
+         PLAYS — you watch the game do what the line said — and stacked, those
+         two things cannot be looked at together: the editor starts below a
+         768 px-tall canvas, so watching means scrolling away from the text and
+         vice versa.
 
-         The break is 1500px because that is what the pair actually needs: 1024
-         for the screen (a crisp 2x of 512x384 — the canvas is `pixelated`, and
-         shrinking it to fit a column would make every pixel a different size),
-         plus a gap, plus a column wide enough for `wait(js=...)` lines. Below
-         that there is no room for two, and the stacked layout is not a fallback
-         — it is the right answer for the window. */
+         The break is 1740px because that is what the screen and the sheet
+         actually need: 1024 for the screen (a crisp 2x of 512x384 — the canvas
+         is `pixelated`, and shrinking it to fit a column would make every pixel
+         a different size), the sheet's own 650px floor (`wait(js=...)` lines and
+         the splits table wrap below it), plus the gap and the padding — 1718, so
+         1740. It was 1500 while the sheet had no floor and would simply take
+         what was left; at that width the floor made it wrap under the canvas
+         instead, which is the one thing this layout exists to prevent. Below the
+         break the stacked layout is not a fallback — it is the right answer for
+         the window.
+
+         The row WRAPS, which is how the pane gets a third column only where one
+         fits: over the break but short of 1024 + sheet + pane, the pane drops to
+         its own line at full width instead of taking the sheet's room. It used
+         to be a `position: fixed` rail with this layout padded by the rail's
+         width to keep clear of it — and #249 is what that cost, because the
+         BODY was padded by the same width as well, so at 1920 with the pane open
+         the page gave away ~960 px to a 480 px pane and the sheet was left a few
+         pixels wide. A column that takes its own share of a row cannot squeeze
+         its siblings. */
       #srlayout {
         display: flex;
         flex-direction: column;
@@ -767,11 +735,17 @@
         align-items: center;
       }
 
-      @media (min-width: 1500px) {
+      @media (min-width: 1740px) {
         #srlayout {
           flex-direction: row;
+          flex-wrap: wrap;
           align-items: flex-start;
-          justify-content: center;
+          /* Packed left, not centred. The row wraps, and a wrapped line holds
+             fewer columns than the first — centring it floats the pane out from
+             under the canvas it belongs to, so a left edge shared with the
+             screen is what makes the second line read as part of the same
+             layout. */
+          justify-content: flex-start;
           gap: 1.4rem;
           padding: 0 0.7rem;
           box-sizing: border-box;
@@ -784,30 +758,154 @@
         }
         #srpanel {
           flex: 1 1 26rem;
-          min-width: 0;
-          max-width: 42rem;
-          margin: 0.9rem 0 3rem;
-          /* Stay put while the page scrolls. The panel is the thing being
-             worked in and the screen is the thing being watched; scrolling to
-             the splits should not carry either off the top. */
-          position: sticky;
-          top: 0.7rem;
+          /* A floor, not a preference: `wait(js=...)` lines are what this column
+             is read for, and below this they wrap. It is a FLOOR rather than a
+             basis so the row's wrap decision respects it — which is why the
+             timer and the X pane drop to their own line on a window that cannot
+             hold 1024 + this + them. Only in here: stacked, the column is the
+             page's width and a floor would push a phone sideways. */
+          min-width: 650px;
+          /* the screen's own width: the sheet may grow to match the canvas it is
+             read beside, and no further — the base rule below the query caps the
+             stacked column at the same 1024 */
+          max-width: 1024px;
+          margin: 0.9rem 0;
+          /* An ordinary column, like the X pane beside it — it used to be
+             `position: sticky` so the sheet stayed put while the page scrolled
+             to the splits. The cap and the inner scroll stay: they are what keep
+             a 500-line sheet from making the column three screens tall. */
           max-height: calc(100vh - 1.4rem);
           overflow: auto;
         }
-        /* The debug rail is `position: fixed` at the right edge, so with the
-           pane open it would draw straight over the sheet. It is only there when
-           #details is in it, which is why this is a :has() and not a margin. */
-        body:has(#rail:not([hidden])) #srlayout {
-          padding-right: clamp(20rem, 28vw, 30rem);
+        /* What the run produced, in its own column. Its floor is the splits
+           table: five columns of tabular mono, and under it the split names wrap
+           against the numbers. Narrower than the sheet's, because a reading is
+           shorter than the line that produced it — and it is the column the row
+           gives up first, since a run can be read after it finishes and the
+           sheet has to be beside the picture while it plays. */
+        #srtimer {
+          flex: 1 1 22rem;
+          min-width: 380px;
+          max-width: 1024px;
+          margin: 0.9rem 0;
+          max-height: calc(100vh - 1.4rem);
+          overflow: auto;
+        }
+        /* The X pane as the last column: the log takes what it needs and the
+           state list takes the rest, each scrolling itself. The ceiling is the
+           CANVAS's own height, so the pane ends where the screen ends and a
+           161-row state list makes the LIST scroll rather than the column three
+           screens tall. Not `sticky` like the sheet above it — the sheet is the
+           thing being worked in, and the pane is a readout that may scroll away
+           with the page. */
+        #srlayout > #details {
+          flex: 1 1 20rem;
+          width: auto;
+          /* A floor and a ceiling, both in here only: stacked, the pane is the
+             screen's column at 96vw and a floor would push a phone sideways.
+             The floor is what the ceiling used to be — the pane is never
+             narrower than it was at its widest — and it feeds the row's wrap
+             decision, so a window that cannot hold the canvas and a 480px pane
+             drops the pane to its own line rather than shaving it thin. */
+          min-width: 480px;
+          max-width: 1024px;
+          display: flex;
+          flex-direction: column;
+          /* A DEFINITE height, and both halves of that matter — the same lesson
+             .sr-editor below carries. The log's `max-height: 40%` is a
+             PERCENTAGE, and a percentage resolves against the parent's height:
+             with only a `max-height` here that height is indefinite, the 40%
+             computes to `none`, and the log takes the whole column with the
+             state list crushed under it. The fixed rail this replaced got its
+             definite height from `top` + `bottom`. */
+          height: 768px;
+          margin: 0.9rem 0;
+        }
+        /* `hidden` alone loses to the display above (see the paired-rule test in
+           tests/auto/locales.ts, and #55 for the spinner that turned all session) */
+        #srlayout > #details[hidden] {
+          display: none;
+        }
+        #srlayout > #details #hud {
+          text-align: left;
+          padding: 0 0 0.4rem;
+        }
+        /* With nothing under it the log takes the whole column; with the state
+           list open it gives most of the height away, because the list is the
+           longer thing and the log is read at its tail. */
+        #srlayout > #details #scriptlog {
+          flex: 1 1 auto;
+          max-height: none;
+        }
+        #srlayout > #details:has(#dbgState:not([hidden])) #scriptlog {
+          flex: 0 1 auto;
+          max-height: 40%;
+          min-height: 250px;
+        }
+        #srlayout > #details #dbgState {
+          flex: 1 1 auto;
+          min-height: 0;
         }
       }
-      #srpanel h2 {
+      /* A rule UNDER the heading, which is where a section divider belongs: it
+         used to sit on top of #srclock, from when the clock and the splits were
+         the tail of one long panel and the line was what separated them from the
+         controls above. Now that each section has a heading, the line is the
+         heading's — one per section, drawn the same, rather than one in the
+         middle of a column. */
+      #srpanel h2,
+      #srtimer h2,
+      #details h2 {
         font-size: 0.9rem;
+        /* #details is a flex column (the log and the state list share its
+           height); the other two are too. A heading gives up none of it. */
+        flex: none;
         margin: 0;
         letter-spacing: 0.03em;
         text-transform: uppercase;
         opacity: 0.7;
+        border-bottom: 1px solid var(--hull-400);
+        padding-bottom: 0.4rem;
+        /* it is also the handle: which of these two panels comes first is the
+           reader's to decide, by dragging one onto the other
+           (src/speedrun-columns.ts) */
+        cursor: grab;
+        user-select: none;
+      }
+      #srpanel h2:active,
+      #srtimer h2:active,
+      #details h2:active {
+        cursor: grabbing;
+      }
+      /* The two sections space their children with `gap`; #details does not —
+         the log and the state list carry their own top margins — so its heading
+         has to space itself. */
+      #details h2 {
+        margin-bottom: 0.5rem;
+      }
+      /* The grip, DRAWN rather than typed. A glyph would read better than dots
+         and every one of them — ⠿, ⣿, ⋮⋮ — is a font dependency this page cannot
+         check, and a tofu box in a heading is worse than no grip at all. Two
+         columns of three dots out of one repeating gradient, in `currentColor`
+         so it dims with the heading it belongs to. */
+      #srpanel h2::before,
+      #srtimer h2::before,
+      #details h2::before {
+        content: "";
+        display: inline-block;
+        width: 5px;
+        height: 11px;
+        margin-right: 0.5rem;
+        vertical-align: -1px;
+        background-image: radial-gradient(circle at 1px 1px, currentColor 1px, transparent 1.4px);
+        background-size: 3px 4px;
+      }
+      /* Where it would land. An outline rather than a border, so nothing reflows
+         as it is dragged over — a column that resized under the pointer would
+         move the very thing being aimed at. */
+      #srlayout > .dropping {
+        outline: 1px dashed var(--ice-500);
+        outline-offset: 5px;
       }
       /* ---- the sheet editor ----
          A <pre> painted under a transparent <textarea>, scrolled in step, plus
@@ -1220,35 +1318,69 @@
         font-variant-numeric: tabular-nums;
         letter-spacing: 0.02em;
         color: var(--text-mute);
-        border-top: 1px solid var(--hull-400);
-        padding-top: 0.5rem;
         transition: color 120ms linear;
       }
       #srclock.live { color: var(--brass-500, #c89b4a); }
 
+      /* Its own scrollport, with the headings pinned to the top of it. A full
+         run is 23 splits and the panel above it is 26rem of editor plus four
+         rows of controls, so without this the table is read by scrolling the
+         whole column — and the headings, five columns of numbers that are
+         indistinguishable without them, go off the top on the first turn of the
+         wheel. `margin-top` rather than the `padding-top` this had: padding
+         inside a scrollport scrolls away under the pinned row. */
       #srsplits {
         font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
-        padding-top: 0.35rem;
+        margin-top: 0.35rem;
+        overflow: auto;
+        max-height: 430px;
       }
       #srsplits table { width: 100%; border-collapse: collapse; }
       /* The headings, in the quiet uppercase this page labels everything else
          with (see .sep on the rows above the editor) — a column heading is a
          label, and it must not compete with the numbers under it. */
+      #srsplits thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        /* A pinned row has rows passing UNDER it, so it needs a ground: the
+           page's own, since this column draws no panel of its own. Without it
+           the splits read straight through the headings. */
+        background: var(--bg);
+      }
       #srsplits th {
         font-weight: normal;
         font-size: 0.68rem;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        opacity: 0.4;
         text-align: left;
         padding: 0 0 0.25rem;
-        border-bottom: 1px solid var(--hull-400);
+        /* Quiet by COLOUR, not by `opacity`. The row is pinned, so it needs an
+           opaque ground — and `opacity` dims the whole element, background
+           included, which left the splits reading straight through the headings
+           at 40%. These two are that 40% resolved against the ground instead,
+           so it looks the same and covers what passes under it. */
+        color: color-mix(in srgb, var(--ice-100) 40%, var(--bg));
+        /* Not `border-bottom`: with `border-collapse: collapse` the table owns
+           the collapsed borders, so the rule would stay behind at the top of the
+           table while the heading it belongs to travels. An inset shadow is the
+           cell's own paint and comes along. */
+        box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--hull-400) 40%, var(--bg));
       }
       #srsplits th.n { text-align: right; padding-left: 1rem; }
       #srsplits tbody tr:first-child td { padding-top: 0.25rem; }
       #srsplits td { padding: 0.06rem 0; }
       #srsplits td.n { text-align: right; opacity: 0.7; font-variant-numeric: tabular-nums; padding-left: 1rem; }
-      #srsplits tr.total td { border-top: 1px solid var(--hull-400); padding-top: 0.3rem; opacity: 1; }
+      /* The total, pinned to the FOOT of the scrollport the way the headings are
+         pinned to its head — same reasons, and the same inset rule rather than a
+         border, which `border-collapse: collapse` would leave behind. */
+      #srsplits tfoot td {
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        background: var(--bg);
+      }
+      #srsplits tr.total td { box-shadow: inset 0 1px 0 var(--hull-400); padding-top: 0.3rem; opacity: 1; }
       /* The legend. Generated from the action table at load (see
          src/speedrun-page.ts) rather than written out here, so it cannot drift
          from what the parser actually accepts. English only and on purpose:
@@ -1318,17 +1450,9 @@
     </header>
 
 
-    <!-- Where #details lives when the window is wide enough to hold it beside the
-         screen rather than below it. #22 reported the pane as "tiny, under the
-         window (off screen at 1920px, 100% zoom)" — which it was: it began about
-         1030 px down a 945 px-tall viewport, so at that window size it was never
-         on screen at all. Empty in the markup; main.ts moves the pane in.
-
-         It and the save modal are both `position: fixed`, so where they sit in
-         the markup decides nothing about where they draw. They are up here, out
-         of #srlayout, only because that wrapper is a two-COLUMN box below and
-         neither of them belongs in a column. -->
-    <div id="rail" hidden></div>
+    <!-- `position: fixed`, so where it sits in the markup decides nothing about
+         where it draws. It is up here, out of #srlayout, only because that
+         wrapper is a COLUMN box below and a modal does not belong in a column. -->
 
     <div id="saveModal" class="modal">
       <div class="modal-box">
@@ -1350,8 +1474,9 @@
       </div>
     </div>
 
-    <!-- The game and the sheet, in that order. One column on a narrow window,
-         two once there is room for both — see #srlayout in the stylesheet. -->
+    <!-- The game, the sheet and the X pane, in that order. One column on a
+         narrow window, and beside each other as far as the window has room for
+         — see #srlayout in the stylesheet. -->
     <div id="srlayout">
       <div id="srgame">
     <div id="booting">
@@ -1382,65 +1507,46 @@
            a half-finished fade. Raised by src/main.ts off FileStore's in-flight
            count, and only once the wait is long enough to be felt. -->
       <div id="netbusy" hidden aria-hidden="true"><span></span></div>
-      <!-- What the run is pressing (src/speedrun-inputs.ts). Over the game
-           rather than beside it, because it is read WHILE the picture moves —
-           a key lighting is the only thing that tells you the arrow was sent
-           and not something the engine did on its own.
-
-           `pointer-events: none` so the canvas underneath keeps every gesture:
-           wherever it is parked it covers part of a room a hand-played click
-           may well want to land in. -->
-      <div id="inputs" aria-hidden="true"></div>
     </div>
 
-    <!-- Everything under the screen, in the order it is wanted: what you press,
-         then how a swipe reads, then which keys there are, and last the two
-         readouts that answer nothing the player asked (X). -->
-    <div id="under">
-      <!-- No #help bar here. The play page's is fullscreen, a bug button, the
-           swipe options and the picture/brightness/low-memory rows — questions
-           about how the game should look and feel to a person playing it, and
-           this page is a workbench where a route is timed. Its own controls are
-           the ones src/speedrun-page.ts builds below the canvas. src/main.ts
-           runs the game on both pages and finds none of these elements here,
+      <!-- No bar of settings under the screen here. The play page's is
+           fullscreen, a bug button, the swipe options and the
+           picture/brightness/low-memory rows — questions about how the game
+           should look and feel to a person playing it, and this page is a
+           workbench where a route is timed. Its own controls are the ones
+           src/speedrun-page.ts builds in #srpanel beside. src/main.ts runs the
+           game on both pages and finds none of the play page's elements here,
            which it is written to tolerate. -->
-
-      <!-- X opens this once the game is up; before then, a logged line does
-           (src/main.ts log), because a boot that never finishes has nothing
-           else to say for itself.
-
-           Its home is here on a narrow window and #rail on a wide one — the
-           element is MOVED between the two (src/main.ts installRail), so there is
-           one pane, one toggle and one renderer either way. -->
-      <div id="details" hidden>
-        <div id="hud"></div>
-        <!-- what the pane can be asked for beyond the log. `state` is off by
-             default: 161 variable names are an answer to a question the player
-             did not ask, and #22 is from someone who did ask. -->
-        <div id="dbgBar">
-          <label data-i18n-attr="title:play.debugStateTitle" title="Every script global, and the six the game's own debug readout names"
-            ><input type="checkbox" id="dbgStateOn" />
-            <span data-i18n="play.debugState">state</span></label
-          >
-          <button id="dbgCopy" data-i18n="play.debugCopy" data-i18n-attr="title:play.debugCopyTitle" title="Copy the state and the whole log, to attach to a bug report">⧉ Copy details</button>
-          <span id="dbgNote" class="note"></span>
-        </div>
-        <pre id="scriptlog"></pre>
-        <div id="dbgState" hidden>
-          <div id="dbgSpine"></div>
-          <div id="dbgTools">
-            <input id="dbgFilter" type="search" data-i18n-attr="placeholder:play.debugFilter" placeholder="filter" />
-            <label data-i18n-attr="title:play.debugAllTitle" title="Every global, not just the ones that have just moved"
-              ><input type="checkbox" id="dbgAll" />
-              <span data-i18n="play.debugAll">all</span></label
-            >
-          </div>
-          <div id="dbgRows"></div>
-        </div>
-      </div>
-    </div>
       </div>
       <!-- /#srgame -->
+
+    <!-- What the run produced, beside what produced it. Its own section rather
+         than the foot of the sheet's column: under 26rem of editor and four rows
+         of controls, the clock and the splits were read by scrolling away from
+         the picture being timed. -->
+    <section id="srtimer">
+      <h2>Timer</h2>
+      <!-- The stopwatch: seconds since Play, counting (src/speedrun-page.ts).
+           Above the splits because it is what the splits are readings OF — while
+           a leg with no split in it runs, this is the only thing on the page
+           that moves. It keeps its last reading when the run stops. -->
+      <div id="srclock">0.0s</div>
+      <div id="srsplits"></div>
+      <!-- What the run is pressing (src/speedrun-inputs.ts). A key lighting is
+           the only thing that tells you the arrow was sent and not something the
+           engine did on its own — which is why it used to be drawn on the canvas
+           itself, and why this section is the one beside the canvas. -->
+      <div id="inputs" aria-hidden="true"></div>
+      <p id="srcaveat">
+        A previewer, not the clock of record. Its input events are synthetic, so
+        they skip the browser's real input pipeline and the same sheet finishes
+        faster here than it does under Playwright. Tune here; take the time with
+        <code>npm run speedrun</code>. The pathfinding verbs
+        (<code>travel</code>, <code>hunt</code>, <code>stand</code>) need the
+        Node runner and will say so.
+      </p>
+    </section>
+    <!-- /#srtimer -->
 
     <section id="srpanel">
       <h2>Speedrun sheet</h2>
@@ -1511,21 +1617,46 @@ split(boot)"></textarea>
         </div>
       </div>
       <div id="srstatus"></div>
-      <!-- The stopwatch: seconds since Play, counting (src/speedrun-page.ts).
-           Above the splits because it is what the splits are readings OF — while
-           a leg with no split in it runs, this is the only thing on the page
-           that moves. It keeps its last reading when the run stops. -->
-      <div id="srclock">0.0s</div>
-      <div id="srsplits"></div>
-      <p id="srcaveat">
-        A previewer, not the clock of record. Its input events are synthetic, so
-        they skip the browser's real input pipeline and the same sheet finishes
-        faster here than it does under Playwright. Tune here; take the time with
-        <code>npm run speedrun</code>. The pathfinding verbs
-        (<code>travel</code>, <code>hunt</code>, <code>stand</code>) need the
-        Node runner and will say so.
-      </p>
     </section>
+    <!-- /#srpanel -->
+
+
+
+      <!-- X opens this once the game is up; before then, a logged line does
+           (src/main.ts log), because a boot that never finishes has nothing
+           else to say for itself.
+
+           A column of #srlayout, in flow, and the LAST one: after the game and
+           after the sheet, whether the three are side by side or stacked. It
+           used to be moved into a fixed rail at the right edge on a wide window
+           (#249) — nothing moves it now, the row wraps instead. -->
+      <div id="details" hidden>
+        <h2 data-i18n="play.debugHeading">Details</h2>
+        <div id="hud"></div>
+        <!-- what the pane can be asked for beyond the log. `state` is off by
+             default: 161 variable names are an answer to a question the player
+             did not ask, and #22 is from someone who did ask. -->
+        <div id="dbgBar">
+          <label data-i18n-attr="title:play.debugStateTitle" title="Every script global, and the six the game's own debug readout names"
+            ><input type="checkbox" id="dbgStateOn" />
+            <span data-i18n="play.debugState">state</span></label
+          >
+          <button id="dbgCopy" data-i18n="play.debugCopy" data-i18n-attr="title:play.debugCopyTitle" title="Copy the state and the whole log, to attach to a bug report">⧉ Copy details</button>
+          <span id="dbgNote" class="note"></span>
+        </div>
+        <pre id="scriptlog"></pre>
+        <div id="dbgState" hidden>
+          <div id="dbgSpine"></div>
+          <div id="dbgTools">
+            <input id="dbgFilter" type="search" data-i18n-attr="placeholder:play.debugFilter" placeholder="filter" />
+            <label data-i18n-attr="title:play.debugAllTitle" title="Every global, not just the ones that have just moved"
+              ><input type="checkbox" id="dbgAll" />
+              <span data-i18n="play.debugAll">all</span></label
+            >
+          </div>
+          <div id="dbgRows"></div>
+        </div>
+      </div>
     </div>
     <!-- /#srlayout -->
 

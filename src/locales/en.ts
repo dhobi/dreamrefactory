@@ -204,6 +204,10 @@ export const en = {
     // The state list in the details pane (#22). Its CONTENTS are never
     // translated — `neckphase 4` is a name out of the game's own tables and the
     // same sentence in six languages — so only the words around it are here.
+    // The pane's own heading, which is also its drag handle on the workbench
+    // page (src/speedrun-columns.ts). "Details" because that is what the key row
+    // above calls it — `X details`.
+    debugHeading: "Details" as Text,
     debugState: "state" as Text,
     debugStateTitle:
       "Every script global, and the six the game's own debug readout names" as Text,
