@@ -318,11 +318,35 @@
 
       /* ---- the script log, and the bars of controls ---- */
 
+      /* The X pane. Under the screen's column on a narrow window and beside it
+         on a wide one — see #playlayout below — so it carries the same width as
+         #under here and is overridden there. */
       #details {
+        width: 1024px;
+        max-width: 96vw;
         padding-top: 0.5rem;
+      }
+      /* The pane's heading, and the hairline under it.
+         The pane used to be a bordered, filled panel when it sat beside the
+         screen — which put a border around #scriptlog's border and #dbgState's,
+         boxes inside a box. It is a SECTION instead, the same shape the speedrun
+         page's two carry: a heading, a rule, and the readouts keeping their own
+         insets. Nothing is drawn around the column itself. */
+      #details h2 {
+        font-size: 0.9rem;
+        margin: 0 0 0.5rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        opacity: 0.7;
+        border-bottom: 1px solid var(--hull-400);
+        padding-bottom: 0.4rem;
+        /* in the column below it is a flex item, and a heading gives up no
+           height to the log and the state list that share the rest */
+        flex: none;
       }
       #scriptlog {
         display: none;
+        min-height: 250px;
         max-height: 8em;
         overflow-y: auto;
         width: 100%;
@@ -337,78 +361,115 @@
         padding: 0.45rem 0.6rem;
       }
 
-      /* ---- the rail: the pane beside the screen instead of below it ----
+      /* ---- one column, or two --------------------------------------------
          #22 reported the details pane as "tiny, under the window (off screen at
          1920px, 100% zoom)", and it was: four bars of controls put it about
          1030 px down a 945 px-tall viewport, so at that window size it was never
-         on screen. On a window with room to spare the pane MOVES here instead
-         (src/main.ts installRail) — the same element, so one toggle and one
-         renderer serve both homes.
+         on screen. On a window with room to spare the pane sits BESIDE the
+         screen instead, as the second column of this row.
 
-         Fixed, and the body is padded by the same width while it is up, so the
-         screen re-centres in what is left rather than sliding under the rail.
-         That does move the game sideways when the pane opens, which is the
-         mockup in #22's own answer to where it should go, and it only ever
-         happens because the reader asked. */
-      #rail {
-        --rail-w: clamp(20rem, 28vw, 30rem);
-        position: fixed;
-        top: 3.2rem;
-        right: 0.7rem;
-        bottom: 0.7rem;
-        width: calc(var(--rail-w) - 1.4rem);
+         It used to do that as a `position: fixed` rail with the body padded by
+         the rail's width to re-centre the screen in what was left. #249 is what
+         that costs: the speedrun page pads its own layout for the rail as well,
+         so with the pane open at 1920 the page gave away ~960 px to a 480 px
+         pane and the run sheet was squeezed to a few pixels wide. A column that
+         takes its share of a row cannot do that to its siblings — it is an
+         ordinary element, it pushes nothing, and it scrolls with the page.
+
+         The break is 1480px: 1024 for the screen (a crisp 2x of 512x384 — the
+         canvas is `pixelated`, and shrinking it to fit a column would make every
+         pixel a different size), a gap, and a column wide enough for `neckphase
+         4` and a log line. Below that the pane stays under the screen, which is
+         also what a phone gets. The row wraps rather than shrinking, so a window
+         that is over the break but still short of holding both never squeezes
+         either one. */
+      #playlayout {
         display: flex;
         flex-direction: column;
-        z-index: 4;
+        align-items: center;
+        width: 100%;
+        min-width: 0;
+        padding-bottom: 3rem;
       }
-      /* `hidden` alone loses to the display above (see the paired-rule test in
-         tests/auto/locales.ts, and #55 for the spinner that turned all session) */
-      #rail[hidden] {
-        display: none;
-      }
-      /* The pane in the rail is a column that fills the height: the log takes
-         what it needs and the state list takes the rest, each scrolling itself. */
-      #rail #details {
+      #gamecol {
         display: flex;
         flex-direction: column;
-        min-height: 0;
-        flex: 1;
-        padding: 0.6rem 0.7rem;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
+        align-items: center;
+        min-width: 0;
       }
-      #rail #hud {
-        text-align: left;
-        padding: 0 0 0.4rem;
-      }
-      /* With nothing under it the log takes the whole rail; with the state list
-         open it gives most of the height away, because the list is the longer
-         thing and the log is read at its tail. */
-      #rail #scriptlog {
-        flex: 1 1 auto;
-        max-height: none;
-      }
-      #rail #details:has(#dbgState:not([hidden])) #scriptlog {
-        flex: 0 1 auto;
-        max-height: 40%;
-        min-height: 4em;
-      }
-      #rail #dbgState {
-        flex: 1 1 auto;
-        min-height: 0;
-      }
-      /* Only where the screen still fits beside it: 1024 px of canvas plus a
-         20rem rail is 1344, and the padding leaves the canvas its 96vw ceiling
-         alone. Below this the pane stays under the screen, which is also what a
-         phone gets. */
-      @media (max-width: 1479px) {
-        #rail {
+      @media (min-width: 1480px) {
+        #playlayout {
+          flex-direction: row;
+          flex-wrap: wrap;
+          align-items: flex-start;
+          justify-content: center;
+          gap: 1.4rem;
+          padding: 0 0.7rem 3rem;
+        }
+        /* the screen's own width, held whether or not the game has booted, so
+           the columns do not jump sideways when #booting gives way to #stage */
+        #gamecol {
+          flex: 0 0 1024px;
+          width: 1024px;
+        }
+        /* The pane as a column: the log takes what it needs and the state list
+           takes the rest, each scrolling itself. The ceiling is the CANVAS's own
+           height, so the pane ends where the screen beside it ends and the two
+           read as a pair — and a 161-row state list makes the LIST scroll rather
+           than the column three screens tall. It is not `sticky`, because #249's
+           answer is that this is a regular element and a regular element scrolls
+           away. */
+        #playlayout > #details {
+          flex: 1 1 20rem;
+          width: auto;
+          /* A floor and a ceiling, both in here only: stacked, the pane is the
+             screen's column at 96vw and a floor would push a phone sideways.
+             The floor is what the ceiling used to be — the pane is never
+             narrower than it was at its widest — and it feeds the row's wrap
+             decision, so a window that cannot hold the canvas and a 480px pane
+             drops the pane to its own line rather than shaving it thin. */
+          min-width: 480px;
+          max-width: 1024px;
+          display: flex;
+          flex-direction: column;
+          /* A DEFINITE height, and both halves of that matter — the same lesson
+             .sr-editor on the speedrun page carries. The log's `max-height: 40%`
+             below is a PERCENTAGE, and a percentage resolves against the
+             parent's height: with only a `max-height` here that height is
+             indefinite, the 40% computes to `none`, and the log takes the whole
+             column with the state list crushed under it. The fixed rail this
+             replaced got its definite height from `top` + `bottom`. */
+          height: 768px;
+          /* #stage's own margin-top, so the pane's top edge lines up with the
+             top of the screen rather than sitting 0.9rem above it. The speedrun
+             page's sheet column carries the same offset for the same reason. */
+          margin-top: 0.9rem;
+        }
+        /* `hidden` alone loses to the display above (see the paired-rule test in
+           tests/auto/locales.ts, and #55 for the spinner that turned all session) */
+        #playlayout > #details[hidden] {
           display: none;
         }
-      }
-      body.railed {
-        padding-right: clamp(20rem, 28vw, 30rem);
+        #playlayout > #details #hud {
+          text-align: left;
+          padding: 0 0 0.4rem;
+        }
+        /* With nothing under it the log takes the whole column; with the state
+           list open it gives most of the height away, because the list is the
+           longer thing and the log is read at its tail. */
+        #playlayout > #details #scriptlog {
+          flex: 1 1 auto;
+          max-height: none;
+        }
+        #playlayout > #details:has(#dbgState:not([hidden])) #scriptlog {
+          flex: 0 1 auto;
+          max-height: 40%;
+          min-height: 250px;
+        }
+        #playlayout > #details #dbgState {
+          flex: 1 1 auto;
+          min-height: 0;
+        }
       }
 
       /* ---- the state list ----
@@ -491,15 +552,12 @@
         color: var(--text-mute);
       }
 
-      /* Everything under the screen shares one column, so that the bars and the
-         details pane line up with each other and with the canvas. The pane is
-         OUTSIDE #help rather than the last bar in it: #help is down until the
-         game shows, and a boot that fails has to be able to say why. */
+      /* The bars under the screen, in the screen's own column so that they line
+         up with the canvas and with the pane below them. */
       #under {
         width: 1024px;
         max-width: 96vw;
         margin-top: 0.6rem;
-        padding-bottom: 3rem;
       }
       #help .bar {
         display: flex;
@@ -716,6 +774,10 @@
       <span class="pickerLabel" id="editionLabel" data-i18n="site.editionLabel">Edition</span>
     </div>
 
+    <!-- The screen and its bars, then the X pane. One column on a narrow window,
+         two once there is room for both — see #playlayout in the stylesheet. -->
+    <div id="playlayout">
+      <div id="gamecol">
     <div id="booting">
       <h1 data-i18n="play.h1">Starting</h1>
       <div class="intro">
@@ -899,14 +961,19 @@
         </div>
       </div>
 
+    </div>
+      </div>
+      <!-- /#gamecol -->
+
       <!-- X opens this once the game is up; before then, a logged line does
            (src/main.ts log), because a boot that never finishes has nothing
            else to say for itself.
 
-           Its home is here on a narrow window and #rail on a wide one — the
-           element is MOVED between the two (src/main.ts installRail), so there is
-           one pane, one toggle and one renderer either way. -->
+           A column of #playlayout, in flow: beside the screen where the window
+           is wide enough and under it where it is not, by the row wrapping
+           rather than by anything moving the element (#249). -->
       <div id="details" hidden>
+        <h2 data-i18n="play.debugHeading">Details</h2>
         <div id="hud"></div>
         <!-- what the pane can be asked for beyond the log. `state` is off by
              default: 161 variable names are an answer to a question the player
@@ -933,13 +1000,7 @@
         </div>
       </div>
     </div>
-
-    <!-- Where #details lives when the window is wide enough to hold it beside the
-         screen rather than below it. #22 reported the pane as "tiny, under the
-         window (off screen at 1920px, 100% zoom)" — which it was: it began about
-         1030 px down a 945 px-tall viewport, so at that window size it was never
-         on screen at all. Empty in the markup; main.ts moves the pane in. -->
-    <div id="rail" hidden></div>
+    <!-- /#playlayout -->
 
     <div id="saveModal" class="modal">
       <div class="modal-box">

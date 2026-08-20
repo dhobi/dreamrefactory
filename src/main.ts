@@ -117,9 +117,6 @@ const movementValue = document.getElementById("movementValue");
 /** where you are and what the engine is doing: the X pane, off by default */
 const details = document.getElementById("details") as HTMLDivElement;
 const scriptlog = document.getElementById("scriptlog") as HTMLPreElement;
-/** the pane's two homes: under the screen, and beside it on a wide window */
-const under = document.getElementById("under") as HTMLDivElement;
-const rail = document.getElementById("rail") as HTMLDivElement;
 /** the state list inside the pane, and what asks for it (#22) */
 const dbgStateOn = document.getElementById("dbgStateOn") as HTMLInputElement;
 const dbgState = document.getElementById("dbgState") as HTMLDivElement;
@@ -277,30 +274,7 @@ function toggleDetails(): void {
   } catch {
     /* not remembering is survivable — the pane still holds for this tab */
   }
-  applyRail();
   if (!details.hidden) scriptlog.scrollTop = scriptlog.scrollHeight;
-}
-
-/**
- * Which of its two homes the pane is in.
- *
- * Wide enough for the screen AND the pane, and it goes beside the screen; below
- * that it stays under the bars where it has always been. The ELEMENT moves rather
- * than being drawn twice, so X, the log, the state list and the scroll position
- * are the same objects in both places and there is nothing to keep in step.
- *
- * The body's padding is what re-centres the screen in what is left, and it is only
- * applied while the pane is actually up — padding the page for an invisible rail
- * would move the game for nothing.
- */
-const RAIL_FITS = "(min-width: 1480px)";
-
-function applyRail(): void {
-  const wide = window.matchMedia(RAIL_FITS).matches;
-  const home = wide ? rail : under;
-  if (details.parentElement !== home) home.appendChild(details);
-  rail.hidden = !wide || details.hidden;
-  document.body.classList.toggle("railed", wide && !details.hidden);
 }
 
 /** where the pane's open/shut answer outlives the tab */
@@ -379,7 +353,6 @@ const host = new GameHost(files, audioSink, {
     clearLog();
     details.hidden = !detailsWanted();
     changeWatch.reset();
-    applyRail();
   },
   mapChanged: () => refreshMap(),
 });
@@ -1403,8 +1376,6 @@ function installDebugPanel(): void {
     if (details.hidden || dbgState.hidden) return;
     refreshState();
   }, REFRESH_MS);
-  window.matchMedia(RAIL_FITS).addEventListener("change", () => applyRail());
-  applyRail();
 }
 
 /** the snapshot the panel and the clipboard both read — the goldens' own */
@@ -1562,6 +1533,17 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     return;
   }
+  // X goes first for the same reason the gamma keys do, and it is a stronger case
+  // than theirs: the pane REMEMBERS being open (taoot.details.open), so a reader
+  // who left it up gets it back on the loading screen — and behind the viewer
+  // guard below, the key that put it there could not take it down again. A pane on
+  // screen that its own advertised key does nothing to is worse than no pane. It
+  // also has to outrank the overlay branch: a stage that owns every key would
+  // otherwise swallow X for as long as the deck map or the intro question is up.
+  if (!focusOwnsKey(e.target, e.key) && (e.key === "x" || e.key === "X")) {
+    toggleDetails();
+    return;
+  }
   const v = host.viewer;
   if (!v) return;
   // Typed into something on the page, not at the game (src/keys.ts). This listens
@@ -1617,10 +1599,6 @@ window.addEventListener("keydown", (e) => {
     case "o":
     case "O":
       v.showHotspots = !v.showHotspots;
-      break;
-    case "x":
-    case "X":
-      toggleDetails();
       break;
     default: {
       // Everything else goes to the game, because that is what the original does:
