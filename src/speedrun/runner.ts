@@ -119,7 +119,7 @@ export function waitOf(step: Step): WaitMode {
   const asked = step.opts.wait as WaitMode | undefined;
   if (asked) {
     if (!["none", "taken", "ready", "quiet"].includes(asked)) {
-      throw new Error(`sheet line ${step.line}: wait=${asked} is not none|taken|ready|quiet`);
+      throw new Error(`sheet line ${step.line}: wait: ${asked} is not none|taken|ready|quiet`);
     }
     return asked;
   }
