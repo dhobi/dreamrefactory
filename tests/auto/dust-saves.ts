@@ -254,6 +254,16 @@ test("the shipped saves decode to the game they came from", () => {
   expect.soft([dog?.x, dog?.y, dog?.z], "the dog's world position").toEqual([1620, 2748, 0]);
   // and its scale, without which the draw list skips it entirely
   expect.soft(dog?.scale, "the dog's scale").toBe(880);
+  /*
+   * `actorturn` and `actorspeed`, on the scale the LIVE game runs at: the port's
+   * script-driven boot puts Leroy, the dog and the horse at speed 3 / turn 7 and
+   * the pig's group at turn 16, and these are the fields that agree with it. The
+   * pair at +78/+80 does not — 32, 64, 100 and a uniform 100 — which is an order
+   * of magnitude out and had every restored walker sprinting.
+   */
+  expect.soft([dog?.speed, dog?.turn], "the dog's speed and turn").toEqual([3, 7]);
+  const pig = read("DOG.RTD").actors.find((a) => a.name === "pig");
+  expect.soft(pig?.turn, "the pig turns at its own rate").toBe(16);
 
   /*
    * A character caught mid-stride is caught in TWO tables, and the walk table is

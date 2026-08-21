@@ -161,7 +161,7 @@ ecx=0x29` at `0x411E2F`, and `add edi,0xa4` in the scan at `0x4129B3`.
 | 24 | `actordeg`, 0..255 |
 | **26 / 28 / 30** | the world position: **x across, y into the screen, z up** |
 | **44** | `actorscale`, per mille |
-| 78 / 80 | `actorspeed`, `actorturn` |
+| **36 / 40** | `actorturn`, `actorspeed` |
 | 84 | the name (Pascal string, 16-byte field) |
 | 100 / 116 / 132 / 148 | `actorset`, `actorstar`, `actorpose`, `actorowner` |
 
@@ -175,6 +175,14 @@ Two of these fields are load-bearing in a way that is invisible in the file:
   perfectly and leave this at 0, and the town comes back deserted. Identified by
   what the values are: the cow reads 2400 and the dog 880, Leroy 1100, and every
   character never placed reads exactly 1000.
+- **`actorturn` and `actorspeed`**, at +36 and +40 — and they were read off the
+  RUNNING GAME rather than picked from plausible-looking numbers. The port's boot
+  is script-driven, so the values Dust's own scripts set are observable: Leroy,
+  the dog and the horse all run at speed 3 and turn 7, the pig at 12 and 16, and
+  the record reads exactly those at +40 and +36. A first attempt took +78 and
+  +80, where the numbers are 32, 64, 100 and a uniform 100 — they *look* like a
+  speed and a turn rate, and they are an order of magnitude out, so every
+  restored walker crossed the town at a sprint.
 - **the axis order.** `y` is depth, not height. Read as x/y/z with y up, every
   character lands at depth 0 — the camera's own eye — and the projection refuses
   them. The port's own boot is the witness: script-placed `dog` stands at

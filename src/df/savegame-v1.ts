@@ -221,16 +221,26 @@ const ACTOR_Z = 30;
  */
 const ACTOR_SCALE = 44;
 /**
- * `actorspeed` and `actorturn` — how fast a character walks, and how fast they
- * turn on the spot.
+ * `actorturn` and `actorspeed` — how fast a character turns on the spot, and how
+ * fast they walk.
  *
- * Same kind of evidence: the horse reads 100 and the pig 16, the dog 64 and
- * Leroy 32, and the two characters who never move read 0. Restoring them matters
- * because only a script ever sets them and a load runs no script — without them
- * every restored walker crosses the town at the stepper's floor.
+ * Read off the RUNNING GAME rather than guessed from plausible-looking numbers,
+ * which is what makes these two right where a first attempt was wrong. The port's
+ * own boot is script-driven, so the values Dust's scripts set are observable:
+ * Leroy, the dog and the horse all run at speed 3 and turn 7, the pig at 12 and
+ * 16. The record reads exactly 3 at +40 and 7 at +36 for those three, and 16 at
+ * +36 for the pig's group.
+ *
+ * The first attempt took +78 and +80 — where the numbers are 32, 64, 100 and a
+ * uniform 100 — because they LOOK like a speed and a turn rate. They are an order
+ * of magnitude out, so every restored walker crossed the town at a sprint and
+ * spun on the spot. Whatever those two fields are, they are not these.
+ *
+ * Worth restoring at all because only a script ever sets them and a load runs no
+ * script: left at the cast's defaults, a resumed walk finishes at the wrong pace.
  */
-const ACTOR_SPEED = 78;
-const ACTOR_TURN = 80;
+const ACTOR_TURN = 36;
+const ACTOR_SPEED = 40;
 const ACTOR_NAME = 84;
 const ACTOR_SET = 100;
 const ACTOR_STAR = 116;
