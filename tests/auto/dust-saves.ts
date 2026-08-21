@@ -255,6 +255,43 @@ test("the shipped saves decode to the game they came from", () => {
   // and its scale, without which the draw list skips it entirely
   expect.soft(dog?.scale, "the dog's scale").toBe(880);
 
+  /*
+   * A character caught mid-stride is caught in TWO tables, and the walk table is
+   * mapped by RECONSTRUCTION: its numbers have to predict the position the CAST
+   * record — a different table, written by the same engine at the same instant —
+   * independently reports.
+   *
+   * Restoring only one of the two is worse than restoring neither: the cast
+   * record hands over the `walk` pose, and an actor plays its pose whether or not
+   * anything is moving it, so Jones came back marching on the spot in the middle
+   * of the street.
+   */
+  const afterWalks = read("AFTERDOG.RTD").walks;
+  expect.soft(afterWalks.map((w) => w.actor).sort(), "who was walking").toEqual(["Help", "Jones"]);
+  const jones = afterWalks.find((w) => w.actor === "Jones")!;
+  expect.soft(jones.star, "where to").toBe("town.jones2");
+  expect.soft([jones.startX, jones.startY], "from").toEqual([1736, 2488]);
+  expect.soft([jones.dx, jones.dy], "delta").toEqual([-112, -616]);
+  expect.soft(jones.dist, "distance").toBe(626);
+  // 626 - 111 remaining; the field holds what is LEFT, the port wants what is done
+  expect.soft(jones.progress, "covered").toBe(515);
+  // and now the reconstruction: start + delta x (covered/dist) has to be where
+  // the cast record says he is standing, to the pixel
+  // TRUNCATED, not rounded — rounding puts him at x=1644 where the cast record
+  // says 1643, which is the same fix-point truncation the projection uses
+  const at = (s: number, d: number) => Math.floor(s + d * (jones.progress / jones.dist));
+  const jonesActor = read("AFTERDOG.RTD").actors.find((a) => a.name === "Jones")!;
+  expect.soft([at(jones.startX, jones.dx), at(jones.startY, jones.dy)], "predicted position").toEqual([
+    jonesActor.x,
+    jonesActor.y,
+  ]);
+
+  // the four saves taken with nobody walking say so — a slot whose active word is
+  // clear holds the LAST walk it ran, not a live one
+  for (const f of ["START.RTD", "DOG.RTD", "GOTBONE.RTD"]) {
+    expect.soft(read(f).walks.length, `${f}: walks in flight`).toBe(0);
+  }
+
   // the frame counter orders them by when they were taken
   const frames = ["START.RTD", "DOG.RTD", "HELP.RTD", "GOTBONE.RTD", "AFTERDOG.RTD"].map((f) => read(f).frame);
   expect.soft(frames, "frames in play order").toEqual([...frames].sort((a, b) => a - b));

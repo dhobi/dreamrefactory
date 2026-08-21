@@ -296,6 +296,59 @@ const FILE_LIST_NAME = 12;
 const BANK_STRIDE = 38;
 const BANK_NAME = 0x16;
 
+/**
+ * The walk record: 82 bytes, where v4's is 110.
+ *
+ * Mapped by RECONSTRUCTION, which is the strongest kind of evidence this format
+ * offers: the fields below predict where the walker is standing, and the cast
+ * record — written by the same engine at the same instant, from a different
+ * table — says whether the prediction is right. AFTERDOG has Jones 82% of the way
+ * along a 626-unit walk to `town.jones2`:
+ *
+ *     destination     (1624, 1872)        +26 / +28
+ *     delta           (-112, -616)        +8 / +12
+ *     start           (1736, 2488)        destination - delta
+ *     distance         626                +20, and hypot(112, 616) = 626.1
+ *     remaining        111                +40
+ *     so covered       515                626 - 111
+ *     which puts him   (1643.9, 1981.2)   start + delta x 515/626
+ *     the cast says    (1643, 1981)       cast record +26 / +28
+ *
+ * and Help, 29% along a 131-unit step in the same file, lands the same way:
+ * predicted (1732.2, 3007.9), recorded (1732, 3007). Two walkers, two files, no
+ * field left over.
+ *
+ * `+40` being the distance REMAINING rather than the distance covered is the one
+ * thing worth flagging: it is why the port converts it (`progress = dist - here`)
+ * instead of passing it through.
+ */
+const WALK_STRIDE = 82;
+const WALK_COUNT = 16;
+const WALK_ACTIVE = 0;
+/** a facing to end on, or −1 for none — v4 spells this the same way */
+const WALK_TURN_TO = 4;
+/** the three deltas, i32 each: across, into the screen, up */
+const WALK_DX = 8;
+const WALK_DY = 12;
+const WALK_DZ = 16;
+/** the whole walk's length, i32 */
+const WALK_DIST = 20;
+/** the walker's current facing */
+const WALK_DEG = 24;
+/** where they are going, in world units and then as a grid cell */
+const WALK_DEST_X = 26;
+const WALK_DEST_Y = 28;
+const WALK_DEST_Z = 30;
+/** the destination as a grid cell, beside the world units */
+const WALK_DEST_CELL_X = 32;
+const WALK_DEST_CELL_Z = 34;
+/** an authored route's waypoints, as a handle to a container of its own */
+const WALK_PAYLOAD = 36;
+/** how much of {@link WALK_DIST} is LEFT */
+const WALK_REMAINING = 40;
+const WALK_ACTOR = 50;
+const WALK_STAR = 66;
+
 /** the loop table, byte-identical to v4's: 32 × 42 */
 const LOOP_STRIDE = 42;
 const LOOP_COUNT = 32;
@@ -353,6 +406,32 @@ export interface SavedPropV1 {
   x: number;
   y: number;
   z: number;
+}
+
+/** a walk in flight — a character caught mid-stride by the save */
+export interface SavedWalkV1 {
+  actor: string;
+  /** the star they are walking to, if the walk names one */
+  star: string;
+  /** where they set off from, and the deltas to where they are going */
+  startX: number;
+  startY: number;
+  startZ: number;
+  dx: number;
+  dy: number;
+  dz: number;
+  /** the whole distance, and how much of it has been covered */
+  dist: number;
+  progress: number;
+  /** a facing to end on, or −1 */
+  turnTo: number;
+  /** the walker's facing right now */
+  deg: number;
+  /** true if this is a turn on the spot rather than a journey */
+  turnOnly: boolean;
+  /** the walk follows an authored route whose waypoints are a container of
+   *  their own — which this port does not read, so the straight line is used */
+  hasPath: boolean;
 }
 
 /** one armed `makeloop` slot */
@@ -413,6 +492,8 @@ export interface SaveGameV1 {
   numGlobals: Map<string, number>;
   strGlobals: Map<string, string>;
   loops: SavedLoopV1[];
+  /** characters caught mid-stride */
+  walks: SavedWalkV1[];
   /** the file itself, kept so a writer can reproduce untouched containers */
   raw: RawSaveFile;
   /** where each interesting container sits — computed, never searched for */
@@ -545,6 +626,54 @@ function readProp(d: Uint8Array, at: number): SavedPropV1 {
   };
 }
 
+/**
+ * The walks in flight.
+ *
+ * A slot whose `active` word is clear is not a walk — it is the LAST walk that
+ * slot ran, left in place, which is why four of the five shipped saves have a
+ * table full of finished journeys and no live one.
+ */
+function readWalks(d: Uint8Array): SavedWalkV1[] {
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const out: SavedWalkV1[] = [];
+  for (let i = 0; i < WALK_COUNT; i++) {
+    const at = i * WALK_STRIDE;
+    if (at + WALK_STRIDE > d.length) break;
+    if (!dv.getUint16(at + WALK_ACTIVE, true)) continue;
+    const actor = pstr(d, at + WALK_ACTOR);
+    if (!actor) continue;
+    const dx = dv.getInt32(at + WALK_DX, true);
+    const dy = dv.getInt32(at + WALK_DY, true);
+    const dz = dv.getInt32(at + WALK_DZ, true);
+    const dist = dv.getInt32(at + WALK_DIST, true);
+    const left = dv.getInt32(at + WALK_REMAINING, true);
+    out.push({
+      actor,
+      star: pstr(d, at + WALK_STAR),
+      // the record holds where the walk ENDS; where it began is that minus the
+      // delta, which is what the mover wants
+      startX: dv.getInt16(at + WALK_DEST_X, true) - dx,
+      startY: dv.getInt16(at + WALK_DEST_Y, true) - dy,
+      startZ: dv.getInt16(at + WALK_DEST_Z, true) - dz,
+      dx,
+      dy,
+      dz,
+      dist,
+      // covered, not remaining — see WALK_STRIDE
+      progress: Math.max(0, dist - left),
+      turnTo: dv.getInt32(at + WALK_TURN_TO, true),
+      deg: dv.getUint16(at + WALK_DEG, true),
+      // A turn on the spot goes nowhere, so it is recognised by that rather than
+      // by a type field: v1's own type word reads 1 for every sample in the
+      // corpus, walkers and all, so it cannot be the thing that distinguishes
+      // them and is not guessed at.
+      turnOnly: dist <= 0 && dx === 0 && dy === 0 && dz === 0,
+      hasPath: dv.getUint32(at + WALK_PAYLOAD, true) !== 0,
+    });
+  }
+  return out;
+}
+
 /** the armed loop slots, from the table the engine hands the writer verbatim */
 function readLoops(d: Uint8Array): SavedLoopV1[] {
   const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
@@ -671,6 +800,7 @@ export function parseSaveV1(bytes: Uint8Array): SaveGameV1 {
     numGlobals,
     strGlobals,
     loops: readLoops(raw.containers[index.loops]?.data ?? new Uint8Array(0)),
+    walks: readWalks(raw.containers[index.walks]?.data ?? new Uint8Array(0)),
     raw,
     index,
   };
@@ -718,6 +848,8 @@ export interface SavePatchV1 {
   props?: PropPatchV1[];
   actors?: ActorPatchV1[];
   loops?: SavedLoopV1[];
+  /** the walks in flight — the whole table, like the loops */
+  walks?: SavedWalkV1[];
   /** called for anything the base had no room for, with why */
   onDrop?: (name: string, why: string) => void;
 }
@@ -970,6 +1102,48 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       put32(cl, at + LOOP_PERIOD, l.period);
       writePstrField(cl, at + LOOP_NAME, l.name);
       writePstrField(cl, at + LOOP_HANDLER, l.handler);
+      slot++;
+    }
+  }
+
+  // ---- the walks ---------------------------------------------------------
+  // The same wholesale rewrite the loops get, and for the same reason: the table
+  // IS the live mover, so a slot the running game does not have is a walker who
+  // must not set off again on load. A walk on an authored route is written as the
+  // straight line it carries — the waypoint container is not reproduced, and the
+  // caller is told, because arriving by a different road is a smaller lie than
+  // not arriving at all.
+  const cw = out.containers[index.walks]?.data;
+  if (cw && patch.walks) {
+    cw.fill(0, 0, Math.min(cw.length, WALK_COUNT * WALK_STRIDE));
+    let slot = 0;
+    for (const w of patch.walks) {
+      if (slot >= WALK_COUNT) {
+        drop(w.actor, `more than ${WALK_COUNT} walks — the table has no more slots`);
+        continue;
+      }
+      const at = slot * WALK_STRIDE;
+      if (at + WALK_STRIDE > cw.length) break;
+      const dv = new DataView(cw.buffer, cw.byteOffset, cw.byteLength);
+      put16(cw, at + WALK_ACTIVE, 1);
+      dv.setInt32(at + WALK_TURN_TO, w.turnTo, true);
+      dv.setInt32(at + WALK_DX, w.dx, true);
+      dv.setInt32(at + WALK_DY, w.dy, true);
+      dv.setInt32(at + WALK_DZ, w.dz, true);
+      dv.setInt32(at + WALK_DIST, w.dist, true);
+      put16(cw, at + WALK_DEG, w.deg);
+      // the record holds the DESTINATION; the port carries the start and the delta
+      put16(cw, at + WALK_DEST_X, w.startX + w.dx);
+      put16(cw, at + WALK_DEST_Y, w.startY + w.dy);
+      put16(cw, at + WALK_DEST_Z, w.startZ + w.dz);
+      put16(cw, at + WALK_DEST_CELL_X, Math.floor((w.startX + w.dx) / 256));
+      put16(cw, at + WALK_DEST_CELL_Z, Math.floor((w.startY + w.dy) / 256));
+      // ...and how much is LEFT, not how much is done
+      dv.setInt32(at + WALK_REMAINING, Math.max(0, w.dist - w.progress), true);
+      dv.setUint32(at + WALK_PAYLOAD, 0, true); // no waypoint container is written
+      writePstrField(cw, at + WALK_ACTOR, w.actor);
+      writePstrField(cw, at + WALK_STAR, w.star);
+      if (w.hasPath) drop(w.actor, "walking an authored route — written as the straight line");
       slot++;
     }
   }

@@ -255,6 +255,50 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
     // scene's own timer, the star that crosses the sky
     for (const l of save.loops) session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period);
 
+    /*
+     * ...and the walkers, mid-stride.
+     *
+     * A character caught walking is caught in TWO tables, and restoring only one
+     * of them is worse than restoring neither: the cast record gives them the
+     * `walk` pose, and an actor steps through its walk animation whether or not a
+     * walk is actually running — so Jones came back marching on the spot in the
+     * middle of the street. (Reported after loading AFTERDOG, which has him 82%
+     * of the way to `town.jones2`.)
+     *
+     * So each walk is resumed from where the save caught it, with only what was
+     * left to run — and anyone whose walk CANNOT be resumed is stood up, which is
+     * the other half of the same bug. The play page learned this one first (#181).
+     */
+    for (const w of save.walks) {
+      const a = session.actorRuntime.get(w.actor);
+      const resumed =
+        !!a &&
+        session.scheduler.restoreWalk(w.actor, {
+          turnOnly: w.turnOnly,
+          turnTo: w.turnTo >= 0 ? w.turnTo : undefined,
+          sx: w.startX,
+          sy: w.startY,
+          sz: w.startZ,
+          dx: w.dx,
+          dy: w.dy,
+          dz: w.dz,
+          dist: w.dist,
+          progress: w.progress,
+          arriveStar: w.star || undefined,
+        });
+      if (resumed) {
+        session.onLog(
+          w.turnOnly
+            ? `opengame: ${w.actor} was saved mid-turn — resuming it`
+            : `opengame: ${w.actor} was saved walking to "${w.star}" ` +
+              `(${w.progress} of ${w.dist})${w.hasPath ? " on an authored route, resumed as a straight line" : ""}`,
+        );
+        continue;
+      }
+      standUp(a ?? undefined);
+      session.onLog(`opengame: ${w.actor} was saved mid-walk and could not be resumed — standing them up`);
+    }
+
     // ---- the arrival ----------------------------------------------------
     const s = save.standpoint;
     /*
@@ -372,6 +416,22 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
       y: a.worldY,
       z: a.worldZ,
     })),
+    walks: [...session.scheduler.walks].map(([actor, w]) => ({
+      actor,
+      star: w.arriveStar ?? "",
+      startX: w.sx,
+      startY: w.sy,
+      startZ: w.sz,
+      dx: w.dx,
+      dy: w.dy,
+      dz: w.dz,
+      dist: w.dist,
+      progress: w.progress,
+      turnTo: w.turnTo ?? -1,
+      deg: session.actorRuntime.get(actor)?.deg ?? 0,
+      turnOnly: !!w.turnOnly,
+      hasPath: !!w.path,
+    })),
     loops: session.scheduler.loops.map((l) => ({
       kind: l.kind,
       name: l.name,
@@ -392,6 +452,21 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
     );
   }
   return bytes;
+}
+
+/**
+ * Stop a character treadmilling: put them in the standing pose of whatever walk
+ * pose they came back in.
+ *
+ * `walk` → `stand`, and a suffixed pose keeps its suffix (`walklj` → `standlj`)
+ * if the cast member has one, because an actor plays its pose regardless of
+ * whether anything is moving it.
+ */
+function standUp(a: { poseName: string; step: number; member: { poses: { name: string }[] } } | undefined): void {
+  if (!a || !a.poseName.startsWith("walk")) return;
+  const suffixed = `stand${a.poseName.slice(4)}`;
+  a.poseName = a.member.poses.some((p) => p.name === suffixed) ? suffixed : "stand";
+  a.step = 0;
 }
 
 /**

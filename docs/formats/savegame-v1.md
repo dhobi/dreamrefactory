@@ -214,10 +214,57 @@ extension is read back out of the container-0 manifest, where the full path is.
 `loops` is **byte-identical to v4** (32 × 42: `{u16 active, u16 kind @4, u32
 period @6, pstr name @10, pstr handler @26}`, kinds 1=actor 2=prop 3=scene
 4=flat), so the v4 decoder reads it unchanged. `crickets` (16 × 48) and `walks`
-(16 × 82) are v1's own sizes; both tables are entirely zero in all five shipped
-saves, so beyond `active @0`, the cricket name at `+0x20` and the walk's actor
-and star (`+50`, `+66`), there is nothing in the corpus to check a field against —
-and nothing is guessed.
+(16 × 82) are v1's own sizes.
+
+The **cricket** table is entirely zero in all five shipped saves, so beyond
+`active @0` and the name at `+0x20` there is nothing to check a field against, and
+nothing is guessed.
+
+The **walk** table is not: AFTERDOG has two walkers in flight.
+
+| Offset | Field |
+|-------:|-------|
+| 0 | `active` — a clear slot holds the LAST walk it ran, not a live one |
+| 4 | a facing to end on, or −1 |
+| 8 / 12 / 16 | the three deltas, i32 each |
+| 20 | the whole distance, i32 |
+| 24 | the walker's current facing |
+| 26 / 28 / 30 | **the destination**, in world units |
+| 32 / 34 | the destination as a grid cell |
+| 36 | an authored route's waypoints, as a container handle (0 = a straight line) |
+| **40** | how much of the distance is **LEFT** |
+| 50 / 66 | the walker, and the star they are walking to |
+
+Mapped by **reconstruction**, which is the strongest evidence this format offers:
+the fields have to predict the position the *cast* record — a different table,
+written by the same engine at the same instant — independently reports. Jones is
+82% of the way to `town.jones2`:
+
+```
+destination   (1624, 1872)      +26 / +28
+delta         (-112, -616)      +8 / +12
+start         (1736, 2488)      destination - delta
+distance       626              +20, and hypot(112, 616) = 626.1
+remaining      111              +40
+covered        515              626 - 111
+predicted     (1643, 1981)      start + delta x 515/626, truncated
+the cast says (1643, 1981)      cast record +26 / +28
+```
+
+and Help, 29% along a 131-unit step in the same file, lands the same way. Two
+walkers, two files, no field left over — and the truncation is the same fix-point
+truncation the projection uses (rounding puts Jones a pixel east).
+
+Restoring the walk table is not optional, because a walker is recorded in **two**
+tables and the cast record hands over the `walk` pose. An actor plays its pose
+whether or not anything is moving it, so restoring the cast without the walks
+brings a character back marching on the spot — which is what loading AFTERDOG did
+until this table was read. Anyone whose walk cannot be resumed is stood up
+instead; the play page learned the same lesson at #181.
+
+An authored route's waypoint container is **not** reproduced when writing: such a
+walk is written as the straight line its own record carries, and the caller is
+told. None of the five shipped saves has one.
 
 ## The globals never changed
 
@@ -270,6 +317,10 @@ guessing:
   v4's tail offsets do not transfer;
 - the prop record beyond the fields tabled above;
 - the cricket record beyond `active` and the name;
+- a walk's waypoint payload container (no shipped save has one), and the walk
+  record's type word — it reads 1 for every sample in the corpus, walkers
+  included, so it cannot be what distinguishes a turn from a journey; a turn is
+  recognised by going nowhere instead;
 - `c13+4`, and the individual roles of `c1` 352–444 and 464–480 (their *purpose*
   is clear — interpolation copies of the standpoint — the field-by-field split is
   not).
