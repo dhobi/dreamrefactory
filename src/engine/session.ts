@@ -1635,11 +1635,45 @@ export class GameSession {
    * what a script reading before anything has set it should see.
    */
   themeVolume = 255;
+  /**
+   * ...and per TRACK, which is what the name argument is for after all.
+   *
+   * `themevol(track, v)` is not only a channel gain: the volume belongs to the
+   * TRACK, and a script sets it BEFORE playing that track. Dust's saloon is the
+   * case that proves it, because the same music is scored at two loudnesses by
+   * two different rooms:
+   *
+   *     SALLOWER  themevol ("saloonsep.snd", 55) ; playtheme ("saloonsep.snd")
+   *     SALUPPER  themevol ("saloonsep.snd", 24) ; playtheme ("saloonsep.snd")
+   *
+   * — the piano heard from the bar, and the same piano heard through the floor
+   * from the landing above it. `playtheme` used to finish by applying the master
+   * `themevolume` global, which threw both of those away: the score came back at
+   * 255 the instant it started. Downstairs that was invisible, because SALLOWER
+   * runs a scene loop that re-sets the volume from your distance to the piano
+   * every two ticks — so the clobber was corrected before anyone could hear it.
+   * Upstairs nothing corrects it, and the music stayed at full volume through
+   * every conversation on that landing.
+   *
+   * So a track's volume is remembered under its name, and starting a track
+   * applies what the script asked for that track. TAOOT is unaffected in
+   * practice: its idiom is the other order — `playtheme(x)` and then
+   * `themevol(currenttheme(2), themevolume)` — so the value it remembers is the
+   * slider's, which is what it wanted the play to apply anyway.
+   */
+  private readonly trackVolume = new Map<string, number>();
   /** Set the theme loudness (0..255) and apply it to the audio channel. The one
-   *  way it is written, so the value a script reads back is the one in effect. */
-  setThemeVolume(v: number): void {
+   *  way it is written, so the value a script reads back is the one in effect.
+   *  `track` names the track it belongs to, so starting that track can restore it. */
+  setThemeVolume(v: number, track?: string): void {
     this.themeVolume = Math.max(0, Math.min(255, Math.round(v)));
+    if (track) this.trackVolume.set(track.toLowerCase(), this.themeVolume);
     this.audio.setChannelVolume("theme", this.themeVolume / 255);
+  }
+  /** What a script last asked THIS track to play at, or undefined if it never
+   *  said — see {@link trackVolume}. */
+  volumeForTrack(track: string): number | undefined {
+    return this.trackVolume.get(track.toLowerCase());
   }
   /** framerate() target cadence; drag loops save/drop/restore it (turbine dials) */
   frameRate = 3;

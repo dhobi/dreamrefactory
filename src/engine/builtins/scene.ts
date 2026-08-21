@@ -293,9 +293,13 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   // `themevol(t, themevol(t) / 4)`, so answering nothing answered 0 — the music
   // was set to silence and then multiplied back up from zero. See
   // GameSession.themeVolume for the two places that bit.
-  r("themevol", (_i, [, vol]) => {
+  // The track NAME is no longer purely informational: the volume is remembered
+  // under it, so starting that track later plays it at the level the script asked
+  // for (see GameSession.volumeForTrack — Dust's saloon scores the same music at
+  // 55 downstairs and 24 through the floor above it).
+  r("themevol", (_i, [track, vol]) => {
     if (vol === undefined) return session.themeVolume;
-    session.setThemeVolume(toNum(vol));
+    session.setThemeVolume(toNum(vol), toStr(track ?? "") || undefined);
     return 0;
   });
   // clut(target)/mixclut(target,color,lo,hi,amt): the DreamFactory colour-
