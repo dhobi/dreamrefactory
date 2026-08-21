@@ -822,6 +822,21 @@ export class Scheduler {
       this.clockLastMs = now;
       return;
     }
+    /**
+     * A game whose boot has no clock handler is not asked for one.
+     *
+     * TAOOT's `calctime` is BOOTFILE's, not the engine's, and Dust keeps time a
+     * different way — its clock is `day`/`clock`/`phase`, wound by `advanceday`
+     * in `new.flt`. Dispatching regardless logged "no handler" twenty times a
+     * second and buried every other line in the boot log under it.
+     *
+     * Asked every pass rather than latched, because the boot library arrives
+     * partway through one: a game booting is a game with no handlers yet.
+     */
+    if (!this.session.hasGlobal("calctime")) {
+      this.clockLastMs = now;
+      return;
+    }
     const CALCTIME_MS = 50; // 20 calls / real second -> 1 second-hand tick / sec
     let calls = Math.floor((now - this.clockLastMs) / CALCTIME_MS);
     if (calls <= 0) return;

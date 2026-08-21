@@ -27,9 +27,27 @@ export class SetScripts {
     readonly session: GameSession,
   ) {
     session.currentBinding = this;
-    // prefer the opened FILE's basename: TAOOT's DECKBD.SET internal name field
-    // says "decka", but scripts address the set as "deckbd"
-    session.currentSetName = session.currentSetFile || set.setName.toLowerCase();
+    /**
+     * The set's OWN name, falling back to the opened file's basename.
+     *
+     * This used to prefer the file, on the belief that TAOOT's `DECKBD.SET` calls
+     * itself "decka" while scripts address it as "deckbd". It does not: across the
+     * seven editions in `gamefiles/`, all 495 sets carry an internal name and not
+     * one of them differs from its file's basename. So on Titanic the two rules
+     * are the same rule.
+     *
+     * Dust separates them on purpose. `nite.set` calls itself **town** and
+     * `nitecour.set` **court** — each is the same place after dark — and its stage
+     * turns on the distinction: `initall`'s
+     *
+     *     if currentset () = newname       (newname is "town", the set is nite.set)
+     *
+     * is what carries your standpoint across a day/night change, and the whole town
+     * cast is bound with `actorset (me, "town")`, so under the file's name nobody
+     * is standing in the night town at all. Four rooms differ the other way
+     * (`apoth.set` is "drugs", `undertak.set` is "under").
+     */
+    session.currentSetName = set.setName.toLowerCase() || session.currentSetFile;
     session.interp.onUnknown = (name, args) =>
       this.onLog(`? ${name}(${args.map((a) => JSON.stringify(a)).join(", ")})`);
 

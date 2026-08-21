@@ -27,6 +27,10 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
     // form, the playagain() argument evaluated locally and recursed forever, so
     // a finished hand hung instead of offering another.
     "sendtopropfx", "sendtostagefx", "sendtopuppetfx",
+    // ...and the three Dust asks for that Titanic never does. `extra.cst`'s
+    // crowd router uses all three (sendtoflatfx, sendtopostfx, sendtoserverfx);
+    // unregistered, their deferred argument evaluated locally instead.
+    "sendtoflatfx", "sendtopostfx", "sendtoserverfx",
   ]) {
     interp.registerSpecial(cmd, async (ip, argExprs, frame) => {
       // sendtostage(call()) / sendtoboot(call()) take the deferred call as

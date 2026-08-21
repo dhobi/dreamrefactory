@@ -1,0 +1,1001 @@
+/**
+ * The Dust shell — *Dust: A Tale of the Wired West* (Cyberflix, 1995) rendered
+ * by the Titanic port's own file layer.
+ *
+ * This is an EXPERIMENT and not a second game. It shares `src/df/` with the play
+ * page and nothing else: no engine, no interpreter, no editions, no saves. What
+ * it answers is a narrow question — how much of a DreamFactory **1** disc can a
+ * DreamFactory **4** port read — and it answers it by standing you in a room and
+ * letting you walk.
+ *
+ * ## What it is actually doing
+ *
+ * Everything below the SET header is shared between the two engines, which is
+ * the finding this page exists to demonstrate:
+ *
+ *   - `container.ts` opens the file unmodified. The envelope never changed.
+ *   - `image.ts` decodes the frames unmodified. Neither did the codec, nor the
+ *     512x264 viewport, nor the palette entry shape.
+ *   - `set-v1.ts` is the one new reader, and only because a v1 set's MOVEMENT
+ *     model is older: a grid of cells and one flat table of transitions, where a
+ *     turn and a walk are the same kind of record. Titanic's turn rings and roads
+ *     are what that table later became.
+ *
+ * So there are three controls, which is all the original had — its set scripts
+ * handle exactly `uparrow`, `leftarrow` and `rightarrow` — and the fourth wall of
+ * the experiment is that there is no fourth control to want.
+ *
+ * ## Why every frame is decoded up front
+ *
+ * DreamFactory frames are DELTA-coded: several row modes copy from "the previous
+ * image", meaning whatever the target buffer already holds. So a frame is only
+ * correct if the frames before it were decoded into the same buffer, in the order
+ * the file lays them out. The play page pays for that with a ring cache and a
+ * careful walk (`ring-cache.ts`); this page pays for it by decoding the whole set
+ * once, in container order, and keeping every result. A set is ~150 frames at
+ * 512x264, so that is ~20 MB of indexed pixels and about a second — a price worth
+ * paying to make the rendering unarguable rather than clever.
+ */
+import { readContainerFile } from "./df/container";
+import { decodeFrame, FrameBuffer, paletteToRGBA, indexedToRGBA } from "./df/image";
+import { detectVersion } from "./df/version";
+import { readSetFileV1, type SetFileV1, type V1Standpoint, type V1Transition } from "./df/set-v1";
+import { readStgFile, readStgRegions, type StgRegion } from "./df/stg";
+import { GameHost } from "./host";
+import { setScreenGamma } from "./screen-gamma";
+import { DustFiles } from "./dust-files";
+import { DeferredAudioSink, WebAudioSink } from "./engine/audio";
+import { siteUrl } from "./site";
+import { DUST_VERSION } from "./version";
+
+/** the frame as the file stores it */
+const VIEW_W = 512;
+const VIEW_H = 264;
+/**
+ * The screen, at the size the play page uses — 1024x768.
+ *
+ * Which is exactly 2x a DreamFactory screen, and that is the reason for it
+ * rather than a coincidence: the engine draws 512x384, of which the top 264 rows
+ * are the view through the camera and the bottom 120 are the control panel. So
+ * the view goes at the top at an integer 2x and the remaining 240 rows are the
+ * panel's, left black until HOUSE.PRP is readable. Fitting the view to the whole
+ * canvas instead would centre it, which is the one thing the original never does.
+ */
+const SCREEN_W = 1024;
+const SCREEN_H = 768;
+const SCALE = 2;
+/** the engine's whole screen, which the control panel is drawn at */
+const FLAT_W = 512;
+const FLAT_H = 384;
+
+/**
+ * The stage the boot opens, and the flat inside it that is the frame around
+ * everything.
+ *
+ * Not a guess and not configuration: Dust's BOOTFILE ends
+ * `openstagefile("new.flt")`, and `readBootPlan` picks that name out of it
+ * unmodified. `mainpanel` is the first flat in the file, which is the one the
+ * stage shows on arrival — the same role `main.stg`'s `main 1` plays in Titanic.
+ */
+const BOOT_STAGE = "NEW.FLT";
+const BOOT_FLAT = "mainpanel";
+/**
+ * How many animation frames a picture is held for.
+ *
+ * Counted in rAF ticks rather than milliseconds, and that is not a detail. The
+ * original paces itself exactly this way: TI.EXE's frame throttle waits
+ * `framerate(n)` ticks of 50/3 ms between pictures and ships with n = 3, which is
+ * the 50 ms an engine step is. Three rAF ticks on a 60 Hz display is the same
+ * 50 ms, arrived at by counting the display's own beat instead of asking the wall
+ * what time it is — so a slow tab drops frames rather than tearing through them,
+ * which is what the original did too.
+ */
+const HOLD_TICKS = 3;
+
+/**
+ * DreamFactory 1 sends its palette to the screen VERBATIM, and that is measured
+ * rather than assumed.
+ *
+ * TI.EXE runs every palette entry through a per-channel power curve on the way to
+ * `AnimatePalette` — `pow(c / 255, 0.65) * 255` — which lifts the dark half hard
+ * (32 becomes 66, 64 becomes 104) and is the reason a faithful DreamFactory 4 port
+ * looks brighter than a verbatim one (see src/screen-gamma.ts). Applying it here
+ * too made Dust's night town look like dusk.
+ *
+ * DF.EXE does not do it. The three constants that curve is built from are all in
+ * TI.EXE — the exponent 0.65 appears four times, with 1/255 and 255.0 beside it —
+ * and in Dust's own engine, in all three of the builds it ships (DF386, DF486,
+ * DFPENT), the exponent and the 1/255 are absent entirely. So there is no curve to
+ * port and 1.0 is not a preference: it is what the palette bytes on the disc mean.
+ */
+const DF1_SCREEN_GAMMA = 1;
+
+/** one animation frame, from the browser's own beat */
+const tick = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
+
+/**
+ * Dust can be HEARD, and that is a measurement rather than an ambition.
+ *
+ * This page ran on a `NullAudioSink` — every sound the game asked for was decoded
+ * and dropped. Which is not a missing luxury: it is the game's only way of
+ * answering some things at all. A locked door is the case. NITE.SET's jail is shut
+ * on day 1 and its script says so out loud —
+ *
+ *     if currentview () = "west" & pointinjail (arg)
+ *         if lockjail ()  voicesound ("knock2")
+ *         else            sendtoprop ("door", setupprop ("jail"))
+ *
+ * — so the whole difference between "this door is locked" and "this door is
+ * broken" was a sound going into a bin. Measured on that click: the sink is
+ * handed 13312 samples at 22050 Hz, a real six-tenths of a second of knocking,
+ * out of a bank the reader already opens without a warning (all 26 of them do).
+ *
+ * The deferral is the play page's, for the play page's reason: an AudioContext may
+ * only be built from a user gesture, so the session plays into this from the first
+ * frame and the real sink is attached on one — which also starts whatever loops
+ * the game began meanwhile (see DeferredAudioSink).
+ *
+ * THE GESTURE IS THE START BUTTON, and only that. This used to be a pair of
+ * `{ once: true }` listeners on the window, which took the first click the player
+ * happened to make and was wrong twice over: whatever that click was FOR arrived
+ * with the audio still cold, and the theme the boot had started came in late, over
+ * a room the player was already walking around in. A page that needs a gesture
+ * should ask for one. So the boot ends on a button (see waitForStart) and this is
+ * called from it, after `play` has run — which is the ordering that matters,
+ * because the theme can only be started through a viewer and `playing` is what
+ * holds it. `startTheme` is a no-op if the boot's own `setupsound` already had its
+ * say (viewer.ts), so calling it here cannot double up.
+ */
+const audioSink = new DeferredAudioSink();
+function ensureAudio(): void {
+  if (audioSink.attached) return;
+  try {
+    audioSink.attach(new WebAudioSink());
+  } catch {
+    return; // no audio available in this browser
+  }
+  playing?.viewer?.startTheme();
+}
+
+const canvas = document.getElementById("screen") as HTMLCanvasElement;
+const ctx = canvas.getContext("2d", { alpha: false })!;
+/**
+ * The frame is composed at 512x264 and blitted up, rather than written straight
+ * into the big canvas a pixel at a time.
+ *
+ * `putImageData` cannot scale, so the choice is either this or 786432 manual
+ * stores per frame. One `drawImage` with smoothing off is a nearest-neighbour
+ * blit in the compositor, which is both faster and the same picture.
+ */
+const plate = document.createElement("canvas");
+plate.width = FLAT_W;
+plate.height = FLAT_H;
+const plateCtx = plate.getContext("2d", { alpha: false })!;
+const errEl = document.getElementById("err") as HTMLElement;
+const verEl = document.getElementById("ver");
+if (verEl) verEl.textContent = `dust-v${DUST_VERSION}`;
+const logEl = document.getElementById("log") as HTMLPreElement;
+
+/**
+ * The log, and it is now the page's ONLY prose surface.
+ *
+ * The strip used to carry a live readout — room, scene, view, how many of the cast
+ * are standing here and how many are in shot, and the canvas's backing size
+ * against its CSS size. Each of those was added for a question (the last one for
+ * "the actors look too big", where a number both ends could compare beat an
+ * impression), and each of them then sat there overwriting itself sixty times a
+ * second. Written HERE instead they become a trace: one line per move, scrollable,
+ * next to the boot that produced the room they describe.
+ *
+ * Which is why this is module-scope and no longer a closure inside `runBoot`. It
+ * appends rather than rebuilding `textContent`, because unlike a boot a trace has
+ * no end, and it keeps only the last {@link LOG_MAX} lines for the same reason.
+ */
+const LOG_MAX = 400;
+const logLines: string[] = [];
+function say(line: string): void {
+  logLines.push(line);
+  if (logLines.length > LOG_MAX) {
+    logLines.splice(0, logLines.length - LOG_MAX);
+    logEl.textContent = `${logLines.join("\n")}\n`;
+  } else {
+    logEl.append(`${line}\n`);
+  }
+  // scrollTop forces layout, so only when there is something to scroll
+  if (!logEl.hidden) logEl.scrollTop = logEl.scrollHeight;
+}
+/** the title card, which rises rather than leaving — see #brand in dust.html */
+const brandEl = document.getElementById("brand") as HTMLImageElement | null;
+/** the fuse: the bar, the burnt length, the boot's newest word, the percentage */
+const bootEl = document.getElementById("boot") as HTMLElement;
+const startEl = document.getElementById("start") as HTMLButtonElement;
+const fuseEl = document.getElementById("fuse") as HTMLElement;
+const burnEl = document.getElementById("burn") as HTMLElement;
+const bootSayEl = document.getElementById("bootsay") as HTMLElement;
+const bootPctEl = document.getElementById("bootpct") as HTMLElement;
+
+/**
+ * The boot's progress, as a count of something rather than a guess at a duration.
+ *
+ * A loading bar has two honest ways to be built and one dishonest one. The
+ * dishonest one is a timer: pick two seconds, animate to full, and be wrong on
+ * every machine that is not the one it was tuned on. The honest ones are a count
+ * of work units and a fraction of bytes, and this boot has a clean supply of the
+ * first: **fetches**. Dust's boot makes fourteen of them, and eight are named up
+ * front by its own BOOTFILE — `unilib.snd, gang.cst, extra.cst, house.prp,
+ * inven.prp, intro.mov, intro2.mov, new.flt` — which the port reads out as a
+ * {@link BootPlan} before it runs a line of script. So the denominator is
+ * discovered from the disc rather than written down here.
+ *
+ * The split between the two halves is measured too. On this machine a cold load
+ * is 2.4 s, of which `coldBoot` is 1.08 s and everything before it 1.3 s — and
+ * that front half is dominated by one thing, the fallback browser decoding a
+ * whole set (~150 frames, see `load`). Hence {@link HEAD}: the front half is
+ * genuinely about half the wait, so it gets to move the bar rather than leaving
+ * it parked at zero for a second and then racing.
+ */
+const HEAD = 0.46;
+/**
+ * Fetches the boot makes that the plan does not name — its BOOTFILE, the room it
+ * settles into, and the room's own siblings. Measured (14 total against a plan of
+ * 8, so 6), and only ever a FLOOR: `expect` below takes the larger of this and
+ * what has actually arrived, so a disc that asks for more slows the bar down
+ * instead of letting it reach 100% while work is still going on.
+ */
+const BOOT_TAIL = 6;
+
+/** the four definite steps of the front half, and what to call each one */
+const HEAD_STEPS: ReadonlyArray<readonly [number, string]> = [
+  [0.02, "reading the disc index"],
+  [0.10, "the control panel — new.flt"],
+  [0.16, "a room, in case the boot fails"],
+  [HEAD, "indexing the CD"],
+];
+
+/** the bar only ever goes forwards, whatever order the answers arrive in */
+let burnt = 0;
+let shownPct = -1;
+function progress(f: number, label?: string): void {
+  burnt = Math.max(burnt, Math.min(1, f));
+  const pct = Math.round(burnt * 100);
+  if (pct !== shownPct) {
+    shownPct = pct;
+    burnEl.style.width = `${pct}%`;
+    bootPctEl.textContent = `${pct}%`;
+    fuseEl.setAttribute("aria-valuenow", String(pct));
+  }
+  // the caption is one line and the newest one wins: what a player watches for
+  // two seconds is the engine naming what it just opened
+  if (label) bootSayEl.textContent = label;
+}
+
+/**
+ * The title card rises, by FLIP.
+ *
+ * Measure where it is, switch the state, measure where it landed, then play the
+ * difference back as a transform from the old rect to the new one. Which is not
+ * ceremony: the two states size the image by DIFFERENT properties — centred by
+ * `max-height: 46vh`, risen by `height: 100%` of a `clamp()`ed band — and a
+ * transition between two sizing modes has nothing to interpolate. A transform
+ * does, and it is the one property that animates without touching layout, which
+ * matters here because the game's frame loop starts in the same frame this does.
+ *
+ * The fuse is PINNED before the switch and faded after it. It is a flex child of
+ * the band the card is rising into, so the class change removes it from the
+ * layout it is standing in; freezing it at the rect it already occupies lets it
+ * fade out where the player last saw it instead of jumping to the top with the
+ * logo.
+ */
+/** a real pause, for the one place that wants to be SEEN rather than be quick */
+const hold = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The boot is done; wait to be told to go.
+ *
+ * Held open for {@link BURN_OUT} first, because the fuse's own `width` transition
+ * is 380ms and swapping it out the instant the number says 100 means the bar never
+ * visibly arrives — the whole point of counting fetches was to earn that end, so
+ * it gets to be watched reaching it.
+ *
+ * Then the gauge crossfades to the button in the same slot (a fixed-height #boot,
+ * see the styles) and the button takes focus, so this is a keyboard gesture as
+ * much as a pointer one — Enter and Space are what a focused button already does,
+ * and the AudioContext accepts either.
+ */
+const BURN_OUT = 520;
+async function waitForStart(): Promise<void> {
+  await hold(BURN_OUT);
+  bootEl.classList.add("ready");
+  startEl.focus();
+  await new Promise<void>((resolve) =>
+    startEl.addEventListener("click", () => resolve(), { once: true }),
+  );
+}
+
+let risen = false;
+function raiseTitle(): void {
+  if (risen) return; // the failure paths can both reach here; the move happens once
+  risen = true;
+  const bar = bootEl.getBoundingClientRect();
+  if (bar.width) {
+    bootEl.style.position = "fixed";
+    bootEl.style.left = `${bar.left}px`;
+    bootEl.style.top = `${bar.top}px`;
+    bootEl.style.width = `${bar.width}px`;
+  }
+  const first = brandEl?.getBoundingClientRect();
+  document.body.classList.remove("booting");
+  document.body.classList.add("playing");
+  const last = brandEl?.getBoundingClientRect();
+  if (brandEl && first?.width && last?.width) {
+    const k = first.width / last.width;
+    const dx = first.left + first.width / 2 - (last.left + last.width / 2);
+    const dy = first.top + first.height / 2 - (last.top + last.height / 2);
+    brandEl.style.transition = "none";
+    brandEl.style.transform = `translate(${dx}px, ${dy}px) scale(${k})`;
+    // two frames: one for the browser to accept the start pose, one to leave it
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        brandEl.style.transition = "transform 980ms cubic-bezier(.28,.74,.22,1)";
+        brandEl.style.transform = "";
+      }),
+    );
+  }
+  // the fuse burns out: down, dim, and blurred, under the rising card
+  bootEl.style.opacity = "0";
+  bootEl.style.translate = "0 18px";
+  bootEl.style.filter = "blur(3px)";
+  bootEl.addEventListener("transitionend", () => bootEl.remove(), { once: true });
+}
+
+/** the sets on the disc, in the order the CD lists them — resolved through
+ *  siteUrl like every URL a page builds, so the page runs from any directory */
+const SET_DIR = siteUrl("gamefiles/dust/dustcd/DATA/");
+
+/** the control panel: a full-screen flat, and the buttons drawn on it */
+interface Panel {
+  pixels: Uint8Array;
+  rgba: Uint8ClampedArray;
+  regions: StgRegion[];
+}
+
+/**
+ * The panel, fetched once and kept across set changes — which is what the
+ * engine does with it too. `openstagefile` happens in `boot()`, before any room
+ * is opened, and the stage outlives every `opensetfile` after it.
+ */
+let panel: Panel | null = null;
+
+interface Loaded {
+  name: string;
+  set: SetFileV1;
+  /** indexed pixels per frame container, decoded in file order */
+  frames: Map<number, Uint8Array>;
+  /** which palette is in force */
+  clut: number;
+}
+
+let live: Loaded | null = null;
+let at: V1Standpoint | null = null;
+let animating = false;
+
+const key = (s: V1Standpoint): string => `${s.x},${s.z},${s.facing}`;
+
+/**
+ * The rotational order of the facing IDs, read out of the file rather than
+ * assumed.
+ *
+ * The IDs are not in compass order — APOTH turns 1 -> 3 -> 2 -> 4 -> 1 one way
+ * round and the reverse the other — so "which way is right" cannot come from
+ * comparing numbers. Every cell carries both cycles as eight turn records, so
+ * the answer is simply the two turns leaving the standpoint we are on, taken in
+ * the order the register stores them: the register groups one whole cycle before
+ * the other, which makes the first the consistent sense across the set.
+ */
+function turnsFrom(set: SetFileV1, s: V1Standpoint): V1Transition[] {
+  return set.transitions.filter((t) => t.kind === "turn" && key(t.from) === key(s));
+}
+function walkFrom(set: SetFileV1, s: V1Standpoint): V1Transition | undefined {
+  return set.transitions.find((t) => t.kind === "walk" && key(t.from) === key(s));
+}
+
+/**
+ * The picture of standing at a standpoint.
+ *
+ * The HI-RES still first — the big frame at the tail of a slot, which every
+ * standpoint on the disc has exactly one of (see `set-v1.ts`). That is what the
+ * original shows you while you are stopped; the move's own frames are the low-res
+ * ones it flicks through on the way. Preferring it is not just fidelity, it is
+ * also visibly sharper.
+ *
+ * Falling back to a move's last frame covers the standpoint whose still failed to
+ * decode. Its arrival frame is the same view at lower detail, which is a better
+ * answer than a black screen.
+ */
+function stillAt(l: Loaded, s: V1Standpoint): Uint8Array | null {
+  for (const t of l.set.transitions) {
+    if (key(t.from) !== key(s) || t.departureStill < 0) continue;
+    const px = l.frames.get(t.departureStill);
+    if (px) return px;
+  }
+  for (const t of l.set.transitions) {
+    if (key(t.to) !== key(s) || !t.frames.length) continue;
+    const px = l.frames.get(t.frames[t.frames.length - 1]);
+    if (px) return px;
+  }
+  return null;
+}
+
+const rgbaOf = (l: Loaded): Uint8ClampedArray =>
+  paletteToRGBA(l.set.cluts[l.clut]?.raw ?? l.set.paletteRaw, 256);
+
+/**
+ * Compose the screen the way the engine does: the stage's flat underneath, the
+ * room's view over its top 264 rows.
+ *
+ * Two palettes in one picture, which an 8-bit engine could not do — the original
+ * `clut()`s between them and the panel is authored to survive whichever room's
+ * palette is loaded. A port drawing in truecolour has no such constraint, so each
+ * half is colourised through its own file's palette and comes out as its author
+ * meant it rather than as the hardware forced it.
+ */
+function paint(px: Uint8Array): void {
+  if (!live) return;
+  if (panel) {
+    const flat = plateCtx.createImageData(FLAT_W, FLAT_H);
+    indexedToRGBA(panel.pixels, FLAT_W, FLAT_H, panel.rgba, flat.data);
+    plateCtx.putImageData(flat, 0, 0);
+  } else {
+    plateCtx.fillStyle = "#000";
+    plateCtx.fillRect(0, 0, FLAT_W, FLAT_H);
+  }
+  const view = plateCtx.createImageData(VIEW_W, VIEW_H);
+  indexedToRGBA(px, VIEW_W, VIEW_H, rgbaOf(live), view.data);
+  plateCtx.putImageData(view, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(plate, 0, 0, FLAT_W * SCALE, FLAT_H * SCALE);
+}
+
+function clearScreen(): void {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+}
+
+/**
+ * Open the boot stage and decode its opening flat.
+ *
+ * The same two readers the play page uses — `readStgFile` now reads both engines,
+ * because a v1 `.FLT` is a v4 `.STG` with a shorter header and a 28-byte flat
+ * record instead of 46. Nothing here knows which it got.
+ */
+async function loadPanel(): Promise<void> {
+  const res = await fetch(SET_DIR + BOOT_STAGE);
+  if (!res.ok) return;
+  const stg = readStgFile(new Uint8Array(await res.arrayBuffer()));
+  const flat = stg.flats.find((f) => f.name.toLowerCase() === BOOT_FLAT) ?? stg.flats[0];
+  if (!flat?.locationFrame) return;
+  const art = stg.file.containers[flat.locationFrame];
+  if (!art || art.gap) return;
+  const fb = new FrameBuffer();
+  const d = decodeFrame(art.data, fb);
+  if (d.width !== FLAT_W || d.height !== FLAT_H) return;
+  panel = {
+    pixels: fb.pixels.slice(0, FLAT_W * FLAT_H),
+    rgba: paletteToRGBA(stg.paletteRaw, 256),
+    regions: flat.locationClickLogic
+      ? readStgRegions(stg.file.containers[flat.locationClickLogic]?.data ?? new Uint8Array(), stg.version)
+      : [],
+  };
+}
+
+function show(): void {
+  if (!live || !at) return;
+  const px = stillAt(live, at);
+  if (px) paint(px);
+  const walk = walkFrom(live.set, at);
+  say(
+    `${live.set.setName || live.name} cell (${at.x},${at.z}) facing ${at.facing}` +
+      ` · ${walk ? "walkable" : "wall ahead"}`,
+  );
+}
+
+/** play a transition's frames, then stand at its far end */
+async function move(t: V1Transition): Promise<void> {
+  if (!live || animating) return;
+  animating = true;
+  canvas.classList.add("busy");
+  try {
+    for (const fr of t.frames) {
+      const px = live.frames.get(fr);
+      if (px) paint(px);
+      for (let held = 0; held < HOLD_TICKS; held++) await tick();
+    }
+    at = t.to;
+    show();
+  } finally {
+    animating = false;
+    canvas.classList.remove("busy");
+  }
+}
+
+async function load(name: string): Promise<void> {
+  errEl.textContent = "";
+  const res = await fetch(SET_DIR + name);
+  if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const version = detectVersion(bytes);
+  if (version !== 1) throw new Error(`${name} reports DreamFactory version ${version}, not 1`);
+  const set = readSetFileV1(bytes);
+
+  // decode every frame in FILE order, into one buffer, keeping each result —
+  // see the note at the top of this file on why the order is not optional
+  const file = readContainerFile(bytes);
+  const fb = new FrameBuffer();
+  const frames = new Map<number, Uint8Array>();
+  for (let i = 0; i < file.containers.length; i++) {
+    const c = file.containers[i];
+    if (c.gap || c.data.length < 8) continue;
+    try {
+      const d = decodeFrame(c.data, fb);
+      if (d.width === VIEW_W && d.height === VIEW_H) {
+        frames.set(i, fb.pixels.slice(0, VIEW_W * VIEW_H));
+      }
+    } catch {
+      /* not a frame — scripts, registers and the header all live here too */
+    }
+  }
+
+  clearScreen();
+  live = { name, set, frames, clut: 0 };
+  at = set.transitions[0]?.from ?? { x: 0, z: 0, facing: 1 };
+  const cells = new Set(set.transitions.map((t) => `${t.from.x},${t.from.z}`)).size;
+  const stills = new Set(set.transitions.filter((t) => t.departureStill >= 0).map((t) => key(t.from))).size;
+  say(
+    `${name}: v1 · ${set.gridWidth}x${set.gridHeight} grid, ${cells} standpoints · ` +
+    `${set.transitions.length} moves · ${frames.size} frames · ${stills} stills · ${set.actors.length} cast · ` +
+    `clut ${live.clut + 1}/${set.cluts.length}` +
+    (panel ? ` · panel ${BOOT_FLAT} (${panel.regions.length} buttons)` : " · no panel") +
+      (set.warnings.length ? ` · ${set.warnings.length} warnings` : ""),
+  );
+  show();
+}
+
+addEventListener("keydown", (e) => {
+  // the browser's own controls, only while the GAME is not the one on screen
+  if (playing) return;
+  if (!live || !at || animating) return;
+  if (e.target instanceof HTMLSelectElement) return;
+  const turns = turnsFrom(live.set, at);
+  if (e.key === "ArrowRight" && turns[0]) void move(turns[0]);
+  else if (e.key === "ArrowLeft" && turns[1]) void move(turns[1]);
+  else if (e.key === "ArrowUp") {
+    const w = walkFrom(live.set, at);
+    if (w) void move(w);
+  } else if (e.key === "c" || e.key === "C") {
+    live.clut = (live.clut + 1) % Math.max(1, live.set.cluts.length);
+    say(`clut ${live.clut + 1}/${live.set.cluts.length}`);
+    show();
+    return;
+  } else return;
+  e.preventDefault();
+});
+
+/**
+ * Open the panel and a first room, so a boot that fails still leaves something
+ * on screen.
+ *
+ * This was a set BROWSER, with a `<select>` of every room on the disc: it was the
+ * whole page before the game booted, and a jump-anywhere control after. The game
+ * boots now, and a control that drops the camera into a room the story has not
+ * reached is a debug tool sitting in the one strip this page has — so the picker
+ * is gone and what it was built around stays, because that is the part the page
+ * still needs: the panel first (exactly as `boot()` does it, openstagefile before
+ * any room) and then a room, drawn straight out of its own move table with no
+ * engine involved.
+ *
+ * The list comes from the gamefiles manifest the dev server and the build both
+ * publish, so this page needs no directory listing of its own.
+ */
+async function browse(): Promise<void> {
+  progress(...HEAD_STEPS[0]);
+  const res = await fetch(siteUrl("gamefiles-dust.json"));
+  const manifest: Record<string, number> = res.ok ? await res.json() : {};
+  const sets = Object.keys(manifest)
+    .filter((p) => /^gamefiles\/dust\/dustcd\/DATA\/.+\.SET$/i.test(p))
+    .map((p) => p.split("/").pop()!)
+    .sort();
+  if (!sets.length) {
+    errEl.textContent = "no Dust sets found under gamefiles/dust/dustcd/DATA/";
+    return;
+  }
+  // the panel first, exactly as boot() does it: openstagefile before any room
+  progress(...HEAD_STEPS[1]);
+  await loadPanel().catch(() => { /* the shell still works without it */ });
+  progress(...HEAD_STEPS[2]);
+  await load(sets.includes("APOTH.SET") ? "APOTH.SET" : sets[0]);
+}
+
+/**
+ * Run Dust's own BOOTFILE in the port's interpreter.
+ *
+ * Not a simulation of a boot and not a script of my own: `GameHost.coldBoot`, the
+ * same call the play page makes, over a {@link DustFiles} instead of a
+ * `FileStore`. It takes the no-landing-room path — the one the Titanic demo takes
+ * — because `readBootPlan` finds no first room in Dust's boot, which is correct:
+ * its `advanceday` lives in `new.flt` and is reached from the stage, not from
+ * here.
+ *
+ * MOVIES ARE NOT AWAITED. `playmovie` is modal in TI.EXE and the port blocks on
+ * it only when something is advancing frames; this page has no viewer driving the
+ * movie player, so `hasRealFrames` stays false, the film starts and the script
+ * carries on. That is the port's own documented behaviour for a host with no
+ * frame source, not a special case added here — and it is why the boot completes
+ * rather than parking on the intro.
+ *
+ * What is being measured is what the log says: which files the boot opened, which
+ * it asked for and did not get, and where the globals ended up. `day = 1`,
+ * `clock = 2`, `phase = 1` is Dust's boot having run to its last line.
+ */
+async function runBoot(): Promise<void> {
+  // The boot's lines go to the log AND to the fuse's caption. The boot's own
+  // words are better than any I could write there, because they name what
+  // actually opened: `cast loaded: gang.cst (26 characters)` is the port doing
+  // the thing this page exists to demonstrate. The log stays closed while it
+  // scrolls past (`b` opens it) — a wall of text and a title card were fighting
+  // for the same middle of the same page, and only one of them is the picture.
+  const bootSay = (l: string) => {
+    say(l);
+    progress(burnt, l.trim());
+  };
+  progress(...HEAD_STEPS[3]);
+  // the build the reader is looking at, first thing in its own account —
+  // Dust versions separately from the TAOOT site (dust-v* tags, deploy.yml)
+  bootSay(`Dust RE v${DUST_VERSION}`);
+  const files = await DustFiles.open();
+  bootSay(`indexed ${files.size} names off the Dust CD`);
+  /**
+   * From here the bar is a FETCH COUNT — see HEAD/BOOT_TAIL above.
+   *
+   * `expect` is re-derived on every arrival rather than fixed once, and takes the
+   * larger of the plan's own reckoning and one more than has landed. So the bar
+   * cannot reach the end while the boot is still asking for things, and it cannot
+   * go backwards when a disc asks for more than this one does.
+   */
+  let expect = BOOT_TAIL;
+  files.onFileLoaded = (name) => {
+    expect = Math.max(expect, files.loads.length + 1);
+    progress(HEAD + (1 - HEAD) * (files.loads.length / expect), name);
+  };
+  const host = new GameHost(files, audioSink, {
+    log: bootSay,
+    hud: (t) => t && bootSay(`  ${t}`),
+  });
+  /**
+   * Give the session a real frame source before the boot runs.
+   *
+   * Without it `hasRealFrames` is false, `playmovie` starts a film and returns,
+   * and any script poll loop (`while stilldown()`, `forceupdate()`) has nothing
+   * advancing it. With it, the boot's intro plays modally and the game's own
+   * loops work — which is the difference between a boot that completed and a game
+   * that runs.
+   */
+  host.session.nextFrame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
+  const plan = await host.bootPlan();
+  // the disc's own answer to "how much is there to do": eight names, read out of
+  // Dust's BOOTFILE before a line of it runs
+  expect = Math.max(expect, plan.resources.length + BOOT_TAIL);
+  bootSay(`boot plan: ${plan.resources.join(", ") || "(none)"}`);
+  bootSay(`  casts: ${plan.casts.join(", ") || "(none)"}  first room: ${plan.landingSet ?? "(none named)"}`);
+  const started = performance.now();
+  try {
+    await host.coldBoot();
+  } catch (e) {
+    bootSay(`!! coldBoot threw: ${(e as Error).message}`);
+  }
+  const s = host.session;
+  const g = (n: string) => s.interp.globals.get(n);
+  bootSay(`boot returned after ${Math.round(performance.now() - started)} ms`);
+  bootSay(`globals: day=${g("day")} clock=${g("clock")} phase=${g("phase")} handitem=${JSON.stringify(g("handitem"))}`);
+  bootSay(`keys: north=${JSON.stringify(g("keynorth"))} east=${JSON.stringify(g("keyeast"))} west=${JSON.stringify(g("keywest"))}`);
+  bootSay(`stage: ${s.stageName || "(none)"} · flat: ${s.currentFlat}` +
+    ` · ${s.stageCtrl.stageFile?.flats.length ?? 0} flats` +
+    ` · ${s.stageCtrl.currentFlatRegions().length} buttons on it`);
+  bootSay(`shops open: ${[...s.propRuntime.shops.keys()].join(", ") || "(none)"}`);
+  bootSay(`casts open: ${[...s.actorRuntime.casts.keys()].join(", ") || "(none)"}` +
+    ` · ${s.actorRuntime.actors.size} actors`);
+  const missed = [...new Set(files.misses)].filter((m) => !files.has(m));
+  bootSay(`asked for and never got: ${missed.join(", ") || "(nothing)"}`);
+  bootSay(`room: ${s.currentSetFile || "(none)"} · viewer ${host.viewer ? "up" : "DOWN"}`);
+  files.onFileLoaded = null; // the game loads for itself from here
+  if (host.viewer) {
+    bootSay("playing — arrows or W/A/D to move, space for a door, b for this log");
+    progress(1, "ready");
+    await waitForStart();
+    raiseTitle();
+    // `play` first, then the audio: ensureAudio starts the theme through the
+    // viewer and `playing` is what holds it. The other way round the sink attached
+    // to a game that had not been declared yet and the theme never began.
+    play(host);
+    ensureAudio();
+  } else {
+    // no viewer: what is on screen is the fallback browser's room, which is worth
+    // seeing, so the card rises anyway — and the log opens, because at this point
+    // the log IS the result.
+    progress(1, "no viewer — showing the disc instead");
+    raiseTitle();
+    logEl.hidden = false;
+  }
+}
+
+/**
+ * The game, once it is booted: the same two lines the play page's frame loop is.
+ *
+ * `host.viewer` is a real {@link SetViewer} over a real {@link SetFile} — Dust's
+ * set having been translated into that shape rather than read into one of its own
+ * (src/df/set-v1-to-v4.ts) — so there is nothing here that knows which engine
+ * wrote the room. The rings, the hi-res settle, the prop and actor layers, the
+ * transition modes: all of it is the port's, unchanged.
+ */
+let playing: GameHost | null = null;
+
+function play(host: GameHost): void {
+  playing = host;
+  /**
+   * A handle on the running game, for the console and for Playwright.
+   *
+   * The play page publishes `window.dbg` for the same reason (src/main.ts) and
+   * this page had nothing, which made every question about the live state —
+   * which props are visible, which actors the room thinks it has — unanswerable
+   * from outside. An experiment whose state cannot be read is an experiment that
+   * can only be judged by screenshots.
+   */
+  (window as unknown as { dust: unknown }).dust = {
+    host,
+    session: host.session,
+    get viewer() {
+      return host.viewer;
+    },
+  };
+  logEl.hidden = true;
+  const s = host.session;
+  let shownRoom = "";
+  let shownSize = "";
+  let roomAsked = -Infinity;
+  let sizeAsked = -Infinity;
+  /**
+   * From here on there IS a frame source, so say so.
+   *
+   * The boot deliberately runs without one (see runBoot) — nothing is driving
+   * `viewer.tick` yet, so a modal `playmovie` would park the boot on its own
+   * intro. The loop below drives it, which changes three answers at once and all
+   * three matter:
+   *
+   *   - `playmovie` becomes MODAL, as it is in DF.EXE. INVEN.PRP's close-ups are
+   *     written for that and only that: `screentoblack` · `blackscreen` ·
+   *     `playmovie` · `clut("black")` · `blacktoscreen("set")`. Non-blocking, the
+   *     fade back to the room runs while the film is still on screen.
+   *   - `forceupdate` stops self-advancing the clock 50 ms a call. The rAF loop
+   *     already advances it by REAL time, so doing both ran the sim clock at ~4x
+   *     and left every later `delay` waiting for real time to catch up.
+   *   - poll loops are spared the interpreter's runaway guard, which is what they
+   *     are: `while stilldown()` waits on a hand, not on arithmetic.
+   */
+  s.hasRealFrames = true;
+  say(
+    `v1 · ${s.propRuntime.shops.size} shops · ${s.actorRuntime.actors.size} actors · ` +
+      `stage ${s.stageName}`,
+  );
+  const loop = (now: number): void => {
+    const v = host.viewer;
+    if (v) {
+      v.tick(now);
+      v.render(ctx);
+    }
+    /*
+     * The trace: where you are, and who else is here.
+     *
+     * The cast is placed by scripts running off the stage rather than by the set
+     * (see ActorRuntime.settleStars), so "how many are standing here, and how many
+     * can I see from where I am" is the one number that says whether that whole
+     * chain worked — and it is not something a screenshot answers when the answer
+     * is none.
+     *
+     * LOGGED ONLY WHEN IT CHANGES, and asked four times a second rather than
+     * sixty. Standing still, the answer is the same every frame, and the scan
+     * behind it walks all 54 actors and tests each against the camera — next to a
+     * game loop that already has a whole screen to composite. Nothing this
+     * describes can change faster than a walk, so 250ms cannot miss a move.
+     */
+    if (now - roomAsked > 250) {
+      roomAsked = now;
+      const here = [...s.actorRuntime.actors.values()].filter(
+        (a) => a.visible && a.setName === s.actorRuntime.currentSet,
+      );
+      const cam = s.activeCamera();
+      const shown = cam ? here.filter((a) => s.actorRuntime.onScreen(a, cam)).length : 0;
+      const room =
+        `${s.currentSetFile || "?"} ${s.currentSceneName()} · ${s.currentViewName()}` +
+        ` · ${here.length} here, ${shown} in view`;
+      if (room !== shownRoom) {
+        shownRoom = room;
+        say(room);
+      }
+    }
+    // The canvas's real size on the page, because the engine REWRITES its backing
+    // store every frame (ScreenPresenter.blit pins it to the engine's own 512x384)
+    // and only CSS decides how big that is drawn. Kept because it is what turned
+    // "it looks too big" into a number both ends could compare.
+    //
+    // getBoundingClientRect FORCES LAYOUT, so it is asked once a second rather
+    // than once a frame: it is a diagnostic about the window, and the window is
+    // not what is moving.
+    if (now - sizeAsked > 1000) {
+      sizeAsked = now;
+      const r = canvas.getBoundingClientRect();
+      const size = `canvas ${canvas.width}x${canvas.height} drawn at ${Math.round(r.width)}x${Math.round(r.height)}`;
+      if (size !== shownSize) {
+        shownSize = size;
+        say(size);
+      }
+    }
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+
+/**
+ * Keys, routed exactly as the play page routes them.
+ *
+ * Which matters most for the letters: Dust's boot maps `keynorth`/`keywest`/
+ * `keyeast` — W, A and D — onto the arrow names itself, in its own keydown
+ * handler, and then forwards to the scene. So the letters have to ARRIVE for the
+ * game's own bindings to work, and dropping anything unrecognised here would
+ * silently disable half of Dust's controls.
+ */
+addEventListener("keydown", (e) => {
+  if (e.target instanceof HTMLSelectElement) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "b" || e.key === "B") {
+    e.preventDefault();
+    logEl.hidden = !logEl.hidden;
+    return;
+  }
+  const host = playing;
+  const v = host?.viewer;
+  if (!host || !v) return;
+  const arrow: Record<string, string> = {
+    ArrowUp: "uparrow", ArrowDown: "downarrow",
+    ArrowLeft: "leftarrow", ArrowRight: "rightarrow",
+  };
+  const name = arrow[e.key] ?? (e.key === " " ? " " : e.key === "Escape" ? "." : null);
+  const ch = name ?? (e.key.length === 1 ? e.key.toLowerCase() : "");
+  if (!ch) return;
+  /**
+   * Was this key HELD, rather than pressed?
+   *
+   * `isrepeat` is the engine's answer to that and 26 of Dust's scripts read it,
+   * always the same way — as the guard on a thing that must happen once however
+   * long the arrow is leant on:
+   *
+   *     if arg = "uparrow" & currentview () = "north" & propowner ("door") = "court"
+   *         if isrepeat
+   *             exitcode
+   *         endif
+   *         sendtostage (gotointerior ("court.set"))
+   *
+   * Nothing in the port ever set it, so it was always false and every one of those
+   * guards was dead: a held arrow walked you through a door twice, and re-fired
+   * whatever the standpoint does on arrival. The browser already knows the answer
+   * (`KeyboardEvent.repeat`) and this is the only place that has it.
+   *
+   * Dust-only, and not because it would be wrong on the play page: no TAOOT script
+   * mentions `isrepeat` at all, in any of the six editions.
+   */
+  host.session.interp.globals.set("isrepeat", e.repeat ? 1 : 0);
+  void host.session.track(v.keyDown(ch, e.key === "Escape"));
+  e.preventDefault();
+});
+
+/** the pointer, in the canvas's own 512x384 coordinates */
+function canvasCoords(e: PointerEvent | MouseEvent): { x: number; y: number } {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: Math.floor(((e.clientX - r.left) / r.width) * FLAT_W),
+    y: Math.floor(((e.clientY - r.top) / r.height) * FLAT_H),
+  };
+}
+
+/**
+ * Press, move, release — three listeners and not one, because Dust asks the
+ * button a question a whole click cannot answer.
+ *
+ * This page used to call `viewer.click()`, which is a press with the release
+ * already in it and `pointerDown` never set. That is enough for anything that
+ * happens ON the press, which is why walking and doors and conversations all
+ * worked — and it silently disables everything the game does by POLLING, because
+ * `stilldown()` and `button()` read `session.pointerDown` and it was never true.
+ *
+ * Dust polls in two places a player lives in. Carrying an object is the first
+ * (INVEN.PRP `stdmouse`): the held item is dragged out of the panel and dropped
+ * on whoever should have it —
+ *
+ *     propdist (handitem, -30000)
+ *     while stilldown ()
+ *         propxy (handitem, pointx (arg), pointy (arg))
+ *         forceupdate ()
+ *         arg = mouse ()
+ *     endwhile
+ *     propdist (handitem, dist)
+ *     propxy (handitem, 316, 320)
+ *     for count = 1 to countactors ()
+ *         if pointinactor (indextoactor (count), arg)
+ *             sendtoactor (thename, offerobject (what))
+ *
+ * With the button never down that loop makes no passes, so `arg` is still the
+ * press — which is the bone in the panel, where no actor and no room is — and
+ * the item goes straight back to 316,320 having been offered to nobody.
+ *
+ * That was the SECOND gate on the same gesture. The first was that the click
+ * never reached the prop at all (see BOOT_UI_SHOPS in engine/session.ts); this is
+ * what stops it once it does.
+ *
+ * The second is the whole "would you like this?" screen (`handleselect`), a modal
+ * pump that is nothing but `if button ()` around a `hittest` — with the button
+ * stuck up it spins for ever and no click in it exists.
+ *
+ * `mouse()` needs the move for the same reason: a drag is a question about where
+ * the pointer is NOW, and without pointermove it only ever answers where the
+ * gesture started.
+ */
+canvas.addEventListener("pointerdown", (e) => {
+  const host = playing;
+  const v = host?.viewer;
+  if (!host || !v) return;
+  const { x, y } = canvasCoords(e);
+  host.session.setPointer(x, y);
+  host.session.pointerDown = true;
+  // what the press CARRIED: Dust reads `shiftkey()` inside its own mousedown
+  // (HOUSE.PRP's HELP button, INVEN.PRP's debug `hotdist`), so the question is
+  // what was held when the click happened, not what is held now.
+  host.session.shiftDown = e.shiftKey;
+  void host.session.track(v.press(x, y), `press ${x},${y}`);
+});
+
+// on the window, not the canvas: a drag that ends off-canvas still has to end.
+addEventListener("pointermove", (e) => {
+  const host = playing;
+  if (!host?.viewer) return;
+  const { x, y } = canvasCoords(e);
+  host.session.setPointer(x, y);
+});
+
+addEventListener("pointerup", () => {
+  const host = playing;
+  if (!host?.viewer) return;
+  host.session.pointerDown = false;
+  host.viewer?.release(host.session.pointerX, host.session.pointerY);
+});
+
+/**
+ * Boot the game. If it cannot produce a viewer, show the set browser instead.
+ *
+ * In that order and not the other way round, because the browser decodes every
+ * frame of a set up front (~20 MB and about a second) and the game does not need
+ * it. The fallback is the honest half of this: a boot that fails should leave
+ * something on screen that says so and still shows the disc.
+ */
+async function start(): Promise<void> {
+  setScreenGamma(DF1_SCREEN_GAMMA);
+  await browse();
+  await runBoot();
+}
+
+start().catch((e) => {
+  errEl.textContent = String(e);
+  // a boot that threw has an account of itself and no picture: raise the card so
+  // the log has the page, and stop the fuse where it stopped rather than leaving
+  // it burning at whatever fraction it had reached
+  progress(burnt, String(e));
+  raiseTitle();
+  logEl.hidden = false;
+});

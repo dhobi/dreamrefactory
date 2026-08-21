@@ -1,4 +1,5 @@
 import type { Actor } from "../../df/set";
+import { CELL_UNITS } from "../../df/set-v1-to-v4";
 import type { GameSession } from "../session";
 import { Builtin, Frame, Interpreter, Value, toStr } from "../interp";
 
@@ -17,6 +18,30 @@ export interface BuiltinCtx {
   log: (line: string) => void;
   /** a named world point ("star") from the current set's actor table */
   findStar: (name: Value) => Actor | undefined;
+  /**
+   * `[column, row]` of a scene on a DreamFactory 1 set's grid, else null — what
+   * `propexists` and `actorexists` answer there.
+   *
+   * Two meanings on one opcode pair, and the second is not a guess: Dust's
+   * `new.flt` draws the town map's you-are-here dot at
+   *
+   *     x = propexists (currentscene ()) * 20 + 222
+   *     y = actorexists (currentscene ()) * 20 + 93
+   *
+   * so on a v1 set these answer a scene's column and row in cells, twenty pixels
+   * apart. `extra.cst`'s wandering pig confirms it from the other side: its
+   * `adjscene` treats the pair as coordinates and calls two scenes adjacent when
+   * one matches and the other differs by exactly one.
+   *
+   * Null for anything that is not a scene of an open v1 set, which is what keeps
+   * Titanic exactly as it was: its 3465 scripts ask these two about props and
+   * characters only (`propexists("sec")`, `actorexists("stok" @ n)`).
+   *
+   * A v1 grid scene is normally named for its cell — `Scene B11` is column 1, row
+   * 10 — but not always: TOWN's cell (3,10) is called `chicken`. So the answer
+   * comes from the scene record and cannot be parsed out of the name.
+   */
+  sceneCell: (name: Value) => [number, number] | null;
   /**
    * Give up one REAL rendered frame from inside a script poll loop.
    *
@@ -91,6 +116,15 @@ export function createBuiltinCtx(session: GameSession): BuiltinCtx {
     findStar: (name) => {
       const n = toStr(name ?? "").toLowerCase();
       return session.currentBinding?.set.actors.find((a) => a.identifier.toLowerCase() === n);
+    },
+    sceneCell: (name) => {
+      const set = session.currentBinding?.set;
+      if (set?.version !== 1) return null;
+      const want = toStr(name ?? "").toLowerCase();
+      const sc = set.scenes.find((s) => s.sceneName.toLowerCase() === want);
+      // world units back to the cell they name: a standpoint stands in the middle
+      // of its cell, so a floor divide is exact (see CELL_UNITS)
+      return sc ? [Math.floor(sc.xAxisMap / CELL_UNITS), Math.floor(sc.zAxisMap / CELL_UNITS)] : null;
     },
     yieldFrame: async () => {
       if (session.hasRealFrames) {

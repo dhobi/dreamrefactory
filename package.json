@@ -2,10 +2,12 @@
   "name": "taoot-web",
   "private": true,
   "version": "0.9.50",
+  "dustVersion": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:dust": "tsc && vite build --mode dust",
     "manifest": "tsx tools/mkmanifest.ts",
     "preview": "vite preview",
     "test": "vitest run",
@@ -36,6 +38,7 @@
     "dump": "tsx tools/dumpset.ts",
     "mklang": "tsx tools/mklangstg.ts",
     "mknightdive": "tsx tools/mknightdive.ts",
+    "mkdustlogo": "tsx tools/mkdustlogo.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"

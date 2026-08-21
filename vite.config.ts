@@ -1,12 +1,24 @@
 import { defineConfig, Plugin } from "vite";
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, normalize, resolve } from "node:path";
-import { MANIFEST_FILE, MANIFEST_URL, buildManifest } from "./tools/manifest";
+import {
+  DUST_MANIFEST_FILE,
+  DUST_MANIFEST_URL,
+  MANIFEST_FILE,
+  MANIFEST_URL,
+  buildManifest,
+  dustManifest,
+} from "./tools/manifest";
 import { NIGHTDIVE_GIF, NIGHTDIVE_OUT, writeNightdiveMov } from "./tools/mknightdive";
 
-/** the port's version — package.json is the one place it is written; the pages
-    read it back through `__APP_VERSION__` (src/version.ts) */
-const VERSION = JSON.parse(readFileSync("package.json", "utf8")).version as string;
+/** the port's versions — package.json is the one place they are written; the
+    pages read them back through `__APP_VERSION__` / `__DUST_VERSION__`
+    (src/version.ts). Two numbers because Dust RELEASES separately: a `v*` tag
+    ships the TAOOT site and a `dust-v*` tag ships the Dust page, each checked
+    against its own field (deploy.yml). */
+const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+const VERSION = pkg.version as string;
+const DUST_VERSION = (pkg.dustVersion as string) ?? "0.0.0";
 
 /**
  * The two things a page needs from `gamefiles/` — a listing of what is there, and
@@ -43,6 +55,12 @@ function gamefilesManifest(): Plugin {
         res.setHeader("cache-control", "no-store"); // a tree can change under it
         res.end(JSON.stringify(buildManifest()));
       });
+      // the Dust page's slice of the same walk (see tools/manifest.ts)
+      server.middlewares.use(DUST_MANIFEST_URL, (_req, res) => {
+        res.setHeader("content-type", "application/json");
+        res.setHeader("cache-control", "no-store");
+        res.end(JSON.stringify(dustManifest(buildManifest())));
+      });
 
       const rootDir = resolve("gamefiles");
       server.middlewares.use("/gamefiles", (req, res, next) => {
@@ -73,6 +91,9 @@ function gamefilesManifest(): Plugin {
       this.info?.(
         `${out}: ${Object.keys(manifest).length} files, ${(json.length / 1024).toFixed(0)} KB`,
       );
+      const dust = dustManifest(manifest);
+      writeFileSync(join("dist", DUST_MANIFEST_FILE), JSON.stringify(dust));
+      this.info?.(`dist/${DUST_MANIFEST_FILE}: ${Object.keys(dust).length} files`);
     },
   };
 }
@@ -170,7 +191,7 @@ function nightdiveMovie(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   /**
    * Every URL the build emits is relative to the page that names it, so `dist/`
    * runs from a subdirectory of some other host as readily as from a domain root.
@@ -187,7 +208,10 @@ export default defineConfig({
   base: "./",
   // substituted into the source text, so the version travels in the bundle and
   // no page has to fetch anything to know it
-  define: { __APP_VERSION__: JSON.stringify(VERSION) },
+  define: {
+    __APP_VERSION__: JSON.stringify(VERSION),
+    __DUST_VERSION__: JSON.stringify(DUST_VERSION),
+  },
   plugins: [nightdiveMovie(), gamefilesManifest(), runSheet()],
   server: {
     watch: {
@@ -208,13 +232,25 @@ export default defineConfig({
       // editors live in their own tree — they import the file-format layer
       // (src/df/) and src/screen.ts, never the engine, so they build as pages
       // that happen to share a data library.
-      input: {
+      /**
+       * `--mode dust` builds the ONE page a `dust-v*` release ships, so a Dust
+       * deploy carries zero bytes of the TAOOT pages (deploy.yml). Everything
+       * else is the full site.
+       */
+      input: mode === "dust" ? { dust: resolve("dust.html") } : {
         main: resolve("index.html"),
         play: resolve("play/index.html"),
         // The speedrun workbench: the play page plus a sheet to drive it with.
         // Unlisted — nothing links to it and it carries `noindex` — but built,
         // because a tool that only exists on a dev server is a tool nobody uses.
         speedrun: resolve("speedrun/index.html"),
+        // The Dust shell — an experiment, and deliberately not part of the game.
+        // *Dust: A Tale of the Wired West* (1995) is DreamFactory 1 where Titanic
+        // is 4, and this page exists to find out how much of the port reads it.
+        // Its own entry rather than a mode of play/: it shares src/df/ and nothing
+        // else, has no menu, no editions, no saves, and should not inherit the
+        // play page's chrome or its assumptions.
+        dust: resolve("dust.html"),
         collection: resolve("collection/index.html"),
         editors: resolve("editors/index.html"),
         puppets: resolve("editors/puppets.html"),
@@ -227,4 +263,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

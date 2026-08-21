@@ -1,4 +1,5 @@
 import { CstFile, CastMember, CastPose } from "../df/cst";
+import type { Actor as StarRecord } from "../df/set";
 import { ShpFrame, decodeShpFrame } from "../df/shp";
 import { WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, bearing } from "./geometry";
 import type { DrawSignature } from "./signature";
@@ -58,6 +59,14 @@ export class ActorInstance {
   value: string | number = 0;
   /** name of the star the actor was last placed on (actorstar getter) */
   starName = "";
+  /**
+   * `actorstar` named a star the open set does not have, so this actor is still
+   * standing wherever it was — see {@link ActorRuntime.settleStars}.
+   *
+   * Never true in Titanic: its star names are bare and a room places its own
+   * cast from its own `openset`, so the table in hand is always the right one.
+   */
+  starPending = false;
   lastTick = 0;
 
   constructor(
@@ -147,6 +156,58 @@ export class ActorRuntime {
     const key = dst.toLowerCase();
     if (!s || this.actors.has(key)) return;
     this.actors.set(key, new ActorInstance(s.member, s.cast));
+  }
+
+  /**
+   * Re-seat this set's actors on the stars they name, now that its star table is
+   * the one in hand.
+   *
+   * `actorstar(who, name)` places an actor the moment it is called, from the star
+   * table of the set that happens to be OPEN. In Titanic that is always the right
+   * table, because a room places its own cast from its own `openset` — the names
+   * are bare (`jones1`), so they could not mean anything else.
+   *
+   * Dust qualifies them (`town.horse1`, `chin.help3`) and places from the STAGE:
+   * `new.flt`'s `advanceday` calls `sendtocast("gang", initactors())`, which runs
+   * `setupactor` for the whole town while whatever room the player is standing in
+   * is the open one. So most of those calls name a star the current set has never
+   * heard of, and land the actor at the origin — which is how this was found:
+   * Leroy read `star=town.leroy1 xyz=0,0,0` while the horses, placed by a script
+   * that happened to run in `town`, read real coordinates.
+   *
+   * Deferring to set entry is enough because an actor is only ever DRAWN in its
+   * own set ({@link currentSet}), so a position is only required to be right by
+   * the time that set is the one being looked at.
+   *
+   * Only actors whose `actorstar` actually MISSED are moved
+   * ({@link ActorInstance.starPending}), never every actor carrying a star name.
+   * The difference matters: a script is free to place an actor by star and then
+   * nudge it with `actorxyz`, and re-seating that on set entry would undo the
+   * nudge. A miss is unambiguous — the position it wanted was never applied.
+   *
+   * Two more things it deliberately does not do:
+   *
+   *  - **the facing.** `actorstar` seeds `deg` from the star, but `setupactor`
+   *    then overrides it (`actordeg (me, 240 + 128)` right after the star), so
+   *    re-seeding here would undo the script.
+   *  - **a walking actor.** Its position is the scheduler's to own until it
+   *    arrives; snapping it back to its departure star would teleport it.
+   */
+  settleStars(stars: readonly StarRecord[], walking: (name: string) => boolean): number {
+    let moved = 0;
+    for (const [name, a] of this.actors) {
+      if (!a.starPending || a.setName.toLowerCase() !== this.currentSet) continue;
+      if (walking(name)) continue;
+      const want = a.starName.toLowerCase();
+      const star = stars.find((s) => s.identifier.toLowerCase() === want);
+      if (!star) continue;
+      a.worldX = star.positionX;
+      a.worldY = star.positionZ;
+      a.worldZ = star.positionY;
+      a.starPending = false;
+      moved++;
+    }
+    return moved;
   }
 
   /** actordelete(name): drop an actor instance from the world */
@@ -295,7 +356,7 @@ export class ActorRuntime {
    * redundant anyway: projectPoint already answers null behind the camera.
    */
   private occludeAt(a: ActorInstance, depth: number, occ: Occlusion): number {
-    return depthLevel(depth - Number(a.zclip), occ);
+    return depthLevel(depth - Number(a.zclip) + (occ.groundBias ?? 0), occ);
   }
 
   /** screen rect of an actor sprite (same depth scaling as world props) */
@@ -322,26 +383,43 @@ export class ActorRuntime {
     cam: WorldCamera,
     occ: Occlusion | null = null,
   ): void {
-    for (const { a, proj } of this.drawList(cam)) {
-      const r = this.rect(a, proj, cam);
-      if (!r) continue;
-      const level = occ ? this.occludeAt(a, proj.depth, occ) : 0;
-      const maxY = Math.min(cam.clipH, height, r.y + r.h);
-      const maxX = Math.min(cam.clipW, width, r.x + r.w);
-      for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
-        const sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
-        for (let tx = Math.max(0, r.x); tx < maxX; tx++) {
-          const sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
-          const s = sy * r.f.width + sx;
-          if (!r.f.opaque[s]) continue;
-          // scenery in front of the actor hides this pixel (SET Z image)
-          if (occ && sceneryOccludes(occ, tx, ty, level)) continue;
-          const pal = r.f.indexed[s] * 4;
-          const d = (ty * width + tx) * 4;
-          rgba[d] = paletteRGBA[pal];
-          rgba[d + 1] = paletteRGBA[pal + 1];
-          rgba[d + 2] = paletteRGBA[pal + 2];
-        }
+    for (const entry of this.drawList(cam)) {
+      this.compositeOne(entry, rgba, width, height, paletteRGBA, cam, occ);
+    }
+  }
+
+  /**
+   * Blit ONE actor — the loop body of {@link composite}, callable per entry so
+   * the viewer can interleave actors and world props into a single far-to-near
+   * pass on a v1 set (see Viewer.compositeWorld for the DF.EXE evidence).
+   */
+  compositeOne(
+    { a, proj }: DrawEntry,
+    rgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+    paletteRGBA: Uint8ClampedArray,
+    cam: WorldCamera,
+    occ: Occlusion | null = null,
+  ): void {
+    const r = this.rect(a, proj, cam);
+    if (!r) return;
+    const level = occ ? this.occludeAt(a, proj.depth, occ) : 0;
+    const maxY = Math.min(cam.clipH, height, r.y + r.h);
+    const maxX = Math.min(cam.clipW, width, r.x + r.w);
+    for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
+      const sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
+      for (let tx = Math.max(0, r.x); tx < maxX; tx++) {
+        const sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
+        const s = sy * r.f.width + sx;
+        if (!r.f.opaque[s]) continue;
+        // scenery in front of the actor hides this pixel (SET Z image)
+        if (occ && sceneryOccludes(occ, tx, ty, level)) continue;
+        const pal = r.f.indexed[s] * 4;
+        const d = (ty * width + tx) * 4;
+        rgba[d] = paletteRGBA[pal];
+        rgba[d + 1] = paletteRGBA[pal + 1];
+        rgba[d + 2] = paletteRGBA[pal + 2];
       }
     }
   }

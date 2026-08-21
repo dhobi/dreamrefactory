@@ -131,7 +131,10 @@ export function readShpFile(data: Uint8Array): ShpFile {
   const r = new BinaryReader(c0);
 
   r.seek(C0.version);
-  if (r.i32() !== 4) throw new Error("unsupported DreamFactory SHP version (need 4.0)");
+  const version = r.i32();
+  if (version !== 4 && version !== 1) {
+    throw new Error(`unsupported DreamFactory SHP/PRP version ${version} (1 and 4 are read)`);
+  }
 
   r.seek(C0.mainScript);
   // Container 0 is always the header, so a stored 0 means "unset" — the main

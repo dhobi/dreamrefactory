@@ -18,6 +18,8 @@
  * notifications) and an {@link AudioSink}. Tests pass node equivalents.
  */
 import { readSetFile, SetFile } from "./df/set";
+import { detectVersion } from "./df/version";
+import { readSetFileAsV4 } from "./df/set-v1-to-v4";
 import { parseSave } from "./df/savegame";
 import { SetViewer } from "./viewer";
 import { ScreenPresenter } from "./screen-presenter";
@@ -77,9 +79,19 @@ export interface HostUi {
 // Prefetching: which files a set needs before it can activate
 // ---------------------------------------------------------------------------
 
-/** a set's sibling files, found next to it under gamefiles/ */
+/**
+ * A set's sibling files, found next to it under `gamefiles/`.
+ *
+ * BOTH engines' spellings for the same three roles, because this layer is not
+ * supposed to know which game it is running. DreamFactory 4 writes `.shp` and
+ * `.trk`; DreamFactory 1 writes `.prp` and `.snd` and its own boot says they are
+ * the same thing (`openshopfile("house.prp")`, `opentrackfile("unilib.snd")`).
+ * Listing both costs nothing — a name the tree does not carry is never fetched,
+ * and the preloader drops it before it weighs it — and without the v1 pair a Dust
+ * room arrived with no props file and no sound at all.
+ */
 const siblingFiles = (base: string): string[] =>
-  [`${base}.shp`, `${base}.trk`, `${base}.sfx`, `${base}.11k`];
+  [`${base}.shp`, `${base}.prp`, `${base}.trk`, `${base}.snd`, `${base}.sfx`, `${base}.11k`];
 
 /**
  * The one file this layer knows the name of: a DreamFactory game's entry point,
@@ -264,10 +276,12 @@ export class GameHost {
       await this.session.closeShop(`${base}.shp`);
     }
     // its sound effects; NOT `${base}.trk`, see above
-    for (const bank of [`${base}.sfx`, `${base}.11k`]) this.session.audioLib.closeBank(bank);
+    for (const bank of [`${base}.sfx`, `${base}.11k`, `${base}.snd`]) {
+      this.session.audioLib.closeBank(bank);
+    }
     this.loadedSets.delete(`${base}.set`);
     let freed = 0;
-    for (const f of [`${base}.set`, `${base}.shp`, `${base}.sfx`, `${base}.11k`]) {
+    for (const f of [`${base}.set`, `${base}.shp`, `${base}.prp`, `${base}.sfx`, `${base}.11k`, `${base}.snd`]) {
       freed += this.files.evict?.(f) ?? 0;
     }
     if (freed) this.ui.log(`left ${base}: freed ${(freed / 1048576).toFixed(1)} MB`);
@@ -276,7 +290,11 @@ export class GameHost {
   /** parse + cache a .SET; false (and a report) if it isn't one */
   private parseInto(name: string, data: Uint8Array, fail: (m: string) => void): boolean {
     try {
-      this.loadedSets.set(name, readSetFile(data));
+      // same routing as GameSession.loadSet: a v1 set becomes a v4-shaped one
+      this.loadedSets.set(
+        name,
+        detectVersion(data) === 1 ? readSetFileAsV4(data) : readSetFile(data),
+      );
       return true;
     } catch (e) {
       fail(`cannot parse ${name}: ${(e as Error).message}`);

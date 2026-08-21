@@ -156,6 +156,12 @@ const CLOCK_ALLOWED = new Set([
   // reports is thrown away as soon as it is read. It fetches, counts and
   // discards; nothing it produces reaches a session or a golden.
   "cache-warmup.ts",
+  // The Dust shell (dust.html), which is not the engine and does not run one: it
+  // is an experiment in reading a DreamFactory 1 disc, and its two calls are a
+  // stopwatch around `coldBoot` printed into a log and thrown away. Nothing it
+  // measures reaches a session, a golden or a decision — the same reason
+  // `cache-warmup.ts` is above it.
+  "dust.ts",
 ]);
 
 /**

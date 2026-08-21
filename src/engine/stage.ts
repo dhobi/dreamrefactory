@@ -142,7 +142,10 @@ export class StageController {
     if (!regs) {
       const flat = stg.flats.find((f) => f.name.toLowerCase() === flatName.toLowerCase());
       const data = flat && stg.file.containers[flat.locationClickLogic]?.data;
-      regs = data ? readStgRegions(data) : [];
+      // with the stage's OWN version: a v1 flat's region count sits at +0 of the
+      // click-logic container and a v4's at +1028, so reading a Dust stage with
+      // the v4 offset quietly returned no buttons at all
+      regs = data ? readStgRegions(data, stg.version) : [];
       this.regionCache.set(key, regs);
     }
     return regs;

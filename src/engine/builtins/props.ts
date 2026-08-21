@@ -16,11 +16,30 @@ import { accessorFamily, BuiltinCtx } from "./context";
  * takes its star AFTER that — so the table arrived already pinned to one of its 32
  * views and stopped turning with the camera.
  */
-function becomeWorldProp(p: PropInstance): void {
+function becomeWorldProp(p: PropInstance, v1 = false): void {
   p.worldSpace = true;
   p.frameLocked = false;
   p.degVariants = false;
   p.frameOrder = null;
+  /**
+   * A v1 world prop DRAWS at its authored size until a script says otherwise.
+   *
+   * `scale` is per-mille — DF.EXE's prop renderer computes
+   * trunc(scale x ref / 1000) x src / depth (0x4150d1) — so 1000 is the
+   * identity, and Dust never propscales its doors at all: HOUSE.PRP's `door`
+   * group (55 one-frame states, refScale 160) is placed with `propstar` and
+   * simply expected to draw. Under the port's 0 default the worldDrawList's
+   * `scale <= 0` skip dropped every one of them: "doors don't draw".
+   *
+   * This default was tried before and REVERTED ("the doors are too big now"),
+   * and both readings were right: the doors drew oversized because the v1
+   * camera was missing its 64-unit setback and f was 256 instead of 310 —
+   * every world sprite was too near. With the camera fixed, a door at its
+   * usual ~156 depth draws at 160/156 of its art, which is the authored look.
+   * v4 keeps 0: TAOOT propscales every world prop it shows, and a v4 prop
+   * placed without one staying invisible is the measured behaviour.
+   */
+  if (v1 && p.scale === 0) p.scale = 1000;
 }
 
 /**
@@ -29,13 +48,14 @@ function becomeWorldProp(p: PropInstance): void {
  * (`propstar`) that read the current set's named world points.
  */
 export function registerPropBuiltins(ctx: BuiltinCtx): void {
-  const { session, r, log, findStar } = ctx;
+  const { session, r, log, findStar, sceneCell } = ctx;
 
   // prop commands — getter/setter by arity
   const prop = (name: Value) => session.propRuntime.get(toStr(name));
   /** getter/setter by arity; a missing prop answers the empty value */
   const acc = accessorFamily(r, prop);
-  r("propexists", (_i, [n]) => (prop(n) ? 1 : 0));
+  // ...or, on a v1 set, the scene's grid COLUMN — see BuiltinCtx.sceneCell
+  r("propexists", (_i, [n]) => sceneCell(n)?.[0] ?? (prop(n) ? 1 : 0));
   // propis3d(name): whether a prop is a 3D world object rather than a 2D sprite.
   // The web build draws every prop as a screen-space overlay (see PropRuntime),
   // so none are 3D — return 0. (Kept explicit so it doesn't log as unknown.)
@@ -155,7 +175,7 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
         default: return 0;
       }
     }
-    becomeWorldProp(p); // see propstar
+    becomeWorldProp(p, session.currentBinding?.set.version === 1); // see propstar
     p.worldX = toNum(x);
     p.worldY = toNum(y);
     p.worldZ = toNum(z ?? 0);
@@ -248,6 +268,11 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   acc("propdist", 0, (p) => p.dist, (p, v) => {
     p.dist = Number(v) || 0;
   });
+  // propspeed: the prop twin of actorspeed, and Dust's tumbleweed is its only
+  // reader anywhere — see PropInstance.speed
+  acc("propspeed", 0, (p) => p.speed, (p, v) => {
+    p.speed = Number(v) || 0;
+  });
   // ONE prop table, whoever asks: `countprops` is `mov ecx, [0x489f18]`
   // (0x418660) and `indextoprop` bounds-checks that same dword before walking the
   // table at [0x489f14] in 158-byte records (0x418710). No calling shop enters
@@ -300,7 +325,7 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   acc("propstar", "", (p) => p.starName, (p, starName) => {
     const star = findStar(starName);
     if (star) {
-      becomeWorldProp(p);
+      becomeWorldProp(p, session.currentBinding?.set.version === 1);
       p.worldX = star.positionX;
       p.worldY = star.positionZ;
       p.worldZ = star.positionY;

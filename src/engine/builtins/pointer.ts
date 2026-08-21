@@ -29,6 +29,35 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
     return hit.name;
   });
   r("result", () => session.lastResult);
+  /**
+   * The three drop tests Dust's inventory ends a drag with, asked in this order:
+   * did the item land on an actor, on the room, or on the stage?
+   *
+   *     for count = 1 to countactors ()
+   *         thename = indextoactor (count)
+   *         if pointinactor (thename, arg)
+   *             sendtoactor (thename, offerobject (what))
+   *
+   * That loop is how the bone reaches the dog, and none of the three existed here
+   * — Titanic's inventory asks `hittest` once and switches on `result()`, so the
+   * port had the machinery and not these names for it. `pointinactor` is that same
+   * hit test read as a predicate; the other two are their own hooks, because they
+   * must answer yes through a prop drawn on top (see GameSession.pointInSet).
+   */
+  r("pointinactor", (_i, [name, point]) => {
+    const pt = toNum(point ?? 0);
+    const hit = session.hitTestAt(pointX(pt), pointY(pt));
+    const want = toStr(name ?? "").toLowerCase();
+    return hit.type === "actor" && hit.name.toLowerCase() === want ? 1 : 0;
+  });
+  r("pointinset", (_i, [point]) => {
+    const pt = toNum(point ?? 0);
+    return session.pointInSet(pointX(pt), pointY(pt)) ? 1 : 0;
+  });
+  r("pointinstage", (_i, [point]) => {
+    const pt = toNum(point ?? 0);
+    return session.pointInStage(pointX(pt), pointY(pt)) ? 1 : 0;
+  });
   // button(): is the mouse button held? Scripts wait for a click with an
   // empty-body poll `while not (button() & pointinprop(...)) endwhile` (TAOOT's
   // Enigma result dismissal), which has no other yield — so, like stilldown,

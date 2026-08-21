@@ -1,4 +1,5 @@
 import { toNum, toStr, truthy } from "../interp";
+import { packPoint } from "../point";
 import { BuiltinCtx } from "./context";
 
 /**
@@ -81,6 +82,38 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   r("indextoview", (_i, [scene, idx]) =>
     sceneByName(toStr(scene ?? ""))?.views[toNum(idx ?? 0) - 1]?.viewName ?? "",
   );
+  /**
+   * `scenexyz(scene, axis)` — where a standpoint IS, in world units.
+   *
+   * A DreamFactory 1 primitive: Titanic's 3465 scripts never call it, Dust's call
+   * it seventeen times, and it is how that game places anything at a standpoint
+   * rather than at a star. `extra.cst` walks its town drunk from `scene g10` to
+   * `scene g6` with it, and `nite.set` measures the player's distance to four
+   * named corners the same way.
+   *
+   * The axis numbering is `playerxyz`'s, because the corpus pairs them directly
+   * (`calcdist (scenexyz ("scene g8", 4), playerxyz (4))`): 1 is X, 2 is the
+   * ground plane's second axis, 4 is the two of them packed into one point. 3
+   * would be the height and no script asks for it — a v1 set is flat, and the
+   * one script that builds a triple writes the height as a literal
+   * (`actorxyz (me, scenexyz (name, 1), scenexyz (name, 2), 0)`).
+   *
+   * These units are the same 256-per-cell the grid is measured in, which the
+   * corpus states outright: `extra.cst`'s crowd router divides by exactly that to
+   * get back to cells (`x1 = scenexyz (dest, 1) / 256`). That is a second,
+   * independent confirmation of the scale the camera poses were calibrated from.
+   */
+  r("scenexyz", (_i, [scene, axis]) => {
+    const sc = sceneByName(toStr(scene ?? ""));
+    if (!sc) return 0;
+    switch (toNum(axis ?? 1)) {
+      case 1: return sc.xAxisMap;
+      case 2: return sc.zAxisMap;
+      case 3: return sc.yAxisMap;
+      case 4: return packPoint(sc.xAxisMap, sc.zAxisMap);
+      default: return 0;
+    }
+  });
   // countshops()/indextoshop(n): open shop files, 1-based (TAOOT's CTL.STG lists them).
   r("countshops", () => session.propRuntime.shops.size);
   r("indextoshop", (_i, [idx]) => [...session.propRuntime.shops.keys()][toNum(idx ?? 0) - 1] ?? "");
@@ -346,14 +379,23 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     // …) ask for `visualeffect(plain, 0)` instead, so honouring the difference is
     // what makes the flips land on the page turns and nowhere else (#12).
     //
-    // Only the two wipes the corpus uses are animated. `venetian`, the irises and
-    // the scrolls are named in TI.EXE's vocabulary but no script asks for one, so
-    // they keep the old instant reveal rather than guessing at geometry.
-    if (name !== "wipeleft" && name !== "wiperight") return;
+    // The wipes the two corpora use are animated: TAOOT asks for wipeleft and
+    // wiperight (9 reveals), Dust adds barndooropen and barndoorclose — its map
+    // and inventory screens arrive middle-outwards (4 opens, 3 closes, reported
+    // from play as "the map and the menu have an opening animation in the real
+    // game"). `venetian`, the irises and the scrolls are named in TI.EXE's
+    // vocabulary but no script in either game asks for one, so those keep the
+    // old instant reveal rather than guessing at geometry.
+    const DIR = {
+      wipeleft: "left", wiperight: "right",
+      barndooropen: "open", barndoorclose: "close",
+    } as const;
+    const dir = DIR[name as keyof typeof DIR];
+    if (!dir) return;
     const from = session.captureFrame?.() ?? null;
     if (!from) return;
     session.wipe.from = from;
-    session.wipe.dir = name === "wipeleft" ? "left" : "right";
+    session.wipe.dir = dir;
     // clamped the way TI.EXE clamps it, 1..1000 (0x43df60..0x43df7a)
     session.wipe.steps = Math.min(1000, Math.max(1, toNum(steps ?? 0) || 1));
     session.wipe.step = 0;

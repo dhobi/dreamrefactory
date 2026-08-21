@@ -14,6 +14,8 @@ import {
 } from "./df/mov";
 import { NATIVE_FRAME_MS, TICK_MS, chooseFrameInterval, frameHoldMs } from "./df/mov-pace";
 import { Container } from "./df/container";
+import { detectVersion } from "./df/version";
+import { movFileFromV1, readMovFileV1 } from "./df/mov-v1";
 import { decodeAudioContainer, resampleTo } from "./df/audio";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "./df/image";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
@@ -238,7 +240,11 @@ export class MoviePlayer {
     }
     let mov;
     try {
-      mov = readMovFile(data);
+      // Dust's movies are DreamFactory 1 and its container 0 is not v4's with the
+      // fields moved (src/df/mov-v1.ts). Routed here rather than inside
+      // readMovFile because the two produce the same MovFile and nothing below
+      // this line has to care which engine wrote the film.
+      mov = detectVersion(data) === 1 ? movFileFromV1(readMovFileV1(data)) : readMovFile(data);
     } catch (e) {
       this.onLog(`playmovie: ${fileName}: ${(e as Error).message}`);
       return false;
@@ -301,7 +307,15 @@ export class MoviePlayer {
     //     "intro too slow".
     let audioSec = 0;
     let soundtrack: { rate: number; resampled: Float32Array[]; unique: Float32Array[] } | null = null;
-    if (seg.audioChunks.length && (!hasRegions || seg.audioLoops)) {
+    // `audioLoops` used to gate this as well (`!hasRegions || seg.audioLoops`), and
+    // for a v4 movie that was already a no-op: df/mov.ts sets `audioLoops =
+    // audioChunks.length > 0`, so the two conditions were the same condition. It
+    // stops being one for DreamFactory 1, whose chunks are a plain run played once
+    // rather than a loop order (df/mov-v1.ts) — and 45 of Dust's 136 films with
+    // sound are interactive, so the old reading would have kept them silent. What
+    // `audioLoops` still decides is whether the bed REPEATS while an interactive
+    // frame waits, which is the question it should be asked (see below).
+    if (seg.audioChunks.length) {
       const decoded = seg.audioChunks.map((loc) => decodeAudioContainer(mov.file.containers[loc].data));
       const rate = Math.max(...decoded.map((p) => p.sampleRate));
       const resampled = decoded.map((p) => resampleTo(p.samples, p.sampleRate, rate));
@@ -333,12 +347,16 @@ export class MoviePlayer {
     if (soundtrack) {
       this.session.audio.halt("voice");
       const { rate, resampled, unique } = soundtrack;
-      if (hasRegions) {
-        // Interactive: the movie sits on a frame for as long as the player
-        // takes to click — there is no runtime to cut the bed to. Play the
-        // DISTINCT chunks once and loop, the same way a theme bank's loop
+      if (hasRegions && seg.audioLoops) {
+        // Interactive AND a loop bed: the movie sits on a frame for as long as
+        // the player takes to click — there is no runtime to cut the bed to. Play
+        // the DISTINCT chunks once and loop, the same way a theme bank's loop
         // chunks are played (see AudioLibrary.theme), so the menu keeps its
         // music however long the player leaves it up.
+        //
+        // A v1 close-up is interactive too and is NOT a loop: it says a line over
+        // a held picture and the line is meant to finish. It takes the branch
+        // below, which plays the run once.
         this.session.audio.play("voice", { sampleRate: rate, samples: concat(unique) }, { loop: true });
       } else {
         // Cutscene: concatenate the (resampled) chunks only up to the movie's
@@ -361,7 +379,16 @@ export class MoviePlayer {
         // hold 213.62 s over a 80.85 s film), and it continues the music the
         // author wrote rather than jumping. `concat` stops at whatever the order
         // actually holds, so a bed with nothing spare is simply unchanged.
-        const runtime = interval > 0 ? (interval * frames.length) / 1000 : audioSec;
+        // ...and never below the material there actually is. The prediction is
+        // `interval x frames`, which assumes the film runs itself out — and a film
+        // that STOPS to wait for a click does not: a v1 close-up is three frames
+        // and a two-second line, so the prediction would have cut the line to a
+        // fifth of a second. For a v4 bed this floor is unreachable by
+        // construction (a paced segment's interval is derived FROM audioSec, so
+        // the product is already >= it, and an interactive v4 bed loops in the
+        // branch above and never arrives here).
+        const predicted = interval > 0 ? (interval * frames.length) / 1000 : 0;
+        const runtime = Math.max(audioSec, predicted);
         const cap = Math.max(1, Math.ceil(runtime * OVERRUN_MARGIN * rate));
         // ...and loop as the backstop, for a host slow enough to outrun even that.
         // A loop-table bed is authored to repeat, and repeating a second of it
