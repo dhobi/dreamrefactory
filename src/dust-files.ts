@@ -78,6 +78,17 @@ export class DustFiles implements HostFiles {
    */
   readonly loads: string[] = [];
   onFileLoaded: ((name: string, bytes: number) => void) | null = null;
+  /**
+   * Every path the manifest listed, verbatim — not just the disc's.
+   *
+   * The disc index below is keyed by BASENAME and filtered to `dustcd/`, which
+   * is right for the engine (it asks for `new.flt`, not for a path) and useless
+   * to anything that lives beside the disc rather than in it. The saved games do:
+   * they are at `gamefiles/dust/save/*.RTD`, they are addressed by path, and the
+   * page seeds them from exactly this list (`dust-saves.ts`). Kept whole so a
+   * second such folder needs no third field.
+   */
+  readonly paths: string[] = [];
 
   /**
    * Index the disc from the manifest the dev server and the build both publish,
@@ -92,6 +103,7 @@ export class DustFiles implements HostFiles {
     const res = await fetch(siteUrl("gamefiles-dust.json"));
     const manifest: Record<string, number> = res.ok ? await res.json() : {};
     for (const path of Object.keys(manifest)) {
+      store.paths.push(path);
       if (!path.startsWith(root)) continue;
       const base = path.split("/").pop()!.toLowerCase();
       const url = siteUrl(path);

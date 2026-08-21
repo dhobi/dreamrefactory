@@ -511,6 +511,47 @@ silent (#36's London flat, `gstair3`, `bind`), because a room that scores nothin
 cannot tell you what was playing when you saved. The file can, and does: exactly one
 track carries playing/looping records, and it is the live theme.
 
+## Dust saves through the same two halves
+
+Dust's `.rtd` saves are the same container file (see
+[the v1 format doc](../formats/savegame-v1.md)), so the framing layer is shared
+outright and only the two ends are Dust's own:
+[`src/engine/saveload-v1.ts`](https://github.com/dhobi/taoot-web/blob/master/src/engine/saveload-v1.ts)
+over
+[`src/df/savegame-v1.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/savegame-v1.ts),
+dispatched on `GameSession.dfVersion` — which the Dust page declares at boot, and
+which nothing else in the engine consults, because a v1 set is translated into
+the v4 shape long before anything downstream sees it.
+
+The *choreography* is not duplicated: reset the timed world, apply the file's
+records with the script runners muted, arrive through the engine's own set
+machinery. That sequence is not about Titanic, it is about what a load is — the
+room you arrive in was never entered, so nothing re-derives anything and the file
+has to carry the screen. `resetCast`, `restoreActors` and `restoreProps` are
+shared, with the v1 records adapted into the shapes they take and any field whose
+offset is not yet proven filled from the LIVE object, so applying a record cannot
+change what this port has not established.
+
+Four differences are worth naming:
+
+- **the room is the manifest's, not the name's.** Dust's town is two files that
+  are both called `town`, so a load reopens the file the handle at c1+396 points
+  at. Trusting the name brings a midnight save back at noon.
+- **`lockevents` is honoured, not cleared.** TAOOT's save lever sits on a panel
+  that freezes world input, so every `.ti` carries `lockevents=1` and a load must
+  drop it. Dust's lever is a button on the inventory panel and sets nothing —
+  there the variable is a scene script's, so the file's answer is the right one.
+- **the standpoint is a grid cell**, resolved against the set's own scene table
+  to get the name `openSetFile` wants (and back again when writing).
+- **there is no disc to mount and no crowd to re-instance** — Dust is one CD and
+  its cast is the boot cast.
+
+The store is the play page's, with a database of its own (`dust-saves`) and its
+own extension: see `SaveKind` in
+[`save-store.ts`](https://github.com/dhobi/taoot-web/blob/master/src/save-store.ts),
+and `dust-saves.ts` for the seeding of the five saves that ship beside the disc —
+one of which is also the base a fresh playthrough's first save is patched into.
+
 ## The saved-games UI
 
 The original called the Windows *Save As* / *Open* dialogs from `CTL.STG`. A

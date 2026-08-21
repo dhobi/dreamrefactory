@@ -21,6 +21,7 @@ import { PuppetController } from "./puppet";
 import { StageController } from "./stage";
 import { FileProvider } from "./setscripts";
 import { loadGame, snapshotSave } from "./saveload";
+import { loadGameV1, snapshotSaveV1 } from "./saveload-v1";
 import { packPoint } from "./point";
 import { registerGameBuiltins } from "./builtins";
 import { BootPlan, EMPTY_BOOT_PLAN, readBootPlan } from "./bootplan";
@@ -1940,16 +1941,36 @@ export class GameSession {
    */
   lastSave: RawSaveFile | null = null;
 
-  /** produce the bytes of a save capturing the current progress — the
-   *  patch-a-base-save logic lives in engine/saveload.ts */
-  snapshotSave(): Uint8Array | null {
-    return snapshotSave(this);
+  /**
+   * Which DreamFactory the game being run is, declared by the page at boot.
+   *
+   * The engine does not otherwise ask — a v1 set is translated into the v4 shape
+   * before anything downstream sees it (`df/set-v1-to-v4.ts`), which is what
+   * keeps one renderer, one interpreter and one scheduler serving both games.
+   * SAVES are the exception, and unavoidably so: a save is a dump of the engine's
+   * own tables, and those tables are the two engines' rather than the port's.
+   *
+   * Defaulted to 4, so the play page and every existing test say nothing. The
+   * getter below falls back to the bound set's own version, so a headless session
+   * that opened a Dust room and forgot to declare itself still saves a Dust save.
+   */
+  dfVersion: 1 | 4 = 4;
+
+  /** is this a DreamFactory 1 game? — see {@link dfVersion} */
+  get isV1(): boolean {
+    return this.dfVersion === 1 || this.currentBinding?.set.version === 1;
   }
 
-  /** load a `.ti` save (restore globals, travel to the saved room) — the
-   *  restore choreography lives in engine/saveload.ts */
+  /** produce the bytes of a save capturing the current progress — the
+   *  patch-a-base-save logic lives in engine/saveload.ts (and saveload-v1.ts) */
+  snapshotSave(): Uint8Array | null {
+    return this.isV1 ? snapshotSaveV1(this) : snapshotSave(this);
+  }
+
+  /** load a save (restore globals, travel to the saved room) — the restore
+   *  choreography lives in engine/saveload.ts (and saveload-v1.ts) */
   loadGame(bytes: Uint8Array): Promise<boolean> {
-    return loadGame(this, bytes);
+    return this.isV1 ? loadGameV1(this, bytes) : loadGame(this, bytes);
   }
 
   /** does any fallback script define this handler? — {@link runGlobal} without

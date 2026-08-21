@@ -43,6 +43,9 @@ import { readSetFileV1, type SetFileV1, type V1Standpoint, type V1Transition } f
 import { readStgFile, readStgRegions, type StgRegion } from "./df/stg";
 import { GameHost } from "./host";
 import { swipeKey } from "./keys";
+import { browseForLoad, browseForSave, savesOpen } from "./save-browser";
+import { useSaveKind } from "./save-store";
+import { DUST_SAVES, dustTemplate, loadDustTemplate, seedDustSaves } from "./dust-saves";
 import { setScreenGamma } from "./screen-gamma";
 import { DustFiles } from "./dust-files";
 import { DeferredAudioSink, WebAudioSink } from "./engine/audio";
@@ -681,6 +684,46 @@ async function runBoot(): Promise<void> {
    * that runs.
    */
   host.session.nextFrame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
+  /**
+   * Save and load: the levers are Dust's own.
+   *
+   * `NEW.FLT`'s menu has SAVE and LOAD buttons which run the `savegame` /
+   * `opengame` builtins — the same opcodes Titanic's CTL.STG uses, with Dust's
+   * own version string ("Dust 0.3") — and those builtins block on these two
+   * hooks (engine/builtins/savegame.ts). The original popped the Windows
+   * Save As / Open dialogs there; a browser has neither, so both open the
+   * in-app modal instead, over the IndexedDB store that stands in for the DOS
+   * SAVE directory.
+   *
+   * Wired before the boot runs rather than after, because the boot is a script
+   * and a script may save: BOOTFILE's own quit path offers to.
+   */
+  // This is a DreamFactory 1 game, and saves are the one place the engine has to
+  // know: a save is a dump of the engine's own tables, and those are v1's here
+  // (src/engine/session.ts).
+  host.session.dfVersion = 1;
+  host.session.onSaveGame = async (bytes) => {
+    await browseForSave(bytes as Uint8Array, defaultSaveName(host), { log: say });
+  };
+  host.session.onLoadGame = () => browseForLoad({ log: say });
+  /**
+   * The base a fresh game's first save is patched into.
+   *
+   * A save is a dump of the engine's live object graph and cannot be built from
+   * nothing, so writing one means patching a real file (docs/formats/savegame.md).
+   * Once a game has been loaded from a file, `session.lastSave` supersedes this;
+   * before that, one of the disc's own saves is the lender.
+   */
+  host.session.saveTemplate = () => dustTemplate();
+  // The five saves that ship beside the disc, imported once into the store.
+  // Off the critical path: it is a handful of 47 KB fetches, nothing the boot
+  // waits for, and a failure only means the browser lists nothing this launch.
+  void seedDustSaves(files.paths)
+    .then(async (n) => {
+      if (n) say(`seeded ${n} saved game${n === 1 ? "" : "s"} from the disc`);
+      await loadDustTemplate();
+    })
+    .catch(() => {});
   const plan = await host.bootPlan();
   // the disc's own answer to "how much is there to do": eight names, read out of
   // Dust's BOOTFILE before a line of it runs
@@ -856,6 +899,9 @@ function play(host: GameHost): void {
 addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLSelectElement) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // a saved-games dialog is a modal: while it is up the game hears nothing, or
+  // an arrow pressed while picking a save walks you down the street behind it
+  if (savesOpen()) return;
   if (e.key === "b" || e.key === "B") {
     e.preventDefault();
     logEl.hidden = !logEl.hidden;
@@ -896,6 +942,15 @@ addEventListener("keydown", (e) => {
   void host.session.track(v.keyDown(ch, e.key === "Escape"));
   e.preventDefault();
 });
+
+/**
+ * Which saves this page keeps: Dust's, in their own database.
+ *
+ * Said once, at module scope, before any store call — the store caches its
+ * connection on first use, so declaring the kind late would read Titanic's
+ * database and then quietly switch (src/save-store.ts).
+ */
+useSaveKind(DUST_SAVES);
 
 /** the pointer, in the canvas's own 512x384 coordinates */
 function canvasCoords(e: PointerEvent | MouseEvent): { x: number; y: number } {
@@ -952,6 +1007,7 @@ canvas.addEventListener("pointerdown", (e) => {
   const host = playing;
   const v = host?.viewer;
   if (!host || !v) return;
+  if (savesOpen()) return; // the dialog owns the screen (see the keydown above)
   const { x, y } = canvasCoords(e);
   host.session.setPointer(x, y);
   // a finger is ambiguous until it moves — see beginTouch
@@ -1206,6 +1262,20 @@ function sendGestureKey(ch: string, isEsc = false): void {
   // make an `isrepeat` door guard swallow the swipe
   host.session.interp.globals.set("isrepeat", 0);
   void host.session.track(v.keyDown(ch, isEsc));
+}
+
+/**
+ * The name the save dialog offers: where you are, and when.
+ *
+ * The room rather than the day or the clock, because that is what a player
+ * recognises a save by in a list of them — and the disc's own five are named the
+ * same way by hand (START, DOG, GOTBONE).
+ */
+function defaultSaveName(host: GameHost): string {
+  const room = host.session.currentSetFile?.replace(/\.set$/i, "") || "dust";
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${room} - ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}`;
 }
 
 /**

@@ -25,6 +25,8 @@ import { isMoveSpeed, isPictureMode, MOVE_SPEED_MS } from "./engine/session";
 import { GameHost } from "./host";
 import { loadTemplates, saveTemplateFor, seedSaves } from "./save-seed";
 import { browseForLoad, browseForSave } from "./save-browser";
+import { TAOOT_SAVES, useSaveKind } from "./save-store";
+import { readSaveFile } from "./df/savegame";
 import { FileStore } from "./files";
 import { StateTrace, snapshotState } from "./engine/trace";
 import { seededRng } from "./engine/rng";
@@ -416,6 +418,17 @@ function defaultSaveName(): string {
   const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}`;
   return `${set} - ${stamp}`;
 }
+// Which game's saves this page keeps: Titanic's, in the `taoot-saves` database,
+// with the `.ti` reader as the import gate. The kind carries the validator
+// rather than the store importing it, so the Dust page can hand in its own
+// (src/save-store.ts).
+useSaveKind({
+  ...TAOOT_SAVES,
+  valid: (bytes) => {
+    readSaveFile(bytes);
+    return true;
+  },
+});
 // savegame builtin: the native Save As dialog becomes the in-app save browser,
 // which stores the produced .ti bytes into the IndexedDB save "file system"
 // (src/save-store.ts) under a player-chosen name.

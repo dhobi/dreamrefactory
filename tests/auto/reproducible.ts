@@ -162,6 +162,11 @@ const CLOCK_ALLOWED = new Set([
   // measures reaches a session, a golden or a decision — the same reason
   // `cache-warmup.ts` is above it.
   "dust.ts",
+  // Dust's saved games, for the same reason `save-seed.ts` is above: the clock
+  // it reads is a FILE's modification time, so a list of saves can put the newest
+  // first. It is the store's bookkeeping, not the engine's — no session waits on
+  // it and no golden records it.
+  "dust-saves.ts",
 ]);
 
 /**
