@@ -2,7 +2,7 @@
   "name": "taoot-web",
   "private": true,
   "version": "0.9.50",
-  "dustVersion": "0.1.0",
+  "dustVersion": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -337,6 +337,10 @@
            ------------------------------------------------------------------ */
         image-rendering: pixelated;
         display: block;
+        /* the swipe gestures (src/dust.ts) need every drag on the canvas: without
+           this the browser claims a vertical drag for scrolling and the
+           walk-forward swipe never arrives. Scoped here, so the page still scrolls. */
+        touch-action: none;
         position: relative; /* over the grain */
         aspect-ratio: 4 / 3;
         /* both from --pic-w, which is where the reasoning about them lives */
@@ -626,6 +630,29 @@
       }
       #start:focus-visible { outline: 2px solid var(--spark); outline-offset: 3px; }
 
+      /* the gesture line under the Start button. Absolute and hung off the bottom
+         of #boot, which is a fixed 48px with everything in it positioned — so this
+         costs the card no height and cannot move the button it sits under. It
+         arrives with the button and leaves with the whole card. */
+      #touchtip {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        translate: -50% 10px;
+        margin: 0;
+        color: var(--dim);
+        font-size: 12px;
+        white-space: nowrap;
+        opacity: 0;
+        transition: opacity 300ms ease-out 200ms;
+      }
+      #boot.ready #touchtip { opacity: 1; }
+      #touchtip b { color: var(--ink); font-weight: 600; }
+      @media (pointer: coarse) and (hover: none) {
+        #touchtip { display: block; }
+      }
+
       /* the strip. one line, monospace, no buttons that look like buttons */
       #strip {
         display: flex;
@@ -642,6 +669,64 @@
       #strip b { color: var(--ink); font-weight: 600; }
       #strip span { color: var(--dim); }
       #strip .k { color: var(--ink); }
+      /* the hint that fits the pointer: keys for a mouse, the gesture for glass.
+         `hover: none` as well as `coarse` so a touchscreen LAPTOP — which has both
+         a finger and arrow keys — keeps the keys line. */
+      /* The HINT is what gives way when the strip is narrow, and it is the only
+         thing that does. At the 400px floor the sentence, the two boxes and the
+         version cannot all fit — so rather than let the row overflow into a scroll
+         nobody knows is there (which is what it did when the hint was the whole
+         line), the sentence ellipsizes and the two things you can PRESS stay put.
+         Both hints carry the full text in a `title` for the pointer that can hover. */
+      #strip .keyhint,
+      #strip .touchhint {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #swipeOpts,
+      #ver {
+        flex: none;
+      }
+      #strip .touchhint { display: none; }
+      @media (pointer: coarse) and (hover: none) {
+        #strip .keyhint { display: none; }
+        #strip .touchhint { display: inline; }
+        /* the word goes and the arrows stay: at the 400px floor the strip has
+           room for the hint, the two boxes and the version, and only just — with
+           "invert" twice it overflows and the boxes are behind a scroll nobody
+           knows is there. The arrow IS the label, and the title still says it. */
+        #swipeOpts .word { display: none; }
+      }
+      /* the two swipe boxes: one group, so the gap between them is tighter than
+         the strip's own and they read as one question with two answers */
+      #swipeOpts {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+      }
+      #swipeOpts[hidden] { display: none; }
+      #swipeOpts label {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+        color: var(--dim);
+        cursor: pointer;
+        /* a checkbox on a phone is a TARGET before it is a label: the strip is
+           38px tall and this fills it, so the tap does not have to be accurate */
+        padding: 6px 0;
+      }
+      #swipeOpts input {
+        /* the tick in the logo's orange, and sized to the line rather than the
+           browser's default 13px, which is a smaller target than a finger */
+        accent-color: var(--spark);
+        width: 15px;
+        height: 15px;
+        margin: 0;
+        cursor: pointer;
+      }
+      #swipeOpts input:focus-visible { outline: 2px solid var(--spark); outline-offset: 2px; }
       #err { color: #d98b6a; }
 
       /* the boot log, over the picture. Not up during the boot any more — the
@@ -717,6 +802,13 @@
           <!-- the gesture the AudioContext needs, asked for at the one moment
                when waiting for it costs nothing: see #start in the styles -->
           <div id="startwrap"><button id="start" type="button">Start</button></div>
+          <!-- The gesture, taught where there is room to say it properly: under
+               the Start button, before the picture exists. The strip's version of
+               this line has to fit beside two checkboxes and a version number at
+               400px, which leaves it about eighteen characters — not enough for the
+               half that matters (double-tap is the one thing no one guesses). So
+               the full sentence lives here, and only on a device that can swipe. -->
+          <p id="touchtip">swipe to walk and turn · double-tap for <b>esc</b></p>
         </div>
       </div>
       <div id="frame"><canvas id="screen" width="1024" height="768"></canvas></div>
@@ -732,8 +824,27 @@
          per move, which is a better shape for it: a trace you can scroll back
          through rather than a number that overwrites itself. -->
     <div id="strip">
-      <span><span class="k">←</span>/<span class="k">→</span> turn <span class="k">↑</span> walk
-        <span class="k">c</span> clut <span class="k">b</span> for the boot log</span>
+      <span class="keyhint" title="←/→ turn · ↑ walk · c cycles the clut · b opens the boot log"
+        ><span class="k">←</span>/<span class="k">→</span> turn <span class="k">↑</span> walk
+        <span class="k">c</span> clut <span class="k">b</span> for the boot log</span
+      >
+      <!-- the same line for a phone, which has none of those keys. Swapped by a
+           media query rather than by script, because it is a question about the
+           POINTER and CSS is what knows the answer without asking. -->
+      <span class="touchhint" title="swipe up to walk, left/right to turn · double-tap for escape"
+        >swipe · <span class="k">2-tap</span> esc</span
+      >
+      <!-- Which way a swipe reads. Only a device that can swipe is asked:
+           src/dust.ts's installSwipeOptions unhides this and remembers both boxes. -->
+      <span id="swipeOpts" hidden
+        ><label title="a swipe from right to left turns right, not left"
+          ><input type="checkbox" id="swipeInvertTurn" /><span class="word">invert</span
+          ><span class="k">←/→</span></label
+        ><label title="a swipe downwards walks on, not one upwards"
+          ><input type="checkbox" id="swipeInvertWalk" /><span class="word">invert</span
+          ><span class="k">↑</span></label
+        ></span
+      >
       <span id="err"></span>
       <!-- Dust's OWN version (package.json dustVersion, filled by dust.ts):
            this page releases separately from the TAOOT site, so the number a
