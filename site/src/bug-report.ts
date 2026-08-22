@@ -29,8 +29,6 @@
  * answer to "what does it collect": whatever you can see in the box.
  */
 
-import { VERSION } from "@dreamfactory/site/version";
-
 /** the port's own repository — the issue is about this port, never about the game */
 const ISSUE_URL = "https://github.com/dhobi/dreamrefactory/issues/new";
 
@@ -59,6 +57,16 @@ export interface BugReportPage {
   /** the last `n` lines the engine logged, oldest first */
   log(n: number): string[];
   /**
+   * What the downloaded screenshot is called, when the clipboard refuses it.
+   *
+   * The page's, because this module is shared and the file lands in a folder that
+   * may already hold one from the other game. It was a constant here while only
+   * Titanic reported bugs.
+   */
+  shotName: string;
+  /** which build this is, for the issue body */
+  version: string;
+  /**
    * Tell the player what became of the picture — on the clipboard to paste, or
    * downloaded as a file to attach. The words are the page's, because they are
    * the only part of this the player reads and the page has the catalogue.
@@ -69,10 +77,13 @@ export interface BugReportPage {
 /** the two places the screenshot can end up */
 export type ShotWent = "clipboard" | "file";
 
-export function installBugReport(btn: HTMLButtonElement, page: BugReportPage): void {
+export function installBugReport(
+  btn: HTMLButtonElement,
+  page: BugReportPage,
+): void {
   btn.addEventListener("click", () => {
     // 1 and 2 — see the header: both have to happen in the click's own task
-    const shot = copyScreen(page.canvas);
+    const shot = copyScreen(page.canvas, page.shotName);
     const url = `${ISSUE_URL}?title=${encodeURIComponent(title(page))}&body=${encodeURIComponent(body(page))}`;
     window.open(url, "_blank", "noopener");
     // 3: only now, and only to say which of the two happened to the picture
@@ -88,9 +99,15 @@ export function installBugReport(btn: HTMLButtonElement, page: BugReportPage): v
  * the reason for it, with the encoding still to come. Waiting for `toBlob` first
  * and writing afterwards is the same picture and a rejected write.
  */
-async function copyScreen(canvas: HTMLCanvasElement): Promise<ShotWent> {
+async function copyScreen(
+  canvas: HTMLCanvasElement,
+  shotName: string,
+): Promise<ShotWent> {
   const png = new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("no blob"))), "image/png");
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("no blob"))),
+      "image/png",
+    );
   });
   try {
     await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
@@ -99,18 +116,18 @@ async function copyScreen(canvas: HTMLCanvasElement): Promise<ShotWent> {
     // no clipboard API, no permission, or an engine that takes only text
   }
   try {
-    download(await png);
+    download(await png, shotName);
   } catch {
     /* nothing left to try; the report goes without a picture */
   }
   return "file";
 }
 
-function download(png: Blob): void {
+function download(png: Blob, shotName: string): void {
   const url = URL.createObjectURL(png);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "taoot-bug.png";
+  a.download = shotName;
   a.click();
   // the object URL outlives the click by a beat, or the download never starts
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
@@ -145,7 +162,7 @@ function body(page: BugReportPage): string {
     "",
     `- **Room:** ${page.where() || "—"}`,
     // which build this was, so a fixed bug can be told from a live one
-    `- **Port version:** ${VERSION}`,
+    `- **Port version:** ${page.version}`,
     `- **Edition:** ${page.edition()}`,
     `- **Page:** ${window.location.href}`,
     `- **Browser:** ${navigator.userAgent}`,

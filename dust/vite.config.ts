@@ -22,7 +22,8 @@ import { siblingSignposts } from "../tools/vite-siblings";
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 
 /** Dust's version — its own number, because it releases on its own tag */
-const VERSION = JSON.parse(readFileSync(join(HERE, "package.json"), "utf8")).version as string;
+const VERSION = JSON.parse(readFileSync(join(HERE, "package.json"), "utf8"))
+  .version as string;
 
 export default defineConfig({
   root: HERE,
@@ -38,11 +39,29 @@ export default defineConfig({
   appType: "mpa",
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [
-    gamefilesManifest({ gamefiles: join(HERE, "gamefiles"), publicDir: join(HERE, "public") }),
+    gamefilesManifest({
+      gamefiles: join(HERE, "gamefiles"),
+      publicDir: join(HERE, "public"),
+    }),
     siblingSignposts([
-      { path: "editors", command: "npm run dev", port: 5173, what: "The format editors" },
-      { path: "docs", command: "npm run docs:dev", port: 5176, what: "The documentation" },
-      { path: "taoot", command: "npm run dev:taoot", port: 5174, what: "Titanic" },
+      {
+        path: "editors",
+        command: "npm run dev",
+        port: 5173,
+        what: "The format editors",
+      },
+      {
+        path: "docs",
+        command: "npm run docs:dev",
+        port: 5176,
+        what: "The documentation",
+      },
+      {
+        path: "taoot",
+        command: "npm run dev:taoot",
+        port: 5174,
+        what: "Titanic",
+      },
     ]),
   ],
   server: {
@@ -54,6 +73,14 @@ export default defineConfig({
   build: {
     outDir: resolve(HERE, "../dist/dust"),
     emptyOutDir: true,
-    rollupOptions: { input: { dust: join(HERE, "index.html") } },
+    rollupOptions: {
+      input: {
+        dust: join(HERE, "index.html"),
+        // The collection page: how to run the 1995 DOS game instead of this
+        // port of it. Its download sits beside the rip on the host and is
+        // not in this repository.
+        collection: join(HERE, "collection/index.html"),
+      },
+    },
   },
 });

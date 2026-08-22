@@ -37,20 +37,47 @@
  * paying to make the rendering unarguable rather than clever.
  */
 import { readContainerFile } from "@dreamfactory/engine/df/container";
-import { decodeFrame, FrameBuffer, paletteToRGBA, indexedToRGBA } from "@dreamfactory/engine/df/image";
+import {
+  decodeFrame,
+  FrameBuffer,
+  paletteToRGBA,
+  indexedToRGBA,
+} from "@dreamfactory/engine/df/image";
 import { detectVersion } from "@dreamfactory/engine/df/version";
-import { readSetFileV1, type SetFileV1, type V1Standpoint, type V1Transition } from "@dreamfactory/engine/df/set-v1";
-import { readStgFile, readStgRegions, type StgRegion } from "@dreamfactory/engine/df/stg";
+import {
+  readSetFileV1,
+  type SetFileV1,
+  type V1Standpoint,
+  type V1Transition,
+} from "@dreamfactory/engine/df/set-v1";
+import {
+  readStgFile,
+  readStgRegions,
+  type StgRegion,
+} from "@dreamfactory/engine/df/stg";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { swipeKey } from "@dreamfactory/engine/web/keys";
-import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
+import {
+  browseForLoad,
+  browseForSave,
+  savesOpen,
+} from "@dreamfactory/engine/web/save-browser";
 import { useSaveKind } from "@dreamfactory/engine/web/save-store";
-import { DUST_SAVES, dustTemplate, loadDustTemplate, seedDustSaves } from "./saves";
+import {
+  DUST_SAVES,
+  dustTemplate,
+  loadDustTemplate,
+  seedDustSaves,
+} from "./saves";
 import { setScreenGamma } from "@dreamfactory/engine/web/screen-gamma";
 import { DustFiles } from "./files";
-import { DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
+import {
+  DeferredAudioSink,
+  WebAudioSink,
+} from "@dreamfactory/engine/runtime/audio";
 import { siteUrl } from "@dreamfactory/site/site";
 import { VERSION } from "@dreamfactory/site/version";
+import { installBugReport } from "@dreamfactory/site/bug-report";
 
 /** the frame as the file stores it */
 const VIEW_W = 512;
@@ -115,7 +142,8 @@ const HOLD_TICKS = 3;
 const DF1_SCREEN_GAMMA = 1;
 
 /** one animation frame, from the browser's own beat */
-const tick = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
+const tick = (): Promise<void> =>
+  new Promise((r) => requestAnimationFrame(() => r()));
 
 /**
  * Dust can be HEARD, and that is a measurement rather than an ambition.
@@ -177,7 +205,68 @@ plate.height = FLAT_H;
 const plateCtx = plate.getContext("2d", { alpha: false })!;
 const errEl = document.getElementById("err") as HTMLElement;
 const verEl = document.getElementById("ver");
-if (verEl) verEl.textContent = `dust-v${VERSION}`;
+/* Just the version. The `dust-` prefix was there when this sat in a status
+   line under the picture with nothing around it to say which page it
+   belonged to; in the top bar it is a hand's width from a mark and a title
+   that both say Dust, and the tag it names (dust-v*, deploy.yml) is still
+   readable off it. */
+if (verEl) verEl.textContent = `v${VERSION}`;
+
+/**
+ * The two levers the port adds: a fullscreen picture, and a bug report that
+ * arrives with the screen attached.
+ *
+ * Both are the play page's, and the reporter is now literally the same module —
+ * it moved to `site/` when this page wanted it, because a game may not import
+ * another game (site/tests/layering.ts) and nothing in it was ever Titanic's
+ * except the name it gave the downloaded PNG.
+ */
+const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
+const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
+const bugNote = document.getElementById("bugNote");
+const stageEl = document.getElementById("stage") as HTMLElement;
+
+/** where the player is, for the issue body: the trace line, kept as it changes */
+let currentRoom = "";
+
+// The STAGE, not the canvas: fullscreening the canvas hands the letterbox to the
+// UA, and the picture is a fixed 512x384 either way — see #stage:fullscreen.
+fsBtn?.addEventListener("click", () => {
+  if (document.fullscreenElement) void document.exitFullscreen();
+  else
+    void stageEl
+      .requestFullscreen()
+      .catch((e: Error) => say(`fullscreen: ${e.message}`));
+});
+document.addEventListener("fullscreenchange", () => {
+  if (fsBtn)
+    fsBtn.textContent = document.fullscreenElement
+      ? "⛶ Exit fullscreen"
+      : "⛶ Fullscreen";
+});
+
+/** how long the screenshot's fate stays on screen before it is taken down */
+const BUG_NOTE_MS = 6000;
+if (bugBtn) {
+  installBugReport(bugBtn, {
+    canvas,
+    shotName: "dust-bug.png",
+    version: VERSION,
+    where: () => currentRoom,
+    // one disc, one language: there is nothing to choose between, and saying so
+    // is more use in an issue than leaving the field out
+    edition: () => "Dust CD (gamefiles/dustcd/)",
+    log: (n) => logLines.slice(-n),
+    note: (how) => {
+      if (!bugNote) return;
+      bugNote.textContent =
+        how === "clipboard"
+          ? "screen copied — paste it into the issue"
+          : "screen saved — attach dust-bug.png to the issue";
+      window.setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
+    },
+  });
+}
 const logEl = document.getElementById("log") as HTMLPreElement;
 
 /**
@@ -251,7 +340,7 @@ const BOOT_TAIL = 6;
 /** the four definite steps of the front half, and what to call each one */
 const HEAD_STEPS: ReadonlyArray<readonly [number, string]> = [
   [0.02, "reading the disc index"],
-  [0.10, "the control panel — new.flt"],
+  [0.1, "the control panel — new.flt"],
   [0.16, "a room, in case the boot fails"],
   [HEAD, "indexing the CD"],
 ];
@@ -291,7 +380,8 @@ function progress(f: number, label?: string): void {
  * logo.
  */
 /** a real pause, for the one place that wants to be SEEN rather than be quick */
-const hold = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const hold = (ms: number): Promise<void> =>
+  new Promise((r) => setTimeout(r, ms));
 
 /**
  * The boot is done; wait to be told to go.
@@ -340,7 +430,8 @@ function raiseTitle(): void {
     // two frames: one for the browser to accept the start pose, one to leave it
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
-        brandEl.style.transition = "transform 980ms cubic-bezier(.28,.74,.22,1)";
+        brandEl.style.transition =
+          "transform 980ms cubic-bezier(.28,.74,.22,1)";
         brandEl.style.transform = "";
       }),
     );
@@ -349,7 +440,9 @@ function raiseTitle(): void {
   bootEl.style.opacity = "0";
   bootEl.style.translate = "0 18px";
   bootEl.style.filter = "blur(3px)";
-  bootEl.addEventListener("transitionend", () => bootEl.remove(), { once: true });
+  bootEl.addEventListener("transitionend", () => bootEl.remove(), {
+    once: true,
+  });
 }
 
 /** the sets on the disc, in the order the CD lists them — resolved through
@@ -397,10 +490,14 @@ const key = (s: V1Standpoint): string => `${s.x},${s.z},${s.facing}`;
  * the other, which makes the first the consistent sense across the set.
  */
 function turnsFrom(set: SetFileV1, s: V1Standpoint): V1Transition[] {
-  return set.transitions.filter((t) => t.kind === "turn" && key(t.from) === key(s));
+  return set.transitions.filter(
+    (t) => t.kind === "turn" && key(t.from) === key(s),
+  );
 }
 function walkFrom(set: SetFileV1, s: V1Standpoint): V1Transition | undefined {
-  return set.transitions.find((t) => t.kind === "walk" && key(t.from) === key(s));
+  return set.transitions.find(
+    (t) => t.kind === "walk" && key(t.from) === key(s),
+  );
 }
 
 /**
@@ -476,7 +573,8 @@ async function loadPanel(): Promise<void> {
   const res = await fetch(SET_DIR + BOOT_STAGE);
   if (!res.ok) return;
   const stg = readStgFile(new Uint8Array(await res.arrayBuffer()));
-  const flat = stg.flats.find((f) => f.name.toLowerCase() === BOOT_FLAT) ?? stg.flats[0];
+  const flat =
+    stg.flats.find((f) => f.name.toLowerCase() === BOOT_FLAT) ?? stg.flats[0];
   if (!flat?.locationFrame) return;
   const art = stg.file.containers[flat.locationFrame];
   if (!art || art.gap) return;
@@ -487,7 +585,11 @@ async function loadPanel(): Promise<void> {
     pixels: fb.pixels.slice(0, FLAT_W * FLAT_H),
     rgba: paletteToRGBA(stg.paletteRaw, 256),
     regions: flat.locationClickLogic
-      ? readStgRegions(stg.file.containers[flat.locationClickLogic]?.data ?? new Uint8Array(), stg.version)
+      ? readStgRegions(
+          stg.file.containers[flat.locationClickLogic]?.data ??
+            new Uint8Array(),
+          stg.version,
+        )
       : [],
   };
 }
@@ -528,7 +630,8 @@ async function load(name: string): Promise<void> {
   if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   const version = detectVersion(bytes);
-  if (version !== 1) throw new Error(`${name} reports DreamFactory version ${version}, not 1`);
+  if (version !== 1)
+    throw new Error(`${name} reports DreamFactory version ${version}, not 1`);
   const set = readSetFileV1(bytes);
 
   // decode every frame in FILE order, into one buffer, keeping each result —
@@ -552,13 +655,20 @@ async function load(name: string): Promise<void> {
   clearScreen();
   live = { name, set, frames, clut: 0 };
   at = set.transitions[0]?.from ?? { x: 0, z: 0, facing: 1 };
-  const cells = new Set(set.transitions.map((t) => `${t.from.x},${t.from.z}`)).size;
-  const stills = new Set(set.transitions.filter((t) => t.departureStill >= 0).map((t) => key(t.from))).size;
+  const cells = new Set(set.transitions.map((t) => `${t.from.x},${t.from.z}`))
+    .size;
+  const stills = new Set(
+    set.transitions
+      .filter((t) => t.departureStill >= 0)
+      .map((t) => key(t.from)),
+  ).size;
   say(
     `${name}: v1 · ${set.gridWidth}x${set.gridHeight} grid, ${cells} standpoints · ` +
-    `${set.transitions.length} moves · ${frames.size} frames · ${stills} stills · ${set.actors.length} cast · ` +
-    `clut ${live.clut + 1}/${set.cluts.length}` +
-    (panel ? ` · panel ${BOOT_FLAT} (${panel.regions.length} buttons)` : " · no panel") +
+      `${set.transitions.length} moves · ${frames.size} frames · ${stills} stills · ${set.actors.length} cast · ` +
+      `clut ${live.clut + 1}/${set.cluts.length}` +
+      (panel
+        ? ` · panel ${BOOT_FLAT} (${panel.regions.length} buttons)`
+        : " · no panel") +
       (set.warnings.length ? ` · ${set.warnings.length} warnings` : ""),
   );
   show();
@@ -614,7 +724,9 @@ async function browse(): Promise<void> {
   }
   // the panel first, exactly as boot() does it: openstagefile before any room
   progress(...HEAD_STEPS[1]);
-  await loadPanel().catch(() => { /* the shell still works without it */ });
+  await loadPanel().catch(() => {
+    /* the shell still works without it */
+  });
   progress(...HEAD_STEPS[2]);
   await load(sets.includes("APOTH.SET") ? "APOTH.SET" : sets[0]);
 }
@@ -730,7 +842,8 @@ async function runBoot(): Promise<void> {
    * loops work — which is the difference between a boot that completed and a game
    * that runs.
    */
-  host.session.nextFrame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
+  host.session.nextFrame = () =>
+    new Promise<void>((res) => requestAnimationFrame(() => res()));
   /**
    * Save and load: the levers are Dust's own.
    *
@@ -750,7 +863,9 @@ async function runBoot(): Promise<void> {
   // (engine/src/runtime/session.ts).
   host.session.dfVersion = 1;
   host.session.onSaveGame = async (bytes) => {
-    await browseForSave(bytes as Uint8Array, defaultSaveName(host), { log: say });
+    await browseForSave(bytes as Uint8Array, defaultSaveName(host), {
+      log: say,
+    });
   };
   host.session.onLoadGame = () => browseForLoad({ log: say });
   /**
@@ -776,7 +891,9 @@ async function runBoot(): Promise<void> {
   // Dust's BOOTFILE before a line of it runs
   expect = Math.max(expect, plan.resources.length + BOOT_TAIL);
   bootSay(`boot plan: ${plan.resources.join(", ") || "(none)"}`);
-  bootSay(`  casts: ${plan.casts.join(", ") || "(none)"}  first room: ${plan.landingSet ?? "(none named)"}`);
+  bootSay(
+    `  casts: ${plan.casts.join(", ") || "(none)"}  first room: ${plan.landingSet ?? "(none named)"}`,
+  );
   /**
    * Everything the boot will play or open, fetched WHILE THE BAR IS UP — the
    * intro films alone are 13 MB, and the alternative is a black canvas
@@ -785,7 +902,9 @@ async function runBoot(): Promise<void> {
    * frame — df/mov-v1.ts), so left out it becomes a mid-intro stall exactly
    * where the story hands over.
    */
-  await Promise.all([...plan.resources, "town.set", "intro3.mov"].map((f) => files.load(f)));
+  await Promise.all(
+    [...plan.resources, "town.set", "intro3.mov"].map((f) => files.load(f)),
+  );
   progress(1, "ready");
   files.onFileLoaded = null; // the game loads for itself from here
   /**
@@ -821,19 +940,33 @@ async function runBoot(): Promise<void> {
   const s = host.session;
   const g = (n: string) => s.interp.globals.get(n);
   bootSay(`boot returned after ${Math.round(performance.now() - started)} ms`);
-  bootSay(`globals: day=${g("day")} clock=${g("clock")} phase=${g("phase")} handitem=${JSON.stringify(g("handitem"))}`);
-  bootSay(`keys: north=${JSON.stringify(g("keynorth"))} east=${JSON.stringify(g("keyeast"))} west=${JSON.stringify(g("keywest"))}`);
-  bootSay(`stage: ${s.stageName || "(none)"} · flat: ${s.currentFlat}` +
-    ` · ${s.stageCtrl.stageFile?.flats.length ?? 0} flats` +
-    ` · ${s.stageCtrl.currentFlatRegions().length} buttons on it`);
-  bootSay(`shops open: ${[...s.propRuntime.shops.keys()].join(", ") || "(none)"}`);
-  bootSay(`casts open: ${[...s.actorRuntime.casts.keys()].join(", ") || "(none)"}` +
-    ` · ${s.actorRuntime.actors.size} actors`);
+  bootSay(
+    `globals: day=${g("day")} clock=${g("clock")} phase=${g("phase")} handitem=${JSON.stringify(g("handitem"))}`,
+  );
+  bootSay(
+    `keys: north=${JSON.stringify(g("keynorth"))} east=${JSON.stringify(g("keyeast"))} west=${JSON.stringify(g("keywest"))}`,
+  );
+  bootSay(
+    `stage: ${s.stageName || "(none)"} · flat: ${s.currentFlat}` +
+      ` · ${s.stageCtrl.stageFile?.flats.length ?? 0} flats` +
+      ` · ${s.stageCtrl.currentFlatRegions().length} buttons on it`,
+  );
+  bootSay(
+    `shops open: ${[...s.propRuntime.shops.keys()].join(", ") || "(none)"}`,
+  );
+  bootSay(
+    `casts open: ${[...s.actorRuntime.casts.keys()].join(", ") || "(none)"}` +
+      ` · ${s.actorRuntime.actors.size} actors`,
+  );
   const missed = [...new Set(files.misses)].filter((m) => !files.has(m));
   bootSay(`asked for and never got: ${missed.join(", ") || "(nothing)"}`);
-  bootSay(`room: ${s.currentSetFile || "(none)"} · viewer ${host.viewer ? "up" : "DOWN"}`);
+  bootSay(
+    `room: ${s.currentSetFile || "(none)"} · viewer ${host.viewer ? "up" : "DOWN"}`,
+  );
   if (host.viewer) {
-    bootSay("playing — arrows or W/A/D to move, space for a door, b for this log");
+    bootSay(
+      "playing — arrows or W/A/D to move, space for a door, b for this log",
+    );
   } else {
     // no viewer: what is on screen is black, so the log opens — at this point
     // the log IS the result.
@@ -930,12 +1063,15 @@ function play(host: GameHost): void {
         (a) => a.visible && a.setName === s.actorRuntime.currentSet,
       );
       const cam = s.activeCamera();
-      const shown = cam ? here.filter((a) => s.actorRuntime.onScreen(a, cam)).length : 0;
+      const shown = cam
+        ? here.filter((a) => s.actorRuntime.onScreen(a, cam)).length
+        : 0;
       const room =
         `${s.currentSetFile || "?"} ${s.currentSceneName()} · ${s.currentViewName()}` +
         ` · ${here.length} here, ${shown} in view`;
       if (room !== shownRoom) {
         shownRoom = room;
+        currentRoom = room;
         say(room);
       }
     }
@@ -985,10 +1121,13 @@ addEventListener("keydown", (e) => {
   const v = host?.viewer;
   if (!host || !v) return;
   const arrow: Record<string, string> = {
-    ArrowUp: "uparrow", ArrowDown: "downarrow",
-    ArrowLeft: "leftarrow", ArrowRight: "rightarrow",
+    ArrowUp: "uparrow",
+    ArrowDown: "downarrow",
+    ArrowLeft: "leftarrow",
+    ArrowRight: "rightarrow",
   };
-  const name = arrow[e.key] ?? (e.key === " " ? " " : e.key === "Escape" ? "." : null);
+  const name =
+    arrow[e.key] ?? (e.key === " " ? " " : e.key === "Escape" ? "." : null);
   const ch = name ?? (e.key.length === 1 ? e.key.toLowerCase() : "");
   if (!ch) return;
   /**
@@ -1106,7 +1245,8 @@ addEventListener("pointermove", (e) => {
   const g = touch;
   if (!g || e.pointerId !== g.id) return;
   if (g.pressed || g.swiped) return; // already committed either way
-  if (Math.hypot(e.clientX - g.clientX, e.clientY - g.clientY) < SWIPE_MIN_PX) return;
+  if (Math.hypot(e.clientX - g.clientX, e.clientY - g.clientY) < SWIPE_MIN_PX)
+    return;
   // committed to a swipe; the DIRECTION is read at release, off the whole
   // journey, so a wobbly first few pixels don't get to choose it
   g.swiped = true;
@@ -1233,7 +1373,11 @@ function endTouch(e: PointerEvent): void {
     return;
   }
   if (g.swiped) {
-    const key = swipeKey(e.clientX - g.clientX, e.clientY - g.clientY, swipeInvert);
+    const key = swipeKey(
+      e.clientX - g.clientX,
+      e.clientY - g.clientY,
+      swipeInvert,
+    );
     if (key) sendGestureKey(key);
     return;
   }
@@ -1294,19 +1438,37 @@ const SWIPE_INVERT_TURN_KEY = "dust.swipe.invertturn";
 const SWIPE_INVERT_WALK_KEY = "dust.swipe.invertwalk";
 
 function installSwipeOptions(): void {
-  const touchable = navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
+  const touchable =
+    navigator.maxTouchPoints > 0 ||
+    window.matchMedia("(pointer: coarse)").matches;
   if (!touchable) return;
   const opts = document.getElementById("swipeOpts");
-  const turnBox = document.getElementById("swipeInvertTurn") as HTMLInputElement | null;
-  const walkBox = document.getElementById("swipeInvertWalk") as HTMLInputElement | null;
+  const turnBox = document.getElementById(
+    "swipeInvertTurn",
+  ) as HTMLInputElement | null;
+  const walkBox = document.getElementById(
+    "swipeInvertWalk",
+  ) as HTMLInputElement | null;
   if (!opts || !turnBox || !walkBox) return;
   opts.hidden = false;
-  bindSwipeOption(turnBox, SWIPE_INVERT_TURN_KEY, (on) => (swipeInvert.turn = on));
-  bindSwipeOption(walkBox, SWIPE_INVERT_WALK_KEY, (on) => (swipeInvert.walk = on));
+  bindSwipeOption(
+    turnBox,
+    SWIPE_INVERT_TURN_KEY,
+    (on) => (swipeInvert.turn = on),
+  );
+  bindSwipeOption(
+    walkBox,
+    SWIPE_INVERT_WALK_KEY,
+    (on) => (swipeInvert.walk = on),
+  );
 }
 
 /** a checkbox that remembers, and applies what it remembered before any gesture */
-function bindSwipeOption(box: HTMLInputElement, key: string, apply: (on: boolean) => void): void {
+function bindSwipeOption(
+  box: HTMLInputElement,
+  key: string,
+  apply: (on: boolean) => void,
+): void {
   let stored: string | null = null;
   try {
     stored = window.localStorage.getItem(key);
