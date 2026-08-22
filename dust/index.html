@@ -9,9 +9,9 @@
          page runs from /taoot/dust.html and from a directory of its own alike. -->
     <meta name="site-root" content="./" />
     <title>Dust: A Tale of the Wired West RE</title>
-    <!-- the skull out of the title card, which is the only part of it that reads
-         at 30px or in a tab (dust/tools/mkdustmark.ts) -->
-    <link rel="icon" type="image/png" href="/dust-mark.png" />
+    <!-- the longhorn skull from the game's own interface band, redrawn as SVG so
+         it keeps its edges in a tab (dust/public/dust-mark.svg says why) -->
+    <link rel="icon" type="image/svg+xml" href="/dust-mark.svg" />
     <!-- the chrome every page in the project shares, in this game's own colours.
          Linked BEFORE the page's own <style> on purpose: where the two describe
          the same element, Dust's existing look wins. -->
@@ -1012,7 +1012,7 @@
     -->
     <header class="topbar">
       <a class="brand" href="./" title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1995 release">
-        <img class="brand-mark" src="/dust-mark.png" alt="" width="30" height="30" />
+        <img class="brand-mark" src="/dust-mark.svg" alt="" width="30" height="30" />
         <span class="brand-text">
           <b>Dust</b>
           <span>A Tale of the Wired West RE</span>

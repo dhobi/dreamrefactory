@@ -53,8 +53,7 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "manifest:dust": "tsx tools/mkmanifest.ts dist/dust dust/gamefiles dust/public",
-    "mklogo": "tsx site/tools/mklogo.ts",
-    "mkdustmark": "tsx dust/tools/mkdustmark.ts"
+    "mklogo": "tsx site/tools/mklogo.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

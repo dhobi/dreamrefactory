@@ -66,13 +66,6 @@ export interface ResizeOptions {
    */
   trimThreshold?: number;
   /**
-   * Take only part of the source, as a fraction of its width and height (0–1).
-   * Applied BEFORE the trim, so the trim then tightens onto whatever is actually
-   * drawn inside it — which is what makes "the left quarter" a usable way to ask
-   * for one element out of a wide title card without measuring pixels.
-   */
-  crop?: { left: number; top: number; width: number; height: number };
-  /**
    * Read the image as light on black and give it a real alpha channel. See the
    * header. Applied before the trim, so `trim` should then be `alpha`.
    */
@@ -110,16 +103,9 @@ export function resizeLogo(png: Uint8Array, opts: ResizeOptions): ResizedLogo {
     return l > threshold;
   };
 
-  // the window the trim is allowed to look in
-  const c = opts.crop;
-  const winX0 = c ? Math.max(0, Math.round(c.left * src.width)) : 0;
-  const winY0 = c ? Math.max(0, Math.round(c.top * src.height)) : 0;
-  const winX1 = c ? Math.min(src.width, Math.round((c.left + c.width) * src.width)) : src.width;
-  const winY1 = c ? Math.min(src.height, Math.round((c.top + c.height) * src.height)) : src.height;
-
   let left = src.width, right = -1, top = src.height, bottom = -1;
-  for (let y = winY0; y < winY1; y++) {
-    for (let x = winX0; x < winX1; x++) {
+  for (let y = 0; y < src.height; y++) {
+    for (let x = 0; x < src.width; x++) {
       if (!drawn((y * src.width + x) * 4)) continue;
       if (x < left) left = x;
       if (x > right) right = x;
