@@ -1,0 +1,168 @@
+/*
+ * Dust's palette: dusk, ember, bone.
+ *
+ * Sampled from its own title card — a longhorn skull under a cowboy hat, DUST in
+ * red-orange letterpress, a sunset over the mesas behind it, a saloon at the end
+ * of the street. Warm where Titanic is cold and the project's front door is
+ * neither.
+ *
+ * The THIRD implementation of the contract in site/src/chrome.css, which is the
+ * point of that split: the same 39 role names and the same top bar as the other
+ * two, wearing nothing either of them wears.
+ *
+ * What the colours MEAN
+ * ---------------------
+ *   ember   it is live, or it is where you are — the letters, and the sun
+ *   bone    it is a word, or it commits — the skull, the brightest thing here
+ *   dusk    it is ground — the night the title card floats on
+ *   leather it is an edge
+ *
+ * `--mark` is bone rather than a fourth hue, for the reason the project's palette
+ * learned the hard way: a second job wants a second VALUE more than it wants a
+ * second hue, and a button in an unrelated colour reads as a visitor from another
+ * design.
+ */
+
+/* The structure comes first: an @import has to lead the file, and custom
+   properties resolve where they are USED. */
+@import "@dreamfactory/site/chrome.css";
+
+/* ---- dusk: the ground ------------------------------------------------- */
+
+:root {
+  --dusk-1000: #0a0705;
+  --dusk-900: #100b07;
+  --dusk-800: #17100a;
+  --dusk-700: #20170f;
+  --dusk-600: #2b1f14;
+  --dusk-500: #38291b;
+
+  /* edges: tooled leather, not grey */
+  --leather-600: #33241a;
+  --leather-500: #443123;
+  --leather-400: #5b422f;
+  --leather-300: #78573e;
+  --leather-200: #9c7a5a;
+}
+
+/* ---- ember: the letters, and the sun ---------------------------------- */
+
+:root {
+  --ember-700: #7d2a0e;
+  --ember-600: #a83714;
+  --ember-500: #d1521c;
+  --ember-400: #e8701f;
+  --ember-300: #f2903a;
+  --ember-200: #f7b25e;
+  --ember-100: #fcd79b;
+}
+
+/* ---- bone: the skull, and the ink ------------------------------------- */
+
+:root {
+  --bone-600: #6b5f4a;
+  --bone-500: #8c7d63;
+  --bone-400: #b3a288;
+  --bone-300: #d4c4a6;
+  --bone-200: #ece0c6;
+  --bone-100: #f8f1e0;
+
+  --alarm: #e04b2a;
+  --ok: #8fae55;
+}
+
+/* ---- typography and metrics ------------------------------------------- */
+
+:root {
+  --font-display:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --gap: 0.8rem;
+  --radius: 3px;
+  --radius-lg: 5px;
+
+  /* the sun's own glow, which is what this page already lights its title with */
+  --glow: 0 0 0 1px rgba(232, 112, 31, 0.3), 0 0 34px -4px rgba(232, 112, 31, 0.4);
+}
+
+/* ---- the 39 roles the chrome asks for --------------------------------- */
+
+:root {
+  --bg: var(--dusk-1000);
+  --panel: var(--dusk-800);
+  --raised: var(--dusk-700);
+  --inset: var(--dusk-900);
+
+  --border: var(--leather-600);
+  --border-strong: var(--leather-500);
+  --border-hover: var(--leather-200);
+
+  --text: var(--bone-300);
+  --text-bright: var(--bone-100);
+  --text-dim: var(--bone-400);
+  --text-mute: var(--bone-600);
+
+  --accent: var(--ember-400);
+  --accent-hover: var(--ember-300);
+  --accent-line: var(--ember-500);
+  --selection-bg: rgba(232, 112, 31, 0.3);
+
+  --mark: var(--bone-200);
+  --mark-glow: rgba(232, 112, 31, 0.4);
+
+  --topbar-top: var(--dusk-600);
+  --topbar-bottom: var(--dusk-1000);
+
+  /* the sunset behind the mesas, thinned to a wash */
+  --depth-light: rgba(209, 82, 28, 0.16);
+
+  --button-hover-bg: var(--dusk-500);
+  --button-active-bg: var(--dusk-600);
+  --state-border: var(--leather-400);
+
+  --rule-mid: var(--ember-500);
+  --rule-bright: var(--ember-200);
+
+  /* the one control that commits: the letters' own press, in ember */
+  --commit-face-bottom: var(--ember-600);
+  --commit-face-deep: var(--ember-700);
+  --commit-edge: var(--ember-200);
+  --commit-edge-hover: var(--ember-100);
+  --commit-text: #1a0c03;
+  --commit-text-hover: #241104;
+
+  --menu-panel: var(--dusk-700);
+  --shadow-drop: rgb(0 0 0 / 65%);
+}
+
+/* ---- the two densities ------------------------------------------------ */
+
+/*
+ * Dust is one page and it is a game page: as little chrome as it can get away
+ * with. `work` is here for the contract's sake.
+ *
+ * NOTE: no `--pad`. The other two palettes set it for the pages they dress, but
+ * it is not one of the chrome's 39 roles — and this page has owned that name
+ * since before it had a top bar, as a single length in `#curtain`'s `left` and
+ * `right`. Redefining it as a two-value padding on `body` made those two
+ * declarations invalid, so the curtain stopped filling the stage and shrank to
+ * its title card. A shared stylesheet's token names are in the page's namespace:
+ * a role the chrome does not ask for is a name not worth taking.
+ */
+body.deep {
+  --bg: var(--dusk-1000);
+  --panel: var(--dusk-900);
+  --raised: var(--dusk-800);
+}
+body.work {
+  --bg: var(--dusk-900);
+  --panel: var(--dusk-700);
+  --raised: var(--dusk-600);
+  --inset: var(--dusk-1000);
+  --border: var(--leather-500);
+  --border-strong: var(--leather-400);
+  --gap: 0.65rem;
+}

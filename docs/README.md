@@ -56,23 +56,23 @@ at the top, so you can jump straight to one and follow those back.
 Two pages are outside the order, for reading out of order:
 **[the glossary](glossary.md)** (one line per term, when a word you don't know
 turns up in the middle of a page) and
-**[how we know it's right](verification.md)** (what actually verifies these
+**[how we know it's right](taoot/verification.md)** (what actually verifies these
 claims — worth reading whenever you want to know how load-bearing one is).
 
 ### Concepts — how the whole thing works
 
-- **[How the game works](01-how-the-game-works.md)** — the big picture.
+- **[How the game works](taoot/how-the-game-works.md)** — the big picture.
   What a "pre-rendered adventure on rails" actually is, and what happens
   from the moment you launch the game to walking around and clicking on
   things. Read this first.
-- **[Engine architecture](02-engine-architecture.md)** — how *this project*
+- **[Engine architecture](engine/architecture.md)** — how *this project*
   is organised: the file-reading layer, the runtime engine, the render
   loop, and how a mouse click travels through the system.
-- **[The scripting language](03-scripting-language.md)** — the game is
+- **[The scripting language](engine/scripting-language.md)** — the game is
   mostly *scripted*, not hard-coded. This explains DreamFactory's little
   scripting language, the event model (`openset`, `mousedown`, …), and how
   the interpreter runs it.
-- **[The mission flow](04-mission-flow.md)** — how the *plot* is encoded:
+- **[The mission flow](taoot/mission-flow.md)** — how the *plot* is encoded:
   the `mission`/`phase` globals, the story spine reconstructed straight from
   the scripts, and the tool that extracts it. Deeper than the three above and
   full of spoilers; safe to come back to.
@@ -82,52 +82,52 @@ claims — worth reading whenever you want to know how load-bearing one is).
 All game data lives in "DFile" container files. Read the foundation doc
 first; every format doc after it builds on it.
 
-- **[The DFile container format](formats/README.md)** — the shared skeleton
+- **[The DFile container format](engine/formats/README.md)** — the shared skeleton
   *every* DreamFactory file uses. **Read this before any specific format.**
-- **[The image codec](formats/image-codec.md)** — how a compressed picture
+- **[The image codec](engine/formats/image-codec.md)** — how a compressed picture
   (a room view, a movie frame, a prop) turns back into pixels, plus how
   colour palettes and depth maps work.
-- **[SET — rooms, scenes & views](formats/set.md)** — the pre-rendered
+- **[SET — rooms, scenes & views](engine/formats/set.md)** — the pre-rendered
   world you walk around in.
-- **[SHP — props ("shop" files)](formats/shp.md)** — the things drawn on top
+- **[SHP — props ("shop" files)](engine/formats/shp.md)** — the things drawn on top
   of the world: doors, items, buttons.
-- **[MOV — movies & inspectable objects](formats/mov.md)** — cutscenes and
+- **[MOV — movies & inspectable objects](engine/formats/mov.md)** — cutscenes and
   click-through close-ups, and why one file is a chain of films rather than one.
-- **[STG — stage files & the UI](formats/stg.md)** — full-screen screens
+- **[STG — stage files & the UI](engine/formats/stg.md)** — full-screen screens
   like the deck map, the inventory, and the on-screen UI band.
-- **[Audio — TRK / SFX / 11K / SND](formats/audio.md)** — music, sound
+- **[Audio — TRK / SFX / 11K / SND](engine/formats/audio.md)** — music, sound
   effects and voice lines, and the two custom compression codecs.
-- **[BOOTFILE — the game's startup & standard library](formats/bootfile.md)**
+- **[BOOTFILE — the game's startup & standard library](engine/formats/bootfile.md)**
   — the script bundle that boots the game and defines its shared behaviour.
-- **[The script container on disk](formats/script-container.md)** — the
+- **[The script container on disk](engine/formats/script-container.md)** — the
   binary layout of a compiled script, for when you want to go deep.
-- **[PUP & CST — characters ("puppets")](formats/pup-cst.md)** — dialogue,
+- **[PUP & CST — characters ("puppets")](engine/formats/pup-cst.md)** — dialogue,
   facial animation and character sprites.
-- **[Saved games (`.ti`)](formats/savegame.md)** — the one file the game
+- **[Saved games (`.ti`)](engine/formats/savegame.md)** — the one file the game
   *writes*: a serialized memory dump, and how it's read and patched back.
 
 ### Runtime — how the port plays the game
 
 The formats say what's in the bytes; these docs say what the engine *does*
 with them — the behaviour recovered from `TI.EXE`, plus the browser host
-around it. Overview: **[the runtime section](runtime/README.md)**.
+around it. Overview: **[the runtime section](engine/runtime/README.md)**.
 
-- **[Timing](runtime/timing.md)** — the heartbeat, `makeloop`, crickets,
+- **[Timing](engine/runtime/timing.md)** — the heartbeat, `makeloop`, crickets,
   walks, and the game clock.
-- **[Stage & UI](runtime/stage-ui.md)** — flat lifecycles, the overlay
+- **[Stage & UI](engine/runtime/stage-ui.md)** — flat lifecycles, the overlay
   stack behind the inventory, and the click order.
-- **[Characters](runtime/characters.md)** — actors in the world and puppet
+- **[Characters](engine/runtime/characters.md)** — actors in the world and puppet
   conversations.
-- **[Audio](runtime/audio.md)** — channels, bank resolution, and the volume
+- **[Audio](engine/runtime/audio.md)** — channels, bank resolution, and the volume
   controls.
-- **[Saving & loading](runtime/saves.md)** — snapshots, the load sequence,
+- **[Saving & loading](engine/runtime/saves.md)** — snapshots, the load sequence,
   and the in-browser saved-games UI.
-- **[The browser host](runtime/host.md)** — the page and the boot it runs, the
+- **[The browser host](engine/runtime/host.md)** — the page and the boot it runs, the
   viewer, the screen everything composites into, the movie player, and input.
-- **[The low-memory game](runtime/low-memory.md)** — the smaller version of
+- **[The low-memory game](engine/runtime/low-memory.md)** — the smaller version of
   itself the game shipped with, what its own `lowmemory()` switches off, and why
   `.11K` is not 11 kHz.
-- **[Languages & the chooser](runtime/languages.md)** — one data tree per
+- **[Languages & the chooser](taoot/languages.md)** — one data tree per
   language, the two selectors a bare filename resolves through, the code page
   its text turns out to be in, and the chooser this port wrote as a real
   DreamFactory stage.

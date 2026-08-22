@@ -1,12 +1,12 @@
 # Builtin commands
 
-*Prerequisite: [The scripting language](../03-scripting-language.md) — what a
+*Prerequisite: [The scripting language](../engine/scripting-language.md) — what a
 builtin is and how calls resolve.*
 
 This is the inventory of every engine command the port registers — roughly
 **250 builtins plus 22 `sendto*` special forms**, grouped by the modules under
-[`src/engine/builtins/`](https://github.com/dhobi/taoot-web/tree/master/src/engine/builtins).
-The [opcode table](../formats/script-container.md#command-ids-the-opcode-table)
+[`engine/src/runtime/builtins/`](https://github.com/dhobi/dreamrefactory/tree/master/engine/src/runtime/builtins).
+The [opcode table](../engine/formats/script-container.md#command-ids-the-opcode-table)
 names ~280 commands in total; the gap between "named" and "implemented" is
 tracked mechanically — [`tools/scancmds.mts`](tools.md) diffs the commands the
 shipped scripts actually invoke against this registry and regenerates
@@ -37,7 +37,7 @@ when absent — not a slice. (ENIGMA maps letters to key angles with
 ## Dispatch — `dispatch.ts`
 
 Plain: `cursor`, `message`. Plus the **special forms** (their last argument is
-a [deferred call](../03-scripting-language.md#talking-to-other-objects-sendto),
+a [deferred call](../engine/scripting-language.md#talking-to-other-objects-sendto),
 not evaluated locally):
 
 `sendtoprop`, `sendtoactor`, `sendtoscene`, `sendtoset`, `sendtoshop`,
@@ -47,7 +47,7 @@ not evaluated locally):
 `sendtopuppetfx`), which resolve the same single script as their siblings.
 `sendtopainting`/`sendtopaintingfx` take (scene, view, painting, call);
 `sendtobutton`/`sendtobuttonfx` take (flat, button, call) — see
-[Stage & UI](../runtime/stage-ui.md#buttons-sendtobutton).
+[Stage & UI](../engine/runtime/stage-ui.md#buttons-sendtobutton).
 
 ## Scene, stage & screen — `scene.ts`
 
@@ -67,7 +67,7 @@ Three groups are **deliberately inert**, each for a recovered reason:
 
 | Group | Names | Why |
 |-------|-------|-----|
-| Visual transitions (21) | `plain`, `nodraw`, `barndoorclose`/`open`, `irisclose`/`open`, `scrolldown`/`up`/`right`/`left` (sic: `scrolleft`), `venetian`, `wipedown`/`up`/`right`/`left`, `turnright`/`left`/`up`/`down`, `turnhalfleft`/`right` | behave as instant — visual polish for later; the fades that gate logic (`screentoblack`…) are real, and they [block the script](../runtime/timing.md) for their `steps` ticks the way the original's do |
+| Visual transitions (21) | `plain`, `nodraw`, `barndoorclose`/`open`, `irisclose`/`open`, `scrolldown`/`up`/`right`/`left` (sic: `scrolleft`), `venetian`, `wipedown`/`up`/`right`/`left`, `turnright`/`left`/`up`/`down`, `turnhalfleft`/`right` | behave as instant — visual polish for later; the fades that gate logic (`screentoblack`…) are real, and they [block the script](../engine/runtime/timing.md) for their `steps` ticks the way the original's do |
 | Debugger family (14) | `propscript`, `buttonscript`, `scenescript`, `flatscript`, `stagescript`, `bootscript`, `postscript`, `setscript`, `paintingscript`, `puppetscript`, `castscript`, `actorscript`, `shopscript`, `serverscript` | opened the in-engine script editor; in every shipping build of `TI.EXE` the editor flag is clear and they no-op |
 | Modifier keys (3) | `shiftkey`, `optionkey`, `commandkey` | always 0, keeping `if debugging & shiftkey()` debug branches dormant |
 
@@ -79,7 +79,7 @@ asset pre-warmers (the port instantiates everything up front).
 one of these: they are ~200 lines of BOOTFILE script with no opcode id, and
 builtins of those names shadowed them. `openstagefile` is the primitive the shipped
 handler calls; the overlay sequence around it is the game's
-([Stage & UI](../runtime/stage-ui.md)).
+([Stage & UI](../engine/runtime/stage-ui.md)).
 `visualeffect` used to be listed as a no-op above and is not one: every effect but
 `plain` is a *reveal*, and while this port still draws the effect itself instantly,
 a reveal also **ends the transition-black the script put up** — which is what one
@@ -90,7 +90,7 @@ stage in the game relies on, and nothing else was doing.
 `propexists`, `propis3d`, `propdelete`, `propvisible`, `propview`, `propxy`,
 `propxyz`, `propset`, `propscale`, `propzclip`, `propowner`, `propinstance`,
 `propdeg`, `propdist`, `propvalue`, `propstar`, `starxyz`, `countprops`,
-`indextoprop`, `error`. See [SHP](../formats/shp.md) for the placement
+`indextoprop`, `error`. See [SHP](../engine/formats/shp.md) for the placement
 model (`propxy` screen-space vs `propxyz` world-space).
 
 `countprops`/`indextoprop` enumerate **one game-wide table** — the union of every
@@ -109,7 +109,7 @@ of `advanceday`'s world-reset loops, and the control panel's
 `currentsound`, `currentvoice`, `soundvol`, `soundpan`, `playtheme`,
 `opentrackfile`, `closetrackfile`, and the
 count/index pairs for sounds and tracks. The channel model is in
-[Audio at runtime](../runtime/audio.md).
+[Audio at runtime](../engine/runtime/audio.md).
 
 `playnewtheme` is **not** here, for the same reason `trackbut` is not: it has no
 opcode id, it is two lines of BOOTFILE script — `playtheme(name);
@@ -121,7 +121,7 @@ not have to get past us to run.
 
 `currentsound(1|2)` reads the two SFX slots and is the *only* way a script can ask
 whether a sound has finished, so everything that plays on that channel has to
-publish itself there — [crickets included](../runtime/timing.md#crickets-sound-with-a-position).
+publish itself there — [crickets included](../engine/runtime/timing.md#crickets-sound-with-a-position).
 
 ## Timing — `timing.ts`
 
@@ -129,7 +129,7 @@ publish itself there — [crickets included](../runtime/timing.md#crickets-sound
 `indextoloop`, `makecricket`, `stopcricket`, `pausecricket`, `iscricket`,
 `countcrickets`, `indextocricket`, `soundloop`, `forceupdate`. The model —
 loops that are really one-shots, crickets, the per-frame special case — is in
-[Timing](../runtime/timing.md).
+[Timing](../engine/runtime/timing.md).
 
 ## Actors — `actors.ts`
 
@@ -140,7 +140,7 @@ loops that are really one-shots, crickets, the per-frame special case — is in
 `turntodeg`, the walks (`walktostar`, `walktoxyz`, `walkonpath`, `iswalk`,
 `stopwalk`, `pausewalk`, `walkdest`, `countwalks`, `indextowalk`) and the
 count/index pairs for actors and casts. See
-[Characters](../runtime/characters.md).
+[Characters](../engine/runtime/characters.md).
 
 One divergence, read out of `TI.EXE` with `disasmcmd`: **`actorvalue`** stores its
 value at `+0x50` of the 0xA8-byte actor record, accepts **integers only** (type tag
@@ -152,7 +152,7 @@ hits are `extra.cst` storing a facing degree; `SMETH1.PUP` sets `smethphase`
 instead). So the gate cannot flip and the knock re-arms on every entry to the
 cabin, **in the original too**. `actorvalue` also has no field in the saved-actor
 record at all, which is one of the things a `.ti` round trip
-[forgets](../verification.md#one-game-carried-not-a-chain-of-loads).
+[forgets](../taoot/verification.md#one-game-carried-not-a-chain-of-loads).
 
 ## Puppets — `puppets.ts`
 
@@ -160,7 +160,7 @@ record at all, which is one of the things a `.ti` round trip
 `puppetclear`, `puppetbevel`, `puppetevent`, `puppetbase`, `puppetvisible`,
 `puppetparam`, `countpuppets`, `indextopuppet` — plus three stubs the corpus
 never exercises meaningfully (`puppetsubtitle`, `puppetgrab`,
-`puppetscramble`). See [Characters](../runtime/characters.md).
+`puppetscramble`). See [Characters](../engine/runtime/characters.md).
 
 ## Pointer & text — `pointer.ts`
 
@@ -187,9 +187,9 @@ String and math utilities plus host probes: `findword`, `putword`,
 and the environment probes `machinetype` (returns `"win"`), `currentcd`,
 `lowmemory` (0) and `heapsize` — 64 MB, so the BOOTFILE's RAM check takes the
 full-quality `.trk` path instead of
-[the low-memory `.11k` one](../formats/audio.md#_11k-the-low-memory-swap-in),
+[the low-memory `.11k` one](../engine/formats/audio.md#_11k-the-low-memory-swap-in),
 and 4 MB when the player has asked for
-[the low-memory game](../runtime/low-memory.md).
+[the low-memory game](../engine/runtime/low-memory.md).
 `calcmod` is a **non-negative** modulo, recovered from `TI.EXE` — plain `%`
 breaks the compass math.
 
@@ -203,7 +203,7 @@ a result of length 1, and copies `source[idx]` into it; out of range is `""`.
 before character idx, one past the end it appends, further out it yields `""`.
 
 Reading that as "split on spaces" was
-[#199](https://github.com/dhobi/taoot-web/issues/199)'s second half. Three of
+[#199](https://github.com/dhobi/dreamrefactory/issues/199)'s second half. Three of
 TAOOT's own uses need the character rule: the wireless Morse tapper walks
 `for count = 1 to stringlength (sound)` and treats `" "` as a value, the keypad
 matches one typed letter against `findword ("thayer", "", stringlength
@@ -216,6 +216,6 @@ those `= "1"` tests failed against a space-joined reading.
 
 ## Saved games — `savegame.ts`
 
-`savegame`, `opengame` — see [Saving & loading](../runtime/saves.md).
+`savegame`, `opengame` — see [Saving & loading](../engine/runtime/saves.md).
 
 Back to the [reference index](README.md).

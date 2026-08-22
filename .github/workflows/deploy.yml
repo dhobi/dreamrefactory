@@ -1,72 +1,46 @@
 name: Deploy
 
-# Publishing the site to www.danielhobi.ch/taoot.
+# Publishing to www.danielhobi.ch/dreamrefactory.
 #
-# A release is a TAG, and there are TWO tag namespaces because the site carries
-# two separately-versioned games off one codebase:
+# THREE builds share that one directory, and each releases on its own tag:
 #
-#   taoot-v0.9.51  the TAOOT site — the full build, MINUS dust.html, so a TAOOT
-#                  release never ships whatever state Dust happens to be in
-#   dust-v0.1.0    the Dust page — `vite build --mode dust`, which emits
-#                  dust.html and its own hashed chunks and nothing else
+#   site-v0.1.0     the front door and the format editors  → /dreamrefactory/
+#   taoot-v0.9.51   Titanic                                → /dreamrefactory/taoot/
+#   dust-v0.3.1     Dust                                   → /dreamrefactory/dust/
 #
-# BOTH namespaces carry their game's name. The TAOOT tag was a bare `v0.9.50`
-# until 0.9.51, which read as "the repository's version" when it was only ever
-# one of the two games' — and left the pair spelled differently for no reason.
-# The bare pattern is GONE rather than kept alongside: two working spellings for
-# one release is how a `v0.9.52` gets tagged, matched by nothing, and quietly
-# deploys nothing. A tag naming no game is now an ERROR, not a default.
+# The documentation is the fourth thing in that tree and does NOT release on a
+# tag — it goes out on any push that touches it (docs.yml → /dreamrefactory/docs/).
 #
-# Either tag builds that commit and uploads its `dist/` over FTP; an ordinary
-# push to master deploys nothing. Both work because the mirror only ADDS and
-# OVERWRITES and every asset name is content-hashed: a dust deploy overwrites
-# exactly dust.html and adds its new chunks, and the TAOOT pages do not move
-# (and vice versa — the superseded page keeps serving its old chunks, which are
-# never deleted). Each tag is checked against its own package.json field
-# (`version` / `dustVersion`), because the pages read their numbers from there
-# (src/version.ts) and a site announcing a version nobody tagged is worse than
-# a failed deploy.
+# Every namespace carries its target's name, and a tag naming none of them is an
+# ERROR rather than a default: the old default-to-TAOOT would take a mis-typed tag
+# and ship a build under it. Each tag is checked against its own package.json,
+# because the pages read their numbers from there (site/src/version.ts) and a site
+# announcing a version nobody tagged is worse than a failed deploy.
 #
-# ## This deploy never deletes anything
+# An ordinary push to master deploys no build. Uploading is add-and-overwrite
+# only — see .github/actions/ftp-mirror, which explains why, and why that is what
+# lets three builds write into one tree.
 #
-# The site is served from the same directory as three things that are not in
-# `dist/` and never in this repository:
+# The trap this leaves is `npm version`, which writes a bare `v0.9.51` that
+# nothing here listens for. Pass `--no-git-tag-version` and tag by hand, which is
+# the hand that knows which of the three it is.
 #
-#   gamefiles/       the CD rip the host serves — ~7 GB, gitignored forever
-#   *.zip            the offline DBGL archives the collection page links to,
-#                    ~1 GB apiece
-#   gamefiles*.json  the listings of the rip (the full manifest and the Dust
-#                    slice). A GitHub runner has no rip, so the manifests THIS
-#                    build writes hold ONE entry (`lang.stg`) against the
-#                    thousands the host serves — the pages would offer nothing.
-#                    They are deleted below rather than uploaded; the host
-#                    regenerates both with tools/mkmanifest.ts.
-#
-# So the mirror only ADDS and OVERWRITES, and the two that could be *written*
-# over are excluded on top of that. There is deliberately no --delete and no
-# option to turn one on: a re-upload of a wrong file is a minute, and a deleted
-# 7 GB rip is not. Vite's asset names are content-hashed, so a superseded bundle
-# is dead weight rather than a stale page — sweep `assets/` by hand if it ever
-# matters.
-#
-# ## The connection
-#
-# Plain FTP sends the password as text on the wire, so the run demands TLS
-# (AUTH TLS on the ordinary FTP port — "explicit FTPS", what shared hosts mean
-# by "FTP over SSL"). Two escape hatches for a host that cannot do it properly,
-# both loud and both off by default: FTP_INSECURE_TLS=1 keeps the encryption but
-# stops checking the certificate (the usual shared-hosting case, where the cert
-# names the server and not the domain), and FTP_ALLOW_PLAINTEXT=1 gives up on
-# TLS entirely.
-#
-# Secrets (repository or `production` environment): FTP_HOST, FTP_USER,
-# FTP_PASSWORD, FTP_PATH, and optionally FTP_PORT, FTP_INSECURE_TLS,
-# FTP_ALLOW_PLAINTEXT. See docs/reference/deploy.md.
+# Secrets: the `dreamrefactory` environment holds FTP_USER, FTP_PASSWORD and
+# FTP_PATH (the account lands in the site directory, so FTP_PATH is "."), and
+# FTP_HOST falls through to the repository secret. Optional: FTP_PORT,
+# FTP_INSECURE_TLS, FTP_ALLOW_PLAINTEXT. See docs/reference/deploy.md.
 
 on:
   push:
-    tags: ["taoot-v*", "dust-v*"]
+    tags: ["site-v*", "taoot-v*", "dust-v*"]
   workflow_dispatch:
+    inputs:
+      target:
+        description: Which of the three to build and upload
+        required: true
+        default: site
+        type: choice
+        options: [site, taoot, dust]
 
 # One upload at a time, and never cancel one in flight: a half-written mirror is
 # a half-broken site.
@@ -79,9 +53,17 @@ permissions:
 
 jobs:
   deploy:
-    name: build and upload dist/
+    name: build and upload
     runs-on: ubuntu-latest
-    environment: production
+    environment: dreamrefactory
+    env:
+      FTP_HOST: ${{ secrets.FTP_HOST }}
+      FTP_USER: ${{ secrets.FTP_USER }}
+      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+      FTP_PATH: ${{ secrets.FTP_PATH }}
+      FTP_PORT: ${{ secrets.FTP_PORT }}
+      FTP_INSECURE_TLS: ${{ secrets.FTP_INSECURE_TLS }}
+      FTP_ALLOW_PLAINTEXT: ${{ secrets.FTP_ALLOW_PLAINTEXT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -92,123 +74,66 @@ jobs:
 
       - run: npm ci
 
-      # Which game is this tag releasing? Each namespace says so itself, and a
-      # tag that says neither stops the run: guessing is what a bare `v*` used
-      # to do, and a wrong guess here uploads one game's build over the other's
-      # page. A manual dispatch has no tag and means the site, as it always did.
+      # Which of the three is this? The tag says so itself; a manual dispatch
+      # says so in its input.
       - name: Which release is this
         id: what
         run: |
           if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
-            echo "game=taoot" >> "$GITHUB_OUTPUT"
-          elif [[ "${GITHUB_REF_NAME}" == dust-v* ]]; then
-            echo "game=dust" >> "$GITHUB_OUTPUT"
-          elif [[ "${GITHUB_REF_NAME}" == taoot-v* ]]; then
-            echo "game=taoot" >> "$GITHUB_OUTPUT"
+            target="${{ inputs.target }}"
+          elif [[ "${GITHUB_REF_NAME}" == site-v*  ]]; then target=site
+          elif [[ "${GITHUB_REF_NAME}" == taoot-v* ]]; then target=taoot
+          elif [[ "${GITHUB_REF_NAME}" == dust-v*  ]]; then target=dust
           else
-            echo "::error::tag $GITHUB_REF_NAME names no game — tag taoot-v* or dust-v*"
+            echo "::error::tag $GITHUB_REF_NAME names no target — tag site-v*, taoot-v* or dust-v*"
             exit 1
           fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          # the site's build IS the root of the tree; the games sit inside it
+          [ "$target" = site ] && echo "remote=." >> "$GITHUB_OUTPUT" \
+                               || echo "remote=$target" >> "$GITHUB_OUTPUT"
 
-      - name: The tag and package.json agree
+      - name: The tag and the package agree
         if: github.ref_type == 'tag'
         run: |
-          if [ "${{ steps.what.outputs.game }}" = "dust" ]; then
-            tag="${GITHUB_REF_NAME#dust-v}"
-            pkg="$(node -p "require('./package.json').dustVersion")"
-            field="dustVersion"
-          else
-            tag="${GITHUB_REF_NAME#taoot-v}"
-            pkg="$(node -p "require('./package.json').version")"
-            field="version"
-          fi
+          target="${{ steps.what.outputs.target }}"
+          tag="${GITHUB_REF_NAME#${target}-v}"
+          pkg="$(node -p "require('./${target}/package.json').version")"
           if [ "$tag" != "$pkg" ]; then
-            echo "::error::tag $GITHUB_REF_NAME says $tag, package.json $field says $pkg"
+            echo "::error::tag $GITHUB_REF_NAME says $tag, ${target}/package.json says $pkg"
             exit 1
           fi
-          echo "deploying ${{ steps.what.outputs.game }} $pkg"
+          echo "deploying $target $pkg"
 
-      # Both scripts run tsc first — a type error stops the deploy.
-      - run: npm run build
-        if: steps.what.outputs.game == 'taoot'
-      - run: npm run build:dust
-        if: steps.what.outputs.game == 'dust'
+      # Each script runs tsc across the whole workspace first, so a type error
+      # anywhere stops any deploy.
+      - name: Build
+        run: npm run build:${{ steps.what.outputs.target }}
 
-      # See the header: without the rip, these files describe nothing.
-      - name: Drop the manifests this build could not write
-        run: rm -f dist/gamefiles.json dist/gamefiles-dust.json
+      # A runner has no rip, so the manifest this build wrote describes almost
+      # nothing. The host's copy is the real one (tools/mkmanifest.ts); this is
+      # deleted here and excluded from the upload as well.
+      - name: Drop the manifest this build could not write
+        run: rm -f dist/${{ steps.what.outputs.target }}/gamefiles.json
 
-      # See the header: the Dust page releases on its OWN tag, so a TAOOT
-      # release must not carry the repository's current dust.html with it.
-      - name: A TAOOT release does not ship the Dust page
-        if: steps.what.outputs.game == 'taoot'
-        run: rm -f dist/dust.html
-
-      - name: Upload dist/ over FTP
-        env:
-          FTP_HOST: ${{ secrets.FTP_HOST }}
-          FTP_USER: ${{ secrets.FTP_USER }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-          FTP_PATH: ${{ secrets.FTP_PATH }}
-          FTP_PORT: ${{ secrets.FTP_PORT }}
-          FTP_INSECURE_TLS: ${{ secrets.FTP_INSECURE_TLS }}
-          FTP_ALLOW_PLAINTEXT: ${{ secrets.FTP_ALLOW_PLAINTEXT }}
-        run: |
-          set -eu
-          for v in FTP_HOST FTP_USER FTP_PASSWORD FTP_PATH; do
-            eval "test -n \"\${$v:-}\"" || { echo "::error::secret $v is not set"; exit 1; }
-          done
-
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq lftp
-
-          # See the header. TLS is required unless someone has said otherwise in
-          # a secret, and either way of saying it prints why in the log.
-          force="true"; verify="yes"
-          if [ "${FTP_INSECURE_TLS:-}" = "1" ]; then
-            verify="no"
-            echo "::warning::FTP_INSECURE_TLS=1 — encrypted, but the certificate is not checked"
-          fi
-          if [ "${FTP_ALLOW_PLAINTEXT:-}" = "1" ]; then
-            force="false"
-            echo "::warning::FTP_ALLOW_PLAINTEXT=1 — the password may cross the wire in the clear"
-          fi
-
-          # Nothing in dist/ is named any of these, so this is the second lock
-          # rather than the first: a build that somehow produced one of them
-          # still cannot write it over the host's copy.
-          keep='--exclude-glob gamefiles.json --exclude-glob gamefiles-dust.json --exclude-glob *.zip'
-
-          # One connection rather than four: shared FTP accounts cap concurrent
-          # logins, and 115 files / 37 MB does not need the parallelism.
-          #
-          # The script goes in a file rather than on the command line so the
-          # password is not in any process list; 077 because the runner is not
-          # the only thing that can read $RUNNER_TEMP.
-          umask 077
-          script="$RUNNER_TEMP/deploy.lftp"
-          cat > "$script" <<LFTP
-          set cmd:fail-exit yes
-          set ftp:passive-mode true
-          set ftp:ssl-allow true
-          set ftp:ssl-force $force
-          set ftp:ssl-protect-data true
-          set ssl:verify-certificate $verify
-          set net:max-retries 2
-          set net:timeout 30
-          open -u "$FTP_USER","$FTP_PASSWORD" -p "${FTP_PORT:-21}" ftp://$FTP_HOST
-          mirror -R --verbose $keep dist/ "$FTP_PATH"
-          bye
-          LFTP
-          trap 'rm -f "$script"' EXIT
-          lftp -f "$script"
+      - name: Upload
+        uses: ./.github/actions/ftp-mirror
+        with:
+          source: dist/${{ steps.what.outputs.target }}
+          remote: ${{ steps.what.outputs.remote }}
+          # the collection page links to ~1 GB DBGL archives that live beside the
+          # rip and are in no build
+          exclude: ${{ steps.what.outputs.target == 'taoot' && '--exclude-glob *.zip' || '' }}
 
       - name: Say what went out
         if: success()
         run: |
+          target="${{ steps.what.outputs.target }}"
+          url="https://www.danielhobi.ch/dreamrefactory/"
+          [ "$target" = site ] || url="$url$target/"
           {
-            echo "### Deployed \`$(node -p "require('./package.json').version")\` to <https://www.danielhobi.ch/taoot/>"
+            echo "### Deployed $target \`$(node -p "require('./${target}/package.json').version")\` to <$url>"
             echo
-            echo "$(find dist -type f | wc -l) files, $(du -sh dist | cut -f1) — added and overwritten only."
-            echo "\`gamefiles/\`, \`gamefiles.json\` and the DBGL archives were not touched."
+            echo "$(find "dist/$target" -type f | wc -l) files, $(du -sh "dist/$target" | cut -f1) — added and overwritten only."
+            echo "The rips, their \`gamefiles.json\`, the DBGL archives and the other two builds were not touched."
           } >> "$GITHUB_STEP_SUMMARY"

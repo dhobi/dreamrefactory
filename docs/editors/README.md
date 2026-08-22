@@ -10,24 +10,24 @@ props (SHP), movies (MOV — logic only, for a reason
 [the page explains](movies.md#why-the-art-is-read-only)), screens (STG), sound
 (TRK/SFX/11K), and characters twice over (PUP for the brains, CST for the
 body). The one file the game *writes* rather than reads, the `.ti`
-[save](../formats/savegame.md), has
-[the saved-games browser](../runtime/saves.md) instead.
+[save](../engine/formats/savegame.md), has
+[the saved-games browser](../engine/runtime/saves.md) instead.
 
 | Editor | Page | Format | Source |
 |--------|------|--------|--------|
-| [Set editor](sets.md) | `/editors/sets.html` | [SET](../formats/set.md) — rooms, scenes, views | [`editors/set-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/set-editor.ts) |
-| [Shop editor](shops.md) | `/editors/shops.html` | [SHP](../formats/shp.md) — props | [`editors/shp-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/shp-editor.ts) |
-| [Movie editor](movies.md) | `/editors/movies.html` | [MOV](../formats/mov.md) — cutscenes & close-ups | [`editors/mov-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/mov-editor.ts) |
-| [Stage editor](stages.md) | `/editors/stages.html` | [STG](../formats/stg.md) — full-screen flats & UI | [`editors/stg-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/stg-editor.ts) |
-| [Track editor](tracks.md) | `/editors/tracks.html` | [TRK / SFX / 11K](../formats/audio.md) — audio banks | [`editors/track-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/track-editor.ts) |
-| [Puppet editor](puppets.md) | `/editors/puppets.html` | [PUP](../formats/pup-cst.md) — conversations | [`editors/puppet-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/puppet-editor.ts) |
-| [Cast editor](casts.md) | `/editors/casts.html` | [CST](../formats/pup-cst.md) — actor sprites | [`editors/cst-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/cst-editor.ts) |
+| [Set editor](sets.md) | `/editors/sets.html` | [SET](../engine/formats/set.md) — rooms, scenes, views | [`editors/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/set-editor.ts) |
+| [Shop editor](shops.md) | `/editors/shops.html` | [SHP](../engine/formats/shp.md) — props | [`editors/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/shp-editor.ts) |
+| [Movie editor](movies.md) | `/editors/movies.html` | [MOV](../engine/formats/mov.md) — cutscenes & close-ups | [`editors/mov-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/mov-editor.ts) |
+| [Stage editor](stages.md) | `/editors/stages.html` | [STG](../engine/formats/stg.md) — full-screen flats & UI | [`editors/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/stg-editor.ts) |
+| [Track editor](tracks.md) | `/editors/tracks.html` | [TRK / SFX / 11K](../engine/formats/audio.md) — audio banks | [`editors/track-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/track-editor.ts) |
+| [Puppet editor](puppets.md) | `/editors/puppets.html` | [PUP](../engine/formats/pup-cst.md) — conversations | [`editors/puppet-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/puppet-editor.ts) |
+| [Cast editor](casts.md) | `/editors/casts.html` | [CST](../engine/formats/pup-cst.md) — actor sprites | [`editors/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/cst-editor.ts) |
 
 All of it lives in `editors/`: one HTML page and one module per editor, the
 `editor.css` all of them share, and an `index.html` that lists them — the page
 `/editors/` itself serves. Each page is its own Vite entry point, so a build
 emits eight pages plus one shared stylesheet. Nothing in there imports
-`src/engine/`; the only shared code is `src/df/` and `src/screen.ts`.
+`engine/src/runtime/`; the only shared code is `engine/src/df/` and `engine/src/web/screen.ts`.
 
 ## What they have in common
 
@@ -40,7 +40,7 @@ runtime loads a room with, `editors/tracks.html` decodes a bank through the
 same `decodeAudioContainer` the audio channel plays through. So the editor cannot
 drift from the port: if a page draws a hotspot in the wrong place, the engine
 is putting it there too. The editors are, in practice, the best debugger the
-[file-reading layer](../02-engine-architecture.md) has.
+[file-reading layer](../engine/architecture.md) has.
 
 **They load a file three ways.** Upload it, drag it onto the page, or — when
 the dev server is running — pick it from the `gamefiles.json` manifest, the same
@@ -51,15 +51,15 @@ the parsing all happens in the tab.
 tree with six languages installed offers six copies of every basename, and an
 editor listing all of them is listing the same file six times — so the 🌐 control
 in the top bar filters the manifest to one tree
-([Languages](../runtime/languages.md)). For the puppet editor it decides more than
+([Languages](../taoot/languages.md)). For the puppet editor it decides more than
 the listing: the subtitles' [code
-page](../runtime/languages.md#the-code-page-is-not-in-the-data) comes from the same
+page](../taoot/languages.md#the-code-page-is-not-in-the-data) comes from the same
 choice, because no puppet file states it.
 
 **An untouched load exports the file it read.** Every edit that is not
 whole-container art is a *copy-on-write patch* on one container:
 `patchContainerData` in
-[`src/df/container.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/container.ts)
+[`engine/src/df/container.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/container.ts)
 replaces just that container with an edited copy and leaves the rest of the
 loaded buffer pristine, and `writeContainerFile` reserializes the file with the
 original header bytes kept verbatim (so header fields nobody has decoded yet
@@ -74,7 +74,7 @@ ordering are byte-exact. Pixels and audio are not, because they get re-encoded:
 
 | Import | What happens to it | Consequence |
 |--------|--------------------|-------------|
-| a **view or flat picture** | matched to the file's palette (nearest RGB) and re-encoded with `encodeFrame` in [`src/df/image.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/image.ts) | written **self-contained** rather than delta-coded, so it decodes identically but is bigger than CyberFlix's own encoding of the same picture |
+| a **view or flat picture** | matched to the file's palette (nearest RGB) and re-encoded with `encodeFrame` in [`engine/src/df/image.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/image.ts) | written **self-contained** rather than delta-coded, so it decodes identically but is bigger than CyberFlix's own encoding of the same picture |
 | a **prop or actor sprite** | the same, plus **alpha < 128 becomes transparent** | the mask is also the click hit-test, so it decides what is clickable, not just what is drawn |
 | **audio** | downmixed to mono, resampled to the chunk's rate, re-encoded with the v41 codec | the codec is lossy — re-importing an exported WAV will not reproduce the original bytes |
 
@@ -87,23 +87,23 @@ says so where it applies, and says it again on screen when it happens.
 ## Reading order
 
 There isn't one — go to the format you care about. But the pages assume you
-have read the [format doc](../formats/README.md) behind them, because they
+have read the [format doc](../engine/formats/README.md) behind them, because they
 describe what the editor *does with* a structure rather than what the structure
 is. The set editor's page will tell you that renaming a road is a
-copy-on-write patch; [SET](../formats/set.md) is where you find out what a road
+copy-on-write patch; [SET](../engine/formats/set.md) is where you find out what a road
 is.
 
 ## What holds them to their contract
 
 Every editor's promise is a round trip: load a file, change one thing, export, and
 the bytes you did not touch are the bytes you had. That is checked in
-`tests/auto/*-editor.ts`, one suite per editor, over a **synthesized** file rather
+`taoot/tests/auto/*-editor.ts`, one suite per editor, over a **synthesized** file rather
 than a shipped one — so the suites need no `gamefiles/` and can be written against
 awkward shapes on purpose (a state whose play order reverses its frames, a pose with
 a missing direction, a movie frame that holds the picture before it).
 
-Those fixtures are built by the library's own writers, `src/df/*-build.ts`
-([the write path](../formats/README.md#writing-one-back)). Before that they were
+Those fixtures are built by the library's own writers, `engine/src/df/*-build.ts`
+([the write path](../engine/formats/README.md#writing-one-back)). Before that they were
 hand-laid byte arrays inside each test, which only proved an edit worked on bytes
 the test itself chose — and were a wall of `i16(d, 0x76 + i * 44, …)` that said
 nothing about what was being built.

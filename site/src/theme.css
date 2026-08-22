@@ -1,0 +1,237 @@
+/*
+ * The project's own palette: black, hot green, chrome.
+ *
+ * Sampled from the DreamREfactory logo — a green wireframe globe with a swoosh
+ * orbiting it, "Dream" and "factory" in brushed chrome, the "RE" between them
+ * lit green, all on black. Nothing below is invented; the three scales are that
+ * image's three materials.
+ *
+ * The SECOND implementation of the contract in site/src/chrome.css, and the
+ * reason that split was worth doing: the same 39 role names and the same topbar,
+ * pickers, controls and panels as Titanic's pages, wearing none of Titanic's
+ * colours.
+ *
+ * Why it is not Titanic's — and why it is not the first attempt either
+ * -------------------------------------------------------------------
+ * taoot/src/theme.css is abyss, hull, ice and brass, sampled out of a logo with
+ * an iceberg in it. This page is the PARENT of the two games, and painting it in
+ * one of their palettes says the opposite: a Titanic site with some docs
+ * attached, rather than a project with Titanic inside it.
+ *
+ * The first version of this file was graphite and steel-blue. It used none of
+ * Titanic's values and still read as the same room with the lights down — dark,
+ * blue-grey, chrome-on-navy either way, because avoiding a palette's hues is not
+ * the same as having one of your own. This has one: real black, and green light.
+ *
+ * What the colours MEAN
+ * ---------------------
+ * The logo has two materials on a void, so the roles divide the same way:
+ *
+ *   green   it is live, it is powered, or it is where you are
+ *   chrome  it is a surface, an edge, or a word
+ *   black   it is the void behind everything
+ *
+ * That leaves the question of "this COMMITS, or this is unsaved", which the
+ * chrome's `--mark` roles need and which must not be mistakable for "this is
+ * live". The first answer here was GOLD — the one hue the logo does not use, on
+ * the theory that a second job wants a second hue. On the page it read as a
+ * visitor from another design: a warm brass button in the middle of a black-and-
+ * green console, which is exactly the Titanic palette this file exists to get
+ * away from.
+ *
+ * The logo answers it better. Its swoosh has a near-white core — the brightest
+ * thing in the image by a distance — and that is the same green doing a louder
+ * job. So the mark is the TOP of the signal scale rather than a different hue:
+ * separated from the accent by value, which is enough, and unmistakably part of
+ * the same instrument.
+ */
+
+/* The structure comes first: an @import has to lead the file, and custom
+   properties resolve where they are USED, so the rules it holds reach these
+   values regardless of order. */
+@import "@dreamfactory/site/chrome.css";
+
+/* ---- the void ---------------------------------------------------------- */
+
+:root {
+  /* Real black at the bottom, because the logo sits on real black — a globe
+     glowing over #0c0e12 looks like it is glowing over a wall. */
+  --void-1000: #000000;
+  --void-900: #030603;
+  --void-800: #060b06;
+  --void-700: #0b130b;
+  --void-600: #111c11;
+  --void-500: #182718;
+
+  /* Edges: green-tinted graphite, so a border reads as part of the wireframe
+     rather than as a grey box drawn over it. */
+  --wire-600: #162a16;
+  --wire-500: #1e3a1e;
+  --wire-400: #2b522b;
+  --wire-300: #3d723d;
+  --wire-200: #58a058;
+}
+
+/* ---- the green --------------------------------------------------------- */
+
+:root {
+  /* The globe's wireframe at the bottom of the scale, the swoosh's core at the
+     top. This is the "RE" — the one word in the logo that is lit rather than
+     reflective. */
+  --signal-700: #0f7a0f;
+  --signal-600: #16a316;
+  --signal-500: #1fc71f;
+  --signal-400: #2ee62e;
+  --signal-300: #5bff5b;
+  --signal-200: #9dff9d;
+  --signal-100: #d8ffd8;
+}
+
+/* ---- the chrome ------------------------------------------------------- */
+
+:root {
+  /* Brushed metal, cool rather than warm: the dark underside of a bevel through
+     to the highlight running along its top edge. */
+  --chrome-600: #3f4a55;
+  --chrome-500: #5d6b78;
+  --chrome-400: #8695a3;
+  --chrome-300: #adbcc8;
+  --chrome-200: #cfdae3;
+  --chrome-100: #eef4f8;
+
+  --alarm: #ff4d3d;
+  --ok: var(--signal-400);
+}
+
+/* ---- typography and metrics ------------------------------------------- */
+
+:root {
+  /*
+   * The logo's own face is a wide, squared, italic-cut techno display type of the
+   * sort a 1996 CD-ROM box carried, and nothing on a system font stack is it. So
+   * the page does not pretend: headings are a plain grotesque and the wordmark is
+   * the image itself. Faking the face with letter-spacing and a skew would read
+   * as a fake of it.
+   */
+  --font-display:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --gap: 0.8rem;
+  --radius: 3px;
+  --radius-lg: 5px;
+  --pad: 0.6rem 0.9rem;
+
+  /* The focus treatment is the swoosh's bloom rather than a drop shadow: a tight
+     ring and a wide soft halo, which is how the logo lights what it lights. */
+  --glow: 0 0 0 1px rgba(46, 230, 46, 0.35), 0 0 34px -4px rgba(46, 230, 46, 0.45);
+}
+
+/* ---- the 39 roles the chrome asks for ---------------------------------- */
+
+:root {
+  /* surfaces */
+  --bg: var(--void-1000);
+  --panel: var(--void-800);
+  --raised: var(--void-700);
+  --inset: var(--void-900);
+
+  /* edges */
+  --border: var(--wire-600);
+  --border-strong: var(--wire-500);
+  --border-hover: var(--wire-200);
+
+  /* ink: chrome, with the wordmark's own highlight reserved for what matters */
+  --text: var(--chrome-300);
+  --text-bright: var(--chrome-100);
+  --text-dim: var(--chrome-400);
+  --text-mute: var(--chrome-600);
+
+  /* the green: live, powered, here */
+  --accent: var(--signal-400);
+  --accent-hover: var(--signal-300);
+  --accent-line: var(--signal-500);
+  --selection-bg: rgba(46, 230, 46, 0.28);
+
+  /* the mark: commits, or unsaved — the swoosh's bright core, not another hue */
+  --mark: var(--signal-200);
+  --mark-glow: rgba(46, 230, 46, 0.4);
+
+  /* the bar across the top: the void, lifted a hair so the page has a horizon */
+  --topbar-top: var(--void-600);
+  --topbar-bottom: var(--void-1000);
+
+  /* The pool of light behind the page — the globe's own halo and not a lit wall,
+     so it is green, and it is faint. */
+  --depth-light: rgba(31, 199, 31, 0.14);
+
+  /* controls */
+  --button-hover-bg: var(--void-500);
+  --button-active-bg: var(--void-600);
+  --state-border: var(--wire-400);
+
+  /* the rule under a page title — the green bar the wordmark sits on */
+  --rule-mid: var(--signal-600);
+  --rule-bright: var(--signal-300);
+
+  /*
+   * The one control that commits: the logo's lit "RE" as a button. A solid green
+   * face with a bright edge, and near-black green ink — the only place in the
+   * design where the ground is the signal rather than the void.
+   */
+  --commit-face-bottom: var(--signal-600);
+  --commit-face-deep: var(--signal-700);
+  --commit-edge: var(--signal-300);
+  --commit-edge-hover: var(--signal-100);
+  --commit-text: #041007;
+  --commit-text-hover: #06180b;
+
+  /* a floating menu, and what it casts */
+  --menu-panel: var(--void-700);
+  --shadow-drop: rgb(0 0 0 / 70%);
+}
+
+/* ---- the two densities ------------------------------------------------- */
+
+/*
+ * The same pair Titanic's palette has, for the same reasons — the chrome's rules
+ * are written against `body.deep` and `body.work`, and a page has to pick one.
+ */
+
+/* A reading page: the front door. Nothing lifts far off the void. */
+body.deep {
+  --bg: var(--void-1000);
+  --panel: var(--void-900);
+  --raised: var(--void-800);
+  --pad: 0.5rem 0.8rem;
+}
+
+/* The editors: the field comes up a step and panels come up two, because a
+   screen with forty controls on it needs grouping to survive without drawing a
+   box around everything. */
+body.work {
+  --bg: var(--void-900);
+  --panel: var(--void-700);
+  --raised: var(--void-600);
+  --inset: var(--void-1000);
+  --border: var(--wire-500);
+  --border-strong: var(--wire-400);
+  --gap: 0.65rem;
+  --pad: 0.4rem 0.7rem;
+}
+
+/* ---- the wordmark in the top bar --------------------------------------- */
+
+/*
+ * The bar spells the project's name in the chrome's own `.brand-text b`, which
+ * up-cases it — so "dreamREfactory" arrives as "DREAMREFACTORY" and the one lit
+ * word in the logo is lost. This gives it back, on the site's pages only: the
+ * structure has no business knowing that this name has a green middle.
+ */
+.brand-text b i {
+  font-style: normal;
+  color: var(--signal-400);
+  text-shadow: 0 0 12px rgba(46, 230, 46, 0.5);
+}

@@ -1,10 +1,10 @@
 # The stage editor
 
-[`editors/stages.html`](https://github.com/dhobi/taoot-web/blob/master/editors/stages.html) — source
-[`editors/stg-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/stg-editor.ts).
+[`editors/stages.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/stages.html) — source
+[`editors/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/stg-editor.ts).
 Open `http://localhost:5173/editors/stages.html`.
 
-Load a [STG stage](../formats/stg.md) — the screens that are not rooms: the UI
+Load a [STG stage](../engine/formats/stg.md) — the screens that are not rooms: the UI
 band (`MAIN.STG`), the inventory (`INVEN1.STG`), the deck plan (`MAP.STG`), a
 mini-game board (`BLKJACK.STG`) — and it comes apart into its flats.
 
@@ -26,9 +26,9 @@ says that rather than showing an empty list.
 are not art are copy-on-write patches on a single container each — the flat names
 in container 0's flat table, a region's name and rectangle in that flat's
 click-logic container (`patchFlatName`, `patchRegionName`, `patchRegionRect` in
-[`src/df/stg.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/stg.ts))
+[`engine/src/df/stg.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/stg.ts))
 — so everything you did not touch is the byte it was
-(see [`tests/auto/stg-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/tests/auto/stg-editor.ts)).
+(see [`taoot/tests/auto/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/stg-editor.ts)).
 
 ## The stage this port wrote itself
 
@@ -46,15 +46,15 @@ That is also the honest fix for the one thing the generator cannot do — its 5�
 pixel font has no Cyrillic or CJK, so `Русский` and `日本語` are drawn as
 `RUSSIAN` and `JAPANESE` until someone imports art with a real font.
 
-See [writing a stage](../formats/stg.md#writing-a-stage) for the builder, and
-[Languages & the chooser](../runtime/languages.md) for what the file does at
+See [writing a stage](../engine/formats/stg.md#writing-a-stage) for the builder, and
+[Languages & the chooser](../taoot/languages.md) for what the file does at
 runtime.
 
 ## See also
 
-- [STG — stage files & the UI](../formats/stg.md) — what the structures are
-- [Stage & UI](../runtime/stage-ui.md) — how the runtime drives flats and overlays
+- [STG — stage files & the UI](../engine/formats/stg.md) — what the structures are
+- [Stage & UI](../engine/runtime/stage-ui.md) — how the runtime drives flats and overlays
 - [The browser editors](README.md) — what the seven pages share
-- [Languages & the chooser](../runtime/languages.md) — `lang.stg`, the stage this
+- [Languages & the chooser](../taoot/languages.md) — `lang.stg`, the stage this
   repository authored
 

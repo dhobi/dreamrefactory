@@ -7,8 +7,8 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { join, basename } from "node:path";
-import { readContainerFile } from "../src/df/container";
-import { sniffScript, scriptToText, Token } from "../src/df/script";
+import { readContainerFile } from "@dreamfactory/engine/df/container";
+import { sniffScript, scriptToText, Token } from "@dreamfactory/engine/df/script";
 
 const [, , rootDir = "gamefiles", outDir = "out"] = process.argv;
 

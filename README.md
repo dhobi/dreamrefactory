@@ -10,7 +10,7 @@ Browser port of the CyberFlix **DreamFactory 4.0** engine, targeting *Titanic:
 Adventure Out of Time* (1996) — no DOSBox, a native TypeScript reimplementation
 running on canvas.
 
-> 📖 **New here? Read the docs: <https://dhobi.github.io/taoot-web/>** — a
+> 📖 **New here? Read the docs: <https://dhobi.github.io/dreamrefactory/>** — a
 > guided tour from "how the game works" down to each DFile container format,
 > written for readers who haven't done low-level reverse engineering. (Source
 > in [`docs/`](docs/README.md); there's a [glossary](docs/glossary.md) if a
@@ -20,8 +20,25 @@ running on canvas.
 
 ```
 npm install
-npm run dev          # then open http://localhost:5173/ and press Play
+npm run dev          # the front door, on http://localhost:5173/
 ```
+
+Three sites build out of this one repository, each from its own root and its own
+port, so they can run at once:
+
+| | | |
+|---|---|---|
+| `npm run dev` | 5173 | the front door and the format editors |
+| `npm run dev:taoot` | 5174 | Titanic |
+| `npm run dev:dust` | 5175 | Dust |
+| `npm run docs:dev` | 5176 | the documentation |
+
+Add `-- --host` to any of them to reach it from another machine.
+
+A link from one to another **404s in dev with a page telling you which server
+serves it** — the deployed tree resolves those links normally, but three Vite
+roots cannot be one origin (see `tools/vite-siblings.ts`). See
+[Layout](#layout).
 
 The sections that follow are the site's own top bar — Play, Editors, Collection,
 Docs, Source — and then what a contributor needs behind it: the suites, the game
@@ -35,11 +52,11 @@ as soon as it is opened. Two pages rather than one because the welcome text used
 to be hidden the instant the boot had something to draw — it was on screen for
 exactly as long as the files took to load.
 
-If your `gamefiles/` holds more than one language, the first thing `/play/` shows is the
+If your `taoot/gamefiles/` holds more than one language, the first thing `/play/` shows is the
 **language chooser** — which is itself a DreamFactory stage this repository
 authored (`public/lang.stg`, built by `npm run mklang`): real flats, real click
 regions, real compiled scripts, opened by the engine's own `openstagefile`. See
-[Languages & the chooser](docs/runtime/languages.md). `?lang=de` skips it,
+[Languages & the chooser](docs/taoot/languages.md). `?lang=de` skips it,
 and the 🌐 picker in the page's top bar switches afterwards.
 
 Once a language is settled the play page runs the cold boot itself — the shipped
@@ -52,11 +69,11 @@ In front of the **English** boot only, if the file is there, there is one more
 screen: `public/nightdive.mov`, an intro film that ends by asking *do you own the
 game?* — Yes boots, No leaves for the game's GOG page. It is a **MOV**, not a
 piece of HTML over the canvas: `npm run mknightdive -- some.gif` turns an
-animated GIF into a DreamFactory movie (`tools/mknightdive.ts`, on top of the
-write half of the format in `src/df/mov-build.ts`), and appends the question as a
+animated GIF into a DreamFactory movie (`taoot/tools/mknightdive.ts`, on top of the
+write half of the format in `engine/src/df/mov-build.ts`), and appends the question as a
 second segment whose two answers are the movie's own click regions and action
 frames — so the answer comes back through `actionframe()` like any other movie's
-does ([src/nightdive.ts](src/nightdive.ts)). English only because the question is
+does ([taoot/src/nightdive.ts](taoot/src/nightdive.ts)). English only because the question is
 drawn *into* the frames and there is no catalogue behind a picture; the other
 editions and the demo boot untouched. Escape presses past the film; the question
 after it carries no skip flag and has to be answered. `assets/nightdive.gif` is
@@ -67,7 +84,7 @@ generator by hand, and the deploy ships it like `lang.stg`. Delete the GIF and t
 build is still valid: no film served, no intro, and the boot is what it was.
 
 Which files exist is one manifest, `gamefiles.json`: a map of served path to
-byte size, walked live by the dev server ([vite.config.ts](vite.config.ts)),
+byte size, walked live by each game's dev server ([tools/vite-gamefiles.ts](tools/vite-gamefiles.ts)),
 written into `dist/` by a build, and regenerable against an uploaded tree with
 `npm run manifest`. It is a file rather than an endpoint, which is the whole
 reason the site can be hosted as static files — no game data is bundled either
@@ -76,7 +93,7 @@ Nor does a build name a host root: every URL is relative to the page that asks
 for it, so `dist/` runs from a subdirectory (`example.com/taoot/`) as readily as
 from a domain root. Vite rewrites what it emits; the URLs built in TypeScript
 resolve against the `<meta name="site-root">` each page carries
-([src/site.ts](src/site.ts)).
+([site/src/site.ts](site/src/site.ts)).
 Loading a set pulls its siblings (`.shp`, `.trk`, `.sfx`, `.11k`, `unilib.trk`)
 over HTTP, and anything scripts ask for later
 (`openshopfile("blkjack.shp")`) is fetched on demand in the background.
@@ -129,7 +146,7 @@ upload or straight out of the manifest, and exports the repacked original
 The stage editor's file list also holds one file CyberFlix never shipped:
 **`lang.stg`**, the language chooser this repository *wrote* (`npm run mklang`) —
 palette, flats, click regions and compiled scripts. Read → edit → export, on a
-file whose every byte we chose ([writing a stage](docs/formats/stg.md#writing-a-stage)).
+file whose every byte we chose ([writing a stage](docs/engine/formats/stg.md#writing-a-stage)).
 
 ## Collection
 
@@ -142,40 +159,40 @@ it shipped rather than this reimplementation of it. The artwork is carried
 over unchanged from the old site at danielhobi.ch/taoot. The DBGL archives
 themselves are not in this repository — they run to roughly 1 GB apiece and
 stay linked at that site — which is the same rule this repo already applies
-to `gamefiles/`: no game data is shipped here, and `gamefiles/` is gitignored.
+to a game's `gamefiles/`: no game data is shipped here, and both rips are gitignored.
 
 ## Docs
 
 The prose that explains the *engine* rather than this repository is a site of
-its own — <https://dhobi.github.io/taoot-web/>, built from [`docs/`](docs/README.md)
+its own — <https://dhobi.github.io/dreamrefactory/>, built from [`docs/`](docs/README.md)
 with VitePress (`npm run docs:dev` to read it locally):
 
-- [How the game works](docs/01-how-the-game-works.md) — the guided tour, from the
+- [How the game works](docs/taoot/how-the-game-works.md) — the guided tour, from the
   outside in, for a reader who has never opened a DFile
-- [Formats](docs/formats/README.md) — each container, block by block
-- [Runtime](docs/runtime/README.md) — the recovered engine behaviour: timing, the
+- [Formats](docs/engine/formats/README.md) — each container, block by block
+- [Runtime](docs/engine/runtime/README.md) — the recovered engine behaviour: timing, the
   stage layer, characters, audio, saves
 - [Editors](docs/editors/README.md) — what the seven pages show, and why
 - [Reference](docs/reference/README.md) — the tools, the test inventory, the
   playthrough route, the recovered builtins
-- [Verification](docs/verification.md) — what the playthrough is *for*, with the
+- [Verification](docs/taoot/verification.md) — what the playthrough is *for*, with the
   bugs it caught that nothing else would
 - [Glossary](docs/glossary.md) — for a word that turns up before its page does
 
 ## Source
 
-<https://github.com/dhobi/taoot-web> — the last thing the top bar points at, and
+<https://github.com/dhobi/dreamrefactory> — the last thing the top bar points at, and
 where you already are if you are reading this on GitHub.
 
 ```
-git clone https://github.com/dhobi/taoot-web
+git clone https://github.com/dhobi/dreamrefactory
 ```
 
 Bugs and findings belong in the issue tracker, and both pages hand you a link to
 it: the front page in its opening paragraph, the play page through the 🪲 button
 beside the game, which fills the issue in first — the page, the edition, the room
 and the last scripts to run, with a screenshot on your clipboard to paste in
-(`src/bug-report.ts`).
+(`taoot/src/bug-report.ts`).
 
 Everything after this section is about the repository rather than the site.
 
@@ -206,11 +223,11 @@ The playthrough asserts a recorded state trace (every script global, the room,
 prop ownership) at each story beat, so a route is written as inputs and a
 divergence names the beat that caused it. Routes name destinations rather than
 coordinates — `goto("gym")` works out the nine rooms and the gestures itself
-(see [tests/playthrough/nav/](tests/playthrough/nav/)). Re-record with
+(see [taoot/tests/playthrough/nav/](taoot/tests/playthrough/nav/)). Re-record with
 `TAOOT_RECORD=1 npm run test:playthrough`; the suite inventory and the commands
 are in [docs/reference/tests.md](docs/reference/tests.md), and what the
 playthrough is *for* — with the bugs it has caught that nothing else would — is
-in [docs/verification.md](docs/verification.md). The route itself — what its
+in [docs/taoot/verification.md](docs/taoot/verification.md). The route itself — what its
 twenty-seven segments cross, how much of it to run while you work, and the
 conventions a new one will trip on — is in
 [docs/reference/route.md](docs/reference/route.md).
@@ -220,21 +237,21 @@ game, `browser/` drives a real page. The corpus/inspection scripts live under
 `tools/` and run directly with `tsx`:
 
 ```
-npx tsx tools/navdump.ts gamefiles/en/titanic1/data/bedsit1.set out/   # navigation dump
+npx tsx taoot/tools/navdump.ts taoot/gamefiles/en/titanic1/data/bedsit1.set out/   # navigation dump
 npx tsx tools/parse.ts                                            # script AST coverage
-# tests/browser/menu-movie.ts and tests/browser/playthrough.ts need a live dev server
+# taoot/tests/browser/menu-movie.ts and taoot/tests/browser/playthrough.ts need a live dev server
 # (the latter replays the playthrough route against the same golden trace)
 ```
 
 CLI verification tool (dump structure + frames as PNG):
 
 ```
-npm run dump -- gamefiles/en/titanic2/DATA/b59.set out/
+npm run dump -- taoot/gamefiles/en/titanic2/DATA/b59.set out/
 ```
 
 ### The speedrun
 
-`tests/speedrun/` is not a test and gates nothing. It plays the game against
+`taoot/tests/speedrun/` is not a test and gates nothing. It plays the game against
 the clock, and it is driven by a **sheet** — one action per line, in text, so a
 route is tuned by editing data rather than TypeScript:
 
@@ -246,7 +263,7 @@ npm run speedrun:lint            # parse the sheet and say nothing else
 npm run speedrun -- --verbs      # every verb a sheet may use
 ```
 
-The route lives in [`tests/speedrun/run.sheet.txt`](tests/speedrun/run.sheet.txt):
+The route lives in [`taoot/tests/speedrun/run.sheet.txt`](taoot/tests/speedrun/run.sheet.txt):
 
 ```
 skipMovie(until: awaiting)      # hammer ESC, but never at a movie that is ASKING
@@ -263,7 +280,7 @@ the brackets repeats it; `#` comments to the end of the line and `;` separates
 actions on one line. A value that needs a comma of its own is quoted
 (`wait(js == "a, b")`).
 
-Two things separate it from `tests/browser/playthrough.ts`, which stays exactly
+Two things separate it from `taoot/tests/browser/playthrough.ts`, which stays exactly
 as it is and remains the diff target for the headless oracle. First, the waits:
 the browser suite pays a flat grace before every settle and then waits for full
 quiescence, because a gesture landing a frame early is a divergence it would
@@ -275,7 +292,7 @@ Second, and the reason it is careful rather than merely fast: **keys are not
 buffered across a fade.** `SetViewer.keyDown` queues on `movingCamera` but
 refuses on `inputLocked`, and the two differ by exactly `session.fading` — a
 press in that gap is silently discarded (the long note on `pressNav` in
-`src/viewer.ts`). Pressing earlier than anything else ever has means meeting
+`engine/src/web/viewer.ts`). Pressing earlier than anything else ever has means meeting
 that gap constantly, so every key is gated, and `left`/`right`/`up` confirm the
 standpoint actually changed and press again if it did not.
 
@@ -297,7 +314,7 @@ the Nightdive film (`<meta name="skip-intro">`) because it is reloaded to get a
 clean game far more often than it is opened to play one.
 
 It shares the parser, the action table and the run loop with the CLI
-(`src/speedrun/`), so a sheet cannot mean one thing there and another here. What
+(`taoot/src/speedrun/`), so a sheet cannot mean one thing there and another here. What
 differs is only delivery: the CLI drives real OS-level input over Playwright,
 while the page synthesizes `PointerEvent`/`KeyboardEvent` against the canvas.
 `main.ts` never asks `isTrusted`, so the engine cannot tell — but the synthetic
@@ -430,10 +447,10 @@ Not distributable — supply it from your own copy, laid out one directory per
 CD, per language:
 
 ```
-gamefiles/en/titanic1/{data,movies,puppets2,trunk,wireless,blkjack,…}
-gamefiles/en/titanic2/{DATA,MOVIES,PUPPETS1,TRUNK,WIRELESS,BLKJACK,…}
-gamefiles/en/save/{1,2,ENDGAME1,ENDGAME2}
-gamefiles/de/…  gamefiles/fr/…  gamefiles/ru/…  gamefiles/nl/…  gamefiles/ja/…
+taoot/gamefiles/en/titanic1/{data,movies,puppets2,trunk,wireless,blkjack,…}
+taoot/gamefiles/en/titanic2/{DATA,MOVIES,PUPPETS1,TRUNK,WIRELESS,BLKJACK,…}
+taoot/gamefiles/en/save/{1,2,ENDGAME1,ENDGAME2}
+taoot/gamefiles/de/…  …/fr/…  …/ru/…  …/nl/…  …/ja/…    dust/gamefiles/dustcd/…
 ```
 
 **Case is not part of the layout.** The two CDs use no single convention between
@@ -445,7 +462,7 @@ The two-letter directory is the **language**, and it is a real axis, not a label
 a localised release is its own pressing of both CDs, so `bedsit1.set` exists once
 per language. Which one a bare filename means is decided once, at startup, by the
 chooser — or by `?lang=`/`TAOOT_LANG` — and everything else follows from that
-([Languages & the chooser](docs/runtime/languages.md)). A tree with no language
+([Languages & the chooser](docs/taoot/languages.md)). A tree with no language
 directory at all still works: it is treated as the only one there is.
 
 Two things besides the filenames come with the tree, because no file declares
@@ -464,8 +481,8 @@ genuinely how the discs ship. `TAOOT_GAMEFILES` overrides the root and
 directory exists, so a route can never silently mix two languages' data).
 
 Two properties of the real data that the lookup has to handle, and does
-identically on both sides — `FileStore` in [`src/files.ts`](src/files.ts) for the
-browser, [`tools/gamefiles.ts`](tools/gamefiles.ts) for the tools and tests:
+identically on both sides — `FileStore` in [`taoot/src/files.ts`](taoot/src/files.ts) for the
+browser, [`taoot/tools/gamefiles.ts`](taoot/tools/gamefiles.ts) for the tools and tests:
 
 - **No single filename case.** `TITANIC1/data` is all lowercase; `Titanic2/DATA`
   is mostly uppercase but also holds `b59.set`, `bridge.set`, `a14.Set`. Scripts
@@ -485,40 +502,54 @@ game.
 
 ## Layout
 
-- `src/df/` — DreamFactory file format library (TypeScript port of the
-  decoding logic in [DFET](https://github.com/M3tox/DFET), GPL-3.0):
-  - `container.ts` — the common container/block structure of all DF files
-  - `image.ts` — frame decompression (delta-encoded RLE) + Z-depth layer, palette
-  - `set.ts` — SET structures: scenes, views, turn rings, roads, actors, hotspots
-  - `*-build.ts` — the write path: a builder per format over the shared
-    `build.ts` scaffolding, so a DF file can be produced and not only patched
-    (`public/lang.stg` is one; the editors' test fixtures are the rest)
-- `src/engine/` — the runtime: script interpreter, builtins, scheduler,
-  props/actors/puppets, stage layer, save/load
-- `src/viewer.ts` — navigation state machine + rendering
-- `editors/` — the asset editors: one HTML page and one module each, plus the
-  `editor.css` they share and an `index.html` that lists them. They are
-  separate Vite entry points and import `src/df/` and `src/screen.ts` only —
-  never the engine, which is why they build as pages that happen to share a
-  file-format library
-- `tools/` — Node-side dump/verification tools, plus the `TI.EXE` mining
-  tools (`exetable`, `disasmcmd`, `scancmds`), the mission flow-map
-  generator (`flowmap`) and `mklangstg` — which writes a DreamFactory stage
-  instead of reading one — see the [tool reference](docs/reference/tools.md)
-- `index.html` — the front page: what this is, and a Play button
-- `play/` — the game page itself, the only one that runs `src/main.ts`
-- `public/` — everything served at the root because none of it comes from the
-  game: `lang.stg` (the language chooser this port authored), the globe logo,
-  and `collection/` — the box, disc and booklet scans the collection page turns
-- `gamefiles/` — original game data (not distributable; user-supplied)
-- `dfet/` — reference C++ extraction tool (GPL-3.0, by M3tox), gitignored like
-  `gamefiles/`: clone it there yourself when you want the original beside the port
+Six directories at the root, and each is a thing rather than a kind of file.
+
+- **`engine/`** — the DreamFactory engine, reimplemented, knowing about no
+  particular game. Its own package (`@dreamfactory/engine`), its own small suite
+  that runs with no game data anywhere.
+  - `src/df/` — the file format library (a TypeScript port of the decoding logic
+    in [DFET](https://github.com/M3tox/DFET), GPL-3.0): `container.ts` for the
+    common container/block structure, `image.ts` for frame decompression
+    (delta-encoded RLE) and the Z-depth layer, `set.ts` for scenes, views, turn
+    rings, roads, actors and hotspots, and a `*-build.ts` per format — the write
+    path, so a DF file can be produced and not only patched
+  - `src/runtime/` — script interpreter, builtins, scheduler, props/actors/
+    puppets, stage layer, save/load
+  - `src/web/` — how a session is presented in a browser: the host, the viewer's
+    navigation state machine and rendering, the screen, the save store
+- **`taoot/`** — *Titanic: Adventure Out of Time* (1996, DreamFactory 4): four
+  pages, six editions and the demo, its own tools, and the suites that play it
+- **`dust/`** — *Dust: A Tale of the Wired West* (1995, DreamFactory 1): one page,
+  and the engine two years earlier
+- **`site/`** — the project's own web presence: the front door, the seven format
+  editors, the chrome every page shares (`chrome.css` — structure only, 39 role
+  names and not one colour), and the UI-language axis with its six catalogues
+- **`tools/`** — Node-side tools that work on any DreamFactory rip because they
+  take one as an argument: the container dumps, the script corpus sweeps, the
+  PNG/GIF codecs, the manifest walk, the self-hosted runner. A tool that knows
+  which game it is looking at lives in that game's `tools/` instead
+- **`docs/`** — the long half of the project ([reference](docs/README.md))
+
+Each game and the site build separately, from its own root, with its own
+`vite.config.ts` and its own `public/`:
+
+```bash
+npm run dev        # the front door (5173) — the games are 5174 and 5175
+npm run dev:taoot  # Titanic
+npm run dev:dust   # Dust
+npm run build      # all three, into dist/{site,taoot,dust}/
+```
+
+Not in git, and user-supplied: **`taoot/gamefiles/`** and **`dust/gamefiles/`** —
+the original game data, one rip per game, gitignored forever. `dfet/` is the
+reference C++ extraction tool (GPL-3.0, by M3tox), also gitignored: clone it
+there when you want the original beside the port.
 
 ## Credits
 
 **[DFET](https://github.com/M3tox/DFET) by M3tox** is why this port exists. The
 container formats were already legible when this repository started, because that
-tool had worked them out first; `src/df/` is a TypeScript port of its decoding
+tool had worked them out first; `engine/src/df/` is a TypeScript port of its decoding
 logic, and the GPL-3.0 below is inherited from it.
 
 The reimplementation itself — the engine, the editors, the test harness and the

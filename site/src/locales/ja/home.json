@@ -1,0 +1,8 @@
+{
+  "docTitle": "Titanic - Adventure Out Of Time RE",
+  "h1": "Adventure out of time RE",
+  "intro": "<b>RE</b> はリバースエンジニアリングの略です。これはエミュレーションではなく、DreamFactory エンジン（CyberFlix）を JavaScript（TypeScript）で実装したバージョンです。すでにほとんどは動作しますが、このバージョンはオリジナルのエンジンの完成度には遠く及びません。<br>いろいろ遊んでみて、<a href=\"../editors/\">エディタ</a>も試して、バグは <a href=\"https://github.com/dhobi/dreamrefactory/issues/new\">GitHub</a> で直接お知らせください。",
+  "play": "プレイ",
+  "playNote": "さあ、始めましょう！",
+  "credits": "<a href=\"https://github.com/M3tox/DFET\">DFET</a>（M3tox）のおかげで実現しました。Claude Opus と Claude Fable の支援を受けて制作しています。"
+}

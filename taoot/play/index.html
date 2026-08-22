@@ -1,0 +1,1027 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="play.docTitle">Play — Titanic - Adventure Out Of Time RE</title>
+    <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
+    <meta name="site-root" content="../" />
+    <link rel="icon" type="image/png" href="/globe-mark.png" />
+    <link rel="stylesheet" href="/src/theme.css" />
+    <style>
+      /*
+       * The game page. Nothing introduces it and nothing asks anything of you:
+       * arriving here IS the decision — the welcome and the Play button are the
+       * front page (index.html), and this page settles a language and cold
+       * boots. The shared sheet (site/src/theme.css) carries the palette, the topbar
+       * and the controls; what is left here is the one thing only this page has
+       * — a 512x384 framebuffer and the bars that sit under it.
+       *
+       * The rule this page is built on: nothing beside the canvas may be
+       * brighter than the canvas. The game draws in its own 1996 palette and
+       * the page's job is to be the dark water around the porthole, so the
+       * chrome here is hairlines and dim text, and the only lit thing on the
+       * screen is the screen.
+       */
+
+      /* ---- the porthole: the framebuffer and its rim ---- */
+
+      #stage {
+        position: relative;
+        margin-top: 0.9rem;
+      }
+
+      /* The renderer always presents a fixed 512x384 (4:3) framebuffer — see
+         engine/src/web/screen.ts. `aspect-ratio` derives the height from the element's own
+         width instead of from the image inside it, so the layout no longer
+         reflows when a scene switches between a full-screen flat and a bare
+         room view. 1024px is a crisp 2x integer scale of 512x384; use the
+         Fullscreen button to fit the screen to the display instead. */
+      #screen {
+        image-rendering: pixelated;
+        aspect-ratio: 4 / 3;
+        width: 1024px;
+        max-width: 96vw;
+        background: #000;
+        display: block;
+        /* The canvas keeps its own gestures: a phone has no arrow keys, so a
+           swipe across the screen is how you walk and turn (see the swipe
+           handler in main.ts). Without this the browser claims a vertical drag
+           for scrolling and the walk-forward swipe never arrives. Scoped to the
+           canvas on purpose — the page around it scrolls normally. */
+        touch-action: none;
+        /* The rim, and the reason the logo works as a mark for this page: a
+           brass hairline with the iceberg's light bleeding past it. The glow is
+           outside the frame, so it never touches a game pixel. */
+        border: 1px solid var(--brass-700);
+        border-radius: 2px;
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.9),
+          0 0 0 2px rgba(184, 120, 36, 0.16),
+          0 0 60px -12px rgba(96, 192, 240, 0.4),
+          0 18px 60px -20px rgba(0, 0, 0, 0.9);
+      }
+
+      /* Fullscreen: letterbox the 4:3 screen inside a black field. The stage
+         (not the canvas) is fullscreened so the minimap overlay comes along and
+         the bar colour stays ours. The rim and its glow come off here — at
+         fullscreen the game IS the porthole and does not need a frame drawn
+         around it. */
+      #stage:fullscreen {
+        display: grid;
+        grid-template-areas: "screen";
+        place-items: center;
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        background: #000;
+      }
+      #stage:fullscreen #screen {
+        grid-area: screen;
+        width: min(100vw, calc(100vh * 4 / 3));
+        height: min(100vh, calc(100vw * 3 / 4));
+        max-width: none;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      /* keep the map overlay pinned to the SCREEN's corner, not the viewport's,
+         by sharing the screen's grid cell instead of #stage's padding box */
+      #stage:fullscreen #minimap {
+        grid-area: screen;
+        position: static;
+        justify-self: end;
+        align-self: start;
+        margin: 10px;
+      }
+
+      /* The waiting-on-the-network mark. Ice, like the preload bar, because it
+         is the live thing on the screen; the opposite corner from the minimap,
+         and small — it reports a wait, it does not ask to be looked at. No
+         words: it sits over 1996 artwork, and a spinner needs no translating. */
+      /* The plate is not decoration: the frame underneath is whatever the game
+         last drew, which is as often a white flat as it is black, so the mark
+         carries its own ground the way the minimap does. */
+      #netbusy {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--hull-400);
+        border-radius: 50%;
+        background: rgba(0, 6, 15, 0.72);
+        box-shadow: 0 6px 22px -8px rgba(0, 0, 0, 0.9);
+        pointer-events: none;
+      }
+      #netbusy span {
+        display: block;
+        width: 14px;
+        height: 14px;
+        box-sizing: border-box;
+        border: 2px solid rgba(255, 255, 255, 0.22);
+        border-top-color: var(--ice-400);
+        border-radius: 50%;
+        animation: netspin 700ms linear infinite;
+      }
+      /* Not redundant with the UA sheet, for the same reason `#help .bar[hidden]`
+         below is not: the `display: flex` above beats `[hidden] { display: none }`,
+         so `netbusy.hidden = true` (taoot/src/main.ts, every time the last fetch lands)
+         took nothing off the screen and the spinner turned for the whole session.
+         The show/hide logic was never visible — only its `false` case was. */
+      #netbusy[hidden] {
+        display: none;
+      }
+      @keyframes netspin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      /* A reader who has asked for less motion still needs to know it is
+         waiting, so the mark stays and breathes instead of turning. */
+      @media (prefers-reduced-motion: reduce) {
+        #netbusy span {
+          animation: netpulse 1.4s ease-in-out infinite;
+          border-color: var(--ice-400);
+        }
+        @keyframes netpulse {
+          50% {
+            opacity: 0.25;
+          }
+        }
+      }
+      /* same corner trick as the minimap's, so it tracks the SCREEN fullscreen */
+      #stage:fullscreen #netbusy {
+        grid-area: screen;
+        position: static;
+        justify-self: end;
+        align-self: end;
+        margin: 12px;
+      }
+
+      #minimap {
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        image-rendering: pixelated;
+        border: 1px solid var(--hull-400);
+        border-radius: 2px;
+        background: rgba(0, 6, 15, 0.72);
+        box-shadow: 0 6px 22px -8px rgba(0, 0, 0, 0.9);
+        display: none;
+        width: 180px;
+      }
+
+      /* The brightness presets: three segments rather than a slider, because a
+         slider is the wrong control for a thumb — this started as one and a
+         phone could not hit it. Three targets a finger can land on, each a
+         whole tap wide, and no dragging.
+
+         Styled down like everything else here: the rule this page is built on
+         is that nothing beside the canvas may be brighter than the canvas, so
+         the chosen segment is a brass hairline and a lift in text colour, not a
+         filled block. The radios themselves are hidden — they carry the state
+         and the keyboard semantics (a radio group is one arrow-key stop, which
+         is what this is), the labels carry the looks. */
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .seg label {
+        margin: 0;
+        cursor: pointer;
+        /* 44px is the tap target a finger wants, and padding alone did not get
+           there (measured 35 at this font size) — so the height is asked for and
+           the text centred in it. */
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        padding: 0 0.75rem;
+        font-size: 0.78rem;
+        color: var(--text-mute);
+        border-left: 1px solid var(--border);
+      }
+      .seg label:first-child {
+        border-left: 0;
+      }
+      .seg input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .seg label:hover {
+        color: var(--text-dim);
+      }
+      .seg input:checked + span {
+        color: var(--brass-500, var(--brass-700));
+      }
+      .seg label:has(input:checked) {
+        background: rgba(184, 120, 36, 0.1);
+        box-shadow: inset 0 -2px 0 var(--brass-700);
+      }
+      /* the focus ring has to be visible even though the input is not */
+      .seg label:has(input:focus-visible) {
+        outline: 1px solid var(--ice-400);
+        outline-offset: -1px;
+      }
+
+      /* ---- where the game says where you are, and what it is doing ----
+         Both live in #details at the bottom of the bars, and both are off until
+         X is pressed (taoot/src/main.ts): where you are standing and a script log are
+         answers to questions the player has not asked, and the rule this page is
+         built on is that the only lit thing on the screen is the screen. */
+
+      #hud {
+        font-size: 0.85rem;
+        color: var(--text-dim);
+        min-height: 1.2em;
+        text-align: center;
+        padding: 0 1rem;
+      }
+
+      /* ---- what stands here until the screen does (taoot/src/main.ts) ----
+         Held only while the files are being found and read, and left up for
+         good when there are none — so it has to read as both "starting" and
+         "this is as far as it gets". */
+
+      /* The boot text says "starting" — in the reader's language or not at all.
+         The pages carry their English inline, and a catalogue arrives over a
+         dynamic import a beat later (site/src/locales/index.ts), so a German reader was
+         reading "Starting" for ~200 ms first. Hidden, not undrawn: it keeps its
+         space, so nothing moves when the words arrive. `body.spoken` is set by
+         main.ts's boot() the moment installI18n has had its say, which for an
+         English reader is the same tick — nothing is fetched in that case. */
+      #booting {
+        visibility: hidden;
+        padding: 1.2rem clamp(0.9rem, 4vw, 2rem) 3rem;
+        margin-top: 1.4rem;
+        text-align: center;
+        width: 100%;
+        max-width: 54rem;
+      }
+      body.spoken #booting {
+        visibility: visible;
+      }
+      #booting .intro {
+        font-size: 0.95rem;
+        color: var(--text-dim);
+        max-width: 40rem;
+        margin: 0 auto;
+        line-height: 1.6;
+      }
+      #booting .intro .sub {
+        display: block;
+        margin-top: 0.7rem;
+        font-size: 0.82rem;
+        color: var(--text-mute);
+      }
+      /* The edition picker (shared chrome, site/src/theme.css): its own row under the
+         top bar, above the boot text and the stage both, so which copy of the
+         game is running is answerable at any moment without opening a menu. */
+      #editionPicker {
+        margin: 1rem 0 0.2rem;
+      }
+
+      /* The preload bar: ice, because it is the live thing on the page — brass is
+         for what has changed or commits. A hairline track and a 3px fill; the
+         numbers under it are mono, being read off the wire. */
+      #preload {
+        margin: 1.4rem auto 0;
+        width: 22rem;
+        max-width: 80%;
+      }
+      #preloadTrack {
+        height: 3px;
+        background: var(--inset);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      #preloadFill {
+        height: 100%;
+        width: 0;
+        background: linear-gradient(to right, var(--ice-600), var(--ice-400));
+        transition: width 140ms linear;
+      }
+      #preloadNum {
+        margin-top: 0.4rem;
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        color: var(--text-mute);
+        text-align: center;
+      }
+
+      /* ---- the script log, and the bars of controls ---- */
+
+      /* The X pane. Under the screen's column on a narrow window and beside it
+         on a wide one — see #playlayout below — so it carries the same width as
+         #under here and is overridden there. */
+      #details {
+        width: 1024px;
+        max-width: 96vw;
+        padding-top: 0.5rem;
+      }
+      /* The pane's heading, and the hairline under it.
+         The pane used to be a bordered, filled panel when it sat beside the
+         screen — which put a border around #scriptlog's border and #dbgState's,
+         boxes inside a box. It is a SECTION instead, the same shape the speedrun
+         page's two carry: a heading, a rule, and the readouts keeping their own
+         insets. Nothing is drawn around the column itself. */
+      #details h2 {
+        font-size: 0.9rem;
+        margin: 0 0 0.5rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        opacity: 0.7;
+        border-bottom: 1px solid var(--hull-400);
+        padding-bottom: 0.4rem;
+        /* in the column below it is a flex item, and a heading gives up no
+           height to the log and the state list that share the rest */
+        flex: none;
+      }
+      #scriptlog {
+        display: none;
+        min-height: 250px;
+        max-height: 8em;
+        overflow-y: auto;
+        width: 100%;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        line-height: 1.5;
+        color: var(--ice-500);
+        margin: 0.5rem 0 0;
+        background: var(--inset);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.45rem 0.6rem;
+      }
+
+      /* ---- one column, or two --------------------------------------------
+         #22 reported the details pane as "tiny, under the window (off screen at
+         1920px, 100% zoom)", and it was: four bars of controls put it about
+         1030 px down a 945 px-tall viewport, so at that window size it was never
+         on screen. On a window with room to spare the pane sits BESIDE the
+         screen instead, as the second column of this row.
+
+         It used to do that as a `position: fixed` rail with the body padded by
+         the rail's width to re-centre the screen in what was left. #249 is what
+         that costs: the speedrun page pads its own layout for the rail as well,
+         so with the pane open at 1920 the page gave away ~960 px to a 480 px
+         pane and the run sheet was squeezed to a few pixels wide. A column that
+         takes its share of a row cannot do that to its siblings — it is an
+         ordinary element, it pushes nothing, and it scrolls with the page.
+
+         The break is 1480px: 1024 for the screen (a crisp 2x of 512x384 — the
+         canvas is `pixelated`, and shrinking it to fit a column would make every
+         pixel a different size), a gap, and a column wide enough for `neckphase
+         4` and a log line. Below that the pane stays under the screen, which is
+         also what a phone gets. The row wraps rather than shrinking, so a window
+         that is over the break but still short of holding both never squeezes
+         either one. */
+      #playlayout {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        min-width: 0;
+        padding-bottom: 3rem;
+      }
+      #gamecol {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 0;
+      }
+      @media (min-width: 1480px) {
+        #playlayout {
+          flex-direction: row;
+          flex-wrap: wrap;
+          align-items: flex-start;
+          justify-content: center;
+          gap: 1.4rem;
+          padding: 0 0.7rem 3rem;
+        }
+        /* the screen's own width, held whether or not the game has booted, so
+           the columns do not jump sideways when #booting gives way to #stage */
+        #gamecol {
+          flex: 0 0 1024px;
+          width: 1024px;
+        }
+        /* The pane as a column: the log takes what it needs and the state list
+           takes the rest, each scrolling itself. The ceiling is the CANVAS's own
+           height, so the pane ends where the screen beside it ends and the two
+           read as a pair — and a 161-row state list makes the LIST scroll rather
+           than the column three screens tall. It is not `sticky`, because #249's
+           answer is that this is a regular element and a regular element scrolls
+           away. */
+        #playlayout > #details {
+          flex: 1 1 20rem;
+          width: auto;
+          /* A floor and a ceiling, both in here only: stacked, the pane is the
+             screen's column at 96vw and a floor would push a phone sideways.
+             The floor is what the ceiling used to be — the pane is never
+             narrower than it was at its widest — and it feeds the row's wrap
+             decision, so a window that cannot hold the canvas and a 480px pane
+             drops the pane to its own line rather than shaving it thin. */
+          min-width: 480px;
+          max-width: 1024px;
+          display: flex;
+          flex-direction: column;
+          /* A DEFINITE height, and both halves of that matter — the same lesson
+             .sr-editor on the speedrun page carries. The log's `max-height: 40%`
+             below is a PERCENTAGE, and a percentage resolves against the
+             parent's height: with only a `max-height` here that height is
+             indefinite, the 40% computes to `none`, and the log takes the whole
+             column with the state list crushed under it. The fixed rail this
+             replaced got its definite height from `top` + `bottom`. */
+          height: 768px;
+          /* #stage's own margin-top, so the pane's top edge lines up with the
+             top of the screen rather than sitting 0.9rem above it. The speedrun
+             page's sheet column carries the same offset for the same reason. */
+          margin-top: 0.9rem;
+        }
+        /* `hidden` alone loses to the display above (see the paired-rule test in
+           site/tests/locales.ts, and #55 for the spinner that turned all session) */
+        #playlayout > #details[hidden] {
+          display: none;
+        }
+        #playlayout > #details #hud {
+          text-align: left;
+          padding: 0 0 0.4rem;
+        }
+        /* With nothing under it the log takes the whole column; with the state
+           list open it gives most of the height away, because the list is the
+           longer thing and the log is read at its tail. */
+        #playlayout > #details #scriptlog {
+          flex: 1 1 auto;
+          max-height: none;
+        }
+        #playlayout > #details:has(#dbgState:not([hidden])) #scriptlog {
+          flex: 0 1 auto;
+          max-height: 40%;
+          min-height: 250px;
+        }
+        #playlayout > #details #dbgState {
+          flex: 1 1 auto;
+          min-height: 0;
+        }
+      }
+
+      /* ---- the state list ----
+         Names and numbers out of the game's own tables, so it is mono and it is
+         not translated: `neckphase 4` is the same sentence in six languages. */
+      #dbgBar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.3rem 0 0.4rem;
+        font-size: 0.78rem;
+        color: var(--text-mute);
+      }
+      #dbgState {
+        overflow-y: auto;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        line-height: 1.6;
+        margin-top: 0.5rem;
+        background: var(--inset);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.45rem 0.6rem;
+      }
+      #dbgState[hidden] {
+        display: none;
+      }
+      /* The six the game's own HELP button answers with — apart from the rest,
+         because they are the ones the game itself thinks locate a player. */
+      #dbgSpine {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.1rem 0.9rem;
+        color: var(--ice-300);
+        padding-bottom: 0.35rem;
+        border-bottom: 1px solid var(--border);
+      }
+      #dbgTools {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0;
+      }
+      #dbgTools input[type="search"] {
+        flex: 1;
+        min-width: 4rem;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        padding: 0.15rem 0.35rem;
+        color: var(--text);
+        background: var(--raised);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+      }
+      #dbgTools label {
+        font-family: var(--font-ui);
+        font-size: 0.72rem;
+        color: var(--text-mute);
+        white-space: nowrap;
+      }
+      #dbgRows .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        color: var(--ice-500);
+      }
+      #dbgRows .row b {
+        font-weight: normal;
+        color: var(--text-mute);
+      }
+      /* Brass for what has just moved: the palette's rule is that brass marks a
+         change and ice marks what is live (site/src/theme.css). */
+      #dbgRows .row.lit,
+      #dbgSpine .lit {
+        color: var(--brass-400);
+      }
+      #dbgRows .none,
+      #dbgState .quiet {
+        color: var(--text-mute);
+      }
+
+      /* The bars under the screen, in the screen's own column so that they line
+         up with the canvas and with the pane below them. */
+      #under {
+        width: 1024px;
+        max-width: 96vw;
+        margin-top: 0.6rem;
+      }
+      #help .bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.45rem 0;
+      }
+      #help .bar + .bar {
+        border-top: 1px solid var(--border);
+      }
+      #help .keys {
+        font-size: 0.78rem;
+        color: var(--text-mute);
+      }
+      /* the key itself: a cap, not just a brighter word */
+      #help .keys b {
+        color: var(--ice-200);
+        font-family: var(--font-mono);
+        font-weight: normal;
+        font-size: 0.74rem;
+        background: var(--raised);
+        border: 1px solid var(--border-strong);
+        border-radius: 3px;
+        padding: 0.04rem 0.32rem;
+      }
+      /* A whole bar can be taken out — the swipe row is hidden until taoot/src/main.ts
+         finds a touch pointer, and a mouse never swipes. Not redundant with the
+         UA sheet: `display: flex` above would otherwise beat `[hidden]`, and the
+         row would come back as an empty hairline-topped strip. */
+      #help .bar[hidden] {
+        display: none;
+      }
+      /* what became of the screenshot: said beside the button that took it, and
+         taken down again once it has been read (taoot/src/main.ts) */
+      #help .note {
+        font-size: 0.74rem;
+        color: var(--ice-400);
+      }
+      #help .bar label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        cursor: pointer;
+        font-size: 0.78rem;
+        color: var(--text-mute);
+      }
+      #help .seclabel {
+        font-size: 0.63rem;
+        text-transform: uppercase;
+        letter-spacing: 0.17em;
+        color: var(--text-mute);
+        margin-right: 0.2rem;
+      }
+
+      /* ---- saved-games modal (engine/src/web/save-browser.ts) ---- */
+
+      .modal {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 4, 10, 0.76);
+        backdrop-filter: blur(3px);
+      }
+      .modal-box {
+        width: 520px;
+        max-width: 92vw;
+        max-height: 82vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--panel);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-lg);
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.6),
+          0 24px 70px -18px rgba(0, 0, 0, 0.9),
+          0 0 70px -30px rgba(96, 192, 240, 0.35);
+        color: var(--text);
+      }
+      .modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.7rem 0.9rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .modal-head span {
+        font-family: var(--font-display);
+        font-size: 0.92rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text-bright);
+      }
+      .modal-head button {
+        background: none;
+        border: none;
+        color: var(--text-mute);
+        font-size: 1rem;
+        cursor: pointer;
+        padding: 0.1rem 0.4rem;
+      }
+      .modal-head button:hover {
+        color: var(--frost);
+        background: none;
+      }
+      .save-list {
+        overflow-y: auto;
+        padding: 0.4rem 0.9rem 0.6rem;
+        flex: 1;
+      }
+      .save-empty {
+        color: var(--text-mute);
+        font-size: 0.85rem;
+        padding: 1.4rem 0.2rem;
+        text-align: center;
+      }
+      .save-group {
+        font-size: 0.64rem;
+        text-transform: uppercase;
+        letter-spacing: 0.17em;
+        color: var(--text-mute);
+        margin: 0.8rem 0 0.3rem;
+      }
+      .save-row {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+      }
+      .save-name {
+        flex: 1;
+        text-align: left;
+        background: none;
+        border: 1px solid transparent;
+        color: var(--text);
+        font-family: var(--font-ui);
+        font-size: 0.85rem;
+        cursor: pointer;
+        padding: 0.3rem 0.45rem;
+        border-radius: var(--radius);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .save-name:hover {
+        background: color-mix(in srgb, var(--ice-400) 12%, transparent);
+        border-color: var(--ice-600);
+        color: var(--frost);
+      }
+      .save-icon {
+        background: var(--raised);
+        border: 1px solid var(--border-strong);
+        color: var(--text-dim);
+        font-size: 0.78rem;
+        cursor: pointer;
+        padding: 0.2rem 0.45rem;
+        border-radius: var(--radius);
+      }
+      .save-icon:hover {
+        border-color: var(--ice-500);
+        color: var(--frost);
+      }
+      .modal-foot {
+        border-top: 1px solid var(--border);
+        padding: 0.7rem 0.9rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .save-newrow {
+        display: flex;
+        gap: 0.4rem;
+      }
+      .save-newrow input {
+        flex: 1;
+        font-size: 0.85rem;
+        padding: 0.3rem 0.5rem;
+      }
+      .modal-foot button {
+        font-size: 0.85rem;
+        padding: 0.3rem 0.8rem;
+      }
+    </style>
+  </head>
+  <body class="deep">
+    <header class="topbar">
+      <a class="brand" href="../" title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1996 release" data-i18n-attr="title:site.brandTitle">
+        <img class="brand-mark" src="/globe-mark.png" alt="" width="30" height="30" />
+        <span class="brand-text">
+          <b>Titanic</b>
+          <span>Adventure Out Of Time RE</span>
+        </span>
+      </a>
+      <nav class="topnav">
+        <a href="../play/" class="here" data-i18n="site.navPlay">Play</a>
+        <a href="../collection/" data-i18n="site.navCollection">Collection</a>
+        <a href="../../" title="dreamREfactory — the engine, and the other game">dreamREfactory</a>
+        <a href="../../docs/" data-i18n="site.navDocs">Docs</a>
+        <a href="https://github.com/dhobi/dreamrefactory" data-i18n="site.navSource">Source</a>
+      </nav>
+    </header>
+
+    <!-- Which copy of the game is being played, above everything that plays it:
+         site/src/lang-menu.ts's installEditionPicker appends one button per tree the
+         manifest offers (and hides the row when there is nothing to choose). It
+         sits outside #booting and #stage so it survives both — the boot text
+         goes, the authored language chooser comes and goes, the game runs, and
+         the choice stays where the reader left it. -->
+    <!-- a role="group" with no accessible name is an unnamed group, so the label
+         the sighted reader sees is the one it points at -->
+    <div class="editionPicker" id="editionPicker" role="group" aria-labelledby="editionLabel">
+      <span class="pickerLabel" id="editionLabel" data-i18n="site.editionLabel">Edition</span>
+    </div>
+
+    <!-- The screen and its bars, then the X pane. One column on a narrow window,
+         two once there is room for both — see #playlayout in the stylesheet. -->
+    <div id="playlayout">
+      <div id="gamecol">
+    <div id="booting">
+      <h1 data-i18n="play.h1">Starting</h1>
+      <div class="intro">
+        <span data-i18n="play.intro">Loading the game's files…</span>
+        <span class="sub" data-i18n-html="play.introSub"
+          >Looking in the <code>gamefiles/</code> directory</span
+        >
+      </div>
+
+      <!-- the preload bar (taoot/src/main.ts showPreload): bytes as they land, so the
+           wait in front of the game is a wait you can watch. Numbers only —
+           there is nothing here for the catalogue to translate. -->
+      <div id="preload" hidden>
+        <div id="preloadTrack"><div id="preloadFill"></div></div>
+        <div id="preloadNum"></div>
+      </div>
+    </div>
+
+    <div id="stage" style="display: none">
+      <canvas id="screen" width="512" height="384"></canvas>
+      <canvas id="minimap"></canvas>
+      <!-- The game is waiting on the network. Nothing draws during a fetch —
+           the frame loop has no new frame to present — so on a slow link the
+           canvas simply holds whatever it had, and a room change reads as a
+           hang at whatever the last frame happened to be: a white flat, black,
+           a half-finished fade. Raised by taoot/src/main.ts off FileStore's in-flight
+           count, and only once the wait is long enough to be felt. -->
+      <div id="netbusy" hidden aria-hidden="true"><span></span></div>
+    </div>
+
+    <!-- Everything under the screen, in the order it is wanted: what you press,
+         then how a swipe reads, then which keys there are, and last the two
+         readouts that answer nothing the player asked (X). -->
+    <div id="under">
+      <div id="help" style="display: none">
+        <div class="bar">
+          <button id="fsBtn" title="Fullscreen (letterboxed 4:3)" data-i18n="play.fullscreen" data-i18n-attr="title:play.fullscreenTitle">⛶ Fullscreen</button>
+          <!-- opens a prefilled GitHub issue and puts the screen on the
+               clipboard, which is the only way an image reaches one
+               (taoot/src/bug-report.ts) -->
+          <button id="bugBtn" title="Report something the port gets wrong" data-i18n="play.reportBug" data-i18n-attr="title:play.reportBugTitle">🪲 Report a bug</button>
+          <!-- what became of the screenshot, said where the button is rather
+               than in the details pane, which is shut -->
+          <span id="bugNote" class="note"></span>
+        </div>
+
+        <!-- Which way a swipe reads, for the phone that has no arrow keys. Only
+             a device that can swipe is asked: taoot/src/main.ts's installSwipeOptions
+             unhides the row on a touch pointer and remembers both boxes. -->
+        <div class="bar" id="swipeOpts" hidden>
+          <span class="seclabel" data-i18n="play.swipeLabel">Swipe</span>
+          <label title="a swipe from right to left turns right, not left" data-i18n-attr="title:play.swipeInvertTurnTitle"
+            ><input type="checkbox" id="swipeInvertTurn" />
+            <span data-i18n="play.swipeInvertTurn">invert left/right</span></label
+          >
+          <label title="a swipe downwards walks on, not one upwards" data-i18n-attr="title:play.swipeInvertWalkTitle"
+            ><input type="checkbox" id="swipeInvertWalk" />
+            <span data-i18n="play.swipeInvertWalk">invert forward</span></label
+          >
+        </div>
+
+        <!-- The picture settings. Not in the swipe row above, which a desktop
+             never sees: these questions are the mouse's as much as the finger's.
+             taoot/src/main.ts's installPictureOptions remembers both.
+
+             The brightness presets are the touch half of the original's own
+             control: TI.EXE puts it on F1/F2 (and the individual colour channels
+             on F3-F8, reset on F9), which a phone has no way to press. Both ends
+             move the same value, so a player who uses the keys sees the
+             selection follow. -->
+        <!-- Four landings, not a box: the original's own is asymmetric (a right
+             turn lands soft and sharpens, a left turn and a walk land sharp), and
+             #75 asks for the three uniform readings of it as well. A select
+             takes the arrow keys while it has focus, so taoot/src/main.ts blurs it on
+             change — otherwise picking a mode would leave the player unable to
+             turn until they clicked the screen. -->
+        <div class="bar">
+          <span class="seclabel" data-i18n="play.pictureLabel">Picture</span>
+          <label
+            title="The game ships each standpoint twice, sharp and soft, and the original shows the soft one for a moment as a right turn lands — a left turn and a walk land sharp. The other three give every direction the same landing. The movement itself stays soft whichever you pick: no sharp version of the moving frames was ever made."
+            data-i18n-attr="title:play.landingTitle"
+            ><span data-i18n="play.landingLabel">landing</span>
+            <select id="pictureMode">
+              <option value="original" data-i18n="play.landingOriginal">original</option>
+              <option value="sharp" data-i18n="play.landingSharp">always sharp</option>
+              <option value="transition" data-i18n="play.landingTransition">always transition</option>
+              <option value="soft" data-i18n="play.landingSoft">always soft</option>
+            </select></label
+          >
+        </div>
+
+        <div class="bar">
+          <span class="seclabel" data-i18n="play.brightnessLabel">Brightness</span>
+          <span
+            class="seg"
+            id="brightnessSeg"
+            role="group"
+            title="The original brightens every colour before it draws it, and lets you move that with Ctrl+F1 and Ctrl+F2 — F1-F9 here, which also trim the colour channels one at a time. These three are the same setting for a screen with no keyboard, six keypresses either side of what the game ships with."
+            data-i18n-attr="title:play.brightnessTitle"
+          >
+            <label
+              ><input type="radio" name="brightness" value="darker" />
+              <span data-i18n="play.brightnessDarker">darker</span></label
+            >
+            <label
+              ><input type="radio" name="brightness" value="default" />
+              <span data-i18n="play.brightnessOriginal">original</span></label
+            >
+            <label
+              ><input type="radio" name="brightness" value="brighter" />
+              <span data-i18n="play.brightnessBrighter">brighter</span></label
+            >
+          </span>
+          <span class="keys" id="brightnessValue">0.65</span>
+        </div>
+
+        <!-- How fast a move the PLAYER asked for animates (#222). Not a feel
+             decision reopened: `original` is the rate measured out of TI.EXE
+             (#205) and is the default. The original has this knob itself and
+             calls it `framerate` — 6 ticks is slow, its own shipped value is 3,
+             and `framerate(0)` means "don't wait", which is what instant is.
+             The row exists because 20 fps of low-res transition makes some
+             players motion-sick, and the ask was either a slower walk or none.
+
+             Radios, like the brightness row and unlike the picture dropdown: a
+             radio owns only Space (engine/src/web/keys.ts), so the arrows still turn while
+             one has focus and nothing has to be blurred. taoot/src/main.ts's
+             installMovement remembers the answer and writes the ms readout. -->
+        <div class="bar">
+          <span class="seclabel" data-i18n="play.movementLabel">Movement</span>
+          <span
+            class="seg"
+            id="movementSeg"
+            role="group"
+            title="How long each frame of a turn or a walk is held — your own moves only, never the ones a script makes for you. The original holds a frame for 50 ms and that is what `original` is; the others are the same move played out slower or faster, over the same frames. `instant` holds none of them: the picture goes straight to where you are standing next, which is the setting to reach for if the movement makes you queasy."
+            data-i18n-attr="title:play.movementTitle"
+          >
+            <label
+              ><input type="radio" name="movement" value="slow" />
+              <span data-i18n="play.movementSlow">slow</span></label
+            >
+            <label
+              ><input type="radio" name="movement" value="original" />
+              <span data-i18n="play.movementOriginal">original</span></label
+            >
+            <label
+              ><input type="radio" name="movement" value="fast" />
+              <span data-i18n="play.movementFast">fast</span></label
+            >
+            <label
+              ><input type="radio" name="movement" value="instant" />
+              <span data-i18n="play.movementInstant">instant</span></label
+            >
+          </span>
+          <span class="keys" id="movementValue">50 ms</span>
+        </div>
+
+        <!-- The small game a 1996 machine got. Nothing here is ours: the box
+             makes heapsize() report under 6 MB and TAOOT's own scripts do the
+             rest (GameSession.lowMemory). Named for the condition rather than
+             for what it produces, because what it produces is the game's
+             answer and not ours — in this port everything it reaches is sound,
+             on the original it also turned two engine caches down. -->
+        <div class="bar">
+          <span class="seclabel" data-i18n="play.lowMemoryLabel">Low memory</span>
+          <label
+            title="A machine with under 6 MB of memory got a smaller game, and the game's own scripts decided that: the half-length deck and sinking themes, and no crowd around you on the boat deck. Tick this to hear that version. It takes effect in the next room."
+            data-i18n-attr="title:play.lowMemoryTitle"
+            ><input type="checkbox" id="lowMemory" />
+            <span data-i18n="play.lowMemory">the reduced 1996 mode</span></label
+          >
+        </div>
+
+        <div class="bar">
+          <span class="keys" data-i18n-html="play.keys">
+            <b>←</b> <b>→</b> turn &nbsp;·&nbsp; <b>↑</b> walk &nbsp;·&nbsp;
+            <b>Esc</b> skip line &nbsp;·&nbsp; <b>M</b> map &nbsp;·&nbsp;
+            <b>O</b> hotspots &nbsp;·&nbsp; <b>X</b> details &nbsp;·&nbsp;
+            <b>0</b>–<b>9</b> sound &nbsp;·&nbsp; <b>F1</b> <b>F2</b> brightness
+          </span>
+        </div>
+      </div>
+
+    </div>
+      </div>
+      <!-- /#gamecol -->
+
+      <!-- X opens this once the game is up; before then, a logged line does
+           (taoot/src/main.ts log), because a boot that never finishes has nothing
+           else to say for itself.
+
+           A column of #playlayout, in flow: beside the screen where the window
+           is wide enough and under it where it is not, by the row wrapping
+           rather than by anything moving the element (#249). -->
+      <div id="details" hidden>
+        <h2 data-i18n="play.debugHeading">Details</h2>
+        <div id="hud"></div>
+        <!-- what the pane can be asked for beyond the log. `state` is off by
+             default: 161 variable names are an answer to a question the player
+             did not ask, and #22 is from someone who did ask. -->
+        <div id="dbgBar">
+          <label data-i18n-attr="title:play.debugStateTitle" title="Every script global, and the six the game's own debug readout names"
+            ><input type="checkbox" id="dbgStateOn" />
+            <span data-i18n="play.debugState">state</span></label
+          >
+          <button id="dbgCopy" data-i18n="play.debugCopy" data-i18n-attr="title:play.debugCopyTitle" title="Copy the state and the whole log, to attach to a bug report">⧉ Copy details</button>
+          <span id="dbgNote" class="note"></span>
+        </div>
+        <pre id="scriptlog"></pre>
+        <div id="dbgState" hidden>
+          <div id="dbgSpine"></div>
+          <div id="dbgTools">
+            <input id="dbgFilter" type="search" data-i18n-attr="placeholder:play.debugFilter" placeholder="filter" />
+            <label data-i18n-attr="title:play.debugAllTitle" title="Every global, not just the ones that have just moved"
+              ><input type="checkbox" id="dbgAll" />
+              <span data-i18n="play.debugAll">all</span></label
+            >
+          </div>
+          <div id="dbgRows"></div>
+        </div>
+      </div>
+    </div>
+    <!-- /#playlayout -->
+
+    <div id="saveModal" class="modal">
+      <div class="modal-box">
+        <div class="modal-head">
+          <span id="saveModalTitle">Saved Games</span>
+          <button id="saveModalClose" data-i18n-attr="title:play.savesClose" title="Close">✕</button>
+        </div>
+        <div id="saveList" class="save-list"></div>
+        <div class="modal-foot">
+          <div id="saveNewRow" class="save-newrow">
+            <input id="saveNameInput" type="text" data-i18n-attr="placeholder:play.savesNamePlaceholder" placeholder="save name" />
+            <button id="saveConfirmBtn" data-i18n="play.savesSave">Save</button>
+          </div>
+          <div>
+            <button id="saveUploadBtn" data-i18n="play.savesUpload">⬆ Upload .ti</button>
+            <input id="saveUploadInput" type="file" accept=".ti" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

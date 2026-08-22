@@ -3,7 +3,7 @@
 #
 #   GITHUB_PAT = github_pat_...
 #
-# a fine-grained PAT with "Administration: Read and write" on dhobi/taoot-web.
+# a fine-grained PAT with "Administration: Read and write" on dhobi/dreamrefactory.
 # Putting it in Portainer's environment-variables box rather than in this text is
 # the whole reason the stack reads it as ${GITHUB_PAT}: the value stays out of the
 # stack definition, out of git, and out of anyone's clipboard history.
@@ -38,9 +38,10 @@ services:
       RUNNER_EPHEMERAL: "0"
 
       # MUST end in a directory named `gamefiles` — the entrypoint refuses to
-      # start otherwise. src/save-seed.ts matches shipped saves on a literal
+      # start otherwise. taoot/src/save-seed.ts matches shipped saves on a literal
       # `gamefiles/` path segment, so `/srv/taoot-gamefiles` costs one red test.
       TAOOT_GAMEFILES: /srv/taoot/gamefiles
+      DUST_GAMEFILES: /srv/dust/gamefiles
 
       RUNNER_LABELS: self-hosted,linux,x64,taoot-gamefiles
       RUNNER_NAME: taoot-portainer
@@ -50,6 +51,7 @@ services:
       # `:ro` because every suite only reads it, and a job that could write here
       # could corrupt the thing the whole suite compares against.
       - /srv/taoot/gamefiles:/srv/taoot/gamefiles:ro
+      - /srv/dust/gamefiles:/srv/dust/gamefiles:ro
 
     # NO docker socket. Portainer makes it a one-line temptation; mounting
     # /var/run/docker.sock hands any job root on the host and makes everything
