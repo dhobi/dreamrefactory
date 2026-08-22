@@ -2,6 +2,7 @@ import { Value, toNum, toStr, truthy } from "../interp";
 import { accessorFamily, BuiltinCtx } from "./context";
 import { packPoint } from "../point";
 import { isqrt, readStarPath } from "../../df/set";
+import type { ActorInstance } from "../actors";
 
 /**
  * What `actorstar` reports while a straight-line walk to a named star is running
@@ -103,14 +104,15 @@ function resumeFrom(points: RoutePoint[], x: number, y: number, z: number): Rout
  * the walking primitives (walktostar / walktoxyz / walkonpath).
  */
 export function registerActorBuiltins(ctx: BuiltinCtx): void {
-  const { session, r, log, findStar } = ctx;
+  const { session, r, log, findStar, sceneCell } = ctx;
 
   const actor = (name: Value) => session.actorRuntime.get(toStr(name));
   /** getter/setter by arity; a missing actor answers the empty value */
   const acc = accessorFamily(r, actor);
   r("opencastfile", async (_i, [n]) => ((await session.openCastFile(toStr(n ?? ""))) ? 1 : 0));
   r("closecastfile", (_i, [n]) => session.closeCastFile(toStr(n ?? "")));
-  r("actorexists", (_i, [n]) => (actor(n) ? 1 : 0));
+  // ...or, on a v1 set, the scene's grid ROW — see BuiltinCtx.sceneCell
+  r("actorexists", (_i, [n]) => sceneCell(n)?.[1] ?? (actor(n) ? 1 : 0));
 
   /**
    * The accost trace, asked for alongside #180 — "can you log when we get the
@@ -324,6 +326,9 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     a.worldX = toNum(x);
     a.worldY = toNum(y);
     a.worldZ = toNum(z ?? 0);
+    // an explicit placement settles the question, so a star that never resolved
+    // must not be allowed to overrule it later (ActorRuntime.settleStars)
+    a.starPending = false;
   });
   // place an actor on a named star point of the current set; the getter
   // form returns the star the actor was last placed on (endwalk checks
@@ -340,6 +345,12 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
       a.deg = star.rotation8 & 0xff;
     }
     a.starName = toStr(starName).toLowerCase();
+    // A star this set has never heard of. Dust's are qualified by set
+    // (`town.horse1`) and placed from the stage, so most calls name a room that
+    // is not the open one; the position is applied when that room opens
+    // (ActorRuntime.settleStars). Titanic never reaches this branch with a real
+    // star name — only with the walk sentinels, and those match no star anywhere.
+    a.starPending = !star && a.starName.includes(".");
   });
   acc("actordeg", 0, (a) => a.deg, (a, v) => {
     a.deg = toNum(v) & 0xff;
@@ -394,11 +405,58 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   // 0x443ac0 is the builder we are — hence "defer" for both named walks.
   r("walktostar", (_i, [n, starName]) => {
     const star = findStar(starName);
-    if (!actor(n) || !star) {
+    const a = actor(n);
+    /**
+     * A DESTINATION SPELLED OUT, which is how Dust moves anything that wanders.
+     *
+     * `walktostar` takes a star name — or, in DreamFactory 1, a point written as
+     * one: the animals build it out of numbers and hand it over as a string.
+     * EXTRA.CST's pig picks a spot in the next cell along, its chickens run at
+     * you, its birds scatter:
+     *
+     *     x = scenexyz (name, 1) + (48 - random (96))
+     *     y = scenexyz (name, 2) + (48 - random (96))
+     *     moveactor (numtostring (x) @ "," @ numtostring (y) @ ",0")
+     *
+     * and `moveactor` is `walktostar (me, where)`. Six call sites across three
+     * scripts, every one built from `playerxyz`/`scenexyz` axes 1 and 2 — the same
+     * triple `actorxyz` and `walktoxyz` take, in the same order. So it IS a
+     * walktoxyz, and the port answered "not found" to all of it: the pig never
+     * moved, and neither did the birds or the chickens.
+     *
+     * Only a string of numbers is read this way, so it cannot collide with a star
+     * name in either engine (both are identifiers — no commas, no digits alone).
+     */
+    const point = toStr(starName ?? "").split(",");
+    if (!star && a && point.length >= 2 && point.every((c) => /^-?\d+$/.test(c.trim()))) {
+      a.starName = "walktoxyz"; // as walktoxyz does: "custom" lands on arrival
+      session.scheduler.startWalk(
+        toStr(n), Number(point[0]), Number(point[1]), Number(point[2] ?? 0), "custom",
+      );
+      return 0;
+    }
+    if (!a || !star) {
       log(`walktostar: ${toStr(n)} -> "${toStr(starName ?? "")}" not found`);
       return 0;
     }
-    actor(n)!.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
+    /**
+     * On a v1 set, walk the authored route when the actor is standing on the
+     * star this one is paired with — see {@link startPathWalk}.
+     *
+     * The lookup is the NAMED one, with the actor's own current star as the
+     * `from`, so a route only applies between the two stars it was authored
+     * between. `"resume"` would match on the destination alone and drag an actor
+     * arriving from anywhere else onto the nearest point of a route it was never
+     * on, which is a teleport rather than a walk.
+     */
+    if (
+      session.currentBinding?.set.version === 1 &&
+      a.starName &&
+      startPathWalk(a, toStr(n), a.starName, toStr(starName).toLowerCase())
+    ) {
+      return 0;
+    }
+    a.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
     session.scheduler.startWalk(
       toStr(n), star.positionX, star.positionZ, star.positionY, toStr(starName).toLowerCase(),
     );
@@ -463,16 +521,23 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
    * With no route authored between the two, the straight line IS the answer: the
    * corpus has six paths and three of them are two points.
    */
-  r("walkonpath", (_i, [n, from, to]) => {
-    const a = actor(n);
-    if (!a) return 0;
-    const toName = toStr(to ?? "").toLowerCase();
-    const fromName = toStr(from ?? "").toLowerCase();
-    const dest = findStar(to);
-    if (!dest) {
-      log(`walkonpath: star "${toStr(to ?? "")}" not found`);
-      return 0;
-    }
+  /**
+   * Start an actor along the AUTHORED route between two stars, if there is one.
+   *
+   * Lifted out of `walkonpath` so `walktostar` can use it too, which is what a
+   * DreamFactory 1 set needs: Dust never calls `walkonpath` — its cast library
+   * moves everyone with `moveactor`, which is `walktostar` — and yet its sets
+   * carry 34 authored routes, and `gang.cst` tests `actorstar (who) =
+   * "walkonpath"` to find out whether the walk it is interrupting was on one. So
+   * v1's `walktostar` is the walker that consults the table, and the sentinel it
+   * leaves behind is the one that script reads. Reported from the page as actors
+   * "walking directly to the destination point" instead of along a path.
+   *
+   * Answers true when a route was found and the walk started.
+   */
+  const startPathWalk = (
+    a: ActorInstance, name: string, fromName: string, toName: string,
+  ): boolean => {
     const set = session.currentBinding?.set;
     const named = fromName !== "resume";
     const rec = set?.starPaths.find((p) => {
@@ -485,7 +550,7 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     if (rec && set) {
       // a star's (X, Z, Y) into the world triple a walk record uses: worldY is the
       // ground plane's second axis and worldZ the height, as walktostar builds it
-      let points = readStarPath(set.file.containers, rec.container)
+      let points = readStarPath(set.file.containers, rec.container, set.version)
         .map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev }));
       // the polyline is stored a->b; walk it backwards when the destination is
       // the `a` end (TI.EXE's second match arm in both lookups)
@@ -509,12 +574,26 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
       if (!named && points.length >= 2) points = resumeFrom(points, a.worldX, a.worldY, a.worldZ);
       if (points.length >= 2) {
         a.starName = WALK_ON_PATH; // the kind of walk, until the arrival names the star
-        session.scheduler.startWalkPath(toStr(n), points, toName);
-        return 0;
+        session.scheduler.startWalkPath(name, points, toName);
+        return true;
       }
     }
+    return false;
+  };
+
+  r("walkonpath", (_i, [n, from, to]) => {
+    const a = actor(n);
+    if (!a) return 0;
+    const toName = toStr(to ?? "").toLowerCase();
+    const fromName = toStr(from ?? "").toLowerCase();
+    const dest = findStar(to);
+    if (!dest) {
+      log(`walkonpath: star "${toStr(to ?? "")}" not found`);
+      return 0;
+    }
+    if (startPathWalk(a, toStr(n), fromName, toName)) return 0;
     a.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
-    if (named) {
+    if (fromName !== "resume") {
       const start = findStar(from);
       if (start) {
         a.worldX = start.positionX;

@@ -97,8 +97,15 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
   // so a theme that starts on set entry (without its own themevol call) still
   // reflects the player's music-volume slider setting. Through the session, so
   // a later `themevol(track)` reads back the level actually in effect.
-  const applyThemeVolume = () => {
-    session.setThemeVolume(toNum(interp.globals.get("themevolume") ?? 255));
+  const applyThemeVolume = (track: string) => {
+    // What the script asked THIS track to play at, if it said — and only the
+    // master slider otherwise. The order matters because the two games use
+    // opposite ones: Dust sets the volume and then plays (its saloon scores one
+    // piano at 55 from the bar and 24 from the landing above), TAOOT plays and
+    // then sets. Reading the global unconditionally, as this used to, threw
+    // Dust's answer away at the instant the music started.
+    const asked = track ? session.volumeForTrack(track) : undefined;
+    session.setThemeVolume(asked ?? toNum(interp.globals.get("themevolume") ?? 255), track || undefined);
   };
   r("playtheme", (_i, [n]) => {
     const theme = session.audioLib.theme(n === undefined ? undefined : toStr(n));
@@ -108,7 +115,7 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
     }
     session.audio.play("theme", theme, { loop: true });
     session.currentThemeName = n === undefined ? "none" : toStr(n);
-    applyThemeVolume();
+    applyThemeVolume(n === undefined ? "" : toStr(n));
   });
   // playnewtheme(name): swap the looping theme to a specific track/bank. Puzzle
   // scripts save the prior theme via currenttheme() and restore it afterwards

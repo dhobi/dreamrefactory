@@ -156,6 +156,17 @@ const CLOCK_ALLOWED = new Set([
   // reports is thrown away as soon as it is read. It fetches, counts and
   // discards; nothing it produces reaches a session or a golden.
   "cache-warmup.ts",
+  // The Dust shell (dust.html), which is not the engine and does not run one: it
+  // is an experiment in reading a DreamFactory 1 disc, and its two calls are a
+  // stopwatch around `coldBoot` printed into a log and thrown away. Nothing it
+  // measures reaches a session, a golden or a decision — the same reason
+  // `cache-warmup.ts` is above it.
+  "dust.ts",
+  // Dust's saved games, for the same reason `save-seed.ts` is above: the clock
+  // it reads is a FILE's modification time, so a list of saves can put the newest
+  // first. It is the store's bookkeeping, not the engine's — no session waits on
+  // it and no golden records it.
+  "dust-saves.ts",
 ]);
 
 /**

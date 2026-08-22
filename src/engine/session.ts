@@ -1,6 +1,8 @@
 import { readContainerFile } from "../df/container";
 import { RawSaveFile } from "../df/savegame";
 import { SetFile, readSetFile } from "../df/set";
+import { detectVersion } from "../df/version";
+import { readSetFileAsV4 } from "../df/set-v1-to-v4";
 import { readShpFile } from "../df/shp";
 import { sniffScript } from "../df/script";
 import { DEFAULT_ENCODING, DfEncoding } from "../df/text";
@@ -19,6 +21,7 @@ import { PuppetController } from "./puppet";
 import { StageController } from "./stage";
 import { FileProvider } from "./setscripts";
 import { loadGame, snapshotSave } from "./saveload";
+import { loadGameV1, snapshotSaveV1 } from "./saveload-v1";
 import { packPoint } from "./point";
 import { registerGameBuiltins } from "./builtins";
 import { BootPlan, EMPTY_BOOT_PLAN, readBootPlan } from "./bootplan";
@@ -34,9 +37,18 @@ const MAX_FRAME_CATCHUP = 64;
 /**
  * The loaded title's boot-level UI shops — the ones whose screen props belong on
  * top of the room view rather than only over their own overlay
- * ({@link LoadedShop.persistent}). The NAMES are TAOOT's (the interface band and
- * the inventory): one of the few pieces of game knowledge the engine still
- * carries, and a different title would need its own entries here.
+ * ({@link LoadedShop.persistent}). One of the few pieces of game knowledge the
+ * engine still carries, so each title it is asked to run has to be listed: the
+ * interface band and the inventory, whatever that title calls them.
+ *
+ * TAOOT's are `.shp`; **Dust's are the same two names with `.prp`**, and its
+ * BOOTFILE opens exactly those (`openshopfile("house.prp")`,
+ * `openshopfile("inven.prp")`) — so listing only the Titanic pair left Dust with
+ * an interface band and an inventory that were correctly placed, correctly
+ * visible, and neither drawn over the room nor clickable in it. Which is what a
+ * picked-up object looked like: `addinven` puts the held item on the panel at
+ * (316, 320) beside the avatar, and it sat there unreachable, so the bone could
+ * never be dragged back out to give to anyone.
  *
  * Which shops these are is a fact about the shops, so it is applied wherever one
  * of them is opened ({@link GameSession.openShop}) and not by whoever does the
@@ -47,7 +59,7 @@ const MAX_FRAME_CATCHUP = 64;
  * prop visible and correctly placed, none of them drawn, because the shop they
  * live in had been opened by the game rather than on its behalf.
  */
-const BOOT_UI_SHOPS = ["inven.shp", "house.shp"];
+const BOOT_UI_SHOPS = ["inven.shp", "house.shp", "inven.prp", "house.prp"];
 
 /** the sendto* commands that address a CAST member, whoever else answers to the
  *  name — see {@link GameSession.resolveEventTarget} */
@@ -296,6 +308,23 @@ export class GameSession {
   });
   /** the type from the most recent hittest(), returned by result() */
   lastResult = "";
+  /**
+   * Is this screen point over the ROOM's own image, and over the STAGE's flat?
+   *
+   * Separate hooks rather than a reading of {@link hitTestAt}, because they have
+   * to answer yes THROUGH whatever is drawn on top. `hittest` asks the
+   * screen-space props first and unbounded, so a point over the room with a band
+   * prop across it is reported as "prop" — correct for a click, wrong for "is
+   * this the room".
+   *
+   * Both are Dust's, and its inventory is what needs them: `inven.prp`'s drag
+   * ends by asking, in this order, whether the item was dropped on an actor, on
+   * the room, or on the stage (`pointinactor` / `pointinset` / `pointinstage`).
+   * Titanic's inventory asks `hittest` once and switches on `result()` instead, so
+   * none of the three existed here.
+   */
+  pointInSet: (x: number, y: number) => boolean = () => false;
+  pointInStage: (x: number, y: number) => boolean = () => false;
   /** what the last `setcursor` handler asked the pointer to look like ("" = the
    *  plain arrow, which is also what a handler that says nothing leaves) */
   cursorName = "";
@@ -334,7 +363,7 @@ export class GameSession {
    * frame, so nothing has to be captured twice or held in sync.
    */
   wipe = {
-    dir: "" as "" | "left" | "right",
+    dir: "" as "" | "left" | "right" | "open" | "close",
     /** steps already revealed, of `steps` */
     step: 0,
     steps: 0,
@@ -906,7 +935,24 @@ export class GameSession {
    * problem — says `lostfight`.
    */
   private resolveEventTarget(cmd: string, targetName: string, handler = ""): ScriptInstance | null {
+    /**
+     * An event ADDRESSED TO A FLAT resolves on the flat's own script first,
+     * when that script actually has the handler.
+     *
+     * The generic name lookup below can be shadowed: Dust names its inventory
+     * flat "avatar" and ALSO has an "avatar" prop (the player portrait in
+     * HOUSE.PRP), and the prop's instance won — so the flat loop the
+     * inventory's openflat arms (`makeloop("flat", currentflat(),
+     * "cashupdate", 2)`) fired `sendtoflat("avatar", cashupdate())` into a
+     * prop script with no such handler, and the CASH readout stayed blank.
+     * Gated on `has(handler)` so a flat-addressed event whose flat cannot
+     * answer still falls through to the shared-handler chain exactly as
+     * before (TAOOT's fencing relies on that stage-main fallback).
+     */
+    const flatFirst =
+      cmd === "sendtoflat" ? this.flatScripts.get(targetName.toLowerCase()) : undefined;
     let inst =
+      (flatFirst?.script.codes.has(handler) ? flatFirst : null) ??
       (ACTOR_ADDRESSEE.test(cmd) ? this.castScripts.get(targetName.toLowerCase()) : null) ??
       this.currentBinding?.findInstance(targetName) ??
       this.findGlobalInstance(targetName);
@@ -1589,11 +1635,45 @@ export class GameSession {
    * what a script reading before anything has set it should see.
    */
   themeVolume = 255;
+  /**
+   * ...and per TRACK, which is what the name argument is for after all.
+   *
+   * `themevol(track, v)` is not only a channel gain: the volume belongs to the
+   * TRACK, and a script sets it BEFORE playing that track. Dust's saloon is the
+   * case that proves it, because the same music is scored at two loudnesses by
+   * two different rooms:
+   *
+   *     SALLOWER  themevol ("saloonsep.snd", 55) ; playtheme ("saloonsep.snd")
+   *     SALUPPER  themevol ("saloonsep.snd", 24) ; playtheme ("saloonsep.snd")
+   *
+   * — the piano heard from the bar, and the same piano heard through the floor
+   * from the landing above it. `playtheme` used to finish by applying the master
+   * `themevolume` global, which threw both of those away: the score came back at
+   * 255 the instant it started. Downstairs that was invisible, because SALLOWER
+   * runs a scene loop that re-sets the volume from your distance to the piano
+   * every two ticks — so the clobber was corrected before anyone could hear it.
+   * Upstairs nothing corrects it, and the music stayed at full volume through
+   * every conversation on that landing.
+   *
+   * So a track's volume is remembered under its name, and starting a track
+   * applies what the script asked for that track. TAOOT is unaffected in
+   * practice: its idiom is the other order — `playtheme(x)` and then
+   * `themevol(currenttheme(2), themevolume)` — so the value it remembers is the
+   * slider's, which is what it wanted the play to apply anyway.
+   */
+  private readonly trackVolume = new Map<string, number>();
   /** Set the theme loudness (0..255) and apply it to the audio channel. The one
-   *  way it is written, so the value a script reads back is the one in effect. */
-  setThemeVolume(v: number): void {
+   *  way it is written, so the value a script reads back is the one in effect.
+   *  `track` names the track it belongs to, so starting that track can restore it. */
+  setThemeVolume(v: number, track?: string): void {
     this.themeVolume = Math.max(0, Math.min(255, Math.round(v)));
+    if (track) this.trackVolume.set(track.toLowerCase(), this.themeVolume);
     this.audio.setChannelVolume("theme", this.themeVolume / 255);
+  }
+  /** What a script last asked THIS track to play at, or undefined if it never
+   *  said — see {@link trackVolume}. */
+  volumeForTrack(track: string): number | undefined {
+    return this.trackVolume.get(track.toLowerCase());
   }
   /** framerate() target cadence; drag loops save/drop/restore it (turbine dials) */
   frameRate = 3;
@@ -1895,16 +1975,42 @@ export class GameSession {
    */
   lastSave: RawSaveFile | null = null;
 
-  /** produce the bytes of a save capturing the current progress — the
-   *  patch-a-base-save logic lives in engine/saveload.ts */
-  snapshotSave(): Uint8Array | null {
-    return snapshotSave(this);
+  /**
+   * Which DreamFactory the game being run is, declared by the page at boot.
+   *
+   * The engine does not otherwise ask — a v1 set is translated into the v4 shape
+   * before anything downstream sees it (`df/set-v1-to-v4.ts`), which is what
+   * keeps one renderer, one interpreter and one scheduler serving both games.
+   * SAVES are the exception, and unavoidably so: a save is a dump of the engine's
+   * own tables, and those tables are the two engines' rather than the port's.
+   *
+   * Defaulted to 4, so the play page and every existing test say nothing. The
+   * getter below falls back to the bound set's own version, so a headless session
+   * that opened a Dust room and forgot to declare itself still saves a Dust save.
+   */
+  dfVersion: 1 | 4 = 4;
+
+  /** is this a DreamFactory 1 game? — see {@link dfVersion} */
+  get isV1(): boolean {
+    return this.dfVersion === 1 || this.currentBinding?.set.version === 1;
   }
 
-  /** load a `.ti` save (restore globals, travel to the saved room) — the
-   *  restore choreography lives in engine/saveload.ts */
+  /** produce the bytes of a save capturing the current progress — the
+   *  patch-a-base-save logic lives in engine/saveload.ts (and saveload-v1.ts) */
+  snapshotSave(): Uint8Array | null {
+    return this.isV1 ? snapshotSaveV1(this) : snapshotSave(this);
+  }
+
+  /** load a save (restore globals, travel to the saved room) — the restore
+   *  choreography lives in engine/saveload.ts (and saveload-v1.ts) */
   loadGame(bytes: Uint8Array): Promise<boolean> {
-    return loadGame(this, bytes);
+    return this.isV1 ? loadGameV1(this, bytes) : loadGame(this, bytes);
+  }
+
+  /** does any fallback script define this handler? — {@link runGlobal} without
+   *  running it, for a caller that would rather not ask at all than miss */
+  hasGlobal(handler: string): boolean {
+    return this.interp.fallbackScripts.some((inst) => inst.script.codes.has(handler));
   }
 
   /**
@@ -1960,12 +2066,21 @@ export class GameSession {
     await this.onSetChange(key, sceneName.toLowerCase(), viewName.toLowerCase());
   }
 
-  /** try to parse a set through the provider (null if not available yet) */
+  /**
+   * Try to parse a set through the provider (null if not available yet).
+   *
+   * A DreamFactory 1 set is translated into the v4 shape rather than read into
+   * one of its own — see {@link file://../df/set-v1-to-v4.ts}. The viewer, the
+   * props, the actors and the transition modes are all built on `SetFile`, and a
+   * v1 set carries the same facts in a flatter arrangement; arranging them the
+   * way the viewer reads them is one file, and a second viewer would be a second
+   * copy of every one of those behaviours.
+   */
   loadSet(fileName: string): SetFile | null {
     const data = this.files(fileName.toLowerCase());
     if (!data) return null;
     try {
-      return readSetFile(data);
+      return detectVersion(data) === 1 ? readSetFileAsV4(data) : readSetFile(data);
     } catch (e) {
       this.onLog(`${fileName}: ${(e as Error).message}`);
       return null;
@@ -2082,6 +2197,35 @@ export class GameSession {
       }
     }
     await this.fireHandler(main, "opencast", key, `opencast ${key}`);
+    /**
+     * ...and `openactor` on each CHARACTER.
+     *
+     * Not a Dust special case: TI.EXE carries the dispatch strings for all four
+     * of this lifecycle — `", opencast()"`, `", openactor()"`, `", closecast()"`,
+     * `", closeactor()"`, one after the other in its literal pool — so the
+     * DreamFactory 4 engine fires the per-character halves too. Titanic simply
+     * never defines them (0 of its scripts, in any of the six editions; the only
+     * files on those discs that contain the word are the engine binaries), which
+     * is why the port could go this long having implemented one of the four.
+     *
+     * Dust defines it six times, and every one of them exists to make its own
+     * copies — `extra.cst`'s horse is one cast member and three animals:
+     *
+     *     code openactor ()
+     *         actorinstance ("horse1", "horse2")
+     *         actorinstance ("horse1", "horse3")
+     *
+     * Without it `new.flt`'s `sendtocast("gang", initactors())` reaches
+     * `sendtoactor("horse2", setupactor("street"))` and the port answers "target
+     * not loaded", which is how this was found. After `opencast`, which is the
+     * order TI.EXE lists them in: the cast's own open first, then its characters.
+     *
+     * The two closing halves stay unimplemented on purpose — no script on either
+     * disc defines them, so firing them would add a dispatch nothing can receive.
+     */
+    for (const m of cst.members) {
+      await this.fireHandler(this.castScripts.get(m.name), "openactor", m.name);
+    }
     this.onLog(`cast loaded: ${key} (${cst.members.length} characters)`);
     return true;
   }
@@ -2111,7 +2255,7 @@ export class GameSession {
   /** session-scoped sendto* targets (usable before any set is open) */
   findGlobalInstance(name: string): ScriptInstance | null {
     const lower = name.toLowerCase();
-    return (
+    const exact =
       this.puppet?.scripts.get(lower) ??
       this.propScripts.get(lower) ??
       this.castScripts.get(lower) ??
@@ -2119,8 +2263,29 @@ export class GameSession {
       this.castMains.get(lower) ??
       this.flatScripts.get(lower) ??
       (this.stageScript && this.stageScript.name.toLowerCase() === lower ? this.stageScript : null) ??
-      (lower === "boot" ? this.boot : null)
-    );
+      (lower === "boot" ? this.boot : null);
+    if (exact) return exact;
+    /**
+     * Then the same lookup ignoring the FILE EXTENSION, because a script may
+     * address a shop or a cast either way and both are the same file.
+     *
+     * TAOOT writes `sendtoshop("inven.shp", initprops())` and Dust writes
+     * `sendtoshop("inven", addinven("helpbut"))` — its boot's very last line —
+     * against files opened as `inven.shp` and `inven.prp`. Keyed on the name it
+     * was opened under, only the first of those resolves, and the other is
+     * dropped as "target not loaded": measured, Dust's boot lost `initactors`,
+     * `initprops` and `addinven` that way, which is its whole opening inventory.
+     *
+     * Extension-insensitive rather than extension-STRIPPING: the exact match
+     * above still wins, so a file genuinely named for its stem is unaffected, and
+     * this only answers the question the exact match could not.
+     */
+    const stem = (n: string): string => n.toLowerCase().replace(/\.[a-z0-9]{1,4}$/, "");
+    const want = stem(lower);
+    for (const table of [this.shopMains, this.castMains, this.flatScripts]) {
+      for (const [key, inst] of table) if (stem(key) === want) return inst;
+    }
+    return null;
   }
 
   /**

@@ -271,6 +271,13 @@ export interface MovSegment {
   /** timed jumps, in file order — fired once each as the segment clock passes
    *  them (empty for every shipped movie but the demo's TOUR.MOV) */
   cues: MovCue[];
+  /**
+   * A DreamFactory 1 film, which draws by DF.EXE's blit rules: palette index
+   * 255 is entry 0 and indices 0/255 are transparent over the previous frame
+   * (mov-v1.ts's compositeFrameV1 has the disassembly). Set by
+   * {@link file://./mov-v1.ts}; the player keys and aliases only when it is.
+   */
+  dfV1?: boolean;
 }
 
 export interface MovFile extends MovSegment {

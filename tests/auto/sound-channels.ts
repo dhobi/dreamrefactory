@@ -302,3 +302,57 @@ test("a movie's opening frame plays its entry sound", async () => {
     ).toEqual([`${seconds.toFixed(2)}s@${rate}`]);
   }
 });
+
+/**
+ * A track plays at the volume the script asked FOR THAT TRACK, not at the
+ * master slider's.
+ *
+ * The two games write the pair in opposite orders, and only one of them
+ * survived. TAOOT plays and then sets — `playtheme(x)` followed by
+ * `themevol(currenttheme(2), themevolume)` — so applying the master global at
+ * the end of `playtheme` was harmless there. Dust sets and then plays, and its
+ * saloon scores ONE piece of music at two loudnesses from two rooms:
+ *
+ *     SALLOWER.SET  themevol ("saloonsep.snd", 55) ; playtheme ("saloonsep.snd")
+ *     SALUPPER.SET  themevol ("saloonsep.snd", 24) ; playtheme ("saloonsep.snd")
+ *
+ * the bar, and the same piano heard through the floor from the landing above.
+ * Applying the global threw both away the instant the music started. Downstairs
+ * that was inaudible — SALLOWER runs a scene loop that re-sets the volume from
+ * the player's distance to the piano every two ticks, so the clobber was
+ * corrected before it could be heard — and upstairs nothing corrects it, so the
+ * music played at full volume through every conversation on that landing
+ * (user-reported: "too loud when I'm talking to puppets ... stays at the
+ * completely same level for sophie and ruby which are a floor up").
+ *
+ * Tested on TAOOT's own files because the ORDERING is not Dust's private
+ * business: it is what `themevol`'s track argument means.
+ */
+test("themevol before playtheme survives the play", async () => {
+  const { session } = await newHost();
+  const call = (n: string, a: (string | number)[]) =>
+    (session.interp.builtins.get(n) as (i: unknown, args: (string | number)[]) => unknown)(session.interp, a);
+
+  await call("opentrackfile", ["bedrad1.trk"]);
+  // the master slider says full, as it does for a game with no music setting
+  session.interp.globals.set("themevolume", 255);
+
+  // Dust's order: the room says how loud its music is, then starts it
+  call("themevol", ["bedrad1.trk", 24]);
+  call("playtheme", ["bedrad1.trk"]);
+  expect(session.themeVolume, "the room's own level, not the master's").toBe(24);
+
+  // ...and re-entering a room that scores it louder moves it, rather than the
+  // first answer sticking
+  call("themevol", ["bedrad1.trk", 55]);
+  call("playtheme", ["bedrad1.trk"]);
+  expect(session.themeVolume, "the same music, scored louder by another room").toBe(55);
+
+  // TAOOT's order still works: a track nobody has spoken for plays at the master
+  // level, and a themevol after the play applies live
+  await call("opentrackfile", ["bedsit1.trk"]);
+  call("playtheme", ["bedsit1.trk"]);
+  expect(session.themeVolume, "an unspoken-for track takes the slider").toBe(255);
+  call("themevol", ["bedsit1.trk", 90]);
+  expect(session.themeVolume, "and a set-after-play still lands").toBe(90);
+});

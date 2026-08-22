@@ -1,5 +1,7 @@
 import { BinaryReader } from "./binary";
 import { DFContainerFile } from "./container";
+import { versionOf } from "./version";
+import { readSndFileFrom, sndLoopChunks } from "./snd";
 
 /**
  * Shared audio-bank chunk tables. TRK/SFX/11K banks (audio.ts) and MOV
@@ -196,8 +198,20 @@ export interface AudioBank {
  * Read the audio bank tables of a TRK/SFX/11K file (non-MOV layout) the way
  * the runtime wants them: the loop chunks resolved to container locations in
  * playback order, and the one-shots keyed by the name a script asks for.
+ *
+ * Dust spells the same thing `.SND` and stores it differently — see
+ * {@link file://./snd.ts} — so a v1 bank is routed there and reshaped into the
+ * same three fields. Everything above this call keeps working unchanged, which is
+ * the point of doing it here: `opentrackfile("unilib.snd")` and
+ * `opentrackfile("unilib.trk")` are the same builtin and should be the same code
+ * path from here up.
+ *
+ * A v1 bank has no loop ORDER table, and the order is what a loop bed IS — but it
+ * is not missing, it is spelled in the names, so `sndLoopChunks` reads it (see
+ * {@link file://./snd.ts}). That is what gives Dust its music.
  */
 export function readAudioBank(file: DFContainerFile): AudioBank {
+  if (versionOf(file.containers[0].data) === 1) return readV1Bank(file);
   const tables = readBankTables(file);
   const loopChunks = tables.loopOrder
     .map((o) => tables.loopRecords[o - 1])
@@ -211,6 +225,23 @@ export function readAudioBank(file: DFContainerFile): AudioBank {
   }
 
   return { trackName: tables.trackName.replace(/\.wav$/i, ""), loopChunks, singles };
+}
+
+/** a Dust `.SND` in the shape the runtime already knows */
+function readV1Bank(file: DFContainerFile): AudioBank {
+  const snd = readSndFileFrom(file);
+  const singles = new Map<string, BankChunk>();
+  for (const chunk of snd.chunks) {
+    singles.set(chunk.identifier.replace(/^.*\//, "").toLowerCase(), chunk);
+  }
+  // VERBATIM, extension and all — a v4 bank stores "BEDRAD1.WAV" and is asked for
+  // as `playnewtheme("bedrad1.trk")`, so stripping is right there. A v1 bank is
+  // asked for by exactly the name it stores: Dust's eight playtheme targets are
+  // `town.snd`, `bountytheme`, `saloonsep.snd`, `mission.snd`, `mine`,
+  // `isaopractice.sn`, `helptheme` and `flute`, and each is some bank's refName
+  // character for character. Stripping ".snd" made three of the eight unfindable,
+  // among them the town theme — the one piece of music the game opens with.
+  return { trackName: snd.refName, loopChunks: sndLoopChunks(snd), singles };
 }
 
 // --- the write half ---------------------------------------------------------

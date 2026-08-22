@@ -496,6 +496,9 @@ export class SetViewer {
     // canonical set identity = the opened file's basename (see SetScripts)
     session.propRuntime.currentSet = session.currentSetName;
     session.actorRuntime.currentSet = session.currentSetName;
+    // ...and now that this set's star table is the one in hand, seat the actors
+    // that were placed on it from somewhere else — see ActorRuntime.settleStars
+    session.actorRuntime.settleStars(set.actors, (n) => session.scheduler.isWalk(n));
     // crickets attenuate/pan against the camera's ground position + facing
     session.listener = () => {
       const sc = this.scene;
@@ -578,6 +581,12 @@ export class SetViewer {
       // are caseless, so a `case "none"` matches either way
       return { name: "", type: "none" };
     };
+    // ...and the two predicates Dust's inventory drops an item against, which
+    // have to answer through whatever is drawn over them — see the note on
+    // GameSession.pointInSet
+    session.pointInSet = (x, y) => this.inSetImage(x, y);
+    session.pointInStage = () =>
+      this.session.stageOpen && this.session.currentFlat !== "none";
     // Snapshot the frame that is actually on screen. captureFrame runs from a
     // script (screentoblack) during tick(), i.e. BEFORE this frame's render, so
     // the screen still holds the last presented composite — the pre-transition
@@ -1441,7 +1450,12 @@ export class SetViewer {
     const levels = this.set.zLevelCount || 24;
     const scale = this.set.zFarMax / levels;
     if (!(scale > 0)) return null;
-    return { z: f.z, w: f.width, h: f.height, scale, levels };
+    return {
+      z: f.z, w: f.width, h: f.height, scale, levels,
+      // v1 z-tests sprites 128 units deep of where they stand (DF.EXE's +0x80,
+      // see set-v1-to-v4.ts); v4 leaves the bias unset
+      groundBias: this.set.spriteZBias ?? 0,
+    };
   }
 
   /** camera of the current view, for world-space (propxyz) props */
@@ -1472,15 +1486,26 @@ export class SetViewer {
   }): import("./engine/props").WorldCamera {
     const w = this.set.viewPortWidth || 512;
     const h = this.set.viewPortHeight || 264;
+    /**
+     * v1 pulls the camera BACK along the view bearing before projecting —
+     * DF.EXE 0x433fd4..0x43401e, by the set's own header amount (64 on every
+     * Dust set; see set-v1-to-v4.ts). The displacement is along the same
+     * (cos, sin) the projection's depth axis uses, so every depth simply
+     * grows by the setback. v4 sets carry no setback and are untouched.
+     */
+    const sb = this.set.cameraSetback ?? 0;
+    const th = (2 * Math.PI * (pose.deg & 0xff)) / 256;
     return {
-      x: pose.x,
-      y: pose.y,
+      x: pose.x - Math.round(sb * Math.cos(th)),
+      y: pose.y - Math.round(sb * Math.sin(th)),
       // TI.EXE projection subtracts the `camerahi` bias from the point height
       // (dyHeight = ptY - camHeight - camerahi); adding it to the camera eye
       // here is equivalent and drops the halls' floating sprites onto the floor.
       z: pose.z + this.session.cameraHiBias,
       deg: pose.deg,
-      f: Math.max(w, h) / 2,
+      // v1 names its own focal length (DF.EXE hard-codes 310 — see
+      // set-v1-to-v4.ts); v4 sets leave it unset and keep the measured default
+      f: this.set.focalLength ?? Math.max(w, h) / 2,
       cx: w / 2,
       cy: h / 2,
       clipW: w,
@@ -2564,13 +2589,34 @@ export class SetViewer {
     // how much of the old screen is still standing, in columns
     const kept = Math.max(0, Math.min(width, Math.round((width * (w.steps - w.step)) / w.steps)));
     if (kept <= 0) return;
-    const srcX = w.dir === "left" ? 0 : width - kept;
-    const strip = this.screen.scratchFor(kept * height * 4);
-    for (let y = 0; y < height; y++) {
-      const from = (y * width + srcX) * 4;
-      strip.set(rgba.subarray(from, from + kept * 4), y * kept * 4);
+    const put = (srcX: number, cols: number): void => {
+      if (cols <= 0) return;
+      const strip = this.screen.scratchFor(cols * height * 4);
+      for (let y = 0; y < height; y++) {
+        const from = (y * width + srcX) * 4;
+        strip.set(rgba.subarray(from, from + cols * 4), y * cols * 4);
+      }
+      this.screen.blitAt(strip, cols, height, srcX, 0);
+    };
+    /**
+     * The BARN DOORS are the same subtraction split at the centre. `open`
+     * reveals the new screen middle-outwards, so what still stands of the old
+     * one is its two edges — half the kept columns against each side. `close`
+     * reveals edges-inwards, so the old screen's remainder is a centre band.
+     * Dust's map and inventory arrive through these (visualeffect
+     * barndooropen/barndoorclose, NEW.FLT).
+     */
+    if (w.dir === "open") {
+      const half = kept >> 1;
+      put(0, half);
+      put(width - (kept - half), kept - half);
+      return;
     }
-    this.screen.blitAt(strip, kept, height, w.dir === "left" ? 0 : width - kept, 0);
+    if (w.dir === "close") {
+      put((width - kept) >> 1, kept);
+      return;
+    }
+    put(w.dir === "left" ? 0 : width - kept, kept);
   }
 
   /**
@@ -2714,13 +2760,51 @@ export class SetViewer {
     palette: Uint8ClampedArray,
     cam: import("./engine/props").WorldCamera | null,
   ): void {
+    /**
+     * A v1 set draws actors and world props as ONE list, far to near.
+     *
+     * DF.EXE's frame loop (0x4340d0) blits a single array of draw records
+     * ([0x45e528]), each stamped with its projection depth at +0xc by
+     * whichever renderer built it — actors (0x41e94c) and props alike — so a
+     * walker passing in front of a prop covers it, and behind it is covered.
+     * The port drew all actors and THEN all world props, which handed every
+     * prop the nearer role whatever the depths: leroy ambling out of town
+     * walked BEHIND his own whiskey jug. Reported from play.
+     *
+     * v4 keeps the two-pass order it always had — its pass structure is
+     * measured against TAOOT and no TI.EXE evidence has been read either way —
+     * so the merge is gated on the set's own version.
+     */
+    const occ = this.occlusion();
+    if (cam && this.set.version === 1) {
+      const ar = this.session.actorRuntime;
+      const pr = this.session.propRuntime;
+      const jobs = [
+        ...ar.drawList(cam).map((e) => ({
+          depth: e.proj.depth,
+          draw: () => ar.compositeOne(e, data, width, height, palette, cam, occ),
+        })),
+        ...pr.worldDrawList(cam).map((e) => ({
+          depth: e.proj.depth,
+          draw: () => pr.compositeWorldOne(e, data, width, height, palette, cam, occ),
+        })),
+      ].sort((x, y) => y.depth - x.depth);
+      for (const j of jobs) j.draw();
+      // the screen-space props still ride on top: cam = null skips the world
+      // half, which the merge above has already drawn
+      pr.composite(
+        data, width, height, palette, -Infinity, null,
+        this.animating || this.session.viewShowing, occ,
+      );
+      return;
+    }
     if (cam) {
-      this.session.actorRuntime.composite(data, width, height, palette, cam, this.occlusion());
+      this.session.actorRuntime.composite(data, width, height, palette, cam, occ);
     }
     this.session.propRuntime.composite(
       data, width, height, palette, -Infinity, cam,
       this.animating || this.session.viewShowing,
-      this.occlusion(),
+      occ,
     );
   }
 

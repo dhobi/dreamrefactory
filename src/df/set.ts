@@ -1,5 +1,6 @@
 import { BinaryReader } from "./binary";
 import { Container, DFContainerFile, readContainerFile } from "./container";
+import type { DfVersion } from "./version";
 
 /**
  * SET file structures — port of DFset (dfet/libs/DFfile/DFset/*.cpp),
@@ -111,6 +112,16 @@ export interface Actor {
 
 export interface SetFile {
   file: DFContainerFile;
+  /**
+   * Which DreamFactory wrote it — 4, or 1 for a Dust set translated into this
+   * shape (src/df/set-v1-to-v4.ts).
+   *
+   * Almost nothing needs to ask: the translation exists precisely so the viewer,
+   * the props and the actors do not know. The exception is a structure the two
+   * engines lay out differently and the SET only POINTS at, so the translator
+   * cannot normalise it in passing — {@link readStarPath}'s polyline is the one.
+   */
+  version: DfVersion;
   /** container refs of the three top-level registers (container 0 header) */
   mainSceneRegister: number;
   transitionRegister: number;
@@ -120,6 +131,25 @@ export interface SetFile {
   defaultViewName: string;
   viewPortWidth: number;
   viewPortHeight: number;
+  /**
+   * The projection's focal length, when the ENGINE that owns this set names one.
+   *
+   * DreamFactory 1 does: DF.EXE hard-codes 0x136 = 310 at both of the sites that
+   * reset the world camera (0x4331e5 and 0x433418), and its projectPoint
+   * (0x433c60) multiplies both the lateral offset and the height drop by that
+   * one constant before the truncating divide by depth — the exact shape of
+   * src/engine/geometry.ts's projectPoint. A v4 SET leaves this unset and the
+   * viewer keeps its measured default, max(viewW, viewH)/2.
+   */
+  focalLength?: number;
+  /** units added to a sprite's depth before z-quantization — what remains of
+   *  DF.EXE's +0x80 once the camera setback is taken out of it; unset (0) for
+   *  v4. See Occlusion.groundBias and set-v1-to-v4 for the disassembly. */
+  spriteZBias?: number;
+  /** how far the camera stands BEHIND its cell anchor, along the facing —
+   *  v1's header 0x18, applied by DF.EXE's camera builder (0x433fd4);
+   *  unset (0) for v4, whose cameras are the stand frames' own. */
+  cameraSetback?: number;
   /**
    * Z-image depth quantization (SCDO chunk, TI.EXE 0x4078ad): the far clip
    * depth (farMax) and the number of depth levels. A frame's Z image stores
@@ -171,8 +201,21 @@ export function roadsAt(
 ): { road: Transition; register: 0 | 1; arriveViewID: number }[] {
   const out: { road: Transition; register: 0 | 1; arriveViewID: number }[] = [];
   for (const road of set.transitions) {
-    if (road.viewIDstart === globalViewID) out.push({ road, register: 0, arriveViewID: road.viewIDend });
-    else if (road.viewIDend === globalViewID) out.push({ road, register: 1, arriveViewID: road.viewIDstart });
+    // A register with no frames is not a road you can take from this end.
+    //
+    // Titanic authors both directions of every road and never trips this. A
+    // DreamFactory 1 road is one-way BY CONSTRUCTION: a v1 walk keeps its facing
+    // at both ends, so the record that brings you back is the one leaving the far
+    // cell on the OPPOSITE facing — a different standpoint, and so a different
+    // road. Every translated v1 road therefore has an empty second register
+    // (src/df/set-v1-to-v4.ts), and offering it from the far end walked the player
+    // into `frames[frames.length - 1]` of nothing: "Cannot read properties of
+    // undefined (reading 'axisX')", raised out of boot's keydown.
+    if (road.viewIDstart === globalViewID && road.frameRegisters[0].frames.length) {
+      out.push({ road, register: 0, arriveViewID: road.viewIDend });
+    } else if (road.viewIDend === globalViewID && road.frameRegisters[1].frames.length) {
+      out.push({ road, register: 1, arriveViewID: road.viewIDstart });
+    }
   }
   return out;
 }
@@ -440,9 +483,25 @@ export function isqrt(n: number): number {
 }
 
 /**
+ * Where a polyline keeps its count and its first point.
+ *
+ * v1 is the same record with one i32 fewer and the two leading fields the other
+ * way round: `{i32 count, i32 total length}`, bbox at 8, points from 16. Measured
+ * on BANK.SET c239, where the six legs sum to the stored total (180 + 82 + 59 +
+ * 101 + 104 = 526) and each `fromPrev` is the distance from the point before it —
+ * two independent checks on one 64-byte container, and 34 of 34 paths on the disc
+ * read clean under it.
+ */
+const PATH_BY_VERSION: Record<DfVersion, { count: number; first: number }> = {
+  4: { count: 8, first: 20 },
+  1: { count: 0, first: 16 },
+};
+
+/**
  * The polyline a {@link StarPath} names: `{i32 total length, i32, i32 count}`, a
  * `(Zmin, Xmin, Zmax, Xmax)` bounding box, then `count` × `{i16 X, Z, Y, i16
- * distance-from-previous}` from offset 20.
+ * distance-from-previous}` from offset 20 — v1's own arrangement of the same
+ * fields is {@link PATH_BY_VERSION}.
  *
  * The first point is the `a` star and the last is `b`, so a two-point path is a
  * straight line and everything between is the authored detour. HALLA's
@@ -450,15 +509,20 @@ export function isqrt(n: number): number {
  * the hall, then down it — which is why walking the straight line instead cut
  * the corner of the wall (#122).
  */
-export function readStarPath(containers: Container[], location: number): StarPathPoint[] {
+export function readStarPath(
+  containers: Container[],
+  location: number,
+  version: DfVersion = 4,
+): StarPathPoint[] {
   const c = containers[location];
   if (!c) return [];
   const r = new BinaryReader(c.data);
-  r.seek(8);
+  const at = PATH_BY_VERSION[version];
+  r.seek(at.count);
   const count = r.i32();
   const points: StarPathPoint[] = [];
   for (let i = 0; i < count; i++) {
-    r.seek(20 + i * 8);
+    r.seek(at.first + i * 8);
     const x = r.i16();
     const z = r.i16();
     const y = r.i16();
@@ -586,7 +650,10 @@ export function readSetFile(data: Uint8Array): SetFile {
   r.seek(C0.version);
   const version = r.i32();
   if (version !== 4) {
-    throw new Error(`Unsupported DreamFactory SET version ${version} (only 4.0 is supported)`);
+    throw new Error(
+      `DreamFactory SET version ${version}, and this reader is 4.0 only` +
+        (version === 1 ? " — v1 (Dust) is read by readSetFileV1 in set-v1.ts" : ""),
+    );
   }
 
   r.seek(C0.mapLight);
@@ -629,6 +696,7 @@ export function readSetFile(data: Uint8Array): SetFile {
 
   return {
     file,
+    version: 4,
     mainSceneRegister,
     transitionRegister,
     actorRegister,

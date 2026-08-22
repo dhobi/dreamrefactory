@@ -83,6 +83,24 @@ export function buildManifest(opts: ManifestOptions = {}): Record<string, number
   return out;
 }
 
+/**
+ * The DUST slice of the same walk — everything under `gamefiles/dust/` — as its
+ * own file, so the Dust page downloads a listing of its one disc rather than
+ * the combined index of every TAOOT edition beside it (~20 KB against ~230),
+ * and the TAOOT manifest stops growing when the Dust tree changes. Written
+ * wherever the full manifest is written (the build plugin, mkmanifest on the
+ * host) and served live by the dev middleware, exactly like its parent.
+ */
+export function dustManifest(full: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(full)) {
+    if (k.startsWith("gamefiles/dust/")) out[k] = v;
+  }
+  return out;
+}
+
 /** where the pages look for it, in dev and in a static deployment alike */
 export const MANIFEST_URL = "/gamefiles.json";
 export const MANIFEST_FILE = "gamefiles.json";
+export const DUST_MANIFEST_URL = "/gamefiles-dust.json";
+export const DUST_MANIFEST_FILE = "gamefiles-dust.json";

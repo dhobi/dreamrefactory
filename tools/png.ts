@@ -1,12 +1,25 @@
 import { deflateSync, inflateSync } from "node:zlib";
 
-/** Minimal PNG encoder (RGBA, 8-bit) for the verification tooling. */
-export function encodePNG(rgba: Uint8Array | Uint8ClampedArray, width: number, height: number): Buffer {
-  const raw = Buffer.alloc((width * 4 + 1) * height);
-  for (let y = 0; y < height; y++) {
-    raw[y * (width * 4 + 1)] = 0; // filter: none
-    raw.set(rgba.subarray(y * width * 4, (y + 1) * width * 4), y * (width * 4 + 1) + 1);
-  }
+/**
+ * Minimal PNG encoder (RGBA, 8-bit) for the verification tooling.
+ *
+ * Unfiltered and at zlib's default level, which is right for what this was
+ * written for: small verification images written once and looked at. `compress`
+ * is for the one case that is not that — a page asset, where the file is served
+ * to a browser and its size is the whole point. It picks a filter per scanline
+ * the way the spec suggests (least sum of absolute differences) and turns deflate
+ * up, which on photographic artwork is most of the difference between a PNG and
+ * a big PNG. Opt-in, so nothing that was passing keeps different bytes.
+ */
+export function encodePNG(
+  rgba: Uint8Array | Uint8ClampedArray,
+  width: number,
+  height: number,
+  opts: { compress?: boolean } = {},
+): Buffer {
+  const raw = opts.compress
+    ? filterAdaptive(rgba, width, height)
+    : filterNone(rgba, width, height);
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
@@ -14,10 +27,65 @@ export function encodePNG(rgba: Uint8Array | Uint8ClampedArray, width: number, h
   ihdr[9] = 6; // color type RGBA
   const chunks = [
     chunk("IHDR", ihdr),
-    chunk("IDAT", deflateSync(raw)),
+    chunk("IDAT", deflateSync(raw, opts.compress ? { level: 9, memLevel: 9 } : {})),
     chunk("IEND", Buffer.alloc(0)),
   ];
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), ...chunks]);
+}
+
+/** every scanline prefixed with filter 0 — the format's simplest legal form */
+function filterNone(rgba: Uint8Array | Uint8ClampedArray, width: number, height: number): Buffer {
+  const stride = width * 4;
+  const raw = Buffer.alloc((stride + 1) * height);
+  for (let y = 0; y < height; y++) {
+    raw[y * (stride + 1)] = 0;
+    raw.set(rgba.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
+  }
+  return raw;
+}
+
+/**
+ * All five predictors tried per scanline, the smallest absolute sum kept — the
+ * heuristic the PNG spec itself recommends. `a` is the byte one pixel to the
+ * left, `b` the byte above, `c` the byte above-left.
+ */
+function filterAdaptive(rgba: Uint8Array | Uint8ClampedArray, width: number, height: number): Buffer {
+  const bpp = 4;
+  const stride = width * bpp;
+  const raw = Buffer.alloc((stride + 1) * height);
+  const cand = [0, 1, 2, 3, 4].map(() => Buffer.alloc(stride));
+  const prev = Buffer.alloc(stride);
+  const line = Buffer.alloc(stride);
+  for (let y = 0; y < height; y++) {
+    line.set(rgba.subarray(y * stride, (y + 1) * stride));
+    for (let i = 0; i < stride; i++) {
+      const x = line[i];
+      const a = i >= bpp ? line[i - bpp] : 0;
+      const b = prev[i];
+      const c = i >= bpp ? prev[i - bpp] : 0;
+      cand[0][i] = x;
+      cand[1][i] = (x - a) & 0xff;
+      cand[2][i] = (x - b) & 0xff;
+      cand[3][i] = (x - ((a + b) >> 1)) & 0xff;
+      cand[4][i] = (x - paeth(a, b, c)) & 0xff;
+    }
+    let best = 0, bestSum = Infinity;
+    for (let f = 0; f < 5; f++) {
+      let sum = 0;
+      for (let i = 0; i < stride; i++) sum += cand[f][i] < 128 ? cand[f][i] : 256 - cand[f][i];
+      if (sum < bestSum) { bestSum = sum; best = f; }
+    }
+    raw[y * (stride + 1)] = best;
+    cand[best].copy(raw, y * (stride + 1) + 1);
+    prev.set(line);
+  }
+  return raw;
+}
+
+function paeth(a: number, b: number, c: number): number {
+  const p = a + b - c;
+  const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+  return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 }
 
 function chunk(type: string, data: Buffer): Buffer {

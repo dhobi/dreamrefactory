@@ -103,6 +103,7 @@ export default withMermaid(
             { text: "The script container on disk", link: "/formats/script-container" },
             { text: "PUP & CST — characters", link: "/formats/pup-cst" },
             { text: "Saved games (.ti)", link: "/formats/savegame" },
+            { text: "Saved games, DF1 (.rtd)", link: "/formats/savegame-v1" },
           ],
         },
         {

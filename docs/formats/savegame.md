@@ -17,6 +17,12 @@ Reference implementation:
 **[Saving & loading at runtime](../runtime/saves.md)**, which also covers the
 in-browser saved-games UI).
 
+> **Dust writes the same file.** DreamFactory 1's `.rtd` saves share this
+> envelope byte for byte — the same `fourCC`, the same `ODTRTRFD`, the same
+> position table and 64-byte alignment — so the reader and writer below take them
+> unchanged. What differs is the offsets inside two containers and four record
+> strides: see **[Saved games, DreamFactory 1 (`.rtd`)](savegame-v1.md)**.
+
 ## A save is a DFile with a different signature
 
 A save file is the **same container skeleton** as every other game file — a

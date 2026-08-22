@@ -14,6 +14,8 @@ import {
 } from "./df/mov";
 import { NATIVE_FRAME_MS, TICK_MS, chooseFrameInterval, frameHoldMs } from "./df/mov-pace";
 import { Container } from "./df/container";
+import { detectVersion } from "./df/version";
+import { compositeFrameV1, movFileFromV1, readMovFileV1 } from "./df/mov-v1";
 import { decodeAudioContainer, resampleTo } from "./df/audio";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "./df/image";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
@@ -41,6 +43,24 @@ const OVERRUN_MARGIN = 1.1;
 const MOVIE_CALL_DEPTH = 5;
 
 /** join PCM segments end to end, stopping at `cap` samples if one is given */
+/**
+ * A segment's palette as the screen shows it.
+ *
+ * For a DreamFactory 1 film (`dfV1`, the adapter's marker) entry 255 is
+ * entry 0: DF.EXE's blit rewrites every 0xff pixel to 0 before the picture
+ * reaches the screen (fn 0x421b40 — Windows reserves the hardware palette's own
+ * entry 255, so the engine never lets the index through). Most 0xff pixels are
+ * transparent outright (compositeFrameV1 keys them at decode); this covers the
+ * remainder — a segment's first frame — where mov-v1's raw-palette alias is
+ * pinned back to white by `paletteToRGBA`'s v4 reserve, so the alias is applied
+ * again after it, on the RGBA.
+ */
+function moviePalette(seg: MovSegment): Uint8ClampedArray {
+  const rgba = paletteToRGBA(seg.paletteRaw, 256);
+  if (seg.dfV1) rgba.copyWithin(255 * 4, 0, 4);
+  return rgba;
+}
+
 function concat(parts: Float32Array[], cap = Infinity): Float32Array {
   const total = Math.min(cap, parts.reduce((a, s) => a + s.length, 0));
   const out = new Float32Array(total);
@@ -198,7 +218,7 @@ export class MoviePlayer {
     // reaches for them.
     const gen = screenGammaGeneration();
     if (m.paletteGen !== gen) {
-      m.palette = displayPalette(paletteToRGBA(m.seg.paletteRaw, 256));
+      m.palette = displayPalette(moviePalette(m.seg));
       m.paletteGen = gen;
     }
     return { ...f, palette: m.palette, originX: m.seg.originX, originY: m.seg.originY };
@@ -238,7 +258,11 @@ export class MoviePlayer {
     }
     let mov;
     try {
-      mov = readMovFile(data);
+      // Dust's movies are DreamFactory 1 and its container 0 is not v4's with the
+      // fields moved (src/df/mov-v1.ts). Routed here rather than inside
+      // readMovFile because the two produce the same MovFile and nothing below
+      // this line has to care which engine wrote the film.
+      mov = detectVersion(data) === 1 ? movFileFromV1(readMovFileV1(data)) : readMovFile(data);
     } catch (e) {
       this.onLog(`playmovie: ${fileName}: ${(e as Error).message}`);
       return false;
@@ -258,16 +282,22 @@ export class MoviePlayer {
    */
   private enterSegment(mov: MovFile, fileName: string, segIdx: number, startFrame = 0): boolean {
     const seg = mov.segments[segIdx];
-    // frames are delta-encoded per segment: decode all in order
+    // Frames are delta-encoded per segment: decode all in order. A v1 frame is
+    // then COMPOSITED over the one before it — its 0/0xff pixels are
+    // transparent (DF.EXE's movie blit keys them out; see compositeFrameV1) —
+    // and the composite lives in the copy, never in the decode buffer, exactly
+    // as the original keeps its delta state raw and keys at the blit.
     const fb = new FrameBuffer();
     const frames: MovieImage[] = [];
+    let shown: Uint8Array | null = null;
     for (const f of seg.frames) {
       const d = decodeFrame(mov.file.containers[f.locationFrame].data, fb);
-      frames.push({
-        pixels: fb.pixels.slice(0, d.width * d.height),
-        width: d.width,
-        height: d.height,
-      });
+      const pixels = fb.pixels.slice(0, d.width * d.height);
+      if (seg.dfV1) {
+        compositeFrameV1(pixels, shown);
+        shown = pixels;
+      }
+      frames.push({ pixels, width: d.width, height: d.height });
     }
     if (!frames.length) return false;
 
@@ -301,7 +331,15 @@ export class MoviePlayer {
     //     "intro too slow".
     let audioSec = 0;
     let soundtrack: { rate: number; resampled: Float32Array[]; unique: Float32Array[] } | null = null;
-    if (seg.audioChunks.length && (!hasRegions || seg.audioLoops)) {
+    // `audioLoops` used to gate this as well (`!hasRegions || seg.audioLoops`), and
+    // for a v4 movie that was already a no-op: df/mov.ts sets `audioLoops =
+    // audioChunks.length > 0`, so the two conditions were the same condition. It
+    // stops being one for DreamFactory 1, whose chunks are a plain run played once
+    // rather than a loop order (df/mov-v1.ts) — and 45 of Dust's 136 films with
+    // sound are interactive, so the old reading would have kept them silent. What
+    // `audioLoops` still decides is whether the bed REPEATS while an interactive
+    // frame waits, which is the question it should be asked (see below).
+    if (seg.audioChunks.length) {
       const decoded = seg.audioChunks.map((loc) => decodeAudioContainer(mov.file.containers[loc].data));
       const rate = Math.max(...decoded.map((p) => p.sampleRate));
       const resampled = decoded.map((p) => resampleTo(p.samples, p.sampleRate, rate));
@@ -318,8 +356,18 @@ export class MoviePlayer {
 
     // an interactive movie paces on its own clock (or on clicks); only a
     // cutscene's soundtrack sets the frame rate — and not even that when the
-    // frames loop, because then the soundtrack says how LONG rather than how fast
-    let interval = chooseFrameInterval(seg, frames.length, hasRegions ? 0 : audioSec, hasRegions);
+    // frames loop, because then the soundtrack says how LONG rather than how fast.
+    // A v1 bed (audioLoops false, the only bed that doesn't loop) paces nothing:
+    // DreamFactory 1 films run at their header's frame rate and hold for their
+    // narration with per-frame voice waits (D1ND2M.MOV: sounds fired at frames 1
+    // and 21, flags bit 0 + hold 20 on the last frame). Stretching 45 frames over
+    // the audio played them as a slideshow.
+    let interval = chooseFrameInterval(
+      seg,
+      frames.length,
+      hasRegions || !seg.audioLoops ? 0 : audioSec,
+      hasRegions,
+    );
     // A later segment always plays itself out: its picture is mid-film, so
     // "no step frames -> wait for clicks" (a close-up's shape) cannot apply.
     // No shipped TAOOT segment needs this — they all step — it just refuses to hang.
@@ -333,12 +381,16 @@ export class MoviePlayer {
     if (soundtrack) {
       this.session.audio.halt("voice");
       const { rate, resampled, unique } = soundtrack;
-      if (hasRegions) {
-        // Interactive: the movie sits on a frame for as long as the player
-        // takes to click — there is no runtime to cut the bed to. Play the
-        // DISTINCT chunks once and loop, the same way a theme bank's loop
+      if (hasRegions && seg.audioLoops) {
+        // Interactive AND a loop bed: the movie sits on a frame for as long as
+        // the player takes to click — there is no runtime to cut the bed to. Play
+        // the DISTINCT chunks once and loop, the same way a theme bank's loop
         // chunks are played (see AudioLibrary.theme), so the menu keeps its
         // music however long the player leaves it up.
+        //
+        // A v1 close-up is interactive too and is NOT a loop: it says a line over
+        // a held picture and the line is meant to finish. It takes the branch
+        // below, which plays the run once.
         this.session.audio.play("voice", { sampleRate: rate, samples: concat(unique) }, { loop: true });
       } else {
         // Cutscene: concatenate the (resampled) chunks only up to the movie's
@@ -361,7 +413,16 @@ export class MoviePlayer {
         // hold 213.62 s over a 80.85 s film), and it continues the music the
         // author wrote rather than jumping. `concat` stops at whatever the order
         // actually holds, so a bed with nothing spare is simply unchanged.
-        const runtime = interval > 0 ? (interval * frames.length) / 1000 : audioSec;
+        // ...and never below the material there actually is. The prediction is
+        // `interval x frames`, which assumes the film runs itself out — and a film
+        // that STOPS to wait for a click does not: a v1 close-up is three frames
+        // and a two-second line, so the prediction would have cut the line to a
+        // fifth of a second. For a v4 bed this floor is unreachable by
+        // construction (a paced segment's interval is derived FROM audioSec, so
+        // the product is already >= it, and an interactive v4 bed loops in the
+        // branch above and never arrives here).
+        const predicted = interval > 0 ? (interval * frames.length) / 1000 : 0;
+        const runtime = Math.max(audioSec, predicted);
         const cap = Math.max(1, Math.ceil(runtime * OVERRUN_MARGIN * rate));
         // ...and loop as the backstop, for a host slow enough to outrun even that.
         // A loop-table bed is authored to repeat, and repeating a second of it
@@ -401,7 +462,7 @@ export class MoviePlayer {
       containers: mov.file.containers,
       hasRegions,
       keySkips: seg.keySkips,
-      palette: displayPalette(paletteToRGBA(seg.paletteRaw, 256)),
+      palette: displayPalette(moviePalette(seg)),
       paletteGen: screenGammaGeneration(),
       pos: Math.min(Math.max(startFrame, 0), frames.length - 1),
       interval,
@@ -536,8 +597,16 @@ export class MoviePlayer {
     if (!region) return;
     if (region.sound) this.playSound(region.sound);
     m.lastTick = 0;
+    // The frame this click advances into may carry the SAME sound the click
+    // just fired (ABE.MOV: the region on frame 17 and frame 18 both say sound
+    // 2). One authored moment, one playback — enter() skips the exact repeat.
+    this.clickSound = region.sound;
     this.action(region.type, region.target, region.event);
+    this.clickSound = "";
   }
+
+  /** the sound the in-flight click fired, for enter()'s repeat guard */
+  private clickSound = "";
 
   /**
    * A key while the movie owns the screen. Returns true if it aborted it.
@@ -625,7 +694,7 @@ export class MoviePlayer {
     m.pos = idx;
     this.recordAction(idx);
     const sound = m.meta[idx].sound;
-    if (sound) this.playSound(sound);
+    if (sound && sound !== this.clickSound) this.playSound(sound);
   }
 
   /**

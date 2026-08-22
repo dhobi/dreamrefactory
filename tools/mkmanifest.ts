@@ -23,13 +23,18 @@
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { MANIFEST_FILE, buildManifest } from "./manifest";
+import { DUST_MANIFEST_FILE, MANIFEST_FILE, buildManifest, dustManifest } from "./manifest";
 
 const [, , outDir = "dist", gamefiles = "gamefiles", publicDir = "public"] = process.argv;
 const manifest = buildManifest({ gamefiles, publicDir });
 const at = join(outDir, MANIFEST_FILE);
 const json = JSON.stringify(manifest);
 writeFileSync(at, json);
+
+// ...and the Dust page's own slice of it, beside it (see manifest.ts)
+const dust = dustManifest(manifest);
+writeFileSync(join(outDir, DUST_MANIFEST_FILE), JSON.stringify(dust));
+console.log(`${join(outDir, DUST_MANIFEST_FILE)}: ${Object.keys(dust).length} files`);
 
 const bytes = Object.values(manifest).reduce((n, s) => n + s, 0);
 const mb = (n: number): string => (n / (1024 * 1024)).toFixed(1);

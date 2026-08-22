@@ -8,9 +8,21 @@
  * undeclared identifier is safe to `typeof` but throws when read.
  */
 declare const __APP_VERSION__: string;
+declare const __DUST_VERSION__: string;
 
 /** semver, as package.json spells it */
 export const VERSION: string = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "0.0.0-dev";
+
+/**
+ * The Dust page's OWN version — `dustVersion` in the same package.json.
+ *
+ * A separate number because Dust releases separately: a `dust-v*` tag deploys
+ * dust.html and nothing else (deploy.yml), so the number the page announces
+ * has to be the number that was tagged, not whatever the TAOOT site last
+ * shipped as.
+ */
+export const DUST_VERSION: string =
+  typeof __DUST_VERSION__ === "string" ? __DUST_VERSION__ : "0.0.0-dev";
 
 /**
  * Put it in the top bar, beside the wordmark.

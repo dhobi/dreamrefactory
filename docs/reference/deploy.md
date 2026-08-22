@@ -15,6 +15,35 @@ git push && git push --tags
 for. It can also be run from the Actions tab (`workflow_dispatch`) to re-publish
 the current master without cutting a version.
 
+## Dust releases separately
+
+The same workflow listens for a second tag namespace, because the site carries
+two separately-versioned games off one codebase:
+
+| tag | ships | checked against |
+|---|---|---|
+| `v0.9.1` | the TAOOT site — the full build, **minus `dust.html`** | `version` |
+| `dust-v0.1.0` | the Dust page — `npm run build:dust`, which emits `dust.html` and its own chunks and nothing else | `dustVersion` |
+
+```bash
+# bump dustVersion in package.json by hand (npm version only knows `version`),
+# commit, then:
+git tag dust-v0.1.1 && git push --tags
+```
+
+Independent releases into one hosting directory are safe by construction: the
+mirror only adds and overwrites, and every asset name is content-hashed, so a
+Dust deploy overwrites exactly `dust.html` and adds its new chunks while the
+TAOOT pages keep serving theirs — and vice versa. The Dust page announces its
+own number (`__DUST_VERSION__` → `DUST_VERSION` in `src/version.ts`) in its
+status strip and as the first line of its boot log.
+
+The Dust page reads its file listing from `gamefiles-dust.json` — the
+`gamefiles/dust/` slice of the same walk — which `tools/mkmanifest.ts` writes
+beside the full manifest, on the host as in a build. The game data itself
+(`gamefiles/dust/dustcd/`, ~600 MB) is uploaded by hand once, exactly like the
+TAOOT rips.
+
 ## Where the version comes from
 
 One number, in `package.json`, and three places it surfaces:

@@ -1,6 +1,7 @@
 import { BinaryReader, latin1 } from "./binary";
 import { DFContainerFile, readContainerFile } from "./container";
 import { DEFAULT_ENCODING, DfEncoding, decodeText, encodeText } from "./text";
+import { versionOf } from "./version";
 
 /**
  * PUP ("puppet") files — the conversation close-ups. One file per
@@ -102,6 +103,10 @@ export interface PupLayer {
  * begin. The shipped corpus tops out at 27.
  */
 export const MAX_LAYER_FRAMES = 32;
+/** the bytes one stance record occupies — {@link PUP_LAYERS} layers of 262 */
+const STANCE_SIZE = 22 + 11 * 262;
+/** a DreamFactory 1 puppet's single stance is this container — see readPupFile */
+const V1_STANCE = 3;
 
 export interface PupStance {
   location: number;
@@ -251,17 +256,13 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
     scripts.push({ name: r2.pstr(31).toLowerCase(), location });
   }
 
-  const stances: PupStance[] = [];
-  const r3 = new BinaryReader(file.containers[3].data);
-  for (let t = 0; t < 64; t++) {
-    r3.seek(22 + t * 4);
-    const location = r3.i32();
-    if (location <= 0 || location >= file.containers.length) break;
+  /** one stance record: 11 layers of `{i16 count, anchorY, anchorX}` + i32 frames */
+  const readStance = (location: number): PupStance | null => {
     const data = file.containers[location]?.data;
-    if (!data || data.length < 22 + 11 * 262) break;
+    if (!data || data.length < STANCE_SIZE) return null;
     const rs = new BinaryReader(data);
     const layers: PupLayer[] = [];
-    for (let l = 0; l < 11; l++) {
+    for (let l = 0; l < PUP_LAYERS.length; l++) {
       rs.seek(22 + l * 262);
       const count = rs.i16();
       const anchorY = rs.i16();
@@ -270,7 +271,38 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
       for (let k = 0; k < Math.min(Math.max(count, 0), MAX_LAYER_FRAMES); k++) frames.push(rs.i32());
       layers.push({ frames, anchorY, anchorX });
     }
-    stances.push({ location, layers });
+    return { location, layers };
+  };
+
+  /**
+   * The stances.
+   *
+   * v4 keeps a directory of up to 64 of them — 64 i32 container refs from offset
+   * 22 of container 3 — because a v4 puppet can be shot from more than one camera
+   * and every dialogue line names the stance it is spoken in.
+   *
+   * **A DreamFactory 1 puppet has exactly one, and container 3 IS it.** No
+   * directory: on all 39 puppets on the Dust CD there is exactly one container of
+   * the stance record's own size (22 + 11 * 262 = 2904 bytes) and it is c3 on
+   * every one of them, and every dialogue line's `stance` field reads 0. Reading
+   * c3 as a directory instead found no stance at all, which is a puppet with a
+   * voice, a subtitle and the answers you can give — and no face. Reported from
+   * the page in exactly those words.
+   */
+  const stances: PupStance[] = [];
+  if (versionOf(c0) === 1) {
+    const only = readStance(V1_STANCE);
+    if (only) stances.push(only);
+  } else {
+    const r3 = new BinaryReader(file.containers[3].data);
+    for (let t = 0; t < 64; t++) {
+      r3.seek(22 + t * 4);
+      const location = r3.i32();
+      if (location <= 0 || location >= file.containers.length) break;
+      const st = readStance(location);
+      if (!st) break;
+      stances.push(st);
+    }
   }
 
   // the four idle intervals: minima then maxima, both 4×i32 (see idleTimers)

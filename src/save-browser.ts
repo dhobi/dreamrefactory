@@ -12,11 +12,13 @@
  *    file; resolves when the player is done (whether they saved or not).
  *
  * Both modes share the list, so a save flow can also download/delete existing
- * saves, and either mode can import (upload) a `.ti` from disk. The markup +
- * styles live in `index.html` (`#saveModal`); this module drives them.
+ * saves, and either mode can import (upload) a save from disk. The markup +
+ * styles live in the page (`#saveModal` in `index.html` and in `dust.html`);
+ * this module drives them, and everything game-specific about it — the
+ * extension, the folder headings, what counts as a valid file — comes from the
+ * page's declared {@link SaveKind} rather than from here.
  */
 
-import { readSaveFile } from "./df/savegame";
 import {
   SaveEntry,
   deleteSave,
@@ -24,6 +26,7 @@ import {
   getSave,
   listSaves,
   putSave,
+  saveKind,
 } from "./save-store";
 
 /** Optional host callbacks (logging into the on-screen script log). */
@@ -35,6 +38,21 @@ type Mode = "load" | "save";
 
 /** Resolver for the currently-open modal; null when closed. */
 let active: ((value: unknown) => void) | null = null;
+
+/**
+ * Is a saved-games dialog on screen?
+ *
+ * For the page's own key handler to stand down while it is. The modal
+ * `stopPropagation`s the keys it RECEIVES, which covers typing in the name field
+ * and nothing else: open the Load list, where no field wants focus, and the
+ * keydown never enters the modal's subtree at all — so it reached the game, and
+ * an arrow pressed while choosing a save walked the player down the street
+ * behind the dialog. The original could not have that bug: its dialog ran its own
+ * message loop and the game did not get a frame, let alone a key.
+ */
+export function savesOpen(): boolean {
+  return active !== null;
+}
 
 interface Els {
   modal: HTMLDivElement;
@@ -80,33 +98,26 @@ function close(value: unknown): void {
   resolve?.(value);
 }
 
-/** Trigger a browser download of a save's bytes as `<name>.ti`. */
+/** Trigger a browser download of a save's bytes as `<name><ext>`. */
 function download(entry: SaveEntry): void {
   const blob = new Blob([entry.bytes as BlobPart], { type: "application/octet-stream" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = /\.ti$/i.test(entry.name) ? entry.name : `${entry.name}.ti`;
+  const ext = saveKind().ext;
+  a.download = entry.name.toLowerCase().endsWith(ext) ? entry.name : `${entry.name}${ext}`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
 }
 
-/** Human label for a folder group. */
-const FOLDER_LABELS: Record<string, string> = {
-  "": "My Saves",
-  "1": "Disk 1",
-  "2": "Disk 2",
-  ENDGAME1: "Endgame (Disk 1)",
-  ENDGAME2: "Endgame (Disk 2)",
-};
-/** Display order for the folder groups; unknown folders sort after these. */
-const FOLDER_ORDER = ["", "1", "2", "ENDGAME1", "ENDGAME2"];
-
+/** Where a folder group sorts; the labels and the order are the game's own
+ *  (see {@link SaveKind}), because Titanic's disks are not Dust's days. */
 function groupOrder(folder: string): number {
-  const i = FOLDER_ORDER.indexOf(folder);
-  return i < 0 ? FOLDER_ORDER.length : i;
+  const order = saveKind().order;
+  const i = order.indexOf(folder);
+  return i < 0 ? order.length : i;
 }
 
 /** Build the grouped list of saves for the given mode. */
@@ -119,7 +130,7 @@ async function renderList(mode: Mode, deps: BrowserDeps): Promise<void> {
     empty.className = "save-empty";
     empty.textContent =
       mode === "load"
-        ? "No saved games yet — save one from the control panel, or upload a .ti below."
+        ? `No saved games yet — save one from the control panel, or upload a ${saveKind().ext} below.`
         : "No saved games yet.";
     e.list.appendChild(empty);
     return;
@@ -136,7 +147,7 @@ async function renderList(mode: Mode, deps: BrowserDeps): Promise<void> {
 
     const header = document.createElement("div");
     header.className = "save-group";
-    header.textContent = FOLDER_LABELS[folder] ?? folder;
+    header.textContent = saveKind().folders[folder] ?? folder;
     e.list.appendChild(header);
 
     for (const entry of group) {
@@ -160,7 +171,7 @@ async function renderList(mode: Mode, deps: BrowserDeps): Promise<void> {
       const dl = document.createElement("button");
       dl.className = "save-icon";
       dl.textContent = "⬇";
-      dl.title = "Download .ti";
+      dl.title = `Download ${saveKind().ext}`;
       dl.addEventListener("click", () => download(entry));
       row.appendChild(dl);
 
@@ -184,24 +195,32 @@ async function renderList(mode: Mode, deps: BrowserDeps): Promise<void> {
 /** Normalise a user-entered save name into a store path (root folder). */
 function nameToPath(name: string): { path: string; clean: string } {
   // keep it filesystem-friendly and confined to the root folder.
-  const clean = name.trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\.ti$/i, "").slice(0, 60) || "save";
-  return { path: `${clean}.ti`, clean };
+  const ext = saveKind().ext;
+  const bare = name.trim().replace(/[\\/:*?"<>|]+/g, "-");
+  const clean = (bare.toLowerCase().endsWith(ext) ? bare.slice(0, -ext.length) : bare).slice(0, 60) || "save";
+  return { path: `${clean}${ext}`, clean };
 }
 
 /** Wire the upload input for the current render (idempotent per open). */
 function wireUpload(mode: Mode, deps: BrowserDeps): void {
   const e = elements();
   e.uploadBtn.onclick = () => e.uploadInput.click();
+  e.uploadInput.accept = saveKind().ext;
   e.uploadInput.onchange = async () => {
     const file = e.uploadInput.files?.[0];
     e.uploadInput.value = ""; // allow re-picking the same file later
     if (!file) return;
     const bytes = new Uint8Array(await file.arrayBuffer());
+    const kind = saveKind();
+    let ok = false;
     try {
-      readSaveFile(bytes); // reject anything that isn't a .ti container
+      ok = kind.valid(bytes); // reject anything that isn't one of OUR saves
     } catch {
-      deps.log?.(`upload: "${file.name}" is not a valid .ti save`);
-      alert(`"${file.name}" is not a valid Titanic save file.`);
+      ok = false;
+    }
+    if (!ok) {
+      deps.log?.(`upload: "${file.name}" is not a valid ${kind.ext} save`);
+      alert(`"${file.name}" is not a valid ${kind.game} save file.`);
       return;
     }
     const { path, clean } = nameToPath(displayName(file.name));
@@ -219,6 +238,11 @@ function open<T>(mode: Mode, deps: BrowserDeps): Promise<T> {
   e.modal.style.display = "flex";
   wireUpload(mode, deps);
   void renderList(mode, deps);
+  // Put focus INSIDE the dialog. Escape is handled on the modal element, so a
+  // load list with nothing focused could not be dismissed by the key that
+  // dismisses everything else — the close button had to be found with a mouse.
+  // The save mode moves it on to the name field a moment later (browseForSave).
+  e.closeBtn.focus();
   return new Promise<T>((resolve) => {
     active = resolve as (v: unknown) => void;
   });

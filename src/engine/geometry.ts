@@ -41,6 +41,20 @@ export interface Occlusion {
   h: number;
   scale: number;
   levels: number;
+  /**
+   * Units ADDED to a sprite's depth before it is quantized to a level, from the
+   * engine that owns the set.
+   *
+   * DreamFactory 1 has one and it is not small: DF.EXE computes the level a
+   * sprite is z-tested at as `(depth - zclip - camerahi + 0x80) >> 6` — the
+   * +128 is hard-coded in both sprite renderers (actors 0x41e81e, props
+   * 0x41508e) and lands in the draw record at 0x41e94c (`sar bx, 6`). Two
+   * whole levels: the scenery has to be 128 units nearer than the sprite
+   * before it wins the pixel, so the ground band an actor stands ON covers
+   * his feet and he reads as planted in the street instead of pasted over
+   * it. v4 leaves this 0, which is the port's measured TI.EXE behaviour.
+   */
+  groundBias?: number;
 }
 
 const SIN14 = new Int16Array(256);

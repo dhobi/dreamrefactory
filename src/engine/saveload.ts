@@ -609,7 +609,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
  * list had been replaced. A member the file has no record for stays reset —
  * a record-less actor was never placed or spoken to in that game.
  */
-function resetCast(session: GameSession): void {
+export function resetCast(session: GameSession): void {
   for (const [key, a] of [...session.actorRuntime.actors]) {
     if (a.member.name.toLowerCase() !== key.toLowerCase()) {
       session.actorRuntime.remove(key);
@@ -647,7 +647,7 @@ function resetCast(session: GameSession): void {
  * own convention (extras are `<member><suffix>`: brown1a1 ← brown1, stok4 ←
  * stok1, life12 ← life1).
  */
-function restoreActors(session: GameSession, actors: SavedActor[]): void {
+export function restoreActors(session: GameSession, actors: SavedActor[]): void {
   for (const sa of actors) {
     let a = session.actorRuntime.get(sa.name);
     if (!a) {
@@ -715,7 +715,7 @@ function instanceSource(session: GameSession, name: string): string | null {
  * back exactly as the original engine recorded them. The old special cases —
  * HELD_BAND_PROPS, restoreOpenWatch, relightNavArrow — are this, generalized.
  */
-function restoreProps(session: GameSession, inventory: SavedProp[]): void {
+export function restoreProps(session: GameSession, inventory: SavedProp[]): void {
   for (const sp of inventory) {
     const p = session.propRuntime.get(sp.name);
     if (!p) continue;

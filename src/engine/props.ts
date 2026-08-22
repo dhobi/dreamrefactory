@@ -151,6 +151,15 @@ export class PropInstance {
   deg: string | number = 0;
   /** z-order (propdist): more negative = closer to the viewer */
   dist = 0;
+  /**
+   * `propspeed` — how fast the prop moves, in world units per frame.
+   *
+   * A plain stored number, the prop twin of `actorspeed`, and Dust's alone:
+   * `house.prp`'s tumbleweed sets `propspeed (me, random (2) + 10)` and then
+   * divides the distance to its target by it to work out how many frames the
+   * crossing takes. Nothing in Titanic reads it.
+   */
+  speed = 0;
   /** placed with propxyz: drawn via world→screen projection */
   worldSpace = false;
   /** name of the star the prop was placed on (propstar getter) */
@@ -433,7 +442,7 @@ export class PropRuntime {
   }
 
   /** visible world-space props, far to near (projected depth descending) */
-  private worldDrawList(cam: WorldCamera): { p: PropInstance; proj: { x: number; y: number; depth: number } }[] {
+  worldDrawList(cam: WorldCamera): { p: PropInstance; proj: { x: number; y: number; depth: number } }[] {
     const out: { p: PropInstance; proj: { x: number; y: number; depth: number } }[] = [];
     for (const p of this.props.values()) {
       if (!p.visible || !p.worldSpace || !p.state()?.frames.length || p.scale <= 0) continue;
@@ -527,7 +536,43 @@ export class PropRuntime {
    * this is a bias and not a clip plane).
    */
   private occludeAt(p: PropInstance, depth: number, occ: Occlusion): number {
-    return depthLevel(depth - Number(p.zclip), occ);
+    return depthLevel(depth - Number(p.zclip) + (occ.groundBias ?? 0), occ);
+  }
+
+  /**
+   * Blit ONE world prop — the world half of {@link composite}'s loop body,
+   * callable per entry so the viewer can interleave world props and actors
+   * into a single far-to-near pass on a v1 set (see Viewer.compositeWorld).
+   */
+  compositeWorldOne(
+    { p, proj }: { p: PropInstance; proj: { x: number; y: number; depth: number } },
+    rgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+    paletteRGBA: Uint8ClampedArray,
+    cam: WorldCamera,
+    occ: Occlusion | null = null,
+  ): void {
+    const r = this.worldRect(p, proj, cam);
+    // scenery nearer than the prop hides it, same SET Z image as actors —
+    // without this the smoke table / plants drew over pillars in front
+    const level = occ ? this.occludeAt(p, proj.depth, occ) : 0;
+    const maxY = Math.min(cam.clipH, height, r.y + r.h);
+    const maxX = Math.min(cam.clipW, width, r.x + r.w);
+    for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
+      const sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
+      for (let tx = Math.max(0, r.x); tx < maxX; tx++) {
+        const sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
+        const s = sy * r.f.width + sx;
+        if (!r.f.opaque[s]) continue;
+        if (occ && sceneryOccludes(occ, tx, ty, level)) continue;
+        const pal = r.f.indexed[s] * 4;
+        const d = (ty * width + tx) * 4;
+        rgba[d] = paletteRGBA[pal];
+        rgba[d + 1] = paletteRGBA[pal + 1];
+        rgba[d + 2] = paletteRGBA[pal + 2];
+      }
+    }
   }
 
   composite(
@@ -542,27 +587,8 @@ export class PropRuntime {
   ): void {
     // world-space props first (they belong to the scene), far to near
     if (cam) {
-      for (const { p, proj } of this.worldDrawList(cam)) {
-        const r = this.worldRect(p, proj, cam);
-        // scenery nearer than the prop hides it, same SET Z image as actors —
-        // without this the smoke table / plants drew over pillars in front
-        const level = occ ? this.occludeAt(p, proj.depth, occ) : 0;
-        const maxY = Math.min(cam.clipH, height, r.y + r.h);
-        const maxX = Math.min(cam.clipW, width, r.x + r.w);
-        for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
-          const sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
-          for (let tx = Math.max(0, r.x); tx < maxX; tx++) {
-            const sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
-            const s = sy * r.f.width + sx;
-            if (!r.f.opaque[s]) continue;
-            if (occ && sceneryOccludes(occ, tx, ty, level)) continue;
-            const pal = r.f.indexed[s] * 4;
-            const d = (ty * width + tx) * 4;
-            rgba[d] = paletteRGBA[pal];
-            rgba[d + 1] = paletteRGBA[pal + 1];
-            rgba[d + 2] = paletteRGBA[pal + 2];
-          }
-        }
+      for (const entry of this.worldDrawList(cam)) {
+        this.compositeWorldOne(entry, rgba, width, height, paletteRGBA, cam, occ);
       }
     }
     for (const p of this.drawList(persistentScreenOnly)) {
