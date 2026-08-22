@@ -315,6 +315,58 @@
           repeating-linear-gradient(90deg, #ffffff08 0 1px, #0000 1px 3px),
           repeating-linear-gradient(90deg, #00000012 0 1px, #0000 1px 7px);
       }
+      /* The game is waiting on the network — the play page's corner spinner, in
+         this page's wood. Quiet and small: it reports a wait, it does not ask
+         to be looked at, and dust.ts only shows it once the wait is long enough
+         to be one (see BUSY_AFTER_MS there). Its plate carries its own ground —
+         what is under it is whatever the game last drew. */
+      #netbusy {
+        position: absolute;
+        right: calc(var(--frame) + 12px);
+        bottom: calc(var(--frame) + 12px);
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--wood-lit);
+        border-radius: 50%;
+        background: rgba(10, 4, 3, 0.72);
+        box-shadow: 0 6px 22px -8px rgba(0, 0, 0, 0.9);
+        pointer-events: none;
+      }
+      #netbusy span {
+        display: block;
+        width: 14px;
+        height: 14px;
+        box-sizing: border-box;
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        border-top-color: var(--spark);
+        border-radius: 50%;
+        animation: netspin 700ms linear infinite;
+      }
+      /* not redundant with the UA sheet: the `display: flex` above beats
+         `[hidden] { display: none }`, the same trap the play page documents */
+      #netbusy[hidden] {
+        display: none;
+      }
+      @keyframes netspin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      /* a reader who has asked for less motion still needs to know it is
+         waiting, so the mark stays and breathes instead of turning */
+      @media (prefers-reduced-motion: reduce) {
+        #netbusy span {
+          animation: netpulse 1.4s ease-in-out infinite;
+          border-color: var(--spark);
+        }
+        @keyframes netpulse {
+          0%, 100% { opacity: 0.35; }
+          50% { opacity: 1; }
+        }
+      }
       #screen {
         /* ------------------------------------------------------------------
            1024x768 CSS pixels — the canvas's own size, so one canvas pixel is one
@@ -960,7 +1012,13 @@
           <p id="touchtip">swipe to walk and turn · double-tap for <b>esc</b></p>
         </div>
       </div>
-      <div id="frame"><canvas id="screen" width="1024" height="768"></canvas></div>
+      <div id="frame">
+        <canvas id="screen" width="1024" height="768"></canvas>
+        <!-- the game is waiting on the network — shown by dust.ts only after the
+             wait is long enough to be one (the play page's netbusy, in this
+             page's wood) -->
+        <div id="netbusy" hidden aria-hidden="true"><span></span></div>
+      </div>
       <!-- the boot's own account of itself, in full; `b` opens it -->
       <pre id="log" hidden></pre>
     </div>

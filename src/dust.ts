@@ -629,14 +629,17 @@ async function browse(): Promise<void> {
  * its `advanceday` lives in `new.flt` and is reached from the stage, not from
  * here.
  *
- * MOVIES ARE NOT AWAITED. `playmovie` is modal in TI.EXE and the port blocks on
- * it only when something is advancing frames; this page has no viewer driving the
- * movie player, so `hasRealFrames` stays false, the film starts and the script
- * carries on. That is the port's own documented behaviour for a host with no
- * frame source, not a special case added here — and it is why the boot completes
- * rather than parking on the intro.
+ * THE BOOT RUNS AFTER START, WITH THE FRAME LOOP LIVE — because the boot is the
+ * opening of the game: BOOTFILE plays `intro.mov` and `intro2.mov` (chaining
+ * `intro3.mov`) before it opens its menu stage. This page used to run the boot
+ * headless behind the title card, where `playmovie` starts a film and moves on
+ * (no frame source, nothing modal), and the report that ended that was exact:
+ * "we start straight in the town — in the original there is a game dust mov
+ * followed by a cyberflix mov first". `coldBoot` gives the films their surface
+ * (DustFiles.serverSetNames — town.set as the movie host, under the boot's own
+ * blackscreen) and `play(host)` before it is what makes `playmovie` block.
  *
- * What is being measured is what the log says: which files the boot opened, which
+ * The log still measures what it always did: which files the boot opened, which
  * it asked for and did not get, and where the globals ended up. `day = 1`,
  * `clock = 2`, `phase = 1` is Dust's boot having run to its last line.
  */
@@ -658,6 +661,32 @@ async function runBoot(): Promise<void> {
   const files = await DustFiles.open();
   bootSay(`indexed ${files.size} names off the Dust CD`);
   /**
+   * Say when the game is waiting on the network, and only then — the play
+   * page's corner spinner, delay and all (src/main.ts has the full argument).
+   * Every room change fetches, so a mark that appeared the instant a fetch did
+   * would strobe through ordinary play and mean nothing; waiting first means it
+   * only ever appears when there is a wait to report. Invisible before Start by
+   * construction: it lives inside #frame, which the page fades in with play.
+   */
+  const netbusy = document.getElementById("netbusy") as HTMLDivElement;
+  const BUSY_AFTER_MS = 400;
+  let busyTimer = 0;
+  files.onBusyChange = (inFlight) => {
+    if (inFlight > 0) {
+      if (busyTimer || !netbusy.hidden) return;
+      busyTimer = window.setTimeout(() => {
+        busyTimer = 0;
+        netbusy.hidden = false;
+      }, BUSY_AFTER_MS);
+      return;
+    }
+    if (busyTimer) {
+      clearTimeout(busyTimer);
+      busyTimer = 0;
+    }
+    netbusy.hidden = true;
+  };
+  /**
    * From here the bar is a FETCH COUNT — see HEAD/BOOT_TAIL above.
    *
    * `expect` is re-derived on every arrival rather than fixed once, and takes the
@@ -666,9 +695,27 @@ async function runBoot(): Promise<void> {
    * go backwards when a disc asks for more than this one does.
    */
   let expect = BOOT_TAIL;
-  files.onFileLoaded = (name) => {
+  /**
+   * The caption under the bar is the TRANSFER RATE, not the filename — the names
+   * scrolled by too fast to read once the intro films (13 MB) joined the
+   * prefetch, and a rate is what a person staring at a loading bar actually
+   * wants to know. A three-second rolling window, so the number settles instead
+   * of averaging the whole boot into one stale figure.
+   */
+  const recent: { t: number; bytes: number }[] = [];
+  files.onFileLoaded = (_name, bytes) => {
+    const now = performance.now();
+    recent.push({ t: now, bytes });
+    while (recent.length > 1 && now - recent[0].t > 3000) recent.shift();
+    const got = recent.reduce((a, s) => a + s.bytes, 0);
+    const secs = Math.max(0.25, (now - recent[0].t) / 1000);
+    const rate = got / secs;
+    const label =
+      rate >= 1024 * 1024
+        ? `${(rate / (1024 * 1024)).toFixed(1)} MB/s`
+        : `${Math.max(1, Math.round(rate / 1024))} KB/s`;
     expect = Math.max(expect, files.loads.length + 1);
-    progress(HEAD + (1 - HEAD) * (files.loads.length / expect), name);
+    progress(HEAD + (1 - HEAD) * (files.loads.length / expect), label);
   };
   const host = new GameHost(files, audioSink, {
     log: bootSay,
@@ -730,6 +777,41 @@ async function runBoot(): Promise<void> {
   expect = Math.max(expect, plan.resources.length + BOOT_TAIL);
   bootSay(`boot plan: ${plan.resources.join(", ") || "(none)"}`);
   bootSay(`  casts: ${plan.casts.join(", ") || "(none)"}  first room: ${plan.landingSet ?? "(none named)"}`);
+  /**
+   * Everything the boot will play or open, fetched WHILE THE BAR IS UP — the
+   * intro films alone are 13 MB, and the alternative is a black canvas
+   * downloading them after the player already pressed Start. `intro3.mov` is
+   * fetched too: no plan names it (INTRO2.MOV chains to it from its last
+   * frame — df/mov-v1.ts), so left out it becomes a mid-intro stall exactly
+   * where the story hands over.
+   */
+  await Promise.all([...plan.resources, "town.set", "intro3.mov"].map((f) => files.load(f)));
+  progress(1, "ready");
+  files.onFileLoaded = null; // the game loads for itself from here
+  /**
+   * START comes BEFORE the boot, not after it, because the boot IS the show:
+   * BOOTFILE plays `intro.mov` and `intro2.mov` (which chains `intro3.mov`)
+   * before it opens the menu stage, and for as long as the boot ran headless
+   * behind this card the port skipped the whole opening — "we start straight
+   * in the town". The click is also what browsers want before audio, so the
+   * films play scored. `play(host)` first: it starts the frame loop and sets
+   * `hasRealFrames`, which is what makes `playmovie` modal (the intro plays to
+   * its end instead of being started and abandoned) and gives the movie player
+   * something that renders it.
+   */
+  await waitForStart();
+  /**
+   * The canvas is NOT blank here: the fallback browser painted its preview room
+   * onto it during the load, behind the title card — harmless when the game's
+   * first frame was the town, but the game now opens on the intro films, and
+   * raising the card revealed that preview for the second or two before
+   * intro.mov's first frame ("there is one SET already rendered / visible
+   * first"). The original starts black; so does this.
+   */
+  clearScreen();
+  raiseTitle();
+  play(host);
+  ensureAudio();
   const started = performance.now();
   try {
     await host.coldBoot();
@@ -750,23 +832,11 @@ async function runBoot(): Promise<void> {
   const missed = [...new Set(files.misses)].filter((m) => !files.has(m));
   bootSay(`asked for and never got: ${missed.join(", ") || "(nothing)"}`);
   bootSay(`room: ${s.currentSetFile || "(none)"} · viewer ${host.viewer ? "up" : "DOWN"}`);
-  files.onFileLoaded = null; // the game loads for itself from here
   if (host.viewer) {
     bootSay("playing — arrows or W/A/D to move, space for a door, b for this log");
-    progress(1, "ready");
-    await waitForStart();
-    raiseTitle();
-    // `play` first, then the audio: ensureAudio starts the theme through the
-    // viewer and `playing` is what holds it. The other way round the sink attached
-    // to a game that had not been declared yet and the theme never began.
-    play(host);
-    ensureAudio();
   } else {
-    // no viewer: what is on screen is the fallback browser's room, which is worth
-    // seeing, so the card rises anyway — and the log opens, because at this point
+    // no viewer: what is on screen is black, so the log opens — at this point
     // the log IS the result.
-    progress(1, "no viewer — showing the disc instead");
-    raiseTitle();
     logEl.hidden = false;
   }
 }
@@ -850,7 +920,11 @@ function play(host: GameHost): void {
      * game loop that already has a whole screen to composite. Nothing this
      * describes can change faster than a walk, so 250ms cannot miss a move.
      */
-    if (now - roomAsked > 250) {
+    // ...but not while a film owns the screen: the boot's movie HOST is a real
+    // room (town.set, pinned black under the intros — DustFiles.serverSetNames),
+    // and the trace announcing "town — Scene G15" during the logos read as the
+    // set flashing in when nothing but the movie was ever visible.
+    if (now - roomAsked > 250 && !v?.moviePlaying) {
       roomAsked = now;
       const here = [...s.actorRuntime.actors.values()].filter(
         (a) => a.visible && a.setName === s.actorRuntime.currentSet,

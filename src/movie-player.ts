@@ -15,7 +15,7 @@ import {
 import { NATIVE_FRAME_MS, TICK_MS, chooseFrameInterval, frameHoldMs } from "./df/mov-pace";
 import { Container } from "./df/container";
 import { detectVersion } from "./df/version";
-import { movFileFromV1, readMovFileV1 } from "./df/mov-v1";
+import { compositeFrameV1, movFileFromV1, readMovFileV1 } from "./df/mov-v1";
 import { decodeAudioContainer, resampleTo } from "./df/audio";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "./df/image";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
@@ -43,6 +43,24 @@ const OVERRUN_MARGIN = 1.1;
 const MOVIE_CALL_DEPTH = 5;
 
 /** join PCM segments end to end, stopping at `cap` samples if one is given */
+/**
+ * A segment's palette as the screen shows it.
+ *
+ * For a DreamFactory 1 film (`dfV1`, the adapter's marker) entry 255 is
+ * entry 0: DF.EXE's blit rewrites every 0xff pixel to 0 before the picture
+ * reaches the screen (fn 0x421b40 — Windows reserves the hardware palette's own
+ * entry 255, so the engine never lets the index through). Most 0xff pixels are
+ * transparent outright (compositeFrameV1 keys them at decode); this covers the
+ * remainder — a segment's first frame — where mov-v1's raw-palette alias is
+ * pinned back to white by `paletteToRGBA`'s v4 reserve, so the alias is applied
+ * again after it, on the RGBA.
+ */
+function moviePalette(seg: MovSegment): Uint8ClampedArray {
+  const rgba = paletteToRGBA(seg.paletteRaw, 256);
+  if (seg.dfV1) rgba.copyWithin(255 * 4, 0, 4);
+  return rgba;
+}
+
 function concat(parts: Float32Array[], cap = Infinity): Float32Array {
   const total = Math.min(cap, parts.reduce((a, s) => a + s.length, 0));
   const out = new Float32Array(total);
@@ -200,7 +218,7 @@ export class MoviePlayer {
     // reaches for them.
     const gen = screenGammaGeneration();
     if (m.paletteGen !== gen) {
-      m.palette = displayPalette(paletteToRGBA(m.seg.paletteRaw, 256));
+      m.palette = displayPalette(moviePalette(m.seg));
       m.paletteGen = gen;
     }
     return { ...f, palette: m.palette, originX: m.seg.originX, originY: m.seg.originY };
@@ -264,16 +282,22 @@ export class MoviePlayer {
    */
   private enterSegment(mov: MovFile, fileName: string, segIdx: number, startFrame = 0): boolean {
     const seg = mov.segments[segIdx];
-    // frames are delta-encoded per segment: decode all in order
+    // Frames are delta-encoded per segment: decode all in order. A v1 frame is
+    // then COMPOSITED over the one before it — its 0/0xff pixels are
+    // transparent (DF.EXE's movie blit keys them out; see compositeFrameV1) —
+    // and the composite lives in the copy, never in the decode buffer, exactly
+    // as the original keeps its delta state raw and keys at the blit.
     const fb = new FrameBuffer();
     const frames: MovieImage[] = [];
+    let shown: Uint8Array | null = null;
     for (const f of seg.frames) {
       const d = decodeFrame(mov.file.containers[f.locationFrame].data, fb);
-      frames.push({
-        pixels: fb.pixels.slice(0, d.width * d.height),
-        width: d.width,
-        height: d.height,
-      });
+      const pixels = fb.pixels.slice(0, d.width * d.height);
+      if (seg.dfV1) {
+        compositeFrameV1(pixels, shown);
+        shown = pixels;
+      }
+      frames.push({ pixels, width: d.width, height: d.height });
     }
     if (!frames.length) return false;
 
@@ -332,8 +356,18 @@ export class MoviePlayer {
 
     // an interactive movie paces on its own clock (or on clicks); only a
     // cutscene's soundtrack sets the frame rate — and not even that when the
-    // frames loop, because then the soundtrack says how LONG rather than how fast
-    let interval = chooseFrameInterval(seg, frames.length, hasRegions ? 0 : audioSec, hasRegions);
+    // frames loop, because then the soundtrack says how LONG rather than how fast.
+    // A v1 bed (audioLoops false, the only bed that doesn't loop) paces nothing:
+    // DreamFactory 1 films run at their header's frame rate and hold for their
+    // narration with per-frame voice waits (D1ND2M.MOV: sounds fired at frames 1
+    // and 21, flags bit 0 + hold 20 on the last frame). Stretching 45 frames over
+    // the audio played them as a slideshow.
+    let interval = chooseFrameInterval(
+      seg,
+      frames.length,
+      hasRegions || !seg.audioLoops ? 0 : audioSec,
+      hasRegions,
+    );
     // A later segment always plays itself out: its picture is mid-film, so
     // "no step frames -> wait for clicks" (a close-up's shape) cannot apply.
     // No shipped TAOOT segment needs this — they all step — it just refuses to hang.
@@ -428,7 +462,7 @@ export class MoviePlayer {
       containers: mov.file.containers,
       hasRegions,
       keySkips: seg.keySkips,
-      palette: displayPalette(paletteToRGBA(seg.paletteRaw, 256)),
+      palette: displayPalette(moviePalette(seg)),
       paletteGen: screenGammaGeneration(),
       pos: Math.min(Math.max(startFrame, 0), frames.length - 1),
       interval,
@@ -563,8 +597,16 @@ export class MoviePlayer {
     if (!region) return;
     if (region.sound) this.playSound(region.sound);
     m.lastTick = 0;
+    // The frame this click advances into may carry the SAME sound the click
+    // just fired (ABE.MOV: the region on frame 17 and frame 18 both say sound
+    // 2). One authored moment, one playback — enter() skips the exact repeat.
+    this.clickSound = region.sound;
     this.action(region.type, region.target, region.event);
+    this.clickSound = "";
   }
+
+  /** the sound the in-flight click fired, for enter()'s repeat guard */
+  private clickSound = "";
 
   /**
    * A key while the movie owns the screen. Returns true if it aborted it.
@@ -652,7 +694,7 @@ export class MoviePlayer {
     m.pos = idx;
     this.recordAction(idx);
     const sound = m.meta[idx].sound;
-    if (sound) this.playSound(sound);
+    if (sound && sound !== this.clickSound) this.playSound(sound);
   }
 
   /**

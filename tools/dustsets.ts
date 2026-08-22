@@ -510,7 +510,7 @@ if (movs.length) {
   console.log(`\n=== movies (${movs.length})`);
   let movClean = 0, movThrew = 0, multi = 0, frames = 0, seconds = 0, exits = 0, voice = 0;
   let unnamed = 0, segs = 0;
-  let interactive = 0, regions = 0, waitFrames = 0, jumps = 0, onExit = 0, wholePicture = 0;
+  let interactive = 0, regions = 0, waitFrames = 0, clickSounds = 0, onExit = 0, wholePicture = 0;
   let scored = 0, chunks = 0, audioSec = 0, interactiveScored = 0;
   for (const m of movs) {
     try {
@@ -537,7 +537,7 @@ if (movs.length) {
         for (const f of held) {
           regions += f.regions.length;
           if (f.action === 1) onExit += f.regions.length;
-          jumps += f.regions.filter((r) => r.target > 0).length;
+          clickSounds += f.regions.filter((r) => r.sound > 0).length;
           wholePicture += f.regions.filter(
             (r) => r.top <= 1 && r.left <= 1 &&
               r.bottom >= (sg.height || 264) - 1 && r.right >= (sg.width || 512) - 1,
@@ -547,14 +547,11 @@ if (movs.length) {
       // WHERE THE FILM STOPS, which is not its last record. Play order: the
       // first frame that carries a click region halts there and waits; failing
       // that, the first that exits or chains out. The final record of every
-      // segment is 56 bytes and has no action of its own (mov-v1.ts forces the
-      // exit), so asking IT is a tautology — it used to be asked, and that is
-      // why the voice-wait count read 0 after the regions went in.
       const all = mov.segments.flatMap((sg) => sg.frames);
-      const stop = all.find((f) => f.regions.length) ??
+      const stop = all.find((f) => f.waitsForClick && f.regions.length) ??
         all.find((f) => f.action === 1 || f.action === 3);
       if (stop) exits++;
-      if (stop && (stop.flags & 1) !== 0) voice++;
+      if (stop && stop.waitsForVoice) voice++;
     } catch {
       movThrew++;
     }
@@ -568,7 +565,7 @@ if (movs.length) {
     ` · ${onExit} of them on the frame the film ends on`);
   console.log(`  ${scored}/${segs} segments carry a soundtrack · ${chunks} chunks · ${Math.round(audioSec)}s of sound` +
     ` · ${interactiveScored} of them under a segment that stops for a click`);
-  console.log(`  ${jumps} regions jump to another frame, ${regions - jumps} advance` +
+  console.log(`  ${clickSounds} regions carry a click sound, ${regions - clickSounds} are silent` +
     ` · ${wholePicture} cover the whole picture (click anywhere to dismiss)`);
   console.log(`  ${movThrew}/${movs.length} would not open at all (the odd-fourCC files)`);
 }

@@ -20,12 +20,12 @@ import { siteUrl } from "./site";
  * ship their own `CHECKERS.PRP` and so on), {@link PREFERRED} decides, and DATA
  * wins because that is the directory `boot()` sets as its search path.
  *
- * **`serverSetNames` is deliberately empty.** `GameHost.coldBoot` asks for a room
- * to draw into on the no-landing-room path and opens it through the v4 SET reader
- * — which a v1 set is not. Answering "none" makes it skip that step (it guards
- * with `if (hostSet)`), which is the correct answer rather than a dodge: Dust's
- * boot opens no room, its `advanceday` lives in `new.flt`, and there is nothing
- * for the port to stand in with until a v1 SetViewer exists.
+ * **`serverSetNames` names the boot's movie host.** `GameHost.coldBoot` asks for
+ * a room to draw into on the no-landing-room path — Dust's boot opens no room of
+ * its own (its `advanceday` lives in `new.flt`) but it DOES play the intro films,
+ * and a film needs a viewer to draw through. This answered "none" for as long as
+ * a v1 set could not be opened; it can now (`parseInto` -> `readSetFileAsV4`),
+ * and the intros were invisible for exactly as long as this still said no.
  */
 
 /** where a basename is looked for first when the disc carries it twice */
@@ -78,6 +78,9 @@ export class DustFiles implements HostFiles {
    */
   readonly loads: string[] = [];
   onFileLoaded: ((name: string, bytes: number) => void) | null = null;
+  /** fires as the number of in-flight fetches changes — the play page's
+   *  `FileStore` has the same hook, and the same canvas-corner spinner on it */
+  onBusyChange: ((inFlight: number) => void) | null = null;
   /**
    * Every path the manifest listed, verbatim — not just the disc's.
    *
@@ -148,6 +151,7 @@ export class DustFiles implements HostFiles {
     if (!url) return null;
     // one fetch per name however many callers ask at once, which the boot does:
     // `preload` fetches the plan while the scripts are already asking
+    const started = !this.inFlight.has(key);
     const flight = this.inFlight.get(key) ?? (async () => {
       const res = await fetch(url);
       if (!res.ok) return null;
@@ -159,12 +163,13 @@ export class DustFiles implements HostFiles {
       return bytes;
     })();
     this.inFlight.set(key, flight);
+    if (started) this.onBusyChange?.(this.inFlight.size);
     try {
       const bytes = await flight;
       if (bytes) onBytes?.(bytes.byteLength);
       return bytes;
     } finally {
-      this.inFlight.delete(key);
+      if (this.inFlight.delete(key)) this.onBusyChange?.(this.inFlight.size);
     }
   }
 
@@ -180,9 +185,17 @@ export class DustFiles implements HostFiles {
     return this.cache.has(name.toLowerCase());
   }
 
-  /** see the note in the header: none, on purpose */
+  /**
+   * The room the boot borrows as its MOVIE HOST — `GameHost.coldBoot`'s
+   * no-landing-room path opens `serverSetNames()[0]` with `skipOpen` so the
+   * intro films have a viewer to draw through, exactly as the Titanic demo's
+   * boot does. This answered "none" for as long as a v1 set could not be
+   * opened at all; `parseInto` routes one through `readSetFileAsV4` now, so the
+   * honest answer is the room the day-advance is about to open anyway — the
+   * host doubles as a prefetch of the town.
+   */
   serverSetNames(): string[] {
-    return [];
+    return this.has("town.set") || this.urls.has("town.set") ? ["town.set"] : [];
   }
 
   serverUrl(name: string): string | null {

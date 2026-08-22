@@ -534,6 +534,42 @@ link in [the click priority chain](../runtime/host.md#the-click-priority-chain).
 Chained movies (types 3/4/5 above) share a five-deep call stack and one
 `playmovie()` wait — details in [the browser host](../runtime/host.md#movieplayer).
 
+## DreamFactory 1 (Dust)
+
+Dust's movies are the same machine — a chain of segments, a frame state
+machine, typed click hotspots, chained films — with everything v4 factors into
+per-frame logic containers kept inline, so they have their own reader rather
+than a branch here. `src/df/mov-v1.ts`'s module comment is the format account,
+and it is DF.EXE's own rather than a statistical fit: the record base comes
+from the engine's indexing (`lea esi, [frame*80 + header + 0x8c2]`), each field
+from the instruction that reads it, and the blit semantics from the
+disassembly at `0x421b40`. The short version of what differs from v4:
+
+- **Advance is an authored goto.** A frame is `action 2, target = next frame`
+  (0-based, clamped); a loop is a backward target (BELL.MOV's bell idles
+  through frames 2–21 and 21 points back at 1); actions are the same codes v4
+  uses — 1 exit, 2 goto, 3 exit + chain, 4 call, 5 return.
+- **Hotspots are typed records** walked from a per-frame offset (record
+  `+0x24`), first hit wins: type 2 (16 bytes) carries a click **sound** and a
+  goto **target**, type 1 (14 bytes) exits with a sound. A frame answers its
+  hotspots on every frame; only the wait bit (record `+0x06` bits 1/3) stops
+  the picture for them — that is how ARMOPEN.MOV's opening animation is
+  steerable mid-swing.
+- **Sounds are per frame and per click, not tables.** Frame record `+0x20`
+  names the chunk a frame starts (negative = interleaved with the pictures),
+  the hotspot its click sound; whatever nothing references is the bed.
+- **Chains end the film.** A type-3 exit sets the abort flag and posts the
+  movie named on its own record `+0x30` — no return, no stack. ARMOPEN.MOV
+  runs its opening straight into Diary.mov; the put-the-diary-back half is
+  reachable only by the click-away hotspots during the animation.
+- **Action frames are 1-based positions**, i16s at header `+0x2e`/`+0x30`,
+  where v4 keeps names.
+- **Indices 0 and 255 are transparent in the blit.** The engine keys them out
+  through a monochrome mask and an SRCINVERT composite, which is what a v1
+  frame authored as solid `0xff` means: hold the picture already on screen.
+  The decode buffer keeps the raw bytes for the delta chain — so does the
+  port's (`compositeFrameV1`).
+
 ## Related tools
 
 - **[the movie editor](../editors/movies.md)** (`/editors/movies.html`)
