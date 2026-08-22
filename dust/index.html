@@ -13,8 +13,11 @@
          it keeps its edges in a tab (dust/public/dust-mark.svg says why) -->
     <link rel="icon" type="image/svg+xml" href="/dust-mark.svg" />
     <!-- the chrome every page in the project shares, in this game's own colours.
-         Linked BEFORE the page's own <style> on purpose: where the two describe
-         the same element, Dust's existing look wins. -->
+         Where the two describe the same element, Dust's own look has to win — but
+         NOT by being linked first. The build resolves this <link> into a bundle
+         and re-inserts it at the END of <head>, after the <style> below, so the
+         authored order holds in dev and inverts in every build. `html body` below
+         is what actually settles it; `site/tests/cascade.ts` keeps it settled. -->
     <link rel="stylesheet" href="/src/theme.css" />
     <style>
       /* ------------------------------------------------------------------
@@ -246,7 +249,21 @@
 
       * { box-sizing: border-box; }
       html, body { height: 100%; margin: 0; min-width: var(--min-w); }
-      body {
+      /*
+       * `html body`, not `body`, and the extra token is load-bearing.
+       *
+       * The shared chrome sets `display: flex; align-items: center` on `body` — the
+       * right thing for the reading pages it was written for, and fatal here. This
+       * page is a grid, and a centred flex child SHRINK-WRAPS: `#stage`'s children
+       * are all absolutely positioned, so it collapsed to its own 2 x --pad, 32px,
+       * and the frame inside it went to a corner 1023px wide in a 1280px window.
+       *
+       * Equal specificity meant the later sheet won, and which sheet is later is
+       * decided by the BUILD, not by this file — dev served the authored order and
+       * looked right, every build inverted it and shipped that. One extra element
+       * in the selector takes the decision away from the bundler.
+       */
+      html body {
         background: var(--soot);
         color: var(--ink);
         font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
