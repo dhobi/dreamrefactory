@@ -23,6 +23,24 @@
  * that would have caught it even if the mechanism had been something else
  * entirely: it builds the page, serves the build, and measures the result.
  *
+ * ## Reachable, not merely visible
+ *
+ * It also checks that nothing invisible is sitting on top of the loader. The
+ * primary assertion is on `#frame`: while `body` is not `.playing` it must be
+ * `pointer-events: none`. That holds with no game data at all, which matters,
+ * because without a rip the page errors out of the loader and removes the button
+ * — so a test that could only hit-test the button would quietly check nothing on
+ * a machine with no disc. When the button IS there, it is hit-tested too.
+ *
+ * This is a separate bug, caught the same way:
+ * `#frame` comes after `#curtain` in the DOM with no z-index, so the canvas
+ * painted over the button and swallowed the click while the frame was still
+ * `opacity: 0`. Nothing looked wrong; the button was simply dead. And it was a
+ * RACE — the canvas has to exist before it can cover anything, so clicking the
+ * instant the button appeared won locally and lost on a real connection every
+ * time. Hence the deliberate wait below: a test that clicks immediately proves
+ * nothing about a user who takes a second to reach for the mouse.
+ *
  * ## No game data needed
  *
  * Every assertion here is about the empty page — the shell, the loader, the stage
@@ -89,6 +107,11 @@ interface Measured {
   curtainWidth: number;
   scrollWidth: number;
   sheets: string;
+  /** what is actually on top at the middle of the START button, if it is there */
+  atStartButton: string;
+  /** whether the invisible frame is excluded from hit-testing before play */
+  framePointerEvents: string;
+  playing: boolean;
 }
 
 const MEASURE = `(() => {
@@ -97,7 +120,31 @@ const MEASURE = `(() => {
     return e ? Math.round(e.getBoundingClientRect().width) : -1;
   };
   const bs = getComputedStyle(document.body);
+  const start = document.getElementById("start");
+  let atStartButton = "no button";
+  if (start) {
+    const r = start.getBoundingClientRect();
+    const top = document.elementFromPoint(
+      Math.round(r.x + r.width / 2),
+      Math.round(r.y + r.height / 2),
+    );
+    atStartButton = top ? top.id || top.tagName : "nothing";
+  }
+  // Ask about the state that matters rather than waiting to be in it: with no rip
+  // the page errors straight past the loader into the playing state, and the
+  // assertion would silently not run on exactly the machines with no game data.
+  // (No backticks in here: this whole block is a template literal.)
+  const frame = document.getElementById("frame");
+  const wasPlaying = document.body.classList.contains("playing");
+  document.body.classList.remove("playing");
+  const framePointerEvents = frame
+    ? getComputedStyle(frame).pointerEvents
+    : "no frame";
+  if (wasPlaying) document.body.classList.add("playing");
   return {
+    atStartButton,
+    framePointerEvents,
+    playing: wasPlaying,
     bodyDisplay: bs.display,
     bodyAlign: bs.alignItems,
     stageWidth: box("stage"),
@@ -122,8 +169,11 @@ function check(where: string, claim: string, ok: boolean, saw: string): void {
 
 async function measure(page: Page, url: string): Promise<Measured> {
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-  // the shell settles synchronously; the wait is for the stylesheet, not the game
-  await page.waitForTimeout(600);
+  // Long enough for the canvas to exist. The overlay bug this checks for is a
+  // race, and a short wait here is the version of the test that passes while the
+  // deployed site is broken — the canvas cannot cover the button until it is
+  // there. Not a wait for the game: no gamefile is read on this path.
+  await page.waitForTimeout(4_000);
   return (await page.evaluate(MEASURE)) as Measured;
 }
 
@@ -169,6 +219,32 @@ async function main(): Promise<void> {
         m.scrollWidth <= vp.width,
         `scrollWidth ${m.scrollWidth}`,
       );
+
+      // Visible is not the same as reachable: an opacity-0 overlay still takes
+      // the click, and a START button nothing can press is the whole game.
+      //
+      // Asserted on the frame rather than on the button, because this has to mean
+      // something on a machine with no rip — where the page errors out of the
+      // loader and the button is gone. The hit test is the stronger claim and runs
+      // whenever there is something to hit.
+      check(
+        at,
+        "the invisible frame does not take clicks",
+        m.framePointerEvents === "none",
+        `pointer-events: ${m.framePointerEvents}`,
+      );
+      if (m.atStartButton !== "no button") {
+        check(
+          at,
+          "START is what you hit when you click START",
+          m.atStartButton === "start",
+          `${m.atStartButton} on top`,
+        );
+      } else {
+        console.log(
+          `  skip  ${at}  no START button on the page (no game data)`,
+        );
+      }
 
       // the arrangement this test exists to distrust: assert the build really does
       // put the bundle last, so that if Vite ever changes and the bug becomes

@@ -92,7 +92,11 @@ function rulesIn(css: string): Map<string, Map<string, string>> {
           declaration.slice(0, colon).trim(),
           // whitespace only: `0` and `0px` are left as different, which is a
           // false positive this has not hit and a real one it would catch
-          declaration.slice(colon + 1).trim().replace(/\s+/g, " ").toLowerCase(),
+          declaration
+            .slice(colon + 1)
+            .trim()
+            .replace(/\s+/g, " ")
+            .toLowerCase(),
         );
       }
     }

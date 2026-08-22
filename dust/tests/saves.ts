@@ -15,11 +15,14 @@
 import { test, expect } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { readSaveFile, writeSaveFile } from "@dreamfactory/engine/df/savegame";
 import { applyPatchV1, parseSaveV1 } from "@dreamfactory/engine/df/savegame-v1";
 import { shippedDustSaves } from "../src/saves";
 
-const SAVE_DIR = join(process.cwd(), "gamefiles", "dust", "save");
+/* anchored to this file: the pre-monorepo `<cwd>/gamefiles/dust/save` made these
+   skip silently rather than fail (see dust/tests/movies.ts) */
+const SAVE_DIR = fileURLToPath(new URL("../gamefiles/save", import.meta.url));
 
 function dustSaves(): string[] {
   if (!existsSync(SAVE_DIR)) return [];
@@ -78,7 +81,9 @@ test("rewriting a Dust save reproduces every byte the loader reads", () => {
     }
     // Every byte of the header, of the 18 live table entries, and of all 18
     // containers — reproduced. A regression here means the framing moved.
-    expect.soft(stray.slice(0, 8), `${f}: bytes changed outside the table slack`).toEqual([]);
+    expect
+      .soft(stray.slice(0, 8), `${f}: bytes changed outside the table slack`)
+      .toEqual([]);
   }
 });
 
@@ -122,7 +127,9 @@ test("every shipped save is discoverable by the pattern the page uses", () => {
 test("a patched Dust save reads back what was written into it", () => {
   const files = dustSaves();
   if (!files.length) return;
-  const base = readSaveFile(new Uint8Array(readFileSync(join(SAVE_DIR, "START.RTD"))));
+  const base = readSaveFile(
+    new Uint8Array(readFileSync(join(SAVE_DIR, "START.RTD"))),
+  );
   const before = parseSaveV1(writeSaveFile(base));
 
   const out = applyPatchV1(base, {
@@ -146,8 +153,26 @@ test("a patched Dust save reads back what was written into it", () => {
       camY: 5 * 256 + 128,
     },
     frame: 4242,
-    props: [{ name: "Bone", owner: "stranger", view: "large", visible: true, scale: 1200, dist: -1 }],
-    actors: [{ name: "Leroy", owner: "stranger", pose: "grunt", deg: 64, star: "town.leroy1", set: "town" }],
+    props: [
+      {
+        name: "Bone",
+        owner: "stranger",
+        view: "large",
+        visible: true,
+        scale: 1200,
+        dist: -1,
+      },
+    ],
+    actors: [
+      {
+        name: "Leroy",
+        owner: "stranger",
+        pose: "grunt",
+        deg: 64,
+        star: "town.leroy1",
+        set: "town",
+      },
+    ],
     loops: [{ kind: "scene", name: "scene a2", handler: "apothfx", period: 5 }],
   });
 
@@ -163,7 +188,9 @@ test("a patched Dust save reads back what was written into it", () => {
   // ...and the room a load would actually reopen, which comes from the manifest
   // rather than from the name beside it
   expect.soft(after.standpoint.setFile, "set file").toBe("apoth.set");
-  expect.soft([after.standpoint.cellX, after.standpoint.cellZ], "cell").toEqual([2, 5]);
+  expect
+    .soft([after.standpoint.cellX, after.standpoint.cellZ], "cell")
+    .toEqual([2, 5]);
   expect.soft(after.standpoint.view, "view from deg 0").toBe("east");
   expect.soft(after.frame, "frame").toBe(4242);
   // the records, found by name in the base's own grids
@@ -185,7 +212,9 @@ test("a patched Dust save reads back what was written into it", () => {
     period: 5,
   });
   // and nothing else moved: the file is still the same shape it was
-  expect.soft(after.raw.containers.length, "containers").toBe(before.raw.containers.length);
+  expect
+    .soft(after.raw.containers.length, "containers")
+    .toBe(before.raw.containers.length);
   expect.soft(after.actors.length, "cast size").toBe(before.actors.length);
   expect.soft(after.props.length, "prop count").toBe(before.props.length);
   expect.soft(after.castFiles, "cast files").toEqual(before.castFiles);
@@ -196,7 +225,8 @@ test("a patched Dust save reads back what was written into it", () => {
 test("the shipped saves decode to the game they came from", () => {
   const files = dustSaves();
   if (!files.length) return;
-  const read = (f: string) => parseSaveV1(new Uint8Array(readFileSync(join(SAVE_DIR, f))));
+  const read = (f: string) =>
+    parseSaveV1(new Uint8Array(readFileSync(join(SAVE_DIR, f))));
 
   const start = read("START.RTD");
   expect.soft(start.title, "title").toBe("dust 0.3");
@@ -204,7 +234,9 @@ test("the shipped saves decode to the game they came from", () => {
   expect.soft(start.numGlobals.get("day"), "day").toBe(1);
   expect.soft(start.numGlobals.get("playercash"), "cash").toBe(5);
   expect.soft(start.standpoint.set, "set").toBe("town");
-  expect.soft([start.standpoint.cellX, start.standpoint.cellZ], "cell").toEqual([6, 14]);
+  expect
+    .soft([start.standpoint.cellX, start.standpoint.cellZ], "cell")
+    .toEqual([6, 14]);
   expect.soft(start.standpoint.view, "view").toBe("north");
   // the camera stands at the centre of that cell
   expect.soft(start.standpoint.camX, "camX").toBe(6 * 256 + 128);
@@ -221,7 +253,9 @@ test("the shipped saves decode to the game they came from", () => {
   const afterdog = read("AFTERDOG.RTD");
   expect.soft(afterdog.strGlobals.get("handitem"), "handitem").toBe("ring");
   expect.soft(afterdog.numGlobals.get("phase"), "phase").toBe(2);
-  expect.soft(afterdog.props.find((p) => p.name === "Ring")?.owner, "the ring").toBe("stranger");
+  expect
+    .soft(afterdog.props.find((p) => p.name === "Ring")?.owner, "the ring")
+    .toBe("stranger");
 
   // HELP was taken with a conversation open, which is why it has an extra file
   expect.soft(read("HELP.RTD").puppet, "the open puppet").toBe("help1.pup");
@@ -251,7 +285,9 @@ test("the shipped saves decode to the game they came from", () => {
    * same three numbers in the same order.
    */
   const dog = read("DOG.RTD").actors.find((a) => a.name === "dog");
-  expect.soft([dog?.x, dog?.y, dog?.z], "the dog's world position").toEqual([1620, 2748, 0]);
+  expect
+    .soft([dog?.x, dog?.y, dog?.z], "the dog's world position")
+    .toEqual([1620, 2748, 0]);
   // and its scale, without which the draw list skips it entirely
   expect.soft(dog?.scale, "the dog's scale").toBe(880);
   /*
@@ -261,7 +297,9 @@ test("the shipped saves decode to the game they came from", () => {
    * pair at +78/+80 does not — 32, 64, 100 and a uniform 100 — which is an order
    * of magnitude out and had every restored walker sprinting.
    */
-  expect.soft([dog?.speed, dog?.turn], "the dog's speed and turn").toEqual([3, 7]);
+  expect
+    .soft([dog?.speed, dog?.turn], "the dog's speed and turn")
+    .toEqual([3, 7]);
   const pig = read("DOG.RTD").actors.find((a) => a.name === "pig");
   expect.soft(pig?.turn, "the pig turns at its own rate").toBe(16);
 
@@ -277,7 +315,9 @@ test("the shipped saves decode to the game they came from", () => {
    * of the street.
    */
   const afterWalks = read("AFTERDOG.RTD").walks;
-  expect.soft(afterWalks.map((w) => w.actor).sort(), "who was walking").toEqual(["Help", "Jones"]);
+  expect
+    .soft(afterWalks.map((w) => w.actor).sort(), "who was walking")
+    .toEqual(["Help", "Jones"]);
   const jones = afterWalks.find((w) => w.actor === "Jones")!;
   expect.soft(jones.star, "where to").toBe("town.jones2");
   expect.soft([jones.startX, jones.startY], "from").toEqual([1736, 2488]);
@@ -289,12 +329,17 @@ test("the shipped saves decode to the game they came from", () => {
   // the cast record says he is standing, to the pixel
   // TRUNCATED, not rounded — rounding puts him at x=1644 where the cast record
   // says 1643, which is the same fix-point truncation the projection uses
-  const at = (s: number, d: number) => Math.floor(s + d * (jones.progress / jones.dist));
-  const jonesActor = read("AFTERDOG.RTD").actors.find((a) => a.name === "Jones")!;
-  expect.soft([at(jones.startX, jones.dx), at(jones.startY, jones.dy)], "predicted position").toEqual([
-    jonesActor.x,
-    jonesActor.y,
-  ]);
+  const at = (s: number, d: number) =>
+    Math.floor(s + d * (jones.progress / jones.dist));
+  const jonesActor = read("AFTERDOG.RTD").actors.find(
+    (a) => a.name === "Jones",
+  )!;
+  expect
+    .soft(
+      [at(jones.startX, jones.dx), at(jones.startY, jones.dy)],
+      "predicted position",
+    )
+    .toEqual([jonesActor.x, jonesActor.y]);
 
   // the four saves taken with nobody walking say so — a slot whose active word is
   // clear holds the LAST walk it ran, not a live one
@@ -303,6 +348,14 @@ test("the shipped saves decode to the game they came from", () => {
   }
 
   // the frame counter orders them by when they were taken
-  const frames = ["START.RTD", "DOG.RTD", "HELP.RTD", "GOTBONE.RTD", "AFTERDOG.RTD"].map((f) => read(f).frame);
-  expect.soft(frames, "frames in play order").toEqual([...frames].sort((a, b) => a - b));
+  const frames = [
+    "START.RTD",
+    "DOG.RTD",
+    "HELP.RTD",
+    "GOTBONE.RTD",
+    "AFTERDOG.RTD",
+  ].map((f) => read(f).frame);
+  expect
+    .soft(frames, "frames in play order")
+    .toEqual([...frames].sort((a, b) => a - b));
 });

@@ -283,7 +283,13 @@ const CHAIN_NAME_MAX = 31;
 const WAIT = { voice: 1, click: 2, clickAlt: 8 } as const;
 
 /** hotspot record sizes by type — DF.EXE's stride table at 0x405450 */
-const HOTSPOT_SIZE: Record<number, number> = { 1: 0xe, 2: 0x10, 3: 0x2e, 4: 0x30, 5: 0xe };
+const HOTSPOT_SIZE: Record<number, number> = {
+  1: 0xe,
+  2: 0x10,
+  3: 0x2e,
+  4: 0x30,
+  5: 0xe,
+};
 const HOTSPOT = { type: 0, top: 2, sound: 0xa, target: 0xe } as const;
 
 export function readMovFileV1(data: Uint8Array): MovFileV1 {
@@ -291,7 +297,9 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
   const c0 = file.containers[0].data;
   const version = versionOf(c0);
   if (version !== 1) {
-    throw new Error(`not a DreamFactory 1 MOV (container 0 says version ${version})`);
+    throw new Error(
+      `not a DreamFactory 1 MOV (container 0 says version ${version})`,
+    );
   }
   const warnings: string[] = [];
 
@@ -305,16 +313,21 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
   };
 
   /** one segment, read from its own header container */
-  const readSegment = (bias: number): { segment: MovSegmentV1; next: number } => {
+  const readSegment = (
+    bias: number,
+  ): { segment: MovSegmentV1; next: number } => {
     const cs = file.containers[bias].data;
     const vs = new DataView(cs.buffer, cs.byteOffset, cs.byteLength);
-    const at16 = (o: number): number => (o >= 0 && o + 2 <= cs.length ? vs.getInt16(o, true) : 0);
-    const at32 = (o: number): number => (o >= 0 && o + 4 <= cs.length ? vs.getInt32(o, true) : 0);
+    const at16 = (o: number): number =>
+      o >= 0 && o + 2 <= cs.length ? vs.getInt16(o, true) : 0;
+    const at32 = (o: number): number =>
+      o >= 0 && o + 4 <= cs.length ? vs.getInt32(o, true) : 0;
     if (cs.length < C0.palette + PALETTE_SIZE) {
       warnings.push(`segment c${bias} is too short to hold a palette`);
     }
     const count = vs.getInt16(C0.frameCount, true);
-    if (count < 1 || count > 4096) warnings.push(`segment c${bias}: implausible frame count ${count}`);
+    if (count < 1 || count > 4096)
+      warnings.push(`segment c${bias}: implausible frame count ${count}`);
 
     /**
      * A hotspot RUN, walked from an offset to the first record whose type is
@@ -358,17 +371,26 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
       const ref = at16(o + FRAME.picture);
       const picLoc = ref + bias;
       if (ref < 1 || picLoc >= file.containers.length || !picture(picLoc)) {
-        warnings.push(`segment c${bias} frame ${i + 1}/${count}: c${picLoc} is not a picture`);
+        warnings.push(
+          `segment c${bias} frame ${i + 1}/${count}: c${picLoc} is not a picture`,
+        );
         break;
       }
       const waitFlags = at16(o + FRAME.waitFlags);
       const soundRef = at32(o + FRAME.sound);
       const nameLen = cs[o + FRAME.chain] ?? 0;
       let chainTo = "";
-      if (nameLen >= 1 && nameLen <= CHAIN_NAME_MAX && o + FRAME.chain + 1 + nameLen <= cs.length) {
-        const s = String.fromCharCode(...cs.subarray(o + FRAME.chain + 1, o + FRAME.chain + 1 + nameLen));
+      if (
+        nameLen >= 1 &&
+        nameLen <= CHAIN_NAME_MAX &&
+        o + FRAME.chain + 1 + nameLen <= cs.length
+      ) {
+        const s = String.fromCharCode(
+          ...cs.subarray(o + FRAME.chain + 1, o + FRAME.chain + 1 + nameLen),
+        );
         // only a type-3 exit reads the field; on other records it is heap garbage
-        if (at16(o + FRAME.action) === 3 && /^[\x20-\x7e]+$/.test(s)) chainTo = s;
+        if (at16(o + FRAME.action) === 3 && /^[\x20-\x7e]+$/.test(s))
+          chainTo = s;
       }
       const hotspotOffset = at16(o + FRAME.hotspots);
       frames.push({
@@ -383,10 +405,16 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
         hotspotOffset,
         chainTo,
         record: o,
-        regions: hotspotOffset > 0 && hotspotOffset < cs.length ? hotspotRun(hotspotOffset) : [],
+        regions:
+          hotspotOffset > 0 && hotspotOffset < cs.length
+            ? hotspotRun(hotspotOffset)
+            : [],
       });
     }
-    if (!frames.length) warnings.push(`segment c${bias}: no frame table at 0x${C0.frames.toString(16)}`);
+    if (!frames.length)
+      warnings.push(
+        `segment c${bias}: no frame table at 0x${C0.frames.toString(16)}`,
+      );
 
     const next = vs.getInt16(C0.nextSegment, true);
     return {
@@ -410,7 +438,7 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
   // `next` is 0, and 0 is where we started.
   const segments: MovSegmentV1[] = [];
   const seen = new Set<number>();
-  for (let at = 0; at >= 0 && at < file.containers.length && !seen.has(at); ) {
+  for (let at = 0; at >= 0 && at < file.containers.length && !seen.has(at);) {
     seen.add(at);
     const { segment, next } = readSegment(at);
     segments.push(segment);
@@ -418,9 +446,12 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
   }
 
   // pictures no segment names — see MovFileV1.unaccounted
-  const named = new Set(segments.flatMap((sg) => sg.frames.map((f) => f.picture)));
+  const named = new Set(
+    segments.flatMap((sg) => sg.frames.map((f) => f.picture)),
+  );
   let unaccounted = 0;
-  for (let i = 1; i < file.containers.length; i++) if (!named.has(i) && picture(i)) unaccounted++;
+  for (let i = 1; i < file.containers.length; i++)
+    if (!named.has(i) && picture(i)) unaccounted++;
 
   /**
    * The audio: whatever a segment owns and its frame table does not name as a
@@ -498,7 +529,10 @@ export const MOV_V1_HOLD_TICKS = 3;
  * them as entry 0 — the original composed them over a screen the scripts had
  * already `blackscreen()`ed.
  */
-export function compositeFrameV1(pixels: Uint8Array, prev: Uint8Array | null): void {
+export function compositeFrameV1(
+  pixels: Uint8Array,
+  prev: Uint8Array | null,
+): void {
   if (!prev || prev.length !== pixels.length) return;
   for (let i = 0; i < pixels.length; i++) {
     const p = pixels[i];
@@ -531,19 +565,35 @@ export function movFileFromV1(v1: MovFileV1): MovFile {
     // and hotspot refs (already absolute) resolve through the player's own map
     const sounds = new Map<string, number>();
     for (const c of sg.audioChunks) sounds.set(String(c), c);
-    /**
-     * Palette entry 255 IS entry 0: DF.EXE's blit rewrites every 0xff pixel to
-     * 0 on its way to the screen (Windows reserves the hardware palette's
-     * entry 255, so the engine never lets the index through). Nearly every
-     * 0xff pixel is transparent anyway ({@link compositeFrameV1}); this alias
-     * covers the ones with nothing under them — a segment's FIRST frame —
-     * which the original composed over a screen its scripts had already
-     * blackscreen()ed.
+    /*
+     * Entry 255 is the film's own colour, and it is usually WHITE.
+     *
+     * This used to alias entry 255 onto entry 0 — "DF.EXE's blit rewrites every
+     * 0xff pixel to 0" — reasoning that 0xff is transparent and a segment's first
+     * frame has nothing under it to show through. The first half is right, and it
+     * is handled where it belongs: {@link compositeFrameV1} keys 0xff at decode,
+     * so a DELTA frame holds the picture before it.
+     *
+     * The second half was wrong. A segment's first frame is a KEYFRAME: nothing is
+     * being held, so 0xff there is not transparency but a colour, and the palette
+     * says which — 255,255,255. Aliasing it to entry 0 painted every one of those
+     * pixels black. Six segments on the disc carry enough of them to see it at a
+     * glance: INTRO3's sun (9.2% of the frame) became a black hole in a purple
+     * sky, DOCTCHES's and DOCTBONE's anatomy charts lost their paper, and PAPER1-3
+     * are newspapers. Rendered both ways side by side, all six are right as white
+     * and wrong as black.
+     *
+     * It went unseen because those films were also frozen on frame 0 for an
+     * unrelated reason (mov-pace.stepsForward), so the only picture anyone saw of
+     * them was the keyframe this broke.
+     *
+     * So: passed through untouched. `paletteToRGBA`'s reserve — 0 black, 255 white
+     * — already says the same thing.
      */
     const paletteRaw = sg.paletteRaw.slice();
-    paletteRaw.copyWithin(255 * 8, 0, 8);
     const count = sg.frames.length;
-    const frameName = (idx0: number): string => String(Math.max(0, Math.min(count - 1, idx0)) + 1);
+    const frameName = (idx0: number): string =>
+      String(Math.max(0, Math.min(count - 1, idx0)) + 1);
     return {
       file: v1.file,
       bias: sg.bias,
@@ -598,7 +648,12 @@ export function movFileFromV1(v1: MovFileV1): MovFile {
           regions: f.regions.map((r) => ({
             // the same codes again; a type-2 hotspot is v4's "goto the frame
             // named target", sound and all
-            type: r.type === 2 ? 2 : r.type >= 1 && r.type <= 5 ? r.type : ACTION_FALLBACK,
+            type:
+              r.type === 2
+                ? 2
+                : r.type >= 1 && r.type <= 5
+                  ? r.type
+                  : ACTION_FALLBACK,
             target: r.type === 2 ? frameName(r.target) : "",
             // stored top/left/bottom/right, Y first — mov.ts keeps the same order
             y0: r.top,

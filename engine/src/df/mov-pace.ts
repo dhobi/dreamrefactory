@@ -60,13 +60,23 @@ export function chooseFrameInterval(
   audioSec: number,
   hasRegions: boolean,
 ): number {
-  const hasStep = mov.frames.some((f) => f.type === 6 || f.type === 7);
+  // type 6/7 is DF4's "advance one frame"; DF1 says the same thing with a forward
+  // goto and has no type 6 anywhere on the disc (see stepsForward)
+  const hasStep =
+    mov.frames.some((f) => f.type === 6 || f.type === 7) || stepsForward(mov);
   const hasAudio = mov.audioChunks.length > 0 || mov.sounds.size > 0;
   return audioSec > 0
     ? Math.max(NATIVE_FRAME_MS, (audioSec * 1000) / frameCount)
-    : hasRegions ? (hasAudio ? FAUCET_FRAME_MS : NATIVE_FRAME_MS)
-    : hasStep ? Math.max(NATIVE_FRAME_MS, Math.min(1200, CUTSCENE_TOTAL_MS / frameCount))
-    : 0;
+    : hasRegions
+      ? hasAudio
+        ? FAUCET_FRAME_MS
+        : NATIVE_FRAME_MS
+      : hasStep
+        ? Math.max(
+            NATIVE_FRAME_MS,
+            Math.min(1200, CUTSCENE_TOTAL_MS / frameCount),
+          )
+        : 0;
 }
 
 /**
@@ -117,6 +127,41 @@ export function framesLoop(mov: MovSegment): boolean {
     if (f.type !== 2 && f.type !== 4) return false;
     const target = byName.get(f.target.toLowerCase());
     return target !== undefined && target <= i;
+  });
+}
+
+/**
+ * Does this segment hand a frame on to a LATER one without waiting for a click —
+ * a straight run, however the film happens to spell it?
+ *
+ * DreamFactory 4 spells it with an action of its own: type 6, "advance one frame"
+ * (type 7 steps back). **DreamFactory 1 has no such action.** A DF1 straight run
+ * is a type-2 `goto` whose target is the next frame — INTRO.MOV names its frames
+ * "1" to "136" and every one of the first 135 gotos to its successor. Same film,
+ * same behaviour, different opcode.
+ *
+ * That difference froze every Dust cutscene. `chooseFrameInterval` asked only for
+ * type 6/7, found none in any of the 160 films on the disc, and returned 0 —
+ * which means "click-through close-up, do not self-pace". The films WITH click
+ * regions took an earlier branch and animated; the 57 region-less ones held frame
+ * 0 for ever. The soundtrack is started separately and ran on regardless, so the
+ * intro played its narration over a still picture, which is exactly what it looked
+ * like: audible, motionless, and no error anywhere.
+ *
+ * Read the same way {@link framesLoop} reads a backward jump — by resolving the
+ * target through the frame names rather than assuming the target is an index —
+ * and gated on {@link MovSegment.dfV1}, so no DF4 film's pacing can change. A
+ * type-2 goto in a TAOOT close-up is a toggle waiting on a click, and that
+ * reading has to stay exactly as it was.
+ */
+export function stepsForward(mov: MovSegment): boolean {
+  if (mov.dfV1 !== true) return false;
+  const byName = new Map<string, number>();
+  mov.frames.forEach((f, i) => f.name && byName.set(f.name.toLowerCase(), i));
+  return mov.frames.some((f, i) => {
+    if (f.type !== 2) return false;
+    const target = byName.get(f.target.toLowerCase());
+    return target !== undefined && target > i;
   });
 }
 
