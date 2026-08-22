@@ -10,14 +10,35 @@
  * and paints {@link frame}; everything else about movies lives in this file.
  */
 import {
-  FLAG_ANY_INPUT_ABORTS, MovClickRegion, MovFile, MovFrame, MovSegment, readMovFile,
+  FLAG_ANY_INPUT_ABORTS,
+  MovClickRegion,
+  MovFile,
+  MovFrame,
+  MovSegment,
+  readMovFile,
 } from "@dreamfactory/engine/df/mov";
-import { NATIVE_FRAME_MS, TICK_MS, chooseFrameInterval, frameHoldMs } from "@dreamfactory/engine/df/mov-pace";
+import {
+  NATIVE_FRAME_MS,
+  TICK_MS,
+  chooseFrameInterval,
+  frameHoldMs,
+} from "@dreamfactory/engine/df/mov-pace";
 import { Container } from "@dreamfactory/engine/df/container";
 import { detectVersion } from "@dreamfactory/engine/df/version";
-import { compositeFrameV1, movFileFromV1, readMovFileV1 } from "@dreamfactory/engine/df/mov-v1";
-import { decodeAudioContainer, resampleTo } from "@dreamfactory/engine/df/audio";
-import { FrameBuffer, decodeFrame, paletteToRGBA } from "@dreamfactory/engine/df/image";
+import {
+  compositeFrameV1,
+  movFileFromV1,
+  readMovFileV1,
+} from "@dreamfactory/engine/df/mov-v1";
+import {
+  decodeAudioContainer,
+  resampleTo,
+} from "@dreamfactory/engine/df/audio";
+import {
+  FrameBuffer,
+  decodeFrame,
+  paletteToRGBA,
+} from "@dreamfactory/engine/df/image";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { volumeKey } from "@dreamfactory/engine/runtime/puppet";
@@ -46,23 +67,22 @@ const MOVIE_CALL_DEPTH = 5;
 /**
  * A segment's palette as the screen shows it.
  *
- * For a DreamFactory 1 film (`dfV1`, the adapter's marker) entry 255 is
- * entry 0: DF.EXE's blit rewrites every 0xff pixel to 0 before the picture
- * reaches the screen (fn 0x421b40 — Windows reserves the hardware palette's own
- * entry 255, so the engine never lets the index through). Most 0xff pixels are
- * transparent outright (compositeFrameV1 keys them at decode); this covers the
- * remainder — a segment's first frame — where mov-v1's raw-palette alias is
- * pinned back to white by `paletteToRGBA`'s v4 reserve, so the alias is applied
- * again after it, on the RGBA.
+ * Nothing version-specific left in here, and the removal is the point. This used
+ * to re-apply mov-v1's entry-255-is-entry-0 alias on the RGBA, because
+ * `paletteToRGBA`'s v4 reserve pins 255 back to white and the alias would
+ * otherwise be undone by it. The reserve was right and the alias was wrong: on a
+ * segment's first frame 0xff is a colour and not transparency, and the colour is
+ * white. `movFileFromV1` names the six films that show it.
  */
 function moviePalette(seg: MovSegment): Uint8ClampedArray {
-  const rgba = paletteToRGBA(seg.paletteRaw, 256);
-  if (seg.dfV1) rgba.copyWithin(255 * 4, 0, 4);
-  return rgba;
+  return paletteToRGBA(seg.paletteRaw, 256);
 }
 
 function concat(parts: Float32Array[], cap = Infinity): Float32Array {
-  const total = Math.min(cap, parts.reduce((a, s) => a + s.length, 0));
+  const total = Math.min(
+    cap,
+    parts.reduce((a, s) => a + s.length, 0),
+  );
   const out = new Float32Array(total);
   let off = 0;
   for (const s of parts) {
@@ -208,7 +228,13 @@ export class MoviePlayer {
 
   /** the frame to paint right now (with the movie's own palette and where on
    *  the screen the segment says it sits — see MovSegment.originX), or null */
-  get frame(): (MovieImage & { palette: Uint8ClampedArray; originX: number; originY: number }) | null {
+  get frame():
+    | (MovieImage & {
+        palette: Uint8ClampedArray;
+        originX: number;
+        originY: number;
+      })
+    | null {
     const m = this.active;
     if (!m) return null;
     const f = m.frames[Math.min(m.pos, m.frames.length - 1)];
@@ -221,7 +247,12 @@ export class MoviePlayer {
       m.palette = displayPalette(moviePalette(m.seg));
       m.paletteGen = gen;
     }
-    return { ...f, palette: m.palette, originX: m.seg.originX, originY: m.seg.originY };
+    return {
+      ...f,
+      palette: m.palette,
+      originX: m.seg.originX,
+      originY: m.seg.originY,
+    };
   }
 
   /**
@@ -262,7 +293,10 @@ export class MoviePlayer {
       // fields moved (engine/src/df/mov-v1.ts). Routed here rather than inside
       // readMovFile because the two produce the same MovFile and nothing below
       // this line has to care which engine wrote the film.
-      mov = detectVersion(data) === 1 ? movFileFromV1(readMovFileV1(data)) : readMovFile(data);
+      mov =
+        detectVersion(data) === 1
+          ? movFileFromV1(readMovFileV1(data))
+          : readMovFile(data);
     } catch (e) {
       this.onLog(`playmovie: ${fileName}: ${(e as Error).message}`);
       return false;
@@ -280,7 +314,12 @@ export class MoviePlayer {
    * the playing one (tour.mov's 18 slide segments carry no audio — the
    * narration bed from segment 0 plays across them all).
    */
-  private enterSegment(mov: MovFile, fileName: string, segIdx: number, startFrame = 0): boolean {
+  private enterSegment(
+    mov: MovFile,
+    fileName: string,
+    segIdx: number,
+    startFrame = 0,
+  ): boolean {
     const seg = mov.segments[segIdx];
     // Frames are delta-encoded per segment: decode all in order. A v1 frame is
     // then COMPOSITED over the one before it — its 0/0xff pixels are
@@ -330,7 +369,11 @@ export class MoviePlayer {
     //     spreads 318 frames over the ~86 s expanded loop — ~4 fps, the reported
     //     "intro too slow".
     let audioSec = 0;
-    let soundtrack: { rate: number; resampled: Float32Array[]; unique: Float32Array[] } | null = null;
+    let soundtrack: {
+      rate: number;
+      resampled: Float32Array[];
+      unique: Float32Array[];
+    } | null = null;
     // `audioLoops` used to gate this as well (`!hasRegions || seg.audioLoops`), and
     // for a v4 movie that was already a no-op: df/mov.ts sets `audioLoops =
     // audioChunks.length > 0`, so the two conditions were the same condition. It
@@ -340,9 +383,13 @@ export class MoviePlayer {
     // `audioLoops` still decides is whether the bed REPEATS while an interactive
     // frame waits, which is the question it should be asked (see below).
     if (seg.audioChunks.length) {
-      const decoded = seg.audioChunks.map((loc) => decodeAudioContainer(mov.file.containers[loc].data));
+      const decoded = seg.audioChunks.map((loc) =>
+        decodeAudioContainer(mov.file.containers[loc].data),
+      );
       const rate = Math.max(...decoded.map((p) => p.sampleRate));
-      const resampled = decoded.map((p) => resampleTo(p.samples, p.sampleRate, rate));
+      const resampled = decoded.map((p) =>
+        resampleTo(p.samples, p.sampleRate, rate),
+      );
       const seen = new Set<number>();
       const unique: Float32Array[] = [];
       seg.audioChunks.forEach((loc, i) => {
@@ -391,7 +438,11 @@ export class MoviePlayer {
         // A v1 close-up is interactive too and is NOT a loop: it says a line over
         // a held picture and the line is meant to finish. It takes the branch
         // below, which plays the run once.
-        this.session.audio.play("voice", { sampleRate: rate, samples: concat(unique) }, { loop: true });
+        this.session.audio.play(
+          "voice",
+          { sampleRate: rate, samples: concat(unique) },
+          { loop: true },
+        );
       } else {
         // Cutscene: concatenate the (resampled) chunks only up to the movie's
         // own runtime, so a 20x loop tail doesn't allocate ~150 s of audio we
@@ -436,7 +487,9 @@ export class MoviePlayer {
       }
     }
     const frameByName = new Map<string, number>();
-    seg.frames.forEach((f, i) => f.name && frameByName.set(f.name.toLowerCase(), i));
+    seg.frames.forEach(
+      (f, i) => f.name && frameByName.set(f.name.toLowerCase(), i),
+    );
     // Everything the player pressed while this was loading is DISCARDED, and the
     // original is unambiguous about it: `playmovie` is one function that reads
     // the .MOV containers and then calls flushevents unconditionally (TI.EXE
@@ -467,8 +520,12 @@ export class MoviePlayer {
       pos: Math.min(Math.max(startFrame, 0), frames.length - 1),
       interval,
       lastTick: 0,
-      actionFrame1: seg.actionFrame1 ? frameByName.get(seg.actionFrame1.toLowerCase()) ?? -1 : -1,
-      actionFrame2: seg.actionFrame2 ? frameByName.get(seg.actionFrame2.toLowerCase()) ?? -1 : -1,
+      actionFrame1: seg.actionFrame1
+        ? (frameByName.get(seg.actionFrame1.toLowerCase()) ?? -1)
+        : -1,
+      actionFrame2: seg.actionFrame2
+        ? (frameByName.get(seg.actionFrame2.toLowerCase()) ?? -1)
+        : -1,
       mov,
       seg,
       segIdx,
@@ -555,8 +612,10 @@ export class MoviePlayer {
     return (
       regions.find(
         (r) =>
-          x >= Math.min(r.x0, r.x1) && x <= Math.max(r.x0, r.x1) &&
-          y >= Math.min(r.y0, r.y1) && y <= Math.max(r.y0, r.y1),
+          x >= Math.min(r.x0, r.x1) &&
+          x <= Math.max(r.x0, r.x1) &&
+          y >= Math.min(r.y0, r.y1) &&
+          y <= Math.max(r.y0, r.y1),
       ) ?? null
     );
   }
@@ -654,7 +713,9 @@ export class MoviePlayer {
     if (!special || (keyName !== "." && keyName !== "q")) return false;
     if (!m.keySkips) return false;
     if (this.escapeSkipsSegment && m.segIdx + 1 < m.mov.segments.length) {
-      this.onLog(`movie: ${m.fileName} segment ${m.segIdx + 1} skipped at frame ${m.pos}`);
+      this.onLog(
+        `movie: ${m.fileName} segment ${m.segIdx + 1} skipped at frame ${m.pos}`,
+      );
       this.endSegment();
       return true;
     }
@@ -668,9 +729,10 @@ export class MoviePlayer {
     const m = this.active;
     if (!m) return;
     const loc = m.sounds.get(name.toLowerCase());
-    const snd = loc !== undefined
-      ? decodeAudioContainer(m.containers[loc].data)
-      : this.session.audioLib.sound(name);
+    const snd =
+      loc !== undefined
+        ? decodeAudioContainer(m.containers[loc].data)
+        : this.session.audioLib.sound(name);
     if (!snd) return;
     // keep the handle: an event sound belongs to the movie that fired it and
     // must die with it (see finish). Drop finished handles as we go so a long
@@ -684,7 +746,10 @@ export class MoviePlayer {
     // is how bedcards.mov's "sil" both cuts the watch's monologue and stops the
     // chain when the player clicks away from it.
     const follow = m.soundFollows.get(name.toLowerCase());
-    const frame = follow !== undefined ? m.frameByName.get(follow.toLowerCase()) : undefined;
+    const frame =
+      follow !== undefined
+        ? m.frameByName.get(follow.toLowerCase())
+        : undefined;
     m.soundJump = frame === undefined ? null : { frame, sound: handle };
   }
 
@@ -780,10 +845,13 @@ export class MoviePlayer {
     // a backward goto) is left at tick 200 by the jump to "Name 12".
     for (let c = 0; c < m.seg.cues.length; c++) {
       const cue = m.seg.cues[c];
-      if (m.cuesFired.has(c) || now - m.segStartMs < cue.tick * TICK_MS) continue;
+      if (m.cuesFired.has(c) || now - m.segStartMs < cue.tick * TICK_MS)
+        continue;
       m.cuesFired.add(c);
       const idx = m.frameByName.get(cue.target.toLowerCase());
-      this.onLog(`movie cue: tick ${cue.tick} -> "${cue.target}"${idx === undefined ? " (no such frame)" : ""}`);
+      this.onLog(
+        `movie cue: tick ${cue.tick} -> "${cue.target}"${idx === undefined ? " (no such frame)" : ""}`,
+      );
       if (idx !== undefined) {
         m.lastTick = now;
         this.enter(idx);
@@ -808,7 +876,8 @@ export class MoviePlayer {
     // deck washes and the fires loop: the last frame of the cycle carries a
     // backward `goto` nothing would ever reach if the frame stopped for its own
     // click rect. See MovFrame.playsThroughRegions.
-    const waits = m.meta[m.pos].regions.length > 0 && !m.meta[m.pos].playsThroughRegions;
+    const waits =
+      m.meta[m.pos].regions.length > 0 && !m.meta[m.pos].playsThroughRegions;
     if (m.interval > 0 && !waits) {
       if (!m.lastTick) m.lastTick = now;
       // The FILM's own hold, not a rate we invented: max(frame, movie floor) —
@@ -826,7 +895,10 @@ export class MoviePlayer {
         // TAOOT leave.mov's frame 68 is the case, and it is why that film's last line
         // outlives its picture: frame 41 fires Morrow's "morrow2.83" (3.34 s) and
         // the second-to-last frame holds until he has finished saying it.
-        if (m.meta[m.pos].waitsForVoice && this.eventSounds.some((h) => !h.done)) {
+        if (
+          m.meta[m.pos].waitsForVoice &&
+          this.eventSounds.some((h) => !h.done)
+        ) {
           return m.frames[m.pos];
         }
         m.lastTick = now;
@@ -868,7 +940,9 @@ export class MoviePlayer {
    */
   abandon(): void {
     if (!this.active && !this.resolveWhenDone) return;
-    this.onLog(`movie: ${this.active?.fileName ?? "sequence"} abandoned — the game was replaced`);
+    this.onLog(
+      `movie: ${this.active?.fileName ?? "sequence"} abandoned — the game was replaced`,
+    );
     this.finish(true);
   }
 

@@ -36,15 +36,40 @@
 import { test, expect } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { readAudioHeader } from "@dreamfactory/engine/df/audio";
 import {
   compositeFrameV1,
   movFileFromV1,
   readMovFileV1,
 } from "@dreamfactory/engine/df/mov-v1";
-import { decodeFrame, FrameBuffer } from "@dreamfactory/engine/df/image";
+import {
+  decodeFrame,
+  FrameBuffer,
+  paletteToRGBA,
+} from "@dreamfactory/engine/df/image";
+import {
+  chooseFrameInterval,
+  frameHoldMs,
+  stepsForward,
+} from "@dreamfactory/engine/df/mov-pace";
 
-const MOVIE_DIR = join(process.cwd(), "gamefiles", "dust", "dustcd", "MOVIES");
+/*
+ * Anchored to THIS FILE, not to the working directory, and not to the old layout.
+ *
+ * It was `<cwd>/gamefiles/dust/dustcd/MOVIES`, which is where the rip lived before
+ * the monorepo split moved it to `dust/gamefiles/`. Nothing failed: `movies()`
+ * returned an empty list, `skip()` decided there was no rip, and all nine tests
+ * passed by not running. They reported green through the entire restructuring and
+ * through a release in which every Dust film was frozen on its first frame.
+ *
+ * `import.meta.url` because a vitest run's cwd is the repo root and a package
+ * script's is the package — the rip's location is a fact about the tree, so ask
+ * the tree.
+ */
+const MOVIE_DIR = fileURLToPath(
+  new URL("../gamefiles/dustcd/MOVIES", import.meta.url),
+);
 
 const movies = (): string[] =>
   existsSync(MOVIE_DIR)
@@ -290,16 +315,20 @@ test("index 255 is transparent: a wait frame HOLDS the picture before it", () =>
   expect(shown[16]).toEqual(shown[15]);
   expect(shown[19]).toEqual(shown[18]);
   expect(shown[16].every((p) => p === 255)).toBe(false);
-  // ...and the first frame keeps its raw indices, which is what the palette
-  // alias is for: the adapter paints entry 255 as entry 0, the raw file keeps
-  // the white it wrote
+  // ...and the first frame keeps its raw indices, which the adapter no longer
+  // second-guesses. It used to paint entry 255 as entry 0 here, on the reading
+  // that a keyframe's 0xff has nothing under it and so should come out as the
+  // background. It comes out as a COLOUR — see the keyframe test below, where
+  // that alias turned INTRO3's sun into a black hole in a purple sky. The
+  // palette goes through untouched and paletteToRGBA's reserve decides 255.
   const mov = movFileFromV1(v1);
   expect(Array.from(mov.paletteRaw.subarray(255 * 8, 255 * 8 + 8))).toEqual(
-    Array.from(mov.paletteRaw.subarray(0, 8)),
+    Array.from(v1.paletteRaw.subarray(255 * 8, 255 * 8 + 8)),
   );
-  expect(Array.from(v1.paletteRaw.subarray(255 * 8, 255 * 8 + 8))).not.toEqual(
-    Array.from(v1.paletteRaw.subarray(0, 8)),
-  );
+  const rgba = paletteToRGBA(mov.paletteRaw, 256);
+  expect([rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]]).toEqual([
+    255, 255, 255,
+  ]);
 });
 
 test("segment audio banks decode and the up-front count matches the header", () => {
@@ -325,5 +354,173 @@ test("segment audio banks decode and the up-front count matches the header", () 
           .toBe(true);
       }
     }
+  }
+});
+
+/**
+ * Every film on the disc paces itself, because a DF1 straight run is a goto.
+ *
+ * `chooseFrameInterval` returns 0 for "click-through close-up: do not advance on
+ * the clock", and it decided that for 57 of Dust's 160 films — every one without
+ * click regions, the intro among them. It was asking for a type-6 frame,
+ * DreamFactory 4's "advance one frame", and **DreamFactory 1 does not have that
+ * action**: it writes a straight run as a type-2 goto to the next frame. There is
+ * not one type-6 frame in any of the 160.
+ *
+ * What that looked like: the film held frame 0 for ever while its soundtrack —
+ * started separately, paced by nothing — played to the end. Audible, motionless,
+ * no error. The decoder was never at fault; 16 consecutive intro frames decode to
+ * 16 distinct pictures, which is asserted elsewhere in this file.
+ */
+test("every Dust film self-paces: a v1 straight run is a forward goto", () => {
+  if (skip()) return;
+  const names = movies();
+  expect(names.length).toBeGreaterThan(100);
+
+  let type67 = 0;
+  const dead: string[] = [];
+  for (const name of names) {
+    const mov = movFileFromV1(read(name));
+    for (const [i, seg] of mov.segments.entries()) {
+      if (seg.frames.some((f) => f.type === 6 || f.type === 7)) type67++;
+      const hasRegions = seg.frames.some((f) => f.regions.length > 0);
+      // the arguments the player passes (movie-player.ts): a v1 bed never paces
+      const interval = chooseFrameInterval(
+        seg,
+        seg.frames.length,
+        hasRegions || !seg.audioLoops ? 0 : 1,
+        hasRegions,
+      );
+      if (interval === 0) dead.push(`${name} segment ${i}`);
+    }
+  }
+
+  // the premise: DF1 genuinely has no "advance one frame" anywhere on the disc,
+  // so a test for type 6/7 alone can only ever have been vacuous here
+  expect(type67).toBe(0);
+  expect(
+    dead,
+    `films frozen on frame 0: ${dead.slice(0, 8).join(", ")}`,
+  ).toEqual([]);
+});
+
+test("the intro runs at its own authored rate, not one we invented", () => {
+  if (skip()) return;
+  const mov = movFileFromV1(read("INTRO.MOV"));
+  const seg = mov.segments[0];
+
+  expect(stepsForward(seg)).toBe(true);
+  // named "1".."136", each handing on to its successor: 135 forward, none back
+  expect(seg.frames.length).toBe(136);
+  expect(
+    seg.frames.filter((f, i) => f.type === 2 && Number(f.target) - 1 > i)
+      .length,
+  ).toBe(135);
+
+  // And the hold is the FILM's own, not a rate derived from its audio:
+  // max(this frame's holdTicks, the movie's floor) x one tick. Frame 0 of the
+  // intro holds 20 ticks against a floor of 2, so the FRAME wins here — which is
+  // the half of that max a test asserting only the floor would never see.
+  const TICK = 50 / 3;
+  expect(frameHoldMs(seg, 0)).toBeCloseTo(
+    Math.max(seg.frames[0].holdTicks, seg.minHoldTicks) * TICK,
+    5,
+  );
+  expect(seg.frames[0].holdTicks).toBeGreaterThan(seg.minHoldTicks);
+  expect(frameHoldMs(seg, 0)).toBeGreaterThan(0);
+});
+
+test("stepsForward refuses to touch a DreamFactory 4 film", () => {
+  // The guard that keeps Titanic's pacing exactly as it was: a type-2 goto in a
+  // DF4 close-up is a toggle waiting on a click, and reading it as a step would
+  // make click-through movies run themselves. Asserted on a hand-built segment so
+  // it holds with no rip of either game present.
+  const frame = (name: string, type: number, target: string) => ({
+    type,
+    height: 0,
+    width: 0,
+    locationFrame: 0,
+    name,
+    sound: "",
+    event: "",
+    target,
+    regions: [],
+    holdTicks: 0,
+    waitsForVoice: false,
+    holdsDeadline: false,
+    playsThroughRegions: false,
+  });
+  const frames = [frame("1", 2, "2"), frame("2", 2, "3"), frame("3", 1, "")];
+  const base = {
+    frames,
+    cues: [],
+    audioChunks: [],
+    bed: [],
+    sounds: new Map<string, number>(),
+    paletteRaw: new Uint8Array(0),
+    minHoldTicks: 3,
+    audioLoops: false,
+    bias: 0,
+  } as unknown as Parameters<typeof stepsForward>[0];
+
+  expect(stepsForward({ ...base, dfV1: true })).toBe(true);
+  expect(stepsForward({ ...base, dfV1: false })).toBe(false);
+  // absent, not merely false: every DF4 segment this port has ever read
+  expect(stepsForward(base)).toBe(false);
+});
+
+/**
+ * On a segment's FIRST frame, 0xff is white — it is a colour, not transparency.
+ *
+ * `movFileFromV1` used to alias palette entry 255 onto entry 0 on the grounds that
+ * DF.EXE folds 0xff into 0 and that 0xff is transparent anyway. Transparency is
+ * real and handled at decode by `compositeFrameV1`, which is what lets a DELTA
+ * frame hold the picture before it. A KEYFRAME has nothing to hold, so there the
+ * index is just a colour, and the alias painted it black.
+ *
+ * Six segments on the disc carry enough index-255 on their first frame to see it:
+ * INTRO3's sun, DOCTCHES's and DOCTBONE's anatomy charts, and PAPER1-3. Asserted
+ * on the two extremes rather than all six, and on the pixels rather than on the
+ * palette alone, because the palette is pinned twice on the way to the screen
+ * (`paletteToRGBA`'s reserve, and once upon a time this alias after it) and only
+ * the pixels say which pinning won.
+ */
+test("a v1 keyframe's 0xff renders white, not black", () => {
+  if (skip()) return;
+
+  for (const [name, atLeast] of [
+    ["INTRO3.MOV", 0.05],
+    ["DOCTCHES.MOV", 0.05],
+  ] as const) {
+    const mov = movFileFromV1(read(name));
+    const seg = mov.segments[0];
+    const rgba = paletteToRGBA(seg.paletteRaw, 256);
+
+    // the reserve: 0 black and 255 white, whatever the film's own table says —
+    // every one of these six ships a raw entry 255 of 0,0,0
+    expect
+      .soft([rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]])
+      .toEqual([255, 255, 255]);
+    expect.soft([rgba[0], rgba[1], rgba[2]]).toEqual([0, 0, 0]);
+
+    const fb = new FrameBuffer();
+    const f = seg.frames[0];
+    const decoded = decodeFrame(mov.file.containers[f.locationFrame].data, fb);
+    const pixels = decoded.width * decoded.height;
+    let indexed255 = 0;
+    let white = 0;
+    for (let i = 0; i < pixels; i++) {
+      if (fb.pixels[i] !== 255) continue;
+      indexed255++;
+      const c = fb.pixels[i] * 4;
+      if (rgba[c] > 250 && rgba[c + 1] > 250 && rgba[c + 2] > 250) white++;
+    }
+    expect
+      .soft(indexed255 / pixels, `${name}: index-255 coverage on frame 0`)
+      .toBeGreaterThan(atLeast);
+    // every one of them, not most: a partial fix is what made this black
+    expect
+      .soft(white, `${name}: index-255 pixels rendering white`)
+      .toBe(indexed255);
   }
 });

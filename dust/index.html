@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <meta name="robots" content="noindex, nofollow" />
     <!-- where the site's root is from THIS page: its own directory. The build
          emits relative URLs (base "./") and siteUrl resolves the rest, so the
@@ -181,7 +184,8 @@
           1024px,
           calc(var(--page-w) - 2 * var(--pad) - 2 * var(--frame)),
           calc(
-            (var(--stage-h) - 2 * var(--pad) - var(--band) - 2 * var(--frame)) * 4 / 3
+            (var(--stage-h) - 2 * var(--pad) - var(--band) - 2 * var(--frame)) *
+              4 / 3
           )
         );
         --pic-h: calc(var(--pic-w) * 3 / 4);
@@ -220,7 +224,8 @@
           1024px,
           calc(var(--page-w) - 2 * var(--pad) - 2 * var(--frame)),
           calc(
-            (var(--stage-h) - 2 * var(--pad) - var(--band) - 2 * var(--frame)) * 4 / 3
+            (var(--stage-h) - 2 * var(--pad) - var(--band) - 2 * var(--frame)) *
+              4 / 3
           )
         );
         --pic-h: calc(var(--pic-w) * 3 / 4);
@@ -235,9 +240,10 @@
             down,
             calc(
               (
-                var(--stage-h) - 2 * var(--pad) - var(--band) - var(--pic-h) -
-                  2 * var(--frame)
-              ) / 2
+                  var(--stage-h) - 2 * var(--pad) - var(--band) - var(--pic-h) -
+                    2 * var(--frame)
+                ) /
+                2
             ),
             2px
           )
@@ -245,10 +251,21 @@
       }
       /* no logo file, no band: the page is honest about it rather than leaving a
          gap where a picture failed to arrive (see #brand's onerror) */
-      body.nobrand { --brand-h: 0px; --bite: 0px; --lap: 0px; }
+      body.nobrand {
+        --brand-h: 0px;
+        --bite: 0px;
+        --lap: 0px;
+      }
 
-      * { box-sizing: border-box; }
-      html, body { height: 100%; margin: 0; min-width: var(--min-w); }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        min-width: var(--min-w);
+      }
       /*
        * `html body`, not `body`, and the extra token is load-bearing.
        *
@@ -266,7 +283,12 @@
       html body {
         background: var(--soot);
         color: var(--ink);
-        font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font:
+          13px/1.5 ui-monospace,
+          "SF Mono",
+          Menlo,
+          Consolas,
+          monospace;
         display: grid;
         /*
          * THREE rows now: the shared top bar, the stage, the status strip. It was
@@ -331,13 +353,12 @@
         height: fit-content;
         padding: var(--frame);
         /* the mat: wood, lit from above, in NEW.FLT's own four browns */
-        background:
-          linear-gradient(
-            var(--wood-lit),
-            var(--wood) 34%,
-            var(--wood-dim) 70%,
-            var(--wood-shade)
-          );
+        background: linear-gradient(
+          var(--wood-lit),
+          var(--wood) 34%,
+          var(--wood-dim) 70%,
+          var(--wood-shade)
+        );
         /* the panel's dark rule on the OUTER edge, and the page beneath it */
         box-shadow:
           0 0 0 1px var(--rule),
@@ -403,8 +424,13 @@
           border-color: var(--spark);
         }
         @keyframes netpulse {
-          0%, 100% { opacity: 0.35; }
-          50% { opacity: 1; }
+          0%,
+          100% {
+            opacity: 0.35;
+          }
+          50% {
+            opacity: 1;
+          }
         }
       }
       #screen {
@@ -446,17 +472,39 @@
           0 0 0 2px var(--rule),
           0 0 0 3px #5a3527;
       }
-      #screen.busy { cursor: progress; }
+      #screen.busy {
+        cursor: progress;
+      }
       /* the room BLENDS IN rather than appearing: it comes up out of the dark a
          touch under scale while the title card is still rising, so the two read
          as one movement instead of a swap. The FRAME comes with it — the moulding
          belongs to the picture, so it must not be on the page before the picture
          is. */
-      body:not(.playing) #frame { opacity: 0; transform: scale(0.985); }
+      /*
+       * `pointer-events: none` and not only `opacity: 0`, because an invisible
+       * element still takes the click.
+       *
+       * #frame comes after #curtain in the DOM and neither carries a z-index, so
+       * it paints on top and is hit-tested first — over the loader's own START
+       * button, which sits in #boot inside #curtain. Pressing START did nothing:
+       * `document.elementFromPoint` at the middle of the button returned #screen.
+       *
+       * It was a race before, which is why it looked fine here and failed on a
+       * real connection: the canvas has to exist to cover anything, and clicking
+       * the moment the button appeared beat it. The one place that never won that
+       * race was the deployed site.
+       */
+      body:not(.playing) #frame {
+        opacity: 0;
+        transform: scale(0.985);
+        pointer-events: none;
+      }
       body.playing #frame {
         opacity: 1;
         transform: none;
-        transition: opacity 620ms ease-out 180ms, transform 900ms cubic-bezier(.28,.74,.22,1) 180ms;
+        transition:
+          opacity 620ms ease-out 180ms,
+          transform 900ms cubic-bezier(0.28, 0.74, 0.22, 1) 180ms;
       }
 
       /* ------------------------------------------------------------------
@@ -519,11 +567,18 @@
         width: min(1100px, 100%);
         aspect-ratio: 2 / 1;
         translate: -50% -50%;
-        background: radial-gradient(ellipse at center, #4a220c66, #2d120c22 40%, #0000 74%);
+        background: radial-gradient(
+          ellipse at center,
+          #4a220c66,
+          #2d120c22 40%,
+          #0000 74%
+        );
         opacity: 1;
         transition: opacity 500ms ease-out;
       }
-      body.playing #curtain::before { opacity: 0; }
+      body.playing #curtain::before {
+        opacity: 0;
+      }
 
       #brand {
         display: block;
@@ -535,14 +590,21 @@
            light rather than on a panel, so it gets a warm glow instead of a box */
         filter: drop-shadow(0 6px 24px #000) drop-shadow(0 0 40px #3a1f0d);
       }
-      body.booting #brand { max-height: 46vh; }
+      body.booting #brand {
+        max-height: 46vh;
+      }
       /* Risen: sized by HEIGHT, which is what makes the band exact — and with NO
          shadow. The glow below is for a card floating on a bare page; once it is
          resting on the frame's top rail a drop-shadow reads as the card hovering
          over the wood instead of sitting on it, which is the opposite of what the
          overlap is for. */
-      body.playing #brand { height: 100%; filter: none; }
-      #brand[hidden] { display: none; }
+      body.playing #brand {
+        height: 100%;
+        filter: none;
+      }
+      #brand[hidden] {
+        display: none;
+      }
 
       /* ------------------------------------------------------------------
          The fuse.
@@ -568,7 +630,10 @@
         position: relative;
         width: min(440px, 76%);
         height: 48px;
-        transition: opacity 340ms ease-out, translate 460ms ease-out, filter 340ms ease-out;
+        transition:
+          opacity 340ms ease-out,
+          translate 460ms ease-out,
+          filter 340ms ease-out;
       }
       #gauge {
         position: absolute;
@@ -576,7 +641,9 @@
         right: 0;
         top: 50%;
         transform: translateY(-50%);
-        transition: opacity 260ms ease-out, transform 320ms ease-out;
+        transition:
+          opacity 260ms ease-out,
+          transform 320ms ease-out;
       }
       #boot.ready #gauge {
         opacity: 0;
@@ -588,7 +655,9 @@
         height: 7px;
         border-radius: 999px;
         background: linear-gradient(#180b07, #241009);
-        box-shadow: inset 0 1px 2px #000000aa, 0 0 0 1px #341811;
+        box-shadow:
+          inset 0 1px 2px #000000aa,
+          0 0 0 1px #341811;
       }
       /* the weave of the unburnt cord */
       #fuse::before {
@@ -596,7 +665,11 @@
         position: absolute;
         inset: 0;
         border-radius: 999px;
-        background: repeating-linear-gradient(72deg, #3d1c12 0 2px, #2b120c 2px 6px);
+        background: repeating-linear-gradient(
+          72deg,
+          #3d1c12 0 2px,
+          #2b120c 2px 6px
+        );
         opacity: 0.75;
       }
       #burn {
@@ -606,11 +679,19 @@
         left: 0;
         width: 0%;
         border-radius: 999px;
-        background: linear-gradient(90deg, var(--ember), var(--fire) 42%, var(--flame) 76%, var(--spark));
-        box-shadow: 0 0 14px -2px var(--flame), 0 0 5px #f8130acc;
+        background: linear-gradient(
+          90deg,
+          var(--ember),
+          var(--fire) 42%,
+          var(--flame) 76%,
+          var(--spark)
+        );
+        box-shadow:
+          0 0 14px -2px var(--flame),
+          0 0 5px #f8130acc;
         /* the width is set from JS; this is what makes each step a slide rather
            than a jump, and 380ms is under the gap between two boot milestones */
-        transition: width 380ms cubic-bezier(.32,.9,.3,1);
+        transition: width 380ms cubic-bezier(0.32, 0.9, 0.3, 1);
       }
       /* heat coming off the burnt length */
       #burn::after {
@@ -630,10 +711,18 @@
         height: 15px;
         margin: -7.5px -7.5px 0 0;
         border-radius: 50%;
-        background: radial-gradient(circle, #fff6dd 0%, #ffca7a 26%, var(--spark) 46%, #f8130a00 72%);
+        background: radial-gradient(
+          circle,
+          #fff6dd 0%,
+          #ffca7a 26%,
+          var(--spark) 46%,
+          #f8130a00 72%
+        );
       }
       /* nothing burning yet, so nothing glowing yet */
-      #burn[style*="width: 0%"] > #spark { opacity: 0; }
+      #burn[style*="width: 0%"] > #spark {
+        opacity: 0;
+      }
 
       #bootline {
         display: flex;
@@ -687,9 +776,17 @@
         pointer-events: none;
         transition: opacity 300ms ease-out 130ms;
       }
-      #boot.ready #startwrap { opacity: 1; pointer-events: auto; }
+      #boot.ready #startwrap {
+        opacity: 1;
+        pointer-events: auto;
+      }
       #start {
-        font: 600 13px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font:
+          600 13px/1 ui-monospace,
+          "SF Mono",
+          Menlo,
+          Consolas,
+          monospace;
         text-transform: uppercase;
         letter-spacing: 0.3em;
         /* the right padding is short by the letter-spacing, which is added AFTER
@@ -699,18 +796,24 @@
         border: 0;
         border-radius: 3px;
         cursor: pointer;
-        background: linear-gradient(var(--wood-lit), var(--wood) 40%, var(--wood-dim));
+        background: linear-gradient(
+          var(--wood-lit),
+          var(--wood) 40%,
+          var(--wood-dim)
+        );
         box-shadow:
           0 0 0 1px var(--rule),
           inset 0 1px 0 #8a5a3c77,
           0 8px 20px -10px #000;
         transform: scale(0.94);
         transition:
-          transform 380ms cubic-bezier(.28,.74,.22,1) 130ms,
+          transform 380ms cubic-bezier(0.28, 0.74, 0.22, 1) 130ms,
           background 160ms ease-out,
           color 160ms ease-out;
       }
-      #boot.ready #start { transform: none; }
+      #boot.ready #start {
+        transform: none;
+      }
       #start:hover {
         background: linear-gradient(#83513a, #663d27 40%, #4b2d1b);
         color: #fff6dd;
@@ -718,9 +821,14 @@
       #start:active {
         transform: translateY(1px);
         transition: transform 40ms;
-        box-shadow: 0 0 0 1px var(--rule), inset 0 2px 7px #000000aa;
+        box-shadow:
+          0 0 0 1px var(--rule),
+          inset 0 2px 7px #000000aa;
       }
-      #start:focus-visible { outline: 2px solid var(--spark); outline-offset: 3px; }
+      #start:focus-visible {
+        outline: 2px solid var(--spark);
+        outline-offset: 3px;
+      }
 
       /* the gesture line under the Start button. Absolute and hung off the bottom
          of #boot, which is a fixed 48px with everything in it positioned — so this
@@ -739,10 +847,17 @@
         opacity: 0;
         transition: opacity 300ms ease-out 200ms;
       }
-      #boot.ready #touchtip { opacity: 1; }
-      #touchtip b { color: var(--ink); font-weight: 600; }
+      #boot.ready #touchtip {
+        opacity: 1;
+      }
+      #touchtip b {
+        color: var(--ink);
+        font-weight: 600;
+      }
       @media (pointer: coarse) and (hover: none) {
-        #touchtip { display: block; }
+        #touchtip {
+          display: block;
+        }
       }
 
       /* the strip. one line, monospace, no buttons that look like buttons */
@@ -758,9 +873,16 @@
         white-space: nowrap;
         overflow-x: auto;
       }
-      #strip b { color: var(--ink); font-weight: 600; }
-      #strip span { color: var(--dim); }
-      #strip .k { color: var(--ink); }
+      #strip b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      #strip span {
+        color: var(--dim);
+      }
+      #strip .k {
+        color: var(--ink);
+      }
       /* the hint that fits the pointer: keys for a mouse, the gesture for glass.
          `hover: none` as well as `coarse` so a touchscreen LAPTOP — which has both
          a finger and arrow keys — keeps the keys line. */
@@ -781,15 +903,23 @@
       #ver {
         flex: none;
       }
-      #strip .touchhint { display: none; }
+      #strip .touchhint {
+        display: none;
+      }
       @media (pointer: coarse) and (hover: none) {
-        #strip .keyhint { display: none; }
-        #strip .touchhint { display: inline; }
+        #strip .keyhint {
+          display: none;
+        }
+        #strip .touchhint {
+          display: inline;
+        }
         /* the word goes and the arrows stay: at the 400px floor the strip has
            room for the hint, the two boxes and the version, and only just — with
            "invert" twice it overflows and the boxes are behind a scroll nobody
            knows is there. The arrow IS the label, and the title still says it. */
-        #swipeOpts .word { display: none; }
+        #swipeOpts .word {
+          display: none;
+        }
       }
       /* the two swipe boxes: one group, so the gap between them is tighter than
          the strip's own and they read as one question with two answers */
@@ -798,7 +928,9 @@
         gap: 14px;
         align-items: center;
       }
-      #swipeOpts[hidden] { display: none; }
+      #swipeOpts[hidden] {
+        display: none;
+      }
       #swipeOpts label {
         display: flex;
         gap: 5px;
@@ -818,8 +950,13 @@
         margin: 0;
         cursor: pointer;
       }
-      #swipeOpts input:focus-visible { outline: 2px solid var(--spark); outline-offset: 2px; }
-      #err { color: #d98b6a; }
+      #swipeOpts input:focus-visible {
+        outline: 2px solid var(--spark);
+        outline-offset: 2px;
+      }
+      #err {
+        color: #d98b6a;
+      }
 
       /* ------------------------------------------------------------------
          The saved-games modal.
@@ -876,7 +1013,12 @@
       #saveConfirmBtn,
       #saveUploadBtn,
       .save-icon {
-        font: 600 12px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font:
+          600 12px/1 ui-monospace,
+          "SF Mono",
+          Menlo,
+          Consolas,
+          monospace;
         color: var(--ink);
         background: linear-gradient(var(--wood-lit) 0%, var(--wood-shade) 100%);
         border: 1px solid var(--rule);
@@ -886,7 +1028,10 @@
       #saveModalClose:hover,
       #saveConfirmBtn:hover,
       #saveUploadBtn:hover,
-      .save-icon:hover { border-color: var(--spark); color: #fff; }
+      .save-icon:hover {
+        border-color: var(--spark);
+        color: #fff;
+      }
       #saveConfirmBtn {
         /* the one button that COMMITS, and the only ember in the dialog */
         background: linear-gradient(var(--flame) 0%, var(--ember) 100%);
@@ -925,7 +1070,12 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         text-align: left;
-        font: 400 13px/1.3 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font:
+          400 13px/1.3 ui-monospace,
+          "SF Mono",
+          Menlo,
+          Consolas,
+          monospace;
         color: var(--ink);
         background: #00000026;
         border: 1px solid transparent;
@@ -936,7 +1086,9 @@
         background: #00000040;
         border-color: var(--spark);
       }
-      .save-icon { padding: 6px 8px; }
+      .save-icon {
+        padding: 6px 8px;
+      }
       #saveModal .modal-foot {
         display: flex;
         align-items: center;
@@ -953,7 +1105,12 @@
       #saveNameInput {
         flex: 1;
         min-width: 0;
-        font: 400 13px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font:
+          400 13px/1 ui-monospace,
+          "SF Mono",
+          Menlo,
+          Consolas,
+          monospace;
         color: var(--ink);
         background: var(--soot);
         border: 1px solid var(--rule);
@@ -967,8 +1124,9 @@
         outline-offset: 2px;
       }
       /* the file picker is reached through its button, never shown itself */
-      #saveUploadInput { display: none; }
-
+      #saveUploadInput {
+        display: none;
+      }
 
       /* the boot log, over the picture. Not up during the boot any more — the
          fuse's caption carries the newest line and the wall of text fought the
@@ -988,7 +1146,11 @@
         backdrop-filter: blur(3px);
         border: 1px solid var(--edge);
         color: var(--ink);
-        font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace;
+        font:
+          12px/1.6 ui-monospace,
+          Menlo,
+          Consolas,
+          monospace;
         white-space: pre-wrap;
       }
 
@@ -996,27 +1158,60 @@
         /* the only two loops on the page, and both are on the fuse: a spark that
            gutters like a flame does, and the heat sliding along what it has
            already burnt. Everything else moves once, when the boot ends. */
-        #spark { animation: gutter 1.15s ease-in-out infinite; }
-        #burn::after { animation: heat 1.9s linear infinite; }
+        #spark {
+          animation: gutter 1.15s ease-in-out infinite;
+        }
+        #burn::after {
+          animation: heat 1.9s linear infinite;
+        }
         /* and the ember under the button, once there is a button */
-        #boot.ready #startwrap { animation: ember 2.9s ease-in-out 900ms infinite; }
+        #boot.ready #startwrap {
+          animation: ember 2.9s ease-in-out 900ms infinite;
+        }
       }
       @keyframes ember {
-        0%, 100% { filter: drop-shadow(0 0 0 #fb501100); }
-        50%      { filter: drop-shadow(0 0 13px #fb501199); }
+        0%,
+        100% {
+          filter: drop-shadow(0 0 0 #fb501100);
+        }
+        50% {
+          filter: drop-shadow(0 0 13px #fb501199);
+        }
       }
       @keyframes gutter {
-        0%, 100% { opacity: 1;    scale: 1; }
-        30%      { opacity: 0.72; scale: 0.86; }
-        55%      { opacity: 1;    scale: 1.1; }
-        78%      { opacity: 0.8;  scale: 0.94; }
+        0%,
+        100% {
+          opacity: 1;
+          scale: 1;
+        }
+        30% {
+          opacity: 0.72;
+          scale: 0.86;
+        }
+        55% {
+          opacity: 1;
+          scale: 1.1;
+        }
+        78% {
+          opacity: 0.8;
+          scale: 0.94;
+        }
       }
       @keyframes heat {
-        from { background-position: -50% 0; }
-        to   { background-position: 150% 0; }
+        from {
+          background-position: -50% 0;
+        }
+        to {
+          background-position: 150% 0;
+        }
       }
       @media (prefers-reduced-motion: reduce) {
-        #frame, #burn, #boot, #curtain::before { transition-duration: 1ms; }
+        #frame,
+        #burn,
+        #boot,
+        #curtain::before {
+          transition-duration: 1ms;
+        }
       }
     </style>
   </head>
@@ -1028,15 +1223,27 @@
       "Collection" either, because there is no physical release page for it.
     -->
     <header class="topbar">
-      <a class="brand" href="./" title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1995 release">
-        <img class="brand-mark" src="/dust-mark.svg" alt="" width="30" height="30" />
+      <a
+        class="brand"
+        href="./"
+        title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1995 release"
+      >
+        <img
+          class="brand-mark"
+          src="/dust-mark.svg"
+          alt=""
+          width="30"
+          height="30"
+        />
         <span class="brand-text">
           <b>Dust</b>
           <span>A Tale of the Wired West RE</span>
         </span>
       </a>
       <nav class="topnav">
-        <a href="../" title="dreamREfactory — the engine, and the other game">dreamREfactory</a>
+        <a href="../" title="dreamREfactory — the engine, and the other game"
+          >dreamREfactory</a
+        >
         <a href="../docs/">Docs</a>
         <a href="https://github.com/dhobi/dreamrefactory">Source</a>
       </nav>
@@ -1048,12 +1255,25 @@
            than leaving a broken frame, and tells the page so the band closes up:
            the logo is decoration and the experiment is the picture below it. -->
       <div id="curtain">
-        <img id="brand" src="./dust-logo.png" alt="Dust: A Tale of the Wired West RE"
-             onerror="this.hidden = true; document.body.classList.add('nobrand')" />
+        <img
+          id="brand"
+          src="./dust-logo.png"
+          alt="Dust: A Tale of the Wired West RE"
+          onerror="
+            this.hidden = true;
+            document.body.classList.add('nobrand');
+          "
+        />
         <div id="boot">
           <div id="gauge">
-            <div id="fuse" role="progressbar" aria-label="booting"
-                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div
+              id="fuse"
+              role="progressbar"
+              aria-label="booting"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
               <div id="burn" style="width: 0%"><i id="spark"></i></div>
             </div>
             <div id="bootline">
@@ -1063,14 +1283,18 @@
           </div>
           <!-- the gesture the AudioContext needs, asked for at the one moment
                when waiting for it costs nothing: see #start in the styles -->
-          <div id="startwrap"><button id="start" type="button">Start</button></div>
+          <div id="startwrap">
+            <button id="start" type="button">Start</button>
+          </div>
           <!-- The gesture, taught where there is room to say it properly: under
                the Start button, before the picture exists. The strip's version of
                this line has to fit beside two checkboxes and a version number at
                400px, which leaves it about eighteen characters — not enough for the
                half that matters (double-tap is the one thing no one guesses). So
                the full sentence lives here, and only on a device that can swipe. -->
-          <p id="touchtip">swipe to walk and turn · double-tap for <b>esc</b></p>
+          <p id="touchtip">
+            swipe to walk and turn · double-tap for <b>esc</b>
+          </p>
         </div>
       </div>
       <div id="frame">
@@ -1092,24 +1316,31 @@
          per move, which is a better shape for it: a trace you can scroll back
          through rather than a number that overwrites itself. -->
     <div id="strip">
-      <span class="keyhint" title="←/→ turn · ↑ walk · c cycles the clut · b opens the boot log"
-        ><span class="k">←</span>/<span class="k">→</span> turn <span class="k">↑</span> walk
-        <span class="k">c</span> clut <span class="k">b</span> for the boot log</span
+      <span
+        class="keyhint"
+        title="←/→ turn · ↑ walk · c cycles the clut · b opens the boot log"
+        ><span class="k">←</span>/<span class="k">→</span> turn
+        <span class="k">↑</span> walk <span class="k">c</span> clut
+        <span class="k">b</span> for the boot log</span
       >
       <!-- the same line for a phone, which has none of those keys. Swapped by a
            media query rather than by script, because it is a question about the
            POINTER and CSS is what knows the answer without asking. -->
-      <span class="touchhint" title="swipe up to walk, left/right to turn · double-tap for escape"
+      <span
+        class="touchhint"
+        title="swipe up to walk, left/right to turn · double-tap for escape"
         >swipe · <span class="k">2-tap</span> esc</span
       >
       <!-- Which way a swipe reads. Only a device that can swipe is asked:
            dust/src/main.ts's installSwipeOptions unhides this and remembers both boxes. -->
       <span id="swipeOpts" hidden
         ><label title="a swipe from right to left turns right, not left"
-          ><input type="checkbox" id="swipeInvertTurn" /><span class="word">invert</span
+          ><input type="checkbox" id="swipeInvertTurn" /><span class="word"
+            >invert</span
           ><span class="k">←/→</span></label
         ><label title="a swipe downwards walks on, not one upwards"
-          ><input type="checkbox" id="swipeInvertWalk" /><span class="word">invert</span
+          ><input type="checkbox" id="swipeInvertWalk" /><span class="word"
+            >invert</span
           ><span class="k">↑</span></label
         ></span
       >
