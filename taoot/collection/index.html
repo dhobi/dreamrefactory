@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title data-i18n="collection.docTitle">Collection — Titanic - Adventure Out Of Time RE</title>
+    <title data-i18n="collection.docTitle">
+      Collection — Titanic - Adventure Out Of Time RE
+    </title>
     <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
     <meta name="site-root" content="../" />
     <link rel="icon" type="image/png" href="/globe-mark.png" />
@@ -18,9 +20,12 @@
        * a real 3D object (taoot/src/collection.ts ports the old site's cover.js), so
        * turning it is worth building even though nothing here plays; the disc
        * is flat because a CD never had a second side worth spinning to. The
-       * offline half sends you OFF this site entirely — the seven archives are
-       * ~1 GB each and live at danielhobi.ch, never in this repository, for the
-       * same reason gamefiles/ is gitignored: no game data ships here.
+       * The archives are ~1 GB each and sit beside the rip on the host — one
+       * directory up from this page, `dreamrefactory/taoot/*.dbgl.zip` — never in
+       * this repository, for the same reason gamefiles/ is gitignored: no game
+       * data ships here. The links were absolute to `danielhobi.ch/taoot/` while
+       * that was where the files lived; relative now, so this page and its
+       * downloads move together and a staging copy points at its own.
        *
        * Sizes and filenames — `1.1 GB`, `taoot_de_offline.dbgl.zip` — are
        * numbers and names read off a real file, the same kind of thing `.SHP`
@@ -149,7 +154,8 @@
         transform: translateZ(calc(var(--d) / 2));
       }
       .face.back {
-        transform: rotateZ(180deg) rotateX(-180deg) translateZ(calc(var(--d) / 2));
+        transform: rotateZ(180deg) rotateX(-180deg)
+          translateZ(calc(var(--d) / 2));
       }
       .face.right {
         transform: rotateY(90deg) translateZ(calc(var(--w) / 2));
@@ -284,7 +290,12 @@
         left: calc(var(--page) - 10px);
         width: 20px;
         pointer-events: none;
-        background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.45), transparent);
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(0, 0, 0, 0.45),
+          transparent
+        );
       }
 
       .turning {
@@ -454,8 +465,19 @@
   </head>
   <body class="deep">
     <header class="topbar">
-      <a class="brand" href="../" title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1996 release" data-i18n-attr="title:site.brandTitle">
-        <img class="brand-mark" src="/globe-mark.png" alt="" width="30" height="30" />
+      <a
+        class="brand"
+        href="../"
+        title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1996 release"
+        data-i18n-attr="title:site.brandTitle"
+      >
+        <img
+          class="brand-mark"
+          src="/globe-mark.png"
+          alt=""
+          width="30"
+          height="30"
+        />
         <span class="brand-text">
           <b>Titanic</b>
           <span>Adventure Out Of Time RE</span>
@@ -463,28 +485,46 @@
       </a>
       <nav class="topnav">
         <a href="../play/" data-i18n="site.navPlay">Play</a>
-        <a href="../collection/" class="here" data-i18n="site.navCollection">Collection</a>
-        <a href="../../" title="dreamREfactory — the engine, and the other game">dreamREfactory</a>
+        <a href="../collection/" class="here" data-i18n="site.navCollection"
+          >Collection</a
+        >
+        <a href="../../" title="dreamREfactory — the engine, and the other game"
+          >dreamREfactory</a
+        >
         <a href="../../docs/" data-i18n="site.navDocs">Docs</a>
-        <a href="https://github.com/dhobi/dreamrefactory" data-i18n="site.navSource">Source</a>
+        <a
+          href="https://github.com/dhobi/dreamrefactory"
+          data-i18n="site.navSource"
+          >Source</a
+        >
       </nav>
     </header>
 
     <div id="collection">
       <section class="release">
         <h1 data-i18n="collection.h1">The Collection</h1>
-        <p class="intro" data-i18n="collection.intro"
-          >Here you will find scanned and published material about the game. At
-          the bottom of the page are the archives that let you play it offline in
-          several languages (DOSBox).</p
-        >
+        <p class="intro" data-i18n="collection.intro">
+          Here you will find scanned and published material about the game. At
+          the bottom of the page are the archives that let you play it offline
+          in several languages (DOSBox).
+        </p>
 
         <!-- taoot/src/collection.ts appends the five endonym buttons here, off the
              same taoot/src/languages.ts list the top bar's own language menu reads -->
         <!-- a role="group" with no accessible name is an unnamed group, so the
              label the sighted reader sees is the one it points at -->
-        <div class="editionPicker" id="editionPicker" role="group" aria-labelledby="editionLabel">
-          <span class="pickerLabel" id="editionLabel" data-i18n="site.editionLabel">Edition</span>
+        <div
+          class="editionPicker"
+          id="editionPicker"
+          role="group"
+          aria-labelledby="editionLabel"
+        >
+          <span
+            class="pickerLabel"
+            id="editionLabel"
+            data-i18n="site.editionLabel"
+            >Edition</span
+          >
         </div>
 
         <div class="viewer">
@@ -493,12 +533,48 @@
                  currently-selected edition; nothing is mounted until then -->
             <div id="box" class="box" tabindex="0"></div>
             <div class="faceButtons">
-              <button type="button" data-face="front" data-i18n="collection.faceFront">Front</button>
-              <button type="button" data-face="back" data-i18n="collection.faceBack">Back</button>
-              <button type="button" data-face="left" data-i18n="collection.faceLeft">Left spine</button>
-              <button type="button" data-face="right" data-i18n="collection.faceRight">Right spine</button>
-              <button type="button" data-face="top" data-i18n="collection.faceTop">Top</button>
-              <button type="button" data-face="bottom" data-i18n="collection.faceBottom">Bottom</button>
+              <button
+                type="button"
+                data-face="front"
+                data-i18n="collection.faceFront"
+              >
+                Front
+              </button>
+              <button
+                type="button"
+                data-face="back"
+                data-i18n="collection.faceBack"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                data-face="left"
+                data-i18n="collection.faceLeft"
+              >
+                Left spine
+              </button>
+              <button
+                type="button"
+                data-face="right"
+                data-i18n="collection.faceRight"
+              >
+                Right spine
+              </button>
+              <button
+                type="button"
+                data-face="top"
+                data-i18n="collection.faceTop"
+              >
+                Top
+              </button>
+              <button
+                type="button"
+                data-face="bottom"
+                data-i18n="collection.faceBottom"
+              >
+                Bottom
+              </button>
             </div>
           </div>
 
@@ -511,95 +587,139 @@
       </section>
 
       <section class="booklet">
-        <h2 id="bookletHeading" data-i18n="collection.bookletHeading">The booklet</h2>
-        <p class="intro" data-i18n="collection.bookletIntro"
-          >Folded into the box was a 32-page booklet: the manual, the controls,
-          and several pages of period detail about the ship. Only the German
-          one was ever scanned, so this is the one edition that has it. Click
-          either half to turn a page.</p
-        >
+        <h2 id="bookletHeading" data-i18n="collection.bookletHeading">
+          The booklet
+        </h2>
+        <p class="intro" data-i18n="collection.bookletIntro">
+          Folded into the box was a 32-page booklet: the manual, the controls,
+          and several pages of period detail about the ship. Only the German one
+          was ever scanned, so this is the one edition that has it. Click either
+          half to turn a page.
+        </p>
 
         <!-- taoot/src/booklet.ts fills this with the two halves of the current
              spread, and lays a turning leaf over them while a page is in the
              air; nothing is mounted until an edition with a scan is picked -->
-        <div id="book" class="book" tabindex="0" role="group" aria-labelledby="bookletHeading" hidden></div>
+        <div
+          id="book"
+          class="book"
+          tabindex="0"
+          role="group"
+          aria-labelledby="bookletHeading"
+          hidden
+        ></div>
 
         <div class="bookControls" id="bookControls" hidden>
-          <button type="button" id="bookPrev" aria-label="Previous pages" data-i18n-attr="aria-label:collection.bookletPrev">‹</button>
+          <button
+            type="button"
+            id="bookPrev"
+            aria-label="Previous pages"
+            data-i18n-attr="aria-label:collection.bookletPrev"
+          >
+            ‹
+          </button>
           <!-- page numbers, written by taoot/src/booklet.ts; polite so that turning a
                page says which two are now open rather than going by in silence -->
           <span class="bookCount" id="bookCount" aria-live="polite"></span>
-          <button type="button" id="bookNext" aria-label="Next pages" data-i18n-attr="aria-label:collection.bookletNext">›</button>
+          <button
+            type="button"
+            id="bookNext"
+            aria-label="Next pages"
+            data-i18n-attr="aria-label:collection.bookletNext"
+          >
+            ›
+          </button>
         </div>
 
-        <p class="bookletNone" id="bookletNone" hidden data-i18n="collection.bookletNone"
-          >This pressing's booklet was never scanned — only the German one is
-          here.</p
+        <p
+          class="bookletNone"
+          id="bookletNone"
+          hidden
+          data-i18n="collection.bookletNone"
         >
+          This pressing's booklet was never scanned — only the German one is
+          here.
+        </p>
       </section>
 
       <section class="offline">
         <h2 data-i18n="collection.offlineHeading">Play it offline</h2>
-        <p data-i18n="collection.offlineIntro"
-          >The 1996 game, not this port: the original DOS executable, run
-          through DOSBox behind a front end that manages the setup. Four steps
-          get it running.</p
-        >
+        <p data-i18n="collection.offlineIntro">
+          The 1996 game, not this port: the original DOS executable, run through
+          DOSBox behind a front end that manages the setup. Four steps get it
+          running.
+        </p>
 
         <ol class="steps">
-          <li data-i18n-html="collection.step1"
-            >Download and install <a href="https://dbgl.org/">DBGL</a> (DOSBox
-            Game Launcher) — a front end for DOSBox.</li
-          >
-          <li data-i18n="collection.step2"
-            >Download one of the archives below. Do not unzip it — DBGL does
-            that itself.</li
-          >
-          <li data-i18n="collection.step3"
-            >In DBGL, choose Profiles → Import… and pick the file you
-            downloaded.</li
-          >
-          <li data-i18n="collection.step4">Select the imported profile and press Play.</li>
+          <li data-i18n-html="collection.step1">
+            Download and install <a href="https://dbgl.org/">DBGL</a> (DOSBox
+            Game Launcher) — a front end for DOSBox.
+          </li>
+          <li data-i18n="collection.step2">
+            Download one of the archives below. Do not unzip it — DBGL does that
+            itself.
+          </li>
+          <li data-i18n="collection.step3">
+            In DBGL, choose Profiles → Import… and pick the file you downloaded.
+          </li>
+          <li data-i18n="collection.step4">
+            Select the imported profile and press Play.
+          </li>
         </ol>
 
         <h3 data-i18n="collection.archivesHeading">The archives</h3>
         <ul class="archives">
           <li>
-            <a href="https://danielhobi.ch/taoot/taoot_en_offline.dbgl.zip">Titanic: Adventure out of time</a>
+            <a href="../taoot_en_offline.dbgl.zip"
+              >Titanic: Adventure out of time</a
+            >
             <span class="size">1.1 GB</span>
           </li>
           <li>
-            <a href="https://danielhobi.ch/taoot/taoot_en_demo_offline.dbgl.zip">Titanic: The lost mission</a>
+            <a href="../taoot_en_demo_offline.dbgl.zip"
+              >Titanic: The lost mission</a
+            >
             <span class="size">324 MB</span>
           </li>
           <li>
-            <a href="https://danielhobi.ch/taoot/taoot_de_offline.dbgl.zip">Titanic: Wettlauf gegen die Zeit</a>
+            <a href="../taoot_de_offline.dbgl.zip"
+              >Titanic: Wettlauf gegen die Zeit</a
+            >
             <span class="size">1.06 GB</span>
           </li>
           <li>
-            <a href="https://danielhobi.ch/taoot/taoot_fr_offline.dbgl.zip">Titanic: Une aventure hors du temps</a>
+            <a href="../taoot_fr_offline.dbgl.zip"
+              >Titanic: Une aventure hors du temps</a
+            >
             <span class="size">1.05 GB</span>
           </li>
           <li>
-            <a href="https://danielhobi.ch/taoot/taoot_ru_offline.dbgl.zip">Титаник: Прошлое можно изменить</a>
+            <a href="../taoot_ru_offline.dbgl.zip"
+              >Титаник: Прошлое можно изменить</a
+            >
             <span class="size">1.06 GB</span>
           </li>
           <li>
-            <a href="https://danielhobi.ch/taoot/taoot_ne_offline.dbgl.zip">Titanic: Avontuur in de tijd</a>
+            <a href="../taoot_ne_offline.dbgl.zip"
+              >Titanic: Avontuur in de tijd</a
+            >
             <span class="size">1.1 GB</span>
           </li>
           <li>
-            <a href="https://danielhobi.ch/taoot/taoot_jp_offline.dbgl.zip">タイタニック: Adventure out of time</a>
+            <a href="../taoot_jp_offline.dbgl.zip"
+              >タイタニック: Adventure out of time</a
+            >
             <span class="size">1.1 GB</span>
           </li>
         </ul>
 
-        <p class="rights" data-i18n-html="collection.rightsNote"
-          >Nightdive Studios is the publisher of Titanic: Adventure Out Of
-          Time; the English version is sold on
-          <a href="https://www.gog.com/game/titanic_adventure_out_of_time">GOG</a
-          >. The other languages have never been re-released.</p
-        >
+        <p class="rights" data-i18n-html="collection.rightsNote">
+          Nightdive Studios is the publisher of Titanic: Adventure Out Of Time;
+          the English version is sold on
+          <a href="https://www.gog.com/game/titanic_adventure_out_of_time"
+            >GOG</a
+          >. The other languages have never been re-released.
+        </p>
       </section>
     </div>
 

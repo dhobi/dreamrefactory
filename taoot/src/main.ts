@@ -20,24 +20,50 @@
  * game plays through now, so what they offered is the game itself, and the
  * editors and the browser suite cover what they were used for besides.
  */
-import { DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
-import { isMoveSpeed, isPictureMode, MOVE_SPEED_MS } from "@dreamfactory/engine/runtime/session";
+import {
+  DeferredAudioSink,
+  WebAudioSink,
+} from "@dreamfactory/engine/runtime/audio";
+import {
+  isMoveSpeed,
+  isPictureMode,
+  MOVE_SPEED_MS,
+} from "@dreamfactory/engine/runtime/session";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { loadTemplates, saveTemplateFor, seedSaves } from "./save-seed";
-import { browseForLoad, browseForSave } from "@dreamfactory/engine/web/save-browser";
+import {
+  browseForLoad,
+  browseForSave,
+} from "@dreamfactory/engine/web/save-browser";
 import { TAOOT_SAVES, useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { readSaveFile } from "@dreamfactory/engine/df/savegame";
 import { FileStore } from "./files";
 import { StateTrace, snapshotState } from "@dreamfactory/engine/runtime/trace";
 import { seededRng } from "@dreamfactory/engine/runtime/rng";
 import { LangChooser, chooserOrder, preselectedEdition } from "./lang-chooser";
-import { GOG_URL, NIGHTDIVE_MOVIE, NightdiveIntro, Ownership, introPlaysFor } from "./nightdive";
-import { DEFAULT_LANGUAGE, EDITION_STORAGE_KEY, LANG_STAGE, editionName } from "./languages";
+import {
+  GOG_URL,
+  NIGHTDIVE_MOVIE,
+  NightdiveIntro,
+  Ownership,
+  introPlaysFor,
+} from "./nightdive";
+import {
+  DEFAULT_LANGUAGE,
+  EDITION_STORAGE_KEY,
+  LANG_STAGE,
+  editionName,
+} from "./languages";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { VERSION, installVersion } from "@dreamfactory/site/version";
-import { gamefileManifest, gamefileSizes, installEditionPicker, markEdition } from "./editions";
+import {
+  gamefileManifest,
+  gamefileSizes,
+  installEditionPicker,
+  markEdition,
+} from "./editions";
 import { installI18n, t } from "@dreamfactory/site/locales";
-import { installBugReport } from "./bug-report";
+import { installBugReport } from "@dreamfactory/site/bug-report";
 import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
 import { ChangeWatch, RowView, stateDump, stateView } from "./debug-panel";
 import { focusOwnsKey, swipeKey } from "@dreamfactory/engine/web/keys";
@@ -108,10 +134,18 @@ const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
 const bugNote = document.getElementById("bugNote");
 /** which way a swipe reads — its own row, hidden unless the pointer is a finger */
 const swipeOpts = document.getElementById("swipeOpts");
-const swipeInvertTurnBox = document.getElementById("swipeInvertTurn") as HTMLInputElement | null;
-const swipeInvertWalkBox = document.getElementById("swipeInvertWalk") as HTMLInputElement | null;
-const pictureModeSel = document.getElementById("pictureMode") as HTMLSelectElement | null;
-const lowMemoryBox = document.getElementById("lowMemory") as HTMLInputElement | null;
+const swipeInvertTurnBox = document.getElementById(
+  "swipeInvertTurn",
+) as HTMLInputElement | null;
+const swipeInvertWalkBox = document.getElementById(
+  "swipeInvertWalk",
+) as HTMLInputElement | null;
+const pictureModeSel = document.getElementById(
+  "pictureMode",
+) as HTMLSelectElement | null;
+const lowMemoryBox = document.getElementById(
+  "lowMemory",
+) as HTMLInputElement | null;
 const brightnessSeg = document.getElementById("brightnessSeg");
 const brightnessValue = document.getElementById("brightnessValue");
 const movementSeg = document.getElementById("movementSeg");
@@ -145,10 +179,16 @@ const mapCtx = minimap.getContext("2d")!;
 // (engine/src/web/screen.ts), so nothing in the renderer cares.
 fsBtn?.addEventListener("click", () => {
   if (document.fullscreenElement) void document.exitFullscreen();
-  else void stage.requestFullscreen().catch((e) => log(`fullscreen: ${e.message}`));
+  else
+    void stage
+      .requestFullscreen()
+      .catch((e) => log(`fullscreen: ${e.message}`));
 });
 document.addEventListener("fullscreenchange", () => {
-  if (fsBtn) fsBtn.textContent = document.fullscreenElement ? "⛶ Exit fullscreen" : "⛶ Fullscreen";
+  if (fsBtn)
+    fsBtn.textContent = document.fullscreenElement
+      ? "⛶ Exit fullscreen"
+      : "⛶ Fullscreen";
 });
 
 /** every game file the page has seen, plus the dev-server manifest */
@@ -207,6 +247,8 @@ let editionCode = DEFAULT_LANGUAGE;
 if (bugBtn) {
   installBugReport(bugBtn, {
     canvas: screen,
+    shotName: "taoot-bug.png",
+    version: VERSION,
     where: () => hud.textContent ?? "",
     edition: () => `${editionName(editionCode)} (gamefiles/${editionCode}/)`,
     log: (n) => logLines.tail(n),
@@ -215,7 +257,9 @@ if (bugBtn) {
     note: (how) => {
       if (!bugNote) return;
       bugNote.textContent =
-        how === "clipboard" ? t("play.bugShotClipboard") : t("play.bugShotFile");
+        how === "clipboard"
+          ? t("play.bugShotClipboard")
+          : t("play.bugShotFile");
       window.setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
     },
   });
@@ -251,7 +295,8 @@ function log(line: string): void {
   // something further up is a question of its own, and yanking the pane back
   // down answers a different one. 4px, because a zoomed page makes these
   // fractional.
-  const atTail = scriptlog.scrollHeight - scriptlog.scrollTop - scriptlog.clientHeight < 4;
+  const atTail =
+    scriptlog.scrollHeight - scriptlog.scrollTop - scriptlog.clientHeight < 4;
   const write = logLines.push(line);
   scriptlog.style.display = "block";
   if (stage.style.display === "none") details.hidden = false;
@@ -365,7 +410,8 @@ session.onNoteDialog = (message) => {
   window.alert(message);
 };
 session.onQuestionDialog = (message) => window.confirm(message);
-session.onTextDialog = (prompt, initial) => window.prompt(prompt, initial) ?? "";
+session.onTextDialog = (prompt, initial) =>
+  window.prompt(prompt, initial) ?? "";
 // quit(): the game is over — the original leaves for the desktop, and what a
 // page can offer instead is the thing it left FOR, its own front door. So go
 // back to the boot: the logos, then the Play / Guided Tour menu, with a session
@@ -409,7 +455,8 @@ session.onQuit = () => {
 // hasRealFrames also relaxes the interpreter's while-loop runaway guard for
 // such loops — only valid here, where each iteration really waits on a frame.
 session.hasRealFrames = true;
-session.nextFrame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
+session.nextFrame = () =>
+  new Promise<void>((res) => requestAnimationFrame(() => res()));
 // default name offered in the save browser: the current set + a timestamp.
 function defaultSaveName(): string {
   const set = session.currentSetFile || "game";
@@ -584,7 +631,8 @@ async function runLangChooser(available: string[]): Promise<string | null> {
  * to handle: it is already how every non-English edition and every deployment
  * with no film served boots. See {@link Ownership}.
  */
-const skipsIntro = (): boolean => !!document.querySelector('meta[name="skip-intro"]');
+const skipsIntro = (): boolean =>
+  !!document.querySelector('meta[name="skip-intro"]');
 
 /**
  * Does this page want the music off?
@@ -604,7 +652,8 @@ const skipsIntro = (): boolean => !!document.querySelector('meta[name="skip-intr
  * it would be a property of what a page is for, not of a visit. The CTL panel's
  * theme lever is the per-session answer either way.
  */
-const mutesTheme = (): boolean => !!document.querySelector('meta[name="mute-theme"]');
+const mutesTheme = (): boolean =>
+  !!document.querySelector('meta[name="mute-theme"]');
 
 /**
  * Which copy of the game this PAGE plays, if it is not a question.
@@ -624,7 +673,10 @@ const mutesTheme = (): boolean => !!document.querySelector('meta[name="mute-them
  * tree that was never ripped cannot leave the page with nothing to boot.
  */
 const pinnedEdition = (): string | null =>
-  document.querySelector('meta[name="edition"]')?.getAttribute("content")?.toLowerCase() ?? null;
+  document
+    .querySelector('meta[name="edition"]')
+    ?.getAttribute("content")
+    ?.toLowerCase() ?? null;
 
 async function runNightdiveIntro(): Promise<Ownership> {
   const intro = new NightdiveIntro(session);
@@ -650,7 +702,14 @@ async function runNightdiveIntro(): Promise<Ownership> {
   const onKey = (e: KeyboardEvent): void => {
     ensureAudio();
     if (e.key === "Escape") intro.key(".", true);
-    else if (e.key.length === 1 && e.key >= "0" && e.key <= "9" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    else if (
+      e.key.length === 1 &&
+      e.key >= "0" &&
+      e.key <= "9" &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey
+    ) {
       if (!focusOwnsKey(e.target, e.key)) intro.key(e.key, false);
     }
   };
@@ -695,8 +754,10 @@ async function resolveEdition(): Promise<{ code: string; asked: boolean }> {
 
   // a page that names its edition is not asking — see pinnedEdition
   const pinned = pinnedEdition();
-  if (pinned && installed.includes(pinned)) return { code: pinned, asked: false };
-  if (pinned) log(`this page asks for the ${pinned} edition, which is not installed`);
+  if (pinned && installed.includes(pinned))
+    return { code: pinned, asked: false };
+  if (pinned)
+    log(`this page asks for the ${pinned} edition, which is not installed`);
 
   let remembered: string | null = null;
   try {
@@ -709,7 +770,8 @@ async function resolveEdition(): Promise<{ code: string; asked: boolean }> {
   if (pre) return { code: pre, asked: false };
 
   const askable = chooserOrder(installed);
-  const picked = askable.length > 1 ? await runLangChooser(askable) : askable[0];
+  const picked =
+    askable.length > 1 ? await runLangChooser(askable) : askable[0];
   if (!picked) return { code: installed[0], asked: false };
   try {
     window.localStorage.setItem(EDITION_STORAGE_KEY, picked);
@@ -808,10 +870,14 @@ async function initServerBrowser(): Promise<void> {
   // bar is not suppressed for it the way it is for the chooser: the bar lives
   // inside #booting, which the intro takes down only once it has a picture, so a
   // deployment with no film served still shows the bytes arriving.
-  const intro: Promise<Ownership> = introPlaysFor(code) && !skipsIntro()
-    ? runNightdiveIntro()
-    : Promise.resolve("unanswered");
-  const loading = host.preload({ sizeOf, onProgress: asked ? undefined : showPreload });
+  const intro: Promise<Ownership> =
+    introPlaysFor(code) && !skipsIntro()
+      ? runNightdiveIntro()
+      : Promise.resolve("unanswered");
+  const loading = host.preload({
+    sizeOf,
+    onProgress: asked ? undefined : showPreload,
+  });
   // "No" leaves. Not a new tab — a navigation, and the film has already said so
   // on its own last frame ("OPENING GOG.COM") while this was still waiting on it.
   // Nothing after this line runs: the preload still in flight goes with the page,
@@ -1034,7 +1100,8 @@ screen.addEventListener("pointermove", (e) => {
   const { x, y } = canvasCoords(e);
   session.setPointer(x, y);
   if (g.pressed || g.swiped) return; // already committed either way
-  if (Math.hypot(e.clientX - g.clientX, e.clientY - g.clientY) < SWIPE_MIN_PX) return;
+  if (Math.hypot(e.clientX - g.clientX, e.clientY - g.clientY) < SWIPE_MIN_PX)
+    return;
   // committed to a swipe; the DIRECTION is read at release, off the whole
   // journey, so a wobbly first few pixels don't get to choose it
   g.swiped = true;
@@ -1126,12 +1193,22 @@ const SWIPE_INVERT_WALK_KEY = "taoot.swipe.invertwalk";
  * setting has to be reachable.
  */
 function installSwipeOptions(): void {
-  const touchable = navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
+  const touchable =
+    navigator.maxTouchPoints > 0 ||
+    window.matchMedia("(pointer: coarse)").matches;
   if (!touchable) return;
   if (!swipeOpts || !swipeInvertTurnBox || !swipeInvertWalkBox) return;
   swipeOpts.hidden = false;
-  bindSwipeOption(swipeInvertTurnBox, SWIPE_INVERT_TURN_KEY, (on) => (swipeInvert.turn = on));
-  bindSwipeOption(swipeInvertWalkBox, SWIPE_INVERT_WALK_KEY, (on) => (swipeInvert.walk = on));
+  bindSwipeOption(
+    swipeInvertTurnBox,
+    SWIPE_INVERT_TURN_KEY,
+    (on) => (swipeInvert.turn = on),
+  );
+  bindSwipeOption(
+    swipeInvertWalkBox,
+    SWIPE_INVERT_WALK_KEY,
+    (on) => (swipeInvert.walk = on),
+  );
 }
 
 /**
@@ -1156,7 +1233,12 @@ function installPictureOptions(): void {
   // Its own row and its own question: this one is the GAME's setting, not the
   // page's — the box only changes what `heapsize()` answers, and TAOOT's own
   // scripts decide what that is worth (GameSession.lowMemory).
-  if (lowMemoryBox) bindSwipeOption(lowMemoryBox, LOW_MEMORY_KEY, (on) => (session.lowMemory = on));
+  if (lowMemoryBox)
+    bindSwipeOption(
+      lowMemoryBox,
+      LOW_MEMORY_KEY,
+      (on) => (session.lowMemory = on),
+    );
 }
 
 /** where the picture answers outlive the tab */
@@ -1176,7 +1258,11 @@ function bindPictureMode(): void {
   let stored: string | null = null;
   try {
     stored = window.localStorage.getItem(PICTURE_MODE_KEY);
-    if (stored === null && window.localStorage.getItem(SHARP_LANDING_KEY) === "1") stored = "sharp";
+    if (
+      stored === null &&
+      window.localStorage.getItem(SHARP_LANDING_KEY) === "1"
+    )
+      stored = "sharp";
   } catch {
     /* storage can be denied; the game then starts on the original every launch */
   }
@@ -1219,8 +1305,11 @@ const BRIGHTNESS_PRESETS: Record<string, number> = {
 
 function installBrightness(): void {
   if (!brightnessSeg) return;
-  const radios = [...brightnessSeg.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
-  const gammaFor = (steps: number): number => DEFAULT_SCREEN_GAMMA / Math.pow(SCREEN_GAMMA_STEP, steps);
+  const radios = [
+    ...brightnessSeg.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+  ];
+  const gammaFor = (steps: number): number =>
+    DEFAULT_SCREEN_GAMMA / Math.pow(SCREEN_GAMMA_STEP, steps);
   /** the preset the live gamma IS, or "" when the keys have put it between two */
   const presetNow = (): string => {
     const g = screenGamma();
@@ -1240,7 +1329,8 @@ function installBrightness(): void {
   } catch {
     /* storage can be denied; the presets then start at the default every launch */
   }
-  if (stored && stored in BRIGHTNESS_PRESETS) setScreenGamma(gammaFor(BRIGHTNESS_PRESETS[stored]));
+  if (stored && stored in BRIGHTNESS_PRESETS)
+    setScreenGamma(gammaFor(BRIGHTNESS_PRESETS[stored]));
   show();
   for (const r of radios) {
     r.addEventListener("change", () => {
@@ -1282,10 +1372,13 @@ function installBrightness(): void {
  */
 function installMovement(): void {
   if (!movementSeg) return;
-  const radios = [...movementSeg.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+  const radios = [
+    ...movementSeg.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+  ];
   const show = (): void => {
     for (const r of radios) r.checked = r.value === session.moveSpeed;
-    if (movementValue) movementValue.textContent = `${MOVE_SPEED_MS[session.moveSpeed]} ms`;
+    if (movementValue)
+      movementValue.textContent = `${MOVE_SPEED_MS[session.moveSpeed]} ms`;
   };
   let stored: string | null = null;
   try {
@@ -1312,7 +1405,11 @@ function installMovement(): void {
 /** set by {@link installBrightness} so the F-keys can refresh the presets */
 let onScreenGammaShown: (() => void) | null = null;
 
-function bindSwipeOption(box: HTMLInputElement, key: string, apply: (on: boolean) => void): void {
+function bindSwipeOption(
+  box: HTMLInputElement,
+  key: string,
+  apply: (on: boolean) => void,
+): void {
   let stored: string | null = null;
   try {
     stored = window.localStorage.getItem(key);
@@ -1362,11 +1459,16 @@ const changeWatch = new ChangeWatch();
  * re-made every row four times a second whether or not the game had done anything.
  * See {@link RowView} — an update over a quiet game now writes nothing.
  */
-const spineView = new RowView(dbgSpine, { row: "span", name: "span", value: "span" }, "");
+const spineView = new RowView(
+  dbgSpine,
+  { row: "span", name: "span", value: "span" },
+  "",
+);
 const rowsView = new RowView(dbgRows);
 
 function installDebugPanel(): void {
-  const asked = new URLSearchParams(window.location.search).get("debug") === "1";
+  const asked =
+    new URLSearchParams(window.location.search).get("debug") === "1";
   if (asked) {
     details.hidden = false;
     try {
@@ -1380,7 +1482,8 @@ function installDebugPanel(): void {
     dbgState.hidden = !on;
     if (on) refreshState();
   });
-  for (const el of [dbgFilter, dbgAll]) el.addEventListener("input", () => refreshState());
+  for (const el of [dbgFilter, dbgAll])
+    el.addEventListener("input", () => refreshState());
   dbgCopy.addEventListener("click", () => void copyDetails());
   window.setInterval(() => {
     // Only while it can be read: the snapshot walks the globals, the props and the
@@ -1412,7 +1515,14 @@ function refreshState(): void {
   // happening", and 156 variables sitting still IS the answer.
   const rows = view.rest.length
     ? view.rest
-    : [{ name: view.hidden ? `${view.hidden} unchanged` : "—", value: "", changed: false, quiet: true }];
+    : [
+        {
+          name: view.hidden ? `${view.hidden} unchanged` : "—",
+          value: "",
+          changed: false,
+          quiet: true,
+        },
+      ];
   rowsView.apply(rows);
 }
 
@@ -1505,7 +1615,8 @@ const DF_KEY: Record<string, string> = {
  * TI.EXE's 0x1fa0 marker: the key is ESC, or was held with Ctrl. The movie key
  * filter requires it, so a plain "." typed at a movie is not an abort.
  */
-const isSpecialKey = (e: KeyboardEvent): boolean => e.key === "Escape" || e.ctrlKey;
+const isSpecialKey = (e: KeyboardEvent): boolean =>
+  e.key === "Escape" || e.ctrlKey;
 
 /**
  * The original's display-gamma keys, by virtual key — TI.EXE's WM_KEYDOWN jump
@@ -1518,17 +1629,18 @@ const isSpecialKey = (e: KeyboardEvent): boolean => e.key === "Escape" || e.ctrl
  * dispatches on the virtual key alone, with no Ctrl test on these arms, so Ctrl
  * makes no difference and both work.
  */
-const GAMMA_KEYS: Record<string, { up: boolean; ch: GammaChannels } | "reset"> = {
-  F1: { up: false, ch: ALL_CHANNELS },
-  F2: { up: true, ch: ALL_CHANNELS },
-  F3: { up: false, ch: [true, false, false] },
-  F4: { up: true, ch: [true, false, false] },
-  F5: { up: false, ch: [false, true, false] },
-  F6: { up: true, ch: [false, true, false] },
-  F7: { up: false, ch: [false, false, true] },
-  F8: { up: true, ch: [false, false, true] },
-  F9: "reset",
-};
+const GAMMA_KEYS: Record<string, { up: boolean; ch: GammaChannels } | "reset"> =
+  {
+    F1: { up: false, ch: ALL_CHANNELS },
+    F2: { up: true, ch: ALL_CHANNELS },
+    F3: { up: false, ch: [true, false, false] },
+    F4: { up: true, ch: [true, false, false] },
+    F5: { up: false, ch: [false, true, false] },
+    F6: { up: true, ch: [false, true, false] },
+    F7: { up: false, ch: [false, false, true] },
+    F8: { up: true, ch: [false, false, true] },
+    F9: "reset",
+  };
 
 window.addEventListener("keydown", (e) => {
   // The gamma keys go FIRST — before the viewer guard below, not after it, which is
@@ -1546,7 +1658,8 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     return;
   }
-  const isDetailsKey = !focusOwnsKey(e.target, e.key) && (e.key === "x" || e.key === "X");
+  const isDetailsKey =
+    !focusOwnsKey(e.target, e.key) && (e.key === "x" || e.key === "X");
   // X outranks the VIEWER guard for the same reason the gamma keys do, and it is a
   // stronger case than theirs: the pane REMEMBERS being open (taoot.details.open),
   // so a reader who left it up gets it back on the loading screen — and behind the

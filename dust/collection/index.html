@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Collection — Dust: A Tale of the Wired West RE</title>
+    <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
+    <meta name="site-root" content="../" />
+    <link rel="icon" type="image/svg+xml" href="/dust-mark.svg" />
+    <!-- The shared chrome in this game's colours. Overridden below by SPECIFICITY
+         and never by order: the build re-inserts this link at the end of <head>,
+         after the inline block, so authored order inverts in every build (see
+         `html body` on the play side and site/tests/cascade.ts). -->
+    <link rel="stylesheet" href="/src/theme.css" />
+    <style>
+      /*
+       * How to run the 1995 game itself, rather than this reimplementation of it.
+       *
+       * Titanic's collection page is two halves — the physical release, then the
+       * offline archives — and this is only the second. There is no box here on
+       * purpose: nobody has photographed a Dust jewel case for this project, and
+       * an empty frame where Titanic has a turnable box would advertise the gap
+       * rather than fill it. When there is artwork this page has room above for it.
+       *
+       * One archive, which is a fact about what is on the host and NOT a fact
+       * about the game. Dust shipped in more than English; this project simply has
+       * only the English package to offer. The first draft of this page said
+       * "the only language Dust shipped in", which was a claim nobody had checked
+       * — the shape of mistake this whole project is otherwise careful about, and
+       * cheaper to make in prose than in a parser.
+       */
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        height: 100%;
+      }
+      /*
+       * `html body`, not `body`: the shared chrome sets `display: flex` and
+       * `align-items: center` on body, and a centred flex child shrink-wraps. This
+       * page is a normal document that scrolls.
+       *
+       * The colours are the CHROME's roles (--bg, --text-bright, --accent, …),
+       * which `dust/src/theme.css` fills in with this game's dusk and ember. Not
+       * the play page's own --soot/--ink/--spark: those are declared in that page's
+       * inline <style> and no other page can see them, so the first draft of this
+       * one came out with a transparent background and black-on-black text.
+       */
+      html body {
+        min-height: 100%;
+        margin: 0;
+        display: block;
+        background: var(--bg);
+        color: var(--text-bright);
+        font:
+          15px/1.6 ui-monospace,
+          "SF Mono",
+          Menlo,
+          Consolas,
+          monospace;
+      }
+      .wrap {
+        max-width: 44rem;
+        margin: 0 auto;
+        padding: 2rem 1.2rem 4rem;
+      }
+      h1 {
+        font-size: 1.5rem;
+        letter-spacing: 0.02em;
+        margin: 0 0 0.4rem;
+        color: var(--text-bright);
+      }
+      .sub {
+        color: var(--text-mute);
+        margin: 0 0 2.2rem;
+      }
+      h2 {
+        font-size: 1.05rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin: 2.4rem 0 0.6rem;
+      }
+      p {
+        color: var(--text-mute);
+      }
+      a {
+        color: var(--accent);
+      }
+      /* the four steps, numbered by the browser rather than by hand so inserting
+         one does not mean renumbering the rest */
+      ol.steps {
+        margin: 1rem 0 0;
+        padding-left: 1.4rem;
+        color: var(--text-mute);
+      }
+      ol.steps li {
+        margin: 0.5rem 0;
+      }
+      /*
+       * The download, as one row rather than a list of one.
+       *
+       * Titanic's page has seven of these and a list is the right shape for seven.
+       * With a single archive the list markers and the vertical rhythm of a
+       * <ul> read as "the first of several" and invite the reader to look for the
+       * others, so this is a single panel that says what it is and how big.
+       */
+      .archive {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.3rem 0.9rem;
+        margin-top: 1rem;
+        padding: 0.9rem 1.1rem;
+        background: var(--raised);
+        border: 1px solid var(--border-strong);
+        border-radius: 3px;
+      }
+      .archive a {
+        font-weight: 600;
+        font-size: 1rem;
+        color: var(--text-bright);
+      }
+      .archive a:hover {
+        color: #fff;
+      }
+      .archive .size {
+        color: var(--text-mute);
+        font-size: 0.8rem;
+        /* pushed to the end so the two rows of a wrapped panel still line up on
+           the name, which is what a reader is scanning for */
+        margin-left: auto;
+      }
+      .note {
+        margin-top: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--text-mute);
+      }
+      .rights {
+        margin-top: 2.6rem;
+        padding-top: 1.2rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.82rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <a
+        class="brand"
+        href="../"
+        title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1995 release"
+      >
+        <img
+          class="brand-mark"
+          src="/dust-mark.svg"
+          alt=""
+          width="30"
+          height="30"
+        />
+        <span class="brand-text">
+          <b>Dust</b>
+          <span>A Tale of the Wired West RE</span>
+        </span>
+      </a>
+      <nav class="topnav">
+        <a href="../">Play</a>
+        <a class="here" href="./">Collection</a>
+        <a href="../../" title="dreamREfactory — the engine, and the other game"
+          >dreamREfactory</a
+        >
+        <a href="../../docs/">Docs</a>
+        <a href="https://github.com/dhobi/dreamrefactory">Source</a>
+      </nav>
+    </header>
+
+    <div class="wrap">
+      <h1>The Collection</h1>
+      <p class="sub">
+        The original DOS game, if you would rather play that than this port of
+        it.
+      </p>
+
+      <h2>Play it offline</h2>
+      <p>
+        The 1995 game, not this port: the original DOS executable, run through
+        DOSBox behind a front end that manages the setup. Four steps get it
+        running.
+      </p>
+
+      <ol class="steps">
+        <li>
+          Download and install <a href="https://dbgl.org/">DBGL</a> (DOSBox Game
+          Launcher) — a front end for DOSBox.
+        </li>
+        <li>
+          Download the archive below. Do not unzip it — DBGL does that itself.
+        </li>
+        <li>
+          In DBGL, choose Profiles → Import… and pick the file you downloaded.
+        </li>
+        <li>Select the imported profile and press Play.</li>
+      </ol>
+
+      <!-- Relative, and one directory up: the archive sits beside the game's own
+           index.html on the host (dreamrefactory/dust/dust.dbgl.zip), unlike
+           Titanic's seven, which sit the same way one directory up from ITS
+           collection page. It is not in
+           this repository and never will be — 546 MB of someone else's game — so
+           the link is only live once deployed, and the FTP mirror only ever adds
+           and overwrites, so a deploy cannot take it away. -->
+      <div class="archive">
+        <a href="../dust.dbgl.zip">Dust: A Tale of the Wired West</a>
+        <span class="size">546 MB</span>
+      </div>
+      <!-- what is offered, not what exists: the game had other releases and this
+           is the one package there is to hand -->
+      <p class="note">
+        English. It is the only package on offer here, not the only one the game
+        had.
+      </p>
+
+      <p class="rights">
+        Dust: A Tale of the Wired West was made by CyberFlix and published by
+        GTE Entertainment in 1995. This project is not affiliated with either,
+        or with any current rights holder, and the game's data is not part of
+        it.
+      </p>
+    </div>
+  </body>
+</html>

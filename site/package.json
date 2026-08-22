@@ -1,8 +1,8 @@
 {
   "name": "@dreamfactory/site",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
-  "description": "The web presence itself: where a page sits in the deployed tree, the top bar it shares with every other page, and the chrome under all of them \u2014 structure only, with every colour coming from a palette the page supplies.",
+  "description": "The web presence itself: where a page sits in the deployed tree, the top bar it shares with every other page, and the chrome under all of them — structure only, with every colour coming from a palette the page supplies.",
   "type": "module",
   "exports": {
     "./*": "./src/*.ts",

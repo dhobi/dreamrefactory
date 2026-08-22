@@ -102,12 +102,31 @@
         /* how wide the PAGE is, which past the floor is no longer how wide the
            viewport is — and the canvas below measures itself against the page */
         --page-w: max(var(--min-w), 100vw);
-        /* The strip's height, PINNED rather than left to the font, because the
-           sum below has to be exact: it is the one term that decides how tall the
-           stage is, and a browser that lays this line out half a pixel differently
-           would cost the canvas its 1:1 scale. */
-        --strip: 38px;
-        --stage-h: calc(100vh - var(--strip));
+        /* The SHARED TOP BAR's height, pinned rather than measured, and pinned for
+           the reason the footer strip used to be: it is the one term that decides
+           how tall the stage is, and a browser that lays that bar out half a pixel
+           differently would cost the canvas its 1:1 scale.
+
+           It replaces `--strip`. The status line used to be a fixed 38px footer and
+           this budget subtracted it; the controls are rows BELOW the picture now,
+           which the page scrolls to, so the only chrome spending viewport height is
+           the bar above. `dust/tests/browser/built-layout.ts` checks this number
+           against the bar the browser actually draws — a pinned height that drifts
+           unnoticed is worse than a measured one. */
+        --bar: 49px;
+        /* The rows under the picture are NOT a term here, and that is deliberate.
+
+           Subtracting them made the picture pay for them: at 1440x900 a perfect
+           1024x768 became 959x719, because 768 plus the mat plus the title card
+           plus the bar plus the rows simply does not fit in 900px. The old fixed
+           strip appeared to fit only because `overflow: hidden` on the body was
+           quietly clipping the difference.
+
+           So the picture is sized against the WINDOW, `#stage` is sized against
+           the FRAME (see its min-height), and the rows follow the stage. When the
+           two together exceed the window the page scrolls, which is the honest
+           outcome and the one that keeps 1:1 art. */
+        --stage-h: calc(100vh - var(--bar));
 
         /* ------------------------------------------------------------------
            THE LEFTOVERS, and who gets to spend them.
@@ -260,9 +279,16 @@
       * {
         box-sizing: border-box;
       }
-      html,
-      body {
+      html {
         height: 100%;
+      }
+      /* No `height: 100%` here, and no `min-height` either. The rows under the
+         picture may push the document past one screen — which is the point of
+         them — and the shared chrome already says `min-height: 100vh` on this
+         selector. Saying `100%` as well was the same instruction in different
+         units on the SAME selector, so the build got to pick which applied;
+         `site/tests/cascade.ts` failed on it, which is what that test is for. */
+      body {
         margin: 0;
         min-width: var(--min-w);
       }
@@ -307,7 +333,9 @@
          */
         align-items: stretch;
         justify-items: stretch;
-        overflow: hidden;
+        /* NO `overflow: hidden` here any more. It was right when the page was
+           exactly one screen with a fixed footer; the rows under the picture
+           are reachable only if the document is allowed to scroll to them. */
       }
 
       /* the picture, centred, integer-scaled, and never smoothed: this is
@@ -320,7 +348,42 @@
          parent resolves against the padding box, which is definite. */
       #stage {
         position: relative;
-        min-height: 0;
+        /*
+         * A HEIGHT of its own, because what sits below it is no longer a fixed 38px
+         * the budget could subtract. As a bare `1fr` grid row the stage got whatever
+         * the rows under it left over, so every control added there came out of the
+         * picture: a taller `#under` meant a smaller game.
+         *
+         * Pinned to the viewport minus the bar above instead — which is exactly what
+         * `--stage-h` means — so the WINDOW sizes the picture and the rows are what
+         * the document scrolls to.
+         */
+        /* NOT a height of its own. Pinned to `--stage-h` it claimed the whole
+           window and left the rows a screen below the picture — the picture was
+           sized right and the rows were nowhere near it. As a bare grid row the
+           stage gets what the bar above and the rows below leave, so the rows sit
+           directly under the frame and the canvas's own `max-height: 100%` — which
+           resolves against THIS box — shrinks the picture to fit whatever is left.
+           That last part is why nothing has to be pinned: a row that wraps on a
+           phone takes its space out of the picture automatically. */
+        /* AS TALL AS ITS CONTENT, which is the frame — not the window, and not
+           whatever the grid has left.
+
+           `min-height: var(--stage-h)` claimed the whole window and left the rows
+           a screen below the picture. A bare `0` let the grid hand the stage less
+           than the frame needs, and the frame — absolutely positioned — spilled
+           68px OVER the rows, so the buttons could not be clicked and there was
+           nothing to scroll to either.
+
+           This is the frame's own height, term for term: the two pads, the slack
+           the pair comes down by, the title card's band, the picture, and the mat
+           on both sides of it. So the rows sit directly under the frame at every
+           size, the picture keeps the whole window to be big in, and when the sum
+           is taller than the window the page scrolls. */
+        min-height: calc(
+          2 * var(--pad) + var(--drop) + var(--band) + var(--pic-h) + 2 *
+            var(--frame)
+        );
         padding: var(--pad);
       }
       /* ------------------------------------------------------------------
@@ -860,59 +923,148 @@
         }
       }
 
-      /* the strip. one line, monospace, no buttons that look like buttons */
-      #strip {
-        display: flex;
-        gap: 18px;
-        align-items: center;
-        /* exactly --strip tall: see the note on that variable */
-        height: var(--strip);
-        padding: 0 14px;
+      /* ------------------------------------------------------------------
+         UNDER THE PICTURE: the controls, as rows.
+
+         Not a bar fixed to the bottom of the window, which is what this was. That
+         cost the picture 38px of every window whether anyone was reading it or
+         not, and it put the only pressable thing on the page — the two swipe
+         boxes — in the corner of a phone that is hardest to reach. Worse, at the
+         400px floor it could not fit its own sentence and ellipsized it.
+
+         A row has no such problem: it is as tall as it needs to be, it wraps, and
+         the page scrolls to it. Which is what the play page does with the same
+         kind of content, so the shape is borrowed rather than invented
+         (taoot/play/index.html: #under, .bar, and the rule between rows).
+         ------------------------------------------------------------------ */
+      #under {
+        /* above the picture in the stacking order, always: the frame is absolutely
+           positioned and overlapped these when the budget was wrong, and an
+           unreachable button is a worse failure than a scrollbar */
+        position: relative;
+        z-index: 1;
+        /* as wide as the picture's frame and centred under it, so it reads as
+           belonging to the picture rather than to the page */
+        width: min(1024px, calc(100% - 2 * var(--pad)));
+        margin: 0 auto var(--pad);
         border-top: 1px solid var(--edge);
-        background: #100c09;
-        white-space: nowrap;
-        overflow-x: auto;
       }
-      #strip b {
+      #under .bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 18px;
+        padding: 10px 2px;
+        color: var(--dim);
+      }
+      /* a rule between rows and not around them: the rows are one list, and a box
+         per row would read as one control each */
+      #under .bar + .bar {
+        border-top: 1px solid var(--edge);
+      }
+      /* an empty row is not a row — #err is silent almost always */
+      #under .bar:not(:has(> *:not(#err))):has(> #err:empty) {
+        display: none;
+      }
+      #under b {
         color: var(--ink);
         font-weight: 600;
       }
-      #strip span {
-        color: var(--dim);
-      }
-      #strip .k {
+      #under .k {
         color: var(--ink);
+      }
+      /* The two levers, in the picture frame's own wood — the same treatment the
+         save dialog's buttons get, because they are the same kind of thing: a
+         control this port added, not one the game had. */
+      #under button {
+        font:
+          600 12px/1 ui-monospace,
+          "SF Mono",
+          Menlo,
+          Consolas,
+          monospace;
+        color: var(--ink);
+        background: linear-gradient(var(--wood-lit) 0%, var(--wood-shade) 100%);
+        border: 1px solid var(--rule);
+        border-radius: 2px;
+        padding: 6px 10px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #under button:hover {
+        border-color: var(--spark);
+        color: #fff;
+      }
+      #under button:focus-visible {
+        outline: 2px solid var(--spark);
+        outline-offset: 2px;
+      }
+      /* what became of the screenshot: said beside the button that took it, and
+         taken down again once it has been read (dust/src/main.ts) */
+      #under .note {
+        font-size: 11px;
+        color: var(--spark);
+      }
+      /* ------------------------------------------------------------------
+         Fullscreen: the picture letterboxed in a black field.
+
+         The STAGE is fullscreened rather than the canvas, so the UA does not take
+         over sizing the letterbox. The wooden frame comes off with everything
+         else: at fullscreen the picture is the whole screen and a moulding drawn
+         around it would be a frame around a frame. Same reasoning as the play
+         page's (taoot/play/index.html #stage:fullscreen).
+         ------------------------------------------------------------------ */
+      #stage:fullscreen {
+        display: grid;
+        place-items: center;
+        width: 100vw;
+        height: 100vh;
+        padding: 0;
+        background: #000;
+      }
+      #stage:fullscreen #curtain,
+      #stage:fullscreen #brand {
+        display: none;
+      }
+      #stage:fullscreen #frame {
+        position: static;
+        margin: 0;
+        padding: 0;
+        width: auto;
+        height: auto;
+        background: none;
+        box-shadow: none;
+      }
+      #stage:fullscreen #screen {
+        width: min(100vw, calc(100vh * 4 / 3));
+        height: min(100vh, calc(100vw * 3 / 4));
+        max-width: none;
+        max-height: none;
+      }
+      /* The hint no longer has to give way to anything: it WRAPS. The strip could
+         not, being one line of fixed height, so the sentence ellipsized and the
+         title attribute carried the rest — which a phone cannot hover to read.
+         Both hints keep their `title` anyway; it costs nothing and a mouse still
+         gets the long form. */
+      #under .keyhint,
+      #under .touchhint {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      #under .touchhint {
+        display: none;
       }
       /* the hint that fits the pointer: keys for a mouse, the gesture for glass.
          `hover: none` as well as `coarse` so a touchscreen LAPTOP — which has both
          a finger and arrow keys — keeps the keys line. */
-      /* The HINT is what gives way when the strip is narrow, and it is the only
-         thing that does. At the 400px floor the sentence, the two boxes and the
-         version cannot all fit — so rather than let the row overflow into a scroll
-         nobody knows is there (which is what it did when the hint was the whole
-         line), the sentence ellipsizes and the two things you can PRESS stay put.
-         Both hints carry the full text in a `title` for the pointer that can hover. */
-      #strip .keyhint,
-      #strip .touchhint {
-        flex: 0 1 auto;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      #swipeOpts,
-      #ver {
-        flex: none;
-      }
-      #strip .touchhint {
-        display: none;
-      }
       @media (pointer: coarse) and (hover: none) {
-        #strip .keyhint {
+        #under .keyhint {
           display: none;
         }
-        #strip .touchhint {
+        #under .touchhint {
           display: inline;
         }
+      }
         /* the word goes and the arrows stay: at the 400px floor the strip has
            room for the hint, the two boxes and the version, and only just — with
            "invert" twice it overflows and the boxes are behind a scroll nobody
@@ -1240,7 +1392,15 @@
           <span>A Tale of the Wired West RE</span>
         </span>
       </a>
+      <!-- Dust's OWN version, filled by dust.ts from this package's own
+             package.json: the page releases separately from the site around it, so
+             the number a bug report names has to be this page's tag. In the bar
+             rather than under the picture now, which is where the site and the play
+             page keep theirs, and `.version` is already a role in the shared
+             chrome (site/src/chrome.css) that nothing had used yet. -->
+      <span class="version" id="ver"></span>
       <nav class="topnav">
+        <a href="./collection/">Collection</a>
         <a href="../" title="dreamREfactory — the engine, and the other game"
           >dreamREfactory</a
         >
@@ -1315,40 +1475,68 @@
          a player needs, and everything the readout said is in the log, one entry
          per move, which is a better shape for it: a trace you can scroll back
          through rather than a number that overwrites itself. -->
-    <div id="strip">
-      <span
-        class="keyhint"
-        title="←/→ turn · ↑ walk · c cycles the clut · b opens the boot log"
-        ><span class="k">←</span>/<span class="k">→</span> turn
-        <span class="k">↑</span> walk <span class="k">c</span> clut
-        <span class="k">b</span> for the boot log</span
-      >
-      <!-- the same line for a phone, which has none of those keys. Swapped by a
-           media query rather than by script, because it is a question about the
-           POINTER and CSS is what knows the answer without asking. -->
-      <span
-        class="touchhint"
-        title="swipe up to walk, left/right to turn · double-tap for escape"
-        >swipe · <span class="k">2-tap</span> esc</span
-      >
-      <!-- Which way a swipe reads. Only a device that can swipe is asked:
-           dust/src/main.ts's installSwipeOptions unhides this and remembers both boxes. -->
-      <span id="swipeOpts" hidden
-        ><label title="a swipe from right to left turns right, not left"
-          ><input type="checkbox" id="swipeInvertTurn" /><span class="word"
-            >invert</span
-          ><span class="k">←/→</span></label
-        ><label title="a swipe downwards walks on, not one upwards"
-          ><input type="checkbox" id="swipeInvertWalk" /><span class="word"
-            >invert</span
-          ><span class="k">↑</span></label
-        ></span
-      >
-      <span id="err"></span>
-      <!-- Dust's OWN version (package.json dustVersion, filled by dust.ts):
-           this page releases separately from the TAOOT site, so the number a
-           bug report names has to be this page's tag, not the site's. -->
-      <span id="ver" style="margin-left: auto"></span>
+    <!--
+           The controls, as ROWS UNDER the picture rather than a bar fixed to the
+           bottom of the window.
+
+           The fixed strip cost the picture 38px of every window whether anyone
+           was reading it or not, put the only thing you can PRESS on this page
+           in the least reachable corner of a phone, and ellipsized its own
+           sentence to fit. A row can be as tall as it needs to be and the page
+           scrolls to it, which is how the play page has always shown this kind
+           of thing (taoot/play/index.html: #under, and its .bar rows).
+      -->
+    <div id="under">
+      <div class="bar">
+        <button id="fsBtn" type="button" title="Fullscreen (letterboxed 4:3)">
+          ⛶ Fullscreen
+        </button>
+        <!-- opens a prefilled GitHub issue and puts the screen on the
+               clipboard, which is the only way an image reaches one
+               (site/src/bug-report.ts, shared with the play page) -->
+        <button
+          id="bugBtn"
+          type="button"
+          title="Report something the port gets wrong"
+        >
+          🪲 Report a bug
+        </button>
+        <!-- what became of the screenshot, said where the button is -->
+        <span id="bugNote" class="note"></span>
+        <span
+          class="keyhint"
+          title="←/→ turn · ↑ walk · c cycles the clut · b opens the boot log"
+          ><span class="k">←</span>/<span class="k">→</span> turn
+          <span class="k">↑</span> walk <span class="k">c</span> clut
+          <span class="k">b</span> for the boot log</span
+        >
+        <!-- the same line for a phone, which has none of those keys. Swapped by a
+             media query rather than by script, because it is a question about the
+             POINTER and CSS is what knows the answer without asking. -->
+        <span
+          class="touchhint"
+          title="swipe up to walk, left/right to turn · double-tap for escape"
+          >swipe · <span class="k">2-tap</span> esc</span
+        >
+      </div>
+      <div class="bar">
+        <!-- Which way a swipe reads. Only a device that can swipe is asked:
+             dust/src/main.ts's installSwipeOptions unhides this and remembers both boxes. -->
+        <span id="swipeOpts" hidden
+          ><label title="a swipe from right to left turns right, not left"
+            ><input type="checkbox" id="swipeInvertTurn" /><span class="word"
+              >invert</span
+            ><span class="k">←/→</span></label
+          ><label title="a swipe downwards walks on, not one upwards"
+            ><input type="checkbox" id="swipeInvertWalk" /><span class="word"
+              >invert</span
+            ><span class="k">↑</span></label
+          ></span
+        >
+        <!-- errors read as part of the controls rather than as a status line:
+               this is the only place on the page that says anything in words. -->
+        <span id="err"></span>
+      </div>
     </div>
     <!-- The saved-games dialog, driven by engine/src/web/save-browser.ts (shared with the
          play page — hence the play page's ids). Dust's own SAVE and LOAD levers
