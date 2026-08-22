@@ -75,6 +75,7 @@ USER runner
 # sees `taoot-gamefiles/`, matches nothing, and exactly one test fails:
 # "the dev-server manifest's shipped saves are all recognised for seeding".
 ENV TAOOT_GAMEFILES=/srv/taoot/gamefiles
+ENV DUST_GAMEFILES=/srv/dust/gamefiles
 
 # No CMD arguments: the entrypoint registers, runs exactly one job, and exits.
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

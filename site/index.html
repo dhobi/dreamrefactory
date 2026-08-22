@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="front.docTitle">dreamREfactory — the CyberFlix DreamFactory engine, reimplemented</title>
+    <meta
+      name="description"
+      content="A browser reimplementation of CyberFlix's DreamFactory engine. Two of the three adventures it shipped are playable here: Titanic: Adventure Out of Time (1996) and Dust: A Tale of the Wired West (1995)."
+    />
+    <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
+    <meta name="site-root" content="./" />
+    <link rel="icon" type="image/svg+xml" href="/globe-mark.svg" />
+    <link rel="stylesheet" href="/src/theme.css" />
+    <style>
+      /*
+       * The front door.
+       *
+       * It has no game on it and nothing to run: it says what the project is and
+       * points at the four things that are it — the documentation, the two games,
+       * and the format editors. Everything atmospheric is behind one of those
+       * doors, which is why this page is black and green and its neighbours are
+       * not (site/src/theme.css).
+       *
+       * The chrome — topbar, brand, panels, the rule under the title — is
+       * site/src/chrome.css, the same file the game pages and the editors use.
+       * Only the hero and the door grid below are this page's own.
+       */
+      #front {
+        width: min(66rem, 100%);
+        padding: clamp(1.5rem, 5vw, 3rem) clamp(0.8rem, 4vw, 2rem) 4rem;
+      }
+
+      /* The way in is centred — the wordmark, the sentence under it, and nothing
+         else. The cards below stay left-aligned, because centred body text stops
+         being readable the moment there is more than a line or two of it. */
+      #hero,
+      .lede,
+      .caveat {
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+      }
+
+      /* ---- the hero ------------------------------------------------------
+       *
+       * The wordmark is the LOGO, not type: its face is a wide squared techno
+       * cut that no system font stack has, and approximating it with
+       * letter-spacing and a skew would read as an imitation of it.
+       *
+       * `#wordmark-text` is the fallback for exactly one situation — the image
+       * not being in `site/public/` yet — and the `onerror` on the image is what
+       * swaps them. Drop the PNG in and this markup needs no edit; until then the
+       * page still has a wordmark, in chrome with a green RE, which is the logo's
+       * idea if not its lettering.
+       */
+      #hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 0 0 1.6rem;
+      }
+
+      #wordmark {
+        display: block;
+        /* 1:1 with what site/tools/mklogo.ts writes — see the note there */
+        width: min(46rem, 100%);
+        height: auto;
+        /*
+         * No drop-shadow. The artwork carries its own bloom, and the tool gives
+         * it a real alpha channel (`unblack`), so a CSS glow would be a second
+         * halo traced round the first one rather than the light it looks like.
+         */
+      }
+
+      #wordmark-text {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: clamp(2.4rem, 8vw, 4.2rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        line-height: 1;
+        /* brushed metal: a highlight along the top edge, a shadow under it */
+        background: linear-gradient(
+          to bottom,
+          var(--chrome-100) 0%,
+          var(--chrome-200) 38%,
+          var(--chrome-500) 52%,
+          var(--chrome-300) 66%,
+          var(--chrome-100) 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      /* the one lit word in the logo */
+      #wordmark-text i {
+        font-style: normal;
+        background: none;
+        -webkit-text-fill-color: var(--signal-400);
+        color: var(--signal-400);
+        text-shadow: 0 0 18px rgba(46, 230, 46, 0.55);
+      }
+
+      .lede {
+        max-width: 42rem;
+        /* fluid rather than a breakpoint: at 1.05rem on a 390px phone this
+           paragraph ran to eight lines before the first card was in view */
+        font-size: clamp(0.95rem, 3.4vw, 1.05rem);
+        line-height: 1.6;
+        color: var(--text-dim);
+      }
+      .lede b {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      /* ---- the doors ------------------------------------------------------
+       *
+       * Two kinds of thing, and the page should not pretend otherwise. The GAMES
+       * are what this exists for and they have their own identities, so their
+       * cards lead with the art and get the width to show it. The documentation
+       * and the editors are tools about the games — real doors, but doors, so
+       * they stay the plain boxes they were.
+       */
+      .doors {
+        display: grid;
+        /*
+         * `min(24rem, 100%)` and not a bare `24rem`: a minmax MINIMUM is a floor
+         * the track cannot go below, so on a 390px phone a 24rem floor made every
+         * card 384px wide inside a 365px column and the page scrolled sideways.
+         * Capping the floor at the container's own width turns "at least 24rem,
+         * or all of it if that is less" into one expression.
+         */
+        grid-template-columns: repeat(auto-fit, minmax(min(24rem, 100%), 1fr));
+        gap: var(--gap);
+        margin-top: 2.5rem;
+      }
+
+      /* the games' row: art band on top, then the same text as any other door */
+      .games {
+        margin-top: 3rem;
+      }
+      .game {
+        align-items: center;
+        text-align: center;
+        padding-top: 0;
+        overflow: hidden;
+      }
+      /*
+       * A fixed-height band with the art centred inside it, because the two
+       * pieces are different shapes on purpose — Titanic's is a round emblem and
+       * Dust's is a wide wordmark — and a band is what lets both sit properly
+       * without cropping either. `contain`, never `cover`: cropping a logo is
+       * worse than leaving air beside it.
+       */
+      .game .art {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        /* the band is the card's tallest fixed cost; on a phone two of them plus
+           two more cards is a lot of scrolling before the tools are reachable */
+        height: clamp(6.5rem, 24vw, 9rem);
+        margin-bottom: 0.9rem;
+        /* the faintest lift, so the band reads as a plate the art sits on */
+        background: radial-gradient(60% 80% at 50% 45%, rgba(31, 199, 31, 0.07), transparent 70%);
+      }
+      .game .art img {
+        max-width: 82%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+      }
+      .game p {
+        max-width: 26rem;
+      }
+
+      .door {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        padding: 1.1rem 1.2rem 1.2rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--panel);
+        color: inherit;
+        text-decoration: none;
+        overflow: hidden;
+        transition:
+          border-color 120ms linear,
+          background-color 120ms linear;
+      }
+      /* A door lights along its top edge on hover — the swoosh passing over it,
+         rather than the whole card changing colour. */
+      .door::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto;
+        height: 1px;
+        background: linear-gradient(to right, transparent, var(--signal-400), transparent);
+        opacity: 0;
+        transition: opacity 140ms linear;
+      }
+      .door:hover {
+        border-color: var(--wire-400);
+        background: var(--raised);
+      }
+      .door:hover::before {
+        opacity: 1;
+      }
+      .door b {
+        font-family: var(--font-display);
+        font-size: 1.05rem;
+        color: var(--text-bright);
+      }
+      /* the year and engine generation, in the same slot on every card, so the
+         two games' vintages line up at a glance */
+      .door .meta {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        color: var(--accent);
+      }
+      .door p {
+        margin: 0.3rem 0 0;
+        font-size: 0.88rem;
+        line-height: 1.5;
+        color: var(--text-dim);
+      }
+
+      .caveat {
+        max-width: 44rem;
+        margin-top: 3rem;
+        padding-top: 1.2rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.85rem;
+        line-height: 1.6;
+        color: var(--text-mute);
+      }
+    </style>
+  </head>
+  <!--
+    `deep` and not `work`: the front door is a reading page, and its density puts
+    the ground at true black — which is what the logo was rendered on.
+  -->
+  <body class="deep">
+    <header class="topbar">
+      <a
+        class="brand"
+        href="./"
+        title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original releases"
+      >
+        <img class="brand-mark" src="/globe-mark.svg" alt="" width="30" height="30" />
+        <span class="brand-text">
+          <b>dream<i>RE</i>factory</b>
+          <span data-i18n="front.tagline">the CyberFlix DreamFactory engine, reimplemented</span>
+        </span>
+      </a>
+      <nav class="topnav">
+        <a href="./docs/" data-i18n="site.navDocs">Docs</a>
+        <a href="./editors/" data-i18n="site.navEditors">Editors</a>
+        <a href="./taoot/">Titanic</a>
+        <a href="./dust/">Dust</a>
+        <a href="https://github.com/dhobi/dreamrefactory" data-i18n="site.navSource">Source</a>
+      </nav>
+    </header>
+
+    <main id="front">
+      <div id="hero">
+        <!-- The logo if it is there, the chrome wordmark if it is not. See the
+             note on #wordmark in the stylesheet above. -->
+        <img
+          id="wordmark"
+          src="/dreamrefactory-logo.png"
+          alt="DreamREfactory"
+          onerror="this.remove(); document.getElementById('wordmark-text').hidden = false;"
+        />
+        <h1 id="wordmark-text" hidden>Dream<i>RE</i>factory</h1>
+      </div>
+
+      <p class="lede" data-i18n-html="front.lede">
+        CyberFlix built an engine and shipped <b>three</b> adventures on it.
+        dreamREfactory is that engine written again in TypeScript, from the files
+        rather than from the source — every container format decoded, the script
+        language parsed and interpreted, and the games played in a browser with
+        nothing installed. <b>Two of the three are here</b>; the third is not
+        ported.
+      </p>
+
+      <div class="doors games">
+        <a class="door game" href="./taoot/">
+          <span class="art"><img src="/card-taoot.png" alt="" width="150" height="129" /></span>
+          <b>Titanic: Adventure Out of Time</b>
+          <span class="meta">1996 · DreamFactory 4</span>
+          <p data-i18n="front.titanicBody">
+            The full game in six languages, plus the 1996 demo. A save browser, a
+            language chooser, and the collection page for the physical release.
+          </p>
+        </a>
+        <a class="door game" href="./dust/">
+          <span class="art"><img src="/card-dust.png" alt="" width="340" height="125" /></span>
+          <b>Dust: A Tale of the Wired West</b>
+          <span class="meta">1995 · DreamFactory 1</span>
+          <p data-i18n="front.dustBody">
+            The engine two years earlier, and a different shape of file. Opens on
+            its films; the town is walkable. Smaller, and growing.
+          </p>
+        </a>
+      </div>
+
+      <div class="doors">
+        <a class="door" href="./docs/">
+          <b data-i18n="front.docsTitle">Documentation</b>
+          <span class="meta" data-i18n="front.docsMeta">formats · runtime · reference</span>
+          <p data-i18n="front.docsBody">
+            How the engine works, container format by container format, and how
+            each was recovered. The long half of this project.
+          </p>
+        </a>
+        <a class="door" href="./editors/">
+          <b data-i18n="front.editorsTitle">Format editors</b>
+          <span class="meta">set · shp · mov · stg · pup · cst · trk</span>
+          <p data-i18n="front.editorsBody">
+            Open a room, a prop, a film or a stage out of the game data, look at
+            what is inside it, change it and write it back.
+          </p>
+        </a>
+      </div>
+
+      <p class="caveat" data-i18n="front.caveat">
+        RE is for reverse-engineered. This is a best-effort re-implementation and
+        not a re-release: it needs a copy of the game's own data files, which it
+        does not supply, and it is not affiliated with CyberFlix, GTE
+        Entertainment or any current rights holder.
+      </p>
+    </main>
+
+    <script type="module" src="/src/front.ts"></script>
+  </body>
+</html>

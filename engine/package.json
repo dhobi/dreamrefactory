@@ -1,0 +1,11 @@
+{
+  "name": "@dreamfactory/engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The CyberFlix DreamFactory engine, reimplemented — container formats (df/) and the runtime that plays them (runtime/). Knows about no particular game.",
+  "type": "module",
+  "//": "Raw TypeScript, deliberately: every consumer is bundled by Vite or run by tsx/vitest, so there is no build step to keep in sync and no dist/ to go stale. The wildcard means `@dreamfactory/engine/df/set` reads `engine/src/df/set.ts`.",
+  "exports": {
+    "./*": "./src/*.ts"
+  }
+}

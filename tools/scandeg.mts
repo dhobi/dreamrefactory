@@ -13,7 +13,7 @@
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { readShpFile } from "../src/df/shp";
+import { readShpFile } from "@dreamfactory/engine/df/shp";
 
 const root = process.argv[2] ?? "gamefiles/en";
 

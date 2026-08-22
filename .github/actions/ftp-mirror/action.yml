@@ -1,0 +1,104 @@
+name: Mirror a directory over FTP
+description: >
+  Upload one built directory into one subdirectory of the site, adding and
+  overwriting only. Every deploy in this repository goes through here, so the
+  connection policy below is written once.
+
+inputs:
+  source:
+    description: The local directory to upload, e.g. dist/taoot. Its CONTENTS are mirrored.
+    required: true
+  remote:
+    description: >
+      Where under FTP_PATH the contents land — "taoot", "dust", "docs", or "."
+      for the site root. Created if it does not exist.
+    required: true
+  exclude:
+    description: >
+      Space-separated lftp --exclude-glob arguments, on top of the ones every
+      target gets. Use it for files that live on the host and are not in any
+      build.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Mirror ${{ inputs.source }} to ${{ inputs.remote }}
+      shell: bash
+      run: |
+        set -eu
+
+        # FTP_HOST may come from a repository secret while the account details
+        # come from an environment; either way all four have to be present.
+        for v in FTP_HOST FTP_USER FTP_PASSWORD FTP_PATH; do
+          eval "test -n \"\${$v:-}\"" || { echo "::error::secret $v is not set"; exit 1; }
+        done
+        test -d "${{ inputs.source }}" || {
+          echo "::error::${{ inputs.source }} does not exist — did the build run?"; exit 1; }
+
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq lftp
+
+        # Plain FTP sends the password as text on the wire, so this demands TLS
+        # (AUTH TLS on the ordinary FTP port — "explicit FTPS", what shared hosts
+        # mean by "FTP over SSL"). Two escape hatches for a host that cannot do it
+        # properly, both loud and both off by default.
+        force="true"; verify="yes"
+        if [ "${FTP_INSECURE_TLS:-}" = "1" ]; then
+          verify="no"
+          echo "::warning::FTP_INSECURE_TLS=1 — encrypted, but the certificate is not checked"
+        fi
+        if [ "${FTP_ALLOW_PLAINTEXT:-}" = "1" ]; then
+          force="false"
+          echo "::warning::FTP_ALLOW_PLAINTEXT=1 — the password may cross the wire in the clear"
+        fi
+
+        # ## This deploy never deletes anything
+        #
+        # The site is served from the same directories as things that are not in
+        # any build and never in this repository:
+        #
+        #   */gamefiles/     the CD rips the hosts serve — 7.4 GB and 645 MB
+        #   *.zip            the offline DBGL archives the collection page links
+        #                    to, ~1 GB apiece
+        #   gamefiles.json   the listing of a rip. A GitHub runner has no rip, so
+        #                    the manifest a build here writes holds a handful of
+        #                    entries against the thousands the host serves — it is
+        #                    deleted before upload AND excluded here, and the host
+        #                    regenerates it with tools/mkmanifest.ts.
+        #
+        # So the mirror only ADDS and OVERWRITES, and the ones that could be
+        # *written* over are excluded on top of that. There is deliberately no
+        # --delete and no option to turn one on: a re-upload of a wrong file is a
+        # minute, and a deleted 7 GB rip is not.
+        #
+        # It is also what lets three builds share one tree: site/ writes the root,
+        # taoot/ and dust/ write directories inside it, and none of them can
+        # remove another's.
+        keep="--exclude-glob gamefiles.json ${{ inputs.exclude }}"
+
+        # One connection rather than four: shared FTP accounts cap concurrent
+        # logins, and a few hundred files does not need the parallelism.
+        #
+        # The script goes in a file rather than on the command line so the
+        # password is not in any process list; 077 because the runner is not the
+        # only thing that can read $RUNNER_TEMP.
+        umask 077
+        script="$RUNNER_TEMP/deploy.lftp"
+        cat > "$script" <<LFTP
+        set cmd:fail-exit yes
+        set ftp:passive-mode true
+        set ftp:ssl-allow true
+        set ftp:ssl-force $force
+        set ftp:ssl-protect-data true
+        set ssl:verify-certificate $verify
+        set net:max-retries 2
+        set net:timeout 30
+        open -u "$FTP_USER","$FTP_PASSWORD" -p "${FTP_PORT:-21}" ftp://$FTP_HOST
+        mkdir -f -p "$FTP_PATH/${{ inputs.remote }}"
+        mirror -R --verbose $keep "${{ inputs.source }}/" "$FTP_PATH/${{ inputs.remote }}"
+        bye
+        LFTP
+        trap 'rm -f "$script"' EXIT
+        lftp -f "$script"

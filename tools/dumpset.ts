@@ -6,8 +6,8 @@
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { readSetFile, RIGHTTURNS, LEFTTURNS } from "../src/df/set";
-import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "../src/df/image";
+import { readSetFile, RIGHTTURNS, LEFTTURNS } from "@dreamfactory/engine/df/set";
+import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { encodePNG } from "./png";
 
 const [, , setPath, outDir = "out"] = process.argv;

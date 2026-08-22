@@ -39,8 +39,10 @@ ExecStart=/usr/bin/docker run --rm \
     --pull=never \
     --env-file /etc/taoot-runner.env \
     --env TAOOT_GAMEFILES=/srv/taoot/gamefiles \
+    --env DUST_GAMEFILES=/srv/dust/gamefiles \
     --env RUNNER_LABELS=self-hosted,linux,x64,taoot-gamefiles \
     --volume /srv/taoot/gamefiles:/srv/taoot/gamefiles:ro \
+    --volume /srv/dust/gamefiles:/srv/dust/gamefiles:ro \
     --security-opt no-new-privileges:true \
     --cap-drop ALL \
     --init \

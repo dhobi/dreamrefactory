@@ -23,7 +23,7 @@
 
 set -euo pipefail
 
-REPO="${TAOOT_REPO:-dhobi/taoot-web}"
+REPO="${TAOOT_REPO:-dhobi/dreamrefactory}"
 API="${GITHUB_API_URL:-https://api.github.com}"
 LABELS="${RUNNER_LABELS:-self-hosted,linux,x64,taoot-gamefiles}"
 # A name per container instance. `--replace` means a restart reclaims its own
@@ -46,7 +46,7 @@ if [ -z "$(ls -A "$TAOOT_GAMEFILES" 2>/dev/null)" ]; then
 fi
 
 # The directory has to be CALLED gamefiles. `gamefilesRoot()` in
-# tools/gamefiles.ts reads this same variable, so the harness enumerates saves at
+# taoot/tools/gamefiles.ts reads this same variable, so the harness enumerates saves at
 # this literal path, and SHIPPED_SAVE in src/save-seed.ts matches on a
 # `gamefiles/` segment. Any other name costs exactly one test — checked here so
 # it says so, instead of leaving a lone red assertion to interpret.

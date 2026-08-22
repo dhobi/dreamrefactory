@@ -3,7 +3,7 @@
  *
  * Flat art is an indexed 512×384 image (one byte per pixel into the stage's own
  * palette), so "drawing" is writing bytes — no canvas, no font stack, nothing to
- * install. That keeps the generator (tools/mklangstg.ts) reproducible: the same
+ * install. That keeps the generator (taoot/tools/mklangstg.ts) reproducible: the same
  * source produces the same bytes on any machine.
  *
  * The font is deliberately small: capitals, digits, a little punctuation and the

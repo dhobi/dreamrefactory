@@ -1,11 +1,11 @@
 # The track editor
 
-[`editors/tracks.html`](https://github.com/dhobi/taoot-web/blob/master/editors/tracks.html) — source
-[`editors/track-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/track-editor.ts).
+[`editors/tracks.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/tracks.html) — source
+[`editors/track-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/track-editor.ts).
 Open `http://localhost:5173/editors/tracks.html`.
 
 The sound half of what the other editors do for pictures: load an
-[audio bank](../formats/audio.md) — a `.TRK` music track, a `.SFX` effects
+[audio bank](../engine/formats/audio.md) — a `.TRK` music track, a `.SFX` effects
 bank, an `.11K` low-memory song — and it comes apart into the two things a bank
 holds.
 
@@ -23,7 +23,7 @@ holds.
 Replacing audio takes any file the browser can decode (WAV, MP3, OGG), downmixes
 it to mono and resamples it to the rate the chunk it replaces plays at, then
 re-encodes it with the format's v41 codec (`encodeAudioContainer` in
-[`src/df/audio.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/audio.ts)).
+[`engine/src/df/audio.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/audio.ts)).
 That codec is lossy and only v41 is written, so an import is *not* a byte-for-
 byte round trip — re-importing an exported WAV will not reproduce the original
 bytes.
@@ -39,13 +39,13 @@ across containers, and the engine loads a theme a chunk at a time).
 that are not audio — the track name, a chunk identifier, the play order — are
 copy-on-write patches on a single container each (`patchTrackName`,
 `patchChunkIdentifier`, `patchLoopOrder` in
-[`src/df/banks.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/banks.ts)),
+[`engine/src/df/banks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/banks.ts)),
 so everything you did not touch is the byte it was
-(see [`tests/auto/trk-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/tests/auto/trk-editor.ts)).
+(see [`taoot/tests/auto/trk-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/trk-editor.ts)).
 
 ## See also
 
-- [Audio — TRK / SFX / 11K / SND](../formats/audio.md) — the formats and their two codecs
-- [Audio](../runtime/audio.md) — channels, bank resolution and the volume controls
+- [Audio — TRK / SFX / 11K / SND](../engine/formats/audio.md) — the formats and their two codecs
+- [Audio](../engine/runtime/audio.md) — channels, bank resolution and the volume controls
 - [The browser editors](README.md) — what the seven pages share
 

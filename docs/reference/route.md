@@ -1,7 +1,7 @@
 # The route
 
 *Prerequisite: [Tests](tests.md), and
-[How we know it's right](../verification.md) for what the playthrough is for.*
+[How we know it's right](../taoot/verification.md) for what the playthrough is for.*
 
 This page is the route itself: what the twenty-seven segments cross, how much of
 it to run while you work, what driving each of the game's minigames costs, and
@@ -19,9 +19,9 @@ loads, 23.7 min, ending on `credits.mov`.
 ## The twenty-seven segments
 
 Each row is one test in
-[`playthrough.ts`](https://github.com/dhobi/taoot-web/blob/master/tests/playthrough/playthrough.ts),
+[`playthrough.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/playthrough/playthrough.ts),
 one function in
-[`segments.ts`](https://github.com/dhobi/taoot-web/blob/master/tests/playthrough/segments.ts),
+[`segments.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/playthrough/segments.ts),
 and one `.ti` in `out/checkpoints/` named for the state it *starts* from.
 
 | segment | from | crosses | ends |
@@ -101,7 +101,7 @@ npm run test:playthrough        # 27 segments + 3 property tests — writes out/
 TAOOT_RECORD=1 npx vitest run --config vitest.playthrough.config.ts   # re-record goldens
 TAOOT_RECHECKPOINT=1 …          # …and rebuild the .ti checkpoints (after a save change)
 npm run watch:m2p0              # watch segment 7 in a real window
-SEGMENTS=9 npx tsx tests/browser/playthrough.ts    # one segment alone, ~35 s
+SEGMENTS=9 npx tsx taoot/tests/browser/playthrough.ts    # one segment alone, ~35 s
 ```
 
 ## The minigames, and what driving one costs
@@ -146,7 +146,7 @@ replayed eleven times. Climbing is four views and is never blocked; walking roun
 ring is sixteen views the maze shuts by setting `blocks` to a comma-list of closed
 gaps per (maze, level). **`mazenumber = random(4)` is drawn live at the door**, so the
 two hosts need not be dealt the same maze and the golden's value is masked. That costs
-nothing, because [nav/smokestack.ts](https://github.com/dhobi/taoot-web/blob/master/tests/playthrough/nav/smokestack.ts)
+nothing, because [nav/smokestack.ts](https://github.com/dhobi/dreamrefactory/blob/master/tests/playthrough/nav/smokestack.ts)
 *solves* whichever maze it draws — a breadth-first over (level, position) against the
 eight `blocks` strings — and asserts every move against that solution, which is a
 stricter test than a fixed value. It has to solve: **one of the sixteen (maze, entry)
@@ -185,7 +185,7 @@ Learned the hard way, all verified:
 
 - **In mission 4, a conversation costs two minutes.** `gang.cst prepuppet()` does
   `min = min + 2` at `mission = 4`, and the sinking's phase is a clock
-  ([the endgame is a countdown](../04-mission-flow.md#the-endgame-is-a-countdown-and-no-gesture-advances-it)).
+  ([the endgame is a countdown](../taoot/mission-flow.md#the-endgame-is-a-countdown-and-no-gesture-advances-it)).
   "Ask everyone everything" is not free the way it is in missions 1–3.
 - **Walking IS pressing up, and some standpoints are wired to that press.** The
   planner's walk within a room is a series of `pressUp`s, so a route crossing the
@@ -263,7 +263,7 @@ Learned the hard way, all verified:
   Movement, never distance: every answered click came from beyond `hotdist()` as the
   route computes it (nav/reach.ts).
 - **Find a hotspot's script by container id.** `ObjectEntry.locationScript` in
-  [`src/df/set.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/set.ts) maps a
+  [`engine/src/df/set.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set.ts) maps a
   view's object to the container that handles it — that is how Sasha's door turned out
   to be the `"door"` of Scene51/View57 and not the `"knock"` beside it.
 - **Bevel ids, never positions.** `PENNY1.PUP`'s `zeitelgram()` calls
@@ -272,7 +272,7 @@ Learned the hard way, all verified:
   (`npx tsx tools/dumpscripts.ts gamefiles out/`) — but it is not complete for
   BOOTFILE: five codes are dumped where boot1 and boot2 carry 78 between them, so
   `progress` looks undefined when it is not. `session.bootScripts[n].script.codes` is
-  the honest list. `npx tsx tools/disasmcmd.mts <name|0xVA>` disassembles TI.EXE when
+  the honest list. `npx tsx taoot/tools/disasmcmd.mts <name|0xVA>` disassembles TI.EXE when
   the scripts are not enough.
 
 Back to the [reference index](README.md).

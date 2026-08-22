@@ -1,0 +1,238 @@
+/*
+ * Titanic's palette, and the roles it fills.
+ *
+ * The STRUCTURE this dresses is site/src/chrome.css — the topbar, the pickers,
+ * the controls and the panels that every page in the project shares. This file
+ * is the half that says what colour any of it is, and it is the half that is
+ * about one game: a page belonging to Dust, or to the project's own front door,
+ * imports the same chrome and supplies its own values for the same names.
+ *
+ * Where the colours come from
+ * ---------------------------
+ * From the logo, literally. `globe.png` is a blue-white globe with a brass
+ * porthole cut through it and an iceberg on open water behind the glass, and
+ * every value below was sampled out of it: the night side of the globe for the
+ * darks, the water and the ice for the mid and bright blues, the porthole ring
+ * for the brass. Nothing here is invented, which is why the mark sits on the
+ * page without looking pasted on.
+ *
+ * What the colours MEAN
+ * ---------------------
+ * The old sheet had one accent (a tan gold) doing every job at once — links,
+ * hover, focus, headings, the unsaved marker, the primary button — so a brass
+ * edge told you nothing about why it was brass. The palette is split by role
+ * instead, and the split is the whole design:
+ *
+ *   ice    it is live, or it is where you are
+ *   brass  it commits, or it is unsaved
+ *   abyss  it is ground
+ *   hull   it is an edge
+ */
+
+/* The structure comes first: an @import has to lead the file, and custom
+   properties resolve where they are USED, so the rules below reach these
+   values regardless of order. */
+@import "@dreamfactory/site/chrome.css";
+
+/* ---- palette: sampled from globe.png ---------------------------------- */
+
+:root {
+  /* Abyss — the globe's night side and the water under the iceberg. Blue-black
+     rather than neutral black: at these levels the hue is barely nameable, but
+     a page of it reads as water instead of as "off". */
+  --abyss-900: #00060f;
+  --abyss-850: #000a18;
+  --abyss-800: #000d1f;
+  --abyss-700: #01152c;
+  --abyss-600: #041e3c;
+  --abyss-500: #06294e;
+
+  /* Hull — the borders. Ice-tinted, so a divider is a lighter piece of the same
+     water rather than a grey line laid over it. */
+  --hull-500: #0a2d52;
+  --hull-400: #0e3a66;
+  --hull-300: #17507f;
+  --hull-200: #2a6c9e;
+
+  /* Ice — the iceberg through the glass. The interactive colour. */
+  --ice-600: #2b7fbc;
+  --ice-500: #3c9cd8;
+  --ice-400: #60c0f0;
+  --ice-300: #90ccf0;
+  --ice-200: #b4d8f0;
+  --ice-100: #cce4fc;
+  --frost: #e4f0fc;
+
+  /* Brass — the porthole ring. Warm, saturated, and used sparingly. */
+  --brass-700: #8a5c1a;
+  --brass-600: #b47824;
+  --brass-500: #c08424;
+  --brass-400: #d89c24;
+  --brass-300: #e4b424;
+  --brass-200: #f0cf7e;
+
+  /* The two states that are neither ice nor brass. */
+  --alarm: #ff5a4a;
+  --ok: #4fc98a;
+
+  /* Type. Georgia stays, but only where it earns it — the wordmark and page
+     titles, where the period is the point. Controls get the UI face so a dense
+     bar looks like a tool, and anything read off a file (offsets, sizes, hex,
+     decompiled script) gets mono, where column alignment is the whole job. */
+  /* Both stacks end in the same CJK families engine/src/web/fonts.ts hands the canvas, for
+     the same reason: the lead faces carry no CJK at all, so a Japanese page
+     rendered without them falls through to whatever generic the browser keeps
+     — Georgia was drawing 日本語 as a per-glyph substitution. Naming the
+     families makes the page and the game text agree on a face instead of
+     each guessing separately. */
+  --font-display:
+    Georgia, "Iowan Old Style", "Times New Roman", "MS PGothic",
+    "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans CJK JP", "Noto Sans JP", serif;
+  --font-ui:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "MS PGothic",
+    "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans CJK JP", "Noto Sans JP", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* One rhythm for both surfaces; `work` tightens it below. */
+  --gap: 0.8rem;
+  --radius: 3px;
+  --radius-lg: 5px;
+
+  /* The porthole glow: the light the iceberg throws through the glass. Used on
+     the game canvas and on a focused control, and nowhere else — it is the one
+     effect in the sheet, so it stays meaningful. */
+  --glow: 0 0 0 1px rgba(96, 192, 240, 0.14), 0 0 34px -6px rgba(96, 192, 240, 0.32);
+
+  color-scheme: dark;
+}
+
+/* ---- semantic layer: the two densities -------------------------------- */
+
+body.deep,
+body.work {
+  --bg: var(--abyss-900);
+  --panel: var(--abyss-800);
+  --raised: var(--abyss-700);
+  --inset: var(--abyss-850);
+
+  --border: var(--hull-500);
+  --border-strong: var(--hull-400);
+  --border-hover: var(--hull-200);
+
+  --text: var(--ice-100);
+  --text-bright: var(--frost);
+  --text-dim: #7fa3c4;
+  --text-mute: #4f7a9c;
+
+  --accent: var(--ice-400);
+  --accent-quiet: var(--ice-600);
+  --mark: var(--brass-400);
+}
+
+/* The game: water all the way down, and as little chrome as the page can get
+   away with. Panels barely separate from the field — nothing beside the
+   framebuffer should read as a surface competing with it. */
+body.deep {
+  --bg: var(--abyss-900);
+  --panel: var(--abyss-850);
+  --raised: var(--abyss-800);
+  --text-dim: #7ba0c2;
+  --text-mute: #4a6f92;
+  --pad: 0.5rem 0.8rem;
+}
+
+/* The editors: the field comes up a step and panels come up two, because a
+   screen with forty controls on it needs grouping to survive without drawing a
+   box around everything. */
+body.work {
+  --bg: var(--abyss-850);
+  --panel: var(--abyss-700);
+  --raised: var(--abyss-600);
+  --inset: var(--abyss-900);
+  --border: var(--hull-400);
+  --border-strong: var(--hull-300);
+  --text-dim: #8fb0cd;
+  --text-mute: #5b81a4;
+  --gap: 0.65rem;
+  --pad: 0.4rem 0.7rem;
+}
+
+
+/* ---- roles the chrome asks for by name -------------------------------- */
+
+/*
+ * Everything above is Titanic's: abyss, hull, ice, brass, sampled out of the
+ * logo. Everything below is a ROLE — what a colour is for — and the chrome in
+ * site/src/chrome.css uses nothing else. That is the whole contract: a palette
+ * supplies these names, the structure consumes them, and a page in a different
+ * world (Dust, or the project's own front door) supplies its own values without
+ * touching a single rule.
+ *
+ * Each one was introduced by reading a rule that had reached past the roles
+ * into the palette, and is defined here with EXACTLY the value that rule had.
+ */
+:root {
+  /* the accent, brighter on hover and as a line */
+  --accent-hover: var(--ice-300);
+  --accent-line: var(--ice-500);
+
+  /* text selection — 28% of the accent, kept literal because that is what it was */
+  --selection-bg: rgba(96, 192, 240, 0.28);
+
+  /* the bar across the top: two translucent stops over the page */
+  --topbar-top: var(--abyss-700);
+  --topbar-bottom: var(--abyss-900);
+
+  /* an ordinary button under the pointer, and while it is held */
+  --button-hover-bg: var(--abyss-500);
+  --button-active-bg: var(--abyss-600);
+
+  /* a button that reports a state rather than doing something */
+  --state-border: var(--hull-300);
+
+  /* the rule under a page title: dark, mid, bright, dark */
+  --rule-mid: var(--brass-500);
+  --rule-bright: var(--brass-300);
+
+  /* the one control that COMMITS — the only thing wearing the mark's colour
+     as a surface rather than as an edge (see the note on --mark) */
+  --commit-face-bottom: var(--brass-600);
+  --commit-face-deep: var(--brass-700);
+  --commit-edge: var(--brass-300);
+  --commit-edge-hover: var(--brass-200);
+}
+
+/* ---- roles found hiding as literals ----------------------------------- */
+
+/*
+ * The same exercise, for values that were written as raw colours rather than as
+ * palette references. Same rule: each is defined with exactly what it was.
+ */
+:root {
+  /* the cold pool of light at the top of every page — hull-300, thinned */
+  --depth-light: rgba(23, 80, 127, 0.35);
+
+  /* the globe in the topbar glows; the accent, thinned */
+  --mark-glow: rgba(96, 192, 240, 0.35);
+
+  /* what a floating menu casts */
+  --shadow-drop: rgb(0 0 0 / 45%);
+
+  /*
+   * The dropped-open language menu's own background.
+   *
+   * This was `var(--bg-panel, #0d1520)`, and `--bg-panel` IS DEFINED NOWHERE —
+   * not in the old sheet, not in any page, nowhere in the repository. So the
+   * fallback has always BEEN the value, and it is not one of the abyss steps: a
+   * touch lighter and greyer than `--panel`. Kept exactly as it rendered rather
+   * than quietly folded into `--panel`, which would darken a menu nobody asked
+   * to change. Whether it SHOULD be `--panel` is a design question, and it is a
+   * visible one now instead of a dead reference.
+   */
+  --menu-panel: #0d1520;
+
+  /* text on the brass commit button: the one place in the design where the
+     ground is the mark, so the ink has to be near-black brown */
+  --commit-text: #180d00;
+  --commit-text-hover: #1c0f00;
+}

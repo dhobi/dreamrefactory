@@ -3,26 +3,30 @@
 # Register this machine as a repository-level self-hosted runner for the test
 # workflows, and point it at a local copy of the CD rip.
 #
-# Why self-hosted at all: 21 of the 24 automatic suites, the playthrough and the
-# whole browser suite read the original game files under `gamefiles/`. That is a
-# ~7 GB CD rip which is gitignored and will never be in the repository, so no
-# GitHub-hosted runner can ever run them. The remaining suites do run on
+# Why self-hosted at all: most of the automatic suites, the playthrough and the
+# whole browser suite read the original game files. Those are a 7.4 GB CD set
+# (Titanic) and a 645 MB one (Dust), gitignored and never in the repository, so
+# no GitHub-hosted runner can ever run them. The remaining suites do run on
 # GitHub's machines — that is the `portable` job in .github/workflows/tests.yml.
 #
 # This script is SELF-CONTAINED: it does not need a clone of the repository to
 # be present, because the runner makes its own checkout under `_work/`. Copy
 # just this file to the runner host and run it there.
 #
+# TWO rips, because each game package resolves `gamefiles/` inside its own root:
+# Titanic's tree of six editions and the demo, and Dust's single disc — which used
+# to be a `dust/` subdirectory of the first and is its own tree now.
+#
 # Usage:
-#   tools/setup-runner.sh /path/to/gamefiles                # register + install service
-#   tools/setup-runner.sh /path/to/gamefiles --no-service    # register only, run by hand
-#   tools/setup-runner.sh /path/to/gamefiles --token TOKEN   # for a host with no `gh`
+#   tools/setup-runner.sh /srv/taoot/gamefiles --dust /srv/dust/gamefiles
+#   … --no-service         # register only, run by hand
+#   … --token TOKEN        # for a host with no `gh`
 #
 # Requires: curl, tar, node 22+, npm. Plus EITHER `gh` logged in with admin on
 # the repository, OR a registration token passed with --token — mint one from a
 # machine that does have `gh`:
 #
-#   gh api --method POST repos/dhobi/taoot-web/actions/runners/registration-token --jq .token
+#   gh api --method POST repos/dhobi/dreamrefactory/actions/runners/registration-token --jq .token
 #
 # It expires in an hour and is single-use.
 #
@@ -42,7 +46,7 @@
 
 set -euo pipefail
 
-REPO="dhobi/taoot-web"
+REPO="dhobi/dreamrefactory"
 
 # The pinned version lives in tools/runner/runner.env so the container build and
 # this script cannot drift apart. These values are the fallback for the case this
@@ -63,11 +67,14 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 # ---------------------------------------------------------------- arguments --
 GAMEFILES=""
+DUST_GAMEFILES=""
 INSTALL_SERVICE=1
 TOKEN=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-service) INSTALL_SERVICE=0 ;;
+    --dust)       DUST_GAMEFILES="${2:-}"; shift; [ -n "$DUST_GAMEFILES" ] || die "--dust needs a value" ;;
+    --dust=*)     DUST_GAMEFILES="${1#*=}" ;;
     --token)      TOKEN="${2:-}"; shift; [ -n "$TOKEN" ] || die "--token needs a value" ;;
     --token=*)    TOKEN="${1#*=}" ;;
     -h|--help)    sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -77,33 +84,52 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-[ -n "$GAMEFILES" ] || die "give the path to the gamefiles directory:
-  setup-runner.sh /srv/taoot/gamefiles"
+[ -n "$GAMEFILES" ] || die "give the path to Titanic's gamefiles directory:
+  setup-runner.sh /srv/taoot/gamefiles --dust /srv/dust/gamefiles"
+# Dust's rip is OPTIONAL, exactly as the workflow treats it: its suites skip the
+# disc rather than failing without it. Saying so beats refusing to register.
+if [ -z "$DUST_GAMEFILES" ]; then
+  printf 'note: no --dust given, so Dust\047s disc-reading tests will skip.\n'
+  printf '      Add it later with: --dust /srv/dust/gamefiles\n'
+fi
 
 GAMEFILES="$(cd "$GAMEFILES" && pwd)" || die "cannot resolve $GAMEFILES"
 [ -d "$GAMEFILES" ] || die "$GAMEFILES is not a directory"
+if [ -n "$DUST_GAMEFILES" ]; then
+  DUST_GAMEFILES="$(cd "$DUST_GAMEFILES" && pwd)" || die "cannot resolve $DUST_GAMEFILES"
+  [ -d "$DUST_GAMEFILES" ] || die "$DUST_GAMEFILES is not a directory"
+fi
 
 # The directory must be CALLED gamefiles, and this is a real constraint, not a
 # convention. The path lands in the runner's environment as TAOOT_GAMEFILES,
-# which `gamefilesRoot()` (tools/gamefiles.ts) already reads — so the harness
+# which `gamefilesRoot()` (taoot/tools/gamefiles.ts) already reads — so the harness
 # enumerates the shipped saves at this literal path, and SHIPPED_SAVE in
 # src/save-seed.ts matches them on a `gamefiles/` path segment. Point this at a
 # directory called `taoot-gamefiles` and the regex sees `taoot-gamefiles/`,
 # matches nothing, and one test fails on its own: "the dev-server manifest's
 # shipped saves are all recognised for seeding". Caught here, so it never gets
 # that far.
-if [ "$(basename "$GAMEFILES")" != "gamefiles" ]; then
-  die "the rip's directory must be NAMED 'gamefiles' (got: $GAMEFILES)
+for _d in "$GAMEFILES" ${DUST_GAMEFILES:+"$DUST_GAMEFILES"}; do
+  if [ "$(basename "$_d")" != "gamefiles" ]; then
+    die "the rip's directory must be NAMED 'gamefiles' (got: $_d)
 Move it one level down — /srv/taoot/gamefiles, not /srv/taoot-gamefiles:
-  sudo mkdir -p /srv/taoot && sudo mv '$GAMEFILES' /srv/taoot/gamefiles
-Why: src/save-seed.ts matches shipped saves on a literal 'gamefiles/' segment."
-fi
+  sudo mkdir -p /srv/taoot && sudo mv '$_d' /srv/taoot/gamefiles
+Why: taoot/src/save-seed.ts matches shipped saves on a literal 'gamefiles/' segment."
+  fi
+done
 
 # An edition is a language tree; without at least one, every rip-reading suite
 # fails on its first read rather than skipping, so check now instead of at 02:00.
 editions="$(find "$GAMEFILES" -maxdepth 1 -mindepth 1 -type d -printf '%f ' 2>/dev/null || true)"
 [ -n "$editions" ] || die "$GAMEFILES has no edition subdirectories (expected e.g. en, de, demo)"
 printf 'rip: %s\n  editions: %s\n' "$GAMEFILES" "$editions"
+
+# Dust is one disc, so there is no edition axis to check — only that the disc is
+# where it says it is.
+if [ -n "$DUST_GAMEFILES" ]; then
+  [ -d "$DUST_GAMEFILES/dustcd" ] || die "$DUST_GAMEFILES has no dustcd/ — that is the disc"
+  printf 'dust: %s\n' "$DUST_GAMEFILES"
+fi
 
 # ------------------------------------------------------------- preflight -----
 command -v curl >/dev/null || die "curl is not installed"
@@ -175,12 +201,16 @@ fi
 # ------------------------------------------------------------ environment ----
 # The runner exports every line of this file into each job. This is how the
 # workflows find the rip without it ever being in the repository.
-if grep -q '^TAOOT_GAMEFILES=' .env 2>/dev/null; then
-  sed -i "s|^TAOOT_GAMEFILES=.*|TAOOT_GAMEFILES=${GAMEFILES}|" .env
-else
-  printf 'TAOOT_GAMEFILES=%s\n' "$GAMEFILES" >> .env
-fi
-printf 'wrote TAOOT_GAMEFILES=%s to %s/.env\n' "$GAMEFILES" "$RUNNER_HOME"
+set_env() {
+  if grep -q "^$1=" .env 2>/dev/null; then
+    sed -i "s|^$1=.*|$1=$2|" .env
+  else
+    printf '%s=%s\n' "$1" "$2" >> .env
+  fi
+  printf 'wrote %s=%s to %s/.env\n' "$1" "$2" "$RUNNER_HOME"
+}
+set_env TAOOT_GAMEFILES "$GAMEFILES"
+[ -n "$DUST_GAMEFILES" ] && set_env DUST_GAMEFILES "$DUST_GAMEFILES"
 
 # ------------------------------------------------------------- playwright ----
 # A warm-up, not a requirement: browser.yml runs `playwright install` itself, so
