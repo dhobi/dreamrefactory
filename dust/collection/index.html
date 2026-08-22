@@ -64,37 +64,37 @@
         margin: 0 auto;
         padding: 2rem 1.2rem 4rem;
       }
-      h1 {
+      .wrap h1 {
         font-size: 1.5rem;
         letter-spacing: 0.02em;
         margin: 0 0 0.4rem;
         color: var(--text-bright);
       }
-      .sub {
+      .wrap .sub {
         color: var(--text-mute);
         margin: 0 0 2.2rem;
       }
-      h2 {
+      .wrap h2 {
         font-size: 1.05rem;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--accent);
         margin: 2.4rem 0 0.6rem;
       }
-      p {
+      .wrap p {
         color: var(--text-mute);
       }
-      a {
+      .wrap a {
         color: var(--accent);
       }
       /* the four steps, numbered by the browser rather than by hand so inserting
          one does not mean renumbering the rest */
-      ol.steps {
+      .wrap ol.steps {
         margin: 1rem 0 0;
         padding-left: 1.4rem;
         color: var(--text-mute);
       }
-      ol.steps li {
+      .wrap ol.steps li {
         margin: 0.5rem 0;
       }
       /*
@@ -105,7 +105,7 @@
        * <ul> read as "the first of several" and invite the reader to look for the
        * others, so this is a single panel that says what it is and how big.
        */
-      .archive {
+      .wrap .archive {
         display: flex;
         flex-wrap: wrap;
         align-items: baseline;
@@ -116,27 +116,27 @@
         border: 1px solid var(--border-strong);
         border-radius: 3px;
       }
-      .archive a {
+      .wrap .archive a {
         font-weight: 600;
         font-size: 1rem;
         color: var(--text-bright);
       }
-      .archive a:hover {
+      .wrap .archive a:hover {
         color: #fff;
       }
-      .archive .size {
+      .wrap .archive .size {
         color: var(--text-mute);
         font-size: 0.8rem;
         /* pushed to the end so the two rows of a wrapped panel still line up on
            the name, which is what a reader is scanning for */
         margin-left: auto;
       }
-      .note {
+      .wrap .note {
         margin-top: 0.5rem;
         font-size: 0.8rem;
         color: var(--text-mute);
       }
-      .rights {
+      .wrap .rights {
         margin-top: 2.6rem;
         padding-top: 1.2rem;
         border-top: 1px solid var(--border);

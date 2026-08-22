@@ -114,10 +114,15 @@ function rulesIn(css: string): Map<string, Map<string, string>> {
 
 /** the pages that layer their own `<style>` over the shared chrome */
 function pagesLayeringChrome(): string[] {
-  const tracked = execFileSync("git", ["ls-files", "*.html"], {
-    cwd: ROOT,
-    encoding: "utf8",
-  })
+  // `--others --exclude-standard` as well as the index, because a page that has
+  // just been written is exactly the one worth checking and `ls-files` alone does
+  // not see it. This test passed locally on a new page and failed in CI on the
+  // same page one `git add` later, which is the wrong way round for a gate.
+  const tracked = execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "*.html"],
+    { cwd: ROOT, encoding: "utf8" },
+  )
     .trim()
     .split("\n")
     .filter(Boolean);
