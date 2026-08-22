@@ -1,8 +1,8 @@
 {
   "name": "taoot-web",
   "private": true,
-  "version": "0.9.50",
-  "dustVersion": "0.3.0",
+  "version": "0.9.51",
+  "dustVersion": "0.3.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

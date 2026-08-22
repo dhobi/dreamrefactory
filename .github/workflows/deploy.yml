@@ -5,10 +5,17 @@ name: Deploy
 # A release is a TAG, and there are TWO tag namespaces because the site carries
 # two separately-versioned games off one codebase:
 #
-#   v0.9.51        the TAOOT site — the full build, MINUS dust.html, so a TAOOT
+#   taoot-v0.9.51  the TAOOT site — the full build, MINUS dust.html, so a TAOOT
 #                  release never ships whatever state Dust happens to be in
 #   dust-v0.1.0    the Dust page — `vite build --mode dust`, which emits
 #                  dust.html and its own hashed chunks and nothing else
+#
+# BOTH namespaces carry their game's name. The TAOOT tag was a bare `v0.9.50`
+# until 0.9.51, which read as "the repository's version" when it was only ever
+# one of the two games' — and left the pair spelled differently for no reason.
+# The bare pattern is GONE rather than kept alongside: two working spellings for
+# one release is how a `v0.9.52` gets tagged, matched by nothing, and quietly
+# deploys nothing. A tag naming no game is now an ERROR, not a default.
 #
 # Either tag builds that commit and uploads its `dist/` over FTP; an ordinary
 # push to master deploys nothing. Both work because the mirror only ADDS and
@@ -58,7 +65,7 @@ name: Deploy
 
 on:
   push:
-    tags: ["v*", "dust-v*"]
+    tags: ["taoot-v*", "dust-v*"]
   workflow_dispatch:
 
 # One upload at a time, and never cancel one in flight: a half-written mirror is
@@ -85,15 +92,22 @@ jobs:
 
       - run: npm ci
 
-      # Which game is this tag releasing? `dust-v*` ships the Dust page alone;
-      # everything else (a `v*` tag, a manual dispatch) ships the TAOOT site.
+      # Which game is this tag releasing? Each namespace says so itself, and a
+      # tag that says neither stops the run: guessing is what a bare `v*` used
+      # to do, and a wrong guess here uploads one game's build over the other's
+      # page. A manual dispatch has no tag and means the site, as it always did.
       - name: Which release is this
         id: what
         run: |
-          if [[ "${GITHUB_REF_NAME}" == dust-v* ]]; then
-            echo "game=dust" >> "$GITHUB_OUTPUT"
-          else
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
             echo "game=taoot" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF_NAME}" == dust-v* ]]; then
+            echo "game=dust" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF_NAME}" == taoot-v* ]]; then
+            echo "game=taoot" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::tag $GITHUB_REF_NAME names no game — tag taoot-v* or dust-v*"
+            exit 1
           fi
 
       - name: The tag and package.json agree
@@ -104,7 +118,7 @@ jobs:
             pkg="$(node -p "require('./package.json').dustVersion")"
             field="dustVersion"
           else
-            tag="${GITHUB_REF_NAME#v}"
+            tag="${GITHUB_REF_NAME#taoot-v}"
             pkg="$(node -p "require('./package.json').version")"
             field="version"
           fi
