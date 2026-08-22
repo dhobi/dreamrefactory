@@ -35,7 +35,18 @@ export default withMermaid(
     description:
       "How CyberFlix's DreamFactory engine works, and how this project reimplemented it — from a game's main flow down to each DFile container format. Titanic (DreamFactory 4) and Dust (DreamFactory 1).",
     lastUpdated: true,
-    cleanUrls: true,
+    /**
+     * FALSE, and it has to be. `cleanUrls` emits links without `.html` and relies
+     * on the SERVER to resolve `/docs/glossary` to `glossary.html` — which GitHub
+     * Pages does and a plain Apache host does not. The first deploy to the new
+     * home returned 404 for every page that is not a directory index; only the
+     * `.html` form answered.
+     *
+     * The premise of this whole deployment is that it needs nothing but a file
+     * server, so the links carry the extension rather than the host carrying a
+     * rewrite rule.
+     */
+    cleanUrls: false,
     ignoreDeadLinks: false,
 
     // Favicon. head[].href is NOT base-prefixed automatically, so include it.
