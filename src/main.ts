@@ -1546,31 +1546,40 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     return;
   }
-  // X goes first for the same reason the gamma keys do, and it is a stronger case
-  // than theirs: the pane REMEMBERS being open (taoot.details.open), so a reader
-  // who left it up gets it back on the loading screen — and behind the viewer
-  // guard below, the key that put it there could not take it down again. A pane on
-  // screen that its own advertised key does nothing to is worse than no pane. It
-  // also has to outrank the overlay branch: a stage that owns every key would
-  // otherwise swallow X for as long as the deck map or the intro question is up.
-  if (!focusOwnsKey(e.target, e.key) && (e.key === "x" || e.key === "X")) {
-    toggleDetails();
+  const isDetailsKey = !focusOwnsKey(e.target, e.key) && (e.key === "x" || e.key === "X");
+  // X outranks the VIEWER guard for the same reason the gamma keys do, and it is a
+  // stronger case than theirs: the pane REMEMBERS being open (taoot.details.open),
+  // so a reader who left it up gets it back on the loading screen — and behind the
+  // guard, the key that put it there could not take it down again. A pane on screen
+  // that its own advertised key does nothing to is worse than no pane.
+  const v = host.viewer;
+  if (!v) {
+    if (isDetailsKey) toggleDetails();
     return;
   }
-  const v = host.viewer;
-  if (!v) return;
   // Typed into something on the page, not at the game (src/keys.ts). This listens
   // on `window`, and the page's own keys are LETTERS — so without this, filtering
   // the state list for "mission" toggled the minimap on the M and the hotspot
   // overlay on the O, and sent all seven letters to the script chain besides.
   if (focusOwnsKey(e.target, e.key)) return;
-  // a full-screen overlay stage (the deck map) consumes all keys itself
+  // a full-screen overlay stage (the deck map) consumes all keys itself — and it
+  // does NOT yield X, which is the one place the pane key has to give way. The
+  // Enigma is such a stage and its keydown TYPES: ZEITEL's telegram spells
+  // `anhqsppaixwbfcxyam`, so a pane toggle up here ate both of its X's and the
+  // machine could never be made to decode — mission 1 with no way past it. The
+  // deck map and the intro question lose the pane key while they are up, which is
+  // a shortcut deferred rather than a screen made useless (#265, and #257 which
+  // put X above this branch).
   if (!session.viewShowing && session.stageCtrl.keydownTarget()) {
     const df = DF_KEY[e.key] ?? (e.key.length === 1 ? e.key.toLowerCase() : "");
     if (df) {
       void session.track(v.keyDown(df, isSpecialKey(e)));
       e.preventDefault();
     }
+    return;
+  }
+  if (isDetailsKey) {
+    toggleDetails();
     return;
   }
   switch (e.key) {
