@@ -12,7 +12,7 @@ Lookup material — no narrative, come here when you need a specific name.
 - **[Tests](tests.md)** — which suite covers what, and the command to run each
   one. The *argument* those suites make — what the playthrough is for and what
   it has caught — is narrative and lives in
-  **[How we know it's right](../verification.md)**.
+  **[How we know it's right](../taoot/verification.md)**.
 - **[Continuous integration](ci.md)** — which suites can run on GitHub's
   machines and which need the self-hosted runner that has the CD rip, how that
   runner is set up, and what changes when the repository goes public.

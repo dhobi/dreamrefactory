@@ -1,11 +1,11 @@
 # The cast editor
 
-[`editors/casts.html`](https://github.com/dhobi/taoot-web/blob/master/editors/casts.html) — source
-[`editors/cst-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/cst-editor.ts).
+[`editors/casts.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/casts.html) — source
+[`editors/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/cst-editor.ts).
 Open `http://localhost:5173/editors/casts.html`.
 
 The other half of a character: the [puppet editor](puppets.md) has the brains,
-this has the **body**. Load a [CST cast](../formats/pup-cst.md) — `GANG.CST` is
+this has the **body**. Load a [CST cast](../engine/formats/pup-cst.md) — `GANG.CST` is
 the 25 named story characters, `EXTRA.CST` the background passengers — and it
 comes apart into members → poses → sprites.
 
@@ -33,17 +33,17 @@ viewer sees from eight positions around a character, not eight camera angles.
 **Export .cst** repacks the container file and downloads it. Both names are
 copy-on-write patches on the member's own logic container (`patchMemberName`,
 `patchPoseName` in
-[`src/df/cst.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/cst.ts)),
+[`engine/src/df/cst.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/cst.ts)),
 and a sprite's anchor goes through `patchFrameAnchor` in
-[`src/df/shp.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/shp.ts) —
+[`engine/src/df/shp.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/shp.ts) —
 a cast sprite *is* a SHP frame, header and all — so everything you did not touch
 is the byte it was
-(see [`tests/auto/cst-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/tests/auto/cst-editor.ts)).
+(see [`taoot/tests/auto/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/cst-editor.ts)).
 
 ## See also
 
-- [PUP & CST — characters ("puppets")](../formats/pup-cst.md) — what the structures are
-- [Characters](../runtime/characters.md) — actors in the world
+- [PUP & CST — characters ("puppets")](../engine/formats/pup-cst.md) — what the structures are
+- [Characters](../engine/runtime/characters.md) — actors in the world
 - [The puppet editor](puppets.md) — the other half of a character
 - [The browser editors](README.md) — what the seven pages share
 

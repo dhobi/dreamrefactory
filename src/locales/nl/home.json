@@ -1,8 +1,0 @@
-{
-  "docTitle": "Titanic - Adventure Out Of Time RE",
-  "h1": "Avontuur in de tijd RE",
-  "intro": "<b>RE</b> staat voor reverse-engineered. Dit is geen emulatie, maar een in JavaScript (TypeScript) geïmplementeerde versie van de DreamFactory-engine (CyberFlix). Het meeste werkt al, maar deze versie heeft bij lange na niet de volwassenheid van de originele engine.<br>Speel er wat mee, probeer de <a href=\"./editors/\">editors</a> uit en meld ons bugs rechtstreeks op <a href=\"https://github.com/dhobi/taoot-web/issues/new\">GitHub</a>.",
-  "play": "Spelen",
-  "playNote": "Ga direct van start!",
-  "credits": "Mogelijk gemaakt door <a href=\"https://github.com/M3tox/DFET\">DFET</a> van M3tox — tot stand gekomen met ondersteuning van Claude Opus en Claude Fable."
-}

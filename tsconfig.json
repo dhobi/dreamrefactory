@@ -4,7 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     // the translations are JSON so a translator or a TMS can read them; the
-    // per-language index.ts asserts each one against Catalogue (src/locales/)
+    // per-language index.ts asserts each one against Catalogue (site/src/locales/)
     "resolveJsonModule": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
@@ -14,5 +14,9 @@
     "forceConsistentCasingInFileNames": true,
     "useDefineForClassFields": true
   },
-  "include": ["src", "editors", "tools", "tests"]
+  "include": ["engine", "site", "taoot", "dust", "tools"],
+  // The rips live inside the game packages now, and a rip is not a source tree:
+  // it is ~7,800 files of 1996 game data, and anything a probe happens to leave
+  // in one is not part of this program.
+  "exclude": ["**/gamefiles/**", "**/node_modules/**", "**/dist/**"]
 }

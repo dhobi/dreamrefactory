@@ -24,9 +24,9 @@ permissions:
 jobs:
   # ---------------------------------------------------------------------------
   # Runs on GitHub's machines, for every pull request including forks': the
-  # suites that build their own fixtures with the write path (src/df/*-build.ts)
+  # suites that build their own fixtures with the write path (engine/src/df/*-build.ts)
   # instead of reading the game's files — or, in save-original.ts's case, read
-  # the one tracked fixture in tests/data/. 159 tests.
+  # the one tracked fixture in taoot/tests/data/. 159 tests.
   #
   # The list below is the INVERSE of what it covers — the ten suites that do
   # need the rip. Excluding is deliberate: a test file added later runs here by
@@ -48,7 +48,7 @@ jobs:
 
       - name: Automatic suites, minus the ten that read the rip
         run: |
-          npx vitest run --exclude 'tests/auto/{regression,savegame,re_builtins,interp,nav,text,audio-rates,sound-channels,shp-play-order,cst-play-order}.ts'
+          npx vitest run --exclude 'taoot/tests/auto/{regression,savegame,re_builtins,interp,nav,text,audio-rates,sound-channels,shp-play-order,cst-play-order}.ts'
 
   # ---------------------------------------------------------------------------
   # Runs on the self-hosted runner, which holds the rip. Everything the port's
@@ -71,18 +71,36 @@ jobs:
       - uses: actions/checkout@v4
 
       # `actions/checkout` cleans with `git clean -ffdx`, and -x takes IGNORED
-      # files too — so the link below is deleted on every run and has to be
-      # remade after the checkout, not before. Remaking it is instant; the 7 GB
-      # it points at never moves and is never copied into the workspace.
-      - name: Link the rip into the workspace
+      # files too — so the links below are deleted on every run and have to be
+      # remade after the checkout, not before. Remaking them is instant; the 8 GB
+      # they point at never moves and is never copied into the workspace.
+      - name: Link the rips into the workspace
         run: |
-          test -d "$TAOOT_GAMEFILES" || {
-            echo "::error::TAOOT_GAMEFILES ($TAOOT_GAMEFILES) is not a directory."
+          # TWO rips now, one per game package, because each game's build and
+          # suite resolve `gamefiles/` inside their own package.
+          #
+          # Titanic's is REQUIRED: most of the automatic suites and the whole
+          # playthrough read it, and without it this job has nothing to do.
+          #
+          # Dust's is OPTIONAL, because its suites already skip the disc rather
+          # than failing without it — `dust/tests/` passes 15 tests with no rip
+          # present at all. Demanding it here was stricter than the tests are, and
+          # it blocked a host that has never needed Dust's disc. Unset is a
+          # WARNING with the consequence named, not an error.
+          if [ -z "${TAOOT_GAMEFILES:-}" ] || [ ! -d "${TAOOT_GAMEFILES:-}" ]; then
+            echo "::error::TAOOT_GAMEFILES (${TAOOT_GAMEFILES:-unset}) is not a directory."
             echo "It is set in the runner's .env — see docs/reference/ci.md."
             exit 1
-          }
-          ln -sfn "$TAOOT_GAMEFILES" gamefiles
-          echo "editions present: $(ls gamefiles | tr '\n' ' ')"
+          fi
+          ln -sfn "$TAOOT_GAMEFILES" taoot/gamefiles
+          echo "editions present: $(ls taoot/gamefiles | tr '\n' ' ')"
+
+          if [ -n "${DUST_GAMEFILES:-}" ] && [ -d "${DUST_GAMEFILES:-}" ]; then
+            ln -sfn "$DUST_GAMEFILES" dust/gamefiles
+            echo "dust present:     $(ls dust/gamefiles | tr '\n' ' ')"
+          else
+            echo "::warning::DUST_GAMEFILES (${DUST_GAMEFILES:-unset}) is not a directory — Dust's disc-reading tests will skip. Set it in the runner's .env to cover them."
+          fi
 
       # No setup-node here: the runner's own Node is used, so a run does not
       # re-download a toolchain onto a machine that already has one.

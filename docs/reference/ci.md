@@ -16,7 +16,7 @@ Measured, in a checkout with no `gamefiles/` present:
 
 The nine are `regression`, `savegame`, `re_builtins`, `interp`, `nav`, `text`,
 `audio-rates`, `sound-channels`, `shp-play-order`. Everything else builds its
-own fixtures with [the write path](../formats/README.md#writing-one-back)
+own fixtures with [the write path](../engine/formats/README.md#writing-one-back)
 instead of reading the game, which is exactly why it travels.
 
 They fail rather than skip on purpose — `text.ts` asserts that it found language
@@ -27,10 +27,10 @@ behind a green tick.
 
 | Workflow | Trigger | What |
 |---|---|---|
-| [`tests.yml`](https://github.com/dhobi/taoot-web/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` on GitHub's machines; `full` (whole auto suite + playthrough) self-hosted |
-| [`browser.yml`](https://github.com/dhobi/taoot-web/blob/master/.github/workflows/browser.yml) | nightly 02:00 UTC, manual, or the `full-run` label on a PR | the browser suite — ~39 min, because it costs what the game costs |
-| [`docs.yml`](https://github.com/dhobi/taoot-web/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to Pages |
-| [`deploy.yml`](https://github.com/dhobi/taoot-web/blob/master/.github/workflows/deploy.yml) | a `v*` tag, or manual | builds and uploads `dist/` to the host — [releasing and deploying](deploy.md) |
+| [`tests.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` on GitHub's machines; `full` (whole auto suite + playthrough) self-hosted |
+| [`browser.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/browser.yml) | nightly 02:00 UTC, manual, or the `full-run` label on a PR | the browser suite — ~39 min, because it costs what the game costs |
+| [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to Pages |
+| [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `v*` tag, or manual | builds and uploads `dist/` to the host — [releasing and deploying](deploy.md) |
 
 The browser suite is off the per-PR path deliberately. Add the **`full-run`**
 label to a pull request to pull it in for that PR.
@@ -68,7 +68,7 @@ rsync -a --info=progress2 gamefiles/ runner-host:/srv/taoot/gamefiles/
 scp tools/setup-runner.sh runner-host:~
 
 # 3. a registration token, minted here, valid one hour, single use
-gh api --method POST repos/dhobi/taoot-web/actions/runners/registration-token --jq .token
+gh api --method POST repos/dhobi/dreamrefactory/actions/runners/registration-token --jq .token
 
 # 4. on that host
 ssh runner-host
@@ -95,7 +95,7 @@ sudo chown -R root:root /srv/taoot/gamefiles && sudo chmod -R a-w /srv/taoot/gam
 Then confirm from anywhere:
 
 ```bash
-gh api repos/dhobi/taoot-web/actions/runners \
+gh api repos/dhobi/dreamrefactory/actions/runners \
   --jq '.runners[] | {name, status, labels: [.labels[].name]}'
 ```
 
@@ -109,20 +109,30 @@ nightly run is a few minutes longer and no later one is. The warm-up
 deliberately refuses to run bare `npx --yes playwright`, which would fetch a
 newer browser than the one the suite pins.
 
-### The rip is linked in, never copied
+### The rips are linked in, never copied
 
-`vite.config.ts` resolves a bare `resolve("gamefiles")` — repo root, no
-environment override — so the workflows link the real directory into the
-workspace:
+**Two** rips now, one per game package: each game's Vite config resolves
+`gamefiles/` inside its own root, so Titanic's tree goes to `taoot/gamefiles`
+and Dust's disc — which used to be a `dust/` subdirectory of the first — to
+`dust/gamefiles`. The runner's `.env` names both.
+
+Titanic's is **required** and Dust's is **optional**: Dust's suites skip the disc
+rather than failing without it (`dust/tests/` passes with no rip present), so an
+unset `DUST_GAMEFILES` is a warning naming what will not be covered, not a failed
+run. Demanding it was stricter than the tests are.
 
 ```yaml
 - uses: actions/checkout@v4
-- run: ln -sfn "$TAOOT_GAMEFILES" gamefiles   # AFTER the checkout
+- run: |                                        # AFTER the checkout
+    ln -sfn "$TAOOT_GAMEFILES" taoot/gamefiles
+    ln -sfn "$DUST_GAMEFILES"  dust/gamefiles
 ```
+
+`browser.yml` links only Titanic's, because the play page it drives is Titanic's.
 
 The ordering is not cosmetic. `actions/checkout` cleans with `git clean -ffdx`,
 and `-x` deletes *ignored* files too — a link made before the checkout is gone
-by the time the tests run. Remaking it costs nothing; the 7 GB never moves.
+by the time the tests run. Remaking it costs nothing; the 8 GB never moves.
 
 ### The dev server does not get port 5173
 
@@ -136,7 +146,9 @@ Two reasons it must not be 5173:
   quietly test *their* working tree instead of the checkout.
 
 It has to be the **dev** server, not `vite preview`: the `/gamefiles` middleware
-is a `configureServer` hook, which preview never runs. Cleanup kills the
+is a `configureServer` hook (`tools/vite-gamefiles.ts`), which preview never
+runs. It is started with `--config taoot/vite.config.ts`, because the play page
+is served from Titanic's root and no other. Cleanup kills the
 recorded pid — never `pkill -f vite`, which on a shared machine takes the
 owner's server with it.
 
@@ -144,10 +156,13 @@ owner's server with it.
 
 Not a convention — a constraint, and it costs exactly one test to get wrong.
 
-`gamefilesRoot()` in `tools/gamefiles.ts` is `process.env.TAOOT_GAMEFILES ?? "gamefiles"`,
-so **the project already reads that variable**. The harness therefore enumerates
+`gamefilesRoot()` in `taoot/tools/gamefiles.ts` is `process.env.TAOOT_GAMEFILES`
+falling back to `taoot/gamefiles` resolved from that file — not from the working
+directory, because the two stopped being the same thing when each package got its
+own build (`npm test` runs from the repository root, a build from `taoot/`). So
+**the project already reads that variable**. The harness therefore enumerates
 the shipped saves at whatever real path it names, and `SHIPPED_SAVE` in
-`src/save-seed.ts` matches them on a literal `gamefiles/` segment:
+`taoot/src/save-seed.ts` matches them on a literal `gamefiles/` segment:
 
 ```js
 const SHIPPED_SAVE = /(?:^|\/)gamefiles\/(?:[^/]+\/)*save\/(.+\.ti)$/i;
@@ -169,7 +184,7 @@ assertion in `savegame.ts` is a poor way to learn this.
 ## The runner in a container
 
 Everything for it is in
-[`tools/runner/`](https://github.com/dhobi/taoot-web/tree/master/tools/runner).
+[`tools/runner/`](https://github.com/dhobi/dreamrefactory/tree/master/tools/runner).
 
 ```bash
 docker build -f tools/runner/Dockerfile -t taoot-runner .   # from the repo root
@@ -224,15 +239,15 @@ Two supervisors, and they are **not** equivalent:
 
 | | What restarts | Isolation between successive jobs |
 |---|---|---|
-| [`compose.yml`](https://github.com/dhobi/taoot-web/blob/master/tools/runner/compose.yml) | `restart: always` restarts the container, **reusing its writable layer** | from the host, yes; from the previous job, no |
-| [`taoot-runner.service`](https://github.com/dhobi/taoot-web/blob/master/tools/runner/taoot-runner.service) | `docker run --rm`, a **brand new container** each time | complete — a pristine filesystem per job |
+| [`compose.yml`](https://github.com/dhobi/dreamrefactory/blob/master/tools/runner/compose.yml) | `restart: always` restarts the container, **reusing its writable layer** | from the host, yes; from the previous job, no |
+| [`taoot-runner.service`](https://github.com/dhobi/dreamrefactory/blob/master/tools/runner/taoot-runner.service) | `docker run --rm`, a **brand new container** each time | complete — a pristine filesystem per job |
 
 Use the systemd unit if you want the stronger property; compose is the quick
 way to try it.
 
 ### Under Portainer
 
-[`portainer-stack.yml`](https://github.com/dhobi/taoot-web/blob/master/tools/runner/portainer-stack.yml)
+[`portainer-stack.yml`](https://github.com/dhobi/dreamrefactory/blob/master/tools/runner/portainer-stack.yml)
 is the same service adjusted for a web-editor stack. *Stacks → Add stack → Web
 editor*, paste it, and add one environment variable underneath:
 
@@ -316,8 +331,8 @@ Running the tests on a pull request is free. **Requiring them to pass before a
 merge is not**, while the repository is private:
 
 ```
-GET /repos/dhobi/taoot-web/branches/master/protection
-GET /repos/dhobi/taoot-web/rulesets
+GET /repos/dhobi/dreamrefactory/branches/master/protection
+GET /repos/dhobi/dreamrefactory/rulesets
 → 403 "Upgrade to GitHub Pro or make this repository public to enable this feature."
 ```
 

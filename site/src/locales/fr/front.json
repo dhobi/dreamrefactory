@@ -1,0 +1,13 @@
+{
+  "docTitle": "dreamREfactory — le moteur DreamFactory de CyberFlix, réimplémenté",
+  "tagline": "le moteur DreamFactory de CyberFlix, réimplémenté",
+  "lede": "CyberFlix a construit un moteur et publié <b>trois</b> aventures dessus. dreamREfactory est ce moteur réécrit en TypeScript, à partir des fichiers et non du code source — chaque format de conteneur décodé, le langage de script analysé et interprété, et les jeux jouables dans un navigateur sans rien installer. <b>Deux des trois sont ici</b> ; la troisième n'est pas portée.",
+  "titanicBody": "Le jeu complet en six langues, plus la démo de 1996. Un navigateur de sauvegardes, un sélecteur de langue et la page collection de l'édition physique.",
+  "dustBody": "Le moteur deux ans plus tôt, et une autre forme de fichier. S'ouvre sur ses films ; la ville est parcourable. Plus petit, et en croissance.",
+  "docsTitle": "Documentation",
+  "docsMeta": "formats · exécution · référence",
+  "docsBody": "Comment le moteur fonctionne, format de conteneur par format de conteneur, et comment chacun a été retrouvé. La moitié la plus longue de ce projet.",
+  "editorsTitle": "Éditeurs de formats",
+  "editorsBody": "Ouvrez une salle, un accessoire, un film ou une scène depuis les données du jeu, regardez ce qu'il y a dedans, modifiez-le et réécrivez-le.",
+  "caveat": "RE signifie reverse-engineered. Ceci est une réimplémentation faite au mieux et non une réédition : elle a besoin d'une copie des fichiers de données du jeu, qu'elle ne fournit pas, et elle n'est affiliée ni à CyberFlix, ni à GTE Entertainment, ni à aucun ayant droit actuel."
+}

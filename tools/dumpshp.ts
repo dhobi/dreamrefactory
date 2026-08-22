@@ -5,8 +5,8 @@
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { readShpFile, decodeShpFrame } from "../src/df/shp";
-import { paletteToRGBA } from "../src/df/image";
+import { readShpFile, decodeShpFrame } from "@dreamfactory/engine/df/shp";
+import { paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { encodePNG } from "./png";
 
 const [, , shpPath, outDir = "out"] = process.argv;

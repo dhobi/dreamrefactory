@@ -21,8 +21,8 @@
  */
 import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
-import { readContainerFile } from "../src/df/container";
-import { sniffScript, scriptToText } from "../src/df/script";
+import { readContainerFile } from "@dreamfactory/engine/df/container";
+import { sniffScript, scriptToText } from "@dreamfactory/engine/df/script";
 
 const [, , root = "gamefiles/en", out = "out/bevels.md"] = process.argv;
 

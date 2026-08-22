@@ -1,10 +1,10 @@
 # The shop editor
 
-[`editors/shops.html`](https://github.com/dhobi/taoot-web/blob/master/editors/shops.html) — source
-[`editors/shp-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/shp-editor.ts).
+[`editors/shops.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/shops.html) — source
+[`editors/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/shp-editor.ts).
 Open `http://localhost:5173/editors/shops.html`.
 
-Load a [SHP shop](../formats/shp.md) — the **props** drawn on top of a room:
+Load a [SHP shop](../engine/formats/shp.md) — the **props** drawn on top of a room:
 `HOUSE.SHP`'s 44 ship-wide props (including the 135-state `door`),
 `INVEN.SHP`'s items, a puzzle's switches — and it comes apart into the three
 levels a shop has, group → state → frame.
@@ -42,9 +42,9 @@ the page says so when that happens.
 **Export .shp** repacks the container file and downloads it. Every edit that is
 not frame art is a copy-on-write patch on a single container (`patchShopRefName`,
 `patchGroupName`, `patchStateIdentifier`, `patchFrameDegree`, `patchFrameAnchor`
-in [`src/df/shp.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/shp.ts)),
+in [`engine/src/df/shp.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/shp.ts)),
 so everything you did not touch is the byte it was
-(see [`tests/auto/shp-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/tests/auto/shp-editor.ts)).
+(see [`taoot/tests/auto/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/shp-editor.ts)).
 
 That suite also pins the one case where the bytes and the view can disagree: a
 state whose play-order table reverses its frames, where an edit made through the
@@ -52,7 +52,7 @@ reordered view has to land on the record that frame came from.
 
 ## See also
 
-- [SHP — props ("shop" files)](../formats/shp.md) — what the structures are
+- [SHP — props ("shop" files)](../engine/formats/shp.md) — what the structures are
 - [The set editor](sets.md) — the room a prop is drawn on top of
 - [The browser editors](README.md) — what the seven pages share
 

@@ -1,4 +1,24 @@
-name: Deploy docs to GitHub Pages
+name: Deploy docs
+
+# The documentation, to www.danielhobi.ch/dreamrefactory/docs.
+#
+# It used to be a GitHub Pages project site at dhobi.github.io/<repo>/, which
+# meant the one part of this project that explains the rest lived at a different
+# domain from the thing it explains, under a base path made of the repository's
+# name. Two things ended that at once: the site moved to /dreamrefactory/, and
+# renaming the repository would have broken that base anyway. So it moved here
+# instead of being fixed twice.
+#
+# It does NOT release on a tag, unlike the three builds in deploy.yml. Docs are
+# not versioned against a game: a correction to a format page should be readable
+# the day it is written, so any push that touches them publishes them.
+#
+# Unlike the games, the docs site cannot be path-independent — VitePress needs an
+# absolute `base` for its router, so docs/.vitepress/config.ts names
+# `/dreamrefactory/docs/` outright. That is the one place in this repository that
+# knows the deployment's URL, and it is why the docs are not at the root: they
+# would then own the whole route namespace, and their own `editors/` section
+# would collide head-on with the editors application.
 
 on:
   push:
@@ -8,51 +28,56 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/docs.yml"
-  # Allow running manually from the Actions tab.
+      - ".github/actions/ftp-mirror/action.yml"
   workflow_dispatch:
 
-# GITHUB_TOKEN permissions the Pages deployment needs.
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# One live deployment at a time; don't cancel an in-progress publish.
 concurrency:
-  group: pages
+  group: deploy # the same lock as the three builds: one upload at a time
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  docs:
+    name: build and upload docs/
     runs-on: ubuntu-latest
+    environment: dreamrefactory
+    env:
+      FTP_HOST: ${{ secrets.FTP_HOST }}
+      FTP_USER: ${{ secrets.FTP_USER }}
+      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+      FTP_PATH: ${{ secrets.FTP_PATH }}
+      FTP_PORT: ${{ secrets.FTP_PORT }}
+      FTP_INSECURE_TLS: ${{ secrets.FTP_INSECURE_TLS }}
+      FTP_ALLOW_PLAINTEXT: ${{ secrets.FTP_ALLOW_PLAINTEXT }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # full history so VitePress "last updated" works
-      - name: Setup Node
-        uses: actions/setup-node@v4
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Build docs
-        run: npm run docs:build
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/.vitepress/dist
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - run: npm ci
+
+      # `ignoreDeadLinks: false` — a broken link between doc pages fails this
+      # build, which is the whole safety net the doc set has.
+      - run: npm run docs:build
+
+      - name: Upload
+        uses: ./.github/actions/ftp-mirror
+        with:
+          source: docs/.vitepress/dist
+          remote: docs
+
+      - name: Say what went out
+        if: success()
+        run: |
+          {
+            echo "### Docs deployed to <https://www.danielhobi.ch/dreamrefactory/docs/>"
+            echo
+            echo "$(find docs/.vitepress/dist -type f | wc -l) files, $(du -sh docs/.vitepress/dist | cut -f1)."
+          } >> "$GITHUB_STEP_SUMMARY"

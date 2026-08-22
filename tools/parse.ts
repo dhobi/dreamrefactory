@@ -6,9 +6,9 @@
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, basename } from "node:path";
-import { readContainerFile } from "../src/df/container";
-import { sniffScript } from "../src/df/script";
-import { parseScript } from "../src/engine/parser";
+import { readContainerFile } from "@dreamfactory/engine/df/container";
+import { sniffScript } from "@dreamfactory/engine/df/script";
+import { parseScript } from "@dreamfactory/engine/runtime/parser";
 
 const rootDir = process.argv[2] ?? "gamefiles";
 

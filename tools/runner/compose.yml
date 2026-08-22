@@ -29,6 +29,7 @@ services:
 
     environment:
       TAOOT_GAMEFILES: /srv/taoot/gamefiles
+      DUST_GAMEFILES: /srv/dust/gamefiles
       RUNNER_LABELS: self-hosted,linux,x64,taoot-gamefiles
       # RUNNER_NAME: taoot-box   # defaults to taoot-<container hostname>
 
@@ -37,6 +38,7 @@ services:
       # write here could corrupt the thing the whole test suite compares
       # against. Change the left side to wherever it actually lives.
       - /srv/taoot/gamefiles:/srv/taoot/gamefiles:ro
+      - /srv/dust/gamefiles:/srv/dust/gamefiles:ro
 
       # Optional: a persistent npm cache, so a fresh container does not
       # re-download the dependency tree on every job. It is shared state between

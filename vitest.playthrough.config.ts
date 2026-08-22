@@ -16,7 +16,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["tests/playthrough/playthrough.ts"],
+    include: ["taoot/tests/playthrough/playthrough.ts"],
     // a segment plays the game; the cold boot alone is 154 s of game time
     testTimeout: 300_000,
   },

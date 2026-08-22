@@ -1,11 +1,11 @@
 # The set editor
 
-[`editors/sets.html`](https://github.com/dhobi/taoot-web/blob/master/editors/sets.html) — source
-[`editors/set-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/editors/set-editor.ts).
+[`editors/sets.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/sets.html) — source
+[`editors/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/set-editor.ts).
 Open `http://localhost:5173/editors/sets.html`.
 
 The editor for the format the game spends most of its time in. Load a
-[SET room](../formats/set.md) — by upload, drag-and-drop, or from the
+[SET room](../engine/formats/set.md) — by upload, drag-and-drop, or from the
 `gamefiles/` manifest — and it opens on the standpoint and facing the set
 itself starts on, taken apart into the pieces a room is made of.
 
@@ -26,7 +26,7 @@ itself starts on, taken apart into the pieces a room is made of.
 Replacing a frame takes any image the browser can decode, matches its pixels to
 the set's view palette (nearest RGB over those first 128 entries) and re-encodes
 it with `encodeFrame` in
-[`src/df/image.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/image.ts).
+[`engine/src/df/image.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/image.ts).
 Two things follow from what that codec is.
 
 Frames are *delta-encoded* against the frame before them, so a replacement is
@@ -45,15 +45,15 @@ not frame art is a copy-on-write patch on a single register or table container
 (`patchSetName`, `patchDefaultStart`, `patchSceneName`, `patchViewName`,
 `patchObjectIdentifier`, `patchObjectRegion`, `patchActor`,
 `patchTransitionName` in
-[`src/df/set-patch.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/set-patch.ts)
+[`engine/src/df/set-patch.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set-patch.ts)
 — a module of its own, so the reader the *runtime* loads carries none of the write
 path),
 so everything you did not touch is the byte it was
-(see [`tests/auto/set-editor.ts`](https://github.com/dhobi/taoot-web/blob/master/tests/auto/set-editor.ts)).
+(see [`taoot/tests/auto/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/set-editor.ts)).
 
 ## See also
 
-- [SET — rooms, scenes & views](../formats/set.md) — what the structures are
-- [The image codec](../formats/image-codec.md) — what the frame encoder does
+- [SET — rooms, scenes & views](../engine/formats/set.md) — what the structures are
+- [The image codec](../engine/formats/image-codec.md) — what the frame encoder does
 - [The browser editors](README.md) — what the seven pages share
 

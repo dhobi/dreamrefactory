@@ -64,11 +64,14 @@ jobs:
       # the link is remade after it.
       - name: Link the rip into the workspace
         run: |
+          # Titanic's only: this suite drives the play page, which is served by
+          # taoot/vite.config.ts from taoot/ — so the rip goes where THAT root
+          # looks for it. Dust's disc is not needed here.
           test -d "$TAOOT_GAMEFILES" || {
             echo "::error::TAOOT_GAMEFILES ($TAOOT_GAMEFILES) is not a directory."
             exit 1
           }
-          ln -sfn "$TAOOT_GAMEFILES" gamefiles
+          ln -sfn "$TAOOT_GAMEFILES" taoot/gamefiles
 
       - run: npm ci
 
@@ -90,12 +93,14 @@ jobs:
           fi
 
       # `vite preview` cannot serve this: the /gamefiles middleware is a
-      # `configureServer` hook (vite.config.ts), which only the dev server runs.
+      # `configureServer` hook (tools/vite-gamefiles.ts), which only the dev
+      # server runs. Titanic's config, because the play page is Titanic's.
       # Started via node directly rather than `npm run dev` so $! is vite's own
       # pid — the cleanup step kills that pid and nothing else.
       - name: Start the dev server
         run: |
           node node_modules/vite/bin/vite.js \
+            --config taoot/vite.config.ts \
             --port "$TAOOT_CI_PORT" --strictPort --host 127.0.0.1 \
             > "$RUNNER_TEMP/vite.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/vite.pid"

@@ -1,8 +1,8 @@
 # DFET bug report
 
 Findings from porting DFET's container-format decoders to TypeScript for
-[taoot-web](https://github.com/dhobi/taoot-web), a browser reimplementation of
-the DreamFactory 4.0 engine. Everything under `src/df/` started as a port of
+[dreamREfactory](https://github.com/dhobi/dreamrefactory), a browser reimplementation of
+the DreamFactory 4.0 engine. Everything under `engine/src/df/` started as a port of
 `libs/DFfile/`; the entries below are places where that port had to *diverge*
 from the C++ to get correct output, plus defects noticed while reading the
 code closely.
@@ -75,7 +75,7 @@ run — i.e. on images narrower than the run length.
 
 The port writes the short-distance case as an explicit forward byte loop and
 keeps `copyWithin` (JavaScript's `memmove`) for the non-overlapping case:
-[`src/df/image.ts:126-138`](https://github.com/dhobi/taoot-web/blob/master/src/df/image.ts#L126-L138).
+[`engine/src/df/image.ts:126-138`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/image.ts#L126-L138).
 
 **Reason**
 
@@ -166,7 +166,7 @@ The port reads both slots with one function and keeps the second when its
 identifier is a plausible name (printable, non-empty, ≤ 20 chars) *and* its
 position is not all-zero — a cheap discriminator against genuinely unused
 slots:
-[`src/df/set.ts:382-433`](https://github.com/dhobi/taoot-web/blob/master/src/df/set.ts#L382-L433).
+[`engine/src/df/set.ts:382-433`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set.ts#L382-L433).
 
 **Reason**
 
@@ -275,7 +275,7 @@ DFET already knows about the cap elsewhere — `writeAllAudioC`
 disk-streaming case where records outnumber it. The two sites disagree.
 
 The port clamps the read to the field and treats the stored count as advisory:
-[`src/df/banks.ts:27-58`](https://github.com/dhobi/taoot-web/blob/master/src/df/banks.ts#L27-L58).
+[`engine/src/df/banks.ts:27-58`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/banks.ts#L27-L58).
 
 **Reason**
 
@@ -364,7 +364,7 @@ overflow on input that is well-formed by the field's own width.
 The port reads Pascal strings with the field width as an explicit parameter, so
 the length byte cannot make a *write* leave the field (and in JavaScript a long
 one truncates at the buffer instead of over-reading):
-[`src/df/binary.ts:58-64`](https://github.com/dhobi/taoot-web/blob/master/src/df/binary.ts#L58-L64).
+[`engine/src/df/binary.ts:58-64`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/binary.ts#L58-L64).
 
 **Reason**
 
@@ -465,7 +465,7 @@ The port sidesteps it entirely by keeping the frame palette-independent —
 `decodeShpFrame` returns indexed pixels plus an explicit `opaque` mask, and
 colourisation happens later against the active SET's palette (props are tinted
 by whichever room they appear in):
-[`src/df/shp.ts:324-372`](https://github.com/dhobi/taoot-web/blob/master/src/df/shp.ts#L324-L372).
+[`engine/src/df/shp.ts:324-372`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/shp.ts#L324-L372).
 
 **Reason**
 
@@ -548,7 +548,7 @@ so a stream that legitimately ends mid-pair fails to decode rather than being
 truncated to the declared length.
 
 The port decodes into a buffer with pair slack and trims to the declared size:
-[`src/df/audio.ts:105-142`](https://github.com/dhobi/taoot-web/blob/master/src/df/audio.ts#L105-L142).
+[`engine/src/df/audio.ts:105-142`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/audio.ts#L105-L142).
 
 **Reason**
 
@@ -705,7 +705,7 @@ in the same function:
 The port bounds the segment stream, reads Pascal strings by their length byte,
 and turns an unknown opcode into a catchable error — which lets the same
 function double as a sniff test for "is this container a script?":
-[`src/df/script.ts:36-78`](https://github.com/dhobi/taoot-web/blob/master/src/df/script.ts#L36-L78).
+[`engine/src/df/script.ts:36-78`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/script.ts#L36-L78).
 
 **Reason**
 
@@ -791,7 +791,7 @@ allocation whenever the reference happens to land on a gap.
 
 The port stores 8 zero bytes instead, sized so the common header peeks stay in
 bounds and read as zero:
-[`src/df/container.ts:47-49`](https://github.com/dhobi/taoot-web/blob/master/src/df/container.ts#L47-L49).
+[`engine/src/df/container.ts:47-49`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/container.ts#L47-L49).
 
 **Reason**
 
@@ -823,7 +823,7 @@ re-emitted as a gap, not as an 8-byte record).
 
 That last part is no longer a suggestion on our side — the port carries the flag
 and its writer round-trips gaps through it
-([`src/df/container.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/container.ts):
+([`engine/src/df/container.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/container.ts):
 `Container.gap`, honoured by `writeContainerFile` and by `patchContainerData`,
 which refuses to edit a gap). It earned its keep the moment the editors could
 save a file back, which is the point at which "a gap looks like a container with
@@ -878,7 +878,7 @@ read as 73 characters long. Both readings are permitted, so the same build reads
 puppet subtitles correctly on one compiler and truncates or over-reads them on
 another — and every `.PUP` in the game goes through this loop. The port's reader
 takes the field width as a parameter and the length byte as a separate read
-([`src/df/pup.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/pup.ts)).
+([`engine/src/df/pup.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/pup.ts)).
 
 **Fix**
 
@@ -930,8 +930,8 @@ the same off-by-one §4 has for MOV soundtracks, on top of the unbounded copy.
 This is §4's defect one step worse: there the out-of-bounds write is a single NUL,
 here it is the copy itself. The port reads every Pascal string with the field width
 as an explicit parameter, so the stored length can never address outside the field
-([`src/df/binary.ts:58-64`](https://github.com/dhobi/taoot-web/blob/master/src/df/binary.ts#L58-L64),
-used by [`src/df/pup.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/pup.ts)).
+([`engine/src/df/binary.ts:58-64`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/binary.ts#L58-L64),
+used by [`engine/src/df/pup.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/pup.ts)).
 
 **Reason**
 
@@ -1024,9 +1024,9 @@ which matters because a two-character close-up re-uses the same eleven slots per
 stance: in `WILZEIT1.PUP` stances 0/1 park the moving `jaw` on the left face
 (anchor x=171) and stance 2 swaps it to the right one (x=388). The port's reader
 and our write-up of the structure are
-[`src/df/pup.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/pup.ts)
+[`engine/src/df/pup.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/pup.ts)
 and
-[`docs/formats/pup-cst.md`](https://github.com/dhobi/taoot-web/blob/master/docs/formats/pup-cst.md#stances-and-animation-logic-the-face-as-11-layers);
+[`docs/engine/formats/pup-cst.md`](https://github.com/dhobi/dreamrefactory/blob/master/docs/engine/formats/pup-cst.md#stances-and-animation-logic-the-face-as-11-layers);
 the same read is why `pupData`'s leading `int32_t unknownInt1` is really the
 **stance** the line is animated against (an i16 at record+0, `TI.EXE` `0x440fb0`),
 followed at +6 by the line's animation-logic tick count. Both are extraction-neutral
@@ -1102,7 +1102,7 @@ const uint8_t* scanline_ptr = data_block_start + scanline_offset;
 
 The port treats them as relative to the **start** of the table, i.e. without the
 `height * 2` skip:
-[`src/df/image.ts:362-379`](https://github.com/dhobi/taoot-web/blob/master/src/df/image.ts#L362-L379).
+[`engine/src/df/image.ts:362-379`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/image.ts#L362-L379).
 The two differ by exactly `height * 2` bytes (528 for a 264-row view).
 
 **Reason**
@@ -1250,9 +1250,9 @@ arbitrary memory rather than a bad-index error.
 
 The port resolves every container reference through one accessor and treats an
 out-of-range one as absent — a gap and a bad reference are the same answer to the
-caller ([`src/df/container.ts`](https://github.com/dhobi/taoot-web/blob/master/src/df/container.ts),
+caller ([`engine/src/df/container.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/container.ts),
 `Container.gap`; the stance loader's own bound is
-[`src/df/pup.ts:223`](https://github.com/dhobi/taoot-web/blob/master/src/df/pup.ts#L223),
+[`engine/src/df/pup.ts:223`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/pup.ts#L223),
 which is `>=`).
 
 **Reason**
@@ -1334,7 +1334,7 @@ layer is quantized against. Its partner, the **number of depth levels**, is an
 *means* — `level = worldDepth × zLevelCount / zFarMax` — which is to say they are
 the units of the layer §13 is about. Our reading of the SET header, resolved to
 absolute offsets, is
-[`src/df/set.ts:436-470`](https://github.com/dhobi/taoot-web/blob/master/src/df/set.ts#L436-L470).
+[`engine/src/df/set.ts:436-470`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set.ts#L436-L470).
 
 **Reason**
 

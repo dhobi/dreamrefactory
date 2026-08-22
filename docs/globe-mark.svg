@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="">
+  <!--
+    The project's mark: the logo's wireframe globe and the swoosh orbiting it, at
+    the size a top bar gives it (30px).
+
+    Drawn rather than cropped out of the logo PNG, for two reasons. At 30px a
+    crop of a 2000px raster with a bloom on it is a green smudge — the same
+    reason Titanic's mark is the shadowless globe and not the full logo. And an
+    SVG carries the glow as a filter, so the swoosh still blooms at 16px in a
+    browser tab where a downscaled raster would just be dim.
+
+    Geometry: a sphere is a circle plus latitude and longitude ellipses clipped
+    to it. Longitudes are ellipses of decreasing width around the same centre,
+    which is what a wireframe sphere's meridians project to head-on.
+  -->
+  <defs>
+    <clipPath id="ball"><circle cx="30" cy="34" r="22" /></clipPath>
+    <filter id="bloom" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.6" result="b" />
+      <feMerge>
+        <feMergeNode in="b" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <linearGradient id="swoosh" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#0f7a0f" />
+      <stop offset="0.45" stop-color="#2ee62e" />
+      <stop offset="0.8" stop-color="#d8ffd8" />
+      <stop offset="1" stop-color="#5bff5b" />
+    </linearGradient>
+  </defs>
+
+  <g filter="url(#bloom)">
+    <!-- the globe's own dark body, so the far-side wires read as behind it -->
+    <circle cx="30" cy="34" r="22" fill="#04140a" />
+
+    <g clip-path="url(#ball)" fill="none" stroke="#1fc71f" stroke-width="1.1">
+      <!-- latitudes -->
+      <ellipse cx="30" cy="34" rx="22" ry="3.5" />
+      <ellipse cx="30" cy="34" rx="22" ry="11" />
+      <ellipse cx="30" cy="34" rx="22" ry="18" />
+      <!-- meridians -->
+      <ellipse cx="30" cy="34" rx="3.5" ry="22" />
+      <ellipse cx="30" cy="34" rx="11" ry="22" />
+      <ellipse cx="30" cy="34" rx="18" ry="22" />
+    </g>
+
+    <!-- the terminator: brighter where the sphere turns away from the viewer -->
+    <circle cx="30" cy="34" r="22" fill="none" stroke="#2ee62e" stroke-width="1.6" />
+
+    <!--
+      The swoosh. One open arc, thickest and brightest where it passes in front
+      of the globe's upper right and tapering as it goes behind — the logo's own
+      motion, which is the whole reason the mark reads as a sphere rather than a
+      dotted circle.
+    -->
+    <path
+      d="M4 46 C 10 58, 34 62, 50 48 C 62 37, 60 18, 44 12"
+      fill="none"
+      stroke="url(#swoosh)"
+      stroke-width="4.2"
+      stroke-linecap="round"
+    />
+  </g>
+</svg>

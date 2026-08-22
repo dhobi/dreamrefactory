@@ -1,0 +1,13 @@
+{
+  "docTitle": "dreamREfactory — die CyberFlix-DreamFactory-Engine, neu implementiert",
+  "tagline": "die CyberFlix-DreamFactory-Engine, neu implementiert",
+  "lede": "CyberFlix hat eine Engine gebaut und <b>drei</b> Adventures darauf veröffentlicht. dreamREfactory ist diese Engine, neu geschrieben in TypeScript — aus den Dateien und nicht aus dem Quellcode: jedes Containerformat dekodiert, die Skriptsprache geparst und interpretiert, und die Spiele im Browser gespielt, ohne Installation. <b>Zwei der drei sind hier</b>; das dritte ist nicht portiert.",
+  "titanicBody": "Das vollständige Spiel in sechs Sprachen, dazu die Demo von 1996. Ein Speicher-Browser, eine Sprachauswahl und die Sammlungsseite zur physischen Veröffentlichung.",
+  "dustBody": "Die Engine zwei Jahre früher, und ein anderer Dateiaufbau. Beginnt mit ihren Filmen; die Stadt ist begehbar. Kleiner, und im Wachsen.",
+  "docsTitle": "Dokumentation",
+  "docsMeta": "Formate · Laufzeit · Referenz",
+  "docsBody": "Wie die Engine funktioniert, Containerformat für Containerformat, und wie jedes davon rekonstruiert wurde. Die längere Hälfte dieses Projekts.",
+  "editorsTitle": "Format-Editoren",
+  "editorsBody": "Öffne einen Raum, ein Requisit, einen Film oder eine Bühne aus den Spieldaten, sieh hinein, ändere etwas und schreibe es zurück.",
+  "caveat": "RE steht für reverse-engineered. Dies ist eine bestmögliche Neuimplementierung und keine Neuveröffentlichung: sie benötigt eine Kopie der Originaldateien des Spiels, die sie nicht mitliefert, und sie steht in keiner Verbindung zu CyberFlix, GTE Entertainment oder einem aktuellen Rechteinhaber."
+}

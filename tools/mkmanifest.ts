@@ -1,10 +1,16 @@
 /**
- * Write the gamefiles manifest — the one file a static deployment needs that a
- * directory listing used to provide.
+ * Write ONE game's gamefiles manifest — the file a static deployment needs that
+ * a directory listing used to provide.
  *
  *   npx tsx tools/mkmanifest.ts [outDir] [gamefilesDir] [publicDir]
- *   npx tsx tools/mkmanifest.ts dist               # after `npm run build`
- *   cd /var/www/taoot && npx tsx …/mkmanifest.ts . ./gamefiles .   # on the host
+ *   npx tsx tools/mkmanifest.ts dist/taoot                      # after a build
+ *   cd …/dreamrefactory/taoot && npx tsx …/mkmanifest.ts . ./gamefiles .
+ *   cd …/dreamrefactory/dust  && npx tsx …/mkmanifest.ts . ./gamefiles .
+ *
+ * Run it once per game, in that game's directory. It used to write a second file
+ * beside the first — `gamefiles-dust.json`, the same walk filtered to keys under
+ * `gamefiles/dust/` — because one tree held both games. Two trees do not need it:
+ * each game's manifest is the walk of its own rip, at its own site root.
  *
  * The paths are RELATIVE on purpose: a key is the walked path as written, so an
  * absolute `gamefilesDir` writes keys nothing can resolve.
@@ -23,18 +29,13 @@
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DUST_MANIFEST_FILE, MANIFEST_FILE, buildManifest, dustManifest } from "./manifest";
+import { MANIFEST_FILE, buildManifest } from "./manifest";
 
 const [, , outDir = "dist", gamefiles = "gamefiles", publicDir = "public"] = process.argv;
 const manifest = buildManifest({ gamefiles, publicDir });
 const at = join(outDir, MANIFEST_FILE);
 const json = JSON.stringify(manifest);
 writeFileSync(at, json);
-
-// ...and the Dust page's own slice of it, beside it (see manifest.ts)
-const dust = dustManifest(manifest);
-writeFileSync(join(outDir, DUST_MANIFEST_FILE), JSON.stringify(dust));
-console.log(`${join(outDir, DUST_MANIFEST_FILE)}: ${Object.keys(dust).length} files`);
 
 const bytes = Object.values(manifest).reduce((n, s) => n + s, 0);
 const mb = (n: number): string => (n / (1024 * 1024)).toFixed(1);

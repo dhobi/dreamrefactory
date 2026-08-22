@@ -1,0 +1,598 @@
+/*
+ * The chrome, in one place: the topbar, the language and edition pickers, the
+ * page title, the controls, the panels — the primitives that were being redrawn
+ * from scratch on every page, and that make separate builds look like one
+ * product.
+ *
+ * There is not one colour in this file. Every value comes from a ROLE that a
+ * palette defines (`--bg`, `--panel`, `--text`, `--accent`, `--mark`, and the
+ * dozen narrower ones a specific control needs), so the same structure wears
+ * Titanic's abyss-and-brass, Dust's own, or something neutral at the project's
+ * front door, without a rule changing. taoot/src/theme.css is the reference
+ * palette and lists the full contract.
+ *
+ * The rule to keep: a `var(--abyss-700)` or a raw `#hex` appearing below is a
+ * leak, and means a role is missing rather than that an exception was needed.
+ */
+
+/* ---- page ------------------------------------------------------------- */
+
+/* Padding counts inside a declared width. Without this, `align-items: center`
+   on the body sizes the landing blocks to their max-content and a 54rem card
+   grid pushes a phone sideways. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  /* The water is not flat: a cold pool of light at the top, the way the globe
+     is lit. Fixed so it does not slide away as a long editor page scrolls. */
+  background-image: radial-gradient(
+    120% 70% at 50% -18%,
+    var(--depth-light),
+    transparent 62%
+  );
+  background-attachment: fixed;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 2px;
+}
+a:hover {
+  color: var(--accent-hover);
+}
+
+code,
+kbd,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--text-bright);
+}
+
+/* One focus treatment everywhere, and it is the porthole glow. Keyboard users
+   get the same "this is lit" language the canvas uses. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- topbar: what makes eleven pages one product --------------------- */
+
+/*
+ * The game and the seven editors used to be unrelated pages that happened to
+ * share a stylesheet, joined by one sentence of body text. This is the thing
+ * they share: the mark, the title, and a way across.
+ */
+.topbar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  /* wrap rather than collide: on a phone the nav drops to its own line, and
+     the row gap is what keeps it off the wordmark's second line */
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  padding: 0.55rem clamp(0.8rem, 4vw, 2rem);
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--topbar-top) 82%, transparent),
+    color-mix(in srgb, var(--topbar-bottom) 82%, transparent)
+  );
+  backdrop-filter: blur(6px);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+/*
+ * The mark is a sphere; give it a sphere's shadow rather than a box's.
+ *
+ * The image is whatever mark the page supplies — Titanic's shadowless disc,
+ * the project's green wireframe globe — because the mark belongs to a palette
+ * and not to the structure. Titanic's globe.png
+ * carries a cast shadow that takes up its bottom third, so at 30px it would
+ * leave a ~20px sphere sitting over a blue smudge. The full logo belongs where
+ * it is large enough to read as one, which is the front page's hero.
+ */
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  filter: drop-shadow(0 0 10px var(--mark-glow));
+}
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+.brand-text b {
+  font-family: var(--font-display);
+  font-weight: normal;
+  font-size: 0.98rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+  white-space: nowrap;
+}
+.brand-text span {
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  white-space: nowrap;
+}
+
+/* The port's version, beside the wordmark. An identifier for a bug report, not
+   a control — so it takes the mute colour and no accent, and sits at the size
+   of the wordmark's second line. Drawn by site/src/version.ts. */
+.version {
+  align-self: center;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  color: var(--text-mute);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.topnav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-wrap: wrap;
+}
+.topnav a {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.topnav a:hover {
+  color: var(--text-bright);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+/* The page you are on, marked in ice — it is a place, not an action. */
+.topnav a.here {
+  color: var(--accent-hover);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* ---- the language picker ------------------------------------------------
+   A <details> rather than a <select>: the list has to carry endonyms in six
+   scripts, and a native menu on a phone renders those in the OS font at the OS
+   size, which is neither this page's font nor legible next to it. Sits in the
+   nav and reads as one of its links until opened. */
+.langmenu {
+  position: relative;
+  /* The list below hangs from `right: 0`, so it opens LEFTWARDS out of the
+     trigger — which is off the screen entirely if the trigger is sitting at the
+     left edge. That is exactly what happens when .topnav wraps and the picker
+     lands alone on the last line: measured at 380px the list ran from x=-39, and
+     the menu read "ish / tsch / çais / кий".
+
+     Not a phone problem, which is why this is not in the media query below: the
+     nav wraps when its words stop fitting, and the words are translated. English
+     only breaks at 380px, German at 380 and 420, Russian — "Играть Редакторы
+     Коллекция Документация Исходный код" — at 480, 560 AND 620, where any
+     mobile breakpoint has long since stopped applying.
+
+     `margin-left: auto` puts the picker at the right end of whatever line it
+     lands on, which is where `right: 0` resolves inside the viewport. On a line
+     it shares with the nav links there is no free space to absorb, so it is a
+     no-op — the trigger does not move at any width where nothing was wrong. */
+  margin-left: auto;
+}
+.langmenu > summary {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+}
+.langmenu > summary::-webkit-details-marker {
+  display: none;
+}
+.langmenu > summary:hover,
+.langmenu[open] > summary {
+  color: var(--text-bright);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.langmenu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.3rem);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 9rem;
+  padding: 0.25rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  background: var(--menu-panel);
+  box-shadow: 0 10px 24px var(--shadow-drop);
+}
+.langmenu-list button {
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  color: var(--text-dim);
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 0.34rem 0.55rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.langmenu-list button:hover {
+  color: var(--text-bright);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+/* the one being read, marked the way the current page is in the nav */
+.langmenu-list button.here {
+  color: var(--accent-hover);
+}
+
+/* ---- the edition picker -------------------------------------------------
+   The flat, always-visible cousin of the menu above: one button per edition,
+   in front of the reader rather than behind a summary. The collection page
+   picks which pressing's box art to turn with it; the play page picks which
+   copy of the game to boot. Both build the buttons in TypeScript
+   (taoot/src/collection.ts, site/src/lang-menu.ts) into a container the page supplies with
+   its label, so only the label is markup.
+
+   Layout-neutral on purpose — where the control sits is the page's business, and
+   both of them put it somewhere different. */
+.editionPicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+/* `display: flex` above outranks the UA sheet's `[hidden] { display: none }`, and
+   the play page hides the row when an install has only one edition in it */
+.editionPicker[hidden] {
+  display: none;
+}
+.editionPicker .pickerLabel {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-mute);
+  margin-right: 0.3rem;
+}
+.editionPicker button {
+  font-size: 0.82rem;
+  padding: 0.32rem 0.8rem;
+}
+/* the edition being shown, marked as the current page is in the nav */
+.editionPicker button.here {
+  border-color: var(--accent-line);
+  color: var(--text-bright);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* On a phone the strapline is the first thing to go: the mark and the word
+   TITANIC already identify the page, and the four links have to stay on one
+   line to be worth having. */
+@media (max-width: 560px) {
+  .brand-text span {
+    display: none;
+  }
+  .brand-mark {
+    width: 26px;
+    height: 26px;
+  }
+  .topnav {
+    gap: 0;
+  }
+  .topnav a {
+    font-size: 0.74rem;
+    padding: 0.26rem 0.42rem;
+  }
+  /*
+   * Both the nav and the language picker push themselves right with
+   * `margin-left: auto`, which is what puts them at the far end of the bar on a
+   * wide screen. Once the bar WRAPS, an auto margin claims the whole remaining
+   * line — so on a phone the brand took row one, the links row two, and the
+   * picker sat alone on row three. Dropping both lets them flow from the left on
+   * as few lines as they need.
+   */
+  .topnav,
+  .langmenu {
+    margin-left: 0;
+  }
+  /* the globe is the affordance; the name is in the menu it opens */
+  .langmenu > summary .langname {
+    display: none;
+  }
+  .topbar {
+    padding: 0.5rem 0.8rem;
+    row-gap: 0.15rem;
+  }
+}
+
+/* ---- page title ------------------------------------------------------- */
+
+h1 {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: normal;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+  margin: 1.1rem 0 0.2rem;
+  text-align: center;
+}
+/* A short brass rule under the title: the porthole ring, reduced to a line.
+   It is the one purely decorative use of brass, and it is two pixels tall. */
+h1::after {
+  content: "";
+  display: block;
+  width: 3.2rem;
+  height: 2px;
+  margin: 0.55rem auto 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--rule-mid),
+    var(--rule-bright),
+    var(--rule-mid),
+    transparent
+  );
+  opacity: 0.85;
+}
+
+/* ---- controls --------------------------------------------------------- */
+
+button {
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  /*
+   * PINNED, not `normal`. With `normal` the line box takes its height from the
+   * glyphs actually in it, and CJK metrics are taller than Latin — so "Titanic ·
+   * 日本語" came out 30.2px against its neighbours' 27.2 and sat 1.5px high in a
+   * centred row. Any non-Latin label does it: the edition row, the language menu
+   * (which lists 日本語 by definition), a translated control anywhere. A fixed
+   * multiple makes a button's height a fact about the button.
+   */
+  line-height: 1.35;
+  cursor: pointer;
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--radius);
+  transition:
+    border-color 90ms linear,
+    background-color 90ms linear,
+    color 90ms linear;
+}
+button:hover {
+  border-color: var(--border-hover);
+  color: var(--text-bright);
+  background: var(--button-hover-bg);
+}
+button:active {
+  background: var(--button-active-bg);
+}
+/* `button.primary` sets its own background gradient, which outranks the flat
+   colour the disabled rule below gives every other control — so it needs saying
+   twice. A commit button that looks live and refuses is worse than no button. */
+button.primary:disabled,
+button.primary:disabled:hover {
+  background: var(--raised);
+  color: var(--text-mute);
+  border-color: var(--border);
+  cursor: not-allowed;
+}
+button:disabled,
+button:disabled:hover {
+  color: var(--text-mute);
+  background: var(--panel);
+  border-color: var(--border);
+  cursor: default;
+}
+
+/* A toggle that is currently ON — ice, because it describes a live state you
+   can turn back off, not a change you have made to a file. */
+button.on {
+  border-color: var(--accent-line);
+  color: var(--text-bright);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* The one button on a screen that commits: start the game, export the file.
+   Brass, and there should never be two of them in view. */
+button.primary {
+  background: linear-gradient(to bottom, var(--commit-face-bottom), var(--commit-face-deep));
+  color: var(--commit-text);
+  border: 1px solid var(--commit-edge);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.42rem 1.05rem;
+  border-radius: var(--radius);
+}
+button.primary:hover {
+  background: linear-gradient(to bottom, var(--mark), var(--commit-face-bottom));
+  color: var(--commit-text-hover);
+  border-color: var(--commit-edge-hover);
+}
+
+/* The rank between primary and plain: a real entry point, but not THE one. */
+button.state {
+  background: var(--raised);
+  border: 1px solid var(--state-border);
+  color: var(--text);
+  font-size: 0.85rem;
+  padding: 0.36rem 0.8rem;
+}
+button.state:hover {
+  border-color: var(--accent-line);
+  color: var(--text-bright);
+}
+button.state.bold {
+  font-weight: 600;
+}
+
+button.mini {
+  padding: 0.05rem 0.34rem;
+  font-size: 0.76rem;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="search"],
+select {
+  background: var(--inset);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  padding: 0.2rem 0.42rem;
+  border-radius: var(--radius);
+}
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+  border-color: var(--accent-line);
+  outline: none;
+  box-shadow: var(--glow);
+}
+/* Numbers read off, or written into, a file: mono, so digits line up. */
+input[type="number"] {
+  font-family: var(--font-mono);
+}
+/* the file input is driven by a button; it is never shown */
+input[type="file"] {
+  display: none;
+}
+
+/* A field the user has changed but not yet exported. Brass — the one place the
+   old sheet already used it for exactly this, kept and made the rule. */
+input.edited {
+  border-color: var(--mark);
+  background: color-mix(in srgb, var(--mark) 9%, var(--inset));
+}
+
+/* ---- panels ----------------------------------------------------------- */
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+}
+.panel > .head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.42rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.17em;
+  color: var(--text-mute);
+}
+.panel > .body {
+  padding: 0.7rem 0.8rem;
+}
+
+/* ---- utilities -------------------------------------------------------- */
+
+.spacer,
+.grow {
+  flex: 1;
+}
+.grow {
+  min-width: 6em;
+}
+/* offsets, sizes, counts — anything read off the file */
+.meta {
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  color: var(--text-dim);
+}
+.dim {
+  color: var(--text-mute);
+  font-size: 0.8rem;
+}
+.note {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+/* ---- Japanese ---------------------------------------------------------- *
+
+   The sheet spaces its display type out — 0.24em on an h1, 0.17em on a section
+   head — because that tracking is what makes small caps read as a label rather
+   than as a word. It does the opposite to kana: Japanese is set solid, so the
+   same rule prises プレイ apart into three drifting glyphs, and there are no
+   capitals for `text-transform` to reach in the first place.
+
+   Selected off `<html lang>`, which site/src/locales/index.ts sets from the reader's
+   choice — so this is dead weight on the other five languages, and Cyrillic
+   keeps the tracking, which it wants as much as Latin does.
+
+   The list is every tracked rule that a `data-i18n` node actually lands in,
+   checked by walking a Japanese page and comparing each marked element's
+   letter-spacing against its own font-size. The band's own labels (.seclabel,
+   .save-group, .modal-head span) are not here: they are written by TypeScript
+   that has not been translated yet, so they hold no kana. They join the list
+   when their strings do. */
+:lang(ja) h1,
+:lang(ja) .brand-text b,
+:lang(ja) .brand-text span,
+:lang(ja) .topnav a,
+:lang(ja) .langmenu > summary,
+:lang(ja) .panel > .head,
+:lang(ja) .section > .head,
+:lang(ja) a.play {
+  letter-spacing: 0.04em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
