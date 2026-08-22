@@ -407,12 +407,15 @@ git commit -am "Version 0.9.17" && git push -u origin release/0.9.17
 gh pr create --fill && gh pr merge --rebase --delete-branch   # once checks are green
 
 git switch master && git pull
-git tag v0.9.17 && git push --tags
+git tag taoot-v0.9.17 && git push --tags
 ```
 
 The tag must sit on a commit whose `package.json` already says that version —
 `deploy.yml` compares the two and fails the deploy rather than announce a version
-nobody tagged.
+nobody tagged. The `taoot-v` prefix matters: the site's tag was a bare `v0.9.50`
+until 0.9.51, and the bare pattern is no longer matched, so `npm version`'s own
+`v0.9.17` would deploy nothing. Dust releases under `dust-v*` on its own number
+(`dustVersion`) — see [Releasing and deploying](docs/reference/deploy.md).
 
 `.github/workflows/deploy.yml` builds that commit and uploads `dist/` to
 www.danielhobi.ch/taoot over FTP. It only ever adds and overwrites — the CD rip,

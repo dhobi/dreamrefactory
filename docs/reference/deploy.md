@@ -7,13 +7,19 @@ The site is published to <https://www.danielhobi.ch/taoot/> by
 and **a release is a tag**. Nothing deploys from an ordinary push to master.
 
 ```bash
-npm version 0.9.1        # bumps package.json and commits it
-git push && git push --tags
+npm version 0.9.1 --no-git-tag-version   # package.json + the lockfile
+# commit, merge, then tag the merged commit:
+git tag taoot-v0.9.1 && git push --tags
 ```
 
-`npm version` writes the tag as `v0.9.1`, which is what the workflow listens
-for. It can also be run from the Actions tab (`workflow_dispatch`) to re-publish
-the current master without cutting a version.
+**Do not let `npm version` cut the tag.** It writes a bare `v0.9.1`, and that is
+no longer a pattern the workflow listens for — the tag would push and deploy
+nothing at all, silently. `--no-git-tag-version` keeps it to the files and
+leaves the tag to you; `npm config set tag-version-prefix taoot-v` is the other
+way, if you would rather `npm version` kept doing it.
+
+The workflow can also be run from the Actions tab (`workflow_dispatch`) to
+re-publish the current master without cutting a version.
 
 ## Dust releases separately
 
@@ -22,13 +28,23 @@ two separately-versioned games off one codebase:
 
 | tag | ships | checked against |
 |---|---|---|
-| `v0.9.1` | the TAOOT site — the full build, **minus `dust.html`** | `version` |
+| `taoot-v0.9.51` | the TAOOT site — the full build, **minus `dust.html`** | `version` |
 | `dust-v0.1.0` | the Dust page — `npm run build:dust`, which emits `dust.html` and its own chunks and nothing else | `dustVersion` |
+
+Both namespaces name their game. The TAOOT tag was a bare `v0.9.50` until
+0.9.51, which read as the repository's version when it was only ever one of the
+two games'. The bare `v*` pattern is no longer matched at all, and a tag that
+names neither game now fails the run rather than defaulting to TAOOT — the old
+default is what would have let a mis-typed tag ship the wrong build. The
+existing `v0.9.x` tags stay as they are; nothing re-runs them.
 
 ```bash
 # bump dustVersion in package.json by hand (npm version only knows `version`),
 # commit, then:
 git tag dust-v0.1.1 && git push --tags
+
+# the site's own release, now with a prefix to match:
+git tag taoot-v0.9.51 && git push --tags
 ```
 
 Independent releases into one hosting directory are safe by construction: the
