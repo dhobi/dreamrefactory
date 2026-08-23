@@ -57,6 +57,16 @@ consumed it**. That's precisely how a scene script suppresses the default walk
 and instead sends you through a door to another set: it handles `keydown` and
 ends with `exitcode`.
 
+The whole BOOTFILE, and it is the odd one out among these maps:
+
+<ByteMap map="bootfile" />
+
+Four containers, no pictures, no tables — and **no pointer graph at all**. Every
+other format here is a tree of containers naming each other; the boot's handlers
+are reached **by name**, through the resolution chain above, so nothing in the
+file points at anything else in it. That is what "standard library" means in
+bytes.
+
 ## What the boot loads at startup
 
 At session start the boot brings in the resources that must exist before any

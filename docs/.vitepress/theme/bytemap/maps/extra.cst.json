@@ -1,0 +1,3017 @@
+{
+ "title": "EXTRA.CST",
+ "subtitle": "2.58 MB · 333 containers · cast · 8 members, 297 frames",
+ "total": 2708416,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 333 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 1332,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "333 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 2560,
+   "size": 2500,
+   "kind": "data",
+   "label": "0 · header container",
+   "container": 0,
+   "detail": "the cast's record: the palette and the directory of its 8 members"
+  },
+  {
+   "at": 5120,
+   "size": 21217,
+   "kind": "script",
+   "label": "1 · compiled script",
+   "container": 1,
+   "detail": "decodes as a compiled script (2577 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 26368,
+   "size": 134,
+   "kind": "data",
+   "label": "2 · \"life1\"",
+   "container": 2,
+   "parent": 0,
+   "detail": "the member's record: their script and their 1 poses"
+  },
+  {
+   "at": 26560,
+   "size": 3286,
+   "kind": "script",
+   "label": "3 · script of \"life1\"",
+   "container": 3,
+   "parent": 2,
+   "detail": "what this character does when spoken to or sent somewhere"
+  },
+  {
+   "at": 29888,
+   "size": 874,
+   "kind": "data",
+   "label": "4 · \"life1\" · stand",
+   "container": 4,
+   "parent": 2,
+   "detail": "17 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 30784,
+   "size": 31704,
+   "kind": "media",
+   "label": "5 · life1 · stand",
+   "container": 5,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 62528,
+   "size": 34897,
+   "kind": "media",
+   "label": "6 · life1 · stand",
+   "container": 6,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 97472,
+   "size": 39966,
+   "kind": "media",
+   "label": "7 · life1 · stand",
+   "container": 7,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 137472,
+   "size": 45849,
+   "kind": "media",
+   "label": "8 · life1 · stand",
+   "container": 8,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 183360,
+   "size": 47828,
+   "kind": "media",
+   "label": "9 · life1 · stand",
+   "container": 9,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 231232,
+   "size": 47685,
+   "kind": "media",
+   "label": "10 · life1 · stand",
+   "container": 10,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 278976,
+   "size": 46297,
+   "kind": "media",
+   "label": "11 · life1 · stand",
+   "container": 11,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 325312,
+   "size": 45229,
+   "kind": "media",
+   "label": "12 · life1 · stand",
+   "container": 12,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 370560,
+   "size": 44532,
+   "kind": "media",
+   "label": "13 · life1 · stand",
+   "container": 13,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 415104,
+   "size": 45179,
+   "kind": "media",
+   "label": "14 · life1 · stand",
+   "container": 14,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 460288,
+   "size": 45953,
+   "kind": "media",
+   "label": "15 · life1 · stand",
+   "container": 15,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 506304,
+   "size": 47193,
+   "kind": "media",
+   "label": "16 · life1 · stand",
+   "container": 16,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 553536,
+   "size": 47784,
+   "kind": "media",
+   "label": "17 · life1 · stand",
+   "container": 17,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 601344,
+   "size": 46240,
+   "kind": "media",
+   "label": "18 · life1 · stand",
+   "container": 18,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 647616,
+   "size": 41711,
+   "kind": "media",
+   "label": "19 · life1 · stand",
+   "container": 19,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 689344,
+   "size": 36694,
+   "kind": "media",
+   "label": "20 · life1 · stand",
+   "container": 20,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 726080,
+   "size": 33936,
+   "kind": "media",
+   "label": "21 · life1 · stand",
+   "container": 21,
+   "parent": 4,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 760064,
+   "size": 198,
+   "kind": "data",
+   "label": "22 · \"bruce1\"",
+   "container": 22,
+   "parent": 0,
+   "detail": "the member's record: their script and their 3 poses"
+  },
+  {
+   "at": 760320,
+   "size": 3579,
+   "kind": "script",
+   "label": "23 · script of \"bruce1\"",
+   "container": 23,
+   "parent": 22,
+   "detail": "what this character does when spoken to or sent somewhere"
+  },
+  {
+   "at": 763904,
+   "size": 478,
+   "kind": "data",
+   "label": "24 · \"bruce1\" · stand",
+   "container": 24,
+   "parent": 22,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 764416,
+   "size": 5415,
+   "kind": "media",
+   "label": "25 · bruce1 · stand",
+   "container": 25,
+   "parent": 24,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 769856,
+   "size": 5316,
+   "kind": "media",
+   "label": "26 · bruce1 · stand",
+   "container": 26,
+   "parent": 24,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 775232,
+   "size": 4131,
+   "kind": "media",
+   "label": "27 · bruce1 · stand",
+   "container": 27,
+   "parent": 24,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 779392,
+   "size": 3748,
+   "kind": "media",
+   "label": "28 · bruce1 · stand",
+   "container": 28,
+   "parent": 24,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 783168,
+   "size": 3973,
+   "kind": "media",
+   "label": "29 · bruce1 · stand",
+   "container": 29,
+   "parent": 24,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 787200,
+   "size": 3931,
+   "kind": "media",
+   "label": "30 · bruce1 · stand",
+   "container": 30,
+   "parent": 24,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 791168,
+   "size": 4161,
+   "kind": "media",
+   "label": "31 · bruce1 · stand",
+   "container": 31,
+   "parent": 24,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 795392,
+   "size": 5005,
+   "kind": "media",
+   "label": "32 · bruce1 · stand",
+   "container": 32,
+   "parent": 24,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 800448,
+   "size": 478,
+   "kind": "data",
+   "label": "33 · \"bruce1\" · standlj",
+   "container": 33,
+   "parent": 22,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 800960,
+   "size": 8756,
+   "kind": "media",
+   "label": "34 · bruce1 · standlj",
+   "container": 34,
+   "parent": 33,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 809728,
+   "size": 8896,
+   "kind": "media",
+   "label": "35 · bruce1 · standlj",
+   "container": 35,
+   "parent": 33,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 818624,
+   "size": 6869,
+   "kind": "media",
+   "label": "36 · bruce1 · standlj",
+   "container": 36,
+   "parent": 33,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 825536,
+   "size": 6622,
+   "kind": "media",
+   "label": "37 · bruce1 · standlj",
+   "container": 37,
+   "parent": 33,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 832192,
+   "size": 6542,
+   "kind": "media",
+   "label": "38 · bruce1 · standlj",
+   "container": 38,
+   "parent": 33,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 838784,
+   "size": 8005,
+   "kind": "media",
+   "label": "39 · bruce1 · standlj",
+   "container": 39,
+   "parent": 33,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 846848,
+   "size": 6893,
+   "kind": "media",
+   "label": "40 · bruce1 · standlj",
+   "container": 40,
+   "parent": 33,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 853760,
+   "size": 8423,
+   "kind": "media",
+   "label": "41 · bruce1 · standlj",
+   "container": 41,
+   "parent": 33,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 862208,
+   "size": 478,
+   "kind": "data",
+   "label": "42 · \"bruce1\" · alt",
+   "container": 42,
+   "parent": 22,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 862720,
+   "size": 5338,
+   "kind": "media",
+   "label": "43 · bruce1 · alt",
+   "container": 43,
+   "parent": 42,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 868096,
+   "size": 4947,
+   "kind": "media",
+   "label": "44 · bruce1 · alt",
+   "container": 44,
+   "parent": 42,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 873088,
+   "size": 4026,
+   "kind": "media",
+   "label": "45 · bruce1 · alt",
+   "container": 45,
+   "parent": 42,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 877120,
+   "size": 3352,
+   "kind": "media",
+   "label": "46 · bruce1 · alt",
+   "container": 46,
+   "parent": 42,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 880512,
+   "size": 3353,
+   "kind": "media",
+   "label": "47 · bruce1 · alt",
+   "container": 47,
+   "parent": 42,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 883904,
+   "size": 3687,
+   "kind": "media",
+   "label": "48 · bruce1 · alt",
+   "container": 48,
+   "parent": 42,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 887616,
+   "size": 3732,
+   "kind": "media",
+   "label": "49 · bruce1 · alt",
+   "container": 49,
+   "parent": 42,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 891392,
+   "size": 4680,
+   "kind": "media",
+   "label": "50 · bruce1 · alt",
+   "container": 50,
+   "parent": 42,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 896128,
+   "size": 166,
+   "kind": "data",
+   "label": "51 · \"jim1\"",
+   "container": 51,
+   "parent": 0,
+   "detail": "the member's record: their script and their 2 poses"
+  },
+  {
+   "at": 896320,
+   "size": 3287,
+   "kind": "script",
+   "label": "52 · script of \"jim1\"",
+   "container": 52,
+   "parent": 51,
+   "detail": "what this character does when spoken to or sent somewhere"
+  },
+  {
+   "at": 899648,
+   "size": 478,
+   "kind": "data",
+   "label": "53 · \"jim1\" · stand",
+   "container": 53,
+   "parent": 51,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 900160,
+   "size": 5510,
+   "kind": "media",
+   "label": "54 · jim1 · stand",
+   "container": 54,
+   "parent": 53,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 905728,
+   "size": 5344,
+   "kind": "media",
+   "label": "55 · jim1 · stand",
+   "container": 55,
+   "parent": 53,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 911104,
+   "size": 4222,
+   "kind": "media",
+   "label": "56 · jim1 · stand",
+   "container": 56,
+   "parent": 53,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 915328,
+   "size": 3708,
+   "kind": "media",
+   "label": "57 · jim1 · stand",
+   "container": 57,
+   "parent": 53,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 919040,
+   "size": 3971,
+   "kind": "media",
+   "label": "58 · jim1 · stand",
+   "container": 58,
+   "parent": 53,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 923072,
+   "size": 3930,
+   "kind": "media",
+   "label": "59 · jim1 · stand",
+   "container": 59,
+   "parent": 53,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 927040,
+   "size": 4232,
+   "kind": "media",
+   "label": "60 · jim1 · stand",
+   "container": 60,
+   "parent": 53,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 931328,
+   "size": 5114,
+   "kind": "media",
+   "label": "61 · jim1 · stand",
+   "container": 61,
+   "parent": 53,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 936448,
+   "size": 478,
+   "kind": "data",
+   "label": "62 · \"jim1\" · standlj",
+   "container": 62,
+   "parent": 51,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 936960,
+   "size": 8939,
+   "kind": "media",
+   "label": "63 · jim1 · standlj",
+   "container": 63,
+   "parent": 62,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 945920,
+   "size": 9056,
+   "kind": "media",
+   "label": "64 · jim1 · standlj",
+   "container": 64,
+   "parent": 62,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 955008,
+   "size": 6910,
+   "kind": "media",
+   "label": "65 · jim1 · standlj",
+   "container": 65,
+   "parent": 62,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 961920,
+   "size": 6574,
+   "kind": "media",
+   "label": "66 · jim1 · standlj",
+   "container": 66,
+   "parent": 62,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 968512,
+   "size": 6614,
+   "kind": "media",
+   "label": "67 · jim1 · standlj",
+   "container": 67,
+   "parent": 62,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 975168,
+   "size": 8014,
+   "kind": "media",
+   "label": "68 · jim1 · standlj",
+   "container": 68,
+   "parent": 62,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 983232,
+   "size": 6981,
+   "kind": "media",
+   "label": "69 · jim1 · standlj",
+   "container": 69,
+   "parent": 62,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 990272,
+   "size": 8500,
+   "kind": "media",
+   "label": "70 · jim1 · standlj",
+   "container": 70,
+   "parent": 62,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 998784,
+   "size": 230,
+   "kind": "data",
+   "label": "71 · \"jay1\"",
+   "container": 71,
+   "parent": 0,
+   "detail": "the member's record: their script and their 4 poses"
+  },
+  {
+   "at": 999040,
+   "size": 6050,
+   "kind": "script",
+   "label": "72 · script of \"jay1\"",
+   "container": 72,
+   "parent": 71,
+   "detail": "what this character does when spoken to or sent somewhere"
+  },
+  {
+   "at": 1005120,
+   "size": 478,
+   "kind": "data",
+   "label": "73 · \"jay1\" · stand",
+   "container": 73,
+   "parent": 71,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 1005632,
+   "size": 5378,
+   "kind": "media",
+   "label": "74 · jay1 · stand",
+   "container": 74,
+   "parent": 73,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1011072,
+   "size": 5234,
+   "kind": "media",
+   "label": "75 · jay1 · stand",
+   "container": 75,
+   "parent": 73,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1016320,
+   "size": 4051,
+   "kind": "media",
+   "label": "76 · jay1 · stand",
+   "container": 76,
+   "parent": 73,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1020416,
+   "size": 3515,
+   "kind": "media",
+   "label": "77 · jay1 · stand",
+   "container": 77,
+   "parent": 73,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1023936,
+   "size": 3035,
+   "kind": "media",
+   "label": "78 · jay1 · stand",
+   "container": 78,
+   "parent": 73,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1027008,
+   "size": 3361,
+   "kind": "media",
+   "label": "79 · jay1 · stand",
+   "container": 79,
+   "parent": 73,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1030400,
+   "size": 3875,
+   "kind": "media",
+   "label": "80 · jay1 · stand",
+   "container": 80,
+   "parent": 73,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1034304,
+   "size": 5156,
+   "kind": "media",
+   "label": "81 · jay1 · stand",
+   "container": 81,
+   "parent": 73,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1039488,
+   "size": 478,
+   "kind": "data",
+   "label": "82 · \"jay1\" · standlj",
+   "container": 82,
+   "parent": 71,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 1040000,
+   "size": 8697,
+   "kind": "media",
+   "label": "83 · jay1 · standlj",
+   "container": 83,
+   "parent": 82,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1048704,
+   "size": 8827,
+   "kind": "media",
+   "label": "84 · jay1 · standlj",
+   "container": 84,
+   "parent": 82,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1057536,
+   "size": 6623,
+   "kind": "media",
+   "label": "85 · jay1 · standlj",
+   "container": 85,
+   "parent": 82,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1064192,
+   "size": 6585,
+   "kind": "media",
+   "label": "86 · jay1 · standlj",
+   "container": 86,
+   "parent": 82,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1070784,
+   "size": 5853,
+   "kind": "media",
+   "label": "87 · jay1 · standlj",
+   "container": 87,
+   "parent": 82,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1076672,
+   "size": 7534,
+   "kind": "media",
+   "label": "88 · jay1 · standlj",
+   "container": 88,
+   "parent": 82,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1084224,
+   "size": 6522,
+   "kind": "media",
+   "label": "89 · jay1 · standlj",
+   "container": 89,
+   "parent": 82,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1090752,
+   "size": 8450,
+   "kind": "media",
+   "label": "90 · jay1 · standlj",
+   "container": 90,
+   "parent": 82,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1099264,
+   "size": 3646,
+   "kind": "data",
+   "label": "91 · \"jay1\" · walk",
+   "container": 91,
+   "parent": 71,
+   "detail": "80 pictures over 10 animation step(s), played in a 20-step order"
+  },
+  {
+   "at": 1102912,
+   "size": 5500,
+   "kind": "media",
+   "label": "92 · jay1 · walk",
+   "container": 92,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1108416,
+   "size": 5136,
+   "kind": "media",
+   "label": "93 · jay1 · walk",
+   "container": 93,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1113600,
+   "size": 4720,
+   "kind": "media",
+   "label": "94 · jay1 · walk",
+   "container": 94,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1118336,
+   "size": 4072,
+   "kind": "media",
+   "label": "95 · jay1 · walk",
+   "container": 95,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1122432,
+   "size": 3499,
+   "kind": "media",
+   "label": "96 · jay1 · walk",
+   "container": 96,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1125952,
+   "size": 3763,
+   "kind": "media",
+   "label": "97 · jay1 · walk",
+   "container": 97,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1129728,
+   "size": 4353,
+   "kind": "media",
+   "label": "98 · jay1 · walk",
+   "container": 98,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1134144,
+   "size": 5426,
+   "kind": "media",
+   "label": "99 · jay1 · walk",
+   "container": 99,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1139584,
+   "size": 5399,
+   "kind": "media",
+   "label": "100 · jay1 · walk",
+   "container": 100,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1145024,
+   "size": 5040,
+   "kind": "media",
+   "label": "101 · jay1 · walk",
+   "container": 101,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1150080,
+   "size": 4537,
+   "kind": "media",
+   "label": "102 · jay1 · walk",
+   "container": 102,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1154624,
+   "size": 4018,
+   "kind": "media",
+   "label": "103 · jay1 · walk",
+   "container": 103,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1158656,
+   "size": 3424,
+   "kind": "media",
+   "label": "104 · jay1 · walk",
+   "container": 104,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1162112,
+   "size": 3696,
+   "kind": "media",
+   "label": "105 · jay1 · walk",
+   "container": 105,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1165824,
+   "size": 4198,
+   "kind": "media",
+   "label": "106 · jay1 · walk",
+   "container": 106,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1170048,
+   "size": 5268,
+   "kind": "media",
+   "label": "107 · jay1 · walk",
+   "container": 107,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1175360,
+   "size": 5308,
+   "kind": "media",
+   "label": "108 · jay1 · walk",
+   "container": 108,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1180672,
+   "size": 4898,
+   "kind": "media",
+   "label": "109 · jay1 · walk",
+   "container": 109,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1185600,
+   "size": 4296,
+   "kind": "media",
+   "label": "110 · jay1 · walk",
+   "container": 110,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1189952,
+   "size": 3834,
+   "kind": "media",
+   "label": "111 · jay1 · walk",
+   "container": 111,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1193792,
+   "size": 3334,
+   "kind": "media",
+   "label": "112 · jay1 · walk",
+   "container": 112,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1197184,
+   "size": 3523,
+   "kind": "media",
+   "label": "113 · jay1 · walk",
+   "container": 113,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1200768,
+   "size": 4185,
+   "kind": "media",
+   "label": "114 · jay1 · walk",
+   "container": 114,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1204992,
+   "size": 4881,
+   "kind": "media",
+   "label": "115 · jay1 · walk",
+   "container": 115,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1209920,
+   "size": 5354,
+   "kind": "media",
+   "label": "116 · jay1 · walk",
+   "container": 116,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1215296,
+   "size": 5252,
+   "kind": "media",
+   "label": "117 · jay1 · walk",
+   "container": 117,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1220608,
+   "size": 4265,
+   "kind": "media",
+   "label": "118 · jay1 · walk",
+   "container": 118,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1224896,
+   "size": 3563,
+   "kind": "media",
+   "label": "119 · jay1 · walk",
+   "container": 119,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1228480,
+   "size": 3260,
+   "kind": "media",
+   "label": "120 · jay1 · walk",
+   "container": 120,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1231744,
+   "size": 3614,
+   "kind": "media",
+   "label": "121 · jay1 · walk",
+   "container": 121,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1235392,
+   "size": 3881,
+   "kind": "media",
+   "label": "122 · jay1 · walk",
+   "container": 122,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1239296,
+   "size": 4740,
+   "kind": "media",
+   "label": "123 · jay1 · walk",
+   "container": 123,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1244096,
+   "size": 5454,
+   "kind": "media",
+   "label": "124 · jay1 · walk",
+   "container": 124,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1249600,
+   "size": 5240,
+   "kind": "media",
+   "label": "125 · jay1 · walk",
+   "container": 125,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1254848,
+   "size": 4583,
+   "kind": "media",
+   "label": "126 · jay1 · walk",
+   "container": 126,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1259456,
+   "size": 3745,
+   "kind": "media",
+   "label": "127 · jay1 · walk",
+   "container": 127,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1263232,
+   "size": 3318,
+   "kind": "media",
+   "label": "128 · jay1 · walk",
+   "container": 128,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1266560,
+   "size": 3719,
+   "kind": "media",
+   "label": "129 · jay1 · walk",
+   "container": 129,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1270336,
+   "size": 4246,
+   "kind": "media",
+   "label": "130 · jay1 · walk",
+   "container": 130,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1274624,
+   "size": 5013,
+   "kind": "media",
+   "label": "131 · jay1 · walk",
+   "container": 131,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1279680,
+   "size": 5585,
+   "kind": "media",
+   "label": "132 · jay1 · walk",
+   "container": 132,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1285312,
+   "size": 5447,
+   "kind": "media",
+   "label": "133 · jay1 · walk",
+   "container": 133,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1290816,
+   "size": 4785,
+   "kind": "media",
+   "label": "134 · jay1 · walk",
+   "container": 134,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1295616,
+   "size": 3849,
+   "kind": "media",
+   "label": "135 · jay1 · walk",
+   "container": 135,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1299520,
+   "size": 3463,
+   "kind": "media",
+   "label": "136 · jay1 · walk",
+   "container": 136,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1303040,
+   "size": 3853,
+   "kind": "media",
+   "label": "137 · jay1 · walk",
+   "container": 137,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1306944,
+   "size": 4507,
+   "kind": "media",
+   "label": "138 · jay1 · walk",
+   "container": 138,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1311488,
+   "size": 5112,
+   "kind": "media",
+   "label": "139 · jay1 · walk",
+   "container": 139,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1316608,
+   "size": 5482,
+   "kind": "media",
+   "label": "140 · jay1 · walk",
+   "container": 140,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1322112,
+   "size": 5403,
+   "kind": "media",
+   "label": "141 · jay1 · walk",
+   "container": 141,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1327552,
+   "size": 4465,
+   "kind": "media",
+   "label": "142 · jay1 · walk",
+   "container": 142,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1332032,
+   "size": 3782,
+   "kind": "media",
+   "label": "143 · jay1 · walk",
+   "container": 143,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1335872,
+   "size": 3421,
+   "kind": "media",
+   "label": "144 · jay1 · walk",
+   "container": 144,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1339328,
+   "size": 3825,
+   "kind": "media",
+   "label": "145 · jay1 · walk",
+   "container": 145,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1343168,
+   "size": 4210,
+   "kind": "media",
+   "label": "146 · jay1 · walk",
+   "container": 146,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1347392,
+   "size": 5001,
+   "kind": "media",
+   "label": "147 · jay1 · walk",
+   "container": 147,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1352448,
+   "size": 5329,
+   "kind": "media",
+   "label": "148 · jay1 · walk",
+   "container": 148,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1357824,
+   "size": 4951,
+   "kind": "media",
+   "label": "149 · jay1 · walk",
+   "container": 149,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1362816,
+   "size": 4342,
+   "kind": "media",
+   "label": "150 · jay1 · walk",
+   "container": 150,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1367168,
+   "size": 3638,
+   "kind": "media",
+   "label": "151 · jay1 · walk",
+   "container": 151,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1370816,
+   "size": 3352,
+   "kind": "media",
+   "label": "152 · jay1 · walk",
+   "container": 152,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1374208,
+   "size": 3445,
+   "kind": "media",
+   "label": "153 · jay1 · walk",
+   "container": 153,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1377664,
+   "size": 4040,
+   "kind": "media",
+   "label": "154 · jay1 · walk",
+   "container": 154,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1381760,
+   "size": 4774,
+   "kind": "media",
+   "label": "155 · jay1 · walk",
+   "container": 155,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1386560,
+   "size": 5305,
+   "kind": "media",
+   "label": "156 · jay1 · walk",
+   "container": 156,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1391872,
+   "size": 4757,
+   "kind": "media",
+   "label": "157 · jay1 · walk",
+   "container": 157,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1396672,
+   "size": 4126,
+   "kind": "media",
+   "label": "158 · jay1 · walk",
+   "container": 158,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1400832,
+   "size": 3805,
+   "kind": "media",
+   "label": "159 · jay1 · walk",
+   "container": 159,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1404672,
+   "size": 3309,
+   "kind": "media",
+   "label": "160 · jay1 · walk",
+   "container": 160,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1408000,
+   "size": 3304,
+   "kind": "media",
+   "label": "161 · jay1 · walk",
+   "container": 161,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1411328,
+   "size": 3928,
+   "kind": "media",
+   "label": "162 · jay1 · walk",
+   "container": 162,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1415296,
+   "size": 5034,
+   "kind": "media",
+   "label": "163 · jay1 · walk",
+   "container": 163,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1420352,
+   "size": 5365,
+   "kind": "media",
+   "label": "164 · jay1 · walk",
+   "container": 164,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1425728,
+   "size": 4982,
+   "kind": "media",
+   "label": "165 · jay1 · walk",
+   "container": 165,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1430720,
+   "size": 4592,
+   "kind": "media",
+   "label": "166 · jay1 · walk",
+   "container": 166,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1435328,
+   "size": 3926,
+   "kind": "media",
+   "label": "167 · jay1 · walk",
+   "container": 167,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1439296,
+   "size": 3405,
+   "kind": "media",
+   "label": "168 · jay1 · walk",
+   "container": 168,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1442752,
+   "size": 3668,
+   "kind": "media",
+   "label": "169 · jay1 · walk",
+   "container": 169,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1446464,
+   "size": 4239,
+   "kind": "media",
+   "label": "170 · jay1 · walk",
+   "container": 170,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1450752,
+   "size": 5089,
+   "kind": "media",
+   "label": "171 · jay1 · walk",
+   "container": 171,
+   "parent": 91,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1455872,
+   "size": 3646,
+   "kind": "data",
+   "label": "172 · \"jay1\" · walklj",
+   "container": 172,
+   "parent": 71,
+   "detail": "80 pictures over 10 animation step(s), played in a 20-step order"
+  },
+  {
+   "at": 1459520,
+   "size": 8973,
+   "kind": "media",
+   "label": "173 · jay1 · walklj",
+   "container": 173,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1468544,
+   "size": 9088,
+   "kind": "media",
+   "label": "174 · jay1 · walklj",
+   "container": 174,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1477632,
+   "size": 7367,
+   "kind": "media",
+   "label": "175 · jay1 · walklj",
+   "container": 175,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1485056,
+   "size": 7451,
+   "kind": "media",
+   "label": "176 · jay1 · walklj",
+   "container": 176,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1492544,
+   "size": 6880,
+   "kind": "media",
+   "label": "177 · jay1 · walklj",
+   "container": 177,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1499456,
+   "size": 8227,
+   "kind": "media",
+   "label": "178 · jay1 · walklj",
+   "container": 178,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1507712,
+   "size": 6697,
+   "kind": "media",
+   "label": "179 · jay1 · walklj",
+   "container": 179,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1514432,
+   "size": 9873,
+   "kind": "media",
+   "label": "180 · jay1 · walklj",
+   "container": 180,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1524352,
+   "size": 8925,
+   "kind": "media",
+   "label": "181 · jay1 · walklj",
+   "container": 181,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1533312,
+   "size": 8957,
+   "kind": "media",
+   "label": "182 · jay1 · walklj",
+   "container": 182,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1542272,
+   "size": 7198,
+   "kind": "media",
+   "label": "183 · jay1 · walklj",
+   "container": 183,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1549504,
+   "size": 7422,
+   "kind": "media",
+   "label": "184 · jay1 · walklj",
+   "container": 184,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1556928,
+   "size": 6753,
+   "kind": "media",
+   "label": "185 · jay1 · walklj",
+   "container": 185,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1563712,
+   "size": 8239,
+   "kind": "media",
+   "label": "186 · jay1 · walklj",
+   "container": 186,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1571968,
+   "size": 6543,
+   "kind": "media",
+   "label": "187 · jay1 · walklj",
+   "container": 187,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1578560,
+   "size": 9639,
+   "kind": "media",
+   "label": "188 · jay1 · walklj",
+   "container": 188,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1588224,
+   "size": 8874,
+   "kind": "media",
+   "label": "189 · jay1 · walklj",
+   "container": 189,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1597120,
+   "size": 8795,
+   "kind": "media",
+   "label": "190 · jay1 · walklj",
+   "container": 190,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1605952,
+   "size": 6741,
+   "kind": "media",
+   "label": "191 · jay1 · walklj",
+   "container": 191,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1612736,
+   "size": 7347,
+   "kind": "media",
+   "label": "192 · jay1 · walklj",
+   "container": 192,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1620096,
+   "size": 6131,
+   "kind": "media",
+   "label": "193 · jay1 · walklj",
+   "container": 193,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1626240,
+   "size": 8313,
+   "kind": "media",
+   "label": "194 · jay1 · walklj",
+   "container": 194,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1634560,
+   "size": 6428,
+   "kind": "media",
+   "label": "195 · jay1 · walklj",
+   "container": 195,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1641024,
+   "size": 8750,
+   "kind": "media",
+   "label": "196 · jay1 · walklj",
+   "container": 196,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1649792,
+   "size": 8939,
+   "kind": "media",
+   "label": "197 · jay1 · walklj",
+   "container": 197,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1658752,
+   "size": 9397,
+   "kind": "media",
+   "label": "198 · jay1 · walklj",
+   "container": 198,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1668160,
+   "size": 6400,
+   "kind": "media",
+   "label": "199 · jay1 · walklj",
+   "container": 199,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1674560,
+   "size": 7598,
+   "kind": "media",
+   "label": "200 · jay1 · walklj",
+   "container": 200,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1682176,
+   "size": 6155,
+   "kind": "media",
+   "label": "201 · jay1 · walklj",
+   "container": 201,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1688384,
+   "size": 8007,
+   "kind": "media",
+   "label": "202 · jay1 · walklj",
+   "container": 202,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1696448,
+   "size": 6393,
+   "kind": "media",
+   "label": "203 · jay1 · walklj",
+   "container": 203,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1702848,
+   "size": 8405,
+   "kind": "media",
+   "label": "204 · jay1 · walklj",
+   "container": 204,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1711296,
+   "size": 8976,
+   "kind": "media",
+   "label": "205 · jay1 · walklj",
+   "container": 205,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1720320,
+   "size": 9666,
+   "kind": "media",
+   "label": "206 · jay1 · walklj",
+   "container": 206,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1730048,
+   "size": 6717,
+   "kind": "media",
+   "label": "207 · jay1 · walklj",
+   "container": 207,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1736768,
+   "size": 8073,
+   "kind": "media",
+   "label": "208 · jay1 · walklj",
+   "container": 208,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1744896,
+   "size": 6318,
+   "kind": "media",
+   "label": "209 · jay1 · walklj",
+   "container": 209,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1751232,
+   "size": 7665,
+   "kind": "media",
+   "label": "210 · jay1 · walklj",
+   "container": 210,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1758912,
+   "size": 6915,
+   "kind": "media",
+   "label": "211 · jay1 · walklj",
+   "container": 211,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1765888,
+   "size": 8699,
+   "kind": "media",
+   "label": "212 · jay1 · walklj",
+   "container": 212,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1774592,
+   "size": 9192,
+   "kind": "media",
+   "label": "213 · jay1 · walklj",
+   "container": 213,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1783808,
+   "size": 10019,
+   "kind": "media",
+   "label": "214 · jay1 · walklj",
+   "container": 214,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1793856,
+   "size": 6911,
+   "kind": "media",
+   "label": "215 · jay1 · walklj",
+   "container": 215,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1800768,
+   "size": 8192,
+   "kind": "media",
+   "label": "216 · jay1 · walklj",
+   "container": 216,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1808960,
+   "size": 6533,
+   "kind": "media",
+   "label": "217 · jay1 · walklj",
+   "container": 217,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1815552,
+   "size": 7785,
+   "kind": "media",
+   "label": "218 · jay1 · walklj",
+   "container": 218,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1823360,
+   "size": 7107,
+   "kind": "media",
+   "label": "219 · jay1 · walklj",
+   "container": 219,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1830528,
+   "size": 8813,
+   "kind": "media",
+   "label": "220 · jay1 · walklj",
+   "container": 220,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1839360,
+   "size": 9027,
+   "kind": "media",
+   "label": "221 · jay1 · walklj",
+   "container": 221,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1848448,
+   "size": 9805,
+   "kind": "media",
+   "label": "222 · jay1 · walklj",
+   "container": 222,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1858304,
+   "size": 6658,
+   "kind": "media",
+   "label": "223 · jay1 · walklj",
+   "container": 223,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1865024,
+   "size": 8040,
+   "kind": "media",
+   "label": "224 · jay1 · walklj",
+   "container": 224,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1873088,
+   "size": 6448,
+   "kind": "media",
+   "label": "225 · jay1 · walklj",
+   "container": 225,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1879552,
+   "size": 7881,
+   "kind": "media",
+   "label": "226 · jay1 · walklj",
+   "container": 226,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1887488,
+   "size": 6830,
+   "kind": "media",
+   "label": "227 · jay1 · walklj",
+   "container": 227,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1894336,
+   "size": 8711,
+   "kind": "media",
+   "label": "228 · jay1 · walklj",
+   "container": 228,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1903104,
+   "size": 8835,
+   "kind": "media",
+   "label": "229 · jay1 · walklj",
+   "container": 229,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1912000,
+   "size": 8973,
+   "kind": "media",
+   "label": "230 · jay1 · walklj",
+   "container": 230,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1921024,
+   "size": 6538,
+   "kind": "media",
+   "label": "231 · jay1 · walklj",
+   "container": 231,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1927616,
+   "size": 7656,
+   "kind": "media",
+   "label": "232 · jay1 · walklj",
+   "container": 232,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1935296,
+   "size": 6143,
+   "kind": "media",
+   "label": "233 · jay1 · walklj",
+   "container": 233,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1941440,
+   "size": 7957,
+   "kind": "media",
+   "label": "234 · jay1 · walklj",
+   "container": 234,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1949440,
+   "size": 6586,
+   "kind": "media",
+   "label": "235 · jay1 · walklj",
+   "container": 235,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1956032,
+   "size": 8569,
+   "kind": "media",
+   "label": "236 · jay1 · walklj",
+   "container": 236,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1964608,
+   "size": 8870,
+   "kind": "media",
+   "label": "237 · jay1 · walklj",
+   "container": 237,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1973504,
+   "size": 8571,
+   "kind": "media",
+   "label": "238 · jay1 · walklj",
+   "container": 238,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1982080,
+   "size": 6587,
+   "kind": "media",
+   "label": "239 · jay1 · walklj",
+   "container": 239,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1988672,
+   "size": 7268,
+   "kind": "media",
+   "label": "240 · jay1 · walklj",
+   "container": 240,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 1995968,
+   "size": 6226,
+   "kind": "media",
+   "label": "241 · jay1 · walklj",
+   "container": 241,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2002240,
+   "size": 8157,
+   "kind": "media",
+   "label": "242 · jay1 · walklj",
+   "container": 242,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2010432,
+   "size": 6180,
+   "kind": "media",
+   "label": "243 · jay1 · walklj",
+   "container": 243,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2016640,
+   "size": 8835,
+   "kind": "media",
+   "label": "244 · jay1 · walklj",
+   "container": 244,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2025536,
+   "size": 8900,
+   "kind": "media",
+   "label": "245 · jay1 · walklj",
+   "container": 245,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2034496,
+   "size": 8875,
+   "kind": "media",
+   "label": "246 · jay1 · walklj",
+   "container": 246,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2043392,
+   "size": 7255,
+   "kind": "media",
+   "label": "247 · jay1 · walklj",
+   "container": 247,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2050688,
+   "size": 7264,
+   "kind": "media",
+   "label": "248 · jay1 · walklj",
+   "container": 248,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2057984,
+   "size": 6624,
+   "kind": "media",
+   "label": "249 · jay1 · walklj",
+   "container": 249,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2064640,
+   "size": 8204,
+   "kind": "media",
+   "label": "250 · jay1 · walklj",
+   "container": 250,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2072896,
+   "size": 6484,
+   "kind": "media",
+   "label": "251 · jay1 · walklj",
+   "container": 251,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2079424,
+   "size": 9377,
+   "kind": "media",
+   "label": "252 · jay1 · walklj",
+   "container": 252,
+   "parent": 172,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2088832,
+   "size": 166,
+   "kind": "data",
+   "label": "253 · \"brown1\"",
+   "container": 253,
+   "parent": 0,
+   "detail": "the member's record: their script and their 2 poses"
+  },
+  {
+   "at": 2089024,
+   "size": 3287,
+   "kind": "script",
+   "label": "254 · script of \"brown1\"",
+   "container": 254,
+   "parent": 253,
+   "detail": "what this character does when spoken to or sent somewhere"
+  },
+  {
+   "at": 2092352,
+   "size": 478,
+   "kind": "data",
+   "label": "255 · \"brown1\" · stand",
+   "container": 255,
+   "parent": 253,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 2092864,
+   "size": 24176,
+   "kind": "media",
+   "label": "256 · brown1 · stand",
+   "container": 256,
+   "parent": 255,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2117056,
+   "size": 19840,
+   "kind": "media",
+   "label": "257 · brown1 · stand",
+   "container": 257,
+   "parent": 255,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2136896,
+   "size": 14925,
+   "kind": "media",
+   "label": "258 · brown1 · stand",
+   "container": 258,
+   "parent": 255,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2151872,
+   "size": 19213,
+   "kind": "media",
+   "label": "259 · brown1 · stand",
+   "container": 259,
+   "parent": 255,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2171136,
+   "size": 21007,
+   "kind": "media",
+   "label": "260 · brown1 · stand",
+   "container": 260,
+   "parent": 255,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2192192,
+   "size": 20192,
+   "kind": "media",
+   "label": "261 · brown1 · stand",
+   "container": 261,
+   "parent": 255,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2212416,
+   "size": 14770,
+   "kind": "media",
+   "label": "262 · brown1 · stand",
+   "container": 262,
+   "parent": 255,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2227200,
+   "size": 20353,
+   "kind": "media",
+   "label": "263 · brown1 · stand",
+   "container": 263,
+   "parent": 255,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2247616,
+   "size": 478,
+   "kind": "data",
+   "label": "264 · \"brown1\" · standlj",
+   "container": 264,
+   "parent": 253,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 2248128,
+   "size": 20608,
+   "kind": "media",
+   "label": "265 · brown1 · standlj",
+   "container": 265,
+   "parent": 264,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2268736,
+   "size": 18623,
+   "kind": "media",
+   "label": "266 · brown1 · standlj",
+   "container": 266,
+   "parent": 264,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2287360,
+   "size": 15631,
+   "kind": "media",
+   "label": "267 · brown1 · standlj",
+   "container": 267,
+   "parent": 264,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2303040,
+   "size": 17080,
+   "kind": "media",
+   "label": "268 · brown1 · standlj",
+   "container": 268,
+   "parent": 264,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2320128,
+   "size": 17839,
+   "kind": "media",
+   "label": "269 · brown1 · standlj",
+   "container": 269,
+   "parent": 264,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2337984,
+   "size": 18474,
+   "kind": "media",
+   "label": "270 · brown1 · standlj",
+   "container": 270,
+   "parent": 264,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2356480,
+   "size": 15741,
+   "kind": "media",
+   "label": "271 · brown1 · standlj",
+   "container": 271,
+   "parent": 264,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2372224,
+   "size": 19233,
+   "kind": "media",
+   "label": "272 · brown1 · standlj",
+   "container": 272,
+   "parent": 264,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2391488,
+   "size": 166,
+   "kind": "data",
+   "label": "273 · \"paul1\"",
+   "container": 273,
+   "parent": 0,
+   "detail": "the member's record: their script and their 2 poses"
+  },
+  {
+   "at": 2391680,
+   "size": 3287,
+   "kind": "script",
+   "label": "274 · script of \"paul1\"",
+   "container": 274,
+   "parent": 273,
+   "detail": "what this character does when spoken to or sent somewhere"
+  },
+  {
+   "at": 2395008,
+   "size": 478,
+   "kind": "data",
+   "label": "275 · \"paul1\" · stand",
+   "container": 275,
+   "parent": 273,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 2395520,
+   "size": 5444,
+   "kind": "media",
+   "label": "276 · paul1 · stand",
+   "container": 276,
+   "parent": 275,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2401024,
+   "size": 5328,
+   "kind": "media",
+   "label": "277 · paul1 · stand",
+   "container": 277,
+   "parent": 275,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2406400,
+   "size": 4045,
+   "kind": "media",
+   "label": "278 · paul1 · stand",
+   "container": 278,
+   "parent": 275,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2410496,
+   "size": 3449,
+   "kind": "media",
+   "label": "279 · paul1 · stand",
+   "container": 279,
+   "parent": 275,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2413952,
+   "size": 3169,
+   "kind": "media",
+   "label": "280 · paul1 · stand",
+   "container": 280,
+   "parent": 275,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2417152,
+   "size": 3454,
+   "kind": "media",
+   "label": "281 · paul1 · stand",
+   "container": 281,
+   "parent": 275,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2420608,
+   "size": 3940,
+   "kind": "media",
+   "label": "282 · paul1 · stand",
+   "container": 282,
+   "parent": 275,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2424576,
+   "size": 5207,
+   "kind": "media",
+   "label": "283 · paul1 · stand",
+   "container": 283,
+   "parent": 275,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2429824,
+   "size": 478,
+   "kind": "data",
+   "label": "284 · \"paul1\" · standlj",
+   "container": 284,
+   "parent": 273,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 2430336,
+   "size": 8725,
+   "kind": "media",
+   "label": "285 · paul1 · standlj",
+   "container": 285,
+   "parent": 284,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2439104,
+   "size": 8759,
+   "kind": "media",
+   "label": "286 · paul1 · standlj",
+   "container": 286,
+   "parent": 284,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2447872,
+   "size": 6628,
+   "kind": "media",
+   "label": "287 · paul1 · standlj",
+   "container": 287,
+   "parent": 284,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2454528,
+   "size": 6574,
+   "kind": "media",
+   "label": "288 · paul1 · standlj",
+   "container": 288,
+   "parent": 284,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2461120,
+   "size": 5880,
+   "kind": "media",
+   "label": "289 · paul1 · standlj",
+   "container": 289,
+   "parent": 284,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2467008,
+   "size": 7647,
+   "kind": "media",
+   "label": "290 · paul1 · standlj",
+   "container": 290,
+   "parent": 284,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2474688,
+   "size": 6540,
+   "kind": "media",
+   "label": "291 · paul1 · standlj",
+   "container": 291,
+   "parent": 284,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2481280,
+   "size": 8526,
+   "kind": "media",
+   "label": "292 · paul1 · standlj",
+   "container": 292,
+   "parent": 284,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2489856,
+   "size": 166,
+   "kind": "data",
+   "label": "293 · \"ani1\"",
+   "container": 293,
+   "parent": 0,
+   "detail": "the member's record: their script and their 2 poses"
+  },
+  {
+   "at": 2490048,
+   "size": 3287,
+   "kind": "script",
+   "label": "294 · script of \"ani1\"",
+   "container": 294,
+   "parent": 293,
+   "detail": "what this character does when spoken to or sent somewhere"
+  },
+  {
+   "at": 2493376,
+   "size": 478,
+   "kind": "data",
+   "label": "295 · \"ani1\" · stand",
+   "container": 295,
+   "parent": 293,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 2493888,
+   "size": 5478,
+   "kind": "media",
+   "label": "296 · ani1 · stand",
+   "container": 296,
+   "parent": 295,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2499392,
+   "size": 5646,
+   "kind": "media",
+   "label": "297 · ani1 · stand",
+   "container": 297,
+   "parent": 295,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2505088,
+   "size": 5033,
+   "kind": "media",
+   "label": "298 · ani1 · stand",
+   "container": 298,
+   "parent": 295,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2510144,
+   "size": 3563,
+   "kind": "media",
+   "label": "299 · ani1 · stand",
+   "container": 299,
+   "parent": 295,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2513728,
+   "size": 3516,
+   "kind": "media",
+   "label": "300 · ani1 · stand",
+   "container": 300,
+   "parent": 295,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2517248,
+   "size": 3539,
+   "kind": "media",
+   "label": "301 · ani1 · stand",
+   "container": 301,
+   "parent": 295,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2520832,
+   "size": 4515,
+   "kind": "media",
+   "label": "302 · ani1 · stand",
+   "container": 302,
+   "parent": 295,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2525376,
+   "size": 5672,
+   "kind": "media",
+   "label": "303 · ani1 · stand",
+   "container": 303,
+   "parent": 295,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2531072,
+   "size": 478,
+   "kind": "data",
+   "label": "304 · \"ani1\" · standlj",
+   "container": 304,
+   "parent": 293,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 2531584,
+   "size": 9224,
+   "kind": "media",
+   "label": "305 · ani1 · standlj",
+   "container": 305,
+   "parent": 304,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2540864,
+   "size": 8230,
+   "kind": "media",
+   "label": "306 · ani1 · standlj",
+   "container": 306,
+   "parent": 304,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2549120,
+   "size": 6781,
+   "kind": "media",
+   "label": "307 · ani1 · standlj",
+   "container": 307,
+   "parent": 304,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2555904,
+   "size": 7637,
+   "kind": "media",
+   "label": "308 · ani1 · standlj",
+   "container": 308,
+   "parent": 304,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2563584,
+   "size": 7899,
+   "kind": "media",
+   "label": "309 · ani1 · standlj",
+   "container": 309,
+   "parent": 304,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2571520,
+   "size": 6990,
+   "kind": "media",
+   "label": "310 · ani1 · standlj",
+   "container": 310,
+   "parent": 304,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2578560,
+   "size": 6473,
+   "kind": "media",
+   "label": "311 · ani1 · standlj",
+   "container": 311,
+   "parent": 304,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2585088,
+   "size": 8771,
+   "kind": "media",
+   "label": "312 · ani1 · standlj",
+   "container": 312,
+   "parent": 304,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2593920,
+   "size": 166,
+   "kind": "data",
+   "label": "313 · \"molly1\"",
+   "container": 313,
+   "parent": 0,
+   "detail": "the member's record: their script and their 2 poses"
+  },
+  {
+   "at": 2594112,
+   "size": 3287,
+   "kind": "script",
+   "label": "314 · script of \"molly1\"",
+   "container": 314,
+   "parent": 313,
+   "detail": "what this character does when spoken to or sent somewhere"
+  },
+  {
+   "at": 2597440,
+   "size": 478,
+   "kind": "data",
+   "label": "315 · \"molly1\" · stand",
+   "container": 315,
+   "parent": 313,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 2597952,
+   "size": 6305,
+   "kind": "media",
+   "label": "316 · molly1 · stand",
+   "container": 316,
+   "parent": 315,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2604288,
+   "size": 6093,
+   "kind": "media",
+   "label": "317 · molly1 · stand",
+   "container": 317,
+   "parent": 315,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2610432,
+   "size": 5809,
+   "kind": "media",
+   "label": "318 · molly1 · stand",
+   "container": 318,
+   "parent": 315,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2616256,
+   "size": 4734,
+   "kind": "media",
+   "label": "319 · molly1 · stand",
+   "container": 319,
+   "parent": 315,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2620992,
+   "size": 4854,
+   "kind": "media",
+   "label": "320 · molly1 · stand",
+   "container": 320,
+   "parent": 315,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2625856,
+   "size": 4421,
+   "kind": "media",
+   "label": "321 · molly1 · stand",
+   "container": 321,
+   "parent": 315,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2630336,
+   "size": 5441,
+   "kind": "media",
+   "label": "322 · molly1 · stand",
+   "container": 322,
+   "parent": 315,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2635840,
+   "size": 6251,
+   "kind": "media",
+   "label": "323 · molly1 · stand",
+   "container": 323,
+   "parent": 315,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2642112,
+   "size": 478,
+   "kind": "data",
+   "label": "324 · \"molly1\" · standlj",
+   "container": 324,
+   "parent": 313,
+   "detail": "8 pictures over 1 animation step(s), played in a 1-step order"
+  },
+  {
+   "at": 2642624,
+   "size": 8658,
+   "kind": "media",
+   "label": "325 · molly1 · standlj",
+   "container": 325,
+   "parent": 324,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2651328,
+   "size": 9071,
+   "kind": "media",
+   "label": "326 · molly1 · standlj",
+   "container": 326,
+   "parent": 324,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2660416,
+   "size": 7689,
+   "kind": "media",
+   "label": "327 · molly1 · standlj",
+   "container": 327,
+   "parent": 324,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2668160,
+   "size": 7934,
+   "kind": "media",
+   "label": "328 · molly1 · standlj",
+   "container": 328,
+   "parent": 324,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2676096,
+   "size": 7632,
+   "kind": "media",
+   "label": "329 · molly1 · standlj",
+   "container": 329,
+   "parent": 324,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2683776,
+   "size": 8258,
+   "kind": "media",
+   "label": "330 · molly1 · standlj",
+   "container": 330,
+   "parent": 324,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2692096,
+   "size": 7525,
+   "kind": "media",
+   "label": "331 · molly1 · standlj",
+   "container": 331,
+   "parent": 324,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  },
+  {
+   "at": 2699648,
+   "size": 8767,
+   "kind": "media",
+   "label": "332 · molly1 · standlj",
+   "container": 332,
+   "parent": 324,
+   "detail": "one picture of the pose, at one of the facings it was drawn from"
+  }
+ ],
+ "source": "extra.cst · tools/blockmap.ts · 332 of 333 containers named by walking the CST reader, 1 by sniffing the payload"
+}

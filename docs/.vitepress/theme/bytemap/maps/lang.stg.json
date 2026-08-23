@@ -1,0 +1,123 @@
+{
+ "title": "LANG.STG",
+ "subtitle": "111 KB · 12 containers · stage · 2 flats (choose, wait), DreamFactory 4",
+ "total": 113409,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 12 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 48,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "12 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 1072,
+   "size": 2224,
+   "kind": "data",
+   "label": "0 · header container",
+   "container": 0,
+   "detail": "the stage record: the 2048-byte palette and the table of 2 flats, 46 bytes each"
+  },
+  {
+   "at": 3296,
+   "size": 196,
+   "kind": "script",
+   "label": "1 · stage main script",
+   "container": 1,
+   "parent": 0,
+   "detail": "the stage's own script — MAIN.STG's is where gotospecial lives"
+  },
+  {
+   "at": 3492,
+   "size": 634,
+   "kind": "script",
+   "label": "2 · script of flat \"choose\"",
+   "container": 2,
+   "parent": 0,
+   "detail": "this layer's handlers"
+  },
+  {
+   "at": 4126,
+   "size": 50506,
+   "kind": "media",
+   "label": "3 · picture of flat \"choose\"",
+   "container": 3,
+   "parent": 0,
+   "detail": "the 512×384 image this UI layer draws"
+  },
+  {
+   "at": 54632,
+   "size": 196,
+   "kind": "script",
+   "label": "4 · compiled script",
+   "container": 4,
+   "detail": "decodes as a compiled script (19 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 54828,
+   "size": 196,
+   "kind": "script",
+   "label": "5 · compiled script",
+   "container": 5,
+   "detail": "decodes as a compiled script (19 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 55024,
+   "size": 196,
+   "kind": "script",
+   "label": "6 · compiled script",
+   "container": 6,
+   "detail": "decodes as a compiled script (19 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 55220,
+   "size": 196,
+   "kind": "script",
+   "label": "7 · compiled script",
+   "container": 7,
+   "detail": "decodes as a compiled script (19 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 55416,
+   "size": 196,
+   "kind": "script",
+   "label": "8 · compiled script",
+   "container": 8,
+   "detail": "decodes as a compiled script (19 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 55612,
+   "size": 196,
+   "kind": "script",
+   "label": "9 · compiled script",
+   "container": 9,
+   "detail": "decodes as a compiled script (19 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 55808,
+   "size": 1232,
+   "kind": "data",
+   "label": "10 · click regions of \"choose\"",
+   "container": 10,
+   "parent": 0,
+   "detail": "6 clickable rectangles, each with the script it runs"
+  },
+  {
+   "at": 57040,
+   "size": 56369,
+   "kind": "media",
+   "label": "11 · picture of flat \"wait\"",
+   "container": 11,
+   "parent": 0,
+   "detail": "the 512×384 image this UI layer draws"
+  }
+ ],
+ "source": "lang.stg · tools/blockmap.ts · 6 of 12 containers named by walking the STG reader, 6 by sniffing the payload"
+}

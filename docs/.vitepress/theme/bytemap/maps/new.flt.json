@@ -1,0 +1,382 @@
+{
+ "title": "NEW.FLT",
+ "subtitle": "390 KB · 43 containers · stage · 5 flats (mainpanel, map, avatar, score, death), DreamFactory 1",
+ "total": 399424,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 43 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 172,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "43 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 1536,
+   "size": 2252,
+   "kind": "data",
+   "label": "0 · header container",
+   "container": 0,
+   "detail": "the stage record: the 2048-byte palette and the table of 5 flats, 46 bytes each"
+  },
+  {
+   "at": 3840,
+   "size": 12332,
+   "kind": "script",
+   "label": "1 · stage main script",
+   "container": 1,
+   "parent": 0,
+   "detail": "the stage's own script — MAIN.STG's is where gotospecial lives"
+  },
+  {
+   "at": 16192,
+   "size": 10172,
+   "kind": "script",
+   "label": "2 · script of flat \"mainpanel\"",
+   "container": 2,
+   "parent": 0,
+   "detail": "this layer's handlers"
+  },
+  {
+   "at": 26368,
+   "size": 41834,
+   "kind": "media",
+   "label": "3 · picture of flat \"mainpanel\"",
+   "container": 3,
+   "parent": 0,
+   "detail": "the 512×384 image this UI layer draws"
+  },
+  {
+   "at": 68224,
+   "size": 108,
+   "kind": "data",
+   "label": "4 · click regions of \"mainpanel\"",
+   "container": 4,
+   "parent": 0,
+   "detail": "3 clickable rectangles, each with the script it runs"
+  },
+  {
+   "at": 68352,
+   "size": 3052,
+   "kind": "script",
+   "label": "5 · script of flat \"map\"",
+   "container": 5,
+   "parent": 0,
+   "detail": "this layer's handlers"
+  },
+  {
+   "at": 71424,
+   "size": 69629,
+   "kind": "media",
+   "label": "6 · picture of flat \"map\"",
+   "container": 6,
+   "parent": 0,
+   "detail": "the 512×384 image this UI layer draws"
+  },
+  {
+   "at": 141056,
+   "size": 44,
+   "kind": "data",
+   "label": "7 · click regions of \"map\"",
+   "container": 7,
+   "parent": 0,
+   "detail": "1 clickable rectangles, each with the script it runs"
+  },
+  {
+   "at": 141120,
+   "size": 10431,
+   "kind": "script",
+   "label": "8 · script of flat \"avatar\"",
+   "container": 8,
+   "parent": 0,
+   "detail": "this layer's handlers"
+  },
+  {
+   "at": 151552,
+   "size": 52653,
+   "kind": "media",
+   "label": "9 · picture of flat \"avatar\"",
+   "container": 9,
+   "parent": 0,
+   "detail": "the 512×384 image this UI layer draws"
+  },
+  {
+   "at": 204224,
+   "size": 76,
+   "kind": "data",
+   "label": "10 · click regions of \"avatar\"",
+   "container": 10,
+   "parent": 0,
+   "detail": "2 clickable rectangles, each with the script it runs"
+  },
+  {
+   "at": 204352,
+   "size": 6839,
+   "kind": "script",
+   "label": "11 · script of flat \"score\"",
+   "container": 11,
+   "parent": 0,
+   "detail": "this layer's handlers"
+  },
+  {
+   "at": 211200,
+   "size": 81506,
+   "kind": "media",
+   "label": "12 · picture of flat \"score\"",
+   "container": 12,
+   "parent": 0,
+   "detail": "the 512×384 image this UI layer draws"
+  },
+  {
+   "at": 292736,
+   "size": 428,
+   "kind": "data",
+   "label": "13 · click regions of \"score\"",
+   "container": 13,
+   "parent": 0,
+   "detail": "13 clickable rectangles, each with the script it runs"
+  },
+  {
+   "at": 293184,
+   "size": 8586,
+   "kind": "script",
+   "label": "14 · script of flat \"death\"",
+   "container": 14,
+   "parent": 0,
+   "detail": "this layer's handlers"
+  },
+  {
+   "at": 301824,
+   "size": 78400,
+   "kind": "media",
+   "label": "15 · picture of flat \"death\"",
+   "container": 15,
+   "parent": 0,
+   "detail": "the 512×384 image this UI layer draws"
+  },
+  {
+   "at": 380224,
+   "size": 236,
+   "kind": "data",
+   "label": "16 · click regions of \"death\"",
+   "container": 16,
+   "parent": 0,
+   "detail": "7 clickable rectangles, each with the script it runs"
+  },
+  {
+   "at": 380480,
+   "size": 238,
+   "kind": "script",
+   "label": "17 · compiled script",
+   "container": 17,
+   "detail": "decodes as a compiled script (26 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 380736,
+   "size": 238,
+   "kind": "script",
+   "label": "18 · compiled script",
+   "container": 18,
+   "detail": "decodes as a compiled script (26 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 380992,
+   "size": 238,
+   "kind": "script",
+   "label": "19 · compiled script",
+   "container": 19,
+   "detail": "decodes as a compiled script (26 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 381248,
+   "size": 230,
+   "kind": "script",
+   "label": "20 · compiled script",
+   "container": 20,
+   "detail": "decodes as a compiled script (25 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 381504,
+   "size": 560,
+   "kind": "script",
+   "label": "21 · compiled script",
+   "container": 21,
+   "detail": "decodes as a compiled script (60 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 382080,
+   "size": 327,
+   "kind": "script",
+   "label": "22 · compiled script",
+   "container": 22,
+   "detail": "decodes as a compiled script (36 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 382464,
+   "size": 327,
+   "kind": "script",
+   "label": "23 · compiled script",
+   "container": 23,
+   "detail": "decodes as a compiled script (36 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 382848,
+   "size": 650,
+   "kind": "script",
+   "label": "24 · compiled script",
+   "container": 24,
+   "detail": "decodes as a compiled script (73 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 383552,
+   "size": 434,
+   "kind": "script",
+   "label": "25 · compiled script",
+   "container": 25,
+   "detail": "decodes as a compiled script (46 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 384000,
+   "size": 382,
+   "kind": "script",
+   "label": "26 · compiled script",
+   "container": 26,
+   "detail": "decodes as a compiled script (39 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 384384,
+   "size": 360,
+   "kind": "script",
+   "label": "27 · compiled script",
+   "container": 27,
+   "detail": "decodes as a compiled script (38 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 384768,
+   "size": 691,
+   "kind": "script",
+   "label": "28 · compiled script",
+   "container": 28,
+   "detail": "decodes as a compiled script (75 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 385472,
+   "size": 360,
+   "kind": "script",
+   "label": "29 · compiled script",
+   "container": 29,
+   "detail": "decodes as a compiled script (38 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 385856,
+   "size": 360,
+   "kind": "script",
+   "label": "30 · compiled script",
+   "container": 30,
+   "detail": "decodes as a compiled script (38 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 386240,
+   "size": 548,
+   "kind": "script",
+   "label": "31 · compiled script",
+   "container": 31,
+   "detail": "decodes as a compiled script (54 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 386816,
+   "size": 8332,
+   "kind": "script",
+   "label": "32 · compiled script",
+   "container": 32,
+   "detail": "decodes as a compiled script (919 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 395200,
+   "size": 474,
+   "kind": "script",
+   "label": "33 · compiled script",
+   "container": 33,
+   "detail": "decodes as a compiled script (50 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 395712,
+   "size": 240,
+   "kind": "script",
+   "label": "34 · compiled script",
+   "container": 34,
+   "detail": "decodes as a compiled script (24 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 395968,
+   "size": 437,
+   "kind": "script",
+   "label": "35 · compiled script",
+   "container": 35,
+   "detail": "decodes as a compiled script (44 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 396416,
+   "size": 266,
+   "kind": "script",
+   "label": "36 · compiled script",
+   "container": 36,
+   "detail": "decodes as a compiled script (26 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 396736,
+   "size": 16,
+   "kind": "data",
+   "label": "37 · container 37",
+   "container": 37,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 396800,
+   "size": 464,
+   "kind": "script",
+   "label": "38 · compiled script",
+   "container": 38,
+   "detail": "decodes as a compiled script (52 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 397312,
+   "size": 465,
+   "kind": "script",
+   "label": "39 · compiled script",
+   "container": 39,
+   "detail": "decodes as a compiled script (52 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 397824,
+   "size": 464,
+   "kind": "script",
+   "label": "40 · compiled script",
+   "container": 40,
+   "detail": "decodes as a compiled script (52 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 398336,
+   "size": 465,
+   "kind": "script",
+   "label": "41 · compiled script",
+   "container": 41,
+   "detail": "decodes as a compiled script (52 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 398848,
+   "size": 524,
+   "kind": "script",
+   "label": "42 · compiled script",
+   "container": 42,
+   "detail": "decodes as a compiled script (61 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  }
+ ],
+ "source": "NEW.FLT · tools/blockmap.ts · 17 of 43 containers named by walking the FLT reader, 26 by sniffing the payload"
+}

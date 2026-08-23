@@ -53,6 +53,12 @@ use the [SHP transparent codec](shp.md)):
 | Container 2 | **script table**: count i16 @ `22`, then 40-byte records @ `24` (`{i32 location, i32, pascal name[31]}`) |
 | Container 3 | **stance register**: up to 64 × i32 @ `22`, each pointing at a stance container |
 
+`BLKJACK1.PUP` laid out — a puppet is mostly *voice*, and the faces are the small
+part. Hover the header container to see the fan-out: the stances, the scripts,
+the answer band and every line's audio all hang off it.
+
+<ByteMap map="blkjack1.pup" />
+
 The **idle intervals** are the eight i32s before the band pointer: four
 `[min, max]` tick pairs, one per `idle 1`..`idle 4` line, at 60 ticks to the second.
 They are how often this character blinks and fidgets while a dialogue plaque is up —
@@ -147,6 +153,11 @@ container**:
 | `0x2A` | pstr | the member's **name** (`"morrow"`, `"sasha"`…) |
 | `0x5A` | i32 | pose count |
 | `0x5E` | — | 32-byte **pose records**: `{i32 set container, … , pascal name @+16}` (`"stand"`, `"walk"`, …) |
+
+`EXTRA.CST` is eight members and 297 pictures, and the shape of the file is the
+shape of the hierarchy — member, pose, frames — three levels deep:
+
+<ByteMap map="extra.cst" />
 
 A pose's set container **is a [SHP state container](shp.md)** — same offsets,
 same meanings — so it carries a play script @ `0x2E` with its length @ `0x70`,

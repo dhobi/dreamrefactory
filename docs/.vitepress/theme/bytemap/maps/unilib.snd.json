@@ -1,0 +1,260 @@
+{
+ "title": "UNILIB.SND",
+ "subtitle": "149 KB · 24 containers · Dust bank \"unilib.snd\" · 23 sounds",
+ "total": 152640,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 24 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 96,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "24 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 1536,
+   "size": 738,
+   "kind": "data",
+   "label": "0 · header container",
+   "container": 0,
+   "detail": "the bank's record: its name \"unilib.snd\" and the table of its 23 sounds. A v1 bank has no play-ORDER table — a loop bed's order is spelled in the names"
+  },
+  {
+   "at": 2304,
+   "size": 1927,
+   "kind": "media",
+   "label": "1 · sound \"pageturn\"",
+   "container": 1,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 4288,
+   "size": 1927,
+   "kind": "media",
+   "label": "2 · sound \"pageturn\"",
+   "container": 2,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 6272,
+   "size": 18056,
+   "kind": "media",
+   "label": "3 · sound \"hotbell\"",
+   "container": 3,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 24384,
+   "size": 6726,
+   "kind": "media",
+   "label": "4 · sound \"doorclose3\"",
+   "container": 4,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 31168,
+   "size": 7518,
+   "kind": "media",
+   "label": "5 · sound \"dooropen3\"",
+   "container": 5,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 38720,
+   "size": 5780,
+   "kind": "media",
+   "label": "6 · sound \"doorclose2\"",
+   "container": 6,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 44544,
+   "size": 6476,
+   "kind": "media",
+   "label": "7 · sound \"dooropen2\"",
+   "container": 7,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 51072,
+   "size": 7053,
+   "kind": "media",
+   "label": "8 · sound \"doorclose1\"",
+   "container": 8,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 58176,
+   "size": 10049,
+   "kind": "media",
+   "label": "9 · sound \"dooropen1\"",
+   "container": 9,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 68288,
+   "size": 2070,
+   "kind": "media",
+   "label": "10 · sound \"gate\"",
+   "container": 10,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 70400,
+   "size": 3557,
+   "kind": "media",
+   "label": "11 · sound \"swingdoor\"",
+   "container": 11,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 73984,
+   "size": 6385,
+   "kind": "media",
+   "label": "12 · sound \"knock2\"",
+   "container": 12,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 80384,
+   "size": 14399,
+   "kind": "media",
+   "label": "13 · sound \"knock1\"",
+   "container": 13,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 94784,
+   "size": 7511,
+   "kind": "media",
+   "label": "14 · sound \"ricochet\"",
+   "container": 14,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 102336,
+   "size": 2908,
+   "kind": "media",
+   "label": "15 · sound \"manfalls\"",
+   "container": 15,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 105280,
+   "size": 6136,
+   "kind": "media",
+   "label": "16 · sound \"heystranger\"",
+   "container": 16,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 111424,
+   "size": 12800,
+   "kind": "media",
+   "label": "17 · sound \"dellgrunt\"",
+   "container": 17,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 124224,
+   "size": 2392,
+   "kind": "media",
+   "label": "18 · sound \"gunclose\"",
+   "container": 18,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 126656,
+   "size": 3318,
+   "kind": "media",
+   "label": "19 · sound \"gunopen\"",
+   "container": 19,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 129984,
+   "size": 1727,
+   "kind": "media",
+   "label": "20 · sound \"gunload\"",
+   "container": 20,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 131712,
+   "size": 1866,
+   "kind": "media",
+   "label": "21 · sound \"gunempty\"",
+   "container": 21,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 133632,
+   "size": 9552,
+   "kind": "media",
+   "label": "22 · sound \"gunshot38\"",
+   "container": 22,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  },
+  {
+   "at": 143232,
+   "size": 9360,
+   "kind": "media",
+   "label": "23 · sound \"inven\"",
+   "container": 23,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "one sound, asked for by this name"
+  }
+ ],
+ "source": "UNILIB.SND · tools/blockmap.ts · 24 of 24 containers named by walking the SND reader"
+}

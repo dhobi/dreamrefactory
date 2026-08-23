@@ -102,6 +102,18 @@ all 109 shipped saves.
 | +4 | the **walks** table, verbatim: `0x6e0` = 16 × 110 |
 | (var) | one **waypoint payload** container per active walk slot whose handle at `+0x12` is non-null — see [The scheduler containers](#the-scheduler-containers-loops-crickets-and-walks) |
 
+A real one, end to end — the endgame save at the First Class Lounge. Because the
+order is the writer's own walk, **every index here is computed and none is
+searched for**: the count of open tracks in container 6 places the globals, and
+the globals place everything after them.
+
+<ByteMap map="lounge.ti" />
+
+A save looks nothing like the other formats in this section: no pictures, no
+sound, no scripts. It is 46 KB of tables — and the biggest single block is the
+manifest, because the paths of every open file cost more bytes than the state of
+the game.
+
 The three tables at the end are not a serialization of anything: `0x442530`
 sits directly in front of the master service pass `0x442550` and hands back
 pointers to its own three tables (`0x48bcd0` loops, `0x48b830` crickets,

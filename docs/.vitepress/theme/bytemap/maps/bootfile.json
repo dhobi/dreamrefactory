@@ -1,0 +1,54 @@
+{
+ "title": "BOOTFILE",
+ "subtitle": "93 KB · 4 containers · boot · 4 containers, nearly all of them scripts reached BY NAME rather than by pointer",
+ "total": 95488,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 4 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 16,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "4 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 1536,
+   "size": 36,
+   "kind": "data",
+   "label": "0 · container 0",
+   "container": 0,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 1600,
+   "size": 22885,
+   "kind": "script",
+   "label": "1 · the library, and keydown → the scene",
+   "container": 1,
+   "detail": "the standard library — some 76 globally-callable handlers — plus the keydown that hands the key to the current scene first"
+  },
+  {
+   "at": 24512,
+   "size": 70908,
+   "kind": "script",
+   "label": "2 · keydown: the default movement",
+   "container": 2,
+   "detail": "walking and turning, reached only if nothing earlier in the event chain consumed the key"
+  },
+  {
+   "at": 95424,
+   "size": 16,
+   "kind": "data",
+   "label": "3 · container 3",
+   "container": 3,
+   "detail": "a structure this map's annotator does not name yet"
+  }
+ ],
+ "source": "bootfile · tools/blockmap.ts · 2 of 4 containers named by walking the BOOTFILE reader, 2 by sniffing the payload"
+}

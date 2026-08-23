@@ -1,0 +1,995 @@
+{
+ "title": "LNGHALL.SET",
+ "subtitle": "1.32 MB · 109 containers · set \"lnghall\" · 2 scenes, 1 transitions, DreamFactory 4",
+ "total": 1386496,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 109 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 436,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "109 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 1536,
+   "size": 2614,
+   "kind": "data",
+   "label": "0 · header container",
+   "container": 0,
+   "detail": "the set's own record: name \"lnghall\", a 512×264 viewport, the 2048-byte palette at 0xf2, and the refs to the three registers below"
+  },
+  {
+   "at": 4160,
+   "size": 1459,
+   "kind": "script",
+   "label": "1 · the set's main script",
+   "container": 1,
+   "parent": 0,
+   "detail": "container 1 by convention, and the set-level handlers the scenes' own scripts sit under"
+  },
+  {
+   "at": 5632,
+   "size": 92,
+   "kind": "data",
+   "label": "2 · scene register",
+   "container": 2,
+   "parent": 0,
+   "detail": "2 scenes, 42 bytes each — the table every \"where am I\" answer starts from"
+  },
+  {
+   "at": 5760,
+   "size": 70,
+   "kind": "data",
+   "label": "3 · actor register",
+   "container": 3,
+   "parent": 0,
+   "detail": "1 actor slots: partycricket"
+  },
+  {
+   "at": 5888,
+   "size": 336,
+   "kind": "data",
+   "label": "4 · views of \"Scene10\"",
+   "container": 4,
+   "parent": 2,
+   "detail": "the scene's camera position and its 6 named views (View12, View13, View14, View15, View22, View23)"
+  },
+  {
+   "at": 6272,
+   "size": 2260,
+   "kind": "script",
+   "label": "5 · script of \"Scene10\"",
+   "container": 5,
+   "parent": 2,
+   "detail": "the scene's own handlers — openset, mousedown, timers"
+  },
+  {
+   "at": 8576,
+   "size": 196,
+   "kind": "data",
+   "label": "6 · hotspots in \"Scene10.View12\"",
+   "container": 6,
+   "parent": 4,
+   "detail": "5 clickable regions, 36 bytes each"
+  },
+  {
+   "at": 8832,
+   "size": 1185,
+   "kind": "script",
+   "label": "7 · script of \"door\"",
+   "container": 7,
+   "parent": 6,
+   "detail": "what clicking \"door\" in Scene10.View12 runs"
+  },
+  {
+   "at": 10048,
+   "size": 16,
+   "kind": "script",
+   "label": "8 · script of \"lite\"",
+   "container": 8,
+   "parent": 6,
+   "detail": "what clicking \"lite\" in Scene10.View12 runs"
+  },
+  {
+   "at": 10112,
+   "size": 16,
+   "kind": "script",
+   "label": "9 · script of \"lite\"",
+   "container": 9,
+   "parent": 6,
+   "detail": "what clicking \"lite\" in Scene10.View12 runs"
+  },
+  {
+   "at": 10176,
+   "size": 16,
+   "kind": "script",
+   "label": "10 · script of \"plant\"",
+   "container": 10,
+   "parent": 6,
+   "detail": "what clicking \"plant\" in Scene10.View12 runs"
+  },
+  {
+   "at": 10240,
+   "size": 16,
+   "kind": "script",
+   "label": "11 · script of \"plant\"",
+   "container": 11,
+   "parent": 6,
+   "detail": "what clicking \"plant\" in Scene10.View12 runs"
+  },
+  {
+   "at": 10304,
+   "size": 52,
+   "kind": "data",
+   "label": "12 · hotspots in \"Scene10.View14\"",
+   "container": 12,
+   "parent": 4,
+   "detail": "1 clickable regions, 36 bytes each"
+  },
+  {
+   "at": 10368,
+   "size": 16,
+   "kind": "script",
+   "label": "13 · script of \"lite\"",
+   "container": 13,
+   "parent": 12,
+   "detail": "what clicking \"lite\" in Scene10.View14 runs"
+  },
+  {
+   "at": 10432,
+   "size": 860,
+   "kind": "data",
+   "label": "14 · container 14",
+   "container": 14,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11328,
+   "size": 860,
+   "kind": "data",
+   "label": "15 · container 15",
+   "container": 15,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 12224,
+   "size": 10299,
+   "kind": "media",
+   "label": "16 · standpoint in \"Scene10\"",
+   "container": 16,
+   "parent": 4,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 22528,
+   "size": 7258,
+   "kind": "media",
+   "label": "17 · turning right in \"Scene10\"",
+   "container": 17,
+   "parent": 4,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 29824,
+   "size": 9787,
+   "kind": "media",
+   "label": "18 · turning right in \"Scene10\"",
+   "container": 18,
+   "parent": 4,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 39616,
+   "size": 7244,
+   "kind": "media",
+   "label": "19 · standpoint in \"Scene10\"",
+   "container": 19,
+   "parent": 4,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 46912,
+   "size": 12662,
+   "kind": "media",
+   "label": "20 · turning right in \"Scene10\"",
+   "container": 20,
+   "parent": 4,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 59584,
+   "size": 19276,
+   "kind": "media",
+   "label": "21 · standpoint in \"Scene10\"",
+   "container": 21,
+   "parent": 4,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 78912,
+   "size": 17620,
+   "kind": "media",
+   "label": "22 · turning right in \"Scene10\"",
+   "container": 22,
+   "parent": 4,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 96576,
+   "size": 23368,
+   "kind": "media",
+   "label": "23 · standpoint in \"Scene10\"",
+   "container": 23,
+   "parent": 4,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 120000,
+   "size": 17615,
+   "kind": "media",
+   "label": "24 · turning right in \"Scene10\"",
+   "container": 24,
+   "parent": 4,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 137664,
+   "size": 21605,
+   "kind": "media",
+   "label": "25 · standpoint in \"Scene10\"",
+   "container": 25,
+   "parent": 4,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 159296,
+   "size": 9712,
+   "kind": "media",
+   "label": "26 · turning right in \"Scene10\"",
+   "container": 26,
+   "parent": 4,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 169024,
+   "size": 7845,
+   "kind": "media",
+   "label": "27 · standpoint in \"Scene10\"",
+   "container": 27,
+   "parent": 4,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 176896,
+   "size": 7765,
+   "kind": "media",
+   "label": "28 · turning right in \"Scene10\"",
+   "container": 28,
+   "parent": 4,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 184704,
+   "size": 8578,
+   "kind": "media",
+   "label": "29 · turning right in \"Scene10\"",
+   "container": 29,
+   "parent": 4,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 193344,
+   "size": 36740,
+   "kind": "media",
+   "label": "30 · standpoint in \"Scene10\"",
+   "container": 30,
+   "parent": 4,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 230144,
+   "size": 8567,
+   "kind": "media",
+   "label": "31 · turning left in \"Scene10\"",
+   "container": 31,
+   "parent": 4,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 238720,
+   "size": 7742,
+   "kind": "media",
+   "label": "32 · turning left in \"Scene10\"",
+   "container": 32,
+   "parent": 4,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 246464,
+   "size": 27224,
+   "kind": "media",
+   "label": "33 · standpoint in \"Scene10\"",
+   "container": 33,
+   "parent": 4,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 273728,
+   "size": 9710,
+   "kind": "media",
+   "label": "34 · turning left in \"Scene10\"",
+   "container": 34,
+   "parent": 4,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 283456,
+   "size": 52876,
+   "kind": "media",
+   "label": "35 · standpoint in \"Scene10\"",
+   "container": 35,
+   "parent": 4,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 336384,
+   "size": 17632,
+   "kind": "media",
+   "label": "36 · turning left in \"Scene10\"",
+   "container": 36,
+   "parent": 4,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 354048,
+   "size": 55692,
+   "kind": "media",
+   "label": "37 · standpoint in \"Scene10\"",
+   "container": 37,
+   "parent": 4,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 409792,
+   "size": 17650,
+   "kind": "media",
+   "label": "38 · turning left in \"Scene10\"",
+   "container": 38,
+   "parent": 4,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 427456,
+   "size": 52297,
+   "kind": "media",
+   "label": "39 · standpoint in \"Scene10\"",
+   "container": 39,
+   "parent": 4,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 479808,
+   "size": 12679,
+   "kind": "media",
+   "label": "40 · turning left in \"Scene10\"",
+   "container": 40,
+   "parent": 4,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 492544,
+   "size": 26965,
+   "kind": "media",
+   "label": "41 · standpoint in \"Scene10\"",
+   "container": 41,
+   "parent": 4,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 519552,
+   "size": 9773,
+   "kind": "media",
+   "label": "42 · turning left in \"Scene10\"",
+   "container": 42,
+   "parent": 4,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 529344,
+   "size": 7230,
+   "kind": "media",
+   "label": "43 · turning left in \"Scene10\"",
+   "container": 43,
+   "parent": 4,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 536576,
+   "size": 138,
+   "kind": "data",
+   "label": "44 · path of \"Road20\"",
+   "container": 44,
+   "parent": 106,
+   "detail": "the walk's endpoints and 2 waypoints"
+  },
+  {
+   "at": 536768,
+   "size": 560,
+   "kind": "data",
+   "label": "45 · container 45",
+   "container": 45,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 537344,
+   "size": 560,
+   "kind": "data",
+   "label": "46 · container 46",
+   "container": 46,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 537920,
+   "size": 21702,
+   "kind": "media",
+   "label": "47 · walking \"Road20\"",
+   "container": 47,
+   "parent": 44,
+   "detail": "one frame of the walk"
+  },
+  {
+   "at": 559680,
+   "size": 15925,
+   "kind": "media",
+   "label": "48 · walking \"Road20\"",
+   "container": 48,
+   "parent": 44,
+   "detail": "one frame of the walk"
+  },
+  {
+   "at": 575616,
+   "size": 15210,
+   "kind": "media",
+   "label": "49 · walking \"Road20\"",
+   "container": 49,
+   "parent": 44,
+   "detail": "one frame of the walk"
+  },
+  {
+   "at": 590848,
+   "size": 16526,
+   "kind": "media",
+   "label": "50 · walking \"Road20\"",
+   "container": 50,
+   "parent": 44,
+   "detail": "one frame of the walk"
+  },
+  {
+   "at": 607424,
+   "size": 15788,
+   "kind": "media",
+   "label": "51 · walking \"Road20\"",
+   "container": 51,
+   "parent": 44,
+   "detail": "one frame of the walk"
+  },
+  {
+   "at": 623232,
+   "size": 13851,
+   "kind": "media",
+   "label": "52 · walking \"Road20\"",
+   "container": 52,
+   "parent": 44,
+   "detail": "one frame of the walk"
+  },
+  {
+   "at": 637120,
+   "size": 13586,
+   "kind": "media",
+   "label": "53 · walking \"Road20\"",
+   "container": 53,
+   "parent": 44,
+   "detail": "one frame of the walk"
+  },
+  {
+   "at": 650752,
+   "size": 9850,
+   "kind": "media",
+   "label": "54 · walking \"Road20\"",
+   "container": 54,
+   "parent": 44,
+   "detail": "one frame of the walk"
+  },
+  {
+   "at": 660608,
+   "size": 8837,
+   "kind": "media",
+   "label": "55 · walking \"Road20\"",
+   "container": 55,
+   "parent": 44,
+   "detail": "one frame of the walk"
+  },
+  {
+   "at": 669504,
+   "size": 23368,
+   "kind": "media",
+   "label": "56 · walking \"Road20\"",
+   "container": 56,
+   "parent": 44,
+   "detail": "one frame of the walk, played in the return direction"
+  },
+  {
+   "at": 692928,
+   "size": 15751,
+   "kind": "media",
+   "label": "57 · walking \"Road20\"",
+   "container": 57,
+   "parent": 44,
+   "detail": "one frame of the walk, played in the return direction"
+  },
+  {
+   "at": 708736,
+   "size": 16110,
+   "kind": "media",
+   "label": "58 · walking \"Road20\"",
+   "container": 58,
+   "parent": 44,
+   "detail": "one frame of the walk, played in the return direction"
+  },
+  {
+   "at": 724864,
+   "size": 17990,
+   "kind": "media",
+   "label": "59 · walking \"Road20\"",
+   "container": 59,
+   "parent": 44,
+   "detail": "one frame of the walk, played in the return direction"
+  },
+  {
+   "at": 742912,
+   "size": 16894,
+   "kind": "media",
+   "label": "60 · walking \"Road20\"",
+   "container": 60,
+   "parent": 44,
+   "detail": "one frame of the walk, played in the return direction"
+  },
+  {
+   "at": 759808,
+   "size": 15828,
+   "kind": "media",
+   "label": "61 · walking \"Road20\"",
+   "container": 61,
+   "parent": 44,
+   "detail": "one frame of the walk, played in the return direction"
+  },
+  {
+   "at": 775680,
+   "size": 14288,
+   "kind": "media",
+   "label": "62 · walking \"Road20\"",
+   "container": 62,
+   "parent": 44,
+   "detail": "one frame of the walk, played in the return direction"
+  },
+  {
+   "at": 790016,
+   "size": 13274,
+   "kind": "media",
+   "label": "63 · walking \"Road20\"",
+   "container": 63,
+   "parent": 44,
+   "detail": "one frame of the walk, played in the return direction"
+  },
+  {
+   "at": 803328,
+   "size": 11804,
+   "kind": "media",
+   "label": "64 · walking \"Road20\"",
+   "container": 64,
+   "parent": 44,
+   "detail": "one frame of the walk, played in the return direction"
+  },
+  {
+   "at": 815168,
+   "size": 336,
+   "kind": "data",
+   "label": "65 · views of \"Scene11\"",
+   "container": 65,
+   "parent": 2,
+   "detail": "the scene's camera position and its 6 named views (View16, View17, View18, View19, View21, View24)"
+  },
+  {
+   "at": 815552,
+   "size": 782,
+   "kind": "script",
+   "label": "66 · script of \"Scene11\"",
+   "container": 66,
+   "parent": 2,
+   "detail": "the scene's own handlers — openset, mousedown, timers"
+  },
+  {
+   "at": 816384,
+   "size": 196,
+   "kind": "data",
+   "label": "67 · hotspots in \"Scene11.View17\"",
+   "container": 67,
+   "parent": 65,
+   "detail": "5 clickable regions, 36 bytes each"
+  },
+  {
+   "at": 816640,
+   "size": 357,
+   "kind": "script",
+   "label": "68 · script of \"door\"",
+   "container": 68,
+   "parent": 67,
+   "detail": "what clicking \"door\" in Scene11.View17 runs"
+  },
+  {
+   "at": 817024,
+   "size": 16,
+   "kind": "script",
+   "label": "69 · script of \"lite\"",
+   "container": 69,
+   "parent": 67,
+   "detail": "what clicking \"lite\" in Scene11.View17 runs"
+  },
+  {
+   "at": 817088,
+   "size": 16,
+   "kind": "script",
+   "label": "70 · script of \"lite\"",
+   "container": 70,
+   "parent": 67,
+   "detail": "what clicking \"lite\" in Scene11.View17 runs"
+  },
+  {
+   "at": 817152,
+   "size": 16,
+   "kind": "script",
+   "label": "71 · script of \"plant\"",
+   "container": 71,
+   "parent": 67,
+   "detail": "what clicking \"plant\" in Scene11.View17 runs"
+  },
+  {
+   "at": 817216,
+   "size": 16,
+   "kind": "script",
+   "label": "72 · script of \"plant\"",
+   "container": 72,
+   "parent": 67,
+   "detail": "what clicking \"plant\" in Scene11.View17 runs"
+  },
+  {
+   "at": 817280,
+   "size": 52,
+   "kind": "data",
+   "label": "73 · hotspots in \"Scene11.View18\"",
+   "container": 73,
+   "parent": 65,
+   "detail": "1 clickable regions, 36 bytes each"
+  },
+  {
+   "at": 817344,
+   "size": 16,
+   "kind": "script",
+   "label": "74 · script of \"lite\"",
+   "container": 74,
+   "parent": 73,
+   "detail": "what clicking \"lite\" in Scene11.View18 runs"
+  },
+  {
+   "at": 817408,
+   "size": 860,
+   "kind": "data",
+   "label": "75 · container 75",
+   "container": 75,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 818304,
+   "size": 860,
+   "kind": "data",
+   "label": "76 · container 76",
+   "container": 76,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 819200,
+   "size": 21702,
+   "kind": "media",
+   "label": "77 · standpoint in \"Scene11\"",
+   "container": 77,
+   "parent": 65,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 840960,
+   "size": 16086,
+   "kind": "media",
+   "label": "78 · turning right in \"Scene11\"",
+   "container": 78,
+   "parent": 65,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 857088,
+   "size": 18741,
+   "kind": "media",
+   "label": "79 · standpoint in \"Scene11\"",
+   "container": 79,
+   "parent": 65,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 875840,
+   "size": 11691,
+   "kind": "media",
+   "label": "80 · turning right in \"Scene11\"",
+   "container": 80,
+   "parent": 65,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 887552,
+   "size": 6942,
+   "kind": "media",
+   "label": "81 · standpoint in \"Scene11\"",
+   "container": 81,
+   "parent": 65,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 894528,
+   "size": 10352,
+   "kind": "media",
+   "label": "82 · turning right in \"Scene11\"",
+   "container": 82,
+   "parent": 65,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 904896,
+   "size": 9859,
+   "kind": "media",
+   "label": "83 · turning right in \"Scene11\"",
+   "container": 83,
+   "parent": 65,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 914816,
+   "size": 13342,
+   "kind": "media",
+   "label": "84 · standpoint in \"Scene11\"",
+   "container": 84,
+   "parent": 65,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 928192,
+   "size": 12241,
+   "kind": "media",
+   "label": "85 · turning right in \"Scene11\"",
+   "container": 85,
+   "parent": 65,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 940480,
+   "size": 9876,
+   "kind": "media",
+   "label": "86 · turning right in \"Scene11\"",
+   "container": 86,
+   "parent": 65,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 950400,
+   "size": 9421,
+   "kind": "media",
+   "label": "87 · standpoint in \"Scene11\"",
+   "container": 87,
+   "parent": 65,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 959872,
+   "size": 8281,
+   "kind": "media",
+   "label": "88 · turning right in \"Scene11\"",
+   "container": 88,
+   "parent": 65,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 968192,
+   "size": 18216,
+   "kind": "media",
+   "label": "89 · standpoint in \"Scene11\"",
+   "container": 89,
+   "parent": 65,
+   "detail": "a standpoint frame (low resolution), where the camera comes to rest"
+  },
+  {
+   "at": 986432,
+   "size": 16519,
+   "kind": "media",
+   "label": "90 · turning right in \"Scene11\"",
+   "container": 90,
+   "parent": 65,
+   "detail": "one frame of the right turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 1003008,
+   "size": 53464,
+   "kind": "media",
+   "label": "91 · standpoint in \"Scene11\"",
+   "container": 91,
+   "parent": 65,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 1056512,
+   "size": 16509,
+   "kind": "media",
+   "label": "92 · turning left in \"Scene11\"",
+   "container": 92,
+   "parent": 65,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 1073024,
+   "size": 46909,
+   "kind": "media",
+   "label": "93 · standpoint in \"Scene11\"",
+   "container": 93,
+   "parent": 65,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 1119936,
+   "size": 8268,
+   "kind": "media",
+   "label": "94 · turning left in \"Scene11\"",
+   "container": 94,
+   "parent": 65,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 1128256,
+   "size": 31322,
+   "kind": "media",
+   "label": "95 · standpoint in \"Scene11\"",
+   "container": 95,
+   "parent": 65,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 1159616,
+   "size": 9917,
+   "kind": "media",
+   "label": "96 · turning left in \"Scene11\"",
+   "container": 96,
+   "parent": 65,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 1169536,
+   "size": 12231,
+   "kind": "media",
+   "label": "97 · turning left in \"Scene11\"",
+   "container": 97,
+   "parent": 65,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 1181824,
+   "size": 42568,
+   "kind": "media",
+   "label": "98 · standpoint in \"Scene11\"",
+   "container": 98,
+   "parent": 65,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 1224448,
+   "size": 9887,
+   "kind": "media",
+   "label": "99 · turning left in \"Scene11\"",
+   "container": 99,
+   "parent": 65,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 1234368,
+   "size": 10364,
+   "kind": "media",
+   "label": "100 · turning left in \"Scene11\"",
+   "container": 100,
+   "parent": 65,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 1244736,
+   "size": 29060,
+   "kind": "media",
+   "label": "101 · standpoint in \"Scene11\"",
+   "container": 101,
+   "parent": 65,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 1273856,
+   "size": 11686,
+   "kind": "media",
+   "label": "102 · turning left in \"Scene11\"",
+   "container": 102,
+   "parent": 65,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 1285568,
+   "size": 51824,
+   "kind": "media",
+   "label": "103 · standpoint in \"Scene11\"",
+   "container": 103,
+   "parent": 65,
+   "detail": "a standpoint frame (high resolution), where the camera comes to rest"
+  },
+  {
+   "at": 1337408,
+   "size": 16106,
+   "kind": "media",
+   "label": "104 · turning left in \"Scene11\"",
+   "container": 104,
+   "parent": 65,
+   "detail": "one frame of the left turn ring — the animation played while the camera swings"
+  },
+  {
+   "at": 1353536,
+   "size": 52,
+   "kind": "data",
+   "label": "105 · container 105",
+   "container": 105,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 1353600,
+   "size": 32,
+   "kind": "data",
+   "label": "106 · transition register",
+   "container": 106,
+   "parent": 0,
+   "detail": "1 transitions — the walks between scenes"
+  },
+  {
+   "at": 1353664,
+   "size": 27544,
+   "kind": "media",
+   "label": "107 · map overview, lit",
+   "container": 107,
+   "parent": 0,
+   "detail": "the 578×307 plan of the room the map screen draws"
+  },
+  {
+   "at": 1381248,
+   "size": 5186,
+   "kind": "media",
+   "label": "108 · map overview, unlit",
+   "container": 108,
+   "parent": 0,
+   "detail": "the same plan for a room you have not been in yet"
+  }
+ ],
+ "source": "lnghall.set · tools/blockmap.ts · 102 of 109 containers named by walking the SET reader, 7 by sniffing the payload"
+}

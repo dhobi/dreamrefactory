@@ -39,6 +39,12 @@ Prop-state animations **play once and hold** — a door opens and *stays* open.
 Anything that genuinely loops has to be re-triggered by a script
 (`makeloop`); the format itself doesn't loop.
 
+Those three levels are pointers, and pointers are what a block map can show.
+`CUFF.SHP` — the cufflink bag, its three props and their 46 pictures — with the
+group table hovered, so every container it addresses lights up:
+
+<ByteMap map="cuff.shp" />
+
 ## Transparency: the prop only paints part of the screen
 
 Unlike a SET background (which fills its rectangle), a prop is a **cut-out** —

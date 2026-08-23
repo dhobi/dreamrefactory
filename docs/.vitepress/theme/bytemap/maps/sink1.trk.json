@@ -1,0 +1,158 @@
+{
+ "title": "SINK1.TRK",
+ "subtitle": "973 KB · 14 containers · audio bank \"sink1.trk\" · 11 loop steps, 0 one-shots",
+ "total": 995968,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 14 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 56,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "14 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 1536,
+   "size": 60,
+   "kind": "data",
+   "label": "0 · header container",
+   "container": 0,
+   "detail": "the bank's record — its stored name \"sink1.trk\" and the ref to the one-shot table"
+  },
+  {
+   "at": 1600,
+   "size": 564,
+   "kind": "data",
+   "label": "1 · loop table",
+   "container": 1,
+   "parent": 0,
+   "detail": "11 looping chunks and the 11-step order they play in"
+  },
+  {
+   "at": 2176,
+   "size": 97645,
+   "kind": "media",
+   "label": "2 · music, step 1",
+   "container": 2,
+   "parent": 1,
+   "texture": "hatch",
+   "detail": "a chunk of the loop bed — step 1 of 11 in playback order"
+  },
+  {
+   "at": 99840,
+   "size": 94259,
+   "kind": "media",
+   "label": "3 · music, step 2",
+   "container": 3,
+   "parent": 1,
+   "texture": "hatch",
+   "detail": "a chunk of the loop bed — step 2 of 11 in playback order"
+  },
+  {
+   "at": 194112,
+   "size": 95331,
+   "kind": "media",
+   "label": "4 · music, step 3",
+   "container": 4,
+   "parent": 1,
+   "texture": "hatch",
+   "detail": "a chunk of the loop bed — step 3 of 11 in playback order"
+  },
+  {
+   "at": 289472,
+   "size": 95307,
+   "kind": "media",
+   "label": "5 · music, step 4",
+   "container": 5,
+   "parent": 1,
+   "texture": "hatch",
+   "detail": "a chunk of the loop bed — step 4 of 11 in playback order"
+  },
+  {
+   "at": 384832,
+   "size": 94973,
+   "kind": "media",
+   "label": "6 · music, step 5",
+   "container": 6,
+   "parent": 1,
+   "texture": "hatch",
+   "detail": "a chunk of the loop bed — step 5 of 11 in playback order"
+  },
+  {
+   "at": 479808,
+   "size": 96778,
+   "kind": "media",
+   "label": "7 · music, step 6",
+   "container": 7,
+   "parent": 1,
+   "texture": "hatch",
+   "detail": "a chunk of the loop bed — step 6 of 11 in playback order"
+  },
+  {
+   "at": 576640,
+   "size": 98747,
+   "kind": "media",
+   "label": "8 · music, step 7",
+   "container": 8,
+   "parent": 1,
+   "texture": "hatch",
+   "detail": "a chunk of the loop bed — step 7 of 11 in playback order"
+  },
+  {
+   "at": 675392,
+   "size": 92444,
+   "kind": "media",
+   "label": "9 · music, step 8",
+   "container": 9,
+   "parent": 1,
+   "texture": "hatch",
+   "detail": "a chunk of the loop bed — step 8 of 11 in playback order"
+  },
+  {
+   "at": 767872,
+   "size": 96582,
+   "kind": "media",
+   "label": "10 · music, step 9",
+   "container": 10,
+   "parent": 1,
+   "texture": "hatch",
+   "detail": "a chunk of the loop bed — step 9 of 11 in playback order"
+  },
+  {
+   "at": 864512,
+   "size": 90598,
+   "kind": "media",
+   "label": "11 · music, step 10",
+   "container": 11,
+   "parent": 1,
+   "texture": "hatch",
+   "detail": "a chunk of the loop bed — step 10 of 11 in playback order"
+  },
+  {
+   "at": 955136,
+   "size": 40768,
+   "kind": "media",
+   "label": "12 · music, step 11",
+   "container": 12,
+   "parent": 1,
+   "texture": "hatch",
+   "detail": "a chunk of the loop bed — step 11 of 11 in playback order"
+  },
+  {
+   "at": 995904,
+   "size": 16,
+   "kind": "data",
+   "label": "13 · one-shot table",
+   "container": 13,
+   "parent": 0,
+   "detail": "0 named sounds a script can ask for"
+  }
+ ],
+ "source": "sink1.trk · tools/blockmap.ts · 14 of 14 containers named by walking the TRK reader"
+}
