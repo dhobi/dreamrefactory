@@ -200,9 +200,9 @@ const DRAG_TICK_TIMEOUT_MS = 20_000;
  * The page URL a browser suite should open: the play page under `APP_URL`, with
  * the EDITION pinned.
  *
- * `APP_URL` is the SITE root (the front page, which only has a Play button on
- * it) — `play/` is appended here, because what a suite wants is the page that
- * boots a game, not the one that links to it.
+ * `APP_URL` is THIS GAME's root (the front page, which only has a Play button
+ * on it) — `play/` is appended here, because what a suite wants is the page
+ * that boots a game, not the one that links to it.
  *
  * The page asks the player to choose an edition when the install has more than
  * one and nothing has been chosen yet (taoot/src/lang-chooser.ts), and a suite that
@@ -218,9 +218,21 @@ export function appUrl(): string {
   return url.toString();
 }
 
-/** the play page under a site root, whether or not the root already names it */
+/**
+ * The play page under a game root, whether or not the root already names it.
+ *
+ * The default is **5174** and not 5173, because each package became its own
+ * Vite root with a port of its own: 5173 is the project's front door
+ * (`npm run dev`, site/), 5174 is Titanic (`npm run dev:taoot`), 5175 is Dust.
+ * This stayed on 5173 through that move, so a bare `npx tsx …/playthrough.ts`
+ * asked the front door for a `play/` it does not serve and got the sibling
+ * signpost — a 404 page explaining which server to start, which is a confusing
+ * thing for a suite to try to boot a game out of. CI never saw it: `browser.yml`
+ * passes `APP_URL` explicitly (5199), which is also why the default could rot
+ * without a red tick anywhere.
+ */
 export function playUrl(base = process.env.APP_URL): URL {
-  const root = base ?? "http://localhost:5173/";
+  const root = base ?? "http://localhost:5174/";
   const url = new URL(root);
   if (!/\/play\/?$/.test(url.pathname)) url.pathname = url.pathname.replace(/\/?$/, "/") + "play/";
   return url;

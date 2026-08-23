@@ -426,7 +426,7 @@ All of the above is produced mechanically by
 [`taoot/tools/flowmap.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/flowmap.ts):
 
 ```sh
-npx tsx taoot/tools/flowmap.ts taoot/gamefiles out/
+npx tsx taoot/tools/flowmap.ts
 ```
 
 It parses every script container into the AST (see
