@@ -130,6 +130,18 @@ downstream has to know which segment it is looking at.
 | Loop-chunk table | the **looping soundtrack** — a scored bed, played under cutscenes *and* interactive movies. Its i32 at `+0` is the **loop-back order index**: the engine chains the loaded chunks by a next-pointer and wires the last order entry back to `order[loopBack]` (`0x4496c4`), so a bed's tail repeats forever (usually a short outro chunk looping under whatever follows) |
 | Non-looping chunk block | **named** one-shot audio chunks (42-byte records) — the movie's own sound library. TWO `pstr(15)` name fields, not one 31-char one: the sound's own name at `+0xa`, and at `+0x1a` a **jump-frame name** — see below |
 
+A film to scale — `TOUR4.MOV` from disc 1, one segment, 16 frames and the
+narration under them:
+
+<ByteMap map="tour4.mov" />
+
+A movie is the format where the block view earns its keep, because a MOV holds
+two kinds of bulk at once: the frames and the soundtrack. The header, the frame
+table and the per-frame logic containers are the handful of small blocks at the
+start; everything after them is a picture or a slice of sound, and which is
+which is the thing a table cannot show you.
+
+
 ### The cue table: timed jumps
 
 Records of `{i32 tick, i32 firedFlag, i32 adjustedTick, pstr(15) frameName}`
@@ -554,6 +566,16 @@ DF.EXE's own rather than a statistical fit: the record base comes
 from the engine's indexing (`lea esi, [frame*80 + header + 0x8c2]`), each field
 from the instruction that reads it, and the blit semantics from the
 disassembly at `0x421b40`. The short version of what differs from v4:
+
+`CACTUS.MOV`, a Dust film, mapped through `mov-v1.ts` and drawn with the same
+labels as a v4 one — 43 frames of a 512×264 picture:
+
+<ByteMap map="cactus.mov" />
+
+Beside [TOUR4.MOV](#what-is-in-a-segment) the family resemblance is the point:
+same header container, same table, same one-picture-per-container rule. The
+differences the rest of this section is about are in what the records *say*, not
+in how the file is arranged.
 
 - **Advance is an authored goto.** A frame is `action 2, target = next frame`
   (0-based, clamped); a loop is a backward target (BELL.MOV's bell idles

@@ -35,6 +35,16 @@ game-wide.
 Each flat, when shown, fires `openflat` / `closeflat` events on its script,
 mirroring the `openscene`/`closescene` pattern for rooms.
 
+One flat record, field by field:
+
+<ByteMap layout="stg-flat-record" />
+
+And a whole stage — `LANG.STG`, [the language chooser](../../taoot/languages.md)
+this project wrote from nothing, which is also the one DF file that ships in this
+repository. Two flats, and the picture each one draws is nearly all of it:
+
+<ByteMap map="lang.stg" />
+
 ## How STG fits the render stack
 
 From [engine architecture](../architecture.md), the screen is built
@@ -117,6 +127,20 @@ a builtin, is in **[Languages & the chooser](../../taoot/languages.md)**.
 The same builder makes the fixture the stage editor's tests are checked against,
 which is the point: read → edit → write is verified against a file the library
 itself produced.
+
+## The same file in Dust — `.FLT`
+
+Dust calls a stage a **flat file** and its boot says `openstagefile("new.flt")` —
+the same builtin, a renamed extension — and the model underneath is the same one:
+flats, each with a script, a picture and a table of clickable regions. So one
+reader takes both, and `NEW.FLT` maps with the same labels a `.STG` does:
+
+<ByteMap map="new.flt" />
+
+What differs is where the fields sit (palette at `0x24` rather than `0x38`, a
+28-byte flat record rather than 46) and what v4 added: a v1 flat record carries no
+condition, width or height, so a v1 flat is reported at the stage's own screen
+size — which is what it is, 512×384, for every flat on the disc.
 
 ## Not just UI — mini-games too
 

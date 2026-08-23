@@ -71,18 +71,25 @@ handles both cases.
 
 ## The file header (first 1024 bytes)
 
-The header is a fixed **1024 bytes**. Only a handful of fields are used:
+The header is a fixed **1024 bytes**. Only a handful of fields are used —
+switch to the block view and that is the whole point of the picture: every
+field the engine reads is in the first 32 bytes, and the remaining 31 rows are
+padding.
 
-| Offset | Type | Field | Meaning |
-|-------:|------|-------|---------|
-| 0 | i32 | `fourCC` | a format/magic tag |
-| 4 | i32 | `fileSize` | total file size |
-| 8 | — | *(unused)* | 12 bytes skipped |
-| 20 | i32 | `containerCount` | how many containers (drawers) |
-| 24 | i32 | `type` | 0 = normal; 1 / 2 = variants with "gap" drawers |
-| 28 | i32 | `gapWhere` | which index is the gap (for type 1/2) |
+<ByteMap layout="df-header" />
 
 Everything up to byte 1024 is header/padding; the real index starts there.
+
+> **About these maps.** Every byte layout in this section is switchable:
+> **Table view** is the offset table these docs have always had, **Block view**
+> is the same regions drawn to scale from byte 0 at the top left, and hovering a
+> block says what it is for. On a whole-file map, hovering also **rings every
+> container the hovered one points at** — the pointer itself is four bytes inside
+> somebody else's payload, far too small to see, so the map draws the relation
+> between the two containers instead. Every format page in this section has one;
+> they are generated from real game files by
+> [`tools/blockmap.ts`](../../reference/tools.md), and what is committed is
+> offsets and roles only, never game content.
 
 ## The position table (starts at byte 1024)
 
@@ -107,11 +114,11 @@ matters because scripts and tables refer to containers **by index**.
 
 Follow a (non-gap) offset and you find one container laid out as:
 
-| Offset | Type | Field | Meaning |
-|-------:|------|-------|---------|
-| +0 | i32 | `id` | the container's ID |
-| +4 | u32 | `size` | length of the payload in bytes |
-| +8 | … | `data` | `size` bytes of payload |
+<ByteMap layout="df-container-record" />
+
+Eight bytes of bookkeeping in front of a payload that is usually thousands of
+times bigger — which is why the block view of a whole file below is almost
+entirely payload, and why the container format costs so little to carry.
 
 That payload is where formats diverge. Which drawer holds what is
 **convention per format**, and those conventions are what the rest of the
@@ -124,6 +131,31 @@ format docs describe. A few conventions are near-universal, though:
 - **Audio is the exception:** a single sound is *split across many*
   containers, each usually under 64 KB, that must be concatenated — see
   [Audio](audio.md).
+
+## A whole file, to scale
+
+Here is all of that on a real file — `LNGHALL.SET`, the first-class lounge, one
+of the smaller rooms on the ship. The header and the position table are the two
+slivers at the top left; everything after them is drawers. Hover any block to
+see which structure claims it, and click to pin it.
+
+<ByteMap map="lnghall.set" />
+
+Three things are worth reading off it, because they are true of nearly every
+file in the game and none of them is obvious from a table:
+
+- **A room is mostly pictures.** The scene registers, view tables, hotspot
+  records and scripts — everything the engine *reasons* about — are the thin
+  band at the start. The rest is frames.
+- **The index is tiny.** 436 bytes of position table address 1.3 MB of content.
+- **A few containers go unclaimed, and they are not random.** Walking the SET
+  reader names 102 of 109; the seven left over are **three pairs of equal-sized
+  containers plus one small singleton**, and that shape holds across every set
+  checked: `wireless` (1 scene, no roads) has one pair and a singleton,
+  `lnghall` three pairs, `c59` (3 scenes, 2 roads) five, `hallf2c` (14 and 13)
+  twenty-seven — one pair per scene *and* per road, every time, plus exactly one
+  singleton per file. Whatever they hold is per-standpoint and per-walk, and
+  nothing in this port reads them yet.
 
 ## Writing one back
 

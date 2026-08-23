@@ -41,6 +41,16 @@ files use for their soundtracks):
 - **Named single chunks** → **one-shots**. Addressed by name — `doorlocked`,
   `dooropen1`, a voice line — and fired individually.
 
+`SINK1.TRK`, one of the four banks the sinking runs on, is what that looks like
+laid out — a header, two tables, and eleven chunks of music in playback order:
+
+<ByteMap map="sink1.trk" />
+
+The hatched blocks are sound (a texture rather than a colour of its own, so the
+legend stays legible for readers with colour-vision deficiency). Each is under
+100 KB and none of them is a whole track: the bank is the track, and the
+concatenation happens on load.
+
 Shared voice lines that many rooms need (locked-door lines, generic
 door-opens) live in **`UNILIB.TRK`**, a bank the session keeps open globally.
 How a requested name finds its bank at runtime is
@@ -145,6 +155,12 @@ A v1 bank has **no tables at all**. Container 0 carries the names inline, and
 the theme is not declared anywhere: it is the trailing run of consecutively
 numbered chunks, and the numbering *is* the order (`daymusic1` through
 `daymusic10`).
+
+`UNILIB.SND`, Dust's shared library, and the absence is visible: every arrow in
+this map comes straight out of container 0, because there is no table in between
+for it to come out of.
+
+<ByteMap map="unilib.snd" />
 
 The boot script treats the two as one thing — `opentrackfile("unilib.snd")` is
 the same builtin Titanic calls with `unilib.trk` — which is exactly why the

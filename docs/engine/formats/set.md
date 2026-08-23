@@ -55,6 +55,18 @@ Then the meat:
 - **`actors`** — placement markers for characters (the characters themselves
   come from [PUP/CST](pup-cst.md)).
 
+All of it, to scale, on `LNGHALL.SET` — the first-class lounge, two scenes and
+one road between them. Hover a block for what claims it; the
+[container page](README.md#a-whole-file-to-scale) reads the same map from the
+container format's side:
+
+<ByteMap map="lnghall.set" />
+
+The proportions are the lesson. Everything the engine *reasons* about — the
+scene register, the view tables, the hotspot records, the scripts — is the thin
+band at the front; the other 95% is turn rings and walks. A room with three ways
+out costs almost nothing more to describe and a great deal more to picture.
+
 ### A frame's metadata (`FrameInfo`)
 
 Every rendered frame — a standpoint view, a turning frame, a walking frame —
@@ -199,7 +211,18 @@ table of transitions in which a turn and a walk are the same kind of record:
     from (x, z, facing)  ->  to (x, z, facing)   + a run of frames
 
 Turning is the record where the cell is equal and the facing differs; walking is
-the record where the facing is equal and the cell differs. `APOTH.SET` has 28 of
+the record where the facing is equal and the cell differs.
+
+`UNDERTAK.SET` — the undertaker's, a 2×3 grid with eight moves — mapped as the v1
+file it is rather than through the v4 shapes:
+
+<ByteMap map="undertak.set" />
+
+Two things a v4 set never shows: the file carries **three palettes** (a v1 set can
+be relit by script), and four of its containers are **gaps** — drawer numbers
+reserved with nothing in them, which the reader keeps so the indices after them
+do not shift.
+ `APOTH.SET` has 28 of
 them, and 28 is exactly 3 walkable cells × 8 turns (four facings, each way
 round) + 4 walks (0↔1, 1↔2). Nothing else is stored because nothing else exists:
 **there is no way to face a direction the table has no record for.** Titanic's
@@ -246,7 +269,7 @@ left, which is exactly the two pictures v1 stores. The viewer's
 settle-sharpens-the-picture behaviour therefore comes out of Dust's own art
 rather than being simulated.
 
-### What is derived, and what is still unknown
+### What is derived, and how each number was pinned down
 
 A v4 `FrameInfo` carries the camera's world position and rotation. A v1 frame
 carries no pose at all, so the original engine must have derived one from the
@@ -262,10 +285,23 @@ choices:
   on 26 of 26 sets, so the cell delta names the heading, and read that way the
   disc has no contradictions at all.
 
-Still **unmeasured**: the field of view, which the viewer takes as
-`max(w, h) / 2` for every set. If Dust's cameras were rendered at a different
-focal length, sprites sit at the right bearing and the wrong distance from the
-centre, and nothing in the header has been shown to be that number yet.
+The **field of view** was the last of the four and the only one that did not come
+off the disc: it came out of the executable. DF.EXE writes `0x136` = 310 into the
+world camera at both of the sites that reset it (`0x4331e5` and `0x433418`), and
+that word is read in exactly one place — the projection at `0x433c60`, where it
+multiplies both the lateral offset and the height drop before the truncating
+divide by depth. So a v1 set carries `focalLength: 310`
+([`set-v1-to-v4.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set-v1-to-v4.ts)),
+and `max(w, h) / 2` is the **v4** default only — the viewer takes
+`set.focalLength ?? max(w, h) / 2`.
+
+It matters by more than the phrase "field of view" suggests. At the v4 default
+(`max(512, 264) / 2` = 256) every Dust sprite sat about 21% too close to the
+centre of the screen on both axes: an actor at depth 176 had its feet at row 222
+where DF.EXE puts them at 241, which read in play as actors "misplaced and
+floating" against rooms whose perspective is baked into the art. The constant
+moves where a sprite *stands* and never how big it is — the sprite scale in both
+renderers carries no focal term at all.
 
 There *is* a Z layer in a v1 frame — all 10,616 of them carry one, in the same
 place and encoding v4 uses — so scenery occludes sprites here too. What v1 has

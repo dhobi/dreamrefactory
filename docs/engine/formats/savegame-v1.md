@@ -72,6 +72,15 @@ Container payload sizes are always a multiple of 32 because the writer stores
 `GlobalSize(handle)` rather than the used length (`0x421360`), which is why every
 table trails slack.
 
+`START.RTD`, Dust's own opening save, mapped by that arithmetic alone:
+
+<ByteMap map="start.rtd" />
+
+Two open sound banks, so `7 + 3·2 = 13` is the globals container, and the five
+tail tables follow it. Put this beside [the Titanic save](savegame.md) and the
+kinship is obvious: the same seven-container head, the same three-per-bank
+middle, the same five-table tail — different strides.
+
 ## Container 0 — the manifest
 
 | Offset | Field |

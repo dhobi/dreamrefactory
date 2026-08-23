@@ -1,0 +1,762 @@
+{
+ "title": "UNDERTAK.SET",
+ "subtitle": "830 KB · 90 containers (4 gap) · Dust set \"under\" · 2×3 grid, 8 moves, 3 palettes",
+ "total": 850048,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 90 containers, type 4"
+  },
+  {
+   "at": 1024,
+   "size": 360,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "90 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 1536,
+   "size": 7384,
+   "kind": "data",
+   "label": "0 · header container",
+   "container": 0,
+   "detail": "the set's record: name \"under\", a 2×3 grid of cells, 3 palettes, and the scene table the header does not point at (it is found by shape)"
+  },
+  {
+   "at": 8960,
+   "size": 86,
+   "kind": "script",
+   "label": "1 · the set's main script",
+   "container": 1,
+   "parent": 0,
+   "detail": "the set-level handlers"
+  },
+  {
+   "at": 9088,
+   "size": 968,
+   "kind": "script",
+   "label": "2 · compiled script",
+   "container": 2,
+   "detail": "decodes as a compiled script (101 tokens) that nothing in this map's walk pointed at — reached by name, or through a structure the annotator does not read yet"
+  },
+  {
+   "at": 10112,
+   "size": 16,
+   "kind": "data",
+   "label": "3 · container 3",
+   "container": 3,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10176,
+   "size": 16,
+   "kind": "data",
+   "label": "4 · container 4",
+   "container": 4,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10240,
+   "size": 16,
+   "kind": "data",
+   "label": "5 · container 5",
+   "container": 5,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10304,
+   "size": 16,
+   "kind": "data",
+   "label": "6 · container 6",
+   "container": 6,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10368,
+   "size": 16,
+   "kind": "data",
+   "label": "7 · container 7",
+   "container": 7,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10432,
+   "size": 16,
+   "kind": "data",
+   "label": "8 · container 8",
+   "container": 8,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10496,
+   "size": 16,
+   "kind": "data",
+   "label": "9 · container 9",
+   "container": 9,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10560,
+   "size": 16,
+   "kind": "data",
+   "label": "10 · container 10",
+   "container": 10,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10624,
+   "size": 16,
+   "kind": "data",
+   "label": "11 · container 11",
+   "container": 11,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10688,
+   "size": 16,
+   "kind": "data",
+   "label": "12 · container 12",
+   "container": 12,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10752,
+   "size": 16,
+   "kind": "data",
+   "label": "13 · container 13",
+   "container": 13,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10816,
+   "size": 16,
+   "kind": "data",
+   "label": "14 · container 14",
+   "container": 14,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10880,
+   "size": 16,
+   "kind": "data",
+   "label": "15 · container 15",
+   "container": 15,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 10944,
+   "size": 16,
+   "kind": "data",
+   "label": "16 · container 16",
+   "container": 16,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11008,
+   "size": 16,
+   "kind": "data",
+   "label": "17 · container 17",
+   "container": 17,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11072,
+   "size": 16,
+   "kind": "data",
+   "label": "18 · container 18",
+   "container": 18,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11136,
+   "size": 16,
+   "kind": "data",
+   "label": "19 · container 19",
+   "container": 19,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11200,
+   "size": 16,
+   "kind": "data",
+   "label": "20 · container 20",
+   "container": 20,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11264,
+   "size": 16,
+   "kind": "data",
+   "label": "21 · container 21",
+   "container": 21,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11328,
+   "size": 16,
+   "kind": "data",
+   "label": "22 · container 22",
+   "container": 22,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11392,
+   "size": 16,
+   "kind": "data",
+   "label": "23 · container 23",
+   "container": 23,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11456,
+   "size": 16,
+   "kind": "data",
+   "label": "24 · container 24",
+   "container": 24,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11520,
+   "size": 16,
+   "kind": "data",
+   "label": "25 · container 25",
+   "container": 25,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11584,
+   "size": 16,
+   "kind": "data",
+   "label": "26 · container 26",
+   "container": 26,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11648,
+   "size": 16,
+   "kind": "data",
+   "label": "27 · container 27",
+   "container": 27,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11712,
+   "size": 16,
+   "kind": "data",
+   "label": "28 · container 28",
+   "container": 28,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11776,
+   "size": 16,
+   "kind": "data",
+   "label": "29 · container 29",
+   "container": 29,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11840,
+   "size": 16,
+   "kind": "data",
+   "label": "30 · container 30",
+   "container": 30,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11904,
+   "size": 16,
+   "kind": "data",
+   "label": "31 · container 31",
+   "container": 31,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 11968,
+   "size": 16,
+   "kind": "data",
+   "label": "32 · container 32",
+   "container": 32,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 12032,
+   "size": 16,
+   "kind": "data",
+   "label": "33 · container 33",
+   "container": 33,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 12096,
+   "size": 16,
+   "kind": "data",
+   "label": "34 · container 34",
+   "container": 34,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 12160,
+   "size": 16,
+   "kind": "script",
+   "label": "35 · script of cell \"Scene A1\"",
+   "container": 35,
+   "parent": 0,
+   "detail": "what standing on cell (0, 0) runs"
+  },
+  {
+   "at": 12224,
+   "size": 3869,
+   "kind": "script",
+   "label": "36 · script of cell \"Scene A2\"",
+   "container": 36,
+   "parent": 0,
+   "detail": "what standing on cell (0, 1) runs"
+  },
+  {
+   "at": 16128,
+   "size": 16,
+   "kind": "script",
+   "label": "37 · script of cell \"Scene A3\"",
+   "container": 37,
+   "parent": 0,
+   "detail": "what standing on cell (0, 2) runs"
+  },
+  {
+   "at": 16192,
+   "size": 16,
+   "kind": "script",
+   "label": "38 · script of cell \"Scene B1\"",
+   "container": 38,
+   "parent": 0,
+   "detail": "what standing on cell (1, 0) runs"
+  },
+  {
+   "at": 16256,
+   "size": 16,
+   "kind": "script",
+   "label": "39 · script of cell \"Scene B2\"",
+   "container": 39,
+   "parent": 0,
+   "detail": "what standing on cell (1, 1) runs"
+  },
+  {
+   "at": 16320,
+   "size": 16,
+   "kind": "script",
+   "label": "40 · script of cell \"Scene B3\"",
+   "container": 40,
+   "parent": 0,
+   "detail": "what standing on cell (1, 2) runs"
+  },
+  {
+   "at": 16384,
+   "size": 16383,
+   "kind": "media",
+   "label": "41 · turning (0,1) → (0,1)",
+   "container": 41,
+   "parent": 0,
+   "detail": "frame 1 of 5 of the move"
+  },
+  {
+   "at": 32768,
+   "size": 15341,
+   "kind": "media",
+   "label": "42 · turning (0,1) → (0,1)",
+   "container": 42,
+   "parent": 0,
+   "detail": "frame 2 of 5 of the move"
+  },
+  {
+   "at": 48128,
+   "size": 15397,
+   "kind": "media",
+   "label": "43 · turning (0,1) → (0,1)",
+   "container": 43,
+   "parent": 0,
+   "detail": "frame 3 of 5 of the move"
+  },
+  {
+   "at": 63552,
+   "size": 15084,
+   "kind": "media",
+   "label": "44 · turning (0,1) → (0,1)",
+   "container": 44,
+   "parent": 0,
+   "detail": "frame 4 of 5 of the move"
+  },
+  {
+   "at": 78656,
+   "size": 15065,
+   "kind": "media",
+   "label": "45 · turning (0,1) → (0,1)",
+   "container": 45,
+   "parent": 0,
+   "detail": "the last frame of the move, which is the arrival's own picture"
+  },
+  {
+   "at": 93760,
+   "size": 48420,
+   "kind": "media",
+   "label": "46 · standing at (0,1)",
+   "container": 46,
+   "parent": 0,
+   "detail": "the hi-res still of the standpoint this move departs from — exactly one departure from each cell carries it"
+  },
+  {
+   "at": 142208,
+   "size": 15225,
+   "kind": "media",
+   "label": "47 · turning (0,1) → (0,1)",
+   "container": 47,
+   "parent": 0,
+   "detail": "frame 1 of 5 of the move"
+  },
+  {
+   "at": 157440,
+   "size": 17600,
+   "kind": "media",
+   "label": "48 · turning (0,1) → (0,1)",
+   "container": 48,
+   "parent": 0,
+   "detail": "frame 2 of 5 of the move"
+  },
+  {
+   "at": 175040,
+   "size": 18036,
+   "kind": "media",
+   "label": "49 · turning (0,1) → (0,1)",
+   "container": 49,
+   "parent": 0,
+   "detail": "frame 3 of 5 of the move"
+  },
+  {
+   "at": 193088,
+   "size": 17750,
+   "kind": "media",
+   "label": "50 · turning (0,1) → (0,1)",
+   "container": 50,
+   "parent": 0,
+   "detail": "frame 4 of 5 of the move"
+  },
+  {
+   "at": 210880,
+   "size": 17887,
+   "kind": "media",
+   "label": "51 · turning (0,1) → (0,1)",
+   "container": 51,
+   "parent": 0,
+   "detail": "the last frame of the move, which is the arrival's own picture"
+  },
+  {
+   "at": 228800,
+   "size": 45678,
+   "kind": "media",
+   "label": "52 · standing at (0,1)",
+   "container": 52,
+   "parent": 0,
+   "detail": "the hi-res still of the standpoint this move departs from — exactly one departure from each cell carries it"
+  },
+  {
+   "at": 274496,
+   "size": 18004,
+   "kind": "media",
+   "label": "53 · turning (0,1) → (0,1)",
+   "container": 53,
+   "parent": 0,
+   "detail": "frame 1 of 5 of the move"
+  },
+  {
+   "at": 292544,
+   "size": 16661,
+   "kind": "media",
+   "label": "54 · turning (0,1) → (0,1)",
+   "container": 54,
+   "parent": 0,
+   "detail": "frame 2 of 5 of the move"
+  },
+  {
+   "at": 309248,
+   "size": 15450,
+   "kind": "media",
+   "label": "55 · turning (0,1) → (0,1)",
+   "container": 55,
+   "parent": 0,
+   "detail": "frame 3 of 5 of the move"
+  },
+  {
+   "at": 324736,
+   "size": 14265,
+   "kind": "media",
+   "label": "56 · turning (0,1) → (0,1)",
+   "container": 56,
+   "parent": 0,
+   "detail": "frame 4 of 5 of the move"
+  },
+  {
+   "at": 339008,
+   "size": 14758,
+   "kind": "media",
+   "label": "57 · turning (0,1) → (0,1)",
+   "container": 57,
+   "parent": 0,
+   "detail": "the last frame of the move, which is the arrival's own picture"
+  },
+  {
+   "at": 353792,
+   "size": 52602,
+   "kind": "media",
+   "label": "58 · standing at (0,1)",
+   "container": 58,
+   "parent": 0,
+   "detail": "the hi-res still of the standpoint this move departs from — exactly one departure from each cell carries it"
+  },
+  {
+   "at": 406400,
+   "size": 14849,
+   "kind": "media",
+   "label": "59 · turning (0,1) → (0,1)",
+   "container": 59,
+   "parent": 0,
+   "detail": "frame 1 of 5 of the move"
+  },
+  {
+   "at": 421312,
+   "size": 14686,
+   "kind": "media",
+   "label": "60 · turning (0,1) → (0,1)",
+   "container": 60,
+   "parent": 0,
+   "detail": "frame 2 of 5 of the move"
+  },
+  {
+   "at": 436032,
+   "size": 15378,
+   "kind": "media",
+   "label": "61 · turning (0,1) → (0,1)",
+   "container": 61,
+   "parent": 0,
+   "detail": "frame 3 of 5 of the move"
+  },
+  {
+   "at": 451456,
+   "size": 15595,
+   "kind": "media",
+   "label": "62 · turning (0,1) → (0,1)",
+   "container": 62,
+   "parent": 0,
+   "detail": "frame 4 of 5 of the move"
+  },
+  {
+   "at": 467072,
+   "size": 16266,
+   "kind": "media",
+   "label": "63 · turning (0,1) → (0,1)",
+   "container": 63,
+   "parent": 0,
+   "detail": "the last frame of the move, which is the arrival's own picture"
+  },
+  {
+   "at": 483392,
+   "size": 45982,
+   "kind": "media",
+   "label": "64 · standing at (0,1)",
+   "container": 64,
+   "parent": 0,
+   "detail": "the hi-res still of the standpoint this move departs from — exactly one departure from each cell carries it"
+  },
+  {
+   "at": 529408,
+   "size": 15225,
+   "kind": "media",
+   "label": "65 · turning (0,1) → (0,1)",
+   "container": 65,
+   "parent": 0,
+   "detail": "frame 1 of 5 of the move"
+  },
+  {
+   "at": 544640,
+   "size": 15100,
+   "kind": "media",
+   "label": "66 · turning (0,1) → (0,1)",
+   "container": 66,
+   "parent": 0,
+   "detail": "frame 2 of 5 of the move"
+  },
+  {
+   "at": 559744,
+   "size": 15367,
+   "kind": "media",
+   "label": "67 · turning (0,1) → (0,1)",
+   "container": 67,
+   "parent": 0,
+   "detail": "frame 3 of 5 of the move"
+  },
+  {
+   "at": 575168,
+   "size": 15317,
+   "kind": "media",
+   "label": "68 · turning (0,1) → (0,1)",
+   "container": 68,
+   "parent": 0,
+   "detail": "frame 4 of 5 of the move"
+  },
+  {
+   "at": 590528,
+   "size": 16290,
+   "kind": "media",
+   "label": "69 · turning (0,1) → (0,1)",
+   "container": 69,
+   "parent": 0,
+   "detail": "the last frame of the move, which is the arrival's own picture"
+  },
+  {
+   "at": 606848,
+   "size": 16383,
+   "kind": "media",
+   "label": "71 · turning (0,1) → (0,1)",
+   "container": 71,
+   "parent": 0,
+   "detail": "frame 1 of 5 of the move"
+  },
+  {
+   "at": 623232,
+   "size": 15591,
+   "kind": "media",
+   "label": "72 · turning (0,1) → (0,1)",
+   "container": 72,
+   "parent": 0,
+   "detail": "frame 2 of 5 of the move"
+  },
+  {
+   "at": 638848,
+   "size": 15387,
+   "kind": "media",
+   "label": "73 · turning (0,1) → (0,1)",
+   "container": 73,
+   "parent": 0,
+   "detail": "frame 3 of 5 of the move"
+  },
+  {
+   "at": 654272,
+   "size": 14599,
+   "kind": "media",
+   "label": "74 · turning (0,1) → (0,1)",
+   "container": 74,
+   "parent": 0,
+   "detail": "frame 4 of 5 of the move"
+  },
+  {
+   "at": 668928,
+   "size": 14745,
+   "kind": "media",
+   "label": "75 · turning (0,1) → (0,1)",
+   "container": 75,
+   "parent": 0,
+   "detail": "the last frame of the move, which is the arrival's own picture"
+  },
+  {
+   "at": 683712,
+   "size": 14849,
+   "kind": "media",
+   "label": "77 · turning (0,1) → (0,1)",
+   "container": 77,
+   "parent": 0,
+   "detail": "frame 1 of 5 of the move"
+  },
+  {
+   "at": 698624,
+   "size": 14283,
+   "kind": "media",
+   "label": "78 · turning (0,1) → (0,1)",
+   "container": 78,
+   "parent": 0,
+   "detail": "frame 2 of 5 of the move"
+  },
+  {
+   "at": 712960,
+   "size": 15445,
+   "kind": "media",
+   "label": "79 · turning (0,1) → (0,1)",
+   "container": 79,
+   "parent": 0,
+   "detail": "frame 3 of 5 of the move"
+  },
+  {
+   "at": 728448,
+   "size": 16644,
+   "kind": "media",
+   "label": "80 · turning (0,1) → (0,1)",
+   "container": 80,
+   "parent": 0,
+   "detail": "frame 4 of 5 of the move"
+  },
+  {
+   "at": 745152,
+   "size": 17900,
+   "kind": "media",
+   "label": "81 · turning (0,1) → (0,1)",
+   "container": 81,
+   "parent": 0,
+   "detail": "the last frame of the move, which is the arrival's own picture"
+  },
+  {
+   "at": 763072,
+   "size": 18004,
+   "kind": "media",
+   "label": "83 · turning (0,1) → (0,1)",
+   "container": 83,
+   "parent": 0,
+   "detail": "frame 1 of 5 of the move"
+  },
+  {
+   "at": 781120,
+   "size": 17822,
+   "kind": "media",
+   "label": "84 · turning (0,1) → (0,1)",
+   "container": 84,
+   "parent": 0,
+   "detail": "frame 2 of 5 of the move"
+  },
+  {
+   "at": 798976,
+   "size": 18046,
+   "kind": "media",
+   "label": "85 · turning (0,1) → (0,1)",
+   "container": 85,
+   "parent": 0,
+   "detail": "frame 3 of 5 of the move"
+  },
+  {
+   "at": 817024,
+   "size": 17618,
+   "kind": "media",
+   "label": "86 · turning (0,1) → (0,1)",
+   "container": 86,
+   "parent": 0,
+   "detail": "frame 4 of 5 of the move"
+  },
+  {
+   "at": 834688,
+   "size": 15048,
+   "kind": "media",
+   "label": "87 · turning (0,1) → (0,1)",
+   "container": 87,
+   "parent": 0,
+   "detail": "the last frame of the move, which is the arrival's own picture"
+  },
+  {
+   "at": 849792,
+   "size": 232,
+   "kind": "media",
+   "label": "89 · sound, part 89",
+   "container": 89,
+   "texture": "hatch",
+   "detail": "an audio chunk — a single sound is split across many containers and concatenated on load"
+  }
+ ],
+ "source": "UNDERTAK.SET · tools/blockmap.ts · 52 of 86 containers named by walking the SET reader, 34 by sniffing the payload"
+}

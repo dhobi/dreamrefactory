@@ -1,0 +1,254 @@
+{
+ "title": "04 - FIRST CLASS LOUNGE.TI",
+ "subtitle": "46 KB · 27 containers · Titanic save · 27 containers, 5 open tracks — every index computed from the count, none searched for",
+ "total": 46976,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 27 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 108,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "27 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 1536,
+   "size": 8788,
+   "kind": "data",
+   "label": "0 · the manifest",
+   "container": 0,
+   "detail": "the version string, the resource paths, the live CLUT, and one 260-byte record per open FILE — the handle every other container's file references resolve through"
+  },
+  {
+   "at": 10368,
+   "size": 794,
+   "kind": "data",
+   "label": "1 · where you were",
+   "container": 1,
+   "detail": "the current stage, set, scene and view, plus the set's register refs — a fixed 786 bytes"
+  },
+  {
+   "at": 11200,
+   "size": 4008,
+   "kind": "data",
+   "label": "2 · the cast",
+   "container": 2,
+   "detail": "one record per actor in the world, at the stride this engine uses"
+  },
+  {
+   "at": 15232,
+   "size": 36,
+   "kind": "data",
+   "label": "3 · open cast files",
+   "container": 3,
+   "detail": "which .cst files were open — a load has to reopen them, because no openset runs to do it"
+  },
+  {
+   "at": 15296,
+   "size": 11384,
+   "kind": "data",
+   "label": "4 · the props",
+   "container": 4,
+   "detail": "every loaded prop, inventory first"
+  },
+  {
+   "at": 26688,
+   "size": 64,
+   "kind": "data",
+   "label": "5 · open prop files",
+   "container": 5,
+   "detail": "which .shp files were open"
+  },
+  {
+   "at": 26752,
+   "size": 208,
+   "kind": "data",
+   "label": "6 · open tracks",
+   "container": 6,
+   "detail": "the descriptors — and how many of them there are is what makes the rest of this map computable"
+  },
+  {
+   "at": 27008,
+   "size": 1360,
+   "kind": "data",
+   "label": "7 · track 1: registered",
+   "container": 7,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 28416,
+   "size": 8,
+   "kind": "data",
+   "label": "8 · track 1: playing",
+   "container": 8,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 28480,
+   "size": 8,
+   "kind": "data",
+   "label": "9 · track 1: looping",
+   "container": 9,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 28544,
+   "size": 2608,
+   "kind": "data",
+   "label": "10 · track 2: registered",
+   "container": 10,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 31168,
+   "size": 8,
+   "kind": "data",
+   "label": "11 · track 2: playing",
+   "container": 11,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 31232,
+   "size": 8,
+   "kind": "data",
+   "label": "12 · track 2: looping",
+   "container": 12,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 31296,
+   "size": 1568,
+   "kind": "data",
+   "label": "13 · track 3: registered",
+   "container": 13,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 32896,
+   "size": 8,
+   "kind": "data",
+   "label": "14 · track 3: playing",
+   "container": 14,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 32960,
+   "size": 8,
+   "kind": "data",
+   "label": "15 · track 3: looping",
+   "container": 15,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 33024,
+   "size": 8,
+   "kind": "data",
+   "label": "16 · track 4: registered",
+   "container": 16,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 33088,
+   "size": 1256,
+   "kind": "data",
+   "label": "17 · track 4: playing",
+   "container": 17,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 34368,
+   "size": 1256,
+   "kind": "data",
+   "label": "18 · track 4: looping",
+   "container": 18,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 35648,
+   "size": 736,
+   "kind": "data",
+   "label": "19 · track 5: registered",
+   "container": 19,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 36416,
+   "size": 8,
+   "kind": "data",
+   "label": "20 · track 5: playing",
+   "container": 20,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 36480,
+   "size": 8,
+   "kind": "data",
+   "label": "21 · track 5: looping",
+   "container": 21,
+   "parent": 6,
+   "detail": "one of the three sound lists this track writes"
+  },
+  {
+   "at": 36544,
+   "size": 3868,
+   "kind": "data",
+   "label": "22 · the globals",
+   "container": 22,
+   "detail": "every script variable — the whole of the story's progress, 32 bytes a node"
+  },
+  {
+   "at": 40448,
+   "size": 2056,
+   "kind": "data",
+   "label": "23 · the string pool",
+   "container": 23,
+   "parent": 22,
+   "detail": "the text the string-valued globals point into; the loader reads the pair together"
+  },
+  {
+   "at": 42560,
+   "size": 1352,
+   "kind": "data",
+   "label": "24 · loops",
+   "container": 24,
+   "detail": "the repeating timers the scheduler was running"
+  },
+  {
+   "at": 43968,
+   "size": 1192,
+   "kind": "data",
+   "label": "25 · crickets",
+   "container": 25,
+   "detail": "the one-shot timers still pending"
+  },
+  {
+   "at": 45184,
+   "size": 1768,
+   "kind": "data",
+   "label": "26 · walks",
+   "container": 26,
+   "detail": "who was walking where, and how far along"
+  }
+ ],
+ "source": "04 - First Class Lounge.ti · tools/blockmap.ts · 27 of 27 containers named by walking the TI reader"
+}

@@ -1,0 +1,492 @@
+{
+ "title": "TOUR4.MOV",
+ "subtitle": "1.18 MB · 51 containers · movie · 1 segment(s), 16 frames, 512×384",
+ "total": 1233920,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 51 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 204,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "51 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 1536,
+   "size": 2852,
+   "kind": "data",
+   "label": "0 · header container",
+   "container": 0,
+   "detail": "the film's first segment: 512×384, 16 frames, floor 3 ticks a frame"
+  },
+  {
+   "at": 4416,
+   "size": 278,
+   "kind": "data",
+   "label": "1 · container 1",
+   "container": 1,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 4736,
+   "size": 646,
+   "kind": "data",
+   "label": "2 · container 2",
+   "container": 2,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 5440,
+   "size": 12,
+   "kind": "data",
+   "label": "3 · container 3",
+   "container": 3,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 5504,
+   "size": 49588,
+   "kind": "media",
+   "label": "4 · sound \"cash01.76\"",
+   "container": 4,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 55104,
+   "size": 43423,
+   "kind": "media",
+   "label": "5 · sound \"cash01.77\"",
+   "container": 5,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 98560,
+   "size": 31882,
+   "kind": "media",
+   "label": "6 · sound \"cash01.78\"",
+   "container": 6,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 130496,
+   "size": 36737,
+   "kind": "media",
+   "label": "7 · sound \"cash01.79\"",
+   "container": 7,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 167296,
+   "size": 58443,
+   "kind": "media",
+   "label": "8 · sound \"cash01.80\"",
+   "container": 8,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 225792,
+   "size": 52578,
+   "kind": "media",
+   "label": "9 · sound \"cash01.81\"",
+   "container": 9,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 278400,
+   "size": 28344,
+   "kind": "media",
+   "label": "10 · sound \"cash01.82\"",
+   "container": 10,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 306752,
+   "size": 63725,
+   "kind": "media",
+   "label": "11 · sound \"cash01.83\"",
+   "container": 11,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 370496,
+   "size": 84691,
+   "kind": "media",
+   "label": "12 · sound \"cash01.84\"",
+   "container": 12,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 455232,
+   "size": 77317,
+   "kind": "media",
+   "label": "13 · sound \"cash01.85\"",
+   "container": 13,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 532608,
+   "size": 77021,
+   "kind": "media",
+   "label": "14 · sound \"cash01.86\"",
+   "container": 14,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 609664,
+   "size": 66559,
+   "kind": "media",
+   "label": "15 · sound \"cash01.87\"",
+   "container": 15,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 676224,
+   "size": 80019,
+   "kind": "media",
+   "label": "16 · sound \"cash01.88\"",
+   "container": 16,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 756288,
+   "size": 47024,
+   "kind": "media",
+   "label": "17 · sound \"cash01.89\"",
+   "container": 17,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 803328,
+   "size": 68186,
+   "kind": "media",
+   "label": "18 · sound \"cash01.90\"",
+   "container": 18,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "a one-shot, fired by a frame or a region click and from nowhere else"
+  },
+  {
+   "at": 871552,
+   "size": 1102,
+   "kind": "data",
+   "label": "19 · logic of frame \"CASH 1\"",
+   "container": 19,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 872704,
+   "size": 91956,
+   "kind": "media",
+   "label": "20 · frame \"CASH 1\"",
+   "container": 20,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 964672,
+   "size": 1102,
+   "kind": "data",
+   "label": "21 · logic of frame \"Name 10\"",
+   "container": 21,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 965824,
+   "size": 396,
+   "kind": "media",
+   "label": "22 · frame \"Name 10\"",
+   "container": 22,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 966272,
+   "size": 1102,
+   "kind": "data",
+   "label": "23 · logic of frame \"Name 11\"",
+   "container": 23,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 967424,
+   "size": 396,
+   "kind": "media",
+   "label": "24 · frame \"Name 11\"",
+   "container": 24,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 967872,
+   "size": 1102,
+   "kind": "data",
+   "label": "25 · logic of frame \"Name 12\"",
+   "container": 25,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 969024,
+   "size": 396,
+   "kind": "media",
+   "label": "26 · frame \"Name 12\"",
+   "container": 26,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 969472,
+   "size": 1102,
+   "kind": "data",
+   "label": "27 · logic of frame \"CASH 2\"",
+   "container": 27,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 970624,
+   "size": 79009,
+   "kind": "media",
+   "label": "28 · frame \"CASH 2\"",
+   "container": 28,
+   "parent": 0,
+   "detail": "one picture of the film, held 60 ticks"
+  },
+  {
+   "at": 1049664,
+   "size": 1102,
+   "kind": "data",
+   "label": "29 · logic of frame \"Name 13\"",
+   "container": 29,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 1050816,
+   "size": 396,
+   "kind": "media",
+   "label": "30 · frame \"Name 13\"",
+   "container": 30,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 1051264,
+   "size": 1102,
+   "kind": "data",
+   "label": "31 · logic of frame \"Name 14\"",
+   "container": 31,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 1052416,
+   "size": 396,
+   "kind": "media",
+   "label": "32 · frame \"Name 14\"",
+   "container": 32,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 1052864,
+   "size": 1102,
+   "kind": "data",
+   "label": "33 · logic of frame \"Name 15\"",
+   "container": 33,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 1054016,
+   "size": 396,
+   "kind": "media",
+   "label": "34 · frame \"Name 15\"",
+   "container": 34,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 1054464,
+   "size": 1102,
+   "kind": "data",
+   "label": "35 · logic of frame \"CASH 3\"",
+   "container": 35,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 1055616,
+   "size": 82961,
+   "kind": "media",
+   "label": "36 · frame \"CASH 3\"",
+   "container": 36,
+   "parent": 0,
+   "detail": "one picture of the film, held 60 ticks"
+  },
+  {
+   "at": 1138624,
+   "size": 1102,
+   "kind": "data",
+   "label": "37 · logic of frame \"Name 16\"",
+   "container": 37,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 1139776,
+   "size": 396,
+   "kind": "media",
+   "label": "38 · frame \"Name 16\"",
+   "container": 38,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 1140224,
+   "size": 1102,
+   "kind": "data",
+   "label": "39 · logic of frame \"Name 30\"",
+   "container": 39,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 1141376,
+   "size": 396,
+   "kind": "media",
+   "label": "40 · frame \"Name 30\"",
+   "container": 40,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 1141824,
+   "size": 1102,
+   "kind": "data",
+   "label": "41 · logic of frame \"CASH 4\"",
+   "container": 41,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 1142976,
+   "size": 84501,
+   "kind": "media",
+   "label": "42 · frame \"CASH 4\"",
+   "container": 42,
+   "parent": 0,
+   "detail": "one picture of the film, held 60 ticks"
+  },
+  {
+   "at": 1227520,
+   "size": 1102,
+   "kind": "data",
+   "label": "43 · logic of frame \"Name 17\"",
+   "container": 43,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 1228672,
+   "size": 396,
+   "kind": "media",
+   "label": "44 · frame \"Name 17\"",
+   "container": 44,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 1229120,
+   "size": 1102,
+   "kind": "data",
+   "label": "45 · logic of frame \"Name 18\"",
+   "container": 45,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 1230272,
+   "size": 396,
+   "kind": "media",
+   "label": "46 · frame \"Name 18\"",
+   "container": 46,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 1230720,
+   "size": 1102,
+   "kind": "data",
+   "label": "47 · logic of frame \"Name 19\"",
+   "container": 47,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 1231872,
+   "size": 396,
+   "kind": "media",
+   "label": "48 · frame \"Name 19\"",
+   "container": 48,
+   "parent": 0,
+   "detail": "one picture of the film"
+  },
+  {
+   "at": 1232320,
+   "size": 1102,
+   "kind": "data",
+   "label": "49 · logic of frame \"Name 50\"",
+   "container": 49,
+   "parent": 0,
+   "detail": "how long the frame is held, what it fires on entry, and its 0 clickable region(s) — a plain animation frame has no such container"
+  },
+  {
+   "at": 1233472,
+   "size": 396,
+   "kind": "media",
+   "label": "50 · frame \"Name 50\"",
+   "container": 50,
+   "parent": 0,
+   "detail": "one picture of the film, held 20 ticks"
+  }
+ ],
+ "source": "tour4.mov · tools/blockmap.ts · 48 of 51 containers named by walking the MOV reader, 3 by sniffing the payload"
+}

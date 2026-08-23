@@ -55,10 +55,11 @@ import { bearing } from "../runtime/geometry";
  *     delta names the heading. Derived that way the disc has no contradictions at
  *     all — see {@link FACING_BEARING}.
  *
- * What remains unmeasured is the FIELD OF VIEW, which the viewer takes as
- * `max(w, h) / 2` for every set. If Dust's cameras were rendered at a different
- * focal length, sprites will sit at the right bearing and the wrong distance from
- * the centre. Nothing in the header has been shown to be that number yet.
+ * The FIELD OF VIEW is the fourth, and the one number here that came out of the
+ * EXECUTABLE rather than off the disc: DF.EXE's focal length is 310, so a v1 set
+ * carries it and `max(w, h) / 2` is the v4 default only. The disassembly, and what
+ * the v4 default did to Dust's sprites before it, are at {@link focalLength}
+ * below.
  *
  * There IS a Z layer in a v1 frame — all 10616 of them carry one, in the same
  * place and encoding v4 uses — so scenery occludes sprites here too. What v1 has

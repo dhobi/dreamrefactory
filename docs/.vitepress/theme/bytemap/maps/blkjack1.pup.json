@@ -1,0 +1,1316 @@
+{
+ "title": "BLKJACK1.PUP",
+ "subtitle": "1.73 MB · 140 containers · puppet \"untitled\" · 4 stances, 38 lines",
+ "total": 1813888,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 140 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 560,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "140 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 2048,
+   "size": 14024,
+   "kind": "data",
+   "label": "0 · header container",
+   "container": 0,
+   "detail": "the puppet's record: palette, idle timers, the 38 dialogue lines with their subtitles, and the stance table. The name it answers currentpuppet() with is \"untitled\""
+  },
+  {
+   "at": 16128,
+   "size": 328,
+   "kind": "data",
+   "label": "1 · container 1",
+   "container": 1,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 16512,
+   "size": 72,
+   "kind": "data",
+   "label": "2 · container 2",
+   "container": 2,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 16640,
+   "size": 1618,
+   "kind": "data",
+   "label": "3 · container 3",
+   "container": 3,
+   "detail": "a structure this map's annotator does not name yet"
+  },
+  {
+   "at": 18304,
+   "size": 29547,
+   "kind": "media",
+   "label": "4 · the answer band",
+   "container": 4,
+   "parent": 0,
+   "detail": "the 512×120 plate of five riveted plaques the choice bevels are lettered onto — every puppet carries its own copy, re-encoded against its palette"
+  },
+  {
+   "at": 47872,
+   "size": 7169,
+   "kind": "script",
+   "label": "5 · script \"boot script\"",
+   "container": 5,
+   "parent": 0,
+   "detail": "a conversation handler — what saying this does to the game"
+  },
+  {
+   "at": 55104,
+   "size": 2912,
+   "kind": "data",
+   "label": "6 · stance 0",
+   "container": 6,
+   "parent": 0,
+   "detail": "the eleven layer tables of one pose — 8 of them carry art"
+  },
+  {
+   "at": 58048,
+   "size": 95645,
+   "kind": "media",
+   "label": "7 · background, stance 0",
+   "container": 7,
+   "parent": 6,
+   "detail": "one frame of the \"background\" layer — the face is drawn by stacking these · shared, also background, stance 1 · shared, also background, stance 2 · shared, also background, stance 3"
+  },
+  {
+   "at": 153728,
+   "size": 26153,
+   "kind": "media",
+   "label": "8 · body, stance 0",
+   "container": 8,
+   "parent": 6,
+   "detail": "one frame of the \"body\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 179904,
+   "size": 43480,
+   "kind": "media",
+   "label": "9 · body, stance 0",
+   "container": 9,
+   "parent": 6,
+   "detail": "one frame of the \"body\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 223424,
+   "size": 40857,
+   "kind": "media",
+   "label": "10 · body, stance 0",
+   "container": 10,
+   "parent": 6,
+   "detail": "one frame of the \"body\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 264320,
+   "size": 40705,
+   "kind": "media",
+   "label": "11 · body, stance 0",
+   "container": 11,
+   "parent": 6,
+   "detail": "one frame of the \"body\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 305088,
+   "size": 38949,
+   "kind": "media",
+   "label": "12 · body, stance 0",
+   "container": 12,
+   "parent": 6,
+   "detail": "one frame of the \"body\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 344064,
+   "size": 39958,
+   "kind": "media",
+   "label": "13 · body, stance 0",
+   "container": 13,
+   "parent": 6,
+   "detail": "one frame of the \"body\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 384064,
+   "size": 40883,
+   "kind": "media",
+   "label": "14 · body, stance 0",
+   "container": 14,
+   "parent": 6,
+   "detail": "one frame of the \"body\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 424960,
+   "size": 40901,
+   "kind": "media",
+   "label": "15 · body, stance 0",
+   "container": 15,
+   "parent": 6,
+   "detail": "one frame of the \"body\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 465920,
+   "size": 41594,
+   "kind": "media",
+   "label": "16 · body, stance 0",
+   "container": 16,
+   "parent": 6,
+   "detail": "one frame of the \"body\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 507520,
+   "size": 41969,
+   "kind": "media",
+   "label": "17 · body, stance 0",
+   "container": 17,
+   "parent": 6,
+   "detail": "one frame of the \"body\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 549504,
+   "size": 19615,
+   "kind": "media",
+   "label": "18 · head, stance 0",
+   "container": 18,
+   "parent": 6,
+   "detail": "one frame of the \"head\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 569152,
+   "size": 20616,
+   "kind": "media",
+   "label": "19 · head, stance 0",
+   "container": 19,
+   "parent": 6,
+   "detail": "one frame of the \"head\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 589824,
+   "size": 1234,
+   "kind": "media",
+   "label": "20 · eyes, stance 0",
+   "container": 20,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 591104,
+   "size": 1230,
+   "kind": "media",
+   "label": "21 · eyes, stance 0",
+   "container": 21,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 592384,
+   "size": 1225,
+   "kind": "media",
+   "label": "22 · eyes, stance 0",
+   "container": 22,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 593664,
+   "size": 1229,
+   "kind": "media",
+   "label": "23 · eyes, stance 0",
+   "container": 23,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 594944,
+   "size": 5754,
+   "kind": "media",
+   "label": "24 · eyes, stance 0",
+   "container": 24,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 600704,
+   "size": 5747,
+   "kind": "media",
+   "label": "25 · eyes, stance 0",
+   "container": 25,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 606464,
+   "size": 1233,
+   "kind": "media",
+   "label": "26 · eyes, stance 0",
+   "container": 26,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 607744,
+   "size": 5788,
+   "kind": "media",
+   "label": "27 · eyes, stance 0",
+   "container": 27,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 613568,
+   "size": 1234,
+   "kind": "media",
+   "label": "28 · eyes, stance 0",
+   "container": 28,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 614848,
+   "size": 5842,
+   "kind": "media",
+   "label": "29 · eyes, stance 0",
+   "container": 29,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 620736,
+   "size": 5811,
+   "kind": "media",
+   "label": "30 · eyes, stance 0",
+   "container": 30,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 626560,
+   "size": 5779,
+   "kind": "media",
+   "label": "31 · eyes, stance 0",
+   "container": 31,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 632384,
+   "size": 5782,
+   "kind": "media",
+   "label": "32 · eyes, stance 0",
+   "container": 32,
+   "parent": 6,
+   "detail": "one frame of the \"eyes\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 638208,
+   "size": 4099,
+   "kind": "media",
+   "label": "33 · eyebrows, stance 0",
+   "container": 33,
+   "parent": 6,
+   "detail": "one frame of the \"eyebrows\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 642368,
+   "size": 4058,
+   "kind": "media",
+   "label": "34 · eyebrows, stance 0",
+   "container": 34,
+   "parent": 6,
+   "detail": "one frame of the \"eyebrows\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 646464,
+   "size": 4107,
+   "kind": "media",
+   "label": "35 · eyebrows, stance 0",
+   "container": 35,
+   "parent": 6,
+   "detail": "one frame of the \"eyebrows\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 650624,
+   "size": 5857,
+   "kind": "media",
+   "label": "36 · jaw, stance 0",
+   "container": 36,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 656512,
+   "size": 5862,
+   "kind": "media",
+   "label": "37 · jaw, stance 0",
+   "container": 37,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 662400,
+   "size": 5855,
+   "kind": "media",
+   "label": "38 · jaw, stance 0",
+   "container": 38,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 668288,
+   "size": 5872,
+   "kind": "media",
+   "label": "39 · jaw, stance 0",
+   "container": 39,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 674176,
+   "size": 5856,
+   "kind": "media",
+   "label": "40 · jaw, stance 0",
+   "container": 40,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 680064,
+   "size": 5857,
+   "kind": "media",
+   "label": "41 · jaw, stance 0",
+   "container": 41,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 685952,
+   "size": 5853,
+   "kind": "media",
+   "label": "42 · jaw, stance 0",
+   "container": 42,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 691840,
+   "size": 5811,
+   "kind": "media",
+   "label": "43 · jaw, stance 0",
+   "container": 43,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 697664,
+   "size": 5813,
+   "kind": "media",
+   "label": "44 · jaw, stance 0",
+   "container": 44,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 703488,
+   "size": 5870,
+   "kind": "media",
+   "label": "45 · jaw, stance 0",
+   "container": 45,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 709376,
+   "size": 5835,
+   "kind": "media",
+   "label": "46 · jaw, stance 0",
+   "container": 46,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 715264,
+   "size": 5821,
+   "kind": "media",
+   "label": "47 · jaw, stance 0",
+   "container": 47,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 721088,
+   "size": 5886,
+   "kind": "media",
+   "label": "48 · jaw, stance 0",
+   "container": 48,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 726976,
+   "size": 5843,
+   "kind": "media",
+   "label": "49 · jaw, stance 0",
+   "container": 49,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 732864,
+   "size": 5907,
+   "kind": "media",
+   "label": "50 · jaw, stance 0",
+   "container": 50,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 738816,
+   "size": 5852,
+   "kind": "media",
+   "label": "51 · jaw, stance 0",
+   "container": 51,
+   "parent": 6,
+   "detail": "one frame of the \"jaw\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 744704,
+   "size": 5697,
+   "kind": "media",
+   "label": "52 · left, stance 0",
+   "container": 52,
+   "parent": 6,
+   "detail": "one frame of the \"left\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 750464,
+   "size": 4906,
+   "kind": "media",
+   "label": "53 · left, stance 0",
+   "container": 53,
+   "parent": 6,
+   "detail": "one frame of the \"left\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 755392,
+   "size": 5040,
+   "kind": "media",
+   "label": "54 · left, stance 0",
+   "container": 54,
+   "parent": 6,
+   "detail": "one frame of the \"left\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 760448,
+   "size": 8277,
+   "kind": "media",
+   "label": "55 · hands1, stance 0",
+   "container": 55,
+   "parent": 6,
+   "detail": "one frame of the \"hands1\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 768768,
+   "size": 5127,
+   "kind": "media",
+   "label": "56 · hands1, stance 0",
+   "container": 56,
+   "parent": 6,
+   "detail": "one frame of the \"hands1\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 773952,
+   "size": 5023,
+   "kind": "media",
+   "label": "57 · hands1, stance 0",
+   "container": 57,
+   "parent": 6,
+   "detail": "one frame of the \"hands1\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 779008,
+   "size": 4503,
+   "kind": "media",
+   "label": "58 · hands1, stance 0",
+   "container": 58,
+   "parent": 6,
+   "detail": "one frame of the \"hands1\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 783552,
+   "size": 3958,
+   "kind": "media",
+   "label": "59 · hands1, stance 0",
+   "container": 59,
+   "parent": 6,
+   "detail": "one frame of the \"hands1\" layer — the face is drawn by stacking these"
+  },
+  {
+   "at": 787520,
+   "size": 2912,
+   "kind": "data",
+   "label": "60 · stance 1",
+   "container": 60,
+   "parent": 0,
+   "detail": "the eleven layer tables of one pose — 1 of them carry art"
+  },
+  {
+   "at": 790464,
+   "size": 2912,
+   "kind": "data",
+   "label": "61 · stance 2",
+   "container": 61,
+   "parent": 0,
+   "detail": "the eleven layer tables of one pose — 1 of them carry art"
+  },
+  {
+   "at": 793408,
+   "size": 2912,
+   "kind": "data",
+   "label": "62 · stance 3",
+   "container": 62,
+   "parent": 0,
+   "detail": "the eleven layer tables of one pose — 1 of them carry art"
+  },
+  {
+   "at": 796352,
+   "size": 342,
+   "kind": "media",
+   "label": "63 · sound, part 63",
+   "container": 63,
+   "texture": "hatch",
+   "detail": "an audio chunk — a single sound is split across many containers and concatenated on load"
+  },
+  {
+   "at": 796736,
+   "size": 48038,
+   "kind": "media",
+   "label": "64 · voice \"blkjack1.01\"",
+   "container": 64,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Good evening, mon ami! Buick Riviera welcomes you to the tables.”"
+  },
+  {
+   "at": 844800,
+   "size": 15014,
+   "kind": "data",
+   "label": "65 · lip-sync of \"blkjack1.01\"",
+   "container": 65,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 859840,
+   "size": 34591,
+   "kind": "media",
+   "label": "66 · voice \"blkjack1.02\"",
+   "container": 66,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “I am always delighted to play with friends of Max.”"
+  },
+  {
+   "at": 894464,
+   "size": 8700,
+   "kind": "data",
+   "label": "67 · lip-sync of \"blkjack1.02\"",
+   "container": 67,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 903168,
+   "size": 65728,
+   "kind": "media",
+   "label": "68 · voice \"blkjack1.03\"",
+   "container": 68,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “You look familiar. We make a meeting before? Deauville? The casino at …”"
+  },
+  {
+   "at": 968896,
+   "size": 22476,
+   "kind": "data",
+   "label": "69 · lip-sync of \"blkjack1.03\"",
+   "container": 69,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 991424,
+   "size": 52114,
+   "kind": "media",
+   "label": "70 · voice \"blkjack1.04\"",
+   "container": 70,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “I live there once. In Diamondback. Such a town! So, have we met?”"
+  },
+  {
+   "at": 1043584,
+   "size": 17392,
+   "kind": "data",
+   "label": "71 · lip-sync of \"blkjack1.04\"",
+   "container": 71,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1060992,
+   "size": 33820,
+   "kind": "media",
+   "label": "72 · voice \"blkjack1.05\"",
+   "container": 72,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “C'est vrai! Then we shall use my special cards!”"
+  },
+  {
+   "at": 1094848,
+   "size": 9684,
+   "kind": "data",
+   "label": "73 · lip-sync of \"blkjack1.05\"",
+   "container": 73,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1104576,
+   "size": 66807,
+   "kind": "media",
+   "label": "74 · voice \"blkjack1.06\"",
+   "container": 74,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “And do not worry about money. I always extend credit! We have plenty o…”"
+  },
+  {
+   "at": 1171392,
+   "size": 18704,
+   "kind": "data",
+   "label": "75 · lip-sync of \"blkjack1.06\"",
+   "container": 75,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1190144,
+   "size": 6346,
+   "kind": "media",
+   "label": "76 · voice \"blkjack1.07\"",
+   "container": 76,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Too bad.”"
+  },
+  {
+   "at": 1196544,
+   "size": 2796,
+   "kind": "data",
+   "label": "77 · lip-sync of \"blkjack1.07\"",
+   "container": 77,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1199360,
+   "size": 13052,
+   "kind": "media",
+   "label": "78 · voice \"blkjack1.08\"",
+   "container": 78,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Care for blackjack?”"
+  },
+  {
+   "at": 1212416,
+   "size": 4190,
+   "kind": "data",
+   "label": "79 · lip-sync of \"blkjack1.08\"",
+   "container": 79,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1216640,
+   "size": 10374,
+   "kind": "media",
+   "label": "80 · voice \"blkjack1.09\"",
+   "container": 80,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Try your luck?”"
+  },
+  {
+   "at": 1227072,
+   "size": 3616,
+   "kind": "data",
+   "label": "81 · lip-sync of \"blkjack1.09\"",
+   "container": 81,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1230720,
+   "size": 14393,
+   "kind": "media",
+   "label": "82 · voice \"blkjack1.10\"",
+   "container": 82,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “A game, mon ami?”"
+  },
+  {
+   "at": 1245120,
+   "size": 4764,
+   "kind": "data",
+   "label": "83 · lip-sync of \"blkjack1.10\"",
+   "container": 83,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1249920,
+   "size": 15175,
+   "kind": "media",
+   "label": "84 · voice \"blkjack1.11\"",
+   "container": 84,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “You like to play again?”"
+  },
+  {
+   "at": 1265152,
+   "size": 4600,
+   "kind": "data",
+   "label": "85 · lip-sync of \"blkjack1.11\"",
+   "container": 85,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1269760,
+   "size": 16133,
+   "kind": "media",
+   "label": "86 · voice \"blkjack1.12\"",
+   "container": 86,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Another hand, mon ami?”"
+  },
+  {
+   "at": 1285952,
+   "size": 4600,
+   "kind": "data",
+   "label": "87 · lip-sync of \"blkjack1.12\"",
+   "container": 87,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1290560,
+   "size": 7137,
+   "kind": "media",
+   "label": "88 · voice \"blkjack1.13\"",
+   "container": 88,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Again?”"
+  },
+  {
+   "at": 1297728,
+   "size": 2878,
+   "kind": "data",
+   "label": "89 · lip-sync of \"blkjack1.13\"",
+   "container": 89,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1300608,
+   "size": 7464,
+   "kind": "media",
+   "label": "90 · voice \"blkjack1.14\"",
+   "container": 90,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Good night.”"
+  },
+  {
+   "at": 1308096,
+   "size": 3042,
+   "kind": "data",
+   "label": "91 · lip-sync of \"blkjack1.14\"",
+   "container": 91,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1311168,
+   "size": 10274,
+   "kind": "media",
+   "label": "92 · voice \"blkjack1.15\"",
+   "container": 92,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Bon soir.”"
+  },
+  {
+   "at": 1321472,
+   "size": 3780,
+   "kind": "data",
+   "label": "93 · lip-sync of \"blkjack1.15\"",
+   "container": 93,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1325312,
+   "size": 16128,
+   "kind": "media",
+   "label": "94 · voice \"blkjack1.16\"",
+   "container": 94,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Bon chance, mon ami.”"
+  },
+  {
+   "at": 1341440,
+   "size": 4354,
+   "kind": "data",
+   "label": "95 · lip-sync of \"blkjack1.16\"",
+   "container": 95,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1345856,
+   "size": 8132,
+   "kind": "media",
+   "label": "96 · voice \"blkjack1.17\"",
+   "container": 96,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Blackjack!”"
+  },
+  {
+   "at": 1354048,
+   "size": 4026,
+   "kind": "data",
+   "label": "97 · lip-sync of \"blkjack1.17\"",
+   "container": 97,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1358080,
+   "size": 9028,
+   "kind": "media",
+   "label": "98 · voice \"blkjack1.18\"",
+   "container": 98,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “You win!”"
+  },
+  {
+   "at": 1367168,
+   "size": 3288,
+   "kind": "data",
+   "label": "99 · lip-sync of \"blkjack1.18\"",
+   "container": 99,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1370496,
+   "size": 16371,
+   "kind": "media",
+   "label": "100 · voice \"blkjack1.19\"",
+   "container": 100,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “You are the winner!”"
+  },
+  {
+   "at": 1386880,
+   "size": 4764,
+   "kind": "data",
+   "label": "101 · lip-sync of \"blkjack1.19\"",
+   "container": 101,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1391680,
+   "size": 24582,
+   "kind": "media",
+   "label": "102 · voice \"blkjack1.20\"",
+   "container": 102,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Your luck has changed...perhaps.”"
+  },
+  {
+   "at": 1416320,
+   "size": 7962,
+   "kind": "data",
+   "label": "103 · lip-sync of \"blkjack1.20\"",
+   "container": 103,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1424320,
+   "size": 9099,
+   "kind": "media",
+   "label": "104 · voice \"blkjack1.21\"",
+   "container": 104,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Magnifique!”"
+  },
+  {
+   "at": 1433472,
+   "size": 3370,
+   "kind": "data",
+   "label": "105 · lip-sync of \"blkjack1.21\"",
+   "container": 105,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1436864,
+   "size": 10275,
+   "kind": "media",
+   "label": "106 · voice \"blkjack1.22\"",
+   "container": 106,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “You have won!”"
+  },
+  {
+   "at": 1447168,
+   "size": 3698,
+   "kind": "data",
+   "label": "107 · lip-sync of \"blkjack1.22\"",
+   "container": 107,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1450880,
+   "size": 9811,
+   "kind": "media",
+   "label": "108 · voice \"blkjack1.23\"",
+   "container": 108,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Well played!”"
+  },
+  {
+   "at": 1460736,
+   "size": 3616,
+   "kind": "data",
+   "label": "109 · lip-sync of \"blkjack1.23\"",
+   "container": 109,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1464384,
+   "size": 30540,
+   "kind": "media",
+   "label": "110 · voice \"blkjack1.24\"",
+   "container": 110,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “J'regrette, but Buick gets the Blackjack!”"
+  },
+  {
+   "at": 1494976,
+   "size": 9192,
+   "kind": "data",
+   "label": "111 · lip-sync of \"blkjack1.24\"",
+   "container": 111,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1504192,
+   "size": 21128,
+   "kind": "media",
+   "label": "112 · voice \"blkjack1.25\"",
+   "container": 112,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Fortune, she favors me.”"
+  },
+  {
+   "at": 1525376,
+   "size": 6814,
+   "kind": "data",
+   "label": "113 · lip-sync of \"blkjack1.25\"",
+   "container": 113,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1532224,
+   "size": 38659,
+   "kind": "media",
+   "label": "114 · voice \"blkjack1.26\"",
+   "container": 114,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Ahhh, I have won, as you see. Je regrette..,”"
+  },
+  {
+   "at": 1570944,
+   "size": 12308,
+   "kind": "data",
+   "label": "115 · lip-sync of \"blkjack1.26\"",
+   "container": 115,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1583296,
+   "size": 18339,
+   "kind": "media",
+   "label": "116 · voice \"blkjack1.27\"",
+   "container": 116,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “TRADEMARK LAUGH”"
+  },
+  {
+   "at": 1601664,
+   "size": 5994,
+   "kind": "data",
+   "label": "117 · lip-sync of \"blkjack1.27\"",
+   "container": 117,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1607680,
+   "size": 7787,
+   "kind": "media",
+   "label": "118 · voice \"blkjack1.28\"",
+   "container": 118,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “I win!”"
+  },
+  {
+   "at": 1615488,
+   "size": 3288,
+   "kind": "data",
+   "label": "119 · lip-sync of \"blkjack1.28\"",
+   "container": 119,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1618816,
+   "size": 21190,
+   "kind": "media",
+   "label": "120 · voice \"blkjack1.29\"",
+   "container": 120,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “The cards, they played well!”"
+  },
+  {
+   "at": 1640064,
+   "size": 6486,
+   "kind": "data",
+   "label": "121 · lip-sync of \"blkjack1.29\"",
+   "container": 121,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1646592,
+   "size": 32147,
+   "kind": "media",
+   "label": "122 · voice \"blkjack1.30\"",
+   "container": 122,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “I am afraid fate is not with you tonight.”"
+  },
+  {
+   "at": 1678784,
+   "size": 9438,
+   "kind": "data",
+   "label": "123 · lip-sync of \"blkjack1.30\"",
+   "container": 123,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1688256,
+   "size": 17342,
+   "kind": "media",
+   "label": "124 · voice \"blkjack1.31\"",
+   "container": 124,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “It is in the cards. ”"
+  },
+  {
+   "at": 1705600,
+   "size": 5174,
+   "kind": "data",
+   "label": "125 · lip-sync of \"blkjack1.31\"",
+   "container": 125,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1710784,
+   "size": 14974,
+   "kind": "media",
+   "label": "126 · voice \"blkjack1.32\"",
+   "container": 126,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “Merde...a draw”"
+  },
+  {
+   "at": 1725760,
+   "size": 6322,
+   "kind": "data",
+   "label": "127 · lip-sync of \"blkjack1.32\"",
+   "container": 127,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1732096,
+   "size": 24278,
+   "kind": "media",
+   "label": "128 · voice \"blkjack1.33\"",
+   "container": 128,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “A draw. We are both losers.”"
+  },
+  {
+   "at": 1756416,
+   "size": 6978,
+   "kind": "data",
+   "label": "129 · lip-sync of \"blkjack1.33\"",
+   "container": 129,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1763456,
+   "size": 17338,
+   "kind": "media",
+   "label": "130 · voice \"blkjack1.34\"",
+   "container": 130,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “It is a draw, mon ami.”"
+  },
+  {
+   "at": 1780800,
+   "size": 4846,
+   "kind": "data",
+   "label": "131 · lip-sync of \"blkjack1.34\"",
+   "container": 131,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1785664,
+   "size": 212,
+   "kind": "media",
+   "label": "132 · voice \"idle 1\"",
+   "container": 132,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “”"
+  },
+  {
+   "at": 1785920,
+   "size": 1402,
+   "kind": "data",
+   "label": "133 · lip-sync of \"idle 1\"",
+   "container": 133,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1787328,
+   "size": 355,
+   "kind": "media",
+   "label": "134 · voice \"idle 2\"",
+   "container": 134,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “*gesture”"
+  },
+  {
+   "at": 1787712,
+   "size": 2714,
+   "kind": "data",
+   "label": "135 · lip-sync of \"idle 2\"",
+   "container": 135,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1790464,
+   "size": 420,
+   "kind": "media",
+   "label": "136 · voice \"idle 3\"",
+   "container": 136,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “*gesture2”"
+  },
+  {
+   "at": 1790912,
+   "size": 3288,
+   "kind": "data",
+   "label": "137 · lip-sync of \"idle 3\"",
+   "container": 137,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  },
+  {
+   "at": 1794240,
+   "size": 14453,
+   "kind": "media",
+   "label": "138 · voice \"idle 4\"",
+   "container": 138,
+   "parent": 0,
+   "texture": "hatch",
+   "detail": "the spoken line: “*idlespeak”"
+  },
+  {
+   "at": 1808704,
+   "size": 5174,
+   "kind": "data",
+   "label": "139 · lip-sync of \"idle 4\"",
+   "container": 139,
+   "parent": 0,
+   "detail": "one record per tick: which frame each of the eleven layers shows, and where it sits"
+  }
+ ],
+ "source": "BLKJACK1.PUP · tools/blockmap.ts · 136 of 140 containers named by walking the PUP reader, 4 by sniffing the payload"
+}

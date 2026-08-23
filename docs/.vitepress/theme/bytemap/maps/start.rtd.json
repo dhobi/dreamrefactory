@@ -1,0 +1,173 @@
+{
+ "title": "START.RTD",
+ "subtitle": "47 KB · 18 containers · Dust save · 18 containers, 2 open sound banks — every index computed from the count, none searched for",
+ "total": 47680,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 18 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 72,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "18 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 1536,
+   "size": 7240,
+   "kind": "data",
+   "label": "0 · the manifest",
+   "container": 0,
+   "detail": "the version string, the resource paths, the live CLUT, and one 260-byte record per open FILE — the handle every other container's file references resolve through"
+  },
+  {
+   "at": 8832,
+   "size": 552,
+   "kind": "data",
+   "label": "1 · where you were",
+   "container": 1,
+   "detail": "the standpoint: a verbatim 542-byte dump of the engine's own block"
+  },
+  {
+   "at": 9408,
+   "size": 8872,
+   "kind": "data",
+   "label": "2 · the cast",
+   "container": 2,
+   "detail": "one record per actor in the world, at the stride this engine uses"
+  },
+  {
+   "at": 18304,
+   "size": 72,
+   "kind": "data",
+   "label": "3 · open cast files",
+   "container": 3,
+   "detail": "which .cst files were open — a load has to reopen them, because no openset runs to do it"
+  },
+  {
+   "at": 18432,
+   "size": 11560,
+   "kind": "data",
+   "label": "4 · the props",
+   "container": 4,
+   "detail": "every loaded prop, inventory first"
+  },
+  {
+   "at": 30016,
+   "size": 72,
+   "kind": "data",
+   "label": "5 · open prop files",
+   "container": 5,
+   "detail": "which .shp files were open"
+  },
+  {
+   "at": 30144,
+   "size": 104,
+   "kind": "data",
+   "label": "6 · open sound banks",
+   "container": 6,
+   "detail": "the descriptors — and how many of them there are is what makes the rest of this map computable"
+  },
+  {
+   "at": 30272,
+   "size": 2408,
+   "kind": "data",
+   "label": "7 · bank 1: registered",
+   "container": 7,
+   "parent": 6,
+   "detail": "one of the three sound lists this bank writes"
+  },
+  {
+   "at": 32704,
+   "size": 40,
+   "kind": "data",
+   "label": "8 · bank 1: playing",
+   "container": 8,
+   "parent": 6,
+   "detail": "one of the three sound lists this bank writes"
+  },
+  {
+   "at": 32768,
+   "size": 40,
+   "kind": "data",
+   "label": "9 · bank 1: looping",
+   "container": 9,
+   "parent": 6,
+   "detail": "one of the three sound lists this bank writes"
+  },
+  {
+   "at": 32832,
+   "size": 1672,
+   "kind": "data",
+   "label": "10 · bank 2: registered",
+   "container": 10,
+   "parent": 6,
+   "detail": "one of the three sound lists this bank writes"
+  },
+  {
+   "at": 34560,
+   "size": 552,
+   "kind": "data",
+   "label": "11 · bank 2: playing",
+   "container": 11,
+   "parent": 6,
+   "detail": "one of the three sound lists this bank writes"
+  },
+  {
+   "at": 35136,
+   "size": 3560,
+   "kind": "data",
+   "label": "12 · bank 2: looping",
+   "container": 12,
+   "parent": 6,
+   "detail": "one of the three sound lists this bank writes"
+  },
+  {
+   "at": 38720,
+   "size": 3240,
+   "kind": "data",
+   "label": "13 · the globals",
+   "container": 13,
+   "detail": "every script variable — the whole of the story's progress, 32 bytes a node"
+  },
+  {
+   "at": 41984,
+   "size": 2056,
+   "kind": "data",
+   "label": "14 · the string pool",
+   "container": 14,
+   "parent": 13,
+   "detail": "the text the string-valued globals point into; the loader reads the pair together"
+  },
+  {
+   "at": 44096,
+   "size": 1352,
+   "kind": "data",
+   "label": "15 · loops",
+   "container": 15,
+   "detail": "the repeating timers the scheduler was running"
+  },
+  {
+   "at": 45504,
+   "size": 776,
+   "kind": "data",
+   "label": "16 · crickets",
+   "container": 16,
+   "detail": "the one-shot timers still pending"
+  },
+  {
+   "at": 46336,
+   "size": 1320,
+   "kind": "data",
+   "label": "17 · walks",
+   "container": 17,
+   "detail": "who was walking where, and how far along"
+  }
+ ],
+ "source": "START.RTD · tools/blockmap.ts · 18 of 18 containers named by walking the RTD reader"
+}

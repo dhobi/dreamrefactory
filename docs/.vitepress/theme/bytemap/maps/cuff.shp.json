@@ -1,0 +1,579 @@
+{
+ "title": "CUFF.SHP",
+ "subtitle": "191 KB · 62 containers · shop \"cuff.shp\" · 3 props, 46 frames",
+ "total": 195136,
+ "regions": [
+  {
+   "at": 0,
+   "size": 1024,
+   "kind": "structure",
+   "label": "file header",
+   "detail": "1024 fixed bytes, six of whose fields the engine reads — here: 62 containers, type 0"
+  },
+  {
+   "at": 1024,
+   "size": 248,
+   "kind": "structure",
+   "label": "position table",
+   "detail": "62 file offsets, one per container — the index the engine jumps through instead of reading the file top to bottom"
+  },
+  {
+   "at": 1536,
+   "size": 2420,
+   "kind": "data",
+   "label": "0 · header container",
+   "container": 0,
+   "detail": "the shop's record: its ref name \"cuff.shp\", the 2048-byte palette and the table of its 3 props"
+  },
+  {
+   "at": 3968,
+   "size": 3032,
+   "kind": "script",
+   "label": "1 · the shop's main script",
+   "container": 1,
+   "parent": 0,
+   "detail": "the file-level handlers, under which each prop's own script sits"
+  },
+  {
+   "at": 7040,
+   "size": 198,
+   "kind": "data",
+   "label": "2 · prop \"cuffcuff\"",
+   "container": 2,
+   "parent": 0,
+   "detail": "the prop's record: its script and its 3 states"
+  },
+  {
+   "at": 7296,
+   "size": 922,
+   "kind": "script",
+   "label": "3 · script of \"cuffcuff\"",
+   "container": 3,
+   "parent": 2,
+   "detail": "what this prop does when it is clicked, opened, or told to change state"
+  },
+  {
+   "at": 8256,
+   "size": 170,
+   "kind": "data",
+   "label": "4 · state \"small\" of \"cuffcuff\"",
+   "container": 4,
+   "parent": 2,
+   "detail": "1 picture(s), picked by stored degree rather than animated"
+  },
+  {
+   "at": 8448,
+   "size": 511,
+   "kind": "media",
+   "label": "5 · \"cuffcuff\" · small",
+   "container": 5,
+   "parent": 4,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 8960,
+   "size": 170,
+   "kind": "data",
+   "label": "6 · state \"med\" of \"cuffcuff\"",
+   "container": 6,
+   "parent": 2,
+   "detail": "1 picture(s), picked by stored degree rather than animated"
+  },
+  {
+   "at": 9152,
+   "size": 409,
+   "kind": "media",
+   "label": "7 · \"cuffcuff\" · med",
+   "container": 7,
+   "parent": 6,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 9600,
+   "size": 170,
+   "kind": "data",
+   "label": "8 · state \"big\" of \"cuffcuff\"",
+   "container": 8,
+   "parent": 2,
+   "detail": "1 picture(s), picked by stored degree rather than animated"
+  },
+  {
+   "at": 9792,
+   "size": 13289,
+   "kind": "media",
+   "label": "9 · \"cuffcuff\" · big",
+   "container": 9,
+   "parent": 8,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 23104,
+   "size": 230,
+   "kind": "data",
+   "label": "10 · prop \"cuffbag\"",
+   "container": 10,
+   "parent": 0,
+   "detail": "the prop's record: its script and its 4 states"
+  },
+  {
+   "at": 23360,
+   "size": 1542,
+   "kind": "script",
+   "label": "11 · script of \"cuffbag\"",
+   "container": 11,
+   "parent": 10,
+   "detail": "what this prop does when it is clicked, opened, or told to change state"
+  },
+  {
+   "at": 24960,
+   "size": 918,
+   "kind": "data",
+   "label": "12 · state \"opening\" of \"cuffbag\"",
+   "container": 12,
+   "parent": 10,
+   "detail": "18 picture(s), played in a 6-step order"
+  },
+  {
+   "at": 25920,
+   "size": 3860,
+   "kind": "media",
+   "label": "13 · \"cuffbag\" · opening",
+   "container": 13,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 29824,
+   "size": 4076,
+   "kind": "media",
+   "label": "14 · \"cuffbag\" · opening",
+   "container": 14,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 33920,
+   "size": 4000,
+   "kind": "media",
+   "label": "15 · \"cuffbag\" · opening",
+   "container": 15,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 37952,
+   "size": 3950,
+   "kind": "media",
+   "label": "16 · \"cuffbag\" · opening",
+   "container": 16,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 41920,
+   "size": 3930,
+   "kind": "media",
+   "label": "17 · \"cuffbag\" · opening",
+   "container": 17,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 45888,
+   "size": 3816,
+   "kind": "media",
+   "label": "18 · \"cuffbag\" · opening",
+   "container": 18,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 49728,
+   "size": 3880,
+   "kind": "media",
+   "label": "19 · \"cuffbag\" · opening",
+   "container": 19,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 53632,
+   "size": 3987,
+   "kind": "media",
+   "label": "20 · \"cuffbag\" · opening",
+   "container": 20,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 57664,
+   "size": 4059,
+   "kind": "media",
+   "label": "21 · \"cuffbag\" · opening",
+   "container": 21,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 61760,
+   "size": 3956,
+   "kind": "media",
+   "label": "22 · \"cuffbag\" · opening",
+   "container": 22,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 65728,
+   "size": 3793,
+   "kind": "media",
+   "label": "23 · \"cuffbag\" · opening",
+   "container": 23,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 69568,
+   "size": 3723,
+   "kind": "media",
+   "label": "24 · \"cuffbag\" · opening",
+   "container": 24,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 73344,
+   "size": 3876,
+   "kind": "media",
+   "label": "25 · \"cuffbag\" · opening",
+   "container": 25,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 77248,
+   "size": 3993,
+   "kind": "media",
+   "label": "26 · \"cuffbag\" · opening",
+   "container": 26,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 81280,
+   "size": 4116,
+   "kind": "media",
+   "label": "27 · \"cuffbag\" · opening",
+   "container": 27,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 85440,
+   "size": 3914,
+   "kind": "media",
+   "label": "28 · \"cuffbag\" · opening",
+   "container": 28,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 89408,
+   "size": 3857,
+   "kind": "media",
+   "label": "29 · \"cuffbag\" · opening",
+   "container": 29,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 93312,
+   "size": 3644,
+   "kind": "media",
+   "label": "30 · \"cuffbag\" · opening",
+   "container": 30,
+   "parent": 12,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 96960,
+   "size": 918,
+   "kind": "data",
+   "label": "31 · state \"closing\" of \"cuffbag\"",
+   "container": 31,
+   "parent": 10,
+   "detail": "18 picture(s), played in a 6-step order"
+  },
+  {
+   "at": 97920,
+   "size": 3860,
+   "kind": "media",
+   "label": "32 · \"cuffbag\" · closing",
+   "container": 32,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 101824,
+   "size": 4076,
+   "kind": "media",
+   "label": "33 · \"cuffbag\" · closing",
+   "container": 33,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 105920,
+   "size": 4000,
+   "kind": "media",
+   "label": "34 · \"cuffbag\" · closing",
+   "container": 34,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 109952,
+   "size": 3950,
+   "kind": "media",
+   "label": "35 · \"cuffbag\" · closing",
+   "container": 35,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 113920,
+   "size": 3930,
+   "kind": "media",
+   "label": "36 · \"cuffbag\" · closing",
+   "container": 36,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 117888,
+   "size": 3816,
+   "kind": "media",
+   "label": "37 · \"cuffbag\" · closing",
+   "container": 37,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 121728,
+   "size": 3880,
+   "kind": "media",
+   "label": "38 · \"cuffbag\" · closing",
+   "container": 38,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 125632,
+   "size": 3987,
+   "kind": "media",
+   "label": "39 · \"cuffbag\" · closing",
+   "container": 39,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 129664,
+   "size": 4059,
+   "kind": "media",
+   "label": "40 · \"cuffbag\" · closing",
+   "container": 40,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 133760,
+   "size": 3956,
+   "kind": "media",
+   "label": "41 · \"cuffbag\" · closing",
+   "container": 41,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 137728,
+   "size": 3793,
+   "kind": "media",
+   "label": "42 · \"cuffbag\" · closing",
+   "container": 42,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 141568,
+   "size": 3723,
+   "kind": "media",
+   "label": "43 · \"cuffbag\" · closing",
+   "container": 43,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 145344,
+   "size": 3876,
+   "kind": "media",
+   "label": "44 · \"cuffbag\" · closing",
+   "container": 44,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 149248,
+   "size": 3993,
+   "kind": "media",
+   "label": "45 · \"cuffbag\" · closing",
+   "container": 45,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 153280,
+   "size": 4116,
+   "kind": "media",
+   "label": "46 · \"cuffbag\" · closing",
+   "container": 46,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 157440,
+   "size": 3914,
+   "kind": "media",
+   "label": "47 · \"cuffbag\" · closing",
+   "container": 47,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 161408,
+   "size": 3857,
+   "kind": "media",
+   "label": "48 · \"cuffbag\" · closing",
+   "container": 48,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 165312,
+   "size": 3644,
+   "kind": "media",
+   "label": "49 · \"cuffbag\" · closing",
+   "container": 49,
+   "parent": 31,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 168960,
+   "size": 258,
+   "kind": "data",
+   "label": "50 · state \"idleclosed\" of \"cuffbag\"",
+   "container": 50,
+   "parent": 10,
+   "detail": "3 picture(s), picked by stored degree rather than animated"
+  },
+  {
+   "at": 169280,
+   "size": 3860,
+   "kind": "media",
+   "label": "51 · \"cuffbag\" · idleclosed",
+   "container": 51,
+   "parent": 50,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 173184,
+   "size": 3880,
+   "kind": "media",
+   "label": "52 · \"cuffbag\" · idleclosed",
+   "container": 52,
+   "parent": 50,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 177088,
+   "size": 3876,
+   "kind": "media",
+   "label": "53 · \"cuffbag\" · idleclosed",
+   "container": 53,
+   "parent": 50,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 180992,
+   "size": 258,
+   "kind": "data",
+   "label": "54 · state \"idleopen\" of \"cuffbag\"",
+   "container": 54,
+   "parent": 10,
+   "detail": "3 picture(s), picked by stored degree rather than animated"
+  },
+  {
+   "at": 181312,
+   "size": 3816,
+   "kind": "media",
+   "label": "55 · \"cuffbag\" · idleopen",
+   "container": 55,
+   "parent": 54,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 185152,
+   "size": 3723,
+   "kind": "media",
+   "label": "56 · \"cuffbag\" · idleopen",
+   "container": 56,
+   "parent": 54,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 188928,
+   "size": 3644,
+   "kind": "media",
+   "label": "57 · \"cuffbag\" · idleopen",
+   "container": 57,
+   "parent": 54,
+   "detail": "one picture of the prop, in the transparent codec"
+  },
+  {
+   "at": 192576,
+   "size": 134,
+   "kind": "data",
+   "label": "58 · prop \"cuffok\"",
+   "container": 58,
+   "parent": 0,
+   "detail": "the prop's record: its script and its 1 states"
+  },
+  {
+   "at": 192768,
+   "size": 826,
+   "kind": "script",
+   "label": "59 · script of \"cuffok\"",
+   "container": 59,
+   "parent": 58,
+   "detail": "what this prop does when it is clicked, opened, or told to change state"
+  },
+  {
+   "at": 193600,
+   "size": 170,
+   "kind": "data",
+   "label": "60 · state \"ok\" of \"cuffok\"",
+   "container": 60,
+   "parent": 58,
+   "detail": "1 picture(s), picked by stored degree rather than animated"
+  },
+  {
+   "at": 193792,
+   "size": 1316,
+   "kind": "media",
+   "label": "61 · \"cuffok\" · ok",
+   "container": 61,
+   "parent": 60,
+   "detail": "one picture of the prop, in the transparent codec"
+  }
+ ],
+ "source": "CUFF.SHP · tools/blockmap.ts · 62 of 62 containers named by walking the SHP reader"
+}
