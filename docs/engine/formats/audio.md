@@ -11,12 +11,13 @@ they hold**:
 | **.TRK** | music ("tracks") — sometimes also effects and voices |
 | **.SFX** | sound effects |
 | **.11K** | shorter versions of the songs (see below — *not* a sample rate) |
-| **.SND** | an older, more limited catch-all sound format (rare in TAOOT) |
+| **.SND** | the same role a `.TRK` plays, as **DreamFactory 1** spells it — Dust's whole sound library and all but absent from TAOOT ([below](#dreamfactory-1-snd)) |
 
 Reference implementation: [`engine/src/df/audio.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/audio.ts)
 (chunk decoding — the two codecs) and
 [`engine/src/df/banks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/banks.ts)
-(the bank chunk tables, shared with [MOV](mov.md) soundtracks). Playback —
+(the bank chunk tables, shared with [MOV](mov.md) soundtracks).
+[`engine/src/df/snd.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/snd.ts) is the v1 bank table beside it. Playback —
 channels, volumes, the sound library — is the runtime's job:
 **[Audio at runtime](../runtime/audio.md)**.
 
@@ -126,11 +127,41 @@ identifier, and the play order. Two asymmetries are worth knowing:
   name fields use). That is why the editor tells you how many characters fit
   rather than offering a fixed field.
 
+## DreamFactory 1 (.SND)
+
+The codec did not change: `audio.ts` decodes a Dust chunk unmodified, and the
+containers are the same containers. What changed is **how a bank says which
+sound is which**, and it is a simplification rather than a redesign — which is
+why it needs its own reader
+([`snd.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/snd.ts)) rather than a
+branch in `banks.ts`.
+
+A v4 bank keeps its chunk tables in containers of their own: container 0 points
+at a one-shot table and a loop table, and each record in them carries the
+container its audio lives in. `unilib.trk`'s container 0 is 52 bytes — a name
+and two pointers.
+
+A v1 bank has **no tables at all**. Container 0 carries the names inline, and
+the theme is not declared anywhere: it is the trailing run of consecutively
+numbered chunks, and the numbering *is* the order (`daymusic1` through
+`daymusic10`).
+
+The boot script treats the two as one thing — `opentrackfile("unilib.snd")` is
+the same builtin Titanic calls with `unilib.trk` — which is exactly why the
+reader has to tell them apart from the version tag rather than the extension.
+
+Two traps that only bite here, and both are on
+**[Dust's music and sound](../../dust/audio.md)**: the name a script asks for
+is the bank's own stored `refName` and frequently *not* the filename, and
+several files answer to one name. A `.SND` also opens **read-only** in the
+[track editor](../../editors/tracks.md), because the patch helpers write at v4
+offsets and in a `.SND` container 1 is a *sound*.
+
 ## Related tools
 
 - `taoot/tools/dumpaudio.ts` — export decoded chunks as WAVs and waveform PNGs;
   `--find <name>` scans every bank for a named sound.
-- [`editors/tracks.html`](../../editors/tracks.md) — the browser editor over this format:
+- [`site/editors/tracks.html`](../../editors/tracks.md) — the browser editor over this format:
   play a bank, rename and reorder its chunks, replace their audio, export the
   repack.
 

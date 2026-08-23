@@ -312,5 +312,5 @@ current view; `propview(me, "x")` sets it. Same name, arity decides.
 - Every builtin the engine registers, family by family — including the
   deliberate no-ops: **[the builtin reference](../reference/builtins.md)**.
 - The command-name → ID table lives inside `TI.EXE`; the tool that extracts it
-  is [`taoot/tools/exetable.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/exetable.ts), and the full opcode table is
+  is [`taoot/tools/exetable.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/exetable.ts), and the full opcode table is
   in [`engine/src/df/opcodes.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/opcodes.ts).

@@ -116,6 +116,8 @@ first; every format doc after it builds on it.
   facial animation and character sprites.
 - **[Saved games (`.ti`)](engine/formats/savegame.md)** — the one file the game
   *writes*: a serialized memory dump, and how it's read and patched back.
+- **[Saved games, DF1 (`.rtd`)](engine/formats/savegame-v1.md)** — the same
+  container three years earlier, and the four record strides that moved.
 
 ### Runtime — how the port plays the game
 
@@ -145,7 +147,7 @@ with them — the behaviour recovered from the games' own binaries (`TI.EXE`, an
 
 ### Editors — reading the formats back out
 
-Seven browser pages the dev server hosts, one per container format: load a
+Seven browser pages the site hosts, one per container format: load a
 file, take it apart, change what is safe to change, export the repacked
 original. They read with the engine's own code, so they double as the best
 debugger the file layer has. Overview: **[the browser editors](editors/README.md)**.
@@ -169,7 +171,17 @@ debugger the file layer has. Overview: **[the browser editors](editors/README.md
 
 Lookup material: **[the glossary](glossary.md)**, **[builtin
 commands](reference/builtins.md)**, **[tools](reference/tools.md)**,
-**[the test inventory](reference/tests.md)**, and **[the route](reference/route.md)**.
+**[the test inventory](reference/tests.md)**, **[the route](reference/route.md)**,
+**[continuous integration](reference/ci.md)** and
+**[releasing and deploying](reference/deploy.md)**.
+
+### How the repository is arranged
+
+Four npm workspaces, and the split these docs follow: **`engine/`** knows about
+no particular game, **`site/`** is the shared web presence and the seven format
+editors, and **`taoot/`** and **`dust/`** are a game each. Dependencies point
+one way only and there is a test that says so. The map is
+**[Engine architecture](engine/architecture.md)**.
 
 ## A note on licensing
 

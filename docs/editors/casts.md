@@ -1,7 +1,7 @@
 # The cast editor
 
-[`editors/casts.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/casts.html) — source
-[`editors/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/cst-editor.ts).
+[`site/editors/casts.html`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/casts.html) — source
+[`site/editors/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/cst-editor.ts).
 Open `http://localhost:5173/editors/casts.html`.
 
 The other half of a character: the [puppet editor](puppets.md) has the brains,
@@ -38,7 +38,7 @@ and a sprite's anchor goes through `patchFrameAnchor` in
 [`engine/src/df/shp.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/shp.ts) —
 a cast sprite *is* a SHP frame, header and all — so everything you did not touch
 is the byte it was
-(see [`taoot/tests/auto/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/cst-editor.ts)).
+(see [`taoot/tests/auto/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/cst-editor.ts)).
 
 ## See also
 

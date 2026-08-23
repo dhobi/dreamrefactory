@@ -1,7 +1,7 @@
 # The puppet editor
 
-[`editors/puppets.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/puppets.html) — source
-[`editors/puppet-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/puppet-editor.ts).
+[`site/editors/puppets.html`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/puppets.html) — source
+[`site/editors/puppet-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/puppet-editor.ts).
 Open `http://localhost:5173/editors/puppets.html`.
 
 A character has two files, and this is the **brains** half — the conversation.
@@ -41,7 +41,7 @@ Shift-JIS line can neither overflow the field nor end half a character in.
 **Export .pup** repacks the container file (`writeContainerFile` in
 [`engine/src/df/container.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/container.ts))
 and downloads the result; untouched parts round-trip byte-identically
-(see [`taoot/tests/auto/pup-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/pup-editor.ts)).
+(see [`taoot/tests/auto/pup-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/pup-editor.ts)).
 
 ## See also
 

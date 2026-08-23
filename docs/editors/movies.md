@@ -1,7 +1,7 @@
 # The movie editor
 
-[`editors/movies.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/movies.html) — source
-[`editors/mov-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/mov-editor.ts).
+[`site/editors/movies.html`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/movies.html) — source
+[`site/editors/mov-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/mov-editor.ts).
 Open `http://localhost:5173/editors/movies.html`.
 
 Mostly an **inspector**, and the only editor whose art is read-only. Load a
@@ -16,7 +16,7 @@ segment picker and why every edit is addressed to the segment it was made in.
 | Part | What you can do with it |
 |------|-------------------------|
 | the **segment picker** | a film is a **chain of segments** ([MOV](../engine/formats/mov.md#a-file-is-a-chain-of-segments)), and this is where you move between them — each option gives its frame count and the container its header sits at, which is the index every location inside it is relative to. Hidden when the file has only one. Switching restarts the decode chain and the frame cursor, because each segment's frames are delta-encoded against a fresh buffer, exactly as the player treats them |
-| the **picture** | scrub any frame, step through, or **▶ Follow the machine** — which plays at the film's **own authored pace** (`frameHoldMs`, the same rule the game uses; see [pacing](../engine/formats/mov.md#a-movie-carries-its-own-pacing-solved-out-of-the-demo-builds-engine)) and stops where the movie itself stops: on a frame with regions, saying so, because that frame waits for a click |
+| the **picture** | scrub any frame, step through, or **▶ Follow the machine** — which plays at the film's **own authored pace** (`frameHoldMs`, the same rule the game uses; see [pacing](../engine/formats/mov.md#a-movie-carries-its-own-pacing-—-solved-out-of-the-demo-build-s-engine)) and stops where the movie itself stops: on a frame with regions, saying so, because that frame waits for a click |
 | **clicking it** | does what the movie would do with that click. A region's type 2 really jumps to its target frame; an exit or a chain to another file is reported, since there is no sequence here to leave. A click outside every region does nothing, exactly as in game |
 | the **frame list** | every frame with its action, its outgoing edges (`→target`, `⇒event`, exit), its entry sound and whether it is an action frame — filterable, and "only frames that wait" reduces a 300-frame cutscene to the handful that are interactive |
 | a **frame's logic** | its name, its action code, and the three names it carries (entry sound, chained movie, target frame). A frame with no logic container says so: it is a plain animation frame, and there is nowhere to put an action |
@@ -41,7 +41,7 @@ its start, and switching segments starts a new one), and why there is no art
 import: a replaced frame would leave everything after it decoding against a
 picture that no longer exists.
 
-[`taoot/tests/auto/mov-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/mov-editor.ts)
+[`taoot/tests/auto/mov-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/mov-editor.ts)
 pins that rather than asserting it — it hand-builds a frame that holds the
 picture before it (row mode 10, the mode our own encoder never emits) and shows
 the swap changing what that frame decodes to. A single frame *can* still be

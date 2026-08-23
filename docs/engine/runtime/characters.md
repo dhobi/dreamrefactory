@@ -39,7 +39,7 @@ owner/value pair scripts use as scratch state.
 
 A pose animation step holds one picture **per depicted view** — usually eight
 45° apart, though [three poses in the corpus do
-not](../formats/pup-cst.md#cst--the-body-that-scales-with-distance). The one
+not](../formats/pup-cst.md#cst-—-the-body-that-scales-with-distance). The one
 drawn is *not* picked from the actor's facing alone — it's the facing **relative
 to the bearing from the actor to the camera**, because which side of someone you
 see depends on where *you* stand, and the engine keeps whichever stored view is

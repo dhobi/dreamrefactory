@@ -52,23 +52,28 @@ Read in any order — each names its own prerequisites.
 
 ## Where the code lives
 
+Paths are relative to `engine/src/` — `runtime/` is the recovered engine,
+`web/` is the browser layer around it, `df/` is the format library
+([the architecture map](../architecture.md) has the full inventory). The last
+two rows are a *game's* code rather than the engine's, and are named as such.
+
 | Subsystem | Source | Page |
 |-----------|--------|------|
-| Heartbeat, loops, crickets, walks | [`engine/scheduler.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/scheduler.ts), [`engine/clock.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/clock.ts) | [Timing](timing.md) |
-| The mission-4 clock and its phase timetable | [`engine/scheduler.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/scheduler.ts) (`serviceGameClock`), [`engine/setscripts.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/setscripts.ts) (`openScene`/`viewChanged`) | [The sinking](../../taoot/sinking.md) |
-| Stage layer (STG at runtime) | [`engine/stage.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/stage.ts) | [Stage & UI](stage-ui.md) |
-| Actors (CST at runtime) | [`engine/actors.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/actors.ts), [`engine/geometry.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/geometry.ts) | [Characters](characters.md) |
-| Puppets (PUP at runtime) | [`engine/puppet.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/puppet.ts), [`puppet-view.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/puppet-view.ts) | [Characters](characters.md) |
-| Props (SHP at runtime) | [`engine/props.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/props.ts) | [Stage & UI](stage-ui.md), [SHP](../formats/shp.md) |
-| Audio channels + bank library | [`engine/audio.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/audio.ts) | [Audio](audio.md) |
-| The `heapsize` answer the game's `lowmemory()` reads | [`engine/builtins/helpers.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/builtins/helpers.ts) | [The low-memory game](../../taoot/low-memory.md) |
-| Save/load orchestration | [`engine/saveload.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/saveload.ts) | [Saves](saves.md) |
-| Saved-games UI + storage | [`save-browser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-browser.ts), [`save-store.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-store.ts), [`save-seed.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/save-seed.ts) | [Saves](saves.md) |
-| Navigation + rendering | [`viewer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/viewer.ts), [`ring-cache.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/ring-cache.ts) | [Browser host](host.md) |
-| The screen everything composites into | [`screen-presenter.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-presenter.ts), [`screen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen.ts) | [Browser host](host.md) |
-| Movie playback | [`movie-player.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/movie-player.ts), [`df/mov-pace.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-pace.ts) | [Browser host](host.md), [MOV](../formats/mov.md) |
-| Page + input | [`main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/main.ts) | [Browser host](host.md) |
-| What a launch has to have in hand | [`engine/bootplan.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/bootplan.ts), [`host.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/host.ts) | [The boot plan](host.md#the-boot-plan-what-a-game-says-it-needs) |
+| Heartbeat, loops, crickets, walks | [`runtime/scheduler.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/scheduler.ts), [`runtime/clock.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/clock.ts) | [Timing](timing.md) |
+| The mission-4 clock and its phase timetable | [`runtime/scheduler.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/scheduler.ts) (`serviceGameClock`), [`runtime/setscripts.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/setscripts.ts) (`openScene`/`viewChanged`) | [The sinking](../../taoot/sinking.md) |
+| Stage layer (STG at runtime) | [`runtime/stage.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/stage.ts) | [Stage & UI](stage-ui.md) |
+| Actors (CST at runtime) | [`runtime/actors.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/actors.ts), [`runtime/geometry.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/geometry.ts) | [Characters](characters.md) |
+| Puppets (PUP at runtime) | [`runtime/puppet.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/puppet.ts), [`web/puppet-view.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/puppet-view.ts) | [Characters](characters.md) |
+| Props (SHP at runtime) | [`runtime/props.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/props.ts) | [Stage & UI](stage-ui.md), [SHP](../formats/shp.md) |
+| Audio channels + bank library | [`runtime/audio.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/audio.ts) | [Audio](audio.md) |
+| The `heapsize` answer the game's `lowmemory()` reads | [`runtime/builtins/helpers.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/builtins/helpers.ts) | [The low-memory game](../../taoot/low-memory.md) |
+| Save/load orchestration | [`runtime/saveload.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/saveload.ts) (`.ti`), [`runtime/saveload-v1.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/saveload-v1.ts) (`.rtd`) | [Saves](saves.md) |
+| Saved-games UI + storage | [`web/save-browser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-browser.ts), [`web/save-store.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-store.ts), [`taoot/src/save-seed.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/save-seed.ts) | [Saves](saves.md) |
+| Navigation + rendering | [`web/viewer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/viewer.ts), [`web/ring-cache.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/ring-cache.ts) | [Browser host](host.md) |
+| The screen everything composites into | [`web/screen-presenter.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-presenter.ts), [`web/screen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen.ts) | [Browser host](host.md) |
+| Movie playback | [`web/movie-player.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/movie-player.ts), [`df/mov-pace.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-pace.ts) | [Browser host](host.md), [MOV](../formats/mov.md) |
+| Page + input | [`taoot/src/main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/main.ts) | [Browser host](host.md) |
+| What a launch has to have in hand | [`runtime/bootplan.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/bootplan.ts), [`web/host.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/host.ts) | [The boot plan](host.md#the-boot-plan-what-a-game-says-it-needs) |
 
 The interpreter itself — scopes, operators, the event chain — is a language
 topic and stays in **[the scripting doc](../scripting-language.md)**; the

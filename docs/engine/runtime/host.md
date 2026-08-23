@@ -2,33 +2,51 @@
 
 *Prerequisite: [Engine architecture](../architecture.md).*
 
-Everything under `src/` (not `engine/src/df/`, not `engine/src/runtime/`) is the **host**:
-the code that is neither format knowledge nor recovered engine behaviour, but
-the glue that puts the game on a canvas — the page, the navigation renderer,
-the movie player, and input. If the engine is the recovered `TI.EXE`, this layer
-is the recovered *Windows 95* around it.
+The **host** is the code that is neither format knowledge (`engine/src/df/`)
+nor recovered engine behaviour (`engine/src/runtime/`), but the glue that puts
+the game on a canvas — the page, the navigation renderer, the movie player, and
+input. If the engine is the recovered `TI.EXE`, this layer is the recovered
+*Windows 95* around it.
+
+It lives in two places, and the seam between them is the subject of the next
+section. `engine/src/web/` is the reusable half — it knows about canvases and
+key events but not about which game is running. A game's own `src/` is the
+other half: the page, its DOM, and which disc it reads.
+
+**The engine's browser layer** — `engine/src/web/`:
 
 | File | Role |
 |------|------|
-| [`main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/main.ts) | the page: DOM, the cold boot it starts, input, the rAF loop — nothing about the game |
 | [`host.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/host.ts) | `GameHost` — what it means to *run* the game: set activation, prefetch, cold boot, resuming a save |
 | [`viewer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/viewer.ts) | `SetViewer` — navigation state machine + renderer |
 | [`screen-presenter.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-presenter.ts) | `ScreenPresenter` — the one persistent framebuffer everything composites into, and the "is this picture already on the canvas?" check. Owned by the host, so it **outlives the viewers** |
+| [`screen-gamma.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-gamma.ts) | the palette power curve `TI.EXE` applies before anything reaches the screen |
 | [`ring-cache.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/ring-cache.ts) | the LRU of decoded turn/walk rings the viewer draws from |
 | [`movie-player.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/movie-player.ts) | `MoviePlayer` — modal MOV playback |
 | [`puppet-view.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/puppet-view.ts) | conversation rendering (see [Characters](characters.md)) |
-| [`files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/files.ts) | `FileStore` — game files by lowercase basename, lazy dev-server fetching |
-| [`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/bug-report.ts) | the Report bug button: a prefilled GitHub issue, and the screen on the clipboard |
-| [`log-buffer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/log-buffer.ts) | the lines behind X, bounded — and the tail a bug report carries |
-| [`debug-panel.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/debug-panel.ts) | what state the game is in, as a list that patches rather than redraws |
+| [`keys.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/keys.ts) | whether a keypress belongs to whatever has focus or to the game — see [Keys](#keys) |
+| [`save-browser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-browser.ts) / [`save-store.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-store.ts) | the saved-games UI and its IndexedDB store, parameterised on a `SaveKind` so each game gets its own database |
+
+**The page around it** — a game's own `src/`. Titanic's is the fuller one and
+is what this page's examples are drawn from; Dust's is three files, because one
+volume and one edition need much less:
+
+| File | Role |
+|------|------|
+| [`taoot/src/main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/main.ts) | the page: DOM, the cold boot it starts, input, the rAF loop — nothing about the engine |
+| [`taoot/src/files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/files.ts) | `FileStore` — game files by lowercase basename, lazy dev-server fetching, six editions and two CDs |
+| [`taoot/src/log-buffer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/log-buffer.ts) | the lines behind X, bounded — and the tail a bug report carries |
+| [`taoot/src/debug-panel.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/debug-panel.ts) | what state the game is in, as a list that patches rather than redraws |
+| [`site/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | the Report bug button: a prefilled GitHub issue, and the screen on the clipboard. Shared, because both games carry it |
+| [`dust/src/main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/main.ts) / [`dust/src/files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/files.ts) | the same two jobs for [Dust](../../dust/README.md), against one disc |
 
 ## The split, and why it is where it is
 
-`GameHost` owns the session, the open set and the lifecycle between them;
-`main.ts` owns the browser. The host may not mention `document`, `window` or
-WebAudio — the page passes its side in as a **file source**, five **UI
-notifications** (`log`, `hud`, `showStage`, `mapChanged`, `setsChanged`) and an
-`AudioSink`.
+`GameHost` owns the session, the open set and the lifecycle between them; the
+game's `main.ts` owns the browser. The host may not mention `document`,
+`window` or WebAudio — the page passes its side in as a **file source**, five
+**UI notifications** (`log`, `hud`, `showStage`, `mapChanged`, `setsChanged`)
+and an `AudioSink`.
 
 That line is not tidiness. The lifecycle used to live in `main.ts` purely
 because the mutable `viewer` did, and the test suite — unable to import a module
@@ -38,6 +56,11 @@ and didn't reset the scheduler, while three defects sat in the real thing.
 `taoot/tests/auto/regression.ts` now builds the **same `GameHost`** over the on-disk
 `gamefiles/` index and a recording sink, so activation and the cold boot are
 ordinary tests. Anything a test could contradict belongs below the line.
+
+It is also what lets one host run two games. `HostFiles` is the whole contract
+for "where is the data", so Dust's 212-line `files.ts` and Titanic's
+six-edition `FileStore` are interchangeable to everything above them — which is
+why the second game cost a shell rather than a second engine.
 
 ## One rule the host keeps breaking
 
@@ -77,9 +100,15 @@ something to say after this line, and who ends what this line starts?*
 
 ## The page, and going straight in
 
-The game is its own page, `/play/` (`play/index.html`); the front page
-(`index.html`) is welcome text and a Play button, and nothing else. They were
-one document until the welcome had to be hidden the moment the boot had
+Everything below is Titanic's shell, `taoot/`, which has four pages: the front
+page, `/play/`, `/collection/`, and the unlisted `/speedrun/` workbench. Dust's
+shell has two — the game and its own `/collection/` — and reaches the same
+`GameHost` a shorter way, because one disc and one edition need no manifest
+edition axis and no language chooser.
+
+The game is its own page, `/play/` (`taoot/play/index.html`); the front page
+(`taoot/index.html`) is welcome text and a Play button, and nothing else. They
+were one document until the welcome had to be hidden the moment the boot had
 something to draw — which put the sentence explaining that this is a
 re-implementation on screen for exactly as long as the files took to load.
 Splitting them means the front page can wait as long as the reader does, and the
@@ -110,7 +139,7 @@ asked for — the scene/view readout and the script log.
 ### Reporting a bug, and the one thing a URL cannot carry
 
 **Report bug** opens `github.com/dhobi/dreamrefactory/issues/new` with `title` and
-`body` prefilled ([`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/bug-report.ts)):
+`body` prefilled ([`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts)):
 the room, the edition, the page URL, the browser, the window size and the last
 eight lines the engine logged — the three questions every report about this port
 otherwise has to be asked. The title names the room, because that is what makes
@@ -760,7 +789,7 @@ ticks, one moved global costs 2 (its number and its highlight), and the only wri
 left under `all` are the pocketwatch's own.
 
 The lines themselves live in a bounded buffer
-([`log-buffer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/log-buffer.ts)),
+([`log-buffer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/log-buffer.ts)),
 not in the `<pre>`: the pane used to be its own storage and grew without end. A
 whole game is 1141 lines / 40 923 bytes, so the 5000-line cap is not a budget for
 playing — it is a ceiling for a session that never ends, where `movie click …`
@@ -813,7 +842,7 @@ jump fires out of any wait, a modal region wait included; each fires once, on th
 segment's own clock.
 
 **Pacing is the film's, not ours.** `frameHoldMs` — `max(frame hold, segment
-floor)`, [recovered from the demo build](../formats/mov.md#a-movie-carries-its-own-pacing-solved-out-of-the-demo-builds-engine)
+floor)`, [recovered from the demo build](../formats/mov.md#a-movie-carries-its-own-pacing-—-solved-out-of-the-demo-build-s-engine)
 — decides every advance. `chooseFrameInterval` only decides *whether* a movie is
 self-paced at all (0 = a click-through close-up); a frame authored to wait for the
 spoken line holds until the movie's own event sounds are done. The soundtrack is

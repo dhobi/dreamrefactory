@@ -84,12 +84,14 @@ These aren't DreamFactory words; they're names for parts of this project.
 
 | Term | What it means |
 |------|---------------|
-| **Host** | Everything under `src/` that is neither format knowledge (`engine/src/df/`) nor recovered engine behaviour (`engine/src/runtime/`) — the page, the canvas, input, the dev toolbar. [→ the browser host](engine/runtime/host.md#the-split-and-why-it-is-where-it-is) |
+| **Host** | The code that is neither format knowledge (`engine/src/df/`) nor recovered engine behaviour (`engine/src/runtime/`) — the page, the canvas, input, the dev toolbar. It sits in two places: `engine/src/web/` is the reusable half, a game's own `src/` the rest. [→ the browser host](engine/runtime/host.md#the-split-and-why-it-is-where-it-is) |
 | **GameSession** | The object that survives a set change: globals, inventory, the interpreter's state. [→ the GameSession](engine/architecture.md#the-gamesession-the-thing-that-persists) |
 | **Trace** | A snapshot of every script global, the current room and who owns what, taken at a story beat. [→ the playthrough](taoot/verification.md#the-playthrough-the-game-played-not-probed) |
 | **Golden** | A recorded trace a later run is diffed against. [→ what a golden speaks for](taoot/verification.md#one-game-carried-not-a-chain-of-loads) |
-| **Segment** | One stretch of the playthrough route — 29 of them cover the boot to the ending. [→ the playthrough](taoot/verification.md#the-playthrough-the-game-played-not-probed) |
+| **Segment** | One stretch of the playthrough route — 27 of them cover the boot to the ending. [→ the playthrough](taoot/verification.md#the-playthrough-the-game-played-not-probed) |
 | **Carried / loaded** | Whether a segment continued the live game or resumed a `.ti` checkpoint. The two produce different traces, which is why a golden only speaks for one. [→ one game carried](taoot/verification.md#one-game-carried-not-a-chain-of-loads) |
-| **Editor** | One of seven browser pages that opens a container format with the engine's own reader, lets you change what's safe, and exports the repacked file. [→ the browser editors](editors/README.md) |
+| **Editor** | One of seven browser pages that opens a container format with the engine's own reader, lets you change what's safe, and exports the repacked file. They belong to `site/`, not to a game. [→ the browser editors](editors/README.md) |
+| **Package** | One of the four workspaces: `engine/` (knows no game), `site/` (the shared web presence and the editors), `taoot/` and `dust/` (a game each). Dependencies point one way only. [→ four packages](engine/architecture.md#four-packages-and-which-way-they-point) |
+| **Shell** | A game's own `src/` — the page around the canvas, and which disc it reads. Everything a `GameHost` is parameterised on. [→ where a game's own code lives](engine/architecture.md#where-a-game-s-own-code-lives) |
 
 Back to the [documentation home](README.md).

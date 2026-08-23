@@ -1,6 +1,7 @@
 # The browser editors
 
-Seven pages the dev server hosts alongside the game. They are not CLIs and they
+Seven pages the project's own site hosts — `npm run dev`, on 5173, beside the
+front door rather than beside either game. They are not CLIs and they
 need no `gamefiles/` directory: each one takes a file you give it, takes it
 apart into the pieces that format is made of, lets you change the parts that
 are safe to change, and hands the repacked file back.
@@ -15,19 +16,30 @@ body). The one file the game *writes* rather than reads, the `.ti`
 
 | Editor | Page | Format | Source |
 |--------|------|--------|--------|
-| [Set editor](sets.md) | `/editors/sets.html` | [SET](../engine/formats/set.md) — rooms, scenes, views | [`editors/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/set-editor.ts) |
-| [Shop editor](shops.md) | `/editors/shops.html` | [SHP](../engine/formats/shp.md) — props | [`editors/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/shp-editor.ts) |
-| [Movie editor](movies.md) | `/editors/movies.html` | [MOV](../engine/formats/mov.md) — cutscenes & close-ups | [`editors/mov-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/mov-editor.ts) |
-| [Stage editor](stages.md) | `/editors/stages.html` | [STG](../engine/formats/stg.md) — full-screen flats & UI | [`editors/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/stg-editor.ts) |
-| [Track editor](tracks.md) | `/editors/tracks.html` | [TRK / SFX / 11K](../engine/formats/audio.md) — audio banks | [`editors/track-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/track-editor.ts) |
-| [Puppet editor](puppets.md) | `/editors/puppets.html` | [PUP](../engine/formats/pup-cst.md) — conversations | [`editors/puppet-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/puppet-editor.ts) |
-| [Cast editor](casts.md) | `/editors/casts.html` | [CST](../engine/formats/pup-cst.md) — actor sprites | [`editors/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/cst-editor.ts) |
+| [Set editor](sets.md) | `/editors/sets.html` | [SET](../engine/formats/set.md) — rooms, scenes, views | [`site/editors/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/set-editor.ts) |
+| [Shop editor](shops.md) | `/editors/shops.html` | [SHP](../engine/formats/shp.md) — props | [`site/editors/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/shp-editor.ts) |
+| [Movie editor](movies.md) | `/editors/movies.html` | [MOV](../engine/formats/mov.md) — cutscenes & close-ups | [`site/editors/mov-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/mov-editor.ts) |
+| [Stage editor](stages.md) | `/editors/stages.html` | [STG](../engine/formats/stg.md) — full-screen flats & UI | [`site/editors/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/stg-editor.ts) |
+| [Track editor](tracks.md) | `/editors/tracks.html` | [TRK / SFX / 11K](../engine/formats/audio.md) — audio banks | [`site/editors/track-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/track-editor.ts) |
+| [Puppet editor](puppets.md) | `/editors/puppets.html` | [PUP](../engine/formats/pup-cst.md) — conversations | [`site/editors/puppet-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/puppet-editor.ts) |
+| [Cast editor](casts.md) | `/editors/casts.html` | [CST](../engine/formats/pup-cst.md) — actor sprites | [`site/editors/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/cst-editor.ts) |
 
-All of it lives in `editors/`: one HTML page and one module per editor, the
-`editor.css` all of them share, and an `index.html` that lists them — the page
-`/editors/` itself serves. Each page is its own Vite entry point, so a build
-emits eight pages plus one shared stylesheet. Nothing in there imports
-`engine/src/runtime/`; the only shared code is `engine/src/df/` and `engine/src/web/screen.ts`.
+All of it lives in `site/editors/`: one HTML page and one module per editor,
+the `editor.css` all of them share, and an `index.html` that lists them — the
+page `/editors/` itself serves. Each page is its own Vite entry point in
+`site/vite.config.ts`, which builds nine in total: the front door and these
+eight.
+
+They are the **site's** rather than a game's, and deliberately: an editor opens
+a file out of whichever rip you point it at, so making it belong to one game
+would have pointed a dependency from the shared package into one of its own
+consumers. What they need to know about a game — which trees a rip offers, what
+to call them, which code page each one's text is in — is
+`site/src/games.ts`.
+
+Nothing in there imports `engine/src/runtime/`; the only shared code is
+`engine/src/df/` and `engine/src/web/screen.ts`. That is the line that keeps an
+editor a file tool rather than half a game.
 
 ## What they have in common
 
@@ -35,8 +47,8 @@ The seven pages look different because the formats do, but underneath they are
 the same four ideas.
 
 **They read with the engine's own code.** An editor does not have a parser of
-its own. `editors/sets.html` opens a room through the same `readSetFile` the
-runtime loads a room with, `editors/tracks.html` decodes a bank through the
+its own. `site/editors/sets.html` opens a room through the same `readSetFile` the
+runtime loads a room with, `site/editors/tracks.html` decodes a bank through the
 same `decodeAudioContainer` the audio channel plays through. So the editor cannot
 drift from the port: if a page draws a hotspot in the wrong place, the engine
 is putting it there too. The editors are, in practice, the best debugger the

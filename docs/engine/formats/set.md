@@ -183,13 +183,107 @@ behind the camera and hidden. Sprites also **scale with depth**, so a teacup
 looks bigger up close. The full derivation lives in the project README and the
 props code; you need it only when working on in-world prop placement.
 
+## DreamFactory 1 (Dust)
+
+Everything above is a **v4** set, as *Titanic* writes them. *Dust* writes
+version 1, and this is the format where the two engines differ most — not in
+the bytes, but in the **model of movement**. It is worth reading even if you
+only care about v4, because v1 is where v4's rings and roads came from.
+
+### A grid and one table, not rings and roads
+
+A v4 scene is a standpoint carrying two full 360° turn rings, joined to other
+scenes by roads. A v1 set has neither. It has a **grid of cells**, and one flat
+table of transitions in which a turn and a walk are the same kind of record:
+
+    from (x, z, facing)  ->  to (x, z, facing)   + a run of frames
+
+Turning is the record where the cell is equal and the facing differs; walking is
+the record where the facing is equal and the cell differs. `APOTH.SET` has 28 of
+them, and 28 is exactly 3 walkable cells × 8 turns (four facings, each way
+round) + 4 walks (0↔1, 1↔2). Nothing else is stored because nothing else exists:
+**there is no way to face a direction the table has no record for.** Titanic's
+rings and roads are that table with the turns factored out of it.
+
+The two engines also pack the header differently. The registers a v4 set spreads
+over eight bytes, a v1 set packs into four — the i32 at 0x1c reads `0x002c0001`
+in `APOTH`, whose low half is the main script and whose high half (44) is the
+transition register. The palette sits at 0x50 rather than 0xf2, and every offset
+after it shifts.
+
+### The frame runs, and the sixth container
+
+A transition record names its **first** frame container and not how many follow.
+Each is allotted six containers, of which the move is the first **five**, ending
+on the arrival standpoint's picture. A move wanting fewer leaves the tail as
+gap containers — which is how `APOTH.SET` comes to have 40 gaps among its 192
+frame slots.
+
+The sixth, where it exists at all, is not part of the move: it is the **hi-res
+standing view of the standpoint the transition departs from** — v4's
+`motionInfo == 2` twin, which v4 stores at the head of a register and v1 at the
+tail of the slot. Counting it as part of the move breaks the set outright: a
+standpoint's picture is agreed on by 44 of 44 arrivals and departures when the
+run is five, and by 12 of 44 when it is six, which showed up as a turn ending on
+a view of somewhere else entirely.
+
+### Read as v1, played as v4
+
+Three modules, and the split is deliberate:
+
+| | |
+|---|---|
+| [`set-v1.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set-v1.ts) | reads the file **as what it is** — grid, cells, transitions. Its own reader, because a shared one would have to pretend the two models are one thing, and reading v1 through the v4 shapes would mean synthesizing rings nobody authored |
+| [`set-v1-to-v4.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set-v1-to-v4.ts) | rearranges that into the `SetFile` the viewer already knows, so there is one viewer rather than two |
+| [`set-any.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set-any.ts) | opens either without knowing which, as a tagged union, so the compiler asks which model you are holding |
+
+The rearrangement is **exact rather than approximate**, and for a reason worth
+stating: a v1 cell has exactly eight turns, so its two rings are already
+authored and merely not adjacent; a v1 turn is five frames ending on the
+arrival, which is precisely a ring walked from one standpoint to the next; and
+v4 wants each standpoint twice, low-res in the right ring and hi-res in the
+left, which is exactly the two pictures v1 stores. The viewer's
+settle-sharpens-the-picture behaviour therefore comes out of Dust's own art
+rather than being simulated.
+
+### What is derived, and what is still unknown
+
+A v4 `FrameInfo` carries the camera's world position and rotation. A v1 frame
+carries no pose at all, so the original engine must have derived one from the
+grid — and so does this, from measurements off the disc rather than from
+choices:
+
+- **the scale**, 256 world units per cell, from the actor registers: across
+  every set with a cast the largest actor coordinate falls just under
+  `gridWidth * 256` and never over it;
+- **the eye height**, from the header word at 0x1a — the only one that varies
+  with the room (90 in the courtroom, 230 in the Chinese laundry);
+- **the headings**, from the walks: a v1 walk keeps the same facing at both ends
+  on 26 of 26 sets, so the cell delta names the heading, and read that way the
+  disc has no contradictions at all.
+
+Still **unmeasured**: the field of view, which the viewer takes as
+`max(w, h) / 2` for every set. If Dust's cameras were rendered at a different
+focal length, sprites sit at the right bearing and the wrong distance from the
+centre, and nothing in the header has been shown to be that number yet.
+
+There *is* a Z layer in a v1 frame — all 10,616 of them carry one, in the same
+place and encoding v4 uses — so scenery occludes sprites here too. What v1 has
+no header field for is the depth quantization, and both of its numbers are
+measured instead.
+
+`npx tsx dust/tools/dustsets.ts` reads every SET on the disc through the v1
+reader and prints what came out. Its last line is the one that matters:
+`warnings` is everything the reader had to assume and could not confirm, which
+is how each of the claims above was settled.
+
 ## Related tools
 
-- `npm run dump -- gamefiles/en/titanic2/DATA/b59.set out/` — decode a set and write its
+- `npm run dump -- taoot/gamefiles/en/titanic2/DATA/b59.set out/` — decode a set and write its
   frames as PNGs ([tools/dumpset.ts](https://github.com/dhobi/dreamrefactory/blob/master/tools/dumpset.ts)).
-- `npx tsx taoot/tools/navdump.ts gamefiles/en/titanic2/DATA/b59.set out/` — headless
+- `npx tsx taoot/tools/navdump.ts taoot/gamefiles/en/titanic2/DATA/b59.set out/` — headless
   navigation test.
-- [`editors/sets.html`](../../editors/sets.md) — the browser editor:
+- [`site/editors/sets.html`](../../editors/sets.md) — the browser editor:
   browse the scenes, views, hotspots, rings, roads, actor marks, maps and
   scripts of a set, play a turn or a walk, edit the names, the hotspot
   rectangles and the actor placement, replace a view's art, and export the

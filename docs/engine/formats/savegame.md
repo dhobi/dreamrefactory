@@ -110,7 +110,7 @@ live scheduler.
 
 (There is **no location-stream container**. A "savestate stack" of facing, road,
 coordinate and set strings was long believed to have one — see
-[the container that wasn't there](#the-location-container-that-wasnt-there).)
+[the container that wasn't there](#the-location-container-that-wasn-t-there).)
 
 ### The crowd comes from this container
 
@@ -1053,7 +1053,7 @@ the set file's manifest path + register refs** (see
 every loaded prop's full record, every actor's full record — **appending** one for a
 crowd extra the base save lacks — the scheduler's loop and cricket tables (walks
 zeroed), and the playing theme
-([one record per loop chunk of the bank](#the-playinglooping-lists-mirror-the-bank-record-for-record)).
+([one record per loop chunk of the bank](#the-playing-looping-lists-mirror-the-bank-record-for-record)).
 Everything the loader ignores stays byte-for-byte as the base had it.
 
 Back to the [format index](README.md), or on to how the running game uses

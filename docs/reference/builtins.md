@@ -4,7 +4,7 @@
 builtin is and how calls resolve.*
 
 This is the inventory of every engine command the port registers — roughly
-**250 builtins plus 22 `sendto*` special forms**, grouped by the modules under
+**249 builtins plus 25 `sendto*` special forms**, grouped by the modules under
 [`engine/src/runtime/builtins/`](https://github.com/dhobi/dreamrefactory/tree/master/engine/src/runtime/builtins).
 The [opcode table](../engine/formats/script-container.md#command-ids-the-opcode-table)
 names ~280 commands in total; the gap between "named" and "implemented" is
@@ -44,16 +44,22 @@ not evaluated locally):
 `sendtopuppet`, `sendtocast`, `sendtostage`, `sendtoflat`, `sendtoboot`,
 `sendtopost`, `sendtoserver` — and their `fx` variants (`sendtopropfx`,
 `sendtoactorfx`, `sendtocastfx`, `sendtoshopfx`, `sendtostagefx`,
-`sendtopuppetfx`), which resolve the same single script as their siblings.
+`sendtopuppetfx`, `sendtoflatfx`, `sendtopostfx`, `sendtoserverfx`), which
+resolve the same single script as their siblings.
 `sendtopainting`/`sendtopaintingfx` take (scene, view, painting, call);
 `sendtobutton`/`sendtobuttonfx` take (flat, button, call) — see
 [Stage & UI](../engine/runtime/stage-ui.md#buttons-sendtobutton).
+
+The last three `fx` forms are **Dust's**, and Titanic asks for none of them:
+`extra.cst`'s crowd router uses `sendtoflatfx`, `sendtopostfx` and
+`sendtoserverfx`, and unregistered they were not special forms at all, so
+their deferred argument evaluated locally instead of on the target.
 
 ## Scene, stage & screen — `scene.ts`
 
 The largest family. Set/scene/view state and travel primitives
 (`opensetfile`, `closesetfile`, `currentset`, `currentscene`, `currentview`,
-`roadahead`, `camerahi`), the stage layer (`openstagefile`, `closestagefile`,
+`roadahead`, `camerahi`, `scenexyz`), the stage layer (`openstagefile`, `closestagefile`,
 `currentstage`, `currentflat`, `gotoflat`, `flattoindex`, `indextoflat`,
 `setvisible`, `stagevisible`), resource
 open/close (`openshopfile`, `closeshopfile`, `fileexists`), movies
@@ -89,8 +95,8 @@ stage in the game relies on, and nothing else was doing.
 
 `propexists`, `propis3d`, `propdelete`, `propvisible`, `propview`, `propxy`,
 `propxyz`, `propset`, `propscale`, `propzclip`, `propowner`, `propinstance`,
-`propdeg`, `propdist`, `propvalue`, `propstar`, `starxyz`, `countprops`,
-`indextoprop`, `error`. See [SHP](../engine/formats/shp.md) for the placement
+`propdeg`, `propdist`, `propspeed`, `propvalue`, `propstar`, `starxyz`,
+`countprops`, `indextoprop`, `error`. See [SHP](../engine/formats/shp.md) for the placement
 model (`propxy` screen-space vs `propxyz` world-space).
 
 `countprops`/`indextoprop` enumerate **one game-wide table** — the union of every
@@ -165,9 +171,9 @@ never exercises meaningfully (`puppetsubtitle`, `puppetgrab`,
 ## Pointer & text — `pointer.ts`
 
 `makepoint`, `pointx`, `pointy` (the packed point `(x<<16)|y`), `mouse`,
-`button`, `stilldown`, `hittest`, `result`, `flushevents`, `mousedown`,
-`pointinbutton`, `pointinprop`, and the text overlay pair
-`drawstring` / `stringwidth`. These are what drag loops (the wireless tuning
+`button`, `stilldown`, `hittest`, `result`, `flushevents`, `mousedown`, the
+five hit tests (`pointinbutton`, `pointinprop`, `pointinactor`, `pointinset`,
+`pointinstage`), and the text overlay pair `drawstring` / `stringwidth`. These are what drag loops (the wireless tuning
 knob, the gramophone crank) are built from.
 
 `trackbut` is deliberately **not** here. It is a BOOTFILE library code the game

@@ -15,7 +15,7 @@ Reference implementation:
 (bytes); the UI is
 [`engine/src/web/save-browser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-browser.ts) /
 [`save-store.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-store.ts) /
-[`save-seed.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/save-seed.ts).
+[`save-seed.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/save-seed.ts).
 
 ## Saving: snapshot = base save + patch
 
@@ -84,7 +84,7 @@ writes:
   chunk of the bank**, taken from the open bank itself (`AudioLibrary.loopTable`):
   TI.EXE's post-load resume walks the bank's tables against these lists and a
   shorter one overruns its heap blocks in the original engine — see
-  [the lists mirror the bank](../formats/savegame.md#the-playinglooping-lists-mirror-the-bank-record-for-record).
+  [the lists mirror the bank](../formats/savegame.md#the-playing-looping-lists-mirror-the-bank-record-for-record).
 
 Everything the loader ignores stays byte-for-byte as the base had it.
 

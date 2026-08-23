@@ -8,7 +8,7 @@ of `"none"`, a timer that never fires. This page is the answer to the question
 that follows every claim in these docs — **how was that checked?**
 
 Everything under
-[`tests/`](https://github.com/dhobi/dreamrefactory/tree/master/tests) runs
+[`tests/`](https://github.com/dhobi/dreamrefactory/tree/master/taoot/tests) runs
 **headless against the original game files** (a local `gamefiles/` copy), in
 three categories with three different budgets. The inventory of what each suite
 covers, and the commands to run them, is
@@ -23,7 +23,7 @@ reason this page exists.
 ## Determinism: what a run must not depend on
 
 Only
-[`harness.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/harness.ts)
+[`harness.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/harness.ts)
 sits above the three categories — a real `GameHost` over the on-disk game files,
 which the automatic suites and the playthrough both boot.
 
@@ -73,12 +73,12 @@ by a tick.
 
 ## The playthrough: the game played, not probed
 
-[`playthrough/playthrough.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/playthrough/playthrough.ts)
+[`playthrough/playthrough.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/playthrough/playthrough.ts)
 is a different shape from the scenario suites. Those jump to a state and probe
 it; this one drives the game the way a player does and never calls `jumpTo`. It
 runs from the cold boot to the closing narration in **27 segments** — the routes
 themselves are
-[`segments.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/playthrough/segments.ts),
+[`segments.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/playthrough/segments.ts),
 one function per segment with the reading of the scripts it was written from in
 its header, and the segment-by-segment table of what each one crosses is
 **[the route](../reference/route.md)**.
@@ -177,7 +177,7 @@ segments, ~7474 through the fencing bout, never again, and 7473 against 7481
 across two identical runs.
 
 **Both comparisons import that list from one place**
-([`playthrough/masks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/playthrough/masks.ts)),
+([`engine/src/runtime/masks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/masks.ts)),
 because they each kept their own and the two drifted: `lastsail` was masked
 headless and not in the browser, so every browser segment from 13 on failed on a
 frame stamp the other suite had already identified — one off-by-one presenting as
@@ -198,7 +198,7 @@ opening onto C78 — and masking the flag does not mask that, since the puppet,
 
 ### The same route, in a real browser
 
-[`browser/playthrough.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/browser/playthrough.ts)
+[`browser/playthrough.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/browser/playthrough.ts)
 replays the *same* routes through real mouse and keyboard events against a live
 dev server and diffs against the *same* golden traces. Everything the two share
 is identical by construction, so a divergence is by elimination a browser-layer
@@ -388,7 +388,7 @@ first:
   replaces, where being stricter would refuse a click that worked. The playthrough
   **cannot** test this — the route was tuned around the bug standpoint by
   standpoint, so a green run makes not one dud click and the branch never runs;
-  [`auto/nav.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/nav.ts)
+  [`auto/nav.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/nav.ts)
   covers it with a stub driver, and against the old behaviour it fails with the
   exact lie (`{"ok":true,"gestures":1}`).
 
@@ -614,7 +614,7 @@ the camera. Same fix on the world-prop twin.
 ## Routes name places, not pixels
 
 A route says `travel("gym")` and
-[taoot/tests/playthrough/nav/](https://github.com/dhobi/dreamrefactory/tree/master/tests/playthrough/nav)
+[taoot/tests/playthrough/nav/](https://github.com/dhobi/dreamrefactory/tree/master/taoot/tests/playthrough/nav)
 works out the rest: the rooms (`shipgraph.ts`, extracted from every exit in the
 scripts), the turns and walks inside each one (`setpath.ts`, whose geometry
 comes from `engine/src/df/set.ts` — the same `turnRing`/`roadsAt` SetViewer uses, so a
@@ -682,12 +682,12 @@ player clicks again, and "the bag would not open" now names the states that refu
 ### How the same route drives two hosts
 
 A segment is written against
-[`Story`](https://github.com/dhobi/dreamrefactory/blob/master/tests/playthrough/story.ts):
+[`Story`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/playthrough/story.ts):
 a `Navigator`, a `NavDriver`, and **synchronous** getters for the state a route
 may ask about (`num("phase")`, `owns("watch")`, `deg("dial1")`). Headless those
 read live. In a browser the engine is in another process, where every read is a
 round trip — so
-[`browser/driver.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/browser/driver.ts)
+[`browser/driver.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/browser/driver.ts)
 keeps a **mirror** of exactly that state, sampled in one `page.evaluate` after
 every gesture and on every turn of every poll loop. A getter is therefore as
 fresh as the last gesture, which is the only moment a route reads anything.
@@ -713,7 +713,7 @@ last move *did*. `TURBINE.SHP` holds the input for as long as the button is down
 and moves each dial by a fixed step in whichever direction the cursor has swung
 about its pivot — so a setting is an arc, not a click, and the dial is a ratchet
 rather than a pointer. Two properties of that make it portable
-([`nav/dials.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/playthrough/nav/dials.ts)):
+([`nav/dials.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/playthrough/nav/dials.ts)):
 a cursor that does not move does not move the dial, so extra frames are free and
 the two hosts turn it by the same amount; and the arc has to stay on the canvas,
 because a browser only sees a `mousemove` while the cursor is over it, and an arc

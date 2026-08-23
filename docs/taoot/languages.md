@@ -128,7 +128,7 @@ skips languages that are not installed, and fails if it ended up checking nothin
 ## The chooser is `lang.stg`
 
 The screen the player sees is a two-flat stage — `choose` and `wait` — built by
-[`taoot/tools/mklangstg.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/mklangstg.ts)
+[`taoot/tools/mklangstg.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/mklangstg.ts)
 and shipped in `public/`, so it is served at `/lang.stg` in dev and bundled into a
 production build. Nothing in it derives from the game's data (its own palette, its
 own art drawn with a 5×8 pixel font, its own scripts), which is why it can live in
@@ -155,7 +155,7 @@ Setting a global rather than calling something is the crux: **there is no builti
 for "pick a language"**, and inventing an opcode the 1996 engine never had would
 make the file unopenable by anything but this port. So the script states the
 choice and the host reads it back — `LangChooser.chosen()` in
-[`taoot/src/lang-chooser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/lang-chooser.ts).
+[`taoot/src/lang-chooser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/lang-chooser.ts).
 
 Closing the chooser then **deletes** that global, which is not tidiness:
 `snapshotSave` writes every script global into the `.ti`, and a base save has only
@@ -232,8 +232,8 @@ in there. Player-made saves are untouched.
 | You want | Do this |
 |----------|---------|
 | skip the screen | `?edition=de` — a link carries it, and it is remembered |
-| change your mind | the **Edition** row on the play page, the editors and the collection ([`taoot/src/editions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/editions.ts)) — one choice, carried between all three. Switching is a reload on the two that have read data: a live session is holding boot scripts, shops and sound banks from the edition being left |
-| a different page language | the 🌐 dropdown in the top bar, which is that and nothing else ([`site/src/lang-menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/lang-menu.ts)) |
+| change your mind | the **Edition** row on the play page, the editors and the collection ([`taoot/src/editions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/editions.ts)) — one choice, carried between all three. Switching is a reload on the two that have read data: a live session is holding boot scripts, shops and sound banks from the edition being left |
+| a different page language | the 🌐 dropdown in the top bar, which is that and nothing else ([`site/src/lang-menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/lang-menu.ts)) |
 | pin it for tests | `TAOOT_LANG` (Node), which the browser suites pass through as `?edition=` |
 | rebuild the stage | `npm run mklang` — then, if you like, restyle it in [the stage editor](../editors/stages.md) |
 
@@ -242,7 +242,7 @@ in there. Player-made saves are untouched.
 Everything above is about the **game's** text, which CyberFlix already translated
 six ways and which this port only has to decode. The port's own chrome — the top
 bar, the front page, the boot notice, the editors' furniture — is a separate
-problem with a separate answer in [`site/src/locales/`](https://github.com/dhobi/dreamrefactory/blob/master/src/locales/en.ts),
+problem with a separate answer in [`site/src/locales/`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/locales/en.ts),
 and, deliberately, a **separate setting**.
 
 Separate because which editions an install carries is a fact about the reader's

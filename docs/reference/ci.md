@@ -11,13 +11,21 @@ Measured, in a checkout with no `gamefiles/` present:
 
 | | Suites | Tests | Runs on |
 |---|---|---|---|
-| **without the rip** | 15 files | 111 pass, 3 skip, ~15 s | GitHub's machines — any pull request, forks included |
-| **needs the rip** | 9 files | 121 tests fail without it | the self-hosted runner, same-repo branches only |
+| **without the rip** | 28 files | 211 pass, 2 skip, ~8 s | GitHub's machines — any pull request, forks included |
+| **needs the rip** | 10 files | 321 tests with it, and they fail without | the self-hosted runner, same-repo branches only |
 
-The nine are `regression`, `savegame`, `re_builtins`, `interp`, `nav`, `text`,
-`audio-rates`, `sound-channels`, `shp-play-order`. Everything else builds its
-own fixtures with [the write path](../engine/formats/README.md#writing-one-back)
-instead of reading the game, which is exactly why it travels.
+The ten are all Titanic's — `regression`, `savegame`, `re_builtins`, `interp`,
+`nav`, `text`, `audio-rates`, `sound-channels`, `shp-play-order`,
+`cst-play-order` — and `tests.yml` names them as an **exclusion**, so a suite
+added later runs on GitHub's machines by default and, if it turns out to need
+the rip, fails loudly and gets added to the list. The other direction would
+have skipped it in silence.
+
+Everything else builds its own fixtures with
+[the write path](../engine/formats/README.md#writing-one-back) instead of
+reading the game, which is exactly why it travels — and that now includes all
+of `engine/tests/` and `site/tests/`, plus Dust's three, which
+[skip](tests.md#dust-s-suites-—-dust-tests) rather than fail without a disc.
 
 They fail rather than skip on purpose — `text.ts` asserts that it found language
 trees, because a suite that silently checks nothing would let the table rot
@@ -29,8 +37,8 @@ behind a green tick.
 |---|---|---|
 | [`tests.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` on GitHub's machines; `full` (whole auto suite + playthrough) self-hosted |
 | [`browser.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/browser.yml) | nightly 02:00 UTC, manual, or the `full-run` label on a PR | the browser suite — ~39 min, because it costs what the game costs |
-| [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to Pages |
-| [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `v*` tag, or manual | builds and uploads `dist/` to the host — [releasing and deploying](deploy.md) |
+| [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to `/dreamrefactory/docs/`, over the same FTP mirror the builds use. Not versioned against a game — [why](deploy.md#the-documentation-is-not-a-release) |
+| [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*` or `dust-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the three is an error rather than a default. [Releasing and deploying](deploy.md) |
 
 The browser suite is off the per-PR path deliberately. Add the **`full-run`**
 label to a pull request to pull it in for that PR.
@@ -368,8 +376,13 @@ common way self-hosted runners get compromised.
 
 Add it and let it fail. A new file runs in `portable` by default, and if it
 opens `gamefiles/` it fails there loudly — then add its name to the exclude glob
-in `tests.yml`. The list is written as the *inverse* (the nine that need the
+in `tests.yml`. The list is written as the *inverse* (the ten that need the
 rip) for exactly this reason: the failure mode is "we noticed", not "silently
 untested".
+
+Dust's suites make the other bargain and **skip** without a disc, which is why
+`DUST_GAMEFILES` is optional on the runner while `TAOOT_GAMEFILES` is required.
+If you add a Dust suite that cannot skip, say so — an unset variable there is a
+warning naming what will not be covered, not a failure.
 
 Back to the [reference index](README.md).
