@@ -357,6 +357,111 @@ const HEAD_STEPS: ReadonlyArray<readonly [number, string]> = [
   [HEAD, "indexing the CD"],
 ];
 
+/**
+ * The network meter — one rolling window for the WHOLE loading page.
+ *
+ * Every byte the loader pulls down feeds this: the two fetches the head phase
+ * makes itself (the panel and the fallback room) and every chunk the file store
+ * streams afterwards. One window rather than one per phase, because a player
+ * watching a bar does not care which of the page's code paths is doing the
+ * fetching — they want to know whether anything is arriving and how fast.
+ *
+ * Sampled per CHUNK and read on a TIMER, and both halves of that matter. Measured
+ * per completed file, on the arrival that completed it, the first thing the boot
+ * fetches divides its whole size by a window that has barely opened: a 13 MB film
+ * reported some tens of MB/s the instant it landed, and nothing at all for the
+ * minute it spent arriving. On a slow connection that was the entire experience
+ * of this loader — a frozen bar under a number that was never true.
+ */
+const WINDOW_MS = 3000;
+/** the least window worth dividing by; under it there is no number to give */
+const SETTLE_MS = 900;
+const TICK_MS = 250;
+const netSamples: { t: number; bytes: number }[] = [];
+let netTotal = 0;
+let meterTimer = 0;
+/** the last thing the LOADER said, to fall back to when the wire goes quiet */
+let idleCaption = "";
+/** is the caption currently a rate, and therefore mine to replace? */
+let rateShown = false;
+
+/** every chunk of every fetch the loading page makes */
+function netChunk(bytes: number): void {
+  netSamples.push({ t: performance.now(), bytes });
+  netTotal += bytes;
+}
+
+/**
+ * Show the rate while bytes are arriving, and get out of the way when they are
+ * not: a rate that survives the transfer it measured is the misleading thing,
+ * and what the page has to say between fetches (which room it is opening, what
+ * the boot just loaded) is better than a stale number.
+ */
+function meterTick(): void {
+  const now = performance.now();
+  while (netSamples.length && now - netSamples[0].t > WINDOW_MS) netSamples.shift();
+  const span = netSamples.length ? now - netSamples[0].t : 0;
+  const got = netSamples.reduce((a, x) => a + x.bytes, 0);
+  const rate = span >= SETTLE_MS ? got / (span / 1000) : 0;
+  if (rate) {
+    bootSayEl.textContent = `${fmtRate(rate)} · ${fmtSize(netTotal)} so far`;
+    rateShown = true;
+  } else if (rateShown) {
+    bootSayEl.textContent = idleCaption;
+    rateShown = false;
+  }
+}
+
+function startMeter(): void {
+  if (!meterTimer) meterTimer = window.setInterval(meterTick, TICK_MS);
+}
+function stopMeter(): void {
+  if (meterTimer) clearInterval(meterTimer);
+  meterTimer = 0;
+}
+
+/**
+ * A fetch whose bytes drive the bar between two marks, for the two files the
+ * head phase pulls before the file store exists. `Content-Length` is what makes
+ * the fraction possible; without one (a chunked or compressed response) the
+ * bytes still feed the meter and the bar simply waits for the mark.
+ */
+async function fetchWatched(url: string, from: number, to: number): Promise<Response> {
+  const res = await fetch(url);
+  if (!res.ok || !res.body) return res;
+  const total = Number(res.headers.get("content-length") ?? 0);
+  let got = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = res.body!.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        got += value.byteLength;
+        netChunk(value.byteLength);
+        if (total > 0) progress(from + (to - from) * Math.min(1, got / total));
+        controller.enqueue(value);
+      }
+      controller.close();
+    },
+  });
+  return new Response(stream, { headers: res.headers, status: res.status });
+}
+
+/** "1.4 MB/s" or "830 KB/s" — whichever reads as a number rather than as noise */
+function fmtRate(bytesPerSecond: number): string {
+  return bytesPerSecond >= 1024 * 1024
+    ? `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`
+    : `${Math.max(1, Math.round(bytesPerSecond / 1024))} KB/s`;
+}
+
+/** "13.1 MB" or "412 KB" — how much has actually come down the wire */
+function fmtSize(bytes: number): string {
+  return bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 /** the bar only ever goes forwards, whatever order the answers arrive in */
 let burnt = 0;
 let shownPct = -1;
@@ -371,7 +476,11 @@ function progress(f: number, label?: string): void {
   }
   // the caption is one line and the newest one wins: what a player watches for
   // two seconds is the engine naming what it just opened
-  if (label) bootSayEl.textContent = label;
+  if (label) {
+    idleCaption = label;
+    bootSayEl.textContent = label;
+    rateShown = false;
+  }
 }
 
 /**
@@ -581,8 +690,10 @@ function clearScreen(): void {
  * because a v1 `.FLT` is a v4 `.STG` with a shorter header and a 28-byte flat
  * record instead of 46. Nothing here knows which it got.
  */
-async function loadPanel(): Promise<void> {
-  const res = await fetch(SET_DIR + BOOT_STAGE);
+async function loadPanel(span?: { from: number; to: number }): Promise<void> {
+  const res = span
+    ? await fetchWatched(SET_DIR + BOOT_STAGE, span.from, span.to)
+    : await fetch(SET_DIR + BOOT_STAGE);
   if (!res.ok) return;
   const stg = readStgFile(new Uint8Array(await res.arrayBuffer()));
   const flat =
@@ -636,9 +747,14 @@ async function move(t: V1Transition): Promise<void> {
   }
 }
 
-async function load(name: string): Promise<void> {
+async function load(name: string, span?: { from: number; to: number }): Promise<void> {
   errEl.textContent = "";
-  const res = await fetch(SET_DIR + name);
+  // `span` is the boot's call, where this room is a multi-megabyte fetch the
+  // player is waiting on; the browse controls call it without one, where the bar
+  // is not on screen to move
+  const res = span
+    ? await fetchWatched(SET_DIR + name, span.from, span.to)
+    : await fetch(SET_DIR + name);
   if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   const version = detectVersion(bytes);
@@ -736,11 +852,17 @@ async function browse(): Promise<void> {
   }
   // the panel first, exactly as boot() does it: openstagefile before any room
   progress(...HEAD_STEPS[1]);
-  await loadPanel().catch(() => {
+  await loadPanel({ from: HEAD_STEPS[1][0], to: HEAD_STEPS[2][0] }).catch(() => {
     /* the shell still works without it */
   });
   progress(...HEAD_STEPS[2]);
-  await load(sets.includes("APOTH.SET") ? "APOTH.SET" : sets[0]);
+  // the room is the big one — a couple of megabytes, and then ~150 frames to
+  // decode. Its bytes carry the bar from here to just short of the head's end,
+  // leaving the last of the span for the decode that follows them.
+  await load(sets.includes("APOTH.SET") ? "APOTH.SET" : sets[0], {
+    from: HEAD_STEPS[2][0],
+    to: HEAD - 0.06,
+  });
 }
 
 /**
@@ -823,24 +945,38 @@ async function runBoot(): Promise<void> {
    * The caption under the bar is the TRANSFER RATE, not the filename — the names
    * scrolled by too fast to read once the intro films (13 MB) joined the
    * prefetch, and a rate is what a person staring at a loading bar actually
-   * wants to know. A three-second rolling window, so the number settles instead
-   * of averaging the whole boot into one stale figure.
+   * wants to know.
+   *
+   * Both halves of that — the number and the bar — are driven by CHUNKS on a
+   * TIMER, and they have to be. Measured per completed file, on the arrival that
+   * completed it, the first thing the boot fetches divides its whole size by a
+   * window that has barely opened: a 13 MB film reported some tens of MB/s the
+   * instant it landed, and nothing at all for the minute it spent arriving. On a
+   * slow connection that is the entire experience of the loader — a frozen bar
+   * under a number that was never true.
+   *
+   * So: a three-second rolling window of chunk samples, read by a ticker four
+   * times a second, and no number at all until the window is wide enough to mean
+   * something. When nothing is arriving the caption falls back to the total
+   * downloaded, which is a fact that cannot go stale — rather than holding up the
+   * last rate, which is the misleading thing.
    */
-  const recent: { t: number; bytes: number }[] = [];
-  files.onFileLoaded = (_name, bytes) => {
-    const now = performance.now();
-    recent.push({ t: now, bytes });
-    while (recent.length > 1 && now - recent[0].t > 3000) recent.shift();
-    const got = recent.reduce((a, s) => a + s.bytes, 0);
-    const secs = Math.max(0.25, (now - recent[0].t) / 1000);
-    const rate = got / secs;
-    const label =
-      rate >= 1024 * 1024
-        ? `${(rate / (1024 * 1024)).toFixed(1)} MB/s`
-        : `${Math.max(1, Math.round(rate / 1024))} KB/s`;
+  files.onChunk = (_name, bytes) => netChunk(bytes);
+  files.onFileLoaded = () => {
     expect = Math.max(expect, files.loads.length + 1);
-    progress(HEAD + (1 - HEAD) * (files.loads.length / expect), label);
+    barFromFetches();
   };
+  /**
+   * The bar, from here on, is a FETCH COUNT plus the fraction of the fetches
+   * still in flight — the count is the unit the boot's work is really in, and
+   * the fraction is what fills the minute between one arrival and the next when
+   * one of them is a 13 MB film (DustFiles.partialProgress).
+   */
+  const barFromFetches = (): void => {
+    const done = files.loads.length + files.partialProgress();
+    progress(HEAD + (1 - HEAD) * (done / expect));
+  };
+  const barTimer = window.setInterval(barFromFetches, TICK_MS);
   const host = new GameHost(files, audioSink, {
     log: bootSay,
     hud: (t) => t && bootSay(`  ${t}`),
@@ -917,7 +1053,10 @@ async function runBoot(): Promise<void> {
   await Promise.all(
     [...plan.resources, "town.set", "intro3.mov"].map((f) => files.load(f)),
   );
+  clearInterval(barTimer);
+  stopMeter();
   progress(1, "ready");
+  files.onChunk = null;
   files.onFileLoaded = null; // the game loads for itself from here
   /**
    * START comes BEFORE the boot, not after it, because the boot IS the show:
@@ -1536,6 +1675,7 @@ function defaultSaveName(host: GameHost): string {
  */
 async function start(): Promise<void> {
   setScreenGamma(DF1_SCREEN_GAMMA);
+  startMeter();
   await browse();
   await runBoot();
 }
