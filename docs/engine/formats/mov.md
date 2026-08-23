@@ -536,11 +536,15 @@ Chained movies (types 3/4/5 above) share a five-deep call stack and one
 
 ## DreamFactory 1 (Dust)
 
-Dust's movies are the same machine — a chain of segments, a frame state
-machine, typed click hotspots, chained films — with everything v4 factors into
-per-frame logic containers kept inline, so they have their own reader rather
-than a branch here. `engine/src/df/mov-v1.ts`'s module comment is the format account,
-and it is DF.EXE's own rather than a statistical fit: the record base comes
+The **model** survives: a chain of segments, a frame state machine, click
+hotspots, chained films. Almost every **mechanic** under it is different, and
+more of it is behaviour than layout — how a frame decides what comes next, how
+long it is held, what a click record looks like, and which palette indices draw
+at all. This is the format where the two engines diverge most, and the reason
+`mov-v1.ts` is a separate reader rather than a branch here.
+
+`engine/src/df/mov-v1.ts`'s module comment is the full account, and it is
+DF.EXE's own rather than a statistical fit: the record base comes
 from the engine's indexing (`lea esi, [frame*80 + header + 0x8c2]`), each field
 from the instruction that reads it, and the blit semantics from the
 disassembly at `0x421b40`. The short version of what differs from v4:
@@ -576,6 +580,11 @@ disassembly at `0x421b40`. The short version of what differs from v4:
   reachable only by the click-away hotspots during the animation.
 - **Action frames are 1-based positions**, i16s at header `+0x2e`/`+0x30`,
   where v4 keeps names.
+- **A mid-film exit ends the whole film.** The segment teardown follows the
+  next-segment pointer only when playback stopped **on the last frame**
+  (`0x404b9c`), so leaving a segment any other way — a type-1 exit, a hotspot
+  that exits — drops the rest of the chain. v4 reaches the same place by a
+  narrower route: there it is ESC that clears the pointer.
 - **Indices 0 and 255 are transparent in the blit.** The engine keys them out
   through a monochrome mask and an SRCINVERT composite, which is what a v1
   frame authored as solid `0xff` means: hold the picture already on screen.

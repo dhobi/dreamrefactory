@@ -37,10 +37,13 @@ The page boots off the real disc, through the same `GameHost` Titanic uses:
 
 There is no disc to mount: Dust is one CD, so nothing does `setpath(disk)`. Its
 SET addresses a standpoint by grid cell and facing rather than by the numbered
-views a v4 set uses. Its ambience is one track rather than a crowd of reopened
-containers. Its saves are `.rtd` and carry world coordinates that a v4 prop
-record does not have at all. And its town exists twice — `town.set` by day and
-`nite.set` by night — which turns out to matter to a save format.
+views a v4 set uses. **Its films are the format that diverges most** — a frame
+names the frame after it, can block until the sound it started has finished,
+and carries typed click records rather than a region table. Its ambience is one
+track rather than a crowd of reopened containers. Its saves are `.rtd` and carry
+world coordinates that a v4 prop record does not have at all. And its town
+exists twice — `town.set` by day and `nite.set` by night — which turns out to
+matter to a save format.
 
 ## The pages here
 
@@ -55,7 +58,7 @@ up with the engine rather than here:
 | | |
 |---|---|
 | [SET — DreamFactory 1](../engine/formats/set.md#dreamfactory-1-dust) | the grid of cells and one flat transition table, and the adapter that hands it to the viewer as if it were a v4 set |
-| [MOV — DreamFactory 1](../engine/formats/mov.md#dreamfactory-1-dust) | the same chain of segments, with the per-frame logic kept inline |
+| [MOV — DreamFactory 1](../engine/formats/mov.md#dreamfactory-1-dust) | the chain-of-segments model survives and almost every mechanic under it differs — **the format where the two engines diverge most** |
 | [Saved games, DF1 (`.rtd`)](../engine/formats/savegame-v1.md) | the same save container three years earlier, rewritten from `DF.EXE`'s own record layout |
 | [Saving & loading](../engine/runtime/saves.md) | both halves, v1 and v4, and what a load actually is |
 | [The DFile container format](../engine/formats/README.md) | the envelope, unchanged between the two |
