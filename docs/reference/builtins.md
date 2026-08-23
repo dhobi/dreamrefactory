@@ -108,6 +108,35 @@ because the callers that are not themselves a shop are the interesting ones: bot
 of `advanceday`'s world-reset loops, and the control panel's
 `allprops`/`countallprops`/`allactors`.
 
+A record carries the prop's name *and* the file it came from, so `indextoprop`
+answers the first and leaves the second in **`result()`** — the same slot
+`hittest` writes. That is how a caller enumerates one file's props out of the
+game-wide table, and both of Dust's saloon card games clear the table between
+rounds with it:
+
+```
+for count = 1 to countprops ()
+    temp = indextoprop (count)
+    if result () = "salgames.prp"
+        propvisible (temp, false)
+```
+
+Every card, both score readouts and the WINNER banner, hidden in one pass and by
+FILE — so the saloon hides its own props and not the interface band's. While
+`result()` was `hittest`'s alone the comparison was never true, the loop hid
+nothing, and a second hand of blackjack was dealt on top of the first one's cards
+and its result. The control panel's `allprops (name1)`, which compares `result()`
+against a file name it was handed, is the same reading from the other game.
+
+The name `indextoprop` answers is the one the prop is **registered** under, not
+its sprite group's. Those are the same name for a shop's own groups and come apart
+for a `propinstance` copy, which shares the group it draws with: blackjack's
+dealer-side score readout is one (`propinstance ("bjscores", "bjscores2")`), and so
+are poker's per-seat hand names (`nopair2`/`nopair3`/`nopair4`, one per seat off a
+single `nopair` group). Reporting the group meant the clear loop named the first
+seat's prop once per copy and the other seats' not at all — so the opponent's last
+total stayed on the table while the player's was hidden three times over.
+
 ## Audio — `audio.ts`
 
 `voicesound`, `singlesound`, `multiplesound`, `dualsound`, `bothsound`,
@@ -198,6 +227,25 @@ and 4 MB when the player has asked for
 [the low-memory game](../taoot/low-memory.md).
 `calcmod` is a **non-negative** modulo, recovered from `TI.EXE` — plain `%`
 breaks the compass math.
+
+`variable(name[, val])` reads and writes a variable by **computed** name, and the
+name resolves the way one written out in full does: the running block's locals
+first, then the globals. Titanic's blackjack uses it for the side it was called
+about (`variable (who @ "count")` → `playercount`/`dealercount`), Dust's crowd for
+the actor it is (`variable (me, 1)`); Dust's poker classifies a hand by counting
+faces into thirteen **locals** and reading them back with it —
+
+```
+local card2, card3, … card14
+…
+for count = 2 to 14
+    if variable ("card" @ numtostring (count)) = num
+```
+
+— which a globals-only lookup answered 0 for, so no hand ever held a pair. The
+*setter* still creates a global for a name the block did not declare local: an
+actor storing its walk phase under its own name has to reach the table the next
+`switch variable (me)` reads.
 
 `findword`/`putword` have **two modes**, and an empty delimiter is the second one
 rather than a default separator. With a delimiter the string is a word list split

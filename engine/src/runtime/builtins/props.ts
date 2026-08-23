@@ -290,8 +290,47 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   // The insertion order of `props` is the order the shops opened, which is the
   // order TI.EXE appends them to its table.
   r("countprops", () => session.propRuntime.props.size);
-  r("indextoprop", (_i, [idx]) =>
-    [...session.propRuntime.props.values()][toNum(idx ?? 0) - 1]?.group.name ?? "");
+  /**
+   * The walk answers the prop's NAME and leaves the FILE it came from in
+   * `result()` — a table record carries both, and the CTL console's `allprops
+   * (name1)` / `countallprops (name1)` read the second half by comparing
+   * `result()` against a file name they were handed.
+   *
+   * Dust needs it to play a second hand. Both saloon card games start a round by
+   * clearing the table with exactly this pair (`blkjack`'s and `poker`'s
+   * `newgame`, SALGAMES.FLT):
+   *
+   *     for count = 1 to countprops ()
+   *         temp = indextoprop (count)
+   *         if result () = "salgames.prp"
+   *             propvisible (temp, false)
+   *
+   * — every card, both score readouts and the WINNER banner, hidden in one pass
+   * and by FILE, so the saloon hides its own props and not the interface band's.
+   * With `result()` set by `hittest` alone the comparison was never true, the
+   * loop hid nothing, and round two was dealt on top of round one's cards and its
+   * result.
+   *
+   * Safe for the games that don't ask: every other `result()` reader in either
+   * corpus reads it one line after its own `hittest` (house.shp's setcursor,
+   * inven.shp's stdmouse, BOOTFILE's mousedown/idle), and no script calls
+   * `indextoprop` between a `hittest` and its `result()`.
+   *
+   * The name is the one the prop is REGISTERED under — the key every other prop
+   * command resolves by — and not its sprite group's. Those come apart on exactly
+   * one kind of prop and it is one of blackjack's: a {@link PropRuntime.instance}
+   * copy shares the group it draws with, so the dealer's score readout
+   * (`propinstance ("bjscores", "bjscores2")`, and salgames.prp ships no
+   * `bjscores2` group of its own) reported itself as `bjscores`. The clear loop
+   * then hid the PLAYER's readout twice and never named the dealer's, which stayed
+   * on the table into the next hand. Poker's per-seat hand names are the same
+   * shape (`scoretoprop (meztotal) @ "2"` — `flush2`, `flush3`, `flush4`).
+   */
+  r("indextoprop", (_i, [idx]) => {
+    const e = [...session.propRuntime.props.entries()][toNum(idx ?? 0) - 1];
+    session.lastResult = e ? e[1].shop.name : "";
+    return e ? e[0] : "";
+  });
   r("error", (_i, args) => log(`script error(): ${args.map(String).join(", ")}`));
   acc("propvalue", 0, (p) => p.value, (p, v) => {
     p.value = v;

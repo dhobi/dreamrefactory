@@ -79,14 +79,44 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
     return parts.join(sep);
   });
   r("stringlength", (_i, [s]) => toStr(s ?? "").length);
-  // variable(name[, val]): dynamic global access by computed name — getter with
-  // one arg, setter with two. TAOOT's blackjack tracks per-side state this way
-  // (variable(who @ "count") -> playercount/dealercount, variable(who @
-  // "downcard", card)). Reads/writes the same global table as named globals.
-  r("variable", (_i, [name, val]) => {
+  /**
+   * variable(name[, val]): access a variable by COMPUTED name — getter with one
+   * argument, setter with two. TAOOT's blackjack tracks per-side state this way
+   * (`variable (who @ "count")` -> playercount/dealercount, `variable (who @
+   * "downcard", card)`), and Dust's crowd stores an actor's walk phase under its
+   * own instance name (`variable (me, 1)`, extra.cst).
+   *
+   * The name resolves the way a name written out in full does — the running
+   * block's LOCALS first, then the globals ({@link Interpreter.getVar}) — and not
+   * against the global table alone, which is what this read. Dust's poker is
+   * where the difference is the whole game: `hasxkind` classifies a hand by
+   * counting faces into thirteen locals and reading them back by name,
+   *
+   *     local card2, card3, … card14
+   *     …
+   *     for count = 2 to 14
+   *         if variable ("card" @ numtostring (count)) = num
+   *
+   * so a globals-only lookup answered 0 for all thirteen and the classifier never
+   * found a pair. Every hand at the showdown scored as its high card — four aces
+   * came out a "straight", the hand-name prop under most hands read "nopair" —
+   * while the winner still looked right, because all four hands were mis-scored
+   * the same way and the comparison is between them.
+   *
+   * The SETTER still creates a GLOBAL for a name that is neither: `variable (me,
+   * 1)` on an actor the cast has never counted must reach the same table the next
+   * `switch variable (me)` reads, and a frame-local would be gone when the loop
+   * comes round. Only a name the block declared local is written locally.
+   *
+   * Titanic is untouched either way: its only computed names are `who @ "…"`
+   * pairs in blkjack.stg, whose blocks declare thecard/x/y/cardwidth/cardcount —
+   * never a playercount or a dealertotal.
+   */
+  r("variable", (_i, [name, val], _call, frame) => {
     const key = toStr(name ?? "");
-    if (val === undefined) return interp.globals.get(key) ?? 0;
-    interp.globals.set(key, val);
+    if (val === undefined) return frame ? interp.getVar(key, frame) : interp.globals.get(key) ?? 0;
+    if (frame?.locals.has(key)) frame.locals.set(key, val);
+    else interp.setGlobal(key, val);
     return 0;
   });
 
