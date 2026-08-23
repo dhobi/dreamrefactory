@@ -1,7 +1,7 @@
 # The track editor
 
-[`editors/tracks.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/tracks.html) — source
-[`editors/track-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/track-editor.ts).
+[`site/editors/tracks.html`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/tracks.html) — source
+[`site/editors/track-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/track-editor.ts).
 Open `http://localhost:5173/editors/tracks.html`.
 
 The sound half of what the other editors do for pictures: load an
@@ -41,7 +41,7 @@ copy-on-write patches on a single container each (`patchTrackName`,
 `patchChunkIdentifier`, `patchLoopOrder` in
 [`engine/src/df/banks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/banks.ts)),
 so everything you did not touch is the byte it was
-(see [`taoot/tests/auto/trk-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/trk-editor.ts)).
+(see [`taoot/tests/auto/trk-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/trk-editor.ts)).
 
 ## See also
 

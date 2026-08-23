@@ -6,25 +6,47 @@ This doc is about *this project* — how the TypeScript code is organised — as
 opposed to the game's file formats (those get their own docs). If you want to
 find where something lives in the source, start here.
 
-## Two layers: "read the files" vs "run the game"
+## Four packages, and which way they point
 
-The code splits cleanly in two, and it's worth keeping the split in your head
-because the two halves came from very different places.
+The repository is an npm workspace of four packages, and the arrangement is one
+rule: **nothing shared knows which game it is.**
+
+| Package | What it is | Imports |
+|---|---|---|
+| `engine/` | the DreamFactory engine — containers, interpreter, runtime, the browser layer around them | nothing |
+| `site/` | the project's own web presence: the front door, the seven format editors, the chrome every page shares, the UI-language axis | `engine` |
+| `taoot/` | *Titanic*: four pages, six editions and the demo, its own tools, the suites that play it to the end | `engine`, `site` |
+| `dust/` | *Dust*: two pages, one disc, its own tools and suites | `engine`, `site` |
+
+There is a test that says so — `site/tests/layering.ts` fails the build if
+`engine/` reaches for a game, or if the two games reach for each other.
+
+Everything below `## Where a game's own code lives` is a game shell. Everything
+above it is the engine, and this page spends most of its length there, because
+that is where most of the code is.
+
+## Two layers inside the engine: "read the files" vs "run the game"
+
+`engine/src/` splits cleanly in two, and it's worth keeping the split in your
+head because the two halves came from very different places. A third directory,
+`engine/src/web/`, puts the result on a canvas.
 
 ```mermaid
 flowchart LR
   subgraph df["engine/src/df/ — the format library"]
     direction TB
-    C["container.ts"] --> IMG["image.ts"]
-    C --> SET["set.ts"]
+    C["container.ts"] --> VER["version.ts (DF1 or DF4?)"]
+    C --> IMG["image.ts"]
+    VER --> SET["set.ts · set-v1.ts"]
+    VER --> MOV["mov.ts · mov-v1.ts"]
+    VER --> AUD["audio.ts"]
+    VER --> SAV["savegame.ts · savegame-v1.ts"]
     C --> SHP["shp.ts"]
-    C --> MOV["mov.ts"]
     C --> STG["stg.ts"]
     C --> CST["cst.ts"]
     C --> PUP["pup.ts"]
-    C --> AUD["audio.ts"]
     C --> SCR["script.ts"]
-    AUD --> BK["banks.ts"]
+    AUD --> BK["banks.ts · snd.ts"]
     MOV --> BK
   end
   subgraph engine["engine/src/runtime/ — the runtime"]
@@ -53,21 +75,29 @@ plays. Every file in here corresponds to a format doc:
 |------|-------|-----|
 | [`container.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/container.ts) | the shared container skeleton | [DFile container](formats/README.md) |
 | [`binary.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/binary.ts) | low-level byte reading (endianness, strings) | [DFile container](formats/README.md) |
+| [`version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/version.ts) | which DreamFactory wrote a file — 1 (*Dust*) or 4 (*Titanic*). Both engines put the tag as an i32 at container 0 + 0x02, the one field that never moved, so the version is **asked** rather than guessed | [DFile container](formats/README.md) |
 | [`image.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/image.ts) | compressed frames, palettes, depth maps | [Image codec](formats/image-codec.md) |
 | [`set.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set.ts) | SET rooms/scenes/views | [SET](formats/set.md) |
 | [`set-patch.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set-patch.ts) | the SET **write** path — the copy-on-write patches the set editor makes, kept out of the reader the runtime loads | [SET](formats/set.md) |
+| [`set-v1.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set-v1.ts) | a DreamFactory 1 SET. Its own reader, not a branch: a v1 set has no turn rings and no roads but a **grid of cells** and one flat transition table in which a turn and a walk are the same record | [SET](formats/set.md#dreamfactory-1-dust) |
+| [`set-v1-to-v4.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set-v1-to-v4.ts) | that grid rearranged into the `SetFile` the viewer already knows, so there is one viewer rather than two | [SET](formats/set.md#dreamfactory-1-dust) |
+| [`set-any.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set-any.ts) | open a SET without knowing which engine wrote it — a tagged union, so the compiler asks which model you are holding | [SET](formats/set.md#dreamfactory-1-dust) |
 | [`shp.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/shp.ts) | SHP props | [SHP](formats/shp.md) |
 | [`mov.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov.ts) | MOV movies — the segment chain, and the patches the movie editor writes | [MOV](formats/mov.md) |
+| [`mov-v1.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-v1.ts) | a DreamFactory 1 movie: the same chain-of-segments shape, with everything v4 moves into per-frame logic containers kept inline. The record layout is `DF.EXE`'s own, read out of its movie loop | [MOV](formats/mov.md#dreamfactory-1-dust) |
 | [`mov-pace.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-pace.ts) | how fast a movie plays, in one place so the player and the editor cannot disagree | [MOV](formats/mov.md#timing) |
 | [`stg.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/stg.ts) | STG stage/UI | [STG](formats/stg.md) |
 | [`cst.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/cst.ts) | CST casts (actor sprite sets) | [PUP / CST](formats/pup-cst.md) |
 | [`pup.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/pup.ts) | PUP puppets (conversation close-ups) | [PUP / CST](formats/pup-cst.md) |
 | [`audio.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/audio.ts) | TRK/SFX/11K audio banks | [Audio](formats/audio.md) |
 | [`banks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/banks.ts) | shared chunk-directory walk for TRK/MOV banks | [Audio](formats/audio.md) |
+| [`snd.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/snd.ts) | `.SND` — the same role a `.TRK` plays, as DreamFactory 1 spells it. Same audio containers, no chunk tables: the names are inline in container 0 and the theme is the trailing run of consecutively numbered chunks | [Dust's music & sound](../dust/audio.md) |
 | [`script.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/script.ts) | the compiled-script binary | [Script container](formats/script-container.md) |
 | [`script-asm.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/script-asm.ts) | the way back: source text → the tokens `encodeScript` writes | [Script container](formats/script-container.md) |
 | [`opcodes.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/opcodes.ts) | the opcode-ID → name table the script decoder and the disassembly tools share | [Script container](formats/script-container.md) |
 | [`savegame.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame.ts) | `.ti` saved games (read, decode, patch-write) | [Savegame](formats/savegame.md) |
+| [`savegame-v1.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame-v1.ts) | `.rtd` saved games — the same container file three years earlier, so this module is only the **delta**: the offsets inside containers 0 and 1, and four record strides that moved | [Savegame, DF1](formats/savegame-v1.md) |
+| [`save-vars.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/save-vars.ts) | the variable list and string pool, the one part of a save that did **not** change between the two engines, so both readers share it rather than each carrying a copy | [Savegame](formats/savegame.md) |
 | [`text.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/text.ts) | the character set the text *bytes* are in — which no DF file declares, so it comes from the language tree | [Languages](../taoot/languages.md#the-code-page-is-not-in-the-data) |
 | [`build.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/build.ts) + `*-build.ts` | the **write** half: a container accumulator and the field writers, plus one builder per format (`set`, `shp`, `stg`, `mov`, `pup`, `cst`, `banks`) | [Writing one back](formats/README.md) |
 
@@ -94,6 +124,9 @@ disassembling `TI.EXE`. Key files:
 | [`puppet.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/puppet.ts) | `PuppetController` — PUP conversation close-ups |
 | [`stage.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/stage.ts) | `StageController` — the STG UI band / full-screen screens |
 | [`saveload.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/saveload.ts) | saving/loading `.ti` games at the session level (what goes in, how a load restores) |
+| [`saveload-v1.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/saveload-v1.ts) | the same two halves for Dust's `.rtd`: the same choreography, and the two ends that genuinely differ — a `.rtd` gives a world position where a `.ti` names a scene and a view |
+| [`masks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/masks.ts) | which globals are a **counter** rather than the story, in one place because three things ask: both playthrough hosts, and the debug panel's "what just moved" list |
+| [`signature.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/signature.ts) | a running hash of everything the next frame would be drawn from, so a composite can be skipped when the picture has not changed — hashing the *inputs* rather than counting mutations, because a revision counter can be forgotten at a write site |
 | [`point.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/point.ts) | the packed-point format `(x<<16)\|y` scripts pass coordinates in |
 | [`input.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/input.ts) | the event queue — input made while the engine was mid-gesture, and what `flushevents()` discards (recovered from the binary) |
 | [`bootplan.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/bootplan.ts) | what a game's boot needs, read out of its own BOOTFILE — the resource list, the landing room and the disc volumes that used to be hardcoded TAOOT filenames in the host ([the boot plan](runtime/host.md#the-boot-plan-what-a-game-says-it-needs)) |
@@ -103,28 +136,70 @@ disassembling `TI.EXE`. Key files:
 The **[Scripting doc](scripting-language.md)** covers the interpreter and
 builtins in detail; the rest of this doc is about how the pieces run together.
 
-### `src/` — the browser host ("put it on a screen")
+### `engine/src/web/` — the browser layer ("put it on a screen")
 
-Everything directly under `src/` is the part that is *neither* format
-knowledge *nor* recovered engine behaviour: it hosts the engine in a browser
-page. If you are reading the code for the first time, these are the two files
-you will open first — and the two biggest, so here is the map:
+The third directory of the engine package, and the part that is *neither*
+format knowledge *nor* recovered engine behaviour: it puts a session on a
+canvas. It is still game-agnostic — it may not mention *Titanic* or *Dust* —
+but it may mention `document`, and it is where a game shell attaches.
 
 | File | Responsibility |
 |------|----------------|
-| [`main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/main.ts) | the page: audio unlock, DOM wiring, the session + its host hooks, set activation, the automatic cold boot, input handlers, the rAF loop |
-| [`host.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/host.ts) | `GameHost` — what it means to *run* the game (set activation, prefetch, cold boot, resuming a save) with no reference to `document`; see [the browser host](runtime/host.md#the-split-and-why-it-is-where-it-is) |
+| [`host.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/host.ts) | `GameHost` — what it means to *run* the game (set activation, prefetch, cold boot, resuming a save) with no reference to `document`; a shell passes its side in as a file source, five UI notifications and an `AudioSink`. See [the browser host](runtime/host.md#the-split-and-why-it-is-where-it-is) |
 | [`viewer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/viewer.ts) | `SetViewer` — the navigation state machine over a parsed SET (turn/walk/teleport, hit-testing, the click priority chain, rendering) |
-| [`screen-presenter.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-presenter.ts) | `ScreenPresenter` — the single persistent framebuffer every render path composites into, the fade overlays, and the signature check that skips a composite when the picture has not changed. Held by the host, so it **outlives** the viewer a set change replaces |
+| [`screen-presenter.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-presenter.ts) | `ScreenPresenter` — the single persistent framebuffer every render path composites into, the fade overlays, and the [signature](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/signature.ts) check that skips a composite when the picture has not changed. Held by the host, so it **outlives** the viewer a set change replaces |
+| [`screen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen.ts) | the screen contract: 512×384, and where a SET view sits inside it |
+| [`screen-gamma.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-gamma.ts) | the per-channel power curve `TI.EXE` applies to every palette entry before it reaches the screen (`pow(c/255, 0.65) * 255`) — the reason a faithful port looks *brighter* than a verbatim one |
 | [`ring-cache.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/ring-cache.ts) | the LRU of decoded turn/walk rings, on a byte budget — the viewer's memory story, on its own |
 | [`movie-player.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/movie-player.ts) | `MoviePlayer` — modal MOV playback: the segment chain, cutscenes, interactive close-ups, movie chains/calls, cues and the soundtrack |
-| [`puppet-view.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/puppet-view.ts) | `PuppetView` — draws conversation close-ups (layer compositing, subtitles, choice bevels); the conversation *logic* is `engine/puppet.ts` |
-| [`files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/files.ts) | `FileStore` — every game file by lowercase basename, with lazy dev-server fetching |
-| [`screen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen.ts) | the screen contract: 512×384, and where a SET view sits inside it |
+| [`puppet-view.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/puppet-view.ts) | `PuppetView` — draws conversation close-ups (layer compositing, subtitles, choice bevels); the conversation *logic* is `runtime/puppet.ts` |
 | [`fonts.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/fonts.ts) | the canvas font stacks and `wrapText` — including breaking a line that has no spaces in it |
-| [`languages.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/languages.ts) / [`lang-chooser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/lang-chooser.ts) / [`lang-menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/lang-menu.ts) | the language axis: the table (codes, endonyms, [code pages](../taoot/languages.md#the-code-page-is-not-in-the-data)), the authored `lang.stg` chooser, and the 🌐 picker in the page's top bar |
-| [`editions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/editions.ts) / [`collection.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/collection.ts) / [`booklet.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/booklet.ts) / [`home.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/home.ts) | the site around the game rather than the game: the shared edition control (one choice carried by the play page, the editors and `/collection/`), and `/collection/`'s own turnable box and 32-page booklet |
-| [`save-browser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-browser.ts) / [`save-store.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-store.ts) / [`save-seed.ts`](https://github.com/dhobi/dreamrefactory/blob/master/src/save-seed.ts) | the saved-games UI, its IndexedDB "file system", and the one-time seeding from shipped saves |
+| [`keys.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/keys.ts) | whether a keypress belongs to whatever has focus or to the game. The page listens on `window`, so without this a filter box typing `mission` toggled the minimap on the M and sent all seven letters into the running game |
+| [`save-browser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-browser.ts) / [`save-store.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-store.ts) | the saved-games UI and its IndexedDB "file system" — parameterised on a `SaveKind`, so Titanic's `.ti` and Dust's `.rtd` get a database each off one implementation |
+
+## Where a game's own code lives
+
+The three packages above the engine. None of them adds engine behaviour; they
+say which disc, which pages, and what the page around the canvas looks like.
+
+### `site/` — the shared web presence
+
+| File | Responsibility |
+|------|----------------|
+| [`editors/`](https://github.com/dhobi/dreamrefactory/tree/master/site/editors) | the seven format editors and the page that lists them — see [the browser editors](../editors/README.md) |
+| [`front.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/front.ts) / [`games.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/games.ts) | the front door, and the registry of which games exist and what it takes to read one's data — here rather than in a game, because the editors need it and a shared package must not depend on a consumer |
+| [`chrome.css`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/chrome.css) | the topbar, pickers, titles, controls and panels every page shares. Not one colour in it: every value is a **role**, and the three palettes — Titanic's abyss-and-brass, Dust's dusk-and-ember, the project's black-and-green — are three implementations of that one contract |
+| [`editions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/editions.ts) | the **edition** axis: which `gamefiles/` tree a page is showing. Remembered per game and carried across the play page, the editors and the collection |
+| [`ui-languages.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/ui-languages.ts) / [`lang-menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/lang-menu.ts) / [`locales/`](https://github.com/dhobi/dreamrefactory/tree/master/site/src/locales) | the **UI-language** axis, which is a different question: what language the words on the page are in. Pages carry their English inline, so nothing is fetched for an English reader |
+| [`site.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/site.ts) / [`version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/version.ts) / [`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | where the site's root is from a page at any depth, the version in the top bar, and the Report-bug button that prefills a GitHub issue with the build number and the screen |
+
+### `taoot/` — Titanic's shell
+
+Four pages: the front page, `/play/`, `/collection/`, and the unlisted
+`/speedrun/` workbench.
+
+| File | Responsibility |
+|------|----------------|
+| [`main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/main.ts) | the play page: audio unlock, DOM wiring, the session and its host hooks, the automatic cold boot, input handlers, the rAF loop |
+| [`files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/files.ts) | `FileStore` — six editions, two CDs, per-disc basename collisions and an LRU for the 37 MB cutscenes |
+| [`languages.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/languages.ts) / [`lang-chooser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/lang-chooser.ts) | the table (codes, endonyms, [code pages](../taoot/languages.md#the-code-page-is-not-in-the-data)) and the authored `lang.stg` chooser — a real DreamFactory stage, not a dialog |
+| [`collection.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/collection.ts) / [`booklet.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/booklet.ts) / [`home.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/home.ts) | the pages that are about the game rather than the game: the turnable box, the 32-page booklet, and the front page's top bar |
+| [`save-seed.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/save-seed.ts) | the one-time seeding of the shipped `.ti` saves into the store |
+| [`nightdive.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/nightdive.ts) | the intro film before the boot — a real MOV built by `mknightdive.ts` and played by the engine's own `MoviePlayer`, buttons and all |
+| [`debug-panel.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/debug-panel.ts) / [`log-buffer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/log-buffer.ts) | the state pane behind **X** (a list that patches rather than redraws, filtered by [`masks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/masks.ts)) and the bounded log a bug report carries the tail of |
+| [`speedrun/`](https://github.com/dhobi/dreamrefactory/tree/master/taoot/src/speedrun) + [`speedrun-page.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/speedrun-page.ts) | the workbench: write a route as a sheet, press Play, watch it play, read which line broke. Deployed but unlisted — [`konami.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/konami.ts) is the door |
+| [`cache-warmup.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/cache-warmup.ts) | pulls a whole edition through the browser cache before a timed run, so the fiftieth run of a leg costs what the second one did |
+
+### `dust/` — Dust's shell
+
+Two pages: the game and `/collection/`. Short on purpose — one volume, one
+edition, one copy of every name.
+
+| File | Responsibility |
+|------|----------------|
+| [`main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/main.ts) | the page: the boot, the films, the town, and the controls |
+| [`files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/files.ts) | the CD as a `HostFiles`. Two things it has to get right: the BOOTFILE is at `INSTALL/ALT31/BOOTFILE` rather than in `DATA/`, and the boot's films need a room to draw through even though the boot opens none |
+| [`saves.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/saves.ts) | the store's Dust dimension (`.rtd`, its own database) and the seeding of the five saves that ship beside the disc — one of which is also the base a fresh save is patched into, because a save is a serialized heap and cannot be written from nothing |
 
 ## The GameSession: the thing that persists
 
@@ -300,27 +375,37 @@ audio playback, and saving/loading.
 
 ## Running and verifying
 
-- `npm run dev` — dev server; the front page has a Play button and `/play/`
-  cold boots itself into the game, with nothing in front of it but the boot text.
-  The saved-games browser reaches saves from the in-game menu and the editors reach
-  every `.SET` under `gamefiles/`; the dev harness that used to sit beside them —
-  story-state presets, puzzle-jump buttons — is gone, and what it was for is
-  [the playthrough](../taoot/verification.md)'s job. Assets are fetched on demand. See
-  **[the browser host](runtime/host.md)**.
-- `npm test` — 302 Vitest tests: the end-to-end regression scenarios, savegame
-  round-trips, recovered-builtin checks, the blackjack interpreter test, the
-  editors' write path, the authoring and language suites, and the text/audio
-  encoding ones. **Prefer extending `regression.ts` over writing throwaway
-  tests.** The full map is **[the test reference](../reference/tests.md)**.
+- **Three dev servers, one per root, so they can run at once.** `npm run dev`
+  is the front door and the editors on 5173, `npm run dev:taoot` is Titanic on
+  5174, `npm run dev:dust` is Dust on 5175, and `npm run docs:dev` is this
+  documentation on 5176. A link from one to another 404s in dev with a page
+  naming the server that would serve it — three Vite roots cannot be one
+  origin, and the deployed tree has no such problem.
+- On Titanic's server, `/play/` cold boots itself into the game with nothing in
+  front of it but the boot text. The saved-games browser reaches saves from the
+  in-game menu and the editors reach every `.SET` under `gamefiles/`; the dev
+  harness that used to sit beside them — story-state presets, puzzle-jump
+  buttons — is gone, and what it was for is
+  [the playthrough](../taoot/verification.md)'s job. Assets are fetched on
+  demand. See **[the browser host](runtime/host.md)**.
+- `npm test` — 534 Vitest tests across 38 files and all four packages: the
+  end-to-end regression scenarios, savegame round-trips, recovered-builtin
+  checks, the blackjack interpreter test, the editors' write path, the
+  authoring and language suites, the text/audio encoding ones, Dust's movies
+  and saves, and the layering rule itself. **Prefer extending `regression.ts`
+  over writing throwaway tests.** The full map is **[the test
+  reference](../reference/tests.md)**.
 - `npm run test:playthrough` — the game *played* from the boot to the ending, 27
   segments carried as one session, asserting a recorded state trace per beat.
   What that buys, and the bugs it has caught that nothing else could, is
   **[how we know it's right](../taoot/verification.md)**.
-- `tools/` has standalone dumpers (`dumpset`, `dumpshp`, `dumpaudio`,
-  `dumpscripts`), the `TI.EXE` mining tools (`exetable`, `disasmcmd`,
-  `scancmds`) and the flow-map generator — see
-  **[the tool reference](../reference/tools.md)**. The dev server also hosts the
-  seven **[browser editors](../editors/README.md)**, one per container format.
+- `tools/` has what works on any rip — the dumpers (`dumpset`, `dumpshp`,
+  `dumpscripts`), `parse`, `scancmds`, `scandeg`, the manifest writer — and a
+  tool that knows which game it is looking at lives in that game's own
+  `tools/`: the `TI.EXE` mining tools and the flow-map generator are
+  `taoot/tools/`. See **[the tool reference](../reference/tools.md)**. The dev
+  server also hosts the seven **[browser editors](../editors/README.md)**, one
+  per container format.
 
 Now that you know where things live, the two deep topics are the
 **[scripting language](scripting-language.md)** and, underneath all the

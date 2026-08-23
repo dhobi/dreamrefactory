@@ -60,7 +60,7 @@ Six directories, and each of them a thing rather than a kind of file.
     the screen, the save store
 - **`taoot/`** — Titanic: its four pages, six editions and the demo, its own
   tools, and the suites that play it through to the end
-- **`dust/`** — Dust: one page, its own disc, its own tools
+- **`dust/`** — Dust: two pages, its own disc, its own tools
 - **`site/`** — the project's own web presence: the front door, the seven format
   editors, the chrome every page shares, and the UI-language axis
 - **`tools/`** — tools that work on any DreamFactory rip because they take one as

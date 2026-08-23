@@ -13,9 +13,9 @@ its own:
 
 | tag | build | lands at |
 |---|---|---|
-| `site-v0.1.0` | `npm run build:site` | `/dreamrefactory/` — the front door and the seven format editors |
-| `taoot-v0.9.51` | `npm run build:taoot` | `/dreamrefactory/taoot/` — Titanic's four pages |
-| `dust-v0.3.1` | `npm run build:dust` | `/dreamrefactory/dust/` — Dust's one page |
+| `site-v0.1.1` | `npm run build:site` | `/dreamrefactory/` — the front door and the seven format editors |
+| `taoot-v0.9.53` | `npm run build:taoot` | `/dreamrefactory/taoot/` — Titanic's four pages (the front page, `/play/`, `/collection/`, the unlisted `/speedrun/`) |
+| `dust-v0.3.6` | `npm run build:dust` | `/dreamrefactory/dust/` — Dust's two pages (the game, `/collection/`) |
 | *(no tag)* | `npm run docs:build` | `/dreamrefactory/docs/` — on any push that touches `docs/` |
 
 ```bash
@@ -52,7 +52,7 @@ which was a symptom of one build serving two games. Now:
 | `taoot/package.json`, `dust/package.json`, `site/package.json` | the sources of truth — semver |
 | each package's `vite.config.ts` | substitutes its own for `__APP_VERSION__` at build time |
 | [`site/src/version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/version.ts) | exports `VERSION`, and draws it in the top bar beside the wordmark |
-| [`taoot/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/bug-report.ts) | puts it in the issue body, so a report names the build it came from |
+| [`site/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | puts it in the issue body, so a report names the build it came from |
 
 There is one constant where there were two, because a page now belongs to exactly
 one package and reads exactly one number. Node does no substitution, so a test or

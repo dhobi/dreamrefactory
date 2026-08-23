@@ -127,7 +127,7 @@ Measured in this port, one turn takes **10 rendered frames** and one road takes
   **instead of** it is the whole question, because a bump also does
   `clockcount = 0`. The video says on top (**2×**); the mechanism, worked through
   below, says instead of (**1×**), and 1× is what this port does. See [the model,
-  derived](#the-model-derived--and-what-it-predicts).
+  derived](#the-model-derived-—-and-what-it-predicts).
 - **Walking a road** — each new standpoint is one `openscene`, and a road is
   longer than 20 frames, so essentially every road bumps: **+1 second per scene
   reached**, on top of real time.

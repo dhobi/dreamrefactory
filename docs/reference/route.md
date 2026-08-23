@@ -19,9 +19,9 @@ loads, 23.7 min, ending on `credits.mov`.
 ## The twenty-seven segments
 
 Each row is one test in
-[`playthrough.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/playthrough/playthrough.ts),
+[`playthrough.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/playthrough/playthrough.ts),
 one function in
-[`segments.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/playthrough/segments.ts),
+[`segments.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/playthrough/segments.ts),
 and one `.ti` in `out/checkpoints/` named for the state it *starts* from.
 
 | segment | from | crosses | ends |
@@ -146,7 +146,7 @@ replayed eleven times. Climbing is four views and is never blocked; walking roun
 ring is sixteen views the maze shuts by setting `blocks` to a comma-list of closed
 gaps per (maze, level). **`mazenumber = random(4)` is drawn live at the door**, so the
 two hosts need not be dealt the same maze and the golden's value is masked. That costs
-nothing, because [nav/smokestack.ts](https://github.com/dhobi/dreamrefactory/blob/master/tests/playthrough/nav/smokestack.ts)
+nothing, because [nav/smokestack.ts](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/playthrough/nav/smokestack.ts)
 *solves* whichever maze it draws — a breadth-first over (level, position) against the
 eight `blocks` strings — and asserts every move against that solution, which is a
 stricter test than a fixed value. It has to solve: **one of the sixteen (maze, entry)
@@ -185,7 +185,7 @@ Learned the hard way, all verified:
 
 - **In mission 4, a conversation costs two minutes.** `gang.cst prepuppet()` does
   `min = min + 2` at `mission = 4`, and the sinking's phase is a clock
-  ([the endgame is a countdown](../taoot/mission-flow.md#the-endgame-is-a-countdown-and-no-gesture-advances-it)).
+  ([the endgame is a countdown](../taoot/mission-flow.md#the-endgame-is-a-countdown)).
   "Ask everyone everything" is not free the way it is in missions 1–3.
 - **Walking IS pressing up, and some standpoints are wired to that press.** The
   planner's walk within a room is a series of `pressUp`s, so a route crossing the
@@ -269,7 +269,7 @@ Learned the hard way, all verified:
 - **Bevel ids, never positions.** `PENNY1.PUP`'s `zeitelgram()` calls
   `puppetscramble()`, which shuffles its plaques.
 - **`out/scripts/` is the first place to look** for any of this
-  (`npx tsx tools/dumpscripts.ts gamefiles out/`) — but it is not complete for
+  (`npx tsx tools/dumpscripts.ts taoot/gamefiles out/`) — but it is not complete for
   BOOTFILE: five codes are dumped where boot1 and boot2 carry 78 between them, so
   `progress` looks undefined when it is not. `session.bootScripts[n].script.codes` is
   the honest list. `npx tsx taoot/tools/disasmcmd.mts <name|0xVA>` disassembles TI.EXE when

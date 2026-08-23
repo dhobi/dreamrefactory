@@ -1,7 +1,7 @@
 # The shop editor
 
-[`editors/shops.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/shops.html) — source
-[`editors/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/shp-editor.ts).
+[`site/editors/shops.html`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/shops.html) — source
+[`site/editors/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/shp-editor.ts).
 Open `http://localhost:5173/editors/shops.html`.
 
 Load a [SHP shop](../engine/formats/shp.md) — the **props** drawn on top of a room:
@@ -44,7 +44,7 @@ not frame art is a copy-on-write patch on a single container (`patchShopRefName`
 `patchGroupName`, `patchStateIdentifier`, `patchFrameDegree`, `patchFrameAnchor`
 in [`engine/src/df/shp.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/shp.ts)),
 so everything you did not touch is the byte it was
-(see [`taoot/tests/auto/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/shp-editor.ts)).
+(see [`taoot/tests/auto/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/shp-editor.ts)).
 
 That suite also pins the one case where the bytes and the view can disagree: a
 state whose play-order table reverses its frames, where an edit made through the

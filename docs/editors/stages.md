@@ -1,7 +1,7 @@
 # The stage editor
 
-[`editors/stages.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/stages.html) — source
-[`editors/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/stg-editor.ts).
+[`site/editors/stages.html`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/stages.html) — source
+[`site/editors/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/stg-editor.ts).
 Open `http://localhost:5173/editors/stages.html`.
 
 Load a [STG stage](../engine/formats/stg.md) — the screens that are not rooms: the UI
@@ -28,13 +28,13 @@ in container 0's flat table, a region's name and rectangle in that flat's
 click-logic container (`patchFlatName`, `patchRegionName`, `patchRegionRect` in
 [`engine/src/df/stg.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/stg.ts))
 — so everything you did not touch is the byte it was
-(see [`taoot/tests/auto/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/stg-editor.ts)).
+(see [`taoot/tests/auto/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/stg-editor.ts)).
 
 ## The stage this port wrote itself
 
 One entry in the file picker is not CyberFlix's: **`lang.stg`**, the language
-chooser (`npm run mklang` builds it; it ships in `public/`, which the dev server
-lists alongside `gamefiles/`). It is a good thing to open here, because it is the
+chooser (`npm run mklang` builds it; it ships in `taoot/public/`, which every
+package's Vite plugin lists alongside its `gamefiles/`). It is a good thing to open here, because it is the
 whole round trip in one file — a stage this repository *wrote*, with two flats, six
 click regions and a compiled `mousedown` handler each, which the editor reads like
 any other. Restyle its art by PNG import, nudge the button rectangles, export, drop

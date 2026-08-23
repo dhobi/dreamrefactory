@@ -71,7 +71,7 @@ currentsound(2) = curlady` is false), so with the gate permanently false she
 started a new line every 1.32 s over the top of the last — 21.25 22.57 23.89
 25.21 26.53 against 21.25 23.89 26.53 31.81 37.09 with the play recorded. Lines
 run 1.6–5.2 s, so four of the five overlapped. Pinned by
-[`sound-channels.ts`](../../reference/tests.md#the-automatic-suite-—-npm-test), which
+[`sound-channels.ts`](../../reference/tests.md#titanic-s-automatic-suite-—-taoot-tests-auto), which
 has to bring its own clock-driven sink to see it at all.
 
 **Every play needs an owner that ends it.** A channel is shared, so "stop what
@@ -105,7 +105,7 @@ The channel model is an interface (`AudioSink`) with two implementations:
   is what keeps the suite deterministic and also makes "is this still playing?"
   unanswerable — so `newHost` takes the sink as an argument and a test about
   sequencing brings a clock-driven one instead
-  ([tests](../../reference/tests.md#the-automatic-suite-—-npm-test)).
+  ([tests](../../reference/tests.md#titanic-s-automatic-suite-—-taoot-tests-auto)).
 
 ## The volume knobs
 

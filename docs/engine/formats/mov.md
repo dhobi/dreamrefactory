@@ -114,7 +114,7 @@ downstream has to know which segment it is looking at.
 |-------|----------|
 | Header `+0x02` | i32 **format version** — 4 (4.0) is the only one the reader accepts |
 | Header `+0x18` | **playback flags** — see [Escaping a movie](#escaping-a-movie) |
-| Header `+0x1c` | i32 **minimum frame hold**, in ticks — the film's own frame rate, and a FLOOR rather than a cap. See [pacing](#a-movie-carries-its-own-pacing-solved-out-of-the-demo-builds-engine) |
+| Header `+0x1c` | i32 **minimum frame hold**, in ticks — the film's own frame rate, and a FLOOR rather than a cap. See [pacing](#a-movie-carries-its-own-pacing-—-solved-out-of-the-demo-build-s-engine) |
 | Header `+0x24`/`+0x26` | i16 x/y **screen origin** — where the picture sits on the 512×384 screen. (0,0) everywhere but the demo's letterboxed 512×264 films, which centre themselves with (0,60); the engine draws there and subtracts it from the mouse before region hit-testing (`0x44ad08`) |
 | Header `+0x28` | i32 the CD drive's **KB/s**, written at load — read only to compute the cue table's streaming lead (below), and 300 (2× CD-ROM) when it is 0 |
 | Header `+0x2c` | i32 container index of the **next segment**, 0 = last |
@@ -185,7 +185,7 @@ frame record's `+16`. Its whole layout:
 | Offset | Type | Field |
 |-------:|------|-------|
 | +0 | i16 | the frame's own **action type** (the codes below) |
-| +2 | i32 | how long the frame is **held**, in ticks — see [pacing](#a-movie-carries-its-own-pacing-solved-out-of-the-demo-builds-engine) |
+| +2 | i32 | how long the frame is **held**, in ticks — see [pacing](#a-movie-carries-its-own-pacing-—-solved-out-of-the-demo-build-s-engine) |
 | +6 | byte | per-frame **flag bits** (same section) |
 | +0x12 | pstr | **entry sound** (below) |
 | +0x22 | pstr | **event** — a movie to chain to (types 3/4) |
@@ -270,7 +270,7 @@ These are the non-obvious rules, verified against `MENU.MOV`, `TURKNMES.MOV`,
 `CURTAINS.MOV`, `BEDLAMP.MOV` and `FAUCET.MOV`:
 
 - **Interactive movies open as a silent still** and pause on region frames
-  (starting with the first) — *unless* the frame sets [flags bit 2](#a-movie-carries-its-own-pacing-solved-out-of-the-demo-builds-engine),
+  (starting with the first) — *unless* the frame sets [flags bit 2](#a-movie-carries-its-own-pacing-—-solved-out-of-the-demo-build-s-engine),
   which says "these regions are live but do not stop for them". Clicks
   **outside** any region do nothing.
 - **A click plays the region's sound, then jumps** per its type. A target that
@@ -379,7 +379,7 @@ measurement of the wrong thing. Its frames are authored at **50 ms**; the water 
 repeats about three times under the 3.62 s sound.
 
 **Regionless cutscenes** carry their own per-frame timing — see
-[A movie carries its own pacing](#a-movie-carries-its-own-pacing-solved-out-of-the-demo-builds-engine)
+[A movie carries its own pacing](#a-movie-carries-its-own-pacing-—-solved-out-of-the-demo-build-s-engine)
 below, which is the rule the player uses. What the file does *not* say is whether a
 movie is self-paced at all, and that is the one pacing decision still the port's:
 `chooseFrameInterval` in
@@ -591,7 +591,7 @@ disassembly at `0x421b40`. The short version of what differs from v4:
   action-frame slots and the ESC flag — each written into the segment you are
   looking at. Frame art is read-only there, for the delta-chain reason described
   above.
-- **[`taoot/tools/mknightdive.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/mknightdive.ts)**
+- **[`taoot/tools/mknightdive.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/mknightdive.ts)**
   — a worked example of the write half: an animated GIF becomes a movie
   (`npm run mknightdive -- some.gif`). The film is one segment — every GIF frame
   scaled into the 512×384 screen, a type-6 STEP on each and a type-1 EXIT on the
@@ -604,7 +604,7 @@ disassembly at `0x421b40`. The short version of what differs from v4:
   close-up and waits for a click (`chooseFrameInterval`), and a segment's palette
   is per segment — sharing one is what lets a screen be an *overlay* on the film
   rather than a screen of its own.
-- **[`taoot/tests/auto/mov-format.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/mov-format.ts)**
+- **[`taoot/tests/auto/mov-format.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/mov-format.ts)**
   pins the three recovered facts on this page against the shipped corpus rather
   than against a synthesized file: the segment chain, the cue table, and the screen
   origin. It skips wholesale when the tree it needs is not installed.

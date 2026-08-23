@@ -326,7 +326,7 @@ way to keep the painting.
 ## Reading the flow as a map you can walk
 
 The report above is a description. Making a route planner out of it
-([`taoot/tests/playthrough/nav/`](https://github.com/dhobi/dreamrefactory/tree/master/tests/playthrough/nav), which
+([`taoot/tests/playthrough/nav/`](https://github.com/dhobi/dreamrefactory/tree/master/taoot/tests/playthrough/nav), which
 walks the ship for the [playthrough tests](verification.md#routes-name-places-not-pixels)) turned up three
 places where a faithful description is still not a usable map, all worth knowing
 before trusting the graph:
@@ -423,10 +423,10 @@ the chapter gate is shared, but each sub-plot tracks its own progress.
 ## Regenerate it yourself
 
 All of the above is produced mechanically by
-[`taoot/tools/flowmap.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/flowmap.ts):
+[`taoot/tools/flowmap.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/flowmap.ts):
 
 ```sh
-npx tsx taoot/tools/flowmap.ts gamefiles out/
+npx tsx taoot/tools/flowmap.ts taoot/gamefiles out/
 ```
 
 It parses every script container into the AST (see
@@ -458,7 +458,7 @@ It writes these files under `out/flow/`:
 It also writes **`taoot/tests/playthrough/nav/shipgraph.gen.ts`** when that directory
 exists: the
 same travel graph distilled into standpoints, doors and guard comparisons, so
-the [navigator](https://github.com/dhobi/dreamrefactory/tree/master/tests/playthrough/nav) can plan
+the [navigator](https://github.com/dhobi/dreamrefactory/tree/master/taoot/tests/playthrough/nav) can plan
 a route with no game files present. Unlike the report, it keeps self-loops
 (the staircase's deck flips) and each exit's own assignments.
 

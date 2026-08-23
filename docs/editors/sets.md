@@ -1,7 +1,7 @@
 # The set editor
 
-[`editors/sets.html`](https://github.com/dhobi/dreamrefactory/blob/master/editors/sets.html) — source
-[`editors/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/editors/set-editor.ts).
+[`site/editors/sets.html`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/sets.html) — source
+[`site/editors/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/set-editor.ts).
 Open `http://localhost:5173/editors/sets.html`.
 
 The editor for the format the game spends most of its time in. Load a
@@ -49,7 +49,7 @@ not frame art is a copy-on-write patch on a single register or table container
 — a module of its own, so the reader the *runtime* loads carries none of the write
 path),
 so everything you did not touch is the byte it was
-(see [`taoot/tests/auto/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tests/auto/set-editor.ts)).
+(see [`taoot/tests/auto/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/set-editor.ts)).
 
 ## See also
 

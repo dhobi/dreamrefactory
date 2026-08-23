@@ -81,7 +81,7 @@ The full table (~351 entries) is the `OPCODES` map in
 and was then **validated byte-for-byte against `TI.EXE`**: the
 executable contains a plaintext table of 6-byte records `{ char* name, u16 id
 }` mapping every command name to its ID. The tool that extracts that table is
-[`taoot/tools/exetable.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/exetable.ts).
+[`taoot/tools/exetable.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/exetable.ts).
 
 > **Names vs. behaviour — the crucial gap.** Having the ID→name table means we
 > can *decompile* a script into readable text. It does **not** tell us what
