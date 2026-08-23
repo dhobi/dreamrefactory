@@ -1,6 +1,6 @@
 /**
  * Cast-editor format layer — the write/edit half of the DF library that
- * casts.html (editors/cst-editor.ts) is built on: the two CST patches (member name,
+ * casts.html (site/editors/cst-editor.ts) is built on: the two CST patches (member name,
  * pose name), the shared frame-anchor patch over a cast sprite, and sprite-art
  * replacement.
  *

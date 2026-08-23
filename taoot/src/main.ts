@@ -230,7 +230,7 @@ files.onBusyChange = (inFlight) => {
 };
 
 /**
- * The Report bug button (taoot/src/bug-report.ts): a GitHub issue with the room, the
+ * The Report bug button (site/src/bug-report.ts): a GitHub issue with the room, the
  * edition, the browser and the tail of the log already in it, and the screen on
  * the clipboard to paste — GitHub takes no image over a URL.
  *
@@ -951,7 +951,7 @@ screen.addEventListener("pointerdown", (e) => {
     return;
   }
   session.pointerDown = true;
-  // What the press CARRIED, for `shiftkey()` (engine/builtins/scene.ts). Taken
+  // What the press CARRIED, for `shiftkey()` (engine/src/runtime/builtins/scene.ts). Taken
   // here rather than tracked as live keyboard state because that is how the
   // original asks: house.shp's HELP button reads it inside its own mousedown, so
   // the question is what was held when the click happened.
@@ -1438,7 +1438,7 @@ function bindSwipeOption(
  * all is to find out what the game is doing.
  *
  * REFRESH_MS is 250 rather than a frame: the panel is a hundred rows of DOM and
- * the game services itself every 50 ms (engine/clock.ts), so redrawing it in step
+ * the game services itself every 50 ms (engine/src/runtime/clock.ts), so redrawing it in step
  * with the engine would be four times the work for a list nobody can read that
  * fast. It follows the fade and the room within a quarter second, which is the
  * speed of the question being asked of it.

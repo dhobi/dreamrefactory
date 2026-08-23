@@ -47,7 +47,7 @@ export interface PropState {
    * runs backwards, and reading just the first six entries saw the repeats, judged
    * it "not a permutation", and played the opening animation for the closing one.
    *
-   * Runtime meaning is {@link playSequence} in engine/props.ts, which composes it
+   * Runtime meaning is {@link playSequence} in runtime/props.ts, which composes it
    * with a deg-variant split (a table whose length is the VARIANT's size indexes
    * within the variant — the boiler/cufflink bags and the deck map store the same
    * six-step swing once per variant).

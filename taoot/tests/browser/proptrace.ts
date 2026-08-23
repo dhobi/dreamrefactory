@@ -13,7 +13,8 @@
  *
  * ## What this replaces, and why it had to be replaced
  *
- * taoot/tests/browser/iface.ts read `propRuntime.get("light").owner` once per animation
+ * An earlier throwaway probe (never committed) read
+ * `propRuntime.get("light").owner` once per animation
  * frame and recorded the transitions it saw. Over two runs of segments 1-5 it saw
  * `none -> on` and nothing else, and the conclusion drawn from that — printed in
  * its own header — was that the browser never writes `"off"` at all, so a

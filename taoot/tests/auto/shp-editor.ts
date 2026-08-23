@@ -1,6 +1,6 @@
 /**
  * Shop-editor format layer — the write/edit half of the DF library that
- * shops.html (editors/shp-editor.ts) is built on: the four SHP patches (shop name,
+ * shops.html (site/editors/shp-editor.ts) is built on: the four SHP patches (shop name,
  * prop name, state identifier, frame degree), the frame-anchor patch, and the
  * transparent-codec art replacement.
  *

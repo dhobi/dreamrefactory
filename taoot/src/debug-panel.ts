@@ -119,7 +119,7 @@ export function stateView(trace: StateTrace, opts: StateViewOptions = {}): State
     // `clockcount` the call counter it rolls over from, so both move every second
     // the game is up: without this the default list was permanently those two and
     // nothing else, and the reader's actual question went unanswered under them.
-    // The list is the trace comparison's own (engine/masks.ts) — they are asking
+    // The list is the trace comparison's own (engine/src/runtime/masks.ts) — they are asking
     // the same thing. Under `all` or a filter they show like anything else, because
     // then the reader has named what they want.
     const news = changed.has(name) && !isHarnessPaced(name);
@@ -304,7 +304,7 @@ export class RowView {
  * something the Report button could carry: the issue body travels as a URL under a
  * 4000-byte ceiling, and one snapshot is 3234 bytes of state on its own (3333 at the
  * fullest beat of the recorded route) — before the log it is pasted with, which runs
- * to 1141 lines and 40 kB over a whole game (taoot/src/bug-report.ts).
+ * to 1141 lines and 40 kB over a whole game (site/src/bug-report.ts).
  */
 export function stateDump(trace: StateTrace, log: readonly string[], head: string[] = []): string {
   return [

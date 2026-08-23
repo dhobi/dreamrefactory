@@ -1,6 +1,6 @@
 /**
  * Set-editor format layer — the write/edit half of the DF library that
- * sets.html (editors/set-editor.ts) is built on: the frame-codec encoder and the
+ * sets.html (site/editors/set-editor.ts) is built on: the frame-codec encoder and the
  * seven SET patches (set name, default start, scene name, view name, hotspot
  * identifier, hotspot region, actor mark, road name).
  *

@@ -6,7 +6,7 @@
  * {@link PUP_LAYERS}), a subtitle strip, and the choice "bevels": the rows of
  * clickable answer text along the bottom of the screen. The conversation
  * LOGIC (which line plays, which choices show) lives in
- * engine/puppet.ts; this file only draws the current state and hit-tests
+ * runtime/puppet.ts; this file only draws the current state and hit-tests
  * the bevels.
  *
  * The geometry below is not a design: every number is read out of TI.EXE, and

@@ -1,6 +1,6 @@
 /**
  * Track-editor format layer — the write/edit half of the audio side of the DF
- * library that tracks.html (editors/track-editor.ts) is built on: the v41 encoder,
+ * library that tracks.html (site/editors/track-editor.ts) is built on: the v41 encoder,
  * the sound-container writer, and the three bank patches (track name, chunk
  * identifier, loop order).
  *

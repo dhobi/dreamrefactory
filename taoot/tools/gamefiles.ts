@@ -7,7 +7,7 @@
  *
  * which is the shape BOOTFILE's `setpath(disk)` assumes when it fills the
  * engine's 9-slot resource search path (see the `path` builtin in
- * engine/builtins/helpers.ts):
+ * engine/src/runtime/builtins/helpers.ts):
  *
  *   setpath(1) -> mainpath "titanic1:"  path(3) data:  path(4) puppets2:  path(5) movies:
  *   setpath(2) -> mainpath "titanic2:"  path(3) data:  path(4) puppets1:  path(5) movies:

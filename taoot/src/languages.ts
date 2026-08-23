@@ -39,7 +39,7 @@ export interface GameLanguage {
  * this game's rather than the project's.
  *
  * It is a drawing instruction: capitals-only pixel art, painted into `lang.stg`
- * by tools/mklangstg.ts, in a font with no lower case and no Cyrillic or CJK.
+ * by taoot/tools/mklangstg.ts, in a font with no lower case and no Cyrillic or CJK.
  * Where it differs from the endonym (Russian, Japanese) the art is the weaker of
  * the pair by design — it is meant to be replaced with a PNG through the stage
  * editor, which is where proper Cyrillic and CJK come from.

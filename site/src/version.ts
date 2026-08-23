@@ -19,7 +19,7 @@ export const VERSION: string = typeof __APP_VERSION__ === "string" ? __APP_VERSI
  *
  * The bar is what the eleven pages share, so this is the one place a version
  * can go and be true everywhere — and it means a bug report opened from any of
- * them names the build it came from (taoot/src/bug-report.ts). Drawn here rather than
+ * them names the build it came from (site/src/bug-report.ts). Drawn here rather than
  * written into eleven documents so the number is bumped once. Nothing is drawn
  * on a page with no top bar.
  */

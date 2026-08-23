@@ -685,7 +685,7 @@ export class GameSession {
    * miss one.
    *
    * `@frame=` is deliberately LAST on the line. It is harness-paced (the two
-   * hosts count frames differently by design — taoot/tests/playthrough/masks.ts), so a
+   * hosts count frames differently by design — runtime/masks.ts), so a
    * comparison strips it and keeps the causal columns:
    *
    *     sed 's| @frame=.*||' both files, then diff
@@ -1509,7 +1509,7 @@ export class GameSession {
   }
 
   // ---- stage layer (STG flats) --------------------------------------------
-  // Flat/region/overlay logic lives in StageController (engine/stage.ts); the
+  // Flat/region/overlay logic lives in StageController (runtime/stage.ts); the
   // widely-shared fields below stay here and the session delegates the methods.
 
   stageName = "none";
@@ -1764,7 +1764,7 @@ export class GameSession {
     this.pointerY = y;
   }
 
-  /** the pointer as the engine's packed point — see engine/point.ts */
+  /** the pointer as the engine's packed point — see runtime/point.ts */
   pointerPoint(): number {
     return packPoint(this.pointerX, this.pointerY);
   }
@@ -1996,13 +1996,13 @@ export class GameSession {
   }
 
   /** produce the bytes of a save capturing the current progress — the
-   *  patch-a-base-save logic lives in engine/saveload.ts (and saveload-v1.ts) */
+   *  patch-a-base-save logic lives in runtime/saveload.ts (and saveload-v1.ts) */
   snapshotSave(): Uint8Array | null {
     return this.isV1 ? snapshotSaveV1(this) : snapshotSave(this);
   }
 
   /** load a save (restore globals, travel to the saved room) — the restore
-   *  choreography lives in engine/saveload.ts (and saveload-v1.ts) */
+   *  choreography lives in runtime/saveload.ts (and saveload-v1.ts) */
   loadGame(bytes: Uint8Array): Promise<boolean> {
     return this.isV1 ? loadGameV1(this, bytes) : loadGame(this, bytes);
   }
