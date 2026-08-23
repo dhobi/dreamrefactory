@@ -56,7 +56,13 @@ const rank = (url: string): number => {
 export class DustFiles implements HostFiles {
   private urls = new Map<string, string>();
   private cache = new Map<string, Uint8Array>();
-  private inFlight = new Map<string, Promise<Uint8Array | null>>();
+  /**
+   * The fetch in progress per name, and whether it is REPORTING ITS CHUNKS to
+   * the caller that started it. A second caller for the same file joins the
+   * flight but is not the one the stream reports to, so it still owes itself the
+   * single total report the old buffering path always made.
+   */
+  private inFlight = new Map<string, Promise<{ bytes: Uint8Array | null; streamed: boolean }>>();
   onBackgroundLoad: ((key: string, data: Uint8Array) => void) | null = null;
   /** every name the engine asked for and did not have, in order — the boot's own
    *  account of what it wanted, which is what makes a failed boot diagnosable */
@@ -78,6 +84,27 @@ export class DustFiles implements HostFiles {
    */
   readonly loads: string[] = [];
   onFileLoaded: ((name: string, bytes: number) => void) | null = null;
+  /**
+   * Every CHUNK of every fetch, as it lands — what a transfer rate has to be
+   * measured from.
+   *
+   * {@link onFileLoaded} fires once, when a file is done, which is the wrong
+   * event for both things the loading page wants to say. A rate computed from it
+   * divides a whole file by however long the page has been watching, so the
+   * intro films (13 MB of the boot's 14 fetches) report one enormous figure at
+   * the moment they land and nothing at all for the minute before; and a bar
+   * that only moves on completion sits still for that same minute. Per chunk,
+   * both are honest.
+   *
+   * A hook on the STORE rather than a callback per call, because the fetches
+   * worth metering are not all started by the page: the engine misses a file,
+   * `provide` starts a fetch, and no caller is there to pass one.
+   */
+  onChunk: ((name: string, bytes: number) => void) | null = null;
+  /** basename → size in bytes, from the manifest — see {@link sizeOf} */
+  private sizes = new Map<string, number>();
+  /** how far each in-flight fetch has got, for {@link partialProgress} */
+  private partial = new Map<string, number>();
   /** fires as the number of in-flight fetches changes — the play page's
    *  `FileStore` has the same hook, and the same canvas-corner spinner on it */
   onBusyChange: ((inFlight: number) => void) | null = null;
@@ -112,7 +139,13 @@ export class DustFiles implements HostFiles {
       const base = path.split("/").pop()!.toLowerCase();
       const url = siteUrl(path);
       const have = store.urls.get(base);
-      if (!have || rank(url) < rank(have)) store.urls.set(base, url);
+      if (!have || rank(url) < rank(have)) {
+        store.urls.set(base, url);
+        // the manifest's VALUES, which this store used to throw away: they are
+        // the byte sizes, and they are what lets the bar weigh a 13 MB film
+        // against a 47 KB save instead of counting both as one fetch
+        store.sizes.set(base, manifest[path]);
+      }
     }
     for (const [base, url] of Object.entries(OFF_MANIFEST)) {
       if (!store.urls.has(base)) store.urls.set(base, siteUrl(url));
@@ -123,6 +156,30 @@ export class DustFiles implements HostFiles {
   /** how many names the disc offers — a boot that indexed nothing says so */
   get size(): number {
     return this.urls.size;
+  }
+
+  /** what the manifest says this file weighs, or 0 for one it does not list */
+  sizeOf(name: string): number {
+    return this.sizes.get(name.toLowerCase()) ?? 0;
+  }
+
+  /**
+   * How far the fetches in flight have got, in whole-file units — 0.4 while a
+   * single film is two fifths of the way down the wire.
+   *
+   * The page's bar counts fetches, which is the right unit for a boot whose work
+   * IS a fetch count, and the wrong one during the one fetch that takes a minute.
+   * Adding this to the completed count keeps the unit and fills in the gap
+   * between two arrivals. A file the manifest does not size contributes nothing
+   * rather than a guess.
+   */
+  partialProgress(): number {
+    let sum = 0;
+    for (const [key, got] of this.partial) {
+      const total = this.sizes.get(key) ?? 0;
+      if (total > 0) sum += Math.min(1, got / total);
+    }
+    return sum;
   }
 
   /**
@@ -155,23 +212,61 @@ export class DustFiles implements HostFiles {
     const started = !this.inFlight.has(key);
     const flight = this.inFlight.get(key) ?? (async () => {
       const res = await fetch(url);
-      if (!res.ok) return null;
-      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (!res.ok) return { bytes: null, streamed: false };
+      // STREAMED, which is what `HostFiles.load` has always promised ("where the
+      // source streams, reports each chunk") and what taoot/src/files.ts does.
+      // This store used to buffer the whole body and report it once, so its page
+      // could only ever draw a bar that moved fourteen times.
+      const bytes = res.body
+        ? await this.readStream(key, res.body, onBytes)
+        : new Uint8Array(await res.arrayBuffer());
+      this.partial.delete(key);
       this.cache.set(key, bytes);
       this.loads.push(key);
       this.onFileLoaded?.(key, bytes.byteLength);
       this.onBackgroundLoad?.(key, bytes);
-      return bytes;
+      return { bytes, streamed: res.body !== null };
     })();
     this.inFlight.set(key, flight);
     if (started) this.onBusyChange?.(this.inFlight.size);
     try {
-      const bytes = await flight;
-      if (bytes) onBytes?.(bytes.byteLength);
+      const { bytes, streamed } = await flight;
+      // The owner of a streamed fetch has been told chunk by chunk already.
+      // Everyone else — a joiner, or the fallback path where the response had no
+      // body to read — still gets the one total, as they always did.
+      if (bytes && (!streamed || !started)) onBytes?.(bytes.byteLength);
       return bytes;
     } finally {
+      this.partial.delete(key);
       if (this.inFlight.delete(key)) this.onBusyChange?.(this.inFlight.size);
     }
+  }
+
+  /** drain a response body, reporting each chunk, then join it into one array */
+  private async readStream(
+    key: string,
+    body: ReadableStream<Uint8Array>,
+    onBytes?: (n: number) => void,
+  ): Promise<Uint8Array> {
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.byteLength;
+      this.partial.set(key, total);
+      this.onChunk?.(key, value.byteLength);
+      onBytes?.(value.byteLength);
+    }
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const c of chunks) {
+      out.set(c, at);
+      at += c.byteLength;
+    }
+    return out;
   }
 
   setDisc(): void {
