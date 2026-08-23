@@ -1,6 +1,6 @@
 /**
  * Movie-editor format layer — the write/edit half of the DF library that
- * movies.html (editors/mov-editor.ts) is built on: the frame-name patch, the frame
+ * movies.html (site/editors/mov-editor.ts) is built on: the frame-name patch, the frame
  * and region logic patches, the region rectangle, the two action-frame slots and
  * the ESC-aborts flag.
  *

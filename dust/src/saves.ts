@@ -11,9 +11,9 @@
  * v1 engine's own. So this module needs no framing code, and the import gate is
  * the shared reader.
  *
- * The saves live at `gamefiles/save/*.RTD` and are listed in the page's own
- * own manifest (`gamefiles.json`, at its own site root), so seeding is the same trick the play
- * page uses: fetch what the manifest already told us is there. They are real
+ * The saves live at `gamefiles/save/*.RTD` and are listed in this page's own
+ * manifest (`gamefiles.json`, at its own site root), so seeding is the same
+ * trick the play page uses: fetch what the manifest already told us is there. They are real
  * saves from the original DOS game, which matters for more than convenience —
  * a save is a serialized heap that cannot be written from nothing, so one of
  * them is also the base a fresh playthrough's first save is patched into

@@ -2,11 +2,18 @@
  * The Dust shell — *Dust: A Tale of the Wired West* (Cyberflix, 1995) rendered
  * by the Titanic port's own file layer.
  *
- * This is an EXPERIMENT and not a second game. It shares `engine/src/df/` with the play
- * page and nothing else: no engine, no interpreter, no editions, no saves. What
- * it answers is a narrow question — how much of a DreamFactory **1** disc can a
- * DreamFactory **4** port read — and it answers it by standing you in a room and
- * letting you walk.
+ * It began as an EXPERIMENT that shared `engine/src/df/` with the play page and
+ * nothing else — no engine, no interpreter, no saves — answering one narrow
+ * question by standing you in a room and letting you walk: how much of a
+ * DreamFactory **1** disc can a DreamFactory **4** port read?
+ *
+ * The answer turned out to be most of it, and the page grew into the answer. It
+ * now boots off the disc through the same {@link GameHost} Titanic uses, plays
+ * the intro films through the engine's own `MoviePlayer`, and saves and loads
+ * `.rtd` through the shared save browser. What is left of the experiment is
+ * {@link browse}, the standalone set walker, which {@link start} keeps as the
+ * FALLBACK for a boot that cannot produce a viewer — a failure should leave
+ * something on screen that says so and still shows the disc.
  *
  * ## What it is actually doing
  *
@@ -19,22 +26,27 @@
  *   - `set-v1.ts` is the one new reader, and only because a v1 set's MOVEMENT
  *     model is older: a grid of cells and one flat table of transitions, where a
  *     turn and a walk are the same kind of record. Titanic's turn rings and roads
- *     are what that table later became.
+ *     are what that table later became — and `set-v1-to-v4.ts` puts the older
+ *     table back into that shape, so {@link play} drives a real `SetViewer` and
+ *     nothing above it knows which engine wrote the room.
  *
- * So there are three controls, which is all the original had — its set scripts
- * handle exactly `uparrow`, `leftarrow` and `rightarrow` — and the fourth wall of
- * the experiment is that there is no fourth control to want.
+ * The set scripts handle exactly `uparrow`, `leftarrow` and `rightarrow`, which
+ * is all the original had, so there is no fourth control to want.
  *
- * ## Why every frame is decoded up front
+ * ## Why the BROWSER decodes every frame up front
+ *
+ * This is about {@link browse} and not about the game, which pays for the same
+ * problem the play page's way.
  *
  * DreamFactory frames are DELTA-coded: several row modes copy from "the previous
  * image", meaning whatever the target buffer already holds. So a frame is only
  * correct if the frames before it were decoded into the same buffer, in the order
- * the file lays them out. The play page pays for that with a ring cache and a
- * careful walk (`ring-cache.ts`); this page pays for it by decoding the whole set
- * once, in container order, and keeping every result. A set is ~150 frames at
- * 512x264, so that is ~20 MB of indexed pixels and about a second — a price worth
- * paying to make the rendering unarguable rather than clever.
+ * the file lays them out. The engine pays for that with a ring cache and a
+ * careful walk (`engine/src/web/ring-cache.ts`); the browser pays for it by
+ * decoding the whole set once, in container order, and keeping every result. A
+ * set is ~150 frames at 512x264, so that is ~20 MB of indexed pixels and about a
+ * second — a price worth paying to make the rendering unarguable rather than
+ * clever, and a price the game does not pay because it does not need to.
  */
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import {
@@ -850,7 +862,7 @@ async function runBoot(): Promise<void> {
    * `NEW.FLT`'s menu has SAVE and LOAD buttons which run the `savegame` /
    * `opengame` builtins — the same opcodes Titanic's CTL.STG uses, with Dust's
    * own version string ("Dust 0.3") — and those builtins block on these two
-   * hooks (engine/builtins/savegame.ts). The original popped the Windows
+   * hooks (engine/src/runtime/builtins/savegame.ts). The original popped the Windows
    * Save As / Open dialogs there; a browser has neither, so both open the
    * in-app modal instead, over the IndexedDB store that stands in for the DOS
    * SAVE directory.
@@ -1205,7 +1217,7 @@ function canvasCoords(e: PointerEvent | MouseEvent): { x: number; y: number } {
  * the item goes straight back to 316,320 having been offered to nobody.
  *
  * That was the SECOND gate on the same gesture. The first was that the click
- * never reached the prop at all (see BOOT_UI_SHOPS in engine/session.ts); this is
+ * never reached the prop at all (see BOOT_UI_SHOPS in engine/src/runtime/session.ts); this is
  * what stops it once it does.
  *
  * The second is the whole "would you like this?" screen (`handleselect`), a modal

@@ -35,7 +35,7 @@ const golden = (n: string) => join(HERE, "golden", `playthrough-${n}.json`);
 /**
  * Globals that count how long the HARNESS dwelt, not what the game did — and
  * which this comparison therefore drops. The list and the measurements behind it
- * live in [masks.ts](../../engine/src/runtime/masks.ts), because the browser suite needs the SAME list
+ * live in [masks.ts](../../../engine/src/runtime/masks.ts), because the browser suite needs the SAME list
  * and keeping a second copy here is what let the two drift apart: `lastsail` was
  * masked here and not there, so every browser segment from 13 on failed on a frame
  * stamp this file had already identified.

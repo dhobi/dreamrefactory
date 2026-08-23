@@ -1,6 +1,6 @@
 /**
  * Puppet-editor format layer — the write/edit half of the DF library that
- * editors/puppets.html (editors/puppet-editor.ts) is built on: the container-file writer,
+ * site/editors/puppets.html (site/editors/puppet-editor.ts) is built on: the container-file writer,
  * the transparent-codec frame encoder, and the dialogue-text patch.
  *
  * Self-contained: works on a SYNTHESIZED puppet file built to the layout

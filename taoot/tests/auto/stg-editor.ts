@@ -1,6 +1,6 @@
 /**
  * Stage-editor format layer — the write/edit half of the DF library that
- * stages.html (editors/stg-editor.ts) is built on: the three STG patches (flat name,
+ * stages.html (site/editors/stg-editor.ts) is built on: the three STG patches (flat name,
  * region name, region rectangle) and the flat-art replacement.
  *
  * Self-contained: works on a SYNTHESIZED stage built to the layout documented in

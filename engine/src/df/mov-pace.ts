@@ -4,7 +4,7 @@
  *
  * They did: the editor previewed everything at the native rate while the player
  * paced a cutscene off its soundtrack, so what you watched in the editor was not
- * what the game would do. Same shape as `editors/cst-editor.ts`'s private copy of
+ * what the game would do. Same shape as `site/editors/cst-editor.ts`'s private copy of
  * the engine heartbeat, which sat at 66 ms for as long as the engine's was 50 —
  * a constant with a second copy is a constant that will drift.
  *

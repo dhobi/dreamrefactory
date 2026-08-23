@@ -1,6 +1,6 @@
 /**
  * A GIF reader, for the one thing this repository wants a GIF for: turning an
- * animation somebody else authored into a DreamFactory MOV (tools/mkintromov.ts).
+ * animation somebody else authored into a DreamFactory MOV (taoot/tools/mknightdive.ts).
  *
  * It is a decoder and nothing else — no writer, no optimiser. What it hands back
  * is what the MOV builder needs and no more: each frame **already composited**

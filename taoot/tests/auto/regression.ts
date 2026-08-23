@@ -2160,7 +2160,7 @@ test("lockevents freezes the world: clicks and keys, but not a conversation", as
 );
 
 // --- 13d. the event queue: input made mid-gesture waits, it isn't dropped ----
-// TI.EXE keeps an event queue (32 slots, recovered in engine/input.ts) and the
+// TI.EXE keeps an event queue (32 slots, recovered in engine/src/runtime/input.ts) and the
 // port had none: `turn()`/`walk()` refuse while a move is on screen and the
 // press was simply gone, and `flushevents()` — which the scripts call in 92
 // places to discard input they don't want to inherit — had nothing to discard.
