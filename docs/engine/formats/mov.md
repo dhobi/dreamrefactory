@@ -114,7 +114,7 @@ downstream has to know which segment it is looking at.
 |-------|----------|
 | Header `+0x02` | i32 **format version** — 4 (4.0) is the only one the reader accepts |
 | Header `+0x18` | **playback flags** — see [Escaping a movie](#escaping-a-movie) |
-| Header `+0x1c` | i32 **minimum frame hold**, in ticks — the film's own frame rate, and a FLOOR rather than a cap. See [pacing](#a-movie-carries-its-own-pacing-—-solved-out-of-the-demo-build-s-engine) |
+| Header `+0x1c` | i32 **minimum frame hold**, in ticks — the film's own frame rate, and a FLOOR rather than a cap. See [pacing](#a-movie-carries-its-own-pacing) |
 | Header `+0x24`/`+0x26` | i16 x/y **screen origin** — where the picture sits on the 512×384 screen. (0,0) everywhere but the demo's letterboxed 512×264 films, which centre themselves with (0,60); the engine draws there and subtracts it from the mouse before region hit-testing (`0x44ad08`) |
 | Header `+0x28` | i32 the CD drive's **KB/s**, written at load — read only to compute the cue table's streaming lead (below), and 300 (2× CD-ROM) when it is 0 |
 | Header `+0x2c` | i32 container index of the **next segment**, 0 = last |
@@ -149,7 +149,7 @@ type-2 goto to frame 5) and escapes it with the single cue
 Without the cue, playback ping-pongs 5↔6 forever, which was exactly the
 reported symptom ("behaves normally at the beginning, then never advances").
 
-### A sound can name the frame that follows it — SOLVED
+### A sound can name the frame that follows it
 
 The second name field of a one-shot record (`+0x1a`) is the frame playback jumps
 to **when that sound ends**, and it works like a cue: it comes due out of any
@@ -166,7 +166,12 @@ all of them this one film — and it is load-bearing: the pocket watch's monolog
 is five chunks over ONE still picture, chained
 `01 → "blah1" → 02 → "blah2" → 03 → "blah5" → 06 → "blah6" → 07 → "endwatch"`,
 27.1 s in all. The port fired the first chunk and sat on the frame for ever
-("missing voice line upon picking up watch, plays only first part of it"). The
+("missing voice line upon picking up watch, plays only first part of it").
+
+**This page is why.** It described the field and then concluded that no shipped
+movie used it, so the port dropped it — and a documented wrong answer is worse
+than a documented gap, because nothing goes looking for it. Measured, 30 records
+across the six editions use the field, all of them this one film. The
 watch frames also show what the clearing rule is for: every one of them carries
 an exit region and a whole-screen region to `endwatch`, whose entry sound is
 `sil` — a second of **silence** that both takes the channel from the line and
@@ -185,7 +190,7 @@ frame record's `+16`. Its whole layout:
 | Offset | Type | Field |
 |-------:|------|-------|
 | +0 | i16 | the frame's own **action type** (the codes below) |
-| +2 | i32 | how long the frame is **held**, in ticks — see [pacing](#a-movie-carries-its-own-pacing-—-solved-out-of-the-demo-build-s-engine) |
+| +2 | i32 | how long the frame is **held**, in ticks — see [pacing](#a-movie-carries-its-own-pacing) |
 | +6 | byte | per-frame **flag bits** (same section) |
 | +0x12 | pstr | **entry sound** (below) |
 | +0x22 | pstr | **event** — a movie to chain to (types 3/4) |
@@ -270,7 +275,7 @@ These are the non-obvious rules, verified against `MENU.MOV`, `TURKNMES.MOV`,
 `CURTAINS.MOV`, `BEDLAMP.MOV` and `FAUCET.MOV`:
 
 - **Interactive movies open as a silent still** and pause on region frames
-  (starting with the first) — *unless* the frame sets [flags bit 2](#a-movie-carries-its-own-pacing-—-solved-out-of-the-demo-build-s-engine),
+  (starting with the first) — *unless* the frame sets [flags bit 2](#a-movie-carries-its-own-pacing),
   which says "these regions are live but do not stop for them". Clicks
   **outside** any region do nothing.
 - **A click plays the region's sound, then jumps** per its type. A target that
@@ -379,7 +384,7 @@ measurement of the wrong thing. Its frames are authored at **50 ms**; the water 
 repeats about three times under the 3.62 s sound.
 
 **Regionless cutscenes** carry their own per-frame timing — see
-[A movie carries its own pacing](#a-movie-carries-its-own-pacing-—-solved-out-of-the-demo-build-s-engine)
+[A movie carries its own pacing](#a-movie-carries-its-own-pacing)
 below, which is the rule the player uses. What the file does *not* say is whether a
 movie is self-paced at all, and that is the one pacing decision still the port's:
 `chooseFrameInterval` in
@@ -420,10 +425,11 @@ matter for playing the audio itself:
   loop-table bed as the backstop. The bed is halted with the film either way —
   `TI.EXE`'s own teardown does that on the no-next-segment path (`0x449d40`).
 
-### A movie carries its own pacing — SOLVED, out of the demo build's engine
+### A movie carries its own pacing
 
-The port derived a frame rate from the soundtrack for years. It did not have to: the
-timing is **in the file**, and it is per frame.
+Recovered out of the demo build's engine. The port derived a frame rate from the
+soundtrack for years and did not have to: the timing is **in the file**, and it
+is per frame.
 
 | Where | Field |
 |-------|-------|

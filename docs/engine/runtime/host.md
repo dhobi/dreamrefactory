@@ -842,7 +842,7 @@ jump fires out of any wait, a modal region wait included; each fires once, on th
 segment's own clock.
 
 **Pacing is the film's, not ours.** `frameHoldMs` — `max(frame hold, segment
-floor)`, [recovered from the demo build](../formats/mov.md#a-movie-carries-its-own-pacing-—-solved-out-of-the-demo-build-s-engine)
+floor)`, [recovered from the demo build](../formats/mov.md#a-movie-carries-its-own-pacing)
 — decides every advance. `chooseFrameInterval` only decides *whether* a movie is
 self-paced at all (0 = a click-through close-up); a frame authored to wait for the
 spoken line holds until the movie's own event sounds are done. The soundtrack is
