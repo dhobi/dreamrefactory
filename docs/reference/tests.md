@@ -129,7 +129,6 @@ It drives **Titanic's** page, which is its own dev server on 5174 — so
 
 ```
 npm run dev:taoot                         # in another terminal — Titanic on 5174
-export APP_URL=http://localhost:5174/     # the driver still defaults to 5173
 npm run test:browser                      # menu-movie, then the whole route, ~39 min
 npm run test:browser:playthrough          # just the route
 npm run test:browser:endgame              # just the ending, ~3 min, off a checkpoint
@@ -140,10 +139,11 @@ npm run test:browser:m2                   # segments 7–16
 SEGMENTS=13 npm run test:browser:seg      # one segment
 ```
 
-`APP_URL` is the **site root** and the driver appends `play/` to it; the
-default it falls back to (`http://localhost:5173/`) is the front door's port
-from before the split, so set it or the run opens a 404. CI does the same
-thing explicitly — `browser.yml` starts a server on 5199 and passes `APP_URL`.
+`APP_URL` overrides where it looks; the driver treats it as the **game's
+root** and appends `play/`, and it defaults to `http://localhost:5174/` — this
+game's own dev server. CI sets it explicitly, because `browser.yml` runs the
+server on 5199 rather than 5174 to stay off the port a person's own
+`npm run dev:taoot` would want.
 
 Dust has one browser check of its own, and it runs against the **build**
 rather than a dev server, because the bug it exists for only appears there:

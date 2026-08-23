@@ -269,7 +269,7 @@ Learned the hard way, all verified:
 - **Bevel ids, never positions.** `PENNY1.PUP`'s `zeitelgram()` calls
   `puppetscramble()`, which shuffles its plaques.
 - **`out/scripts/` is the first place to look** for any of this
-  (`npx tsx tools/dumpscripts.ts taoot/gamefiles out/`) — but it is not complete for
+  (`npx tsx tools/dumpscripts.ts`) — but it is not complete for
   BOOTFILE: five codes are dumped where boot1 and boot2 carry 78 between them, so
   `progress` looks undefined when it is not. `session.bootScripts[n].script.codes` is
   the honest list. `npx tsx taoot/tools/disasmcmd.mts <name|0xVA>` disassembles TI.EXE when

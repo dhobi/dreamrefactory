@@ -142,14 +142,15 @@ The ordering is not cosmetic. `actions/checkout` cleans with `git clean -ffdx`,
 and `-x` deletes *ignored* files too — a link made before the checkout is gone
 by the time the tests run. Remaking it costs nothing; the 8 GB never moves.
 
-### The dev server does not get port 5173
+### The dev server does not get port 5174
 
 The browser suite drives a live server and does not start one, so `browser.yml`
 starts it — on **5199**, with `--strictPort`, and reachable through `APP_URL`.
-Two reasons it must not be 5173:
+Two reasons it must not be 5174, which is Titanic's own port and the driver's
+default:
 
-- the runner shares a machine with a person, and 5173 is where their own
-  `npm run dev` lives;
+- the runner shares a machine with a person, and 5174 is where their own
+  `npm run dev:taoot` lives;
 - without `--strictPort`, Vite hops to the next free port and the suite would
   quietly test *their* working tree instead of the checkout.
 

@@ -3,14 +3,44 @@
  *   <outDir>/scripts/<file>/<container>.txt   decompiled scripts
  *   <outDir>/opcode-frequency.tsv             usage stats across the corpus
  *
- *   npx tsx tools/dumpscripts.ts gamefiles out/
+ *   npx tsx tools/dumpscripts.ts                  # whichever rip is installed
+ *   npx tsx tools/dumpscripts.ts <rip> <outDir>   # or say which
  */
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
+import { fileURLToPath } from "node:url";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { sniffScript, scriptToText, Token } from "@dreamfactory/engine/df/script";
 
-const [, , rootDir = "gamefiles", outDir = "out"] = process.argv;
+/**
+ * Which rip to read when the caller does not say.
+ *
+ * This tool takes a rip as an ARGUMENT — that is what makes it a shared tool
+ * rather than a game's — so it may not import a game to find one, and the
+ * default has to be discovered rather than depended on.
+ *
+ * It used to be the bare string `"gamefiles"`, which was right while there was
+ * one rip at the repository root. Each game has its own now, and a bare literal
+ * is resolved against the WORKING DIRECTORY, so the zero-argument form named a
+ * path that stopped existing. These are resolved from THIS FILE instead, so the
+ * tool answers the same from anywhere, and the two environment variables come
+ * first because that is what the CI runner sets.
+ */
+function defaultRip(): string {
+  const candidates = [
+    process.env.TAOOT_GAMEFILES,
+    fileURLToPath(new URL("../taoot/gamefiles", import.meta.url)),
+    process.env.DUST_GAMEFILES,
+    fileURLToPath(new URL("../dust/gamefiles", import.meta.url)),
+  ];
+  for (const c of candidates) if (c && existsSync(c)) return c;
+  console.error(
+    "no rip found: pass one as the first argument, or set TAOOT_GAMEFILES / DUST_GAMEFILES.",
+  );
+  process.exit(1);
+}
+
+const [, , rootDir = defaultRip(), outDir = "out"] = process.argv;
 
 const SCRIPT_BEARING = /\.(SET|STG|PUP|SHP|CST|MOV)$/i;
 

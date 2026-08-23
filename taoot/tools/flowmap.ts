@@ -34,7 +34,8 @@
  *                              grand staircase changes DECK onto itself, and
  *                              that is the ship's vertical connection.
  *
- *   npx tsx taoot/tools/flowmap.ts gamefiles out/
+ *   npx tsx taoot/tools/flowmap.ts                    # this game's own rip
+ *   npx tsx taoot/tools/flowmap.ts <rip> <outDir>      # or say where
  */
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, existsSync, copyFileSync } from "node:fs";
 import { join, basename, dirname } from "node:path";
@@ -43,8 +44,20 @@ import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { sniffScript, Token } from "@dreamfactory/engine/df/script";
 import { parseScript } from "@dreamfactory/engine/runtime/parser";
 import { CallExpr, Expr, Script, Stmt } from "@dreamfactory/engine/runtime/ast";
+import { gamefilesRoot } from "./gamefiles";
 
-const [, , rootDir = "gamefiles", outDir = "out"] = process.argv;
+/**
+ * The rip to read, and where to write.
+ *
+ * The default goes through {@link gamefilesRoot} rather than being the string
+ * `"gamefiles"`, which is what it was until each game got a package of its own
+ * and the rip moved to `taoot/gamefiles`. A bare literal is resolved against
+ * the WORKING DIRECTORY, so it named a path that no longer exists from the
+ * repository root and a different one from inside `taoot/`; `gamefilesRoot`
+ * resolves from this file and honours `TAOOT_GAMEFILES`, which is what the CI
+ * runner sets and what every other tool in this directory already used.
+ */
+const [, , rootDir = gamefilesRoot(), outDir = "out"] = process.argv;
 
 const SCRIPT_BEARING = /\.(SET|STG|PUP|SHP|CST|MOV)$/i;
 
@@ -904,7 +917,19 @@ if (existsSync(navDir)) {
 // render the self-contained interactive page and publish it into the docs site
 const flowMapHtml = buildFlowMapHtml(sceneGraph);
 const here = dirname(fileURLToPath(import.meta.url));
-const docsPublic = join(here, "..", "docs", "public");
+/**
+ * The repository root — TWO levels up, because this tool lives in `taoot/tools/`
+ * and not in `tools/`.
+ *
+ * It said one, from when it did, and the failure was silent by construction:
+ * the publish is wrapped in `existsSync(docsPublic)`, so a wrong path is
+ * indistinguishable from "you have no docs checkout" and the run still reports
+ * success for everything else it wrote. The interactive map therefore stopped
+ * being regenerated at the monorepo move and nothing said so — the one on the
+ * site is the copy committed before it.
+ */
+const repoRoot = join(here, "..", "..");
+const docsPublic = join(repoRoot, "docs", "public");
 let published = false;
 if (existsSync(docsPublic)) {
   // Serve as a directory index (flow-map/index.html), NOT flow-map.html:
@@ -915,7 +940,9 @@ if (existsSync(docsPublic)) {
   writeFileSync(join(mapDir, "index.html"), flowMapHtml);
   const vendorDir = join(mapDir, "vendor");
   mkdirSync(vendorDir, { recursive: true });
-  const nm = join(here, "..", "node_modules");
+  // the root install, not `taoot/node_modules` — a workspace package's own
+  // directory holds its symlinks and none of the hoisted dependencies
+  const nm = join(repoRoot, "node_modules");
   // fcose 2.x needs cose-base 2.x / layout-base 2.x — take them from fcose's
   // own nested node_modules, not the top-level 1.x copies (cose-bilkent's).
   const fc = join(nm, "cytoscape-fcose");
