@@ -173,6 +173,26 @@ export class DustFiles implements HostFiles {
    * between two arrivals. A file the manifest does not size contributes nothing
    * rather than a guess.
    */
+  /**
+   * How many bytes of these names are still to come: nothing for one already in
+   * hand, and only the unfetched remainder of one in flight.
+   *
+   * The loading page's estimate of how long is left needs a "how much", and this
+   * is the honest form of it — the manifest's sizes minus what has actually
+   * landed, rather than a count of files scaled by an average. A name the
+   * manifest does not size contributes nothing, which makes the estimate
+   * optimistic rather than invented; on this disc it sizes everything.
+   */
+  bytesLeft(names: Iterable<string>): number {
+    let left = 0;
+    for (const name of names) {
+      const key = name.toLowerCase();
+      if (this.cache.has(key)) continue;
+      left += Math.max(0, (this.sizes.get(key) ?? 0) - (this.partial.get(key) ?? 0));
+    }
+    return left;
+  }
+
   partialProgress(): number {
     let sum = 0;
     for (const [key, got] of this.partial) {

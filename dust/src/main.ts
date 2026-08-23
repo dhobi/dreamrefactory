@@ -380,6 +380,17 @@ const TICK_MS = 250;
 const netSamples: { t: number; bytes: number }[] = [];
 let netTotal = 0;
 let meterTimer = 0;
+/**
+ * What is still to come, once anything knows: the boot's own prefetch list,
+ * weighed against the manifest (DustFiles.bytesLeft).
+ *
+ * Not set until the BOOTFILE has been read, because until then nothing has
+ * asked the disc what a launch needs — and an estimate made before that would be
+ * a guess dressed as a number. Which is the whole argument for this line: a cold
+ * boot moves some 95 MB, and on a slow connection the difference between "this
+ * is working" and "this is broken" is being told how long it will take.
+ */
+let bytesLeft: (() => number) | null = null;
 /** the last thing the LOADER said, to fall back to when the wire goes quiet */
 let idleCaption = "";
 /** is the caption currently a rate, and therefore mine to replace? */
@@ -404,7 +415,16 @@ function meterTick(): void {
   const got = netSamples.reduce((a, x) => a + x.bytes, 0);
   const rate = span >= SETTLE_MS ? got / (span / 1000) : 0;
   if (rate) {
-    bootSayEl.textContent = `${fmtRate(rate)} · ${fmtSize(netTotal)} so far`;
+    const left = bytesLeft?.() ?? 0;
+    // "12 of 95 MB" rather than "12 MB so far", once there is a total to be a
+    // fraction of. The total is what has come down plus what is still owed, so
+    // it grows if the boot asks for something the plan did not name — which is
+    // the honest direction for it to move.
+    const scale = left
+      ? `${fmtSize(netTotal)} of ${fmtSize(netTotal + left)}`
+      : `${fmtSize(netTotal)} so far`;
+    const eta = left ? fmtLeft(left / rate) : "";
+    bootSayEl.textContent = `${fmtRate(rate)} · ${scale}${eta ? ` · ${eta}` : ""}`;
     rateShown = true;
   } else if (rateShown) {
     bootSayEl.textContent = idleCaption;
@@ -453,6 +473,26 @@ function fmtRate(bytesPerSecond: number): string {
   return bytesPerSecond >= 1024 * 1024
     ? `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`
     : `${Math.max(1, Math.round(bytesPerSecond / 1024))} KB/s`;
+}
+
+/**
+ * "~4 min left", "~35 s left", or nothing at all when the answer is "any moment
+ * now" or too wild to print.
+ *
+ * Rounded coarsely on purpose — to five seconds under a minute and a half, to
+ * whole minutes above it. The rate it divides is a three-second average, so the
+ * raw figure jitters by a second or two between ticks; a countdown that flickers
+ * reads as broken even when every value it shows is true. And it is a tilde
+ * rather than a colon-separated clock, because it is an estimate from the last
+ * three seconds of a connection that is free to change its mind.
+ */
+function fmtLeft(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 3) return "";
+  if (seconds > 3 * 3600) return ""; // not an estimate, a symptom
+  // clamped at 85 so the seconds branch cannot round its way to "~90 s left",
+  // which is a minute and a half wearing the wrong unit
+  if (seconds < 90) return `~${Math.min(85, Math.max(5, Math.round(seconds / 5) * 5))} s left`;
+  return `~${Math.round(seconds / 60)} min left`;
 }
 
 /** "13.1 MB" or "412 KB" — how much has actually come down the wire */
@@ -1050,9 +1090,10 @@ async function runBoot(): Promise<void> {
    * frame — df/mov-v1.ts), so left out it becomes a mid-intro stall exactly
    * where the story hands over.
    */
-  await Promise.all(
-    [...plan.resources, "town.set", "intro3.mov"].map((f) => files.load(f)),
-  );
+  const prefetch = [...plan.resources, "town.set", "intro3.mov"];
+  bytesLeft = () => files.bytesLeft(prefetch);
+  await Promise.all(prefetch.map((f) => files.load(f)));
+  bytesLeft = null;
   clearInterval(barTimer);
   stopMeter();
   progress(1, "ready");
