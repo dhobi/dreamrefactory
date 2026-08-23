@@ -551,10 +551,22 @@ disassembly at `0x421b40`. The short version of what differs from v4:
   uses — 1 exit, 2 goto, 3 exit + chain, 4 call, 5 return.
 - **Hotspots are typed records** walked from a per-frame offset (record
   `+0x24`), first hit wins: type 2 (16 bytes) carries a click **sound** and a
-  goto **target**, type 1 (14 bytes) exits with a sound. A frame answers its
-  hotspots on every frame; only the wait bit (record `+0x06` bits 1/3) stops
-  the picture for them — that is how ARMOPEN.MOV's opening animation is
-  steerable mid-swing.
+  goto **target**, type 1 (14 bytes) exits with a sound. How many a frame owns
+  is the count at record `+0x00`, and a frame that owns any of them **blocks
+  until one is hit** unless `+0x1a` bit 2 says to play through — that is how
+  ARMOPEN.MOV's opening animation is steerable mid-swing. The port derives both
+  from `+0x06` instead, which is not a field the movie loop reads; it survives
+  on what those bits amount to (first frame, last frame) and the reader's own
+  walk finds more boxes than the count admits to. Both gaps are written up in
+  `mov-v1.ts`.
+- **A frame can wait for the sound it started.** Record `+0x1a` bit 0 makes the
+  loop block on the sound channel before advancing (`0x404ab0` → `0x429bd0`),
+  so the frame is held for `max(hold, what is left of the sound)`. Nothing in
+  the file says how long a chunk is, and this is how a film times itself to one:
+  152 frames across 69 of the disc's 185 segments, in 50 of its 160 films. DOG1.MOV fires one 0.88 s
+  growl twice and waits after each, so the dog growls twice over 2.4 s instead
+  of once over 1.0 s; MAYOREND.MOV runs 61 s rather than 15 s, which is the
+  difference between hearing the mayor's last speech and hearing a quarter of it.
 - **Sounds are per frame and per click, not tables.** Frame record `+0x20`
   names the chunk a frame starts (negative = interleaved with the pictures),
   the hotspot its click sound; whatever nothing references is the bed.

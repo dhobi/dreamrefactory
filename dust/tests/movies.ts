@@ -37,7 +37,10 @@ import { test, expect } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readAudioHeader } from "@dreamfactory/engine/df/audio";
+import {
+  decodeAudioContainer,
+  readAudioHeader,
+} from "@dreamfactory/engine/df/audio";
 import {
   compositeFrameV1,
   movFileFromV1,
@@ -485,6 +488,134 @@ test("stepsForward refuses to touch a DreamFactory 4 film", () => {
  * (`paletteToRGBA`'s reserve, and once upon a time this alias after it) and only
  * the pixels say which pinning won.
  */
+/**
+ * How long a v1 film runs, played the way the movie loop plays it: each frame
+ * held for its own `max(hold, floor)`, and a frame that says so held longer
+ * still — until the sound it started has finished.
+ *
+ * The same `max` the player applies, and deliberately not a sum: the wait is a
+ * floor under the hold, not time added after it (DF.EXE reaches the hold
+ * deadline and the sound spin one after the other, so whichever is later wins).
+ */
+const runtimeMs = (mov: ReturnType<typeof movFileFromV1>, segIdx = 0): number => {
+  const seg = mov.segments[segIdx];
+  const raw = mov.file.containers;
+  let now = 0;
+  let soundEnds = 0;
+  seg.frames.forEach((f, i) => {
+    if (f.sound) {
+      const loc = seg.sounds.get(f.sound.toLowerCase());
+      const pcm = loc === undefined ? null : decodeAudioContainer(raw[loc].data);
+      if (pcm) soundEnds = now + (pcm.samples.length / pcm.sampleRate) * 1000;
+    }
+    now += frameHoldMs(seg, i);
+    if (f.waitsForVoice) now = Math.max(now, soundEnds);
+  });
+  return now;
+};
+
+test("DOG1.MOV: the dog growls twice, because the film waits for each growl", () => {
+  if (skip()) return;
+  const v1 = read("DOG1.MOV");
+  const mov = movFileFromV1(v1);
+  const seg = mov.segments[0];
+  const raw = v1.segments[0];
+
+  // six frames, one growl chunk, and the growl fired TWICE — once per snarl
+  expect(seg.frames.length).toBe(6);
+  expect(raw.audioChunks.length).toBe(1);
+  expect(seg.frames.map((f) => f.sound)).toEqual(["", "1", "", "1", "", ""]);
+  const growl = decodeAudioContainer(mov.file.containers[1].data);
+  const growlMs = (growl.samples.length / growl.sampleRate) * 1000;
+  expect(growlMs).toBeGreaterThan(800);
+
+  // The two firings are 100 ms apart on the film's own frame holds — two copies
+  // of one 0.88 s growl that close together is ONE growl, which is what was
+  // reported. What separates them is +0x1a bit 0 on the frame AFTER each
+  // firing: hold until the sound is done.
+  expect(raw.frames.map((f) => f.holdsForSound)).toEqual([
+    false,
+    false,
+    true,
+    false,
+    true,
+    false,
+  ]);
+  // and it arrives in the player as v4's own name for the same sentence
+  expect(seg.frames[2].waitsForVoice).toBe(true);
+  expect(seg.frames[4].waitsForVoice).toBe(true);
+
+  // frames 1 and 3 are 100 ms apart on holds alone; the wait pushes the second
+  // growl past the end of the first
+  const holdsOnly = raw.frames.reduce(
+    (a, _, i) => a + frameHoldMs(seg, i),
+    0,
+  );
+  expect(holdsOnly).toBeLessThan(1_100);
+  expect(runtimeMs(mov)).toBeGreaterThan(holdsOnly + growlMs);
+  expect(runtimeMs(mov)).toBeGreaterThan(2_300);
+});
+
+test("+0x1a bit 0 is what times 50 of the disc's films, the four endings among them", () => {
+  if (skip()) return;
+
+  // The flag is real and it is rare: 152 frames of 6717, and never bit 4 —
+  // the step-advance the earlier reading named is not on this disc at all.
+  //
+  // The spread is counted too, because it is the figure the module comment and
+  // the format notes quote and the one nothing else would catch drifting: 69
+  // segments of 185, across 50 films of 160.
+  let carrying = 0;
+  let stepping = 0;
+  let frames = 0;
+  let segments = 0;
+  let segmentsWaiting = 0;
+  let films = 0;
+  let filmsWaiting = 0;
+  for (const name of movies()) {
+    films++;
+    let anyInFilm = false;
+    for (const seg of read(name).segments) {
+      segments++;
+      let anyInSegment = false;
+      for (const f of seg.frames) {
+        frames++;
+        if (f.holdsForSound) {
+          carrying++;
+          anyInSegment = true;
+          anyInFilm = true;
+        }
+        if (f.flags2 & 0x10) stepping++;
+      }
+      if (anyInSegment) segmentsWaiting++;
+    }
+    if (anyInFilm) filmsWaiting++;
+  }
+  expect(frames).toBe(6717);
+  expect(carrying).toBe(152);
+  expect(stepping).toBe(0);
+  expect([films, filmsWaiting]).toEqual([160, 50]);
+  expect([segments, segmentsWaiting]).toEqual([185, 69]);
+
+  // every one of them reaches the player as a frame that holds for its sound
+  for (const name of movies()) {
+    const v1 = read(name);
+    const mov = movFileFromV1(v1);
+    v1.segments.forEach((raw, i) =>
+      raw.frames.forEach((f, k) => {
+        if (f.holdsForSound)
+          expect(mov.segments[i].frames[k].waitsForVoice).toBe(true);
+      }),
+    );
+  }
+
+  // MAYOREND.MOV is the film it matters most to: the mayor's last speech is
+  // fired frame by frame and the picture is four times shorter than it. Without
+  // the wait the film ended at 15 s and the teardown cut the rest.
+  const mayor = movFileFromV1(read("MAYOREND.MOV"));
+  expect(runtimeMs(mayor)).toBeGreaterThan(55_000);
+});
+
 test("a v1 keyframe's 0xff renders white, not black", () => {
   if (skip()) return;
 

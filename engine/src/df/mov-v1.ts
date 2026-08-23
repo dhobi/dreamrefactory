@@ -28,17 +28,37 @@ import type { MovFile, MovFrame, MovSegment } from "./mov";
  * bit of one frame to the action of another.) The fields, each with the engine
  * read that proves it:
  *
+ *     +0x00  i16 how many HOTSPOT records this frame owns, at the offset in
+ *            +0x24 (0x404e5a reads it, 0x404e90 skips straight to the action
+ *            when it is <= 0). See the note on hotspot counts below: this
+ *            reader does not use it yet.
  *     +0x02  i32 hold, in ticks of 50/3 ms — floored by the header's frame rate
  *            (0x404861: `max(hold, [hdr+0x26])`)
- *     +0x06  i16 wait flags: bit 0 = wait for the one-shot sound to finish,
- *            bits 1/3 = wait for a click (0x404e72 area; bit 4 rides along on
- *            nearly every record and nothing read it)
+ *     +0x06  i16 NOT read by the movie loop — see below. 16 on 6255 of the
+ *            disc's 6717 frames, 18 on 175 first frames and 17 on 163 last
+ *            ones, which is a structural marker and not behaviour.
+ *     +0x0a  i32 first and +0x0e i32 last container of the range this frame
+ *            loads, when +0x1a bit 1 says it loads one (0x406be9). Not read
+ *            here: the port has the whole file in hand and has nothing to
+ *            stage in.
  *     +0x16  i16 action, dispatched 1..5 through the table at 0x405464:
  *              1 exit · 2 goto `target` · 3 exit + chain to the movie named at
  *              +0x30 · 4/5 unshipped as frame actions
  *     +0x18  i16 target of action 2, a 0-BASED frame index, clamped to the table
  *            (0x405190; a target past the end pins to the last frame)
- *     +0x1a  i16 more flags (bit 4 = plain step-advance, 0x405134)
+ *     +0x1a  i16 the flags the loop actually reads, each at its own site:
+ *              bit 0  after this frame, BLOCK until the sound is done
+ *                     (0x404ab0 and the exit path 0x404ae6, both calling
+ *                     0x429bd0 — a spin on the channel-0 "still playing" word
+ *                     at 0x45e1c1, servicing audio until it clears)
+ *              bit 1  this frame loads the container range at +0x0a..+0x0e,
+ *                     bit 3 deciding before or after the blit (0x406bc0)
+ *              bit 2  do NOT stop for this frame's hotspots when no click is
+ *                     in hand — the count is zeroed and the frame's own action
+ *                     runs (0x404e7f, and the loop it picks at 0x405119)
+ *              bit 4  plain step-advance to the next frame, ignoring the
+ *                     action (0x404e76 -> 0x405134). Never set on this disc:
+ *                     +0x1a is 0 on 6564 frames, 1 on 152 and 0xa on one.
  *     +0x1c  i16 picture container, relative to the segment's header
  *     +0x20  i32 sound started when the frame shows: the chunk at
  *            `bias + |ref|`, 0 = none. Positive refs point into the up-front
@@ -101,6 +121,51 @@ import type { MovFile, MovFrame, MovSegment } from "./mov";
  * is four such chunks; 81 segments reference everything they own and have no
  * bed at all.
  *
+ * ## A frame can WAIT for the sound it started, and 152 of them do
+ *
+ * The picture does not simply run at the frame rate over the top of whatever is
+ * playing. Record +0x1a bit 0 makes the movie loop block on the sound channel
+ * before it moves on (0x404ab0 -> 0x429bd0), so the frame is held for
+ * `max(hold, what is left of the sound)`. Nothing in the file says how long a
+ * sound is; this is how a film times itself to one.
+ *
+ * DOG1.MOV — the dog that stops you leaving town on day one — is the small proof
+ * and was the report: six frames, one 0.88 s growl, and the growl is fired
+ * TWICE, at frame 1 and again at frame 3. Held only to the frame rate, the two
+ * land 100 ms apart, and two copies of one 0.88 s growl 100 ms apart is one
+ * growl. Its frames 2 and 4 — each the frame after a firing — carry bit 0: the
+ * film waits out the first growl before it snarls again, and takes 2.43 s rather
+ * than 0.98 s. That is the difference between a dog that growls twice and a dog
+ * that growls once.
+ *
+ * 69 of the disc's 185 segments are timed this way — 50 of its 160 films — and
+ * the four endings are the ones it matters most to: MAYOREND.MOV runs 61 s with the wait and 15 s
+ * without it, so three quarters of the mayor's last speech played over a picture
+ * that had already finished.
+ *
+ * The port spends it through {@link MovFrame.waitsForVoice}, which is the same
+ * sentence in v4's words — "hold until this movie's own sounds are done".
+ *
+ * ## Two fields this reader still does not read the way DF.EXE does
+ *
+ * Recorded here because both were found by disassembling around the wait above,
+ * and neither is what the earlier readings assumed:
+ *
+ *  - **+0x06 is not wait flags.** The movie loop never reads it: no site in
+ *    .text tests a bit of the record at +0x06, and the values do not behave like
+ *    flags either — 16 almost everywhere, 18 on a first frame, 17 on a last one.
+ *    This reader still derives `waitsForVoice`/`waitsForClick` from it, and that
+ *    survives on its accidents: "bit 0" is "this is the last frame", which keeps
+ *    a final line from being cut on ten films, and "bits 1/3" is "this is the
+ *    first frame", which is where a Dust close-up's click actually waits.
+ *  - **+0x00 is the hotspot count** (above), and `hotspotRun` walks from +0x24
+ *    until a record's type is not 1..5 instead. The two disagree on 422 of the
+ *    525 frames that have either, always by the reader finding MORE — ABE.MOV's
+ *    first frame owns none and it walks four. Harmless so far, because a v1
+ *    frame only stops for a click when this reader thinks it is frame 0, so the
+ *    extra boxes are unreachable rather than wrong. It is still a count that
+ *    should be read.
+ *
  * ## Header fields
  *
  * Shared with the previous readings and unchanged: version @2, frame count
@@ -126,8 +191,17 @@ export interface MovFrameV1 {
   action: number;
   /** action 2's destination, a 0-based frame index (unclamped, as stored) */
   target: number;
-  /** +0x1a — bit 4 = plain step-advance */
+  /** +0x1a — the raw flag word; the bits are in the module comment */
   flags2: number;
+  /**
+   * +0x1a bit 0 — after this frame, hold until the sound it started is done.
+   *
+   * The film's own way of timing itself to a line it cannot measure, and read
+   * out of the movie loop's `test byte ptr [rec+0x1a], 1` -> `call 0x429bd0`
+   * (0x404ab0, and 0x404ae6 on the exit path). 152 frames across 69 segments
+   * carry it, DOG1.MOV's two snarls among them.
+   */
+  holdsForSound: boolean;
   /** container of the sound this frame starts, 0 = none (absolute) */
   sound: number;
   /** offset of this frame's hotspot run in container 0 */
@@ -279,8 +353,26 @@ const FRAME = {
 /** the +0x30 pstr runs to the record's end at +0x50 */
 const CHAIN_NAME_MAX = 31;
 
-/** wait-flag bits at record +0x06 */
+/**
+ * Bits of record +0x06. NOT flags the engine reads — see the module comment;
+ * they behave as "this is the last frame" and "this is the first frame", and
+ * this reader leans on that.
+ */
 const WAIT = { voice: 1, click: 2, clickAlt: 8 } as const;
+
+/** bits of record +0x1a, each one an engine read (see the module comment) */
+const MORE = {
+  /** bit 0 — block on the sound channel before advancing (0x429bd0) */
+  holdForSound: 1,
+  /** bit 1 — load the container range at +0x0a..+0x0e (0x406bc0) */
+  preload: 2,
+  /** bit 2 — do not stop for this frame's hotspots without a click in hand */
+  playsThroughHotspots: 4,
+  /** bit 3 — with `preload`, load after the blit rather than before it */
+  preloadAfterBlit: 8,
+  /** bit 4 — step to the next frame, ignoring the action. Unused on this disc */
+  step: 0x10,
+} as const;
 
 /** hotspot record sizes by type — DF.EXE's stride table at 0x405450 */
 const HOTSPOT_SIZE: Record<number, number> = {
@@ -401,6 +493,7 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
         action: at16(o + FRAME.action),
         target: at16(o + FRAME.target),
         flags2: at16(o + FRAME.flags2),
+        holdsForSound: (at16(o + FRAME.flags2) & MORE.holdForSound) !== 0,
         sound: soundRef === 0 ? 0 : bias + Math.abs(soundRef),
         hotspotOffset,
         chainTo,
@@ -665,7 +758,20 @@ export function movFileFromV1(v1: MovFileV1): MovFile {
             record: r.record,
           })),
           holdTicks: f.holdTicks,
-          waitsForVoice: f.waitsForVoice,
+          /*
+           * v4's "hold until this movie's own sounds are done" is DF1's +0x1a
+           * bit 0, which is the flag the engine really tests (0x404ab0 ->
+           * 0x429bd0) and the one 69 segments are timed by — DOG1.MOV waits out
+           * each growl before the next snarl, MAYOREND.MOV waits out the
+           * mayor's speech instead of ending 46 s early.
+           *
+           * OR-ed with the +0x06 reading rather than replacing it. That one is
+           * not a flag the engine reads at all (module comment), but what it
+           * amounts to — "this is the last frame" — still keeps a final line
+           * from being cut on ten films, DIEH3 and WELLGUN among them, and
+           * dropping it would trade one class of clipped sound for another.
+           */
+          waitsForVoice: f.waitsForVoice || f.holdsForSound,
           holdsDeadline: false,
           // a hotspot run is live on every frame that carries one; only the
           // wait bit stops the picture for it (the module comment's skippable

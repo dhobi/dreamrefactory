@@ -101,7 +101,7 @@ safe because the upload only ever adds and overwrites — see
 ## Tests
 
 ```bash
-npm test                 # 36 files, 524 tests — the automatic suite
+npm test                 # 38 files, 534 tests — the automatic suite
 npm run test:playthrough # the game played end to end, by the clock it runs on
 npm run test:browser     # Playwright against a live dev server
 ```
