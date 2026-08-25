@@ -12,6 +12,7 @@ import { CallCtx, Frame, Interpreter, ScriptInstance, Value, toStr } from "./int
 import { ActorRuntime } from "./actors";
 import type { WorldCamera } from "./geometry";
 import { PropRuntime } from "./props";
+import { PluginBus } from "./plugins";
 import { seededRng } from "./rng";
 import { AudioLibrary, AudioSink } from "./audio";
 import { Clock, ENGINE_STEP_MS, RAMP_STEP_MS, ticksAt } from "./clock";
@@ -25,6 +26,7 @@ import { loadGameV1, snapshotSaveV1 } from "./saveload-v1";
 import { packPoint } from "./point";
 import { registerGameBuiltins } from "./builtins";
 import { BootPlan, EMPTY_BOOT_PLAN, readBootPlan } from "./bootplan";
+import { PHOTO_H, PHOTO_W, Photo, PhotoAlbum } from "./photos";
 
 /**
  * Most displayed frames one call may make up after a stall — a backgrounded
@@ -128,6 +130,12 @@ export class GameSession {
   readonly audioLib = new AudioLibrary();
   readonly propRuntime = new PropRuntime();
   readonly actorRuntime = new ActorRuntime();
+  /**
+   * What the native plugin bus is holding — Timelapse's `plugin`/`pluginfx`
+   * (engine/src/runtime/plugins.ts). Empty for Titanic and Dust, which name no
+   * plugin between them.
+   */
+  readonly plugins = new PluginBus();
 
   /**
    * BOOTFILE script containers, in order. Container 1 holds the startup +
@@ -328,6 +336,30 @@ export class GameSession {
   /** what the last `setcursor` handler asked the pointer to look like ("" = the
    *  plain arrow, which is also what a handler that says nothing leaves) */
   cursorName = "";
+  /**
+   * `hidecursor()` / `showcursor()`, as a DEPTH — Win32's `ShowCursor` counter,
+   * because that is literally what the original keeps.
+   *
+   * `hidecursor` is `ShowCursor(FALSE)` and a decrement of its own tally at
+   * `tl.exe` 0x45b418 (0x4087b0); `showcursor` is the increment (0x408790).
+   * Visible while this is >= 0, hidden below it, and a counter rather than a flag
+   * so that two nested hides need two shows — which is Windows' rule and
+   * therefore the rule the scripts were written against.
+   *
+   * The game hides the pointer where it draws its OWN: Timelapse does it three
+   * times, and all three are places where a prop follows the mouse instead of a
+   * cursor — the bow being drawn (`a.shp` mousedown, paired on both exits), the
+   * camera's viewfinder bevel (`docamera`'s `while not button()`), and the
+   * endgame. That last one never calls `showcursor`, which is safe in the
+   * original because two of its routines wind this back up to 0 for themselves
+   * (0x408750 forcing the arrow back, and 0x40ad2f around a modal window). This
+   * port has one such place — {@link prepareRestart} — for the same reason.
+   */
+  cursorDepth = 0;
+  /** is the pointer hidden right now? Win32's rule: visible at zero and above */
+  get cursorHidden(): boolean {
+    return this.cursorDepth < 0;
+  }
   /** facing direction of the current view (radians), for arrival continuity */
   currentRotation: (() => number) | null = null;
   /** facing carried across a set change; the next viewer consumes it */
@@ -363,7 +395,84 @@ export class GameSession {
    * frame, so nothing has to be captured twice or held in sync.
    */
   wipe = {
-    dir: "" as "" | "left" | "right" | "open" | "close",
+    /**
+     * `left`/`right` are WIPES — the arriving screen is uncovered and the leaving
+     * one stands still — and `open`/`close` the barn doors. `turnleft`/
+     * `turnright` are a PUSH: both pictures move, and they are a different effect
+     * in the original too rather than a variation on the wipes (see
+     * ScreenDirector.pushTurn for the evidence).
+     */
+    dir: "" as "" | "left" | "right" | "open" | "close" | "turnleft" | "turnright",
+    /**
+     * How far a turn travels, as a fraction of the screen: 1, or 0.5 for the
+     * `half` pair. That is what "half" names, and it is in the binary rather than
+     * inferred — `turnhalfleft` (tl.exe 0x448b48) halves the rect's width with
+     * `sar eax, 1` before dividing by the step count, where `turnleft` (0x44875b)
+     * divides the whole of it. Both are handed the same rect: the screen.
+     */
+    span: 1,
+    /**
+     * The ramp has finished but the COMPOSITE is still the screen.
+     *
+     * A turn comes in two legs — Timelapse's `lefttoframeMin` shows the mid-turn
+     * flat and asks for `turnhalfleft`, then shows the destination and asks for
+     * `turnleft` — and the second leg has to start from where the first one
+     * stopped. In the original that is automatic: it never blits a whole flat, it
+     * only ever moves strips, so the screen simply IS the composite. This port
+     * repaints the current flat every frame, so without this the frame between
+     * the legs is the mid-turn flat drawn whole — and those are not whole
+     * pictures. They are 320 columns of art centred in a 640 canvas with the
+     * rest left blank, so the second leg would capture that blank and scroll it
+     * across the screen.
+     *
+     * So a HALF turn's ramp ends by settling rather than clearing: `wiping` goes
+     * false (the script waiting on the effect proceeds) while the composite keeps
+     * being drawn, which is what the next `visualeffect` then captures. And it
+     * keeps being drawn until that next effect replaces it — the settled state
+     * must outlive the `visualeffect` call itself, because `gotoflat(namedest)`
+     * runs between the legs and is free to yield frames (a flat's open script, a
+     * sound, a decode). Ending the wipe when the script's wait was over — which
+     * is what the wait loop's unconditional endWipe did — put the live world
+     * back on screen for exactly those frames, and leg two then captured the
+     * destination flat drawn whole and glued its own middle to its right edge.
+     * A right turn survived that (both halves the same picture, near enough); a
+     * left turn showed the join, at 66 against the art's own 9, whenever — and
+     * only whenever — something between the legs happened to yield. A FULL turn
+     * does not settle: at `off === width` the leaving picture contributes no
+     * columns, the composite IS the current flat, and ending it is what lets the
+     * flat's animation run again after the turn.
+     */
+    settled: false,
+    /**
+     * Milliseconds per ramp step. {@link RAMP_STEP_MS} — one 60 Hz tick, the
+     * original's own pacing — unless a shell has slowed it down to look at one.
+     *
+     * A turn is over in about a third of a second, which is right and is also too
+     * quick to describe: "there is a seam somewhere on the left" is as much as
+     * anyone can say at full speed. Raising this stretches the ramp without
+     * changing a single number in the geometry, so what you see slowly is exactly
+     * what happens quickly.
+     */
+    stepMs: RAMP_STEP_MS,
+    /**
+     * The picture a turn is ARRIVING at, captured once when the effect starts.
+     *
+     * The original has this for free: `gotoflat` draws the new flat to the
+     * OFFSCREEN surface, `visualeffect` is modal, and nothing can redraw that
+     * surface until the effect returns — so every strip 0x448c20 lifts comes
+     * from one stable picture. This port repaints the world every frame, and
+     * the world moves under a ramp: the destination flat ANIMATES (i0001.103
+     * is water, and it was reaching frames .2 and .3 mid-turn), so strips
+     * consumed on different passes came from different pictures, and the join
+     * a settle captured was not the join the ramp had shown. Held here, the
+     * arriving side is one picture for the whole ramp, exactly as the
+     * original's offscreen is.
+     *
+     * Only turns carry it. A wipe's arriving side really is the live world —
+     * that is what "the new screen is whatever the viewer paints" means — and
+     * changing that would be inventing behaviour, not porting it.
+     */
+    to: null as { rgba: Uint8ClampedArray; width: number; height: number } | null,
     /** steps already revealed, of `steps` */
     step: 0,
     steps: 0,
@@ -371,7 +480,13 @@ export class GameSession {
     from: null as { rgba: Uint8ClampedArray; width: number; height: number } | null,
   };
 
+  /** a reveal the SCRIPT is still waiting on */
   get wiping(): boolean {
+    return this.wipe.dir !== "" && this.wipe.from !== null && !this.wipe.settled;
+  }
+
+  /** a reveal the RENDERER still has to composite — see {@link wipe.settled} */
+  get compositing(): boolean {
     return this.wipe.dir !== "" && this.wipe.from !== null;
   }
 
@@ -393,10 +508,23 @@ export class GameSession {
   tickWipe(now: number): void {
     const w = this.wipe;
     if (!this.wiping) return;
-    if (!w.lastTick) w.lastTick = now - RAMP_STEP_MS;
-    while (this.wiping && now - w.lastTick >= RAMP_STEP_MS) {
-      w.lastTick += RAMP_STEP_MS;
-      if (++w.step >= w.steps) this.endWipe();
+    const stepMs = w.stepMs || RAMP_STEP_MS;
+    if (!w.lastTick) w.lastTick = now - stepMs;
+    while (this.wiping && now - w.lastTick >= stepMs) {
+      w.lastTick += stepMs;
+      // A HALF turn SETTLES: the composite stays on screen — half arriving
+      // picture, half leaving one — for the second leg to capture, and it can,
+      // because both halves are held pictures (`to`/`from`) that no world
+      // repaint can move. A FULL turn is over: at `off === width` the leaving
+      // picture contributes no columns and the composite IS the current flat,
+      // so ending it hands the screen back to the live world — which is where
+      // the destination's animation resumes, exactly as the original's does by
+      // drawing over whatever the effect left.
+      if (++w.step >= w.steps) {
+        if ((w.dir === "turnleft" || w.dir === "turnright") && w.span < 1) {
+          w.settled = true;
+        } else this.endWipe();
+      }
     }
   }
 
@@ -406,7 +534,29 @@ export class GameSession {
     this.wipe.step = 0;
     this.wipe.steps = 0;
     this.wipe.lastTick = 0;
+    this.wipe.span = 1;
+    this.wipe.settled = false;
+    this.wipe.to = null;
   }
+
+  /**
+   * Host hook: rebuild the framebuffer from the game's CURRENT state, now.
+   *
+   * This is `visualeffect(plain, 0)`, which is not the no-op its name suggests.
+   * In `tl.exe` it is effect 24014 and its whole body (0x448630) pushes the
+   * screen rect TWICE and calls the offscreen-to-screen blit — a full-screen
+   * redraw with no effect over it. Which is why the scripts pair it with every
+   * change they want to see immediately:
+   *
+   *     propvisible ("compass", false)
+   *     visualeffect (plain, 0)
+   *
+   * With it doing nothing, a prop the script had just hidden was still in the
+   * framebuffer when the next effect captured it — so Timelapse's compass, hidden
+   * before every turn, slid off with the leaving picture instead of simply not
+   * being there.
+   */
+  repaintNow: (() => void) | null = null;
 
   /** host hook: snapshot the currently displayed frame for fade-outs */
   captureFrame: (() => { rgba: Uint8ClampedArray; width: number; height: number } | null) | null =
@@ -844,7 +994,17 @@ export class GameSession {
     const inst = this.resolveEventTarget(cmd, targetName, handler);
     const chain = this.buildEventChain(cmd, inst, handler);
     if (!chain.length) {
-      this.onLog(`${cmd}("${targetName}", ${handler}(..)) — target not loaded`);
+      // Two different things used to say "target not loaded", and only one of them
+      // is a fault. A name nothing answers to is a real miss; a target that IS open
+      // and simply has no handler for this event is the engine working — the boot
+      // fires `sendtoshop(curworldchar, updateallfx())` for every Timelapse world
+      // and only `m.shp` implements it. Reported apart so a log line means one
+      // thing.
+      this.onLog(
+        inst
+          ? `${cmd}("${targetName}", ${handler}(..)) — no ${handler} handler on ${inst.name}`
+          : `${cmd}("${targetName}", ${handler}(..)) — target not loaded`,
+      );
       return 0;
     }
     // EXPERIMENT (see TODO 11b): `target` is the ADDRESSEE where the addressee is
@@ -882,11 +1042,36 @@ export class GameSession {
         if (!chain.includes(b) && !this.interp.isRunning(b, handler)) chain.push(b);
       }
     }
+    /**
+     * `me` is the PROP, not its sprite group, on the prop's own script.
+     *
+     * `me` is otherwise the running script's name, which is right for every
+     * fallback in the chain — a shop main answering for one of its props is
+     * itself, and keys on `target`. But a prop's own script is the prop's, and
+     * with `propinstance` one script belongs to several props at once:
+     * Timelapse's lantern is six of them out of the "Lantern" group, and the
+     * script tells them apart by `me` alone —
+     *
+     *     code mousedown (arg)
+     *         switch (me)
+     *             case "PrimeLever"  …
+     *             case "GasKnob"     if gGasKnobDir = 0 …
+     *
+     * — so with `me` fixed at the group's name every one of those cases missed.
+     * The click arrived, the handler ran, the switch matched nothing and returned
+     * 0. Reported as the lamp in the cave not being clickable: no cursor over any
+     * of its parts and no response from any of them.
+     *
+     * Only the prop's OWN script (`chain[0]`), and only for a prop: everywhere
+     * else in the corpus the two names are the same string, so this changes
+     * nothing that was already working.
+     */
+    const propOwn = /^sendtoprop(fx)?$/.test(cmd) && !!evTarget;
     const { value, ran, passed, visited } = await this.runHandlerChain(
       chain,
       handler,
       args,
-      (link) => ({ me: link.name, target: evTarget }),
+      (link) => ({ me: propOwn && link === inst ? evTarget : link.name, target: evTarget }),
       !keyEvent,
       parent,
     );
@@ -957,7 +1142,56 @@ export class GameSession {
       this.currentBinding?.findInstance(targetName) ??
       this.findGlobalInstance(targetName);
     if (!inst && cmd === "sendtostage") inst = this.stageScript;
-    if (!inst && cmd === "sendtoboot") inst = this.boot;
+    /**
+     * `sendtoboot` addresses THE BOOT, which is every one of its containers and
+     * not just the first.
+     *
+     * A BOOTFILE is a stack of script containers — container 1 the boot proper,
+     * container 2 the library — and {@link boot} is container 1 alone, because
+     * that is where the entry points a host calls live. TAOOT never noticed the
+     * difference: all six things its scripts `sendtoboot` are in container 1.
+     *
+     * Timelapse's interface family is not. `endinterface` (11 call sites),
+     * `begininterface` (4) and `docamera` (2) are container 2's, so every one of
+     * those dead-ended on container 1 having no such handler — and the panel's
+     * own buttons are exactly those call sites. Clicking the camera ran its
+     * `mousedown`, set `retinter`, and then asked the boot to close the panel and
+     * take the picture; both asks resolved to a script that could not answer, so
+     * the panel just sat there. Same for the journal, the photo album and the
+     * gene pod, and for the `ok` button that leaves the panel.
+     *
+     * Gated on the handler being ABSENT, so nothing that already resolved moves:
+     * `keydown` is defined in both containers and its 24,349 call sites keep
+     * reaching container 1's, which is the one the port has always run.
+     */
+    /**
+     * ...and `sendtopost` addresses it too.
+     *
+     * "post" is a target this port had registered as a deferred form and then
+     * resolved to the STAGE script, which is where the implicit-target branch in
+     * `registerDispatchBuiltins` sends anything that is not `sendtoboot`. Nothing
+     * in Timelapse's 110 `sendtopost` calls is a stage handler. Every one of the
+     * seven names they use — `gotostage` (58 calls), `jumptoframe` (29),
+     * `righttoframe`, `lefttoframe`, `invdropcur`, `gototheme`, `invnewprop` — is
+     * defined in the BOOTFILE library and NOWHERE else in the corpus, so all 110
+     * resolved to a script that could not answer and returned 0 in silence.
+     *
+     * What that is from the player's side is a click that shows the right cursor
+     * and does nothing. The cave's lantern is four of them: the approach views
+     * (i0090.867/.877/.967/.977) each carry a `Lantern` region whose whole
+     * mousedown is `sendtopost (jumptoframe (873))` — walk up to the lamp — and
+     * clicking the lamp did nothing at all. The other 58 are stage-to-stage
+     * moves.
+     *
+     * Whether the 1996 engine's "post" is the boot by another name or an object
+     * of its own that falls through to it is NOT settled here; what is settled is
+     * where the handlers are. The gate is the same as the boot's above — only a
+     * handler the addressed script does not have goes looking — so a stage that
+     * does answer for one still wins, and nothing that already resolved moves.
+     */
+    if (/^sendto(boot|post)(fx)?$/.test(cmd) && !inst?.script.codes.has(handler)) {
+      inst = this.bootScripts.find((b) => b.script.codes.has(handler)) ?? inst ?? this.boot;
+    }
     // a flat is contained in its stage: an event to a flat with no own script
     // (TAOOT's fencing: per-flat click regions carry the scripts, not the flat
     // itself) resolves on the stage main, where shared handlers live (its
@@ -1072,6 +1306,38 @@ export class GameSession {
     if (!chain.length && (cmd === "sendtoprop" || cmd === "sendtoactor")) {
       for (const b of this.bootScripts) {
         if (b.script.codes.has(handler) && !this.interp.isRunning(b, handler)) chain.push(b);
+      }
+    }
+    /**
+     * ...and a FLAT falls through to the boot too — but gated on the CHAIN not
+     * already answering, rather than on it being empty.
+     *
+     * The difference matters here and nowhere else: a flat with no script of its
+     * own resolves to its STAGE (just above), so the chain is never empty for a
+     * flat and the emptiness test could not fire. What is actually true in the
+     * failing case is narrower — nothing in the chain has the handler.
+     *
+     * Timelapse animates a stage by walking a run of flats, and the routine that
+     * walks them lives in the BOOTFILE: `flattick` does `gotoflat(baseflat @ "."
+     * @ n)` and re-arms itself with `makeloop("flat", baseflat, "flattick", d)`.
+     * A flat loop fires on the CURRENT flat (Scheduler.fireLoop), which by the
+     * second frame is `i0001.100.2` — an animation cel with no script — so the
+     * event reached the stage main, found no `flattick` there, and the walk
+     * stopped one frame in. Measured: the birds moved once and froze.
+     *
+     * Titanic and Dust are untouched by it. Neither calls `flatstartanim` at all,
+     * and this can only add a link where every existing one has ALREADY been
+     * found not to have the handler — which is to say, where the event is being
+     * dropped today. The two other guards are the ones the prop/actor fallback
+     * uses and for the same reasons: the boot must actually define it, and must
+     * not already be running it (the boot holds the click router as well as the
+     * library, and re-entering one handler is the dispatch cycle).
+     */
+    if (cmd === "sendtoflat" && !chain.some((c) => c.script.codes.has(handler))) {
+      for (const b of this.bootScripts) {
+        if (b.script.codes.has(handler) && !this.interp.isRunning(b, handler) && !chain.includes(b)) {
+          chain.push(b);
+        }
       }
     }
     return chain;
@@ -1422,6 +1688,11 @@ export class GameSession {
     this.fade.snapshot = null;
     this.fade.pendingReveal = false;
     this.fade.level = 1;
+    // and the pointer comes BACK. The endgame's `hidecursor()` has no matching
+    // `showcursor()` — the game is over — so a restart in the same page would
+    // otherwise begin with an invisible cursor. See cursorDepth: the original
+    // unwinds its own counter at two equivalent boundaries.
+    this.cursorDepth = 0;
     this.endWipe(); // a reveal in flight belongs to the screen being thrown away
     // And the SCREEN, because of where quit() is called from. The CTL panel is a
     // flat: reaching Quit means `transtoflat("ctl.stg")` has already run, which
@@ -1687,6 +1958,33 @@ export class GameSession {
    *  Cleared on flat change and by clearmessagebox() (see the messageboxclear
    *  hook). */
   readonly textOverlay: { text: string; x: number; y: number; color: number; size: number }[] = [];
+  /**
+   * The photograph the album is showing, composited over the flat.
+   *
+   * `plugin("camera", path, id)` sets it and the renderer draws it until
+   * something replaces it — which is the same contract as {@link textOverlay},
+   * and for the same reason: the original's plugin writes into a persistent
+   * screen buffer, this port rebuilds the picture every frame. The album's
+   * `updateflat` loop re-issues both every other tick.
+   *
+   * Cleared with the text layer on a flat change, so leaving the album does not
+   * leave a photograph floating over the next picture.
+   */
+  photoOverlay: { photo: Photo; x: number; y: number } | null = null;
+  /**
+   * The player's photographs. See {@link PhotoAlbum} — the store behind it is
+   * the host's business, and there is none in a headless run.
+   */
+  readonly photos = new PhotoAlbum();
+  /**
+   * Host hook: grab a {@link PHOTO_W}x{@link PHOTO_H} photograph centred on a
+   * point of the CURRENT screen.
+   *
+   * The renderer owns the framebuffer, so only it can answer. `docamera` hides
+   * the viewfinder bevel, shows the cursor and calls `forceupdate()` before the
+   * shutter, so what this grabs is the clean picture the player framed.
+   */
+  grabPhoto: ((cx: number, cy: number) => Photo | null) | null = null;
   /** measure a drawstring in device pixels using the render font; set by the
    *  viewer so stringwidth() matches what actually paints. null in headless
    *  tests, where stringwidth() falls back to a fixed-pitch estimate. */
@@ -1701,6 +1999,7 @@ export class GameSession {
   textEncoding: () => DfEncoding = () => DEFAULT_ENCODING;
   clearTextOverlay(): void {
     this.textOverlay.length = 0;
+    this.photoOverlay = null;
   }
 
   /**
@@ -2253,11 +2552,31 @@ export class GameSession {
   }
 
   /** session-scoped sendto* targets (usable before any set is open) */
+  /**
+   * The script a PROP answers on — its GROUP's, whatever the instance is called.
+   *
+   * `propScripts` is keyed by group, because that is where a sprite's script
+   * lives, and for an ordinary prop the two names are the same. They are not for
+   * a `propinstance` copy: Timelapse's lantern is six props out of one group
+   * ("GasKnob", "PumpHandle", …), all sharing the Lantern script and told apart
+   * inside it by `me`. So `sendtoprop ("GasKnob", mousedown (…))` has to find the
+   * group's script under a name the group does not have — otherwise the click
+   * resolves nowhere and the lamp does nothing.
+   *
+   * See {@link PropInstance.name}.
+   */
+  private propScriptFor(name: string): ScriptInstance | null {
+    const own = this.propScripts.get(name);
+    if (own) return own;
+    const group = this.propRuntime.get(name)?.group.name.toLowerCase();
+    return group && group !== name ? this.propScripts.get(group) ?? null : null;
+  }
+
   findGlobalInstance(name: string): ScriptInstance | null {
     const lower = name.toLowerCase();
     const exact =
       this.puppet?.scripts.get(lower) ??
-      this.propScripts.get(lower) ??
+      this.propScriptFor(lower) ??
       this.castScripts.get(lower) ??
       this.shopMains.get(lower) ??
       this.castMains.get(lower) ??

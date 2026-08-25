@@ -53,7 +53,34 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     session.setVisible = truthy(v);
   });
   r("stagevisible", () => (session.stageName !== "none" ? 1 : 0));
-  r("currentstage", () => session.stageName);
+  /**
+   * currentstage() — the stage's OWN name, with its FILE left in `result()`.
+   *
+   * It used to answer the file, and on Titanic the two are the same string: all
+   * fifteen of its stages store their own filename in the name field
+   * (`StgFile.refName`), so nothing could tell the difference. Timelapse can.
+   * Its `p.stg` is called `"interface"`, and its BOOTFILE's space bar is
+   *
+   *     if currentstage () = "interface"
+   *         endinterface ()
+   *     else
+   *         begininterface (1)
+   *
+   * so with the file as the answer the panel opened and could never be closed
+   * again — the branch that puts it away was unreachable. Its 155 other stages
+   * say `"stagename"`, the authoring default nobody filled in, which is not
+   * `"interface"` and so is exactly the right answer for all of them.
+   *
+   * The pair is the convention `hittest`/`indextoprop` already use, and the game
+   * reads both halves: `begininterface` is `laststage = currentstage ()` and then
+   * `laststage = result ()`. A v1 `.FLT` has no name field at all, so Dust falls
+   * back to the file — and to the `"none"` sentinel when no stage is open, which
+   * is the only thing its own `currentstage () != "none"` asks.
+   */
+  r("currentstage", () => {
+    session.lastResult = session.stageName;
+    return session.stageCtrl.stageRefName() || session.stageName;
+  });
   r("currentflat", () => session.currentFlat);
   r("openstagefile", async (_i, [n]) => ((await session.stageCtrl.openStageFile(toStr(n ?? ""))) ? 1 : 0));
   r("closestagefile", () => session.stageCtrl.closeStageFile().then(() => {}));
@@ -250,7 +277,27 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     if (session.hasRealFrames || session.modalMovies) await session.clock.sleep((n * 50) / 3);
   };
   r("screentoblack", (_i, [, steps]) => fade(1, steps));
-  r("blacktoscreen", (_i, [, steps]) => fade(0, steps));
+  /**
+   * `blacktoscreen(name, steps)` reveals FROM black — which is what the name
+   * says, and it has to be said in code because the screen is not always black
+   * when a script asks.
+   *
+   * Every overlay the games open is `screentoblack`, swap the stage, `visualeffect
+   * (plain, 0)`, `blacktoscreen` — and opening a stage file now clears the level,
+   * because it replaces the palette the ramp was against (StageController.
+   * openStageFile). Ramping from wherever the level happens to be would make
+   * that a ramp from 0 to 0: the panel, the map and the CTL would appear
+   * instantly instead of fading in. So a reveal with nothing to reveal from
+   * starts at black.
+   *
+   * Guarded on a darkening already in flight, so the ordinary pairing — a
+   * `screentoblack` whose ramp is still running — is left exactly as it was.
+   */
+  r("blacktoscreen", (_i, [, steps]) => {
+    const f = session.fade;
+    if (f.level === 0 && !f.queue.some((q) => q.to === 1)) f.level = 1;
+    return fade(0, steps);
+  });
   /** the screen is black from this instant — no ramp, nothing left running */
   const blackNow = (): void => {
     session.fade.queue.length = 0;
@@ -360,7 +407,14 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    */
   r("visualeffect", (_i, [effect, steps]) => {
     const name = toStr(effect ?? "plain").toLowerCase();
-    if (name === "plain") return;
+    if (name === "plain") {
+      // NOT a no-op: `plain` is a full-screen redraw (tl.exe 0x448630 blits the
+      // screen rect to itself), which is how a script makes a change it just made
+      // visible before whatever it does next reads the screen. It still must not
+      // clear a pending reveal — see the note above.
+      session.repaintNow?.();
+      return;
+    }
     session.fade.queue.length = 0;
     session.fade.snapshot = null;
     session.fade.pendingReveal = false;
@@ -390,16 +444,48 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     // game"). `venetian`, the irises and the scrolls are named in TI.EXE's
     // vocabulary but no script in either game asks for one, so those keep the
     // old instant reveal rather than guessing at geometry.
+    /**
+     * ...and the TURNS, which are not wipes at all.
+     *
+     * Timelapse turns by scrolling: `lefttoframeMin` shows the mid-turn flat,
+     * asks for `turnhalfleft`, shows the destination, asks for `turnleft`. It is
+     * the only game that asks — one call each, all four in those two handlers —
+     * and it is the path the game itself takes on a small machine (see
+     * freemem/sysmem in helpers.ts). What they do is settled in
+     * ScreenDirector.pushTurn, off `tl.exe`.
+     */
     const DIR = {
       wipeleft: "left", wiperight: "right",
       barndooropen: "open", barndoorclose: "close",
+      turnleft: "turnleft", turnhalfleft: "turnleft",
+      turnright: "turnright", turnhalfright: "turnright",
     } as const;
     const dir = DIR[name as keyof typeof DIR];
     if (!dir) return;
     const from = session.captureFrame?.() ?? null;
     if (!from) return;
+    /**
+     * A turn also captures the picture it is ARRIVING at, here, once. The
+     * script has already done `gotoflat`, so the current flat is the one the
+     * turn is turning to; painting it now and holding the capture is the
+     * port's copy of the original's offscreen surface, which `gotoflat` drew
+     * and the modal effect then consumed unchanged. Left to the live frame
+     * instead, an animating destination swapped the entering strips mid-ramp
+     * (i0001.103's water reached frame 3 before the turn was over), and the
+     * between-legs composite drifted with it. See GameSession.wipe.to.
+     */
+    let to: { rgba: Uint8ClampedArray; width: number; height: number } | null = null;
+    if (dir === "turnleft" || dir === "turnright") {
+      session.repaintNow?.();
+      to = session.captureFrame?.() ?? null;
+      if (!to) return;
+    }
     session.wipe.from = from;
+    session.wipe.to = to;
     session.wipe.dir = dir;
+    session.wipe.settled = false;
+    // the `half` pair travels half the screen (tl.exe 0x448b48); the rest all of it
+    session.wipe.span = name === "turnhalfleft" || name === "turnhalfright" ? 0.5 : 1;
     // clamped the way TI.EXE clamps it, 1..1000 (0x43df60..0x43df7a)
     session.wipe.steps = Math.min(1000, Math.max(1, toNum(steps ?? 0) || 1));
     session.wipe.step = 0;
@@ -417,12 +503,39 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     return (async () => {
       const cap = session.wipe.steps * 4 + 60;
       for (let i = 0; i < cap && session.wiping; i++) await session.nextFrame();
-      session.endWipe(); // gave up: never leave a reveal holding the screen
+      // Gave up (the host stopped ticking): never leave a reveal holding the
+      // screen. But ONLY then — a wipe that finished was ended by tickWipe, and
+      // a half turn that finished has SETTLED, which must survive this return:
+      // the script's next statements are `gotoflat(namedest)` and the second
+      // leg's visualeffect, and any frame either yields must keep showing the
+      // settled composite for that leg to capture. Ending it here — which this
+      // line did unconditionally when only TAOOT's wipes existed — was the left
+      // turn's mid-picture jump (see GameSession.wipe.settled).
+      if (session.wiping) session.endWipe();
     })();
   });
 
+  /**
+   * `hidecursor()` / `showcursor()` — the pointer goes away where the game draws
+   * its own.
+   *
+   * A counter and not a flag, because the original's is: `ShowCursor(FALSE)` plus
+   * a decrement of its own tally (`tl.exe` 0x4087b0), `ShowCursor(TRUE)` plus the
+   * increment (0x408790). What consumes it is the hover chain — see
+   * `GameSession.cursorDepth` for who hides the pointer and why one of them never
+   * puts it back.
+   */
+  r("hidecursor", () => {
+    session.cursorDepth--;
+    return 0;
+  });
+  r("showcursor", () => {
+    session.cursorDepth++;
+    return 0;
+  });
+
   for (const noop of [
-    "hidecursor", "showcursor", "debugger", // (flushevents no-ops in pointer.ts)
+    "debugger", // (flushevents no-ops in pointer.ts)
     "exportclut",
     // *warm: asset preloaders (propwarm/actorwarm/shopwarm). openshopfile/
     // openset already instantiate every prop/actor up front, so warming is a

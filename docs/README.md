@@ -6,11 +6,14 @@ These docs explain how CyberFlix's **DreamFactory** engine works, and how this
 project turns the original game files into something that runs in a browser —
 **no DOSBox, no emulator**, a fresh reimplementation in TypeScript.
 
-Two of the three adventures CyberFlix shipped on that engine are here:
+All three adventures built on that engine are here — two of them CyberFlix's own
+and the third GTE Interactive Media's:
+**[Dust: A Tale of the Wired West](dust/)** (1995, DreamFactory 1),
 **[Titanic: Adventure Out of Time](taoot/)** (1996, DreamFactory 4) and
-**[Dust: A Tale of the Wired West](dust/)** (1995, DreamFactory 1). Two years
-apart, the same lineage, and different enough on disk that several formats have a
-`-v1` page of their own.
+**[Timelapse: Ancient Civilizations](timelapse/)** (1996, DreamFactory 4 on four
+discs). The first two are two years apart and different enough on disk that
+several formats have a `-v1` page of their own; the third is the same generation
+as Titanic and still nothing like it, because it ships no `.SET` file at all.
 
 The docs are written for a curious programmer who has **not** done
 low-level reverse engineering before. You do not need to know C++, and you
@@ -60,9 +63,10 @@ at the top, so you can jump straight to one and follow those back.
 
 Each game also has a section of its own, for what is true of that game rather
 than of the engine: **[Titanic](taoot/)** — its mission flow, its timed sinking,
-its six editions and how the port was verified against it — and
-**[Dust](dust/)** — what DreamFactory 1 does differently, and where its music
-lives.
+its six editions and how the port was verified against it — **[Dust](dust/)** —
+what DreamFactory 1 does differently, and where its music lives — and
+**[Timelapse](timelapse/)** — a game with no rooms, navigated by the shape of the
+cursor.
 
 Two pages are outside the order, for reading out of order:
 **[the glossary](glossary.md)** (one line per term, when a word you don't know
@@ -177,10 +181,10 @@ commands](reference/builtins.md)**, **[tools](reference/tools.md)**,
 
 ### How the repository is arranged
 
-Four npm workspaces, and the split these docs follow: **`engine/`** knows about
+Five npm workspaces, and the split these docs follow: **`engine/`** knows about
 no particular game, **`site/`** is the shared web presence and the seven format
-editors, and **`taoot/`** and **`dust/`** are a game each. Dependencies point
-one way only and there is a test that says so. The map is
+editors, and **`taoot/`**, **`dust/`** and **`timelapse/`** are a game each.
+Dependencies point one way only and there is a test that says so. The map is
 **[Engine architecture](engine/architecture.md)**.
 
 ## A note on licensing

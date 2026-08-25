@@ -17,7 +17,7 @@
 import { indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources } from "./sources";
+import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf } from "./sources";
 import { siteUrl } from "@dreamfactory/site/site";
 import { t, formatNumber } from "@dreamfactory/site/locales";
 import { installI18n } from "@dreamfactory/site/locales";
@@ -39,7 +39,7 @@ import {
   patchStateIdentifier,
   readShpFile,
 } from "@dreamfactory/engine/df/shp";
-import { SCREEN_W, SCREEN_H } from "@dreamfactory/engine/web/screen";
+import type { GameScreen } from "@dreamfactory/site/games";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -51,11 +51,23 @@ const dirtyEl = $("dirty");
 /** the cadence props animate at — PropRuntime.tick's frameMs, which the viewer
  *  has always passed as ENGINE_STEP_MS; this said 90 and was never the game's */
 const FRAME_MS = 50;
-/** where a prop draws before any propxy: the centre of the 512×384 screen */
-const DEFAULT_ANCHOR_X = 256;
-const DEFAULT_ANCHOR_Y = 192;
-/** the set view fills the screen down to here; the UI band is below it */
-const BAND_TOP = 264;
+/**
+ * The screen this rip's props are authored against, and where its UI band starts.
+ *
+ * A SHP records neither — a prop is a bitmap and a stored offset, and the screen
+ * it lands on is the GAME's (see `screenOf`). Titanic's and Dust's is 512×384
+ * with the set view above y=264; Timelapse's is 640×480 with no band at all, and
+ * drawing its compass on a 512×384 field put it 64,48 from where the game puts
+ * it. The default holds until the source is known, which is one await away at
+ * startup.
+ */
+let screen: GameScreen = screenOf(null);
+
+/** where a prop draws before any propxy: the CENTRE of the screen */
+const anchorHome = (): { x: number; y: number } => ({
+  x: Math.floor(screen.width / 2),
+  y: Math.floor(screen.height / 2),
+});
 
 // --- editor state -----------------------------------------------------------
 
@@ -70,7 +82,7 @@ let groupIdx = 0;
 let stateIdx = 0;
 let frameIdx = 0;
 /** the anchor the preview draws at — propxy, simulated */
-const anchor = { x: DEFAULT_ANCHOR_X, y: DEFAULT_ANCHOR_Y };
+const anchor = anchorHome();
 /** the running state animation, if any */
 let playing: { stop: () => void } | null = null;
 
@@ -104,6 +116,9 @@ function loadShp(bytes: Uint8Array, name: string): void {
   }
   shp = parsed;
   fileName = name;
+  // and the export button says which extension it will WRITE, which is the one
+  // this file came in as: a v1 `.flt`/`.prp` round-trips as itself
+  $("exportBtn").textContent = t("shops.export", { ext: /\.[a-z0-9]+$/i.exec(name)?.[0]?.toLowerCase() ?? "" });
   palette = paletteToRGBA(parsed.paletteRaw, 256);
   frameCache.clear();
   edits.length = 0;
@@ -111,8 +126,14 @@ function loadShp(bytes: Uint8Array, name: string): void {
   groupIdx = 0;
   stateIdx = 0;
   frameIdx = 0;
-  anchor.x = DEFAULT_ANCHOR_X;
-  anchor.y = DEFAULT_ANCHOR_Y;
+  // the anchor, and the two fields that SAY where it is: the markup's own 256,192
+  // is this screen's centre only on two of the three games, and a field reading
+  // 256 over a prop drawn at 320 is worse than no field at all
+  const home = anchorHome();
+  anchor.x = home.x;
+  anchor.y = home.y;
+  $<HTMLInputElement>("anchorX").value = String(anchor.x);
+  $<HTMLInputElement>("anchorY").value = String(anchor.y);
 
   landing.style.display = "none";
   editor.style.display = "flex";
@@ -153,7 +174,13 @@ async function initServerShops(): Promise<void> {
   // what chooses, and it is the same choice the game reads (taoot/src/editions.ts).
   const source = chosenSource(await listSources());
   if (!source) return; // production / no dev server: upload only
-  const shops = filesIn(source, byExtension(".shp"));
+  // before any of this rip's props are drawn — see the note on `screen`
+  screen = screenOf(source);
+  // `.prp` as well: it is the same format under DreamFactory 1's name for it, and
+  // the reader takes both (`readShpFile` accepts version 1 and 4 through one
+  // layout — the PRP header did not move). Dust ships 14 of them and they were
+  // invisible here, which is a third of its props.
+  const shops = filesIn(source, byExtension(".shp", ".prp"));
   if (!shops.length) return;
   const wrap = $("serverShops");
   const note = document.createElement("div");
@@ -226,26 +253,33 @@ function frameToCanvas(f: ShpFrame, canvas: HTMLCanvasElement): void {
 // --- preview ----------------------------------------------------------------
 
 /**
- * Draw one frame where the engine would put it: at `anchor - storedOffset` on
- * the 512×384 screen (see the placement rule in docs/engine/formats/shp.md), over a
+ * Draw one frame where the engine would put it: at `anchor - storedOffset` on the
+ * game's own screen (see the placement rule in docs/engine/formats/shp.md), over a
  * backdrop that marks the room view / UI band split and the anchor itself. The
  * anchor is what `propxy` moves, so the two inputs beside the canvas are that
  * command, simulated.
+ *
+ * The band line is drawn only where the game HAS one: a game with no sets has no
+ * room view to end, so the line would be a boundary of Titanic's rather than of
+ * the rip on screen.
  */
 function drawScreen(f: ShpFrame | null): void {
   const canvas = $<HTMLCanvasElement>("preview");
-  canvas.width = SCREEN_W;
-  canvas.height = SCREEN_H;
+  canvas.width = screen.width;
+  canvas.height = screen.height;
   const ctx = canvas.getContext("2d")!;
+  const band = screen.band ?? screen.height;
   ctx.fillStyle = "#00060f";
-  ctx.fillRect(0, 0, SCREEN_W, BAND_TOP);
-  ctx.fillStyle = "#000d1f";
-  ctx.fillRect(0, BAND_TOP, SCREEN_W, SCREEN_H - BAND_TOP);
-  ctx.strokeStyle = "#0a2d52";
-  ctx.beginPath();
-  ctx.moveTo(0, BAND_TOP + 0.5);
-  ctx.lineTo(SCREEN_W, BAND_TOP + 0.5);
-  ctx.stroke();
+  ctx.fillRect(0, 0, screen.width, band);
+  if (band < screen.height) {
+    ctx.fillStyle = "#000d1f";
+    ctx.fillRect(0, band, screen.width, screen.height - band);
+    ctx.strokeStyle = "#0a2d52";
+    ctx.beginPath();
+    ctx.moveTo(0, band + 0.5);
+    ctx.lineTo(screen.width, band + 0.5);
+    ctx.stroke();
+  }
 
   if (f && f.width && f.height) {
     const dx = anchor.x - f.posXraw;
@@ -310,8 +344,9 @@ for (const [id, key] of [
   });
 }
 $("anchorReset").addEventListener("click", () => {
-  anchor.x = DEFAULT_ANCHOR_X;
-  anchor.y = DEFAULT_ANCHOR_Y;
+  const home = anchorHome();
+  anchor.x = home.x;
+  anchor.y = home.y;
   $<HTMLInputElement>("anchorX").value = String(anchor.x);
   $<HTMLInputElement>("anchorY").value = String(anchor.y);
   renderPreview();

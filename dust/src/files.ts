@@ -20,12 +20,13 @@ import { siteUrl } from "@dreamfactory/site/site";
  * ship their own `CHECKERS.PRP` and so on), {@link PREFERRED} decides, and DATA
  * wins because that is the directory `boot()` sets as its search path.
  *
- * **`serverSetNames` names the boot's movie host.** `GameHost.coldBoot` asks for
- * a room to draw into on the no-landing-room path — Dust's boot opens no room of
- * its own (its `advanceday` lives in `new.flt`) but it DOES play the intro films,
- * and a film needs a viewer to draw through. This answered "none" for as long as
- * a v1 set could not be opened; it can now (`parseInto` -> `readSetFileAsV4`),
- * and the intros were invisible for exactly as long as this still said no.
+ * **`serverSetNames` is a listing again.** It used to name the boot's MOVIE HOST:
+ * `GameHost.coldBoot` asked for a room to draw into on the no-landing-room path,
+ * because a film needed a viewer to draw through, and Dust's boot opens no room of
+ * its own (its `advanceday` lives in `new.flt`). The intro films were invisible
+ * for exactly as long as this answered "none". The screen is no longer a room's to
+ * own (engine/src/web/screen-director.ts), so the films play with nothing loaded
+ * behind them and this is back to meaning what it says.
  */
 
 /** where a basename is looked for first when the disc carries it twice */
@@ -302,13 +303,13 @@ export class DustFiles implements HostFiles {
   }
 
   /**
-   * The room the boot borrows as its MOVIE HOST — `GameHost.coldBoot`'s
-   * no-landing-room path opens `serverSetNames()[0]` with `skipOpen` so the
-   * intro films have a viewer to draw through, exactly as the Titanic demo's
-   * boot does. This answered "none" for as long as a v1 set could not be
-   * opened at all; `parseInto` routes one through `readSetFileAsV4` now, so the
-   * honest answer is the room the day-advance is about to open anyway — the
-   * host doubles as a prefetch of the town.
+   * The sets this disc has, which is one.
+   *
+   * No longer load-bearing for the boot: the intro films used to need this to
+   * name a room they could be drawn through, and now they do not. `town.set` is
+   * still prefetched before the boot runs, explicitly, by the loader in main.ts —
+   * which is where a prefetch belongs rather than as a side effect of borrowing a
+   * room to draw on.
    */
   serverSetNames(): string[] {
     return this.has("town.set") || this.urls.has("town.set") ? ["town.set"] : [];

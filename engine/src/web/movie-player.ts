@@ -18,11 +18,12 @@ import {
   readMovFile,
 } from "@dreamfactory/engine/df/mov";
 import {
-  NATIVE_FRAME_MS,
   TICK_MS,
-  chooseFrameInterval,
   frameHoldMs,
+  frameWaits,
+  segmentInterval,
 } from "@dreamfactory/engine/df/mov-pace";
+import { segmentAudio, soundtrackFor } from "@dreamfactory/engine/df/mov-sound";
 import { Container } from "@dreamfactory/engine/df/container";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import {
@@ -30,10 +31,7 @@ import {
   movFileFromV1,
   readMovFileV1,
 } from "@dreamfactory/engine/df/mov-v1";
-import {
-  decodeAudioContainer,
-  resampleTo,
-} from "@dreamfactory/engine/df/audio";
+import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
 import {
   FrameBuffer,
   decodeFrame,
@@ -51,19 +49,9 @@ interface MovieImage {
   height: number;
 }
 
-/**
- * How much of a cutscene's soundtrack to take beyond its predicted runtime.
- *
- * A film's runtime is `interval x frames` in theory and tick-quantised in
- * practice, so the picture always runs a little long — ~1% on a 60 Hz screen,
- * more with a dropped frame. 10% covers that with room to spare, and costs
- * nothing on a bed whose authored order has no material left to give.
- */
-const OVERRUN_MARGIN = 1.1;
 /** cross-movie call stack limit, matching TI.EXE */
 const MOVIE_CALL_DEPTH = 5;
 
-/** join PCM segments end to end, stopping at `cap` samples if one is given */
 /**
  * A segment's palette as the screen shows it.
  *
@@ -76,21 +64,6 @@ const MOVIE_CALL_DEPTH = 5;
  */
 function moviePalette(seg: MovSegment): Uint8ClampedArray {
   return paletteToRGBA(seg.paletteRaw, 256);
-}
-
-function concat(parts: Float32Array[], cap = Infinity): Float32Array {
-  const total = Math.min(
-    cap,
-    parts.reduce((a, s) => a + s.length, 0),
-  );
-  const out = new Float32Array(total);
-  let off = 0;
-  for (const s of parts) {
-    if (off >= out.length) break;
-    out.set(s.subarray(0, out.length - off), off);
-    off += s.length;
-  }
-  return out;
 }
 
 export class MoviePlayer {
@@ -264,10 +237,38 @@ export class MoviePlayer {
   /** every movie this chain has loaded, for release when the chain ends */
   private played = new Set<string>();
 
-  play(fileName: string, startFrame = 0): Promise<void> {
+  async play(fileName: string, startFrame = 0): Promise<void> {
     const chained = this.resolveWhenDone !== null;
     // fresh top-level play: reset the action-frame set the script will query
     if (!chained) this.session.movieActions.clear();
+    /**
+     * FETCH IT FIRST. `load` reads the provider synchronously, and on a browser
+     * source the provider only answers for what has already arrived — so the
+     * first play of any film that was not preloaded missed, logged "not
+     * available", and the script carried on as though the movie had ended.
+     *
+     * Timelapse is the game with no preload list at all: its `boot()` ends in
+     * `enterworld ("I")` and every name it opens is built by concatenation, so
+     * `readBootPlan` finds nothing to fetch ahead of time and EVERY film arrives
+     * on the miss that wants it. The journal is the plain case — `dojournal` is
+     * `playmovie (curworldchar @ "098.Mov")` then `"099.Mov"` — and it reported
+     * as the journal doing nothing the first time you opened it and working the
+     * second, because the failed first attempt is what pulled the file in.
+     *
+     * The other two games hid this: their BOOTFILEs name their films as string
+     * literals, so the boot plan has already fetched them.
+     *
+     * Only when it is NOT already in hand, and that is not an optimisation. An
+     * `await` that runs turns `load` into something that happens a microtask
+     * after the call, and a modal film is expected to be ON SCREEN the moment
+     * `playmovie` is entered — TAOOT's `abandon()` releases a script blocked in
+     * one, the nightdive question waits on its own last frame, and Dust's
+     * growls are sequenced against a film that is already running. With the
+     * file present nothing is awaited, so the body reaches `load` in the
+     * caller's own turn exactly as it always did.
+     */
+    const key = fileName.toLowerCase();
+    if (!this.session.files(key)) await this.session.ensureFile(key);
     if (!this.load(fileName, startFrame)) {
       // nothing to play — end the sequence (resolves any pending chain promise)
       this.finish();
@@ -342,149 +343,29 @@ export class MoviePlayer {
 
     const hasRegions = seg.frames.some((f) => f.regions.length > 0);
 
-    // Movie soundtrack. Only the LOOP table is one (MovSegment.audioChunks —
-    // the engine's sole self-started audio): a scored bed, played under the
-    // whole segment, INCLUDING an interactive one. The main menu's theme
-    // lives here (playmode.mov: one 8 s chunk listed 4x, and no event sounds
-    // at all), as does playmore.mov's, the end credits' and the Smethells
-    // note's. Without this the menu sat in silence. The one-shot table is the
-    // EVENT-sound library — frame entries and region clicks (FAUCET.MOV's
-    // "Brook Babbling." + the tap clicks), fired by enter()/click() and by
-    // nothing else.
-    //
-    // The loop table is an `order` sequence
-    // over a handful of chunk records, and that sequence usually ends in a
-    // REPEATED tail — a bed that loops behind the animation (logo.mov's cybermix
-    // loops its 4th segment 20x behind the title). Two facts the pacing must
-    // respect:
-    //   * Segments can sit at DIFFERENT sample rates — intro stingers at
-    //     22050 Hz, looping beds at 11025 Hz (the per-chunk rate is a field in
-    //     the audio header; see docs/engine/formats/audio.md). This is NOT the .11k
-    //     scheme — those are shorter songs swapped in on low-RAM machines, not a
-    //     downsample. We resample every segment UP to the highest rate present
-    //     so the concatenated buffer is coherent — an 11025 chunk left at 22050
-    //     would play at double speed (chipmunk).
-    //   * A looped tail must NOT stretch the video: pacing uses the UNIQUE
-    //     content length (each distinct chunk counted once). Otherwise logo.mov
-    //     spreads 318 frames over the ~86 s expanded loop — ~4 fps, the reported
-    //     "intro too slow".
-    let audioSec = 0;
-    let soundtrack: {
-      rate: number;
-      resampled: Float32Array[];
-      unique: Float32Array[];
-    } | null = null;
-    // `audioLoops` used to gate this as well (`!hasRegions || seg.audioLoops`), and
-    // for a v4 movie that was already a no-op: df/mov.ts sets `audioLoops =
-    // audioChunks.length > 0`, so the two conditions were the same condition. It
-    // stops being one for DreamFactory 1, whose chunks are a plain run played once
-    // rather than a loop order (df/mov-v1.ts) — and 45 of Dust's 136 films with
-    // sound are interactive, so the old reading would have kept them silent. What
-    // `audioLoops` still decides is whether the bed REPEATS while an interactive
-    // frame waits, which is the question it should be asked (see below).
-    if (seg.audioChunks.length) {
-      const decoded = seg.audioChunks.map((loc) =>
-        decodeAudioContainer(mov.file.containers[loc].data),
-      );
-      const rate = Math.max(...decoded.map((p) => p.sampleRate));
-      const resampled = decoded.map((p) =>
-        resampleTo(p.samples, p.sampleRate, rate),
-      );
-      const seen = new Set<number>();
-      const unique: Float32Array[] = [];
-      seg.audioChunks.forEach((loc, i) => {
-        if (seen.has(loc)) return;
-        seen.add(loc);
-        unique.push(resampled[i]);
-      });
-      audioSec = unique.reduce((a, s) => a + s.length, 0) / rate;
-      soundtrack = { rate, resampled, unique };
-    }
-
-    // an interactive movie paces on its own clock (or on clicks); only a
-    // cutscene's soundtrack sets the frame rate — and not even that when the
-    // frames loop, because then the soundtrack says how LONG rather than how fast.
-    // A v1 bed (audioLoops false, the only bed that doesn't loop) paces nothing:
-    // DreamFactory 1 films run at their header's frame rate and hold for their
-    // narration with per-frame voice waits (D1ND2M.MOV: sounds fired at frames 1
-    // and 21, flags bit 0 + hold 20 on the last frame). Stretching 45 frames over
-    // the audio played them as a slideshow.
-    let interval = chooseFrameInterval(
-      seg,
-      frames.length,
-      hasRegions || !seg.audioLoops ? 0 : audioSec,
-      hasRegions,
-    );
-    // A later segment always plays itself out: its picture is mid-film, so
-    // "no step frames -> wait for clicks" (a close-up's shape) cannot apply.
-    // No shipped TAOOT segment needs this — they all step — it just refuses to hang.
-    if (!interval && segIdx > 0 && !hasRegions) interval = NATIVE_FRAME_MS;
+    // The soundtrack, and the rate the picture runs at: both from the shared
+    // rules (df/mov-sound.ts, df/mov-pace.ts) rather than from a reading of the
+    // loop table kept here. The movie editor plays films too, and a bed the
+    // editor computes differently is a preview of a film the game does not play.
+    const audio = segmentAudio(seg);
+    const audioSec = audio?.audioSec ?? 0;
+    const interval = segmentInterval(seg, frames.length, audioSec, segIdx);
 
     // now that the frame interval is known, play the soundtrack (finish() stops
     // the "voice" channel, so it can never outlive the movie). A segment that
     // brings audio REPLACES whatever bed is playing (TI.EXE halts the bed
-    // channel before rewiring it, 0x449593); one that brings none fell through
-    // above and inherits the previous segment's, still running.
-    if (soundtrack) {
+    // channel before rewiring it, 0x449593); one that brings none takes no
+    // branch here at all and INHERITS the previous segment's, still running
+    // (tour.mov's 18 slide segments carry no audio — the narration bed from
+    // segment 0 plays across them all).
+    if (audio) {
       this.session.audio.halt("voice");
-      const { rate, resampled, unique } = soundtrack;
-      if (hasRegions && seg.audioLoops) {
-        // Interactive AND a loop bed: the movie sits on a frame for as long as
-        // the player takes to click — there is no runtime to cut the bed to. Play
-        // the DISTINCT chunks once and loop, the same way a theme bank's loop
-        // chunks are played (see AudioLibrary.theme), so the menu keeps its
-        // music however long the player leaves it up.
-        //
-        // A v1 close-up is interactive too and is NOT a loop: it says a line over
-        // a held picture and the line is meant to finish. It takes the branch
-        // below, which plays the run once.
-        this.session.audio.play(
-          "voice",
-          { sampleRate: rate, samples: concat(unique) },
-          { loop: true },
-        );
-      } else {
-        // Cutscene: concatenate the (resampled) chunks only up to the movie's
-        // own runtime, so a 20x loop tail doesn't allocate ~150 s of audio we
-        // halt at movie end anyway.
-        //
-        // ...but that runtime is a PREDICTION, and the film is not held to it.
-        // `interval x frames` assumes every frame arrives the instant it is due,
-        // while frames actually advance on ticks: the step is
-        // `now - lastTick >= interval`, so on a 60 Hz screen a 66 ms interval
-        // really costs ceil(66/16.7) x 16.7 = 66.7 ms, and a dropped frame costs
-        // a whole refresh more. Over TAOOT ocredits.mov's 1225 frames that is ~0.8 s of
-        // picture past the end of a bed cut to the prediction — reported as the
-        // fly-in to C73 losing its audio and carrying on silent for a second or
-        // two before the next scene's horn.
-        //
-        // So take a margin of the authored sequence beyond the prediction. It is
-        // free material for exactly the movies that need it (the bed comes from a
-        // LOOP table, whose repeats are there to be drawn on: ocredits' 53 entries
-        // hold 213.62 s over a 80.85 s film), and it continues the music the
-        // author wrote rather than jumping. `concat` stops at whatever the order
-        // actually holds, so a bed with nothing spare is simply unchanged.
-        // ...and never below the material there actually is. The prediction is
-        // `interval x frames`, which assumes the film runs itself out — and a film
-        // that STOPS to wait for a click does not: a v1 close-up is three frames
-        // and a two-second line, so the prediction would have cut the line to a
-        // fifth of a second. For a v4 bed this floor is unreachable by
-        // construction (a paced segment's interval is derived FROM audioSec, so
-        // the product is already >= it, and an interactive v4 bed loops in the
-        // branch above and never arrives here).
-        const predicted = interval > 0 ? (interval * frames.length) / 1000 : 0;
-        const runtime = Math.max(audioSec, predicted);
-        const cap = Math.max(1, Math.ceil(runtime * OVERRUN_MARGIN * rate));
-        // ...and loop as the backstop, for a host slow enough to outrun even that.
-        // A loop-table bed is authored to repeat, and repeating a second of it
-        // beats a second of silence. finish() halts "voice" the moment the film
-        // really does end, so this can never outlive the movie.
-        this.session.audio.play(
-          "voice",
-          { sampleRate: rate, samples: concat(resampled, cap) },
-          seg.audioLoops ? { loop: true } : undefined,
-        );
-      }
+      const bed = soundtrackFor(seg, audio, interval, frames.length);
+      this.session.audio.play(
+        "voice",
+        { sampleRate: bed.sampleRate, samples: bed.samples },
+        bed.loop ? { loop: true } : undefined,
+      );
     }
     const frameByName = new Map<string, number>();
     seg.frames.forEach(
@@ -876,8 +757,7 @@ export class MoviePlayer {
     // deck washes and the fires loop: the last frame of the cycle carries a
     // backward `goto` nothing would ever reach if the frame stopped for its own
     // click rect. See MovFrame.playsThroughRegions.
-    const waits =
-      m.meta[m.pos].regions.length > 0 && !m.meta[m.pos].playsThroughRegions;
+    const waits = frameWaits(m.seg, m.pos);
     if (m.interval > 0 && !waits) {
       if (!m.lastTick) m.lastTick = now;
       // The FILM's own hold, not a rate we invented: max(frame, movie floor) —

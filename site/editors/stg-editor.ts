@@ -34,7 +34,6 @@ import {
   readStgFile,
   readStgRegions,
 } from "@dreamfactory/engine/df/stg";
-import { SCREEN_H, SCREEN_W } from "@dreamfactory/engine/web/screen";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -95,6 +94,9 @@ function loadStg(bytes: Uint8Array, name: string): void {
   }
   stg = parsed;
   fileName = name;
+  // and the export button says which extension it will WRITE, which is the one
+  // this file came in as: a v1 `.flt`/`.prp` round-trips as itself
+  $("exportBtn").textContent = t("stages.export", { ext: /\.[a-z0-9]+$/i.exec(name)?.[0]?.toLowerCase() ?? "" });
   palette = paletteToRGBA(parsed.paletteRaw, 256);
   imageCache.clear();
   edits.length = 0;
@@ -141,7 +143,11 @@ async function initServerStages(): Promise<void> {
   // what chooses, and it is the same choice the game reads (taoot/src/editions.ts).
   const source = chosenSource(await listSources());
   if (!source) return; // production / no dev server: upload only
-  const stages = filesIn(source, byExtension(".stg"));
+  // `.flt` as well: DreamFactory 1's name for a stage. Its container-0 header IS
+  // at different offsets, and both the reader and the patches take their tables
+  // from the file's own version tag (`C0_BY_VERSION`, `FLAT_BY_VERSION`), so an
+  // edit lands on the byte the name came out of. Dust ships 20 of them.
+  const stages = filesIn(source, byExtension(".stg", ".flt"));
   if (!stages.length) return;
   const wrap = $("serverStages");
   const note = document.createElement("div");
@@ -229,8 +235,8 @@ function renderPreview(): void {
   const img = f ? imageAt(f.locationFrame) : null;
   if (img) imageToCanvas(img, canvas);
   else {
-    canvas.width = SCREEN_W;
-    canvas.height = SCREEN_H;
+    canvas.width = stg.screen.width;
+    canvas.height = stg.screen.height;
     const ctx = canvas.getContext("2d")!;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -348,8 +354,15 @@ function buildFlatFields(): void {
     buildFlatSelect();
     renderPreview();
   };
-  $("stageInfo").innerHTML =
-    t("stages.stageInfo", { loc: MAIN_SCRIPT_LOCATION, w: SCREEN_W, h: SCREEN_H });
+  // the SIZE THIS FILE DECLARES, not a default: an STG header carries it (v4 at
+  // 0x28, v1 at 0x1c — `StgFile.screen`), and it is 640×480 on Timelapse where the
+  // engine's own default is 512×384. The old constant put Titanic's numbers in a
+  // sentence sitting directly above this file's own record saying otherwise.
+  $("stageInfo").innerHTML = t("stages.stageInfo", {
+    loc: MAIN_SCRIPT_LOCATION,
+    w: stg?.screen.width ?? 0,
+    h: stg?.screen.height ?? 0,
+  });
 }
 
 function buildRegions(): void {
@@ -572,7 +585,12 @@ async function importPng(file: File): Promise<void> {
       was: (container.data.length / 1024).toFixed(1),
     }) +
       (old && !sameSize
-        ? t("stages.artSizeWarn", { w: old.width, h: old.height, sw: SCREEN_W, sh: SCREEN_H })
+        ? t("stages.artSizeWarn", {
+            w: old.width,
+            h: old.height,
+            sw: stg?.screen.width ?? 0,
+            sh: stg?.screen.height ?? 0,
+          })
         : ""),
   );
   renderPreview();

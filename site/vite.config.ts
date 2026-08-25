@@ -11,13 +11,13 @@
  *
  * They belong to no game: `site/` imports none, and `site/editors/sources.ts`
  * asks the registry which games exist and fetches each one's manifest. A SOURCE
- * is one game in one edition — "Dust", "Titanic · English" — and the row at the
- * top of each editor picks between them.
+ * is one game in one edition — "Dust", "Titanic · English", "Timelapse" — and the
+ * row at the top of each editor picks between them.
  *
- * What that costs this config is mounting BOTH rips for the dev server, below,
- * because in dev each package is a separate origin and a page cannot reach the
- * other's files. Neither mount emits a manifest: those belong to the games' own
- * builds.
+ * What that costs this config is mounting ALL THREE rips for the dev server,
+ * below, because in dev each package is a separate origin and a page cannot reach
+ * another's files. None of the mounts emits a manifest: those belong to the
+ * games' own builds.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -44,8 +44,8 @@ export default defineConfig({
   appType: "mpa",
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [
-    // BOTH games' trees, each mounted where the editors resolve it to, and
-    // neither emitted: a manifest belongs to whoever owns the tree, and each
+    // ALL THREE games' trees, each mounted where the editors resolve it to, and
+    // none of them emitted: a manifest belongs to whoever owns the tree, and each
     // game's own build writes its own. The editors list every source there is
     // (site/editors/sources.ts), so a dev server for the front door has to serve
     // every rip the editors can offer.
@@ -61,10 +61,21 @@ export default defineConfig({
       mount: "/dust",
       emit: false,
     }),
+    gamefilesManifest({
+      gamefiles: resolve(HERE, "../timelapse/gamefiles"),
+      publicDir: resolve(HERE, "../timelapse/public"),
+      mount: "/timelapse",
+      emit: false,
+      // the same one exception that game's own build makes: half of it lives in
+      // the installer's tree, and without this the editors would be offered its
+      // films and stages with one shop file and no track banks
+      include: ["TLAPSE1/install/data"],
+    }),
     siblingSignposts([
-      { path: "taoot", command: "npm run dev:taoot", port: 5174, what: "Titanic" },
-      { path: "dust", command: "npm run dev:dust", port: 5175, what: "Dust" },
-      { path: "docs", command: "npm run docs:dev", port: 5176, what: "The documentation" },
+      { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },
+      { path: "taoot", command: "npm run dev:taoot", port: 5175, what: "Titanic" },
+      { path: "dust", command: "npm run dev:dust", port: 5176, what: "Dust" },
+      { path: "timelapse", command: "npm run dev:timelapse", port: 5177, what: "Timelapse" },
     ]),
   ],
   server: {

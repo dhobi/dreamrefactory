@@ -72,6 +72,7 @@ const ALLOWED: Record<string, string[]> = {
   site: ["engine"],
   taoot: ["engine", "site"],
   dust: ["engine", "site"],
+  timelapse: ["engine", "site"],
 };
 
 for (const [pkg, allowed] of Object.entries(ALLOWED)) {

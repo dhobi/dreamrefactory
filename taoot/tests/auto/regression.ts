@@ -596,9 +596,11 @@ test.skipIf(noDemo)("host: the demo edition boots its own way", async () => {
 
   let booted = false;
   const boot = session.track(host.coldBoot().then(() => (booted = true)));
-  // frames, because the boot plays open.mov and playmovie only ends on them
+  // Frames, because the boot plays open.mov and playmovie only ends on them — and
+  // through the DIRECTOR, because there is no viewer to tick: this boot borrows no
+  // room now, which is the point of the check further down.
   for (let i = 0; i < 40000 && !(booted && session.stageName === "demo.stg"); i++) {
-    host.viewer?.tick((clock += 66));
+    host.director.tick((clock += 66));
     await drain();
   }
   await boot;
@@ -619,12 +621,22 @@ test.skipIf(noDemo)("host: the demo edition boots its own way", async () => {
       !session.interp.globals.has("__propsinit"),
     `shops=${[...session.propRuntime.shops.keys()].join()} life=${!!session.propRuntime.get("life")}`,
   );
-  // it still needs a surface: the frame loop draws through a SetViewer, and the
-  // demo's boot plays a movie and opens a stage with no room behind either
+  // ...and it opened NO ROOM AT ALL, which is the inversion of what this used to
+  // assert. The port had to borrow one — "any of the game's rooms will do", 9 MB
+  // of grand staircase pinned black — because the frame loop drew through a
+  // SetViewer and the demo's boot plays a movie and opens a stage with no room
+  // behind either. The screen is not a room's any more
+  // (engine/src/web/screen-director.ts), so the honest state here is no viewer,
+  // no set, nothing showing, and a director compositing the menu stage anyway.
   check(
-    "it has a viewer to draw into, and no room the player was never in",
-    !!host.viewer && session.currentSetName === "none" && !session.viewShowing,
+    "it borrows no room to draw into",
+    !host.viewer && session.currentSetName === "none" && !session.viewShowing,
     `viewer=${!!host.viewer} set=${session.currentSetName} showing=${session.viewShowing}`,
+  );
+  check(
+    "and the screen composites the menu stage without one",
+    host.director.paintWorldInto() === "flat" && host.director.screenOwner() !== "held",
+    `drew=${host.director.paintWorldInto()} owner=${host.director.screenOwner()}`,
   );
   check(
     "and its menu opens at the same 50% mix the full game does",
@@ -1458,6 +1470,51 @@ test("ESC skips a movie, and the rest of its chain with it", async () => {
 }
 );
 
+/**
+ * `currentstage()` answers the stage's own NAME now, not its filename — and on
+ * this disc those are the same string, which is the claim that has to hold.
+ *
+ * The field is a 16-byte Pascal string at 2104 of container 0 (`StgFile.refName`),
+ * v4 only, and it went unread for as long as it did because Titanic fills it with
+ * its own filename in every stage it ships. Timelapse does not: its `p.stg` is
+ * called `"interface"` and its space bar tests for exactly that, so the panel
+ * opened and could never be closed while the file was the answer.
+ *
+ * So this is the regression guard on the OTHER side of that change. If any stage
+ * on this disc stored something else there, Titanic's own `currentstage()`
+ * comparisons — `!= "bomb.stg"`, `!= "fence.stg"`, `= "main.stg"`, `!= "ctl.stg"`
+ * — would have silently started failing, and each of those guards a door or a
+ * panel rather than throwing anything.
+ *
+ * The two that do NOT match are named here rather than excused: `inven1.stg` and
+ * `inven2.stg` both say `"inven.stg"`, and nothing compares `currentstage()`
+ * against either — the inventory's own `switch currentstage()` runs after
+ * `transfromflat()` has popped back to the stage underneath, so what it reads is
+ * that stage's name and never its own.
+ */
+test("every stage on the disc stores the name currentstage() used to answer", async () => {
+  const { session } = await newSession();
+  // the two the inventory shares, by design: a name is not required to be unique
+  const SHARED = new Map([
+    ["inven1.stg", "inven.stg"],
+    ["inven2.stg", "inven.stg"],
+  ]);
+  const names = [
+    "main.stg", "map.stg", "ctl.stg", "tour.stg", "inven1.stg", "inven2.stg",
+    "blkjack.stg", "bomb.stg", "enigma.stg", "wireless.stg", "trunk.stg",
+  ];
+  let checked = 0;
+  for (const file of names) {
+    const bytes = session.files(file);
+    if (!bytes) continue; // a stage this edition does not carry
+    const { refName } = readStgFile(bytes);
+    check(`${file} names itself "${SHARED.get(file) ?? file}", not "${refName}"`,
+      refName === (SHARED.get(file) ?? file));
+    checked++;
+  }
+  check(`at least the five core stages were read (got ${checked})`, checked >= 5);
+});
+
 // --- 10c. the deck map's jump table, against MAP.STG itself ---
 test("the deck map's jump table says what MAP.STG says", async () => {
   const { session } = await newSession();
@@ -1951,7 +2008,10 @@ test("darkroom stage darkness: entering redphoto.stg with the white light", asyn
   const { session, viewer } = await newSession();
   await session.openSetFile("c78.set");
   const v = viewer();
-  const stageDark = (): boolean => (v as unknown as { stageDim: unknown }).stageDim !== null;
+  // the stage dim lives on the SCREEN now (ScreenDirector), not on the room
+  // standing in front of it — a stage outlives any one set
+  const stageDark = (): boolean =>
+    (v.dir as unknown as { stageDim: unknown }).stageDim !== null;
   const call = (name: string, args: unknown[]): void => {
     void session.interp.builtins.get(name)!(
       session.interp, args as never, { me: "", target: "" } as never, undefined as never,
@@ -2444,7 +2504,8 @@ test("a set crossing never shows the flat's matte (#146)", async () => {
   // every other flat is 3.4%-22.4%, the ending (narend) among them.
   const { session, viewer } = await newSession();
   await session.openSetFile("gstair3.set");
-  const isMatte = (viewer() as never as { flatIsMatte(f: unknown): boolean }).flatIsMatte.bind(viewer());
+  const dir = viewer().dir;
+  const isMatte = (dir as never as { flatIsMatte(f: unknown): boolean }).flatIsMatte.bind(dir);
   const main = session.stageCtrl.flatImage()!;
   await session.stageCtrl.openStageFile("tour.stg");
   const tour = session.stageCtrl.flatImage()!;
@@ -5010,19 +5071,18 @@ test("world sprites keep a camera during movement (no vanish on turn)", async ()
   const v = viewer();
   const anyv = v as unknown as {
     animation: unknown;
-    activeCamera: () => { deg: number } | null;
   };
   const standDeg = v.worldCamera()!.deg;
   v.turn(0); // start a right turn
   v.tick((clock += 100)); // step into the animation
   v.tick((clock += 100));
   const animating = anyv.animation !== null;
-  const midCam = anyv.activeCamera();
+  const midCam = v.roomCamera();
   // mid-turn: a camera exists (was null before) and it has moved off the standpoint
   const tracksWhileMoving = animating && !!midCam && midCam.deg !== standDeg;
   await runAnimations(v);
   // at rest: back to the standpoint camera, seamlessly
-  const restCam = anyv.activeCamera();
+  const restCam = v.roomCamera();
   const backToStand = anyv.animation === null && !!restCam && restCam.deg === v.worldCamera()!.deg;
   check(
     "world sprites track the camera during movement, not just at the standpoint",

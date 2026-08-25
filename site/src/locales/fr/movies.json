@@ -111,5 +111,14 @@
   "audioLoopTable": "la table de boucle — un fond que le moteur joue sous tout le film, bloc après bloc",
   "audioOneShotBlock": "le bloc ponctuel — des sons d'événement qu'une image ou une région déclenche par leur nom",
   "noAudio": "ce film ne porte aucun audio",
-  "paletteInfo": "les 256 couleurs propres au film"
+  "paletteInfo": "les 256 couleurs propres au film",
+  "playFilm": "▶▶ Jouer le film",
+  "playFilmTitle": "jouer tout le fichier comme le jeu le joue — chaque segment dans l'ordre, avec sa bande-son",
+  "filmStart": "le film se joue : chaque segment dans l'ordre, au rythme et avec le son du jeu",
+  "filmSegment": "segment {n} sur {total} : {frames} sur {picture} s d'image{bed}",
+  "filmBed": " · {secs} s de fond sonore",
+  "filmEnd": "le film se termine — {frames} en {secs} s",
+  "filmCue": "repère au tick {tick} → « {target} »",
+  "filmNoPacing": "rien ici ne fait avancer l'image — aucune action de pas, aucune bande-son, aucune région : dans le jeu c'est un gros plan qui reste jusqu'au clic",
+  "filmResume": "lecture à partir de l'image sélectionnée, au rythme et avec le son du jeu"
 }

@@ -140,10 +140,14 @@ asked for — the scene/view readout and the script log.
 
 **Report bug** opens `github.com/dhobi/dreamrefactory/issues/new` with `title` and
 `body` prefilled ([`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts)):
-the room, the edition, the page URL, the browser, the window size and the last
-eight lines the engine logged — the three questions every report about this port
-otherwise has to be asked. The title names the room, because that is what makes
-an issue list readable.
+the game, the room, the edition, the page URL, the browser, the window size and
+the last eight lines the engine logged — the three questions every report about
+this port otherwise has to be asked. The title names **the game and then the
+room** — `[Dust] Bug in nite scene g15`, `[Timelapse] Bug in flat i0001.100.6` —
+because that is what makes an issue list readable when one repository takes
+reports about three games, and because `[Dust]` in the search box is then a
+filter. The game comes from the page's own registry entry (`site/src/games.ts`),
+so it has one spelling.
 
 The picture cannot go that way. GitHub has no query parameter for an attachment,
 and the framebuffer is a **42 KB PNG** against a URL that starts answering 414

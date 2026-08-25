@@ -27,6 +27,38 @@
  */
 import { DEFAULT_ENCODING, DfEncoding } from "@dreamfactory/engine/df/text";
 
+/**
+ * The screen a game renders into, and where its UI band starts.
+ *
+ * A DreamFactory game has ONE framebuffer and everything in its data is authored
+ * against it: STG flats are full-screen images, MOV frames decode to a full
+ * screen, PUP stances composite over the whole screen, and a screen prop with no
+ * `propxy` anchors at its CENTRE. So a tool that draws any of those has to know
+ * how big the screen is, and only two of these formats say — an STG header
+ * carries it at 0x28 (`StgFile.screen`), a SET carries its viewport, and a SHP, a
+ * CST, a PUP and a MOV carry nothing.
+ *
+ * Which makes it a per-GAME fact, and one that is not derivable from the engine
+ * version: measured off the three rips' own stage headers, 512×384 spans both
+ * DreamFactory 1 and 4, and 640×480 is DreamFactory 4 as well
+ * (`engine/src/web/screen.ts` has the table). It lives here because this is where
+ * the editors already ask what a rip is.
+ */
+export interface GameScreen {
+  width: number;
+  height: number;
+  /**
+   * Where the room view ends and the UI band begins, when there is one.
+   *
+   * Titanic and Dust put a 512×264 set view in the top of the screen with their
+   * interface band below it. ABSENT for a game with no sets at all: Timelapse has
+   * no `.SET` on any of its four discs and no permanent band — its panel is a
+   * stage of its own — so a tool drawing that line would be drawing a boundary
+   * the game does not have.
+   */
+  band?: number;
+}
+
 /** one tree a game's data comes in */
 export interface Edition {
   /** the directory under `gamefiles/`, and what `?edition=` accepts */
@@ -57,6 +89,22 @@ export interface GameEditions {
   legacyKey?: string;
   /** the edition to fall back to when nothing else answers */
   fallback: string;
+  /** the framebuffer this game's data is authored against — see {@link GameScreen} */
+  screen: GameScreen;
+  /**
+   * Who DEVELOPED it, which is not one answer for the three.
+   *
+   * CyberFlix wrote the DreamFactory engine and used it for *Dust* and *Titanic*.
+   * *Timelapse* is somebody else's game on the same engine — GTE Interactive
+   * Media's — and everything in this project that said "the three CyberFlix
+   * games" was quietly wrong about a third of it.
+   *
+   * Worth carrying as a field rather than as a sentence on a page, because it is
+   * the fact that stops the engine's name and the studio's name being treated as
+   * the same thing: `site/tests/front-doors.ts` holds the front page's badges to
+   * this list.
+   */
+  developer: string;
 }
 
 /**
@@ -97,6 +145,8 @@ export const TITANIC: GameEditions = {
   storageKey: "taoot.edition",
   legacyKey: "taoot.lang",
   fallback: "en",
+  screen: { width: 512, height: 384, band: 264 },
+  developer: "CyberFlix",
 };
 
 /**
@@ -114,6 +164,47 @@ export const DUST: GameEditions = {
   editions: [{ code: "dustcd", name: "English", encoding: DEFAULT_ENCODING }],
   storageKey: "dust.edition",
   fallback: "dustcd",
+  // the same screen as Titanic's, which is the fact that made this a per-title
+  // question rather than a per-version one
+  screen: { width: 512, height: 384, band: 264 },
+  developer: "CyberFlix",
+};
+
+/**
+ * *Timelapse: Ancient Civilizations* — four discs, one language, and no edition
+ * level in the tree at all.
+ *
+ * Dust has no axis either but still has a CODE, because its rip sits under
+ * `gamefiles/dustcd/`. This one's paths are `gamefiles/TLAPSE1/…` through
+ * `TLAPSE4/`, and those are VOLUMES rather than editions: one game, split across
+ * four CDs, every one of them mounted at once and indexed by basename (the
+ * scripts ask for `I001.Stg`, never for a path). So the code is the neutral one —
+ * `editionOfUrl` already answers that for a path whose first segment names no
+ * edition, which is what makes a game with no such level work here at all.
+ *
+ * ## The code page is the DEFAULT, and for once that is a finding
+ *
+ * `macintosh` here is not the usual "nothing said otherwise". This game gives
+ * nothing to decide it WITH, which was checked rather than assumed: across the
+ * whole rip — the eight installed files, 155 stages and 259 films, 100,680 script
+ * containers and 49,561 string literals — there is not one byte above 0x7F. And
+ * the two formats an encoding is really for are absent: no `.PUP` and no `.CST` on
+ * any of the four discs, so there is no dialogue record and no cast text to get
+ * wrong. What the editors will show out of this rip is stages, films and track
+ * banks, whose text is identifiers.
+ */
+export const TIMELAPSE: GameEditions = {
+  title: "Timelapse: Ancient Civilizations",
+  short: "Timelapse",
+  dir: "timelapse",
+  editions: [{ code: "", name: "English", encoding: DEFAULT_ENCODING }],
+  storageKey: "timelapse.edition",
+  fallback: "",
+  // 640×480, said in the header of every one of its 155 stages — and no band,
+  // because there are no sets to put above one
+  screen: { width: 640, height: 480 },
+  // NOT CyberFlix: the engine is theirs and this game is not
+  developer: "GTE Interactive Media",
 };
 
 /** the code every edition-less path is treated as belonging to — see `editionOfUrl` */
@@ -138,6 +229,9 @@ export function editionOfUrl(game: GameEditions, url: string): string {
  *
  * Oldest engine first, which is also oldest game first — the order the
  * documentation introduces them in, and the order that makes "DreamFactory 1,
- * then 4" read as a progression rather than an arbitrary pair.
+ * then 4" read as a progression rather than an arbitrary pair. Timelapse is last
+ * of the three: the same engine generation as Titanic, shipped after it, and the
+ * one whose corpus has the least in it for an editor to open — no set, no puppet,
+ * no cast, and one shop per world.
  */
-export const GAMES: readonly GameEditions[] = [DUST, TITANIC];
+export const GAMES: readonly GameEditions[] = [DUST, TITANIC, TIMELAPSE];

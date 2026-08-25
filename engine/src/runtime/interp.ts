@@ -1,4 +1,5 @@
 import { CallExpr, Expr, Script, Stmt } from "./ast";
+import { CaselessMap } from "./caseless";
 
 /**
  * DreamFactory script interpreter core.
@@ -56,7 +57,7 @@ export type SpecialForm = (
 ) => Value | void | Promise<Value | void>;
 
 export class Frame {
-  locals = new Map<string, Value>();
+  locals: Map<string, Value> = new CaselessMap<Value>();
   constructor(
     readonly script: ScriptInstance,
     readonly ctx: CallCtx,
@@ -110,7 +111,8 @@ export class ScriptInstance {
 }
 
 export class Interpreter {
-  readonly globals = new Map<string, Value>();
+  /** case-insensitive, as the language is — see {@link CaselessMap} */
+  readonly globals: Map<string, Value> = new CaselessMap<Value>();
   /**
    * Globals whose every change is announced through {@link onGlobalChange} —
    * a watch list, in the debugger's sense.
@@ -456,9 +458,15 @@ export class Interpreter {
       const args = await this.evalArgs(call.args, frame);
       return (await this.runHandler(frame.script, call.name, args, frame.ctx, frame)).value;
     }
-    const special = this.specialForms.get(call.name);
+    // The registries are keyed by the lowercase name the opcode table uses; a
+    // script is free to spell the call any way (Timelapse's journal pickup asks
+    // for `Playsound`, the camera two flats away for `playsound`). Without this
+    // the capitalised one reached no builtin and no handler and was logged as an
+    // unknown command — the pickup that made no sound.
+    const folded = call.name.toLowerCase();
+    const special = this.specialForms.get(folded);
     if (special) return special(this, call.args, frame);
-    const builtin = this.builtins.get(call.name);
+    const builtin = this.builtins.get(folded);
     const args = await this.evalArgs(call.args, frame);
     if (builtin) return builtin(this, args, call, frame);
     if (call.id === undefined) {
@@ -505,7 +513,10 @@ export class Interpreter {
   setGlobal(name: string, v: Value): void {
     const from = this.globals.get(name) ?? "";
     this.globals.set(name, v);
-    if (this.watchGlobals.has(name) && !valueEq(from, v)) this.onGlobalChange(name, from, v);
+    // the watch list is the debugger's, typed by a person — matched caselessly
+    // for the same reason the variables themselves are
+    const watched = name.toLowerCase();
+    if (this.watchGlobals.has(watched) && !valueEq(from, v)) this.onGlobalChange(watched, from, v);
   }
 }
 

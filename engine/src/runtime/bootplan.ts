@@ -38,6 +38,7 @@
  * whole of what this layer now knows about any particular game.
  */
 import { readContainerFile } from "../df/container";
+import { CaselessMap } from "./caseless";
 import { sniffScript } from "../df/script";
 import { parseScript } from "./parser";
 import type { CallExpr, CodeBlock, Expr, Stmt } from "./ast";
@@ -192,7 +193,7 @@ function walkStmts(body: Stmt[], onCall: (c: CallExpr) => void): void {
 /** the boot library's handlers by lowercase name; the first definition wins,
  *  which is the order events traverse the containers in (GameSession) */
 function bootHandlers(bootfile: Uint8Array): Map<string, CodeBlock> {
-  const codes = new Map<string, CodeBlock>();
+  const codes: Map<string, CodeBlock> = new CaselessMap<CodeBlock>();
   const file = readContainerFile(bootfile);
   for (let i = 1; i < file.containers.length; i++) {
     const tokens = sniffScript(file.containers[i].data);

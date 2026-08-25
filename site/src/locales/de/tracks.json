@@ -1,8 +1,8 @@
 {
   "docTitle": "Track-Editor — Titanic - Adventure Out Of Time RE",
   "h1": "Track-Editor",
-  "intro": "Eine DreamFactory-Audiobank laden — einen <b>.TRK</b>-Musiktitel (<code>BEDRAD1.TRK</code>, …), eine <b>.SFX</b>-Effektbank oder ein <b>.11K</b>-Lied für wenig Speicher. Das Thema und seine Einzelgeräusche abspielen, sie umbenennen, die Blöcke umsortieren, die das Thema durchläuft, eigenen Ton einfügen und dann die neu gepackte Datei exportieren.",
-  "open": "📂 Eine .trk-/.sfx-/.11k-Datei öffnen…",
+  "intro": "Eine DreamFactory-Audiobank laden — einen <b>.TRK</b>-Musiktitel (<code>BEDRAD1.TRK</code>, …), eine <b>.SFX</b>-Effektbank, ein <b>.11K</b>-Lied für wenig Speicher oder eine <b>.SND</b> aus DreamFactory 1, die sich nur lesend öffnet. Das Thema und seine Einzelgeräusche abspielen, sie umbenennen, die Blöcke umsortieren, die das Thema durchläuft, eigenen Ton einfügen und dann die neu gepackte Datei exportieren.",
+  "open": "📂 Eine .trk-/.sfx-/.11k-/.snd-Datei öffnen…",
   "export": "⬇ Bank exportieren",
   "closeTitle": "Diese Bank schließen",
   "bankHead": "Bank",

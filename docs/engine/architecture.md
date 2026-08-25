@@ -8,7 +8,7 @@ find where something lives in the source, start here.
 
 ## Four packages, and which way they point
 
-The repository is an npm workspace of four packages, and the arrangement is one
+The repository is an npm workspace of five packages, and the arrangement is one
 rule: **nothing shared knows which game it is.**
 
 | Package | What it is | Imports |
@@ -17,9 +17,10 @@ rule: **nothing shared knows which game it is.**
 | `site/` | the project's own web presence: the front door, the seven format editors, the chrome every page shares, the UI-language axis | `engine` |
 | `taoot/` | *Titanic*: four pages, six editions and the demo, its own tools, the suites that play it to the end | `engine`, `site` |
 | `dust/` | *Dust*: two pages, one disc, its own tools and suites | `engine`, `site` |
+| `timelapse/` | *[Timelapse](../timelapse/)*: one page and four discs — its own palette, its own title card, and the boot log it started life as, now a panel the page opens over the picture | `engine`, `site` |
 
 There is a test that says so — `site/tests/layering.ts` fails the build if
-`engine/` reaches for a game, or if the two games reach for each other.
+`engine/` reaches for a game, or if any of the three games reaches for another.
 
 Everything below `## Where a game's own code lives` is a game shell. Everything
 above it is the engine, and this page spends most of its length there, because
@@ -86,6 +87,7 @@ plays. Every file in here corresponds to a format doc:
 | [`mov.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov.ts) | MOV movies — the segment chain, and the patches the movie editor writes | [MOV](formats/mov.md) |
 | [`mov-v1.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-v1.ts) | a DreamFactory 1 movie. The chain-of-segments **model** survives; almost every mechanic under it differs, and more of it is behaviour than layout — advance is an authored goto, a frame can block until the sound it started finishes, hotspots are typed records, two palette indices are transparent. The format where the two engines diverge most. The record layout is `DF.EXE`'s own, read out of its movie loop | [MOV](formats/mov.md#dreamfactory-1-dust) |
 | [`mov-pace.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-pace.ts) | how fast a movie plays, in one place so the player and the editor cannot disagree | [MOV](formats/mov.md#timing) |
+| [`mov-sound.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-sound.ts) | a segment's bed: which chunks, how much of the authored loop order, and whether it repeats — beside the pacing, and shared for the same reason | [MOV](formats/mov.md#whats-in-a-segment) |
 | [`stg.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/stg.ts) | STG stage/UI | [STG](formats/stg.md) |
 | [`cst.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/cst.ts) | CST casts (actor sprite sets) | [PUP / CST](formats/pup-cst.md) |
 | [`pup.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/pup.ts) | PUP puppets (conversation close-ups) | [PUP / CST](formats/pup-cst.md) |
@@ -146,20 +148,23 @@ but it may mention `document`, and it is where a game shell attaches.
 | File | Responsibility |
 |------|----------------|
 | [`host.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/host.ts) | `GameHost` — what it means to *run* the game (set activation, prefetch, cold boot, resuming a save) with no reference to `document`; a shell passes its side in as a file source, five UI notifications and an `AudioSink`. See [the browser host](runtime/host.md#the-split-and-why-it-is-where-it-is) |
-| [`viewer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/viewer.ts) | `SetViewer` — the navigation state machine over a parsed SET (turn/walk/teleport, hit-testing, the click priority chain, rendering) |
+| [`viewer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/viewer.ts) | `SetViewer` — the navigation state machine over a parsed SET (turn/walk/teleport, the geometry of its own hit-testing), and one optional `RoomLayer` of the screen. It used to own the rendering and the click priority chain too; see the row below |
+| [`screen-director.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-director.ts) | `ScreenDirector` — **who owns the screen, and who gets a click**: the five-way arbitration between a movie, a conversation, a fade, the world and a held frame, the flat/room compositor, the CLUT, the per-frame service of the whole session, and the input priority chain (`hittest`, clicks, keys, the cursor). Held by the host, and it works with **no room at all** — which is what lets *Timelapse*, a game with no `.SET` on any of its four discs, draw and play its films |
 | [`screen-presenter.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-presenter.ts) | `ScreenPresenter` — the single persistent framebuffer every render path composites into, the fade overlays, and the [signature](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/signature.ts) check that skips a composite when the picture has not changed. Held by the host, so it **outlives** the viewer a set change replaces |
-| [`screen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen.ts) | the screen contract: 512×384, and where a SET view sits inside it |
+| [`screen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen.ts) | the screen contract: how big the framebuffer is, and where a SET view sits inside it. 512×384 is the DF4 **default** (Titanic, Dust) rather than the law — Timelapse says 640×480 in every one of its stage headers |
 | [`screen-gamma.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-gamma.ts) | the per-channel power curve `TI.EXE` applies to every palette entry before it reaches the screen (`pow(c/255, 0.65) * 255`) — the reason a faithful port looks *brighter* than a verbatim one |
 | [`ring-cache.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/ring-cache.ts) | the LRU of decoded turn/walk rings, on a byte budget — the viewer's memory story, on its own |
 | [`movie-player.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/movie-player.ts) | `MoviePlayer` — modal MOV playback: the segment chain, cutscenes, interactive close-ups, movie chains/calls, cues and the soundtrack |
 | [`puppet-view.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/puppet-view.ts) | `PuppetView` — draws conversation close-ups (layer compositing, subtitles, choice bevels); the conversation *logic* is `runtime/puppet.ts` |
 | [`fonts.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/fonts.ts) | the canvas font stacks and `wrapText` — including breaking a line that has no spaces in it |
+| [`cursors.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/cursors.ts) | `cursor(name)` as something `style.cursor` will take: the 32×32 monochrome `CURS.*` art a DreamFactory build keeps in its own executable, resampled (nearest neighbour, never blended) to the size the picture is being shown at — a whole-number zoom is exact pixel doubling and a fractional one an even mix of one- and two-pixel rows, capped at the 128×128 past which browsers ignore a cursor image outright. All three games have their own set, extracted from their own build by [`tools/dumpcursors.ts`](../reference/tools.md) — 15 for Timelapse, 11 for Titanic, 9 for Dust — because the sets differ: Timelapse navigates BY cursor (11,031 of its 13,200 `cursor(...)` calls are the two step arrows, and it redrew both), Dust's v1 build has no step arrows at all, and the two disagree about the pointing hand |
+| [`photos-idb.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/photos-idb.ts) | the IndexedDB store behind Timelapse's photo album (`plugin("camera", …)`) — the one thing this engine produces that the *player* made, and the one the original kept outside a saved game. Everything in it is allowed to fail: a blocked or full store costs persistence and nothing else |
 | [`keys.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/keys.ts) | whether a keypress belongs to whatever has focus or to the game. The page listens on `window`, so without this a filter box typing `mission` toggled the minimap on the M and sent all seven letters into the running game |
 | [`save-browser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-browser.ts) / [`save-store.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-store.ts) | the saved-games UI and its IndexedDB "file system" — parameterised on a `SaveKind`, so Titanic's `.ti` and Dust's `.rtd` get a database each off one implementation |
 
 ## Where a game's own code lives
 
-The three packages above the engine. None of them adds engine behaviour; they
+The four packages above the engine. None of them adds engine behaviour; they
 say which disc, which pages, and what the page around the canvas looks like.
 
 ### `site/` — the shared web presence
@@ -168,10 +173,10 @@ say which disc, which pages, and what the page around the canvas looks like.
 |------|----------------|
 | [`editors/`](https://github.com/dhobi/dreamrefactory/tree/master/site/editors) | the seven format editors and the page that lists them — see [the browser editors](../editors/README.md) |
 | [`front.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/front.ts) / [`games.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/games.ts) | the front door, and the registry of which games exist and what it takes to read one's data — here rather than in a game, because the editors need it and a shared package must not depend on a consumer |
-| [`chrome.css`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/chrome.css) | the topbar, pickers, titles, controls and panels every page shares. Not one colour in it: every value is a **role**, and the three palettes — Titanic's abyss-and-brass, Dust's dusk-and-ember, the project's black-and-green — are three implementations of that one contract |
+| [`chrome.css`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/chrome.css) | the topbar, pickers, titles, controls and panels every page shares. Not one colour in it: every value is a **role**, and the four palettes — Titanic's abyss-and-brass, Dust's dusk-and-ember, Timelapse's glass-and-chrome, the project's black-and-green — are four implementations of that one contract |
 | [`editions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/editions.ts) | the **edition** axis: which `gamefiles/` tree a page is showing. Remembered per game and carried across the play page, the editors and the collection |
 | [`ui-languages.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/ui-languages.ts) / [`lang-menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/lang-menu.ts) / [`locales/`](https://github.com/dhobi/dreamrefactory/tree/master/site/src/locales) | the **UI-language** axis, which is a different question: what language the words on the page are in. Pages carry their English inline, so nothing is fetched for an English reader |
-| [`site.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/site.ts) / [`version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/version.ts) / [`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | where the site's root is from a page at any depth, the version in the top bar, and the Report-bug button that prefills a GitHub issue with the build number and the screen |
+| [`site.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/site.ts) / [`version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/version.ts) / [`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | where the site's root is from a page at any depth, the version in the top bar, and the Report-bug button that prefills a GitHub issue with the game, the build number and the screen |
 
 ### `taoot/` — Titanic's shell
 
@@ -200,6 +205,18 @@ edition, one copy of every name.
 | [`main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/main.ts) | the page: the boot, the films, the town, and the controls |
 | [`files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/files.ts) | the CD as a `HostFiles`. Two things it has to get right: the BOOTFILE is at `INSTALL/ALT31/BOOTFILE` rather than in `DATA/`, and the boot's films need a room to draw through even though the boot opens none |
 | [`saves.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/saves.ts) | the store's Dust dimension (`.rtd`, its own database) and the seeding of the five saves that ship beside the disc — one of which is also the base a fresh save is patched into, because a save is a serialized heap and cannot be written from nothing |
+
+### `timelapse/` — Timelapse's shell
+
+One page, four discs. The shortest of the three and the only one that carries a
+game's own **cursors**, because this is the game that navigates by them.
+
+| File | Responsibility |
+|------|----------------|
+| [`main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/timelapse/src/main.ts) | the page: the loader and its Enter button, the 640×480 plate blitted into a 1280×960 canvas, the input (mouse, keys, gestures), the position readout, and the boot log `b` opens |
+| [`files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/timelapse/src/files.ts) | four CDs as one flat basename index, every disc mounted at once — plus the fourteen installed files the manifest does not list, because the walker skips any directory called `install` |
+| [`theme.css`](https://github.com/dhobi/dreamrefactory/blob/master/timelapse/src/theme.css) | the palette, sampled from the title card: void, nacre, glass, chrome, and one warm stair for the one control that commits |
+| [`cursor-art.ts`](https://github.com/dhobi/dreamrefactory/blob/master/timelapse/src/cursor-art.ts) | the fifteen `CURS.*` cursors out of `tl.exe`, written by [`tools/dumpcursors.ts`](../reference/tools.md) — two 1bpp planes each, not PNGs |
 
 ## The GameSession: the thing that persists
 
@@ -375,12 +392,14 @@ audio playback, and saving/loading.
 
 ## Running and verifying
 
-- **Three dev servers, one per root, so they can run at once.** `npm run dev`
-  is the front door and the editors on 5173, `npm run dev:taoot` is Titanic on
-  5174, `npm run dev:dust` is Dust on 5175, and `npm run docs:dev` is this
-  documentation on 5176. A link from one to another 404s in dev with a page
-  naming the server that would serve it — three Vite roots cannot be one
-  origin, and the deployed tree has no such problem.
+- **Five dev servers, one per root, so they can run at once.** The two that are
+  about the whole project come first and the games follow in the order the engine
+  shipped them: 5173 the front door and the editors (`npm run dev`), 5174 this
+  documentation (`npm run docs:dev`), 5175 Titanic (`npm run dev:taoot`), 5176
+  Dust (`npm run dev:dust`), 5177 Timelapse (`npm run dev:timelapse`). A link from
+  one to another 404s in dev with a page naming the server that would serve it —
+  five Vite roots cannot be one origin, and the deployed tree has no such
+  problem.
 - On Titanic's server, `/play/` cold boots itself into the game with nothing in
   front of it but the boot text. The saved-games browser reaches saves from the
   in-game menu and the editors reach every `.SET` under `gamefiles/`; the dev

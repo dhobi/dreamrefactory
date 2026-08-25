@@ -6,8 +6,16 @@ Open `http://localhost:5173/editors/tracks.html`.
 
 The sound half of what the other editors do for pictures: load an
 [audio bank](../engine/formats/audio.md) — a `.TRK` music track, a `.SFX` effects
-bank, an `.11K` low-memory song — and it comes apart into the two things a bank
-holds.
+bank, an `.11K` low-memory song, or Dust's `.SND` — and it comes apart into the
+two things a bank holds.
+
+**`.SND` opens read-only.** It is DreamFactory 1's bank and the file it comes out
+of is reshaped rather than patched, so there is no v1 write path to export
+through; the editor says so across the top of the file bar and greys the export
+button out. Everything else works on one — the loop order, the one-shots, the
+waveforms, playback. Which file you get is decided by CONTENT and not by the
+extension: `detectVersion` picks the reader, so a bank with the wrong suffix on it
+still opens as what it is.
 
 ## What it shows
 

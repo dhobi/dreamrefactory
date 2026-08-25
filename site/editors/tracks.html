@@ -148,6 +148,7 @@
         <a href="./" class="here" data-i18n="site.navEditors">Editors</a>
         <a href="../taoot/">Titanic</a>
         <a href="../dust/">Dust</a>
+        <a href="../timelapse/">Timelapse</a>
         <a href="https://github.com/dhobi/dreamrefactory" data-i18n="site.navSource">Source</a>
       </nav>
     </header>
@@ -166,17 +167,25 @@
     <div id="landing">
       <div class="intro" data-i18n-html="tracks.intro">
         Load a DreamFactory audio bank — a <b>.TRK</b> music track
-        (<code>BEDRAD1.TRK</code>, …), a <b>.SFX</b> effects bank, or an
-        <b>.11K</b> low-memory song. Play the theme and its one-shot sounds,
+        (<code>BEDRAD1.TRK</code>, …), a <b>.SFX</b> effects bank, an
+        <b>.11K</b> low-memory song, or a DreamFactory 1 <b>.SND</b>, which opens
+        read-only. Play the theme and its one-shot sounds,
         rename them, reorder the chunks the theme loops through, drop your own
         audio in, then export the repacked file.
       </div>
       <div class="row">
-        <button id="openBtn" class="primary" data-i18n="tracks.open">📂 Open a .trk / .sfx / .11k file…</button>
+        <button id="openBtn" class="primary" data-i18n="tracks.open">📂 Open a .trk / .sfx / .11k / .snd file…</button>
       </div>
       <div class="note" data-i18n="editors.dropNote">or drop a file anywhere on this page</div>
       <div id="serverBanks"></div>
-      <input id="fileInput" type="file" accept=".trk,.TRK,.sfx,.SFX,.11k,.11K" />
+      <!-- `.snd` belongs here for the same reason it is in the gamefiles list: the
+         editor routes by CONTENT (`detectVersion` picks the v1 reader), so a
+         dropped .SND has always worked and only this dialog was hiding them. -->
+    <input
+      id="fileInput"
+      type="file"
+      accept=".trk,.TRK,.sfx,.SFX,.11k,.11K,.snd,.SND"
+    />
     </div>
 
     <div id="editor">

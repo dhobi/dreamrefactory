@@ -55,6 +55,8 @@ export interface GamefilesOptions {
    * builds writing one file is how they disagree.
    */
   emit?: boolean;
+  /** subtrees under a skipped directory that ARE game data — see ManifestOptions */
+  include?: readonly string[];
 }
 
 export function gamefilesManifest(opts: GamefilesOptions): Plugin {
@@ -68,7 +70,11 @@ export function gamefilesManifest(opts: GamefilesOptions): Plugin {
   let outDir = "dist";
 
   const walk = (): Record<string, number> => {
-    const full = buildManifest({ gamefiles: opts.gamefiles, publicDir: opts.publicDir });
+    const full = buildManifest({
+      gamefiles: opts.gamefiles,
+      publicDir: opts.publicDir,
+      include: opts.include,
+    });
     // buildManifest keys by the path it walked, which is absolute here; the
     // pages ask for them relative to their own site root
     const out: Record<string, number> = {};

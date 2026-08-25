@@ -111,5 +111,14 @@
   "audioLoopTable": "de lustabel — een bed dat de engine blok na blok onder de hele film speelt",
   "audioOneShotBlock": "het losse blok — gebeurtenisgeluiden die een beeld of gebied bij naam afvuurt",
   "noAudio": "deze film bevat geen audio",
-  "paletteInfo": "de eigen 256 kleuren van de film"
+  "paletteInfo": "de eigen 256 kleuren van de film",
+  "playFilm": "▶▶ De film afspelen",
+  "playFilmTitle": "het hele bestand afspelen zoals het spel het afspeelt — elk segment op volgorde, met zijn geluidsband",
+  "filmStart": "de film loopt: elk segment op volgorde, op het tempo en met het geluid van het spel",
+  "filmSegment": "segment {n} van {total}: {frames} over {picture} s beeld{bed}",
+  "filmBed": " · {secs} s geluidsbed eronder",
+  "filmEnd": "de film eindigt — {frames} in {secs} s",
+  "filmCue": "cue op tick {tick} → “{target}”",
+  "filmNoPacing": "hier brengt niets het beeld verder — geen stap, geen geluidsband, geen regio's: in het spel is dit een close-up die blijft staan tot je hem wegklikt",
+  "filmResume": "verder vanaf het gekozen beeld, op het tempo en met het geluid van het spel"
 }

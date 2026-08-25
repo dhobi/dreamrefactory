@@ -6,21 +6,21 @@ need no `gamefiles/` directory: each one takes a file you give it, takes it
 apart into the pieces that format is made of, lets you change the parts that
 are safe to change, and hands the repacked file back.
 
-Between them they cover **every container format the game ships**: rooms (SET),
-props (SHP), movies (MOV — logic only, for a reason
-[the page explains](movies.md#why-the-art-is-read-only)), screens (STG), sound
-(TRK/SFX/11K), and characters twice over (PUP for the brains, CST for the
-body). The one file the game *writes* rather than reads, the `.ti`
+Between them they cover **every container format the games ship**: rooms (SET),
+props (SHP, and DreamFactory 1's PRP), movies (MOV — logic only, for a reason
+[the page explains](movies.md#why-the-art-is-read-only)), screens (STG, and v1's
+FLT), sound (TRK/SFX/11K/SND), and characters twice over (PUP for the brains, CST
+for the body). The one file the game *writes* rather than reads, the `.ti`
 [save](../engine/formats/savegame.md), has
 [the saved-games browser](../engine/runtime/saves.md) instead.
 
 | Editor | Page | Format | Source |
 |--------|------|--------|--------|
 | [Set editor](sets.md) | `/editors/sets.html` | [SET](../engine/formats/set.md) — rooms, scenes, views | [`site/editors/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/set-editor.ts) |
-| [Shop editor](shops.md) | `/editors/shops.html` | [SHP](../engine/formats/shp.md) — props | [`site/editors/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/shp-editor.ts) |
+| [Shop editor](shops.md) | `/editors/shops.html` | [SHP / PRP](../engine/formats/shp.md) — props | [`site/editors/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/shp-editor.ts) |
 | [Movie editor](movies.md) | `/editors/movies.html` | [MOV](../engine/formats/mov.md) — cutscenes & close-ups | [`site/editors/mov-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/mov-editor.ts) |
-| [Stage editor](stages.md) | `/editors/stages.html` | [STG](../engine/formats/stg.md) — full-screen flats & UI | [`site/editors/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/stg-editor.ts) |
-| [Track editor](tracks.md) | `/editors/tracks.html` | [TRK / SFX / 11K](../engine/formats/audio.md) — audio banks | [`site/editors/track-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/track-editor.ts) |
+| [Stage editor](stages.md) | `/editors/stages.html` | [STG / FLT](../engine/formats/stg.md) — full-screen flats & UI | [`site/editors/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/stg-editor.ts) |
+| [Track editor](tracks.md) | `/editors/tracks.html` | [TRK / SFX / 11K / SND](../engine/formats/audio.md) — audio banks (`.SND` read-only) | [`site/editors/track-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/track-editor.ts) |
 | [Puppet editor](puppets.md) | `/editors/puppets.html` | [PUP](../engine/formats/pup-cst.md) — conversations | [`site/editors/puppet-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/puppet-editor.ts) |
 | [Cast editor](casts.md) | `/editors/casts.html` | [CST](../engine/formats/pup-cst.md) — actor sprites | [`site/editors/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/cst-editor.ts) |
 

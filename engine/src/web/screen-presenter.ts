@@ -1,4 +1,4 @@
-import { SCREEN_W, SCREEN_H, SCREEN_BYTES, BLANK_SCREEN } from "./screen";
+import { BLANK_SCREEN, DEFAULT_SCREEN, ScreenSize, blankScreen } from "./screen";
 import { DrawSignature } from "@dreamfactory/engine/runtime/signature";
 import { overlayFont } from "./fonts";
 
@@ -24,10 +24,34 @@ const REPAINT_EVERY = 60;
  * underneath the CSS and the page reflowed every time a scene crossed that
  * boundary. A view is the top region of the screen, not a smaller screen — so
  * short sources are composited into the top and the remaining rows stay black.
+ *
+ * WHICH fixed size is the game's, not the engine's, and not its DreamFactory
+ * version's either — see {@link ScreenSize}. Titanic (DF4) and Dust (DF1) are both
+ * 512×384 and get it by default; Timelapse (DF4) is 640×480 and says so. Every
+ * dimension below is read off this instance rather than off a module constant,
+ * which is the whole of what made the difference.
  */
 export class ScreenPresenter {
-  /** one persistent SCREEN_W×SCREEN_H RGBA framebuffer, blitted by {@link blit} */
-  readonly frame = new Uint8ClampedArray(SCREEN_BYTES);
+  readonly width: number;
+  readonly height: number;
+  /** one persistent width×height RGBA framebuffer, blitted by {@link blit} */
+  // The buffer is spelled out because {@link blit} wraps it in an `ImageData`
+  // zero-copy, and that overload takes only an `ArrayBuffer`-backed view — an
+  // inferred `ArrayBufferLike` would silently fall back to the copying path.
+  readonly frame: Uint8ClampedArray<ArrayBuffer>;
+  /** the clear source at THIS size (see {@link blankScreen}) */
+  private readonly blank: Uint8ClampedArray;
+
+  constructor(size: ScreenSize = DEFAULT_SCREEN) {
+    this.width = size.width;
+    this.height = size.height;
+    this.frame = new Uint8ClampedArray(size.width * size.height * 4);
+    // the shared one where it fits, which is every DF4 game but Timelapse
+    this.blank =
+      size.width === DEFAULT_SCREEN.width && size.height === DEFAULT_SCREEN.height
+        ? BLANK_SCREEN
+        : blankScreen(size.width, size.height);
+  }
   /** false until the first composite, so {@link capture} can't hand out a blank screen */
   frameValid = false;
   /** the ImageData wrapper used to present {@link frame}; shares its buffer when possible */
@@ -49,14 +73,14 @@ export class ScreenPresenter {
 
   /** reset the framebuffer to opaque black */
   clearFrame(): void {
-    this.frame.set(BLANK_SCREEN);
+    this.frame.set(this.blank);
   }
 
   /** the composited frame the player is looking at, or null before the first
    *  composite — the screen half of the session's captureFrame hook */
   capture(): { rgba: Uint8ClampedArray; width: number; height: number } | null {
     if (!this.frameValid) return null;
-    return { rgba: this.frame.slice(), width: SCREEN_W, height: SCREEN_H };
+    return { rgba: this.frame.slice(), width: this.width, height: this.height };
   }
 
   /**
@@ -89,11 +113,11 @@ export class ScreenPresenter {
       this.blitTop(src, w, h);
       return;
     }
-    const rows = Math.min(h, SCREEN_H - y);
-    const cols = Math.min(w, SCREEN_W - x);
+    const rows = Math.min(h, this.height - y);
+    const cols = Math.min(w, this.width - x);
     for (let row = 0; row < rows; row++) {
       const s = row * w * 4;
-      this.frame.set(src.subarray(s, s + cols * 4), ((row + y) * SCREEN_W + x) * 4);
+      this.frame.set(src.subarray(s, s + cols * 4), ((row + y) * this.width + x) * 4);
     }
   }
 
@@ -104,18 +128,18 @@ export class ScreenPresenter {
    * how the engine composes the screen: view on top, UI band underneath.
    */
   blitTop(src: Uint8ClampedArray, w: number, h: number): void {
-    const rows = Math.min(h, SCREEN_H);
-    const cols = Math.min(w, SCREEN_W);
+    const rows = Math.min(h, this.height);
+    const cols = Math.min(w, this.width);
     // A source already screen-wide — the stage flat, the set view, a movie
     // image, i.e. nearly every blit there is — has its rows contiguous with the
     // framebuffer's, so the whole thing is one copy instead of 384 (~2x).
-    if (w === SCREEN_W) {
-      this.frame.set(src.subarray(0, rows * SCREEN_W * 4), 0);
+    if (w === this.width) {
+      this.frame.set(src.subarray(0, rows * this.width * 4), 0);
       return;
     }
     for (let y = 0; y < rows; y++) {
       const s = y * w * 4;
-      this.frame.set(src.subarray(s, s + cols * 4), y * SCREEN_W * 4);
+      this.frame.set(src.subarray(s, s + cols * 4), y * this.width * 4);
     }
   }
 
@@ -126,9 +150,9 @@ export class ScreenPresenter {
    */
   blit(ctx: CanvasRenderingContext2D): void {
     const canvas = ctx.canvas;
-    if (canvas.width !== SCREEN_W || canvas.height !== SCREEN_H) {
-      canvas.width = SCREEN_W;
-      canvas.height = SCREEN_H;
+    if (canvas.width !== this.width || canvas.height !== this.height) {
+      canvas.width = this.width;
+      canvas.height = this.height;
       this.presented = null; // a resize drops the old backing store
     }
     let img = this.presented;
@@ -136,9 +160,9 @@ export class ScreenPresenter {
       // Wrapping `frame` makes putImageData zero-copy; if the one-arg ImageData
       // constructor isn't available, fall back to a per-present copy.
       try {
-        img = new ImageData(this.frame, SCREEN_W, SCREEN_H);
+        img = new ImageData(this.frame, this.width, this.height);
       } catch {
-        img = ctx.createImageData(SCREEN_W, SCREEN_H);
+        img = ctx.createImageData(this.width, this.height);
       }
       this.presented = img;
     }

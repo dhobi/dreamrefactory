@@ -29,19 +29,20 @@ port, so they can run at once:
 | | | |
 |---|---|---|
 | `npm run dev` | 5173 | the front door and the format editors |
-| `npm run dev:taoot` | 5174 | Titanic |
-| `npm run dev:dust` | 5175 | Dust |
-| `npm run docs:dev` | 5176 | the documentation |
+| `npm run docs:dev` | 5174 | the documentation |
+| `npm run dev:taoot` | 5175 | **Titanic — this one** |
+| `npm run dev:dust` | 5176 | Dust |
+| `npm run dev:timelapse` | 5177 | Timelapse |
 
 Add `-- --host` to any of them to reach it from another machine.
 
 A link from one to another **404s in dev with a page telling you which server
-serves it** — the deployed tree resolves those links normally, but three Vite
+serves it** — the deployed tree resolves those links normally, but five Vite
 roots cannot be one origin (see `tools/vite-siblings.ts`). See
 [Layout](#layout).
 
 What follows is this game's own half of the project: its pages, its suites, its
-game data and how it releases. For the engine underneath it, the other game, the
+game data and how it releases. For the engine underneath it, the other two games, the
 format editors and the repository's layout, see the
 [root README](../README.md).
 

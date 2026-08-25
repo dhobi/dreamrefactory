@@ -2,18 +2,19 @@
 
 # dreamREfactory
 
-CyberFlix built a game engine and shipped three adventures on it. **dreamREfactory
-is that engine written again in TypeScript, from the files rather than from the
-source** — every container format decoded, the script language parsed and
+CyberFlix built a game engine, and three adventures shipped on it — two of them
+CyberFlix's own and the third GTE Interactive Media's. **dreamREfactory is that
+engine written again in TypeScript, from the files rather than from the source** — every container format decoded, the script language parsed and
 interpreted, and the games played in a browser with nothing installed. No DOSBox,
 no emulator.
 
-Two of the three are here:
+All three are here:
 
 | | | |
 |---|---|---|
 | **[Titanic: Adventure Out of Time](taoot/)** | 1996 | DreamFactory 4 — six languages, the 1996 demo, a timed endgame |
 | **[Dust: A Tale of the Wired West](dust/)** | 1995 | DreamFactory 1 — one disc, and the engine two years earlier |
+| **[Timelapse: Ancient Civilizations](timelapse/)** | 1996 | DreamFactory 4 on four discs, and **no `.SET` anywhere** — its rooms are stage flats, and it navigates by the shape of the cursor |
 
 **RE is for reverse-engineered.** This is a best-effort re-implementation and not
 a re-release: it needs a copy of a game's own data files, which it does not
@@ -27,22 +28,25 @@ npm install
 npm run dev          # the front door, on http://localhost:5173/
 ```
 
-Three sites build out of this one repository, each from its own root and its own
-port, so they can run at once:
+Five sites build out of this one repository, each from its own root and its own
+port, so they can run at once. **The two that are about the whole project come
+first, then one port per game in the order the engine shipped them** — so the next
+game to be ported takes 5178 and nothing has to move:
 
 | | | |
 |---|---|---|
 | `npm run dev` | 5173 | the front door and the format editors |
-| `npm run dev:taoot` | 5174 | Titanic |
-| `npm run dev:dust` | 5175 | Dust |
-| `npm run docs:dev` | 5176 | the documentation |
+| `npm run docs:dev` | 5174 | the documentation |
+| `npm run dev:taoot` | 5175 | Titanic |
+| `npm run dev:dust` | 5176 | Dust |
+| `npm run dev:timelapse` | 5177 | Timelapse |
 
 Add `-- --host` to reach one from another machine. A link from one site to
-another **404s in dev with a page telling you which server serves it** — three
+another **404s in dev with a page telling you which server serves it** — five
 Vite roots cannot be one origin, and the deployed tree has no such problem
 (`tools/vite-siblings.ts` explains why a proxy cannot fix it).
 
-Neither game is playable without its data. See **[Game data](taoot/README.md#game-data)**
+No game is playable without its data. See **[Game data](taoot/README.md#game-data)**
 for what a rip has to look like; nothing distributable is in this repository and
 `gamefiles/` is gitignored forever.
 
@@ -61,6 +65,9 @@ Six directories, and each of them a thing rather than a kind of file.
 - **`taoot/`** — Titanic: its four pages, six editions and the demo, its own
   tools, and the suites that play it through to the end
 - **`dust/`** — Dust: two pages, its own disc, its own tools
+- **`timelapse/`** — Timelapse: one page, four discs, and its own palette. The
+  engine's screen with no room on it (`engine/src/web/screen-director.ts`) is what
+  made it possible at all
 - **`site/`** — the project's own web presence: the front door, the seven format
   editors, the chrome every page shares, and the UI-language axis
 - **`tools/`** — tools that work on any DreamFactory rip because they take one as
@@ -71,15 +78,16 @@ Six directories, and each of them a thing rather than a kind of file.
 Dependencies point one way only, and there is a test that says so
 (`site/tests/layering.ts`):
 
-    engine  ←  nothing
-    site    ←  engine
-    taoot   ←  engine, site
-    dust    ←  engine, site
+    engine     ←  nothing
+    site       ←  engine
+    taoot      ←  engine, site
+    dust       ←  engine, site
+    timelapse  ←  engine, site
 
-Nothing shared imports a game. The three palettes — Titanic's abyss-and-brass,
-Dust's dusk-and-ember, the project's black-and-green — are three implementations
-of one 39-role contract in `site/src/chrome.css`, which is structure and not a
-single colour.
+Nothing shared imports a game. The four palettes — Titanic's abyss-and-brass,
+Dust's dusk-and-ember, Timelapse's glass-and-chrome, the project's
+black-and-green — are four implementations of one 39-role contract in
+`site/src/chrome.css`, which is structure and not a single colour.
 
 ## Where it goes
 

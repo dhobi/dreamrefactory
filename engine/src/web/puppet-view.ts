@@ -22,6 +22,21 @@ import { indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { displayChannel, displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import type { DrawSignature } from "@dreamfactory/engine/runtime/signature";
+/**
+ * The conversation screen is 512×384, and deliberately still a constant.
+ *
+ * Not because the engine's screen is — it is not, see screen.ts — but because
+ * this layout is measured against the only two games that have puppets at all,
+ * and they are both that size: Titanic ships 316 `.pup` files and Dust 39, and
+ * both declare 512×384 in every stage header. Timelapse is 640×480 and ships
+ * NONE, so there is no third geometry to generalise to and no way to check a
+ * guess at one. The bevel heights, the subtitle band and the two anchors below
+ * are pixel facts about those two games' art.
+ *
+ * If a fourth title ever turns up with puppets at another size, this is the file
+ * that has to grow a screen of its own — and the note in {@link PUPPET_ART_H} is
+ * where the room-view split it derives would move to.
+ */
 import { SCREEN_W, SCREEN_H } from "./screen";
 
 /** the scene backdrop a puppet composites over (the live set view) */

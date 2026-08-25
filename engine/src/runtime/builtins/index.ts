@@ -11,6 +11,7 @@ import { registerPointerBuiltins } from "./pointer";
 import { registerHelperBuiltins } from "./helpers";
 import { registerSaveGameBuiltins } from "./savegame";
 import { registerCoreBuiltins } from "./core";
+import { registerPluginBuiltins } from "./plugins";
 
 /**
  * Register every builtin — the language core plus all game families — on the
@@ -44,4 +45,5 @@ export function registerGameBuiltins(session: GameSession): void {
   registerPointerBuiltins(ctx);
   registerHelperBuiltins(ctx);
   registerSaveGameBuiltins(ctx);
+  registerPluginBuiltins(ctx);
 }

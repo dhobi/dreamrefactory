@@ -15,10 +15,10 @@
 import { ContainerBuilder, checkName, emptyScript, i16, i32, paletteBlock, pstr } from "./build";
 import { ContainerRef, DFContainerFile, writeContainerFile } from "./container";
 import { encodeFrame } from "./image";
-import { FLAT_NAME_FIELD, REGION_NAME_FIELD } from "./stg";
+import { FLAT_NAME_FIELD, REGION_NAME_FIELD, STAGE_NAME_FIELD } from "./stg";
 
 /** offsets in container 0 and in one flat record — the reader's constants */
-const C0 = { palette: 56, flatCount: 2120, flats: 2124, flatSize: 46 } as const;
+const C0 = { palette: 56, refName: 2104, flatCount: 2120, flats: 2124, flatSize: 46 } as const;
 const FLAT = { condition: 0, script: 6, frame: 10, clickLogic: 14, height: 22, width: 24, name: 30 } as const;
 const REGION = { count: 1028, first: 1032, size: 32, top: 4, script: 12, name: 16 } as const;
 
@@ -66,6 +66,17 @@ export interface StgBuildOptions {
    * empty script is written, because the slot itself is conventional.
    */
   main?: Uint8Array;
+  /**
+   * The stage's OWN name, which is not its filename — `currentstage()`'s answer,
+   * and the twin of `ShpBuildOptions.refName` (≤15 chars).
+   *
+   * Omitted, the field is left empty and `currentstage()` falls back to the file,
+   * which is what the language chooser's generated stage wants. Worth writing when
+   * a stage is meant to be *recognised* by a script: Timelapse's `p.stg` is called
+   * `"interface"` and its space bar tests for exactly that (see
+   * {@link StgFile.refName}).
+   */
+  refName?: string;
   flats: StgBuildFlat[];
   /** dummy gap containers after the main script, as the shipped files carry */
   gaps?: number;
@@ -108,6 +119,10 @@ export function buildStgFile(opts: StgBuildOptions): DFContainerFile {
   b.add(opts.main ?? emptyScript());
   for (let g = 0; g < (opts.gaps ?? 0); g++) b.gap();
 
+  if (opts.refName) {
+    checkName("stg: stage", opts.refName, STAGE_NAME_FIELD);
+    pstr(c0, C0.refName, opts.refName, STAGE_NAME_FIELD);
+  }
   i32(c0, C0.flatCount, flats.length);
   flats.forEach((f, i) => {
     checkName("stg: flat", f.name, FLAT_NAME_FIELD);

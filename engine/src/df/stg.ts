@@ -25,6 +25,7 @@ import { versionOf, type DfVersion } from "./version";
  *
  *                       v1 (.FLT)      v4 (.STG)
  *   palette                  0x24           0x38
+ *   stage name                  -           2104
  *   flat count               2100           2120
  *   flat record              28 B           46 B
  *   region count      +0 of the      +1028 of the click-logic container
@@ -72,13 +73,63 @@ export interface StgFile {
   /** which engine wrote it — 1 is Dust's `.FLT`, 4 is Titanic's `.STG` */
   version: DfVersion;
   paletteRaw: Uint8Array;
+  /**
+   * The stage's OWN name, as `currentstage()` answers it — not its filename, and
+   * empty on a v1 `.FLT`, which has no such field.
+   *
+   * A 16-byte Pascal string abutting the flat count, and it went unnoticed for as
+   * long as it did because on Titanic it is a copy of the filename: all fifteen of
+   * its stages say `"main.stg"`, `"map.stg"`, `"bomb.stg"` and so on, so answering
+   * `currentstage()` with the file was indistinguishable from answering with this.
+   *
+   * Timelapse is where the two part company. Its 155 world stages all say
+   * `"stagename"` — the authoring tool's unfilled default, left as shipped — and
+   * `p.stg` alone says **`"interface"`**, which is the name its BOOTFILE tests:
+   *
+   *     if arg = " "
+   *         if currentstage () = "interface"
+   *             endinterface ()
+   *         else
+   *             begininterface (1)
+   *
+   * So SPACE opened the panel and could never close it again: `currentstage()`
+   * answered `"p.stg"`, the test failed, and the branch that puts the panel away
+   * was unreachable. The two Titanic stages that DON'T match their filename are
+   * `inven1.stg` and `inven2.stg`, both `"inven.stg"`, and nothing compares
+   * `currentstage()` against either — the inventory's own `switch currentstage()`
+   * runs after `transfromflat()` has already popped back to the stage underneath.
+   *
+   * The FILE is still reachable: `currentstage()` leaves it in `result()`, which
+   * is how the game's own `begininterface` reads both —
+   * `laststage = currentstage ()` and then `laststage = result ()`.
+   */
+  refName: string;
+  /**
+   * The screen this stage was authored against, out of its own container-0
+   * header — 512×384 on Titanic and Dust, 640×480 on Timelapse.
+   *
+   * The runtime does not read it: a framebuffer has to exist before the first
+   * file is parsed, so the shell declares its game's size when it builds the host
+   * (`engine/src/web/screen.ts` says why, and its table is this field measured
+   * across the three rips). But a TOOL is in the opposite position — it is handed
+   * a file and asked what is in it — and the file's own answer beats a default
+   * that happens to be right for two games out of three.
+   *
+   * Both versions store it: v4 at 0x28, v1 at 0x1c. Every flat record already
+   * falls back to it for its own width and height, which is how a v1 `.FLT` —
+   * whose records carry neither — has any size at all.
+   */
+  screen: { width: number; height: number };
   flats: StgFlat[];
 }
 
 /** container 0: the palette and the flat table, per version */
 const C0_BY_VERSION = {
-  4: { palette: 56, flatCount: 2120, flats: 2124, flatSize: 46, screen: 0x28 },
-  1: { palette: 36, flatCount: 2100, flats: 2104, flatSize: 28, screen: 0x1c },
+  4: { palette: 56, flatCount: 2120, flats: 2124, flatSize: 46, screen: 0x28, refName: 2104 },
+  // 2104 is the first FLAT RECORD on a v1 and not a name at all — the collision is
+  // a coincidence of two layouts, and reading a name there would report the low
+  // bytes of a container ref as one (measured: two NULs on all 20 of Dust's).
+  1: { palette: 36, flatCount: 2100, flats: 2104, flatSize: 28, screen: 0x1c, refName: -1 },
 } as const;
 
 /** the flat record. `-1` is a field the version does not store. */
@@ -104,6 +155,8 @@ const REGION = { size: 32, top: 4, script: 12, name: 16 } as const;
 /** characters that fit the name fields (the length byte is not counted) */
 export const FLAT_NAME_FIELD = 15;
 export const REGION_NAME_FIELD = 15;
+/** the stage's own name field, which abuts the flat count 16 bytes later */
+export const STAGE_NAME_FIELD = 15;
 
 /** the stage's main script, by convention (`gotospecial` lives in MAIN.STG's) */
 export const MAIN_SCRIPT_LOCATION = 1;
@@ -161,6 +214,12 @@ export function readStgFile(data: Uint8Array): StgFile {
   const screenH = v.getInt16(C0.screen + 2, true);
 
   const paletteRaw = c0.subarray(C0.palette, C0.palette + 256 * 8);
+  // the stage's own name, where the version has one — see StgFile.refName
+  let refName = "";
+  if (C0.refName >= 0 && c0.length > C0.refName) {
+    const n = Math.min(c0[C0.refName], STAGE_NAME_FIELD);
+    refName = latin1(c0.subarray(C0.refName + 1, C0.refName + 1 + n));
+  }
   const count = v.getInt32(C0.flatCount, true);
   const flats: StgFlat[] = [];
   let off = C0.flats;
@@ -185,7 +244,7 @@ export function readStgFile(data: Uint8Array): StgFile {
     });
     off += C0.flatSize;
   }
-  return { file, version, paletteRaw, flats };
+  return { file, version, paletteRaw, refName, screen: { width: screenW, height: screenH }, flats };
 }
 
 // ---------------------------------------------------------------------------

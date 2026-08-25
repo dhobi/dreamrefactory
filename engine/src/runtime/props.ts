@@ -132,7 +132,41 @@ const DEFAULT_ANCHOR_X = 256;
 const DEFAULT_ANCHOR_Y = 192;
 
 export class PropInstance {
+  /**
+   * What this prop is CALLED — which is not always its group's name.
+   *
+   * `propinstance(src, dst)` makes a second prop out of one group's sprite, and
+   * the copies are addressed by the name the script gave them. Timelapse's
+   * paraffin lantern is six of them out of one group: `propview ("Lantern",
+   * "GasKnob")`, `propinstance ("Lantern", "GasKnob")`, and the same for
+   * TopLight, MantelLight, LampSway, PrimeLever and PumpHandle. They share the
+   * group's script, and that script tells them apart by `me`:
+   *
+   *     code setcursor (pt)
+   *         switch (me)
+   *             case "PrimeLever"   cursor ("touch")
+   *             case "PumpHandle"   …
+   *             case "GasKnob"      cursor ("touch")
+   *
+   * so a `hittest` that answered the GROUP's name — "Lantern" — matched none of
+   * those cases. The lamp showed no cursor and did nothing when any part of it
+   * was clicked, which is what it was reported as: the lamp in the cave cannot
+   * be clicked. Set from the map key, so an ordinary prop's name is its group's
+   * exactly as before.
+   */
+  name = "";
   visible = false;
+  /**
+   * `prophide` — a SECOND suppression, held apart from `visible` on purpose.
+   *
+   * The pair that needs it is Timelapse's `HideVisibleProps`/`ShowVisibleProps`,
+   * which wrap a transition in `prophide("all", true)` and `prophide("all",
+   * false)`. The name says what the asymmetry is: what comes back is what was
+   * visible BEFORE, so the blanket cannot be implemented by writing `visible` —
+   * doing that loses which props were up, and the show call would have to raise
+   * every prop in the shop, including the ones the script had put away.
+   */
+  hidden = false;
   stateName = "";
   anchorX = DEFAULT_ANCHOR_X;
   anchorY = DEFAULT_ANCHOR_Y;
@@ -298,11 +332,30 @@ export class PropRuntime {
   readonly props = new Map<string, PropInstance>();
   readonly shops = new Map<string, LoadedShop>();
 
+  /**
+   * `prophide("all", …)` — every screen prop suppressed at once, without
+   * touching any prop's own `visible`.
+   *
+   * Timelapse wraps its stage transitions in it (`HideVisibleProps` /
+   * `ShowVisibleProps` in the BOOTFILE) so the compass and whatever the player
+   * is carrying do not float over a picture that is being replaced underneath
+   * them. See {@link PropInstance.hidden} for why this is not a write to
+   * `visible`.
+   *
+   * Carried by {@link PropInstance.hidden} on each prop rather than by a flag
+   * here: `prophide("all", …)` is a BROADCAST of that flag, not a latch, so a
+   * prop the scripts show during a hidden span is shown. The interface panel's
+   * own sliders are exactly that case — see the note on the `prophide` builtin
+   * for what a latch did to them.
+   */
+
   addShop(name: string, shp: ShpFile): LoadedShop {
     const shop = new LoadedShop(name.toLowerCase(), shp);
     this.shops.set(shop.name, shop);
     for (const group of shp.groups) {
-      this.props.set(group.name.toLowerCase(), new PropInstance(group, shop));
+      const inst = new PropInstance(group, shop);
+      inst.name = group.name;
+      this.props.set(group.name.toLowerCase(), inst);
     }
     return shop;
   }
@@ -343,6 +396,9 @@ export class PropRuntime {
     if (!s) return;
     if (this.props.has(String(dst).toLowerCase())) return; // dst is its own group: don't clobber
     const p = new PropInstance(s.group, s.shop);
+    // the name the script asked for, which is what the group's script switches
+    // on — see PropInstance.name
+    p.name = String(dst);
     p.visible = s.visible;
     p.stateName = s.stateName;
     p.deg = s.deg;
@@ -397,7 +453,7 @@ export class PropRuntime {
    */
   private drawList(persistentOnly = false): PropInstance[] {
     return [...this.props.values()]
-      .filter((p) => p.visible && !p.worldSpace && p.state()?.frames.length)
+      .filter((p) => p.visible && !p.hidden && !p.worldSpace && p.state()?.frames.length)
       .filter((p) => !persistentOnly || p.shop.persistent)
       .sort((a, b) => b.dist - a.dist);
   }
@@ -426,7 +482,7 @@ export class PropRuntime {
   drawSignature(sig: DrawSignature): void {
     sig.num(this.props.size).str(this.currentSet);
     for (const p of this.props.values()) {
-      sig.bool(p.visible);
+      sig.bool(p.visible).bool(p.hidden);
       if (!p.visible) continue;
       sig.ref(p.group).bool(p.shop.persistent);
       sig.str(p.stateName).num(p.frameIdx);
@@ -445,7 +501,7 @@ export class PropRuntime {
   worldDrawList(cam: WorldCamera): { p: PropInstance; proj: { x: number; y: number; depth: number } }[] {
     const out: { p: PropInstance; proj: { x: number; y: number; depth: number } }[] = [];
     for (const p of this.props.values()) {
-      if (!p.visible || !p.worldSpace || !p.state()?.frames.length || p.scale <= 0) continue;
+      if (!p.visible || p.hidden || !p.worldSpace || !p.state()?.frames.length || p.scale <= 0) continue;
       if (p.setName && p.setName !== this.currentSet) continue;
       const proj = projectPoint(cam, p.worldX, p.worldY, p.worldZ);
       // as for actors: behind-the-camera is projectPoint's answer, and zclip is

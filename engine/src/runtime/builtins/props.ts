@@ -63,6 +63,66 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   // propdelete(name): permanently remove a prop from the set (e.g. clearing
   // TAOOT's greenhouse plants). Distinct from prophide, which only toggles visibility.
   r("propdelete", (_i, [n]) => session.propRuntime.remove(toStr(n ?? "")));
+  /**
+   * prophide(name, flag) — suppress a prop's drawing without disturbing whether
+   * a script thinks it is visible.
+   *
+   * `"all"` is a BROADCAST of that per-prop flag, not a latch of one global —
+   * and it is the only form the three corpora use. Timelapse's BOOTFILE wraps a
+   * transition in `HideVisibleProps` / `ShowVisibleProps`, which are one
+   * `prophide("all", true)` and one `prophide("all", false)`, so the compass and
+   * the carried inventory item do not sit over a picture being swapped
+   * underneath them.
+   *
+   * Two flags rather than one, and {@link PropInstance.hidden} has the reason:
+   * "show the props that were visible" is only answerable if hiding never wrote
+   * `visible` in the first place. The named form is here for symmetry with the
+   * opcode's signature and has no call site on any of the three discs.
+   *
+   * ## Why hiding is per-prop, and only of what is VISIBLE
+   *
+   * The handler's own name says it — `HideVisibleProps` — and the interface is
+   * where the difference shows. `begininterface` hides, and then never shows
+   * again before handing over:
+   *
+   *     HideVisibleProps ()          / / prophide ("all", true)
+   *     …
+   *     openstagefile ("P.Stg")
+   *     sendtoflat (currentflat (), openflatx ())
+   *
+   * and that `openflatx` is the panel building its own controls:
+   * `propvisible ("slider", true)`, `propxy ("slider", 442 - turnframerate,
+   * 215)`, `propvisible ("volume", true)`, `propdeg ("volume", wavevolume ())`.
+   * `ShowVisibleProps` is not called until `endinterface`, on the way out. So a
+   * single global latched across that span suppressed the panel's OWN props for
+   * exactly as long as the panel was open: the volume dial and the two slider
+   * knobs were never drawn, and `propAt` never saw them either, so the drag
+   * loops in `P.Shp` (`while stilldown () … propxy (me, xloc, 215)`) could not
+   * start. Reported from play as the sound settings doing nothing — the coarse
+   * region handlers behind the knobs still worked, so clicking an icon jammed
+   * the level to maximum and nothing was draggable.
+   *
+   * Broadcasting to what is visible NOW is what makes both halves true: the
+   * compass and the carried item are visible when the transition starts, so they
+   * are hidden; the panel's slider is `propvisible (…, false)` at that instant
+   * (`endinterface` put it away last time), so it is untouched and comes back
+   * the moment `openflatx` shows it.
+   */
+  r("prophide", (_i, [n, flag]) => {
+    const on = truthy(flag ?? 1);
+    const name = toStr(n ?? "").toLowerCase();
+    if (name === "all") {
+      for (const p of session.propRuntime.props.values()) {
+        // hiding takes only what is on screen; showing releases everything, so
+        // no prop can be left holding a flag from a transition that is over
+        if (on ? p.visible : true) p.hidden = on;
+      }
+      return 0;
+    }
+    const p = prop(n);
+    if (p) p.hidden = on;
+    return 0;
+  });
   acc("propvisible", 0, (p) => (p.visible ? 1 : 0), (p, v, n) => {
     p.visible = truthy(v);
     // TAOOT's clearmessagebox() wipes the drawstring text by flashing an opaque

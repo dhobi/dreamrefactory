@@ -13,14 +13,7 @@
 import { indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
-import {
-  byExtension,
-  chosenSource,
-  encodingOf,
-  filesIn,
-  installSourcePicker,
-  listSources,
-} from "./sources";
+import { byExtension, chosenSource, encodingOf, filesIn, installSourcePicker, listSources, screenOf } from "./sources";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { siteUrl } from "@dreamfactory/site/site";
 import { t, formatNumber } from "@dreamfactory/site/locales";
@@ -38,7 +31,7 @@ import {
   readAnimLogic,
   readPupFile,
 } from "@dreamfactory/engine/df/pup";
-import { SCREEN_W, SCREEN_H } from "@dreamfactory/engine/web/screen";
+import type { GameScreen } from "@dreamfactory/site/games";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -82,9 +75,16 @@ window.addEventListener("beforeunload", (e) => {
  * once, at start-up, because no puppet file says (engine/src/df/text.ts) — it decides
  * both what the dialogue list shows and what an edit writes back.
  */
+/**
+ * The screen a stance composites over — the game's, because a PUP records none.
+ * See `screenOf`, and the note on the same field in `shp-editor.ts`.
+ */
+let screen: GameScreen = screenOf(null);
+
 let encoding: DfEncoding = DEFAULT_ENCODING;
 void (async () => {
   const source = chosenSource(await listSources());
+  if (source) screen = screenOf(source);
   if (source) encoding = encodingOf(source);
 })();
 
@@ -287,9 +287,9 @@ function poseForLine(ident: string | null): PupAnimFrame | null {
  */
 function composite(state: PupAnimFrame, ctx: CanvasRenderingContext2D, stanceOf = stanceIdx): void {
   if (!pup) return;
-  const img = ctx.createImageData(SCREEN_W, SCREEN_H);
+  const img = ctx.createImageData(screen.width, screen.height);
   const rgba = new Uint8ClampedArray(img.data.buffer);
-  for (let i = 0; i < SCREEN_W * SCREEN_H; i++) {
+  for (let i = 0; i < screen.width * screen.height; i++) {
     rgba[i * 4] = 18;
     rgba[i * 4 + 1] = 17;
     rgba[i * 4 + 2] = 20;
@@ -319,14 +319,14 @@ function composite(state: PupAnimFrame, ctx: CanvasRenderingContext2D, stanceOf 
       const dy = st.y - f.posYraw;
       for (let yy = 0; yy < f.height; yy++) {
         const ty = dy + yy;
-        if (ty < 0 || ty >= SCREEN_H) continue;
+        if (ty < 0 || ty >= screen.height) continue;
         for (let xx = 0; xx < f.width; xx++) {
           const tx = dx + xx;
-          if (tx < 0 || tx >= SCREEN_W) continue;
+          if (tx < 0 || tx >= screen.width) continue;
           const s = yy * f.width + xx;
           if (!f.opaque[s]) continue;
           const c = f.indexed[s] * 4;
-          const d = (ty * SCREEN_W + tx) * 4;
+          const d = (ty * screen.width + tx) * 4;
           rgba[d] = palette[c];
           rgba[d + 1] = palette[c + 1];
           rgba[d + 2] = palette[c + 2];
