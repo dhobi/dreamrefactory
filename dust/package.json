@@ -1,6 +1,6 @@
 {
   "name": "@dreamfactory/dust",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "private": true,
   "description": "Dust: A Tale of the Wired West (1995) — DreamFactory 1, the engine two years before Titanic. Its own version because it releases on its own tag.",
   "type": "module"

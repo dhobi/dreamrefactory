@@ -114,12 +114,13 @@ export default defineConfig({
     runSheet(),
     siblingSignposts([
       { path: "editors", command: "npm run dev", port: 5173, what: "The format editors" },
-      { path: "docs", command: "npm run docs:dev", port: 5176, what: "The documentation" },
-      { path: "dust", command: "npm run dev:dust", port: 5175, what: "Dust" },
+      { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },
+      { path: "dust", command: "npm run dev:dust", port: 5176, what: "Dust" },
+      { path: "timelapse", command: "npm run dev:timelapse", port: 5177, what: "Timelapse" },
     ]),
   ],
   server: {
-    port: 5174,
+    port: 5175,
     strictPort: true,
     watch: {
       // gamefiles/ is a CD rip — ~7,800 files that the middleware streams as raw

@@ -112,9 +112,10 @@ export const en = {
   front: {
     docTitle: "dreamREfactory — the CyberFlix DreamFactory engine, reimplemented" as Text,
     tagline: "the CyberFlix DreamFactory engine, reimplemented" as Text,
-    lede: "CyberFlix built an engine and shipped <b>three</b> adventures on it. dreamREfactory is that engine written again in TypeScript, from the files rather than from the source — every container format decoded, the script language parsed and interpreted, and the games played in a browser with nothing installed. <b>Two of the three are here</b>; the third is not ported." as Html,
+    lede: "CyberFlix built an engine, and <b>three</b> adventures shipped on it — two of them CyberFlix's own, the third GTE Interactive Media's. dreamREfactory is that engine written again in TypeScript, from the files rather than from the source — every container format decoded, the script language parsed and interpreted, and the games played in a browser with nothing installed. <b>All three are here.</b>" as Html,
     titanicBody: "The full game in six languages, plus the 1996 demo. A save browser, a language chooser, and the collection page for the physical release." as Text,
     dustBody: "The engine two years earlier, and a different shape of file. Opens on its films; the town is walkable. Smaller, and growing." as Text,
+    timelapseBody: "Four discs and no rooms at all — a world of stage flats, navigated by the shape of the cursor. Opens on its film; the first world is walkable. Newest, and least finished." as Text,
     docsTitle: "Documentation" as Text,
     docsMeta: "formats · runtime · reference" as Text,
     docsBody: "How the engine works, container format by container format, and how each was recovered. The long half of this project." as Text,
@@ -519,9 +520,9 @@ export const en = {
     docTitle: "Shop (prop) Editor — Titanic - Adventure Out Of Time RE" as Text,
     h1: "Shop Editor" as Text,
     intro:
-      'Load a DreamFactory <b>.SHP</b> "shop" — the <b>props</b> drawn on top of a room (<code>HOUSE.SHP</code>\'s ship-wide doors and UI furniture, <code>INVEN.SHP</code>\'s items, a puzzle\'s switches). Browse every prop, its named states and their frames, see where a frame lands on the screen, play an animation, edit names, stored offsets and degrees, replace art via PNG round-trip — then export the repacked file.' as Html,
+      'Load a DreamFactory <b>.SHP</b> "shop" — or a <b>.PRP</b>, which is the same format under DreamFactory 1\'s name for it — the <b>props</b> drawn on top of a room (<code>HOUSE.SHP</code>\'s ship-wide doors and UI furniture, <code>INVEN.SHP</code>\'s items, a puzzle\'s switches). Browse every prop, its named states and their frames, see where a frame lands on the screen, play an animation, edit names, stored offsets and degrees, replace art via PNG round-trip — then export the repacked file.' as Html,
     open: "📂 Open a .shp file…" as Text,
-    export: "⬇ Export .shp" as Text,
+    export: "⬇ Export {ext}" as Text,
     closeTitle: "Close this shop" as Text,
     shopHead: "Shop" as Text,
     propStatesHead: "Prop & states" as Text,
@@ -529,7 +530,7 @@ export const en = {
     playState: "▶ Play state" as Text,
     playStateTitle: "play the selected state at the game's rate" as Text,
     previewNote:
-      "The 512×384 screen, with the room view above the line and the UI band below it. A prop draws at <b>anchor − stored offset</b>; the anchor is what <code>propxy</code> moves, so move it here to see where the prop would land." as Html,
+      "The game's whole screen. A prop draws at <b>anchor − stored offset</b>; the anchor is what <code>propxy</code> moves, so move it here to see where the prop would land." as Html,
     anchorX: "anchor x" as Text,
     reset: "reset" as Text,
     resetTitle: "back to the default (256,192)" as Text,
@@ -577,16 +578,16 @@ export const en = {
     docTitle: "Stage Editor — Titanic - Adventure Out Of Time RE" as Text,
     h1: "Stage Editor" as Text,
     intro:
-      "Load a DreamFactory <b>.STG</b> stage — the screens that are not rooms: the UI band (<code>MAIN.STG</code>), the inventory (<code>INVEN1.STG</code>), the deck plan (<code>MAP.STG</code>), a mini-game board (<code>BLKJACK.STG</code>). Browse its flats, see each one's full-screen art with its clickable regions drawn over it, rename a flat or a region, move a region's rectangle, replace the art via PNG round-trip — then export the repacked file." as Html,
+      "Load a DreamFactory <b>.STG</b> stage, or DreamFactory 1's <b>.FLT</b> — the screens that are not rooms: the UI band (<code>MAIN.STG</code>), the inventory (<code>INVEN1.STG</code>), the deck plan (<code>MAP.STG</code>), a mini-game board (<code>BLKJACK.STG</code>). Browse its flats, see each one's full-screen art with its clickable regions drawn over it, rename a flat or a region, move a region's rectangle, replace the art via PNG round-trip — then export the repacked file." as Html,
     open: "📂 Open a .stg file…" as Text,
-    export: "⬇ Export .stg" as Text,
+    export: "⬇ Export {ext}" as Text,
     closeTitle: "Close this stage" as Text,
     flatHead: "Flat" as Text,
     flat: "flat" as Text,
     regionsBtn: "▦ Regions" as Text,
     regionsBtnTitle: "draw the flat's clickable regions over the picture" as Text,
     previewNote:
-      "A flat is the whole 512×384 screen, drawn behind the props and — unless it hides the room view with <code>setvisible(false)</code> — behind the view composited into the top 512×264." as Html,
+      "A flat is the whole screen, drawn behind the props and — unless it hides the room view with <code>setvisible(false)</code> — behind the view composited into its top." as Html,
     clickableRegionsHead: "Clickable regions" as Text,
 
     // what the tool itself says — the notation inside stays notation
@@ -627,6 +628,10 @@ export const en = {
     regionsBtnTitle: "draw the frame's click regions over the picture" as Text,
     followMachine: "▶ Follow the machine" as Text,
     followMachineTitle: "play the movie the way its own logic says" as Text,
+    // the OTHER button: the machine walk reads one segment's logic, this plays
+    // the file — every segment, its holds, its bed (site/editors/mov-editor.ts)
+    playFilm: "▶▶ Play the film" as Text,
+    playFilmTitle: "play the whole file the way the game plays it — every segment in order, with its soundtrack" as Text,
     previewNote:
       "<b>Click the picture</b> and the movie does what it would do with that click — jump to a region's target frame, or report the exit or the chain to another file. A click outside every region does nothing, exactly as in game." as Html,
     readonlyNote:
@@ -676,6 +681,13 @@ export const en = {
     frameWaitsTail: ". Click the picture to take one." as Text,
     lastAdvances: "the last frame advances: the movie ends here" as Text,
     stoppedAfter: "stopped after {n} steps — this movie's logic loops (which is allowed)" as Text,
+    filmStart: "playing the film: every segment in order, paced and scored as the game plays it" as Text,
+    filmResume: "playing on from the frame you are on, paced and scored as the game plays it" as Text,
+    filmSegment: "segment {n} of {total}: {frames} over {picture}s of picture{bed}" as Text,
+    filmBed: " · {secs}s bed under it" as Text,
+    filmEnd: "the film ends — {frames} shown in {secs}s" as Text,
+    filmCue: "cue at tick {tick} → “{target}”" as Text,
+    filmNoPacing: "nothing here advances a frame — no step action, no soundtrack, no regions: in game this is a close-up held until it is clicked away" as Text,
     fileStatsTail: "({waiting} wait for a click) · {regions} regions · {w}×{h}" as Text,
     // a film is a chain of segments played back to back; the picker shows one
     segmentLabel: "segment" as Text,
@@ -805,8 +817,8 @@ export const en = {
     docTitle: "Track Editor — Titanic - Adventure Out Of Time RE" as Text,
     h1: "Track Editor" as Text,
     intro:
-      "Load a DreamFactory audio bank — a <b>.TRK</b> music track (<code>BEDRAD1.TRK</code>, …), a <b>.SFX</b> effects bank, or an <b>.11K</b> low-memory song. Play the theme and its one-shot sounds, rename them, reorder the chunks the theme loops through, drop your own audio in, then export the repacked file." as Html,
-    open: "📂 Open a .trk / .sfx / .11k file…" as Text,
+      "Load a DreamFactory audio bank — a <b>.TRK</b> music track (<code>BEDRAD1.TRK</code>, …), a <b>.SFX</b> effects bank, an <b>.11K</b> low-memory song, or a DreamFactory 1 <b>.SND</b>, which opens read-only. Play the theme and its one-shot sounds, rename them, reorder the chunks the theme loops through, drop your own audio in, then export the repacked file." as Html,
+    open: "📂 Open a .trk / .sfx / .11k / .snd file…" as Text,
     export: "⬇ Export bank" as Text,
     closeTitle: "Close this bank" as Text,
     bankHead: "Bank" as Text,

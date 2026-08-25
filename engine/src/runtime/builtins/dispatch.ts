@@ -31,14 +31,61 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
     // crowd router uses all three (sendtoflatfx, sendtopostfx, sendtoserverfx);
     // unregistered, their deferred argument evaluated locally instead.
     "sendtoflatfx", "sendtopostfx", "sendtoserverfx",
+    // ...and the one Timelapse asks for. `sendtobootfx(GameOpen2())` is the
+    // single-argument form — the target is implicit — and it is how the game
+    // offers a save after the ending: `if not sendtobootfx (GameOpen2 ()) quit ()`.
+    // Unregistered, `GameOpen2()` evaluated LOCALLY in the stage's frame, where
+    // no such handler exists, so the branch read the handler's absence as a
+    // refusal and the game quit on the player instead of offering the dialog.
+    "sendtobootfx",
   ]) {
     interp.registerSpecial(cmd, async (ip, argExprs, frame) => {
+      /**
+       * ...unless this is a DreamFactory 1 game, where two of these ids are not
+       * these commands at all.
+       *
+       * The two engines' command tables diverge on twenty ids (the list, and
+       * where both tables were read from, is in engine/src/df/opcodes.ts) and Dust
+       * calls eight of them. Two land here:
+       *
+       *     20021   v1 `rowcoltoscene`   v4 `sendtopostfx`
+       *     20100   v1 `scenebuild`      v4 `sendtoserverfx`
+       *
+       * Neither v1 command takes a deferred call — `rowcoltoscene(row, col)`
+       * names the scene at a grid cell and `scenebuild(name)` asks whether that
+       * cell is built on — so as deferred forms they found no call in their
+       * second argument, logged a complaint and answered 0. `extra.cst`'s bounty
+       * hunters are what asks: their `isbuild` is
+       *
+       *     name = rowcoltoscene (y2, x2)
+       *     if name = "none"      return true
+       *     if scenebuild (name)  return true
+       *
+       * so with both answering 0 the hunters treated the whole town as open
+       * ground and walked through the buildings. ROW first, then column, which is
+       * the order the callers use and the same Y-first habit the rest of this
+       * engine's rects have (`isbuild (scenecol (name), scenerow (name))` is the
+       * other side of it).
+       */
+      if (session.isV1 && (cmd === "sendtopostfx" || cmd === "sendtopost")) {
+        const row = await ip.evalExpr(argExprs[0], frame);
+        const col = await ip.evalExpr(argExprs[1], frame);
+        return ctx.sceneAt(row, col) ?? 0;
+      }
+      if (session.isV1 && (cmd === "sendtoserverfx" || cmd === "sendtoserver")) {
+        const name = await ip.evalExpr(argExprs[0], frame);
+        return ctx.sceneBuild(name) ? 1 : 0;
+      }
       // sendtostage(call()) / sendtoboot(call()) take the deferred call as
       // their only argument — the target is implicit
       let targetName: string;
       let deferred = argExprs[1];
       if (argExprs.length === 1 && argExprs[0]?.t === "call") {
-        targetName = cmd === "sendtoboot" ? "boot" : (session.stageScript?.name ?? "main.stg");
+        // `startsWith`, not equality: `sendtobootfx` takes the same implicit
+        // target its non-fx sibling does, and matching the exact name sent it to
+        // the STAGE instead — the one place in this loop where the fx suffix
+        // would have changed which object answered.
+        targetName = cmd.startsWith("sendtoboot") ? "boot" : (session.stageScript?.name ?? "main.stg");
         deferred = argExprs[0];
       } else {
         targetName = toStr(await ip.evalExpr(argExprs[0], frame));

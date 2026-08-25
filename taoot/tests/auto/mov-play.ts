@@ -13,6 +13,12 @@ import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { MoviePlayer } from "@dreamfactory/engine/web/movie-player";
 import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
 import { readMovFile } from "@dreamfactory/engine/df/mov";
+import {
+  OVERRUN_MARGIN,
+  segmentAudio,
+  soundtrackFor,
+} from "@dreamfactory/engine/df/mov-sound";
+import { segmentInterval } from "@dreamfactory/engine/df/mov-pace";
 
 const root = gamefilesRoot();
 
@@ -142,4 +148,82 @@ test("camelsee.mov: a click during the gallop takes the phase-matched exit", () 
   // and the tail is regionless, so it plays itself out and ends the movie
   run(player, 400);
   expect(player.playing).toBe(false);
+});
+
+// --- the bed, as a rule two players share -----------------------------------
+
+/**
+ * The soundtrack used to be computed inside `enterSegment`, against a
+ * `GameSession`, which is why the movie editor's preview could only ever be
+ * silent: nothing outside a running game could ask what a film sounds like. It
+ * moved to `df/mov-sound.ts` when that editor grew a "Play the film" button, and
+ * these two assertions are what stops the move from being a rewrite — they are
+ * the numbers the comments in that file cite, read off the shipped discs.
+ *
+ * `seg.file.containers` is how the functions reach the bytes, so a segment is all
+ * they need; the player passes the same segments it always did.
+ */
+function bedOf(name: string, segIdx = 0) {
+  const path = gamefiles(gamefilesRoot(), "en").resolve(name);
+  if (!path) return null; // no full-game tree installed
+  const mov = readMovFile(new Uint8Array(readFileSync(path)));
+  const seg = mov.segments[segIdx];
+  const audio = segmentAudio(seg);
+  if (!audio) throw new Error(`${name} segment ${segIdx} has no bed`);
+  const interval = segmentInterval(seg, seg.frames.length, audio.audioSec, segIdx);
+  const bed = soundtrackFor(seg, audio, interval, seg.frames.length);
+  const order = audio.resampled.reduce((n, c) => n + c.length, 0) / audio.rate;
+  return {
+    seg,
+    audio,
+    interval,
+    bed,
+    order,
+    played: bed.samples.length / bed.sampleRate,
+  };
+}
+
+test("a cutscene's bed is cut from its authored order, with the overrun margin", () => {
+  const logo = bedOf("logo.mov", 1);
+  if (!logo) return;
+  // logo.mov's second segment: 23 loop entries over 4 distinct chunks, so the
+  // order holds 156 s of music behind a 318-frame picture worth 22.9 s of them.
+  expect(logo.seg.frames.length).toBe(318);
+  expect(logo.seg.audioChunks.length).toBe(23);
+  expect(logo.audio.unique.length).toBe(4);
+  expect(logo.audio.audioSec).toBeCloseTo(22.89, 1);
+  expect(logo.order).toBeGreaterThan(150);
+  // ...and the film is paced BY that 22.9 s, so what plays is the content plus
+  // the margin — not the whole order (which would be 6x the film) and not the
+  // bare prediction (which the tick quantisation always overruns).
+  expect(logo.interval).toBeCloseTo(72, 0);
+  expect(logo.played).toBeCloseTo(logo.audio.audioSec * OVERRUN_MARGIN, 1);
+  expect(logo.bed.loop).toBe(true);
+
+  // ocredits.mov is the other side of the same rule: 12 distinct chunks, 72.0 s
+  // of content under an 80.9 s picture, so the PREDICTION is the longer of the
+  // two and the margin is taken on it. This is the film whose last second went
+  // silent when the bed was cut to the prediction exactly.
+  const credits = bedOf("ocredits.mov");
+  if (!credits) return;
+  expect(credits.seg.frames.length).toBe(1225);
+  expect(credits.audio.audioSec).toBeCloseTo(71.98, 1);
+  const predicted = (credits.interval * credits.seg.frames.length) / 1000;
+  expect(predicted).toBeCloseTo(80.85, 1);
+  expect(credits.played).toBeCloseTo(predicted * OVERRUN_MARGIN, 1);
+  expect(credits.played).toBeGreaterThan(credits.audio.audioSec);
+});
+
+test("an interactive film's bed loops, because there is no runtime to cut it to", () => {
+  const menu = bedOf("playmode.mov");
+  if (!menu) return;
+  // the main menu: four frames that wait for a click, and one 8 s chunk listed
+  // four times. There is no telling how long the player leaves it up, so the
+  // DISTINCT content plays and repeats — the menu sat in silence before it did.
+  expect(menu.seg.frames.some((f) => f.regions.length > 0)).toBe(true);
+  expect(menu.seg.audioChunks.length).toBe(4);
+  expect(menu.audio.unique.length).toBe(1);
+  expect(menu.played).toBeCloseTo(menu.audio.audioSec, 3);
+  expect(menu.played).toBeCloseTo(7.99, 1);
+  expect(menu.bed.loop).toBe(true);
 });

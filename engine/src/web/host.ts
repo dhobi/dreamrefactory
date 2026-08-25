@@ -23,11 +23,14 @@ import { readSetFileAsV4 } from "@dreamfactory/engine/df/set-v1-to-v4";
 import { parseSave } from "@dreamfactory/engine/df/savegame";
 import { SetViewer } from "./viewer";
 import { ScreenPresenter } from "./screen-presenter";
+import { ScreenDirector } from "./screen-director";
+import { ScreenSize } from "./screen";
 import { AudioSink } from "@dreamfactory/engine/runtime/audio";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { FileProvider } from "@dreamfactory/engine/runtime/setscripts";
 import { BootPlan, EMPTY_BOOT_PLAN, readBootPlan } from "@dreamfactory/engine/runtime/bootplan";
 import { DEFAULT_ENCODING, DfEncoding } from "@dreamfactory/engine/df/text";
+import { indexedDbPhotoStore } from "./photos-idb";
 
 /**
  * Where game files come from: `FileStore` in the browser (fetch + cache), the
@@ -54,7 +57,15 @@ export interface HostFiles {
   textEncoding?(): DfEncoding;
   /** is this file already in hand? (the preloader skips what it need not fetch) */
   has?(name: string): boolean;
-  /** every `.set` this edition offers — the cold boot needs one to draw into */
+  /**
+   * Every `.set` this edition offers.
+   *
+   * A LISTING, and nothing more. The cold boot used to take `[0]` of it as a
+   * surface to play its logos on, which is why Dust's implementation still
+   * carries a comment about being "the boot's movie host"; the screen needs no
+   * room now, so nothing here does. A shell may still use it to ask whether it
+   * has any game data at all (taoot/src/main.ts).
+   */
   serverSetNames?(): string[];
   /** where a basename would be fetched from — the preloader totals these up */
   serverUrl?(name: string): string | null;
@@ -111,6 +122,20 @@ const siblingFiles = (base: string): string[] =>
 const BOOT_FILE = "bootfile";
 
 /**
+ * What a shell can tell the host about its game that the files do not say in
+ * time to be useful.
+ *
+ * One field so far, and it is the screen: the framebuffer has to be allocated
+ * before the first file is parsed, so which size it is cannot be read out of a
+ * stage header the way it could later on. Titanic and Dust are the DF4 default
+ * and pass nothing; Timelapse is 640x480 and says so.
+ */
+export interface HostOptions {
+  /** the game's screen, if it is not the DF4 512x384 (engine/src/web/screen.ts) */
+  screen?: ScreenSize;
+}
+
+/**
  * Run a callback on the next macrotask — the yield {@link GameHost}'s
  * `nextFrame` renders on. `setImmediate` where there is one (node: it runs in
  * the check phase, ahead of timers, so a pumped host's own `setImmediate` drain
@@ -126,12 +151,22 @@ const yieldMacrotask: (fn: () => void) => void =
 export class GameHost {
   readonly session: GameSession;
   /**
-   * The one screen every viewer composites into. It belongs here, not to the
-   * viewer, because it OUTLIVES the viewers: a set change swaps the viewer,
-   * and the frame the player is looking at must not be swapped with it (the
-   * session's fade snapshot holds it across exactly that gap).
+   * The screen, and everything that decides what reaches it: movies, the
+   * conversation view, the flat compositor, the fades, the CLUT.
+   *
+   * It belongs here and not to a viewer, because it OUTLIVES the viewers — a set
+   * change swaps the room, and the frame the player is looking at must not be
+   * swapped with it (the session's fade snapshot holds it across exactly that
+   * gap). It also has to exist when there is no viewer AT ALL: see
+   * screen-director.ts, and *Timelapse*, which has no `.SET` on any of its four
+   * discs and used to get no screen at all as a result.
    */
-  readonly screen = new ScreenPresenter();
+  readonly director: ScreenDirector;
+  /** the framebuffer, which is the director's — kept as a property because the
+   *  shells and the suites reach for `host.screen` */
+  get screen(): ScreenPresenter {
+    return this.director.screen;
+  }
   /** parsed .SET files by name (a set is parsed once, re-activated many times) */
   readonly loadedSets = new Map<string, SetFile>();
   private current: SetViewer | null = null;
@@ -166,13 +201,26 @@ export class GameHost {
     readonly files: HostFiles,
     audio: AudioSink,
     ui: Partial<HostUi> = {},
+    opts: HostOptions = {},
   ) {
     this.ui = {
       log: () => {}, hud: () => {}, showStage: () => {},
       mapChanged: () => {}, setsChanged: () => {}, ...ui,
     };
     this.session = new GameSession(files.provide, audio);
+    // The screen, at this game's own size. `screen` on the options is how a shell
+    // says 640x480 (Timelapse) instead of the DF4 default 512x384 that Titanic
+    // and Dust share — see engine/src/web/screen.ts.
+    this.director = new ScreenDirector(this.session, opts.screen);
+    this.director.onLog = (l) => this.ui.log(l);
     this.session.onLog = (l) => this.ui.log(l);
+    /**
+     * Somewhere for the player's photographs to live. Null in a headless run,
+     * where the album works for the length of the process — see
+     * `engine/src/web/photos-idb.ts`.
+     */
+    this.session.photos.store = indexedDbPhotoStore();
+    this.session.photos.onLog = (l) => this.ui.log(l);
     // Subtitles and drawstring are bytes in the tree's own code page and no DF
     // file says which (engine/src/df/text.ts) — the tree is the only thing that knows.
     // Asked live rather than copied, so a language switch cannot leave the
@@ -225,7 +273,10 @@ export class GameHost {
     this.session.nextFrame = () =>
       new Promise<void>((resolve) =>
         yieldMacrotask(() => {
-          this.current?.tick(this.session.clock.now);
+          // the DIRECTOR's tick, not the viewer's: a boot with no room open yet
+          // (and a game with no rooms at all) still has a fade to ramp, a movie
+          // to advance and a delay clock to move
+          this.director.tick(this.session.clock.now);
           resolve();
         }),
       );
@@ -347,8 +398,13 @@ export class GameHost {
     // boot, a resumed save), and none of them can know — so each states what it
     // needs and the session decides whether that is already true
     await session.ensureBooted();
-    const viewer = new SetViewer(set, session, startScene, startView, this.screen);
+    const viewer = new SetViewer(set, session, startScene, startView, this.director);
     this.current = viewer;
+    // ...and it is the screen's room from here until the next activation or
+    // release. The director composites without one when this is null, which is
+    // every frame of a SET-less game and every frame of a boot before the first
+    // room opens.
+    this.director.setRoom(viewer);
     // A changeset fired from a keydown/click (a door leading to another set,
     // e.g. TAOOT gstair3's grand-staircase exit into recept1c) swaps in this fresh
     // viewer mid-gesture. Re-arm the nav hooks on it so boot's default walk —
@@ -630,23 +686,22 @@ export class GameHost {
         return;
       }
       /*
-       * It still needs a room to draw INTO, and for the same reason a boot with a
-       * landing room opens that one before its logos: a stage is composited by a
-       * SetViewer, the frame loop draws when there is one (taoot/src/main.ts), and this
-       * boot plays a movie and then opens a menu stage with no set behind either.
-       * Without this the demo booted perfectly and showed a black screen — scripts
-       * running, menu music playing, nothing drawing.
+       * ...and NOTHING is opened to draw into, which is the whole of what changed
+       * here.
        *
-       * Any of the game's rooms will do: `skipOpen` leaves its `openset` unrun, the
-       * boot paints black over it (`clut("black")`, `blackscreen()`) and the menu's
-       * own flat covers the screen. `currentset` goes back to "none" afterwards so
-       * the viewer stops compositing a room the player was never in over the flat,
-       * and so the first real `changeset` — the demo's `initall("c71")`, three
-       * clicks later — sees a cold start. Its bytes go back at that changeset, like
-       * any room you leave (activateSet).
+       * This used to borrow a room. A stage was composited by a `SetViewer`, the
+       * frame loop only drew when there was one, and this boot plays a movie and
+       * then opens a menu stage with no set behind either — so it opened one of
+       * the game's rooms with `skipOpen`, painted black over it, and let the
+       * menu's own flat cover the screen. "Any of the game's rooms will do" was
+       * the comment, and a comment saying that about a 9 MB room is a comment
+       * about the wrong abstraction: the screen was parented to a room.
+       *
+       * It is not any more (engine/src/web/screen-director.ts). The director
+       * composites flats, films and fades with no room layer at all, so a boot
+       * that has no room simply has no room — the demo's menu, Dust's two intro
+       * films, and every frame of a game that has no `.SET` on any of its discs.
        */
-      const hostSet = this.files.serverSetNames?.()[0];
-      if (hostSet) await this.loadServerSet(hostSet, { skipOpen: true });
       session.fade.level = 1;
       session.currentSetName = "none";
       session.currentSetFile = "";

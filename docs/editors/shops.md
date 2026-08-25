@@ -9,6 +9,10 @@ Load a [SHP shop](../engine/formats/shp.md) — the **props** drawn on top of a 
 `INVEN.SHP`'s items, a puzzle's switches — and it comes apart into the three
 levels a shop has, group → state → frame.
 
+Dust's props are `.PRP`, which is the same format under DreamFactory 1's name for
+it: `readShpFile` takes version 1 and 4 through one layout, so its fourteen open
+here like any other shop, and an export writes back the extension it read.
+
 ## What it shows
 
 | Part | What you can do with it |

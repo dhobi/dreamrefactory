@@ -1,0 +1,233 @@
+/*
+ * Timelapse's palette: void, nacre, glass, chrome.
+ *
+ * Sampled from its own title card — a stepped pyramid of turquoise glass on a
+ * limestone terrace, a Maya temple of red brick and gold built into its base, and
+ * TIMELAPSE across the front in chrome-bevelled letters inlaid with abalone
+ * shell. Cold and iridescent where Dust is warm and Titanic is deep water.
+ *
+ * The FOURTH implementation of the contract in site/src/chrome.css, which is what
+ * that split is for: the same 39 role names and the same top bar as the other
+ * three, wearing nothing any of them wear.
+ *
+ * Where the colours come from
+ * ---------------------------
+ * `tools/keylogo.ts` writes the page's own copy of the artwork; the numbers below
+ * came from a census of the same file's 716,412 non-black pixels, by hue family
+ * and then by quantised cell, each stop being the MEAN of the pixels in its cell:
+ *
+ *   blue        37.7%   the letters' shell inlay — and its #1e2c58 is the single
+ *                       commonest colour in the picture, 8.1% on its own
+ *   cyan        19.1%   the pyramid's glass
+ *   grey-light  15.0%   the chrome the letters are bevelled in
+ *   violet      10.7%   the limestone terrace, which is lilac rather than grey
+ *   red          5.6%   the temple's brick lintel
+ *   orange       5.2%   its gold stair
+ *
+ * — and 54.5% of the card is the black it was rendered on, which is why this page
+ * is darker than the other three and why its darks have a hue: the deepest colour
+ * IN the picture is the indigo inside its own letters (#090b24), not black.
+ *
+ * What the colours MEAN
+ * ---------------------
+ *   glass   it is live, or it is where you are — the pyramid, lit from inside
+ *   chrome  it is a word — the letters' own bevel, the brightest thing here
+ *   void    it is ground — the black the card floats on, with the letters' hue
+ *   stone   it is an edge — cut limestone, so a divider is masonry and not a line
+ *   sand    it commits — the temple's gold stair, and the only warm thing on the
+ *           page, used on exactly one control
+ *
+ * `--mark` is chrome rather than a fifth hue, for the reason this project's
+ * palettes keep learning: a second job wants a second VALUE more than a second
+ * hue, and a button in an unrelated colour reads as a visitor from another design.
+ */
+
+/* The structure comes first: an @import has to lead the file, and custom
+   properties resolve where they are USED. */
+@import "@dreamfactory/site/chrome.css";
+
+/* ---- void: the ground ------------------------------------------------- */
+
+/*
+ * The ramp runs from below the artwork's own black to its commonest colour
+ * outright, so the page's ground and the picture's subject are the two ends of
+ * one gradient. Blue-black and not neutral: at these levels the hue is barely
+ * nameable, and a page of it reads as depth rather than as "off".
+ */
+:root {
+  --void-1000: #04050e;
+  --void-900: #090b24;
+  --void-800: #0d1030;
+  --void-700: #13183c;
+  --void-600: #1b2249;
+  --void-500: #1e2c58;
+}
+
+/* ---- stone: the edges ------------------------------------------------- */
+
+/* The terrace the pyramid stands on. Lilac, which is what the render makes of
+   limestone under a cold sky — a grey border on this page looks like a mistake
+   next to it. */
+:root {
+  --stone-600: #38284e;
+  --stone-500: #4b3660;
+  --stone-400: #604d71;
+  --stone-300: #765e89;
+  --stone-200: #8b719a;
+  --stone-100: #a090ad;
+}
+
+/* ---- glass: the pyramid, and everything interactive ------------------- */
+
+/* Six measured stops, in luminance order rather than in hue order — #14aad4 is
+   the lit blue face and #1fd3d9 the turquoise one, and they are within a shade
+   of each other in value. */
+:root {
+  --glass-600: #165b68;
+  --glass-500: #199ba9;
+  --glass-400: #14aad4;
+  --glass-300: #1fd3d9;
+  --glass-200: #5ed0db;
+  --glass-100: #9ae3ee;
+}
+
+/* ---- chrome and nacre: the letters ------------------------------------ */
+
+/*
+ * The bevel, and the shell behind it. `--chrome-200` is the face of the moulding
+ * and the commonest light value in the picture; `--chrome-100` is the top rail,
+ * which the render takes to pure white because the light is straight above.
+ */
+:root {
+  --chrome-600: #6b6a6f;
+  --chrome-500: #8f8892;
+  --chrome-400: #b5a7b6;
+  --chrome-300: #c9c4d4;
+  --chrome-200: #e6e3eb;
+  --chrome-100: #f7f9fe;
+
+  /* the shell inlay: an electric blue nothing else on the page is allowed to be,
+     kept for the one thing that is genuinely in motion (the loading gauge) */
+  --nacre-600: #0a3562;
+  --nacre-500: #0459ba;
+  --nacre-400: #0d66f4;
+}
+
+/* ---- sand: the temple's stair, and the one control that commits ------- */
+
+:root {
+  --sand-600: #6d5031;
+  --sand-500: #976739;
+  --sand-400: #a07449;
+  --sand-300: #cf995b;
+  --sand-200: #e1dd9e;
+
+  /*
+   * Both of these are lifted a step in value from where they were sampled, and
+   * that is the only invention in the file. The lintel's brick is #5b292c and its
+   * shell's green flecks are #6ad4a1 — a warning at 3.1:1 against this ground and
+   * a confirmation nobody would notice. The hues are the picture's; the values
+   * are what a message has to be to be read.
+   */
+  --alarm: #d4685c;
+  --ok: #7fd9a8;
+}
+
+/* ---- typography and metrics ------------------------------------------- */
+
+:root {
+  --font-display:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --gap: 0.8rem;
+  /* Squarer than the other two palettes. Everything in the artwork is cut stone
+     or bevelled metal and neither has a soft corner in it; 2px is enough to stop
+     a border looking like a hairline crack, and no more than that. */
+  --radius: 2px;
+  --radius-lg: 3px;
+
+  /* the light inside the glass, which is what this page lights its title with */
+  --glow: 0 0 0 1px rgba(31, 211, 217, 0.28), 0 0 34px -4px rgba(31, 211, 217, 0.38);
+}
+
+/* ---- the 39 roles the chrome asks for --------------------------------- */
+
+:root {
+  --bg: var(--void-1000);
+  --panel: var(--void-800);
+  --raised: var(--void-700);
+  --inset: var(--void-900);
+
+  --border: var(--stone-600);
+  --border-strong: var(--stone-500);
+  --border-hover: var(--stone-100);
+
+  --text: var(--chrome-300);
+  --text-bright: var(--chrome-100);
+  --text-dim: var(--chrome-400);
+  --text-mute: var(--chrome-600);
+
+  --accent: var(--glass-300);
+  --accent-hover: var(--glass-100);
+  --accent-line: var(--glass-400);
+  --selection-bg: rgba(31, 211, 217, 0.28);
+
+  --mark: var(--chrome-200);
+  --mark-glow: rgba(31, 211, 217, 0.4);
+
+  --topbar-top: var(--void-700);
+  --topbar-bottom: var(--void-1000);
+
+  /* the cold pool of light at the top of every page in the project — here it is
+     the glow coming off the pyramid's own glass */
+  --depth-light: rgba(25, 155, 169, 0.16);
+
+  --button-hover-bg: var(--void-600);
+  --button-active-bg: var(--void-700);
+  --state-border: var(--stone-300);
+
+  --rule-mid: var(--glass-500);
+  --rule-bright: var(--glass-200);
+
+  /* the one control that commits: the temple's gold stair, which is the only
+     warm thing in the picture and so the only warm thing on the page */
+  --commit-face-bottom: var(--sand-500);
+  --commit-face-deep: var(--sand-600);
+  --commit-edge: var(--sand-300);
+  --commit-edge-hover: var(--sand-200);
+  --commit-text: #180f04;
+  --commit-text-hover: #221607;
+
+  --menu-panel: var(--void-700);
+  --shadow-drop: rgb(0 0 0 / 70%);
+}
+
+/* ---- the two densities ------------------------------------------------ */
+
+/*
+ * One page, and it is a game page: as little chrome as it can get away with.
+ * `work` is here for the contract's sake.
+ *
+ * NOTE: no `--pad`, for the reason Dust's palette records — it is not one of the
+ * chrome's 39 roles, and the page has owned that name since before it had a top
+ * bar, as a single length in `#curtain`'s `left` and `right`. Redefining it here
+ * as a two-value padding would make those declarations invalid and collapse the
+ * curtain to its title card.
+ */
+body.deep {
+  --bg: var(--void-1000);
+  --panel: var(--void-900);
+  --raised: var(--void-800);
+}
+body.work {
+  --bg: var(--void-900);
+  --panel: var(--void-700);
+  --raised: var(--void-600);
+  --inset: var(--void-1000);
+  --border: var(--stone-500);
+  --border-strong: var(--stone-400);
+  --gap: 0.65rem;
+}

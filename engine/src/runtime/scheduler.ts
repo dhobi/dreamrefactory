@@ -111,6 +111,30 @@ export class Scheduler {
     return n > 0 ? Math.floor(this.session.ambientRng() * n) + 1 : 0;
   }
 
+  /**
+   * The handler a loop names, as a NAME.
+   *
+   * The corpus writes it both ways. Most of it is a bare name —
+   * `makeloop("prop", me, "invdockloop", 2)` — but Timelapse writes 21 of its 53
+   * as a CALL: `makeloop("flat", baseflat, flatcallback, 0)` where `flatcallback`
+   * is the string `"FlatAnimDone()"`, and `"Ambient()"`, `"DoBa()"`,
+   * `"DoSwayLantern()"` beside it. The original engine plainly took either, and
+   * this port took only the first, so those 21 resolved nothing.
+   *
+   * It is the tail of the stage animations that shows it: `flattick` walks the
+   * cels and then schedules the CALLBACK to put the base flat back. Without this
+   * the callback never ran, so the game sat on the last cel of the run — the
+   * screen the birds had just left — instead of returning to the picture.
+   *
+   * Arguments are not accepted, only the empty call: nothing in any of the three
+   * corpora writes one, a loop handler is invoked with no arguments anyway, and
+   * silently dropping arguments somebody meant would be worse than not resolving.
+   */
+  private static loopHandlerName(handler: string): string {
+    const m = /^(.*?)\s*\(\s*\)$/.exec(handler.trim());
+    return m ? m[1] : handler;
+  }
+
   /** makeloop: (kind, name) identity — replaces an existing loop */
   makeLoop(kind: string, name: string, handler: string, period: number): void {
     this.stopLoop(kind, name);
@@ -121,7 +145,31 @@ export class Scheduler {
     this.loops.push({
       kind: kind.toLowerCase(),
       name: name.toLowerCase(),
-      handler: handler.toLowerCase(),
+      /**
+       * The handler keeps its CASE, and the other two do not, because they are
+       * different kinds of name.
+       *
+       * `kind` and `name` are matched — `stopLoop`, `isLoop` and `makeLoop`'s own
+       * replacement all compare them, and the corpus spells them freely
+       * (`makeloop("SCENE", …)` in Dust against `makeloop("scene", …)`
+       * everywhere else). A handler is not matched, it is CALLED: it ends up at
+       * `Script.codes.get(handler)`, and those keys are stored exactly as the
+       * 1996 compiler wrote them.
+       *
+       * So lowercasing it silently lost every loop whose callback has a capital
+       * letter. Titanic hid this completely — all 67 of its loop callbacks are
+       * lowercase, so the fold was the identity — and the other two discs are
+       * where it shows: Timelapse names 9 of its 34 in CamelCase, and Dust one,
+       * `SOUNDFXS`, which is CHIN.SET's ambient sound loop re-arming itself.
+       *
+       * What it looked like on Timelapse is that the stages did not move. Its
+       * opening shot arms `makeloop("flat", baseflat, "DelayBirds", 15)` from
+       * `enterframe`; the loop came due, fired `sendtoflat(i0001.100,
+       * delaybirds)`, resolved nothing and removed itself — and the birds never
+       * left the shot. 433 `flatstartanim` calls on those discs are reached
+       * through callbacks like that one.
+       */
+      handler: Scheduler.loopHandlerName(handler),
       count: Math.max(1, period),
       period: Math.max(1, period),
       paused: false,
@@ -143,7 +191,7 @@ export class Scheduler {
     this.loops.push({
       kind: kind.toLowerCase(),
       name: name.toLowerCase(),
-      handler: handler.toLowerCase(),
+      handler: Scheduler.loopHandlerName(handler), // as written: see makeLoop
       count,
       period: count,
       paused: false,
@@ -907,6 +955,27 @@ export class Scheduler {
     const ex = String(exceptName).toLowerCase();
     // NOT gated on scriptBusy: the caller IS the busy script, yielding a frame
     this.fireLoops((l) => l.period <= 1 && l.name !== ex);
+    /**
+     * ...and the COARSE loops the master service has already counted down.
+     *
+     * `fireDueLoops` counts a timer loop down whether or not a script is in
+     * flight and then declines to fire it, so a loop armed during a drag sits at
+     * zero for as long as the drag lasts. Timelapse's match is what that looks
+     * like: `HandleMatch` is a `while stilldown()` loop that drags the match
+     * across the box, and striking it plays the sound and arms
+     * `makeloop("prop", "Matches", "MatchBurn()", 30 / 6)` — so the strike was
+     * audible and the flame did not start until the player let go. Reported
+     * exactly that way.
+     *
+     * Fired, not counted: `fireNow` does no decrement, so the PACE stays the
+     * engine's 50 ms service and a period-5 loop still comes round every 250 ms
+     * rather than every pumped frame. This only decides that a loop already due
+     * gets to run during the yield instead of after it — which is what the
+     * original's own pass does, since its forceupdate IS a service pass.
+     */
+    this.fireNow(
+      this.loops.filter((l) => !l.paused && l.period > 1 && l.count <= 0 && l.name !== ex),
+    );
   }
 
   /**
@@ -1070,7 +1139,18 @@ export class Scheduler {
     // in a flat REGION (hit/stay), `me` is that region's name, not the flat —
     // sendtoflat(region) wouldn't resolve newgame and the play-again prompt
     // never fired. (For the deal-triggered gameover, me already IS the flat.)
-    const target = l.kind === "flat" ? this.session.currentFlat : l.name;
+    // ...but only when the captured name cannot answer for itself. Timelapse's
+    // stage animation is the case that needs the other half: `flattick` walks the
+    // cels and then arms the CALLBACK — `makeloop("flat", baseflat,
+    // flatcallback, 0)` — to put the base flat back, and by then the current flat
+    // is `i0001.100.54`, an animation cel with no script. The captured name is
+    // the base flat, which is exactly where `FlatAnimDone` lives. So: prefer the
+    // name the script gave, fall back to the current flat when it has nothing to
+    // say, which is what leaves the blackjack case above working (a region name
+    // has no `newgame`).
+    const named = l.kind === "flat" ? this.session.flatScripts.get(l.name) : null;
+    const target =
+      l.kind === "flat" && !named?.script.codes.has(l.handler) ? this.session.currentFlat : l.name;
     // A SCENE loop may drive the camera via currentscene()/currentview() — a
     // scripted pan (TAOOT BEDSIT1's gotowin: `while currentview()!="view23":
     // currentscene("right")` to face the bomb). The nav hooks are only armed

@@ -310,6 +310,7 @@ export function setFileFromV1(v1: SetFileV1): SetFile {
       index,
       sceneName: s.name,
       record: s.record,
+      build: s.build,
       // WORLD units, not the cell indices they are read from — v4's fields hold
       // the standpoint's position and two live readers want it that way: the
       // cricket/sound listener and `playerxyz` take these two straight

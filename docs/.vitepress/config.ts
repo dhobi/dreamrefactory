@@ -22,6 +22,7 @@ const rewrites = {
   "engine/runtime/README.md": "engine/runtime/index.md",
   "taoot/README.md": "taoot/index.md",
   "dust/README.md": "dust/index.md",
+  "timelapse/README.md": "timelapse/index.md",
   "editors/README.md": "editors/index.md",
   "reference/README.md": "reference/index.md",
 };
@@ -33,7 +34,7 @@ export default withMermaid(
     lang: "en-US",
     title: "dreamREfactory",
     description:
-      "How CyberFlix's DreamFactory engine works, and how this project reimplemented it — from a game's main flow down to each DFile container format. Titanic (DreamFactory 4) and Dust (DreamFactory 1).",
+      "How CyberFlix's DreamFactory engine works, and how this project reimplemented it — from a game's main flow down to each DFile container format. Dust (DreamFactory 1), Titanic and Timelapse (DreamFactory 4).",
     lastUpdated: true,
     /**
      * FALSE, and it has to be. `cleanUrls` emits links without `.html` and relies
@@ -73,9 +74,12 @@ export default withMermaid(
       nav: [
         { text: "Home", link: "/" },
         { text: "Engine", link: "/engine/" },
-        // oldest engine first, as the sidebar and the registry have it
+        // oldest engine first, as the sidebar and the registry have it — and
+        // Timelapse last of the three, which is both its shipping order and the
+        // order the port learned them in
         { text: "Dust", link: "/dust/" },
         { text: "Titanic", link: "/taoot/" },
+        { text: "Timelapse", link: "/timelapse/" },
         { text: "Editors", link: "/editors/" },
         { text: "Glossary", link: "/glossary" },
         // Points at the section index rather than a page inside it, like every
@@ -85,8 +89,8 @@ export default withMermaid(
       ],
 
       /**
-       * Four sections, mirroring the repository: the engine, each game, and the
-       * project's own tooling and reference.
+       * Five sections, mirroring the repository: the engine, each of the three
+       * games, and the project's own tooling and reference.
        *
        * "Start here" is a READING PATH and not a section — its four pages live in
        * three different sections, and the order is general to specific: what kind
@@ -95,12 +99,14 @@ export default withMermaid(
        * so, which stopped working the moment they no longer shared a directory. A
        * sidebar can express a path across sections; a filename cannot.
        *
-       * The two games come oldest first — DreamFactory 1 before 4 — which is the
-       * order `GAMES` lists them in (site/src/games.ts), the order the format
-       * pages introduce the two generations in, and the order that makes the pair
-       * read as a progression rather than an arbitrary couple. Dust is also the
-       * smaller door: one page and one disc, where Titanic is six editions and a
-       * timed endgame.
+       * The games come oldest first — DreamFactory 1 before 4 — which is the
+       * order the format pages introduce the two generations in, and the order
+       * that makes them read as a progression rather than an arbitrary set. Dust
+       * is also the smallest door: one page and one disc, where Titanic is six
+       * editions and a timed endgame. Timelapse comes last of the three even
+       * though it is the same engine generation as Titanic: it is the game that
+       * only makes sense once a room has been described, because its whole point
+       * is that it has none.
        *
        * The scripting language leaves the path and stays in "The engine". It is
        * the right third step for someone implementing the engine and the wrong
@@ -116,6 +122,7 @@ export default withMermaid(
             { text: "2 · Engine architecture", link: "/engine/architecture" },
             { text: "3 · Dust: A Tale of the Wired West", link: "/dust/" },
             { text: "4 · Titanic: Adventure Out of Time", link: "/taoot/" },
+            { text: "5 · Timelapse: Ancient Civilizations", link: "/timelapse/" },
             { text: "Glossary", link: "/glossary" },
           ],
         },
@@ -185,6 +192,11 @@ export default withMermaid(
             // the game it was checked against rather than in Reference.
             { text: "How we know it's right", link: "/taoot/verification" },
           ],
+        },
+        {
+          text: "Timelapse: Ancient Civilizations",
+          collapsed: false,
+          items: [{ text: "Overview", link: "/timelapse/" }],
         },
         {
           text: "Editors — the browser tools",

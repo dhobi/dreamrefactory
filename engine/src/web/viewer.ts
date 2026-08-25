@@ -2,16 +2,16 @@ import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTUR
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { ShpFrame } from "@dreamfactory/engine/df/shp";
+import { DfVersion } from "@dreamfactory/engine/df/version";
 import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
-import { truthy } from "@dreamfactory/engine/runtime/interp";
+import { Value } from "@dreamfactory/engine/runtime/interp";
 import { SetScripts } from "@dreamfactory/engine/runtime/setscripts";
 import { GameSession, MOVE_SPEED_MS } from "@dreamfactory/engine/runtime/session";
 import { DrawSignature } from "@dreamfactory/engine/runtime/signature";
-import { MoviePlayer } from "./movie-player";
-import { PUPPET_ART_H, PuppetView } from "./puppet-view";
+import { PUPPET_ART_H } from "./puppet-view";
 import { CachedFrame, RingCache } from "./ring-cache";
 import { ScreenPresenter } from "./screen-presenter";
-import { SCREEN_W, SCREEN_H } from "./screen";
+import { ClutDim, RoomLayer, ScreenDirector, dimPalette } from "./screen-director";
 // the font drawstring() paints and stringwidth() measures with — one definition
 // so pen advance matches the glyphs, and so both get the CJK fall-through
 import { overlayFont } from "./fonts";
@@ -81,13 +81,6 @@ function angularDistance(a: number, b: number): number {
   return Math.min(d, TAU - d);
 }
 
-/** a mixclut(target,"black",lo,hi,amt) request: darken palette entries lo..hi */
-interface ClutDim {
-  lo: number;
-  hi: number;
-  amt: number;
-}
-
 /** The session's camera hooks as they stood before a gesture armed its own —
  *  what {@link SetViewer.armNavHooks} hands back for the matching disarm. */
 export interface NavHooks {
@@ -98,31 +91,22 @@ export interface NavHooks {
 }
 
 /**
- * Return a copy of `base` (an RGBA CLUT) with entries [lo..hi] blended toward
- * black by amt/255 — the engine's `mixclut(target,"black",lo,hi,amt)`. amt=255
- * is fully black, 0 leaves it unchanged; entries outside the range are kept.
- * (The darkroom kills the room light with mixclut("set","black",0,127,240).)
+ * The navigation state machine over a parsed SET, and one LAYER of the screen
+ * rather than its owner.
+ *
+ * The decoded scenery frames live in {@link RingCache}, a ring (turn circle /
+ * road direction) at a time. Everything that decides what reaches the canvas —
+ * movies, conversation close-ups, the flat compositor, the fades, the CLUT — is
+ * {@link ScreenDirector}'s, which this implements {@link RoomLayer} for. That
+ * split is the subject of screen-director.ts's header: a game need not have
+ * rooms at all, and *Timelapse* does not.
  */
-function dimPalette(base: Uint8ClampedArray, dim: ClutDim): Uint8ClampedArray {
-  const out = base.slice();
-  const factor = Math.max(0, Math.min(255, 255 - dim.amt)) / 255;
-  const lo = Math.max(0, dim.lo);
-  const hi = Math.min(base.length / 4 - 1, dim.hi);
-  for (let i = lo; i <= hi; i++) {
-    out[i * 4] = base[i * 4] * factor;
-    out[i * 4 + 1] = base[i * 4 + 1] * factor;
-    out[i * 4 + 2] = base[i * 4 + 2] * factor;
-    // alpha (i*4+3) left as-is
-  }
-  return out;
-}
-
-export class SetViewer {
+export class SetViewer implements RoomLayer {
   readonly set: SetFile;
   private palette: Uint8ClampedArray;
   /** full 256-entry set palette — props colorize through the set's CLUT. Only
    *  its lower half is the set's own once a stage flat is up; see
-   *  {@link worldPalette} */
+   *  {@link bandPropPalette} */
   private propPalette: Uint8ClampedArray;
   // Pristine baselines for the CLUT-mixing opcodes (clut/mixclut). `palette`
   // and `propPalette` above are the EFFECTIVE (possibly dimmed) versions the
@@ -140,14 +124,13 @@ export class SetViewer {
 
   /**
    * The presented screen — framebuffer, blits, presentation and the
-   * signature-skip live in {@link ScreenPresenter}. Owned by the HOST and
-   * handed in, so it outlives this viewer: a set change swaps the viewer, not
-   * the screen the player is looking at.
+   * signature-skip live in {@link ScreenPresenter}. Owned by the DIRECTOR, so it
+   * outlives this viewer: a set change swaps the room, not the screen the player
+   * is looking at.
    */
-  readonly screen: ScreenPresenter;
-
-  /** the "is this picture already on the canvas?" hash — see {@link render} */
-  private readonly sig = new DrawSignature();
+  get screen(): ScreenPresenter {
+    return this.dir.screen;
+  }
 
   sceneIdx = 0;
   viewIdx = 0; // index into scene.views
@@ -440,10 +423,13 @@ export class SetViewer {
   private lastTick = 0;
   private current: CachedFrame | null = null;
 
-  /** MOV playback (cutscenes / object close-ups) — see movie-player.ts */
-  private readonly movies: MoviePlayer;
-  /** puppet-mode rendering (conversation close-ups) — see puppet-view.ts */
-  private readonly puppetView: PuppetView;
+  /**
+   * The screen this room is one layer OF: the movie player, the conversation
+   * view, the fades, the CLUT and the compositor all live there, and this class
+   * reaches them through it. screen-director.ts says why none of them is a
+   * room's to own.
+   */
+  readonly dir: ScreenDirector;
 
   onHud: (text: string) => void = () => {};
   onLog: (line: string) => void = () => {};
@@ -456,24 +442,30 @@ export class SetViewer {
     session: GameSession,
     startScene = "",
     startView = "",
-    screen: ScreenPresenter | null = null,
+    /**
+     * The screen to be a layer of. The host passes its one persistent director;
+     * a caller without one (tests driving a bare viewer, `tools/navdump.ts`)
+     * gets a private screen with the same behaviour — which is exactly the
+     * fallback the `screen` parameter used to be, one level up.
+     */
+    director: ScreenDirector | null = null,
   ) {
     this.set = set;
     this.session = session;
     this.rings = new RingCache(set);
-    // the host passes its one persistent screen; a caller without one (tests
-    // driving a bare viewer) gets a private surface with the same behaviour
-    this.screen = screen ?? new ScreenPresenter();
-    // the movie player reveals the settled view once a movie sequence ends
-    this.movies = new MoviePlayer(session, () => this.showView());
-    this.movies.onLog = (l) => this.onLog(l);
-    this.puppetView = new PuppetView(session);
+    this.dir = director ?? new ScreenDirector(session);
+    this.dir.onLog = (l) => this.onLog(l);
+    // the movie player reveals the settled view once a movie sequence ends, and
+    // this room is what it reveals
+    this.dir.onRoomReveal = () => this.showView();
     this.basePalette = paletteToRGBA(set.paletteRaw, set.colorCount);
     this.basePropPalette = paletteToRGBA(set.paletteRaw, 256);
     this.palette = displayPalette(this.basePalette);
     this.propPalette = displayPalette(this.basePropPalette);
-    // clut/mixclut palette dimming (darkroom light switch etc.)
-    session.onClut = (target, dim) => this.setClut(target, dim);
+    // ...and this room is the layer it composites. A host that owns the director
+    // does this itself on activation (GameHost.activateSet) and undoes it on
+    // release; a bare viewer with a director of its own has to say so here.
+    if (!director) this.dir.setRoom(this);
     this.scripts = new SetScripts(set, session);
     this.scripts.onLog = (l) => this.onLog(l);
     session.currentSceneName = () => this.scene.sceneName.toLowerCase();
@@ -507,126 +499,10 @@ export class SetViewer {
     };
     // ...and the whole camera, for `actordist`: what it answers is whether the
     // actor would be DRAWN through this camera, not how far away they are (#180).
-    session.activeCamera = () => this.activeCamera();
-    // hittest(point): resolve a screen pixel to an object name + kind. Every
-    // script that dispatches a click or a cursor switches on this (BOOTFILE's
-    // mousedown and idle, INVEN.SHP's handleselect and its drop flow, HOUSE.SHP's
-    // band props), so its six answers ARE the port's click priority.
-    //
-    // Read out of TI.EXE rather than inferred, because the two labels it hands a
-    // room were both wrong here and the corpus distinguishes them (id 20070 →
-    // 0x4277f0):
-    //
-    //   1. one draw-ordered SPRITE list, asked before anything else and wherever
-    //      the point is (0x43abc0); whatever it finds is then named by lookup —
-    //      in a cast it is an "actor", in a shop a "prop"
-    //   2. else, set open + visible + the point inside the SET's own screen rect
-    //      (0x43ad50 → 0x435410): a hotspot of the current scene/view is a
-    //      "painting" (0x409910), and where there is none the answer is the
-    //      SCENE ITSELF, by name — not nothing, and not the flat behind it
-    //   3. else, stage open + visible + inside the STAGE's rect (0x43ad20): a
-    //      named click-region is a "button" (0x446fb0), else the current FLAT
-    //   4. else "None" (the engine capitalises it; comparisons are caseless)
-    //
-    // A PROP first, in a room exactly as over a flat, and through the same
-    // {@link propAtPointer} the click path uses, so the two agree by construction
-    // rather than by two hit tests happening to match: that function is where a
-    // room's camera, occlusion mask and opaque-pixel test live, and where an
-    // overlay's absence of all three does. In a room this step was missing
-    // entirely, so every prop in the world (TAOOT: the bag on the bed, the watch
-    // on the table) answered for the room instead, and `case "prop"` was
-    // unreachable.
-    session.hitTestAt = (x, y) => {
-      const prop = this.propAtPointer(x, y);
-      if (prop) return { name: prop.group.name, type: "prop" };
-      // the SET, while the point is inside the image it draws. In-game that image
-      // is the top 264 rows and the interface band below it belongs to the stage,
-      // which is how a band click reaches "main 1" at all (its mousedown is the
-      // one that puts the interface away) while a click in the ROOM does not.
-      if (this.inSetImage(x, y)) {
-        // an actor stands in front of the view's hotspots — and ONLY inside this
-        // image, because that is the only place one is drawn. A projected sprite
-        // reaches past the bottom of it for anyone standing close to the camera,
-        // so asking the actors first and everywhere answered "actor" over the
-        // interface band: measured in TAOOT at 1558 band points in gstair2
-        // (trask, elev), 1275 in b59 (conk), 1299 in recept1c. A prop is asked
-        // first and unbounded, which is right — the band's own props ARE
-        // screen-space.
-        const cam = this.worldCamera();
-        const act = cam ? this.session.actorRuntime.actorAt(x, y, cam, this.occlusion()) : null;
-        if (act) return { name: act.member.name, type: "actor" };
-        const hit = this.hitTest(x, y); // smallest-region-wins, same as clicks
-        // A hotspot is a PAINTING — countpaintings/indextopainting enumerate
-        // exactly these, and both handlers that route one send it through
-        // `sendtopainting(currentscene(), currentview(), thename, …)`, which
-        // resolves it in the view you are looking at. Labelling it "scene" sent
-        // it through `sendtoscene(thename, …)` instead, which resolves a name
-        // against the whole set: 141 hotspot names in TAOOT's tree carry more
-        // than one script (bedsit1's `cabinet` has eight, one per standpoint), so
-        // the wrong standpoint's script could answer, and the scene script — where
-        // twelve of them keep their handler — was skipped entirely.
-        if (hit) return { name: hit.obj.identifier, type: "painting" };
-        return { name: this.scene.sceneName.toLowerCase(), type: "scene" };
-      }
-      // `currentFlat` is "none" between openstagefile and the first flat, and a
-      // stage standing on no flat has no regions and no surface to name.
-      // The stage is OPEN or it is not — not "has a main script"; see
-      // GameSession.stageOpen for the demo inventory that has no main.
-      if (this.session.stageOpen && this.session.currentFlat !== "none") {
-        const r = this.flatRegionAt(x, y); // same test hover() uses, so they agree
-        if (r) return { name: r.name, type: "button" };
-        return { name: this.session.currentFlat, type: "flat" };
-      }
-      // the engine capitalises this one ("None" at 0x45b1e4); script comparisons
-      // are caseless, so a `case "none"` matches either way
-      return { name: "", type: "none" };
-    };
-    // ...and the two predicates Dust's inventory drops an item against, which
-    // have to answer through whatever is drawn over them — see the note on
-    // GameSession.pointInSet
-    session.pointInSet = (x, y) => this.inSetImage(x, y);
-    session.pointInStage = () =>
-      this.session.stageOpen && this.session.currentFlat !== "none";
-    // Snapshot the frame that is actually on screen. captureFrame runs from a
-    // script (screentoblack) during tick(), i.e. BEFORE this frame's render, so
-    // the screen still holds the last presented composite — the pre-transition
-    // image the fade-out should hold. It is the pre-fade composite (applyFade
-    // paints on the canvas, not into the framebuffer), so ramping the fade over
-    // it can't double-darken. Before the first composite there is nothing on the
-    // screen yet, so fall back to the bare set frame. The screen outlives this
-    // viewer, so mid-set-change the snapshot is still the room being left.
-    session.captureFrame = () => {
-      // ...with one exception, and it is a conversation. TI.EXE has no snapshot
-      // at all: `screentoblack` (0x43e550 -> 0x435b90) dims the LIVE screen in
-      // place, `steps` times, and returns — so what it fades is whatever the
-      // picture is at that instant. The last presented composite is not that
-      // picture here, because a line ends by clearing the subtitle
-      // (PuppetController.puppetSpeak) and the script's screentoblack runs in
-      // the same tick, before any render: the buffer still holds the frame
-      // composited while the caption was up, with the character's lower 40 px
-      // clipped away for it (see PuppetView.composite). Fading that showed the
-      // room through a band across the character's waist for the whole ramp —
-      // subtitles-only, because with them off nothing is ever clipped. So
-      // rebuild the conversation screen from what is true NOW.
-      //
-      // Everything else keeps the stale frame deliberately, and must: a set
-      // change fades around `changeset`, so by the time the ramp runs the set
-      // underneath has already been replaced and only the buffer still holds
-      // the room being left.
-      if (this.session.puppet?.visible && !this.session.fade.snapshot) {
-        this.compositePuppetScreen();
-      }
-      const shot = this.screen.capture();
-      if (shot) return shot;
-      const f = this.current;
-      if (!f) return null;
-      const rgba = new Uint8ClampedArray(f.width * f.height * 4);
-      indexedToRGBA(f.pixels, f.width, f.height, this.palette, rgba);
-      return { rgba, width: f.width, height: f.height };
-    };
-    // return the promise so playmovie() blocks the script until the movie ends
-    // (main.ts overrides this with a fetch-first version for on-demand movies)
-    session.onPlayMovie = (name, startFrame) => this.playMovie(name, startFrame);
+    session.activeCamera = () => this.roomCamera();
+    // `hittest` and the two point predicates are the DIRECTOR's: it owns the prop
+    // step, the stage step and the fallthrough, and asks this room only for its own
+    // zone ({@link roomHitTest}). See the wiring in screen-director.ts.
     // stringwidth() measures against the same font drawTextOverlay paints with
     if (typeof document !== "undefined") {
       const mctx = document.createElement("canvas").getContext("2d");
@@ -751,63 +627,14 @@ export class SetViewer {
   }
 
   /**
-   * Keyboard event into the script chain. Boot's default keydown performs
-   * walking/turning itself via the currentscene() setter (onNavigate), so
-   * the return value covers both "a script exitcoded" and "we navigated".
+   * The key, once the screen has had its say: this room's own script chain.
+   *
+   * The chain above it — a movie, a suspended conversation, the queue, the
+   * `inputLocked` gate, a stage that handles its own keys — is
+   * {@link ScreenDirector.keyDown}'s, because every one of those is true of a
+   * game with no rooms too.
    */
-  async keyDown(keyName: string, special = false): Promise<boolean> {
-    // A live movie owns the screen and its INPUT — the same precedence clicks
-    // already get in click(), and for the same reason: the original has one
-    // event queue and the movie loop is the one popping it while a movie
-    // plays. So the key is consumed here whatever it is (ESC aborts, anything
-    // else is eaten), and the script chain never sees it. `special` is
-    // TI.EXE's 0x1fa0 marker — the key is ESC, or was held with Ctrl — which
-    // its movie key filter requires; see MoviePlayer.key.
-    if (this.movies.playing) {
-      this.movies.key(keyName, special);
-      return true;
-    }
-    // A suspended conversation owns its keys the same way, and for the same
-    // reason: in the original the puppet's own wait is the loop popping the
-    // event queue, so ESC reaches the line being spoken and not the scripts.
-    // Ahead of the inputLocked gate below, which a suspended puppetspeak trips.
-    if (this.session.puppetCtrl.key(keyName, special)) return true;
-    // A press made while a move is already running is QUEUED, not dropped (see
-    // {@link EventQueue}) — that is what makes holding a movement key walk a
-    // corridor instead of one room. It is posted coalescing, so a held key keeps
-    // exactly one press pending however long it is held, and letting go leaves at
-    // most one more move to come. Queued counts as consumed: the caller's default
-    // walk/turn must not also run, or the press would happen twice.
-    //
-    // EVERY key, not just the movement arrows, because that is where the original
-    // keeps its queue: TI.EXE's window proc posts the record and the main loop
-    // pops it, both of them above any notion of WHICH key it was — BOOTFILE 0001's
-    // `keydown` only translates the letter afterwards, and it reads the bindings,
-    // so the key that means "walk forward" is whatever the control panel last set
-    // (`keynorth`/`keywest`/`keyeast`, W/A/D by default). The port had this gate
-    // in `pressNav` instead, which only the three arrow names ever reach, so W/A/D
-    // pressed during a turn or a walk were dropped while the arrows were kept.
-    // The movie and the conversation above are deliberately ahead of it: both own
-    // their keys outright (ESC aborts a clip), so those are consumed, not deferred.
-    if (this.movingCamera) {
-      this.session.events.post({ kind: "keydown", key: keyName, special }, { coalesce: true });
-      return true;
-    }
-    if (this.inputLocked) return false;
-    // a full-screen overlay stage (TAOOT's deck map) handles keys itself — page
-    // decks with arrows/letters — instead of the world turn/walk navigation
-    const target = this.session.stageCtrl.keydownTarget();
-    if (!this.session.viewShowing && target) {
-      try {
-        await this.session.interp.runHandler(target, "keydown", [keyName], {
-          me: target.name,
-          target: "",
-        });
-      } catch (e) {
-        this.onLog(`stage keydown: ${(e as Error).message}`);
-      }
-      return true;
-    }
+  async roomKeyDown(keyName: string): Promise<boolean> {
     this.session.navHappened = false;
     const prevHooks = this.armNavHooks();
     try {
@@ -819,6 +646,11 @@ export class SetViewer {
     } finally {
       this.disarmNavHooks(prevHooks);
     }
+  }
+
+  /** the whole key gesture — {@link ScreenDirector.keyDown}, delegated */
+  keyDown(keyName: string, special = false): Promise<boolean> {
+    return this.dir.keyDown(keyName, special);
   }
 
   /**
@@ -880,93 +712,82 @@ export class SetViewer {
     else this.turn(key === "leftarrow" ? LEFTTURNS : RIGHTTURNS);
   }
 
-  /**
-   * A turn or walk is on screen, so a movement key cannot be acted on yet —
-   * exactly the condition `turn()`/`walk()` refuse on. Deliberately NOT
-   * {@link inputLocked}: that also covers movies, conversations and fades, which
-   * take their own input rather than making the player wait.
-   */
-  private get movingCamera(): boolean {
-    return this.animating || this.session.scriptBusy;
-  }
 
   // ---- movies (playback lives in movie-player.ts) --------------------------
 
   get moviePlaying(): boolean {
-    return this.movies.playing;
+    return this.dir.movies.playing;
   }
 
   /** which clip is on screen (lowercase), or null — see MoviePlayer.playingFile */
   get movieFile(): string | null {
-    return this.movies.playingFile;
+    return this.dir.movies.playingFile;
   }
 
   /** play a movie modally — resolves when the whole chain ends (MoviePlayer) */
   playMovie(fileName: string, startFrame = 0): Promise<void> {
-    return this.movies.play(fileName, startFrame);
+    return this.dir.movies.play(fileName, startFrame);
   }
 
   /** the game is being replaced under this viewer — see MoviePlayer.abandon */
   abandonMovie(): void {
-    this.movies.abandon();
+    this.dir.movies.abandon();
+  }
+
+
+
+  // -------------------------------------------------------------------------
+  // The {@link RoomLayer} contract — what the screen asks a room for.
+  //
+  // Accessors rather than public fields, because the director must not be able
+  // to write any of it: a palette here is replaced wholesale by
+  // {@link applyRoomClut} and hashed by identity, and a frame is the ring
+  // cache's to hand out.
+  // -------------------------------------------------------------------------
+
+  /** which engine wrote this room — v1 merges actors and world props into one
+   *  depth-sorted list, v4 draws them in two passes (compositeWorld) */
+  get roomVersion(): DfVersion {
+    return this.set.version;
+  }
+
+  /** is the camera mid-turn, mid-walk or mid-road? */
+  get roomAnimating(): boolean {
+    return this.animating;
+  }
+
+  /** the view frame on the screen now, or null before the first settle */
+  roomFrame(): CachedFrame | null {
+    return this.current;
+  }
+
+  /** the view's own palette, dim and gamma applied */
+  roomPalette(): Uint8ClampedArray {
+    return this.palette;
+  }
+
+  /** the palette this room's props colorize through */
+  roomPropPalette(): Uint8ClampedArray {
+    return this.propPalette;
   }
 
   /**
-   * clut(target)/mixclut(target,…) host hook. `dim` null = restore the target's
-   * normal palette (clut), a spec = darken it (mixclut). "current" resolves to
-   * the set when the 3D view is showing, else the stage flat. The set CLUT is
-   * rebuilt eagerly (set + world-prop palettes); the stage dim is applied to
-   * the flat palette at render time (flats are cached per-name, so we mustn't
-   * mutate the cache). clut("black") never reaches here — it's a no-op paired
-   * with blackscreen() in movie transitions.
-   */
-  private setClut(target: string, dim: ClutDim | null): void {
-    let t = target.toLowerCase();
-    if (t === "current") t = this.session.viewShowing ? "set" : "stage";
-    if (t === "set") {
-      this.setDim = dim;
-      this.palette = displayPalette(dim ? dimPalette(this.basePalette, dim) : this.basePalette);
-      this.propPalette = displayPalette(dim ? dimPalette(this.basePropPalette, dim) : this.basePropPalette);
-    } else if (t === "stage") {
-      this.stageDim = dim; // consumed by flatPalette() during render
-    }
-    // A clut on the surface the SCREEN IS SHOWING is a repaint of what you are
-    // looking at, and in TI.EXE that ends a transition black by construction:
-    // a fade is a palette ramp there, and the clut writes the palette. TAOOT's
-    // darkroom is the shipped case — `transtoflat("redphoto.stg")` puts up
-    // `screentoblack("current")` and ends on `mixclut("stage", …, 245)` with
-    // NO blacktoscreen, the dim palette itself being the reveal; our held
-    // overlay fade kept it pitch black, red lamp and all. A clut on a surface
-    // that is NOT showing stores palette state and reveals nothing — its CTL
-    // exit runs `clut("set")` between a stage's screentoblack and its
-    // blacktoscreen, and lifting the black there would flash the room in
-    // early (same reasoning as visualeffect's reveal, one function up).
-    const showing = this.session.viewShowing ? "set" : this.session.currentFlat !== "none" ? "stage" : "";
-    if (t === showing && !this.session.puppet?.visible) {
-      this.session.fade.queue.length = 0;
-      this.session.fade.snapshot = null;
-      this.session.fade.pendingReveal = false;
-      this.session.fade.level = 0;
-    }
-  }
-
-  /**
-   * The stage flat's effective palette: dimmed if a stage mixclut is active, then
-   * through the display gamma — that order, for the reason in screen-gamma.ts.
+   * `clut("set")` / `mixclut("set", …)`: rebuild this room's palettes.
    *
-   * Memoised on the three things it depends on, because this runs on EVERY frame
-   * that draws a flat and both steps allocate. The flat's own decoded palette is a
-   * stable object per flat, so identity is a sound key for it.
+   * The set half of what used to be the viewer's own `setClut` — the stage half,
+   * and the decision about which target a bare `clut("current")` means, are the
+   * director's, because the stage outlives any one room.
+   *
+   * Rebuilt EAGERLY (both the view's palette and the props') where the stage dim
+   * is applied at render time: a flat's palette is cached per name and must not
+   * be mutated, and a room's is this object's own.
    */
-  private flatPal: { base: Uint8ClampedArray; dim: ClutDim | null; gen: number;
-                     out: Uint8ClampedArray } | null = null;
-  private flatPalette(base: Uint8ClampedArray): Uint8ClampedArray {
-    const gen = screenGammaGeneration();
-    const hit = this.flatPal;
-    if (hit && hit.base === base && hit.dim === this.stageDim && hit.gen === gen) return hit.out;
-    const out = displayPalette(this.stageDim ? dimPalette(base, this.stageDim) : base);
-    this.flatPal = { base, dim: this.stageDim, gen, out };
-    return out;
+  applyRoomClut(dim: ClutDim | null): void {
+    this.setDim = dim;
+    this.palette = displayPalette(dim ? dimPalette(this.basePalette, dim) : this.basePalette);
+    this.propPalette = displayPalette(
+      dim ? dimPalette(this.basePropPalette, dim) : this.basePropPalette,
+    );
   }
 
   /**
@@ -1004,7 +825,7 @@ export class SetViewer {
    */
   private worldPal: { stage: Uint8ClampedArray; dim: ClutDim | null; gen: number;
                       out: Uint8ClampedArray } | null = null;
-  private worldPalette(stageBase: Uint8ClampedArray): Uint8ClampedArray {
+  bandPropPalette(stageBase: Uint8ClampedArray): Uint8ClampedArray {
     const gen = screenGammaGeneration();
     const hit = this.worldPal;
     if (hit && hit.stage === stageBase && hit.dim === this.setDim && hit.gen === gen) return hit.out;
@@ -1026,7 +847,7 @@ export class SetViewer {
    * `buildSignature` refs both palettes by identity, so a new one is a repaint,
    * and without that the picture would not change until the next camera move.
    */
-  private refreshGamma(): void {
+  refreshRoomGamma(): void {
     const gen = screenGammaGeneration();
     if (gen === this.paletteGen) return;
     this.paletteGen = gen;
@@ -1312,18 +1133,10 @@ export class SetViewer {
     );
   }
 
-  /**
-   * Engine-side busy: something visual is in flight. Checked by walk/turn —
-   * deliberately WITHOUT scriptBusy, because the engine default movement is
-   * itself invoked from inside a running script (boot's keydown).
-   */
+  /** engine-side busy: something visual is in flight — the director's, which
+   *  is where the movie and the conversation it also counts live */
   get busy(): boolean {
-    return (
-      this.animating ||
-      this.movies.playing ||
-      (this.session.puppet?.visible ?? false) || // conversation in progress
-      this.session.fading
-    );
+    return this.dir.busy;
   }
 
   /** a turn/walk camera animation is in flight */
@@ -1333,118 +1146,55 @@ export class SetViewer {
 
   /** gate for NEW user input: also waits for running/suspended scripts */
   get inputLocked(): boolean {
-    return this.busy || this.session.scriptBusy;
+    return this.dir.inputLocked;
   }
 
-  /**
-   * The regions a parked movie is waiting on — see MoviePlayer.waitingRegions.
-   * `type`, `target` and `event` come along because they say what a region DOES
-   * (1 exit · 2 jump to the named frame · 3/4 chain to the movie named `event` ·
-   * 6/7 step), and "where the exit is" is not answerable from the rectangles
-   * alone: TAOOT's wireless message stack pages through telegrams on a type-2
-   * region and only leaves on the plaque.
-   *
-   * `event` matters as much as the other two. TAOOT's Purser's desk
-   * (`maino2.mov`) parks with TWO type-4 regions that share the target "win 1" —
-   * one chains to `key.mov` and one to `purspost.mov` — and only the first leads
-   * to the car keys, because `key.mov` is where action frame 1 is declared.
-   * Without the chained movie's name the two are indistinguishable, and a caller
-   * has nothing to name the gesture by but a rectangle.
-   */
-  get movieRegions(): readonly {
-    type: number;
-    target: string;
-    event: string;
-    x0: number;
-    y0: number;
-    x1: number;
-    y1: number;
-  }[] {
-    return this.movies.waitingRegions;
+  /** the regions a parked movie is waiting on — the director's */
+  get movieRegions(): ScreenDirector["movieRegions"] {
+    return this.dir.movieRegions;
   }
 
   /** the engine has stopped and is waiting for the player to click something */
   get awaitingInput(): boolean {
-    return this.movies.waitingRegions.length > 0 || this.awaitingChoice;
+    return this.dir.awaitingInput;
   }
 
-  /**
-   * A conversation is parked on a choice. `puppetevent` suspends the PUP
-   * script until a bevel is clicked, so — like an interactive movie — the
-   * engine is "busy" and will stay that way until the player answers.
-   */
   get awaitingChoice(): boolean {
-    return !!this.session.puppet?.eventWaiter;
+    return this.dir.awaitingChoice;
   }
 
   /** the choices a parked conversation is offering, in bevel order */
   get choices(): { text: string; id: number }[] {
-    return this.awaitingChoice ? [...(this.session.puppet?.bevels ?? [])] : [];
+    return this.dir.choices;
   }
 
-  /**
-   * Where those choices are on screen. A conversation is answered by clicking
-   * a plaque, so anything driving the game — a test, a replay, a demo — needs
-   * the rectangles, not just the text.
-   */
   get choiceRects(): { x: number; y: number; w: number; h: number }[] {
-    return this.awaitingChoice ? this.puppetView.bevelRects() : [];
+    return this.dir.choiceRects;
   }
 
   /** a conversation close-up is on screen (speaking or waiting) */
   get conversing(): boolean {
-    return this.session.puppet?.visible ?? false;
+    return this.dir.conversing;
   }
 
-  /**
-   * A LINE is being spoken right now — the only state ESC skips.
-   *
-   * Exposed because ESC is no longer harmless anywhere else in a conversation:
-   * at a plaque it answers with -1 and walks the player out (#131). So anything
-   * driving the game has to aim its skip rather than hammer it, and this is the
-   * aim. `speakSkip` is set for exactly the length of the race in `playLine`.
-   */
   get speaking(): boolean {
-    return !!this.session.puppet?.speakSkip;
+    return this.dir.speaking;
   }
 
-  /**
-   * WHO is on screen — the open puppet's name (`currentpuppet()`), or "" when
-   * nobody is. The harness reports a conversation it could not get past, and
-   * "a conversation is open in gstair3" leaves you to guess which of the four
-   * people in that room it was; the name is already right here.
-   */
   get conversingWith(): string {
-    return this.conversing ? (this.session.puppet?.name ?? "") : "";
+    return this.dir.conversingWith;
   }
 
-  /**
-   * The engine is not going to move again on its own — the point at which a
-   * scripted playthrough may take its next step or sample a state trace.
-   *
-   * This is NOT `!inputLocked`. An interactive movie parked on its exit region
-   * is `busy` (it is "playing") AND `scriptBusy` (the spotmovie() that opened
-   * it is suspended), so by that measure the boot's own main menu never
-   * settles — waiting for it is a guaranteed timeout, which is exactly what a
-   * naive harness does before falling back to sleeps.
-   *
-   * It deliberately does NOT ask whether the event queue is empty, though a
-   * queued press is something the engine has accepted and not yet acted on.
-   * Making it wait for that shifts when a beat is sampled — measured, it moved
-   * four of the headless goldens (22, 24, 26 and 29) — and the oracle is not
-   * worth moving for it. `pressNav` keeps its own gesture atomic instead: what it
-   * cannot act on yet it either waits out (a fade) or posts and lets the caller's
-   * `scriptBusy` cover (a move already running).
-   */
+  /** the engine is not going to move again on its own — the director's */
   get quiescent(): boolean {
-    return this.awaitingInput || !this.inputLocked;
+    return this.dir.quiescent;
   }
 
   /**
    * the current view's depth map for occluding world sprites behind scenery.
    * scale (units/level) = zFarMax / zLevelCount from the SET's SCDO chunk.
    */
-  private occlusion(): import("@dreamfactory/engine/runtime/actors").Occlusion | null {
+  roomOcclusion(): import("@dreamfactory/engine/runtime/actors").Occlusion | null {
     const f = this.current;
     if (!f || !f.z) return null;
     const levels = this.set.zLevelCount || 24;
@@ -1515,7 +1265,7 @@ export class SetViewer {
 
   /** camera to project world sprites onto the frame shown right now — the
    *  moving motion-frame camera during a turn/walk, else the standpoint */
-  private activeCamera(): import("@dreamfactory/engine/runtime/props").WorldCamera | null {
+  roomCamera(): import("@dreamfactory/engine/runtime/props").WorldCamera | null {
     if (this.animating) {
       return this.current?.cam ? this.cameraFrom(this.current.cam) : null;
     }
@@ -1734,207 +1484,90 @@ export class SetViewer {
     return best;
   }
 
-  /**
-   * A whole click — press then release at the same point.
-   *
-   * Kept for callers that have no press/release of their own to give (the
-   * headless drivers, scripted input). Real input goes through
-   * {@link press} / {@link release}, because a conversation answers on the
-   * RELEASE and only if it lands on the row the press started on.
-   */
-  async click(x: number, y: number): Promise<void> {
-    await this.press(x, y);
-    this.release(x, y);
+  /** press and release at one point — the director's, delegated */
+  click(x: number, y: number): Promise<void> {
+    return this.dir.click(x, y);
   }
 
-  async press(x: number, y: number): Promise<void> {
-    // publish the cursor position so scripts that hit-test themselves (stage
-    // flats, draggable props) read the click via mouse()/pointx/pointy. The
-    // caller (pointerdown) has already set pointerDown, so held-button drag
-    // loops (`while stilldown()`) see the button held.
-    this.session.setPointer(x, y);
-    // let mousedown handlers drive the camera via currentscene() (the bridge's
-    // Morrow kick-out turns you to face him from the OK button); restored to a
-    // no-op on exit so navigation stays scoped to this gesture.
-    const prevHooks = this.armNavHooks();
-    try {
-      // TRACKED, because a click is a script and the engine is single-threaded.
-      // Nothing else held the engine for the length of one: `session.track` is
-      // what `scriptBusy` counts, and a click went untracked — so while a
-      // hotspot's `spotmovie` sat modal on the screen, `inflight` was 0 and the
-      // scheduler read the engine as free and dispatched loops over it.
-      //
-      // Which is a softlock in the London flat (#33). The air raid arms
-      // `makeloop("scene", "scene1", "bomb", random (100))` the moment
-      // bombpoints passes 10 — so it comes due while you are still looking at
-      // whatever you clicked to score that point — and `bomb` -> `gotoship` ->
-      // the scene's `gotowin` turns you to the window with a bare
-      //
-      //     while currentview () != "view23"
-      //         currentscene ("right")
-      //         …
-      //     endwhile
-      //
-      // A movie owns the screen, so `currentscene()` cannot turn, so that view
-      // never comes round and the loop never ends: the sirens play (the loop
-      // that started them fired) over a room that has stopped answering, with
-      // the movie's watch cursor still up. Measured from the reporter's own
-      // standpoint, Scene3/View22, and from Scene2/View14; Scene1 escapes it
-      // because its `gotowin` is already on the window and never turns.
-      //
-      // `fireDueLoops` was always going to be the thing that fixed it — it has
-      // held firing on `scriptBusy` all along, and keeps counting down while it
-      // waits, so nothing is slowed. It simply was not being told.
-      return await this.session.track(this.clickDispatch(x, y), "click");
-    } finally {
-      this.disarmNavHooks(prevHooks);
-    }
+  /** a click, through the whole priority chain — the director's, delegated */
+  press(x: number, y: number): Promise<void> {
+    return this.dir.press(x, y);
   }
 
-  /**
-   * The button came up. Only a conversation cares: it is the release, not the
-   * press, that answers, and only on the row the press began on.
-   */
+  /** arm/disarm this room's camera hooks for the length of one gesture — see
+   *  {@link RoomLayer.armRoomNav} */
+  armRoomNav(): unknown {
+    return this.armNavHooks();
+  }
+  disarmRoomNav(prev: unknown): void {
+    this.disarmNavHooks(prev as NavHooks);
+  }
+
+  /** the button came up — {@link ScreenDirector.release}, delegated */
   release(x: number, y: number): void {
-    if (!this.session.puppet?.visible) return;
-    this.session.puppetCtrl.puppetRelease(this.puppetView.bevelAt(x, y));
+    this.dir.release(x, y);
   }
 
   /**
-   * The click priority chain — who gets a click, front to back:
-   * movie → puppet bevels → overlay-stage regions → props → actors →
-   * view hotspots → the flat/stage surface itself.
+   * This room's own zone of a click: an actor, then a view hotspot, then the
+   * scene itself. True when the room took it.
+   *
+   * The rest of the chain — a movie, a conversation, the `lockevents` gate, the
+   * queue, the game's own shipped `mousedown`, props, and the stage below — is
+   * {@link ScreenDirector.clickDispatch}'s, because none of it is a room's and a
+   * game may have no rooms at all.
    */
-  private async clickDispatch(x: number, y: number): Promise<void> {
-    // Capture busy state up front: this dispatch is itself tracked (adds to
-    // inflight), and in an overlay stage the `await stageClickAt` below
-    // suspends us long enough for our own promise to register — which would
-    // otherwise make the inputLocked gate reject the prop path spuriously.
-    const busyOnEntry = this.inputLocked;
-    // A live movie owns the screen and its clicks — even over a suspended
-    // conversation (spotmovie's interactive penote.mov in the Smethells
-    // briefing): an interactive movie waits for a click to step/finish, so this
-    // must be checked before the puppet branch or the movie can never advance.
-    if (this.movies.playing) {
-      this.movies.click(x, y);
-      return;
-    }
-    // conversation clicks reach the puppet even while its script is
-    // suspended in puppetevent/puppetspeak — but only while it is shown; a
-    // hidden puppet (blackjack table between prompts) lets clicks reach the flat
-    if (this.session.puppet?.visible) {
-      // above the answer band = on the picture, which is the repeat (#3)
-      this.session.puppetCtrl.puppetPress(this.puppetView.bevelAt(x, y), y < PUPPET_ART_H);
-      return;
-    }
-    // `lockevents` freezes the world: the scripts set it when the game is doing
-    // something to you and a click must not interrupt. The BOOTFILE's own
-    // mousedown exitcodes on it before hittest, in exactly this position — after
-    // the puppet branch, so a conversation still answers while locked (TAOOT:
-    // the turbine's OK locks and then csea thanks you through a puppet). Keys
-    // have always honoured it, because the boot's keydown tests it and keys go
-    // through the chain; clicks are dispatched here instead of by that handler,
-    // so the gate has to be here too. Eight TAOOT windows rely on it, and two
-    // are places a player will click: the London air raid, where `gotowin`
-    // takes the camera off you for a second, and the turbine puzzle's OK, whose
-    // trigger loop runs with the world frozen. A save taken from the CTL panel
-    // carries lockevents=1,
-    // which is why loadGame clears it (see saveload) — otherwise the restored
-    // game would come up unclickable.
-    if (truthy(this.session.interp.globals.get("lockevents") ?? 0)) return;
-    // a full-screen overlay stage (the deck map) resolves clicks through its
-    // own click-logic regions — deck buttons, OK, red-area jumps. But when a
-    // script is already suspended in an interactive poll loop (the crank play
-    // loop, drag loops), that loop OWNS the input: it reads mouse()/button()
-    // itself and dispatches the button by name (sendtobutton). Dispatching the
-    // region here too would run the same handler twice concurrently (the trunk
-    // OK would close the flat while the play loop's cleanup still runs). The
-    // original engine is single-threaded: a modal loop pumps input, nothing
-    // interleaves — so while busy, just publish the pointer and stand back.
-    // ...and a click made while something IS running waits its turn instead of
-    // being thrown away (TI.EXE queues it — see EventQueue). This is the case
-    // `flushevents()` exists for: a poll loop reads the press itself, so the copy
-    // in the queue is a leak into whatever comes next, and the loops that end on
-    // a press discard it (all 92 call sites in the TAOOT corpus — its trunk play
-    // loop, the Enigma keys, the inventory, the CTL panel). What it buys is the
-    // ordinary case: a click during a door's animation, or during a walk, is not
-    // lost.
-    if (busyOnEntry) {
-      // ...unless a script is polling the button right now, in which case this
-      // press IS its input and queueing a second copy would replay it into
-      // whatever comes next (GameSession.pollingInput).
-      if (!this.session.pollingInput()) this.session.events.post({ kind: "mousedown", x, y });
-      return;
-    }
-    // Over an overlay flat, a PROP outranks a click region, and this order is
-    // not a guess — the BOOTFILE's own mousedown (TAOOT container 0001) is the
-    // whole rule:
-    //
-    //     thename = hittest (thepoint)
-    //     switch result ()
-    //     case "prop"    sendtoprop (thename, mousedown (thepoint))
-    //     case "button"  sendtobutton (currentflat (), thename, mousedown (…))
-    //     case "flat"    sendtoflat (thename, mousedown (thepoint))
-    //
-    // so it is also the order {@link SetViewer.hitTestAt} already answers in, and
-    // the two used to disagree: this dispatched the region first, so anything
-    // aiming by hit test was told a prop would take the click and then it didn't.
-    //
-    // Two TAOOT flats say it out loud. FUSE.SHP's `fuseokdark` script is one line
-    // — `sendtobutton(currentflat(), me, mousedown(0))` — a prop hand-forwarding
-    // its click to its own region BY NAME, which is only ever written if the prop
-    // is what the click reached; region-first made it dead code. And PATTY.STG's
-    // `"patty 1"` cannot be played at all the other way round: its `doll1` and
-    // `dial` regions between them cover the left half of the doll sprite, so the
-    // matryoshka — whose whole interaction is clicking its left half to open it
-    // (PATTY.SHP 0003) — was unclickable, which is where this was found.
-    //
-    // The regions still get everything no prop's opaque pixels are under, which
-    // is how `doll1` is reached at all: the doll is invisible until the
-    // combination is right, so the region takes the click, and once the doll is
-    // out it covers its own region. Same shape in the fusebox, where `fusedoor`
-    // closed spans x 91..346 and so covers all four fuse regions — region-first
-    // let a player flip fuses through a shut door.
-    //
-    // Below the sprites the shipped hittest asks the SET first and the STAGE only
-    // where the set's image is not — so the three zones here are the three
-    // {@link SetViewer.hitTestAt} answers in, in the same order.
-    //
-    // ...except that a game SHIPS this rule and can run it itself: the BOOTFILE
-    // `mousedown` is the six-case switch above, and everything it dispatches
-    // through is an opcode we have. Where the title provides one, it decides where
-    // a click goes; the transcription below is the fallback for a title that does
-    // not (and the reference the port was built from).
-    const dispatcher = this.session.bootScripts.find((b) => b.script.codes.has("mousedown"));
-    if (dispatcher) {
-      try {
-        await this.session.interp.runHandler(
-          dispatcher, "mousedown", [this.session.pointerPoint()],
-          { me: dispatcher.name, target: "" },
-        );
-      } catch (e) {
-        this.onLog(`script error in ${dispatcher.name}.mousedown: ${(e as Error).message}`);
-      }
-      return;
-    }
-    if (await this.clickProp(x, y)) return;
-    if (await this.clickActor(x, y)) return;
-    if (this.inSetImage(x, y)) {
-      if (await this.clickHotspot(x, y)) return;
-      await this.clickScene();
-      return;
-    }
-    // again the stage itself, not its main script (GameSession.stageOpen)
-    if (this.session.stageOpen) {
-      if (await this.session.stageCtrl.stageClickAt(x, y)) return;
-    }
-    await this.clickFlatSurface();
+  async roomClickAt(x: number, y: number): Promise<boolean> {
+    if (await this.clickActor(x, y)) return true;
+    if (!this.pointInRoomImage(x, y)) return false;
+    if (await this.clickHotspot(x, y)) return true;
+    await this.clickScene();
+    return true;
+  }
+
+  /**
+   * ...and the same zone of `hittest`: an actor in front of the view's hotspots,
+   * a hotspot as a "painting", and where there is neither, the SCENE ITSELF by
+   * name — not nothing, and not the flat behind it.
+   */
+  roomHitTest(x: number, y: number): { name: string; type: string } | null {
+    if (!this.pointInRoomImage(x, y)) return null;
+    // an actor stands in front of the view's hotspots — and ONLY inside this
+    // image, because that is the only place one is drawn. A projected sprite
+    // reaches past the bottom of it for anyone standing close to the camera,
+    // so asking the actors first and everywhere answered "actor" over the
+    // interface band: measured in TAOOT at 1558 band points in gstair2
+    // (trask, elev), 1275 in b59 (conk), 1299 in recept1c. A prop is asked
+    // first and unbounded, which is right — the band's own props ARE
+    // screen-space, and that step is the director's.
+    const cam = this.worldCamera();
+    const act = cam ? this.session.actorRuntime.actorAt(x, y, cam, this.roomOcclusion()) : null;
+    if (act) return { name: act.member.name, type: "actor" };
+    const hit = this.hitTest(x, y); // smallest-region-wins, same as clicks
+    // A hotspot is a PAINTING — countpaintings/indextopainting enumerate
+    // exactly these, and both handlers that route one send it through
+    // `sendtopainting(currentscene(), currentview(), thename, …)`, which
+    // resolves it in the view you are looking at. Labelling it "scene" sent
+    // it through `sendtoscene(thename, …)` instead, which resolves a name
+    // against the whole set: 141 hotspot names in TAOOT's tree carry more
+    // than one script (bedsit1's `cabinet` has eight, one per standpoint), so
+    // the wrong standpoint's script could answer, and the scene script — where
+    // twelve of them keep their handler — was skipped entirely.
+    if (hit) return { name: hit.obj.identifier, type: "painting" };
+    return { name: this.scene.sceneName.toLowerCase(), type: "scene" };
   }
 
   /** is the point inside the image the SET draws? In-game the room occupies the
    *  top 264 rows and the interface band below belongs to the stage — which is
    *  what makes a band click a flat click and a room click neither. */
-  private inSetImage(x: number, y: number): boolean {
+  /**
+   * Is the point inside the image this room draws?
+   *
+   * In-game the room occupies the top 264 rows and the interface band below
+   * belongs to the stage — which is what makes a band click a flat click and a
+   * room click neither.
+   */
+  pointInRoomImage(x: number, y: number): boolean {
     return (
       this.session.viewShowing && !!this.current &&
       x >= 0 && y >= 0 && x < this.current.width && y < this.current.height
@@ -1942,70 +1575,12 @@ export class SetViewer {
   }
 
   /** props (UI band, inventory items) sit in front of everything */
-  private async clickProp(x: number, y: number): Promise<boolean> {
-    const prop = this.propAtPointer(x, y);
-    if (!prop) return false;
-    const name = prop.group.name;
-    // A prop's mousedown may live on its own script (TAOOT: the trunk's
-    // gramdrawer) OR only on the owning shop's main, which dispatches by
-    // `switch target` for a whole bank of props (the Enigma switch/wires/dials
-    // share one handler). Try the prop script first, then fall through to the
-    // shop main, with target = the prop name so that dispatcher matches.
-    //
-    // The chain STOPS at the shop, and TAOOT's fusebox is the proof rather than
-    // the counter-example it looks like. Turning a fuse off lives in FUSE.STG's
-    // main and turning it on in FUSE.SHP's, for the same four props — which reads like
-    // one click having to reach both. It isn't: the two are reached by the two
-    // DIFFERENT dispatch paths above, and which one a click takes is decided by
-    // the sprite currently showing.
-    //
-    //   fuse14 showing "light"  the 13x12 lamp at 280..293, 70..82 — MISSES the
-    //                           region (264..295, 31..56), so hittest says
-    //                           "button" and FUSE.STG's main turns it off
-    //   fuse14 showing "off"    the 128x57 switch body at 168..296, 11..68 —
-    //                           covers it, so it is a prop and FUSE.SHP's main
-    //                           turns it on
-    //
-    // A chain that ran the flat/stage main after the shop would break TAOOT's
-    // inventory instead: flat "inven 1"'s own mousedown is the BACKGROUND
-    // handler (`handitem = ""`), which the boot reaches only via `case "flat"`,
-    // so folding it into a prop's chain deselects the item you just picked up.
-    const own = this.session.propScripts.get(name.toLowerCase());
-    const shopMain = this.session.shopMain(prop.shop.name);
-    const chain = [own, shopMain].filter(
-      (s): s is NonNullable<typeof s> => !!s && s.script.codes.has("mousedown"),
-    );
-    if (!chain.length) return false;
-    // mousedown's ARGUMENT is the click point, not the prop name — the
-    // original boot routes `sendtoprop(name, mousedown(thepoint))`, so a
-    // handler like TAOOT's bomb switches' `pointinbutton(currentflat(), "3B",
-    // arg)` can hit-test the sub-region under the cursor. The prop NAME is
-    // carried in the me/target context (the shop-main dispatcher keys on
-    // target). Passing the name as the arg silently broke point-reading
-    // props (every switch click was a no-op at point 0,0).
-    const point = this.session.pointerPoint();
-    this.session.interp.eventConsumed = false;
-    for (const inst of chain) {
-      try {
-        const res = await this.session.interp.runHandler(inst, "mousedown", [point], {
-          me: name,
-          target: name,
-        });
-        if (this.session.interp.eventConsumed || (res.handled && !res.passed)) break;
-      } catch (e) {
-        this.onLog(`script error in ${name}.mousedown: ${(e as Error).message}`);
-        break;
-      }
-    }
-    this.onLog(`click prop ${name}`);
-    return true;
-  }
 
   /** actors stand in the world between the props and the view hotspots */
   private async clickActor(x: number, y: number): Promise<boolean> {
     if (!this.session.viewShowing || !this.current || y >= this.current.height) return false;
     const cam = this.worldCamera();
-    const act = cam ? this.session.actorRuntime.actorAt(x, y, cam, this.occlusion()) : null;
+    const act = cam ? this.session.actorRuntime.actorAt(x, y, cam, this.roomOcclusion()) : null;
     if (!act) return false;
     const inst = this.session.castScripts.get(act.member.name);
     if (!inst?.script.codes.has("mousedown")) return false;
@@ -2073,135 +1648,38 @@ export class SetViewer {
 
   /** the front-most prop sprite under a screen position — world-projected
    *  while the set is visible, screen-space over an overlay flat */
-  propUnder(x: number, y: number): ReturnType<typeof this.session.propRuntime.propAt> {
-    return this.propAtPointer(x, y);
-  }
-
-  /**
-   * The prop a click at this point would actually dispatch to — world camera,
-   * occlusion and opaque-pixel mask included. Public as {@link propUnder}
-   * because anything looking for something to click has to ask the same
-   * question the click will: a bare propRuntime.propAt() finds a prop over its
-   * transparent pixels too, and clicking there dispatches nothing.
-   */
-  private propAtPointer(x: number, y: number): ReturnType<typeof this.session.propRuntime.propAt> {
-    return this.session.propRuntime.propAt(
-      x, y, this.session.viewShowing ? this.worldCamera() : null, this.session.viewShowing,
-      this.session.viewShowing ? this.occlusion() : null,
-    );
+  /** the front-most prop sprite under a screen position — the director's, and
+   *  its own, because a prop is screen-space unless a room is showing */
+  propUnder(x: number, y: number): ReturnType<GameSession["propRuntime"]["propAt"]> {
+    return this.dir.propUnder(x, y);
   }
 
   // ---- puppet mode (rendering + bevel hit-testing live in puppet-view.ts) --
 
   /** decode (cached per pup) a layer sprite of the active puppet */
+  /** decode (cached per pup) a layer sprite of the active puppet */
   puppetLayerFrame(loc: number): ShpFrame | null {
-    return this.puppetView.layerFrame(loc);
+    return this.dir.puppetLayerFrame(loc);
   }
 
   /** the active overlay flat's named click-region under a point, or null */
-  private flatRegionAt(x: number, y: number): { name: string } | null {
-    return (
-      this.session
-        .stageCtrl.currentFlatRegions()
-        .find((rg) => x >= rg.left && x <= rg.right && y >= rg.top && y <= rg.bottom) ?? null
-    );
+
+  /** the cursor under the pointer — {@link ScreenDirector.hover}, delegated */
+  hover(x: number, y: number): Promise<string> {
+    return this.dir.hover(x, y);
   }
 
   /**
-   * The DreamFactory cursor name for this position ("" = the plain arrow).
+   * Route a handler at one of this room's own hotspots.
    *
-   * This is the cursor half of BOOTFILE 0001's `idle()`, and it asks the GAME
-   * rather than deciding: `hittest` the point, then send `setcursor` to whatever
-   * it answered, exactly as the shipped handler does —
-   *
-   *     thepoint = mouse ()
-   *     thename = hittest (thepoint)
-   *     switch result ()
-   *     case "actor"     sendtoactor (thename, setcursor (thepoint))
-   *     case "prop"      sendtoprop (thename, setcursor (thepoint))
-   *     case "button"    sendtobutton (currentflat (), thename, setcursor (…))
-   *     case "scene"     sendtoscene (thename, setcursor (thepoint))
-   *     case "painting"  sendtopainting (currentscene (), currentview (), …)
-   *     case "flat"      sendtoflat (thename, setcursor (thepoint))
-   *     case "none"
-   *     endswitch
-   *
-   * so the cursor and the click now answer from ONE hit test, and neither can
-   * promise what the other won't do.
-   *
-   * What this stopped inventing, and it was inventing plenty. A prop used to be
-   * `"touch"` whatever it was and wherever it was; an actor was `"talk"`; a flat
-   * region was `"touch"` for having a region at all. None of those names come
-   * from the game: the whole TAOOT corpus emits five — `touch` (809), `arrow`
-   * (75), `hand` (36), `watch` (18) and `fist` (2) — and the hand over a takeable
-   * thing is `inven.shp`'s shop main, which gates it:
-   *
-   *     if propview (target) = "small"
-   *         if realdist (target) < hotdist ()   cursor ("touch")   exitcode
-   *         endif
-   *         passcode
-   *     endif
-   *     cursor ("touch")
-   *
-   * The story cast's main (gang.cst) says the same for people. So an object across the room is
-   * NOT a hand in the original, and now isn't here either — which needs both
-   * halves of this to be true: `target` is the addressee (so `realdist(target)`
-   * asks about the thing under the pointer), and a `passcode` climbs the
-   * containment chain (so the shop main is reached at all).
-   *
-   * Still transcribed, deliberately: the HEARTBEAT. The shipped `idle()` also
-   * calls `forceupdate()` and its clock handler every pass and only does the
-   * cursor every 4th, and running it whole is what the port cannot do yet —
-   * headless `forceupdate` self-advances the session clock 50 ms, so an `idle`
-   * on the clock service would feed its own elapsed time and race. The clock
-   * half is already the game's (`Scheduler.serviceGameClock` dispatches the
-   * boot's calctime); the cadence is ours, and this is called from pointermove
-   * instead.
+   * `sendtopainting` is answered in the scene and view you are LOOKING at, so
+   * only the room can resolve it — which is why the director asks rather than
+   * reading a scene name off the session (that one says "moving" mid-turn).
    */
-  async hover(x: number, y: number): Promise<string> {
-    this.session.setPointer(x, y); // keep mouse() current as the cursor moves
-    // Screen ownership first, and it is the port's own: a movie or a shown puppet
-    // is not something `hittest` can answer for (the original's idle doesn't run
-    // while either holds the screen). Same order as clickDispatch — a live movie
-    // outranks a suspended conversation.
-    if (this.movies.playing) return this.movies.clickableAt(x, y) ? "touch" : "";
-    if (this.session.puppet?.visible) {
-      return this.puppetView.bevelAt(x, y) >= 0 ? "touch" : "";
-    }
-    // frozen world: idle() answers `cursor("watch")` while lockevents is set
-    // instead of asking anything what it would like to be, and that is the whole
-    // feedback a player gets that the game is doing something rather than
-    // ignoring them. Same position as the gate in clickDispatch, and for the same
-    // reason: the puppet above it still answers.
-    if (truthy(this.session.interp.globals.get("lockevents") ?? 0)) return "watch";
-    const hit = this.session.hitTestAt(x, y);
-    const point = this.session.pointerPoint();
-    const caller = this.session.boot?.name ?? "boot script";
-    this.session.cursorName = "";
-    try {
-      switch (hit.type) {
-        case "actor":
-        case "prop":
-        case "scene":
-        case "flat":
-          await this.session.sendEvent(`sendto${hit.type}`, hit.name, "setcursor", [point], caller);
-          break;
-        case "button":
-          await this.session.stageCtrl.sendToButton(
-            this.session.currentFlat, hit.name, "setcursor", [point], caller,
-          );
-          break;
-        case "painting":
-          await this.session.sendToPainting(
-            this.scene.sceneName, this.scene.views[this.viewIdx].viewName,
-            hit.name, "setcursor", [point],
-          );
-          break;
-      }
-    } catch {
-      /* a cursor is cosmetic: a handler that throws leaves the plain arrow */
-    }
-    return this.session.cursorName;
+  async sendRoomPainting(name: string, handler: string, point: Value): Promise<void> {
+    await this.session.sendToPainting(
+      this.scene.sceneName, this.scene.views[this.viewIdx].viewName, name, handler, [point],
+    );
   }
 
   private startAnimation(frames: CachedFrame[], pace: number, done: () => void): void {
@@ -2216,45 +1694,32 @@ export class SetViewer {
     this.lastTick = 0;
   }
 
-  /** advance animation; returns the frame to draw this tick */
+  /**
+   * One frame of the whole game — the director's, delegated.
+   *
+   * This method WAS the frame loop, and that was the inversion: the session's own
+   * per-frame service (the fade, the wipe, the delay clock, the prop animation,
+   * the frame loops) ran inside the ROOM's tick, so a game with no room got none
+   * of it. {@link ScreenDirector.tick} runs it and then calls
+   * {@link advanceRoom} below for the part that really is a room's.
+   *
+   * Kept as a delegation, with the same signature and the same return, because a
+   * hundred test call sites and two frame loops read the frame back out of it.
+   */
   tick(now: number): CachedFrame | null {
-    // Real time in, game time out: while a host modal owns the screen the
-    // reading stops moving and every delta below it is zero, which is the
-    // original's own state under a blocking file dialog (GameSession.gameTime).
-    now = this.session.gameTime(now);
-    // A prop animates one frame per SERVICE PASS, not at the camera's rate.
-    //
-    // The scripts say so. A prop animation is played by putting the prop in the
-    // moving state, spending a fixed budget of passes on it and then forcing the
-    // resting state — BOIL.SHP's coal chute (its `open`):
-    //
-    //     propview (me, "opening")
-    //     for count = 1 to 11
-    //         forceupdate ()
-    //     endfor
-    //     propview (me, "idleopen")
-    //
-    // and `opening` holds 12 frames. Censused over gamefiles/en, 21 of the 33
-    // sites shaped like that budget exactly as many passes as the state has
-    // frames (or one fewer); the rest budget an exact half or third of the
-    // container's frames, which is a state holding one animation per degree, and
-    // one that budgets more has slack. Nothing budgets the 2n+1 that a 90 ms
-    // frame against a 50 ms pass would cost — at that rate the chute got through
-    // 6 of its 12 frames before the script slammed it to `idleopen`, so the door
-    // crawled and then jumped, which is #15 in the reporter's words: "move
-    // slowly, then at about 60% of the animation jumps to the end". A prop has
-    // always animated a frame per pass here; the CAMERA joined it in {@link
-    // FRAME_MS}.
-    this.refreshGamma();
-    this.session.propRuntime.tick(now, ENGINE_STEP_MS);
-    this.session.tickFade(now);
-    this.session.tickWipe(now);
-    this.session.tickTime(now); // delay() clock + coarse loop/cricket service
-    this.session.scheduler.serviceFrameLoops(); // smooth per-frame loops (sky drift, fence idle)
-    if (this.movies.playing) {
-      // a self-paced movie may finish mid-tick; fall back to the settled view
-      return this.movies.tick(now) ?? this.current;
-    }
+    return this.dir.tick(now);
+  }
+
+  /**
+   * The room's own frame: advance a turn or a walk, pump one queued gesture,
+   * warm the ring next door. Called by the director once the session-wide
+   * service is done, and never while a movie owns the screen.
+   *
+   * A prop animates one frame per SERVICE PASS, not at the camera's rate — that
+   * census is in {@link ScreenDirector.tick}, which is where the prop tick now
+   * runs.
+   */
+  advanceRoom(now: number): CachedFrame | null {
     if (this.animation) {
       if (!this.lastTick) this.lastTick = now;
       // ONE frame a tick, normally — and more than one only when the pace asks
@@ -2298,7 +1763,7 @@ export class SetViewer {
     // did while it was, which is where the original's main loop pops its queue.
     // One per tick — the event it dispatches may start another animation, and
     // the next tick will find that and wait again.
-    if (!this.movingCamera && this.session.events.length) this.drainOneEvent();
+    if (!this.dir.movingCamera && this.session.events.length) this.drainOneEvent();
     // standing still: decode one ring the player could reach from here, so the
     // move they make next doesn't wait for it (see warmNeighbourRing)
     if (!this.session.scriptBusy) this.warmNeighbourRing();
@@ -2325,490 +1790,45 @@ export class SetViewer {
   }
 
   /**
-   * Hash everything {@link paint} is about to read. Over-hashing costs a
-   * redraw nobody needed; under-hashing costs one that WAS needed, so where
-   * the two are in tension this leans on the first — the camera, the palettes
-   * and the hotspot overlay go in whether or not the branch about to run will
-   * look at them.
+   * The room's half of the screen's draw signature — what
+   * {@link ScreenDirector.paint} is about to read from THIS layer.
    *
-   * The canvas dimensions are in here because assigning `canvas.width` clears
-   * the backing store: a resize is a repaint even when the game has not moved.
+   * Over-hashing costs a redraw nobody needed; under-hashing costs one that WAS
+   * needed, so where the two are in tension this leans on the first: the
+   * palettes and the hotspot overlay go in whether or not the branch about to
+   * run will look at them.
    */
-  private buildSignature(ctx: CanvasRenderingContext2D): DrawSignature {
-    const s = this.session;
-    const sig = this.sig.reset();
-    sig.num(ctx.canvas.width).num(ctx.canvas.height);
-    // which of paint()'s five branches, and the source each of them blits
-    sig.bool(!!s.puppet?.visible).bool(s.viewShowing);
-    sig.ref(s.fade.snapshot).num(s.fade.level);
-    sig.str(this.movies.playingFile ?? "").num(this.movies.framePos);
-    sig.ref(this.current).ref(s.stageCtrl.flatImage());
-    // CLUTs are replaced wholesale by setClut, never written through, so which
-    // array it is IS which colours they are; stageDim is applied at paint time.
-    // worldPalette's composition needs nothing more here — its other input is
-    // the flat, hashed by identity a line above.
-    sig.ref(this.palette).ref(this.propPalette).ref(this.stageDim);
-    // the world sprites, and the camera they are projected through
-    const cam = this.activeCamera();
-    if (!cam) sig.bool(false);
-    else {
-      sig.num(cam.x).num(cam.y).num(cam.z).num(cam.deg);
-      sig.num(cam.f).num(cam.cx).num(cam.cy).num(cam.clipW).num(cam.clipH);
-    }
+  roomSignature(sig: DrawSignature): void {
+    // CLUTs are replaced wholesale by applyRoomClut, never written through, so
+    // which array it is IS which colours they are.
+    sig.ref(this.palette).ref(this.propPalette);
     sig.bool(this.animating);
-    s.actorRuntime.drawSignature(sig);
-    s.propRuntime.drawSignature(sig);
-    this.puppetView.drawSignature(sig);
-    // the canvas-drawn overlays that sit on top of the blit
-    sig.num(s.textOverlay.length);
-    for (const e of s.textOverlay) sig.str(e.text).num(e.x).num(e.y).num(e.size).num(e.color);
     sig.bool(this.showHotspots).num(this.sceneIdx).num(this.viewIdx);
-    // a reveal moves the seam every pass while everything behind it stands still,
-    // so the step has to be in here or the frame is skipped as already-drawn
-    sig.num(s.wipe.step).str(s.wipe.dir);
-    return sig;
   }
 
-  /**
-   * Present the current state of the world — redrawing it only when it is not
-   * already on the screen.
-   *
-   * A composite is ~7 ms on a slow machine (palette-expand the flat, expand the
-   * view over it, walk every prop and actor, upload 768 KB), and the frame loop
-   * asks for one 60 times a second. An adventure game standing in a room is
-   * identical frame to frame: measured at the bedsit standpoint, 0 of 173
-   * consecutive composites differed by a single byte, for 60% of a core. So the
-   * work is not made faster here, it is not done — {@link buildSignature} hashes
-   * what the picture is drawn FROM, and an unchanged hash means the canvas
-   * already shows it.
-   *
-   * The hash is the ONLY test. `scriptBusy` looks like the obvious safety
-   * override — "a script is running, so the world is moving, so just paint" —
-   * and it is worthless here: it means a script has not RETURNED, not that it
-   * is doing anything. A script blocked in `playmovie` on an interactive clip
-   * parked waiting for a click holds `inflight` at 1 for as long as the player
-   * looks at it, which is precisely one of the still screens this exists to
-   * stop redrawing. Measured on the boot standpoint, that override alone kept
-   * 100% of frames compositing while every part of the signature sat perfectly
-   * still.
-   *
-   * The presenter's REPAINT_EVERY is the one net: an unconditional composite
-   * once a second. Hashing live fields cannot be forgotten at a write site the
-   * way a dirty flag can, but it CAN be incomplete — a field added to a prop
-   * later, a collision across both halves. This bounds either to a second of
-   * staleness rather than a screen frozen until the player does something, and
-   * costs ~1% of the 60% it insures. taoot/tests/browser/repaint.ts is the check
-   * that it is never actually needed: it recomposites every skipped frame and
-   * asserts the pixels match what was left on the canvas.
-   */
+  /** present the screen — the director's work. Delegated because two frame
+   *  loops and a hundred test call sites say `viewer.render(ctx)`. */
   render(ctx: CanvasRenderingContext2D): void {
-    // Nothing repaints while the screen is HELD — see screenOwner. Returning
-    // before shouldPaint deliberately leaves the cached signature alone, so the
-    // first frame after the hold still differs from the last one painted and
-    // composites; skipping through shouldPaint instead would cache the held
-    // picture's signature and could strand it on the canvas.
-    if (this.screenOwner() === "held") return;
-    if (this.screen.shouldPaint(this.buildSignature(ctx))) this.paint(ctx);
+    this.dir.render(ctx);
   }
 
-  /**
-   * Who owns the screen right now, front to back — the painter's priority, kept
-   * in one place because it is the same rule the INPUT path keeps (clickDispatch:
-   * a live movie beats even a suspended conversation) and the two had drifted.
-   *
-   * A movie owns the screen outright. It carries its own palette and its own
-   * pixels, and a fade is not a layer over it — so a fade-out the script left
-   * standing must not survive into it. TAOOT's demo Smethells briefing is where
-   * that showed: `screentoblack("puppet", 15); puppetvisible(false);
-   * playmovie("penote.mov")` — no `blackscreen()` between, so the held snapshot
-   * kept the screen and penote.mov played, clickable, behind a black rectangle.
-   * The full game has the same shape twice: the darkroom's
-   * `playmovie("photobox.mov")` (PHOTO.STG 0012) and the wireless portrait
-   * (WIRELESS.SHP 0120).
-   *
-   * **held** is the frame after a movie, and it is the one state in which the
-   * screen belongs to nobody. `playmovie` in TI.EXE returns having freed its
-   * buffers and restored nothing (`0x448b00`'s exit path, `0x44969e`–
-   * `0x4496c7`): the clip's last frame is simply still in the framebuffer, and
-   * the palette is still the clip's, until a script says otherwise. Ours handed
-   * the screen straight back to `world` on the frame the movie ended, and with
-   * the script resuming a rAF later that is one fully-lit frame of the room
-   * between a movie and whatever the script does next — #209, measured at
-   * exactly one 16 ms frame of the un-bombed apartment between `bedex.mov` and
-   * `ocredits.mov`. `fade.pendingReveal` already means precisely "a movie ended
-   * and nothing has said what the screen should look like", so it is also the
-   * answer to "is the screen still the movie's": hold until the script draws
-   * (`blackscreen`, `clut`, either fade — all of which clear it) or falls quiet
-   * (tickFade). The boot is the long case and it is the original's: `boot()`
-   * plays `playmode.mov` and then loads the cast, four shops and a stage before
-   * `advanceday` reaches `datebed.mov`, with no screen statement in between, so
-   * the menu's last frame is what stays up through the load.
-   */
+  /** who owns the screen: {@link ScreenDirector.screenOwner}, delegated because
+   *  the regression suite asks the viewer */
   screenOwner(): "movie" | "puppet" | "faded" | "world" | "held" {
-    if (this.movies.frame) return "movie";
-    if (this.session.fade.pendingReveal) return "held";
-    // a conversation close-up replaces the world display, but only while shown:
-    // puppetvisible(false) keeps the puppet loaded and reveals the flat behind it
-    // (the blackjack table between "play again?" prompts)
-    if (this.session.puppet?.visible && !this.session.fade.snapshot) return "puppet";
-    // a frozen pre-transition frame while fading out — the set may already have
-    // changed underneath (gotospecial fades around changeset)
-    if (this.session.fade.snapshot) return "faded";
-    return "world";
+    return this.dir.screenOwner();
   }
 
-  /**
-   * Build the conversation screen into the framebuffer: the stage flat and its
-   * persistent props (TAOOT: the lifesaver, the watch, the held item) first,
-   * exactly as the flat path does, then the close-up over the view region above
-   * it. The answer rows are text drawn ON the interface band, so the band has to
-   * be under them; the original gets that for free, because its bevel redraw
-   * restores that strip of screen from a stored copy of the background before
-   * every DrawString.
-   *
-   * Split out of {@link paint} because {@link GameSession.captureFrame} needs it
-   * too — see the note there on why a fade-out over a conversation cannot use
-   * the frame that happens to be sitting in the buffer.
-   */
-  private compositePuppetScreen(): void {
-    this.screen.clearFrame();
-    const flat = this.session.stageCtrl.flatImage();
-    if (flat) {
-      const flatPal = this.flatPalette(flat.palette);
-      const fbuf = this.screen.scratchFor(flat.width * flat.height * 4);
-      indexedToRGBA(flat.pixels, flat.width, flat.height, flatPal, fbuf);
-      this.screen.blitTop(fbuf, flat.width, flat.height);
-      this.compositeWorld(this.screen.frame, SCREEN_W, SCREEN_H, flatPal, null);
-    }
-    const cur = this.current;
-    this.puppetView.composite(
-      this.screen.frame,
-      cur ? { pixels: cur.pixels, width: cur.width, height: cur.height, palette: this.palette } : null,
-    );
-    this.screen.frameValid = true;
+
+
+
+  /** build the ordinary screen into the framebuffer — the director's work, and
+   *  delegated because the regression suite reaches for it through the viewer */
+  paintWorldInto(): "flat" | "set" | null {
+    return this.dir.paintWorldInto();
   }
 
-  private paint(ctx: CanvasRenderingContext2D): void {
-    const owner = this.screenOwner();
-    if (owner === "puppet") {
-      this.compositePuppetScreen();
-      this.screen.blit(ctx);
-      // the subtitle band and choice bevels sit UNDER the fade, as they did
-      // when PuppetView drew them itself and the viewer faded afterwards
-      this.puppetView.drawOverlay(ctx);
-      this.screen.applyFade(ctx, this.session.fade.level);
-      return;
-    }
-    const movieFrame = owner === "movie" ? this.movies.frame : null;
-    if (movieFrame) {
-      const f = movieFrame;
-      // A clip is a RECTANGLE PAINTED OVER THE SCREEN, not a screen of its own.
-      // WHERE it sits is the segment's own header field (MovSegment.originX/Y),
-      // and the engine writes only those pixels — so whatever the screen was
-      // showing is still there around it.
-      //
-      // Most clips make the distinction moot by covering the screen: 302 of
-      // TAOOT's 327 segments are the full 512×384. The 25 that are not divide
-      // in two, and both need this. Its in-room transitions — the lifts, the
-      // smokestack climbs, `hallf3c` — are 512×264 at (0,0), which is exactly
-      // the room-view region, and they are played straight out of a keydown
-      // with nothing hiding the interface (`playmovie("stackup.mov");
-      // changeset(...)`), so the band belongs UNDER them and clearing the
-      // screen first blacked it out for the length of the ride. The demo's
-      // cutscenes are 512×264 at (0,60), centred, and play behind a fade the
-      // script has already raised — so what belongs in their letterbox bands
-      // is that black, which is now the fade's doing rather than a clear's.
-      const covers =
-        f.originX <= 0 && f.originY <= 0 && f.width >= SCREEN_W && f.height >= SCREEN_H;
-      // ...so only a clip that leaves screen showing pays for the screen under
-      // it (short-circuit: the full-screen 302 never build one), and where
-      // there is no screen to show, black — which is what the clear used to do
-      // for every clip, wanted or not.
-      if (covers || !this.paintWorldInto()) this.screen.clearFrame();
-      const buf = this.screen.scratchFor(f.width * f.height * 4);
-      indexedToRGBA(f.pixels, f.width, f.height, f.palette, buf);
-      this.screen.blitAt(buf, f.width, f.height, f.originX, f.originY);
-      this.screen.frameValid = true;
-      this.screen.blit(ctx);
-      // A live movie presents its own pixels at full brightness — it is NOT
-      // dimmed by the persistent fade level, and a preceding blackscreen() is a
-      // one-shot clear it draws over. Do NOT fade the clip, or an intro movie
-      // after blackscreen renders black. Around it the fade still applies,
-      // which is what blacks a letterboxed cutscene's bands: in TI.EXE the
-      // fade is the PALETTE, and a movie carries its own, so the clip is bright
-      // while everything drawn in the faded palette is not.
-      if (!covers) {
-        this.screen.applyFadeExcept(ctx, this.session.fade.level, {
-          x: f.originX, y: f.originY, w: f.width, h: f.height,
-        });
-      }
-      return;
-    }
-    // the fade-out's frozen frame, which the movie above outranks: a script that
-    // fades out and then plays a clip means the clip to be seen, and when the clip
-    // ends the screen is this black again for the blacktoscreen that follows
-    const snap = owner === "faded" ? this.session.fade.snapshot : null;
-    if (snap) {
-      this.screen.clearFrame();
-      this.screen.blitTop(snap.rgba, snap.width, snap.height);
-      this.screen.frameValid = true;
-      this.screen.blit(ctx);
-      this.screen.applyFade(ctx, this.session.fade.level);
-      return;
-    }
-    const drew = this.paintWorldInto();
-    if (!drew) return; // nothing to draw: leave the canvas as it stands
-    this.coverWithWipe();
-    this.screen.frameValid = true;
-    this.screen.blit(ctx);
-    this.screen.drawTextOverlay(ctx, this.session.textOverlay);
-    this.screen.applyFade(ctx, this.session.fade.level);
-    // over a flat the hotspots belong to the room, so only when it is showing;
-    // on the bare room there is nothing else they could belong to
-    if (drew === "set" || this.session.viewShowing) this.drawHotspots(ctx);
-  }
 
-  /**
-   * A reveal in progress: put the part of the OLD screen back that the new one
-   * has not uncovered yet.
-   *
-   * The new screen is whatever was just painted, so the wipe is subtractive —
-   * only the leaving screen has to be held (`session.wipe.from`), and the arriving
-   * one needs no special handling at all. `wipeleft` uncovers from the right edge
-   * leftwards and `wiperight` from the left edge rightwards, which is the reading
-   * of the two names I could not settle from the disassembly: the effect ids are
-   * in TI.EXE's vocabulary (24012 wiperight, 24013 wipeleft) but not compared as
-   * plain immediates anywhere, and the whole corpus asks for only these two. If a
-   * side-by-side against the original shows them the other way round, the two
-   * branches here swap and nothing else moves.
-   */
-  private coverWithWipe(): void {
-    const w = this.session.wipe;
-    if (!this.session.wiping || !w.from) return;
-    const { rgba, width, height } = w.from;
-    // how much of the old screen is still standing, in columns
-    const kept = Math.max(0, Math.min(width, Math.round((width * (w.steps - w.step)) / w.steps)));
-    if (kept <= 0) return;
-    const put = (srcX: number, cols: number): void => {
-      if (cols <= 0) return;
-      const strip = this.screen.scratchFor(cols * height * 4);
-      for (let y = 0; y < height; y++) {
-        const from = (y * width + srcX) * 4;
-        strip.set(rgba.subarray(from, from + cols * 4), y * cols * 4);
-      }
-      this.screen.blitAt(strip, cols, height, srcX, 0);
-    };
-    /**
-     * The BARN DOORS are the same subtraction split at the centre. `open`
-     * reveals the new screen middle-outwards, so what still stands of the old
-     * one is its two edges — half the kept columns against each side. `close`
-     * reveals edges-inwards, so the old screen's remainder is a centre band.
-     * Dust's map and inventory arrive through these (visualeffect
-     * barndooropen/barndoorclose, NEW.FLT).
-     */
-    if (w.dir === "open") {
-      const half = kept >> 1;
-      put(0, half);
-      put(width - (kept - half), kept - half);
-      return;
-    }
-    if (w.dir === "close") {
-      put((width - kept) >> 1, kept);
-      return;
-    }
-    put(w.dir === "left" ? 0 : width - kept, kept);
-  }
-
-  /**
-   * Build the ordinary screen into the framebuffer — the stage flat with the
-   * room composited into its top region and the sprites over both ("flat"), or
-   * the bare room when no flat is up ("set"). Null when there is nothing to
-   * draw at all, and then the framebuffer is left alone: a caller that has
-   * something of its own to put up decides what the rest of the screen is.
-   *
-   * Its own method because a MOVIE needs it too. A clip is a rectangle painted
-   * over the screen, not a screen of its own (see {@link paint}).
-   */
-  /**
-   * Is this flat's view region a MATTE — one flat colour, a hole the room view
-   * is composited into — rather than artwork of its own? See the note in
-   * {@link paintWorldInto} for what it decides and why the test is on the
-   * pixels rather than on engine state.
-   *
-   * Memoised on the pixel array's identity: a flat is decoded once and kept, so
-   * identity is a sound key, and the scan bails on the first differing pixel —
-   * which for a real flat is within the first row or two.
-   */
-  private matteSeen: { pixels: Uint8Array; matte: boolean } | null = null;
-
-  private flatIsMatte(flat: { pixels: Uint8Array; width: number; height: number }): boolean {
-    if (this.matteSeen?.pixels === flat.pixels) return this.matteSeen.matte;
-    // PUPPET_ART_H is the interface-band split (SCREEN_H - BAND_H = 264) — the
-    // rows a room view occupies, which is exactly the region a matte fills.
-    let matte = flat.width >= SCREEN_W && flat.height >= PUPPET_ART_H;
-    if (matte) {
-      const first = flat.pixels[0];
-      scan: for (let y = 0; y < PUPPET_ART_H; y++) {
-        const row = y * flat.width;
-        for (let x = 0; x < SCREEN_W; x++) {
-          if (flat.pixels[row + x] !== first) {
-            matte = false;
-            break scan;
-          }
-        }
-      }
-    }
-    this.matteSeen = { pixels: flat.pixels, matte };
-    return matte;
-  }
-
-  private paintWorldInto(): "flat" | "set" | null {
-    // stage flat active: full 512×384 screen — flat image as background,
-    // the set view composited into the top region, props over everything
-    const flat = this.session.stageCtrl.flatImage();
-    if (flat) {
-      // A MATTE must never be shown bare. main.stg fills its whole 512x264 view
-      // region with one palette index (253, which in that flat's own palette is
-      // (246,242,219) — a cream): it is a hole for the room view to be
-      // composited into, not a picture. Whenever there is no view to cover it,
-      // painting it is the "white flash" of #146 — measured off the report's
-      // video at (247,241,222), and reproduced walking gstair3 Scene50/View53
-      // into the next set, where 109 of 120 sampled frames were matte.
-      //
-      // Two different windows uncover it, which is why fixing one did not fix
-      // the bug. `changeset` runs `closesetfile` FIRST — that sets
-      // currentSetName to "none", so viewShowing goes false while the departing
-      // room's frame is still in hand and the blit below is skipped — and then
-      // the host's load runs before the arriving viewer exists. The rule here
-      // covers both, and anything else that leaves the hole uncovered.
-      //
-      // TI.EXE never shows it, and not because it is faster: `screentoblack` is
-      // a palette ramp (0x435b90; see the note in captureFrame), so the
-      // departing room's PIXELS stay in the framebuffer until the arriving
-      // room's overwrite them. The matte is only ever uncovered for the instant
-      // between the flat being blitted and the view landing on top of it.
-      // Holding the screen is that behaviour: returning null leaves the canvas
-      // exactly as it stands.
-      //
-      // Testing the FLAT rather than the engine's state is what makes this
-      // safe. `set === "none"` would also catch the endgame, where advanceday()
-      // closes the set and then transtoflat()s to the closing narration, which
-      // must keep painting. Measured across the 15 stage flats on disc 1,
-      // main.stg's view region is 100.0% one index and every other flat is
-      // 3.4%-22.4% — narend (the ending) is 4.9%, map 3.4%, ctl 7.7%. Only a
-      // hole looks like a hole.
-      if (!(this.session.viewShowing && this.current) && this.flatIsMatte(flat)) return null;
-      this.screen.clearFrame();
-      const flatPal = this.flatPalette(flat.palette);
-      const fbuf = this.screen.scratchFor(flat.width * flat.height * 4);
-      indexedToRGBA(flat.pixels, flat.width, flat.height, flatPal, fbuf);
-      this.screen.blitTop(fbuf, flat.width, flat.height);
-      const f = this.current;
-      if (this.session.viewShowing && f) {
-        // straight over the flat's top rows — scratch is free again, the flat
-        // is already in the framebuffer
-        const vbuf = this.screen.scratchFor(f.width * f.height * 4);
-        indexedToRGBA(f.pixels, f.width, f.height, this.palette, vbuf);
-        this.screen.blitTop(vbuf, f.width, f.height);
-      }
-      // the band's props share the flat's half of the CLUT, the room's props the
-      // set's — one CLUT, two owners (see worldPalette). Without a room to
-      // composite there is no set half in play and the flat owns all of it.
-      const propPal = this.session.viewShowing ? this.worldPalette(flat.palette) : flatPal;
-      // world sprites follow the motion-frame camera during movement too, so
-      // actors/world props stay visible over the composited set region
-      const cam = this.session.viewShowing ? this.activeCamera() : null;
-      this.compositeWorld(this.screen.frame, SCREEN_W, SCREEN_H, propPal, cam);
-      return "flat";
-    }
-    // bare set view (currentFlat "none"): the room view alone, occupying the
-    // top region of an otherwise black screen
-    const f = this.current;
-    if (!f) return null;
-    this.screen.clearFrame();
-    const buf = this.screen.scratchFor(f.width * f.height * 4);
-    indexedToRGBA(f.pixels, f.width, f.height, this.palette, buf);
-    this.screen.blitTop(buf, f.width, f.height);
-    this.compositeWorld(this.screen.frame, SCREEN_W, SCREEN_H, this.propPalette, this.activeCamera());
-    return "set";
-  }
-
-  /**
-   * Composite the world sprites — actors, then props — over an RGBA frame.
-   * Shared by the bare-set and stage-flat render paths.
-   *
-   * World sprites (actors + propxyz/propstar props) track the camera even
-   * mid-turn/walk via the motion frame's own pose (see activeCamera), so
-   * people no longer vanish during movement.
-   *
-   * Persistent HUD props (TAOOT: the nav arrow, the interface band) keep
-   * drawing through turns and walks so the direction indicator doesn't blink
-   * out for the whole animation and only reappear when it settles — they draw
-   * regardless of anchor Y (a y-based filter dropped the nav arrow, which is
-   * anchored inside the set-view region). Set-local screen props are still
-   * suppressed while animating — anchored to the standpoint, they'd float
-   * over the rotating scene — by restricting the draw to persistent shops
-   * mid-motion. The standpoint-bound interface overlays (house.shp's open
-   * door / signs) are persistent too, but need no special case: boot's
-   * closescene puts exactly those two away, and it runs before the first
-   * motion frame ({@link departScene}), as it does in the original.
-   */
-  private compositeWorld(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number,
-    palette: Uint8ClampedArray,
-    cam: import("@dreamfactory/engine/runtime/props").WorldCamera | null,
-  ): void {
-    /**
-     * A v1 set draws actors and world props as ONE list, far to near.
-     *
-     * DF.EXE's frame loop (0x4340d0) blits a single array of draw records
-     * ([0x45e528]), each stamped with its projection depth at +0xc by
-     * whichever renderer built it — actors (0x41e94c) and props alike — so a
-     * walker passing in front of a prop covers it, and behind it is covered.
-     * The port drew all actors and THEN all world props, which handed every
-     * prop the nearer role whatever the depths: leroy ambling out of town
-     * walked BEHIND his own whiskey jug. Reported from play.
-     *
-     * v4 keeps the two-pass order it always had — its pass structure is
-     * measured against TAOOT and no TI.EXE evidence has been read either way —
-     * so the merge is gated on the set's own version.
-     */
-    const occ = this.occlusion();
-    if (cam && this.set.version === 1) {
-      const ar = this.session.actorRuntime;
-      const pr = this.session.propRuntime;
-      const jobs = [
-        ...ar.drawList(cam).map((e) => ({
-          depth: e.proj.depth,
-          draw: () => ar.compositeOne(e, data, width, height, palette, cam, occ),
-        })),
-        ...pr.worldDrawList(cam).map((e) => ({
-          depth: e.proj.depth,
-          draw: () => pr.compositeWorldOne(e, data, width, height, palette, cam, occ),
-        })),
-      ].sort((x, y) => y.depth - x.depth);
-      for (const j of jobs) j.draw();
-      // the screen-space props still ride on top: cam = null skips the world
-      // half, which the merge above has already drawn
-      pr.composite(
-        data, width, height, palette, -Infinity, null,
-        this.animating || this.session.viewShowing, occ,
-      );
-      return;
-    }
-    if (cam) {
-      this.session.actorRuntime.composite(data, width, height, palette, cam, occ);
-    }
-    this.session.propRuntime.composite(
-      data, width, height, palette, -Infinity, cam,
-      this.animating || this.session.viewShowing,
-      occ,
-    );
-  }
-
-  private drawHotspots(ctx: CanvasRenderingContext2D): void {
+  drawRoomHotspots(ctx: CanvasRenderingContext2D): void {
     if (!this.showHotspots || this.animating) return;
     ctx.save();
     ctx.strokeStyle = "rgba(255, 220, 120, 0.9)";

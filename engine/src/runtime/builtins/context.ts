@@ -1,7 +1,7 @@
 import type { Actor } from "../../df/set";
 import { CELL_UNITS } from "../../df/set-v1-to-v4";
 import type { GameSession } from "../session";
-import { Builtin, Frame, Interpreter, Value, toStr } from "../interp";
+import { Builtin, Frame, Interpreter, Value, toNum, toStr } from "../interp";
 
 /**
  * Shared plumbing handed to every `register*Builtins` module. Only the pieces
@@ -42,6 +42,19 @@ export interface BuiltinCtx {
    * comes from the scene record and cannot be parsed out of the name.
    */
   sceneCell: (name: Value) => [number, number] | null;
+  /**
+   * The scene at a DreamFactory 1 set's grid cell, by name — the inverse of
+   * {@link sceneCell}, and `rowcoltoscene`'s whole job. "none" where the cell has
+   * no scene, which is the answer the callers test for; null off a v1 set.
+   */
+  sceneAt: (row: Value, col: Value) => string | null;
+  /**
+   * Is that scene's cell BUILT ON — `scenebuild(name)`. Null off a v1 set.
+   *
+   * See `V1Scene.build` for why record +12 is this flag. Dust's bounty hunters
+   * are what asks: `extra.cst`'s `isbuild` will not step on a built cell.
+   */
+  sceneBuild: (name: Value) => boolean | null;
   /**
    * Give up one REAL rendered frame from inside a script poll loop.
    *
@@ -125,6 +138,26 @@ export function createBuiltinCtx(session: GameSession): BuiltinCtx {
       // world units back to the cell they name: a standpoint stands in the middle
       // of its cell, so a floor divide is exact (see CELL_UNITS)
       return sc ? [Math.floor(sc.xAxisMap / CELL_UNITS), Math.floor(sc.zAxisMap / CELL_UNITS)] : null;
+    },
+    sceneAt: (row, col) => {
+      const set = session.currentBinding?.set;
+      if (set?.version !== 1) return null;
+      const r = toNum(row ?? 0), c = toNum(col ?? 0);
+      const sc = set.scenes.find(
+        (s) => Math.floor(s.zAxisMap / CELL_UNITS) === r && Math.floor(s.xAxisMap / CELL_UNITS) === c,
+      );
+      // the engine capitalises its own "None" and script comparisons are
+      // caseless, so either spelling answers a `= "none"` test
+      return sc ? sc.sceneName : "none";
+    },
+    sceneBuild: (name) => {
+      const set = session.currentBinding?.set;
+      if (set?.version !== 1) return null;
+      const want = toStr(name ?? "").toLowerCase();
+      const sc = set.scenes.find((s) => s.sceneName.toLowerCase() === want);
+      // a name that is no scene of this set is not a building; `isbuild` has
+      // already handled "none" by the time it asks
+      return !!sc?.build;
     },
     yieldFrame: async () => {
       if (session.hasRealFrames) {

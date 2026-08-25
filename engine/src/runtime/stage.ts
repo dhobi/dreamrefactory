@@ -31,6 +31,33 @@ export class StageController {
     // TAOOT's darkroom mixclut("stage") (re-applied right after this in transtoflat)
     // doesn't bleed into the next stage you open (e.g. after leaving redphoto).
     this.session.onClut("stage", null);
+    /**
+     * ...and un-faded, for the same reason one layer up.
+     *
+     * `screentoblack(name, steps)` ramps a named CLUT to black — the port models
+     * it as a level over the whole screen — and the name Timelapse hands it is
+     * `curclutname`, which over a stage is `"stage"`. Replacing the stage file
+     * replaces that palette, so a ramp against the OLD stage's cannot survive
+     * into the new one; there is nothing left for it to be a ramp of.
+     *
+     * The interface panel is what needs this said out loud. `begininterface` is
+     * `screentoblack (curclutname, 10)`, `closestagefile ()`, `openstagefile
+     * ("P.Stg")`, `gotoflat (coder)`, `visualeffect (plain, 0)` — and then the
+     * arriving flat's own `openflatx`. Three of the four panel flats end that
+     * with `blacktoscreen`, and the PHOTO ALBUM (flat 3, container 32) does not:
+     * its `openflatx` checks the film count and arms `makeloop ("flat", me,
+     * "updateflat", 2)`, nothing more. So a level that outlived the stage swap
+     * left the album's caption, its furniture and the photograph itself painted
+     * correctly into a framebuffer nobody could see — reported from play as the
+     * album being a black screen.
+     *
+     * `blacktoscreen` still ramps, because it reveals FROM black by definition —
+     * see the note on it in builtins/scene.ts.
+     */
+    this.session.fade.queue.length = 0;
+    this.session.fade.snapshot = null;
+    this.session.fade.level = 0;
+    this.session.fade.pendingReveal = false;
     await this.session.ensureFile(key); // lazy browser provider: fetch before first read
     const data = this.session.files(key);
     if (!data) {
@@ -86,6 +113,11 @@ export class StageController {
     this.session.flatNames = [];
     this.flatImageCache.clear();
     this.regionCache.clear();
+    // An armed xray reveal names a flat in the file being closed. Timelapse's
+    // own `leaveframe` disarms it on the way out of the insect room, but a stage
+    // change from anywhere else does not, and a reveal held across one would
+    // point at a flat the new stage has never heard of.
+    this.session.plugins.reset();
     this.session.refreshFallbacks();
   }
 
@@ -123,15 +155,33 @@ export class StageController {
     return this.session.flatNames.findIndex((f) => f.toLowerCase() === name.toLowerCase()) + 1;
   }
 
+  /**
+   * The art of the flat we are leaving, kept for the next one to be decoded over
+   * — see the note in {@link flatImage}. Held here rather than read back out of
+   * `currentFlat` because `gotoFlat` has already moved that on by the time
+   * anything asks to be painted.
+   */
+  private outgoing: { pixels: Uint8Array; width: number; height: number } | null = null;
+
   /** engine primitive: switch the active flat (gotoflat) — by name or index */
   async gotoFlat(name: string): Promise<void> {
     const target = this.resolveFlat(toStr(name));
+    this.outgoing = this.flatImage();
     await this.fireFlat(this.session.currentFlat, "closeflat");
     this.session.currentFlat = target;
     this.session.clearTextOverlay(); // a new flat starts with a blank text layer
     await this.fireFlat(target, "openflat");
   }
 
+
+  /**
+   * The open stage's own name — `currentstage()`'s answer, and empty when there is
+   * no stage or the stage is a v1 `.FLT` with no such field (see
+   * {@link StgFile.refName}).
+   */
+  stageRefName(): string {
+    return this.stageFile?.refName ?? "";
+  }
 
   /** clickable regions of an arbitrary flat by name (current flat included) */
   private regionsFor(flatName: string): StgRegion[] {
@@ -311,22 +361,144 @@ export class StageController {
     return null;
   }
 
-  private fireFlat(name: string, handler: string): Promise<void> {
-    const inst = this.session.flatScripts.get(name.toLowerCase());
-    return this.session.fireHandler(inst, handler, inst?.name ?? name, `${name}.${handler}`);
+  /**
+   * A flat's own lifecycle event — `openflat` / `closeflat` — sent along the
+   * CHAIN rather than straight at the flat's script.
+   *
+   * It used to go straight there, so a flat with no handler of its own was the
+   * end of it. That is right for the first two games and wrong for the third,
+   * because a boot library may hold the DEFAULT: Timelapse's does, and its
+   * defaults are what keep the game's own idea of where it is up to date —
+   *
+   *     code openflat ()
+   *         if intransition & currentflat () = transnameopen
+   *             baseflat = currentflat ()
+   *             PatchEnterFrame ()
+   *
+   * with `closeflat` clearing `baseflat` and calling `PatchLeaveFrame` on the way
+   * out. Those two patches are what fire a flat's `enterframe`/`leaveframe`, and
+   * `baseflat` is what `flatstartanim` animates.
+   *
+   * So without this, a move WITHIN a stage left `baseflat` pointing at whichever
+   * flat the stage was entered on, and no frame ever got its enterframe. The sea
+   * off the opening cliffs shows it: frame 196 walks the cels of frame 192's
+   * water — the animation the last `enterframe` armed — while navigation keeps
+   * putting frame 196 back, so the water jumps between two views. It also means
+   * `leaveframe` never stopped an animation, which is what `flatstopanim` is for.
+   *
+   * Titanic and Dust cannot be affected: neither BOOTFILE defines `openflat` or
+   * `closeflat` at all, and the boot is only consulted for a handler it has.
+   */
+  private async fireFlat(name: string, handler: string): Promise<void> {
+    if (!name || name === "none") return;
+    await this.session.sendEvent("sendtoflat", name, handler, [], name);
   }
 
-  /** decoded image of the active flat (background layer), cached */
-  flatImage(): { pixels: Uint8Array; width: number; height: number; palette: Uint8ClampedArray } | null {
+  /**
+   * A flat's decoded art, by name — the CURRENT flat unless one is asked for.
+   *
+   * The parameter is Timelapse's `plugin("xray", …)`, which reveals a second flat
+   * through a moving aperture (engine/src/runtime/plugins.ts). That flat is never
+   * the one on screen and is never switched to, so it cannot come through
+   * `gotoFlat`; and it is always in the OPEN stage file, which is what lets it
+   * come through here rather than through a second stage load.
+   *
+   * Resolved through {@link resolveFlat} so the caller may pass an index, and
+   * cached per stage-and-flat like the current one — the reveal asks for the same
+   * hidden flat on every frame of a drag.
+   */
+  /**
+   * What a VARIANT flat's delta is authored against: the variant before it.
+   *
+   * Timelapse names a flat `i{region}.{frame}` and a variant of one
+   * `i{region}.{frame}.{n}` — three components, not two — and those variants are
+   * a CHAIN: `.1` is a delta over the base picture, `.2` over `.1`, and an
+   * animation run walks `.2 … .54` the same way. Seeding from the flat that was
+   * on screen (see below) is right for a run, because a run is walked in order
+   * and the previous cel IS what you arrived from. It is wrong the moment a
+   * script JUMPS into the middle of a chain, and Timelapse does that on purpose.
+   *
+   * The lantern's instruction sheet is the worked example, and it was reported:
+   * the table flat `i0001.605` carries a `LanternInst` region whose mousedown is
+   *
+   *     if gHasMatches = 0 & gLanternLit = 0
+   *         gotoflat ("i0001.605.1")     ← the sheet, matchbox still on it
+   *     else
+   *         gotoflat ("i0001.605.2")     ← the sheet, matchbox gone
+   *
+   * so once the player has taken the matches the game jumps straight from the
+   * TABLE to `.2`. Decoded over the table, `.2` changes 4,771 pixels of it and
+   * leaves the other 302,429 — the player clicks the instructions and gets the
+   * table back, which is exactly what the screenshot showed. Decoded over `.1`
+   * (itself decoded over the base) it is the sheet, and matches the shipped art
+   * to the pixel.
+   *
+   * Recursive, and the cache is what makes that cheap: walking an animation
+   * forward finds its predecessor already decoded, and a cold jump into `.28`
+   * builds the 28 it needs once. Returns null for anything that is not a variant,
+   * or whose predecessor is not in this stage, so a two-component flat keeps the
+   * behaviour below.
+   */
+  private deltaBase(
+    name: string,
+  ): { pixels: Uint8Array; width: number; height: number } | null {
+    // three components: `A.B.n`. Two would match the frame number itself
+    // (`i0001.605` -> "i0001" and 605), which would chain every flat in the file
+    // backwards through its neighbours.
+    const m = /^(.+\..+)\.(\d+)$/.exec(name);
+    if (!m) return null;
+    const n = Number(m[2]);
+    const previous = n > 1 ? `${m[1]}.${n - 1}` : m[1];
+    if (!this.stageFile?.flats.some((f) => f.name === previous)) return null;
+    return this.flatImage(previous);
+  }
+
+  flatImage(
+    name = this.session.currentFlat,
+  ): { pixels: Uint8Array; width: number; height: number; palette: Uint8ClampedArray } | null {
     const stg = this.stageFile;
-    if (!stg || this.session.currentFlat === "none") return null;
-    const key = `${this.session.stageName}:${this.session.currentFlat}`;
+    if (!stg || name === "none") return null;
+    const target = name === this.session.currentFlat ? name : this.resolveFlat(name);
+    const key = `${this.session.stageName}:${target}`;
     let img = this.flatImageCache.get(key);
     if (!img) {
-      const flat = stg.flats.find((f) => f.name === this.session.currentFlat);
+      const flat = stg.flats.find((f) => f.name === target);
       if (!flat) return null;
       try {
+        /**
+         * Decode into a buffer holding the flat that is ON SCREEN, not a blank
+         * one — because a flat's art may be a DELTA against it.
+         *
+         * `engine/src/df/image.ts` says so at the top: "several row modes / run
+         * modes copy pixels from the previous image, i.e. whatever the target
+         * buffer already contains. Callers must therefore decode frame sequences
+         * in order into the same persistent FrameBuffer." This one decoded every
+         * flat into a fresh `new FrameBuffer()`, which is exactly the mistake that
+         * warning describes.
+         *
+         * It never showed on the first two games because neither animates a
+         * stage: their flats are all whole pictures, and a whole picture writes
+         * every pixel, so what the buffer held first cannot matter. Timelapse
+         * animates 156 stages this way — its BOOTFILE calls them "flat delta
+         * animation handlers" in a comment — and `flatstartanim(2, 54, …)` walks
+         * `i0001.100.2 … .54` as deltas over the shot they belong to. Decoded
+         * cold, only the pixels that CHANGED had a value and the rest came out
+         * index 0: the birds took off over a black rectangle.
+         *
+         * Seeding from the OUTGOING flat rather than tracking runs explicitly is
+         * what keeps this safe for the other two: a keyframe overwrites the seed
+         * completely, so it renders identically whatever was underneath, and only
+         * art that deliberately leaves pixels alone can tell the difference.
+         */
         const fb = new FrameBuffer();
+        const under = this.deltaBase(target) ?? this.outgoing;
+        if (under) {
+          // `ensure` FIRST: a fresh FrameBuffer's `pixels` is zero-length until it
+          // is sized, so seeding before this writes nothing at all and the delta
+          // still lands on an empty screen.
+          fb.ensure(under.width, under.height);
+          fb.pixels.set(under.pixels.subarray(0, Math.min(under.pixels.length, fb.pixels.length)));
+        }
         const d = decodeFrame(stg.file.containers[flat.locationFrame].data, fb);
         img = {
           pixels: fb.pixels.slice(0, d.width * d.height),

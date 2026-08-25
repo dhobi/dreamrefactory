@@ -32,6 +32,26 @@
  * blurs the dropdown when the answer changes.
  */
 
+/**
+ * The two keys whose NAME is not what a page would guess, spelled once.
+ *
+ * `escape` is `"."` with the special marker — TI.EXE's 0x1fa0 — and it is what
+ * `MoviePlayer.key` tests for, so a shell that invents `"esc"` gets a key that
+ * reaches the script chain and skips nothing. Measured: Timelapse's `open.mov` is
+ * 51 seconds played MODALLY inside `coldBoot()`, and with the wrong name there was
+ * no way past it at all.
+ *
+ * `space` is a literal space because that is what the scripts compare against —
+ * `if arg = " "` — and it is load-bearing in two of the three games. *Titanic*
+ * opens doors with it: its BOOTFILE's `keydown` scans the current view's hotspots
+ * and fires `mousedown` on a painting named `door`, `locked` or `knock`.
+ * *Timelapse* opens its whole interface with it: `interfacekey(" ")` toggles
+ * `begininterface(1)`, which is `P.Stg` — the journal, the camera and the saved
+ * games. A phone has neither key, so a page that wants them has to offer them.
+ */
+export const ESCAPE_KEY = ".";
+export const SPACE_KEY = " ";
+
 /** input types that take TEXT, as opposed to the ones that are a control */
 const TEXT_INPUT = new Set([
   "",

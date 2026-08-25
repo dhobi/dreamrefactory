@@ -49,6 +49,8 @@
  * clever, and a price the game does not pay because it does not need to.
  */
 import { readContainerFile } from "@dreamfactory/engine/df/container";
+import { CursorSheet } from "@dreamfactory/engine/web/cursors";
+import { DF_CURSORS } from "./cursor-art";
 import {
   decodeFrame,
   FrameBuffer,
@@ -90,6 +92,7 @@ import {
 import { siteUrl } from "@dreamfactory/site/site";
 import { VERSION } from "@dreamfactory/site/version";
 import { installBugReport } from "@dreamfactory/site/bug-report";
+import { DUST } from "@dreamfactory/site/games";
 
 /** the frame as the file stores it */
 const VIEW_W = 512;
@@ -261,6 +264,7 @@ document.addEventListener("fullscreenchange", () => {
 const BUG_NOTE_MS = 6000;
 if (bugBtn) {
   installBugReport(bugBtn, {
+    game: DUST.short,
     canvas,
     shotName: "dust-bug.png",
     version: VERSION,
@@ -1179,6 +1183,10 @@ let playing: GameHost | null = null;
 
 function play(host: GameHost): void {
   playing = host;
+  // the cursor changes for reasons that are not the pointer — a film taking the
+  // screen, `lockevents` freezing the world — and a mouse move is the only thing
+  // the browser reports. See ScreenDirector.onCursor.
+  host.director.onCursor = showCursor;
   /**
    * A handle on the running game, for the console and for Playwright.
    *
@@ -1225,11 +1233,13 @@ function play(host: GameHost): void {
       `stage ${s.stageName}`,
   );
   const loop = (now: number): void => {
+    // The SCREEN's frame, not a room's — which is what lets this disc's two
+    // intro films play before the town is open. They used to need `town.set`
+    // loaded and pinned black behind them purely so this loop had a viewer to
+    // call (see files.ts's serverSetNames, and screen-director.ts).
+    host.director.tick(now);
+    host.director.render(ctx);
     const v = host.viewer;
-    if (v) {
-      v.tick(now);
-      v.render(ctx);
-    }
     /*
      * The trace: where you are, and who else is here.
      *
@@ -1309,9 +1319,23 @@ addEventListener("keydown", (e) => {
     logEl.hidden = !logEl.hidden;
     return;
   }
+  /**
+   * A KEY needs the game, not a viewer.
+   *
+   * This asked for `host.viewer` and returned when there was none, which is
+   * every key dropped for as long as no SET is open — and the boot's intro films
+   * play before it opens one. So Dust's whole opening was unskippable: the log
+   * said `movie: intro.mov (1/10 segments)`, ESC did nothing, and handing the
+   * same key straight to the director skipped it at frame 31 and moved on to
+   * intro2.mov. Reported exactly that way.
+   *
+   * `ScreenDirector.keyDown` is where the movie gets its keys first, and
+   * `SetViewer.keyDown` is one line that delegates to it, so going through the
+   * director is what the viewer was doing anyway — it just also works when there
+   * is nothing to view yet.
+   */
   const host = playing;
-  const v = host?.viewer;
-  if (!host || !v) return;
+  if (!host) return;
   const arrow: Record<string, string> = {
     ArrowUp: "uparrow",
     ArrowDown: "downarrow",
@@ -1344,7 +1368,7 @@ addEventListener("keydown", (e) => {
    * mentions `isrepeat` at all, in any of the six editions.
    */
   host.session.interp.globals.set("isrepeat", e.repeat ? 1 : 0);
-  void host.session.track(v.keyDown(ch, e.key === "Escape"));
+  void host.session.track(host.director.keyDown(ch, e.key === "Escape"));
   e.preventDefault();
 });
 
@@ -1408,6 +1432,47 @@ function canvasCoords(e: PointerEvent | MouseEvent): { x: number; y: number } {
  * the pointer is NOW, and without pointermove it only ever answers where the
  * gesture started.
  */
+/**
+ * The pointer, drawn with Dust's own art — and this page never asked for one.
+ *
+ * `cursor("touch")` names a `CURS.*` cursor resource inside the engine's own
+ * executable (`tools/dumpcursors.ts` has the mechanism), and `DF.EXE` carries
+ * nine. Dust's scripts ask for seven of them 285 times: touch (205), arrow (40),
+ * watch (34), sight (3), and one each of gostrait, goright and goleft. This shell
+ * dropped every one of those on the floor — it never called `hover` at all, so
+ * the pointer over Dust was whatever the browser felt like, including over the
+ * three `sight` crosshairs and the direction arrows that are the only sign a
+ * doorway can be walked through.
+ *
+ * DreamFactory 1's set is not Titanic's: it has no `godown`/`goup` at all (and no
+ * script asks for one), and its `CURS.TOUCH` is drawn differently — the two
+ * builds share eight of the nine byte for byte and disagree about the pointing
+ * hand.
+ */
+const cursors = new CursorSheet(DF_CURSORS);
+
+/** the name last answered, so a resize can redraw it at the new size */
+let cursorShown = "";
+
+/**
+ * Show what the thing under the pointer asked for.
+ *
+ * The scale is the ratio the CANVAS is stretched by, and nothing else. This
+ * divided by {@link SCALE} as well, on the reasoning that the page composites a
+ * 512-wide game into a 1024-wide canvas — which is true of the element in the
+ * markup and not of the one the game runs on: once `play()` has it, the canvas
+ * backing store IS the framebuffer, 512x384, stretched to whatever CSS says. So
+ * the extra divide doubled the answer, and measured in Chrome with the game
+ * running it asked for a 128x128 cursor over a picture at 2x — exactly twice the
+ * size the artist drew. Reported as "it looks like it's not scaled".
+ */
+function showCursor(name: string): void {
+  cursorShown = name;
+  const rect = canvas.getBoundingClientRect();
+  canvas.style.cursor = cursors.css(name || "arrow", rect.width / canvas.width);
+}
+addEventListener("resize", () => showCursor(cursorShown));
+
 canvas.addEventListener("pointerdown", (e) => {
   const host = playing;
   const v = host?.viewer;
@@ -1434,6 +1499,13 @@ addEventListener("pointermove", (e) => {
   if (!host?.viewer) return;
   const { x, y } = canvasCoords(e);
   host.session.setPointer(x, y);
+  // ...and what the thing under it wants to look like. Not while a press is in
+  // flight: Dust's drags are `while stilldown()` handlers that hold the world,
+  // and running a `setcursor` chain concurrently with one is asking two scripts
+  // to move the same prop.
+  if (e.pointerType !== "touch" && !host.session.pointerDown) {
+    void host.viewer.hover(x, y).then(showCursor);
+  }
   const g = touch;
   if (!g || e.pointerId !== g.id) return;
   if (g.pressed || g.swiped) return; // already committed either way
@@ -1683,13 +1755,14 @@ installSwipeOptions();
 
 /** a key a gesture means, on the same route the keyboard uses */
 function sendGestureKey(ch: string, isEsc = false): void {
+  // ...and the phone's double-tap ESC had the same fault as the keyboard's: no
+  // SET open, no key sent, so the intro could not be skipped by finger either
   const host = playing;
-  const v = host?.viewer;
-  if (!host || !v) return;
+  if (!host) return;
   // a gesture is never a held key: don't let a stale 1 from a leant-on arrow
   // make an `isrepeat` door guard swallow the swipe
   host.session.interp.globals.set("isrepeat", 0);
-  void host.session.track(v.keyDown(ch, isEsc));
+  void host.session.track(host.director.keyDown(ch, isEsc));
 }
 
 /**

@@ -54,8 +54,10 @@ import {
 import {
   chooseFrameInterval,
   frameHoldMs,
+  segmentInterval,
   stepsForward,
 } from "@dreamfactory/engine/df/mov-pace";
+import { segmentAudio, soundtrackFor } from "@dreamfactory/engine/df/mov-sound";
 
 /*
  * Anchored to THIS FILE, not to the working directory, and not to the old layout.
@@ -654,4 +656,56 @@ test("a v1 keyframe's 0xff renders white, not black", () => {
       .soft(white, `${name}: index-255 pixels rendering white`)
       .toBe(indexed255);
   }
+});
+
+/**
+ * A DreamFactory 1 bed plays ONCE, and all of it.
+ *
+ * The one branch of the soundtrack rule (`df/mov-sound.ts`) that only this game
+ * reaches. A v4 bed comes out of a loop table and is authored to repeat; a v1
+ * "bed" is a plain run of chunks — narration, said once — and `audioLoops` is
+ * false for every film on this disc. Two things follow, and both are here
+ * because the film would be wrong without them:
+ *
+ *   - it does not loop, so a line cannot be heard twice under a held picture;
+ *   - it is not CUT to the picture. D1ND2M.MOV's first segment is 45 frames of
+ *     roughly 3 s, over 12.3 s of two people talking, and the frames that carry
+ *     flags bit 0 wait for them to finish (see the growl test above). Cutting the
+ *     bed to `interval x frames` would have cut the conversation to a quarter.
+ *
+ * Checked here rather than in the editor that now plays these films, because this
+ * is where the rip is and because a rule is worth pinning once.
+ */
+test("a v1 bed plays once, and is not cut to the picture", () => {
+  if (skip()) return;
+  const mov = movFileFromV1(read("D1ND2M.MOV"));
+  const seg = mov.segments[0];
+  const audio = segmentAudio(seg);
+  expect(audio, "D1ND2M.MOV's first segment has a bed").toBeTruthy();
+  expect(seg.audioLoops).toBe(false);
+  expect(audio!.unique.length).toBe(2);
+  expect(audio!.audioSec).toBeCloseTo(12.31, 1);
+
+  const interval = segmentInterval(seg, seg.frames.length, audio!.audioSec, 0);
+  const bed = soundtrackFor(seg, audio!, interval, seg.frames.length);
+  expect(bed.loop).toBe(false);
+  // the picture is a fifth of the talking, and every second of it still plays
+  const picture = (interval * seg.frames.length) / 1000;
+  expect(picture).toBeLessThan(4);
+  expect(bed.samples.length / bed.sampleRate).toBeCloseTo(audio!.audioSec, 2);
+
+  // and INTRO.MOV, the film that was frozen on frame 0 for a release: 44.9 s of
+  // narration under its first segment, nine more segments carrying none, which
+  // is what the inheritance rule is for
+  const intro = movFileFromV1(read("INTRO.MOV"));
+  const first = segmentAudio(intro.segments[0]);
+  expect(first!.audioSec).toBeCloseTo(44.91, 1);
+  expect(intro.segments.slice(1, 7).map((s) => segmentAudio(s))).toEqual([
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+  ]);
 });

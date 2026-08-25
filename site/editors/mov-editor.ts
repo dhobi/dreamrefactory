@@ -18,12 +18,22 @@
 import { FrameBuffer, decodeFrame, indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources } from "./sources";
+import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf } from "./sources";
 import { siteUrl } from "@dreamfactory/site/site";
 import { t, formatNumber } from "@dreamfactory/site/locales";
 import { installI18n } from "@dreamfactory/site/locales";
 import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
-import { NATIVE_FRAME_MS, chooseFrameInterval, frameHoldMs, framesLoop, isBed } from "@dreamfactory/engine/df/mov-pace";
+import {
+  NATIVE_FRAME_MS,
+  TICK_MS,
+  chooseFrameInterval,
+  frameHoldMs,
+  frameWaits,
+  framesLoop,
+  isBed,
+  segmentInterval,
+} from "@dreamfactory/engine/df/mov-pace";
+import { segmentAudio, soundtrackFor } from "@dreamfactory/engine/df/mov-sound";
 import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { movFileFromV1, readMovFileV1 } from "@dreamfactory/engine/df/mov-v1";
@@ -42,7 +52,7 @@ import {
   patchRegionRect,
   readMovFile,
 } from "@dreamfactory/engine/df/mov";
-import { SCREEN_H, SCREEN_W } from "@dreamfactory/engine/web/screen";
+import type { GameScreen } from "@dreamfactory/site/games";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -201,6 +211,7 @@ async function initServerMovies(): Promise<void> {
   // names that cannot be told apart. The edition row at the top of the page is
   // what chooses, and it is the same choice the game reads (taoot/src/editions.ts).
   const source = chosenSource(await listSources());
+  if (source) screen = screenOf(source);
   if (!source) return; // production / no dev server: upload only
   const movies = filesIn(source, byExtension(".mov"));
   if (!movies.length) return;
@@ -277,10 +288,17 @@ function decodeUpTo(index: number): number {
   return count;
 }
 
+/**
+ * The game's own screen, for the one case a film does not say: a MOV segment
+ * declares its size and a decoded frame has one, so this is only ever the
+ * fallback — and a fallback of 512×384 is another game's guess. See `screenOf`.
+ */
+let screen: GameScreen = screenOf(null);
+
 function paintFrame(): void {
   const canvas = $<HTMLCanvasElement>("preview");
-  const w = decoded?.width || segment()?.width || SCREEN_W;
-  const h = decoded?.height || segment()?.height || SCREEN_H;
+  const w = decoded?.width || segment()?.width || screen.width;
+  const h = decoded?.height || segment()?.height || screen.height;
   canvas.width = Math.max(1, w);
   canvas.height = Math.max(1, h);
   const ctx = canvas.getContext("2d")!;
@@ -386,12 +404,20 @@ $<HTMLCanvasElement>("overlay").addEventListener("click", (e) => {
     log(t("movies.clickOutside", { x, y }));
     return;
   }
-  stopPlayback();
   const r = f.regions[idx];
   log(
     `region ${idx} at (${x},${y}): ${actionText(r.type, r.event, r.target)}` +
       (r.sound ? ` · plays “${r.sound}”` : ""),
   );
+  // A film parked on a waiting frame is waiting for exactly this: take the click
+  // and play ON, which is how faucet.mov's tap and camelsee.mov's gallop are
+  // meant to be watched. Only when no film is running does the click become a
+  // single step of the machine walk.
+  if (film) {
+    filmClick(r);
+    return;
+  }
+  stopPlayback();
   act(r.type, r.target, r.event, `region ${idx}`);
 });
 
@@ -475,6 +501,9 @@ function stopPlayback(): void {
   playing?.stop();
   playing = null;
   $("playBtn").textContent = t("movies.followMachine");
+  // the two are alternatives, not layers: a film running under a machine walk
+  // would fight it for the frame on screen and for the decode cursor
+  if (film) stopFilm();
 }
 
 /**
@@ -534,6 +563,392 @@ $("playBtn").addEventListener("click", () => {
   };
   raf = requestAnimationFrame(step);
   playing = { stop: () => cancelAnimationFrame(raf) };
+});
+
+// --- playing the whole film -------------------------------------------------
+
+/**
+ * The other button, and a different thing entirely.
+ *
+ * "Follow the machine" above walks the LOGIC of the segment you are looking at:
+ * it steps frame by frame, stops at the first frame that waits for a click, stops
+ * again at any action that would leave the file, and plays no sound. That is what
+ * you want when the question is "where does this frame go".
+ *
+ * This plays the FILM — the whole file, from segment 1 frame 0, the way the game
+ * plays it: every segment in order, each on its own palette and its own decode
+ * chain, paced by the frames' authored holds, with the segment's bed under it and
+ * the frames' entry sounds fired as they are entered. The rules come from the
+ * engine ({@link file://../../engine/src/df/mov-pace.ts} for the pacing,
+ * {@link file://../../engine/src/df/mov-sound.ts} for the soundtrack, both shared
+ * with {@link file://../../engine/src/web/movie-player.ts}) rather than from a
+ * second reading of them kept here, which is the only reason a preview is worth
+ * trusting: a 13-segment film used to show you its first fragment in silence.
+ *
+ * Three things it does not do, each because this page has one file open and no
+ * game around it:
+ *
+ *   - a chain to ANOTHER file (action types 3, 4 and 5) is reported and ends the
+ *     run — following it would swap the file under your unexported edits;
+ *   - a frame that genuinely waits for a click ends the run and says which frame
+ *     and how many regions — the picture is still there to click, and clicking it
+ *     does what the game would do (see the overlay handler above);
+ *   - `actionframe(1)`/`(2)` are shown on the frame panel, not reported here:
+ *     there is no script to hang a consequence off.
+ */
+interface Film {
+  raf: number;
+  /** the clock the CUE table is counted from: the segment's own start */
+  segStart: number;
+  /** when the frame on screen was entered — the hold is measured from here */
+  lastTick: number;
+  /** ms a frame, from the shared rule; 0 means nothing here self-advances */
+  interval: number;
+  /** cue indices already fired, so each fires once a segment (as in the player) */
+  cuesFired: Set<number>;
+  /** the segment's bed, stopped when the film ends or the next bed replaces it */
+  bed: Voice | null;
+  /** event sounds still in the air — what a waitsForVoice frame waits on */
+  voices: Voice[];
+  /** a spoken line that names the frame to jump to when it is done */
+  soundJump: { frame: number; voice: Voice } | null;
+  /** frames shown and when we started, for the closing line */
+  shown: number;
+  started: number;
+  /**
+   * Parked on a frame that waits for a click — the film is still running, and
+   * still ticking: a cue or a finished line can lift it out of the wait, which
+   * is why the poll for those sits outside the pacing gate (as it does in the
+   * player, and for the same reason — the original polls both from its modal
+   * wait loop).
+   */
+  waiting: boolean;
+}
+
+/**
+ * The sound a click just fired, while its action is being taken.
+ *
+ * The frame a click advances into may carry the SAME sound the click itself
+ * fired (ABE.MOV: the region on frame 17 and frame 18 both name sound 2). One
+ * authored moment, one playback.
+ */
+let filmClickSound = "";
+
+let film: Film | null = null;
+
+function stopFilm(): void {
+  if (!film) return;
+  cancelAnimationFrame(film.raf);
+  film.bed?.stop();
+  for (const v of film.voices) v.stop();
+  film = null;
+  $("filmBtn").textContent = t("movies.playFilm");
+  // the panels went untouched while it ran (a 1225-frame cutscene cannot rebuild
+  // six tables a frame), so bring them to wherever it stopped
+  refresh();
+}
+
+/**
+ * Where the film is, on the controls that already say where you are: the label,
+ * the scrub slider and — for a film that has more than one — the segment picker.
+ *
+ * Written rather than left behind, because a running film that leaves the slider
+ * at frame 0 is a page telling you two different things at once. Assigning
+ * `value` fires no `input` event, so the slider's own handler (which stops
+ * playback) cannot be triggered by this.
+ */
+function filmLabel(): void {
+  const m = mov!;
+  const seg = segment()!;
+  $("frameLabel").textContent =
+    (m.segments.length > 1 ? `${segIdx + 1}/${m.segments.length} · ` : "") +
+    `${frameIdx + 1} / ${seg.frames.length}`;
+  const slider = $<HTMLInputElement>("frameSlider");
+  slider.max = String(Math.max(0, seg.frames.length - 1));
+  slider.value = String(frameIdx);
+  const sel = $<HTMLSelectElement>("segmentSel");
+  if (sel.value !== String(segIdx)) sel.value = String(segIdx);
+}
+
+/** play a named event sound, and arm the jump its name may carry */
+function filmSound(name: string): void {
+  const seg = segment();
+  if (!film || !mov || !seg) return;
+  if (name === filmClickSound) return;
+  const loc = seg.sounds.get(name.toLowerCase());
+  if (loc === undefined) return;
+  let voice: Voice | null = null;
+  try {
+    const audio = decodeAudioContainer(mov.file.containers[loc].data);
+    voice = playPcm(audio.samples, audio.sampleRate);
+  } catch {
+    // a sound this build cannot decode is silence, not a stopped film
+  }
+  if (!voice) return;
+  film.voices = film.voices.filter((v) => !v.done);
+  film.voices.push(voice);
+  const follows = seg.soundFollows.get(name.toLowerCase());
+  const target = follows ? frameIndexOf(follows) : -1;
+  film.soundJump = target < 0 ? null : { frame: target, voice };
+}
+
+/** a frame by name, the way every stored target is resolved: case-insensitively */
+function frameIndexOf(name: string): number {
+  const seg = segment();
+  if (!seg || !name) return -1;
+  return seg.frames.findIndex((f) => f.name.toLowerCase() === name.toLowerCase());
+}
+
+/** show a frame while the film runs: the picture and the readout, nothing else */
+function filmEnter(idx: number, now: number): void {
+  const seg = segment();
+  if (!film || !seg) return;
+  frameIdx = Math.max(0, Math.min(seg.frames.length - 1, idx));
+  hoveredRegion = -1;
+  decodeUpTo(frameIdx);
+  paintFrame();
+  drawOverlay();
+  filmLabel();
+  film.shown++;
+  film.lastTick = now;
+  const sound = seg.frames[frameIdx].sound;
+  if (sound) filmSound(sound);
+}
+
+/**
+ * Start a segment: its palette, a fresh decode chain, its own pacing and its own
+ * bed. A segment that brings no audio of its own KEEPS the bed already playing —
+ * the rule the player takes from TI.EXE's segment reload, and the reason tour.mov's
+ * eighteen slides sit under one narration.
+ */
+function enterFilmSegment(idx: number, now: number, startFrame = 0): void {
+  const m = mov;
+  if (!film || !m) return;
+  segIdx = Math.max(0, Math.min(m.segments.length - 1, idx));
+  const seg = m.segments[segIdx];
+  fb = new FrameBuffer();
+  cursor = -1;
+  decoded = null;
+  palette = paletteToRGBA(seg.paletteRaw, 256);
+  film.segStart = now;
+  film.cuesFired.clear();
+  film.soundJump = null;
+
+  let audio: ReturnType<typeof segmentAudio> = null;
+  try {
+    audio = segmentAudio(seg);
+  } catch {
+    // an undecodable chunk leaves the film silent and playing, which is what the
+    // page does everywhere else it meets one
+  }
+  film.interval = segmentInterval(seg, seg.frames.length, audio?.audioSec ?? 0, segIdx);
+  if (audio) {
+    film.bed?.stop();
+    const bed = soundtrackFor(seg, audio, film.interval, seg.frames.length);
+    film.bed = playPcm(bed.samples, bed.sampleRate, bed.loop);
+  }
+  log(
+    t("movies.filmSegment", {
+      n: segIdx + 1,
+      total: m.segments.length,
+      frames: t("counts.frames", { n: seg.frames.length }),
+      picture: (
+        seg.frames.reduce((a, _, i) => a + frameHoldMs(seg, i), 0) / 1000
+      ).toFixed(1),
+      bed: audio ? t("movies.filmBed", { secs: audio.audioSec.toFixed(1) }) : "",
+    }),
+  );
+  // the chain is per segment and delta-encoded from its own frame 0, so starting
+  // in the middle means replaying it to there — which decodeUpTo does, and which
+  // is what the player does too when it resumes a segment at a frame
+  filmEnter(startFrame, now);
+}
+
+/** the segment's exit: the next one, or the end of the film */
+function endFilmSegment(now: number): void {
+  const m = mov;
+  if (!film || !m) return;
+  if (segIdx + 1 < m.segments.length) enterFilmSegment(segIdx + 1, now, 0);
+  else endFilm();
+}
+
+function endFilm(): void {
+  if (!film) return;
+  const secs = (performance.now() - film.started) / 1000;
+  const shown = film.shown;
+  stopFilm();
+  log(t("movies.filmEnd", { frames: t("counts.frames", { n: shown }), secs: secs.toFixed(1) }));
+}
+
+/**
+ * One of the seven action codes, applied to the running film. A frame's own
+ * action and a region's are the same seven codes and take the same path, exactly
+ * as they do in the player.
+ */
+function filmAction(
+  type: number,
+  target: string,
+  event: string,
+  who: string,
+  now: number,
+): void {
+  const seg = segment();
+  if (!film || !seg) return;
+  switch (type) {
+    case 2:
+    case 4: {
+      const idx = frameIndexOf(target);
+      if (type === 4) {
+        // the return stack only exists across files, and there is one file here
+        log(t("movies.type4", { who, target, event }));
+        stopFilm();
+        return;
+      }
+      if (idx < 0) {
+        log(t("movies.type2NotFrame", { who, target }));
+        stopFilm();
+        return;
+      }
+      filmEnter(idx, now);
+      return;
+    }
+    case 3:
+      log(t("movies.type3", { who, event }));
+      stopFilm();
+      return;
+    case 5:
+      log(t("movies.type5", { who }));
+      stopFilm();
+      return;
+    case 6:
+      // stepping past the last frame is the segment's exit, exactly as the
+      // player treats it (TI.EXE calls it an error and says so)
+      if (frameIdx + 1 < seg.frames.length) filmEnter(frameIdx + 1, now);
+      else endFilmSegment(now);
+      return;
+    case 7:
+      if (frameIdx > 0) filmEnter(frameIdx - 1, now);
+      return;
+    default:
+      // 1 = exit: the SEGMENT's, and the film's only if this is the last of them
+      endFilmSegment(now);
+  }
+}
+
+/** the click a parked film was waiting for: its sound, then its action */
+function filmClick(r: MovClickRegion): void {
+  const seg = segment();
+  if (!film || !seg) return;
+  if (r.sound) filmSound(r.sound);
+  film.waiting = false;
+  const now = performance.now();
+  film.lastTick = now;
+  filmClickSound = r.sound;
+  filmAction(r.type, r.target, r.event, `region on frame ${frameIdx}`, now);
+  filmClickSound = "";
+}
+
+function filmStep(now: number): void {
+  const seg = segment();
+  if (!film || !seg) return;
+
+  // Cues first, and outside the pacing gate: a timed jump fires out of any wait
+  // (the original polls it from both wait loops). Empty for every shipped film
+  // but the demo's tour.mov.
+  for (let c = 0; c < seg.cues.length; c++) {
+    const cue = seg.cues[c];
+    if (film.cuesFired.has(c) || now - film.segStart < cue.tick * TICK_MS) continue;
+    film.cuesFired.add(c);
+    const idx = frameIndexOf(cue.target);
+    log(t("movies.filmCue", { tick: cue.tick, target: cue.target }));
+    if (idx >= 0) filmEnter(idx, now);
+  }
+
+  // a spoken line that names a follow-on frame comes due the same way
+  if (film.soundJump?.voice.done) {
+    const { frame: to } = film.soundJump;
+    film.soundJump = null;
+    filmEnter(to, now);
+  }
+
+  if (frameWaits(seg, frameIdx)) {
+    // The film has not ended: this is what an interactive movie DOES, and the
+    // bed under it goes on playing (soundtrackFor loops one for exactly this
+    // case). Say so once, then keep ticking so a cue can still lift it out.
+    if (!film.waiting) {
+      const f = seg.frames[frameIdx];
+      film.waiting = true;
+      log(
+        t("movies.frameWaits", { i: frameIdx, name: f.name }) +
+          t("counts.clickableRegions", { n: f.regions.length }) +
+          t("movies.frameWaitsTail"),
+      );
+    }
+    film.raf = requestAnimationFrame(filmStep);
+    return;
+  }
+  film.waiting = false;
+  if (!film.interval) {
+    // no step action, no soundtrack, no regions: in game this is a close-up held
+    // until the player clicks it away, and there is nothing here to run
+    log(t("movies.filmNoPacing"));
+    stopFilm();
+    return;
+  }
+
+  if (now - film.lastTick >= frameHoldMs(seg, frameIdx)) {
+    const f = seg.frames[frameIdx];
+    // ...and a frame may be authored to wait for the spoken line as well (flags
+    // bit 0): what it waits on is the movie's own event sounds, never the bed —
+    // a looping bed is never done, and waiting on it would hang the film
+    if (f.waitsForVoice && film.voices.some((v) => !v.done)) {
+      film.raf = requestAnimationFrame(filmStep);
+      return;
+    }
+    film.lastTick = now;
+    filmAction(f.type, f.target, f.event, `frame ${frameIdx}${f.name ? ` “${f.name}”` : ""}`, now);
+  }
+  if (film) film.raf = requestAnimationFrame(filmStep);
+}
+
+$("filmBtn").addEventListener("click", () => {
+  if (film) {
+    stopFilm();
+    return;
+  }
+  const m = mov;
+  if (!m || !m.segments.length) return;
+  stopPlayback();
+  // the click is the gesture a browser wants before it will make a sound; a
+  // context built on page load starts suspended and the film would play mute
+  audioCtx ??= new AudioContext();
+  void audioCtx.resume();
+  const now = performance.now();
+  film = {
+    raf: 0,
+    segStart: now,
+    lastTick: now,
+    interval: 0,
+    cuesFired: new Set(),
+    bed: null,
+    voices: [],
+    soundJump: null,
+    shown: 0,
+    started: now,
+    waiting: false,
+  };
+  $("filmBtn").textContent = "◼ Stop";
+  // From the frame you are looking at, not from the top: scrub to the moment you
+  // want to watch and press play. The one exception is the very end of the file —
+  // there is nothing after the last frame of the last segment to continue INTO,
+  // so pressing play there starts the film again.
+  const atEnd =
+    segIdx === m.segments.length - 1 && frameIdx >= m.segments[segIdx].frames.length - 1;
+  const from = atEnd ? 0 : segIdx;
+  const fromFrame = atEnd ? 0 : frameIdx;
+  log(fromFrame || from ? t("movies.filmResume") : t("movies.filmStart"));
+  enterFilmSegment(from, now, fromFrame);
+  if (film) film.raf = requestAnimationFrame(filmStep);
 });
 
 // --- rendering --------------------------------------------------------------
@@ -1071,17 +1486,52 @@ function buildRegions(): void {
 
 let audioCtx: AudioContext | null = null;
 
+/**
+ * A sound that is playing, and the one question the film loop asks of it: is it
+ * over? A frame may be authored to hold until the VOICE channel is idle
+ * (MovFrame.waitsForVoice), and a spoken line may name the frame to jump to when
+ * it finishes (MovSegment.soundFollows) — neither can be honoured by a preview
+ * that starts a buffer and forgets it.
+ */
+interface Voice {
+  done: boolean;
+  stop(): void;
+}
+
+/** hand PCM to the browser and keep hold of the handle */
+function playPcm(samples: Float32Array, rate: number, loop = false): Voice | null {
+  if (!samples.length) return null;
+  audioCtx ??= new AudioContext();
+  const ctx = audioCtx;
+  const buf = ctx.createBuffer(1, samples.length, rate);
+  buf.getChannelData(0).set(samples);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.loop = loop;
+  src.connect(ctx.destination);
+  const voice: Voice = {
+    done: false,
+    stop: () => {
+      voice.done = true;
+      try {
+        src.stop();
+      } catch {
+        /* already stopped, or never started */
+      }
+    },
+  };
+  src.onended = () => {
+    voice.done = true;
+  };
+  src.start();
+  return voice;
+}
+
 function playChunk(loc: number, label: string): void {
   if (!mov) return;
   try {
     const audio = decodeAudioContainer(mov.file.containers[loc].data);
-    audioCtx ??= new AudioContext();
-    const buf = audioCtx.createBuffer(1, audio.samples.length, audio.sampleRate);
-    buf.getChannelData(0).set(audio.samples);
-    const src = audioCtx.createBufferSource();
-    src.buffer = buf;
-    src.connect(audioCtx.destination);
-    src.start();
+    playPcm(audio.samples, audio.sampleRate);
     log(
       `${label}: ${(audio.samples.length / audio.sampleRate).toFixed(2)} s at ` +
         `${audio.sampleRate} Hz`,

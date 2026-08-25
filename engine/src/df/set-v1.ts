@@ -236,6 +236,21 @@ export interface V1Scene {
   z: number;
   /** container ref of this cell's script, 0 when it has none */
   scriptLocation: number;
+  /**
+   * Is this cell BUILT ON — a building or scenery rather than street?
+   *
+   * Record +12, and the disc says what it means rather than the header: on 28 of
+   * the 29 sets, "this flag is set" is EXACTLY "no transition touches this cell"
+   * — TOWN's 173 flagged cells against the 52 its 526 moves reach, and the same
+   * inversion on every interior. The twenty-ninth (MAYUPPER) has two cells the
+   * flag calls open that no authored move visits, which is the harmless
+   * direction: a cell can be unbuilt and simply have nothing walking to it.
+   *
+   * It is what `scenebuild(name)` answers (v1 opcode 20100 — see
+   * engine/src/df/opcodes.ts), and `extra.cst`'s bounty hunters are the reason it
+   * matters: their `isbuild` refuses to step on a cell whose scene is built on.
+   */
+  build: boolean;
   record: number;
 }
 
@@ -373,6 +388,7 @@ export function readSetFileV1(data: Uint8Array): SetFileV1 {
       scenes.push({
         name,
         scriptLocation: scriptAt + 4 <= c0.length ? v.getInt32(scriptAt, true) : 0,
+        build: v.getInt16(b + 12, true) !== 0,
         /**
          * Z FIRST, then X — the opposite of the reading order, and the file is
          * what says so rather than taste.

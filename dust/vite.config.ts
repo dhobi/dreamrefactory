@@ -53,19 +53,25 @@ export default defineConfig({
       {
         path: "docs",
         command: "npm run docs:dev",
-        port: 5176,
+        port: 5174,
         what: "The documentation",
       },
       {
         path: "taoot",
         command: "npm run dev:taoot",
-        port: 5174,
+        port: 5175,
         what: "Titanic",
+      },
+      {
+        path: "timelapse",
+        command: "npm run dev:timelapse",
+        port: 5177,
+        what: "Timelapse",
       },
     ]),
   ],
   server: {
-    port: 5175,
+    port: 5176,
     strictPort: true,
     // a CD rip is not a source tree; see the note in taoot/vite.config.ts
     watch: { ignored: ["**/gamefiles/**"] },

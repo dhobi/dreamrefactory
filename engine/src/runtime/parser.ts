@@ -1,4 +1,5 @@
 import { Token } from "../df/script";
+import { CaselessMap } from "./caseless";
 import { CallExpr, CodeBlock, Expr, Script, Stmt } from "./ast";
 
 /**
@@ -104,6 +105,12 @@ class Parser {
   /** consume a block closer; tolerate EOF (original scripts are sloppy) */
   private expectCloser(id: number, what: string): void {
     if (this.atEnd() || this.atCodeBoundary()) return;
+    // a `case`/`endswitch` standing where this block's own closer should be means
+    // the closer was never written — see {@link atSwitchBoundary}. Not for the
+    // switch's OWN closer, which is the one thing those two cannot stand in for:
+    // `endswitch` is what it is waiting for, and a `case` there is a case it has
+    // not read yet.
+    if (id !== OP.ENDSWITCH && this.atSwitchBoundary()) return;
     this.expectOp(id, what);
   }
   /**
@@ -127,6 +134,36 @@ class Parser {
     const t = this.peek();
     return t?.kind === "op" && (t.id === OP.ENDCODE || t.id === OP.CODE);
   }
+  /**
+   * ...and the same for a SWITCH's own structure: `case` and `endswitch` end
+   * every block open inside the case they close.
+   *
+   * The compiler omits an `endif` where nothing could reach past it. Timelapse's
+   * navigation tables are full of it — E026.STG's stage main, its `getframeaction`
+   * case 140:
+   *
+   *     case 140
+   *         if gateopen = 1
+   *             return ("J.136 X TL.141 TR.239 L2 R2 ")
+   *         else
+   *             return ("J.136 X TL.141 TR.139 L2 R2 ")
+   *     case 141
+   *
+   * Both arms return, so an `endif` would be dead and it is not written. The next
+   * `case` is what closes the `if`, exactly as the original's jump table does —
+   * and without this the parse died there and took the whole container with it.
+   * Five of Timelapse's stage mains are this shape, which is five stages whose
+   * navigation table was missing entirely.
+   *
+   * It cannot change a well-formed script: where an `endif` IS written, the
+   * block's own closer is reached first and this is never consulted. A switch's
+   * own case bodies already break on these two ({@link parseStmt}'s SWITCH case
+   * lists them), so the only blocks this reaches are the ones nested inside.
+   */
+  private atSwitchBoundary(): boolean {
+    const t = this.peek();
+    return t?.kind === "op" && (t.id === OP.CASE || t.id === OP.ENDSWITCH);
+  }
   /** skip the rest of the line (comments, unparseable noise) */
   private skipLine(): void {
     while (!this.atEnd() && this.peek()?.kind !== "break") this.pos++;
@@ -137,17 +174,94 @@ class Parser {
   private atEnd(): boolean {
     return this.pos >= this.toks.length;
   }
+  /**
+   * Consume a `()` that carries no arguments, where the grammar wants no argument
+   * list at all — see the note on `exitcode`/`passcode` in {@link parseStmt}.
+   *
+   * Empty only: anything between the parentheses is left for the caller to fail
+   * on, because a keyword with a real argument is not a spelling difference.
+   */
+  private skipEmptyArgs(): void {
+    if (this.atOp(OP.LPAREN) && this.toks[this.pos + 1]?.kind === "op" &&
+        (this.toks[this.pos + 1] as { id: number }).id === OP.RPAREN) {
+      this.pos += 2;
+    }
+  }
 
+  /** does this container declare a handler at all? — see {@link parseScript} */
+  private hasHandlers = false;
+
+  /** advance to the next handler, or to the end — see {@link parseScript} */
+  private skipToNextCode(): void {
+    while (!this.atEnd() && !this.atOp(OP.CODE)) this.pos++;
+  }
+
+  /**
+   * The handlers of one script container, and — between them — a tolerance for
+   * tokens that are not code at all.
+   *
+   * A compiled container can carry DEAD TOKENS after a handler's `endcode`:
+   * fragments of an earlier compile that the tool left in the stream and the
+   * original engine never reached, because it dispatches to handlers by name and
+   * never walks past the one it wants. This port parses the whole container up
+   * front, so it walks straight into them, and until this was here one stray pair
+   * of parentheses cost the caller every handler in the file.
+   *
+   * Timelapse is where that shows. Its BOOTFILE's first container ends
+   * `endcode ( )` — two tokens past the last handler — and `parseStmt` on a bare
+   * `(` throws, so `instanceFrom` discarded all fifteen handlers of it, `boot`
+   * among them, and the game could not start at all. Its stages have the same
+   * shape at scale: most stage mains are followed by the `case`/`return` limbs of
+   * a `getframeaction` switch that is no longer inside any `code`. Across the four
+   * discs 100 of 100,701 script containers fail this way; the other 99.90% never
+   * reach this branch.
+   *
+   * Recovery is a RESYNC and not a stop, so a live handler after the rubbish is
+   * still found, and it restarts from where the failed statement BEGAN rather than
+   * from where it gave up — a statement that consumed tokens before throwing must
+   * not be able to swallow the `code` that follows it.
+   *
+   * The tolerance costs nothing where it does not apply: it is gated on having
+   * parsed a handler already. A container whose FIRST statement will not parse is
+   * still a parse error, which is what keeps a genuine gap in this grammar from
+   * being silently absorbed — the corpus is how the grammar was found, and a
+   * parser that shrugs at everything cannot tell you it was wrong.
+   */
   parseScript(): Script {
-    const codes = new Map<string, CodeBlock>();
+    // Handler names fold case, as every other name in this language does: a
+    // `sendtoflat (…, openflatx ())` has to find a handler written `openFlatX`.
+    // See CaselessMap.
+    const codes: Map<string, CodeBlock> = new CaselessMap<CodeBlock>();
     const topLevel: Stmt[] = [];
+    this.hasHandlers = this.toks.some((t) => t.kind === "op" && t.id === OP.CODE);
     this.skipBreaks();
     while (!this.atEnd()) {
       if (this.atOp(OP.CODE)) {
         const block = this.parseCode();
         codes.set(block.name, block);
       } else {
-        topLevel.push(this.parseStmt());
+        const at = this.pos;
+        try {
+          topLevel.push(this.parseStmt());
+        } catch (e) {
+          // Gated on the container HAVING handlers — anywhere in it, not just
+          // already-parsed ones. It was "at least one parsed already", which
+          // caught dead tokens after a handler and not the same rubbish in front
+          // of one: three of Timelapse's flat scripts open with a stray integer
+          // and then a perfectly good `code setcursor (arg)` (M038.STG's
+          // container 17 is `355` and then the handler), and losing a container
+          // for a token before it says as little as losing one for a token after
+          // it.
+          //
+          // A container with NO `code` at all still throws, which is the property
+          // that matters: it is what keeps this from quietly reporting the
+          // 31 one-token DATA containers on these discs — a lone `262144`, three
+          // NUL bytes read as a string — as empty scripts. They are not scripts,
+          // and a parse error is the right answer for them.
+          if (!this.hasHandlers) throw e;
+          this.pos = at;
+          this.skipToNextCode();
+        }
       }
       this.skipBreaks();
     }
@@ -182,7 +296,8 @@ class Parser {
     const stmts: Stmt[] = [];
     this.skipBreaks();
     while (!this.atEnd()) {
-      if (this.atCodeBoundary()) break; // see {@link atCodeBoundary}
+      // see {@link atCodeBoundary} and {@link atSwitchBoundary}
+      if (this.atCodeBoundary() || this.atSwitchBoundary()) break;
       const t = this.peek();
       if (t?.kind === "op" && closers.includes(t.id)) break;
       stmts.push(this.parseStmt());
@@ -217,11 +332,36 @@ class Parser {
           }
           return { t: "decl", kind, names };
         }
+        /**
+         * `exitcode` and `passcode` — and an EMPTY ARGUMENT LIST after either, if
+         * the compiler that wrote this file put one there.
+         *
+         * They are keywords and not calls: `exitcode` ends handling of an event and
+         * `passcode` passes it to the next link in the chain, neither takes an
+         * argument, and Titanic and Dust write both bare in all 22,125 places they
+         * appear between them. Timelapse's compiler writes `exitcode ()` — 31 times
+         * across its four discs — and without this the keyword was consumed, the
+         * `(` then began a fresh statement, and the parse died on the line break
+         * inside it (`expected ), got break`).
+         *
+         * Which cost more than 31 statements: a throw anywhere inside a handler
+         * loses the whole CONTAINER, so three of Timelapse's shop scripts were
+         * discarded entirely — including `i.shp`'s main, which is why the intro
+         * world's `openshop`, `closeshop` and every `sendtoshop` into it did
+         * nothing at all.
+         *
+         * Accepted only in the empty form. `exitcode (x)` appears nowhere in any of
+         * the three corpora and would mean something this grammar has no reading
+         * for, so it is still a parse error rather than a silently dropped
+         * expression.
+         */
         case OP.EXITCODE:
           this.pos++;
+          this.skipEmptyArgs();
           return { t: "exitcode" };
         case OP.PASSCODE:
           this.pos++;
+          this.skipEmptyArgs();
           return { t: "passcode" };
         case OP.RETURN: {
           this.pos++;

@@ -136,6 +136,7 @@
         <a href="./" class="here" data-i18n="site.navEditors">Editors</a>
         <a href="../taoot/">Titanic</a>
         <a href="../dust/">Dust</a>
+        <a href="../timelapse/">Timelapse</a>
         <a href="https://github.com/dhobi/dreamrefactory" data-i18n="site.navSource">Source</a>
       </nav>
     </header>
@@ -153,7 +154,8 @@
 
     <div id="landing">
       <div class="intro" data-i18n-html="stages.intro">
-        Load a DreamFactory <b>.STG</b> stage — the screens that are not rooms:
+        Load a DreamFactory <b>.STG</b> stage, or DreamFactory 1's <b>.FLT</b> —
+        the screens that are not rooms:
         the UI band (<code>MAIN.STG</code>), the inventory
         (<code>INVEN1.STG</code>), the deck plan (<code>MAP.STG</code>), a
         mini-game board (<code>BLKJACK.STG</code>). Browse its flats, see each
@@ -176,7 +178,9 @@
           <span class="stats" id="fileStats"></span>
           <span class="spacer" style="flex: 1"></span>
           <span id="dirty"></span>
-          <button id="exportBtn" class="primary" data-i18n="stages.export">⬇ Export .stg</button>
+          <!-- filled from the file that is open: a `.flt` exports a `.flt`, not a
+               `.stg` (see sta-editor.ts) -->
+          <button id="exportBtn" class="primary">⬇ Export .stg</button>
           <button id="closeBtn" title="Close this stage" data-i18n="editors.close" data-i18n-attr="title:stages.closeTitle">✕ Close</button>
         </div>
         <div style="padding: 0 0.8rem 0.5rem"><span id="status"></span></div>
@@ -200,9 +204,9 @@
             </div>
             <div id="previewSide">
               <div>
-                <span data-i18n-html="stages.previewNote">A flat is the whole 512×384 screen, drawn behind the props and —
+                <span data-i18n-html="stages.previewNote">A flat is the whole screen, drawn behind the props and —
                 unless it hides the room view with <code>setvisible(false)</code> —
-                behind the view composited into the top 512×264.</span>
+                behind the view composited into its top.</span>
               </div>
               <div id="previewInfo"></div>
               <div style="display: flex; gap: 0.4rem; flex-wrap: wrap">

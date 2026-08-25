@@ -2,11 +2,12 @@ name: Deploy
 
 # Publishing to www.danielhobi.ch/dreamrefactory.
 #
-# THREE builds share that one directory, and each releases on its own tag:
+# FOUR builds share that one directory, and each releases on its own tag:
 #
-#   site-v0.1.0     the front door and the format editors  → /dreamrefactory/
-#   taoot-v0.9.51   Titanic                                → /dreamrefactory/taoot/
-#   dust-v0.3.1     Dust                                   → /dreamrefactory/dust/
+#   site-v0.1.0      the front door and the format editors → /dreamrefactory/
+#   taoot-v0.9.51    Titanic                              → /dreamrefactory/taoot/
+#   dust-v0.3.1      Dust                                 → /dreamrefactory/dust/
+#   timelapse-v0.1.0 Timelapse                            → /dreamrefactory/timelapse/
 #
 # The documentation is the fourth thing in that tree and does NOT release on a
 # tag — it goes out on any push that touches it (docs.yml → /dreamrefactory/docs/).
@@ -32,15 +33,15 @@ name: Deploy
 
 on:
   push:
-    tags: ["site-v*", "taoot-v*", "dust-v*"]
+    tags: ["site-v*", "taoot-v*", "dust-v*", "timelapse-v*"]
   workflow_dispatch:
     inputs:
       target:
-        description: Which of the three to build and upload
+        description: Which of the four to build and upload
         required: true
         default: site
         type: choice
-        options: [site, taoot, dust]
+        options: [site, taoot, dust, timelapse]
 
 # One upload at a time, and never cancel one in flight: a half-written mirror is
 # a half-broken site.
@@ -74,7 +75,7 @@ jobs:
 
       - run: npm ci
 
-      # Which of the three is this? The tag says so itself; a manual dispatch
+      # Which of the four is this? The tag says so itself; a manual dispatch
       # says so in its input.
       - name: Which release is this
         id: what
@@ -84,8 +85,9 @@ jobs:
           elif [[ "${GITHUB_REF_NAME}" == site-v*  ]]; then target=site
           elif [[ "${GITHUB_REF_NAME}" == taoot-v* ]]; then target=taoot
           elif [[ "${GITHUB_REF_NAME}" == dust-v*  ]]; then target=dust
+          elif [[ "${GITHUB_REF_NAME}" == timelapse-v* ]]; then target=timelapse
           else
-            echo "::error::tag $GITHUB_REF_NAME names no target — tag site-v*, taoot-v* or dust-v*"
+            echo "::error::tag $GITHUB_REF_NAME names no target — tag site-v*, taoot-v*, dust-v* or timelapse-v*"
             exit 1
           fi
           echo "target=$target" >> "$GITHUB_OUTPUT"

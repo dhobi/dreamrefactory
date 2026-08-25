@@ -8,6 +8,12 @@ Load a [STG stage](../engine/formats/stg.md) — the screens that are not rooms:
 band (`MAIN.STG`), the inventory (`INVEN1.STG`), the deck plan (`MAP.STG`), a
 mini-game board (`BLKJACK.STG`) — and it comes apart into its flats.
 
+Dust's are `.FLT`, DreamFactory 1's name for a stage, and its container-0 header
+really is at different offsets — but the reader and every patch take their tables
+from the file's own version tag, so an edit lands on the byte the name came out of
+and its twenty open here too. Timelapse's stages are `.STG` and 640×480; the
+caption reads the size out of the file rather than assuming one.
+
 ## What it shows
 
 | Part | What you can do with it |

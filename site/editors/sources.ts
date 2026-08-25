@@ -30,7 +30,7 @@
 import { DfEncoding } from "@dreamfactory/engine/df/text";
 import { uiLanguage } from "@dreamfactory/site/locales";
 import { siteUrl } from "@dreamfactory/site/site";
-import { GAMES, GameEditions, NEUTRAL, editionOfUrl } from "@dreamfactory/site/games";
+import { GAMES, GameEditions, GameScreen, NEUTRAL, editionOfUrl } from "@dreamfactory/site/games";
 
 /** one rip, in one edition, ready to list files from */
 export interface Source {
@@ -186,6 +186,25 @@ export function filesIn(source: Source, keep: (path: string) => boolean): Source
 export function encodingOf(source: Source): DfEncoding {
   const found = source.game.editions.find((e) => e.code === source.edition);
   return found?.encoding ?? source.game.editions[0].encoding;
+}
+
+/**
+ * The screen a source's game renders into.
+ *
+ * Same shape as {@link encodingOf} and for the same reason: it is a fact about
+ * the TREE, so a source answers it and no editor has to import a game. What it
+ * is for is the four formats that do not record it — a SHP, a CST, a PUP and a
+ * MOV are all authored against the screen and none of them says how big it is,
+ * so an editor drawing a prop at its default anchor, or a stance over the
+ * screen, would otherwise be drawing Titanic's geometry around another game's
+ * art (measured: Timelapse's `p.shp` compass came out at 256,192 on a 512×384
+ * field, where the game puts it at 320,240 on a 640×480 one).
+ *
+ * An STG says, so `stg-editor` uses the file's own answer instead
+ * (`StgFile.screen`), which beats a registry entry that happens to agree.
+ */
+export function screenOf(source: Source | null | undefined): GameScreen {
+  return source?.game.screen ?? { width: 512, height: 384, band: 264 };
 }
 
 /** files with one of these extensions, which is what every editor wants */

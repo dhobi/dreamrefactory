@@ -2,8 +2,8 @@
  * A signpost, for dev only: what to do when you click a link into another
  * package.
  *
- * The three sites share one deployed directory but have three Vite ROOTS, and
- * that is what makes `/src/main.ts` in a page mean the right file. The cost shows
+ * The five sites share one deployed directory but have five Vite ROOTS, and that
+ * is what makes `/src/main.ts` in a page mean the right file. The cost shows
  * up in the top bar: from Titanic's dev server, `../editors/` is a path this
  * server knows nothing about.
  *
@@ -13,8 +13,8 @@
  * asks for `/src/main.ts`, `/globe-mark.png` and `/gamefiles/…` — all
  * ROOT-absolute, all resolved against whatever origin the browser is on. Proxy
  * `/taoot/*` to Titanic's server and the page arrives, then asks the SITE's
- * server for `/src/main.ts` — a path that exists in all three packages and means
- * something different in each. The deployed tree has no such problem: `base:
+ * server for `/src/main.ts` — a path that exists in every one of those packages
+ * and means something different in each. The deployed tree has no such problem: `base:
  * "./"` makes every emitted URL relative to the page that names it.
  *
  * ## So: an honest 404 with directions
@@ -60,9 +60,9 @@ export function siblingSignposts(siblings: readonly Sibling[]): Plugin {
               `a{color:#7ab4dd}h1{font-size:1.15rem;margin:0 0 1rem}` +
               `p{color:#8b98a8}</style>` +
               `<main><h1>${s.what} is served by its own dev server</h1>` +
-              `<p>The three sites share one deployed directory but build from three ` +
-              `roots, so each dev server serves only its own package. In the deployed ` +
-              `tree this link resolves normally.</p>` +
+              `<p>The sites share one deployed directory but build from a root each, ` +
+              `so a dev server serves only its own package. In the deployed tree this ` +
+              `link resolves normally.</p>` +
               `<p>Run <code>${s.command}</code>, then open ` +
               `<a href="${there}">${there}</a></p></main>`,
           );

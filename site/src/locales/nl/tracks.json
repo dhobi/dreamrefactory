@@ -1,8 +1,8 @@
 {
   "docTitle": "Audio-editor — Titanic - Adventure Out Of Time RE",
   "h1": "Audio-editor",
-  "intro": "Laad een DreamFactory-audiobank — een <b>.TRK</b>-muziekstuk (<code>BEDRAD1.TRK</code>, …), een <b>.SFX</b>-effectenbank of een <b>.11K</b>-lied voor weinig geheugen. Speel het thema en zijn losse geluiden af, hernoem ze, herschik de blokken waar het thema doorheen loopt, voeg je eigen audio toe en exporteer daarna het opnieuw ingepakte bestand.",
-  "open": "📂 Een .trk-/.sfx-/.11k-bestand openen…",
+  "intro": "Laad een DreamFactory-audiobank — een <b>.TRK</b>-muziekstuk (<code>BEDRAD1.TRK</code>, …), een <b>.SFX</b>-effectenbank, een <b>.11K</b>-lied voor weinig geheugen of een <b>.SND</b> uit DreamFactory 1, die alleen-lezen opent. Speel het thema en zijn losse geluiden af, hernoem ze, herschik de blokken waar het thema doorheen loopt, voeg je eigen audio toe en exporteer daarna het opnieuw ingepakte bestand.",
+  "open": "📂 Een .trk-/.sfx-/.11k-/.snd-bestand openen…",
   "export": "⬇ Bank exporteren",
   "closeTitle": "Deze bank sluiten",
   "bankHead": "Bank",

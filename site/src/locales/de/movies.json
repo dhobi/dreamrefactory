@@ -111,5 +111,14 @@
   "audioLoopTable": "die Schleifentabelle — ein Teppich, den die Engine Block für Block unter dem ganzen Film abspielt",
   "audioOneShotBlock": "der Einzelgeräusch-Block — Ereignisgeräusche, die ein Einzelbild oder eine Region beim Namen auslöst",
   "noAudio": "dieser Film enthält keinen Ton",
-  "paletteInfo": "die eigenen 256 Farben des Films"
+  "paletteInfo": "die eigenen 256 Farben des Films",
+  "playFilm": "▶▶ Den Film abspielen",
+  "playFilmTitle": "die ganze Datei so abspielen, wie das Spiel sie abspielt — jedes Segment der Reihe nach, mit seiner Tonspur",
+  "filmStart": "der Film läuft: jedes Segment der Reihe nach, getaktet und vertont wie im Spiel",
+  "filmSegment": "Segment {n} von {total}: {frames} über {picture} s Bild{bed}",
+  "filmBed": " · {secs} s Tonbett darunter",
+  "filmEnd": "der Film endet — {frames} in {secs} s gezeigt",
+  "filmCue": "Cue bei Tick {tick} → „{target}“",
+  "filmNoPacing": "hier bringt nichts das Bild weiter — kein Schritt, keine Tonspur, keine Regionen: im Spiel ist das eine Nahaufnahme, die bis zum Wegklicken stehen bleibt",
+  "filmResume": "weiter ab dem gewählten Einzelbild, getaktet und vertont wie im Spiel"
 }

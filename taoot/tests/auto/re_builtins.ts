@@ -219,8 +219,23 @@ test("misc scalar builtins: machinetype/tick/frame/setparam/menuvisible/keyabort
   const session = new GameSession(() => null, new NullAudioSink());
   expect(callBuiltin(session, "machinetype")).toBe("win");
 
+  /**
+   * `tick()` is the engine's 60 Hz counter, not milliseconds — TI.EXE's 0x41de90
+   * returns `timeGetTime() * 3 / 50`, which this port already relies on for the
+   * wipe pacer, and the scripts say the same in their own arithmetic. Timelapse
+   * writes a five-second wait as `tick () - tonaltick > 60 * 5`, and paces its
+   * stage animations with `flatticknum * 60 / flatframerate` — sixty per second
+   * over frames per second. Read as milliseconds those animations ran ten times
+   * too fast, finishing a 53-cel run before a sampler could catch two frames of
+   * it.
+   *
+   * This game's one use gets more sensible with it, not less: `blkjack.shp`'s
+   * barman fidgets `if tick () - bjtime > 1200`, twenty seconds of the player
+   * sitting still — a cue for a bigger idle animation, where 1.2 seconds had him
+   * tilting almost continuously.
+   */
   session.clock.now = 4200;
-  expect(Number(callBuiltin(session, "tick"))).toBe(4200);
+  expect(Number(callBuiltin(session, "tick")), "4200 ms is 252 sixtieths").toBe(252);
   expect(Number(callBuiltin(session, "frame"))).toBe(0);
   // frame() counts DISPLAYED frames, and framerate() is ticks per displayed
   // frame (default 3) — so one frame every 3/60 s = 50 ms of the CLOCK, which

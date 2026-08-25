@@ -188,3 +188,57 @@ export function frameHoldMs(mov: MovSegment, frameIdx: number): number {
   if (!f) return NATIVE_FRAME_MS;
   return Math.max(f.holdTicks, mov.minHoldTicks) * TICK_MS;
 }
+
+/**
+ * Does playback STOP on this frame and wait for a click?
+ *
+ * Regions alone do not decide it: flags bit 2 says "honour them only if a click
+ * is already in hand, else run the frame's own action and play on"
+ * ({@link MovFrame.playsThroughRegions} carries the disassembly). That is what
+ * makes the camel ride, the deck washes and the fires loop — the last frame of
+ * each cycle carries a backward `goto` that nothing would ever reach if the
+ * frame stopped for its own click rect.
+ *
+ * Here rather than in either player because both need it and they must agree: a
+ * frame the editor calls a wait and the game plays through is a frame the editor
+ * shows you stopping where the game does not.
+ */
+export function frameWaits(mov: MovSegment, frameIdx: number): boolean {
+  const f = mov.frames[frameIdx];
+  return !!f && f.regions.length > 0 && !f.playsThroughRegions;
+}
+
+/**
+ * The frame interval a SEGMENT of a film plays at — {@link chooseFrameInterval}
+ * plus the two things that are true of a segment rather than of a movie.
+ *
+ * `audioSec` is the segment's UNIQUE bed content in seconds (0 if it brings
+ * none) — see `df/mov-sound.ts`, which is where that number comes from.
+ */
+export function segmentInterval(
+  mov: MovSegment,
+  frameCount: number,
+  audioSec: number,
+  segIdx: number,
+): number {
+  const hasRegions = mov.frames.some((f) => f.regions.length > 0);
+  // an interactive movie paces on its own clock (or on clicks); only a
+  // cutscene's soundtrack sets the frame rate — and not even that when the
+  // frames loop, because then the soundtrack says how LONG rather than how fast.
+  // A v1 bed (audioLoops false, the only bed that doesn't loop) paces nothing:
+  // DreamFactory 1 films run at their header's frame rate and hold for their
+  // narration with per-frame voice waits (D1ND2M.MOV: sounds fired at frames 1
+  // and 21, flags bit 0 + hold 20 on the last frame). Stretching 45 frames over
+  // the audio played them as a slideshow.
+  const interval = chooseFrameInterval(
+    mov,
+    frameCount,
+    hasRegions || !mov.audioLoops ? 0 : audioSec,
+    hasRegions,
+  );
+  // A later segment always plays itself out: its picture is mid-film, so
+  // "no step frames -> wait for clicks" (a close-up's shape) cannot apply.
+  // No shipped TAOOT segment needs this — they all step — it just refuses to hang.
+  if (!interval && segIdx > 0 && !hasRegions) return NATIVE_FRAME_MS;
+  return interval;
+}

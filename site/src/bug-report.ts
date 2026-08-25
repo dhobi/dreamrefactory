@@ -67,6 +67,21 @@ export interface BugReportPage {
   /** which build this is, for the issue body */
   version: string;
   /**
+   * Which game this is — "Titanic", "Dust", "Timelapse".
+   *
+   * It goes in the issue TITLE, because one repository takes reports about three
+   * games and an issue list that opens with "Bug in the cave" says nothing about
+   * which cave. Bracketed and first (`[Dust] Bug in the saloon`) so the list is
+   * scannable and `[Dust]` in the search box is a filter.
+   *
+   * Supplied by the page rather than derived from anything here: the file name of
+   * a screenshot is the only other per-game string this module has, and reading a
+   * display name out of `dust-bug.png` would be a guess dressed as a fact. Pages
+   * pass their registry entry's own `short` (site/src/games.ts), so the name has
+   * one spelling in the project.
+   */
+  game: string;
+  /**
    * Tell the player what became of the picture — on the clipboard to paste, or
    * downloaded as a file to attach. The words are the page's, because they are
    * the only part of this the player reads and the page has the catalogue.
@@ -134,14 +149,19 @@ function download(png: Blob, shotName: string): void {
 }
 
 /**
- * The issue's title names the room, because that is what makes an issue list
- * readable — half the reports about this port are about one view. It is a first
- * line, not a verdict: the player is looking at it in the form and will say what
- * actually happened.
+ * The issue's title names the GAME and then the room.
+ *
+ * The room, because that is what makes an issue list readable — half the reports
+ * about this port are about one view. The game first, because one repository now
+ * takes reports about three of them and "Bug in i0001.100" is a filename to
+ * everyone who has not played that one.
+ *
+ * It is a first line and not a verdict: the player is looking at it in the form
+ * and will say what actually happened.
  */
 function title(page: BugReportPage): string {
   const room = page.where().split("·")[0].trim();
-  return room ? `Bug in ${room}` : "Bug";
+  return `[${page.game}] ${room ? `Bug in ${room}` : "Bug"}`;
 }
 
 /**
@@ -160,6 +180,7 @@ function body(page: BugReportPage): string {
     "",
     "### Where",
     "",
+    `- **Game:** ${page.game}`,
     `- **Room:** ${page.where() || "—"}`,
     // which build this was, so a fixed bug can be told from a live one
     `- **Port version:** ${page.version}`,

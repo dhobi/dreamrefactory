@@ -218,6 +218,7 @@
         <a href="./" class="here" data-i18n="site.navEditors">Editors</a>
         <a href="../taoot/">Titanic</a>
         <a href="../dust/">Dust</a>
+        <a href="../timelapse/">Timelapse</a>
         <a href="https://github.com/dhobi/dreamrefactory" data-i18n="site.navSource">Source</a>
       </nav>
     </header>
@@ -280,6 +281,12 @@
           </button>
           <button id="playBtn" title="play the movie the way its own logic says" data-i18n="movies.followMachine" data-i18n-attr="title:movies.followMachineTitle">
             ▶ Follow the machine
+          </button>
+          <!-- the other one: the machine walk above reads ONE segment's logic
+               and stops at the first wait; this plays the whole file, paced and
+               scored the way the game does it (mov-editor.ts's film section). -->
+          <button id="filmBtn" title="play the whole file the way the game plays it — every segment in order, with its soundtrack" data-i18n="movies.playFilm" data-i18n-attr="title:movies.playFilmTitle">
+            ▶▶ Play the film
           </button>
         </div>
         <div class="body">

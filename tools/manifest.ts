@@ -40,6 +40,23 @@ export interface ManifestOptions {
   gamefiles?: string;
   /** where the authored assets live — served at the root, so listed bare */
   publicDir?: string;
+  /**
+   * Subtrees under a skipped directory that ARE game data, relative to
+   * `gamefiles`.
+   *
+   * The rule above is a good one and this does not relax it: *Timelapse* put
+   * half of itself inside the installer's tree. `TLAPSE1/install/data/` holds
+   * fourteen files and 43 MB the 1996 installer copied to the hard disc rather
+   * than playing off the CD — the BOOTFILE, six shop files, five track banks,
+   * the shared panel stage and the camera — and without them the listing is 458
+   * films and stages with one `.shp` and nothing to boot from.
+   *
+   * Named paths rather than a cleverer rule, and walked SEPARATELY rather than
+   * by descending into `install`: a walk rooted at the subtree never re-tests
+   * the skipped name above it, and never picks up the installer's own 140 DLLs
+   * and 125 drivers sitting beside it.
+   */
+  include?: readonly string[];
 }
 
 /** the manifest: served path -> bytes */
@@ -67,6 +84,8 @@ export function buildManifest(opts: ManifestOptions = {}): Record<string, number
     }
   };
   walk(gamefiles);
+  // the game data that lives under a skipped name — see `include`
+  for (const extra of opts.include ?? []) walk(join(gamefiles, extra));
 
   // ...and this port's own DreamFactory files, listed by the path they are SERVED
   // at (`lang.stg`, not `public/lang.stg`). Listing them is what puts them in the

@@ -72,6 +72,14 @@ export interface SceneView {
 export interface Scene {
   index: number;
   sceneName: string;
+  /**
+   * v1 only: this grid cell is BUILT ON — a building or scenery, not street.
+   *
+   * Undefined on a v4 set, which has no grid to build on. What reads it is
+   * `scenebuild(name)`, a DreamFactory 1 command Dust's bounty hunters walk by;
+   * see V1Scene.build for the evidence that record +12 is this flag.
+   */
+  build?: boolean;
   /** byte offset of this 42-byte entry in the main scene register */
   record: number;
   xAxisMap: number;

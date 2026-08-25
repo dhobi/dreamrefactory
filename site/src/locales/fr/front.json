@@ -1,9 +1,10 @@
 {
   "docTitle": "dreamREfactory — le moteur DreamFactory de CyberFlix, réimplémenté",
   "tagline": "le moteur DreamFactory de CyberFlix, réimplémenté",
-  "lede": "CyberFlix a construit un moteur et publié <b>trois</b> aventures dessus. dreamREfactory est ce moteur réécrit en TypeScript, à partir des fichiers et non du code source — chaque format de conteneur décodé, le langage de script analysé et interprété, et les jeux jouables dans un navigateur sans rien installer. <b>Deux des trois sont ici</b> ; la troisième n'est pas portée.",
+  "lede": "CyberFlix a construit un moteur, et <b>trois</b> aventures ont paru dessus — deux de CyberFlix elle-même, la troisième de GTE Interactive Media. dreamREfactory est ce moteur réécrit en TypeScript, à partir des fichiers et non du code source — chaque format de conteneur décodé, le langage de script analysé et interprété, et les jeux jouables dans un navigateur sans rien installer. <b>Les trois sont ici.</b>",
   "titanicBody": "Le jeu complet en six langues, plus la démo de 1996. Un navigateur de sauvegardes, un sélecteur de langue et la page collection de l'édition physique.",
   "dustBody": "Le moteur deux ans plus tôt, et une autre forme de fichier. S'ouvre sur ses films ; la ville est parcourable. Plus petit, et en croissance.",
+  "timelapseBody": "Quatre disques et aucune pièce — un monde fait de flats de stage, où l'on navigue à la forme du curseur. Commence par son film ; le premier monde est parcourable. Le plus récent, et le moins abouti.",
   "docsTitle": "Documentation",
   "docsMeta": "formats · exécution · référence",
   "docsBody": "Comment le moteur fonctionne, format de conteneur par format de conteneur, et comment chacun a été retrouvé. La moitié la plus longue de ce projet.",

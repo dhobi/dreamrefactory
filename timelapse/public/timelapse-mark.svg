@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="">
+  <!--
+    Timelapse's mark: the glass pyramid off its own title card.
+
+    The card is a 1905x826 render — a stepped pyramid of turquoise glass on a
+    limestone terrace, a chrome apex, and a red-and-gold Maya temple built into
+    its base, all of it behind letters filled with abalone shell. None of that
+    survives 16 pixels, so this is the shape that does: the silhouette, three of
+    its five courses, and the doorway.
+
+    ## Measured, then simplified
+
+    The courses are real. A vertical scan down the middle of the artwork
+    (`out/logo-probe.mts`) finds its lit chrome rails at y = 53, 148, 189, 240
+    and 285 of 826 — five of them, unevenly spaced because the render is in
+    perspective and the top course is nearly face-on. Drawing five here made a
+    grey smudge at tab size and the fourth and fifth rails fell inside one pixel
+    of each other, so this draws THREE, evenly, which is the count that still
+    reads as "stepped" when the mark is 16px wide.
+
+    ## Faithful in four things
+
+    * the apex is CHROME and the courses are GLASS — the one hue change in the
+      whole silhouette, and the thing that says the pyramid is not stone
+    * the glass is lighter at the top and deepest at the base, which is how the
+      render lights it (#9de1ef at the apex, #37a9b0 by the terrace)
+    * every course is capped by a bright rail and undercut by a dark one: the
+      stepped profile is what a pyramid of glass boxes looks like edge-on
+    * a dark doorway at the base centre, because the temple is what the player
+      walks into and its opening is the only black in the picture's middle
+
+    Symmetric about the centre and lit from straight above, so the symmetry
+    holds — the same decision Dust's skull mark documents, for the same reason.
+  -->
+  <defs>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <!-- the pyramid's own turquoise, top to bottom, sampled down its axis -->
+      <stop offset="0" stop-color="#9de1ef" />
+      <stop offset="0.35" stop-color="#48d2c9" />
+      <stop offset="0.72" stop-color="#22a4a9" />
+      <stop offset="1" stop-color="#166b78" />
+    </linearGradient>
+    <linearGradient id="cap" x1="0" y1="0" x2="0.7" y2="1">
+      <!-- the chrome apex: white on the lit face, blue-white in the shade -->
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="0.6" stop-color="#dfe6f6" />
+      <stop offset="1" stop-color="#a8b4d4" />
+    </linearGradient>
+  </defs>
+
+  <!-- the body: one silhouette, so the courses can be drawn ON it and nothing
+       has to line up along a diagonal. Apex at 32,5 and a 52-unit rise, which is
+       what every x below is computed from: a rail at height y is as wide as
+       26 x (y - 5) / 52. -->
+  <path fill="url(#glass)" d="M32 5 L58 57 L6 57 Z" />
+
+  <!-- The four courses: a bright rail capping each step and a dark one undercutting
+       it, which is what a stack of glass boxes looks like edge-on. Drawn as strokes
+       cut to the silhouette's own width at that height rather than clipped, so the
+       mark stays four paths and a triangle at any size. -->
+  <g stroke-linecap="butt">
+    <path d="M23.7 22 H40.3" stroke="#cbf0ed" stroke-width="2" />
+    <path d="M23.3 23.4 H40.7" stroke="#10474f" stroke-width="1" />
+    <path d="M18.7 32 H45.3" stroke="#c2ecea" stroke-width="2" />
+    <path d="M18.3 33.4 H45.7" stroke="#0e4048" stroke-width="1" />
+    <path d="M13.7 42 H50.3" stroke="#b9e6e6" stroke-width="2" />
+    <path d="M13.3 43.4 H50.7" stroke="#0c3841" stroke-width="1" />
+    <path d="M8.7 52 H55.3" stroke="#b0dfe2" stroke-width="2" />
+    <path d="M8.3 53.4 H55.7" stroke="#0a313a" stroke-width="1" />
+  </g>
+
+  <!-- the chrome apex: the top tenth of the artwork's pyramid, and the one hue
+       change in the silhouette -->
+  <path fill="url(#cap)" d="M32 4 L36.8 14 H27.2 Z" />
+
+  <!-- the temple, built into the base course the way the render has it: a dark
+       doorway, and a lintel in its own red. The lintel is the only warm thing on
+       the whole card and the mark is flat without it. -->
+  <path fill="#0a1622" d="M28.6 57 V49.5 H35.4 V57 Z" />
+  <path d="M27.9 48.7 H36.1" stroke="#8d3a33" stroke-width="1.8" />
+
+  <!-- the outline, which is what keeps the silhouette legible on a light tab
+       strip as well as a dark one -->
+  <path
+    fill="none"
+    stroke="#2a3f63"
+    stroke-width="1.4"
+    stroke-linejoin="round"
+    d="M32 5 L58 57 L6 57 Z"
+  />
+</svg>

@@ -275,10 +275,62 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   // machinetype(): host platform. Scripts branch `if machinetype() = "win"`; the
   // web build is the Windows engine's descendant, so report "win".
   r("machinetype", () => "win");
-  // tick(): milliseconds since start (TI.EXE timeGetTime). TAOOT's blackjack
-  // times the deal with `bjtime = tick(); if tick() - bjtime > 1200`. frame(): the
-  // monotonic rendered-frame counter (a conversation's attentionspan = frame()).
-  r("tick", () => session.clock.now);
+  /**
+   * freemem() / sysmem() — bytes free to the application, and bytes the machine
+   * has. Timelapse's alone: its BOOTFILE asks both, once, on the way into `boot`.
+   *
+   *     minMemory = false
+   *     if freemem () / 1024 < 3595
+   *         minMemory = true
+   *     endif
+   *     if sysmem () / 1024 < 10000
+   *         minMemory = true
+   *     endif
+   *
+   * A browser tab has no honest answer to either question, so the number is a
+   * CHOICE, and the numbers below choose `minMemory = true` on purpose.
+   *
+   * That flag is not a quality setting. It picks between two implementations of
+   * the same handler, and only one of them is built out of opcodes this port has:
+   * `lefttoframe` pans between flats through `plugin("scrollflat", …)`, and
+   * `lefttoframeMin` does the identical turn with `gotoflat` and
+   * `visualeffect(turnhalfleft, …)`. Report a 1996-generous machine and Timelapse
+   * takes the plugin path, where nothing is implemented and turning left or right
+   * stops changing the picture at all. Report a tight one and it takes the path
+   * that works. (`stageparam(1, 0)`/`stageparam(2, 0)` come with it, which the
+   * port already round-trips.)
+   *
+   * So: 3 MB free of an 8 MB machine, which is under both thresholds and is a
+   * configuration the game shipped support for and was tested on. This is the
+   * only place to change if `scrollflat` is ever written — and see
+   * engine/src/runtime/plugins.ts, where that call logs loudly for the same
+   * reason.
+   */
+  r("freemem", () => 3 * 1024 * 1024);
+  r("sysmem", () => 8 * 1024 * 1024);
+  /**
+   * tick(): the engine's 60 Hz counter — NOT milliseconds.
+   *
+   * It was milliseconds here, and the scripts say otherwise in three independent
+   * places. Timelapse writes a five-second wait as `tick () - tonaltick > 60 * 5`,
+   * which nobody spells that way for a millisecond clock. Its stage animator
+   * paces itself with `flatstarttick + flatticknum * 60 / flatframerate - tick ()`
+   * — sixty per second over frames per second is ticks per frame, and only if a
+   * tick is a sixtieth. And TI.EXE's own counter (0x41de90) returns
+   * `timeGetTime() * 3 / 50`, i.e. ms/16.67, which this port already relies on for
+   * the wipe pacer (see GameSession.tickWipe).
+   *
+   * What it looked like was every paced animation running ten times too fast: the
+   * sea and the grass off the opening cliffs are `flatstartanim(2, 10, "FlatAnim",
+   * 6)`, six frames a second, and the delay came out negative on every pass — so
+   * the loop was armed with a period of 0 and ran at the display rate instead.
+   *
+   * Titanic's one use gets more sensible rather than less. `blkjack.shp`'s barman
+   * fidgets `if tick () - bjtime > 1200`, which is twenty seconds of the player
+   * sitting still — a reasonable cue for a bigger idle animation, where 1.2
+   * seconds had him tilting almost continuously. Dust asks for the value nowhere.
+   */
+  r("tick", () => Math.floor((session.clock.now * 3) / 50));
   r("frame", () => session.frameCounter);
   // setparam(idx[, val]): per-set scratch parameters, getter/setter by arity —
   // the set-level twin of stageparam.

@@ -8,7 +8,7 @@
     </title>
     <meta
       name="description"
-      content="A browser reimplementation of CyberFlix's DreamFactory engine. Two of the three adventures it shipped are playable here: Titanic: Adventure Out of Time (1996) and Dust: A Tale of the Wired West (1995)."
+      content="A browser reimplementation of CyberFlix's DreamFactory engine. All three adventures built on it are playable here: CyberFlix's own Titanic: Adventure Out of Time (1996) and Dust: A Tale of the Wired West (1995), and GTE Interactive Media's Timelapse: Ancient Civilizations (1996)."
     />
     <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
     <meta name="site-root" content="./" />
@@ -227,6 +227,53 @@
         font-size: 1.05rem;
         color: var(--text-bright);
       }
+      /* ------------------------------------------------------------------
+         WHO MADE IT, on the card.
+
+         CyberFlix wrote the engine and two of the three games; *Timelapse* is
+         GTE Interactive Media's. Nothing on this page said so, and the lede came
+         close to saying the opposite — which is the whole reason this exists:
+         the engine's name and the studio's name are not the same fact, and a
+         card that credits neither lets a reader assume they are.
+
+         One treatment for both studios, and the NAME is what differs. A colour
+         per studio would be inventing a code the reader has to learn, where three
+         cards reading "CyberFlix · CyberFlix · GTE Interactive Media" can simply
+         be read.
+
+         Top-right rather than over the art: the art band is a fixed height with
+         two logos of different shapes in it (see `.game .art`), and a plate
+         floating over a wordmark covers whichever one is widest. The door is
+         already `position: relative` for its hover light, so this needs no
+         stacking context of its own.
+         ------------------------------------------------------------------ */
+      .door .studio {
+        position: absolute;
+        top: 0.55rem;
+        right: 0.6rem;
+        z-index: 1;
+        padding: 0.16rem 0.45rem;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--inset);
+        font-family: var(--font-mono);
+        font-size: 0.66rem;
+        letter-spacing: 0.06em;
+        color: var(--text-mute);
+        /* a studio name is a proper noun and must not be broken across lines by
+           a narrow card */
+        white-space: nowrap;
+        transition:
+          color 120ms linear,
+          border-color 120ms linear;
+      }
+      /* it comes up with the card, so the credit is legible exactly when the
+         card is the one being looked at */
+      .door:hover .studio {
+        color: var(--text);
+        border-color: var(--border-hover);
+      }
+
       /* the year and engine generation, in the same slot on every card, so the
          two games' vintages line up at a glance */
       .door .meta {
@@ -282,6 +329,7 @@
         <a href="./editors/" data-i18n="site.navEditors">Editors</a>
         <a href="./taoot/">Titanic</a>
         <a href="./dust/">Dust</a>
+        <a href="./timelapse/">Timelapse</a>
         <a
           href="https://github.com/dhobi/dreamrefactory"
           data-i18n="site.navSource"
@@ -307,12 +355,12 @@
       </div>
 
       <p class="lede" data-i18n-html="front.lede">
-        CyberFlix built an engine and shipped <b>three</b> adventures on it.
+        CyberFlix built an engine, and <b>three</b> adventures shipped on it — two
+        of them CyberFlix's own, the third GTE Interactive Media's.
         dreamREfactory is that engine written again in TypeScript, from the
         files rather than from the source — every container format decoded, the
         script language parsed and interpreted, and the games played in a
-        browser with nothing installed. <b>Two of the three are here</b>; the
-        third is not ported.
+        browser with nothing installed. <b>All three are here.</b>
       </p>
 
       <div class="doors games">
@@ -320,6 +368,7 @@
           <span class="art"
             ><img src="/card-taoot.png" alt="" width="150" height="129"
           /></span>
+          <span class="studio" data-studio="CyberFlix" title="Developed by CyberFlix, who wrote the DreamFactory engine this port reimplements">CyberFlix</span>
           <b>Titanic: Adventure Out of Time RE</b>
           <span class="meta">1996 · DreamFactory 4</span>
           <p data-i18n="front.titanicBody">
@@ -332,11 +381,25 @@
           <span class="art"
             ><img src="/card-dust.png" alt="" width="340" height="125"
           /></span>
+          <span class="studio" data-studio="CyberFlix" title="Developed by CyberFlix, who wrote the DreamFactory engine this port reimplements">CyberFlix</span>
           <b>Dust: A Tale of the Wired West RE</b>
           <span class="meta">1995 · DreamFactory 1</span>
           <p data-i18n="front.dustBody">
             The engine two years earlier, and a different shape of file. Opens
             on its films; the town is walkable. Smaller, and growing.
+          </p>
+        </a>
+        <a class="door game" href="./timelapse/">
+          <span class="art"
+            ><img src="/card-timelapse.png" alt="" width="340" height="143"
+          /></span>
+          <span class="studio" data-studio="GTE Interactive Media" title="Developed by GTE Interactive Media on CyberFlix's DreamFactory engine — not a CyberFlix game">GTE Interactive Media</span>
+          <b>Timelapse: Ancient Civilizations RE</b>
+          <span class="meta">1996 · DreamFactory 4</span>
+          <p data-i18n="front.timelapseBody">
+            Four discs and no rooms at all — a world of stage flats, navigated
+            by the shape of the cursor. Opens on its film; the first world is
+            walkable. Newest, and least finished.
           </p>
         </a>
       </div>

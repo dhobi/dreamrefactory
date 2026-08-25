@@ -8,7 +8,7 @@ the documentation.
 
 ## Four things in one directory
 
-Three builds and a doc set share that one hosting directory, and each goes out on
+Four builds and a doc set share that one hosting directory, and each goes out on
 its own:
 
 | tag | build | lands at |
@@ -16,6 +16,7 @@ its own:
 | `site-v0.1.1` | `npm run build:site` | `/dreamrefactory/` — the front door and the seven format editors |
 | `taoot-v0.9.53` | `npm run build:taoot` | `/dreamrefactory/taoot/` — Titanic's four pages (the front page, `/play/`, `/collection/`, the unlisted `/speedrun/`) |
 | `dust-v0.3.6` | `npm run build:dust` | `/dreamrefactory/dust/` — Dust's two pages (the game, `/collection/`) |
+| `timelapse-v0.1.0` | `npm run build:timelapse` | `/dreamrefactory/timelapse/` — Timelapse's one page |
 | *(no tag)* | `npm run docs:build` | `/dreamrefactory/docs/` — on any push that touches `docs/` |
 
 ```bash
@@ -28,7 +29,7 @@ git tag taoot-v0.9.1 && git push --tags
 **Do not let `npm version` cut the tag.** It writes a bare `v0.9.1`, which no
 pattern here listens for — the tag would push and deploy nothing at all,
 silently. `--no-git-tag-version` keeps it to the files and leaves the tag to the
-hand that knows which of the three it is.
+hand that knows which of the four it is.
 
 Every namespace carries its target's name, and a tag naming none of them **fails
 the run** rather than defaulting to one. The old default-to-TAOOT is exactly what
@@ -38,8 +39,8 @@ from the Actions tab, where a `workflow_dispatch` input picks the target.
 ### Why sharing a directory is safe
 
 Because the mirror only **adds and overwrites** — see below. The site's build
-writes the root of the tree and the two games write directories inside it, so
-none of the three can remove another's files. Asset names are content-hashed, so
+writes the root of the tree and the three games write directories inside it, so
+none of the four can remove another's files. Asset names are content-hashed, so
 a superseded bundle is dead weight rather than a stale page.
 
 ### Each package holds its own version
@@ -49,7 +50,7 @@ which was a symptom of one build serving two games. Now:
 
 | | |
 |---|---|
-| `taoot/package.json`, `dust/package.json`, `site/package.json` | the sources of truth — semver |
+| `taoot/package.json`, `dust/package.json`, `timelapse/package.json`, `site/package.json` | the sources of truth — semver |
 | each package's `vite.config.ts` | substitutes its own for `__APP_VERSION__` at build time |
 | [`site/src/version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/version.ts) | exports `VERSION`, and draws it in the top bar beside the wordmark |
 | [`site/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | puts it in the issue body, so a report names the build it came from |
@@ -175,7 +176,7 @@ the thing it explains, under a base path made of the repository's name. Two
 things ended that at once: the site moved, and renaming the repository would have
 broken that base anyway.
 
-Unlike the three builds, the docs site cannot be path-independent: VitePress needs
+Unlike the four builds, the docs site cannot be path-independent: VitePress needs
 an absolute `base` for its router, so `docs/.vitepress/config.ts` names
 `/dreamrefactory/docs/` outright. It is the one place in the repository that knows
 the deployment's URL. It sits under `docs/` rather than at the root because a

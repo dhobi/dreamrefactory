@@ -18,7 +18,7 @@ import { indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources } from "./sources";
+import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf } from "./sources";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { siteUrl } from "@dreamfactory/site/site";
 import { t, formatNumber } from "@dreamfactory/site/locales";
@@ -35,7 +35,7 @@ import {
   readCstFile,
 } from "@dreamfactory/engine/df/cst";
 import { ShpFrame, decodeShpFrame, encodeShpFrame, patchFrameAnchor } from "@dreamfactory/engine/df/shp";
-import { SCREEN_H, SCREEN_W } from "@dreamfactory/engine/web/screen";
+import type { GameScreen } from "@dreamfactory/site/games";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -71,9 +71,25 @@ const DIRECTIONS = [
   "front-right",
 ];
 const compassOf = (angle: number): string => DIRECTIONS[Math.round((angle & 0xff) / 32) & 7];
-/** where the preview puts the actor's world point */
-const GROUND_X = 256;
-const GROUND_Y = 300;
+/**
+ * The screen this rip's actors are composited over.
+ *
+ * A CST records no screen size either, so it is the GAME's — see `screenOf`, and
+ * the note on the same field in `shp-editor.ts`.
+ */
+let screen: GameScreen = screenOf(null);
+
+/**
+ * Where the preview puts the actor's world point: the middle of the screen, low
+ * enough down that a full-height sprite has headroom above it.
+ *
+ * The preview's own choice rather than anything the data says — 256,300 on the
+ * 512×384 screen every CST in the corpus is authored for — but written as a
+ * fraction of {@link screen} so it stays in the middle of a screen of another
+ * size, which is where "the middle" means the same thing.
+ */
+const groundX = (): number => Math.floor(screen.width / 2);
+const groundY = (): number => Math.round(screen.height * (300 / 384));
 /** the most the preview canvas will grow past the screen on any one side, so a
  *  hand-typed depth scale cannot ask for a canvas the size of a wall */
 const MAX_PAD = 512;
@@ -194,6 +210,8 @@ async function initServerCasts(): Promise<void> {
   // names that cannot be told apart. The edition row at the top of the page is
   // what chooses, and it is the same choice the game reads (taoot/src/editions.ts).
   const source = chosenSource(await listSources());
+  // before any of this rip's actors are drawn — see the note on `screen`
+  if (source) screen = screenOf(source);
   if (!source) return; // production / no dev server: upload only
   const casts = filesIn(source, byExtension(".cst"));
   if (!casts.length) return;
@@ -270,15 +288,15 @@ function frameToCanvas(f: ShpFrame, canvas: HTMLCanvasElement): void {
 /** where a sprite lands on the screen, at the current depth scale */
 function spriteRect(f: ShpFrame): { x: number; y: number; w: number; h: number } {
   return {
-    x: GROUND_X - Math.round(f.posXraw * scaleK),
-    y: GROUND_Y - Math.round(f.posYraw * scaleK),
+    x: groundX() - Math.round(f.posXraw * scaleK),
+    y: groundY() - Math.round(f.posYraw * scaleK),
     w: Math.max(1, Math.round(f.width * scaleK)),
     h: Math.max(1, Math.round(f.height * scaleK)),
   };
 }
 
 /**
- * Room the canvas needs OUTSIDE the 512×384 screen, per side.
+ * Room the canvas needs OUTSIDE the screen, per side.
  *
  * A cast sprite is anchored at the actor's feet, so its stored offset is very
  * nearly its full height — GANG.CST's tallest is 392 px with the anchor at 383 —
@@ -300,8 +318,8 @@ function poseOverhang(): { top: number; right: number; bottom: number; left: num
       const r = spriteRect(f);
       pad.top = Math.max(pad.top, -r.y);
       pad.left = Math.max(pad.left, -r.x);
-      pad.bottom = Math.max(pad.bottom, r.y + r.h - SCREEN_H);
-      pad.right = Math.max(pad.right, r.x + r.w - SCREEN_W);
+      pad.bottom = Math.max(pad.bottom, r.y + r.h - screen.height);
+      pad.right = Math.max(pad.right, r.x + r.w - screen.width);
     }
   }
   // a side that overhangs gets its overhang plus AIR; a side that does not stays
@@ -324,8 +342,8 @@ function poseOverhang(): { top: number; right: number; bottom: number; left: num
 function drawScreen(f: ShpFrame | null): void {
   const canvas = $<HTMLCanvasElement>("preview");
   const pad = poseOverhang();
-  canvas.width = SCREEN_W + pad.left + pad.right;
-  canvas.height = SCREEN_H + pad.top + pad.bottom;
+  canvas.width = screen.width + pad.left + pad.right;
+  canvas.height = screen.height + pad.top + pad.bottom;
   const ctx = canvas.getContext("2d")!;
   // off the screen entirely: flatter and darker than either band, so the strip a
   // sprite hangs into reads as "the engine would not draw this"
@@ -333,15 +351,19 @@ function drawScreen(f: ShpFrame | null): void {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.save();
   ctx.translate(pad.left, pad.top); // from here on, screen coordinates
+  const band = screen.band ?? screen.height;
   ctx.fillStyle = "#00060f";
-  ctx.fillRect(0, 0, SCREEN_W, 264);
-  ctx.fillStyle = "#000d1f";
-  ctx.fillRect(0, 264, SCREEN_W, SCREEN_H - 264);
-  ctx.strokeStyle = "#0a2d52";
-  ctx.beginPath();
-  ctx.moveTo(0, 264.5);
-  ctx.lineTo(SCREEN_W, 264.5);
-  ctx.stroke();
+  ctx.fillRect(0, 0, screen.width, band);
+  // the band, and the line that ends the room view, only where the game has one
+  if (band < screen.height) {
+    ctx.fillStyle = "#000d1f";
+    ctx.fillRect(0, band, screen.width, screen.height - band);
+    ctx.strokeStyle = "#0a2d52";
+    ctx.beginPath();
+    ctx.moveTo(0, band + 0.5);
+    ctx.lineTo(screen.width, band + 0.5);
+    ctx.stroke();
+  }
 
   if (f && f.width && f.height) {
     const r = spriteRect(f);
@@ -356,15 +378,15 @@ function drawScreen(f: ShpFrame | null): void {
   // the world point the sprite hangs off — the actor's own position
   ctx.strokeStyle = "rgba(242,232,205,0.5)";
   ctx.beginPath();
-  ctx.moveTo(GROUND_X - 8, GROUND_Y + 0.5);
-  ctx.lineTo(GROUND_X + 8, GROUND_Y + 0.5);
-  ctx.moveTo(GROUND_X + 0.5, GROUND_Y - 8);
-  ctx.lineTo(GROUND_X + 0.5, GROUND_Y + 8);
+  ctx.moveTo(groundX() - 8, groundY() + 0.5);
+  ctx.lineTo(groundX() + 8, groundY() + 0.5);
+  ctx.moveTo(groundX() + 0.5, groundY() - 8);
+  ctx.lineTo(groundX() + 0.5, groundY() + 8);
   ctx.stroke();
   // ...and where the screen ends, whenever anything reaches past it
   if (pad.top || pad.right || pad.bottom || pad.left) {
     ctx.strokeStyle = "rgba(122,168,214,0.5)";
-    ctx.strokeRect(-0.5, -0.5, SCREEN_W + 1, SCREEN_H + 1);
+    ctx.strokeRect(-0.5, -0.5, screen.width + 1, screen.height + 1);
   }
   ctx.restore();
 }
@@ -394,8 +416,8 @@ function renderPreview(): void {
                 k: scaleK,
                 w: Math.round(f.width * scaleK),
                 h: Math.round(f.height * scaleK),
-                x: GROUND_X - Math.round(f.posXraw * scaleK),
-                y: GROUND_Y - Math.round(f.posYraw * scaleK),
+                x: groundX() - Math.round(f.posXraw * scaleK),
+                y: groundY() - Math.round(f.posYraw * scaleK),
               })
             : t("casts.previewNotSprite"))
         : t("casts.previewNoSprite"))

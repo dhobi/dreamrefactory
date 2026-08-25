@@ -14,7 +14,7 @@
     "forceConsistentCasingInFileNames": true,
     "useDefineForClassFields": true
   },
-  "include": ["engine", "site", "taoot", "dust", "tools"],
+  "include": ["engine", "site", "taoot", "dust", "timelapse", "tools"],
   // The rips live inside the game packages now, and a rip is not a source tree:
   // it is ~7,800 files of 1996 game data, and anything a probe happens to leave
   // in one is not part of this program.

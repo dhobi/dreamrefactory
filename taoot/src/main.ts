@@ -30,6 +30,8 @@ import {
   MOVE_SPEED_MS,
 } from "@dreamfactory/engine/runtime/session";
 import { GameHost } from "@dreamfactory/engine/web/host";
+import { CursorSheet } from "@dreamfactory/engine/web/cursors";
+import { TI_CURSORS } from "./cursor-art";
 import { loadTemplates, saveTemplateFor, seedSaves } from "./save-seed";
 import {
   browseForLoad,
@@ -68,6 +70,7 @@ import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
 import { ChangeWatch, RowView, stateDump, stateView } from "./debug-panel";
 import { focusOwnsKey, swipeKey } from "@dreamfactory/engine/web/keys";
 import { siteUrl, sitePath } from "@dreamfactory/site/site";
+import { TITANIC } from "@dreamfactory/site/games";
 import {
   ALL_CHANNELS,
   DEFAULT_SCREEN_GAMMA,
@@ -246,6 +249,7 @@ let editionCode = DEFAULT_LANGUAGE;
 // no button on /speedrun/, and nothing to report from a stopwatch
 if (bugBtn) {
   installBugReport(bugBtn, {
+    game: TITANIC.short,
     canvas: screen,
     shotName: "taoot-bug.png",
     version: VERSION,
@@ -336,24 +340,48 @@ function detailsWanted(): boolean {
   }
 }
 
-// DreamFactory cursor names -> CSS cursors. The list is CLOSED, because the
-// corpus is: every `cursor(...)` call in every script in the tree names one of
-// five — touch (809), arrow (75), hand (36), watch (18), fist (2). `take`,
-// `turn`, `look` and `talk` used to be here and are emitted by nothing; they
-// were ours, from when the port decided cursors itself instead of asking.
-const CURSOR_CSS: Record<string, string> = {
-  touch: "pointer",
-  // a script asking for the plain arrow, and 75 places do. Unmapped it fell to
-  // the `?? "pointer"` default below, so "explicitly not clickable" drew a hand —
-  // the notebook lying on the smokestack platform is the worked example.
-  arrow: "default",
-  hand: "grab",
-  fist: "grabbing",
-  // boot1's idle() sets this while `lockevents` freezes the world — the air
-  // raid, the turbine trigger. Without the mapping a frozen game showed the
-  // same hand as a live one over things that would not answer.
-  watch: "wait",
-};
+/**
+ * The pointer, drawn with Titanic's own art.
+ *
+ * `cursor("touch")` names a `CURS.*` cursor resource inside the engine's own
+ * executable — `tools/dumpcursors.ts` has the mechanism — and `ti.exe` carries
+ * eleven of them, byte-identical across the demo and every shipped edition. This
+ * page used to map the names onto CSS keywords instead, which is the right first
+ * move and loses two things: the art is the 1996 artwork, and three of the eleven
+ * (`goleft`, `goright`, `gostrait`) have no keyword that means what they mean.
+ *
+ * The corpus is CLOSED and small: every `cursor(...)` call in every script names
+ * one of five — touch (809), arrow (75), hand (36), watch (18), fist (2). `take`,
+ * `turn`, `look` and `talk` used to be mapped here and are emitted by nothing;
+ * they were ours, from when the port decided cursors itself instead of asking.
+ * The other six in the file are the engine's own, kept because the table is the
+ * BUILD's rather than a list of what this game happens to use.
+ *
+ * Each name still carries a keyword for a browser that will not take the image
+ * (see {@link CursorSheet}) — the same five mappings this comment used to be, plus
+ * `crosshair` for `sight` and `none` for a pointer `hidecursor()` has taken away.
+ */
+const cursors = new CursorSheet(TI_CURSORS);
+
+/** the name last answered, so a resize can redraw it at the new size */
+let cursorShown = "";
+
+/**
+ * Show what the thing under the pointer asked for.
+ *
+ * An empty answer is the game's ARROW rather than the browser's default:
+ * `CURS.ARROW` is the window class's cursor in `ti.exe`, which is what the player
+ * saw everywhere no script had claimed the pointer.
+ */
+function showCursor(name: string): void {
+  cursorShown = name;
+  const rect = screen.getBoundingClientRect();
+  // the scale the PICTURE is shown at: the canvas is the framebuffer (512x384)
+  // and CSS stretches it, so a cursor at 1x would be half the size the artist
+  // drew it at against a doubled picture
+  screen.style.cursor = cursors.css(name || "arrow", rect.width / screen.width);
+}
+addEventListener("resize", () => showCursor(cursorShown));
 
 /**
  * The bar the player watches while the game is fetched (GameHost.preload).
@@ -403,6 +431,15 @@ const host = new GameHost(files, audioSink, {
   },
   mapChanged: () => refreshMap(),
 });
+
+/**
+ * ...and let the DIRECTOR ask for a cursor too, for the changes a mouse move
+ * cannot report: the hourglass while `lockevents` freezes the world — a character
+ * walking up to you — arrived only when the player happened to move the pointer,
+ * where the original's idle loop set it the moment the lock went up. See
+ * ScreenDirector.onCursor.
+ */
+host.director.onCursor = showCursor;
 const session = host.session;
 
 // dialog builtins -> native browser dialogs; quit reloads to the boot screen
@@ -1588,9 +1625,7 @@ screen.addEventListener("mousemove", (e) => {
     session.setPointer(x, y);
     return;
   }
-  void v.hover(x, y).then((name) => {
-    screen.style.cursor = name ? (CURSOR_CSS[name] ?? "pointer") : "default";
-  });
+  void v.hover(x, y).then(showCursor);
 });
 
 /**
@@ -1763,12 +1798,19 @@ window.addEventListener("keydown", (e) => {
 // The frame loop
 // ---------------------------------------------------------------------------
 
+/**
+ * The screen, not the room.
+ *
+ * This used to be `if (host.viewer) { tick; render }` — so on any frame with no
+ * room open there was no fade ramping, no movie advancing, no delay clock moving
+ * and nothing drawn. The demo's boot is exactly that frame: it plays its logos
+ * and opens a menu stage before it has a room, and the port had to open one it
+ * did not want just to have something to run this loop on
+ * (`GameHost.coldBoot`, now without that workaround).
+ */
 function loop(now: number): void {
-  const viewer = host.viewer;
-  if (viewer) {
-    viewer.tick(now);
-    viewer.render(ctx);
-  }
+  host.director.tick(now);
+  host.director.render(ctx);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
