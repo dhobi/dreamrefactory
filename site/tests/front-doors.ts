@@ -87,18 +87,40 @@ test("a badge shows the studio it claims in its attribute", () => {
 });
 
 /**
- * And the one claim that is not per-game: the lede.
+ * And the two claims that are not per-game, both in the lede.
  *
- * It said "CyberFlix built an engine and shipped three adventures on it", which
- * is wrong about the third and is the sentence that made the badges necessary.
- * Pinned by the studio's name being IN it, rather than by the whole sentence,
- * because the wording is translated six ways and this is about the fact.
+ * It began as "CyberFlix built an engine and shipped three adventures on it",
+ * which was wrong twice. Wrong about the third — *Timelapse* is not CyberFlix's,
+ * and that half is the sentence that made the badges necessary. And wrong about
+ * the number: DreamFactory was Bill Appleton's authoring system and it carried
+ * *Lunicus* and *Jump Raven* as well, besides being licensed to studios outside
+ * CyberFlix altogether. THREE is how many of them this port plays, which is a
+ * fact about this project and not about the engine.
+ *
+ * Pinned by the names being IN the sentence rather than by the sentence itself,
+ * because the wording is translated six ways and these are about the facts.
  */
+const lede = (): string => /<p class="lede"[^>]*>([\s\S]*?)<\/p>/.exec(html)?.[1] ?? "";
+
 test("the lede does not hand CyberFlix somebody else's game", () => {
-  const lede = /<p class="lede"[^>]*>([\s\S]*?)<\/p>/.exec(html)?.[1] ?? "";
-  expect(lede, "no lede found").not.toBe("");
+  const text = lede();
+  expect(text, "no lede found").not.toBe("");
   const others = GAMES.map((g) => g.developer).filter((d) => d !== "CyberFlix");
   for (const studio of new Set(others)) {
-    expect(lede.includes(studio), `the lede never names ${studio}`).toBe(true);
+    expect(text.includes(studio), `the lede never names ${studio}`).toBe(true);
   }
+});
+
+test("the lede does not make the engine's games only the ones this port plays", () => {
+  // Games built on DreamFactory that are NOT in this port. Naming some of them
+  // is what stops the sentence collapsing back into a count of what happens to
+  // be playable here — the mistake it shipped with, which reads as though the
+  // engine had three games rather than the port having three.
+  const elsewhere = ["Lunicus", "Jump Raven", "Redjack"];
+  const named = elsewhere.filter((title) => lede().includes(title));
+  expect(
+    named.length,
+    `the lede names none of ${elsewhere.join(", ")} — a reader is left thinking ` +
+      `DreamFactory's games are exactly the ones with a door on this page`,
+  ).toBeGreaterThanOrEqual(2);
 });
