@@ -6,8 +6,27 @@ These docs explain how CyberFlix's **DreamFactory** engine works, and how this
 project turns the original game files into something that runs in a browser —
 **no DOSBox, no emulator**, a fresh reimplementation in TypeScript.
 
-All three adventures built on that engine are here — two of them CyberFlix's own
-and the third GTE Interactive Media's:
+**DreamFactory** was Bill Appleton's CD-ROM authoring system, written at
+CyberFlix, and the studio's games were made with it: *Lunicus* (1993),
+*Jump Raven* (1994), *Dust: A Tale of the Wired West* (1995) and
+*Titanic: Adventure Out of Time* (1996). It was licensed outside CyberFlix as
+well. So "the DreamFactory games" is a longer list than this project covers, and
+nothing here should be read as claiming otherwise.
+
+Two of those attributions are documented and one is measured, which is worth
+separating: published sources name *Dust* and *Titanic* as DreamFactory titles,
+and *Lunicus* and *Jump Raven* are named as such in accounts of the Pippin
+platform they were announced for. *Timelapse* needs no source at all — its discs
+are DreamFactory 4 containers and this port reads them with the same code that
+reads Titanic's, which is the strongest evidence available for any of them.
+CyberFlix's remaining titles are deliberately **not** claimed here: *Skull
+Cracker* (1996) and *Redjack: Revenge of the Brethren* (1998, its last, published
+by THQ) are the studio's games, but no source consulted attributes either to the
+engine, and Redjack's own write-ups describe several purpose-built engines
+instead.
+
+Three of them are here — two of them CyberFlix's own and the third GTE
+Interactive Media's:
 **[Dust: A Tale of the Wired West](dust/)** (1995, DreamFactory 1),
 **[Titanic: Adventure Out of Time](taoot/)** (1996, DreamFactory 4) and
 **[Timelapse: Ancient Civilizations](timelapse/)** (1996, DreamFactory 4 on four

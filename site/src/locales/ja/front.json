@@ -1,7 +1,7 @@
 {
   "docTitle": "dreamREfactory — CyberFlix の DreamFactory エンジン、再実装",
   "tagline": "CyberFlix の DreamFactory エンジン、再実装",
-  "lede": "CyberFlix はひとつのエンジンを作り、その上で<b>3本</b>のアドベンチャーが発売されました。うち2本は CyberFlix 自身のもので、3本目は GTE Interactive Media のものです。dreamREfactory は、そのエンジンをソースコードではなくファイルそのものから TypeScript で書き直したものです。すべてのコンテナ形式を解析し、スクリプト言語を構文解析して実行し、ブラウザだけでゲームを動かします。<b>3本すべてがここにあります。</b>",
+  "lede": "CyberFlix はエンジンを作りました。ビル・アップルトンの <b>DreamFactory</b> は CD-ROM 用のオーサリングシステムで、同スタジオの作品はこれで作られました — <i>Lunicus</i>（1993）、<i>Jump Raven</i>、<i>Dust: A Tale of the Wired West</i>、<i>Titanic: Adventure Out of Time</i> — さらに他のスタジオにもライセンスされました。<i>Timelapse: Ancient Civilizations</i> は <b>GTE Interactive Media</b> の作品です。CyberFlix は最後の作品 <i>Redjack: Revenge of the Brethren</i> と同じ 1998 年に閉じました。dreamREfactory はそのエンジンを TypeScript で書き直したものです。ソースコードではなくファイルから — すべてのコンテナ形式を解読し、スクリプト言語を解析して実行し、インストールなしでブラウザーでゲームを動かします。<b>そのうち三本がここにあります。</b>",
   "titanicBody": "6言語の完全版に、1996年のデモを加えたもの。セーブブラウザ、言語選択、そしてパッケージ版のコレクションページ。",
   "dustBody": "2年前のエンジンと、異なるファイル構造。ムービーから始まり、町を歩けます。小さく、そして育っています。",
   "timelapseBody": "4枚のディスクに部屋はひとつもなく、世界はステージのフラットで作られ、カーソルの形が道を示します。まずムービーが流れ、最初のワールドを歩けます。いちばん新しく、いちばん未完成です。",
