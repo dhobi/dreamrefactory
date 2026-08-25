@@ -180,6 +180,11 @@
         /* how far down the picture starts — nothing while the card is centred */
         --band: 0px;
         /* and how far down the pair starts; see body.playing */
+        /* The cap on --drop, where the reasoning lives. Dust's page and
+           Timelapse's are the same composition — a title card over a framed
+           picture — so they cap it at the same 96px and behave alike on a phone. */
+        --drop-max: 96px;
+
         --drop: 0px;
 
         /* ------------------------------------------------------------------
@@ -248,23 +253,37 @@
           )
         );
         --pic-h: calc(var(--pic-w) * 3 / 4);
-        /* Half the slack, measured against the picture THERE IS. Written against a
-           flat 768px first, which is only the picture's height when the height is
-           what limits it — at 400x600 the width limits it, the real picture is 267
-           tall, and the formula saw 768, called the slack negative and left all 231
-           spare pixels in one lump under the frame. */
-        --drop: max(
-          0px,
-          round(
-            down,
-            calc(
-              (
-                  var(--stage-h) - 2 * var(--pad) - var(--band) - var(--pic-h) -
-                    2 * var(--frame)
-                ) /
-                2
-            ),
-            2px
+        /* Half the slack, measured against the picture THERE IS, and never more
+           than --drop-max.
+
+           Written against a flat 768px first, which is only the picture's height
+           when the height is what limits it — at 400x600 the width limits it, the
+           real picture is 267 tall, and the formula saw 768, called the slack
+           negative and left all 231 spare pixels in one lump under the frame.
+
+           Capped, because on a phone half the slack is most of the screen. At
+           412x915 the picture is 273px tall and the drop came out around 240, so
+           the canvas started 389px down a 915px window with 253px below it —
+           reported as "the game canvas moves too far downwards", and true: the
+           composition hung in the middle of the page with a third of the window
+           empty above it. A picture hung a little high with its controls under it
+           is the better answer, and it is the answer Timelapse's page already
+           gives — same composition, same cap, same behaviour. */
+        --drop: min(
+          var(--drop-max),
+          max(
+            0px,
+            round(
+              down,
+              calc(
+                (
+                    var(--stage-h) - 2 * var(--pad) - var(--band) -
+                      var(--pic-h) - 2 * var(--frame)
+                  ) /
+                  2
+              ),
+              2px
+            )
           )
         );
       }

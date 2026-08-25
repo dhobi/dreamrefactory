@@ -70,7 +70,12 @@ import {
   type StgRegion,
 } from "@dreamfactory/engine/df/stg";
 import { GameHost } from "@dreamfactory/engine/web/host";
-import { swipeKey } from "@dreamfactory/engine/web/keys";
+import {
+  GestureKey,
+  PointerEventLike,
+  TouchGestures,
+  bindSwipeInvert,
+} from "@dreamfactory/engine/web/touch";
 import {
   browseForLoad,
   browseForSave,
@@ -1382,7 +1387,10 @@ addEventListener("keydown", (e) => {
 useSaveKind(DUST_SAVES);
 
 /** the pointer, in the canvas's own 512x384 coordinates */
-function canvasCoords(e: PointerEvent | MouseEvent): { x: number; y: number } {
+function canvasCoords(e: { clientX: number; clientY: number }): {
+  x: number;
+  y: number;
+} {
   const r = canvas.getBoundingClientRect();
   return {
     x: Math.floor(((e.clientX - r.left) / r.width) * FLAT_W),
@@ -1475,16 +1483,30 @@ addEventListener("resize", () => showCursor(cursorShown));
 
 canvas.addEventListener("pointerdown", (e) => {
   const host = playing;
-  const v = host?.viewer;
-  if (!host || !v) return;
+  if (!host) return;
   if (savesOpen()) return; // the dialog owns the screen (see the keydown above)
   const { x, y } = canvasCoords(e);
   host.session.setPointer(x, y);
-  // a finger is ambiguous until it moves — see beginTouch
+  /**
+   * A finger is ambiguous until it moves — see beginTouch — and it is allowed to
+   * begin with NO VIEWER, for exactly the reason a key is (see the keydown
+   * handler's note): what a double-tap means is ESCAPE, and a film is skipped
+   * through the director with no room open at all.
+   *
+   * This asked for `host.viewer` and dropped the gesture when there was none, so
+   * the opening films were unskippable BY FINGER while the keyboard skipped them
+   * — the same bug as the keyboard's, in the half nobody retested. Reported as
+   * "I cannot skip a mov with double tap anymore", and it is a regression rather
+   * than an old fault: films used to play over an open set, and they play on the
+   * ScreenDirector now, which is when `viewer` became null underneath this.
+   */
   if (e.pointerType === "touch") {
-    beginTouch(e, x, y);
+    touch.down(e);
     return;
   }
+  // a MOUSE press is a click on a room, and there is no room to click
+  const v = host.viewer;
+  if (!v) return;
   host.session.pointerDown = true;
   // what the press CARRIED: Dust reads `shiftkey()` inside its own mousedown
   // (HOUSE.PRP's HELP button, INVEN.PRP's debug `hotdist`), so the question is
@@ -1496,32 +1518,23 @@ canvas.addEventListener("pointerdown", (e) => {
 // on the window, not the canvas: a drag that ends off-canvas still has to end.
 addEventListener("pointermove", (e) => {
   const host = playing;
-  if (!host?.viewer) return;
+  if (!host) return;
   const { x, y } = canvasCoords(e);
   host.session.setPointer(x, y);
-  // ...and what the thing under it wants to look like. Not while a press is in
-  // flight: Dust's drags are `while stilldown()` handlers that hold the world,
-  // and running a `setcursor` chain concurrently with one is asking two scripts
-  // to move the same prop.
-  if (e.pointerType !== "touch" && !host.session.pointerDown) {
+  // ...and what the thing under it wants to look like. A question about a ROOM,
+  // so it waits for one — unlike the gesture below it. Not while a press is in
+  // flight either: Dust's drags are `while stilldown()` handlers that hold the
+  // world, and running a `setcursor` chain concurrently with one is asking two
+  // scripts to move the same prop.
+  if (host.viewer && e.pointerType !== "touch" && !host.session.pointerDown) {
     void host.viewer.hover(x, y).then(showCursor);
   }
-  const g = touch;
-  if (!g || e.pointerId !== g.id) return;
-  if (g.pressed || g.swiped) return; // already committed either way
-  if (Math.hypot(e.clientX - g.clientX, e.clientY - g.clientY) < SWIPE_MIN_PX)
-    return;
-  // committed to a swipe; the DIRECTION is read at release, off the whole
-  // journey, so a wobbly first few pixels don't get to choose it
-  g.swiped = true;
-  clearTimeout(g.holdTimer);
+  // and the finger's journey, which the recogniser measures for the swipe
+  if (touch.owns(e)) touch.move(e);
 });
 
 addEventListener("pointerup", (e) => {
-  if (touch && e.pointerId === touch.id) {
-    endTouch(e);
-    return;
-  }
+  if (touch.up(e)) return;
   const host = playing;
   if (!host?.viewer) return;
   host.session.pointerDown = false;
@@ -1549,209 +1562,75 @@ addEventListener("pointerup", (e) => {
  * keys through `keyDown` (see the keydown handler above — its boot script does
  * its own arrow mapping), so a swipe sends exactly what the keyboard would.
  */
-/** CSS px a finger must travel before the gesture counts as a swipe */
-const SWIPE_MIN_PX = 48;
-/** a finger still on the glass this long is holding a control, not swiping */
-const TAP_HOLD_MS = 220;
 /**
- * Two taps in the same place this close together are the phone's ESCAPE — the
- * key a cutscene is skipped with. Only the SECOND tap is swallowed: the first
- * has already been sent as a click, because holding every tap back to see
- * whether another follows would put 300 ms of lag on every press in the game.
+ * How the player has asked the two swipe axes to read, and where the answers
+ * outlive the tab. The storage keys are unchanged by the move to the shared
+ * binder — it appends `.invertturn`/`.invertwalk` to this prefix, which is what
+ * this page has always written — so a player's setting survives the migration.
  */
-const DOUBLE_TAP_MS = 320;
-const DOUBLE_TAP_PX = 48;
-let lastTapAt = 0;
-let lastTapX = 0;
-let lastTapY = 0;
-
-interface TouchGesture {
-  id: number;
-  /** where the finger went down: CSS px (for the swipe) and canvas px (for the tap) */
-  clientX: number;
-  clientY: number;
-  x: number;
-  y: number;
-  /** the game has been given its mousedown (a hold, being dragged) */
-  pressed: boolean;
-  /** ruled a swipe — no click will be sent */
-  swiped: boolean;
-  holdTimer: number;
-}
-let touch: TouchGesture | null = null;
-
-/**
- * A finger that goes down on a CONTROL is never a swipe: a drag moves
- * immediately, and waiting TAP_HOLD_MS to disambiguate would rule Dust's
- * inventory drag (INVEN.PRP `stdmouse`, a `while stilldown()` loop) a swipe and
- * walk the camera instead of carrying the item. A prop or a stage button takes
- * the press at once; room surfaces keep the wait, because swiping the ROOM is
- * how a phone walks.
- */
-function touchOwnedByGame(x: number, y: number): boolean {
-  const kind = playing?.session.hitTestAt(x, y).type;
-  return kind === "prop" || kind === "button";
-}
-
-function beginTouch(e: PointerEvent, x: number, y: number): void {
-  if (touch) clearTimeout(touch.holdTimer);
-  const control = touchOwnedByGame(x, y);
-  const g: TouchGesture = {
-    id: e.pointerId,
-    clientX: e.clientX,
-    clientY: e.clientY,
-    x,
-    y,
-    pressed: false,
-    swiped: false,
-    holdTimer: control ? 0 : window.setTimeout(() => holdTouch(), TAP_HOLD_MS),
-  };
-  touch = g;
-  if (control) holdTouch();
-}
-
-/** the finger stayed put: it is a press after all, so hand the mousedown over */
-function holdTouch(): void {
-  const g = touch;
-  const host = playing;
-  const v = host?.viewer;
-  if (!g || g.pressed || g.swiped || !host || !v) return;
-  g.pressed = true;
-  host.session.pointerDown = true;
-  host.session.shiftDown = false;
-  void host.session.track(v.press(g.x, g.y), `press ${g.x},${g.y}`);
-}
-
-function endTouch(e: PointerEvent): void {
-  const g = touch;
-  if (!g) return;
-  clearTimeout(g.holdTimer);
-  touch = null;
-  const host = playing;
-  const v = host?.viewer;
-  if (!host || !v) return;
-  if (g.pressed) {
-    // it was a hold: end it the way any other release does
-    host.session.pointerDown = false;
-    v.release(host.session.pointerX, host.session.pointerY);
-    return;
-  }
-  if (g.swiped) {
-    const key = swipeKey(
-      e.clientX - g.clientX,
-      e.clientY - g.clientY,
-      swipeInvert,
-    );
-    if (key) sendGestureKey(key);
-    return;
-  }
-  // a second tap in the same place, promptly: that is ESC, not a click
-  const now = performance.now();
-  if (
-    now - lastTapAt < DOUBLE_TAP_MS &&
-    Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < DOUBLE_TAP_PX
-  ) {
-    lastTapAt = 0;
-    sendGestureKey(".", true);
-    return;
-  }
-  lastTapAt = now;
-  lastTapX = e.clientX;
-  lastTapY = e.clientY;
-  // a tap: down and up at the point the finger landed, not where it lifted.
-  // Not awaited between the two — press() may not resolve until a close-up it
-  // opened is dismissed, and the mouseup belongs to the tap, not to the movie.
-  host.session.pointerDown = true;
-  host.session.shiftDown = false;
-  void host.session.track(v.press(g.x, g.y), `press ${g.x},${g.y}`);
-  host.session.pointerDown = false;
-  v.release(g.x, g.y);
-}
-
-/** a gesture the browser took away (a system edge-swipe): forget it, act on nothing */
-addEventListener("pointercancel", (e) => {
-  const g = touch;
-  if (!g || e.pointerId !== g.id) return;
-  clearTimeout(g.holdTimer);
-  touch = null;
-  const host = playing;
-  if (g.pressed && host?.viewer) {
-    host.session.pointerDown = false;
-    host.viewer.release(host.session.pointerX, host.session.pointerY);
-  }
+const swipeInvert = bindSwipeInvert({
+  storageKey: "dust.swipe",
+  turnBox: document.getElementById("swipeInvertTurn") as HTMLInputElement | null,
+  walkBox: document.getElementById("swipeInvertWalk") as HTMLInputElement | null,
+  reveal: document.getElementById("swipeOpts"),
 });
 
-/** how the player has asked the two swipe axes to read */
-const swipeInvert = { turn: false, walk: false };
-
 /**
- * The two boxes in the strip, and their memory.
+ * The recogniser, and only the DISPATCH is Dust's.
  *
- * Their own storage keys and not the play page's: this is a different game on a
- * different page, and a player who inverted Titanic's turn has said nothing
- * about Dust's.
- *
- * Shown only where a swipe is possible at all — a mouse has the arrow keys and
- * never reaches a gesture, so on a desktop the question is noise in a strip that
- * is otherwise one hint. `maxTouchPoints` as well as the media query, because a
- * laptop with a touchscreen reports a FINE pointer while still delivering
- * `pointerType === "touch"`: the gesture is live there, so the setting has to be
- * reachable.
+ * This was two hundred lines of state machine here, the same two hundred as
+ * Titanic's page, and the copies had drifted in ways nobody chose. They also
+ * drifted from the truth in the same place twice: every hook below that needs a
+ * ROOM says so, and the two that send a KEY do not — which is the distinction
+ * the private copy got wrong, so a film that plays with no set open could not be
+ * skipped by finger while the keyboard skipped it fine.
  */
-const SWIPE_INVERT_TURN_KEY = "dust.swipe.invertturn";
-const SWIPE_INVERT_WALK_KEY = "dust.swipe.invertwalk";
+const touch = new TouchGestures({
+  /**
+   * Geometry, and deliberately NOT gated on a viewer.
+   *
+   * `coords` returning null drops the gesture before it starts, so gating it on
+   * a room would take the double-tap away exactly when a cutscene is on screen —
+   * which is when it is wanted. The game itself has to exist, because there is
+   * nothing to send a key to before that.
+   */
+  coords: (e: PointerEventLike) => (playing ? canvasCoords(e) : null),
+  /**
+   * A finger that goes down on a CONTROL is never a swipe: a drag moves
+   * immediately, and waiting TAP_HOLD_MS to disambiguate would rule Dust's
+   * inventory drag (INVEN.PRP `stdmouse`, a `while stilldown()` loop) a swipe and
+   * walk the camera instead of carrying the item. Room surfaces keep the wait,
+   * because swiping the ROOM is how a phone walks.
+   */
+  ownedByGame: (x, y) => {
+    const kind = playing?.session.hitTestAt(x, y).type;
+    return kind === "prop" || kind === "button";
+  },
+  /** a mousedown needs a room to land in; a film on screen has none */
+  press: (x, y) => {
+    const host = playing;
+    const v = host?.viewer;
+    if (!host || !v) return;
+    host.session.pointerDown = true;
+    // a finger holds no shift key, and Dust reads `shiftkey()` inside its own
+    // mousedown (HOUSE.PRP's HELP button, INVEN.PRP's debug `hotdist`)
+    host.session.shiftDown = false;
+    void host.session.track(v.press(x, y), `press ${x},${y}`);
+  },
+  release: (x, y) => {
+    const host = playing;
+    if (!host) return;
+    host.session.pointerDown = false;
+    host.viewer?.release(x, y);
+  },
+  /** a swipe's arrow and a double-tap's ESCAPE, on the route the keyboard uses */
+  sendKey: (key: GestureKey, special: boolean) => sendGestureKey(key, special),
+  // read at RELEASE, so a box ticked mid-gesture applies to that gesture
+  invert: () => swipeInvert,
+});
 
-function installSwipeOptions(): void {
-  const touchable =
-    navigator.maxTouchPoints > 0 ||
-    window.matchMedia("(pointer: coarse)").matches;
-  if (!touchable) return;
-  const opts = document.getElementById("swipeOpts");
-  const turnBox = document.getElementById(
-    "swipeInvertTurn",
-  ) as HTMLInputElement | null;
-  const walkBox = document.getElementById(
-    "swipeInvertWalk",
-  ) as HTMLInputElement | null;
-  if (!opts || !turnBox || !walkBox) return;
-  opts.hidden = false;
-  bindSwipeOption(
-    turnBox,
-    SWIPE_INVERT_TURN_KEY,
-    (on) => (swipeInvert.turn = on),
-  );
-  bindSwipeOption(
-    walkBox,
-    SWIPE_INVERT_WALK_KEY,
-    (on) => (swipeInvert.walk = on),
-  );
-}
-
-/** a checkbox that remembers, and applies what it remembered before any gesture */
-function bindSwipeOption(
-  box: HTMLInputElement,
-  key: string,
-  apply: (on: boolean) => void,
-): void {
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem(key);
-  } catch {
-    /* storage can be denied; the box then starts unchecked every launch */
-  }
-  box.checked = stored === "1";
-  apply(box.checked);
-  box.addEventListener("change", () => {
-    apply(box.checked);
-    try {
-      window.localStorage.setItem(key, box.checked ? "1" : "0");
-    } catch {
-      /* not remembering is survivable — the setting still holds for this tab */
-    }
-  });
-}
-
-installSwipeOptions();
+/** a gesture the browser took away (a system edge-swipe): forget it, act on nothing */
+addEventListener("pointercancel", (e) => touch.cancel(e));
 
 /** a key a gesture means, on the same route the keyboard uses */
 function sendGestureKey(ch: string, isEsc = false): void {

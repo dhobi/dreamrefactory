@@ -144,8 +144,20 @@ interface Gesture {
  */
 export class TouchGestures {
   private g: Gesture | null = null;
-  /** the previous tap, for the double-tap test — CSS px and a timestamp */
-  private lastTapAt = 0;
+  /**
+   * The previous tap, for the double-tap test — CSS px and a timestamp.
+   *
+   * `-Infinity` and not `0`, because 0 is a TIME as well as a sentinel: the
+   * escape branch below clears this to mean "no previous tap", and a clock that
+   * reads 0 makes `now - lastTapAt < DOUBLE_TAP_MS` true for a FIRST tap. In a
+   * page `performance.now()` is never exactly 0 by the time a finger arrives, but
+   * a tap inside the first 320 ms of the document's life hit it, and sent the
+   * ESCAPE a cutscene is skipped with instead of a click. Found by the first
+   * tests this recogniser has ever had (engine/tests/touch.ts), which drive an
+   * injected clock from 0 — which is to say: found because the clock is
+   * injectable, which is why it is.
+   */
+  private lastTapAt = -Infinity;
   private lastTapX = 0;
   private lastTapY = 0;
 
@@ -235,7 +247,8 @@ export class TouchGestures {
       t - this.lastTapAt < DOUBLE_TAP_MS &&
       Math.hypot(e.clientX - this.lastTapX, e.clientY - this.lastTapY) < DOUBLE_TAP_PX
     ) {
-      this.lastTapAt = 0; // so a third tap is a fresh first, not another escape
+      // so a third tap is a fresh first, not another escape
+      this.lastTapAt = -Infinity;
       this.hooks.sendKey(ESCAPE_KEY, true);
       return true;
     }
