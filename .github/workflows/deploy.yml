@@ -43,10 +43,35 @@ on:
         type: choice
         options: [site, taoot, dust, timelapse]
 
-# One upload at a time, and never cancel one in flight: a half-written mirror is
-# a half-broken site.
+# One upload of a given TARGET at a time, and never cancel one in flight: a
+# half-written mirror is a half-broken site.
+#
+# Per target rather than one lane for all four, because a single lane silently
+# DROPS releases. GitHub keeps only the newest run pending in a concurrency
+# group — `cancel-in-progress: false` protects the run that is already going,
+# not the ones queued behind it — so pushing dust-v0.3.9, taoot-v0.9.55 and
+# timelapse-v0.1.1 together deployed dust and cancelled the other two within two
+# seconds, and the tags sat there looking released. They went out by hand.
+#
+# Splitting the lane is safe because the four write DISJOINT paths — each game
+# into its own directory, the site into the root around them — and the upload
+# only ever adds and overwrites (.github/actions/ftp-mirror is `mirror -R` with
+# no --delete, deliberately). What must never overlap is two uploads of the same
+# target, and that is what this group still holds.
+#
+# The residue: two runs of the SAME target queued at the same moment still lose
+# the older one, because GitHub's queue is one deep and nothing here can make it
+# deeper. That is a re-tag of one game inside a few seconds, which is a mistake
+# worth noticing rather than a workflow to support; a real FIFO would mean a
+# third-party wait-action in the middle of the deploy path.
 concurrency:
-  group: deploy
+  group: >-
+    deploy-${{ inputs.target
+    || (startsWith(github.ref_name, 'site-v') && 'site')
+    || (startsWith(github.ref_name, 'taoot-v') && 'taoot')
+    || (startsWith(github.ref_name, 'dust-v') && 'dust')
+    || (startsWith(github.ref_name, 'timelapse-v') && 'timelapse')
+    || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
