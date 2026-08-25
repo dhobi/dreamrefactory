@@ -270,3 +270,63 @@ test("a gesture with no game behind it is dropped before it starts", () => {
   expect(g.up({ pointerId: 1, clientX: 10, clientY: 10 })).toBe(false);
   expect(acts).toEqual([]);
 });
+
+/**
+ * A first tap while the clock still reads ~0 is a CLICK, not an escape.
+ *
+ * `lastTapAt` doubles as the "no previous tap" sentinel — the escape branch
+ * clears it so a drumming finger does not send escape on every beat — and it was
+ * `0`, which is also a time. Every test above starts its clock at 1000 and none
+ * of them could see it: with `now() - 0 < DOUBLE_TAP_MS` true, the FIRST tap of a
+ * page's life was read as the second of a pair and sent the ESCAPE a cutscene is
+ * skipped with instead of the click the player meant.
+ *
+ * Narrow in a browser — `performance.now()` has usually passed 320 ms before a
+ * finger arrives — and reachable exactly where it does most harm: a fast reload
+ * onto a page whose film is already playing. The sentinel is `-Infinity` now, so
+ * "never tapped" is not a moment in time.
+ */
+test("the first tap of all is a click, however early the clock says it is", () => {
+  const acts: Act[] = [];
+  let clock = 0; // a page that has only just started
+  const g = new TouchGestures(
+    {
+      coords: (e) => ({ x: e.clientX, y: e.clientY }),
+      ownedByGame: () => false,
+      press: (x, y) => acts.push({ act: "press", x, y }),
+      release: (x, y) => acts.push({ act: "release", x, y }),
+      sendKey: (key, special) => acts.push({ act: "key", key, special }),
+    },
+    () => clock,
+  );
+  const at = (x: number, y: number) => ({ pointerId: 1, clientX: x, clientY: y });
+  g.down(at(50, 60));
+  g.up(at(50, 60));
+  expect(acts).toEqual([
+    { act: "press", x: 50, y: 60 },
+    { act: "release", x: 50, y: 60 },
+  ]);
+  // ...and the pair still works from there, so the sentinel did not cost a feature
+  acts.length = 0;
+  clock += DOUBLE_TAP_MS - 50;
+  g.down(at(50, 60));
+  g.up(at(50, 60));
+  expect(acts).toEqual([{ act: "key", key: ESCAPE_KEY, special: true }]);
+});
+
+/**
+ * `owns()` is how a page routes `pointermove`: the shells listen on the window so
+ * a drag that ends off-canvas still ends, which means they see moves belonging to
+ * pointers that are not the gesture's. Both game pages now ask this question
+ * before forwarding, so it is worth pinning that it answers per POINTER.
+ */
+test("owns() answers for the finger that started the gesture, and no other", () => {
+  const { g, at } = rig();
+  expect(g.owns(at(0, 0)), "nothing in flight").toBe(false);
+  g.down(at(10, 10, 7));
+  expect(g.owns(at(11, 11, 7))).toBe(true);
+  expect(g.owns(at(11, 11, 8)), "a second finger owns nothing").toBe(false);
+  g.up(at(10, 10, 7));
+  expect(g.owns(at(10, 10, 7)), "the gesture is over").toBe(false);
+});
+
