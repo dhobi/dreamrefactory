@@ -425,17 +425,37 @@ matter for playing the audio itself:
   for low-RAM machines, not a downsample). Resample every chunk up to the
   highest rate present before concatenating, or the low-rate bed plays at double
   speed.
-- How much of the order to take is a **prediction plus a margin**, not the
-  prediction. `interval × frames` assumes every frame arrives the instant it is
-  due, while frames actually advance on ticks — a 66 ms interval really costs
-  `ceil(66/16.7) × 16.7` on a 60 Hz screen, and a dropped frame a whole refresh
-  more. Over `OCREDITS.MOV`'s 1225 frames that is ~0.8 s of picture past the end
-  of a bed cut to the prediction, which was reported as the fly-in losing its
-  audio and carrying on silent. So the player takes **110%** of the predicted
-  runtime out of the authored order (free material for exactly the films that
-  need it: `OCREDITS`' 53 entries hold 213.62 s over an 80.85 s film) and loops a
-  loop-table bed as the backstop. The bed is halted with the film either way —
-  `TI.EXE`'s own teardown does that on the no-next-segment path (`0x449d40`).
+- How much of the order to take is **how long the bed will be on screen, plus a
+  margin** — and "on screen" is three things, each of which was got wrong once.
+
+  It is not `interval × frames`: that is a rate the player never uses. The film's
+  own length is its **authored holds** added up (`segmentPictureMs`), and the two
+  disagree by 8.3 s over `OCREDITS.MOV`'s 1225 frames — a bed cut to the
+  prediction ended before the picture did, reported as the fly-in to C73 losing
+  its audio and carrying on silent.
+
+  It is not this segment either. A segment whose loop table is empty **inherits
+  the playing bed**, so one bed scores a whole chain (`bedRuntimeMs` walks
+  forward until a segment brings its own, or stops for a click).
+
+  And it is not the holds alone: a frame flagged `waitsForVoice` holds until the
+  event sound an earlier frame fired has finished. `OPEN.MOV`'s last segment is
+  4.83 s of authored holds and **8.1 s** on screen, because its frame 6 waits out
+  the 6.64 s `punch.01` that frame 2 started.
+
+  Missing all three at once is what made the 1996 demo's opening restart its own
+  music: a 23-entry order holding 156 s, cut to 25.18 s — one segment's
+  prediction — under a film that runs 31.4 s. The player takes **110%** of the
+  measured runtime out of the authored order, which for `OPEN.MOV` is 33.87 s and
+  never reaches the end.
+
+  The loop is the backstop, and it applies **only when the order itself ran out**.
+  Reaching the end of a bed that was cut short is the *cut* having been short, and
+  rewinding there plays the author's first chunk, which is never what comes next.
+  Across all three discs no bed now falls short of its film, so the distinction
+  costs nothing and removes a whole class of wrong. The bed is halted with the
+  film either way — `TI.EXE`'s own teardown does that on the no-next-segment path
+  (`0x449d40`).
 
 ### A movie carries its own pacing
 
