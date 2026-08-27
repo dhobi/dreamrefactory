@@ -172,6 +172,7 @@ npm run test:watch       # vitest in watch mode
 npm run test:playthrough # the game played, not probed (headless, virtual clock)
 npm run test:browser     # Playwright against a live dev server (needs npm run dev)
 npm run test:browser:lang # pick a language in a real browser (needs 2+ language trees)
+npm run test:browser:demo # the 1996 demo's menu — the edition that opens no room
 ```
 
 Three categories, because they have different budgets. The **gate** jumps to a

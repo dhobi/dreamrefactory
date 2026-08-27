@@ -26,6 +26,7 @@ on:
           - test:browser:playthrough
           - test:browser:endgame
           - test:browser:lang
+          - test:browser:demo
   pull_request:
     types: [labeled]
 
