@@ -891,6 +891,41 @@
       #under .bar + .bar {
         border-top: 1px solid var(--border);
       }
+      /* ------------------------------------------------------------------
+         The controls belong to the PICTURE, so they wait for it.
+
+         Every one of them acts on something that is not on screen yet:
+         fullscreen has nothing to letterbox, the log has nothing to report, the
+         key hints describe keys that do nothing, and the swipe options configure
+         a gesture that has nowhere to land. Before Start they were a row of live
+         buttons under an empty stage, which reads as an interface that is already
+         running.
+
+         So the rule is on #under rather than on each row: while booting AND with
+         nothing in #err, every row is hidden. The moment #err has something to
+         say the whole strip comes back — which is the behaviour a failed boot
+         wants, because that is exactly when the bug reporter is needed and there
+         is no picture to reach it from.
+
+         One rule and not two on purpose. Hiding rows individually and then
+         re-showing them on error gives two selectors of identical specificity
+         whose order decides the outcome, and Dust's swipe options share a row
+         with #err — so a per-row `:has(> #err)` exemption left the options
+         visible under an empty stage.
+
+         And it is on #under itself rather than on its rows, because hiding every
+         row still left the container: #under carries a 1px border, so all three
+         pages drew a stray hairline across the stage under the title card with
+         nothing above or below it. A row that is not there is not a row; a strip
+         with no rows in it is not a strip.
+         ------------------------------------------------------------------ */
+      body:not(.playing) #under:not(:has(#err:not(:empty))) {
+        display: none;
+      }
+      /* ...and the options are for playing whether or not anything went wrong */
+      body:not(.playing) #swipeOpts {
+        display: none;
+      }
       /* an empty row is not a row — #err is silent almost always */
       #under .bar:not(:has(> *:not(#err))):has(> #err:empty) {
         display: none;

@@ -1,4 +1,5 @@
 import { BinaryReader } from "./binary";
+import { ByteOrder, PC, little } from "./byte-order";
 import { DFContainerFile } from "./container";
 import { versionOf } from "./version";
 import { readSndFileFrom, sndLoopChunks } from "./snd";
@@ -39,7 +40,19 @@ const LOOP_COUNT_AT = 4;
 const LOOP_RECORDS_AT = LOOP_ORDER_AT + LOOP_ORDER_MAX * 2 + 4;
 /** the shortest loop table that can hold a count and its (fixed-size) order */
 const LOOP_TABLE_MIN = LOOP_RECORDS_AT;
-/** container 0 fields: the one-shot table's location, then the bank's name */
+/**
+ * Container 0 fields: the loop table's location, the one-shot table's, then the
+ * bank's name.
+ *
+ * The loop pointer at +28 used to be read as a constant 1, because on 615 of the
+ * 630 v4 banks across four discs that is what it says. The other fifteen are
+ * Skull Cracker's music: `THEME01.SND` is 14 containers with its loop table in
+ * **12** and its (empty) one-shot table in 13, the bars in 1..11. Nothing else
+ * about the layout differs — same 52-byte header, same name at +36, same 26-byte
+ * records, same codec — so the field was always the right thing to read and the
+ * constant was right by luck.
+ */
+const BANK_LOOPINFO_AT = 28;
 const BANK_CHUNKINFO2_AT = 32;
 const BANK_NAME_AT = 36;
 /** a name field's cap, matching the other 31-char name fields of the formats */
@@ -48,7 +61,30 @@ const BANK_NAME_MAX = 31;
 /**
  * The looping-music chunk table (container 1 of a bank / MOV soundtrack): a
  * fixed-size order list of 1-based indices, then the chunk records — {i32
- * unknown, i16 container loc, i16 pad, i16 bool+pad, char[16] id}.
+ * unknown, i32 container loc, i16 bool+pad, char[16] id}.
+ *
+ * ## Two fields that are 32 bits wide, and used not to be
+ *
+ * The record count and each record's container location were read here as an
+ * i16 followed by two skipped bytes. On a little-endian file that is the same
+ * number — the skipped pair is the field's own zero high half — and it went
+ * unnoticed for as long as every rip was little-endian. On Skull Cracker's
+ * Macintosh rip it is the WRONG half: the count of a one-record table reads 0,
+ * so the film's bed is silently empty and the menu plays without its music.
+ *
+ * Read as i32 in the file's own order, both orders get the same field. That the
+ * skipped bytes really were the high half rather than something else is measured
+ * rather than assumed: reading both ways through the production entry points
+ * ({@link readAudioBank} and `readMovFile`) over every bank and film in the three
+ * little-endian rips — 1973 films and 646 banks — the two readings differ nowhere.
+ * So no PC file changes its reading, and the suite that plays those games through
+ * is unmoved.
+ *
+ * (The comparison has to go through those entry points and not over raw
+ * containers: Dust's v1 `.SND` banks have no loop table at all, and forcing this
+ * reader onto container 1 of one produces thousands of differences between two
+ * meaningless numbers. `readAudioBank` routes a v1 bank to {@link file://./snd.ts}
+ * before it ever gets here, which is why the game has always worked.)
  */
 export interface LoopTable {
   /** 1-based indices into `records`, in playback order */
@@ -57,9 +93,9 @@ export interface LoopTable {
   records: BankChunk[];
 }
 
-export function readLoopTable(data: Uint8Array): LoopTable {
+export function readLoopTable(data: Uint8Array, byteOrder: ByteOrder = PC): LoopTable {
   if (data.length < LOOP_TABLE_MIN) return { order: [], records: [] };
-  const r = new BinaryReader(data);
+  const r = new BinaryReader(data, 0, byteOrder);
   r.seek(LOOP_COUNT_AT);
   const totalLoops = r.i16();
   const order: number[] = [];
@@ -67,13 +103,12 @@ export function readLoopTable(data: Uint8Array): LoopTable {
   r.seek(LOOP_RECORDS_AT - 4);
 
   const records: BankChunk[] = [];
-  const loopCount = r.i16();
+  const loopCount = r.i32();
   if (loopCount > 0) {
     r.seek(LOOP_RECORDS_AT);
     for (let i = 0; i < loopCount; i++) {
       r.skip(4); // unknown int
-      const containerLoc = r.i16();
-      r.skip(2);
+      const containerLoc = r.i32();
       r.skip(2); // bool + pad
       const idOffset = r.pos;
       const identifier = r.pstr(CHUNK_ID_FIELD);
@@ -84,27 +119,31 @@ export function readLoopTable(data: Uint8Array): LoopTable {
 }
 
 /** the loop chunks already reordered into playback order (missing ones dropped) */
-export function readLoopChunks(data: Uint8Array): BankChunk[] {
-  const { order, records } = readLoopTable(data);
+export function readLoopChunks(data: Uint8Array, byteOrder: ByteOrder = PC): BankChunk[] {
+  const { order, records } = readLoopTable(data, byteOrder);
   return order.map((o) => records[o - 1]).filter((x): x is BankChunk => x !== undefined);
 }
 
 /**
- * The one-shot chunk table (the non-looping block): {i32 count} then `count`
- * records of {i32 unknown, i32 container loc, i16 bool+pad, char[16] id} —
- * 26 bytes in a TRK/SFX bank. A MOV record is 42, the extra 16 being a second
- * name field (`followFieldSize`, {@link BankChunk.follow}) that TI.EXE reads at
- * record +0x1a. Records are returned in file order; callers key/filter them as
- * needed.
+ * The one-shot chunk table (the non-looping block): {i32 unknown, i32 count}
+ * then `count` records of {i32 unknown, i32 container loc, i16 bool+pad,
+ * char[16] id} — 26 bytes in a TRK/SFX bank. A MOV record is 42, the extra 16
+ * being a second name field (`followFieldSize`, {@link BankChunk.follow}) that
+ * TI.EXE reads at record +0x1a. Records are returned in file order; callers
+ * key/filter them as needed.
+ *
+ * The count is the 32-bit field {@link readLoopTable}'s comment explains: read
+ * as an i16 it is the same number on a PC rip and the empty half on a Mac one.
  */
 export function readOneShotChunks(
   data: Uint8Array,
   idFieldSize: number,
   followFieldSize = 0,
+  byteOrder: ByteOrder = PC,
 ): BankChunk[] {
-  const r = new BinaryReader(data);
+  const r = new BinaryReader(data, 0, byteOrder);
   r.skip(4);
-  const count = r.i16();
+  const count = r.i32();
   r.seek(8);
   const out: BankChunk[] = [];
   for (let i = 0; i < count; i++) {
@@ -125,9 +164,9 @@ export function readOneShotChunks(
  * editor's view of a bank; {@link readAudioBank} is the runtime's, which only
  * wants playable chunks.
  *
- * Container 0: one-shot table location @32, track name (Pascal) @36.
- * Container 1: the loop table. Banks that carry no music (most .SFX) have an
- * empty or absent one.
+ * Container 0: loop table location @28, one-shot table location @32, track name
+ * (Pascal) @36. Banks that carry no music (most .SFX) point at an empty loop
+ * table — 270 bytes, a count of zero and its fixed-size order list.
  */
 export interface BankTables {
   /** the stored name, which on shipped banks usually still carries ".WAV" */
@@ -146,13 +185,18 @@ export interface BankTables {
 
 export function readBankTables(file: DFContainerFile): BankTables {
   const c0 = file.containers[0].data;
+  const byteOrder = file.order ?? PC;
   const v0 = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);
-  const chunkInfo2Loc = v0.getInt32(BANK_CHUNKINFO2_AT, true);
+  const chunkInfo2Loc = v0.getInt32(BANK_CHUNKINFO2_AT, little(byteOrder));
+  const loopInfoLoc = v0.getInt32(BANK_LOOPINFO_AT, little(byteOrder));
   const trackName = new BinaryReader(c0, BANK_NAME_AT).pstr();
 
-  const hasLoops = file.containers.length > 1 && file.containers[1].data.length >= LOOP_TABLE_MIN;
+  // the container the header names, and only if what is there could BE a table —
+  // a bank whose field points at audio (or past the end) has no loop bed
+  const loopLoc = loopInfoLoc > 0 && loopInfoLoc < file.containers.length ? loopInfoLoc : 0;
+  const hasLoops = loopLoc > 0 && file.containers[loopLoc].data.length >= LOOP_TABLE_MIN;
   const { order, records } = hasLoops
-    ? readLoopTable(file.containers[1].data)
+    ? readLoopTable(file.containers[loopLoc].data, byteOrder)
     : { order: [], records: [] };
 
   const oneShotTable =
@@ -161,12 +205,12 @@ export function readBankTables(file: DFContainerFile): BankTables {
   return {
     trackName,
     trackNameLimit: nameFieldLimit(c0, BANK_NAME_AT),
-    loopTable: hasLoops ? 1 : 0,
+    loopTable: hasLoops ? loopLoc : 0,
     oneShotTable,
     loopOrder: order,
     loopRecords: records,
     singles: oneShotTable
-      ? readOneShotChunks(file.containers[oneShotTable].data, CHUNK_ID_FIELD)
+      ? readOneShotChunks(file.containers[oneShotTable].data, CHUNK_ID_FIELD, 0, byteOrder)
       : [],
   };
 }
@@ -211,7 +255,7 @@ export interface AudioBank {
  * {@link file://./snd.ts}). That is what gives Dust its music.
  */
 export function readAudioBank(file: DFContainerFile): AudioBank {
-  if (versionOf(file.containers[0].data) === 1) return readV1Bank(file);
+  if (versionOf(file.containers[0].data, file.order) === 1) return readV1Bank(file);
   const tables = readBankTables(file);
   const loopChunks = tables.loopOrder
     .map((o) => tables.loopRecords[o - 1])

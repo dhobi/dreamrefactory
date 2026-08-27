@@ -63,7 +63,7 @@ const MOVIE_CALL_DEPTH = 5;
  * white. `movFileFromV1` names the six films that show it.
  */
 function moviePalette(seg: MovSegment): Uint8ClampedArray {
-  return paletteToRGBA(seg.paletteRaw, 256);
+  return paletteToRGBA(seg.paletteRaw, 256, seg.file.order);
 }
 
 export class MoviePlayer {
@@ -331,7 +331,7 @@ export class MoviePlayer {
     const frames: MovieImage[] = [];
     let shown: Uint8Array | null = null;
     for (const f of seg.frames) {
-      const d = decodeFrame(mov.file.containers[f.locationFrame].data, fb);
+      const d = decodeFrame(mov.file.containers[f.locationFrame].data, fb, mov.file.order);
       const pixels = fb.pixels.slice(0, d.width * d.height);
       if (seg.dfV1) {
         compositeFrameV1(pixels, shown);
@@ -612,7 +612,7 @@ export class MoviePlayer {
     const loc = m.sounds.get(name.toLowerCase());
     const snd =
       loc !== undefined
-        ? decodeAudioContainer(m.containers[loc].data)
+        ? decodeAudioContainer(m.containers[loc].data, m.mov.file.order)
         : this.session.audioLib.sound(name);
     if (!snd) return;
     // keep the handle: an event sound belongs to the movie that fired it and

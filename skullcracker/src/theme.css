@@ -1,0 +1,363 @@
+/*
+ * Skull Cracker's palette: gore, bone, iron, toxic.
+ *
+ * Sampled from its own title card — SKULL CRACKER in crimson slab letters,
+ * bevelled in salmon-cream, cracked across; a horned skull above them with two
+ * green lights burning in its sockets; a spearman, a scythe and two spiked
+ * maces around the edges, all of it in cold steel. Hot and lit-from-the-front
+ * where Timelapse is cold and Dust is warm, and the only one of the four that
+ * is loud.
+ *
+ * The FIFTH implementation of the contract in site/src/chrome.css, which is what
+ * that split is for: the same 39 role names and the same top bar as the other
+ * four, wearing nothing any of them wear. This file used to be one `@import` and
+ * a paragraph explaining that the game had no artwork to sample; the artwork
+ * arrived, so the paragraph became a palette and nothing else had to move, which
+ * is exactly what that note promised.
+ *
+ * Where the colours come from
+ * ---------------------------
+ * A census of `assets/skullcracker-full.png` — 1,078,131 opaque pixels, of which
+ * 23.5% are the black it was rendered on — by hue family and then by quantised
+ * cell, each stop being the MEAN of the pixels in its cell:
+ *
+ *   red         51.6%   the letters, and #ed170d is the single commonest colour
+ *                       in the picture at 7.9% on its own
+ *   orange      24.2%   flesh — the hands gripping the letters, the arms — and
+ *                       the letters' own bevel, which is a warm cream
+ *   blue         8.0%   the steel's shadows, which are indigo and not grey
+ *   grey-light   4.1%   the bevel's lit lip and the skull, #f9f7f0 at 2.0%
+ *   grey-dark    4.3%   the steel's body
+ *   violet       2.9%   the deepest shadows in the picture — plum, not black
+ *   yellow       2.7%   the subtitle's cream, AN ACTION HORROR FIGHTING GAME
+ *   green        0.5%   the eyes. Nothing else in the artwork is green.
+ *
+ * That last line is the one that decides how this page works. Half the picture
+ * is red, so red cannot mean "look here" — it is the ground the brand is made
+ * of. The green is half a percent of the artwork and it is the only thing in it
+ * that GLOWS, so green is what live means, and it is spent as sparingly here as
+ * the illustrator spent it there: a gauge, a cursor, an eye.
+ *
+ * What the colours MEAN
+ * ---------------------
+ *   gore    it is the brand — the letters' crimson, the loudest thing here, and
+ *           therefore never a state and never a warning
+ *   bone    it is a word — the bevel and the subtitle, so every legible thing on
+ *           the page is cut from the same cream the letters are moulded in
+ *   iron    it is an edge — the maces and the scythe, cold against everything
+ *           else, so a divider reads as machined rather than as a line
+ *   void    it is ground — the card's own black, carrying the plum its shadows
+ *           actually have
+ *   toxic   it is LIVE, or it is where you are — the sockets, and 0.5% of the
+ *           artwork
+ *   flesh   it commits — the hands' orange, on exactly one control, and the only
+ *           warm-but-not-red thing on the page
+ *
+ * `--mark` is bone rather than a sixth hue, for the reason these palettes keep
+ * arriving at: a second job wants a second VALUE more than a second hue, and a
+ * button in an unrelated colour reads as a visitor from another design.
+ */
+
+/* The structure comes first: an @import has to lead the file, and custom
+   properties resolve where they are USED. */
+@import "@dreamfactory/site/chrome.css";
+
+/* ---- void: the ground -------------------------------------------------- */
+
+/*
+ * OXBLOOD, and this is the one stop in the palette that was got wrong first.
+ *
+ * The card is rendered on black, and the first version of this ramp was built
+ * from the darkest COLOURED pixels in it — plum (#160f16) and indigo (#141729),
+ * the shadows under the flesh and inside the steel. Defensible, and wrong: those
+ * two families are 2.9% and 8.0% of the picture, and using them for the GROUND
+ * made a page whose largest surfaces belonged to its smallest subjects. The top
+ * bar came out violet on a card that has no violet in it worth speaking of.
+ *
+ * The artwork's own darks are red. #310b08 is 5.8% of the non-black picture and
+ * #4e0c07 another 5.2% — the shadow inside the letters' own cracks and under
+ * their bevel — which is more of the card than the plum and the indigo together,
+ * and it is the shadow of the SUBJECT rather than of the props around it. So the
+ * ground is the letters' shadow, and the page is dark red before it is dark.
+ *
+ * ...and then a second correction, which was about SATURATION rather than hue.
+ * The first oxblood ramp had the hue right — #310b08 sits at 4.4 degrees against
+ * a red family whose hue peaks at +3 — but it carried a green channel of 11 and a
+ * blue of 8, which is 84% saturated. The card's own dark reds run 93 to 97%:
+ *
+ *   #2b0503   hue 3.0deg   sat 93.0%   g= 5 b= 3   0.91% of the red family
+ *   #330302   hue 1.2deg   sat 96.1%   g= 3 b= 2   1.13%
+ *   #3b0302   hue 1.1deg   sat 96.6%   g= 3 b= 2   1.00%
+ *
+ * Twelve points of saturation is the whole difference between blood and brick.
+ * Desaturated dark red is brown, the eye reads brown as dirt rather than as
+ * blood, and a page of it looks like old leather — which is Dust's job, not this
+ * one's. So the ramp below is built from those three measured cells and their
+ * ratios continued down: the green channel stays at or under 5 the whole way,
+ * and that is what keeps it blood at every level.
+ *
+ * It also does the job a neutral ground could not: #ed170d on true black
+ * vibrates, and on #180302 it sits.
+ */
+:root {
+  --void-1000: #080202;
+  --void-900: #0f0302;
+  --void-800: #180302;
+  --void-700: #210402;
+  --void-600: #2b0503;
+  --void-500: #3b0302;
+}
+
+/* ---- gore: the letters ------------------------------------------------- */
+
+/*
+ * Half the artwork, and the ramp is its own moulding read across a letter. This
+ * is a scanline at y=340 of 819, going out of the face of the K in SKULL:
+ *
+ *   x=560   #f11d0a   the face
+ *   x=566   #b90f06   the face darkening into its edge
+ *   x=571   #f7c5a8   the bevel's lit lip, and the brightest thing on the letter
+ *   x=580   #da6b5f   the bevel falling away
+ *   x=588   #594844   its shaded flank
+ *   x=592   #040304   a hard dark rule, one pixel of it
+ *   x=593+  #000000   the black
+ *
+ * The 400/300/200 stops below are the face; 500 and 600 are what happens to it
+ * at an edge; 700 is the shadow the letters cast into their own cracks. The lip
+ * is not in this ramp — it is bone-200, because on the card it is the same cream
+ * as the subtitle, and calling it that is what lets a border and a word share a
+ * colour honestly.
+ */
+:root {
+  --gore-700: #2a0705;
+  --gore-600: #4e0c07;
+  --gore-500: #6e0e07;
+  --gore-400: #d11109;
+  --gore-300: #ed170d;
+  --gore-200: #f42915;
+  --gore-100: #ff5a42;
+}
+
+/* ---- bone: every word on the page -------------------------------------- */
+
+/*
+ * The skull, the bevel's lit lip, and the subtitle band's lettering, which are
+ * three uses of one cream. #f9f7f0 is 2.0% of the non-black picture on its own —
+ * the highlight along the top of every letter, where the light is — and #faebb1
+ * is the subtitle's, a half-step warmer because it is printed on red.
+ *
+ * The bottom of the ramp is where this palette differs from a grey one: bone-600
+ * is #6a5649, the brown the flesh goes in shadow, not a grey. Dim text on this
+ * page is under-lit rather than desaturated.
+ */
+:root {
+  --bone-100: #f9f7f0;
+  --bone-200: #f7edd6;
+  --bone-300: #faebb1;
+  --bone-400: #f3d1ad;
+  --bone-500: #d1c7b7;
+  --bone-600: #a69891;
+  --bone-700: #6a5649;
+}
+
+/* ---- iron: the edges --------------------------------------------------- */
+
+/*
+ * The two maces, the scythe, the horns and the studded collars. It is the only
+ * COLD family in the artwork and the census says so twice — 8.0% blue and 4.3%
+ * grey-dark, and the blue is the shadow side of the same metal (#2c344c inside a
+ * mace against #8f8d8f along its lit edge). Which makes iron the natural border:
+ * a rule in it is the one thing on the page that is not red, cream or black, so
+ * it separates without competing.
+ */
+:root {
+  --iron-100: #b1aeae;
+  --iron-200: #8f8d8f;
+  --iron-300: #767786;
+  --iron-400: #4b526f;
+  --iron-500: #2c344c;
+  --iron-600: #252936;
+}
+
+/* ---- toxic: the eyes --------------------------------------------------- */
+
+/*
+ * Half a percent of the artwork, and the whole of its light. Measured inside the
+ * sockets, where 1,667 pixels are green: the mean is #506e03 and the core blows
+ * out to #d6ed15 before going white at the very centre.
+ *
+ * It is used here the way it is used there, and the discipline is a COUNT. Green
+ * appears in exactly four places on this page:
+ *
+ *   1  the fracture in the boot gauge, and its advancing tip
+ *   2  the light the title card sits in
+ *   3  the eyes of the mark in the top bar — and this one needed NO page rule:
+ *      the shared chrome already lights `.brand-mark` with `--mark-glow`, so
+ *      setting that role green is the whole of it. Writing the glow again on the
+ *      page collided with the chrome's own rule at equal specificity, which
+ *      `site/tests/cascade.ts` refused, and it was right to: the role existed
+ *   4  `--ok`, when the page says it is ready
+ *
+ * Not for text, not for a border, not for a panel, not for the ground. A green
+ * page was considered and is the wrong answer twice over: it inverts the
+ * artwork's own hierarchy, putting 0.5% of the picture on its largest surfaces,
+ * and it would put the red logo on a green field — the one pairing at this
+ * saturation that vibrates instead of sitting. Green cannot mean "live" if
+ * everything is green.
+ *
+ * (It also happens to be the game's own: Skull Cracker's menu is green phosphor
+ * on black — see the lit buttons in its `menu.mov` — so the artwork and the
+ * interface agreed about this long before this page did.)
+ */
+:root {
+  --toxic-600: #2c3a02;
+  --toxic-500: #4e6d03;
+  --toxic-400: #6d8f03;
+  --toxic-300: #8fb703;
+  --toxic-200: #a8cf0d;
+  --toxic-100: #d6ed15;
+}
+
+/* ---- flesh: the one control that commits ------------------------------- */
+
+/*
+ * The hands. 24.2% of the picture is this family, but most of that is the
+ * letters' cream bevel — the SATURATED end of it is the flesh gripping them,
+ * #f46f2d at 1.0%, falling to #6a5649 in shadow.
+ *
+ * Orange is the right colour for a commit here for a reason that is about the
+ * red rather than about orange: the brand is crimson, so a crimson button is
+ * invisible against its own identity. Orange is adjacent enough to belong to the
+ * artwork and far enough to be seen inside it.
+ */
+:root {
+  --flesh-600: #7a3510;
+  --flesh-500: #c4551f;
+  --flesh-400: #f46f2d;
+  --flesh-300: #f2ae71;
+  --flesh-200: #f7c5a8;
+}
+
+/* ---- the two extras the pages use ------------------------------------- */
+
+:root {
+  /* a warning is not the brand: it has to be distinguishable FROM gore, so it
+     is the bevel's mid-tone, a dusty rose that reads as a caution rather than
+     as the logo */
+  --alarm: #da6b5f;
+  --ok: var(--toxic-300);
+}
+
+/* ---- typography and metrics ------------------------------------------- */
+
+:root {
+  --font-display:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --gap: 0.8rem;
+  /* squarer than the other three. The letters on the card are slab-cut with a
+     hard bevel and the plates around them are riveted steel; a 5px radius on a
+     panel next to that reads as a different product. */
+  --radius: 2px;
+  --radius-lg: 3px;
+
+  /* what the title card is lit by, and it is the sockets rather than the letters:
+     a red glow around red letters is a smudge, and a green one is the picture's
+     own light source falling on the thing it comes out of */
+  --glow: 0 0 0 1px rgba(109, 143, 3, 0.22), 0 0 38px -6px rgba(109, 143, 3, 0.3);
+}
+
+/* ---- the 39 roles the chrome asks for --------------------------------- */
+
+:root {
+  --bg: var(--void-1000);
+  --panel: var(--void-800);
+  --raised: var(--void-700);
+  --inset: var(--void-900);
+
+  --border: var(--iron-500);
+  --border-strong: var(--iron-400);
+  --border-hover: var(--iron-200);
+
+  --text: var(--bone-400);
+  --text-bright: var(--bone-100);
+  --text-dim: var(--bone-600);
+  --text-mute: var(--bone-700);
+
+  --accent: var(--gore-300);
+  --accent-hover: var(--gore-200);
+  --accent-line: var(--gore-500);
+  --selection-bg: rgba(237, 23, 13, 0.32);
+
+  --mark: var(--bone-200);
+  /* the mark glows green for the same reason the title card does — and the mark
+     IS the eyes, so this is the artwork's own light rather than a UI colour */
+  --mark-glow: rgba(109, 143, 3, 0.42);
+
+  --topbar-top: var(--void-600);
+  --topbar-bottom: var(--void-1000);
+
+  /* the light off the letters, thinned to a wash — the one place gore is
+     allowed to be large and quiet */
+  --depth-light: rgba(209, 17, 9, 0.15);
+
+  --button-hover-bg: var(--void-600);
+  --button-active-bg: var(--void-700);
+  --state-border: var(--iron-300);
+
+  --rule-mid: var(--gore-500);
+  --rule-bright: var(--bone-200);
+
+  /* ------------------------------------------------------------------
+     The one control that commits, and it is the LETTERS: red face, cream bevel,
+     cream label — the subtitle band's own arrangement, which is red with cream
+     printed on it.
+
+     This was the hands' orange first, on the argument that a crimson button is
+     invisible against a crimson identity. That argument belonged to the older,
+     lighter ground; against the blood ramp above there is plenty of contrast, and
+     an orange button next to a red logo reads as a different product's.
+
+     The face is #d11109 and not the letters' own #ed170d, and the reason is
+     measured: cream on #ed170d is 3.72:1, under the 4.5 this label needs at 0.9rem
+     600-weight. One step down the ramp it is 4.63, and the bottom of the gradient
+     is 10.17. So #ed170d is still on the button — as the lit lip along its top
+     edge (see #start in index.html), which is where the card puts its brightest
+     red too.
+     ------------------------------------------------------------------ */
+  --commit-face-bottom: var(--gore-400);
+  --commit-face-deep: var(--gore-500);
+  --commit-edge: var(--bone-400);
+  --commit-edge-hover: var(--bone-200);
+  --commit-text: var(--bone-300);
+  --commit-text-hover: var(--bone-100);
+
+  --menu-panel: var(--void-700);
+  --shadow-drop: rgb(0 0 0 / 72%);
+}
+
+/* ---- the two densities ------------------------------------------------ */
+
+/*
+ * Same split the other pages carry: `deep` is the game page, as little chrome as
+ * it can get away with, and `work` is for a page with panels on it. Skull Cracker
+ * has one page today and it is `deep`; `work` is here for the contract's sake
+ * and for the editors, which will want it.
+ */
+body.deep {
+  --bg: var(--void-1000);
+  --panel: var(--void-900);
+  --raised: var(--void-800);
+}
+body.work {
+  --bg: var(--void-900);
+  --panel: var(--void-700);
+  --raised: var(--void-600);
+  --inset: var(--void-1000);
+  --border: var(--iron-400);
+  --border-strong: var(--iron-300);
+  --gap: 0.65rem;
+}

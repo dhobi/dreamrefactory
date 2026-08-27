@@ -14,7 +14,7 @@ rule: **nothing shared knows which game it is.**
 | Package | What it is | Imports |
 |---|---|---|
 | `engine/` | the DreamFactory engine — containers, interpreter, runtime, the browser layer around them | nothing |
-| `site/` | the project's own web presence: the front door, the seven format editors, the chrome every page shares, the UI-language axis | `engine` |
+| `site/` | the project's own web presence: the front door, the eight format editors, the chrome every page shares, the UI-language axis | `engine` |
 | `taoot/` | *Titanic*: four pages, six editions and the demo, its own tools, the suites that play it to the end | `engine`, `site` |
 | `dust/` | *Dust*: two pages, one disc, its own tools and suites | `engine`, `site` |
 | `timelapse/` | *[Timelapse](../timelapse/)*: one page and four discs — its own palette, its own title card, and the boot log it started life as, now a panel the page opens over the picture | `engine`, `site` |
@@ -171,7 +171,7 @@ say which disc, which pages, and what the page around the canvas looks like.
 
 | File | Responsibility |
 |------|----------------|
-| [`editors/`](https://github.com/dhobi/dreamrefactory/tree/master/site/editors) | the seven format editors and the page that lists them — see [the browser editors](../editors/README.md) |
+| [`editors/`](https://github.com/dhobi/dreamrefactory/tree/master/site/editors) | the eight format editors and the page that lists them — see [the browser editors](../editors/README.md) |
 | [`front.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/front.ts) / [`games.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/games.ts) | the front door, and the registry of which games exist and what it takes to read one's data — here rather than in a game, because the editors need it and a shared package must not depend on a consumer |
 | [`chrome.css`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/chrome.css) | the topbar, pickers, titles, controls and panels every page shares. Not one colour in it: every value is a **role**, and the four palettes — Titanic's abyss-and-brass, Dust's dusk-and-ember, Timelapse's glass-and-chrome, the project's black-and-green — are four implementations of that one contract |
 | [`editions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/editions.ts) | the **edition** axis: which `gamefiles/` tree a page is showing. Remembered per game and carried across the play page, the editors and the collection |

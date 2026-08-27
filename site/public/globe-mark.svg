@@ -5,7 +5,7 @@
 
     Drawn rather than cropped out of the logo PNG, for two reasons. At 30px a
     crop of a 2000px raster with a bloom on it is a green smudge — the same
-    reason Titanic's mark is the shadowless globe and not the full logo. And an
+    reason Titanic's mark is the porthole alone and not the full logo. And an
     SVG carries the glow as a filter, so the swoosh still blooms at 16px in a
     browser tab where a downscaled raster would just be dim.
 

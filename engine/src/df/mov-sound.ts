@@ -92,7 +92,7 @@ export function segmentAudio(seg: MovSegment): SegmentAudio | null {
   if (!seg.audioChunks.length) return null;
   const containers = seg.file.containers;
   const decoded = seg.audioChunks.map((loc) =>
-    decodeAudioContainer(containers[loc].data),
+    decodeAudioContainer(containers[loc].data, seg.file.order),
   );
   const rate = Math.max(...decoded.map((p) => p.sampleRate));
   const resampled = decoded.map((p) => resampleTo(p.samples, p.sampleRate, rate));

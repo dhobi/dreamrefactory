@@ -68,6 +68,12 @@ export default defineConfig({
         port: 5177,
         what: "Timelapse",
       },
+      {
+        path: "skullcracker",
+        command: "npm run dev:skullcracker",
+        port: 5178,
+        what: "Skull Cracker",
+      },
     ]),
   ],
   server: {

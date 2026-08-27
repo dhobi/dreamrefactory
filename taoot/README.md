@@ -1,7 +1,7 @@
 <!-- decorative: the heading below names the project, so alt text here would only
      make a screen reader say it twice (same reasoning as index.html's hero) -->
 <p align="center">
-  <img src="public/globe.png" alt="" width="220" />
+  <img src="public/taoot-logo.png" alt="" width="420" />
 </p>
 
 # Titanic: Adventure Out of Time (RE)
@@ -106,7 +106,7 @@ scene readout and script log.
 
 ## Editors
 
-Seven **asset editors** live under `/editors/` (which is itself a page listing
+Eight **asset editors** live under `/editors/` (which is itself a page listing
 them) — part of the built site, not a dev-only affair. Each loads a file by
 upload or straight out of the manifest, and exports the repacked original
 ([docs section](../docs/editors/README.md)):

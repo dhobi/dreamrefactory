@@ -60,6 +60,45 @@ reads a big-endian double.
 > 1.2×10³⁰⁷**, you almost certainly read a big-endian double as little-endian.
 > This is the single most common decoding mistake.
 
+#### …unless the disc is Skull Cracker's, and then every integer flips too
+
+That split describes every disc anyone had looked at for a long time.
+*Skull Cracker* (1996) is the same formats with their integers **big-endian** as
+well — so on that disc the rule is simply "everything is big-endian", and the odd
+split above turns out to be the *converted* form rather than the original one.
+Something byte-swapped the integers on the way across and left the floats alone.
+
+**It is a property of the title, not of the platform**, and it is worth being
+careful about because the obvious shorthand is wrong. Skull Cracker's disc is a
+Macintosh one, which makes "Mac discs are big-endian" an inviting guess — but
+Titanic's Dutch release is a hybrid disc whose `INSTALL_MAC/` holds a PowerPC
+executable beside a `bootfile`, a `Local/` and a `Tour/`, and every one of those
+data files is little-endian. Titanic's Mac build ran on converted data. So the
+order is asked, never assumed.
+
+Nothing above the container reader is told which is which:
+[`byte-order.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/byte-order.ts)
+asks the file. The header's size field holds the file's own length, so exactly one
+of the two readings equals the bytes in hand — and little-endian is tried first
+and wins ties, so no disc that read correctly before can be re-read as something
+else. `readContainerFile` records the answer on the file and every reader
+downstream inherits it.
+
+Three details worth knowing if you go looking:
+
+- The **version tag moves**. It is an i32 at container 0 +0x02 on a PC file and a
+  u16 at +0x00 on a Mac one — the only field in the whole suite that does this.
+  Ask `versionOf()` rather than reading the offset.
+- Several fields are **32 bits wide** where this port used to read 16. Harmless on
+  a little-endian file (you get the low half, and the high half is zero); on a
+  big-endian one you get the empty half, and a bank quietly reports no music.
+- The **two reserved palette entries are the host platform's**. Windows reserves
+  black at 0 and white at 255, so a PC rip is corrected to those; the palette as
+  *stored* is the Macintosh pair (white at 0, black at 255) in every rip, and a
+  Mac rip needs no correction at all.
+
+See **[Skull Cracker](../../skullcracker/)** for how that was worked out.
+
 ### Pascal strings — length first, no terminator
 
 Text is stored **Pascal-style**: a single **length byte** followed by exactly
@@ -219,3 +258,8 @@ container's `data`*, not the whole file.
 
 Start with the thing most formats share — **[the image codec](image-codec.md)**
 — then move on to [SET](set.md), [SHP](shp.md), [MOV](mov.md), and the rest.
+
+One format here belongs to a game with no interpreter at all:
+**[SBK](sbk.md)**, Skull Cracker's sprite books. Its cels are SHP's transparent
+codec unchanged, and what is its own is the arrangement — a cel directory, a
+named level plan, and a parallax backdrop.

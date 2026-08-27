@@ -6,7 +6,8 @@
     "site",
     "taoot",
     "dust",
-    "timelapse"
+    "timelapse",
+    "skullcracker"
   ],
   "type": "module",
   "scripts": {
@@ -14,15 +15,18 @@
     "dev:taoot": "vite --config taoot/vite.config.ts",
     "dev:dust": "vite --config dust/vite.config.ts",
     "dev:timelapse": "vite --config timelapse/vite.config.ts",
+    "dev:skullcracker": "vite --config skullcracker/vite.config.ts",
     "docs:dev": "vitepress dev docs --port 5174",
     "preview": "vite preview --config site/vite.config.ts",
     "preview:taoot": "vite preview --config taoot/vite.config.ts",
     "preview:dust": "vite preview --config dust/vite.config.ts",
     "preview:timelapse": "vite preview --config timelapse/vite.config.ts",
-    "build": "npm run build:site && npm run build:taoot && npm run build:dust && npm run build:timelapse",
+    "preview:skullcracker": "vite preview --config skullcracker/vite.config.ts",
+    "build": "npm run build:site && npm run build:taoot && npm run build:dust && npm run build:timelapse && npm run build:skullcracker",
     "build:taoot": "tsc && vite build --config taoot/vite.config.ts",
     "build:dust": "tsc && vite build --config dust/vite.config.ts",
     "build:timelapse": "tsc && vite build --config timelapse/vite.config.ts",
+    "build:skullcracker": "tsc && vite build --config skullcracker/vite.config.ts",
     "build:site": "tsc && vite build --config site/vite.config.ts",
     "manifest": "tsx tools/mkmanifest.ts dist/taoot taoot/gamefiles taoot/public",
     "test": "vitest run",
@@ -31,6 +35,16 @@
     "test:built:dust": "tsx dust/tests/browser/built-layout.ts",
   "test:browser": "tsx taoot/tests/browser/menu-movie.ts && tsx taoot/tests/browser/playthrough.ts",
     "test:browser:endgame": "tsx taoot/tests/browser/endgame.ts",
+    "test:browser:skullcracker": "tsx skullcracker/tests/browser/menu.ts",
+    "test:browser:skullcracker:touch": "tsx skullcracker/tests/browser/touch.ts",
+    "test:browser:skullcracker:rooms": "tsx skullcracker/tests/browser/rooms.ts",
+    "test:browser:skullcracker:climb": "tsx skullcracker/tests/browser/climb.ts",
+    "test:browser:skullcracker:speed": "tsx skullcracker/tests/browser/speed.ts",
+    "test:browser:skullcracker:hud": "tsx skullcracker/tests/browser/hud.ts",
+    "test:browser:skullcracker:mission": "tsx skullcracker/tests/browser/mission.ts",
+    "test:browser:skullcracker:foes": "tsx skullcracker/tests/browser/foes.ts",
+    "test:browser:skullcracker:sound": "tsx skullcracker/tests/browser/sound.ts",
+    "test:browser:skullcracker:city": "tsx skullcracker/tests/browser/city.ts",
     "test:browser:playthrough": "tsx taoot/tests/browser/playthrough.ts",
     "test:browser:lang": "tsx taoot/tests/browser/lang-chooser.ts",
     "test:browser:m0": "SEGMENTS=1 tsx taoot/tests/browser/playthrough.ts",
@@ -54,6 +68,7 @@
     "dump": "tsx tools/dumpset.ts",
     "mklang": "tsx taoot/tools/mklangstg.ts",
     "mknightdive": "tsx taoot/tools/mknightdive.ts",
+    "mktaootlogo": "tsx taoot/tools/mktaootlogo.ts",
     "mkdustlogo": "tsx dust/tools/mkdustlogo.ts",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
@@ -73,5 +88,5 @@
     "vitepress-plugin-mermaid": "^2.0.17",
     "vitest": "^4.1.10"
   },
-  "description": "The CyberFlix DreamFactory engine, reimplemented, and the two games that run on it. A workspace: engine/, taoot/, dust/, site/, plus the tools any rip can use."
+  "description": "The CyberFlix DreamFactory engine, reimplemented, and the games that run on it. A workspace: engine/, taoot/, dust/, timelapse/, skullcracker/, site/, plus the tools any rip can use."
 }

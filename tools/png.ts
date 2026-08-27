@@ -123,7 +123,9 @@ export interface DecodedPNG {
  * format for the assets this repo actually keeps: 8 bits a channel, colour
  * types 0/2/4/6 (grey, RGB, and either with alpha). Interlaced files and 16-bit
  * samples are refused rather than half-read, and a palette image (type 3) is
- * not needed here — the only PNG a tool reads is public/globe.png.
+ * not needed here — the PNGs a tool reads back are this repo's own artwork
+ * (taoot/assets/globe.png, and the title cards the logo tools resize), none of
+ * which is paletted.
  *
  * The filters are the whole of it. Each scanline is prefixed by one of five
  * predictors over the byte to its left (`a`) and the byte above (`b`), so the

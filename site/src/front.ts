@@ -15,9 +15,11 @@
  * languages as everything behind it.
  */
 import { installI18n } from "./locales";
+import { installGamesMenu } from "./games-menu";
 import { installLanguageMenu } from "./lang-menu";
 import { installVersion } from "./version";
 
+installGamesMenu();
 installLanguageMenu();
 installVersion();
 void installI18n();

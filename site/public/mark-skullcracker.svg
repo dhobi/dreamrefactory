@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img"
+     aria-label="Skull Cracker">
+  <!--
+    The horned skull off the title card, cut down to 32 pixels.
+
+    What survives at this size is the silhouette and the eyes: two horns, a
+    cracked dome, and the toxic-green glow that is the only lit thing in the
+    artwork. The spikes, the flesh, the maces and the letters all go — a favicon
+    is a shape at 16px, and this one has to be readable beside a tab full of
+    them.
+
+    Every colour is measured out of skullcracker/assets/skullcracker-full.png:
+    bone #f9e0b2 and its highlight #f9f7f0, the eye's green #6d8f03 up to the
+    #d6ed15 peak at its core, steel #8f8d8f falling to #4b526f, on the card's
+    own near-black.
+  -->
+  <defs>
+    <linearGradient id="bone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f9f7f0"/>
+      <stop offset=".55" stop-color="#f9e0b2"/>
+      <stop offset="1" stop-color="#c7b7ae"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b1aeae"/>
+      <stop offset=".6" stop-color="#8f8d8f"/>
+      <stop offset="1" stop-color="#4b526f"/>
+    </linearGradient>
+    <radialGradient id="eye">
+      <stop offset="0" stop-color="#d6ed15"/>
+      <stop offset=".45" stop-color="#8fb703"/>
+      <stop offset="1" stop-color="#2c3a02"/>
+    </radialGradient>
+  </defs>
+
+  <!-- No plate behind it. Dust's longhorn and Timelapse's pyramid are drawn on
+       transparency and the top bar puts all three on its own ground; a rounded
+       dark rect here read as a box beside two marks that had none. -->
+
+  <!-- the two horns, sweeping up and out of the dome -->
+  <path d="M11.2 12.4C8.1 11.4 4.6 8.8 2.7 4.9c3.8.5 7.1 2.4 9.4 5.3z"
+        fill="url(#steel)" stroke="#160f16" stroke-width=".7"/>
+  <path d="M20.8 12.4c3.1-1 6.6-3.6 8.5-7.5-3.8.5-7.1 2.4-9.4 5.3z"
+        fill="url(#steel)" stroke="#160f16" stroke-width=".7"/>
+
+  <!-- the dome and the jaw, one silhouette -->
+  <path d="M16 5.6c5.2 0 8.7 3.6 8.7 8.3 0 2.5-1 4.3-2.4 5.5l.2 3.1c0
+           1.3-1 2.1-2.3 2.1h-8.4c-1.3 0-2.3-.8-2.3-2.1l.2-3.1c-1.4-1.2-2.4-3-2.4-5.5
+           0-4.7 3.5-8.3 8.7-8.3z"
+        fill="url(#bone)"/>
+
+  <!-- the crack across the dome: the letters have it too, and it is the one
+       detail small enough to keep -->
+  <path d="M15.2 6.1l1.5 2.3-1.1 1.4 1.3 1.6" fill="none" stroke="#6a5649"
+        stroke-width=".9" stroke-linecap="round"/>
+
+  <!-- the sockets, and the glow that is the whole point of them -->
+  <ellipse cx="12.1" cy="14.6" rx="2.9" ry="3.1" fill="#160f16"/>
+  <ellipse cx="19.9" cy="14.6" rx="2.9" ry="3.1" fill="#160f16"/>
+  <ellipse cx="12.1" cy="14.6" rx="2.1" ry="2.3" fill="url(#eye)"/>
+  <ellipse cx="19.9" cy="14.6" rx="2.1" ry="2.3" fill="url(#eye)"/>
+
+  <!-- nose, and four teeth: at 16px these read as one dark band, which is
+       what a skull's lower half looks like anyway -->
+  <path d="M16 17.4l1.5 2.6h-3z" fill="#6a5649"/>
+  <g fill="#160f16">
+    <rect x="11.6" y="21.3" width="1.7" height="3" rx=".4"/>
+    <rect x="14" y="21.3" width="1.7" height="3.4" rx=".4"/>
+    <rect x="16.4" y="21.3" width="1.7" height="3.4" rx=".4"/>
+    <rect x="18.8" y="21.3" width="1.7" height="3" rx=".4"/>
+  </g>
+</svg>

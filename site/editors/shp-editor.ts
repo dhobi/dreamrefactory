@@ -15,6 +15,7 @@
  * taoot/tests/auto/shp-editor.ts).
  */
 import { indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
+import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf } from "./sources";
@@ -830,6 +831,7 @@ $("exportBtn").addEventListener("click", () => {
 });
 
 void installI18n();
+installGamesMenu();
 void installLanguageMenu();
 installVersion();
 // Which edition's files the landing screen lists, and which copy of a basename an

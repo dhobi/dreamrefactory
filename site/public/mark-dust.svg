@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="">
+  <!--
+    Dust's mark: the longhorn skull from the middle of the game's own interface
+    band, redrawn.
+
+    Not the title card's skull — that one wears a cowboy hat, sits at an angle and
+    is a crop of a 2000px render, none of which survives 16px. This is the shape a
+    player looks at for the whole game, bottom centre of the screen.
+
+    Redrawn rather than extracted, and not for want of trying: a `.PRP` turns out
+    to be v1's `.SHP` and a `.FLT` v1's `.STG`, so the existing readers open all of
+    Dust's props and flats — but the band's plate is one of eleven 512x384 frames
+    in HOUSE.PRP that the prop frame decoder does not read, and chasing that one
+    bitmap is reverse engineering rather than icon work.
+
+    ## Faithful to the original in four things
+
+    * the horns are DARK, with a lighter tan patch where they meet the skull
+    * the cranium is a tall cream oval, not a round cartoon skull
+    * a single suture runs down its middle
+    * NO eye sockets. The game's art has none, and that is most of why it reads as
+      a game render instead of a diagram. Adding them made it a different object.
+
+    Stylised on purpose: mirrored exactly about the centre, lit from straight above
+    so the symmetry holds, and shaded in three flat-ish steps rather than modelled.
+  -->
+  <defs>
+    <linearGradient id="skull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fdf3d9" />
+      <stop offset="0.45" stop-color="#eedab0" />
+      <stop offset="0.8" stop-color="#d3bb8c" />
+      <stop offset="1" stop-color="#ab9068" />
+    </linearGradient>
+    <linearGradient id="hornL" x1="0" y1="0" x2="1" y2="0.4">
+      <!--
+        Mid-brown at the TIP, not near-black. The first version ran to #1d1108
+        there, which is within a shade of this game's own background — the horns
+        were geometrically correct and invisible, readable only when the mark was
+        dropped on white. A tab strip can be either colour, so the range has to
+        clear both ends.
+      -->
+      <stop offset="0" stop-color="#6d4420" />
+      <stop offset="0.5" stop-color="#a97a3c" />
+      <stop offset="1" stop-color="#e4c896" />
+    </linearGradient>
+    <linearGradient id="hornR" x1="1" y1="0" x2="0" y2="0.4">
+      <!--
+        Mid-brown at the TIP, not near-black. The first version ran to #1d1108
+        there, which is within a shade of this game's own background — the horns
+        were geometrically correct and invisible, readable only when the mark was
+        dropped on white. A tab strip can be either colour, so the range has to
+        clear both ends.
+      -->
+      <stop offset="0" stop-color="#6d4420" />
+      <stop offset="0.5" stop-color="#a97a3c" />
+      <stop offset="1" stop-color="#e4c896" />
+    </linearGradient>
+  </defs>
+
+  <!-- horns first, so the cranium overlaps their inner ends and hides the join -->
+  <g stroke="#4a2c15" stroke-width="0.6" stroke-linejoin="round">
+    <!--
+      Chunky and nearly horizontal before the tip hooks up, which is how the
+      game draws them. The first pass made thin steep swooshes: geometrically a
+      horn, but reading as a bird in flight at small sizes.
+    -->
+    <path
+      fill="url(#hornL)"
+      d="M22 14 C16 16 10 19 5 12 C3.5 10 2 8 1.5 7
+         C3 11 5 16 8 20 C12 24 17 26 22 26 Z"
+    />
+    <path
+      fill="url(#hornR)"
+      d="M42 14 C48 16 54 19 59 12 C60.5 10 62 8 62.5 7
+         C61 11 59 16 56 20 C52 24 47 26 42 26 Z"
+    />
+  </g>
+
+  <!-- the cranium: tall oval, widest at the brow, tapering to the teeth -->
+  <path
+    fill="url(#skull)"
+    stroke="#7d6440"
+    stroke-width="0.7"
+    stroke-linejoin="round"
+    d="M32 7 C38.5 7 43 12 43 21 C43 29 42.5 35 41 42
+       C39 48 37 53 35.5 57 L34 60 L32.8 56.5 L32 60 L31.2 56.5 L30 60 L28.5 57
+       C27 53 25 48 23 42 C21.5 35 21 29 21 21 C21 12 25.5 7 32 7 Z"
+  />
+
+  <!-- the suture down the middle, and a soft brow shadow for volume -->
+  <path
+    d="M32 11 C31.4 18 31.4 26 32 33 C32.6 26 32.6 18 32 11 Z"
+    fill="#8a6f45"
+    opacity="0.75"
+  />
+  <path
+    d="M24.5 16 C27 13.5 37 13.5 39.5 16 C37 15 27 15 24.5 16 Z"
+    fill="#fffaf0"
+    opacity="0.55"
+  />
+</svg>

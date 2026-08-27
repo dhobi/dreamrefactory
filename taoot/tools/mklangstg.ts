@@ -215,7 +215,7 @@ function globeDisc(png: DecodedPNG): { cx: number; cy: number } {
  * steps in the bottom rows the footer text sits on anyway.
  */
 function globeField(): Float32Array {
-  const png = decodePNG(new Uint8Array(readFileSync(new URL("../public/globe.png", import.meta.url))));
+  const png = decodePNG(new Uint8Array(readFileSync(new URL("../assets/globe.png", import.meta.url))));
   const scale = SCREEN_H / png.height;
   const drawW = Math.round(png.width * scale);
   const drawH = Math.round(png.height * scale);

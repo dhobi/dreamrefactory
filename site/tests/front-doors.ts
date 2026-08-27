@@ -28,6 +28,7 @@
  */
 import { test, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { GAMES } from "@dreamfactory/site/games";
 
@@ -123,4 +124,71 @@ test("the lede does not make the engine's games only the ones this port plays", 
     `the lede names none of ${elsewhere.join(", ")} — a reader is left thinking ` +
       `DreamFactory's games are exactly the ones with a door on this page`,
   ).toBeGreaterThanOrEqual(2);
+});
+
+/**
+ * And the same fact once more, in the nine editor pages' top bar.
+ *
+ * Those pages belong to no game and link to every one of them, which means
+ * adding a game to the registry leaves nine hand-written navs to update. It was
+ * missed: Skull Cracker had a door on the front page, a book editor of its own and
+ * a track editor that would not open its banks, and eight of the nine top bars
+ * stopped at Timelapse — so from inside the editors the game did not exist.
+ *
+ * The nav is authored inline in each page for the same reason the doors are, so
+ * this is the same bargain as the badges above: a copy per page, made safe by a
+ * test that fails when one of them drifts.
+ */
+const EDITOR_PAGES = [
+  "index",
+  "books",
+  "casts",
+  "movies",
+  "puppets",
+  "sets",
+  "shops",
+  "stages",
+  "tracks",
+];
+
+test("every editor page's top bar links to every game", () => {
+  const missing: string[] = [];
+  for (const page of EDITOR_PAGES) {
+    const src = readFileSync(`${ROOT}/site/editors/${page}.html`, "utf8");
+    const nav = /<nav class="topnav">([\s\S]*?)<\/nav>/.exec(src)?.[1];
+    if (!nav) {
+      missing.push(`${page}.html: no topnav`);
+      continue;
+    }
+    for (const game of GAMES) {
+      if (!nav.includes(`href="../${game.dir}/"`)) missing.push(`${page}.html: no link to ${game.dir}`);
+    }
+  }
+  expect(missing, missing.length ? `an editor page's nav is missing a game:\n  ${missing.join("\n  ")}` : undefined).toEqual(
+    [],
+  );
+});
+
+/**
+ * And the marks the games menu draws, which are copies.
+ *
+ * `site/public/mark-*` is each game's own favicon copied into the site's public
+ * directory, because the pages that carry that menu — the front page and the nine
+ * editors — are served by the SITE build, and a game's own public directory is
+ * behind its own port on the dev server. The copy is what makes the icon appear in
+ * development as well as in production; this is what stops it going stale.
+ */
+test("every game's mark in site/public is the game's own file, byte for byte", () => {
+  for (const game of GAMES) {
+    const copy = `${ROOT}/site/public/${game.mark}`;
+    expect(existsSync(copy), `${game.mark} is missing from site/public`).toBe(true);
+    // the original keeps the game's own naming: <dir>/public/<dir>-mark.<ext>
+    const ext = game.mark.split(".").pop();
+    const original = `${ROOT}/${game.dir}/public/${game.dir}-mark.${ext}`;
+    expect(existsSync(original), `${original} is missing`).toBe(true);
+    expect(
+      readFileSync(copy).equals(readFileSync(original)),
+      `site/public/${game.mark} has drifted from ${game.dir}/public/${game.dir}-mark.${ext}`,
+    ).toBe(true);
+  }
 });

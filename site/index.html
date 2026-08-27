@@ -125,6 +125,48 @@
        * and the editors are tools about the games — real doors, but doors, so
        * they stay the plain boxes they were.
        */
+      /*
+       * The two project links — Documentation and Format editors — sit straight
+       * under the wordmark, above the lede, so the first thing the page offers is
+       * the two halves of the project rather than four games. They are capped at
+       * the LEDE's own 42rem so the pair reads as part of that column and not as
+       * two more doors, and their track minimum drops to 18rem because two 24rem
+       * minimums cannot share a 42rem row and the grid would stack them.
+       */
+      .doors.links {
+        max-width: 42rem;
+        /* centred in the page, under a centred wordmark — the hero's text is
+           centred but a max-width BLOCK is not, and left-aligned under that logo
+           it read as a mistake */
+        margin-inline: auto;
+        grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+        margin-top: 1.6rem;
+        margin-bottom: 2.2rem;
+      }
+      /*
+       * And they are not games, so they do not look like one. A wash of the
+       * accent instead of the panel grey, the text centred in the card, and the
+       * studio badge and cover art that make a game door a game door are simply
+       * absent — these two are the project's own halves.
+       *
+       * `color-mix` against `transparent` rather than a new token: the tint has to
+       * sit on whatever the page's background is, and both themes give `--accent`
+       * a green.
+       */
+      .doors.links .door {
+        align-items: center;
+        text-align: center;
+        background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+        border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+      }
+      .doors.links .door:hover {
+        background: color-mix(in srgb, var(--accent) 13%, var(--panel));
+        border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+      }
+      .doors.links .door p {
+        /* a centred paragraph reads best short of the card's full width */
+        max-width: 22rem;
+      }
       .doors {
         display: grid;
         /*
@@ -230,8 +272,8 @@
       /* ------------------------------------------------------------------
          WHO MADE IT, on the card.
 
-         CyberFlix wrote the engine and two of the three games; *Timelapse* is
-         GTE Interactive Media's. Nothing on this page said so, and the lede came
+         CyberFlix wrote the engine and three of the four games here; *Timelapse*
+         is GTE Interactive Media's. Nothing on this page said so, and the lede came
          close to saying the opposite — which is the whole reason this exists:
          the engine's name and the studio's name are not the same fact, and a
          card that credits neither lets a reader assume they are.
@@ -327,14 +369,15 @@
       <nav class="topnav">
         <a href="./docs/" data-i18n="site.navDocs">Docs</a>
         <a href="./editors/" data-i18n="site.navEditors">Editors</a>
-        <a href="./taoot/">Titanic</a>
-        <a href="./dust/">Dust</a>
-        <a href="./timelapse/">Timelapse</a>
         <a
           href="https://github.com/dhobi/dreamrefactory"
           data-i18n="site.navSource"
           >Source</a
         >
+        <a href="./taoot/">Titanic</a>
+        <a href="./dust/">Dust</a>
+        <a href="./timelapse/">Timelapse</a>
+        <a href="./skullcracker/">Skull Cracker</a>
       </nav>
     </header>
 
@@ -352,6 +395,19 @@
           "
         />
         <h1 id="wordmark-text" hidden>Dream<i>RE</i>factory</h1>
+      </div>
+
+      <div class="doors links">
+        <a class="door" href="./docs/">
+          <b data-i18n="front.docsTitle">Documentation</b>
+          <span class="meta" data-i18n="front.docsMeta"
+            >formats · runtime · reference</span
+          >
+        </a>
+        <a class="door" href="./editors/">
+          <b data-i18n="front.editorsTitle">Format editors</b>
+          <span class="meta">set · shp · mov · stg · pup · cst · trk</span>
+        </a>
       </div>
 
       <p class="lede" data-i18n-html="front.lede">
@@ -372,7 +428,7 @@
       <div class="doors games">
         <a class="door game" href="./taoot/">
           <span class="art"
-            ><img src="/card-taoot.png" alt="" width="150" height="129"
+            ><img src="/card-taoot.png" alt="" width="340" height="120"
           /></span>
           <span class="studio" data-studio="CyberFlix" title="Developed by CyberFlix, who wrote the DreamFactory engine this port reimplements">CyberFlix</span>
           <b>Titanic: Adventure Out of Time RE</b>
@@ -408,28 +464,22 @@
             walkable. Newest, and least finished.
           </p>
         </a>
+        <a class="door game" href="./skullcracker/">
+          <span class="art"
+            ><img src="/card-skullcracker.png" alt="" width="340" height="145"
+          /></span>
+          <span class="studio" data-studio="CyberFlix" title="Developed by CyberFlix, who wrote the DreamFactory engine this port reimplements">CyberFlix</span>
+          <b>Skull Cracker RE</b>
+          <span class="meta">1996 · DreamFactory 4</span>
+          <p>
+            The same studio and the same file formats, with no interpreter: this
+            one's logic is compiled into its executable. So the films and the
+            game's own menu play, and a level is walkable — read out of the
+            executable rather than scripted in the data.
+          </p>
+        </a>
       </div>
 
-      <div class="doors">
-        <a class="door" href="./docs/">
-          <b data-i18n="front.docsTitle">Documentation</b>
-          <span class="meta" data-i18n="front.docsMeta"
-            >formats · runtime · reference</span
-          >
-          <p data-i18n="front.docsBody">
-            How the engine works, container format by container format, and how
-            each was recovered. The long half of this project.
-          </p>
-        </a>
-        <a class="door" href="./editors/">
-          <b data-i18n="front.editorsTitle">Format editors</b>
-          <span class="meta">set · shp · mov · stg · pup · cst · trk</span>
-          <p data-i18n="front.editorsBody">
-            Open a room, a prop, a film or a stage out of the game data, look at
-            what is inside it, change it and write it back.
-          </p>
-        </a>
-      </div>
 
       <p class="caveat" data-i18n="front.caveat">
         RE is for reverse-engineered. This is a best-effort re-implementation

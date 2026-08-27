@@ -62,6 +62,12 @@ export default defineConfig({
       emit: false,
     }),
     gamefilesManifest({
+      gamefiles: resolve(HERE, "../skullcracker/gamefiles"),
+      publicDir: resolve(HERE, "../skullcracker/public"),
+      mount: "/skullcracker",
+      emit: false,
+    }),
+    gamefilesManifest({
       gamefiles: resolve(HERE, "../timelapse/gamefiles"),
       publicDir: resolve(HERE, "../timelapse/public"),
       mount: "/timelapse",
@@ -76,6 +82,7 @@ export default defineConfig({
       { path: "taoot", command: "npm run dev:taoot", port: 5175, what: "Titanic" },
       { path: "dust", command: "npm run dev:dust", port: 5176, what: "Dust" },
       { path: "timelapse", command: "npm run dev:timelapse", port: 5177, what: "Timelapse" },
+      { path: "skullcracker", command: "npm run dev:skullcracker", port: 5178, what: "Skull Cracker" },
     ]),
   ],
   server: {
@@ -93,7 +100,7 @@ export default defineConfig({
       input: {
         // the front door
         main: join(HERE, "index.html"),
-        // the editors: a landing page and the seven format editors. They import
+        // the editors: a landing page and the eight format pages. They import
         // the file-format layer (engine/src/df/) and engine/src/web/screen.ts,
         // never the runtime, so they build as pages that happen to share a data
         // library with a game.
@@ -105,6 +112,7 @@ export default defineConfig({
         stages: join(HERE, "editors/stages.html"),
         casts: join(HERE, "editors/casts.html"),
         movies: join(HERE, "editors/movies.html"),
+        books: join(HERE, "editors/books.html"),
       },
     },
   },

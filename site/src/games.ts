@@ -105,6 +105,20 @@ export interface GameEditions {
    * this list.
    */
   developer: string;
+  /**
+   * The game's little mark, as the FRONT-END serves it — `site/public/mark-*`,
+   * which are copies of each game's own `<dir>/public/<dir>-mark.*` favicon.
+   *
+   * Copies, and deliberately: the games menu ({@link file://./games-menu.ts})
+   * draws these beside the names, and the pages that carry that menu are the front
+   * page and the nine editors — all served by the SITE build, where a game's own
+   * public directory is not. In the deployed tree `/taoot/taoot-mark.png` exists;
+   * on the dev server the games are signposts to their own ports and it does not,
+   * so a page reaching across would show a broken image in development and a mark
+   * in production. `site/tests/front-doors.ts` holds each copy byte-for-byte
+   * against the original, which is what makes the duplication safe.
+   */
+  mark: string;
 }
 
 /**
@@ -122,6 +136,7 @@ export const TITANIC: GameEditions = {
   title: "Titanic: Adventure Out of Time",
   short: "Titanic",
   dir: "taoot",
+  mark: "mark-taoot.png",
   editions: [
     { code: "en", name: "English", encoding: "macintosh" },
     { code: "de", name: "Deutsch", encoding: "macintosh" },
@@ -161,6 +176,7 @@ export const DUST: GameEditions = {
   title: "Dust: A Tale of the Wired West",
   short: "Dust",
   dir: "dust",
+  mark: "mark-dust.svg",
   editions: [{ code: "dustcd", name: "English", encoding: DEFAULT_ENCODING }],
   storageKey: "dust.edition",
   fallback: "dustcd",
@@ -197,6 +213,7 @@ export const TIMELAPSE: GameEditions = {
   title: "Timelapse: Ancient Civilizations",
   short: "Timelapse",
   dir: "timelapse",
+  mark: "mark-timelapse.svg",
   editions: [{ code: "", name: "English", encoding: DEFAULT_ENCODING }],
   storageKey: "timelapse.edition",
   fallback: "",
@@ -205,6 +222,37 @@ export const TIMELAPSE: GameEditions = {
   screen: { width: 640, height: 480 },
   // NOT CyberFlix: the engine is theirs and this game is not
   developer: "GTE Interactive Media",
+};
+
+/**
+ * *Skull Cracker* — the one entry here that is not an adventure, and the one whose
+ * page is not a game.
+ *
+ * CyberFlix's own beat-'em-up, on their own engine, and it uses DreamFactory's
+ * FILE formats without its interpreter: the logic is compiled into `SC.EXE`
+ * rather than scripted in the data, so there is no BOOTFILE and nothing for a
+ * `GameHost` to boot. What `skullcracker/` therefore is, is a film player over
+ * the game's own menu — and what the editors can open is its sprite books, which
+ * hold every cel and every level plan the game has (`engine/src/df/sbk.ts`).
+ *
+ * It is in this registry because the registry answers "which rips are there", and
+ * a rip is what it has. The editors' source picker reads exactly that, and
+ * without an entry here its 111 files would be the one corpus the tooling could
+ * not see.
+ */
+export const SKULLCRACKER: GameEditions = {
+  title: "Skull Cracker",
+  short: "Skull Cracker",
+  dir: "skullcracker",
+  mark: "mark-skullcracker.svg",
+  editions: [{ code: "", name: "English", encoding: DEFAULT_ENCODING }],
+  storageKey: "skullcracker.edition",
+  fallback: "",
+  // 512×384, the same as Titanic's and Dust's — and no band, because there are
+  // no sets. A sprite book records no screen at all; this is what its films are
+  // authored against, which is the nearest thing the game has to one.
+  screen: { width: 512, height: 384 },
+  developer: "CyberFlix",
 };
 
 /** the code every edition-less path is treated as belonging to — see `editionOfUrl` */
@@ -229,9 +277,14 @@ export function editionOfUrl(game: GameEditions, url: string): string {
  *
  * Oldest engine first, which is also oldest game first — the order the
  * documentation introduces them in, and the order that makes "DreamFactory 1,
- * then 4" read as a progression rather than an arbitrary pair. Timelapse is last
- * of the three: the same engine generation as Titanic, shipped after it, and the
- * one whose corpus has the least in it for an editor to open — no set, no puppet,
- * no cast, and one shop per world.
+ * then 4" read as a progression rather than an arbitrary pair. Timelapse is
+ * third: the same engine generation as Titanic, shipped after it, and the one
+ * whose corpus has the least in it for an editor to open — no set, no puppet, no
+ * cast, and one shop per world.
+ *
+ * Skull Cracker is last because it is the odd one out rather than the newest: same
+ * year as Titanic, same studio, same file formats — and no interpreter, so it is
+ * the only entry whose door does not lead to a playable game. Putting it after
+ * the three keeps "these are DreamFactory adventures" true of the run of them.
  */
-export const GAMES: readonly GameEditions[] = [DUST, TITANIC, TIMELAPSE];
+export const GAMES: readonly GameEditions[] = [DUST, TITANIC, TIMELAPSE, SKULLCRACKER];

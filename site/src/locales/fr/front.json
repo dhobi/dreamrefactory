@@ -7,8 +7,6 @@
   "timelapseBody": "Quatre disques et aucune pièce — un monde fait de flats de stage, où l'on navigue à la forme du curseur. Commence par son film ; le premier monde est parcourable. Le plus récent, et le moins abouti.",
   "docsTitle": "Documentation",
   "docsMeta": "formats · exécution · référence",
-  "docsBody": "Comment le moteur fonctionne, format de conteneur par format de conteneur, et comment chacun a été retrouvé. La moitié la plus longue de ce projet.",
   "editorsTitle": "Éditeurs de formats",
-  "editorsBody": "Ouvrez une salle, un accessoire, un film ou une scène depuis les données du jeu, regardez ce qu'il y a dedans, modifiez-le et réécrivez-le.",
   "caveat": "RE signifie reverse-engineered. Ceci est une réimplémentation faite au mieux et non une réédition : elle a besoin d'une copie des fichiers de données du jeu, qu'elle ne fournit pas, et elle n'est affiliée ni à CyberFlix, ni à GTE Entertainment, ni à aucun ayant droit actuel."
 }

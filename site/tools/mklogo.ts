@@ -57,14 +57,22 @@ const JOBS: Job[] = [
     opts: { width: 760, unblack: true, trim: "alpha", trimThreshold: 8 },
   },
   {
-    what: "Titanic's emblem",
-    // the port's own mark for that game — the globe with a brass porthole cut
-    // through it, already cut out against transparency
-    src: at("../../taoot/public/globe.png"),
+    what: "Titanic's title card",
+    // the full-size original, not taoot/public's 512px derivative: resizing a
+    // resize softens edges twice
+    src: at("../../taoot/assets/taoot-full.png"),
     out: at("../public/card-taoot.png"),
-    // shown about 145 CSS px wide in the card's art band, so 300 is a true 2x on
-    // an image small enough that 2x costs nothing
-    opts: { width: 300, trim: "alpha" },
+    /**
+     * Shown about 340 CSS px wide, so 480 is a modest oversample on a wordmark
+     * whose bevels are the thing to lose — the same trade as Dust's below, which
+     * is now the same shape of picture in the same size of band.
+     *
+     * The threshold is taoot/tools/mktaootlogo.ts's, and for its reason: this
+     * artwork's fringe reaches the canvas edge at an alpha no eye can see, so a
+     * trim looking for any alpha at all finds the whole frame and leaves 4% of
+     * the height as empty margin.
+     */
+    opts: { width: 480, trim: "alpha", trimThreshold: 8 },
   },
   {
     what: "Dust's title card",

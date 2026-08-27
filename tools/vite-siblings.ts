@@ -10,7 +10,7 @@
  * ## Why not just proxy it
  *
  * Because it cannot work. In dev, Vite serves the HTML as authored, so a page
- * asks for `/src/main.ts`, `/globe-mark.png` and `/gamefiles/…` — all
+ * asks for `/src/main.ts`, `/taoot-mark.png` and `/gamefiles/…` — all
  * ROOT-absolute, all resolved against whatever origin the browser is on. Proxy
  * `/taoot/*` to Titanic's server and the page arrives, then asks the SITE's
  * server for `/src/main.ts` — a path that exists in every one of those packages

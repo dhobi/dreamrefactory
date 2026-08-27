@@ -7,8 +7,6 @@
   "timelapseBody": "Vier CDs und überhaupt keine Räume — eine Welt aus Stage-Flats, navigiert über die Form des Mauszeigers. Beginnt mit ihrem Film; die erste Welt ist begehbar. Am neuesten, und am wenigsten fertig.",
   "docsTitle": "Dokumentation",
   "docsMeta": "Formate · Laufzeit · Referenz",
-  "docsBody": "Wie die Engine funktioniert, Containerformat für Containerformat, und wie jedes davon rekonstruiert wurde. Die längere Hälfte dieses Projekts.",
   "editorsTitle": "Format-Editoren",
-  "editorsBody": "Öffne einen Raum, ein Requisit, einen Film oder eine Bühne aus den Spieldaten, sieh hinein, ändere etwas und schreibe es zurück.",
   "caveat": "RE steht für reverse-engineered. Dies ist eine bestmögliche Neuimplementierung und keine Neuveröffentlichung: sie benötigt eine Kopie der Originaldateien des Spiels, die sie nicht mitliefert, und sie steht in keiner Verbindung zu CyberFlix, GTE Entertainment oder einem aktuellen Rechteinhaber."
 }

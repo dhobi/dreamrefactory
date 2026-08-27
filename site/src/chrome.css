@@ -115,10 +115,11 @@ kbd,
 /*
  * The mark is a sphere; give it a sphere's shadow rather than a box's.
  *
- * The image is whatever mark the page supplies — Titanic's shadowless disc,
+ * The image is whatever mark the page supplies — Titanic's brass porthole,
  * the project's green wireframe globe — because the mark belongs to a palette
- * and not to the structure. Titanic's globe.png
- * carries a cast shadow that takes up its bottom third, so at 30px it would
+ * and not to the structure. Titanic's is cut from its globe artwork as that
+ * disc and nothing else (taoot/tools/mktaootlogo.ts): the artwork carries a
+ * cast shadow taking up its bottom third, so the whole image at 30px would
  * leave a ~20px sphere sitting over a blue smudge. The full logo belongs where
  * it is large enough to read as one, which is the front page's hero.
  */
@@ -193,13 +194,18 @@ kbd,
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-/* ---- the language picker ------------------------------------------------
-   A <details> rather than a <select>: the list has to carry endonyms in six
-   scripts, and a native menu on a phone renders those in the OS font at the OS
-   size, which is neither this page's font nor legible next to it. Sits in the
-   nav and reads as one of its links until opened. */
-.langmenu {
+/* ---- the nav's dropdowns ------------------------------------------------
+   Two of them now, and they share everything but where they sit: the LANGUAGE
+   picker (site/src/lang-menu.ts) and the GAMES menu (site/src/games-menu.ts).
+
+   A <details> rather than a <select>: the language list has to carry endonyms in
+   six scripts, and a native menu on a phone renders those in the OS font at the
+   OS size, which is neither this page's font nor legible next to it. Both sit in
+   the nav and read as one of its links until opened. */
+.navmenu {
   position: relative;
+}
+.langmenu {
   /* The list below hangs from `right: 0`, so it opens LEFTWARDS out of the
      trigger — which is off the screen entirely if the trigger is sitting at the
      left edge. That is exactly what happens when .topnav wraps and the picker
@@ -218,7 +224,7 @@ kbd,
      no-op — the trigger does not move at any width where nothing was wrong. */
   margin-left: auto;
 }
-.langmenu > summary {
+.navmenu > summary {
   font-size: 0.78rem;
   letter-spacing: 0.06em;
   color: var(--text-dim);
@@ -229,15 +235,15 @@ kbd,
   cursor: pointer;
   list-style: none;
 }
-.langmenu > summary::-webkit-details-marker {
+.navmenu > summary::-webkit-details-marker {
   display: none;
 }
-.langmenu > summary:hover,
-.langmenu[open] > summary {
+.navmenu > summary:hover,
+.navmenu[open] > summary {
   color: var(--text-bright);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
-.langmenu-list {
+.navmenu-list {
   position: absolute;
   right: 0;
   top: calc(100% + 0.3rem);
@@ -251,7 +257,8 @@ kbd,
   background: var(--menu-panel);
   box-shadow: 0 10px 24px var(--shadow-drop);
 }
-.langmenu-list button {
+.navmenu-list button,
+.navmenu-list a {
   font: inherit;
   font-size: 0.8rem;
   text-align: left;
@@ -262,13 +269,31 @@ kbd,
   padding: 0.34rem 0.55rem;
   cursor: pointer;
   white-space: nowrap;
+  /* the games list holds real links, and a nav link is underlined out there */
+  text-decoration: none;
 }
-.langmenu-list button:hover {
+/* the games menu puts each game's own mark in front of its name */
+.navmenu-list a {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.navmenu-list a img {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  /* the marks are drawn for a dark tab strip and sit on a dark menu here, so
+     nothing is done to them but the size */
+  object-fit: contain;
+}
+.navmenu-list button:hover,
+.navmenu-list a:hover {
   color: var(--text-bright);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 /* the one being read, marked the way the current page is in the nav */
-.langmenu-list button.here {
+.navmenu-list button.here,
+.navmenu-list a.here {
   color: var(--accent-hover);
 }
 
@@ -584,7 +609,7 @@ input.edited {
 :lang(ja) .brand-text b,
 :lang(ja) .brand-text span,
 :lang(ja) .topnav a,
-:lang(ja) .langmenu > summary,
+:lang(ja) .navmenu > summary,
 :lang(ja) .panel > .head,
 :lang(ja) .section > .head,
 :lang(ja) a.play {

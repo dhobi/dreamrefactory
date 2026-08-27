@@ -6,7 +6,7 @@
     <title data-i18n="home.docTitle">Titanic - Adventure Out Of Time RE</title>
     <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
     <meta name="site-root" content="./" />
-    <link rel="icon" type="image/png" href="/globe-mark.png" />
+    <link rel="icon" type="image/png" href="/taoot-mark.png" />
     <link rel="stylesheet" href="/src/theme.css" />
     <style>
       /*
@@ -34,32 +34,34 @@
       }
 
       /*
-       * The globe, at the size it deserves on the one page that is only about
-       * what this is.
+       * The title card, at the size it deserves on the one page that is only
+       * about what this is.
        *
-       * The topbar carries the disc alone at 30px as an identity mark
-       * (globe-mark.png); this is the one place the logo is the subject rather
-       * than a label, so it gets the whole image — cast shadow included — and
-       * the title sits under it. Fluid rather than
-       * fixed (`clamp`) because the page is read on phones as well, and the
-       * source is 504x434, so even the top of that range is a downscale and never
-       * a stretch. `height: auto` with the intrinsic size still declared on the
-       * element keeps the aspect ratio and reserves the space before it loads, so
-       * the title does not jump.
+       * The topbar carries the porthole alone at 30px as an identity mark
+       * (taoot-mark.png); this is the one place the logo is the subject rather
+       * than a label, so it gets the whole thing — porthole, wordmark and
+       * subtitle. Fluid rather than fixed (`clamp`) because the page is read on
+       * phones as well, and the top of that range is 32rem, which is the width
+       * taoot/tools/mktaootlogo.ts writes the file at — so even the largest it
+       * is ever drawn is 1:1 and never a stretch. `height: auto` with the
+       * intrinsic size still declared on the element keeps the aspect ratio and
+       * reserves the space before it loads, so the title does not jump.
        *
-       * Same sphere shadow as the small mark, opened up a little: a sphere gets a
-       * sphere's glow, not a box's drop shadow (site/src/theme.css).
+       * The same glow the small mark gets, opened up a little: this artwork is
+       * lit metal and ice on a dark page, so what sits behind it is a haze in
+       * the sheet's own ice blue and not a box's drop shadow
+       * (site/src/theme.css).
        */
       #home .hero-mark {
         display: block;
-        width: clamp(8rem, 24vw, 14rem);
+        width: clamp(15rem, 70vw, 32rem);
         height: auto;
         margin: 0 auto 0.6rem;
         filter: drop-shadow(0 0 26px rgba(96, 192, 240, 0.3));
       }
 
       /*
-       * The globe answering the Konami code, on its way to the speedrun
+       * The title card answering the Konami code, on its way to the speedrun
        * workbench (taoot/src/konami.ts, taoot/src/home.ts).
        *
        * Two beats of brass and back, because brass is the sheet's colour for
@@ -278,7 +280,7 @@
   <body class="deep">
     <header class="topbar">
       <a class="brand" href="./" title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1996 release" data-i18n-attr="title:site.brandTitle">
-        <img class="brand-mark" src="/globe-mark.png" alt="" width="30" height="30" />
+        <img class="brand-mark" src="/taoot-mark.png" alt="" width="30" height="30" />
         <span class="brand-text">
           <b>Titanic</b>
           <span>Adventure Out Of Time RE</span>
@@ -296,7 +298,7 @@
     <div id="home">
       <!-- decorative: the <h1> below is the page's name for itself, so an alt
            here would only make a screen reader say it twice -->
-      <img class="hero-mark" src="/globe.png" alt="" width="504" height="434" />
+      <img class="hero-mark" src="/taoot-logo.png" alt="" width="512" height="181" />
       <h1 data-i18n="home.h1">Adventure Out Of Time RE</h1>
       <div class="intro">
         <span data-i18n-html="home.intro"

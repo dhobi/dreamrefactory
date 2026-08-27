@@ -17,6 +17,7 @@
 import { DFContainerFile, readContainerFile, writeContainerFile } from "@dreamfactory/engine/df/container";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { SndFile, readSndFile, sndLoopChunks } from "@dreamfactory/engine/df/snd";
+import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { byExtension, chosenSource, filesIn, installSourcePicker, listSources } from "./sources";
@@ -874,6 +875,7 @@ $("exportBtn").addEventListener("click", () => {
 });
 
 void installI18n();
+installGamesMenu();
 void installLanguageMenu();
 installVersion();
 // Which edition's files the landing screen lists, and which copy of a basename an

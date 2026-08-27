@@ -1,3 +1,5 @@
+import { ByteOrder, PC, little } from "./byte-order";
+
 /**
  * Frame decompression for SET/MOV-style image containers.
  * Port of DFfile::getRawImageData (dfet/libs/DFfile/DFfile.cpp).
@@ -42,10 +44,22 @@ export class FrameBuffer {
   }
 }
 
-export function decodeFrame(data: Uint8Array, fb: FrameBuffer): DecodedFrame {
+/**
+ * `order` is the containing file's ({@link file://./byte-order.ts}). Only three
+ * numbers in a frame are integers at all — the two dimensions in its header and
+ * the back-reference offset of run mode 7 — and the run stream itself is bytes,
+ * so a Macintosh frame is the same codec reading the same runs. Everything else
+ * on this page is byte-addressed and needs no flag.
+ */
+export function decodeFrame(
+  data: Uint8Array,
+  fb: FrameBuffer,
+  order: ByteOrder = PC,
+): DecodedFrame {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const height = view.getInt16(0, true);
-  const width = view.getInt16(2, true);
+  const le = little(order);
+  const height = view.getInt16(0, le);
+  const width = view.getInt16(2, le);
   fb.ensure(width, height);
   const out = fb.pixels;
 
@@ -124,7 +138,7 @@ export function decodeFrame(data: Uint8Array, fb: FrameBuffer): DecodedFrame {
           out.fill(data[inPos++], outPos, outPos + count);
           break;
         case 7: {
-          const off = view.getUint16(inPos, true);
+          const off = view.getUint16(inPos, le);
           inPos += 2;
           // A back-reference SHORTER than the run repeats what it just wrote —
           // LZ77-style, the way `rep movsb` copies. copyWithin is memmove: it
@@ -148,7 +162,7 @@ export function decodeFrame(data: Uint8Array, fb: FrameBuffer): DecodedFrame {
 
   // Z layer follows if the container is not exhausted
   const hasZ = inPos < data.length;
-  if (hasZ) decodeZLayer(data, view, inPos, height, fb.zPixels);
+  if (hasZ) decodeZLayer(data, view, inPos, height, fb.zPixels, le);
 
   return { width, height, hasZ, zOffset: hasZ ? inPos : -1 };
 }
@@ -365,10 +379,11 @@ function decodeZLayer(
   tableStart: number,
   height: number,
   zOut: Uint8Array,
+  le = true,
 ): void {
   let zPos = 0;
   for (let i = 0; i < height; i++) {
-    const rowOff = view.getUint16(tableStart + i * 2, true);
+    const rowOff = view.getUint16(tableStart + i * 2, le);
     const runCount = data[tableStart + rowOff];
     for (let d = 0; d < runCount; d++) {
       const valCount = data[tableStart + rowOff + 1 + d * 2];
@@ -381,22 +396,97 @@ function decodeZLayer(
 /**
  * Palette entries are {int16 index, int16 rgb[3]} where the usable 8-bit
  * channel value is the high byte of each int16 (DFfile.h ColorPalette use).
- * Returns a 256*4 RGBA table. Index 0 is forced black and, when all 256
- * colors are used, index 255 is forced white — mirroring dfet's BMP writer.
+ * Returns a 256*4 RGBA table.
+ *
+ * "The high byte" is one of this function's two endianness questions: it sits at
+ * +1 of each component on a PC rip and at +0 on a Macintosh one, which is 16
+ * bits of precision nobody ever had a use for landing on the other side of the
+ * pair. Read the wrong way a palette does not look subtly off — it comes out as
+ * 256 near-black entries, because the low byte of a component whose high byte is
+ * anything at all is noise.
+ *
+ * ## The other question: the two RESERVED entries, and whose they are
+ *
+ * On a PC rip index 0 is forced black and index 255 white — mirroring dfet's BMP
+ * writer, and right for Titanic and Dust. It is worth knowing WHY it is right,
+ * because the answer is a fact about Windows rather than about DreamFactory: a
+ * palettised Windows display reserves the two ends of the system palette, black
+ * at 0 and white at 255, and no application gets to use them. So the port has to
+ * put them back whatever the file stores — and what the file stores is the other
+ * way round. Every DF palette in every rip, PC and Mac alike, carries WHITE at
+ * entry 0 and BLACK at entry 255, because DreamFactory was authored on a Mac and
+ * that is the Macintosh system palette's reserved pair.
+ *
+ * Which means Skull Cracker's disc needs no remap at all: its reserved entries are
+ * the ones already in the file, and overriding them is the PC's correction
+ * applied to a picture that never needed correcting.
+ *
+ * The switch below is on the byte ORDER, which is a proxy for "whose build is
+ * this" and not the thing itself — worth saying, because `byte-order.ts` is at
+ * pains to point out that the order is a fact about the title rather than the
+ * platform. It is sound for the discs this port reads: the little-endian ones are
+ * the PC releases it renders, Skull Cracker's Macintosh one is not. What it could
+ * not distinguish is a MACINTOSH release shipping converted data — Titanic's
+ * Dutch disc ships exactly such a build — where the data would want the PC
+ * correction and the display would not. Nothing here renders one, and the day
+ * something does, this wants a flag of its own rather than a cleverer proxy.
+ *
+ * ## Both Skull Cracker releases were read, and they prove the model
+ *
+ * The reasoning above was worked out from the Macintosh disc alone, one frame of
+ * it load-bearing. The Windows release settles it from outside, and the way it
+ * does is better than agreement: **the conversion swapped the two indices in the
+ * PIXEL DATA.** Over every film on each disc —
+ *
+ *   | disc    | index 0 | index 255 |
+ *   |---------|---------|-----------|
+ *   | Mac     |  0.14%  |  27.34%   |
+ *   | Windows | 27.52%  |   0.14%   |
+ *
+ * — a mirror, because the authoring pipeline remapped 0 and 255 to land on
+ * whichever end the target platform reserves. `Belfry.mov`'s flat frame is 100%
+ * index 0 on the Mac disc and 100% index 255 on the Windows one, and under the
+ * rules below both render WHITE: the lightning flash that a single frame's worth
+ * of inference had called, confirmed by a disc that was not consulted to make the
+ * call. The menu's first frame decodes pixel-for-pixel identically from the two
+ * files — 0 differences over 196608 pixels, from files of 1.74 MB and 1.08 MB
+ * whose every integer runs the other way.
+ *
+ * Measured on Skull Cracker's
+ * 66 films — 18,725 frames, 1.83 billion pixels:
+ *
+ *   - index 255 is **27.34%** of every pixel in the game and appears in 15,879
+ *     of those frames. It is the ground the whole game is drawn on: forcing it
+ *     to white turns a black chapter card into a white one and puts a white
+ *     halo around every object in the menu.
+ *   - index 0 is **0.14%**, and one frame in the entire rip is substantially
+ *     made of it — `Belfry.mov` frame 100, which is 100% index 0 and sits
+ *     between two frames of night sky. A single full-screen frame in the middle
+ *     of a storm is a lightning flash, so that entry is white, which is what the
+ *     file says it is.
  */
-export function paletteToRGBA(paletteRaw: Uint8Array, colorCount: number): Uint8ClampedArray {
+export function paletteToRGBA(
+  paletteRaw: Uint8Array,
+  colorCount: number,
+  order: ByteOrder = PC,
+): Uint8ClampedArray {
   const rgba = new Uint8ClampedArray(256 * 4);
+  const pc = little(order);
+  /** where the high byte of a component sits, relative to the component */
+  const hi = pc ? 1 : 0;
   for (let i = 0; i < colorCount; i++) {
     const base = i * 8; // int16 index + 3 * int16 rgb
-    rgba[i * 4 + 0] = paletteRaw[base + 3]; // high byte of RGB[0]
-    rgba[i * 4 + 1] = paletteRaw[base + 5];
-    rgba[i * 4 + 2] = paletteRaw[base + 7];
+    rgba[i * 4 + 0] = paletteRaw[base + 2 + hi]; // high byte of RGB[0]
+    rgba[i * 4 + 1] = paletteRaw[base + 4 + hi];
+    rgba[i * 4 + 2] = paletteRaw[base + 6 + hi];
     rgba[i * 4 + 3] = 255;
   }
-  rgba[0] = rgba[1] = rgba[2] = 0;
   rgba[3] = 255;
-  if (colorCount === 256) {
-    rgba[255 * 4] = rgba[255 * 4 + 1] = rgba[255 * 4 + 2] = 255;
+  if (pc) {
+    rgba[0] = rgba[1] = rgba[2] = 0;
+    if (colorCount === 256) {
+      rgba[255 * 4] = rgba[255 * 4 + 1] = rgba[255 * 4 + 2] = 255;
+    }
   }
   return rgba;
 }
