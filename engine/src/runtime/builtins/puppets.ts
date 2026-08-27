@@ -57,9 +57,13 @@ export function registerPuppetBuiltins(ctx: BuiltinCtx): void {
     session.puppetParams.set(s, toNum(value));
     return 0;
   });
+  // puppetscramble(): shuffle the plaques already offered, leaving any pushed
+  // after it where they are — see PuppetController.puppetScramble for the
+  // original's loop, and why it draws from the SCRIPT random stream.
+  r("puppetscramble", () => session.puppetCtrl.puppetScramble());
   // remaining puppet effects are rare and unverified: puppetsubtitle (override
-  // text), puppetgrab (hold an item in-frame), puppetscramble (garbled face)
-  for (const stub of ["puppetsubtitle", "puppetgrab", "puppetscramble"]) {
+  // text), puppetgrab (hold an item in-frame)
+  for (const stub of ["puppetsubtitle", "puppetgrab"]) {
     r(stub, () => {});
   }
 }

@@ -423,6 +423,54 @@ export class PuppetController {
   }
 
   /**
+   * puppetscramble(): shuffle the choices offered SO FAR, in place.
+   *
+   * 0x4402e0, and it is a bubble of random swaps rather than a shuffle:
+   *
+   *     if bevelCount < 2: return
+   *     repeat bevelCount * 5 times:
+   *         a = rand(bevelCount) - 1        ; two independent draws, so a may
+   *         b = rand(bevelCount) - 1        ; equal b and the swap be a no-op
+   *         swap bevel[a], bevel[b]         ; 65-dword records at 0x48a6ec
+   *
+   * Reproduced exactly, draw for draw, rather than replaced with a Fisher-Yates
+   * — the count of draws is what advances the script RNG stream, and `rand()`
+   * (0x435810, `(raw % n) + 1`) is the same generator `random()` reads, so a
+   * different number of draws here re-values every story coin that follows.
+   * Hence {@link GameSession.rng} and not {@link GameSession.ambientRng}: this
+   * is a SCRIPT draw, made where the script asks for it.
+   *
+   * It shuffles what is on the list at the moment it is called, which is the
+   * whole of why it is a separate command rather than a flag on the plaque.
+   * Every one of the nine call sites in the corpus relies on that:
+   *
+   *     puppetbevel ("Care for a drink?", 104)
+   *     puppetscramble ()
+   *     puppetbevel ("Good night.", 105)      <- appended AFTER, stays last
+   *
+   * so Morrow's questions move and the way out of the conversation does not
+   * (MORROW1.PUP `wireless()`). BURNS1.PUP is the plainest statement of the
+   * intent: five plaques carrying only the ids 101 and 102, where the answer
+   * has to be read rather than counted along the row.
+   *
+   * Reported as #298 — the Recomp offered Morrow's choices in the order the
+   * puppet defines them, every time, because this was a no-op stub.
+   */
+  puppetScramble(): void {
+    const p = this.puppet;
+    if (!p) return;
+    const n = p.bevels.length;
+    if (n < 2) return; // 0x440313: nothing to do with one plaque or none
+    for (let i = 0; i < n * 5; i++) {
+      const a = Math.floor(this.session.rng() * n);
+      const b = Math.floor(this.session.rng() * n);
+      const t = p.bevels[a];
+      p.bevels[a] = p.bevels[b];
+      p.bevels[b] = t;
+    }
+  }
+
+  /**
    * A key while the puppet is waiting — true if the wait consumed it.
    *
    * The original's filter (0x441d80) is reached from inside the two waits and

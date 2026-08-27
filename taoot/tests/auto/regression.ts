@@ -3263,6 +3263,79 @@ test("idle timers fidget a character at a plaque, and only when asked", async ()
 }
 );
 
+// --- 18b6. the choices are shuffled, and the way out of them is not --------
+// `puppetscramble` was a no-op stub, so every conversation that calls it offered
+// its plaques in the order the puppet defines them — Morrow's wireless-room
+// questions came out the same way every time, where the original never repeats
+// (#298). The handler is 0x4402e0: `bevelCount * 5` swaps, each of two
+// independent `rand(bevelCount)` draws, over the list as it stands AT THE CALL.
+//
+// Which is the whole point of it being a command and not a flag: MORROW1's
+// `wireless()` scrambles and THEN pushes "Good night.", so the questions move and
+// the exit line does not. BURNS1 is the plainest case — five plaques carrying
+// only the ids 101 and 102, an answer you have to read rather than count to.
+test("puppetscramble shuffles the plaques already offered, and only those", async () => {
+  const { session } = await newSession();
+  await session.openSetFile("c73.set");
+  await session.puppetCtrl.openPuppetFile("smeth1.pup");
+  const rows = (): string => session.puppet!.bevels.map((b) => b.id).join(",");
+
+  // A seed rather than Math.random, so the claim is about THIS shuffle and a
+  // rerun cannot quietly agree with itself.
+  session.seedRandom(7);
+  for (const id of [101, 102, 103, 104]) session.puppetCtrl.puppetBevel(`q${id}`, id);
+  session.puppetCtrl.puppetScramble();
+  const scrambled = rows();
+  session.puppetCtrl.puppetBevel("Good night.", 105);
+  check(
+    "the four questions are reordered",
+    scrambled !== "101,102,103,104" && [...scrambled.split(",")].sort().join(",") === "101,102,103,104",
+    `rows=${scrambled}`,
+  );
+  check(
+    "and a plaque pushed after the scramble is still last",
+    rows() === `${scrambled},105`,
+    `rows=${rows()}`,
+  );
+  // the text travels with the id — a swap moves whole records (65 dwords each),
+  // and a shuffle that separated them would offer Morrow's words under Morrow's
+  // wrong number, which no route and no player could see
+  check(
+    "each plaque keeps its own words",
+    session.puppet!.bevels.every((b) => b.text === (b.id === 105 ? "Good night." : `q${b.id}`)),
+    JSON.stringify(session.puppet!.bevels),
+  );
+
+  // Every ordering is reachable, and none of them is fixed: 24 permutations of
+  // four plaques, and 200 seeds have to find more than one of them.
+  const seen = new Set<string>();
+  for (let seed = 0; seed < 200; seed++) {
+    session.seedRandom(seed);
+    session.puppetCtrl.puppetClear();
+    for (const id of [101, 102, 103, 104]) session.puppetCtrl.puppetBevel(`q${id}`, id);
+    session.puppetCtrl.puppetScramble();
+    seen.add(rows());
+  }
+  check("the order really varies with the draw", seen.size > 1, `orders=${seen.size}`);
+
+  // 0x440313 returns before drawing at all below two plaques — and that matters
+  // beyond tidiness, because a draw taken here would move the script RNG stream
+  // for every story coin that follows it.
+  const draws = { n: 0 };
+  const counted = session.rng;
+  session.rng = () => (draws.n++, counted());
+  session.puppetCtrl.puppetClear();
+  session.puppetCtrl.puppetBevel("only one", 101);
+  session.puppetCtrl.puppetScramble();
+  check("one plaque draws nothing", draws.n === 0 && rows() === "101", `draws=${draws.n}`);
+  // ...and with a list to shuffle it draws exactly twice per swap, 5n swaps
+  session.puppetCtrl.puppetBevel("and another", 102);
+  session.puppetCtrl.puppetScramble();
+  check("two plaques draw 2 x 5 x 2", draws.n === 20, `draws=${draws.n}`);
+  session.puppetCtrl.closePuppetFile();
+}
+);
+
 // --- 18c. one ESC gets past the whole speech, not one line of it ----------
 // TI.EXE's skip is a FLAG, not a race: 0x440620 raises 0x48ac00, and every
 // following puppetspeak queues its line and returns without playing it
