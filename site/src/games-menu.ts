@@ -30,6 +30,13 @@
  * game's own public directory is behind its own port — see
  * {@link GameEditions.mark}.
  *
+ * The `src` goes through {@link siteUrl}, which is the whole reason that module
+ * exists: Vite rebases every URL it can SEE, and it cannot see one assembled in
+ * TypeScript at runtime. `/mark-taoot.png` is a path off the HOST's root, and this
+ * site is published in a subdirectory — so the marks 404'd on the live site while
+ * being correct in dev and in every local build. `<meta name="site-root">` is what
+ * each page uses to say how deep it is.
+ *
  * ## The label
  *
  * Hard-coded English, like the sibling picker's, and for the same reason its own
@@ -39,6 +46,7 @@
  * key as soon as that race is settled.
  */
 import { GAMES } from "./games";
+import { siteUrl } from "./site";
 
 /** is this href one of the registry's game directories */
 function gameDir(href: string | null): string | null {
@@ -88,7 +96,12 @@ export function installGamesMenu(): number {
     const mark = GAMES.find((g) => g.dir === dir)?.mark;
     if (mark) {
       const icon = document.createElement("img");
-      icon.src = `/${mark}`;
+      // through `siteUrl`, and see {@link file://./site.ts} for why a bare "/" is
+      // wrong: this URL is built at RUNTIME, so Vite never rebases it, and the
+      // deployment is a SUBDIRECTORY — `/mark-taoot.png` asked
+      // danielhobi.ch for a file that lives under /dreamrefactory/, and all four
+      // marks 404'd on the live site while working in every local build
+      icon.src = siteUrl(mark);
       icon.alt = "";
       icon.width = 16;
       icon.height = 16;

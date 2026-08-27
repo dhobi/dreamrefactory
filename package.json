@@ -33,6 +33,7 @@
     "test:watch": "vitest",
     "test:playthrough": "vitest run --config vitest.playthrough.config.ts",
     "test:built:dust": "tsx dust/tests/browser/built-layout.ts",
+    "test:built:site": "tsx site/tests/browser/built-subdir.ts",
   "test:browser": "tsx taoot/tests/browser/menu-movie.ts && tsx taoot/tests/browser/playthrough.ts",
     "test:browser:endgame": "tsx taoot/tests/browser/endgame.ts",
     "test:browser:skullcracker": "tsx skullcracker/tests/browser/menu.ts",
