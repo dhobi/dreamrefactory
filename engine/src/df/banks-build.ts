@@ -19,8 +19,14 @@ import { ContainerBuilder, i16, i32, pstr } from "./build";
 import { ContainerRef, DFContainerFile, writeContainerFile } from "./container";
 import { CHUNK_ID_FIELD, LOOP_ORDER_MAX } from "./banks";
 
-/** container 0: the one-shot table's location, then the bank's name */
-const C0 = { size: 64, oneShotTable: 32, name: 36, nameField: 31 } as const;
+/**
+ * Container 0. Both table pointers are written, which they always should have
+ * been: the reader used to take the loop table's location as a constant 1 and now
+ * reads the field at +28 the way every shipped bank fills it in (see
+ * `readBankTables`). A file that named only its one-shot table read back with no
+ * music at all.
+ */
+const C0 = { size: 64, loopTable: 28, oneShotTable: 32, name: 36, nameField: 31 } as const;
 
 /** the loop table: the order list, then the chunk records */
 const LOOP = { count: 4, order: 6, records: 6 + LOOP_ORDER_MAX * 2 + 4, recordSize: 26, loc: 4, flag: 8, id: 10 } as const;
@@ -78,9 +84,10 @@ export function buildBankFile(opts: BankBuildOptions): BankBuildResult {
 
   const b = new ContainerBuilder();
   const { data: c0 } = b.reserve(C0.size);
-  const { data: c1 } = b.reserve(LOOP.records + loops.length * LOOP.recordSize);
+  const { loc: loopLoc, data: c1 } = b.reserve(LOOP.records + loops.length * LOOP.recordSize);
   const { loc: singleLoc, data: c2 } = b.reserve(SINGLE.first + singles.length * SINGLE.recordSize);
 
+  i32(c0, C0.loopTable, loopLoc);
   i32(c0, C0.oneShotTable, singleLoc);
   if (opts.name !== undefined) pstr(c0, C0.name, opts.name, C0.nameField);
 

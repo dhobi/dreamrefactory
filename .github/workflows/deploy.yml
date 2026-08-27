@@ -2,15 +2,23 @@ name: Deploy
 
 # Publishing to www.danielhobi.ch/dreamrefactory.
 #
-# FOUR builds share that one directory, and each releases on its own tag:
+# FIVE builds share that one directory, and each releases on its own tag:
 #
-#   site-v0.1.0      the front door and the format editors → /dreamrefactory/
-#   taoot-v0.9.51    Titanic                              → /dreamrefactory/taoot/
-#   dust-v0.3.1      Dust                                 → /dreamrefactory/dust/
-#   timelapse-v0.1.0 Timelapse                            → /dreamrefactory/timelapse/
+#   site-v0.1.0        the front door and the format editors → /dreamrefactory/
+#   taoot-v0.9.51      Titanic                              → /dreamrefactory/taoot/
+#   dust-v0.3.1        Dust                                 → /dreamrefactory/dust/
+#   timelapse-v0.1.0   Timelapse                            → /dreamrefactory/timelapse/
+#   skullcracker-v0.1.0 Skull Cracker                       → /dreamrefactory/skullcracker/
 #
-# The documentation is the fourth thing in that tree and does NOT release on a
+# The documentation is the sixth thing in that tree and does NOT release on a
 # tag — it goes out on any push that touches it (docs.yml → /dreamrefactory/docs/).
+#
+# Adding a game to this lane is four lines and nothing else, because everything
+# below is driven by the TARGET NAME: `npm run build:<target>` writes
+# `dist/<target>` and that directory is mirrored to `<target>/`. What is not
+# automatic is the rip — the runner has none, so a freshly deployed game shows its
+# "no game data" page until the host's own copy and its manifest are in place
+# (tools/mkmanifest.ts).
 #
 # Every namespace carries its target's name, and a tag naming none of them is an
 # ERROR rather than a default: the old default-to-TAOOT would take a mis-typed tag
@@ -24,7 +32,7 @@ name: Deploy
 #
 # The trap this leaves is `npm version`, which writes a bare `v0.9.51` that
 # nothing here listens for. Pass `--no-git-tag-version` and tag by hand, which is
-# the hand that knows which of the three it is.
+# the hand that knows which of the five it is.
 #
 # Secrets: the `dreamrefactory` environment holds FTP_USER, FTP_PASSWORD and
 # FTP_PATH (the account lands in the site directory, so FTP_PATH is "."), and
@@ -33,27 +41,27 @@ name: Deploy
 
 on:
   push:
-    tags: ["site-v*", "taoot-v*", "dust-v*", "timelapse-v*"]
+    tags: ["site-v*", "taoot-v*", "dust-v*", "timelapse-v*", "skullcracker-v*"]
   workflow_dispatch:
     inputs:
       target:
-        description: Which of the four to build and upload
+        description: Which of the five to build and upload
         required: true
         default: site
         type: choice
-        options: [site, taoot, dust, timelapse]
+        options: [site, taoot, dust, timelapse, skullcracker]
 
 # One upload of a given TARGET at a time, and never cancel one in flight: a
 # half-written mirror is a half-broken site.
 #
-# Per target rather than one lane for all four, because a single lane silently
+# Per target rather than one lane for all five, because a single lane silently
 # DROPS releases. GitHub keeps only the newest run pending in a concurrency
 # group — `cancel-in-progress: false` protects the run that is already going,
 # not the ones queued behind it — so pushing dust-v0.3.9, taoot-v0.9.55 and
 # timelapse-v0.1.1 together deployed dust and cancelled the other two within two
 # seconds, and the tags sat there looking released. They went out by hand.
 #
-# Splitting the lane is safe because the four write DISJOINT paths — each game
+# Splitting the lane is safe because the five write DISJOINT paths — each game
 # into its own directory, the site into the root around them — and the upload
 # only ever adds and overwrites (.github/actions/ftp-mirror is `mirror -R` with
 # no --delete, deliberately). What must never overlap is two uploads of the same
@@ -71,6 +79,7 @@ concurrency:
     || (startsWith(github.ref_name, 'taoot-v') && 'taoot')
     || (startsWith(github.ref_name, 'dust-v') && 'dust')
     || (startsWith(github.ref_name, 'timelapse-v') && 'timelapse')
+    || (startsWith(github.ref_name, 'skullcracker-v') && 'skullcracker')
     || github.ref_name }}
   cancel-in-progress: false
 
@@ -100,7 +109,7 @@ jobs:
 
       - run: npm ci
 
-      # Which of the four is this? The tag says so itself; a manual dispatch
+      # Which of the five is this? The tag says so itself; a manual dispatch
       # says so in its input.
       - name: Which release is this
         id: what
@@ -111,8 +120,9 @@ jobs:
           elif [[ "${GITHUB_REF_NAME}" == taoot-v* ]]; then target=taoot
           elif [[ "${GITHUB_REF_NAME}" == dust-v*  ]]; then target=dust
           elif [[ "${GITHUB_REF_NAME}" == timelapse-v* ]]; then target=timelapse
+          elif [[ "${GITHUB_REF_NAME}" == skullcracker-v* ]]; then target=skullcracker
           else
-            echo "::error::tag $GITHUB_REF_NAME names no target — tag site-v*, taoot-v*, dust-v* or timelapse-v*"
+            echo "::error::tag $GITHUB_REF_NAME names no target — tag site-v*, taoot-v*, dust-v*, timelapse-v* or skullcracker-v*"
             exit 1
           fi
           echo "target=$target" >> "$GITHUB_OUTPUT"

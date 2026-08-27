@@ -23,6 +23,7 @@ const rewrites = {
   "taoot/README.md": "taoot/index.md",
   "dust/README.md": "dust/index.md",
   "timelapse/README.md": "timelapse/index.md",
+  "skullcracker/README.md": "skullcracker/index.md",
   "editors/README.md": "editors/index.md",
   "reference/README.md": "reference/index.md",
 };
@@ -34,7 +35,7 @@ export default withMermaid(
     lang: "en-US",
     title: "dreamREfactory",
     description:
-      "How CyberFlix's DreamFactory engine works, and how this project reimplemented it — from a game's main flow down to each DFile container format. Dust (DreamFactory 1), Titanic and Timelapse (DreamFactory 4).",
+      "How CyberFlix's DreamFactory engine works, and how this project reimplemented it — from a game's main flow down to each DFile container format. Dust (DreamFactory 1), Titanic, Timelapse and Skull Cracker (DreamFactory 4).",
     lastUpdated: true,
     /**
      * FALSE, and it has to be. `cleanUrls` emits links without `.html` and relies
@@ -80,6 +81,7 @@ export default withMermaid(
         { text: "Dust", link: "/dust/" },
         { text: "Titanic", link: "/taoot/" },
         { text: "Timelapse", link: "/timelapse/" },
+        { text: "Skull Cracker", link: "/skullcracker/" },
         { text: "Editors", link: "/editors/" },
         { text: "Glossary", link: "/glossary" },
         // Points at the section index rather than a page inside it, like every
@@ -123,6 +125,7 @@ export default withMermaid(
             { text: "3 · Dust: A Tale of the Wired West", link: "/dust/" },
             { text: "4 · Titanic: Adventure Out of Time", link: "/taoot/" },
             { text: "5 · Timelapse: Ancient Civilizations", link: "/timelapse/" },
+            { text: "6 · Skull Cracker", link: "/skullcracker/" },
             { text: "Glossary", link: "/glossary" },
           ],
         },
@@ -150,6 +153,7 @@ export default withMermaid(
             { text: "BOOTFILE — startup & library", link: "/engine/formats/bootfile" },
             { text: "The script container on disk", link: "/engine/formats/script-container" },
             { text: "PUP & CST — characters", link: "/engine/formats/pup-cst" },
+            { text: "SBK — Skull Cracker's sprite books", link: "/engine/formats/sbk" },
             { text: "Saved games (.ti)", link: "/engine/formats/savegame" },
             { text: "Saved games, DF1 (.rtd)", link: "/engine/formats/savegame-v1" },
           ],
@@ -199,6 +203,11 @@ export default withMermaid(
           items: [{ text: "Overview", link: "/timelapse/" }],
         },
         {
+          text: "Skull Cracker",
+          collapsed: false,
+          items: [{ text: "Overview", link: "/skullcracker/" }],
+        },
+        {
           text: "Editors — the browser tools",
           collapsed: true,
           items: [
@@ -210,6 +219,7 @@ export default withMermaid(
             { text: "The track editor", link: "/editors/tracks" },
             { text: "The puppet editor", link: "/editors/puppets" },
             { text: "The cast editor", link: "/editors/casts" },
+            { text: "The sprite book viewer", link: "/editors/books" },
           ],
         },
         {

@@ -7,8 +7,6 @@
   "timelapseBody": "Vier discs en helemaal geen kamers — een wereld van stage-flats, waarin de vorm van de cursor de weg wijst. Begint met zijn film; de eerste wereld is beloopbaar. Het nieuwst, en het minst af.",
   "docsTitle": "Documentatie",
   "docsMeta": "formaten · runtime · naslag",
-  "docsBody": "Hoe de engine werkt, containerformaat voor containerformaat, en hoe elk daarvan is achterhaald. De langste helft van dit project.",
   "editorsTitle": "Formaat-editors",
-  "editorsBody": "Open een kamer, een voorwerp, een film of een decor uit de speldata, kijk wat erin zit, verander het en schrijf het terug.",
   "caveat": "RE staat voor reverse-engineered. Dit is een zo goed mogelijke herimplementatie en geen heruitgave: het heeft een kopie van de eigen databestanden van het spel nodig, die het niet meelevert, en het is niet verbonden aan CyberFlix, GTE Entertainment of enige huidige rechthebbende."
 }

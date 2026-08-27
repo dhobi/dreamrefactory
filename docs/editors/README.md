@@ -1,16 +1,19 @@
 # The browser editors
 
-Seven pages the project's own site hosts — `npm run dev`, on 5173, beside the
+Eight pages the project's own site hosts — `npm run dev`, on 5173, beside the
 front door rather than beside either game. They are not CLIs and they
 need no `gamefiles/` directory: each one takes a file you give it, takes it
 apart into the pieces that format is made of, lets you change the parts that
-are safe to change, and hands the repacked file back.
+are safe to change, and hands the repacked file back. Seven of them do; the
+eighth, the [sprite book viewer](books.md), only reads — nothing in this project
+writes a `.SBK`, so it would be a button with no round-trip behind it.
 
 Between them they cover **every container format the games ship**: rooms (SET),
 props (SHP, and DreamFactory 1's PRP), movies (MOV — logic only, for a reason
 [the page explains](movies.md#why-the-art-is-read-only)), screens (STG, and v1's
 FLT), sound (TRK/SFX/11K/SND), and characters twice over (PUP for the brains, CST
-for the body). The one file the game *writes* rather than reads, the `.ti`
+for the body) — plus Skull Cracker's sprite books (SBK), the one format here that
+belongs to a game with no interpreter. The one file the game *writes* rather than reads, the `.ti`
 [save](../engine/formats/savegame.md), has
 [the saved-games browser](../engine/runtime/saves.md) instead.
 
@@ -23,6 +26,7 @@ for the body). The one file the game *writes* rather than reads, the `.ti`
 | [Track editor](tracks.md) | `/editors/tracks.html` | [TRK / SFX / 11K / SND](../engine/formats/audio.md) — audio banks (`.SND` read-only) | [`site/editors/track-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/track-editor.ts) |
 | [Puppet editor](puppets.md) | `/editors/puppets.html` | [PUP](../engine/formats/pup-cst.md) — conversations | [`site/editors/puppet-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/puppet-editor.ts) |
 | [Cast editor](casts.md) | `/editors/casts.html` | [CST](../engine/formats/pup-cst.md) — actor sprites | [`site/editors/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/cst-editor.ts) |
+| [Sprite book viewer](books.md) | `/editors/books.html` | [SBK](../engine/formats/sbk.md) — Skull Cracker's cels & levels (read-only) | [`site/editors/sbk-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/sbk-editor.ts) |
 
 All of it lives in `site/editors/`: one HTML page and one module per editor,
 the `editor.css` all of them share, and an `index.html` that lists them — the

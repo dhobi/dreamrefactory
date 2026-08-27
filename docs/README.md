@@ -13,26 +13,40 @@ CyberFlix, and the studio's games were made with it: *Lunicus* (1993),
 well. So "the DreamFactory games" is a longer list than this project covers, and
 nothing here should be read as claiming otherwise.
 
-Two of those attributions are documented and one is measured, which is worth
+Two of those attributions are documented and two are measured, which is worth
 separating: published sources name *Dust* and *Titanic* as DreamFactory titles,
 and *Lunicus* and *Jump Raven* are named as such in accounts of the Pippin
 platform they were announced for. *Timelapse* needs no source at all — its discs
 are DreamFactory 4 containers and this port reads them with the same code that
 reads Titanic's, which is the strongest evidence available for any of them.
-CyberFlix's remaining titles are deliberately **not** claimed here: *Skull
-Cracker* (1996) and *Redjack: Revenge of the Brethren* (1998, its last, published
-by THQ) are the studio's games, but no source consulted attributes either to the
-engine, and Redjack's own write-ups describe several purpose-built engines
-instead.
 
-Three of them are here — two of them CyberFlix's own and the third GTE
+**And so, it turns out, does *Skull Cracker*** (1996). This page used to say the
+opposite — that CyberFlix's remaining titles were deliberately not claimed, since
+no source consulted attributed them to the engine. That was the right position to
+hold on the evidence available, and the files then answered for themselves: every
+one of Skull Cracker's 111 data files is a DreamFactory container, its 66 films are
+MOV files this port reads with Titanic's own reader, and container 0 of each says
+version 4. What is new about it is not the format but the byte order — its rip is
+a **Macintosh** one, so every integer in it is the other way round
+([byte order](engine/formats/README.md)). It is a beat-'em-up rather than an
+adventure and its levels are in a PowerPC binary, so what runs here is its film
+layer and its menu, not its game; see
+**[Skull Cracker](skullcracker/)**.
+
+*Redjack: Revenge of the Brethren* (1998, the studio's last, published by THQ) is
+still **not** claimed: no source consulted attributes it to the engine, and its
+own write-ups describe several purpose-built engines instead.
+
+Three of them play here — two of them CyberFlix's own and the third GTE
 Interactive Media's:
 **[Dust: A Tale of the Wired West](dust/)** (1995, DreamFactory 1),
 **[Titanic: Adventure Out of Time](taoot/)** (1996, DreamFactory 4) and
 **[Timelapse: Ancient Civilizations](timelapse/)** (1996, DreamFactory 4 on four
 discs). The first two are two years apart and different enough on disk that
 several formats have a `-v1` page of their own; the third is the same generation
-as Titanic and still nothing like it, because it ships no `.SET` file at all.
+as Titanic and still nothing like it, because it ships no `.SET` file at all. A
+fourth, **[Skull Cracker](skullcracker/)**, is read but not played: its discs open
+completely and its films run, and there is no game under them to boot.
 
 The docs are written for a curious programmer who has **not** done
 low-level reverse engineering before. You do not need to know C++, and you
@@ -170,7 +184,7 @@ with them — the behaviour recovered from the games' own binaries (`TI.EXE`, an
 
 ### Editors — reading the formats back out
 
-Seven browser pages the site hosts, one per container format: load a
+Eight browser pages the site hosts, one per container format: load a
 file, take it apart, change what is safe to change, export the repacked
 original. They read with the engine's own code, so they double as the best
 debugger the file layer has. Overview: **[the browser editors](editors/README.md)**.
@@ -201,7 +215,7 @@ commands](reference/builtins.md)**, **[tools](reference/tools.md)**,
 ### How the repository is arranged
 
 Five npm workspaces, and the split these docs follow: **`engine/`** knows about
-no particular game, **`site/`** is the shared web presence and the seven format
+no particular game, **`site/`** is the shared web presence and the eight format
 editors, and **`taoot/`**, **`dust/`** and **`timelapse/`** are a game each.
 Dependencies point one way only and there is a test that says so. The map is
 **[Engine architecture](engine/architecture.md)**.

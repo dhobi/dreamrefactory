@@ -21,3 +21,6 @@ docs/.vitepress/dist
 
 # stray capture from a backgrounded run
 nohup.out
+
+# scratch notes for the Skull Cracker disassembly work, deliberately local
+assumptions.md

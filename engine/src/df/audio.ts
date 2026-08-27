@@ -8,7 +8,14 @@
  *
  * The way back — {@link encodeAudioContainer}, for the track editor's WAV
  * import — is at the bottom of this file.
+ *
+ * Only the HEADER is endianness-sensitive. Both codecs read one byte at a time —
+ * v40 in int8 space, v41 as a delta/absolute selector — so the compressed stream
+ * of a Macintosh chunk is the same stream, and the sound comes out identical
+ * once the four header fields are read the right way round.
  */
+
+import { ByteOrder, PC, little } from "./byte-order";
 
 export interface DecodedAudio {
   sampleRate: number;
@@ -73,20 +80,24 @@ export interface AudioChunkHeader {
 }
 
 /** null when the bytes are not a sound container — the editor's probe */
-export function readAudioHeader(data: Uint8Array): AudioChunkHeader | null {
+export function readAudioHeader(
+  data: Uint8Array,
+  order: ByteOrder = PC,
+): AudioChunkHeader | null {
   if (data.length < MIN_HEADER) return null;
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  if (view.getInt32(0, true) !== MAGIC) return null;
+  const le = little(order);
+  if (view.getInt32(0, le) !== MAGIC) return null;
   return {
-    codec: view.getInt16(OFF_CODEC, true),
-    sampleRate: view.getInt32(OFF_RATE, true),
-    byteSize: view.getInt32(OFF_SIZE, true),
-    dataStart: view.getInt32(OFF_DATA_START, true),
+    codec: view.getInt16(OFF_CODEC, le),
+    sampleRate: view.getInt32(OFF_RATE, le),
+    byteSize: view.getInt32(OFF_SIZE, le),
+    dataStart: view.getInt32(OFF_DATA_START, le),
   };
 }
 
-export function decodeAudioContainer(data: Uint8Array): DecodedAudio {
-  const header = readAudioHeader(data);
+export function decodeAudioContainer(data: Uint8Array, order: ByteOrder = PC): DecodedAudio {
+  const header = readAudioHeader(data, order);
   if (!header) {
     throw new Error("audio container: bad magic");
   }

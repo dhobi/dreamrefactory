@@ -1,0 +1,7 @@
+{
+  "name": "@dreamfactory/skullcracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Skull Cracker (1996) — CyberFlix's own, and the first Macintosh rip this port has read: the same DreamFactory containers with their integers the other way round. Experimental; its own version because it would release on its own tag.",
+  "type": "module"
+}

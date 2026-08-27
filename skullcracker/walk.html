@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skull Cracker RE — walk a level (experimental)</title>
+    <!--
+      The walkable-level experiment, deliberately its own page: skullcracker/
+      index.html plays the game's films and claims nothing more, and that claim
+      stays clean by this living elsewhere. What this page shows is the disc's
+      own data — the backdrop, the parallax depths, the rasterised ground, the
+      rooms and the doors between them, the platforms and ladders, the player's
+      cels — driven by a handful of numbers the disc does NOT contain (walk
+      speed, gravity, the jump, animation cadence), each one named in
+      src/walk.ts's INVENTED table. This is a reconstruction you
+      can walk through, not the game.
+    -->
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/theme.css" />
+    <style>
+      html body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        background: var(--bg, #0a0f0a);
+        color: var(--text, #cfe3cf);
+        font-family: var(--font-mono, monospace);
+      }
+      #screen {
+        width: min(1024px, calc(100vw - 2rem));
+        aspect-ratio: 4 / 3;
+        background: #000;
+        image-rendering: pixelated;
+        border: 1px solid var(--line, #234023);
+        /* the recogniser's due: a swipe must not scroll the page */
+        touch-action: none;
+      }
+      #pick {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+        color: var(--text-mute, #7a9a7a);
+      }
+      #pick select {
+        background: var(--surface, #0f1a0f);
+        color: var(--text, #cfe3cf);
+        border: 1px solid var(--line, #234023);
+        font: inherit;
+        padding: 0.15rem 0.3rem;
+      }
+      #hud {
+        font-size: 0.85rem;
+        color: var(--text-mute, #7a9a7a);
+        text-align: center;
+        max-width: 60rem;
+        padding: 0 1rem;
+      }
+      #hud b {
+        color: var(--text, #cfe3cf);
+      }
+      /* one element more specific than the chrome's `a`, per site/tests/cascade.ts */
+      body a {
+        color: var(--accent, #1fc71f);
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="screen" width="512" height="384"></canvas>
+    <!--
+      The level chooser. `[` and `]` have always stepped through the sixteen and
+      `?level=N` has always opened one, but neither is visible on the page, and
+      the game itself had the same thing spelled out: "Enter level (1-16):" is a
+      string in SC.EXE.
+    -->
+    <div id="pick">
+      <label for="level">level</label>
+      <select id="level"></select>
+    </div>
+    <div id="hud">loading…</div>
+    <div id="hud2" class="">
+      <span id="say" style="font-size: 0.8rem; color: var(--text-mute, #7a9a7a)"
+        >A/D or ← → walk 120px/s · <b>hold W/↑ to RUN 225px/s</b> — on a ladder
+        the same key climbs, one RUNG at a time: 35px a four-frame tag, which is
+        the ladder record's own param, and the sign of that param is the ladder
+        art's mirror flag and so which side of the pole you hang on — and standing
+        still it opens a door · S/↓ CROUCH (move to crawl, P/K attack from the knee) · J/space JUMP · P+K HEADBUTT ·
+        K KICK · P PUNCH — the original's own keys and its own labels, from the
+        table at 0x46b210 joined to the action handlers at 0x402d54 in SC.EXE ·
+        on touch, hold a screen half to walk and the top third for up · Ctrl+P INTERFACE / full screen (SC.EXE's own toggle) · the chooser above, or [ ]
+        switch level · N next spawn point (SC.EXE's own unbound action 10) · P is 47 and K is 55 — the striking cel's own speed, which is what damage IS in this engine (0x42f910), so a punk with 250 takes six punches, a mailbox dents at 10 and springs back, and topples on its side for good at 55 — a hydrant is not smashed but OPENED, three quarter-turns of the valve on its cap and it lets go of a jet of water that is its own object beside it, while the hydrant itself shuts and can be turned again — and flies most of a screen doing it, because 0x430470 is a real elastic collision with obj+0xe as the mass (you 12, a mailbox 7), and every blow sprays one gob of goo per six points of it, which arcs, lands and spreads into one puddle · things on the FLOOR are below the fist: a rat's box tops out two pixels above where the punch's bottoms out, so it takes S+K, the duck-kick, whose boot box is on the ground — and one blow of any size launches a rat nine cels through the air · a punk's body lies there for fifty frames and then leaves a green ball (0x40cba0's -13 branch); a rat leaves none, and furniture does not bleed at all · CITY is a staircase of rooftops with no floor: its PLANKS give you six crossings and then drop you (six sags of cel 1050..1053 and it is gone, at three times your gravity), its CROWS sleep on a rooftop until you walk into their own rect and then hold a height a hundred pixels over you — they keep the x the level gave them, because no frame of any crow script carries a dx, and one blow of any size kills one · a level ends the way the game ends one: kill the mission's share of what stands and a flying television comes down to the goal; walk to it and the next mission's briefing film plays · ?clock=N starts the eight-minute mission clock short · fall out of the world (CITY has no floor: its ground is 2900px below anything it draws) and it costs a life, one of the seven KILL films plays, and the level starts again
+        ·
+        · <b>SOUND</b> is the disc's: the level's own theme, arranged by the play
+        order in its bank (STREETS opens theme01.snd, 11 bars in a 62-step order
+        — three and a third minutes out of eighteen seconds of audio), and the
+        one-shots the handlers ask for BY INDEX out of skulz.snd and the chapter's
+        woods.snd, which is how a footfall, a rung, a fist going past, a wolf
+        taking a hit and a fire hydrant letting go are all the sounds the game
+        played. Each is placed the way 0x40efb0 places it: the volume falls off
+        linearly with the distance from the middle of the view and nothing 768px
+        past it is played at all. M mutes — the one key on this page the original
+        does not have ·
+        <a href="./">back to the films</a></span
+      >
+    </div>
+    <script type="module" src="/src/walk.ts"></script>
+  </body>
+</html>

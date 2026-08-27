@@ -57,7 +57,10 @@ export function installLanguageMenu(): string {
 
   const options = uiLanguageOptions();
   const menu = document.createElement("details");
-  menu.className = "langmenu";
+  // `navmenu` is the shape it shares with the games menu beside it
+  // ({@link file://./games-menu.ts}); `langmenu` is what is its own — where it
+  // sits in the row, and the endonym it hides on a phone.
+  menu.className = "navmenu langmenu";
   const summary = document.createElement("summary");
   // The globe and the name are separate nodes so a narrow screen can drop the
   // name and keep the affordance: six nav items plus "🌐 Nederlands" does not fit
@@ -76,7 +79,7 @@ export function installLanguageMenu(): string {
   menu.appendChild(summary);
 
   const list = document.createElement("div");
-  list.className = "langmenu-list";
+  list.className = "navmenu-list";
   for (const o of options) {
     const item = document.createElement("button");
     item.type = "button";

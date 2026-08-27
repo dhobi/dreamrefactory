@@ -1,6 +1,8 @@
 import { BinaryReader, pstrAtChecked, writeNameAt } from "./binary";
 import { readLoopChunks, readOneShotChunks } from "./banks";
+import { PC, little } from "./byte-order";
 import { DFContainerFile, patchContainerData, readContainerFile } from "./container";
+import { versionOf } from "./version";
 
 /**
  * MOV files — cutscenes, item close-ups, clickable multi-frame objects.
@@ -410,10 +412,16 @@ export function readMovFile(data: Uint8Array): MovFile {
 /** parse the segment whose header sits at container `bias` */
 function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment; next: number } {
   const c0 = file.containers[bias].data;
-  const r = new BinaryReader(c0);
+  // whichever order the ENVELOPE was read in is the order every field below is
+  // in — see engine/src/df/byte-order.ts. A Macintosh film is this same header
+  // at these same offsets with its integers the other way round.
+  const order = file.order ?? PC;
+  const le = little(order);
+  const r = new BinaryReader(c0, 0, order);
 
-  r.seek(C0.version);
-  if (r.i32() !== 4) throw new Error("unsupported DreamFactory MOV version (need 4.0)");
+  // asked through versionOf rather than read at C0.version directly: the version
+  // tag is the one field that MOVES between the two orders (version.ts says why)
+  if (versionOf(c0, order) !== 4) throw new Error("unsupported DreamFactory MOV version (need 4.0)");
 
   r.seek(C0.flags);
   const flags = r.i32();
@@ -480,23 +488,23 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
     if (rd && rd.length >= LOGIC.minSize) {
       const rv = new DataView(rd.buffer, rd.byteOffset, rd.byteLength);
       const pascal = (off: number, max: number): string => pstrAtChecked(rd, off, 1, max) ?? "";
-      type = rv.getInt16(LOGIC.type, true);
-      holdTicks = rv.getInt32(LOGIC.hold, true);
+      type = rv.getInt16(LOGIC.type, le);
+      holdTicks = rv.getInt32(LOGIC.hold, le);
       frameFlags = rd[LOGIC.flags];
       sound = pascal(LOGIC.sound, MOV_NAME_FIELD);
       event = pascal(LOGIC.event, MOV_NAME_FIELD);
       target = pascal(LOGIC.target, MOV_NAME_FIELD);
       if (rd.length >= LOGIC.regions) {
-        const count = rv.getInt32(LOGIC.regionCount, true);
+        const count = rv.getInt32(LOGIC.regionCount, le);
         for (let g = 0; g < count; g++) {
           const off = LOGIC.regions + g * LOGIC.regionSize;
           if (off + LOGIC.regionSize > rd.length) break;
           regions.push({
-            type: rv.getInt16(off + REGION.type, true),
-            y0: rv.getInt16(off + REGION.top, true),
-            x0: rv.getInt16(off + REGION.top + 2, true),
-            y1: rv.getInt16(off + REGION.top + 4, true),
-            x1: rv.getInt16(off + REGION.top + 6, true),
+            type: rv.getInt16(off + REGION.type, le),
+            y0: rv.getInt16(off + REGION.top, le),
+            x0: rv.getInt16(off + REGION.top + 2, le),
+            y1: rv.getInt16(off + REGION.top + 4, le),
+            x1: rv.getInt16(off + REGION.top + 6, le),
             sound: pascal(off + REGION.sound, MOV_NAME_FIELD), // event sound (page rustles etc.)
             event: pascal(off + REGION.event, MOV_NAME_FIELD), // movie chained to (types 3/4)
             target: pascal(off + REGION.target, MOV_NAME_FIELD), // frame jumped to (types 2/4)
@@ -521,7 +529,9 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
   const audioChunks: number[] = [];
   const loopLoc = loopLocation > 0 ? loopLocation + bias : 0;
   if (loopLoc > 0 && loopLoc < file.containers.length && file.containers[loopLoc].data.length >= 266) {
-    audioChunks.push(...readLoopChunks(file.containers[loopLoc].data).map((c) => c.containerLoc + bias));
+    audioChunks.push(
+      ...readLoopChunks(file.containers[loopLoc].data, order).map((c) => c.containerLoc + bias),
+    );
   }
   const audioLoops = audioChunks.length > 0;
   // One-shot chunks in the NON-looping block: named EVENT sounds, fired by
@@ -545,7 +555,7 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
   const oneShotLoc = audioLocation > 0 ? audioLocation + bias : 0;
   if (oneShotLoc > 0 && oneShotLoc < file.containers.length) {
     const table = file.containers[oneShotLoc].data;
-    for (const c of readOneShotChunks(table, MOV_NAME_FIELD, MOV_NAME_FIELD)) {
+    for (const c of readOneShotChunks(table, MOV_NAME_FIELD, MOV_NAME_FIELD, order)) {
       if (!c.identifier) continue;
       const key = c.identifier.toLowerCase();
       sounds.set(key, c.containerLoc + bias);
@@ -560,12 +570,12 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
     const t = file.containers[cueLoc].data;
     if (t.length >= CUE.records) {
       const tv = new DataView(t.buffer, t.byteOffset, t.byteLength);
-      const count = tv.getInt32(0, true);
+      const count = tv.getInt32(0, le);
       for (let i = 0; i < count; i++) {
         const off = CUE.records + i * CUE.recordSize;
         if (off + CUE.recordSize > t.length) break;
         cues.push({
-          tick: tv.getInt32(off + CUE.tick, true),
+          tick: tv.getInt32(off + CUE.tick, le),
           target: pstrAtChecked(t, off + CUE.name, 1, MOV_NAME_FIELD) ?? "",
         });
       }
@@ -631,11 +641,12 @@ function writeLogic(
   base: number,
   offsets: { type: number; sound: number; event: number; target: number },
   fields: MovLogicFields,
+  le = true,
 ): MovLogicFields {
   const stored: MovLogicFields = {};
   if (fields.type !== undefined) {
     const value = i16clamp(fields.type);
-    new DataView(d.buffer, d.byteOffset, d.byteLength).setInt16(base + offsets.type, value, true);
+    new DataView(d.buffer, d.byteOffset, d.byteLength).setInt16(base + offsets.type, value, le);
     stored.type = value;
   }
   for (const key of ["sound", "event", "target"] as const) {
@@ -683,7 +694,7 @@ export function patchFrameLogic(
   if (!data || data.length < LOGIC.minSize) return false;
   let stored: MovLogicFields = {};
   const ok = patchContainerData(seg.file, frame.locationClickRegion, (d) => {
-    stored = writeLogic(d, 0, LOGIC, fields);
+    stored = writeLogic(d, 0, LOGIC, fields, little(seg.file.order ?? PC));
   });
   if (ok) Object.assign(frame, stored);
   return ok;
@@ -702,7 +713,7 @@ export function patchRegionLogic(
   if (!frame.locationClickRegion) return false;
   let stored: MovLogicFields = {};
   const ok = patchContainerData(seg.file, frame.locationClickRegion, (d) => {
-    stored = writeLogic(d, region.record, REGION, fields);
+    stored = writeLogic(d, region.record, REGION, fields, little(seg.file.order ?? PC));
   });
   if (ok) Object.assign(region, stored);
   return ok;
@@ -730,10 +741,11 @@ export function patchRegionRect(
   const ok = patchContainerData(seg.file, frame.locationClickRegion, (d) => {
     const v = new DataView(d.buffer, d.byteOffset, d.byteLength);
     const at = region.record + REGION.top;
-    v.setInt16(at, next.y0, true);
-    v.setInt16(at + 2, next.x0, true);
-    v.setInt16(at + 4, next.y1, true);
-    v.setInt16(at + 6, next.x1, true);
+    const le = little(seg.file.order ?? PC);
+    v.setInt16(at, next.y0, le);
+    v.setInt16(at + 2, next.x0, le);
+    v.setInt16(at + 4, next.y1, le);
+    v.setInt16(at + 6, next.x1, le);
   });
   if (ok) Object.assign(region, next);
   return ok;
@@ -771,7 +783,11 @@ export function patchActionFrames(seg: MovSegment, name1: string, name2: string)
 export function patchKeySkips(seg: MovSegment, keySkips: boolean): boolean {
   const flags = keySkips ? seg.flags | FLAG_KEY_SKIPS : seg.flags & ~FLAG_KEY_SKIPS;
   const ok = patchContainerData(seg.file, seg.bias, (d) => {
-    new DataView(d.buffer, d.byteOffset, d.byteLength).setInt32(C0.flags, flags, true);
+    new DataView(d.buffer, d.byteOffset, d.byteLength).setInt32(
+      C0.flags,
+      flags,
+      little(seg.file.order ?? PC),
+    );
     seg.paletteRaw = d.subarray(C0.palette, C0.palette + 256 * 8);
   });
   if (ok) {

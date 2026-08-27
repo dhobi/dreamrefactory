@@ -1,16 +1,28 @@
+import { ByteOrder, PC, little } from "./byte-order";
+
 /**
  * Little helper around DataView for the DreamFactory binary formats.
  * Integers are little-endian; doubles/floats are stored big-endian
  * (the engine's Mac heritage), matching dfet's swapEndians().
+ *
+ * A MACINTOSH rip reverses the first half of that sentence and not the second:
+ * its ints are big-endian, its floats still are, and everything else about the
+ * layout is the same. Pass the file's {@link ByteOrder} to read one — see
+ * {@link file://./byte-order.ts}, which works out which a file is. The default
+ * is the PC order every reader here assumed before Mac files turned up, so a
+ * caller that does not care keeps the behaviour it had.
  */
 export class BinaryReader {
   readonly view: DataView;
   readonly bytes: Uint8Array;
+  /** what a DataView call wants: false on a Mac rip, true on every other */
+  readonly little: boolean;
   pos: number;
 
-  constructor(data: Uint8Array, pos = 0) {
+  constructor(data: Uint8Array, pos = 0, order: ByteOrder = PC) {
     this.bytes = data;
     this.view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    this.little = little(order);
     this.pos = pos;
   }
 
@@ -18,22 +30,22 @@ export class BinaryReader {
     return this.bytes[this.pos++];
   }
   i16(): number {
-    const v = this.view.getInt16(this.pos, true);
+    const v = this.view.getInt16(this.pos, this.little);
     this.pos += 2;
     return v;
   }
   u16(): number {
-    const v = this.view.getUint16(this.pos, true);
+    const v = this.view.getUint16(this.pos, this.little);
     this.pos += 2;
     return v;
   }
   i32(): number {
-    const v = this.view.getInt32(this.pos, true);
+    const v = this.view.getInt32(this.pos, this.little);
     this.pos += 4;
     return v;
   }
   u32(): number {
-    const v = this.view.getUint32(this.pos, true);
+    const v = this.view.getUint32(this.pos, this.little);
     this.pos += 4;
     return v;
   }

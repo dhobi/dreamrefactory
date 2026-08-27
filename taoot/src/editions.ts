@@ -7,7 +7,7 @@
  * — six trees and a demo, their endonyms, their code pages, the two storage keys
  * — is `TITANIC` in `site/src/games.ts`.
  *
- * Why it moved: seven format editors read this axis, and the editors are the
+ * Why it moved: eight format editors read this axis, and the editors are the
  * project's tooling rather than this game's. They were importing it through
  * Titanic, which pointed a dependency from the shared package into one of its own
  * consumers. The mechanism was never Titanic's; only the table was.

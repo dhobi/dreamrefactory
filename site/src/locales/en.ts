@@ -118,9 +118,7 @@ export const en = {
     timelapseBody: "Four discs and no rooms at all — a world of stage flats, navigated by the shape of the cursor. Opens on its film; the first world is walkable. Newest, and least finished." as Text,
     docsTitle: "Documentation" as Text,
     docsMeta: "formats · runtime · reference" as Text,
-    docsBody: "How the engine works, container format by container format, and how each was recovered. The long half of this project." as Text,
     editorsTitle: "Format editors" as Text,
-    editorsBody: "Open a room, a prop, a film or a stage out of the game data, look at what is inside it, change it and write it back." as Text,
     caveat: "RE is for reverse-engineered. This is a best-effort re-implementation and not a re-release: it needs a copy of the game's own data files, which it does not supply, and it is not affiliated with CyberFlix, GTE Entertainment or any current rights holder." as Text,
   },
 

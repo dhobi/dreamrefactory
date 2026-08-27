@@ -23,6 +23,7 @@
  * and a builder only places them and points at them.
  */
 import { writePstrAt } from "./binary";
+import { PC } from "./byte-order";
 import { Container, ContainerRef, DFContainerFile, writeContainerFile } from "./container";
 
 /** what `readContainerFile` finds in the header's fourCC slot */
@@ -112,6 +113,10 @@ export class ContainerBuilder {
       },
       containers: this.containers,
       headerRaw: new Uint8Array(1024),
+      // the field writers above (i16/i32/u16) are little-endian, so what a
+      // builder makes is a PC file — there is no Mac WRITE path and no caller
+      // that wants one
+      order: PC,
     };
   }
 

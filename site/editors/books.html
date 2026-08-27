@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sprite Book (level) Viewer — dreamREfactory</title>
+    <!-- The project root: these pages list every game's rip, so they resolve
+         `taoot/gamefiles/…` and `skullcracker/gamefiles/…` from here rather than
+         being rooted inside one game (site/editors/sources.ts) -->
+    <meta name="site-root" content="../" />
+    <link rel="icon" type="image/svg+xml" href="/globe-mark.svg" />
+    <link rel="stylesheet" href="./editor.css" />
+    <style>
+      /* ---- landing ---- */
+      #landing .row.books {
+        margin-top: 1rem;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+      }
+      #landing button.book {
+        border-radius: 0;
+        padding: 0.2rem 0.6rem;
+      }
+
+      /* ---- the level view ---- */
+      #stage {
+        position: relative;
+        background: #000;
+        border: 1px solid var(--line, #333);
+        overflow: hidden;
+        /* the canvas is panned by dragging, so the browser must not claim it */
+        touch-action: none;
+      }
+      #level {
+        display: block;
+        width: 100%;
+        height: auto;
+        /* 1996 art, and the zoom is integral: never smoothed */
+        image-rendering: pixelated;
+        cursor: grab;
+      }
+      #stage.dragging #level {
+        cursor: grabbing;
+      }
+      .viewbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+      }
+      .viewbar label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+      }
+      /* one row per parallax layer: its factor, how many placements, a toggle */
+      #layers {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.15rem 0.9rem;
+        padding: 0 0.8rem 0.5rem;
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+      }
+      #layers label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+      }
+      #layers .n {
+        color: var(--text-mute);
+      }
+      /* the entity legend — the same colours the overlay draws with */
+      #legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.2rem 0.9rem;
+        padding: 0 0.8rem 0.6rem;
+        font-size: 0.8rem;
+      }
+      #legend span.key {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+      }
+      #legend i {
+        width: 0.75rem;
+        height: 0.75rem;
+        display: inline-block;
+        border: 2px solid currentColor;
+      }
+
+      /* ---- the level plan ---- */
+      #plan {
+        max-height: 20rem;
+        overflow: auto;
+        padding: 0 0.8rem 0.6rem;
+      }
+      #plan button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        border: 0;
+        border-radius: 0;
+        background: none;
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        padding: 0.1rem 0.3rem;
+        color: inherit;
+        cursor: pointer;
+      }
+      #plan button:hover,
+      #plan button:focus-visible {
+        background: var(--line, #2a2a2a);
+      }
+      #plan .kind {
+        display: inline-block;
+        min-width: 9em;
+      }
+      #plan .where {
+        color: var(--text-mute);
+      }
+
+      /* ---- the cel browser ---- */
+      #cels {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        max-height: 24rem;
+        overflow: auto;
+        padding: 0 0.8rem 0.6rem;
+      }
+      #cels button {
+        border: 1px solid transparent;
+        border-radius: 0;
+        background: #000;
+        padding: 0;
+        line-height: 0;
+        cursor: pointer;
+      }
+      #cels button[aria-pressed="true"] {
+        border-color: var(--accent, #1fc71f);
+      }
+      #cels canvas {
+        display: block;
+        image-rendering: pixelated;
+      }
+      #celPanel {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+        padding: 0 0.8rem 0.6rem;
+      }
+      #celView {
+        background: #000;
+        border: 1px solid var(--line, #333);
+        image-rendering: pixelated;
+      }
+      .muted {
+        color: var(--text-mute);
+        font-size: 0.85rem;
+      }
+    </style>
+  </head>
+  <body class="work">
+    <header class="topbar">
+      <a class="brand" href="../" title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original releases">
+        <img class="brand-mark" src="/globe-mark.svg" alt="" width="30" height="30" />
+        <span class="brand-text">
+          <b>dream<i>RE</i>factory</b>
+          <span>format editors</span>
+        </span>
+      </a>
+      <nav class="topnav">
+        <a href="../docs/" data-i18n="site.navDocs">Docs</a>
+        <a href="./" class="here" data-i18n="site.navEditors">Editors</a>
+        <a href="https://github.com/dhobi/dreamrefactory" data-i18n="site.navSource">Source</a>
+        <a href="../taoot/">Titanic</a>
+        <a href="../dust/">Dust</a>
+        <a href="../timelapse/">Timelapse</a>
+        <a href="../skullcracker/">Skull Cracker</a>
+      </nav>
+    </header>
+    <h1>Sprite Book Viewer</h1>
+
+    <div class="editionPicker" id="editionPicker" role="group" aria-labelledby="sourceLabel">
+      <span class="pickerLabel" id="sourceLabel" data-i18n="site.sourceLabel">Source</span>
+    </div>
+
+    <div id="landing">
+      <div class="intro">
+        Load a <b>.sbk</b> "sprite book" — Skull Cracker's cels and, for the
+        sixteen level books, the level itself: a named plan of platforms,
+        ladders, goals, enemy spawns and pickups, over a parallax backdrop of
+        placed cels. Browse the cels, walk the level, see what the game put
+        where.
+        <br /><br />
+        This is a <b>viewer and not an editor</b>: it has no export. The other
+        pages here write the format back; nothing yet writes a sprite book,
+        because nothing reads one but this. And a level shown here is the level
+        <i>unrolled</i> — the layers are drawn at the positions the book stores,
+        and the camera that lined them up in 1996 lives in the game's own
+        executable, not in its data.
+      </div>
+      <div class="row">
+        <button id="openBtn" class="primary">📂 Open a .sbk file…</button>
+      </div>
+      <div class="note" data-i18n="editors.dropNote">or drop a file anywhere on this page</div>
+      <div id="serverBooks"></div>
+      <input id="fileInput" type="file" accept=".sbk,.SBK" />
+    </div>
+
+    <div id="editor">
+      <div class="section">
+        <div id="filebar">
+          <span class="name" id="fileName"></span>
+          <span class="stats" id="fileStats"></span>
+          <span class="spacer" style="flex: 1"></span>
+          <button id="closeBtn" title="Close this book" data-i18n="editors.close">✕ Close</button>
+        </div>
+        <div style="padding: 0 0.8rem 0.5rem"><span id="status"></span></div>
+      </div>
+
+      <div class="section">
+        <div class="head"><span>Level</span></div>
+        <div class="viewbar">
+          <!-- continuous: scroll wheel or two-finger pinch on the picture; the
+               default is the game's own magnification (one screen across) -->
+          <span class="muted">zoom <b id="zoomsay">100%</b> · wheel / pinch</span>
+          <label
+            ><input type="checkbox" id="parallax" checked /> parallax scroll
+            <span class="muted">(approximate — the game's camera anchor is in its executable)</span>
+          </label>
+          <label><input type="checkbox" id="showEntities" checked /> entity overlay</label>
+          <label><input type="checkbox" id="showGround" checked /> the ground</label>
+          <label><input type="checkbox" id="showRooms" checked /> rooms and doors</label>
+          <button id="toStart">↩ the player's start</button>
+          <span class="muted" id="camsay"></span>
+        </div>
+        <div id="stage"><canvas id="level" width="960" height="540"></canvas></div>
+        <div id="layers"></div>
+        <div id="legend"></div>
+      </div>
+
+      <div class="section">
+        <div class="head"><span>The plan</span> <span class="stats" id="planStats"></span></div>
+        <div id="plan"></div>
+      </div>
+
+      <div class="section">
+        <div class="head"><span>Cels</span> <span class="stats" id="celStats"></span></div>
+        <div id="celPanel">
+          <canvas id="celView" width="256" height="256"></canvas>
+          <div id="celInfo" class="muted"></div>
+        </div>
+        <div id="cels"></div>
+      </div>
+    </div>
+    <script type="module" src="./sbk-editor.ts"></script>
+  </body>
+</html>

@@ -6,17 +6,18 @@ Everything is published under <https://www.danielhobi.ch/dreamrefactory/>, and
 **a release is a tag**. Nothing deploys from an ordinary push to master except
 the documentation.
 
-## Four things in one directory
+## Five things in one directory
 
-Four builds and a doc set share that one hosting directory, and each goes out on
+Five builds and a doc set share that one hosting directory, and each goes out on
 its own:
 
 | tag | build | lands at |
 |---|---|---|
-| `site-v0.1.1` | `npm run build:site` | `/dreamrefactory/` — the front door and the seven format editors |
+| `site-v0.1.1` | `npm run build:site` | `/dreamrefactory/` — the front door and the eight format editors |
 | `taoot-v0.9.53` | `npm run build:taoot` | `/dreamrefactory/taoot/` — Titanic's four pages (the front page, `/play/`, `/collection/`, the unlisted `/speedrun/`) |
 | `dust-v0.3.6` | `npm run build:dust` | `/dreamrefactory/dust/` — Dust's two pages (the game, `/collection/`) |
 | `timelapse-v0.1.0` | `npm run build:timelapse` | `/dreamrefactory/timelapse/` — Timelapse's one page |
+| `skullcracker-v0.1.0` | `npm run build:skullcracker` | `/dreamrefactory/skullcracker/` — Skull Cracker's two pages (the films and its menu, `walk.html`) |
 | *(no tag)* | `npm run docs:build` | `/dreamrefactory/docs/` — on any push that touches `docs/` |
 
 ```bash
@@ -29,18 +30,35 @@ git tag taoot-v0.9.1 && git push --tags
 **Do not let `npm version` cut the tag.** It writes a bare `v0.9.1`, which no
 pattern here listens for — the tag would push and deploy nothing at all,
 silently. `--no-git-tag-version` keeps it to the files and leaves the tag to the
-hand that knows which of the four it is.
+hand that knows which of the five it is.
 
 Every namespace carries its target's name, and a tag naming none of them **fails
 the run** rather than defaulting to one. The old default-to-TAOOT is exactly what
 would let a mis-typed tag ship the wrong build. `deploy.yml` can also be run
 from the Actions tab, where a `workflow_dispatch` input picks the target.
 
+### Adding a game to the lane
+
+Four lines in `deploy.yml` and nothing else, because everything after the target
+is resolved is driven by the name: `npm run build:<target>` writes
+`dist/<target>`, and that directory is mirrored to `<target>/`. The four are the
+`push.tags` trigger, the `workflow_dispatch` choices, the concurrency group and
+the shell that turns a tag into a target — and
+[`site/tests/deploy-lanes.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/tests/deploy-lanes.ts)
+fails when a game in the registry is missing from any of them, because three of
+the four ways to get it wrong are silent.
+
+What the workflow cannot do is put the RIP there. A runner has no game data, so
+the manifest the build writes describes almost nothing and is deleted before the
+upload; a freshly deployed game shows its "no game data" page until the host's own
+copy and a manifest generated beside it (`tools/mkmanifest.ts`) are in place. That
+is true of every game here and is why the deploy of a new one is two steps.
+
 ### Why sharing a directory is safe
 
 Because the mirror only **adds and overwrites** — see below. The site's build
-writes the root of the tree and the three games write directories inside it, so
-none of the four can remove another's files. Asset names are content-hashed, so
+writes the root of the tree and the four games write directories inside it, so
+none of the five can remove another's files. Asset names are content-hashed, so
 a superseded bundle is dead weight rather than a stale page.
 
 ### Each package holds its own version
@@ -50,7 +68,7 @@ which was a symptom of one build serving two games. Now:
 
 | | |
 |---|---|
-| `taoot/package.json`, `dust/package.json`, `timelapse/package.json`, `site/package.json` | the sources of truth — semver |
+| `taoot/package.json`, `dust/package.json`, `timelapse/package.json`, `skullcracker/package.json`, `site/package.json` | the sources of truth — semver |
 | each package's `vite.config.ts` | substitutes its own for `__APP_VERSION__` at build time |
 | [`site/src/version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/version.ts) | exports `VERSION`, and draws it in the top bar beside the wordmark |
 | [`site/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | puts it in the issue body, so a report names the build it came from |

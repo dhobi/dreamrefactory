@@ -1,4 +1,5 @@
 import { BinaryReader } from "./binary";
+import { ByteOrder, PC, detectByteOrder, little } from "./byte-order";
 
 /**
  * Every DreamFactory file is a sequence of "containers" indexed by a
@@ -38,6 +39,16 @@ export interface DFContainerFile {
    * interpret (unknown[3] and everything past offset 32).
    */
   headerRaw: Uint8Array;
+  /**
+   * Which way round this file's integers are ({@link file://./byte-order.ts}).
+   *
+   * Carried on the FILE rather than passed down every call because a per-format
+   * reader takes a `DFContainerFile` and reaches into whichever containers it
+   * likes: the question is answered once, at the envelope, and every field read
+   * out of the thing afterwards inherits the answer. `"le"` on every rip in this
+   * repository but Skull Cracker's, which is a Macintosh one.
+   */
+  order: ByteOrder;
 }
 
 /** the fixed file header; the container position table follows it */
@@ -71,15 +82,28 @@ export function patchContainerData(
 }
 
 /** read the {id, size, bytes} container record at an absolute file position */
-export function readContainerAt(data: Uint8Array, pos: number): Container {
+export function readContainerAt(data: Uint8Array, pos: number, order: ByteOrder = PC): Container {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const id = view.getInt32(pos, true);
-  const size = view.getUint32(pos + 4, true);
+  const le = little(order);
+  const id = view.getInt32(pos, le);
+  const size = view.getUint32(pos + 4, le);
   return { id, data: data.subarray(pos + RECORD_HEADER_SIZE, pos + RECORD_HEADER_SIZE + size) };
 }
 
-export function readContainerFile(data: Uint8Array): DFContainerFile {
-  const r = new BinaryReader(data);
+/**
+ * Open a container file.
+ *
+ * `order` is detected from the file itself when not given, which is what every
+ * caller wants: nothing above this knows whether a rip came off a PC or a Mac,
+ * and {@link detectByteOrder} answers from the header's own size field. Pass one
+ * only to read a file whose header cannot be trusted to say — a builder's
+ * output, or a hand-made fixture.
+ */
+export function readContainerFile(
+  data: Uint8Array,
+  order: ByteOrder = detectByteOrder(data),
+): DFContainerFile {
+  const r = new BinaryReader(data, 0, order);
   const fourCC = r.i32();
   const fileSize = r.i32();
   r.skip(12); // unknown[3]
@@ -102,9 +126,9 @@ export function readContainerFile(data: Uint8Array): DFContainerFile {
       containers.push({ id: i, data: EMPTY, gap: true });
       continue;
     }
-    containers.push(readContainerAt(data, positions[i]));
+    containers.push(readContainerAt(data, positions[i], order));
   }
-  return { header, containers, headerRaw: data.slice(0, HEADER_SIZE) };
+  return { header, containers, headerRaw: data.slice(0, HEADER_SIZE), order };
 }
 
 /**
@@ -118,6 +142,9 @@ export function readContainerFile(data: Uint8Array): DFContainerFile {
  */
 export function writeContainerFile(file: DFContainerFile): Uint8Array {
   const { header, containers } = file;
+  // whichever way round the file was read, it is written back the same way, so
+  // an edit-and-export round trip is byte-identical on a Mac rip too
+  const le = little(file.order ?? PC);
   const isGap = (i: number): boolean =>
     header.type === 1 ? i === header.gapWhere :
     header.type === 2 ? i === header.gapWhere - 1 || i === header.gapWhere :
@@ -132,21 +159,21 @@ export function writeContainerFile(file: DFContainerFile): Uint8Array {
   const out = new Uint8Array(total);
   out.set(file.headerRaw.subarray(0, HEADER_SIZE));
   const view = new DataView(out.buffer);
-  view.setInt32(0, header.fourCC, true);
-  view.setInt32(4, total, true);
-  view.setInt32(20, containers.length, true);
-  view.setInt32(24, header.type, true);
-  view.setInt32(28, header.gapWhere, true);
+  view.setInt32(0, header.fourCC, le);
+  view.setInt32(4, total, le);
+  view.setInt32(20, containers.length, le);
+  view.setInt32(24, header.type, le);
+  view.setInt32(28, header.gapWhere, le);
 
   let pos = HEADER_SIZE + tableSize;
   for (let i = 0; i < containers.length; i++) {
     if (isGap(i)) {
-      view.setUint32(HEADER_SIZE + i * 4, 0, true);
+      view.setUint32(HEADER_SIZE + i * 4, 0, le);
       continue;
     }
-    view.setUint32(HEADER_SIZE + i * 4, pos, true);
-    view.setInt32(pos, containers[i].id, true);
-    view.setUint32(pos + 4, containers[i].data.length, true);
+    view.setUint32(HEADER_SIZE + i * 4, pos, le);
+    view.setInt32(pos, containers[i].id, le);
+    view.setUint32(pos + 4, containers[i].data.length, le);
     out.set(containers[i].data, pos + RECORD_HEADER_SIZE);
     pos += RECORD_HEADER_SIZE + containers[i].data.length;
   }
