@@ -14,7 +14,8 @@
  * docs/engine/formats/mov.md, and the note there about two earlier models that were built
  * on fields the engine turned out never to read.
  */
-import { MovSegment } from "./mov";
+import { decodeAudioContainer } from "./audio";
+import { MovFile, MovSegment } from "./mov";
 
 /** native movie frame rate: ~15 fps */
 export const NATIVE_FRAME_MS = 66;
@@ -187,6 +188,96 @@ export function frameHoldMs(mov: MovSegment, frameIdx: number): number {
   const f = mov.frames[frameIdx];
   if (!f) return NATIVE_FRAME_MS;
   return Math.max(f.holdTicks, mov.minHoldTicks) * TICK_MS;
+}
+
+/**
+ * How long a segment's PICTURE is, in ms — its authored holds, added up.
+ *
+ * The holds are what the player advances on ({@link frameHoldMs}), so this is the
+ * film's own length and not a rate times a frame count. Those two disagree by
+ * more than rounding: the demo's `open.mov` runs 13.0 s of picture against the
+ * 22.9 s its soundtrack would predict, and TAOOT's `ocredits.mov` 89.1 s against
+ * a predicted 80.9 s — a film whose last second went quiet for exactly that gap.
+ */
+export function segmentPictureMs(seg: MovSegment): number {
+  let ms = 0;
+  for (let i = 0; i < seg.frames.length; i++) ms += frameHoldMs(seg, i);
+  return ms;
+}
+
+/** seconds of a segment's named one-shot, or 0 if it has no such sound */
+function oneShotSec(seg: MovSegment, name: string): number {
+  const loc = seg.sounds.get(name.toLowerCase());
+  if (loc === undefined) return 0;
+  try {
+    const a = decodeAudioContainer(seg.file.containers[loc].data, seg.file.order);
+    return a.samples.length / a.sampleRate;
+  } catch {
+    return 0; // an undecodable chunk paces nothing; the holds still stand
+  }
+}
+
+/**
+ * How long a segment is really ON SCREEN — its holds, plus the waits.
+ *
+ * A frame may be authored to hold until the event sound a previous frame fired
+ * has finished (`MovFrame.waitsForVoice`, flags bit 0), and that is not a detail:
+ * it is the difference between `open.mov`'s last segment on paper and in a
+ * browser. Thirteen frames of authored holds add up to 4.83 s, and the segment
+ * takes 8.1 s, because frame 6 ("Name 11") waits out the 6.64 s `punch.01` that
+ * frame 2 started. Simulated in the same order the player does it (fire on
+ * entry, hold, then wait), and the model lands on 8.06 s.
+ *
+ * Every wait is on a sound this segment names, so this is still a function of one
+ * segment and the containers behind it. What it is NOT is a promise about a
+ * segment that stops for a CLICK — see {@link bedRuntimeMs}, its only caller.
+ */
+export function segmentOnScreenMs(seg: MovSegment): number {
+  let t = 0;
+  let soundEndsAt = 0;
+  for (let i = 0; i < seg.frames.length; i++) {
+    const f = seg.frames[i];
+    if (f.sound) soundEndsAt = Math.max(soundEndsAt, t + oneShotSec(seg, f.sound) * 1000);
+    t += frameHoldMs(seg, i);
+    if (f.waitsForVoice) t = Math.max(t, soundEndsAt);
+  }
+  return t;
+}
+
+/**
+ * How long a segment's soundtrack will be ON SCREEN — its own time, plus the
+ * time of every following segment that brings no bed and therefore INHERITS this
+ * one (`MoviePlayer.enterSegment`, TI.EXE's segment reload at 0x44956f).
+ *
+ * This exists because a bed measured against its own segment is measured against
+ * the wrong film whenever the picture goes on without it, and the shortfall is
+ * not silence: a loop-table bed is played looping, so running out means starting
+ * the bed AGAIN from its first chunk.
+ *
+ * That is #299's third symptom, and it is audible. The demo's `open.mov` carries
+ * a 23-entry loop order — 6.73 s + 5.39 s + 3.76 s of CyberFlix logo music and
+ * then a 7.01 s tail listed twenty times, 156 s of material in all. The bed was
+ * cut to 25.18 s, being the first segment's own predicted runtime plus a margin,
+ * while the film runs 31.5 s across four segments; so partway through the last
+ * one the fanfare started over underneath the Titanic title card and its own
+ * sting: "when open.mov segment 4/4 starts, the main theme and the Cyberflix
+ * theme play over each other".
+ *
+ * The walk stops at a segment that brings its own chunks, because that one
+ * REPLACES the bed rather than inheriting it. It also stops at one that waits for
+ * a CLICK, whose length is the player's and not the film's — there the loop is
+ * the right answer and the honest one, and it is the same answer
+ * {@link soundtrackFor} gives an interactive segment about its own bed.
+ */
+export function bedRuntimeMs(mov: MovFile, segIdx: number): number {
+  let ms = 0;
+  for (let i = segIdx; i < mov.segments.length; i++) {
+    const seg = mov.segments[i];
+    if (i > segIdx && seg.audioChunks.length) break;
+    ms += segmentOnScreenMs(seg);
+    if (seg.frames.some((_f, j) => frameWaits(seg, j))) break;
+  }
+  return ms;
 }
 
 /**
