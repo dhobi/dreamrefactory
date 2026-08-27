@@ -10,7 +10,7 @@ Browser port of the CyberFlix **DreamFactory 4.0** engine, targeting *Titanic:
 Adventure Out of Time* (1996) — no DOSBox, a native TypeScript reimplementation
 running on canvas.
 
-> 📖 **New here? Read the docs: <https://dhobi.github.io/dreamrefactory/>** — a
+> 📖 **New here? Read the docs: <https://www.danielhobi.ch/dreamrefactory/docs/>** — a
 > guided tour from "how the game works" down to each DFile container format,
 > written for readers who haven't done low-level reverse engineering. (Source
 > in [`docs/`](../docs/README.md); there's a [glossary](../docs/glossary.md) if a
@@ -23,8 +23,9 @@ npm install
 npm run dev          # the front door, on http://localhost:5173/
 ```
 
-Three sites build out of this one repository, each from its own root and its own
-port, so they can run at once:
+Six sites build out of this one repository, each from its own root and its own
+port, so they can run at once — the two about the whole project first, then one
+per game in the order the engine shipped them:
 
 | | | |
 |---|---|---|
@@ -33,17 +34,18 @@ port, so they can run at once:
 | `npm run dev:taoot` | 5175 | **Titanic — this one** |
 | `npm run dev:dust` | 5176 | Dust |
 | `npm run dev:timelapse` | 5177 | Timelapse |
+| `npm run dev:skullcracker` | 5178 | Skull Cracker (experimental) |
 
 Add `-- --host` to any of them to reach it from another machine.
 
 A link from one to another **404s in dev with a page telling you which server
-serves it** — the deployed tree resolves those links normally, but five Vite
+serves it** — the deployed tree resolves those links normally, but six Vite
 roots cannot be one origin (see `tools/vite-siblings.ts`). See
-[Layout](#layout).
+[Layout](../README.md#layout).
 
 What follows is this game's own half of the project: its pages, its suites, its
-game data and how it releases. For the engine underneath it, the other two games, the
-format editors and the repository's layout, see the
+game data and how it releases. For the engine underneath it, the three other
+games, the format editors and the repository's layout, see the
 [root README](../README.md).
 
 ## Play
@@ -106,44 +108,19 @@ scene readout and script log.
 
 ## Editors
 
-Eight **asset editors** live under `/editors/` (which is itself a page listing
-them) — part of the built site, not a dev-only affair. Each loads a file by
-upload or straight out of the manifest, and exports the repacked original
-([docs section](../docs/editors/README.md)):
+The **eight asset editors** are no longer part of this package: they belong to
+the site (`site/editors/`, served from the front door at `/editors/`, which is
+itself a page listing them) and they know no game — each asks the registry which
+rips exist and offers them as sources, so Titanic is chosen there the same way
+one of its editions is (`site/editors/sources.ts`).
 
-- **`/editors/puppets.html`** (`editors/puppet-editor.ts`) — a `.PUP` conversation puppet:
-  stance art via PNG export/import, frame anchor offsets, subtitle text, with
-  voice + animLogic playback.
-  ([reference](../docs/editors/puppets.md))
-- **`/editors/tracks.html`** (`editors/track-editor.ts`) — a `.TRK`/`.SFX`/`.11K` audio
-  bank: play the theme and every one-shot, rename the bank and its chunks,
-  reorder the chunks the theme loops through, and drop your own audio in
-  (WAV/MP3/OGG, resampled and re-encoded).
-  ([reference](../docs/editors/tracks.md))
-- **`/editors/sets.html`** (`editors/set-editor.ts`) — a `.SET` room: browse the scenes,
-  views, turn rings, roads, actor marks, maps and scripts, play a turn or a
-  walk, edit names/hotspot rectangles/actor placement, and replace view art via
-  PNG round-trip. ([reference](../docs/editors/sets.md))
-- **`/editors/shops.html`** (`editors/shp-editor.ts`) — a `.SHP` shop, i.e. the props drawn
-  on top of a room: every prop's states and frames, where a frame lands on the
-  screen for a given `propxy` anchor, animation playback, editable prop/state
-  names, stored offsets and `propdeg` degrees, art via PNG round-trip.
-  ([reference](../docs/editors/shops.md))
-- **`/editors/stages.html`** (`editors/stg-editor.ts`) — a `.STG` stage: the UI band, the
-  inventory, the deck plan, a mini-game board — each flat's full-screen art with
-  its clickable regions drawn over it, editable flat/region names and region
-  rectangles, art via PNG round-trip.
-  ([reference](../docs/editors/stages.md))
-- **`/editors/casts.html`** (`editors/cst-editor.ts`) — a `.CST` cast, the other half of a
-  character: every member's poses as a step × direction grid, a walk cycle played
-  at the engine's tick, the depth scale that keeps feet on the floor, editable
-  member/pose names and sprite anchors, art via PNG round-trip.
-  ([reference](../docs/editors/casts.md))
-- **`/editors/movies.html`** (`editors/mov-editor.ts`) — a `.MOV` read as what it is, a
-  **state machine of frames**: scrub the chain, follow the machine, click the
-  regions and see where they go, edit the action codes, targets, region
-  rectangles, action-frame slots and the ESC flag. Frame art is read-only, and
-  the page says why. ([reference](../docs/editors/movies.md))
+Seven of them round-trip a format this game uses — `.PUP` puppets,
+`.TRK`/`.SFX`/`.11K` audio banks, `.SET` rooms, `.SHP` shops, `.STG` stages,
+`.CST` casts and `.MOV` movies — loading a file by upload or straight out of
+this game's manifest and exporting the repacked original. (The eighth, the
+`.SBK` sprite-book viewer, is Skull Cracker's and reads only.) What each page
+does is in the [docs](../docs/editors/README.md); where they sit in the
+repository is in the [root README](../README.md#layout).
 
 The stage editor's file list also holds one file CyberFlix never shipped:
 **`lang.stg`**, the language chooser this repository *wrote* (`npm run mklang`) —
@@ -161,13 +138,15 @@ it shipped rather than this reimplementation of it. The artwork is carried
 over unchanged from the old site at danielhobi.ch/taoot. The DBGL archives
 themselves are not in this repository — they run to roughly 1 GB apiece and
 stay linked at that site — which is the same rule this repo already applies
-to a game's `gamefiles/`: no game data is shipped here, and both rips are gitignored.
+to a game's `gamefiles/`: no game data is shipped here, and every rip is
+gitignored.
 
 ## Tests
 
 ```
-npm test                 # the fast gate: scenarios, savegames, recovered builtins,
-                         # the editors' write path, text/audio encodings
+npm test                 # the fast gate, whole repository: scenarios, savegames,
+                         # recovered builtins, the editors' write path, text and
+                         # audio encodings — Titanic's own half is taoot/tests/auto/
 npm run test:watch       # vitest in watch mode
 npm run test:playthrough # the game played, not probed (headless, virtual clock)
 npm run test:browser     # Playwright against a live dev server (needs npm run dev)
@@ -379,32 +358,38 @@ print the literal gestures they used precisely so a sheet can stop needing them.
 
 ## Releases
 
-The version is `version` in `package.json` — **0.9.17**, semver, shown in the top
-bar of every page and carried into a bug report. Tagging is what publishes, and
-`master` is protected (the two `tests.yml` jobs are required checks, admins
-included), so the bump goes through a pull request like anything else:
+The version is `version` in **this package's** `taoot/package.json` — **0.9.56**,
+semver, shown in the top bar of every page of this game and carried into a bug
+report. Every package holds its own number now (the site, Dust, Timelapse and
+Skull Cracker each release on theirs), and each `vite.config.ts` substitutes its
+own for `__APP_VERSION__`. Tagging is what publishes, and `master` is protected
+(the two `tests.yml` jobs are required checks, admins included), so the bump goes
+through a pull request like anything else:
 
 ```
-git switch -c release/0.9.17
-npm version 0.9.17 --no-git-tag-version   # package.json + the lockfile
-git commit -am "Version 0.9.17" && git push -u origin release/0.9.17
+git switch -c release/0.9.57
+npm version 0.9.57 --no-git-tag-version -w @dreamfactory/taoot   # package.json + the lockfile
+git commit -am "Version 0.9.57" && git push -u origin release/0.9.57
 gh pr create --fill && gh pr merge --rebase --delete-branch   # once checks are green
 
 git switch master && git pull
-git tag taoot-v0.9.17 && git push --tags
+git tag taoot-v0.9.57 && git push --tags
 ```
 
-The tag must sit on a commit whose `package.json` already says that version —
-`deploy.yml` compares the two and fails the deploy rather than announce a version
-nobody tagged. The `taoot-v` prefix matters: the site's tag was a bare `v0.9.50`
-until 0.9.51, and the bare pattern is no longer matched, so `npm version`'s own
-`v0.9.17` would deploy nothing. Dust releases under `dust-v*` on its own number
-(`dustVersion`) — see [Releasing and deploying](../docs/reference/deploy.md).
+The tag must sit on a commit whose `taoot/package.json` already says that version
+— `deploy.yml` compares the two and fails the deploy rather than announce a
+version nobody tagged. The `taoot-v` prefix matters twice over: this game's tag
+was a bare `v0.9.50` until 0.9.51 and the bare pattern is no longer matched, so
+`npm version`'s own `v0.9.57` would deploy nothing at all; and a tag naming none
+of the five targets (`site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`,
+`skullcracker-v*`) is an error rather than a default — see
+[Releasing and deploying](../docs/reference/deploy.md).
 
-`.github/workflows/deploy.yml` builds that commit and uploads `dist/` to
-www.danielhobi.ch/taoot over FTP. It only ever adds and overwrites — the CD rip,
-the DBGL archives and `gamefiles.json` on the host are never written over and
-never deleted. [Releasing and deploying](../docs/reference/deploy.md)
+`.github/workflows/deploy.yml` builds that commit and uploads `dist/taoot` to
+www.danielhobi.ch/dreamrefactory/taoot over FTP, one lane per target so a
+three-tag release deploys three games. It only ever adds and overwrites — the CD
+rip, the DBGL archives and `gamefiles.json` on the host are never written over
+and never deleted. [Releasing and deploying](../docs/reference/deploy.md)
 says why, and how to regenerate the manifest when the game data on the host
 changes.
 
@@ -417,8 +402,13 @@ CD, per language:
 taoot/gamefiles/en/titanic1/{data,movies,puppets2,trunk,wireless,blkjack,…}
 taoot/gamefiles/en/titanic2/{DATA,MOVIES,PUPPETS1,TRUNK,WIRELESS,BLKJACK,…}
 taoot/gamefiles/en/save/{1,2,ENDGAME1,ENDGAME2}
-taoot/gamefiles/de/…  …/fr/…  …/ru/…  …/nl/…  …/ja/…    dust/gamefiles/dustcd/…
+taoot/gamefiles/de/…  …/fr/…  …/ru/…  …/nl/…  …/ja/…
 ```
+
+The other games' rips sit under their own packages the same way
+(`dust/gamefiles/`, `timelapse/gamefiles/`, `skullcracker/gamefiles/`), each
+gitignored, and each with its own layout — Dust is one disc, Timelapse four,
+Skull Cracker a Macintosh disc.
 
 **Case is not part of the layout.** The two CDs use no single convention between
 them (`titanic1/data` is lowercase, `titanic2/DATA` mostly is not) and a rip may
@@ -469,5 +459,6 @@ game.
 
 ---
 
-Part of **[dreamREfactory](../README.md)** — the engine, the other game, and the
+Part of **[dreamREfactory](../README.md)** — the engine, the three other games
+(Dust, Timelapse, Skull Cracker), the format editors, and the
 [documentation](../docs/README.md).
