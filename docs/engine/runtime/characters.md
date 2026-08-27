@@ -197,6 +197,19 @@ four commands:
   (or −1 immediately if there are none). That pair is the entire dialogue-
   choice mechanism. A click that lands on the picture instead of a row is the
   **repeat** ([below](#skipping-and-repeating)).
+- **`puppetscramble()`** — shuffles the plaques added so far, so the same
+  question is not always on the same row. Nine conversations in the corpus use
+  it and every one of them relies on it shuffling *the list as it stands*:
+  `MORROW1.PUP`'s `wireless()` scrambles and only then adds "Good night.", so
+  his questions move and the way out of the conversation stays at the bottom.
+  `BURNS1.PUP` is the plainest statement of why it exists — five plaques
+  carrying only the ids 101 and 102, an answer you have to read rather than
+  count to. It is `0x4402e0`'s own loop, swap for swap and draw for draw —
+  `bevelCount * 5` swaps of two independent `rand(bevelCount)` draws — and it
+  reads the **script** stream (`GameSession.rng`), because a script is what
+  asked. Both halves of that matter for the same reason: the number of draws is
+  what moves every story coin after it, which is the argument the idle timers
+  are on the *other* side of ([below](#idling-while-you-read-the-choices)).
 - **`puppetparam(n, …)`** — engine-side toggles; slot 7 is "subtitles on",
   wired to the game's settings screen.
 
