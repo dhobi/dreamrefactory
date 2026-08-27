@@ -275,9 +275,9 @@ suite cannot see it, because the gates are the page's and not the engine's:
 `auto/regression.ts` boots the demo to its menu and passes either way.
 
 Its ESC check is timed rather than tested for effect, which is the shape worth
-copying: `open.mov` ends by itself after 27.6 s, so "the film stopped" is not
+copying: `open.mov` ends by itself after 31.4 s, so "the film stopped" is not
 evidence that a key did anything. The claim is that the menu arrives within ten
-seconds of the press — 0.2 s in practice, against 27.6 s with the key dropped.
+seconds of the press — 0.2 s in practice, against 31.4 s with the key dropped.
 
 The two older browser scripts are not the same kind of thing.
 `browser/playthrough.ts` asserts — it diffs a live page against the golden
