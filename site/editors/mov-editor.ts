@@ -27,6 +27,7 @@ import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
 import {
   NATIVE_FRAME_MS,
   TICK_MS,
+  bedRuntimeMs,
   chooseFrameInterval,
   frameHoldMs,
   frameWaits,
@@ -745,7 +746,9 @@ function enterFilmSegment(idx: number, now: number, startFrame = 0): void {
   film.interval = segmentInterval(seg, seg.frames.length, audio?.audioSec ?? 0, segIdx);
   if (audio) {
     film.bed?.stop();
-    const bed = soundtrackFor(seg, audio, film.interval, seg.frames.length);
+    // the same bed the GAME will play, inherited segments included — an editor
+    // that previews a shorter one previews a film the game does not play
+    const bed = soundtrackFor(seg, audio, film.interval, seg.frames.length, bedRuntimeMs(m, segIdx));
     film.bed = playPcm(bed.samples, bed.sampleRate, bed.loop);
   }
   log(

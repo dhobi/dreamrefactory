@@ -121,12 +121,18 @@ export interface Soundtrack {
  * `interval` is the segment's frame interval ({@link file://./mov-pace.ts}) and
  * `frameCount` its picture, because how much of an authored loop order to take
  * depends on how long the picture will be on screen.
+ *
+ * `onScreenMs` is how long the bed really will be up — this segment's picture
+ * plus every following segment that inherits it ({@link bedRuntimeMs}). Optional,
+ * and 0 means "no more than my own picture", which is what every caller said
+ * before it existed.
  */
 export function soundtrackFor(
   seg: MovSegment,
   audio: SegmentAudio,
   interval: number,
   frameCount: number,
+  onScreenMs = 0,
 ): Soundtrack {
   const { rate, resampled, unique, audioSec } = audio;
   const hasRegions = seg.frames.some((f) => f.regions.length > 0);
@@ -171,15 +177,41 @@ export function soundtrackFor(
   // the product is already >= it, and an interactive v4 bed loops in the
   // branch above and never arrives here).
   const predicted = interval > 0 ? (interval * frameCount) / 1000 : 0;
-  const runtime = Math.max(audioSec, predicted);
+  // ...and never below how long the bed will actually be ON SCREEN, which is a
+  // question about the FILM and not about this segment. A segment that brings no
+  // bed of its own inherits this one, so a film may go on for segments after the
+  // prediction runs out — and running out is not silence, it is the loop backstop
+  // below starting the bed again from its first chunk. See `bedRuntimeMs` in
+  // df/mov-pace.ts, where the demo's open.mov is measured: 25.18 s of bed cut
+  // from a 156 s loop order, under 27.57 s of film, so 2.4 s into the last
+  // segment the CyberFlix fanfare began again under the Titanic title (#299).
+  //
+  // Passed in rather than derived here because a segment does not know its
+  // successors and this file may not learn: `soundtrackFor` is what the game and
+  // the movie editor share so that neither can have its own idea of a bed, and
+  // that only holds while it is a function of what it is handed. A caller that
+  // leaves it out gets exactly the old answer.
+  const runtime = Math.max(audioSec, predicted, onScreenMs / 1000);
   const cap = Math.max(1, Math.ceil(runtime * OVERRUN_MARGIN * rate));
-  // ...and loop as the backstop, for a host slow enough to outrun even that.
-  // A loop-table bed is authored to repeat, and repeating a second of it
-  // beats a second of silence. The player halts the bed the moment the film
-  // really does end, so this can never outlive the movie.
+  // ...and loop as the backstop, but ONLY once the author's order has actually
+  // run out — which is what `samples` being shorter than the cap says.
+  //
+  // The distinction is the difference between a backstop and a bug. If `concat`
+  // stopped at the CAP there is more order behind it, and reaching the end of
+  // what we took is our estimate having been short, not the music having ended:
+  // rewinding there plays the author's FIRST chunk, which is never what comes
+  // next. That is what the demo's opening did — 25.18 s taken out of a 156 s
+  // order, and the CyberFlix fanfare back over the Titanic title card (#299).
+  // Silence for a moment at the end of a film is a smaller wrong than the wrong
+  // music, and with the runtime measured properly above it does not arise.
+  //
+  // If `concat` stopped because the ORDER ran out, repeating it is the authored
+  // answer and the old one. The player halts the bed the moment the film really
+  // does end, so neither can outlive the movie.
+  const samples = concat(resampled, cap);
   return {
     sampleRate: rate,
-    samples: concat(resampled, cap),
-    loop: seg.audioLoops,
+    samples,
+    loop: seg.audioLoops && samples.length < cap,
   };
 }

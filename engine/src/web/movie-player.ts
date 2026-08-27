@@ -19,6 +19,7 @@ import {
 } from "@dreamfactory/engine/df/mov";
 import {
   TICK_MS,
+  bedRuntimeMs,
   frameHoldMs,
   frameWaits,
   segmentInterval,
@@ -360,7 +361,10 @@ export class MoviePlayer {
     // segment 0 plays across them all).
     if (audio) {
       this.session.audio.halt("voice");
-      const bed = soundtrackFor(seg, audio, interval, frames.length);
+      // ...for as long as it will be UP, which is not the same as this segment's
+      // own picture: the segments after it that bring no bed inherit this one
+      // (see the paragraph above, and bedRuntimeMs).
+      const bed = soundtrackFor(seg, audio, interval, frames.length, bedRuntimeMs(mov, segIdx));
       this.session.audio.play(
         "voice",
         { sampleRate: bed.sampleRate, samples: bed.samples },

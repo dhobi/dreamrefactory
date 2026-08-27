@@ -18,7 +18,11 @@ import {
   segmentAudio,
   soundtrackFor,
 } from "@dreamfactory/engine/df/mov-sound";
-import { segmentInterval } from "@dreamfactory/engine/df/mov-pace";
+import {
+  bedRuntimeMs,
+  segmentInterval,
+  segmentPictureMs,
+} from "@dreamfactory/engine/df/mov-pace";
 
 const root = gamefilesRoot();
 
@@ -171,7 +175,10 @@ function bedOf(name: string, segIdx = 0) {
   const audio = segmentAudio(seg);
   if (!audio) throw new Error(`${name} segment ${segIdx} has no bed`);
   const interval = segmentInterval(seg, seg.frames.length, audio.audioSec, segIdx);
-  const bed = soundtrackFor(seg, audio, interval, seg.frames.length);
+  // ...with the on-screen time the PLAYER passes, or this helper measures a bed
+  // the game does not play — which is the whole reason these two assertions
+  // exist (see above)
+  const bed = soundtrackFor(seg, audio, interval, seg.frames.length, bedRuntimeMs(mov, segIdx));
   const order = audio.resampled.reduce((n, c) => n + c.length, 0) / audio.rate;
   return {
     seg,
@@ -179,6 +186,8 @@ function bedOf(name: string, segIdx = 0) {
     interval,
     bed,
     order,
+    onScreen: bedRuntimeMs(mov, segIdx) / 1000,
+    picture: segmentPictureMs(seg) / 1000,
     played: bed.samples.length / bed.sampleRate,
   };
 }
@@ -198,20 +207,90 @@ test("a cutscene's bed is cut from its authored order, with the overrun margin",
   // bare prediction (which the tick quantisation always overruns).
   expect(logo.interval).toBeCloseTo(72, 0);
   expect(logo.played).toBeCloseTo(logo.audio.audioSec * OVERRUN_MARGIN, 1);
-  expect(logo.bed.loop).toBe(true);
+  // ...and it does NOT loop, because the order is not what ran out — 25.2 s taken
+  // out of 156 s, over a picture that is on screen for 16.6 s. Rewinding at the
+  // end of what we happened to take would play the author's FIRST chunk, which is
+  // never what comes next; the loop is for a bed whose material is exhausted.
+  expect(logo.onScreen).toBeLessThan(logo.played);
+  expect(logo.order).toBeGreaterThan(logo.played);
+  expect(logo.bed.loop).toBe(false);
 
   // ocredits.mov is the other side of the same rule: 12 distinct chunks, 72.0 s
-  // of content under an 80.9 s picture, so the PREDICTION is the longer of the
-  // two and the margin is taken on it. This is the film whose last second went
-  // silent when the bed was cut to the prediction exactly.
+  // of content under a picture that runs much longer, so what the bed is cut to
+  // is the PICTURE and the margin is taken on that. This is the film whose last
+  // second went silent when the bed was cut to the prediction exactly.
   const credits = bedOf("ocredits.mov");
   if (!credits) return;
   expect(credits.seg.frames.length).toBe(1225);
   expect(credits.audio.audioSec).toBeCloseTo(71.98, 1);
+  // And "the picture" is its AUTHORED length — the holds the player advances on,
+  // added up — not `interval x frames`, which is a rate the player never uses.
+  // They disagree by 8.3 s here, and the disagreement was the bug the 10% margin
+  // was covering for rather than fixing: 80.85 x 1.1 = 88.9 s of bed under 89.1 s
+  // of film, which is the last second going quiet all over again.
   const predicted = (credits.interval * credits.seg.frames.length) / 1000;
   expect(predicted).toBeCloseTo(80.85, 1);
-  expect(credits.played).toBeCloseTo(predicted * OVERRUN_MARGIN, 1);
+  expect(credits.picture).toBeCloseTo(89.13, 1);
+  expect(credits.played).toBeCloseTo(credits.picture * OVERRUN_MARGIN, 1);
+  expect(credits.played).toBeGreaterThan(credits.picture);
   expect(credits.played).toBeGreaterThan(credits.audio.audioSec);
+});
+
+/**
+ * The demo's `open.mov`, and #299's third symptom.
+ *
+ * Its bed lives on segment 1 and the three segments after it bring none, so they
+ * INHERIT it: 27.6 s of film over a bed that was being cut to 25.2 s, and cutting
+ * a loop-table bed short does not go quiet — it starts again from the top. Which
+ * is what the reporter heard, and described exactly: "when open.mov segment 4/4
+ * starts, the main theme and the Cyberflix theme play over each other."
+ *
+ * The film's own material is not the problem. The loop order is 23 entries over 4
+ * chunks — 6.73 + 5.39 + 3.76 s of logo music and then a 7.01 s tail listed
+ * twenty times, 156 s in all — so there was never a need to rewind to reach the
+ * end of a 27.6 s film.
+ */
+test("a bed inherited by later segments is cut to the whole film, not one segment", () => {
+  const path = gamefiles(root, "demo").resolve("open.mov");
+  if (!path) return; // no demo tree installed
+  const mov = readMovFile(new Uint8Array(readFileSync(path)));
+  const seg = mov.segments[0];
+  const audio = segmentAudio(seg)!;
+  expect(mov.segments.length).toBe(4);
+  expect(seg.audioChunks.length).toBe(23);
+  expect(audio.unique.length).toBe(4);
+
+  // only the first segment brings a bed, so the other three play under this one
+  expect(mov.segments.slice(1).every((s) => s.audioChunks.length === 0)).toBe(true);
+  const own = segmentPictureMs(seg) / 1000;
+  const onScreen = bedRuntimeMs(mov, 0) / 1000;
+  expect(own).toBeCloseTo(13.02, 1);
+  // 13.0 + 6.1 + 3.7 + 8.1: the last segment is 4.8 s of authored holds and 8.1 s
+  // on screen, because its frame 6 waits out the 6.6 s `punch.01` that its frame 2
+  // fired (MovFrame.waitsForVoice). Measured in a browser at 31.4-31.6 s, the rest
+  // being the tick the player quantises every hold up to — which is what the
+  // overrun margin is for.
+  expect(onScreen).toBeCloseTo(30.79, 1);
+
+  const interval = segmentInterval(seg, seg.frames.length, audio.audioSec, 0);
+  const before = soundtrackFor(seg, audio, interval, seg.frames.length);
+  const after = soundtrackFor(seg, audio, interval, seg.frames.length, bedRuntimeMs(mov, 0));
+  const secs = (b: { samples: Float32Array; sampleRate: number }): number =>
+    b.samples.length / b.sampleRate;
+  // what it was: a bed that runs out inside the last segment, over a film still
+  // playing — and a bed that runs out REWINDS
+  expect(secs(before)).toBeCloseTo(25.18, 1);
+  expect(secs(before)).toBeLessThan(onScreen);
+  // ...and what it is: past the end of the film, so the end is never reached
+  expect(secs(after)).toBeGreaterThan(onScreen);
+  expect(secs(after)).toBeCloseTo(onScreen * OVERRUN_MARGIN, 1);
+  // taken out of the authored order and not by repeating it — the order holds
+  // 156 s, so nothing here is invented
+  const order = audio.resampled.reduce((n, c) => n + c.length, 0) / audio.rate;
+  expect(order).toBeGreaterThan(secs(after));
+  // and the second guard, which holds even if the estimate above is ever wrong:
+  // a bed cut out of an order with more behind it does not rewind to chunk one
+  expect(after.loop).toBe(false);
 });
 
 test("an interactive film's bed loops, because there is no runtime to cut it to", () => {
