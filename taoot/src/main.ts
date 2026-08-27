@@ -420,7 +420,6 @@ const host = new GameHost(files, audioSink, {
   showStage: () => {
     booting.style.display = "none";
     stage.style.display = "block";
-    if (help) help.style.display = "block";
     // The pane is reset by the BOOT, not by arriving somewhere. showStage runs on
     // every set activation (GameHost.activateSet), so clearing here threw the log
     // away and shut the pane the player had opened at every changeset — 28 rooms
@@ -933,6 +932,23 @@ async function initServerBrowser(): Promise<void> {
   hidePreload();
   booting.style.display = "none";
   stage.style.display = "";
+  /**
+   * The row under the canvas — fullscreen, the bug button, the swipe boxes, the
+   * key list — goes up with the CANVAS, and it used to go up with a ROOM.
+   *
+   * It was raised inside the host's `showStage`, which fires on set activation,
+   * so an edition that activates no set never got it. That is the 1996 demo, all
+   * of whose screens are films and a menu stage: reported, in passing and
+   * correctly, as "the demo page doesn't have a bug report button. Not sure if
+   * that's intentional" (#299). It was not.
+   *
+   * Here rather than there because none of these controls is about a room, and
+   * because this is the one line every edition passes through — the language
+   * chooser and the Nightdive question both reveal the canvas earlier and both
+   * come back to here before a game starts. `showStage` keeps the pane reset
+   * that really is per-boot; this is chrome, and it is the page's.
+   */
+  if (help) help.style.display = "block";
   ensureAudio(); // a no-op until a gesture has happened, and free to call early
   // before the boot, because the boot is where the mix is set and where the
   // first room's setupsound starts playing into it
@@ -1006,16 +1022,26 @@ screen.addEventListener("pointerdown", (e) => {
     touch.down(e);
     return;
   }
-  // a MOUSE press is a click on a room, and there is none yet
-  const viewer = host.viewer;
-  if (!viewer) return;
+  /**
+   * ...and a MOUSE press goes to the DIRECTOR, for the reason the keys do (see
+   * {@link keyToGame}). This asked for `host.viewer` and returned when there was
+   * none — "a click is a click on a room, and there is none yet" — which is true
+   * of a film and false of a MENU. The 1996 demo's menu is a stage flat with four
+   * portholes and no room anywhere behind it, so every click on it was dropped
+   * here: "when the main menu (demo.stg) loads, nothing can be clicked on" (#299).
+   *
+   * `SetViewer.press` is one line that delegates to `ScreenDirector.press`, which
+   * already expects to run without a room — it arms the room's nav hooks through
+   * `this.room?.` and says so — so this is the same call reaching the same place,
+   * minus a guard that was asking about the wrong thing.
+   */
   session.pointerDown = true;
   // What the press CARRIED, for `shiftkey()` (engine/src/runtime/builtins/scene.ts). Taken
   // here rather than tracked as live keyboard state because that is how the
   // original asks: house.shp's HELP button reads it inside its own mousedown, so
   // the question is what was held when the click happened.
   session.shiftDown = e.shiftKey;
-  void session.track(viewer.press(x, y), `press ${x},${y}`);
+  void session.track(host.director.press(x, y), `press ${x},${y}`);
 });
 
 // release anywhere ends a drag (the pointer may leave the canvas mid-drag).
@@ -1032,7 +1058,7 @@ window.addEventListener("pointerup", (e) => {
   // that reads `shiftkey()` may not have run yet. It says what the last press
   // carried until the next press says otherwise, which is the question scripts
   // actually ask.
-  host.viewer?.release(session.pointerX, session.pointerY);
+  host.director.release(session.pointerX, session.pointerY);
 });
 
 // ---------------------------------------------------------------------------
@@ -1106,15 +1132,15 @@ const touch = new TouchGestures({
     const kind = session.hitTestAt(x, y).type;
     return kind === "prop" || kind === "button";
   },
+  // The finger's half of the same thing the mouse handler above does, and it had
+  // the same guard: a tap on the demo's menu was dropped for want of a room.
   press: (x, y) => {
-    const v = host.viewer;
-    if (!v) return; // a click needs a room; a film on screen has none
     session.pointerDown = true;
-    void session.track(v.press(x, y));
+    void session.track(host.director.press(x, y));
   },
   release: (x, y) => {
     session.pointerDown = false;
-    host.viewer?.release(x, y);
+    host.director.release(x, y);
   },
   /**
    * The two halves of a gesture that is a KEY, and they differ: three of the
@@ -1564,8 +1590,6 @@ function pressArrow(name: "uparrow" | "leftarrow" | "rightarrow"): void {
 }
 
 screen.addEventListener("mousemove", (e) => {
-  const v = host.viewer;
-  if (!v) return;
   const { x, y } = canvasCoords(e);
   // while dragging, just track the pointer — don't run hover's setcursor
   // scripts concurrently with the suspended drag handler
@@ -1573,7 +1597,12 @@ screen.addEventListener("mousemove", (e) => {
     session.setPointer(x, y);
     return;
   }
-  void v.hover(x, y).then(showCursor);
+  // The director's, not a viewer's, and for the third time on this page: what is
+  // under the pointer is a question about the SCREEN. `ScreenDirector.hover`
+  // answers for a stage button and a flat with no room open at all, which is the
+  // whole of what the demo's menu is — without it its portholes never took the
+  // `cursor("touch")` their own setcursor handlers ask for.
+  void host.director.hover(x, y).then(showCursor);
 });
 
 /**
@@ -1625,8 +1654,36 @@ const GAMMA_KEYS: Record<string, { up: boolean; ch: GammaChannels } | "reset"> =
     F9: "reset",
   };
 
+/**
+ * Hand a key to the GAME — the director, which is where a key lands anyway.
+ *
+ * `SetViewer.keyDown` is one line that delegates here, so nothing about this is
+ * new behaviour; what is new is that it also works when there is no room to
+ * view. That mattered for one edition and not the others, which is why it took a
+ * bug report to find: the 1996 demo (`?edition=demo`) opens NO SET EVER. Its
+ * BOOTFILE plays `open.mov` and then opens `demo.stg`, a menu that is a stage
+ * flat with four portholes on it — no room behind it at any point — so
+ * `host.viewer` is null for the whole life of the page, and a `if (!v) return`
+ * at the top of the key handler dropped every key the demo could be sent.
+ * Reported as "cannot use ESC to cancel the introductions and jump to menu"
+ * (#299): ESC is exactly the key that reaches a playing movie and aborts it, and
+ * it was being thrown away one line before it could.
+ *
+ * The full game hides this because the port loads `bedsit1` before running
+ * `boot()`, so a viewer happens to exist while the films that want ESC are
+ * playing. The ORIGINAL has no room open there either — its BOOTFILE opens the
+ * bedsit from `advanceday()`, which runs after `logo.mov` and `playmode.mov` —
+ * so a key that needs a room was never the original's rule, only ours. Dust's
+ * page reached the same conclusion from the other end ("A KEY needs the game,
+ * not a viewer", dust/src/main.ts); this is that fix, on the page it had not
+ * reached yet.
+ */
+function keyToGame(name: string, special = false): void {
+  void session.track(host.director.keyDown(name, special));
+}
+
 window.addEventListener("keydown", (e) => {
-  // The gamma keys go FIRST — before the viewer guard below, not after it, which is
+  // The gamma keys go FIRST — before everything below, which is
   // where they were until a browser check found F1 dead on the loading screen. In
   // TI.EXE these arms sit in the window proc ahead of everything, so they work over
   // a playing movie, under a full-screen overlay stage, and while the game is still
@@ -1643,16 +1700,12 @@ window.addEventListener("keydown", (e) => {
   }
   const isDetailsKey =
     !focusOwnsKey(e.target, e.key) && (e.key === "x" || e.key === "X");
-  // X outranks the VIEWER guard for the same reason the gamma keys do, and it is a
-  // stronger case than theirs: the pane REMEMBERS being open (taoot.details.open),
-  // so a reader who left it up gets it back on the loading screen — and behind the
-  // guard, the key that put it there could not take it down again. A pane on screen
-  // that its own advertised key does nothing to is worse than no pane.
+  // X used to outrank a VIEWER guard here, on the argument that the pane REMEMBERS
+  // being open (taoot.details.open), so a reader who left it up gets it back on the
+  // loading screen — and behind the guard, the key that put it there could not take
+  // it down again. The guard is gone (see keyToGame) and the argument is not: X is
+  // still answered before anything asks whether there is a game to send a key to.
   const v = host.viewer;
-  if (!v) {
-    if (isDetailsKey) toggleDetails();
-    return;
-  }
   // Typed into something on the page, not at the game (engine/src/web/keys.ts). This listens
   // on `window`, and the page's own keys are LETTERS — so without this, filtering
   // the state list for "mission" toggled the minimap on the M and the hotspot
@@ -1669,7 +1722,7 @@ window.addEventListener("keydown", (e) => {
   if (!session.viewShowing && session.stageCtrl.keydownTarget()) {
     const df = DF_KEY[e.key] ?? (e.key.length === 1 ? e.key.toLowerCase() : "");
     if (df) {
-      void session.track(v.keyDown(df, isSpecialKey(e)));
+      keyToGame(df, isSpecialKey(e));
       e.preventDefault();
     }
     return;
@@ -1692,14 +1745,14 @@ window.addEventListener("keydown", (e) => {
       pressArrow("uparrow");
       break;
     case "ArrowDown":
-      void session.track(v.keyDown("downarrow"));
+      keyToGame("downarrow");
       break;
     case " ":
       // SPACE is the door opener (not a general click): BOOTFILE keydown scans
       // the current view's hotspots and fires mousedown only on a painting named
       // "door", "locked" or "knock" — open/close a door, rattle a locked one, or
       // knock. Route it through the script chain like the arrows.
-      void session.track(v.keyDown(" "));
+      keyToGame(" ");
       break;
     case "Escape":
       // Forwarded, not acted on: a live movie takes it and aborts (the game's
@@ -1707,15 +1760,19 @@ window.addEventListener("keydown", (e) => {
       // chain as "." and is ignored — which is what the original does too.
       // TI.EXE's other abort key, Ctrl+Q, is left unbound: the movie filter
       // knows it, but it is a browser-level shortcut here.
-      void session.track(v.keyDown(".", true));
+      keyToGame(".", true);
       break;
+    // The only two arms that really do need a room: they toggle the ROOM's own
+    // overlays, and an edition with no room (the demo) has neither to show.
     case "m":
     case "M":
+      if (!v) return;
       v.showMap = !v.showMap;
       refreshMap();
       break;
     case "o":
     case "O":
+      if (!v) return;
       v.showHotspots = !v.showHotspots;
       break;
     default: {
@@ -1735,7 +1792,7 @@ window.addEventListener("keydown", (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const ch = e.key.length === 1 ? e.key.toLowerCase() : "";
       if (!ch) return;
-      void session.track(v.keyDown(ch));
+      keyToGame(ch);
       break;
     }
   }

@@ -147,10 +147,11 @@ It drives **Titanic's** page, which is its own dev server on 5175 — so
 
 ```
 npm run dev:taoot                         # in another terminal — Titanic on 5175
-npm run test:browser                      # menu-movie, then the whole route, ~39 min
+npm run test:browser                      # the demo, menu-movie, then the whole route, ~39 min
 npm run test:browser:playthrough          # just the route
 npm run test:browser:endgame              # just the ending, ~3 min, off a checkpoint
 npm run test:browser:lang                 # the language chooser, with real clicks
+npm run test:browser:demo                 # the 1996 demo's menu, ~30 s (skips with no demo rip)
 npm run test:browser:m0                   # segment 1
 npm run test:browser:m1                   # segments 2–6
 npm run test:browser:m2                   # segments 7–16
@@ -262,6 +263,21 @@ screen, clicks a language's region with a real mouse, and then asserts the thing
 only a browser can be asked — that every `gamefiles/` request from the choice
 onwards comes from the chosen tree. The other browser suites pass `?edition=`
 (from `TAOOT_LANG`, default `en`) so the chooser never blocks them.
+
+`browser/demo.ts` is the third that asserts, and it exists because a whole class
+of page bug is invisible to everything else here. The 1996 demo opens **no set,
+ever** — `open.mov`, then `demo.stg`, a menu that is a stage flat with four
+portholes on it — so `host.viewer` is null for the life of the page. Every other
+edition has a room from the first second, so three input gates and a row of
+chrome could all be conditioned on one existing and nobody would feel it; the
+demo arrived with no keys, no clicks and no bug button (#299). The headless
+suite cannot see it, because the gates are the page's and not the engine's:
+`auto/regression.ts` boots the demo to its menu and passes either way.
+
+Its ESC check is timed rather than tested for effect, which is the shape worth
+copying: `open.mov` ends by itself after 27.6 s, so "the film stopped" is not
+evidence that a key did anything. The claim is that the menu arrives within ten
+seconds of the press — 0.2 s in practice, against 27.6 s with the key dropped.
 
 The two older browser scripts are not the same kind of thing.
 `browser/playthrough.ts` asserts — it diffs a live page against the golden
