@@ -193,9 +193,16 @@ record at all, which is one of the things a `.ti` round trip
 
 `openpuppetfile`, `closepuppetfile`, `currentpuppet`, `puppetspeak`,
 `puppetclear`, `puppetbevel`, `puppetevent`, `puppetbase`, `puppetvisible`,
-`puppetparam`, `countpuppets`, `indextopuppet` — plus three stubs the corpus
-never exercises meaningfully (`puppetsubtitle`, `puppetgrab`,
-`puppetscramble`). See [Characters](../engine/runtime/characters.md).
+`puppetparam`, `countpuppets`, `indextopuppet`, `puppetscramble` — plus two
+stubs the corpus never exercises meaningfully (`puppetsubtitle`, `puppetgrab`).
+See [Characters](../engine/runtime/characters.md).
+
+`puppetscramble` shuffles the plaques offered **so far**, leaving any pushed
+after it in place — which is what pins the way out of a conversation to the
+bottom row while the questions above it move. It is 0x4402e0's own loop rather
+than a shuffle of our choosing (`bevelCount * 5` swaps, two independent
+`rand(bevelCount)` draws each), because the number of draws is what advances
+the script random stream and every story coin after it is a function of that.
 
 ## Pointer & text — `pointer.ts`
 
