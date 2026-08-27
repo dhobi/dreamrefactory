@@ -163,12 +163,22 @@ game's own dev server. CI sets it explicitly, because `browser.yml` runs the
 server on 5199 rather than 5175 to stay off the port a person's own
 `npm run dev:taoot` would want.
 
-Dust has one browser check of its own, and it runs against the **build**
-rather than a dev server, because the bug it exists for only appears there:
+Two browser checks run against the **build** rather than a dev server, because
+the bugs they exist for only appear there:
 
 ```
-npm run build:dust && npm run test:built:dust
+npm run build:dust && npm run test:built:dust    # Dust's layout, as built
+npm run test:built:site                          # the site, served from a subdirectory
 ```
+
+The second builds the site itself and serves `dist/site` under a
+`/dreamrefactory/` prefix, which is the one thing neither `npm run dev` nor
+`vite preview` can show: both serve at a host's root, so a URL that is wrong for a
+subdirectory is right everywhere else a test looks. It caught the games menu
+asking `danielhobi.ch` for `/mark-taoot.png` — a URL assembled in TypeScript at
+runtime, which Vite never sees and so never rebases. Anything the page requests
+that does not answer 200 fails it, `gamefiles.json` excepted: the editors probe
+every game for one to find out which rips a deployment carries.
 
 **Run it on its own** — it waits on real frames, so anything else using the
 machine changes what the game does rather than merely slowing it down. No second
