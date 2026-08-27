@@ -73,6 +73,7 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "manifest:dust": "tsx tools/mkmanifest.ts dist/dust dust/gamefiles dust/public",
+    "manifest:skullcracker": "tsx tools/mkmanifest.ts dist/skullcracker skullcracker/gamefiles skullcracker/public",
     "mklogo": "tsx site/tools/mklogo.ts"
   },
   "devDependencies": {

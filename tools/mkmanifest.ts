@@ -42,11 +42,34 @@ import { join } from "node:path";
 import { MANIFEST_FILE, buildManifest } from "./manifest";
 
 const [, , outDir = "dist", gamefiles = "gamefiles", publicDir = "public", include = ""] = process.argv;
-const manifest = buildManifest({
+const walked = buildManifest({
   gamefiles,
   publicDir,
   include: include ? include.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
 });
+
+/**
+ * Key by the path as SERVED, which is what `tools/manifest.ts` promises and what
+ * every page's store filters on (`if (!path.startsWith("gamefiles/")) continue`).
+ *
+ * `buildManifest` keys by the path it WALKED, so the shape depends on where the
+ * walk started: run from inside a game's directory with `./gamefiles` — the form
+ * this file's examples show, and the form used on the host — the two are the same
+ * string and nothing needs doing. Run from the repository root with
+ * `skullcracker/gamefiles`, which is what the `npm run manifest*` scripts do,
+ * every key came out as `skullcracker/gamefiles/…` and the page indexed **nothing**:
+ * a manifest that parses, lists 113 files, and matches none of them.
+ *
+ * So the prefix is normalised here, the same way `tools/vite-gamefiles.ts` does it
+ * for the build. The authored `public/` entries are listed bare and must stay
+ * that way, so only the walked tree is rewritten.
+ */
+const walkedFrom = gamefiles.replace(/\\/g, "/").replace(/\/+$/, "");
+const manifest: Record<string, number> = {};
+for (const [key, size] of Object.entries(walked)) {
+  const norm = key.replace(/\\/g, "/");
+  manifest[norm.startsWith(`${walkedFrom}/`) ? `gamefiles${norm.slice(walkedFrom.length)}` : norm] = size;
+}
 const at = join(outDir, MANIFEST_FILE);
 const json = JSON.stringify(manifest);
 writeFileSync(at, json);

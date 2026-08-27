@@ -48,6 +48,12 @@ the shell that turns a tag into a target — and
 fails when a game in the registry is missing from any of them, because three of
 the four ways to get it wrong are silent.
 
+The manifest is written by `npm run manifest`, `manifest:dust` or
+`manifest:skullcracker` from the repository root, or by `mkmanifest.ts` run inside
+the game's directory on the host — both produce the same keys now, which was not
+true before: run from the root, every key came out prefixed with the game's own
+directory and the page indexed nothing (`site/tests/manifest-keys.ts`).
+
 What the workflow cannot do is put the RIP there. A runner has no game data, so
 the manifest the build writes describes almost nothing and is deleted before the
 upload; a freshly deployed game shows its "no game data" page until the host's own
