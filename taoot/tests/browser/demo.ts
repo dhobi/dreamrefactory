@@ -30,10 +30,13 @@ const HEADED = !!process.env.HEADED;
 /**
  * How long the menu may take to arrive after ESC.
  *
- * open.mov is 27.6 s of picture across its four segments, so anything under that
- * is the key having landed rather than the film having finished — which is the
- * only way to tell those two apart from outside. Well under it, and still loose
- * enough for a loaded machine: the gap being measured is 27.6 s against ~0.
+ * open.mov runs **31.4 s** across its four segments — timed in this browser, not
+ * added up from the file, because the two differ and the wall clock is the thing
+ * being measured here (its authored holds come to 27.6 s, and a frame that waits
+ * out `punch.01` accounts for most of the rest; see df/mov-pace.ts). So anything
+ * under this budget is the key having landed rather than the film having
+ * finished, which is the only way to tell those two apart from outside. Well
+ * under it and still loose for a loaded machine: the gap is 31.4 s against ~0.2.
  */
 const FILM_BUDGET_MS = 10_000;
 
@@ -169,11 +172,10 @@ const main = async (): Promise<void> => {
 
   // Against the CLOCK, because "the film stopped" is not evidence: open.mov ends
   // by itself, and a probe that waits for it to has measured nothing. It is four
-  // segments and 27.6 s of picture (240 + 4 + 3 + 13 frames against their own
-  // authored holds), so a menu that arrives inside FILM_BUDGET_MS did not get
-  // there by the film running out. With the key dropped it takes the full 27.6 s;
-  // with the key delivered, ESC clears the next-segment pointer and the whole
-  // chain ends at once.
+  // segments and 31.4 s of film, so a menu that arrives inside FILM_BUDGET_MS did
+  // not get there by the film running out. With the key dropped it takes the full
+  // 31.4 s; with the key delivered, ESC clears the next-segment pointer and the
+  // whole chain ends at once.
   const pressedAt = Date.now();
   await page.keyboard.press("Escape");
   const menu = await until(
@@ -185,7 +187,7 @@ const main = async (): Promise<void> => {
   const took = Date.now() - pressedAt;
   const atMenu = await state(page);
   check(
-    `ESC cuts the opening films short (${(took / 1000).toFixed(1)} s, and they run 27.6 s)`,
+    `ESC cuts the opening films short (${(took / 1000).toFixed(1)} s, and they run 31.4 s)`,
     menu,
     `stage=${atMenu.stage} flat=${atMenu.flat}`,
   );

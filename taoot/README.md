@@ -359,7 +359,7 @@ print the literal gestures they used precisely so a sheet can stop needing them.
 
 ## Releases
 
-The version is `version` in **this package's** `taoot/package.json` — **0.9.56**,
+The version is `version` in **this package's** `taoot/package.json` — **0.9.57**,
 semver, shown in the top bar of every page of this game and carried into a bug
 report. Every package holds its own number now (the site, Dust, Timelapse and
 Skull Cracker each release on theirs), and each `vite.config.ts` substitutes its
@@ -368,20 +368,20 @@ own for `__APP_VERSION__`. Tagging is what publishes, and `master` is protected
 through a pull request like anything else:
 
 ```
-git switch -c release/0.9.57
-npm version 0.9.57 --no-git-tag-version -w @dreamfactory/taoot   # package.json + the lockfile
-git commit -am "Version 0.9.57" && git push -u origin release/0.9.57
+git switch -c release/0.9.58
+npm version 0.9.58 --no-git-tag-version -w @dreamfactory/taoot   # package.json + the lockfile
+git commit -am "Version 0.9.58" && git push -u origin release/0.9.58
 gh pr create --fill && gh pr merge --rebase --delete-branch   # once checks are green
 
 git switch master && git pull
-git tag taoot-v0.9.57 && git push --tags
+git tag taoot-v0.9.58 && git push --tags
 ```
 
 The tag must sit on a commit whose `taoot/package.json` already says that version
 — `deploy.yml` compares the two and fails the deploy rather than announce a
 version nobody tagged. The `taoot-v` prefix matters twice over: this game's tag
 was a bare `v0.9.50` until 0.9.51 and the bare pattern is no longer matched, so
-`npm version`'s own `v0.9.57` would deploy nothing at all; and a tag naming none
+`npm version`'s own `v0.9.58` would deploy nothing at all; and a tag naming none
 of the five targets (`site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`,
 `skullcracker-v*`) is an error rather than a default — see
 [Releasing and deploying](../docs/reference/deploy.md).
