@@ -123,13 +123,15 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     if (p) p.hidden = on;
     return 0;
   });
-  acc("propvisible", 0, (p) => (p.visible ? 1 : 0), (p, v, n) => {
+  acc("propvisible", 0, (p) => (p.visible ? 1 : 0), (p, v) => {
+    const was = p.visible;
     p.visible = truthy(v);
-    // TAOOT's clearmessagebox() wipes the drawstring text by flashing an opaque
-    // "clean strip" prop over it (visible → forceupdate → invisible). Our
-    // props are non-destructive, so instead we drop the text layer when that
-    // eraser prop is shown.
-    if (p.visible && toStr(n).toLowerCase() === "messageboxclear") session.clearTextOverlay();
+    // A prop drawn over a drawstring erases it, which is how a script clears a
+    // field — TAOOT's clearmessagebox(), Dust's lowdrawcash(). Our text layer is
+    // retained, so the erase has to be modelled: see GameSession.
+    // eraseTextUnderProp, which is also why this is the show TRANSITION and not
+    // every write of `true`.
+    if (!was && p.visible) session.eraseTextUnderProp(p);
   });
   // The getter answers the state the prop is actually IN, which for one no script
   // has touched is its FIRST state — the same one `PropInstance.state()` resolves

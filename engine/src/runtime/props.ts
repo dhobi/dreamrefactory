@@ -300,6 +300,21 @@ export class PropInstance {
   currentFrame(st: PropState): number {
     return st.frames[this.currentFrameIdx(st)];
   }
+
+  /**
+   * Where this prop is drawn on the SCREEN — the rect `composite` blits into,
+   * which is the frame's size at the anchor less the frame's own hot spot.
+   *
+   * Screen space only, so it answers null for a prop with no state to draw.
+   * A world-space prop's rect is the projected one ({@link PropRuntime.
+   * worldRect}) and depends on a camera, which is why that one is not this.
+   */
+  screenRect(): { x: number; y: number; w: number; h: number } | null {
+    const st = this.state();
+    if (!st || !st.frames.length) return null;
+    const f = this.shop.frame(this.currentFrame(st));
+    return { x: this.anchorX - f.posXraw, y: this.anchorY - f.posYraw, w: f.width, h: f.height };
+  }
 }
 
 export class LoadedShop {

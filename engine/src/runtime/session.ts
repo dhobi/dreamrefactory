@@ -11,7 +11,7 @@ import { readCstFile } from "../df/cst";
 import { CallCtx, Frame, Interpreter, ScriptInstance, Value, toStr } from "./interp";
 import { ActorRuntime } from "./actors";
 import type { WorldCamera } from "./geometry";
-import { PropRuntime } from "./props";
+import { PropRuntime, type PropInstance } from "./props";
 import { PluginBus } from "./plugins";
 import { seededRng } from "./rng";
 import { AudioLibrary, AudioSink } from "./audio";
@@ -1955,8 +1955,8 @@ export class GameSession {
    *  so we keep the drawn strings and re-apply them. Later draws at the same
    *  (x,y,size) replace earlier ones (TAOOT: CTL redraws its direction letters
    *  every update(); the wireless writes each morse glyph at a fresh x).
-   *  Cleared on flat change and by clearmessagebox() (see the messageboxclear
-   *  hook). */
+   *  Cleared on flat change, and where a prop is drawn over it — see
+   *  {@link eraseTextUnderProp}, which is how a script erases a field. */
   readonly textOverlay: { text: string; x: number; y: number; color: number; size: number }[] = [];
   /**
    * The photograph the album is showing, composited over the flat.
@@ -2000,6 +2000,74 @@ export class GameSession {
   clearTextOverlay(): void {
     this.textOverlay.length = 0;
     this.photoOverlay = null;
+  }
+
+  /** what a drawstring occupies on screen — `y` is its BASELINE, so the box
+   *  runs a size up from it and a little below (screen-presenter.ts paints it
+   *  with an alphabetic baseline, QuickDraw's own convention) */
+  private textEntryBox(e: { text: string; x: number; y: number; size: number }) {
+    return {
+      x: e.x,
+      y: e.y - e.size,
+      w: this.textWidth(e.text, e.size),
+      h: e.size + Math.ceil(e.size / 4),
+    };
+  }
+
+  /** the width stringwidth() answers — the render font's when a host has one */
+  textWidth(text: string, size: number): number {
+    return this.measureText
+      ? Math.round(this.measureText(text, size))
+      : Math.ceil(text.length * size * 0.6);
+  }
+
+  /**
+   * A prop has just been drawn over the screen: whatever `drawstring` left
+   * under it is gone.
+   *
+   * This is how a DreamFactory script ERASES text, and it has to be modelled
+   * because our text layer is retained and the original's is not. In TI.EXE and
+   * DUST.EXE a `drawstring` paints into the composited screen, and the pixels
+   * stand until something composites over that region — so a script that wants
+   * a field cleared flashes an opaque patch across it: show, `forceupdate`,
+   * hide, `forceupdate`, and the old string is painted over on the way in and
+   * restored-from-flat on the way out. Ours recomposites every frame with the
+   * text ON TOP, so the patch was invisible and every value a field ever held
+   * stayed on screen, stacked.
+   *
+   * Both games do it, which is why this is a rule about props and not a name:
+   *
+   *   - TAOOT's wireless, `clearmessagebox()`: `propvisible ("messageboxclear",
+   *     true)`, `forceupdate ()`, `propvisible ("messageboxclear", false)`.
+   *   - Dust's saloon, `lowdrawcash(num, x, y)` in SALGAMES.FLT: the same four
+   *     statements over `blankscore`, moved to the field being rewritten with
+   *     `propxy` first, and only THEN `drawstring ("$" @ num, …)`. Both fields
+   *     are right-aligned by shifting x by 4 px per missing digit, so the new
+   *     value never lands where the old one did and nothing replaced it: #288,
+   *     "$100" and "$10" and "$0" all at once in the WAGER box.
+   *
+   * By RECT and not the whole layer, because the patch is a patch: TAOOT's
+   * `messageboxclear` covers x 65..350, y 339..362 of the wireless slip and
+   * nothing else on that flat, and Dust's `blankscore` is 60x15 over one of two
+   * fields 40 px apart — clearing everything would take the CASH readout with
+   * the WAGER one.
+   *
+   * On the show TRANSITION only. Showing a prop that is already shown
+   * composites nothing in the original (nothing is dirty), and a prop being
+   * HIDDEN restores the flat under it, which would also wipe text — but no
+   * script in the three corpora draws under a prop it then hides, and taking
+   * that on would put every disappearing prop in reach of a field it never
+   * touched.
+   */
+  eraseTextUnderProp(p: PropInstance): void {
+    const r = p.screenRect();
+    if (!r) return;
+    for (let i = this.textOverlay.length - 1; i >= 0; i--) {
+      const b = this.textEntryBox(this.textOverlay[i]);
+      if (b.x < r.x + r.w && r.x < b.x + b.w && b.y < r.y + r.h && r.y < b.y + b.h) {
+        this.textOverlay.splice(i, 1);
+      }
+    }
   }
 
   /**
