@@ -407,6 +407,26 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
      * exactly how the original's own loader reopens the room.
      */
     const file = s.setFile || `${s.set}.set`;
+    /*
+     * The bytes, before anything asks the set a question.
+     *
+     * `sceneAtCell` reads the set's own grid to turn the saved cell into a scene
+     * name, and it does that through `GameSession.loadSet`, which is SYNCHRONOUS:
+     * it asks the provider for the file and gets null when the file has not been
+     * fetched. In the browser that is the ordinary state of any room the player
+     * has not been in yet — so on a FRESHLY BOOTED game the cell resolved to
+     * nothing, the loader fell back to "open it at its own standpoint", and the
+     * save came back in the right room at the wrong place. Reported from play, and
+     * exactly as narrow as it sounds: load `D1E_002` after visiting the saloon and
+     * the standpoint is right, load it as the first thing a boot does and it is
+     * `sallower.set`'s own opening view (Scene D1) instead of the saved Scene C4.
+     *
+     * Invisible on disk, which is why no test had it: a headless provider answers
+     * from the filesystem on the spot and `loadSet` always succeeds. The test that
+     * covers it now models the browser's provider — nothing answers until it has
+     * been fetched.
+     */
+    await session.ensureFile(file);
     const scene = sceneAtCell(session, file, s.cellX, s.cellZ);
     if (!scene) {
       session.onLog(

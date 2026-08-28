@@ -481,3 +481,79 @@ test("a load brings back the sound banks, and the theme if one was playing", asy
     "NITE.SET's night chorus is running",
   ).toBe(true);
 });
+
+// --- the standpoint, on a game that has not been anywhere yet ---------------
+
+/**
+ * A load has to fetch the room before it can ask the room a question.
+ *
+ * The saved standpoint is a GRID CELL, and turning it into a scene name means
+ * reading the set's own grid — `sceneAtCell`, through `GameSession.loadSet`,
+ * which is synchronous and answers null for a file the provider has not been
+ * given yet. In a browser that is the ordinary state of every room the player
+ * has not visited, so on a freshly booted game the cell resolved to nothing and
+ * the loader fell back to opening the room at its OWN standpoint: the right
+ * room, the wrong place.
+ *
+ * Reported from play, and as narrow as it sounds — load `D1E_002` after visiting
+ * the saloon and the standpoint is right; load it as the first thing a boot does
+ * and it is `sallower.set`'s opening view (Scene D1) rather than the saved Scene
+ * C4. Both arms are here, because a test that only proves the fetched case
+ * passes on the bug.
+ *
+ * The provider is the point: it answers for nothing until `ensureFile` has asked
+ * for it, which is what `FileStore` does in the page and what a test reading
+ * straight off the disk cannot model.
+ */
+test("a load fetches the saved room before reading its grid", async () => {
+  if (!existsSync(`${DATA_DIR}/SALLOWER.SET`) || !existsSync(join(SAVE_DIR, "D1E_002.RTD"))) {
+    console.warn(`no ${DATA_DIR} — skipping (needs the Dust rip)`);
+    return;
+  }
+  /** a session over a LAZY provider: nothing is readable until it is fetched */
+  const lazy = (prefetched: string[]) => {
+    const fetched = new Set(prefetched.map((n) => n.toLowerCase()));
+    const bytes = (n: string) => {
+      const path = `${DATA_DIR}/${n.toUpperCase()}`;
+      return existsSync(path) ? new Uint8Array(readFileSync(path)) : null;
+    };
+    const session = new GameSession(
+      (n) => (fetched.has(n.toLowerCase()) ? bytes(n) : null),
+      new NullAudioSink(),
+    );
+    session.ensureFile = async (n) => {
+      fetched.add(n.toLowerCase());
+    };
+    session.onLog = () => {};
+    session.dfVersion = 1;
+    // what the loader asks the host to open, which is the whole question here
+    const opened: { file: string; scene: string; view: string }[] = [];
+    session.onSetChange = async (file, scene, view) => {
+      opened.push({ file, scene, view });
+    };
+    return { session, opened };
+  };
+
+  const bytes = new Uint8Array(readFileSync(join(SAVE_DIR, "D1E_002.RTD")));
+
+  // 1. a freshly booted game: the saloon has never been fetched
+  const cold = lazy([]);
+  expect(await cold.session.loadGame(bytes), "the save loads").toBe(true);
+  expect(cold.opened, "the room is opened at the SAVED standpoint").toEqual([
+    { file: "sallower.set", scene: "scene c4", view: "west" },
+  ]);
+
+  // 2. and the case that always worked — the player has been in the saloon
+  const warm = lazy(["sallower.set"]);
+  expect(await warm.session.loadGame(bytes), "the save loads").toBe(true);
+  expect(warm.opened, "...which is what the fetched case already did").toEqual(cold.opened);
+
+  // the cell in the file, and the scene the set puts on it — so a change to
+  // either shows up here as a disagreement rather than as a silent pass
+  const save = parseSaveV1(bytes);
+  expect([save.standpoint.cellX, save.standpoint.cellZ], "the saved cell").toEqual([2, 3]);
+  expect([save.standpoint.camX, save.standpoint.camY], "the camera at that cell's centre").toEqual([
+    2 * 256 + 128,
+    3 * 256 + 128,
+  ]);
+});
