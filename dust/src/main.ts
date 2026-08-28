@@ -87,6 +87,7 @@ import {
   dustTemplate,
   loadDustTemplate,
   seedDustSaves,
+  shippedDustSaves,
 } from "./saves";
 import { setScreenGamma } from "@dreamfactory/engine/web/screen-gamma";
 import { DustFiles } from "./files";
@@ -307,9 +308,12 @@ const logEl = document.getElementById("log") as HTMLPreElement;
  */
 const LOG_MAX = 400;
 const logLines: string[] = [];
+/** how many lines have rolled off the top — see the `log()` on window.dbg */
+let logDropped = 0;
 function say(line: string): void {
   logLines.push(line);
   if (logLines.length > LOG_MAX) {
+    logDropped += logLines.length - LOG_MAX;
     logLines.splice(0, logLines.length - LOG_MAX);
     logEl.textContent = `${logLines.join("\n")}\n`;
   } else {
@@ -1130,7 +1134,7 @@ async function runBoot(): Promise<void> {
    */
   clearScreen();
   raiseTitle();
-  play(host);
+  play(host, files);
   ensureAudio();
   const started = performance.now();
   try {
@@ -1186,7 +1190,7 @@ async function runBoot(): Promise<void> {
  */
 let playing: GameHost | null = null;
 
-function play(host: GameHost): void {
+function play(host: GameHost, files: DustFiles): void {
   playing = host;
   // the cursor changes for reasons that are not the pointer — a film taking the
   // screen, `lockevents` freezing the world — and a mouse move is the only thing
@@ -1195,19 +1199,55 @@ function play(host: GameHost): void {
   /**
    * A handle on the running game, for the console and for Playwright.
    *
-   * The play page publishes `window.dbg` for the same reason (taoot/src/main.ts) and
-   * this page had nothing, which made every question about the live state —
-   * which props are visible, which actors the room thinks it has — unanswerable
-   * from outside. An experiment whose state cannot be read is an experiment that
-   * can only be judged by screenshots.
+   * `window.dbg`, which is what the play page calls its own (taoot/src/main.ts) and
+   * therefore what every probe and every console session reaches for. This page
+   * published the same three fields under `window.dust`, which is kept as an
+   * alias — the name was the reason a probe written against the other page found
+   * nothing here.
+   *
+   * Two things beyond the handles, both because of what could not be measured
+   * without them:
+   *
+   *   - **`log()`**, the trace as data. The engine says a great deal through it
+   *     that the state does not show — `opengame: … has no scene at cell (2,3) —
+   *     opening it at its own standpoint` is a whole diagnosis in one line — and
+   *     scraping a `<pre>` is not a way to read it.
+   *   - **`loadSave(name)`**, which loads one of the disc's saves the way the
+   *     panel's LOAD lever does, minus the modal. The lever is `opengame`, and
+   *     `opengame` blocks on `onLoadGame`, whose browser answer is a dialog a
+   *     probe would have to click through — so the bug that only shows on a
+   *     FRESHLY BOOTED game (the standpoint one) could not be reached at all
+   *     without driving the whole menu first, which is the state that hides it.
    */
-  (window as unknown as { dust: unknown }).dust = {
+  const dbg = {
     host,
     session: host.session,
     get viewer() {
       return host.viewer;
     },
+    log: () => ({ lines: [...logLines], dropped: logDropped }),
+    /**
+     * Load a shipped save by name (`"D1E_002"`), from the disc's own `save/`
+     * directory. Returns what `loadgame` returns, and says what it did in the
+     * trace — a probe reads the answer, a person reads the line.
+     */
+    loadSave: async (name: string): Promise<boolean> => {
+      const want = String(name).toLowerCase().replace(/\.rtd$/, "");
+      const source = shippedDustSaves(files.paths).find((v) => v.name.toLowerCase() === want);
+      if (!source) {
+        say(`dbg.loadSave: no shipped save called "${name}"`);
+        return false;
+      }
+      const res = await fetch(source.url);
+      if (!res.ok) {
+        say(`dbg.loadSave: ${source.url} — ${res.status}`);
+        return false;
+      }
+      return host.session.loadGame(new Uint8Array(await res.arrayBuffer()));
+    },
   };
+  (window as unknown as { dbg: unknown }).dbg = dbg;
+  (window as unknown as { dust: unknown }).dust = dbg; // the name this page had first
   logEl.hidden = true;
   const s = host.session;
   let shownRoom = "";

@@ -50,6 +50,7 @@
     "test:browser:playthrough": "tsx taoot/tests/browser/playthrough.ts",
     "test:browser:lang": "tsx taoot/tests/browser/lang-chooser.ts",
     "test:browser:transitions": "tsx taoot/tests/browser/transition-hold.ts",
+    "test:browser:dust:load": "tsx dust/tests/browser/load-standpoint.ts",
     "test:browser:m0": "SEGMENTS=1 tsx taoot/tests/browser/playthrough.ts",
     "test:browser:m1": "SEGMENTS=2,3,4,5,6 tsx taoot/tests/browser/playthrough.ts",
     "test:browser:m2": "SEGMENTS=7,8,9,10,11,12,13,14,15,16 tsx taoot/tests/browser/playthrough.ts",
