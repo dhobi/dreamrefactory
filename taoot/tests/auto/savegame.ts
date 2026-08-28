@@ -85,16 +85,25 @@ function containersEqual(a: RawSaveFile, b: RawSaveFile): boolean {
   return true;
 }
 
-// The writer zero-fills the ignored pointer/padding regions the original left
-// process junk in, so bytes are NOT identical — but everything the loader reads
-// (header fields, position table, each container's id/size/data) must survive.
-test("every shipped save round-trips everything the loader reads", () => {
+// BYTE for byte, and that is a promise to another program rather than a tidiness
+// rule: a port save is a patched copy of one of these files, and the one reader
+// that matters is the original game, which we cannot debug. So the writer puts
+// back even the bytes it does not understand — the process junk the original left
+// behind the live slots of the position table (RawSaveFile.table), which this
+// writer used to zero-fill.
+//
+// `containersEqual` stays as the diagnostic: it says whether what the LOADER
+// reads survived, which is the more useful failure message when the bytes move.
+test("every shipped save round-trips byte for byte", () => {
   const saves = allSaves();
   expect(saves.length).toBeGreaterThan(0);
   for (const path of saves) {
-    const raw = readSaveFile(new Uint8Array(readFileSync(path)));
-    const raw2 = readSaveFile(writeSaveFile(raw));
-    expect.soft(containersEqual(raw, raw2), path).toBe(true);
+    const bytes = new Uint8Array(readFileSync(path));
+    const raw = readSaveFile(bytes);
+    const out = writeSaveFile(raw);
+    expect.soft(containersEqual(raw, readSaveFile(out)), `${path}: what the loader reads`).toBe(true);
+    const at = out.length === bytes.length ? out.findIndex((v, i) => v !== bytes[i]) : -2;
+    expect.soft(at, `${path}: identical bytes (${bytes.length} in, ${out.length} out)`).toBe(-1);
   }
 });
 

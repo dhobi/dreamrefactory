@@ -45,7 +45,7 @@ import { Container, HEADER_SIZE, readContainerAt } from "./container";
  *
  * This module has two layers:
  *  - low level: `readSaveFile` / `writeSaveFile` — the raw container file, which
- *    round-trips byte-for-byte;
+ *    round-trips byte-for-byte, leftovers included (see RawSaveFile.table);
  *  - high level: `parseSave` — decodes the fields the engine needs to load a
  *    game (globals, current location, inventory), keeping the raw file so the
  *    writer can reproduce untouched containers exactly.
@@ -309,6 +309,19 @@ const roundUp = (n: number, a: number) => Math.ceil(n / a) * a;
 export interface RawSaveFile {
   /** verbatim 1024-byte file header (fourCC, size, signature, …). */
   header: Uint8Array;
+  /**
+   * The position-table region, verbatim: 128 u32 slots between the header and
+   * {@link DATA_START}, of which the header's `containerCount` are live.
+   *
+   * Carried rather than rebuilt because the rest of it is NOT ours. The original
+   * writes the table into a buffer it does not clear, so a real save has the
+   * writing process's leftovers behind the live slots — Mac heap pointers, ends
+   * of path strings — and a reader that drops them makes a writer that cannot
+   * put them back. The port's saves are patched copies of the game's own files,
+   * offered back to a program we cannot debug, so "reproduce every byte you were
+   * given" is the only defensible rule for the bytes we do not understand.
+   */
+  table: Uint8Array;
   containers: Container[];
 }
 
@@ -322,6 +335,9 @@ export function readSaveFile(bytes: Uint8Array): RawSaveFile {
   r.seek(20);
   const count = r.i32();
   const header = bytes.slice(0, HEADER_SIZE);
+  // padded, so a truncated or hand-built file still yields the full region
+  const table = new Uint8Array(DATA_START - HEADER_SIZE);
+  table.set(bytes.subarray(HEADER_SIZE, Math.min(bytes.length, DATA_START)));
 
   const positions: number[] = [];
   r.seek(HEADER_SIZE);
@@ -338,7 +354,7 @@ export function readSaveFile(bytes: Uint8Array): RawSaveFile {
     }
     containers.push(readContainerAt(bytes, p));
   }
-  return { header, containers };
+  return { header, table, containers };
 }
 
 /**
@@ -360,6 +376,8 @@ export function writeSaveFile(raw: RawSaveFile): Uint8Array {
 
   const out = new Uint8Array(fileSize);
   out.set(raw.header.subarray(0, HEADER_SIZE), 0);
+  // the table region as it came, live slots and leftovers alike (RawSaveFile.table)
+  out.set((raw.table ?? new Uint8Array(0)).subarray(0, DATA_START - HEADER_SIZE), HEADER_SIZE);
   const dv = new DataView(out.buffer);
   dv.setUint32(4, fileSize, true);
   dv.setInt32(20, count, true);
@@ -1619,7 +1637,7 @@ const NEW_RECORD_PRIORITY = ["savedeck", "hallside", "handitem", "pennybrush", "
 export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
   // deep-copy so we can mutate container data without touching the base.
   const containers: Container[] = base.containers.map((c) => ({ id: c.id, data: c.data.slice() }));
-  const raw: RawSaveFile = { header: base.header.slice(), containers };
+  const raw: RawSaveFile = { header: base.header.slice(), table: base.table.slice(), containers };
 
   // globals: overwrite each variable's DFValue (type at slot+24, value at
   // slot+26 — the slot recordOffsets maps to already accounts for the
