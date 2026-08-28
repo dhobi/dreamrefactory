@@ -170,6 +170,7 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     if (y === undefined) return toNum(x) === 2 ? p.anchorY : p.anchorX;
     p.anchorX = Number(x) || 0;
     p.anchorY = Number(y) || 0;
+    p.screenPlaced = true; // ...and a save may now write it — see PropInstance
     p.worldSpace = false; // screen placement (band/inventory/flat)
     return 0;
   });

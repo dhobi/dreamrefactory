@@ -534,38 +534,81 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
     standpoint,
     openSet,
     frame: session.frameCounter,
-    // the map's KEY is the prop's name — a PropInstance does not carry it, the
-    // same reason the play page's snapshot destructures the entry
+    /*
+     * ---- WHAT THE PORT KNOWS, AND ONLY THAT --------------------------------
+     *
+     * A patch field left `undefined` keeps the base save's value (every write in
+     * `applyPatchV1` is guarded), and that is the whole design of this list.
+     *
+     * This port does not model everything a record holds, and where it does not,
+     * its own default is not a decision — it is an absence. Writing those
+     * absences over a real save is what a port save did to the original:
+     * measured against the base it was patched from, 73 of 73 prop records and
+     * 40 of 54 cast records came out worse —
+     *
+     *     avatar     scale 1000 -> 0        the panel portrait, at no size
+     *     slider     screen (117,323) -> (256,192)   into the middle of the room
+     *     inven day  view "base" -> ""     no state to pick a sprite from
+     *     Jug        dist 148 -> 0
+     *     Mwife      scale 1000 -> 0, speed 4 -> 0   (she loaded hovering)
+     *     Help       set "town" -> "", star "walktostar" -> "", x 1732 -> 0
+     *
+     * So each field below is written only where the port has a positive value
+     * for it: a scale it was given, an anchor a script placed (`screenPlaced`),
+     * a name a script set, a world position for something actually in the world.
+     * The rest is the base's, which is the only other thing it could truthfully
+     * be.
+     *
+     * The map's KEY is the prop's name — a PropInstance does not carry it, the
+     * same reason the play page's snapshot destructures the entry.
+     */
     props: [...session.propRuntime.props].map(([name, p]) => ({
       name,
       owner: String(p.owner),
-      view: p.stateName,
       visible: p.visible,
       is3d: p.worldSpace,
-      screenX: p.anchorX,
-      screenY: p.anchorY,
       deg: Number(p.deg) || 0,
-      dist: p.dist,
-      scale: p.scale,
-      x: p.worldX,
-      y: p.worldY,
-      z: p.worldZ,
+      // a state the script chose, not the empty string this starts as
+      view: p.stateName || undefined,
+      set: p.setName || undefined,
+      star: p.starName || undefined,
+      // the port ignores `scale` for a screen prop, so 0 means "never told"
+      scale: p.scale > 0 ? p.scale : undefined,
+      // ...and 0 is this port's default where the original's is -1
+      dist: p.dist !== 0 ? p.dist : undefined,
+      // only a prop a script actually placed on the screen has an anchor to save
+      screenX: p.screenPlaced ? p.anchorX : undefined,
+      screenY: p.screenPlaced ? p.anchorY : undefined,
+      // ...and only a prop in the world has a world position
+      x: p.worldSpace ? p.worldX : undefined,
+      y: p.worldSpace ? p.worldY : undefined,
+      z: p.worldSpace ? p.worldZ : undefined,
     })),
-    actors: [...session.actorRuntime.actors.values()].map((a) => ({
-      name: a.member.name,
-      owner: String(a.owner),
-      set: a.setName,
-      star: a.starName,
-      pose: a.poseName,
-      visible: a.visible,
-      deg: a.deg & 0xff,
-      scale: a.scale,
-      speed: a.speed,
-      turn: a.turn,
-      x: a.worldX,
-      y: a.worldY,
-      z: a.worldZ,
-    })),
+    actors: [...session.actorRuntime.actors.values()].map((a) => {
+      /**
+       * Has this port SET THIS ACTOR UP? `stdactor` — the handler every cast
+       * member's `setupactor` calls — is what gives an actor its scale, and
+       * nothing else does. So a scale is the port's word for "I have placed and
+       * dressed this character"; without one, its position, pace and turn rate
+       * are construction defaults and the base's are worth more.
+       */
+      const dressed = a.scale > 0;
+      return {
+        name: a.member.name,
+        owner: String(a.owner),
+        visible: a.visible,
+        deg: a.deg & 0xff,
+        set: a.setName || undefined,
+        star: a.starName || undefined,
+        pose: a.poseName || undefined,
+        scale: dressed ? a.scale : undefined,
+        speed: dressed ? a.speed : undefined,
+        turn: dressed ? a.turn : undefined,
+        x: dressed ? a.worldX : undefined,
+        y: dressed ? a.worldY : undefined,
+        z: dressed ? a.worldZ : undefined,
+      };
+    }),
     walks: [...session.scheduler.walks].map(([actor, w]) => ({
       actor,
       star: w.arriveStar ?? "",
