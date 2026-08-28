@@ -22,6 +22,18 @@ So read it with its grain in mind:
   on from there. That is the one thing this walkthrough has that no other does.
   The opening minutes have no save of their own — the collection begins at
   `D1E_001`, a few minutes in — so those steps are taken from the scripts.
+
+  To open the game already at one of them, in a real window:
+
+  ```
+  npm run dev:dust                 # in one terminal
+  npm run watch:dust -- D2A_006    # in another
+  npm run watch:dust -- --list     # every rung, in the order they were made
+  ```
+
+  It boots (about three minutes), loads that save, and leaves the window open —
+  and prints the room and view to the terminal as you walk, which is how you
+  check a step on this page against the game.
 - **It is one route, not the only one.** Dust is a town you wander, and much of
   what the original player did was optional. Treat the order as a thread to
   follow, not a combination to enter.
