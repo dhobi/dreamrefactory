@@ -8,6 +8,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, basename } from "node:path";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { sniffScript } from "@dreamfactory/engine/df/script";
+import { carriesScript } from "./script-bearing";
 import { parseScript } from "@dreamfactory/engine/runtime/parser";
 
 const rootDir = process.argv[2] ?? "gamefiles";
@@ -27,7 +28,7 @@ const errors = new Map<string, { count: number; example: string }>();
 
 for (const path of walk(rootDir)) {
   const name = basename(path);
-  if (!/\.(SET|STG|PUP|SHP|CST|MOV)$/i.test(name) && !/^BOOTFILE$/i.test(name)) continue;
+  if (!carriesScript(name)) continue;
   let file;
   try {
     file = readContainerFile(new Uint8Array(readFileSync(path)));
