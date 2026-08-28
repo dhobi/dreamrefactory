@@ -519,6 +519,10 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
       return {
         transitionRegister: set.transitionRegister,
         actorRegister: set.actorRegister,
+        // the camera the original projects its cast through — per room, and a
+        // hover on every restored character when left as the base room's
+        eyeHeight: set.eyeHeight,
+        cameraSetback: set.cameraSetback,
         clut: set.paletteRaw,
       };
     } catch (e) {
@@ -597,6 +601,12 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
         name: a.member.name,
         owner: String(a.owner),
         visible: a.visible,
+        // in the world at all: the original's draw gate reads this before
+        // anything else, and a visible actor without it is drawn screen-anchored
+        // at the top-left in every room (#319, #320). Asserted only where the
+        // port has placed the character; an undressed one keeps the base's
+        // sticky bit, which is what the original itself does.
+        is3d: dressed || a.visible ? true : undefined,
         deg: a.deg & 0xff,
         set: a.setName || undefined,
         star: a.starName || undefined,

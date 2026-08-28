@@ -123,14 +123,28 @@ may copy the first 244 bytes from its base without thinking about it.
 |-------:|-------|
 | 248 | the **frame counter** — what `frame()` answers (`inc DWORD ds:0x460AD8` at `0x4334AD`) |
 | 356 | the open **flat file**, as a manifest handle (`appl:local:new.flt`) |
+| **428 / 430** | the room's **camera**: `cameraSetback` and `eyeHeight`, copied from the set's own header (c0+0x18/0x1a) |
 | 372 | the flat's base name (`"new"`) |
 | **396** | the open **set file**, as a manifest handle (`dust:data:nite.set`) |
 | 446 / 448 | the **grid cell** — column, row |
 | 450 | the **facing**, 1..4 |
 | 458 | the camera's heading, 0..255 (192 north, 0 east, 64 south, 128 west) |
 | 460 / 462 | the camera in world units — `cell·256 + 128` when standing still |
+| **472 / 474 / 476** | the **projection's eye** — x, y, height: what `0x433C60` (the world-to-screen every drawn actor goes through) reads as its camera. x/y are the cell centre pushed back `setback` along the facing; the height equals +430 in all 61 shipped saves |
 | 482 | the set's **name** (`"town"`) |
 | 506 / 526 | the open **puppet**: its manifest handle, and its name |
+
+### The camera is the room's, and the actors hang from it
+
++430 is per room — 62 in the town, 130 upstairs at the mayor's, 230 in the
+Chinese laundry — and it is load-bearing the same way the registers at +404/+416
+are: a save moved to another room that keeps the base's value projects the new
+room's cast through the old room's eye height. The error is purely vertical —
+`(room − stale) · focal / depth` pixels — so every restored character hovers or
+sinks by the same world-unit difference; the Mayor's wife floated 68 units up
+the wall of `mayupper` over a save patched from a town base (#320). The load
+rebuilds the eye x/y from the grid cell (`0x433D20`) but takes the height from
++430, which is why that pair of bytes is the one that matters.
 
 ### Where you are is a cell, not a scene name
 
@@ -167,6 +181,7 @@ ecx=0x29` at `0x411E2F`, and `add edi,0xa4` in the scan at `0x4129B3`.
 | Offset | Field |
 |-------:|-------|
 | 0 | `actorvisible` |
+| 18 | `is3d` — in the world, as opposed to screen-anchored (the props' +18, same offset) |
 | 24 | `actordeg`, 0..255 |
 | **26 / 28 / 30** | the world position: **x across, y into the screen, z up** |
 | **44** | `actorscale`, per mille |
@@ -177,7 +192,21 @@ ecx=0x29` at `0x411E2F`, and `add edi,0xa4` in the scan at `0x4129B3`.
 The string half is v4's exactly, on the same 16-byte stride from the name; the
 numeric half is four bytes longer, so v4's tail offsets do not transfer.
 
-Two of these fields are load-bearing in a way that is invisible in the file:
+Three of these fields are load-bearing in a way that is invisible in the file:
+
+- **`is3d`.** The draw gate (`0x414fd0`) branches on this word before anything
+  else. Nonzero is the world path: the actor's set (+100) is compared against the
+  standpoint's set name (c1+482) — the filter that keeps a visible actor from
+  ANOTHER room off the screen — and the rect is recomputed by projecting the
+  world position and scale (the cached rect at +56…+70 is output, never input).
+  Zero is the screen-anchored path: no set filter, no projection, the rect read
+  off the anchor words at +20/+22, which a never-placed record holds as (0, 0).
+  So restore everything else perfectly and leave this at 0, and every visible
+  actor — whatever room it belongs to — is drawn in the top-left corner at its
+  raw per-mille scale, which is one bit presenting as two bugs: a fragment of the
+  town cast inside an interior, and a giant hovering Mayor's wife. Across the
+  shipped corpus no visible record holds 0 here, and plenty of INVISIBLE ones
+  hold 1: the original sets it when an actor is first placed and never clears it.
 
 - **`actorscale`.** A load resets the cast before applying records, and a reset
   actor has scale 0 — which the draw list skips. Restore everything else

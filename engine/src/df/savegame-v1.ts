@@ -142,6 +142,37 @@ const C1_DEG = 458;
 const C1_CAM_X = 460;
 const C1_CAM_Y = 462;
 /**
+ * The camera the actor projection actually looks through — and the reason a
+ * restored character can hover.
+ *
+ * `0x433c60`, the world-to-screen projection every drawn actor goes through,
+ * reads its eye from c1+472/474/476 (`[0x460bb8]`/`[0x460bba]`/`[0x460bbc]`) —
+ * x, y, and HEIGHT — not from the cell fields the port was writing. The load
+ * rebuilds x and y from the grid cell (`0x433d20`: `cell·256+128`), but the
+ * height it copies from c1+430 (`[0x460b8e]`) — so +430 is the load-bearing
+ * byte pair, and it is PER ROOM: it is the set file's own `eyeHeight`
+ * ({@link SetFileV1.eyeHeight}, c0+0x1a), 62 in the town and 130 upstairs at
+ * the mayor's. Verified across all 61 shipped saves: +476 == +430 == the
+ * save's own set's eyeHeight, every time.
+ *
+ * A save that changes the room and leaves +430 alone projects the new room's
+ * cast through the old room's eye height, and the error lands on the screen's
+ * vertical axis: `(eyeHeight_room − eyeHeight_stale) · focal / depth` pixels of
+ * hover — the Mayor's wife floating 68 world units up the wall of `mayupper`
+ * (#320).
+ *
+ * +428 is the companion `cameraSetback` (c0+0x18): how far the eye stands
+ * back from the cell centre along the facing. 64 in every set on the disc and
+ * every shipped save, but written with +430 because they travel together in
+ * the set header. The eye pair at +472/474 obeys, in all 61 shipped saves:
+ * facing 1 → y+setback, 2 → y−setback, 3 → x−setback, 4 → x+setback.
+ */
+const C1_CAMERA_SETBACK = 428;
+const C1_EYE_HEIGHT = 430;
+const C1_EYE_X = 472;
+const C1_EYE_Y = 474;
+const C1_EYE_Z = 476;
+/**
  * The open set's NAME ("town"), which is not the same thing as its file.
  *
  * Dust has two versions of the same town — `town.set` by day and `nite.set` by
@@ -219,6 +250,26 @@ const COMPASS: Record<number, string> = { 192: "north", 0: "east", 64: "south", 
  */
 const ACTOR_STRIDE = 164;
 const ACTOR_VISIBLE = 0;
+/**
+ * `is3d` — the same offset and meaning the PROP record documents at +18, and the
+ * one bit both of a port save's visual faults in the original turned on.
+ *
+ * `DF.EXE`'s per-actor draw gate at `0x414fd0` branches on this word before it
+ * does anything else. Nonzero takes the world path: the actor's set (+100) is
+ * compared against the standpoint's set name (c1+482) — which is what keeps a
+ * visible actor from another room off the screen — and the draw rect is computed
+ * by projecting the world position and scale (`0x415320`; the rect at +56…+70 is
+ * where the result is CACHED, never a load-time input). Zero takes the
+ * screen-anchored path at `0x4151f8` instead: no set filter, no projection, the
+ * rect read straight off the anchor words at +20/+22.
+ *
+ * So a visible actor written with 0 here is drawn in every room, at the anchor a
+ * never-placed record holds — (0, 0), the top-left corner — at its raw per-mille
+ * scale (#319, #320). Measured across all 61 shipped saves: no record is visible
+ * with 0 here, and 1521 invisible records hold 1 — the original sets it when an
+ * actor is first placed in the world and never clears it.
+ */
+const ACTOR_IS3D = 18;
 const ACTOR_DEG = 24;
 /**
  * The world position, in the engine's own axis names: x across, **y into the
@@ -418,6 +469,8 @@ export interface SavedActorV1 {
   star: string;
   pose: string;
   visible: boolean;
+  /** in the world (drawn via set filter + projection) rather than screen-anchored — see {@link ACTOR_IS3D} */
+  is3d: boolean;
   deg: number;
   /** per-mille `actorscale`; 0 would make the character undrawable */
   scale: number;
@@ -505,6 +558,8 @@ export interface SavedStandpointV1 {
   camY: number;
   /** the view name that heading looks along ("north"), or "" if it is mid-turn */
   view: string;
+  /** the room's camera height — the set's own `eyeHeight`, see {@link C1_EYE_HEIGHT} */
+  eyeHeight: number;
 }
 
 /** everything this reader takes out of a `.rtd` */
@@ -647,6 +702,7 @@ function readActor(d: Uint8Array, at: number): SavedActorV1 {
     star: pstr(d, at + ACTOR_STAR),
     pose: pstr(d, at + ACTOR_POSE),
     visible: dv.getUint16(at + ACTOR_VISIBLE, true) !== 0,
+    is3d: dv.getUint16(at + ACTOR_IS3D, true) !== 0,
     deg: dv.getUint16(at + ACTOR_DEG, true),
     scale: dv.getInt16(at + ACTOR_SCALE, true),
     speed: dv.getInt16(at + ACTOR_SPEED, true),
@@ -788,6 +844,7 @@ export function parseSaveV1(bytes: Uint8Array): SaveGameV1 {
     camX: dv1.getUint16(C1_CAM_X, true),
     camY: dv1.getUint16(C1_CAM_Y, true),
     view: COMPASS[deg & 0xff] ?? "",
+    eyeHeight: dv1.getInt16(C1_EYE_HEIGHT, true),
   };
 
   const actors: SavedActorV1[] = [];
@@ -909,6 +966,13 @@ export interface SavePatchV1 {
     transitionRegister: number;
     /** {@link SetFileV1.actorRegister} of the room being written */
     actorRegister: number;
+    /**
+     * {@link SetFileV1.eyeHeight} and {@link SetFileV1.cameraSetback} of the
+     * room being written — the camera the actor projection looks through
+     * (see {@link C1_EYE_HEIGHT}). Left stale, the new room's cast hovers.
+     */
+    eyeHeight: number;
+    cameraSetback: number;
     /**
      * The set's own 256-entry palette ({@link SetFileV1.paletteRaw}), 8 bytes an
      * entry, written into container 0's live CLUT.
@@ -1124,6 +1188,25 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
   if (openSet && c1 && c1.length >= C1_SIZE) {
     put32(c1, C1_TRANSITION_REGISTER, openSet.transitionRegister);
     put32(c1, C1_ACTOR_REGISTER, openSet.actorRegister);
+    // the camera the actor projection looks through (see C1_EYE_HEIGHT). The
+    // eye is rederived from the cell AS WRITTEN ABOVE rather than taken from
+    // the patch, so the trio can never disagree with the standpoint beside it.
+    put16(c1, C1_CAMERA_SETBACK, openSet.cameraSetback);
+    put16(c1, C1_EYE_HEIGHT, openSet.eyeHeight);
+    {
+      const dv1 = new DataView(c1.buffer, c1.byteOffset, c1.byteLength);
+      const facing = dv1.getUint16(C1_FACING, true);
+      let ex = dv1.getUint16(C1_CELL_X, true) * 256 + 128;
+      let ey = dv1.getUint16(C1_CELL_Z, true) * 256 + 128;
+      const sb = openSet.cameraSetback;
+      if (facing === 1) ey += sb;
+      else if (facing === 2) ey -= sb;
+      else if (facing === 3) ex -= sb;
+      else if (facing === 4) ex += sb;
+      put16(c1, C1_EYE_X, ex);
+      put16(c1, C1_EYE_Y, ey);
+      put16(c1, C1_EYE_Z, openSet.eyeHeight);
+    }
     const c0 = out.containers[0]?.data;
     if (openSet.clut && c0 && c0.length >= C0_CLUT + C0_CLUT_SIZE) {
       if (openSet.clut.length < C0_CLUT_SIZE) {
@@ -1186,6 +1269,7 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       if (a.star !== undefined) writePstrField(ca, o + ACTOR_STAR, a.star);
       if (a.pose !== undefined) writePstrField(ca, o + ACTOR_POSE, a.pose);
       if (a.visible !== undefined) put16(ca, o + ACTOR_VISIBLE, a.visible ? 1 : 0);
+      if (a.is3d !== undefined) put16(ca, o + ACTOR_IS3D, a.is3d ? 1 : 0);
       if (a.deg !== undefined) put16(ca, o + ACTOR_DEG, a.deg);
       if (a.scale !== undefined) put16(ca, o + ACTOR_SCALE, a.scale);
       if (a.speed !== undefined) put16(ca, o + ACTOR_SPEED, a.speed);
