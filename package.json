@@ -57,6 +57,7 @@
     "test:browser:m1": "SEGMENTS=2,3,4,5,6 tsx taoot/tests/browser/playthrough.ts",
     "test:browser:m2": "SEGMENTS=7,8,9,10,11,12,13,14,15,16 tsx taoot/tests/browser/playthrough.ts",
     "test:browser:seg": "tsx taoot/tests/browser/playthrough.ts",
+    "play:dust": "tsx dust/tests/browser/play.ts",
     "watch:playthrough": "HEADED=1 tsx taoot/tests/browser/playthrough.ts",
     "watch:endgame": "HEADED=1 RUSH=0 tsx taoot/tests/browser/endgame.ts",
     "watch:mission0": "HEADED=1 SEGMENTS=1 tsx taoot/tests/browser/playthrough.ts",
