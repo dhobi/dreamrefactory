@@ -35,11 +35,13 @@ import {
   DUST_SAVE_TITLE,
   SavedActorV1,
   SavedPropV1,
+  type SaveGameV1,
   applyPatchV1,
   describeSaveV1,
   parseSaveV1,
   saveTitleMatches,
 } from "../df/savegame-v1";
+import { toNum } from "./interp";
 import { readSaveFile } from "../df/savegame";
 import type { SavedActor, SavedProp } from "../df/savegame";
 import type { GameSession } from "./session";
@@ -151,6 +153,98 @@ function asV4Prop(session: GameSession, p: SavedPropV1): SavedProp {
  * False without side effects for a file that is not a save or is another
  * title's; true once the room has been rebuilt and entered.
  */
+/**
+ * The sound: the banks the save had open, and the loop that was sounding out of
+ * one of them.
+ *
+ * The v1 loader restored neither, and both halves were audible. Reported as
+ * "loading a game does not restore the playing theme": load `D1E_002` in DUST.EXE
+ * and the saloon theme is there at once, load it here and the saloon was silent.
+ *
+ * ## The banks come first, and not only for the theme
+ *
+ * A load re-arms the scheduler from the file and runs no `openset` (see the note
+ * on GameSession.restoringSave), so the room's ambience comes back as a restored
+ * LOOP — `D1E_001` carries `scene:scene g14.nightfxs`, which is NITE.SET's night
+ * chorus: it picks a sound by distance, `soundloop`s it and fires the occasional
+ * owl, distant dog or coyote over the top. Every one of those is an identifier in
+ * a bank, and with no bank open `singlesound` had nothing to find. That is why
+ * the night was completely silent and not merely music-less.
+ *
+ * ## Which bank is "town.snd"
+ *
+ * `NIGHT.SND` calls itself `town.snd`, exactly as `TOWN.SND` does — DF.EXE's
+ * banks are named twice and the scripts use both names (AudioLibrary.find) —
+ * and NITE.SET's `openset` is `opentrackfile ("night.snd")`, `playtheme
+ * ("town.snd")`. So the save's bank LIST, which holds those inside names, says
+ * "town.snd" for a night game, and opening a file by that name would fetch the
+ * daylight bank: no owl, no night wind, and a day theme under a night sky.
+ *
+ * The theme record's words are handles into the open-file manifest, so they name
+ * the FILE. Opening that first and then skipping any listed name the open banks
+ * already answer to is what puts `D1E_001` back with exactly the two banks it
+ * was saved with, `night.snd` and `unilib.snd`.
+ *
+ * ## What is not restored, and said
+ *
+ * The third word, and it is NOT a hole in this. It is an index into the loop that
+ * was sounding — not a container location of one: `D1E_002` carries 6 against
+ * `saloon2.snd`, whose seven loop chunks are `newrag 1`..`newrag 7` at locations
+ * 8..14, while location 6 there is a one-shot crowd yell. Nothing resumes from
+ * it: DF.EXE restarts the loop from its beginning on a load (checked in the
+ * original — `D1E_002` comes back with the ragtime from the top), and the port
+ * plays a bank's loop chunks as one concatenation (AudioLibrary.theme) and does
+ * the same. The word is recorded and unused on both sides.
+ *
+ * What IS missing is neither of those:
+ *
+ *   - a bank with NO loop chunks cannot be resumed at all. `D2M_004` is one
+ *     (`mayor.snd`, the hall clock), and it loads silent with a line saying so.
+ *   - `currenttheme (1)` is the name of the chunk sounding NOW, which a script
+ *     reads while the loop RUNS — `if currenttheme (1) != "nightwind3"` is what
+ *     gates NITE.SET's random owl and coyote — and a single concatenated buffer
+ *     cannot answer it. Nothing to do with loading; its own fix.
+ */
+async function restoreThemeV1(session: GameSession, save: SaveGameV1): Promise<void> {
+  session.audio.halt("theme");
+  session.currentThemeName = "none";
+  const t = save.theme;
+  // the playing bank first, then the one the loop belongs to: both are files
+  const opened: string[] = [];
+  for (const file of [t?.playingBank, t?.loopBank]) {
+    if (file && !opened.includes(file.toLowerCase()) && (await session.openTrackFile(file))) {
+      opened.push(file.toLowerCase());
+    }
+  }
+  // ...and the rest of the list, minus whatever the open banks already are —
+  // by either of their two names, which is what keeps a night save's "town.snd"
+  // from dragging the daylight bank in beside night.snd
+  for (const name of save.bankFiles) {
+    if (session.audioLib.trackNameOf(name) !== null) continue;
+    if (await session.openTrackFile(name)) opened.push(name.toLowerCase());
+  }
+  if (opened.length) session.onLog(`opengame: sound banks restored: ${opened.join(", ")}`);
+
+  const playing = t?.playingBank;
+  if (!playing) {
+    // Not a failure and worth saying: D1E_001 is saved with the theme stopped,
+    // so the night comes back as the room's own loops and nothing else.
+    session.onLog("opengame: this save was taken with no theme playing");
+    return;
+  }
+  const theme = session.audioLib.theme(playing);
+  if (!theme) {
+    session.onLog(`opengame: saved theme bank "${playing}" has no loop to play — the room loads silent`);
+    return;
+  }
+  session.audio.play("theme", theme, { loop: true });
+  // the name a script gets back from `currenttheme (2)` and hands to `playtheme`,
+  // which is the bank's INSIDE name and not the file it came out of
+  session.currentThemeName = session.audioLib.trackNameOf(playing) ?? playing;
+  session.setThemeVolume(toNum(session.interp.globals.get("themevolume") ?? 255));
+  session.onLog(`opengame: theme "${session.currentThemeName}" resumed from ${playing}`);
+}
+
 export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promise<boolean> {
   let save;
   try {
@@ -223,6 +317,7 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
     // them — a v1 list carries no extension of its own
     for (const file of save.castFiles) await session.openCastFile(file);
     for (const file of save.propFiles) await session.openShop(file);
+    await restoreThemeV1(session, save);
 
     resetCast(session);
     restoreActors(

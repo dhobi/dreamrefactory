@@ -88,7 +88,16 @@ const C0_VERSION = 0;
 const C0_PATHS = 0x100;
 const C0_PATH_COUNT = 9;
 const C0_PATH_STRIDE = 256;
-/** the live loop-sound state: {u32 bank file, u32 playing bank, u32 chunk} */
+/**
+ * The live loop-sound state: `{u32 bank file, u32 playing bank, u32 chunk}`,
+ * three heap handles' worth of what DF.EXE calls the theme.
+ *
+ * Both bank words are handles into the open-file manifest and the second is not
+ * a flag: it is the bank whose loop is SOUNDING, zero when none is. They are
+ * usually the same handle and they can differ — `D2M_004.RTD` carries no loop
+ * bank and a playing one (mayor.snd, the clock in the hall) — so a parse that
+ * read the second as a boolean off the first lost that save's theme entirely.
+ */
 const C0_THEME = 0xa00;
 /** the live CLUT, 256 × {i16 index, i16 rgb[3]} — v4's 0xb0c, 0x100 lower */
 const C0_CLUT = 0xa0c;
@@ -484,8 +493,18 @@ export interface SaveGameV1 {
   files: { handle: number; path: string }[];
   /** the live CLUT, verbatim (256 × {i16 index, i16 rgb[3]}) */
   clut: Uint8Array;
-  /** what the loop sound was: the bank's file name and the chunk index in it */
-  theme: { bank: string; playing: boolean; chunk: number } | null;
+  /**
+   * The loop sound, as {@link C0_THEME} holds it: the bank it belongs to, the
+   * bank actually sounding (null when the save was taken silent), and the chunk
+   * index within it.
+   *
+   * Null only when neither word names a file. `loopBank` and `playingBank` are
+   * FILE names out of the manifest, which matters because a bank's own track name
+   * need not be its filename — `NIGHT.SND` calls itself `town.snd`, exactly as
+   * `TOWN.SND` does — so the handle is the only thing that says which of the two
+   * was playing.
+   */
+  theme: { loopBank: string | null; playingBank: string | null; chunk: number } | null;
   /** the service-pass counter `frame()` answers */
   frame: number;
   standpoint: SavedStandpointV1;
@@ -723,14 +742,12 @@ export function parseSaveV1(bytes: Uint8Array): SaveGameV1 {
   }
 
   const dv0 = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);
-  const themeBank = fileByHandle(files, dv0.getUint32(C0_THEME, true));
-  const theme = themeBank
-    ? {
-        bank: themeBank,
-        playing: dv0.getUint32(C0_THEME + 4, true) !== 0,
-        chunk: dv0.getUint32(C0_THEME + 8, true),
-      }
-    : null;
+  const loopBank = fileByHandle(files, dv0.getUint32(C0_THEME, true));
+  const playingBank = fileByHandle(files, dv0.getUint32(C0_THEME + 4, true));
+  const theme =
+    loopBank || playingBank
+      ? { loopBank: loopBank ?? null, playingBank: playingBank ?? null, chunk: dv0.getUint32(C0_THEME + 8, true) }
+      : null;
 
   const deg = dv1.getUint16(C1_DEG, true);
   const standpoint: SavedStandpointV1 = {

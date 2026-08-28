@@ -17,12 +17,18 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readSaveFile, writeSaveFile } from "@dreamfactory/engine/df/savegame";
-import { applyPatchV1, parseSaveV1 } from "@dreamfactory/engine/df/savegame-v1";
+import { GameSession } from "@dreamfactory/engine/runtime/session";
+import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
+import { applyPatchV1, parseSaveV1, v1Index } from "@dreamfactory/engine/df/savegame-v1";
+
+/** `7 + 5` — the containers every v1 save has, whatever it had open (v1Index) */
+const FIXED_V1_CONTAINERS = 12;
 import { shippedDustSaves } from "../src/saves";
 
 /* anchored to this file: the pre-monorepo `<cwd>/gamefiles/dust/save` made these
    skip silently rather than fail (see dust/tests/movies.ts) */
 const SAVE_DIR = fileURLToPath(new URL("../gamefiles/save", import.meta.url));
+const DATA_DIR = fileURLToPath(new URL("../gamefiles/dustcd/DATA", import.meta.url));
 
 function dustSaves(): string[] {
   if (!existsSync(SAVE_DIR)) return [];
@@ -43,8 +49,23 @@ test("a Dust save is the same container a Titanic save is", () => {
     // the signature gate inside readSaveFile already passed, so what is left to
     // say is that the file HAS containers and the table was believed
     expect.soft(raw.containers.length, `${f}: containers`).toBeGreaterThan(0);
-    // 18 in all five: the writer emits a fixed sequence, as TI.EXE's does
-    expect.soft(raw.containers.length, `${f}: container count`).toBe(18);
+    /*
+     * ...and that the count is one the positional map can account for. NOT a
+     * fixed 18: that was true of the five saves this was written against and is
+     * not a property of the format — `count = 7 + 3·banks + 5 + payloads`
+     * (v1Index), so a save with one open sound bank is 15 and one carrying an
+     * active walk's waypoints is 19. A larger collection has both: `D2E_001`
+     * with one bank, `D1E_005` with a walk payload. What IS a property is that
+     * the bank count the count implies matches container 6's own capacity, and
+     * `v1Index` throws when it does not — so parsing is the assertion, and the
+     * arithmetic is checked here rather than a magic number.
+     */
+    const index = v1Index(raw);
+    const payloads = raw.containers.length - (FIXED_V1_CONTAINERS + 3 * index.banks);
+    expect
+      .soft(payloads, `${f}: ${raw.containers.length} containers, ${index.banks} bank(s), so payloads`)
+      .toBeGreaterThanOrEqual(0);
+    expect.soft(index.banks, `${f}: at least the boot's own bank is open`).toBeGreaterThan(0);
   }
 });
 
@@ -59,11 +80,18 @@ test("a Dust save is the same container a Titanic save is", () => {
  * the count at offset 20, so this is junk in the exact sense the `.ti` format
  * doc means it (and we write zeros, as we do there).
  *
- * Named as a constant because it is the ONE region a rewrite is allowed to
- * differ in: everything before it is header and live table, everything after it
- * is container data, and both have to come back exactly.
+ * Derived per save, because where the live table ends is where the CONTAINERS
+ * end: `1024 + 4 × count`. It was `1024 + 18 × 4`, which is right only for a
+ * save with two open sound banks and no walk payload — the count is
+ * `7 + 3·banks + 5 + payloads` (see the note in the first test) — so on a save
+ * with one bank the three entries the fixed figure covered are live table, and
+ * a rewrite that zeroes the slack was reported as corrupting them.
+ *
+ * It is the ONE region a rewrite is allowed to differ in: everything before it
+ * is header and live table, everything after it is container data, and both have
+ * to come back exactly.
  */
-const TABLE_SLACK_START = 1024 + 18 * 4;
+const tableSlackStart = (containers: number): number => 1024 + containers * 4;
 const DATA_START = 1536;
 
 test("rewriting a Dust save reproduces every byte the loader reads", () => {
@@ -71,12 +99,14 @@ test("rewriting a Dust save reproduces every byte the loader reads", () => {
   if (!files.length) return;
   for (const f of files) {
     const bytes = new Uint8Array(readFileSync(join(SAVE_DIR, f)));
-    const out = writeSaveFile(readSaveFile(bytes));
+    const raw = readSaveFile(bytes);
+    const out = writeSaveFile(raw);
+    const slack = tableSlackStart(raw.containers.length);
     expect.soft(out.length, `${f}: length`).toBe(bytes.length);
     const stray: number[] = [];
     for (let i = 0; i < Math.min(out.length, bytes.length); i++) {
       if (out[i] === bytes[i]) continue;
-      if (i >= TABLE_SLACK_START && i < DATA_START) continue; // the heap junk, above
+      if (i >= slack && i < DATA_START) continue; // the heap junk, above
       stray.push(i);
     }
     // Every byte of the header, of the 18 live table entries, and of all 18
@@ -228,7 +258,12 @@ test("the shipped saves decode to the game they came from", () => {
   const read = (f: string) =>
     parseSaveV1(new Uint8Array(readFileSync(join(SAVE_DIR, f))));
 
-  const start = read("START.RTD");
+  const named = (f: string) => (existsSync(join(SAVE_DIR, f)) ? read(f) : null);
+  const start = named("START.RTD");
+  if (!start) {
+    console.warn(`no START.RTD in ${SAVE_DIR} — skipping the five this test is about`);
+    return;
+  }
   expect.soft(start.title, "title").toBe("dust 0.3");
   // a fresh game: day 1, five dollars, the street outside at the south edge
   expect.soft(start.numGlobals.get("day"), "day").toBe(1);
@@ -261,16 +296,33 @@ test("the shipped saves decode to the game they came from", () => {
   expect.soft(read("HELP.RTD").puppet, "the open puppet").toBe("help1.pup");
 
   /*
-   * The room every one of them reopens is the NIGHT town, not the day one.
+   * The room these reopen is the NIGHT town, not the day one.
    *
    * Both files call themselves "town" inside, so the name field cannot tell them
    * apart — and the name is what a load used to trust, which brought a midnight
    * save back at noon with the day palette over it.
+   *
+   * Asserted of the saves this file is ABOUT rather than of everything in the
+   * directory: an install may hold a whole collection (the CD's own, a player's
+   * own), and "every save was taken in the night town" is a fact about these
+   * five, not about the format. What holds for any save is underneath.
    */
-  for (const f of files) {
+  for (const f of ["START.RTD", "GOTBONE.RTD", "AFTERDOG.RTD", "HELP.RTD", "DOG.RTD"]) {
+    if (!existsSync(join(SAVE_DIR, f))) continue;
     const save = read(f);
     expect.soft(save.standpoint.set, `${f} set name`).toBe("town");
     expect.soft(save.standpoint.setFile, `${f} set file`).toBe("nite.set");
+  }
+  for (const f of files) {
+    const save = read(f);
+    // the FILE is what a load has to trust, so every save has to name one...
+    expect.soft(save.standpoint.setFile, `${f}: names a set file`).toMatch(/\.set$/i);
+    // ...and where the inside name is the ambiguous one, the file resolves it
+    if (save.standpoint.set === "town") {
+      expect
+        .soft(["town.set", "nite.set"], `${f}: "town" is one of the two town files`)
+        .toContain(save.standpoint.setFile);
+    }
   }
 
   /*
@@ -358,4 +410,74 @@ test("the shipped saves decode to the game they came from", () => {
   expect
     .soft(frames, "frames in play order")
     .toEqual([...frames].sort((a, b) => a - b));
+});
+
+// --- the sound a load brings back ------------------------------------------
+
+/**
+ * Loading a Dust save restored no audio at all: `save.theme` and
+ * `save.bankFiles` were parsed and then unused. Reported from play — "loading a
+ * game does not restore the playing theme" — and confirmed against DUST.EXE,
+ * where `D1E_002` comes back with the saloon's ragtime already going.
+ *
+ * Two halves, and the banks are the bigger one. A load runs no `openset` (see
+ * GameSession.restoringSave), so a room's ambience comes back as a restored LOOP
+ * — `D1E_001` carries NITE.SET's `nightfxs`, which fires the owl and the distant
+ * dog — and every one of those names a sound in a bank. With no bank open there
+ * was nothing to find, which is why the night was silent rather than merely
+ * music-less.
+ *
+ * The sharp part is WHICH bank. `NIGHT.SND` calls itself `town.snd`, exactly as
+ * `TOWN.SND` does, and the save's bank list holds those inside names — so
+ * opening the list by name fetches the daylight bank for a midnight save. The
+ * theme record's words are manifest HANDLES, so they name the file; open that
+ * first and the listed name is already answered.
+ */
+test("a load brings back the sound banks, and the theme if one was playing", async () => {
+  if (!existsSync(`${DATA_DIR}/NIGHT.SND`) || !existsSync(join(SAVE_DIR, "D1E_001.RTD"))) {
+    console.warn(`no ${DATA_DIR} — skipping (needs the Dust rip)`);
+    return;
+  }
+  const load = async (file: string) => {
+    const sink = new NullAudioSink();
+    const logs: string[] = [];
+    const session = new GameSession((n) => {
+      const path = `${DATA_DIR}/${n.toUpperCase()}`;
+      return existsSync(path) ? new Uint8Array(readFileSync(path)) : null;
+    }, sink);
+    session.onLog = (m) => logs.push(m);
+    session.dfVersion = 1; // what dust/src/main.ts says at boot
+    expect(await session.loadGame(new Uint8Array(readFileSync(join(SAVE_DIR, file)))), `${file} loads`).toBe(true);
+    return { session, sink, logs };
+  };
+
+  // 1. the saloon, saved with its theme going: saloon2.snd is not even in the
+  // save's bank list — the theme record's handle is what names it — and the
+  // track it answers to is the name a script would hand back to playtheme.
+  const saloon = await load("D1E_002.RTD");
+  expect(saloon.session.audioLib.bankNames, "the saloon's banks").toContain("saloon2.snd");
+  expect(saloon.session.currentThemeName, "the theme, by the name the bank calls itself").toBe("saloonsep.snd");
+  const themePlays = saloon.sink.calls.filter((c) => c.channel === "theme" && c.loop);
+  expect(themePlays.length, "one looping play on the theme channel").toBe(1);
+  expect(themePlays[0].seconds, "and it is the bank's whole loop").toBeGreaterThan(1);
+
+  // 2. the night town, saved with the theme stopped: no theme, but the right
+  // TWO banks — and night.snd rather than the day bank whose name the list gives.
+  const night = await load("D1E_001.RTD");
+  expect([...night.session.audioLib.bankNames].sort(), "the night's banks").toEqual([
+    "night.snd",
+    "unilib.snd",
+  ]);
+  expect(night.session.audioLib.trackNameOf("night.snd"), "which is the bank calling itself town.snd").toBe("town.snd");
+  expect(night.session.currentThemeName, "nothing was playing, so nothing plays").toBe("none");
+  expect(night.sink.calls.filter((c) => c.channel === "theme").length, "no theme play").toBe(0);
+  expect(
+    night.logs.some((l) => l.includes("no theme playing")),
+    "and the load says why it is quiet",
+  ).toBe(true);
+  // the room's own ambience is a restored LOOP, and it is what needs the banks
+  expect(
+    night.session.scheduler.loops.some((l) => l.handler === "nightfxs"),
+    "NITE.SET's night chorus is running",
+  ).toBe(true);
 });
