@@ -1,13 +1,13 @@
 /**
- * Dust's saved games: the store's Dust dimension, and the one-time seeding of
- * the five saves that ship beside the disc.
+ * Dust's saved games: the store's Dust dimension, and the seeding of the saves
+ * that ship beside the disc.
  *
  * Dust writes `.rtd` where Titanic writes `.ti`, and the two are the SAME
  * container skeleton — a 1024-byte header with `fourCC 0x00010000` and the
  * signature `ODTRTRFD` at 32, a 128-entry position table, container 0 at 1536
  * and every later one aligned to 64. `df/savegame.ts`'s `readSaveFile` and
- * `writeSaveFile` therefore take Dust's files unchanged, and round-trip all five
- * shipped ones byte-identically; only the records INSIDE the containers are the
+ * `writeSaveFile` therefore take Dust's files unchanged, and round-trip every
+ * shipped one byte-identically; only the records INSIDE the containers are the
  * v1 engine's own. So this module needs no framing code, and the import gate is
  * the shared reader.
  *
@@ -21,7 +21,8 @@
  */
 
 import { readSaveFile } from "@dreamfactory/engine/df/savegame";
-import { SaveEntry, SaveKind, getMeta, getSave, listSaves, putSave, setMeta } from "@dreamfactory/engine/web/save-store";
+import { parseSaveV1 } from "@dreamfactory/engine/df/savegame-v1";
+import { SaveEntry, SaveKind, getMeta, listSaves, putSave, setMeta } from "@dreamfactory/engine/web/save-store";
 import { siteUrl } from "@dreamfactory/site/site";
 
 /** Dust's saves: its own IndexedDB database, its own extension. */
@@ -75,21 +76,54 @@ export function shippedDustSaves(manifestPaths: string[]): { rel: string; url: s
 /** meta key: the shipped saves have been imported once */
 const SEEDED = "seeded";
 
+/** meta key: which shipped saves have been imported, by store path */
+const SEEDED_PATHS = "seededPaths";
+
 /**
- * Import the shipped saves into the store, once ever. Best-effort and
- * idempotent: a page that cannot reach them leaves the marker unset and tries
- * again next launch, which is why the marker is only written when something
- * actually landed. Returns how many were stored.
+ * Which shipped saves this browser has already been offered.
  *
- * A player who deletes one does NOT get it back on the next boot — that is the
- * marker's whole point. It is a file system, and a deleted file stays deleted.
+ * Seeding used to be gated on one boolean — *have we ever seeded?* — which was
+ * right while the shipped set was fixed and wrong as soon as it was not. Adding
+ * a save to `gamefiles/save/` after a first launch left it invisible forever,
+ * with no symptom except that it never appeared, and the only cure was deleting
+ * the database by hand.
+ *
+ * A set of paths answers the question the boolean was standing in for. A save is
+ * offered exactly once: new files arrive on the next launch, and a file the
+ * player deleted stays deleted, because its path is in the set whether or not it
+ * is in the store.
+ *
+ * **Migrating from the boolean**, once: the paths already in the store are taken
+ * as the ones already offered. A player who had deleted a shipped save before
+ * this upgrade gets that one back a single time — a one-launch cost, and the
+ * alternative is marking files as offered that never were.
+ */
+async function seededPaths(): Promise<Set<string>> {
+  const stored = await getMeta<string[]>(SEEDED_PATHS);
+  if (stored) return new Set(stored);
+  if (await getMeta<boolean>(SEEDED)) {
+    return new Set((await listSaves()).filter((s) => s.builtin).map((s) => s.path));
+  }
+  return new Set();
+}
+
+/**
+ * Import any shipped save this browser has not been offered before. Best-effort:
+ * a page that cannot reach them records nothing and tries again next launch,
+ * which is why the marker only grows by what actually landed. Returns how many
+ * were stored.
+ *
+ * A player who deletes one does NOT get it back on the next boot. It is a file
+ * system, and a deleted file stays deleted.
  */
 export async function seedDustSaves(manifestPaths: string[]): Promise<number> {
-  if (await getMeta<boolean>(SEEDED)) return 0;
   const sources = shippedDustSaves(manifestPaths);
   if (!sources.length) return 0;
+  const seen = await seededPaths();
+  const fresh = sources.filter((s) => !seen.has(s.rel));
+  if (!fresh.length) return 0;
   let stored = 0;
-  for (const { rel, url, name } of sources) {
+  for (const { rel, url, name } of fresh) {
     try {
       const res = await fetch(url);
       if (!res.ok) continue;
@@ -104,12 +138,16 @@ export async function seedDustSaves(manifestPaths: string[]): Promise<number> {
         mtime: Date.now(),
       };
       await putSave(entry);
+      seen.add(rel);
       stored++;
     } catch {
       /* skip this one — a save that will not parse is not one we can load */
     }
   }
-  if (stored) await setMeta(SEEDED, true);
+  if (stored) {
+    await setMeta(SEEDED_PATHS, [...seen]);
+    await setMeta(SEEDED, true); // an older build reading this store still sees it
+  }
   return stored;
 }
 
@@ -117,26 +155,41 @@ export async function seedDustSaves(manifestPaths: string[]): Promise<number> {
 let template: Uint8Array | null = null;
 
 /**
- * Cache a base save for {@link dustTemplate}, preferring the disc's own START.
+ * Cache a base save for {@link dustTemplate}: the EARLIEST shipped save there is.
  *
  * A save cannot be built from nothing — it is a dump of the engine's live C++
  * object graph, pointers and all — so writing one means patching a real file
  * (see `docs/engine/formats/savegame.md`). Once a game has been loaded from a file that
- * file is the base; before that, there has to be a lender, and START.RTD is the
- * honest choice: it is the beginning of the game, so the fields a patch does not
- * understand carry the beginning's values rather than some other run's.
+ * file is the base; before that, there has to be a lender, and the beginning of
+ * the game is the honest choice: the fields a patch does not understand then
+ * carry the beginning's values rather than some other run's.
  *
- * Falls back to whatever shipped save is present, because a base with the wrong
- * untouched fields still saves a game, and no base at all does not.
+ * Which file that is has to be **derived, not named**. It used to be
+ * `START.RTD`, which was right while the shipped set was one player's opening
+ * saves and wrong the moment the directory held the disc's own collection
+ * instead — the fallback was alphabetical, and alphabetically first in that
+ * collection is a day-4 save taken underground. `frame` is the service-pass
+ * counter, so the lowest one is the earliest moment anybody saved.
+ *
+ * Best-effort throughout: a save that will not parse is skipped rather than
+ * thrown, and any base at all beats none, because a base with the wrong
+ * untouched fields still saves a game and no base does not.
  */
 export async function loadDustTemplate(): Promise<void> {
-  const start = await getSave(`${DISC}/START.RTD`);
-  if (start) {
-    template = start.bytes;
-    return;
+  const shipped = (await listSaves()).filter((s) => s.builtin);
+  let best: { bytes: Uint8Array; frame: number } | null = null;
+  for (const entry of shipped) {
+    try {
+      const frame = parseSaveV1(entry.bytes).frame;
+      if (!best || frame < best.frame) best = { bytes: entry.bytes, frame };
+    } catch {
+      /* not a save this reader understands — it cannot lend fields either */
+    }
   }
-  const shipped = (await listSaves()).filter((s) => s.builtin).sort((a, b) => a.name.localeCompare(b.name));
-  template = shipped[0]?.bytes ?? null;
+  template =
+    best?.bytes ??
+    [...shipped].sort((a, b) => a.name.localeCompare(b.name))[0]?.bytes ??
+    null;
 }
 
 /** the cached base save, or null if none was found (saving then reports so) */

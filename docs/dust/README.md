@@ -28,7 +28,8 @@ The page boots off the real disc, through the same `GameHost` Titanic uses:
 - **the town**, walked with the three controls the original had, because its set
   scripts handle exactly `uparrow`, `leftarrow` and `rightarrow`;
 - **saved games** — its own `.rtd` in its own IndexedDB database, seeded from
-  the five that ship beside the disc;
+  the ones that ship beside the disc, which turn out to be
+  [a whole playthrough](thread.md);
 - **the control panel**, a full-screen flat with its buttons drawn on it;
 - **a collection page**, for how to run the 1995 DOS game instead of this port
   of it.
@@ -47,6 +48,11 @@ matter to a save format.
 
 ## The pages here
 
+- **[Walkthrough](walkthrough.md)** — the game, played, day by day. Every step
+  names the shipped save that ends it, so any of them can be loaded
+- **[The golden thread](thread.md)** — where that walkthrough comes from: sixty
+  of the sixty-one shipped saves are one continuous session, written by the
+  original `DF.EXE`, and what that is worth to a port
 - **[Music & sound — the 40 banks](audio.md)** — why `.SND` is not `.TRK`, and
   the trap that the name a script asks for is frequently not the file's
 
