@@ -592,6 +592,49 @@ export class Scheduler {
       // after the turn lands on the arrival, which is the point — a turn goes
       // nowhere and ends as soon as the facing does.
       dist: 1, progress: 0, paused: false,
+      /**
+       * ## WHERE THE ACTOR IS STILL GOING (#289)
+       *
+       * `+0x3e` copied from the actor's current star, as the block above says
+       * 0x443550 does — a turn does not change anyone's destination, and this
+       * field is the destination. It had been left unset, and one caller reads
+       * it: `walkdest`, whose no-record answer is `"custom"`. So a turn made an
+       * actor answer "I am on my way to nowhere anybody named".
+       *
+       * Which is a save-breaking answer, because of who asks. GANG.CST's
+       * `walktopuppet` opens a conversation by memorising where the character
+       * was going so it can send them back afterwards —
+       *
+       *     if iswalk (who)
+       *         savestar = walkdest (who)          <-- HERE
+       *         ...
+       *         stopwalk (who)
+       *     else
+       *         savestar = actorstar (who)
+       *     ...
+       *     actorstar (who, "custom")
+       *     sendtoactor (who, moveactor (savestar))
+       *
+       * and Dust's idles turn constantly: `mwifeidle` faces the camera whenever
+       * the player is within `hotdist`, every 21 service steps, all conversation
+       * long. Click a character during one of those turns — likelier the moment
+       * you walk up to them, since the turn then has 128 units to cover — and
+       * `savestar` was `"custom"`, so the walk home was `walktostar (me,
+       * "custom")`: not found, no walk, no arrival, no `endwalk`. The character
+       * stands where they met you with `"custom"` in `actorstar` and no idle loop
+       * left, and nothing in the corpus places them again: `setupactor` is only
+       * ever called from a puppet, so re-entering the room does not fix it and
+       * neither does a save. Reported as the Mayor's wife blocking the guest-room
+       * door on night 1, and confirmed in the save attached to #289: `Mwife ·
+       * mayupper · star "custom"`, standing at the player's feet, absent from the
+       * loop table.
+       *
+       * Titanic never reached it. Its `walktopuppet` opens with `pauseloop
+       * ("actor", who, true)`, so the idle that would turn anyone is already
+       * silent; Dust's has no such line and leans on the engine answering this
+       * correctly instead.
+       */
+      arriveStar: a.starName,
       turnTo: target,
       turnOnly: true,
     });
