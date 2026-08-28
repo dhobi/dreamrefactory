@@ -169,14 +169,19 @@ test("ARMOPEN.MOV: one wait, a straight run into Diary.mov, no return", () => {
   const v1 = read("ARMOPEN.MOV");
   const sg = v1.segments[0];
   expect(sg.frames.length).toBe(37);
-  // the only click-wait is the FIRST frame — the zoomed, closed armoire
+  // Three click-waits, and which frames they are is the whole of #324: a frame
+  // waits because it OWNS hotspots (+0x00) and does not carry the play-through
+  // bit, not because it is frame 0. Frame 1 is a lead-in that owns none and
+  // steps straight on; the closed armoire you actually click is frame 2.
   expect(
     sg.frames.map((f, i) => (f.waitsForClick ? i + 1 : 0)).filter(Boolean),
-  ).toEqual([1]);
-  // its two boxes tile the picture: the doors open it (goto 0-based 2 = frame 3,
-  // where the creak fires), anywhere else leaves (frame 37, the exit)
-  const f1 = sg.frames[0];
-  expect(f1.regions.slice(0, 2).map((r) => r.target)).toEqual([2, 36]);
+  ).toEqual([2, 16, 36]);
+  expect(sg.frames[0].hotspotCount).toBe(0);
+  // the armoire's two boxes tile the picture: the doors open it (goto 0-based 2
+  // = frame 3, where the creak fires), anywhere else leaves (frame 37, the exit)
+  const f1 = sg.frames[1];
+  expect(f1.hotspotCount).toBe(2);
+  expect(f1.regions.map((r) => r.target)).toEqual([2, 36]);
   // the three creaks: door opens at 3, diary goes back at 19, doors close at 30
   const fired = sg.frames
     .map((f, i) => (f.sound ? [i + 1, f.sound] : null))
@@ -193,10 +198,12 @@ test("ARMOPEN.MOV: one wait, a straight run into Diary.mov, no return", () => {
   expect(sg.frames[18].chainTo).toBe("Diary.mov");
   // ...and it holds for its creak first (wait flag bit 0)
   expect(sg.frames[18].waitsForVoice).toBe(true);
-  // the put-back half is reached only by the click-away boxes during the
-  // opening animation (goto 0-based 20 = frame 21)
-  const away = sg.frames[3].regions.filter((r) => r.target === 20);
-  expect(away.length).toBeGreaterThan(0);
+  // The put-back half is reached only by the click-away boxes, and they live on
+  // frame 16 — the one moment the swing stops for a click, which is the
+  // "steerable mid-swing" the format doc describes (goto 0-based 20 = frame 21).
+  // On the old reading nothing stopped there and those three boxes were dead.
+  const away = sg.frames[15].regions.filter((r) => r.target === 20);
+  expect(away.length).toBe(3);
 
   const mov = movFileFromV1(v1);
   // v4's own type 3 — exit + chain, NO call stack: Diary.mov ends and the
@@ -207,10 +214,11 @@ test("ARMOPEN.MOV: one wait, a straight run into Diary.mov, no return", () => {
   expect(f19.event).toBe("Diary.mov");
   expect(f19.target).toBe("");
   expect(mov.segments[0].dfV1).toBe(true);
-  // animation frames answer clicks without stopping for them
-  expect(mov.frames[0].playsThroughRegions).toBe(false);
-  expect(mov.frames[3].playsThroughRegions).toBe(true);
-  expect(mov.frames[3].regions.length).toBeGreaterThan(0);
+  // a frame that owns hotspots stops for them; one that owns none carries no
+  // regions to stop for in the first place (frameWaits tests both)
+  expect(mov.frames[1].playsThroughRegions).toBe(false);
+  expect(mov.frames[1].regions.length).toBe(2);
+  expect(mov.frames[3].regions.length).toBe(0);
   // the fired sounds resolve through the segment's own sound map
   expect(mov.frames[2].sound).toBe("1");
   expect(mov.sounds.get("1")).toBe(1);
@@ -224,7 +232,10 @@ test("BELL.MOV: three bells, three dings, a backward idle loop", () => {
   // no frame fires a sound; each bell's box carries its own ding and its own
   // ring animation, and the fourth box (the whole picture) leaves
   expect(sg.frames.every((f) => f.sound === 0)).toBe(true);
-  const spots = sg.frames[0].regions;
+  // frame 1 is the lead-in (it owns none and preloads the picture range);
+  // the four boxes belong to frame 2, which is where the film waits
+  expect(sg.frames[0].hotspotCount).toBe(0);
+  const spots = sg.frames[1].regions;
   expect(spots.map((r) => [r.sound, r.target])).toEqual([
     [1, 2],
     [2, 22],
@@ -239,7 +250,7 @@ test("BELL.MOV: three bells, three dings, a backward idle loop", () => {
   // 0-based targets become 1-based frame names for the player's case 2
   expect(mov.frames[20].type).toBe(2);
   expect(mov.frames[20].target).toBe("2");
-  const withSound = mov.frames[0].regions.filter((r) => r.sound);
+  const withSound = mov.frames[1].regions.filter((r) => r.sound);
   expect(withSound.map((r) => [r.sound, r.target])).toEqual([
     ["1", "3"],
     ["2", "23"],
@@ -262,9 +273,67 @@ test("action frames are 1-based positions in the header", () => {
   const mov = movFileFromV1(read("MAYBED.MOV"));
   expect(mov.actionFrame1).toBe("4");
   expect(mov.frames[3].name).toBe("4");
-  // ...which is exactly where its bed-click hotspot goes (goto 0-based 3)
-  expect(mov.frames[0].regions[0].target).toBe("4");
+  // ...which is exactly where its bed-click hotspot goes (goto 0-based 3). The
+  // box is on frame 2, the first frame that owns one — not frame 1, which owns
+  // none and steps straight on (#324).
+  expect(mov.frames[1].regions[0].target).toBe("4");
   expect(movFileFromV1(read("DIARY.MOV")).actionFrame1).toBe("1");
+});
+
+test("a frame waits because it OWNS hotspots, not because it is frame 0 (#324)", () => {
+  if (skip()) return;
+  /*
+   * Reported twice from play, on two different films: click the envelopes in
+   * the Mayor's study and "the letter appears for a frame, then runs through
+   * the remainder of the movie's frames and closes"; same for the hotel room's
+   * blinds. In both cases the picture you clicked to reach never stopped.
+   *
+   * The cause was one field. `waitsForClick` read record +0x06, which the movie
+   * loop never touches — its bits amount to "this is the first frame" and "this
+   * is the last frame" — so frame 0 was the only frame that ever waited, and
+   * every frame reached BY a click played straight on. The count is at +0x00
+   * and the play-through override is +0x1a bit 2.
+   *
+   * Both films have the same shape, and it is the shape the old reading could
+   * not express: frame 0 owns nothing and steps on, and every frame that owns
+   * boxes waits.
+   */
+  const lett = read("MAYLETT.MOV").segments[0];
+  expect(lett.frames.map((f) => f.hotspotCount)).toEqual([0, 3, 2, 2, 2, 2, 0, 0, 0]);
+  expect(
+    lett.frames.map((f, i) => (f.waitsForClick ? i + 1 : 0)).filter(Boolean),
+  ).toEqual([2, 3, 4, 5, 6]);
+  // the rack offers three envelopes and a way out; each letter can be turned or
+  // put back (goto 0-based 0 = the rack), which is the "click to close" that was
+  // missing
+  expect(lett.frames[1].regions.map((r) => r.target)).toEqual([4, 2, 7]);
+  // ...and every letter carries a box back to the rack (0-based 1), which is the
+  // "click the letter to close it again" the report said was missing
+  for (const i of [2, 3, 4, 5]) {
+    expect(
+      lett.frames[i].regions.some((r) => r.target === 1),
+      `frame ${i} can be closed`,
+    ).toBe(true);
+  }
+
+  const win = read("HWIN.MOV").segments[0];
+  expect(win.frames.map((f) => f.hotspotCount)).toEqual([0, 1, 1, 0, 0]);
+  expect(
+    win.frames.map((f, i) => (f.waitsForClick ? i + 1 : 0)).filter(Boolean),
+  ).toEqual([2, 3]);
+
+  /*
+   * The count also bounds the run. `hotspotRun` used to walk from +0x24 until a
+   * record failed to decode, which sails into the NEXT frame's boxes whenever
+   * two frames' runs are adjacent — and they always are, because each run is
+   * exactly its own count of records long. That is how frame 0, owning none,
+   * came to answer clicks with frame 1's boxes at all.
+   */
+  expect(lett.frames[0].regions).toEqual([]);
+  expect(win.frames[0].regions).toEqual([]);
+  // adjacent runs: frame 1's three 16-byte type-2 records end where frame 2's
+  // run begins, so an unbounded walk would have found five where there are three
+  expect(lett.frames[1].hotspotOffset + 3 * 0x10).toBe(lett.frames[2].hotspotOffset);
 });
 
 test("a movie chains by name on its way out", () => {

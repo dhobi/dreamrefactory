@@ -606,11 +606,19 @@ in how the file is arranged.
   goto **target**, type 1 (14 bytes) exits with a sound. How many a frame owns
   is the count at record `+0x00`, and a frame that owns any of them **blocks
   until one is hit** unless `+0x1a` bit 2 says to play through — that is how
-  ARMOPEN.MOV's opening animation is steerable mid-swing. The port derives both
-  from `+0x06` instead, which is not a field the movie loop reads; it survives
-  on what those bits amount to (first frame, last frame) and the reader's own
-  walk finds more boxes than the count admits to. Both gaps are written up in
-  `mov-v1.ts`.
+  ARMOPEN.MOV's opening animation is steerable mid-swing, at frame 16, where
+  three of its four boxes put the diary back.
+
+  The port read `+0x06` for both until #324, and that is not a field the movie
+  loop touches: its bits amount to "first frame" and "last frame", so frame 0
+  was the only frame that ever waited and every frame reached *by* a click ran
+  on to the end of the film. Two reports, one cause — the Mayor's letters
+  (`maylett.mov`) and the hotel room's blinds (`hwin.mov`) each opened for a
+  single frame and then closed. The count also bounds the run, which the old
+  unbounded walk did not: runs are adjacent, each exactly its own count of
+  records long, so a frame owning none answered clicks with the next frame's
+  boxes. All 520 counted runs on the disc decode cleanly for exactly their
+  count; 372 are ones the walk over-read.
 - **A frame can wait for the sound it started.** Record `+0x1a` bit 0 makes the
   loop block on the sound channel before advancing (`0x404ab0` → `0x429bd0`),
   so the frame is held for `max(hold, what is left of the sound)`. Nothing in

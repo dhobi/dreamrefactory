@@ -30,8 +30,8 @@ import type { MovFile, MovFrame, MovSegment } from "./mov";
  *
  *     +0x00  i16 how many HOTSPOT records this frame owns, at the offset in
  *            +0x24 (0x404e5a reads it, 0x404e90 skips straight to the action
- *            when it is <= 0). See the note on hotspot counts below: this
- *            reader does not use it yet.
+ *            when it is <= 0). It both BOUNDS the run and decides whether the
+ *            frame stops for a click — see {@link MovFrameV1.waitsForClick}.
  *     +0x02  i32 hold, in ticks of 50/3 ms — floored by the header's frame rate
  *            (0x404861: `max(hold, [hdr+0x26])`)
  *     +0x06  i16 NOT read by the movie loop — see below. 16 on 6255 of the
@@ -146,25 +146,35 @@ import type { MovFile, MovFrame, MovSegment } from "./mov";
  * The port spends it through {@link MovFrame.waitsForVoice}, which is the same
  * sentence in v4's words — "hold until this movie's own sounds are done".
  *
- * ## Two fields this reader still does not read the way DF.EXE does
+ * ## +0x06 is not wait flags, and what that cost (#324)
  *
- * Recorded here because both were found by disassembling around the wait above,
- * and neither is what the earlier readings assumed:
+ * The movie loop never reads +0x06: no site in .text tests a bit of it, and the
+ * values do not behave like flags either — 16 almost everywhere, 18 on a first
+ * frame, 17 on a last one. This reader used to derive BOTH waits from it, and
+ * the click half was wrong in a way that showed: "bits 1/3" amounts to "this is
+ * the first frame", so frame 0 was the only frame that ever stopped for a click
+ * and every frame reached BY a click played straight on. Reported twice from
+ * play — the Mayor's letters and the hotel room's blinds both opened for one
+ * frame and then ran off the end of the film.
  *
- *  - **+0x06 is not wait flags.** The movie loop never reads it: no site in
- *    .text tests a bit of the record at +0x06, and the values do not behave like
- *    flags either — 16 almost everywhere, 18 on a first frame, 17 on a last one.
- *    This reader still derives `waitsForVoice`/`waitsForClick` from it, and that
- *    survives on its accidents: "bit 0" is "this is the last frame", which keeps
- *    a final line from being cut on ten films, and "bits 1/3" is "this is the
- *    first frame", which is where a Dust close-up's click actually waits.
- *  - **+0x00 is the hotspot count** (above), and `hotspotRun` walks from +0x24
- *    until a record's type is not 1..5 instead. The two disagree on 422 of the
- *    525 frames that have either, always by the reader finding MORE — ABE.MOV's
- *    first frame owns none and it walks four. Harmless so far, because a v1
- *    frame only stops for a click when this reader thinks it is frame 0, so the
- *    extra boxes are unreachable rather than wrong. It is still a count that
- *    should be read.
+ * A frame stops because it OWNS hotspots and is not told to play through them:
+ * the count at +0x00 (0x404e5a, and 0x404e90 skipping to the action when it is
+ * <= 0) and +0x1a bit 2 (0x404e7f, which zeroes the count when no click is in
+ * hand). Those are the two the loop reads, and they are what `waitsForClick` is
+ * now. Across the disc's 8344 frames, 568 own a hotspot and 358 carry bit 2.
+ *
+ * The count also BOUNDS the run. `hotspotRun` used to walk from +0x24 until a
+ * record failed to decode, which sails into the next frame's boxes whenever two
+ * runs are adjacent — and they always are, since each run is exactly its own
+ * count of records long. That is how a frame owning none came to answer clicks
+ * with the following frame's boxes. All 520 counted runs on the disc decode
+ * cleanly for exactly their count, and 372 of them are ones the unbounded walk
+ * over-read.
+ *
+ * `waitsForVoice` still comes from +0x06 bit 0, OR-ed with the real +0x1a bit 0
+ * — see {@link MovFrameV1.holdsForSound}. That one is still an accident ("this
+ * is the last frame") but a load-bearing one, and untangling it is a separate
+ * question from this.
  *
  * ## Header fields
  *
@@ -185,8 +195,19 @@ export interface MovFrameV1 {
   holdTicks: number;
   /** bit 0 of +0x06 — hold until the fired one-shot sound has finished */
   waitsForVoice: boolean;
-  /** bits 1/3 of +0x06 — hold until a hotspot is clicked */
+  /**
+   * Hold until a hotspot is clicked: this frame owns at least one (+0x00) and
+   * +0x1a bit 2 does not say to play through them.
+   *
+   * NOT +0x06, which is what this used to read and is not a field the movie
+   * loop touches — see the module comment. Its bits amount to "first frame" and
+   * "last frame", so only a frame 0 ever waited: click the envelope in
+   * `maylett.mov` or the hotel blinds in `hwin.mov` and the picture showed for
+   * one frame and then ran off the end of the film (#324).
+   */
   waitsForClick: boolean;
+  /** +0x00 — how many hotspot records this frame owns */
+  hotspotCount: number;
   /** 1 exit · 2 goto · 3 exit + chain — see the module comment */
   action: number;
   /** action 2's destination, a 0-based frame index (unclamped, as stored) */
@@ -340,6 +361,8 @@ const PALETTE_SIZE = 256 * 8;
 const FRAME_SIZE = 80;
 /** the frame record fields — each offset is an engine read, see the module comment */
 const FRAME = {
+  /** +0x00 — how many hotspot records this frame owns at {@link FRAME.hotspots} */
+  count: 0x00,
   hold: 0x02,
   waitFlags: 0x06,
   action: 0x16,
@@ -355,8 +378,12 @@ const CHAIN_NAME_MAX = 31;
 
 /**
  * Bits of record +0x06. NOT flags the engine reads — see the module comment;
- * they behave as "this is the last frame" and "this is the first frame", and
- * this reader leans on that.
+ * they behave as "this is the last frame" and "this is the first frame".
+ *
+ * Only `voice` is still read, and only as one half of `waitsForVoice`. The
+ * click bits are kept named rather than deleted because what they are NOT is
+ * the finding: they are what `waitsForClick` used to come from, and #324 is
+ * what that cost.
  */
 const WAIT = { voice: 1, click: 2, clickAlt: 8 } as const;
 
@@ -429,13 +456,14 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
      * picture so nothing below them is reachable. Memoised because frames of
      * one phase share a run.
      */
-    const runs = new Map<number, MovHotspotV1[]>();
-    const hotspotRun = (from: number): MovHotspotV1[] => {
-      const have = runs.get(from);
+    const runs = new Map<string, MovHotspotV1[]>();
+    const hotspotRun = (from: number, want: number): MovHotspotV1[] => {
+      const key = `${from}:${want}`;
+      const have = runs.get(key);
       if (have) return have;
       const list: MovHotspotV1[] = [];
       let at = from;
-      while (at >= 0 && at + 2 <= cs.length) {
+      while (list.length < want && at >= 0 && at + 2 <= cs.length) {
         const rawType = vs.getInt16(at, true);
         const type = Math.abs(rawType);
         const size = HOTSPOT_SIZE[type];
@@ -453,7 +481,7 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
         });
         at += size;
       }
-      runs.set(from, list);
+      runs.set(key, list);
       return list;
     };
 
@@ -485,11 +513,15 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
           chainTo = s;
       }
       const hotspotOffset = at16(o + FRAME.hotspots);
+      const hotspotCount = at16(o + FRAME.count);
+      const flags2 = at16(o + FRAME.flags2);
       frames.push({
         picture: picLoc,
         holdTicks: at32(o + FRAME.hold),
         waitsForVoice: (waitFlags & WAIT.voice) !== 0,
-        waitsForClick: (waitFlags & (WAIT.click | WAIT.clickAlt)) !== 0,
+        waitsForClick:
+          hotspotCount > 0 && (flags2 & MORE.playsThroughHotspots) === 0,
+        hotspotCount,
         action: at16(o + FRAME.action),
         target: at16(o + FRAME.target),
         flags2: at16(o + FRAME.flags2),
@@ -499,8 +531,8 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
         chainTo,
         record: o,
         regions:
-          hotspotOffset > 0 && hotspotOffset < cs.length
-            ? hotspotRun(hotspotOffset)
+          hotspotCount > 0 && hotspotOffset > 0 && hotspotOffset < cs.length
+            ? hotspotRun(hotspotOffset, hotspotCount)
             : [],
       });
     }
