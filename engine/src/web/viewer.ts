@@ -1544,7 +1544,11 @@ export class SetViewer implements RoomLayer {
     // screen-space, and that step is the director's.
     const cam = this.worldCamera();
     const act = cam ? this.session.actorRuntime.actorAt(x, y, cam, this.roomOcclusion()) : null;
-    if (act) return { name: act.member.name, type: "actor" };
+    // the INSTANCE's name, not its cast member's: three of Dust's shooting-range
+    // targets are `actorinstance` copies of one member, and naming the member
+    // told the range that the left-hand bottle was hit whichever one was
+    // (ActorInstance.name)
+    if (act) return { name: act.name || act.member.name, type: "actor" };
     const hit = this.hitTest(x, y); // smallest-region-wins, same as clicks
     // A hotspot is a PAINTING — countpaintings/indextopainting enumerate
     // exactly these, and both handlers that route one send it through
@@ -1584,17 +1588,20 @@ export class SetViewer implements RoomLayer {
     const cam = this.worldCamera();
     const act = cam ? this.session.actorRuntime.actorAt(x, y, cam, this.roomOcclusion()) : null;
     if (!act) return false;
-    const inst = this.session.castScripts.get(act.member.name);
+    // ...and a COPY answers on its own script under its own name — see
+    // GameSession.instanceCastScript, which registers one per instance
+    const who = act.name || act.member.name;
+    const inst = this.session.castScripts.get(who);
     if (!inst?.script.codes.has("mousedown")) return false;
     try {
-      await this.session.interp.runHandler(inst, "mousedown", [act.member.name], {
-        me: act.member.name,
-        target: act.member.name,
+      await this.session.interp.runHandler(inst, "mousedown", [who], {
+        me: who,
+        target: who,
       });
     } catch (e) {
-      this.onLog(`script error in ${act.member.name}.mousedown: ${(e as Error).message}`);
+      this.onLog(`script error in ${who}.mousedown: ${(e as Error).message}`);
     }
-    this.onLog(`click actor ${act.member.name}`);
+    this.onLog(`click actor ${who}`);
     return true;
   }
 

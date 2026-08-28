@@ -17,11 +17,53 @@ export type { Occlusion } from "./geometry";
  */
 
 export class ActorInstance {
+  /**
+   * What this actor is CALLED, which is not always its cast member's name.
+   *
+   * `actorinstance (src, dst)` makes a second actor out of one member's sprite,
+   * and the copies are addressed by the name the script gave them — Dust's
+   * shooting range has three bottles and three birds out of one member each
+   * (`actorinstance ("bottle1targ", "bottle2targ")`). Every read went through
+   * `member.name`, so all three bottles answered to "bottle1targ": shoot the
+   * middle one and `hittest` named the left one, which is the wrong target to
+   * break. {@link PropInstance.name} is the same field for the same reason.
+   */
+  name = "";
   visible = false;
   setName = "";
   worldX = 0;
   worldY = 0;
   worldZ = 0;
+  /**
+   * Is this actor IN the world, or painted on the screen?
+   *
+   * DreamFactory 1 has both, and Dust's shooting range is built out of the
+   * difference. `TARGET.CST`'s `initactors` places the bottles, the cans, the
+   * weathervane and the seven pop-up targets with `actorxy (name, x, y)` — screen
+   * pixels, a painted booth — and the tower, the water jets and the birds with
+   * `actoris3d (name, true)` + `actorxyz`, out in the scene where the camera can
+   * see round them. Neither opcode existed here, so the whole 2D half was placed
+   * nowhere and drawn nowhere: "the targets didn't appear ... trying to shoot
+   * where the props should be results in nothing happening" (#292).
+   *
+   * True by default, which is the port as it was and Titanic as it is: every
+   * TAOOT actor is placed by `actorstar`/`actorxyz`, and a v4 cast has no 2D
+   * actors at all. `actorxy` is what moves an actor OUT of the world, exactly as
+   * `propxy` does for a prop.
+   */
+  worldSpace = true;
+  /** screen placement for a 2D actor — `actorxy`, the twin of a prop's anchor */
+  anchorX = 0;
+  anchorY = 0;
+  /**
+   * Draw order among the SCREEN-space sprites, low in front — `actordist` with
+   * two arguments, and the same number space props order by (`propdist`).
+   *
+   * `TARGET.SET` sets `propdist ("gunhand", -3)` for the gun in your hand and
+   * `TARGET.CST` `actordist ("dummytarg", -2)` for the dummy that pops up, which
+   * is what says the two scales are one scale.
+   */
+  dist = 0;
   /** facing, 0..255 like the camera */
   deg = 0;
   poseName = "stand";
@@ -130,7 +172,11 @@ export class ActorRuntime {
     const cast = new LoadedCast(name.toLowerCase(), cst);
     this.casts.set(cast.name, cast);
     for (const m of cst.members) {
-      if (!this.actors.has(m.name)) this.actors.set(m.name, new ActorInstance(m, cast));
+      if (!this.actors.has(m.name)) {
+        const inst = new ActorInstance(m, cast);
+        inst.name = m.name;
+        this.actors.set(m.name, inst);
+      }
     }
     return cast;
   }
@@ -155,7 +201,9 @@ export class ActorRuntime {
     const s = this.get(src);
     const key = dst.toLowerCase();
     if (!s || this.actors.has(key)) return;
-    this.actors.set(key, new ActorInstance(s.member, s.cast));
+    const inst = new ActorInstance(s.member, s.cast);
+    inst.name = dst; // the name the script asked for — see ActorInstance.name
+    this.actors.set(key, inst);
   }
 
   /**
@@ -245,7 +293,7 @@ export class ActorRuntime {
    * search at 0x4114e0, which is one loop over the step's records keeping the
    * angularly closest, first one winning a tie (0x4115ba's `jge` skips equals).
    */
-  private frameFor(a: ActorInstance, cam: WorldCamera): ShpFrame | null {
+  private frameFor(a: ActorInstance, cam: WorldCamera | null): ShpFrame | null {
     const pose = a.pose();
     if (!pose || !pose.play.length) return null;
     // through the play script, which is what says how long a picture is HELD —
@@ -258,8 +306,11 @@ export class ActorRuntime {
     // front (face toward viewer): when the actor faces the camera (deg == actor→
     // camera bearing) rel is 0. (Using camera→actor here inverted it: facing you
     // showed the back, and walkers moonwalked.)
-    const camBearing = bearing(cam.x - a.worldX, cam.y - a.worldY);
-    const rel = (a.deg - camBearing) & 0xff;
+    // A 2D actor has no camera to be seen from — it is painted on the screen —
+    // so its own facing IS the angle to match, and an actor no script ever turns
+    // (Dust's booth targets, all of them) takes the frame nearest angle 0, the
+    // one drawn front-on.
+    const rel = cam ? (a.deg - bearing(cam.x - a.worldX, cam.y - a.worldY)) & 0xff : Number(a.deg) & 0xff;
     let cf = step[0];
     let best = angleApart(cf.angle, rel);
     for (const f of step) {
@@ -327,8 +378,15 @@ export class ActorRuntime {
    * them. Everything the report turns on is the rectangle.
    */
   onScreen(a: ActorInstance, cam: WorldCamera): boolean {
-    if (!a.visible || a.scale <= 0) return false;
+    if (!a.visible) return false;
     if (a.setName && a.setName !== this.currentSet) return false;
+    // a 2D actor is not projected at all: it is where the script put it, and a
+    // scale of 0 is no bar to drawing one (see screenRect)
+    if (!a.worldSpace) {
+      const sr = this.screenRect(a);
+      return !!sr && sr.x < cam.clipW && sr.y < cam.clipH && sr.x + sr.w > 0 && sr.y + sr.h > 0;
+    }
+    if (a.scale <= 0) return false;
     const proj = projectPoint(cam, a.worldX, a.worldY, a.worldZ);
     if (!proj) return false; // behind the camera
     const r = this.rect(a, proj, cam);
@@ -372,6 +430,58 @@ export class ActorRuntime {
       w: Math.max(1, Math.round(f.width * k)),
       h: Math.max(1, Math.round(f.height * k)),
     };
+  }
+
+  /**
+   * Screen rect of a 2D actor: its frame at the anchor, less the frame's own hot
+   * spot, at 1:1.
+   *
+   * No projection and no scale. `actorscale` is per-mille against a DEPTH
+   * (see {@link rect}) and there is no depth here — the sprite is drawn the size
+   * it was authored, which is how Dust's booth targets line up with the painted
+   * backdrop behind them. That also means a 2D actor draws at `scale` 0, unlike a
+   * world one: `TARGET.CST` never scales any of them.
+   */
+  screenRect(a: ActorInstance) {
+    const f = this.frameFor(a, null);
+    if (!f) return null;
+    return { f, x: a.anchorX - f.posXraw, y: a.anchorY - f.posYraw, w: f.width, h: f.height };
+  }
+
+  /** visible 2D actors, far to near — `dist` descending, so low draws last */
+  screenDrawList(): ActorInstance[] {
+    return [...this.actors.values()]
+      .filter((a) => a.visible && !a.worldSpace && this.frameFor(a, null))
+      .filter((a) => !a.setName || a.setName === this.currentSet)
+      .sort((x, y) => y.dist - x.dist);
+  }
+
+  /** blit the 2D actors — the booth, in front of the room and behind the band */
+  compositeScreen(
+    rgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+    paletteRGBA: Uint8ClampedArray,
+  ): void {
+    for (const a of this.screenDrawList()) {
+      const r = this.screenRect(a);
+      if (!r) continue;
+      for (let y = 0; y < r.f.height; y++) {
+        const ty = r.y + y;
+        if (ty < 0 || ty >= height) continue;
+        for (let x = 0; x < r.f.width; x++) {
+          const tx = r.x + x;
+          if (tx < 0 || tx >= width) continue;
+          const s = y * r.f.width + x;
+          if (!r.f.opaque[s]) continue;
+          const pal = r.f.indexed[s] * 4;
+          const d = (ty * width + tx) * 4;
+          rgba[d] = paletteRGBA[pal];
+          rgba[d + 1] = paletteRGBA[pal + 1];
+          rgba[d + 2] = paletteRGBA[pal + 2];
+        }
+      }
+    }
   }
 
   /** blit visible actors into the view buffer (before screen-space props) */
@@ -443,11 +553,35 @@ export class ActorRuntime {
       sig.ref(a.member).str(a.setName).str(a.poseName);
       sig.num(a.worldX).num(a.worldY).num(a.worldZ);
       sig.num(a.deg).num(a.step).num(a.scale).num(a.zclip);
+      // the 2D half: where it is painted, and where in the screen order
+      sig.bool(a.worldSpace).num(a.anchorX).num(a.anchorY).num(a.dist);
     }
   }
 
   /** front-most actor whose opaque pixels cover (x, y) — for talking */
-  actorAt(x: number, y: number, cam: WorldCamera, occ: Occlusion | null = null): ActorInstance | null {
+  actorAt(
+    x: number,
+    y: number,
+    cam: WorldCamera | null = null,
+    occ: Occlusion | null = null,
+  ): ActorInstance | null {
+    /**
+     * The 2D actors first, front-most first, and without a camera — which is why
+     * `cam` is optional now. They are drawn over the world, so a click reaches
+     * them before anything in it, and Dust's shooting range is the whole reason
+     * this path exists: every target you can hit is one of these, and `bullet`
+     * (TARGET.FLT) asks `hittest` where the shot landed.
+     */
+    const screen = this.screenDrawList();
+    for (let i = screen.length - 1; i >= 0; i--) {
+      const a = screen[i];
+      const r = this.screenRect(a);
+      if (!r) continue;
+      if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
+      if (!r.f.opaque[(y - r.y) * r.f.width + (x - r.x)]) continue;
+      return a;
+    }
+    if (!cam) return null;
     const list = this.drawList(cam);
     for (let i = list.length - 1; i >= 0; i--) {
       const { a, proj } = list[i];
