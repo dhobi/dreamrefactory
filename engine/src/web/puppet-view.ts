@@ -132,8 +132,18 @@ function clutColor(paletteRaw: Uint8Array, index: number): string {
 }
 
 export class PuppetView {
-  /** cached layer composite of the active puppet stance */
-  private image: { key: string; rgba: Uint8ClampedArray } | null = null;
+  /**
+   * Cached layer composite of the active puppet stance — and of the ROOM behind
+   * it, which is why the backdrop's own two buffers are part of what identifies
+   * it (see {@link composite}).
+   */
+  private image: {
+    key: string;
+    rgba: Uint8ClampedArray;
+    /** the backdrop this composite was built over, by identity */
+    pixels: Uint8Array | null;
+    palette: Uint8ClampedArray | null;
+  } | null = null;
   /**
    * decoded puppet layer frames, keyed by "<pup name>:<container loc>". The
    * pup name MUST be part of the key: different PUP files hold different data
@@ -244,7 +254,38 @@ export class PuppetView {
     // until their next lip-sync frame changed the key by itself
     const key = `${p.name}:${p.stanceIdx}:${clipY}:${screenGammaGeneration()}:${
       state ? state.layers.map((l) => l.frame).join(",") : "-"}`;
-    if (!this.image || this.image.key !== key) {
+    /**
+     * ## AND THE ROOM IS PART OF THE PICTURE (#289)
+     *
+     * Compared by identity, not by content: a view's decoded frame and a room's
+     * palette are each one object that lasts as long as the thing it belongs to
+     * (RingCache; SetViewer.applyRoomClut builds a new one), so the same room
+     * seen twice is the same two references and this stays a cache hit. It is
+     * how the director tells its own repaints apart as well —
+     * `sig.ref(this.room?.roomFrame())`.
+     *
+     * Left out, the cache held a picture of one room and reused it in another.
+     * Measured on `mwife.pup`: the backdrop is 96,875 of the conversation
+     * screen's 135,168 pixels — Dust's stances are matte plates, so nearly
+     * three quarters of a Dust conversation IS the room — and compositing the
+     * same character over a different room changed none of them.
+     *
+     * What that looks like is what was reported alongside #289: "at the very
+     * beginning of the talk to the puppet, the background from the previous talk
+     * is still visible for a very brief moment". Every conversation opens on the
+     * character's neutral pose (PuppetCtrl.openPuppetFile's `defaultPose`), so
+     * talking to the same person twice built the identical key — and the screen
+     * came up over the room the LAST conversation happened in, until the first
+     * lip-sync record moved the key along.
+     */
+    const backdropPixels = backdrop?.pixels ?? null;
+    const backdropPalette = backdrop?.palette ?? null;
+    if (
+      !this.image ||
+      this.image.key !== key ||
+      this.image.pixels !== backdropPixels ||
+      this.image.palette !== backdropPalette
+    ) {
       // the character composites OVER the live scene view; a stance's
       // "background" layer that is one flat colour is a key-colour matte
       // (SMETH1: all-247 plate), not a backdrop
@@ -316,7 +357,7 @@ export class PuppetView {
           }
         }
       }
-      this.image = { key, rgba };
+      this.image = { key, rgba, pixels: backdropPixels, palette: backdropPalette };
     }
     dest.set(this.image.rgba);
     this.compositeBand(dest);
