@@ -9254,6 +9254,84 @@ test("engine: the screen after a movie is the movie's, until a script draws (#20
 }
 );
 
+// The same mechanism one stage swap further along (#308). A hold is only as good
+// as the statements that end it, and `openstagefile` was ending it — before it
+// had even asked for the file. Reported as three sightings of one bug: the boot
+// showing the lit apartment before the date caption, and the map and the save
+// panel each flashing the room you left back over their own fade to black.
+//
+// HEADLESS THE WINDOW IS ZERO-WIDTH, for the reason the #209 note above gives:
+// the disk provider answers synchronously, so no frame falls inside
+// `openStageFile`'s await. What decides what a browser shows there is the STATE
+// at the instant the fetch begins — a fetch is where the browser spends frames,
+// and whoever owns the screen for the length of the download is what the player
+// looks at — so that is what this samples.
+test("engine: a stage swap does not un-black the screen while it loads (#308)", async () => {
+  const { host, session } = await newHost();
+  await session.ensureBooted();
+  await session.openSetFile("bedsit1.set");
+  const viewer = host.viewer!;
+  // who owns the screen at the moment each file is asked for
+  const atFetch = new Map<string, string>();
+  const ensure = session.ensureFile;
+  session.ensureFile = async (name: string) => {
+    atFetch.set(name.toLowerCase(), viewer.screenOwner());
+    return ensure.call(session, name);
+  };
+  // ...and the fade state on the far side of the swap, sampled where the
+  // arriving stage's own scripts get their first say — its `openstage`, which
+  // `openStageFile` fires immediately after installing the file. Reading it
+  // after the call returns would be reading what those scripts did (three of the
+  // four panel flats end on a `blacktoscreen`, whose ramp nothing ticks here).
+  const atOpenStage = new Map<string, string>();
+  const fire = session.fireHandler.bind(session);
+  session.fireHandler = async (inst, handler, me, label?) => {
+    const f = session.fade;
+    if (handler === "openstage") {
+      atOpenStage.set(me.toLowerCase(), `level=${f.level} snap=${!!f.snapshot}`);
+    }
+    return fire(inst, handler, me, label);
+  };
+
+  // 1. every overlay this game opens is `screentoblack`, swap the stage,
+  // `visualeffect (plain, 0)`, `blacktoscreen` — TAOOT's map and its save panel
+  // (`map.stg`, `ctl.stg`) included, and Timelapse's `begininterface` is the same
+  // four statements. So the black is up — a level of 1 over the frozen frame —
+  // when the swap starts, and it has to still be up when the bytes arrive: an
+  // overlay is one network round trip wide the first time it is opened.
+  session.fade.level = 1;
+  session.fade.snapshot = { rgba: new Uint8ClampedArray(4), width: 1, height: 1 };
+  await session.stageCtrl.openStageFile("map.stg");
+  check("the overlay's own black covers its download",
+    atFetch.get("map.stg") === "faded", `owner=${atFetch.get("map.stg")}`);
+  // ...and once the stage is IN, the level goes: the ramp was against the palette
+  // this just replaced. Timelapse's photo album is the flat that proves that half
+  // — the one panel flat with no `blacktoscreen` of its own, so a level that
+  // outlived the swap left it painted behind a black screen.
+  check("...and the arriving stage is not left behind it",
+    atOpenStage.get("map.stg") === "level=0 snap=false", `${atOpenStage.get("map.stg")}`);
+
+  // 2. the boot. `playmode.mov` ends with the hold armed, and the cast, four
+  // shops and `main.stg` load before `advanceday` reaches `datebed.mov` with no
+  // screen statement in between — so the stage swap is inside the hold, and
+  // opening a stage file is not a script saying what the screen looks like.
+  session.fade.queue.length = 0;
+  session.fade.snapshot = null;
+  session.fade.level = 0;
+  session.fade.pendingReveal = true;
+  await session.stageCtrl.openStageFile("main.stg");
+  check("a stage opened after a movie does not end the movie's hold",
+    atFetch.get("main.stg") === "held" && session.fade.pendingReveal,
+    `owner=${atFetch.get("main.stg")} pending=${session.fade.pendingReveal}`);
+  // and it lasts the rest of the window, which is the room's own load
+  atFetch.clear();
+  await session.openSetFile("bedsit1.set");
+  const rest = [...atFetch.entries()].filter(([, o]) => o !== "held");
+  check("...and it lasts through the room the boot opens next",
+    viewer.screenOwner() === "held" && !rest.length,
+    `owner=${viewer.screenOwner()} lit=${rest.map(([n, o]) => `${n}:${o}`).join(", ")}`);
+});
+
 // --- 105. the blackjack deal plays its swing, not its first frame ------------
 //
 // Reported (#223): "Riveria's dealing animation is not playing as intended. It
