@@ -36,6 +36,7 @@ import {
   SavedActorV1,
   SavedPropV1,
   type SaveGameV1,
+  type SavePatchV1,
   applyPatchV1,
   describeSaveV1,
   parseSaveV1,
@@ -43,6 +44,8 @@ import {
 } from "../df/savegame-v1";
 import { toNum } from "./interp";
 import { readSaveFile } from "../df/savegame";
+import { readSetFileV1 } from "../df/set-v1";
+import { detectVersion } from "../df/version";
 import type { SavedActor, SavedProp } from "../df/savegame";
 import type { GameSession } from "./session";
 import { resetCast, restoreActors, restoreProps } from "./saveload";
@@ -493,11 +496,43 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
       }
     : undefined;
 
+  /**
+   * What the room contributes to the file beyond its name: the two registers a
+   * load re-acquires, and the palette it comes back in.
+   *
+   * Read off the set FILE rather than the live binding, because the binding is
+   * the v1 set translated into the v4 shape and the translation reads the two
+   * register tables directly instead of carrying their indices — so it zeroes
+   * them (see set-v1-to-v4.ts). The bytes are in the store whenever the room is
+   * open, which is whenever there is something to save.
+   */
+  const openSet = ((): SavePatchV1["openSet"] => {
+    if (!setFile) return undefined;
+    const raw = session.files(setFile.toLowerCase());
+    if (!raw) {
+      session.onLog(`savegame: ${setFile} is not in the store — its registers keep the base's`);
+      return undefined;
+    }
+    try {
+      if (detectVersion(raw) !== 1) return undefined;
+      const set = readSetFileV1(raw);
+      return {
+        transitionRegister: set.transitionRegister,
+        actorRegister: set.actorRegister,
+        clut: set.paletteRaw,
+      };
+    } catch (e) {
+      session.onLog(`savegame: ${setFile}: ${(e as Error).message}`);
+      return undefined;
+    }
+  })();
+
   const dropped: string[] = [];
   const bytes = applyPatchV1(base, {
     numGlobals,
     strGlobals,
     standpoint,
+    openSet,
     frame: session.frameCounter,
     // the map's KEY is the prop's name — a PropInstance does not carry it, the
     // same reason the play page's snapshot destructures the entry

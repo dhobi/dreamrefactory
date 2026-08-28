@@ -298,6 +298,27 @@ export interface SetFileV1 {
   defaultCellX: number;
   defaultCellZ: number;
   defaultFacing: number;
+  /**
+   * The two containers the ENGINE holds open for as long as the room is —
+   * `+0x1e` and `+0x22` of container 0 — and the reason they are surfaced rather
+   * than only consumed here.
+   *
+   * DF.EXE's load path re-acquires exactly these two packs from the reopened set
+   * file (`0x42ef0b`, source line 5361, then `0x42ef4a`, line 5362) using
+   * INDICES IT READS OUT OF THE SAVE: container 1 copies verbatim into the
+   * loader's global block at `0x4607a0`, so the save's +404 and +416 are the
+   * transition and actor registers of whatever room it was taken in. All 61
+   * shipped saves carry their own set's two values.
+   *
+   * A save writer that changes the room and not these leaves a load acquiring a
+   * container index from the room it CAME from. Same file, or a file that
+   * happens to be as large, and nothing happens; `mayupper.set` has 205
+   * containers where `nite.set` has 3111, so a save moved from the night town to
+   * the Mayor's landing asked for pack 259 of 205 and the original said "Dust
+   * cannot find a file … (Error line 5361, code 2)".
+   */
+  transitionRegister: number;
+  actorRegister: number;
   mainScript: number;
   scenes: V1Scene[];
   actors: V1Actor[];
@@ -449,6 +470,8 @@ export function readSetFileV1(data: Uint8Array): SetFileV1 {
     defaultCellX,
     defaultCellZ,
     defaultFacing,
+    transitionRegister,
+    actorRegister,
     mainScript: v.getInt16(C0.mainScript, true),
     scenes,
     actors,
