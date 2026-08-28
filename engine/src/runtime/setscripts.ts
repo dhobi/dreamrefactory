@@ -92,6 +92,40 @@ export class SetScripts {
   /** most recently opened scene (for closesetfile's implicit closescene) */
   lastSceneIdx = -1;
 
+  /** nesting depth of a scene/set lifecycle dispatch — see {@link inLifecycle} */
+  private lifecycleDepth = 0;
+
+  /**
+   * Is a lifecycle handler running right now?
+   *
+   * The original has ONE event queue and pops one event at a time, so a handler
+   * cannot recursively dispatch the event it is already handling. This port
+   * fires the scene lifecycle from `SetViewer.teleport`, which a script reaches
+   * synchronously by calling `currentview()` — and fourteen of Dust's openscene
+   * handlers do exactly that.
+   *
+   * `hotupper.set`'s is the one that hangs the tab. Leaving the hotel room on
+   * day 2 lands you in Scene C4, whose openscene is
+   *
+   *     if day = 2 & clock = 1 & phase = 0
+   *         lockevents = true
+   *         currentview ("north")
+   *         makeloop ("scene", currentscene (), "trigger", 20)
+   *
+   * and `phase` is cleared to 1 only by the `trigger` the last line arms. So the
+   * jump re-entered openscene, which jumped again, which re-entered — an
+   * unbounded async chain that starves the very loop that would have ended it.
+   * The screen froze on the darkened room because it never got past the
+   * `screentoblack` half of `gotospecial`.
+   *
+   * A jump made from inside the lifecycle still MOVES you; what it does not do
+   * is ask for the event again. A jump from an ordinary handler is untouched,
+   * which is what TAOOT's `dopurser` needs (#71).
+   */
+  get inLifecycle(): boolean {
+    return this.lifecycleDepth > 0;
+  }
+
   /**
    * Lifecycle events run through the chain like keydown: scene script →
    * set main → stage → boot scripts. Boot's defaults matter — e.g. TAOOT's
@@ -106,6 +140,8 @@ export class SetScripts {
     // (#143). The scene is still recorded as current, so the first turn or step
     // re-fires openscene normally.
     if (this.session.restoringSave) return;
+    this.lifecycleDepth++;
+    try {
     const interp = this.session.interp;
     const chain = [
       sceneIdx >= 0 ? this.sceneScripts[sceneIdx] : null,
@@ -132,6 +168,9 @@ export class SetScripts {
       } catch (e) {
         this.onLog(`script error in ${inst.name}.${handler}: ${(e as Error).message}`);
       }
+    }
+    } finally {
+      this.lifecycleDepth--;
     }
   }
 
@@ -178,6 +217,8 @@ export class SetScripts {
    *    keydown swallows `uparrow` while `blocked` (#88).
    */
   async viewChanged(sceneIdx = -1): Promise<void> {
+    this.lifecycleDepth++;
+    try {
     const interp = this.session.interp;
     interp.eventConsumed = false;
     for (const inst of this.session.bootScripts) {
@@ -189,6 +230,9 @@ export class SetScripts {
       }
     }
     await this.viewSettled(sceneIdx);
+    } finally {
+      this.lifecycleDepth--;
+    }
   }
 
   /**
@@ -204,6 +248,8 @@ export class SetScripts {
    * through openScene, so this is the jump path's half only.)
    */
   async viewSettled(sceneIdx = -1): Promise<void> {
+    this.lifecycleDepth++;
+    try {
     const interp = this.session.interp;
     const scene = sceneIdx >= 0 ? this.sceneScripts[sceneIdx] : null;
     for (const inst of [scene, this.main, this.session.stageScript, ...this.session.bootScripts]) {
@@ -217,6 +263,9 @@ export class SetScripts {
       } catch (e) {
         this.onLog(`script error in ${inst.name}.openscene (view change): ${(e as Error).message}`);
       }
+    }
+    } finally {
+      this.lifecycleDepth--;
     }
   }
 
