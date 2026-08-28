@@ -31,8 +31,24 @@ export class StageController {
     // TAOOT's darkroom mixclut("stage") (re-applied right after this in transtoflat)
     // doesn't bleed into the next stage you open (e.g. after leaving redphoto).
     this.session.onClut("stage", null);
+    await this.session.ensureFile(key); // lazy browser provider: fetch before first read
+    const data = this.session.files(key);
+    if (!data) {
+      this.session.onLog(`openstagefile: "${fileName}" not available`);
+      return false;
+    }
+    let stg: StgFile;
+    try {
+      stg = readStgFile(data);
+    } catch (e) {
+      this.session.onLog(`openstagefile: ${fileName}: ${(e as Error).message}`);
+      return false;
+    }
+    this.stageFile = stg;
+    this.session.stageName = key;
     /**
-     * ...and un-faded, for the same reason one layer up.
+     * From this instant the screen is un-faded — for the same reason the stage
+     * CLUT above is un-dimmed.
      *
      * `screentoblack(name, steps)` ramps a named CLUT to black — the port models
      * it as a level over the whole screen — and the name Timelapse hands it is
@@ -53,26 +69,35 @@ export class StageController {
      *
      * `blacktoscreen` still ramps, because it reveals FROM black by definition —
      * see the note on it in builtins/scene.ts.
+     *
+     * ## HERE, and not before the bytes (#308)
+     *
+     * The clear used to be the first thing this method did, above `ensureFile` —
+     * and the justification for it, that the palette it ramped against is gone,
+     * is only true once the replacement is actually in hand. In TI.EXE the
+     * distinction cannot arise: `openstagefile` reads the file with the
+     * interpreter blocked inside it, nothing repaints, and the screen is still
+     * the black `screentoblack` left until the new stage draws. Ours awaits a
+     * NETWORK FETCH there, with the rAF loop compositing throughout — so
+     * lifting the black first handed the screen back to `world` for the whole
+     * download. First open of the map and of the save panel: fade to black, the
+     * room you left painted over it again for as long as `p.stg` took to arrive,
+     * then a snap back to black for `blacktoscreen` to ramp out of.
+     *
+     * And the post-movie hold (`fade.pendingReveal`, see ScreenDirector.
+     * screenOwner) is not this method's to end at all. Opening a stage file is
+     * not a script saying what the screen should look like; the four statements
+     * that ARE end it, and `tickFade` lifts it when the script falls quiet.
+     * TAOOT's boot is what that cost: `playmode.mov` ends, and the cast, four
+     * shops and `main.stg` load before `advanceday` reaches `datebed.mov` with
+     * no screen statement in between. `main.stg` is in that window, so ending
+     * the hold there lit the apartment up — through `bedsit1.set`'s own load and
+     * on until the date caption started — which is exactly the flash #209 was
+     * about, one stage swap further along.
      */
     this.session.fade.queue.length = 0;
     this.session.fade.snapshot = null;
     this.session.fade.level = 0;
-    this.session.fade.pendingReveal = false;
-    await this.session.ensureFile(key); // lazy browser provider: fetch before first read
-    const data = this.session.files(key);
-    if (!data) {
-      this.session.onLog(`openstagefile: "${fileName}" not available`);
-      return false;
-    }
-    let stg: StgFile;
-    try {
-      stg = readStgFile(data);
-    } catch (e) {
-      this.session.onLog(`openstagefile: ${fileName}: ${(e as Error).message}`);
-      return false;
-    }
-    this.stageFile = stg;
-    this.session.stageName = key;
     this.session.stageScript = this.session.instanceFrom(stg.file.containers[1]?.data, key);
     this.session.refreshFallbacks();
     for (const f of stg.flats) {
