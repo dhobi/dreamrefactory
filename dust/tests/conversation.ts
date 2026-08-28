@@ -41,6 +41,7 @@ import { test, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
+import { PuppetView, PUPPET_ART_H } from "@dreamfactory/engine/web/puppet-view";
 import { SetScripts } from "@dreamfactory/engine/runtime/setscripts";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 
@@ -141,4 +142,79 @@ test("a turn does not lose where the actor was going (#289)", async () => {
   }
   expect([wife.worldX, wife.worldY], "she gets home").toEqual([star.positionX, star.positionZ]);
   expect(wife.starName, "and knows where home is, so her idle can re-arm").toBe("mayupper.mwife");
+});
+
+/**
+ * The room a conversation happens in is part of the conversation's picture.
+ *
+ * Reported alongside #289: "at the very beginning of the talk to the puppet, the
+ * background from the previous talk is still visible for a very brief moment at
+ * the beginning."
+ *
+ * It is, because Dust's stances are MATTE plates — layer 0 is one flat colour,
+ * which `PuppetView.composite` reads as "keep the scene" — so most of a Dust
+ * conversation is the room behind the character, and the composite is cached.
+ * The cache knew the character, the stance, the clip and the display gamma, and
+ * did not know the room: every conversation opens on the same neutral pose, so a
+ * second talk with the same person built the same key and came up over the room
+ * the last one happened in.
+ *
+ * The assertion is the measurement: over two different rooms, the same character
+ * at the same instant must not composite to the same pixels.
+ */
+test("a conversation composites over the room you are having it in (#289)", async () => {
+  if (!existsSync(`${CD}/PUPPETS/MWIFE.PUP`)) {
+    console.warn(`no ${CD} — skipping (needs the Dust rip)`);
+    return;
+  }
+  const session = newSession();
+  expect(await session.puppetCtrl.openPuppetFile("mwife.pup"), "mwife.pup opens").toBe(true);
+  const view = new PuppetView(session);
+
+  const W = 512, H = 384;
+  /** a room, as the director hands one over: a fresh frame and its own palette */
+  const room = (index: number) => {
+    const palette = new Uint8ClampedArray(256 * 4);
+    for (let i = 0; i < 256; i++) {
+      palette[i * 4] = i;
+      palette[i * 4 + 1] = 255 - i;
+      palette[i * 4 + 2] = (i * 7) & 0xff;
+      palette[i * 4 + 3] = 255;
+    }
+    return {
+      pixels: new Uint8Array(W * PUPPET_ART_H).fill(index),
+      width: W,
+      height: PUPPET_ART_H,
+      palette,
+    };
+  };
+  const shot = (index: number): Uint8ClampedArray => {
+    const buf = new Uint8ClampedArray(W * H * 4);
+    view.composite(buf, room(index));
+    return buf;
+  };
+
+  const here = shot(10);
+  const elsewhere = shot(200);
+  let differing = 0;
+  let backdrop = 0;
+  for (let i = 0; i < W * PUPPET_ART_H * 4; i += 4) {
+    if (here[i] !== elsewhere[i] || here[i + 1] !== elsewhere[i + 1]) differing++;
+    if (here[i] === 10 && here[i + 1] === 245) backdrop++;
+  }
+  // how much of the screen this is about — and evidence that Dust's opening
+  // stance really is a matte, rather than a background that hides the question
+  expect(backdrop, "most of a Dust conversation is the room behind the character")
+    .toBeGreaterThan(W * PUPPET_ART_H / 2);
+  expect(differing, "and all of it follows the room, second talk included").toBe(backdrop);
+
+  // ...and the cache still IS a cache: the same room twice is the same picture,
+  // built once. (Identity, not content — see PuppetView.composite.)
+  const again = new Uint8ClampedArray(W * H * 4);
+  const sameRoom = room(200);
+  view.composite(again, sameRoom);
+  const twice = new Uint8ClampedArray(W * H * 4);
+  view.composite(twice, sameRoom);
+  expect(Buffer.from(twice.buffer).equals(Buffer.from(again.buffer)), "a held room repaints the same")
+    .toBe(true);
 });
