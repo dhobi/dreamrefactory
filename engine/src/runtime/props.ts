@@ -9,6 +9,55 @@ export type { WorldCamera } from "./geometry";
 export { projectPoint } from "./geometry";
 
 /**
+ * A named world point of a set, as much of one as {@link PropRuntime.settleStars}
+ * reads: the star tables of both DreamFactory generations answer this shape, so
+ * neither `df/set`'s v4 `Actor` nor `df/set-v1`'s is imported here for it.
+ */
+export interface StarPoint {
+  identifier: string;
+  positionX: number;
+  positionY: number;
+  positionZ: number;
+}
+
+/**
+ * A prop moving into world space, and dropping the screen-space frame pin on the
+ * way, because becoming a world prop changes what a frame MEANS: it stops being a
+ * selector index and becomes a choice made at draw time, from the prop's facing
+ * against the camera bearing. A pin from an earlier `propdeg` is stale.
+ *
+ * Reachable only since the boot library's default `initprop` became reachable: it
+ * does `propdeg (target, 0)` on every prop at set open, and SMOKE's card table
+ * takes its star AFTER that — so the table arrived already pinned to one of its 32
+ * views and stopped turning with the camera.
+ */
+export function becomeWorldProp(p: PropInstance, v1 = false): void {
+  p.worldSpace = true;
+  p.frameLocked = false;
+  p.degVariants = false;
+  p.frameOrder = null;
+  /**
+   * A v1 world prop DRAWS at its authored size until a script says otherwise.
+   *
+   * `scale` is per-mille — DF.EXE's prop renderer computes
+   * trunc(scale x ref / 1000) x src / depth (0x4150d1) — so 1000 is the
+   * identity, and Dust never propscales its doors at all: HOUSE.PRP's `door`
+   * group (55 one-frame states, refScale 160) is placed with `propstar` and
+   * simply expected to draw. Under the port's 0 default the worldDrawList's
+   * `scale <= 0` skip dropped every one of them: "doors don't draw".
+   *
+   * This default was tried before and REVERTED ("the doors are too big now"),
+   * and both readings were right: the doors drew oversized because the v1
+   * camera was missing its 64-unit setback and f was 256 instead of 310 —
+   * every world sprite was too near. With the camera fixed, a door at its
+   * usual ~156 depth draws at 160/156 of its art, which is the authored look.
+   * v4 keeps 0: TAOOT propscales every world prop it shows, and a v4 prop
+   * placed without one staying invisible is the measured behaviour.
+   */
+  if (v1 && p.scale === 0) p.scale = 1000;
+}
+
+/**
  * The frame of a state to show for propdeg(deg). Each frame carries a stored
  * degree (SHP +40): propdeg selects the frame whose degree is angularly closest
  * to `deg`, NOT the deg-th frame. Selector props store small ascending values
@@ -198,6 +247,15 @@ export class PropInstance {
   worldSpace = false;
   /** name of the star the prop was placed on (propstar getter) */
   starName = "";
+  /**
+   * `propstar` named a star the open set does not have, so this prop has no
+   * position yet — see {@link PropRuntime.settleStars}, and
+   * {@link ActorInstance.starPending}, which is the same flag for the cast.
+   *
+   * Never true in Titanic: its star names are bare and a room decorates itself
+   * from its own `openset`, so the table in hand is always the right one.
+   */
+  starPending = false;
   /**
    * A world prop whose frames are 8-way-style DIRECTIONAL views (a card table,
    * a plant), not an animation — set when propdeg() gives it an orientation.
@@ -391,6 +449,38 @@ export class PropRuntime {
   /** propdelete(name): remove a prop from the set (permanent hide) */
   remove(name: string): void {
     this.props.delete(String(name).toLowerCase());
+  }
+
+  /**
+   * Seat the props that were put on a star of THIS set from somewhere else.
+   *
+   * The prop half of {@link ActorRuntime.settleStars}, and the same situation:
+   * Dust's star names are qualified by set (`town.flower`, and the identifier in
+   * the SET file is that too), and a script decorating a room runs wherever the
+   * player is. `INVEN.PRP`'s `initprops` places the cemetery flowers, the jug and
+   * the bone on day 2 while the player is waking up in `mayroom`, so all three
+   * `propstar` calls miss the table in hand — see the note on the builtin.
+   *
+   * Only props whose `propstar` actually MISSED, for the reason the actor twin
+   * gives: a script may place by star and then nudge with `propxyz`, and
+   * re-seating that on set entry would undo the nudge. And not the FACING, which
+   * `propstar` seeds from the star only to have the calling script override it a
+   * line later.
+   */
+  settleStars(stars: readonly StarPoint[], v1 = false): number {
+    let moved = 0;
+    for (const p of this.props.values()) {
+      if (!p.starPending || p.setName !== this.currentSet) continue;
+      const star = stars.find((s) => s.identifier.toLowerCase() === p.starName);
+      if (!star) continue;
+      becomeWorldProp(p, v1);
+      p.worldX = star.positionX;
+      p.worldY = star.positionZ;
+      p.worldZ = star.positionY;
+      p.starPending = false;
+      moved++;
+    }
+    return moved;
   }
 
   /**
