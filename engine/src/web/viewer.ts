@@ -382,6 +382,12 @@ export class SetViewer implements RoomLayer {
     this.sceneIdx = targetScene;
     this.viewIdx = v >= 0 ? v : this.viewIdx;
     this.showView();
+    // A jump made from INSIDE the scene lifecycle moves you and stops there.
+    // Asking for the event again from within its own dispatch is a loop the
+    // original cannot have — it pops one event at a time — and Dust has
+    // fourteen openscene handlers that jump. `hotupper.set`'s hangs the tab
+    // outright: see SetScripts.inLifecycle for the walk-through.
+    if (this.scripts.inLifecycle) return;
     // A JUMP is a standpoint change and owes the same scene event a turn does.
     //
     // Boot's closescene is the only thing in the corpus that puts the shared
