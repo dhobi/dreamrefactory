@@ -212,8 +212,22 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
    * caller of actordist in the shipped corpus, so no script can tell the two
    * mechanisms apart.
    */
-  r("actordist", (_i, [n]) => {
+  r("actordist", (_i, [n, order]) => {
     const a = actor(n);
+    /**
+     * Two arguments is not a measurement, it is a WRITE: where this actor sits in
+     * the screen-space draw order, low in front. Dust's shooting range is the
+     * corpus's only caller — `actordist ("dummytarg", -2)` — and the number is in
+     * the same space props order by, since `TARGET.SET` puts the gun in your hand
+     * at `propdist ("gunhand", -3)` and expects to see past it.
+     *
+     * The one-argument form below is untouched, and it is the one Titanic uses:
+     * `hasattention` reads it as a distance (see the note above).
+     */
+    if (order !== undefined) {
+      if (a) a.dist = toNum(order);
+      return 0;
+    }
     const lis = session.listener();
     if (!a || !a.visible || !lis || !session.setVisible) return sight(n, 32000);
     if (session.puppet?.visible) return sight(n, 32000);
@@ -329,6 +343,49 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     // an explicit placement settles the question, so a star that never resolved
     // must not be allowed to overrule it later (ActorRuntime.settleStars)
     a.starPending = false;
+    a.worldSpace = true; // a placement in the world is what makes an actor of it
+  });
+  /**
+   * `actorxy(name, x, y)` — the 2D placement, and the twin of `propxy`.
+   *
+   * Dust's shooting range is built out of it: `TARGET.CST`'s `initactors` puts
+   * the three bottles, the three cans, the weathervane, the dummy and the seven
+   * pop-up targets at screen pixels, because they are a painted booth and not
+   * scenery. Nothing answered to the name, so all fourteen were placed nowhere,
+   * drawn nowhere and hit nowhere — #292, "the target's didn't appear ... trying
+   * to shoot where the props should be results in nothing happening".
+   *
+   * Getter by arity like every other actor command, with `propxy`'s axes: 1 = x,
+   * 2 = y. Setting it takes the actor OUT of the world, which is exactly what
+   * `propxy` does to a prop, and the reason neither needs a "make this 2D" call
+   * of its own — though this game has one anyway (`actoris3d`).
+   */
+  r("actorxy", (_i, [n, x, y]) => {
+    const a = actor(n);
+    if (!a || x === undefined) return 0;
+    if (y === undefined) return toNum(x) === 2 ? a.anchorY : a.anchorX;
+    a.anchorX = toNum(x);
+    a.anchorY = toNum(y);
+    a.worldSpace = false;
+    return 0;
+  });
+  /**
+   * `actoris3d(name, flag)` — is this actor in the world, or painted on the
+   * screen?
+   *
+   * `TARGET.CST` declares seven of its twenty 3D and leaves the rest alone, then
+   * places the 3D ones with `actorxyz` and the others with `actorxy`: the tower,
+   * the water jets and the three birds are out in the scene where the camera can
+   * see round them, and the bottles are painted on the booth. So the flag and the
+   * placement say the same thing twice — which is what would make reading it as a
+   * no-op survivable, right up until a script asks.
+   *
+   * Not `propis3d`'s twin in behaviour: that one answers 0 always, because a v4
+   * shop's props are screen-space until something places them and nothing in
+   * TAOOT asks.
+   */
+  acc("actoris3d", 0, (a) => (a.worldSpace ? 1 : 0), (a, v) => {
+    a.worldSpace = truthy(v);
   });
   // place an actor on a named star point of the current set; the getter
   // form returns the star the actor was last placed on (endwalk checks
@@ -351,6 +408,7 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     // (ActorRuntime.settleStars). Titanic never reaches this branch with a real
     // star name — only with the walk sentinels, and those match no star anywhere.
     a.starPending = !star && a.starName.includes(".");
+    if (star) a.worldSpace = true; // as for actorxyz: a real placement in the world
   });
   acc("actordeg", 0, (a) => a.deg, (a, v) => {
     a.deg = toNum(v) & 0xff;

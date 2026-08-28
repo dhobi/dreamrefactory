@@ -1078,8 +1078,27 @@ export class ScreenDirector {
         })),
       ].sort((x, y) => y.depth - x.depth);
       for (const j of jobs) j.draw();
-      // the screen-space props still ride on top: cam = null skips the world
-      // half, which the merge above has already drawn
+      /**
+       * ...then the SCREEN-space sprites, which are a second world of their own:
+       * the 2D actors and then the screen props.
+       *
+       * Dust's shooting range is both at once. `TARGET.CST` paints its bottles,
+       * cans, weathervane and pop-up targets at screen pixels (`actorxy`), and
+       * `TARGET.SET`/`TARGET.FLT` put the gun in your hand, the avatar and the
+       * exit hotspot there too (`propxy`) — so the booth is actors and the
+       * furniture is props, over the room's own picture.
+       *
+       * Actors before props, which is the order the two passes have always had
+       * one level up (see `composite`'s own note) — and NOT a merge by `dist`,
+       * though `actordist` and `propdist` are one number space (ActorInstance.
+       * dist): the two lists could be interleaved by it, DF.EXE may well do
+       * exactly that, and nothing has been read either way. The gun is
+       * `propdist -3` against the dummy's `actordist -2`, so under a merge the gun
+       * would be drawn last and over the dummy, and under this order it is over it
+       * anyway. Where the two would differ is a case the corpus does not contain.
+       */
+      ar.compositeScreen(data, width, height, palette);
+      // cam = null skips the world half, which the merge above has already drawn
       pr.composite(
         data, width, height, palette, -Infinity, null,
         animating || this.session.viewShowing, occ,
@@ -1089,6 +1108,7 @@ export class ScreenDirector {
     if (cam) {
       this.session.actorRuntime.composite(data, width, height, palette, cam, occ);
     }
+    this.session.actorRuntime.compositeScreen(data, width, height, palette);
     this.session.propRuntime.composite(
       data, width, height, palette, -Infinity, cam,
       animating || this.session.viewShowing,

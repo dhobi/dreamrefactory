@@ -228,6 +228,7 @@ npx tsx taoot/tests/browser/repaint.ts                    # does the renderer ev
 npx tsx taoot/tests/browser/transition-hold.ts            # does anything paint the world while a transition waits for bytes? (#308)
 npx tsx dust/tests/browser/built-layout.ts                # Dust's page as BUILT, not as served
 npx tsx dust/tests/browser/load-standpoint.ts             # where a load puts you on a game that has just booted
+npx tsx dust/tests/browser/shooting-range.ts             # are the range's targets actually on the canvas?
 npx tsx tools/parse.ts                                    # parse the whole script corpus, report coverage
 npx tsx taoot/tools/navdump.ts taoot/gamefiles/en/titanic2/DATA/b59.set out/   # navigation dump (PNG per step)
 ```
