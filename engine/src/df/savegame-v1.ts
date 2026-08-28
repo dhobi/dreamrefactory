@@ -888,6 +888,7 @@ export type ActorPatchV1 = { name: string } & Partial<Omit<SavedActorV1, "name">
 function copyOf(raw: RawSaveFile): RawSaveFile {
   return {
     header: raw.header.slice(),
+    table: raw.table.slice(),
     containers: raw.containers.map((c) => ({ id: c.id, data: c.data.slice(), gap: c.gap })),
   };
 }
