@@ -578,21 +578,33 @@ test("a load fetches the saved room before reading its grid", async () => {
  *
  * Reported from the original: a port-written save would not load at all —
  * "Dust cannot find a file. Be sure the Dust CD is in your computer's CD-ROM
- * drive (Error line 5361, code 2)". Line 5361 is a `__LINE__`, and `push 0x14f1`
- * occurs exactly once in `DF.EXE`, at `0x42ef2a`:
+ * drive (Error line 5361, code 2)". Line 5361 is a `__LINE__`, so it can be
+ * found as `push 0x14f1`.
  *
- *     0x42eed5  call 0x42f010            ; reopen the set file by path
- *     0x42eeea  call 0x42d160            ; acquire pack 0             -> 5360
- *     0x42ef10  mov eax, [0x460940]      ; an index READ FROM THE SAVE
- *     0x42ef1d  call 0x42d160            ; acquire it                 -> 5361
- *     0x42ef4a  call 0x42d160            ; and [0x460934]             -> 5362
+ * ADDRESSES ARE `SUPPORT/BETA43/DFPENT.EXE`, which is on the disc, so every one
+ * of them can be checked from a rip. They were first read in the DF.EXE an
+ * INSTALL unpacks from `INSTALL/DATAPENT.Z`, which is NOT on the disc unpacked —
+ * this comment used to quote that build (`push 0x14f1 at 0x42ef2a`, acquire at
+ * `0x42d160`, globals at `0x4609xx`) and so pointed at nothing a reader could
+ * open. The two are the same code: every data global below sits exactly 0x5F00
+ * lower here, and the shipped build puts `push 0x14f1` at 0x424921.
  *
- * The loader copies container 1 verbatim into its globals at `0x4607a0` — which
+ *     0x4248cc  call 0x424a00            ; reopen the set file by path
+ *     0x4248e1  call 0x401500            ; acquire pack 0             -> 5360
+ *     0x424907  mov eax, [0x45aa40]      ; an index READ FROM THE SAVE
+ *     0x424914  call 0x401500            ; acquire it                 -> 5361
+ *     0x424941  call 0x401500            ; and [0x45aa34]             -> 5362
+ *
+ * The loader copies container 1 verbatim into its globals at `0x45a8a0` — which
  * is checkable, and checks out: every offset this port already knew lands on a
- * global the disassembly uses the same way (`C1_SET_FILE` 396 -> `0x46092c`, the
- * flat's file 356 -> `0x460904`, cell/facing 446/448/450 -> `0x46095e/60/62`).
- * So `[0x460940]` and `[0x460934]` are container 1 at +416 and +404: the set's
+ * global the disassembly uses the same way (`C1_SET_FILE` 396 -> `0x45aa2c`, the
+ * flat's file 356 -> `0x45aa04`, cell/facing 446/448/450 -> `0x45aa5e/60/62`).
+ * So `[0x45aa40]` and `[0x45aa34]` are container 1 at +416 and +404: the set's
  * ACTOR and TRANSITION registers.
+ *
+ * The same binary is what `set-v1.ts` reads the set header out of, and the same
+ * acquire routine — `0x401500` here — is how set-open was found to take only
+ * three containers, which is what put the main script at 0x1b78 (#291).
  *
  * Leaving them stale is invisible until the room changes SIZE. `town.set` and
  * `nite.set` are the same 3111-container file twice, so a save moved between the
