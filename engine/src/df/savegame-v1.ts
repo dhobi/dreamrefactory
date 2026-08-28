@@ -161,6 +161,30 @@ const C1_SET = 482;
  * The flat file is the same trick one field earlier, at +356 (`appl:local:new.flt`).
  */
 const C1_SET_FILE = 396;
+/**
+ * The two container indices the loader re-acquires from the reopened set file,
+ * and they are the room's, not the save's.
+ *
+ * DF.EXE copies container 1 verbatim into its global block at `0x4607a0`, so
+ * these are `[0x460934]` and `[0x460940]` — two globals with exactly one code
+ * reference each in the whole binary, the reads at `0x42ef3d` and `0x42ef10`:
+ *
+ *     0x42eed5  call 0x42f010            ; reopen the set file by path
+ *     0x42eee2  push 0x460930 / 0 / eax
+ *     0x42eeea  call 0x42d160            ; acquire pack 0        -> line 5360
+ *     0x42ef0b  push 0x460944
+ *     0x42ef10  mov eax, [0x460940]      ; the ACTOR register, from the save
+ *     0x42ef1d  call 0x42d160            ; acquire it            -> line 5361
+ *     0x42ef4a  call 0x42d160            ; the TRANSITION register -> line 5362
+ *
+ * and a failed acquire is the fatal "Dust cannot find a file. Be sure the Dust
+ * CD is in your computer's CD-ROM drive (Error line %d, code %ld)".
+ *
+ * See {@link SetFileV1.transitionRegister} for what they are and what leaving
+ * them stale did.
+ */
+const C1_TRANSITION_REGISTER = 404;
+const C1_ACTOR_REGISTER = 416;
 const C1_FLAT_FILE = 356;
 /** the open puppet's manifest handle, and its name; 0 when none is open */
 const C1_PUPPET_HANDLE = 506;
@@ -872,6 +896,34 @@ export interface SavePatchV1 {
     camY: number;
   };
   frame?: number;
+  /**
+   * What the LOADER needs from the set FILE itself, when the room changes.
+   *
+   * The counterpart of Titanic's `SavePatch.setFile` (engine/src/df/savegame.ts),
+   * and the same two omissions it already covers: the registers the load
+   * re-acquires ({@link C1_TRANSITION_REGISTER}) and the palette the screen comes
+   * back in.
+   */
+  openSet?: {
+    /** {@link SetFileV1.transitionRegister} of the room being written */
+    transitionRegister: number;
+    /** {@link SetFileV1.actorRegister} of the room being written */
+    actorRegister: number;
+    /**
+     * The set's own 256-entry palette ({@link SetFileV1.paletteRaw}), 8 bytes an
+     * entry, written into container 0's live CLUT.
+     *
+     * Measured against the disc: in all 61 shipped saves the live CLUT is
+     * palette 0 of the save's own set, byte for byte, except entries 0 and 255 —
+     * black and white, the two slots Windows reserves — which are always
+     * `{0, 0,0,0}` and `{255, -1,-1,-1}`. So those two are forced rather than
+     * copied, and the rest is the room's.
+     *
+     * Without it a cross-room save loads in the base save's colours, which is
+     * what a night-town palette does to the Mayor's landing.
+     */
+    clut?: Uint8Array;
+  };
   props?: PropPatchV1[];
   actors?: ActorPatchV1[];
   loops?: SavedLoopV1[];
@@ -1050,6 +1102,46 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
         break;
       }
       if (!found) drop(setFile, "the base's manifest has no record for the open set");
+    }
+  }
+
+  /*
+   * ---- the room's own two packs, and its colours ------------------------
+   *
+   * Reopening the set file is not the whole of arriving in a room: the loader
+   * then acquires three packs out of it — pack 0, the ACTOR register and the
+   * TRANSITION register — and it takes the last two indices from the save
+   * (C1_TRANSITION_REGISTER). They belong to the room, so a save that changes
+   * the room and not these sends the load looking for a container the new file
+   * may not have. `mayupper.set` has 205 containers; `nite.set`, which every
+   * shipped Dust save was taken in, says its actor register is 259.
+   *
+   * The CLUT is the same omission one layer over: container 0 carries the live
+   * palette, and a room that arrives under the previous room's colours is what
+   * the original showed when the registers alone were fixed.
+   */
+  const openSet = patch.openSet;
+  if (openSet && c1 && c1.length >= C1_SIZE) {
+    put32(c1, C1_TRANSITION_REGISTER, openSet.transitionRegister);
+    put32(c1, C1_ACTOR_REGISTER, openSet.actorRegister);
+    const c0 = out.containers[0]?.data;
+    if (openSet.clut && c0 && c0.length >= C0_CLUT + C0_CLUT_SIZE) {
+      if (openSet.clut.length < C0_CLUT_SIZE) {
+        drop("clut", `${openSet.clut.length} bytes of palette, ${C0_CLUT_SIZE} needed`);
+      } else {
+        c0.set(openSet.clut.subarray(0, C0_CLUT_SIZE), C0_CLUT);
+        // the two slots the live palette always holds itself — see openSet.clut
+        const black = C0_CLUT;
+        const white = C0_CLUT + 255 * 8;
+        put16(c0, black, 0);
+        put16(c0, black + 2, 0);
+        put16(c0, black + 4, 0);
+        put16(c0, black + 6, 0);
+        put16(c0, white, 255);
+        put16(c0, white + 2, -1);
+        put16(c0, white + 4, -1);
+        put16(c0, white + 6, -1);
+      }
     }
   }
 

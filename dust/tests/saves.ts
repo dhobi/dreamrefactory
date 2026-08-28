@@ -20,6 +20,7 @@ import { readSaveFile, writeSaveFile } from "@dreamfactory/engine/df/savegame";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { applyPatchV1, parseSaveV1, v1Index } from "@dreamfactory/engine/df/savegame-v1";
+import { readSetFileV1 } from "@dreamfactory/engine/df/set-v1";
 
 /** `7 + 5` — the containers every v1 save has, whatever it had open (v1Index) */
 const FIXED_V1_CONTAINERS = 12;
@@ -556,4 +557,127 @@ test("a load fetches the saved room before reading its grid", async () => {
     2 * 256 + 128,
     3 * 256 + 128,
   ]);
+});
+
+// --- the room's own two packs, and its colours ------------------------------
+
+/**
+ * A save carries container indices out of the SET FILE it was taken in, and the
+ * port used to leave them pointing at the wrong room.
+ *
+ * Reported from the original: a port-written save would not load at all —
+ * "Dust cannot find a file. Be sure the Dust CD is in your computer's CD-ROM
+ * drive (Error line 5361, code 2)". Line 5361 is a `__LINE__`, and `push 0x14f1`
+ * occurs exactly once in `DF.EXE`, at `0x42ef2a`:
+ *
+ *     0x42eed5  call 0x42f010            ; reopen the set file by path
+ *     0x42eeea  call 0x42d160            ; acquire pack 0             -> 5360
+ *     0x42ef10  mov eax, [0x460940]      ; an index READ FROM THE SAVE
+ *     0x42ef1d  call 0x42d160            ; acquire it                 -> 5361
+ *     0x42ef4a  call 0x42d160            ; and [0x460934]             -> 5362
+ *
+ * The loader copies container 1 verbatim into its globals at `0x4607a0` — which
+ * is checkable, and checks out: every offset this port already knew lands on a
+ * global the disassembly uses the same way (`C1_SET_FILE` 396 -> `0x46092c`, the
+ * flat's file 356 -> `0x460904`, cell/facing 446/448/450 -> `0x46095e/60/62`).
+ * So `[0x460940]` and `[0x460934]` are container 1 at +416 and +404: the set's
+ * ACTOR and TRANSITION registers.
+ *
+ * Leaving them stale is invisible until the room changes SIZE. `town.set` and
+ * `nite.set` are the same 3111-container file twice, so a save moved between the
+ * day and night town loads; `mayupper.set` has 205 containers, and a save moved
+ * there asked the original for pack 259 of 205.
+ *
+ * Both halves below are measurements against the disc, not assertions about it.
+ */
+const setFilePath = (name: string): string | null => {
+  const cd = fileURLToPath(new URL("../gamefiles/dustcd", import.meta.url));
+  if (!existsSync(cd)) return null;
+  for (const folder of readdirSync(cd)) {
+    const p = join(cd, folder, name.toUpperCase());
+    if (existsSync(p)) return p;
+  }
+  return null;
+};
+
+test("every shipped save carries its own room's registers and palette", () => {
+  const files = dustSaves();
+  if (!files.length || !setFilePath("NITE.SET")) {
+    console.warn(`no ${SAVE_DIR} — skipping (needs the Dust rip)`);
+    return;
+  }
+  let checked = 0;
+  for (const f of files) {
+    const bytes = new Uint8Array(readFileSync(join(SAVE_DIR, f)));
+    const save = parseSaveV1(bytes);
+    const path = save?.standpoint.setFile ? setFilePath(save.standpoint.setFile) : null;
+    if (!save || !path) continue;
+    checked++;
+    const raw = readSaveFile(bytes);
+    const c1 = new DataView(raw.containers[1].data.buffer, raw.containers[1].data.byteOffset);
+    const set = readSetFileV1(new Uint8Array(readFileSync(path)));
+    expect.soft([c1.getUint32(404, true), c1.getUint32(416, true)], `${f}: the registers of ${save.standpoint.setFile}`)
+      .toEqual([set.transitionRegister, set.actorRegister]);
+    // ...and the live CLUT is palette 0 of that same room, except black and
+    // white — the two slots Windows reserves, which the engine always holds
+    const clut = raw.containers[0].data.subarray(0xa0c, 0xa0c + 2048);
+    const want = new Uint8Array(set.paletteRaw.subarray(0, 2048));
+    const dvW = new DataView(want.buffer);
+    dvW.setInt16(0, 0, true); dvW.setInt16(2, 0, true); dvW.setInt16(4, 0, true); dvW.setInt16(6, 0, true);
+    dvW.setInt16(255 * 8, 255, true);
+    for (let o = 2; o < 8; o += 2) dvW.setInt16(255 * 8 + o, -1, true);
+    const first = [...clut].findIndex((v, i) => v !== want[i]);
+    expect.soft(first, `${f}: the CLUT is ${save.standpoint.setFile}'s palette`).toBe(-1);
+  }
+  expect(checked, "saves whose room is on the disc").toBeGreaterThan(20);
+});
+
+test("moving a save to another room takes that room's registers and palette with it", () => {
+  const base = join(SAVE_DIR, "D1E_006.RTD");
+  const room = setFilePath("MAYUPPER.SET");
+  if (!existsSync(base) || !room) {
+    console.warn(`no ${base} — skipping (needs the Dust rip)`);
+    return;
+  }
+  const raw = readSaveFile(new Uint8Array(readFileSync(base)));
+  const set = readSetFileV1(new Uint8Array(readFileSync(room)));
+  const standpoint = {
+    set: "mayupper", setFile: "mayupper.set",
+    cellX: 1, cellZ: 1, facing: 1, deg: 192, camX: 384, camY: 384,
+  };
+  const patch = {
+    numGlobals: new Map<string, number>(), strGlobals: new Map<string, string>(), standpoint,
+  };
+
+  // WITHOUT the room's own values, which is what shipped: the night town's
+  // registers survive into a 205-container file, and 259 is not one of them
+  const stale = readSaveFile(applyPatchV1(raw, patch));
+  const dvStale = new DataView(stale.containers[1].data.buffer, stale.containers[1].data.byteOffset);
+  expect([dvStale.getUint32(404, true), dvStale.getUint32(416, true)], "nite.set's registers, left behind")
+    .toEqual([272, 259]);
+
+  // ...and with them
+  const bytes = applyPatchV1(raw, {
+    ...patch,
+    openSet: {
+      transitionRegister: set.transitionRegister,
+      actorRegister: set.actorRegister,
+      clut: set.paletteRaw,
+    },
+  });
+  const out = readSaveFile(bytes);
+  const dv1 = new DataView(out.containers[1].data.buffer, out.containers[1].data.byteOffset);
+  expect([dv1.getUint32(404, true), dv1.getUint32(416, true)], "mayupper.set's own registers")
+    .toEqual([set.transitionRegister, set.actorRegister]);
+  expect(set.actorRegister, "which are inside a 205-container file").toBeLessThan(set.file.containers.length);
+
+  // the palette came too, with the two reserved slots the engine keeps
+  const clut = out.containers[0].data.subarray(0xa0c, 0xa0c + 2048);
+  expect([...clut.subarray(8, 2040)], "the room's colours")
+    .toEqual([...set.paletteRaw.subarray(8, 2040)]);
+  const dv0 = new DataView(clut.buffer, clut.byteOffset);
+  expect([dv0.getInt16(0, true), dv0.getInt16(2, true)], "entry 0 is black").toEqual([0, 0]);
+  expect([dv0.getInt16(255 * 8, true), dv0.getInt16(255 * 8 + 2, true)], "entry 255 is white").toEqual([255, -1]);
+  // and the standpoint still says what it said
+  expect(parseSaveV1(bytes)!.standpoint.setFile, "the room").toBe("mayupper.set");
 });
