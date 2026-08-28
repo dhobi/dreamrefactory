@@ -281,3 +281,71 @@ test("makehands deals four whole hands out of one deck", async () => {
       .toBe(dealt.length);
   }
 });
+
+// --- 3. the money readouts are rewritten, not written over (#288) ----------
+
+/**
+ * `lowdrawcash(num, x, y)` in SALGAMES.FLT, which is the whole mechanism:
+ *
+ *     propvisible ("blankscore", true)     / / the patch, over this field
+ *     forceupdate ()
+ *     propvisible ("blankscore", false)
+ *     forceupdate ()
+ *     …
+ *     drawstring ("$" @ num, makepoint (x + 4 * (5 -stringlength (num)), y), 0, 12)
+ *
+ * In DUST.EXE a `drawstring` paints into the composited screen and the pixels
+ * stand until something composites over them, so that flash IS the erase. Ours
+ * keeps the drawn strings and re-applies them over the props every frame, which
+ * made the patch a no-op — and because the field is right-aligned by shifting x
+ * by 4 px per missing digit, the new value never landed on the old one's key and
+ * never replaced it. Reported as CASH and WAGER holding every value they had
+ * ever shown at once: "$100" under "$10" under "$0".
+ *
+ * The assertion is per FIELD, not per layer: `drawcash` rewrites both, 40 px
+ * apart, and a fix that wiped the text layer wholesale would pass a one-field
+ * test while taking the other field's number off the table.
+ */
+test("blackjack's CASH and WAGER hold one value each", async () => {
+  const flt = `${SALGAMES}/SALGAMES.FLT`;
+  if (!existsSync(flt) || !existsSync(`${SALGAMES}/SALGAMES.PRP`)) {
+    console.warn(`no ${flt} — skipping (needs the Dust rip)`);
+    return;
+  }
+  const session = newSession();
+  expect(await session.openShop("salgames.prp"), "salgames.prp opens").toBe(true);
+  const all = scripts(flt, "salgames.flt");
+  const util = all.find((s) => s.script.codes.has("drawcash"))!;
+  expect(util, "drawcash() is in the file").toBeTruthy();
+  session.interp.fallbackScripts = all;
+  // blackjack's own flat, which is the arm of drawcash's switch that draws both
+  // fields (flat 3 is the slot machine, and has only the one)
+  session.currentFlat = "flat 2";
+  expect(session.propRuntime.get("blankscore"), "the eraser prop is in the shop").toBeTruthy();
+
+  const ctx = { me: "flat 2", target: "" };
+  const drawcash = (cash: number, bet: number) =>
+    session.interp.runHandler(util, "drawcash", [cash, bet], ctx);
+  /** the layer as "text@x" per baseline — CASH is drawn at y 314, WAGER at 354 */
+  const field = (y: number) =>
+    session.textOverlay.filter((e) => e.y === y).map((e) => `${e.text}@${e.x}`);
+
+  // a hundred dollars in hand, all of it on the table
+  await drawcash(100, 100);
+  expect(field(314), "CASH after the bet").toEqual(["$100@69"]);
+  expect(field(354), "WAGER after the bet").toEqual(["$100@69"]);
+
+  // ...lost, and the next round is a ten. Both values are shorter than the ones
+  // they replace, so both land at a DIFFERENT x — which is what made a
+  // same-position replacement miss.
+  await drawcash(0, 10);
+  expect(field(314), "CASH, rewritten").toEqual(["$0@77"]);
+  expect(field(354), "WAGER, rewritten").toEqual(["$10@73"]);
+  expect(session.textOverlay.length, "nothing else is left on the felt").toBe(2);
+
+  // and rewriting ONE field leaves the other alone: closecards() redraws the
+  // cash with no bet showing (drawcash(playercash, -1))
+  await session.interp.runHandler(util, "drawcash", [25, -1], ctx);
+  expect(field(314), "CASH alone, rewritten").toEqual(["$25@73"]);
+  expect(field(354), "WAGER survives its neighbour's redraw").toEqual(["$-1@73"]);
+});

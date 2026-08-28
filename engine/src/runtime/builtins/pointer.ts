@@ -100,10 +100,7 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
   // what drawstring actually paints, so measure with the render font.
   r("stringwidth", (_i, [text, , size]) => {
     const t = decodeText(toStr(text ?? ""), session.textEncoding());
-    const sz = toNum(size ?? 12);
-    return session.measureText
-      ? Math.round(session.measureText(t, sz))
-      : Math.ceil(t.length * sz * 0.6);
+    return session.textWidth(t, toNum(size ?? 12));
   });
   // stilldown(): true while the mouse button is held. Drag loops spin on it
   // (`while stilldown() { propdeg(me, ...); forceupdate() }`), so each check

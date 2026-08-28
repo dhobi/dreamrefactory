@@ -11,6 +11,7 @@ import { join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { sniffScript, scriptToText, Token } from "@dreamfactory/engine/df/script";
+import { carriesScript } from "./script-bearing";
 
 /**
  * Which rip to read when the caller does not say.
@@ -42,7 +43,6 @@ function defaultRip(): string {
 
 const [, , rootDir = defaultRip(), outDir = "out"] = process.argv;
 
-const SCRIPT_BEARING = /\.(SET|STG|PUP|SHP|CST|MOV)$/i;
 
 function* walk(dir: string): Generator<string> {
   for (const e of readdirSync(dir)) {
@@ -62,8 +62,7 @@ mkdirSync(join(outDir, "scripts"), { recursive: true });
 
 for (const path of walk(rootDir)) {
   const name = basename(path);
-  const isBoot = /^BOOTFILE$/i.test(name);
-  if (!SCRIPT_BEARING.test(name) && !isBoot) continue;
+  if (!carriesScript(name)) continue;
 
   let file;
   try {
