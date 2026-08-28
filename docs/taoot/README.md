@@ -31,7 +31,7 @@ project's evidence:
 
 | | |
 |---|---|
-| `taoot/tests/auto/` | 30 files, 466 tests — nearly all the behavioural coverage there is ([the inventory](../reference/tests.md)) |
+| `taoot/tests/auto/` | nearly all the behavioural coverage there is ([the inventory](../reference/tests.md)) |
 | `taoot/tests/playthrough/` | the game played from boot to credits in one session, 27 segments ([the route](../reference/route.md)) |
 | `taoot/tests/browser/` | the same route through a real page, diffed against the same trace |
 | `taoot/tests/speedrun/` | that route written as a sheet and driven against the clock |
