@@ -1,46 +1,11 @@
 import { Value, toNum, toStr, truthy } from "../interp";
 import {
-  degVariantFrames, frameIndexForDegree, isDegreeSelector, playSequence, type PropInstance,
+  becomeWorldProp, degVariantFrames, frameIndexForDegree, isDegreeSelector, playSequence,
+  type PropInstance,
 } from "../props";
 import { packPoint } from "../point";
 import { accessorFamily, BuiltinCtx } from "./context";
 
-/**
- * A prop moving into world space, and dropping the screen-space frame pin on the
- * way, because becoming a world prop changes what a frame MEANS: it stops being a
- * selector index and becomes a choice made at draw time, from the prop's facing
- * against the camera bearing. A pin from an earlier `propdeg` is stale.
- *
- * Reachable only since the boot library's default `initprop` became reachable: it
- * does `propdeg (target, 0)` on every prop at set open, and SMOKE's card table
- * takes its star AFTER that — so the table arrived already pinned to one of its 32
- * views and stopped turning with the camera.
- */
-function becomeWorldProp(p: PropInstance, v1 = false): void {
-  p.worldSpace = true;
-  p.frameLocked = false;
-  p.degVariants = false;
-  p.frameOrder = null;
-  /**
-   * A v1 world prop DRAWS at its authored size until a script says otherwise.
-   *
-   * `scale` is per-mille — DF.EXE's prop renderer computes
-   * trunc(scale x ref / 1000) x src / depth (0x4150d1) — so 1000 is the
-   * identity, and Dust never propscales its doors at all: HOUSE.PRP's `door`
-   * group (55 one-frame states, refScale 160) is placed with `propstar` and
-   * simply expected to draw. Under the port's 0 default the worldDrawList's
-   * `scale <= 0` skip dropped every one of them: "doors don't draw".
-   *
-   * This default was tried before and REVERTED ("the doors are too big now"),
-   * and both readings were right: the doors drew oversized because the v1
-   * camera was missing its 64-unit setback and f was 256 instead of 310 —
-   * every world sprite was too near. With the camera fixed, a door at its
-   * usual ~156 depth draws at 160/156 of its art, which is the authored look.
-   * v4 keeps 0: TAOOT propscales every world prop it shows, and a v4 prop
-   * placed without one staying invisible is the measured behaviour.
-   */
-  if (v1 && p.scale === 0) p.scale = 1000;
-}
 
 /**
  * Prop (SHP "shop") commands: existence/visibility/state/placement getters and
@@ -237,13 +202,58 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
         default: return 0;
       }
     }
-    becomeWorldProp(p, session.currentBinding?.set.version === 1); // see propstar
+    becomeWorldProp(p, session.isV1); // see propstar
     p.worldX = toNum(x);
     p.worldY = toNum(y);
     p.worldZ = toNum(z ?? 0);
+    // as for actors: an explicit placement answers the question, so a star that
+    // never resolved must not overrule it when its set opens (settleStars)
+    p.starPending = false;
   });
+  /**
+   * `propset(name, set)` says which SET a prop belongs to — and belonging to a
+   * set is what makes it scenery.
+   *
+   * The port stored the name and nothing else, and the set filter that reads it
+   * lives in {@link PropRuntime.worldDrawList} — which a screen-space prop never
+   * reaches. So a prop that had been assigned to a room but not yet positioned
+   * stayed in the SCREEN draw list, pinned at the default anchor (256, 192) and
+   * drawn over every room in the game. #290 is that, reported from the Mayor's
+   * spare room on the morning of day 2: a pile of dung, a tumbleweed and a vase
+   * of flowers stacked in mid-air at the centre of the view, unchanged by turning
+   * or walking, and clickable.
+   *
+   * The corpora say the two are the same statement. All 94 `propset` calls in
+   * Dust and all 27 in Titanic are about world props — every one is within a few
+   * lines of a `propxyz`, `propstar`, `makecricket` or a `propscale` in the
+   * thousands — and Dust is the game that leans on the ORDER:
+   *
+   *     code setupprop (where)            / / HOUSE.PRP, the dung
+   *         if where = "town"
+   *             propset (me, "town")
+   *             propvisible (me, true)
+   *             propscale (me, 500)
+   *             propdeg (me, random (255))
+   *
+   * with the position arriving later and from somewhere else — `randomloc()` when
+   * the town opens, `movestar()` for the shooting star, a `makecricket` for the
+   * shooting-range bullet. Titanic always places first and calls `propset` after
+   * (`propstar (me, "flames")` then `propset (me, "smoke")`), which is why this
+   * costs it nothing: by the time propset runs there, the prop is already a world
+   * prop.
+   *
+   * `propdeg (me, random (255))` is the same fact said twice: 0..255 is an
+   * ORIENTATION, which is only meaningful for a prop drawn against a camera —
+   * screen-space props read propdeg as a frame index (see the note there).
+   *
+   * An empty name is not an assignment and does not move a prop into the world;
+   * `propxy` still takes it back out, so a script that places a prop on the
+   * screen after assigning it to a set gets what it asked for, in that order.
+   */
   acc("propset", "", (p) => p.setName, (p, v) => {
-    p.setName = toStr(v).toLowerCase();
+    const name = toStr(v).toLowerCase();
+    p.setName = name;
+    if (name) becomeWorldProp(p, session.isV1);
   });
   acc("propscale", 0, (p) => p.scale, (p, v) => {
     p.scale = Number(v) || 0;
@@ -426,12 +436,34 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   acc("propstar", "", (p) => p.starName, (p, starName) => {
     const star = findStar(starName);
     if (star) {
-      becomeWorldProp(p, session.currentBinding?.set.version === 1);
+      becomeWorldProp(p, session.isV1);
       p.worldX = star.positionX;
       p.worldY = star.positionZ;
       p.worldZ = star.positionY;
       p.deg = star.rotation8 & 0xff;
     }
     p.starName = toStr(starName).toLowerCase();
+    /**
+     * A star the open set has never heard of, which in Dust is the ordinary
+     * case: its star names are qualified by set — the identifiers in the SET
+     * itself are `town.flower`, `town.jug`, `town.bone` — and the scripts that
+     * place these props run wherever the player happens to be. `INVEN.PRP`'s
+     * `initprops` is the one #290 caught: on the morning of day 2 it does
+     * `sendtoprop ("flowers", setupprop ("grave"))`, whose body is `propset (me,
+     * "town")` and `propstar (me, "town.flower")`, and the player is asleep in
+     * `mayroom` — so the star misses and the vase had no position at all.
+     *
+     * The answer is the one {@link ActorRuntime.settleStars} already gives for
+     * the cast, for the same reason and with the same restraint: remember that
+     * this one MISSED, and seat it when its own set opens. A prop is only ever
+     * drawn in its own set, so a position is only required to be right by the
+     * time that set is the one being looked at.
+     *
+     * Qualified names only. Titanic reaches this branch with bare names that are
+     * simply not stars — `propstar` doubles as a store for placement sentinels
+     * there, the way `actorstar` does — and those must not be waiting for a set
+     * called after them.
+     */
+    p.starPending = !star && p.starName.includes(".");
   });
 }

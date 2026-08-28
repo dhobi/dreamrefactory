@@ -2719,6 +2719,36 @@ export class GameSession {
         this.propScripts.set(g.name.toLowerCase(), inst);
       }
     }
+    /**
+     * Each prop's own `openprop` — the shop-open lifecycle handler, and the prop
+     * twin of `openstage`/`openflat`/`openshop`. Nothing fired it, and nothing in
+     * either corpus CALLS it either (unlike `initprop`, which the set scripts send
+     * themselves: `sendtoprop ("door", initprop ())`), so what it sets up simply
+     * never happened.
+     *
+     * All six in Dust are structural, and they are the props that come in pairs:
+     *
+     *     code openprop ()                  / / HOUSE.PRP, the dung
+     *         propinstance ("dung1", "dung2")
+     *         propzclip (me, 16)
+     *
+     * plus powderkeg2/3, buildrand2/3, table2 and two more `propzclip`s. So the
+     * second of each pair did not exist, and #290's report has the engine saying
+     * so out loud — `sendtoprop("dung2", setupprop(..)) — target not loaded`,
+     * from `initprops` addressing a prop whose maker had never run. Titanic
+     * defines none, so this is Dust's alone until Timelapse says otherwise.
+     *
+     * Before the shop's own `openshop`: a group that makes an instance is making
+     * something the shop may then address by name, and the order that cannot be
+     * wrong is the one where it exists first. (Nothing in the corpora needs it
+     * either way — Dust's `house.prp` has no `openshop` handler at all.)
+     */
+    for (const g of shp.groups) {
+      const inst = this.propScripts.get(g.name.toLowerCase());
+      if (inst?.script.codes.has("openprop")) {
+        await this.fireHandler(inst, "openprop", g.name, `openprop ${g.name}`);
+      }
+    }
     await this.fireHandler(main, "openshop", key, `openshop ${key}`);
     this.onLog(`shop loaded: ${key} (${shp.groups.length} props)`);
     return true;
