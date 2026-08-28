@@ -202,6 +202,7 @@ test("a patched Dust save reads back what was written into it", () => {
         deg: 64,
         star: "town.leroy1",
         set: "town",
+        is3d: true,
       },
     ],
     loops: [{ kind: "scene", name: "scene a2", handler: "apothfx", period: 5 }],
@@ -234,6 +235,7 @@ test("a patched Dust save reads back what was written into it", () => {
   expect.soft(leroy?.pose, "Leroy pose").toBe("grunt");
   expect.soft(leroy?.owner, "Leroy owner").toBe("stranger");
   expect.soft(leroy?.deg, "Leroy deg").toBe(64);
+  expect.soft(leroy?.is3d, "Leroy is3d").toBe(true);
   // the loop table is rewritten whole, so the base's nine are gone
   expect.soft(after.loops.length, "loops").toBe(1);
   expect.soft(after.loops[0], "the one loop").toEqual({
@@ -323,6 +325,15 @@ test("the shipped saves decode to the game they came from", () => {
       expect
         .soft(["town.set", "nite.set"], `${f}: "town" is one of the two town files`)
         .toContain(save.standpoint.setFile);
+    }
+    /*
+     * No visible actor without `is3d` — the invariant the original's draw gate
+     * (0x414fd0) makes load-bearing. A record that breaks it is drawn in EVERY
+     * room, screen-anchored at the top-left, at raw scale (#319, #320); the
+     * original never writes one, so neither may this port.
+     */
+    for (const a of save.actors) {
+      if (a.visible) expect.soft(a.is3d, `${f}: ${a.name} is visible, so it is in the world`).toBe(true);
     }
   }
 
@@ -628,6 +639,26 @@ test("every shipped save carries its own room's registers and palette", () => {
     for (let o = 2; o < 8; o += 2) dvW.setInt16(255 * 8 + o, -1, true);
     const first = [...clut].findIndex((v, i) => v !== want[i]);
     expect.soft(first, `${f}: the CLUT is ${save.standpoint.setFile}'s palette`).toBe(-1);
+    // ...and the camera the actor projection looks through is that room's too:
+    // its eye height and setback (c1+430/+428), and the eye trio the formula
+    // the writer uses — cell centre pushed back 64 along the facing (see the
+    // room-move test below). Held by all 61 shipped saves before it was code.
+    expect
+      .soft([c1.getInt16(428, true), c1.getInt16(430, true)], `${f}: the camera of ${save.standpoint.setFile}`)
+      .toEqual([set.cameraSetback, set.eyeHeight]);
+    const sp = save.standpoint;
+    let ex = sp.cellX * 256 + 128;
+    let ey = sp.cellZ * 256 + 128;
+    if (sp.facing === 1) ey += set.cameraSetback;
+    else if (sp.facing === 2) ey -= set.cameraSetback;
+    else if (sp.facing === 3) ex -= set.cameraSetback;
+    else if (sp.facing === 4) ex += set.cameraSetback;
+    expect
+      .soft(
+        [c1.getInt16(472, true), c1.getInt16(474, true), c1.getInt16(476, true)],
+        `${f}: the projection's eye`,
+      )
+      .toEqual([ex, ey, set.eyeHeight]);
   }
   expect(checked, "saves whose room is on the disc").toBeGreaterThan(20);
 });
@@ -662,6 +693,8 @@ test("moving a save to another room takes that room's registers and palette with
     openSet: {
       transitionRegister: set.transitionRegister,
       actorRegister: set.actorRegister,
+      eyeHeight: set.eyeHeight,
+      cameraSetback: set.cameraSetback,
       clut: set.paletteRaw,
     },
   });
@@ -669,6 +702,19 @@ test("moving a save to another room takes that room's registers and palette with
   const dv1 = new DataView(out.containers[1].data.buffer, out.containers[1].data.byteOffset);
   expect([dv1.getUint32(404, true), dv1.getUint32(416, true)], "mayupper.set's own registers")
     .toEqual([set.transitionRegister, set.actorRegister]);
+  /*
+   * The camera the actor projection looks through (c1+428/430 and the eye trio
+   * at +472/474/476). mayupper's eye stands 130 above the floor where the night
+   * town's stood 62; left stale, every restored character in the room hangs the
+   * difference up the wall (#320). The eye pair is the cell centre pushed back
+   * along the facing — facing 1 looks north, so the eye is 64 south of centre.
+   */
+  expect([dv1.getInt16(428, true), dv1.getInt16(430, true)], "mayupper's camera setback and eye height")
+    .toEqual([set.cameraSetback, set.eyeHeight]);
+  expect(
+    [dv1.getInt16(472, true), dv1.getInt16(474, true), dv1.getInt16(476, true)],
+    "the projection's eye: cell (1,1) centre, set back 64 along facing 1, at mayupper's height",
+  ).toEqual([384, 384 + set.cameraSetback, set.eyeHeight]);
   expect(set.actorRegister, "which are inside a 205-container file").toBeLessThan(set.file.containers.length);
 
   // the palette came too, with the two reserved slots the engine keeps
