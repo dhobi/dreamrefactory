@@ -27,8 +27,8 @@ So read it with its grain in mind:
 
   ```
   npm run dev:dust                 # in one terminal
-  npm run watch:dust -- D2A_006    # in another
-  npm run watch:dust -- --list     # every rung, in the order they were made
+  npm run play:dust -- D2A_006    # in another
+  npm run play:dust -- --list     # every rung, in the order they were made
   ```
 
   It boots (about three minutes), loads that save, and leaves the window open —
