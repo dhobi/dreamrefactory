@@ -226,6 +226,7 @@ npx tsx taoot/tests/browser/endgame.ts                    # the ending only, res
 npx tsx taoot/tests/browser/menu-movie.ts                 # screenshots + state dump of the menu movie flow
 npx tsx taoot/tests/browser/lang-chooser.ts               # pick a language in a real browser, then check what the boot reads
 npx tsx taoot/tests/browser/repaint.ts                    # does the renderer ever skip a frame it should have drawn?
+npx tsx taoot/tests/browser/transition-hold.ts            # does anything paint the world while a transition waits for bytes? (#308)
 npx tsx dust/tests/browser/built-layout.ts                # Dust's page as BUILT, not as served
 npx tsx tools/parse.ts                                    # parse the whole script corpus, report coverage
 npx tsx taoot/tools/navdump.ts taoot/gamefiles/en/titanic2/DATA/b59.set out/   # navigation dump (PNG per step)
@@ -255,6 +256,19 @@ SHEET=taoot/tests/speedrun/any.sheet npm run speedrun
 The same sheet language runs in the browser, on the unlisted `/speedrun/`
 workbench — `taoot/src/speedrun/` is the in-page half and
 `taoot/tests/speedrun/` the Playwright one, over one sheet parser.
+
+`browser/transition-hold.ts` is the browser half of one decision the headless
+suite can only pin from the inside: a load must not hand the screen back to the
+world while a transition is waiting for it. It samples every
+`ScreenDirector.render` — flagged with whether a composite actually happened —
+and reports any composite that put the lit room on the canvas inside two windows
+the report named: the boot between the menu film and the date caption (CPU
+throttled 4x, because nothing there is a fetch on a warm page), and the first
+open of the map (`map.stg` held back by `STALL_MS`, default 1200). It prints
+which build the PAGE is running, read out of the loaded function — a dev server
+that has been up across an edit can serve the browser a stale transform while
+handing curl a fresh one, which is enough to make both arms of a before/after
+measure the same code.
 
 `browser/lang-chooser.ts` needs two or more language directories under
 `gamefiles/` and skips (exit 0, with the reason) when the install has fewer: it
