@@ -125,7 +125,7 @@ safe because the upload only ever adds and overwrites — see
 ## Tests
 
 ```bash
-npm test                 # 55 files, 684 tests — the automatic suite
+npm test                 # the automatic suite
 npm run test:playthrough # the game played end to end, by the clock it runs on
 npm run test:browser     # Playwright against a live dev server
 ```
