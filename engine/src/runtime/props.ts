@@ -220,6 +220,16 @@ export class PropInstance {
   anchorX = DEFAULT_ANCHOR_X;
   anchorY = DEFAULT_ANCHOR_Y;
   /**
+   * Has a script actually placed this prop on the screen (`propxy`)?
+   *
+   * The anchor has a DEFAULT, and a save writer cannot tell a default from a
+   * placement without being told. Writing (256, 192) over the interface band's
+   * real coordinates is what moved Dust's panel chrome into the middle of the
+   * room when a port-written save was loaded in the original — `slider` went
+   * from (117, 323) to the port's default, and so did eleven others.
+   */
+  screenPlaced = false;
+  /**
    * Free-form script storage (propowner), and "none" until a script writes it.
    *
    * The same convention as an actor's owner, and for the same reason: TAOOT scripts
