@@ -9,7 +9,7 @@
  * A `.rtd` is the SAME container a `.ti` is — `fourCC 0x00010000` at 0, the
  * signature `ODTRTRFD` at 32, a 128-slot position table, container 0 at 1536 and
  * every later one aligned to 64 — so `readSaveFile` and `writeSaveFile` take
- * these files unchanged, and reproduce all five shipped ones byte for byte
+ * these files unchanged, and reproduce every shipped one byte for byte
  * (`dust/tests/saves.ts`). The writer that made them is DF.EXE's
  * `0x419CD0`, and it is recognisably the ancestor of TI.EXE's `0x413910`: the
  * same containers, in the same order, from the same kind of live engine tables.
@@ -117,7 +117,7 @@ const C0_FILE_STRIDE = 260;
  *
  * `inc DWORD ds:0x460ad8` at `0x4334ad` runs once per service pass, and the
  * accessor at `0x42bd60` builds its DFValue straight off that address. It is also
- * the one field that orders the five shipped saves by when they were taken:
+ * the one field that orders the shipped saves by when they were taken:
  * START 167, DOG 312, HELP 525, GOTBONE 705, AFTERDOG 958.
  */
 const C1_FRAME = 248;
@@ -186,7 +186,7 @@ const C1_SET = 482;
  *
  * The same indirection v4 uses (its set id at c1+544), and for the same reason:
  * the engine reopens the room it had OPEN, not the room it can name. Resolving
- * the handle in all five shipped saves gives `dust:data:nite.set` — the night
+ * the handle resolves the two apart: a night save gives `dust:data:nite.set` — the night
  * town — while the name field beside it says "town" in every one of them.
  *
  * The flat file is the same trick one field earlier, at +356 (`appl:local:new.flt`).
@@ -622,7 +622,7 @@ export interface V1Index {
  * Which container is which, from the count alone.
  *
  * `count = 7 + 3·banks + 5 + payloads`, and a payload only exists for an active
- * walk carrying waypoints — none of the five shipped saves has one. Deriving
+ * walk carrying waypoints, which a good many of the shipped saves do have. Deriving
  * `banks` from the count and cross-checking it against container 6's own size
  * (38 bytes per bank) is what makes the map self-validating: if the two
  * disagree, this is not the file we think it is.

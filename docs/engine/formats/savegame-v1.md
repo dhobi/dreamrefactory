@@ -5,8 +5,10 @@ is the ancestor of, and whose reader parses these files unchanged.*
 
 Dust's control panel writes a save with `savegame("dust 0.3")` and reads one back
 with `opengame("dust 0.3")` — the same two opcodes Titanic uses (12077 / 12078),
-three years earlier. The five example saves under `gamefiles/dust/save/` were
-produced by the shipped `DF.EXE`.
+three years earlier. The saves under `gamefiles/dust/save/` were produced by the
+shipped `DF.EXE`, and they are not examples: ordered by their frame counter they
+are one continuous playthrough of the whole game
+([the golden thread](../../dust/thread.md)).
 
 Reference implementation: [`engine/src/df/savegame-v1.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame-v1.ts)
 (the byte format), [`engine/src/df/save-vars.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/save-vars.ts)
@@ -36,9 +38,9 @@ All of it proven from the writer: `savegame` at `0x419CD0` calls
 selects the `*.rtd` filter in the file-dialog helper at `0x427882`.
 
 So `readSaveFile` and `writeSaveFile` take Dust's saves with no changes at all,
-and reproduce every byte the loader reads in all five shipped files. The only
+and reproduce every byte the loader reads in every shipped file. The only
 bytes a rewrite differs in are the **unused tail of the position table**, where
-the original left process memory — in four of the five it is legible
+the original left process memory — in most of them it is legible
 (`appl:bootfile`, the tail of `unilib.snd`), which is the boot's own file list
 still lying in the heap the writer dumped. We zero it, as we do in `.ti`.
 
@@ -72,9 +74,10 @@ Container payload sizes are always a multiple of 32 because the writer stores
 `GlobalSize(handle)` rather than the used length (`0x421360`), which is why every
 table trails slack.
 
-`START.RTD`, Dust's own opening save, mapped by that arithmetic alone:
+`D1E_001.RTD`, the earliest save in the collection, mapped by that arithmetic
+alone:
 
-<ByteMap map="start.rtd" />
+<ByteMap map="d1e_001.rtd" />
 
 Two open sound banks, so `7 + 3·2 = 13` is the globals container, and the five
 tail tables follow it. Put this beside [the Titanic save](savegame.md) and the
@@ -159,8 +162,10 @@ own scene table. Proven by identity: `START.RTD` reads (6, 14, 1), and
 
 Dust's town exists twice — `town.set` by day and `nite.set` by night — and **both
 are named `"town"` inside**. So the name at +482 cannot say which file to reopen;
-the handle at +396 can, and does: it resolves to `dust:data:nite.set` in all five
-shipped saves, every one of which says `"town"` in the name field beside it.
+the handle at +396 can, and does. The collection demonstrates it **both ways**:
+saves whose name field says `"town"` and whose handle resolves to
+`dust:data:nite.set`, and saves whose name field says `"town"` and whose handle
+resolves to `dust:data:town.set`. The name alone could not tell those two apart.
 
 This is the same indirection v4 documents (its set id at c1+544), and skipping it
 has a memorable symptom: a save taken at midnight comes back at noon, in the
@@ -262,11 +267,15 @@ period @6, pstr name @10, pstr handler @26}`, kinds 1=actor 2=prop 3=scene
 4=flat), so the v4 decoder reads it unchanged. `crickets` (16 × 48) and `walks`
 (16 × 82) are v1's own sizes.
 
-The **cricket** table is entirely zero in all five shipped saves, so beyond
-`active @0` and the name at `+0x20` there is nothing to check a field against, and
-nothing is guessed.
+The **cricket** table was entirely zero in every save this format was worked out
+against, so beyond `active @0` and the name at `+0x20` **nothing here is
+guessed — and nothing is confirmed either**. That is no longer forced: the
+collection now beside the disc carries non-zero cricket tables, so the rest of
+the layout is checkable against real records for the first time. Until somebody
+does that, treat everything past the name as unread.
 
-The **walk** table is not: AFTERDOG has two walkers in flight.
+The **walk** table has always been better served: saves with several walkers in
+flight are common in the collection.
 
 | Offset | Field |
 |-------:|-------|
@@ -304,13 +313,14 @@ truncation the projection uses (rounding puts Jones a pixel east).
 Restoring the walk table is not optional, because a walker is recorded in **two**
 tables and the cast record hands over the `walk` pose. An actor plays its pose
 whether or not anything is moving it, so restoring the cast without the walks
-brings a character back marching on the spot — which is what loading AFTERDOG did
-until this table was read. Anyone whose walk cannot be resumed is stood up
+brings a character back marching on the spot — which is what loading a save taken
+mid-street did until this table was read. Anyone whose walk cannot be resumed is stood up
 instead; the play page learned the same lesson at #181.
 
 An authored route's waypoint container is **not** reproduced when writing: such a
 walk is written as the straight line its own record carries, and the caller is
-told. None of the five shipped saves has one.
+told. This is not a rare case to be relied on: a good many of the shipped saves
+carry at least one walk following an authored route.
 
 ## The globals never changed
 
@@ -337,22 +347,24 @@ cost something to learn there:
   afford to — TAOOT's head is `clock`. Dust's is **`day`**, the variable the whole
   five-day story is counted in, so this writer does write it.
 
-### What the five shipped saves say
+### What the shipped saves say
 
-They are one fresh game, played a few minutes in, and they read as a story:
+They are one playthrough, and they read as a story — the whole of it, ordered by
+the frame counter and written up as [the golden thread](../../dust/thread.md):
 
-| | START | DOG | HELP | GOTBONE | AFTERDOG |
-|---|---|---|---|---|---|
-| frame | 167 | 312 | 525 | 705 | 958 |
-| `handitem` | helpbut | helpbut | helpbut | **Bone** | **ring** |
-| `phase` | 0 | 0 | 0 | 0 | **2** |
-| cell | (6,14) | (6,11) | (6,11) | (6,13) | (6,11) |
-| puppet open | — | — | help1.pup | help1.pup | help1.pup |
+| | `D1E_001` | `D1E_005` | … | `ENDING` |
+|---|---|---|---|---|
+| frame | 4885 | 16252 | | 224670 |
+| `day` | 1 | 1 | | **5** |
+| `handitem` | cards | **cigar** | | **chest** |
+| `phase` | 2 | 5 | | 0 |
+| puppet open | jones.pup | fear.pup | | — |
 
-`day=1`, `playercash=5` and `bulletcount=6` throughout; the prop grid agrees with
-the globals (the Bone is owned by `stranger` and visible in GOTBONE, the Ring in
-AFTERDOG), and so does the cast (`Help` is unplaced in START and standing on
-`town.help` from DOG on). The frame counter is what orders them.
+Every table in the file agrees with every other, which is what makes the
+collection a canary on the whole record layout at once: the prop grid agrees with
+the globals (in `D1E_005` the Cigar is owned by `stranger` and visible, and the
+Ring has already passed to `ruby`), and the cast and walk tables agree with each
+other to the pixel. The frame counter is what orders them.
 
 ## What is not resolved
 

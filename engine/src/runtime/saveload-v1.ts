@@ -269,10 +269,11 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
    * The frame counter, with the globals rather than after them, because several
    * of them are frame STAMPS and the game only ever reads a stamp as
    * `frame() - stamp`. Dust's own `attentionspan` is the clearest: it is how long
-   * the character you are talking to has been waiting, and the five shipped saves
-   * carry 0, 235, 591, 828 against frame counters of 167, 312, 705, 958. Left
-   * counting from the browser tab's start instead of the saved game's, every one
-   * of those intervals is already impossibly long the moment the save loads.
+   * the character you are talking to has been waiting, and the shipped saves carry
+   * a stamp of 1235 against frame counters of 4885, 13307 and 13745 — one moment,
+   * read from three later ones. Left counting from the browser tab's start instead
+   * of the saved game's, every one of those intervals is already impossibly long
+   * the moment the save loads.
    */
   session.frameCounter = save.frame;
   /*
@@ -404,10 +405,11 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
      *
      * Dust's town exists twice — `town.set` by day, `nite.set` by night — and
      * both call themselves "town", so the name field cannot tell them apart.
-     * All five shipped saves were taken at night and every one of them names
-     * "town": trusting it opened the daylight town, with the day palette over a
-     * night game. The manifest handle beside it says which file, which is
-     * exactly how the original's own loader reopens the room.
+     * The shipped saves demonstrate it both ways: twelve of them name "town"
+     * and hold `nite.set`, ten name "town" and hold `town.set`. Trusting the
+     * name opened the daylight town over a night game. The manifest handle
+     * beside it says which file, which is exactly how the original's own loader
+     * reopens the room.
      */
     const file = s.setFile || `${s.set}.set`;
     /*

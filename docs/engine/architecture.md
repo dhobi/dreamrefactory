@@ -204,7 +204,7 @@ edition, one copy of every name.
 |------|----------------|
 | [`main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/main.ts) | the page: the boot, the films, the town, and the controls |
 | [`files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/files.ts) | the CD as a `HostFiles`. Two things it has to get right: the BOOTFILE is at `INSTALL/ALT31/BOOTFILE` rather than in `DATA/`, and the boot's films need a room to draw through even though the boot opens none |
-| [`saves.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/saves.ts) | the store's Dust dimension (`.rtd`, its own database) and the seeding of the five saves that ship beside the disc — one of which is also the base a fresh save is patched into, because a save is a serialized heap and cannot be written from nothing |
+| [`saves.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/saves.ts) | the store's Dust dimension (`.rtd`, its own database) and the seeding of the saves that ship beside the disc, each offered once so a save added to the tree later still arrives. The earliest of them — found by frame, not by name — is also the base a fresh save is patched into, because a save is a serialized heap and cannot be written from nothing |
 
 ### `timelapse/` — Timelapse's shell
 

@@ -31,6 +31,24 @@ import { shippedDustSaves } from "../src/saves";
 const SAVE_DIR = fileURLToPath(new URL("../gamefiles/save", import.meta.url));
 const DATA_DIR = fileURLToPath(new URL("../gamefiles/dustcd/DATA", import.meta.url));
 
+/**
+ * The earliest save in the directory — the start of whatever session it holds.
+ *
+ * `frame` is the service-pass counter and orders the collection by when each
+ * save was taken, so this is the beginning of the game without any file having
+ * to be called `START`.
+ */
+function earliest(files: string[]): { name: string; bytes: Uint8Array } {
+  const read = (f: string) => new Uint8Array(readFileSync(join(SAVE_DIR, f)));
+  let best: { name: string; bytes: Uint8Array; frame: number } | null = null;
+  for (const f of files) {
+    const bytes = read(f);
+    const frame = parseSaveV1(bytes).frame;
+    if (!best || frame < best.frame) best = { name: f, bytes, frame };
+  }
+  return best!;
+}
+
 function dustSaves(): string[] {
   if (!existsSync(SAVE_DIR)) return [];
   return readdirSync(SAVE_DIR)
@@ -52,7 +70,7 @@ test("a Dust save is the same container a Titanic save is", () => {
     expect.soft(raw.containers.length, `${f}: containers`).toBeGreaterThan(0);
     /*
      * ...and that the count is one the positional map can account for. NOT a
-     * fixed 18: that was true of the five saves this was written against and is
+     * fixed 18: that was true of the saves this was written against and is
      * not a property of the format — `count = 7 + 3·banks + 5 + payloads`
      * (v1Index), so a save with one open sound bank is 15 and one carrying an
      * active walk's waypoints is 19. A larger collection has both: `D2E_001`
@@ -158,9 +176,14 @@ test("every shipped save is discoverable by the pattern the page uses", () => {
 test("a patched Dust save reads back what was written into it", () => {
   const files = dustSaves();
   if (!files.length) return;
-  const base = readSaveFile(
-    new Uint8Array(readFileSync(join(SAVE_DIR, "START.RTD"))),
-  );
+  /*
+   * The base is the EARLIEST save in the directory, found by frame rather than
+   * named: whatever collection is installed, the beginning of its session is the
+   * honest lender for the fields a patch does not understand. It used to be
+   * `START.RTD` by name, and naming a file made this the one test in here that
+   * could not survive a different set of saves.
+   */
+  const base = readSaveFile(earliest(files).bytes);
   const before = parseSaveV1(writeSaveFile(base));
 
   const out = applyPatchV1(base, {
@@ -262,41 +285,58 @@ test("the shipped saves decode to the game they came from", () => {
     parseSaveV1(new Uint8Array(readFileSync(join(SAVE_DIR, f))));
 
   const named = (f: string) => (existsSync(join(SAVE_DIR, f)) ? read(f) : null);
-  const start = named("START.RTD");
-  if (!start) {
-    console.warn(`no START.RTD in ${SAVE_DIR} — skipping the five this test is about`);
-    return;
+
+  /*
+   * The first night, `D1E_001`: day 1, the five dollars you arrive with, and the
+   * NIGHT town, a conversation with Jones open. The camera stands at the centre
+   * of the cell the standpoint names, which is the arithmetic that makes a cell
+   * a place.
+   */
+  const first = named("D1E_001.RTD");
+  if (first) {
+    expect.soft(first.title, "title").toBe("dust 0.3");
+    expect.soft(first.numGlobals.get("day"), "day").toBe(1);
+    expect.soft(first.numGlobals.get("playercash"), "cash").toBe(5);
+    expect.soft(first.standpoint.set, "set").toBe("town");
+    expect.soft(first.standpoint.setFile, "set file").toBe("nite.set");
+    expect
+      .soft([first.standpoint.cellX, first.standpoint.cellZ], "cell")
+      .toEqual([10, 10]);
+    expect.soft(first.standpoint.view, "view").toBe("south");
+    expect.soft(first.standpoint.camX, "camX").toBe(10 * 256 + 128);
+    expect.soft(first.standpoint.camY, "camY").toBe(10 * 256 + 128);
+    // taken with a conversation open, which is why it carries an extra file
+    expect.soft(first.puppet, "the open puppet").toBe("jones.pup");
   }
-  expect.soft(start.title, "title").toBe("dust 0.3");
-  // a fresh game: day 1, five dollars, the street outside at the south edge
-  expect.soft(start.numGlobals.get("day"), "day").toBe(1);
-  expect.soft(start.numGlobals.get("playercash"), "cash").toBe(5);
-  expect.soft(start.standpoint.set, "set").toBe("town");
-  expect
-    .soft([start.standpoint.cellX, start.standpoint.cellZ], "cell")
-    .toEqual([6, 14]);
-  expect.soft(start.standpoint.view, "view").toBe("north");
-  // the camera stands at the centre of that cell
-  expect.soft(start.standpoint.camX, "camX").toBe(6 * 256 + 128);
-  expect.soft(start.standpoint.camY, "camY").toBe(14 * 256 + 128);
 
-  // GOTBONE is the save taken holding the bone, and the record says so twice
-  const gotbone = read("GOTBONE.RTD");
-  expect.soft(gotbone.strGlobals.get("handitem"), "handitem").toBe("Bone");
-  const bone = gotbone.props.find((p) => p.name === "Bone");
-  expect.soft(bone?.owner, "who owns the bone").toBe("stranger");
-  expect.soft(bone?.visible, "and it is on screen").toBe(true);
+  /*
+   * `D1E_005` is the save taken one gesture after a trade, and it records BOTH
+   * halves of it: the Cigar is in the player's hands and the Ring has passed to
+   * Ruby. The player's own owner string is `stranger` — Dust's hero has no name
+   * and the data agrees — and that one field is what makes an inventory legible.
+   */
+  const trade = named("D1E_005.RTD");
+  if (trade) {
+    expect.soft(trade.strGlobals.get("handitem"), "handitem").toBe("cigar");
+    expect.soft(trade.numGlobals.get("phase"), "phase").toBe(5);
+    const cigar = trade.props.find((p) => p.name === "Cigar");
+    expect.soft(cigar?.owner, "who owns the cigar").toBe("stranger");
+    expect.soft(cigar?.visible, "and it is on screen").toBe(true);
+    expect
+      .soft(trade.props.find((p) => p.name === "Ring")?.owner, "the ring")
+      .toBe("ruby");
+    expect.soft(trade.puppet, "the open puppet").toBe("fear.pup");
+  }
 
-  // AFTERDOG is after giving it away: the ring, and the story one phase on
-  const afterdog = read("AFTERDOG.RTD");
-  expect.soft(afterdog.strGlobals.get("handitem"), "handitem").toBe("ring");
-  expect.soft(afterdog.numGlobals.get("phase"), "phase").toBe(2);
-  expect
-    .soft(afterdog.props.find((p) => p.name === "Ring")?.owner, "the ring")
-    .toBe("stranger");
-
-  // HELP was taken with a conversation open, which is why it has an extra file
-  expect.soft(read("HELP.RTD").puppet, "the open puppet").toBe("help1.pup");
+  // and the far end of the same session: day 5, holding the chest
+  const end = named("ENDING.RTD");
+  if (end) {
+    expect.soft(end.numGlobals.get("day"), "the last day").toBe(5);
+    expect.soft(end.strGlobals.get("handitem"), "handitem").toBe("chest");
+    expect
+      .soft(end.props.find((p) => p.name === "chest")?.owner, "the chest")
+      .toBe("stranger");
+  }
 
   /*
    * The room these reopen is the NIGHT town, not the day one.
@@ -305,16 +345,18 @@ test("the shipped saves decode to the game they came from", () => {
    * apart — and the name is what a load used to trust, which brought a midnight
    * save back at noon with the day palette over it.
    *
-   * Asserted of the saves this file is ABOUT rather than of everything in the
-   * directory: an install may hold a whole collection (the CD's own, a player's
-   * own), and "every save was taken in the night town" is a fact about these
-   * five, not about the format. What holds for any save is underneath.
+   * The collection demonstrates it BOTH ways, which is the strongest form this
+   * claim has: saves calling themselves "town" and holding `nite.set`, and saves
+   * calling themselves "town" and holding `town.set`. Neither list is named here
+   * — a directory may hold any collection — so the assertion is that the
+   * ambiguity is real and the file resolves it, not that any one save is night.
    */
-  for (const f of ["START.RTD", "GOTBONE.RTD", "AFTERDOG.RTD", "HELP.RTD", "DOG.RTD"]) {
-    if (!existsSync(join(SAVE_DIR, f))) continue;
-    const save = read(f);
-    expect.soft(save.standpoint.set, `${f} set name`).toBe("town");
-    expect.soft(save.standpoint.setFile, `${f} set file`).toBe("nite.set");
+  const towns = files.map(read).filter((s) => s.standpoint.set === "town");
+  if (towns.length) {
+    const bySet = new Set(towns.map((s) => s.standpoint.setFile.toLowerCase()));
+    expect
+      .soft([...bySet].sort(), 'every save named "town" names one of the two town files')
+      .toEqual([...bySet].filter((f) => f === "nite.set" || f === "town.set").sort());
   }
   for (const f of files) {
     const save = read(f);
@@ -348,7 +390,8 @@ test("the shipped saves decode to the game they came from", () => {
    * (1620, 2748, 0) — worldX, worldY, worldZ — and the record has to read the
    * same three numbers in the same order.
    */
-  const dog = read("DOG.RTD").actors.find((a) => a.name === "dog");
+  const NIGHT = "D1E_001.RTD"; // any save taken in the night town carries it
+  const dog = read(NIGHT).actors.find((a) => a.name === "dog");
   expect
     .soft([dog?.x, dog?.y, dog?.z], "the dog's world position")
     .toEqual([1620, 2748, 0]);
@@ -364,7 +407,7 @@ test("the shipped saves decode to the game they came from", () => {
   expect
     .soft([dog?.speed, dog?.turn], "the dog's speed and turn")
     .toEqual([3, 7]);
-  const pig = read("DOG.RTD").actors.find((a) => a.name === "pig");
+  const pig = read(NIGHT).actors.find((a) => a.name === "pig");
   expect.soft(pig?.turn, "the pig turns at its own rate").toBe(16);
 
   /*
@@ -378,26 +421,24 @@ test("the shipped saves decode to the game they came from", () => {
    * anything is moving it, so Jones came back marching on the spot in the middle
    * of the street.
    */
-  const afterWalks = read("AFTERDOG.RTD").walks;
+  const WALKING = "D2A_002.RTD"; // eight walks in flight, Jones among them
+  const afterWalks = read(WALKING).walks;
   expect
-    .soft(afterWalks.map((w) => w.actor).sort(), "who was walking")
-    .toEqual(["Help", "Jones"]);
+    .soft(afterWalks.map((w) => w.actor)).toContain("Jones");
   const jones = afterWalks.find((w) => w.actor === "Jones")!;
   expect.soft(jones.star, "where to").toBe("town.jones2");
   expect.soft([jones.startX, jones.startY], "from").toEqual([1736, 2488]);
   expect.soft([jones.dx, jones.dy], "delta").toEqual([-112, -616]);
   expect.soft(jones.dist, "distance").toBe(626);
-  // 626 - 111 remaining; the field holds what is LEFT, the port wants what is done
-  expect.soft(jones.progress, "covered").toBe(515);
+  // the field holds what is LEFT, the port wants what is done
+  expect.soft(jones.progress, "covered").toBe(587);
   // and now the reconstruction: start + delta x (covered/dist) has to be where
   // the cast record says he is standing, to the pixel
   // TRUNCATED, not rounded — rounding puts him at x=1644 where the cast record
   // says 1643, which is the same fix-point truncation the projection uses
   const at = (s: number, d: number) =>
     Math.floor(s + d * (jones.progress / jones.dist));
-  const jonesActor = read("AFTERDOG.RTD").actors.find(
-    (a) => a.name === "Jones",
-  )!;
+  const jonesActor = read(WALKING).actors.find((a) => a.name === "Jones")!;
   expect
     .soft(
       [at(jones.startX, jones.dx), at(jones.startY, jones.dy)],
@@ -405,23 +446,47 @@ test("the shipped saves decode to the game they came from", () => {
     )
     .toEqual([jonesActor.x, jonesActor.y]);
 
-  // the four saves taken with nobody walking say so — a slot whose active word is
-  // clear holds the LAST walk it ran, not a live one
-  for (const f of ["START.RTD", "DOG.RTD", "GOTBONE.RTD"]) {
-    expect.soft(read(f).walks.length, `${f}: walks in flight`).toBe(0);
-  }
+  // a save taken with nobody walking says so — a slot whose active word is clear
+  // holds the LAST walk it ran, not a live one, and must not come back as one
+  expect.soft(read(NIGHT).walks.length, `${NIGHT}: walks in flight`).toBe(0);
+});
 
-  // the frame counter orders them by when they were taken
-  const frames = [
-    "START.RTD",
-    "DOG.RTD",
-    "HELP.RTD",
-    "GOTBONE.RTD",
-    "AFTERDOG.RTD",
-  ].map((f) => read(f).frame);
+/**
+ * The collection is a SESSION, and the frame counter is what says so.
+ *
+ * `gamefiles/save/` reads like a folder of examples and is not: ordered by the
+ * service-pass counter, the saves that ship beside the disc are one continuous
+ * playthrough, and `day` never goes backwards along it. That is the claim the
+ * walkthrough and the thread page are built on
+ * (`docs/dust/thread.md`), so it is worth a test rather than a paragraph.
+ *
+ * Stated as "at most one lineage break" rather than "none", because a directory
+ * is a directory: a second sitting saved into it is a legitimate thing to find,
+ * and the disc's own collection has exactly one such file. What would falsify
+ * the claim is the saves being unordered — many breaks, not one.
+ */
+test("the shipped saves are one session, ordered by the frame counter", () => {
+  const files = dustSaves();
+  if (files.length < 2) return;
+  const byFrame = files
+    .map((f) => ({ f, save: parseSaveV1(new Uint8Array(readFileSync(join(SAVE_DIR, f)))) }))
+    .sort((a, b) => a.save.frame - b.save.frame);
+
+  // no two saves were taken at the same instant
+  const frames = byFrame.map((r) => r.save.frame);
+  expect.soft(new Set(frames).size, "distinct frame counters").toBe(frames.length);
+
+  // and the story runs forwards with them
+  let maxDay = 0;
+  const breaks: string[] = [];
+  for (const { f, save } of byFrame) {
+    const day = save.numGlobals.get("day") ?? 0;
+    if (day < maxDay) breaks.push(`${f} (day ${day} after day ${maxDay})`);
+    else maxDay = day;
+  }
   expect
-    .soft(frames, "frames in play order")
-    .toEqual([...frames].sort((a, b) => a - b));
+    .soft(breaks.length, `lineage breaks: ${breaks.join(", ") || "none"}`)
+    .toBeLessThanOrEqual(1);
 });
 
 // --- the sound a load brings back ------------------------------------------

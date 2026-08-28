@@ -21,7 +21,7 @@
  *   new.flt      dust/gamefiles/dustcd/DATA/NEW.FLT
  *   cactus.mov   dust/gamefiles/dustcd/DRUGS/CACTUS.MOV
  *   unilib.snd   dust/gamefiles/dustcd/DATA/UNILIB.SND
- *   start.rtd    dust/gamefiles/save/START.RTD
+ *   d1e_001.rtd  dust/gamefiles/save/D1E_001.RTD
  *
  * Writes docs/.vitepress/theme/bytemap/maps/<name>.json, which is COMMITTED:
  * the game data is not in this repository and the docs site has to build

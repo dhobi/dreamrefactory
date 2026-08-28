@@ -1078,7 +1078,7 @@ async function runBoot(): Promise<void> {
    * before that, one of the disc's own saves is the lender.
    */
   host.session.saveTemplate = () => dustTemplate();
-  // The five saves that ship beside the disc, imported once into the store.
+  // The saves that ship beside the disc, each imported into the store once.
   // Off the critical path: it is a handful of 47 KB fetches, nothing the boot
   // waits for, and a failure only means the browser lists nothing this launch.
   void seedDustSaves(files.paths)

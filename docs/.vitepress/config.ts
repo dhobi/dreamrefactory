@@ -176,6 +176,8 @@ export default withMermaid(
           collapsed: false,
           items: [
             { text: "Overview", link: "/dust/" },
+            { text: "Walkthrough", link: "/dust/walkthrough" },
+            { text: "The golden thread", link: "/dust/thread" },
             { text: "Music & sound — the 40 banks", link: "/dust/audio" },
           ],
         },

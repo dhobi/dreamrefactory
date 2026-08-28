@@ -1,7 +1,7 @@
 {
- "title": "START.RTD",
+ "title": "D1E_001.RTD",
  "subtitle": "47 KB · 18 containers · Dust save · 18 containers, 2 open sound banks — every index computed from the count, none searched for",
- "total": 47680,
+ "total": 48448,
  "regions": [
   {
    "at": 0,
@@ -19,14 +19,14 @@
   },
   {
    "at": 1536,
-   "size": 7240,
+   "size": 8040,
    "kind": "data",
    "label": "0 · the manifest",
    "container": 0,
    "detail": "the version string, the resource paths, the live CLUT, and one 260-byte record per open FILE — the handle every other container's file references resolve through"
   },
   {
-   "at": 8832,
+   "at": 9600,
    "size": 552,
    "kind": "data",
    "label": "1 · where you were",
@@ -34,7 +34,7 @@
    "detail": "the standpoint: a verbatim 542-byte dump of the engine's own block"
   },
   {
-   "at": 9408,
+   "at": 10176,
    "size": 8872,
    "kind": "data",
    "label": "2 · the cast",
@@ -42,7 +42,7 @@
    "detail": "one record per actor in the world, at the stride this engine uses"
   },
   {
-   "at": 18304,
+   "at": 19072,
    "size": 72,
    "kind": "data",
    "label": "3 · open cast files",
@@ -50,7 +50,7 @@
    "detail": "which .cst files were open — a load has to reopen them, because no openset runs to do it"
   },
   {
-   "at": 18432,
+   "at": 19200,
    "size": 11560,
    "kind": "data",
    "label": "4 · the props",
@@ -58,7 +58,7 @@
    "detail": "every loaded prop, inventory first"
   },
   {
-   "at": 30016,
+   "at": 30784,
    "size": 72,
    "kind": "data",
    "label": "5 · open prop files",
@@ -66,7 +66,7 @@
    "detail": "which .shp files were open"
   },
   {
-   "at": 30144,
+   "at": 30912,
    "size": 104,
    "kind": "data",
    "label": "6 · open sound banks",
@@ -74,7 +74,7 @@
    "detail": "the descriptors — and how many of them there are is what makes the rest of this map computable"
   },
   {
-   "at": 30272,
+   "at": 31040,
    "size": 2408,
    "kind": "data",
    "label": "7 · bank 1: registered",
@@ -83,7 +83,7 @@
    "detail": "one of the three sound lists this bank writes"
   },
   {
-   "at": 32704,
+   "at": 33472,
    "size": 40,
    "kind": "data",
    "label": "8 · bank 1: playing",
@@ -92,7 +92,7 @@
    "detail": "one of the three sound lists this bank writes"
   },
   {
-   "at": 32768,
+   "at": 33536,
    "size": 40,
    "kind": "data",
    "label": "9 · bank 1: looping",
@@ -101,7 +101,7 @@
    "detail": "one of the three sound lists this bank writes"
   },
   {
-   "at": 32832,
+   "at": 33600,
    "size": 1672,
    "kind": "data",
    "label": "10 · bank 2: registered",
@@ -110,7 +110,7 @@
    "detail": "one of the three sound lists this bank writes"
   },
   {
-   "at": 34560,
+   "at": 35328,
    "size": 552,
    "kind": "data",
    "label": "11 · bank 2: playing",
@@ -119,7 +119,7 @@
    "detail": "one of the three sound lists this bank writes"
   },
   {
-   "at": 35136,
+   "at": 35904,
    "size": 3560,
    "kind": "data",
    "label": "12 · bank 2: looping",
@@ -128,7 +128,7 @@
    "detail": "one of the three sound lists this bank writes"
   },
   {
-   "at": 38720,
+   "at": 39488,
    "size": 3240,
    "kind": "data",
    "label": "13 · the globals",
@@ -136,7 +136,7 @@
    "detail": "every script variable — the whole of the story's progress, 32 bytes a node"
   },
   {
-   "at": 41984,
+   "at": 42752,
    "size": 2056,
    "kind": "data",
    "label": "14 · the string pool",
@@ -145,7 +145,7 @@
    "detail": "the text the string-valued globals point into; the loader reads the pair together"
   },
   {
-   "at": 44096,
+   "at": 44864,
    "size": 1352,
    "kind": "data",
    "label": "15 · loops",
@@ -153,7 +153,7 @@
    "detail": "the repeating timers the scheduler was running"
   },
   {
-   "at": 45504,
+   "at": 46272,
    "size": 776,
    "kind": "data",
    "label": "16 · crickets",
@@ -161,7 +161,7 @@
    "detail": "the one-shot timers still pending"
   },
   {
-   "at": 46336,
+   "at": 47104,
    "size": 1320,
    "kind": "data",
    "label": "17 · walks",
@@ -169,5 +169,5 @@
    "detail": "who was walking where, and how far along"
   }
  ],
- "source": "START.RTD · tools/blockmap.ts · 18 of 18 containers named by walking the RTD reader"
+ "source": "D1E_001.RTD · tools/blockmap.ts · 18 of 18 containers named by walking the RTD reader"
 }
