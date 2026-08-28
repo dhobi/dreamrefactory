@@ -100,7 +100,6 @@ const C0 = {
    */
   cameraSetback: 0x18, // i16
   eyeHeight: 0x1a, // i16
-  mainScript: 0x1c, // i16
   transitionRegister: 0x1e, // i16
   actorRegister: 0x22, // i16
   gridWidth: 0x26, // i16
@@ -128,6 +127,42 @@ const C0 = {
   defaultFacing: 0x34, // i16
   /** the first of {@link CLUT_COUNT} palette blocks */
   palette: 0x50,
+  /**
+   * NOT 0x1c. That offset holds a constant — 1 in all 35 sets on this disc and,
+   * read at its v4 equivalent, 1 in all of Titanic's too — and DF.EXE never uses
+   * it as a container index. What it does with it is check it is non-zero and
+   * bail if it is not (DFPENT.EXE 0x419962, `cmp word ptr [eax+0x1c], 0`, paired
+   * with the same test on +0x34, error line 5402), which is a file sanity check
+   * and not a pointer. Reading it as the main script only ever worked because
+   * the authoring tool wrote the main script into container 1.
+   *
+   * `undertak.set` is where that stops being true: its container 1 is the ACTOR
+   * REGISTER (`actorRegister` names the same index — the only set on the disc
+   * where the two collide — and the bytes there are the star record
+   * `under.side.side`), so its main script is container 2.
+   *
+   * The real field is here, and set-open reads it as a DWORD:
+   *
+   *     0x419981  mov eax, dword ptr [edi + 0x1b78]
+   *     0x419987  mov dword ptr [esi + 0x24], eax
+   *
+   * — and it sits immediately before {@link C0.setName} at 0x1b7c, which set-open
+ * pushes to a string copy two instructions later (`add edi, 0x1b7c`), so the two
+ * corroborate each other's placement at the tail of the header.
+ *
+ * It is kept in the set's own state for the lazy load, exactly as a scene's script
+   * is kept at scene+0x18 (the loader is DFPENT.EXE 0x41c1c0, error line 5410).
+   * It is also the ONLY offset in the whole 0x1c90-byte header that equals each
+   * set's real main-script container across all 35 of them: 2 for undertak.set
+   * and 1 for the other 34.
+   *
+   * Reading 0x1c instead cost that room its entire script. No main means no
+   * `openset`, and undertak.set's openset is the only thing in the corpus that
+   * ever places the undertaker (`sendtoactor ("side", setupactor ("store"))`),
+   * while the same container holds the `keydown` that drives the room's arrows
+   * — so you walked in to an empty room you could not leave (#291).
+   */
+  mainScript: 0x1b78, // i32
   /**
    * The name SCRIPTS address the set by, four bytes short of the end of the last
    * CLUT block — `0x50 + 3 * 0x910 - 4`.
@@ -472,7 +507,7 @@ export function readSetFileV1(data: Uint8Array): SetFileV1 {
     defaultFacing,
     transitionRegister,
     actorRegister,
-    mainScript: v.getInt16(C0.mainScript, true),
+    mainScript: v.getInt32(C0.mainScript, true),
     scenes,
     actors,
     starPaths,

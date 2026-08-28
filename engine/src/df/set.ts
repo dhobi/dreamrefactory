@@ -633,9 +633,41 @@ export const C0 = {
   setDimensionsY: 0x2c, // i16 (also stored as f64be at 0x40/0x48; unread)
   setDimensionsX: 0x2e, // i16
   transitionRegister: 0x54, // i32 container ref (sceneRegister at 0x50: unused)
-  actorRegister: 0x58, // i32 container ref
-  mainScript: 0x5c, // i32 container ref
-  mainSceneRegister: 0x60, // i32 container ref
+  /**
+   * Three i32 container refs — and all three are CONSTANTS in every set we have.
+   * Across all 474 `.set` files in the seven editions and the demo, 0x58 reads 3,
+   * 0x5c reads 1 and 0x60 reads 2, without exception. So nothing in this corpus
+   * has ever tested any of them as a pointer, and within it they are
+   * indistinguishable from any other constant word of the same value.
+   *
+   * That is exactly the shape of the v1 bug: `set-v1.ts`'s old `mainScript` was a
+   * word that read 1 in all 35 Dust sets, and it turned out not to be a pointer
+   * at all — reading it cost `undertak.set` its whole script, because that is the
+   * one set on either disc whose main script is not container 1 (#291).
+   *
+   * What keeps these three as read is layout, not value: they sit in a run with
+   * four refs that demonstrably ARE pointers (mapLight 0x18, mapDark 0x1c, 0x50,
+   * transitionRegister 0x54 — 62 distinct values each). And those four are
+   * provably positional rather than fixed: in every set they are the file's last
+   * four containers, except `FORE.SET` (all editions), which has 739 containers
+   * and points at 733-736 — two spare containers past the end of the run. A field
+   * that tracks the file is a pointer.
+   *
+   * Titanic is not in undertak.set's position today, which is why this is a note
+   * and not a fix: the sets whose container 1 holds no script have no set-level
+   * main to miss — every script container in them that no scene or object
+   * references is a short stub that decompiles to nothing, and their per-view
+   * keydown lives in scene scripts that ARE referenced.
+   *
+   * Only the disassembly settles it, the way `[edi + 0x1b78]` settled v1, and
+   * TI.EXE is not in the rip (only the CD launcher). Until then: if a v4 set ever
+   * turns up whose container 3 is not its actor register, look here first.
+   * `set-build.ts` writes all three back at these offsets, so a wrong reading is
+   * a wrong writing too.
+   */
+  actorRegister: 0x58,
+  mainScript: 0x5c,
+  mainSceneRegister: 0x60,
   sceneCount: 0x64, // i32
   setName: 0x70, // pstr
   viewPortWidth: 0x84, // i16

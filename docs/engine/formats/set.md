@@ -229,10 +229,35 @@ round) + 4 walks (0↔1, 1↔2). Nothing else is stored because nothing else exi
 rings and roads are that table with the turns factored out of it.
 
 The two engines also pack the header differently. The registers a v4 set spreads
-over eight bytes, a v1 set packs into four — the i32 at 0x1c reads `0x002c0001`
-in `APOTH`, whose low half is the main script and whose high half (44) is the
-transition register. The palette sits at 0x50 rather than 0xf2, and every offset
-after it shifts.
+over eight bytes sit close together in v1: the transition register is the i32 at
+0x1e and the actor register the i32 at 0x22 — 44 and 43 in `APOTH`, 89 and 1 in
+`UNDERTAK` — and DF.EXE reads both as dwords when it opens a set (`DFPENT.EXE`
+0x419a3b and 0x419a18). The palette sits at 0x50 rather than 0xf2, and every
+offset after it shifts.
+
+**The main script is not in that run.** Reading the i32 at 0x1c as a packed pair
+— `0x002c0001` in `APOTH`, a "main script" of 1 beside the transition register —
+is a coincidence, because that low half is a constant: it is 1 in all 35 sets on
+the disc, and DF.EXE never uses it as a container index. All it does with it is
+check the word is non-zero, alongside the same test on `defaultFacing` at 0x34,
+and refuse the file if either is (0x419962, error line 5402).
+
+The real reference is the i32 at **0x1b78**, immediately before the set name at
+0x1b7c, which set-open copies into the set's own state for the lazy load the way
+a scene's script is taken from `scene+0x18`:
+
+```
+0x419981  mov eax, dword ptr [edi + 0x1b78]
+0x419987  mov dword ptr [esi + 0x24], eax
+```
+
+It is the only offset in the whole header that names each set's real main script
+across all 35 of them, and 34 of those say 1 — which is why the wrong reading
+survived. `undertak.set` is the one that says 2, because its container 1 is the
+actor register (it is the only set where `actorRegister` and container 1 collide,
+and the bytes there are the star record `under.side.side`). Reading 0x1c cost
+that room its whole script: no main, so no `openset`, and its openset is the only
+thing in the corpus that places the undertaker.
 
 ### The frame runs, and the sixth container
 
