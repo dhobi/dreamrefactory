@@ -417,26 +417,32 @@ function decodeZLayer(
  * entry 0 and BLACK at entry 255, because DreamFactory was authored on a Mac and
  * that is the Macintosh system palette's reserved pair.
  *
- * Which means Skull Cracker's disc needs no remap at all: its reserved entries are
- * the ones already in the file, and overriding them is the PC's correction
- * applied to a picture that never needed correcting.
+ * Which means the Mac pressing of Skull Cracker needed no remap at all: its
+ * reserved entries were the ones already in the file, and overriding them would
+ * have been the PC's correction applied to a picture that never needed
+ * correcting. The Windows pressing that replaced it is a PC release like the
+ * rest, and does want the correction.
  *
  * The switch below is on the byte ORDER, which is a proxy for "whose build is
  * this" and not the thing itself — worth saying, because `byte-order.ts` is at
  * pains to point out that the order is a fact about the title rather than the
- * platform. It is sound for the discs this port reads: the little-endian ones are
- * the PC releases it renders, Skull Cracker's Macintosh one is not. What it could
- * not distinguish is a MACINTOSH release shipping converted data — Titanic's
- * Dutch disc ships exactly such a build — where the data would want the PC
- * correction and the display would not. Nothing here renders one, and the day
+ * platform. It was sound for every disc this port has read: the little-endian
+ * ones are the PC releases it renders, and the Macintosh Skull Cracker pressing
+ * was not. Now that pressing is gone, every disc in the corpus takes the same
+ * side of the switch — which makes the proxy right by default and exercised by
+ * nothing, so treat it as untested rather than as confirmed. What it could not
+ * distinguish either way is a MACINTOSH release shipping converted data —
+ * Titanic's Dutch disc ships exactly such a build — where the data would want the
+ * PC correction and the display would not. Nothing here renders one, and the day
  * something does, this wants a flag of its own rather than a cleverer proxy.
  *
  * ## Both Skull Cracker releases were read, and they prove the model
  *
  * The reasoning above was worked out from the Macintosh disc alone, one frame of
- * it load-bearing. The Windows release settles it from outside, and the way it
- * does is better than agreement: **the conversion swapped the two indices in the
- * PIXEL DATA.** Over every film on each disc —
+ * it load-bearing. The Windows release — the one that stayed, and the only Skull
+ * Cracker disc this port reads now — settles it from outside, and the way it does
+ * is better than agreement: **the conversion swapped the two indices in the PIXEL
+ * DATA.** Over every film on each disc —
  *
  *   | disc    | index 0 | index 255 |
  *   |---------|---------|-----------|
@@ -452,8 +458,10 @@ function decodeZLayer(
  * files — 0 differences over 196608 pixels, from files of 1.74 MB and 1.08 MB
  * whose every integer runs the other way.
  *
- * Measured on Skull Cracker's
- * 66 films — 18,725 frames, 1.83 billion pixels:
+ * Measured on the MAC pressing's 66 films — 18,725 frames, 1.83 billion pixels.
+ * Read the two indices exchanged for the Windows disc, per the table above: what
+ * is said of 255 here is true of 0 there, and the palette correction on that side
+ * lands each of them on the same colour anyway, which is the point of the table.
  *
  *   - index 255 is **27.34%** of every pixel in the game and appears in 15,879
  *     of those frames. It is the ground the whole game is drawn on: forcing it

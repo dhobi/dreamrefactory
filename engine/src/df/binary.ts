@@ -5,7 +5,7 @@ import { ByteOrder, PC, little } from "./byte-order";
  * Integers are little-endian; doubles/floats are stored big-endian
  * (the engine's Mac heritage), matching dfet's swapEndians().
  *
- * A MACINTOSH rip reverses the first half of that sentence and not the second:
+ * A BIG-ENDIAN rip reverses the first half of that sentence and not the second:
  * its ints are big-endian, its floats still are, and everything else about the
  * layout is the same. Pass the file's {@link ByteOrder} to read one — see
  * {@link file://./byte-order.ts}, which works out which a file is. The default
@@ -15,7 +15,7 @@ import { ByteOrder, PC, little } from "./byte-order";
 export class BinaryReader {
   readonly view: DataView;
   readonly bytes: Uint8Array;
-  /** what a DataView call wants: false on a Mac rip, true on every other */
+  /** what a DataView call wants: false on a big-endian rip, true on every other */
   readonly little: boolean;
   pos: number;
 
