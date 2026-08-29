@@ -56,7 +56,13 @@ jobs:
   # the playthrough.
   # ---------------------------------------------------------------------------
   full:
-    name: full auto suite + playthroughs
+    # DO NOT RENAME. This string is the status check's name, and branch
+    # protection requires it by that exact name — a rename makes the required
+    # check never report and every pull request waits for it forever, green
+    # jobs and all. (Learned the hard way: #333 renamed this to "playthroughs"
+    # and blocked itself.) The step below carries the plural instead, where it
+    # costs nothing.
+    name: full auto suite + playthrough
     # A fork's pull request must never reach the machine that holds the rip:
     # `pull_request` checks out the PR's head, and that head is the fork's code.
     # Same-repo branches only. (GitHub's own advice is to keep self-hosted
