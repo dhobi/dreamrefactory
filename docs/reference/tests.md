@@ -30,7 +30,7 @@ its own budget:
 | Category | Directory | Command | What it is |
 |----------|-----------|---------|------------|
 | **playthrough** | `taoot/tests/playthrough/` | `npm run test:playthrough` | the game *played* from the boot to the ending, asserting a recorded state trace — 27 segments plus 3 property tests, ~75 s |
-| **browser** | `taoot/tests/browser/` | `npm run test:browser` | the same route through real mouse and keyboard events against a live dev server, diffed against the same trace — ~39 min, because it costs what the game costs |
+| **browser** | `taoot/tests/browser/` | `npm run test:browser -w taoot` | the same route through real mouse and keyboard events against a live dev server, diffed against the same trace — ~39 min, because it costs what the game costs |
 
 The split exists because a playthrough segment covers minutes of game time and
 will only grow as the route reaches further into the story; keeping it out of
@@ -145,30 +145,30 @@ It drives **Titanic's** page, which is its own dev server on 5175 — so
 `npm run dev` (the front door, 5173) is not the one to start:
 
 ```
-npm run dev:taoot                         # in another terminal — Titanic on 5175
-npm run test:browser                      # the demo, menu-movie, then the whole route, ~39 min
-npm run test:browser:playthrough          # just the route
-npm run test:browser:endgame              # just the ending, ~3 min, off a checkpoint
-npm run test:browser:lang                 # the language chooser, with real clicks
-npm run test:browser:demo                 # the 1996 demo's menu, ~30 s (skips with no demo rip)
-npm run test:browser:m0                   # segment 1
-npm run test:browser:m1                   # segments 2–6
-npm run test:browser:m2                   # segments 7–16
-SEGMENTS=13 npm run test:browser:seg      # one segment
+npm run dev -w taoot                         # in another terminal — Titanic on 5175
+npm run test:browser -w taoot                      # the demo, menu-movie, then the whole route, ~39 min
+npm run test:browser:playthrough -w taoot          # just the route
+npm run test:browser:endgame -w taoot              # just the ending, ~3 min, off a checkpoint
+npm run test:browser:lang -w taoot                 # the language chooser, with real clicks
+npm run test:browser:demo -w taoot                 # the 1996 demo's menu, ~30 s (skips with no demo rip)
+npm run test:browser:m0 -w taoot                   # segment 1
+npm run test:browser:m1 -w taoot                   # segments 2–6
+npm run test:browser:m2 -w taoot                   # segments 7–16
+SEGMENTS=13 npm run test:browser:seg -w taoot      # one segment
 ```
 
 `APP_URL` overrides where it looks; the driver treats it as the **game's
 root** and appends `play/`, and it defaults to `http://localhost:5175/` — this
 game's own dev server. CI sets it explicitly, because `browser.yml` runs the
 server on 5199 rather than 5175 to stay off the port a person's own
-`npm run dev:taoot` would want.
+`npm run dev -w taoot` would want.
 
 Two browser checks run against the **build** rather than a dev server, because
 the bugs they exist for only appear there:
 
 ```
-npm run build:dust && npm run test:built:dust    # Dust's layout, as built
-npm run test:built:site                          # the site, served from a subdirectory
+npm run build -w dust && npm run test:built -w dust    # Dust's layout, as built
+npm run test:built -w site                          # the site, served from a subdirectory
 ```
 
 The second builds the site itself and serves `dist/site` under a
@@ -187,17 +187,17 @@ browser, no `vitest`, no docs build alongside it.
 ### Watching it play
 
 ```
-npm run dev:taoot
-npm run watch:playthrough                 # a real window, slowed down, stays open
-npm run watch:mission0                    # the boot, the flat, the bomb, the crossing
-npm run watch:mission1                    # skip the boot, watch all of mission 1
-npm run watch:mission2                    # ...and all of mission 2
-npm run watch:m1p0                        # just the segment that starts at phase 0
-npm run watch:m1p1                        # ...phase 1
-npm run watch:m1p2                        # ...phase 2
-npm run watch:m1p3                        # ...phase 3
-npm run watch:m1p4                        # ...and mission 1's debrief
-npm run watch:m2p0                        # ...and the start of mission 2
+npm run dev -w taoot
+npm run watch:playthrough -w taoot                 # a real window, slowed down, stays open
+npm run watch:mission0 -w taoot                    # the boot, the flat, the bomb, the crossing
+npm run watch:mission1 -w taoot                    # skip the boot, watch all of mission 1
+npm run watch:mission2 -w taoot                    # ...and all of mission 2
+npm run watch:m1p0 -w taoot                        # just the segment that starts at phase 0
+npm run watch:m1p1 -w taoot                        # ...phase 1
+npm run watch:m1p2 -w taoot                        # ...phase 2
+npm run watch:m1p3 -w taoot                        # ...phase 3
+npm run watch:m1p4 -w taoot                        # ...and mission 1's debrief
+npm run watch:m2p0 -w taoot                        # ...and the start of mission 2
 HEADED=1 SLOWMO=400 KEEPOPEN=0 npx tsx taoot/tests/browser/playthrough.ts
 ```
 
@@ -246,12 +246,12 @@ which is why it has its own directory and its own runner rather than a place
 in the suite above.
 
 ```
-npm run dev:taoot
-npm run speedrun                          # run the sheet, print the splits
-npm run speedrun:watch                    # a real window, same run
-npm run speedrun:lint                     # parse the sheet and say nothing else
-npm run speedrun -- --from="m4p0 cabin"   # enter at one of its save points
-SHEET=taoot/tests/speedrun/any.sheet npm run speedrun
+npm run dev -w taoot
+npm run speedrun -w taoot                          # run the sheet, print the splits
+npm run speedrun:watch -w taoot                    # a real window, same run
+npm run speedrun:lint -w taoot                     # parse the sheet and say nothing else
+npm run speedrun -w taoot -- --from="m4p0 cabin"   # enter at one of its save points
+SHEET=taoot/tests/speedrun/any.sheet npm run speedrun -w taoot
 ```
 
 The same sheet language runs in the browser, on the unlisted `/speedrun/`

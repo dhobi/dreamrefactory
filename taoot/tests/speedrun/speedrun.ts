@@ -2,14 +2,14 @@
  * The speedrun — one game, cold boot to credits, against the clock.
  *
  *   npm run dev
- *   npm run speedrun                    # run the sheet, print the splits
- *   npm run speedrun:watch              # a real window, same run, watchable
- *   npm run speedrun:lint               # parse the sheet and say nothing else
- *   npm run speedrun -- --verbs         # what a sheet may contain
- *   npm run speedrun -- --from="m4p0 cabin"   # enter at one of its save points
- *   SHEET=taoot/tests/speedrun/any.sheet npm run speedrun
+ *   npm run speedrun -w taoot                    # run the sheet, print the splits
+ *   npm run speedrun:watch -w taoot              # a real window, same run, watchable
+ *   npm run speedrun:lint -w taoot               # parse the sheet and say nothing else
+ *   npm run speedrun -w taoot -- --verbs         # what a sheet may contain
+ *   npm run speedrun -w taoot -- --from="m4p0 cabin"   # enter at one of its save points
+ *   SHEET=taoot/tests/speedrun/any.sheet npm run speedrun -w taoot
  *
- * This is NOT a test and does not gate anything. `npm run test:browser:playthrough`
+ * This is NOT a test and does not gate anything. `npm run test:browser:playthrough -w taoot`
  * is still the browser gate and `npm run test:playthrough` is still the oracle;
  * both are untouched by everything in this directory, goldens included. What this
  * does is play the game as fast as a human legally can and say how long it took.

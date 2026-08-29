@@ -1,7 +1,7 @@
 /**
  * Does a character walk BACK after a conversation, in a real browser?
  *
- *   npm run dev:dust
+ *   npm run dev -w dust
  *   npx tsx dust/tests/browser/walk-back.ts
  *
  * The headless test beside this one (dust/tests/conversation.ts) pins the

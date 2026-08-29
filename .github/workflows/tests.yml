@@ -28,10 +28,11 @@ jobs:
   # instead of reading the game's files — or, in save-original.ts's case, read
   # the one tracked fixture in taoot/tests/data/. 159 tests.
   #
-  # The list below is the INVERSE of what it covers — the ten suites that do
-  # need the rip. Excluding is deliberate: a test file added later runs here by
-  # default, and if it turns out to need `gamefiles/` it fails loudly and gets
-  # added to this list. The other direction would have skipped it in silence.
+  # Which suites those are is no longer written here. `npm run test:portable`
+  # sets NO_GAMEFILES=1, and each package's own vitest config drops the suites it
+  # knows need the rip — today only Titanic has any, listed in
+  # `taoot/vitest.config.ts` beside the files it names. A suite renamed in that
+  # directory used to leave a stale path in this workflow; now it cannot.
   # ---------------------------------------------------------------------------
   portable:
     name: suites that need no game files
@@ -46,9 +47,8 @@ jobs:
 
       - run: npm ci
 
-      - name: Automatic suites, minus the ten that read the rip
-        run: |
-          npx vitest run --exclude 'taoot/tests/auto/{regression,savegame,re_builtins,interp,nav,text,audio-rates,sound-channels,shp-play-order,cst-play-order}.ts'
+      - name: Automatic suites, minus the ones that read the rip
+        run: npm run test:portable
 
   # ---------------------------------------------------------------------------
   # Runs on the self-hosted runner, which holds the rip. Everything the port's
@@ -56,6 +56,12 @@ jobs:
   # the playthrough.
   # ---------------------------------------------------------------------------
   full:
+    # DO NOT RENAME. This string is the status check's name, and branch
+    # protection requires it by that exact name — a rename makes the required
+    # check never report and every pull request waits for it forever, green
+    # jobs and all. (Learned the hard way: #333 renamed this to "playthroughs"
+    # and blocked itself.) The step below carries the plural instead, where it
+    # costs nothing.
     name: full auto suite + playthrough
     # A fork's pull request must never reach the machine that holds the rip:
     # `pull_request` checks out the PR's head, and that head is the fork's code.
@@ -115,5 +121,7 @@ jobs:
       # Timed by ticks and gestures rather than by wall clock, so this number is
       # not a budget — it has come in anywhere from 77 s to 137 s on the same
       # green code, which is why nothing here asserts on seconds.
-      - name: Playthrough
+      # Fans out over every package that has a playthrough — Titanic's today,
+      # and a second game's the day it grows one, with nothing to change here.
+      - name: Playthroughs
         run: npm run test:playthrough

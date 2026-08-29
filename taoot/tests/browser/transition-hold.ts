@@ -1,7 +1,7 @@
 /**
  * Does anything paint the world while a transition is waiting for bytes? (#308)
  *
- *   npm run dev:taoot
+ *   npm run dev -w taoot
  *   npx tsx taoot/tests/browser/transition-hold.ts
  *
  * The headless suite can pin who owns the screen at the instant a load starts

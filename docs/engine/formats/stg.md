@@ -119,7 +119,7 @@ endcode
 ```
 
 The port's own **language chooser** (`public/lang.stg`, built by
-`npm run mklang`) is exactly this and nothing more — two flats, six click regions,
+`npm run mklang -w taoot`) is exactly this and nothing more — two flats, six click regions,
 a compiled handler each — and the engine opens it with `openstagefile` like any
 CyberFlix stage. What it does with the choice, and why a script global rather than
 a builtin, is in **[Languages & the chooser](../../taoot/languages.md)**.

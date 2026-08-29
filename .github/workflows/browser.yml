@@ -2,9 +2,16 @@ name: Browser suite
 
 # The same route as the playthrough, but through real mouse and keyboard events
 # against a live dev server — so it costs what the game costs, ~39 min for a
-# carried run. That is too long to sit on every pull request, so it is not on
-# `pull_request` by default: it runs nightly, on demand, or when a PR is given
-# the `full-run` label.
+# carried run of Titanic's. That is too long to sit on every pull request, so it
+# is not on `pull_request` by default: it runs nightly, on demand, or when a PR
+# is given a `full-run-<game>` label.
+#
+# NOTHING HERE NAMES A GAME. The game is a variable, and everything that differs
+# between them is derived from it: the rip's environment variable, the Vite
+# config, the package the suite is a script of. Titanic is only the DEFAULT — for
+# the nightly run and for a dispatch that does not say otherwise — because it is
+# the game with the long route. Adding Dust's or Skull Cracker's is a label, not
+# an edit to this file.
 
 on:
   schedule:
@@ -12,26 +19,31 @@ on:
     - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
+      game:
+        description: "which game's suite (a package directory)"
+        required: false
+        default: taoot
+        type: choice
+        options:
+          - taoot
+          - dust
+          - skullcracker
+      suite:
+        description: "which browser suite — a script in THAT package (test:browser, test:browser:endgame, test:browser:climb, …)"
+        required: false
+        default: test:browser
       segments:
         description: "SEGMENTS to run (blank = the gated set)"
         required: false
         default: ""
-      suite:
-        description: "which browser suite"
-        required: false
-        default: test:browser
-        type: choice
-        options:
-          - test:browser
-          - test:browser:playthrough
-          - test:browser:endgame
-          - test:browser:lang
-          - test:browser:demo
   pull_request:
     types: [labeled]
 
+# Per game as well as per ref: two games labelled on the same pull request are
+# two different runs and must not cancel each other, which one group keyed only
+# on the ref would have done.
 concurrency:
-  group: browser-${{ github.ref }}
+  group: browser-${{ github.ref }}-${{ inputs.game || github.event.label.name || 'nightly' }}
   cancel-in-progress: true
 
 permissions:
@@ -39,13 +51,13 @@ permissions:
 
 jobs:
   browser:
-    name: ${{ inputs.suite || 'test:browser' }}
-    # On `labeled`, only the one label starts a run — every other label edit on
-    # every PR would otherwise boot a 39-minute job. Forks are excluded for the
-    # same reason as in tests.yml: this runner holds the rip.
+    name: browser suite — ${{ inputs.game || github.event.label.name || 'taoot (nightly)' }}
+    # On `labeled`, only a `full-run-<game>` label starts a run — every other
+    # label edit on every PR would otherwise boot a 39-minute job. Forks are
+    # excluded for the same reason as in tests.yml: this runner holds the rips.
     if: >-
       github.event_name != 'pull_request' ||
-      (github.event.label.name == 'full-run' &&
+      (startsWith(github.event.label.name, 'full-run-') &&
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, linux, x64, taoot-gamefiles]
     timeout-minutes: 90
@@ -56,23 +68,58 @@ jobs:
       # fail the run or, worse, quietly test their working tree instead of this
       # checkout. `--strictPort` makes the collision an error rather than a
       # silent hop to the next free port.
-      TAOOT_CI_PORT: "5199"
+      CI_PORT: "5199"
 
     steps:
       - uses: actions/checkout@v4
 
+      # The one place the trigger's shape is turned into a game, so every step
+      # after this is the same three lines whichever game it is.
+      - name: Which game, and which of its suites
+        id: what
+        env:
+          LABEL: ${{ github.event.label.name }}
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            game="${LABEL#full-run-}"          # full-run-dust -> dust
+          else
+            game="${{ inputs.game || 'taoot' }}"   # dispatch, or the nightly default
+          fi
+          suite="${{ inputs.suite || 'test:browser' }}"
+
+          # A package directory rather than a hardcoded list, so a new game is
+          # nothing to this file. Both checks fail loudly here rather than as an
+          # obscure npm error twenty lines later.
+          if [ ! -f "$game/package.json" ]; then
+            echo "::error::'$game' is not a package in this repository — a full-run-* label must name one"
+            exit 1
+          fi
+          if ! node -e "process.exit(require('./$game/package.json').scripts?.['$suite'] ? 0 : 1)"; then
+            echo "::error::$game/package.json has no '$suite' script"
+            exit 1
+          fi
+
+          echo "game=$game"   >> "$GITHUB_OUTPUT"
+          echo "suite=$suite" >> "$GITHUB_OUTPUT"
+          echo "running $game's $suite"
+
       # See tests.yml: checkout's `git clean -ffdx` removes ignored files, so
       # the link is remade after it.
       - name: Link the rip into the workspace
+        env:
+          GAME: ${{ steps.what.outputs.game }}
         run: |
-          # Titanic's only: this suite drives the play page, which is served by
-          # taoot/vite.config.ts from taoot/ — so the rip goes where THAT root
-          # looks for it. Dust's disc is not needed here.
-          test -d "$TAOOT_GAMEFILES" || {
-            echo "::error::TAOOT_GAMEFILES ($TAOOT_GAMEFILES) is not a directory."
+          # The runner records each rip as <GAME>_GAMEFILES in its .env, so the
+          # variable to read follows from the game and this needs no table. Only
+          # the one game's disc is linked: the suite drives that game's page,
+          # served by its own vite.config.ts from its own directory.
+          var="$(echo "$GAME" | tr '[:lower:]' '[:upper:]')_GAMEFILES"
+          rip="${!var:-}"
+          if [ -z "$rip" ] || [ ! -d "$rip" ]; then
+            echo "::error::$var (${rip:-unset}) is not a directory — set it in the runner's .env"
             exit 1
-          }
-          ln -sfn "$TAOOT_GAMEFILES" taoot/gamefiles
+          fi
+          ln -sfn "$rip" "$GAME/gamefiles"
 
       - run: npm ci
 
@@ -95,32 +142,36 @@ jobs:
 
       # `vite preview` cannot serve this: the /gamefiles middleware is a
       # `configureServer` hook (tools/vite-gamefiles.ts), which only the dev
-      # server runs. Titanic's config, because the play page is Titanic's.
+      # server runs. The config is the game's own, because the page is.
       # Started via node directly rather than `npm run dev` so $! is vite's own
       # pid — the cleanup step kills that pid and nothing else.
       - name: Start the dev server
+        env:
+          GAME: ${{ steps.what.outputs.game }}
         run: |
           node node_modules/vite/bin/vite.js \
-            --config taoot/vite.config.ts \
-            --port "$TAOOT_CI_PORT" --strictPort --host 127.0.0.1 \
+            --config "$GAME/vite.config.ts" \
+            --port "$CI_PORT" --strictPort --host 127.0.0.1 \
             > "$RUNNER_TEMP/vite.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/vite.pid"
           for _ in $(seq 1 60); do
-            if curl -sf "http://127.0.0.1:$TAOOT_CI_PORT/" >/dev/null; then
-              echo "dev server up on $TAOOT_CI_PORT"
+            if curl -sf "http://127.0.0.1:$CI_PORT/" >/dev/null; then
+              echo "$GAME's dev server up on $CI_PORT"
               exit 0
             fi
             sleep 1
           done
-          echo "::error::dev server never answered on $TAOOT_CI_PORT"
+          echo "::error::dev server never answered on $CI_PORT"
           cat "$RUNNER_TEMP/vite.log"
           exit 1
 
       - name: Run the suite
         env:
-          APP_URL: http://127.0.0.1:${{ env.TAOOT_CI_PORT }}/
+          APP_URL: http://127.0.0.1:${{ env.CI_PORT }}/
           SEGMENTS: ${{ inputs.segments }}
           SHOT_DIR: ${{ runner.temp }}/shots
+          GAME: ${{ steps.what.outputs.game }}
+          SUITE: ${{ steps.what.outputs.suite }}
         run: |
           # An EMPTY SEGMENTS is not the same as an unset one, and the
           # difference is a silent pass. playthrough.ts reads it with `??`, so
@@ -134,7 +185,7 @@ jobs:
           else
             echo "segments: $SEGMENTS"
           fi
-          npm run ${{ inputs.suite || 'test:browser' }}
+          npm run "$SUITE" -w "$GAME"
 
       # Kill by recorded pid. Never `pkill -f vite` — on a shared machine that
       # would take the owner's dev server with it.
@@ -151,7 +202,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-${{ github.run_id }}
+          name: browser-${{ steps.what.outputs.game }}-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/shots
             ${{ runner.temp }}/vite.log

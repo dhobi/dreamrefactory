@@ -31,10 +31,10 @@ per game in the order the engine shipped them:
 |---|---|---|
 | `npm run dev` | 5173 | the front door and the format editors |
 | `npm run docs:dev` | 5174 | the documentation |
-| `npm run dev:taoot` | 5175 | **Titanic — this one** |
-| `npm run dev:dust` | 5176 | Dust |
-| `npm run dev:timelapse` | 5177 | Timelapse |
-| `npm run dev:skullcracker` | 5178 | Skull Cracker (experimental) |
+| `npm run dev -w taoot` | 5175 | **Titanic — this one** |
+| `npm run dev -w dust` | 5176 | Dust |
+| `npm run dev -w timelapse` | 5177 | Timelapse |
+| `npm run dev -w skullcracker` | 5178 | Skull Cracker (experimental) |
 
 Add `-- --host` to any of them to reach it from another machine.
 
@@ -58,7 +58,7 @@ exactly as long as the files took to load.
 
 If your `taoot/gamefiles/` holds more than one language, the first thing `/play/` shows is the
 **language chooser** — which is itself a DreamFactory stage this repository
-authored (`public/lang.stg`, built by `npm run mklang`): real flats, real click
+authored (`public/lang.stg`, built by `npm run mklang -w taoot`): real flats, real click
 regions, real compiled scripts, opened by the engine's own `openstagefile`. See
 [Languages & the chooser](../docs/taoot/languages.md). `?lang=de` skips it,
 and the 🌐 picker in the page's top bar switches afterwards.
@@ -72,7 +72,7 @@ menu and any room through the editors.
 In front of the **English** boot only, if the file is there, there is one more
 screen: `public/nightdive.mov`, an intro film that ends by asking *do you own the
 game?* — Yes boots, No leaves for the game's GOG page. It is a **MOV**, not a
-piece of HTML over the canvas: `npm run mknightdive -- some.gif` turns an
+piece of HTML over the canvas: `npm run mknightdive -w taoot -- some.gif` turns an
 animated GIF into a DreamFactory movie (`taoot/tools/mknightdive.ts`, on top of the
 write half of the format in `engine/src/df/mov-build.ts`), and appends the question as a
 second segment whose two answers are the movie's own click regions and action
@@ -90,7 +90,7 @@ build is still valid: no film served, no intro, and the boot is what it was.
 Which files exist is one manifest, `gamefiles.json`: a map of served path to
 byte size, walked live by each game's dev server ([tools/vite-gamefiles.ts](../tools/vite-gamefiles.ts)),
 written into `dist/` by a build, and regenerable against an uploaded tree with
-`npm run manifest`. It is a file rather than an endpoint, which is the whole
+`npm run manifest -w taoot`. It is a file rather than an endpoint, which is the whole
 reason the site can be hosted as static files — no game data is bundled either
 way, so a deployment serves whatever tree is laid down beside it, or none.
 Nor does a build name a host root: every URL is relative to the page that asks
@@ -123,7 +123,7 @@ does is in the [docs](../docs/editors/README.md); where they sit in the
 repository is in the [root README](../README.md#layout).
 
 The stage editor's file list also holds one file CyberFlix never shipped:
-**`lang.stg`**, the language chooser this repository *wrote* (`npm run mklang`) —
+**`lang.stg`**, the language chooser this repository *wrote* (`npm run mklang -w taoot`) —
 palette, flats, click regions and compiled scripts. Read → edit → export, on a
 file whose every byte we chose ([writing a stage](../docs/engine/formats/stg.md#writing-a-stage)).
 
@@ -149,9 +149,9 @@ npm test                 # the fast gate, whole repository: scenarios, savegames
                          # audio encodings — Titanic's own half is taoot/tests/auto/
 npm run test:watch       # vitest in watch mode
 npm run test:playthrough # the game played, not probed (headless, virtual clock)
-npm run test:browser     # Playwright against a live dev server (needs npm run dev)
-npm run test:browser:lang # pick a language in a real browser (needs 2+ language trees)
-npm run test:browser:demo # the 1996 demo's menu — the edition that opens no room
+npm run test:browser -w taoot     # Playwright against a live dev server (needs npm run dev)
+npm run test:browser:lang -w taoot # pick a language in a real browser (needs 2+ language trees)
+npm run test:browser:demo -w taoot # the 1996 demo's menu — the edition that opens no room
 ```
 
 Three categories, because they have different budgets. The **gate** jumps to a
@@ -204,10 +204,10 @@ route is tuned by editing data rather than TypeScript:
 
 ```
 npm run dev
-npm run speedrun                 # run it, print the splits
-npm run speedrun:watch           # the same run in a real window, not slowed down
-npm run speedrun:lint            # parse the sheet and say nothing else
-npm run speedrun -- --verbs      # every verb a sheet may use
+npm run speedrun -w taoot                 # run it, print the splits
+npm run speedrun:watch -w taoot           # the same run in a real window, not slowed down
+npm run speedrun:lint -w taoot            # parse the sheet and say nothing else
+npm run speedrun -w taoot -- --verbs      # every verb a sheet may use
 ```
 
 The route lives in [`taoot/tests/speedrun/run.sheet.txt`](tests/speedrun/run.sheet.txt):
@@ -274,7 +274,7 @@ clock, which is the useful way round: same game, slightly different stopwatch.
 *after* it, because a breakpoint you cannot get past is a deadlock rather than a
 tool. The CLI has nobody to press Resume, so it steps over one with a note —
 which is what makes it safe to leave breakpoints in a sheet while a leg is being
-worked on and still time the whole thing under `npm run speedrun`.
+worked on and still time the whole thing under `npm run speedrun -w taoot`.
 
 The workbench booted with the **music off** for a while (`<meta
 name="mute-theme">`, applied as the cold boot's theme mix) on the grounds that the

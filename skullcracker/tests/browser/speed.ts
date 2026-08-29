@@ -1,8 +1,8 @@
 /**
  * Does the player move at the speed `SC.EXE` moves them at?
  *
- *   npm run dev:skullcracker                  # in one terminal
- *   npm run test:browser:skullcracker:speed   # in another
+ *   npm run dev -w skullcracker                  # in one terminal
+ *   npm run test:browser:speed -w skullcracker   # in another
  *
  * Every number here is read out of the executable, and the chain is short enough
  * to state in full:

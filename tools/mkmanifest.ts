@@ -56,7 +56,8 @@ const walked = buildManifest({
  * walk started: run from inside a game's directory with `./gamefiles` — the form
  * this file's examples show, and the form used on the host — the two are the same
  * string and nothing needs doing. Run from the repository root with
- * `skullcracker/gamefiles`, which is what the `npm run manifest*` scripts do,
+ * `skullcracker/gamefiles`, which is what the manifest scripts did before they
+ * moved into the game packages and started running from inside one,
  * every key came out as `skullcracker/gamefiles/…` and the page indexed **nothing**:
  * a manifest that parses, lists 113 files, and matches none of them.
  *

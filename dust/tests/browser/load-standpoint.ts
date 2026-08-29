@@ -1,7 +1,7 @@
 /**
  * Where a load puts you, in a real browser, on a game that has just booted.
  *
- *   npm run dev:dust
+ *   npm run dev -w dust
  *   npx tsx dust/tests/browser/load-standpoint.ts
  *
  * A v1 standpoint is a grid CELL, and turning it into a scene means reading the

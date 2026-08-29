@@ -2,7 +2,7 @@
  * Make `public/dust-logo.png` — the page-sized title card — from the full-size
  * artwork at `dust/assets/dust-full.png`.
  *
- *   npm run mkdustlogo [-- <width>]
+ *   npm run mklogo -w site -w dust [-- <width>]
  *
  * A build step rather than a checked-in resize, so the small file is always
  * derivable from the big one and the page's asset is not a mystery.

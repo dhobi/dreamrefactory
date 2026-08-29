@@ -1,7 +1,7 @@
 /**
  * The site as it is PUBLISHED: a static build served from a subdirectory.
  *
- *   npm run test:built:site
+ *   npm run test:built -w site
  *
  * Everything here is deployed under `https://www.danielhobi.ch/dreamrefactory/`,
  * never at a host's root, and that is a difference no other test could see. `npm

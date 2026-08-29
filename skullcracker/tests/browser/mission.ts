@@ -1,8 +1,8 @@
 /**
  * A level ends the way `SC.EXE` ends one: the quota, then the goal, then a film.
  *
- *   npm run dev:skullcracker                    # in one terminal
- *   npm run test:browser:skullcracker:mission   # in another
+ *   npm run dev -w skullcracker                    # in one terminal
+ *   npm run test:browser:mission -w skullcracker   # in another
  *
  * `skullcracker/src/mission.ts` is where the numbers and their addresses are.
  * What this asserts is the shape of the rule rather than the numbers themselves:

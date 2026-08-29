@@ -35,13 +35,18 @@ behind a green tick.
 
 | Workflow | Trigger | What |
 |---|---|---|
-| [`tests.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` on GitHub's machines; `full` (whole auto suite + playthrough) self-hosted |
-| [`browser.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/browser.yml) | nightly 02:00 UTC, manual, or the `full-run` label on a PR | the browser suite — ~39 min, because it costs what the game costs |
+| [`tests.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` on GitHub's machines; `full` (whole auto suite + every package's playthrough) self-hosted. The `full` job's NAME is a required status check — renaming it blocks every PR |
+| [`browser.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/browser.yml) | nightly 02:00 UTC, manual, or a `full-run-<game>` label on a PR | that game's browser suite — ~39 min for Titanic's, because it costs what the game costs |
 | [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to `/dreamrefactory/docs/`, over the same FTP mirror the builds use. Not versioned against a game — [why](deploy.md#the-documentation-is-not-a-release) |
-| [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*` or `dust-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the three is an error rather than a default. [Releasing and deploying](deploy.md) |
+| [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*` or `skullcracker-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the five is an error rather than a default. [Releasing and deploying](deploy.md) |
 
-The browser suite is off the per-PR path deliberately. Add the **`full-run`**
-label to a pull request to pull it in for that PR.
+The browser suite is off the per-PR path deliberately. Add a
+**`full-run-<game>`** label — `full-run-taoot`, `full-run-dust`,
+`full-run-skullcracker` — to pull that game's in for that PR. The label names the
+package directory and nothing else: the workflow reads the game out of it and
+derives the rest (which rip to link, which Vite config to serve, which package
+the suite is a script of), so a game added later needs a label rather than an
+edit. Two games labelled on one PR are two runs and do not cancel each other.
 
 ## Setting the runner up
 
@@ -150,7 +155,7 @@ Two reasons it must not be 5175, which is Titanic's own port and the driver's
 default:
 
 - the runner shares a machine with a person, and 5175 is where their own
-  `npm run dev:taoot` lives;
+  `npm run dev -w taoot` lives;
 - without `--strictPort`, Vite hops to the next free port and the suite would
   quietly test *their* working tree instead of the checkout.
 

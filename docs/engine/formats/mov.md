@@ -658,7 +658,7 @@ in how the file is arranged.
   above.
 - **[`taoot/tools/mknightdive.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/mknightdive.ts)**
   — a worked example of the write half: an animated GIF becomes a movie
-  (`npm run mknightdive -- some.gif`). The film is one segment — every GIF frame
+  (`npm run mknightdive -w taoot -- some.gif`). The film is one segment — every GIF frame
   scaled into the 512×384 screen, a type-6 STEP on each and a type-1 EXIT on the
   last, paced by the GIF's own delays through the segment's frame-rate floor
   (`+0x1c`) with a per-frame hold only where a frame disagrees with it. A second

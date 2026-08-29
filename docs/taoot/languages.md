@@ -235,7 +235,7 @@ in there. Player-made saves are untouched.
 | change your mind | the **Edition** row on the play page, the editors and the collection ([`taoot/src/editions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/editions.ts)) — one choice, carried between all three. Switching is a reload on the two that have read data: a live session is holding boot scripts, shops and sound banks from the edition being left |
 | a different page language | the 🌐 dropdown in the top bar, which is that and nothing else ([`site/src/lang-menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/lang-menu.ts)) |
 | pin it for tests | `TAOOT_LANG` (Node), which the browser suites pass through as `?edition=` |
-| rebuild the stage | `npm run mklang` — then, if you like, restyle it in [the stage editor](../editors/stages.md) |
+| rebuild the stage | `npm run mklang -w taoot` — then, if you like, restyle it in [the stage editor](../editors/stages.md) |
 
 ## The pages' own language
 
@@ -342,7 +342,7 @@ handled, but a renamed room file would miss); `save/` might not be called `save/
 in which case nothing seeds and the save browser is empty, which looks like a bug
 and isn't; a tree missing `LOCAL/BOOTFILE` fails at the cold boot rather than at the
 chooser, so the error points at the wrong place; and voice/subtitle pacing differs
-per language. `npm run test:browser:lang` settles the first three and needs two or
+per language. `npm run test:browser:lang -w taoot` settles the first three and needs two or
 more real trees — it skips with a reason when the install has only one.
 Voice and subtitle *pacing* is no longer only-English by assumption — a
 missing-audio line is paced by its stored byte count for exactly that reason — but

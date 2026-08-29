@@ -85,9 +85,9 @@ full run spends most of its time replaying segments untouched for days.
 | while | run | cost |
 |-------|-----|------|
 | writing a segment | `npm test && npm run test:playthrough` | ~2 min |
-| that segment's cross-host check | `SEGMENTS=13 npm run test:browser:seg` | 20 s – 5 min |
-| a mission is finished | `npm run test:browser:m0` / `:m1` / `:m2` | 1 – 8 min |
-| before a long break, or after touching nav/aim/drivers | `npm run test:browser` | ~24 min |
+| that segment's cross-host check | `SEGMENTS=13 npm run test:browser:seg -w taoot` | 20 s – 5 min |
+| a mission is finished | `npm run test:browser:m0 -w taoot` / `:m1` / `:m2` | 1 – 8 min |
+| before a long break, or after touching nav/aim/drivers | `npm run test:browser -w taoot` | ~24 min |
 
 The last row is the one that matters: a change to the shared navigation, aiming or
 driver code is exactly what CAN break an old segment, and that is when the whole
@@ -100,7 +100,7 @@ npm test                        # the gate
 npm run test:playthrough        # 27 segments + 3 property tests — writes out/checkpoints/*.ti
 TAOOT_RECORD=1 npx vitest run --config vitest.playthrough.config.ts   # re-record goldens
 TAOOT_RECHECKPOINT=1 …          # …and rebuild the .ti checkpoints (after a save change)
-npm run watch:m2p0              # watch segment 7 in a real window
+npm run watch:m2p0 -w taoot              # watch segment 7 in a real window
 SEGMENTS=9 npx tsx taoot/tests/browser/playthrough.ts    # one segment alone, ~35 s
 ```
 

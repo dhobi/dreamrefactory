@@ -678,7 +678,7 @@ async function planner(c: ActionContext, method: "travel" | "hunt" | "stand", ta
   if (!plannerImpl) {
     throw new Error(
       `\`${method}\` needs the pathfinder, which only the Playwright runner has. ` +
-        `Run this sheet with \`npm run speedrun\` to get the literal gestures it would use, ` +
+        `Run this sheet with \`npm run speedrun -w taoot\` to get the literal gestures it would use, ` +
         `then paste those in and the line will work here too.`,
     );
   }
@@ -2466,7 +2466,7 @@ export const ACTIONS: Record<string, Action> = {
    *
    * Ignored where there is nobody to resume it. An unattended CLI run steps over
    * it with a note, so a sheet can be left with breakpoints in it while a leg is
-   * being worked on and still time end to end under `npm run speedrun`.
+   * being worked on and still time end to end under `npm run speedrun -w taoot`.
    */
   pause: {
     args: [0, 0],

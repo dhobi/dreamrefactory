@@ -1,8 +1,8 @@
 /**
  * Build `lang.stg` — the language chooser, as a DreamFactory stage.
  *
- *   npm run mklang            # writes public/lang.stg
- *   npm run mklang -- out/    # somewhere else (e.g. a copy under gamefiles/ so
+ *   npm run mklang -w taoot            # writes public/lang.stg
+ *   npm run mklang -w taoot -- out/    # somewhere else (e.g. a copy under gamefiles/ so
  *                             # the editors' file picker lists it)
  *
  * Everything the file needs is authored here: the palette, both flats' art (an

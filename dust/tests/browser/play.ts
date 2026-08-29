@@ -1,10 +1,10 @@
 /**
  * Open Dust in a real window, at any rung of the disc's own playthrough.
  *
- *   npm run dev:dust                 # in another terminal
- *   npm run play:dust               # boot, and leave it open
- *   npm run play:dust -- D2A_006    # …at that shipped save
- *   npm run play:dust -- --list     # the saves in the order they were made
+ *   npm run dev -w dust                 # in another terminal
+ *   npm run play -w dust               # boot, and leave it open
+ *   npm run play -w dust -- D2A_006    # …at that shipped save
+ *   npm run play -w dust -- --list     # the saves in the order they were made
  *
  * Not a test — it asserts nothing and never exits on its own — and **it does not
  * play the game.** It opens it, puts you where you asked to be, and hands you the
@@ -13,7 +13,7 @@
  * names the save that ends it, and this is how you get to one without playing the
  * four hours in front of it.
  *
- * Hence `play:` and not `watch:`. Titanic's `npm run watch:m2p0` and friends are
+ * Hence `play:` and not `watch:`. Titanic's `npm run watch:m2p0 -w taoot` and friends are
  * its browser playthrough run headed with a segment filter — the harness plays
  * and you watch. Dust has no harness yet, so there is nothing to watch; this
  * drives the one thing that does exist, `dbg.loadSave`, which is the panel's LOAD
@@ -67,7 +67,7 @@ if (wantList) {
   for (const [i, r] of rows.entries()) {
     console.log(`${String(i + 1).padStart(3)}. ${r.name.padEnd(12)} day ${r.day}  frame ${r.frame}`);
   }
-  console.log(`\n  npm run play:dust -- ${rows[0].name}`);
+  console.log(`\n  npm run play -w dust -- ${rows[0].name}`);
   process.exit(0);
 }
 

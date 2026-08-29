@@ -3,5 +3,11 @@
   "version": "0.1.2",
   "private": true,
   "description": "Timelapse: Ancient Civilizations (1996) — the third and last CyberFlix game on this engine, and the one that navigates by cursor. Its own version because it releases on its own tag.",
-  "type": "module"
+  "type": "module",
+  "//scripts": "Run from anywhere with `-w timelapse`; npm sets the working directory to this package, which is why every path here is relative to it and `vite`/`vitest` find the configs beside this file with no --config.",
+  "scripts": {
+    "dev": "vite",
+    "preview": "vite preview",
+    "build": "vite build"
+  }
 }

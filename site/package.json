@@ -4,6 +4,14 @@
   "private": true,
   "description": "The web presence itself: where a page sits in the deployed tree, the top bar it shares with every other page, and the chrome under all of them — structure only, with every colour coming from a palette the page supplies.",
   "type": "module",
+  "//scripts": "Run from anywhere with `-w site`; npm sets the working directory to this package, which is why every path here is relative to it and `vite`/`vitest` find the configs beside this file with no --config.",
+  "scripts": {
+    "dev": "vite",
+    "preview": "vite preview",
+    "build": "vite build",
+    "test:built": "tsx tests/browser/built-subdir.ts",
+    "mklogo": "tsx tools/mklogo.ts"
+  },
   "exports": {
     "./*": "./src/*.ts",
     "./locales": "./src/locales/index.ts",

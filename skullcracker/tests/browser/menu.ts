@@ -1,8 +1,8 @@
 /**
  * Does Skull Cracker start the way its own binary says it starts?
  *
- *   npm run dev:skullcracker            # in one terminal
- *   npm run test:browser:skullcracker   # in another
+ *   npm run dev -w skullcracker            # in one terminal
+ *   npm run test:browser -w taoot -w skullcracker   # in another
  *
  * This is the branch's whole claim, checked against a real browser rather than
  * against the readers that feed it. The readers are checked separately and

@@ -102,8 +102,8 @@ click regions per frame — so `skullcracker/` plays the game's own opening and 
 menu comes up, animates, plays its music and answers a click:
 
 ```bash
-npm run dev:skullcracker        # http://localhost:5178/
-npm run test:browser:skullcracker
+npm run dev -w skullcracker        # http://localhost:5178/
+npm run test:browser -w taoot -w skullcracker
 ```
 
 ### The sprite books are the engine's format, arranged a new way

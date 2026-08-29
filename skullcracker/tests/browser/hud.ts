@@ -1,8 +1,8 @@
 /**
  * Does the interface panel show what `SC.EXE`'s panel shows?
  *
- *   npm run dev:skullcracker              # in one terminal
- *   npm run test:browser:skullcracker:hud # in another
+ *   npm run dev -w skullcracker              # in one terminal
+ *   npm run test:browser:hud -w skullcracker # in another
  *
  * The panel is `skullcracker/src/hud.ts`, and its module comment carries the
  * addresses every coordinate came out of. What can be asserted from outside is

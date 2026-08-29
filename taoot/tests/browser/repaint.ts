@@ -3,7 +3,7 @@
  *
  *   npm run dev
  *   npx tsx taoot/tests/browser/repaint.ts            # boot, sit still, poke around
- *   REPAINT_CHECK=1 npm run test:browser:m0     # ride along with a real route
+ *   REPAINT_CHECK=1 npm run test:browser:m0 -w taoot     # ride along with a real route
  *
  * `SetViewer.render` decides whether to composite by hashing what the picture
  * is drawn from ({@link SetViewer.buildSignature}). That hash is the one place

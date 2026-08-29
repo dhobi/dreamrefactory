@@ -2,8 +2,8 @@
  * Build `nightdive.mov` — an animated GIF turned into a DreamFactory movie, with
  * the ownership question after it.
  *
- *   npm run mknightdive -- heading-gif.gif        # writes public/nightdive.mov
- *   npm run mknightdive -- heading-gif.gif out/   # somewhere else
+ *   npm run mknightdive -w taoot -- heading-gif.gif        # writes public/nightdive.mov
+ *   npm run mknightdive -w taoot -- heading-gif.gif out/   # somewhere else
  *
  * Two halves, and they are the two halves a MOV can be (docs/engine/formats/mov.md):
  *
@@ -529,7 +529,7 @@ export function buildNightdiveMov(gif: GifImage): { bytes: Uint8Array; seconds: 
  * ({@link FileStore.urlFor} resolves through the manifest, not by guessing a URL).
  */
 // this package's own, resolved from the file: a build runs from taoot/ and an
-// `npm run mknightdive` from the repository root
+// `npm run mknightdive -w taoot` from the repository root
 export const NIGHTDIVE_GIF = fileURLToPath(new URL("../assets/nightdive.gif", import.meta.url));
 export const NIGHTDIVE_OUT = fileURLToPath(new URL(`../public/${OUT_NAME}`, import.meta.url));
 

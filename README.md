@@ -45,10 +45,16 @@ game to be ported takes 5179 and nothing has to move:
 |---|---|---|
 | `npm run dev` | 5173 | the front door and the format editors |
 | `npm run docs:dev` | 5174 | the documentation |
-| `npm run dev:taoot` | 5175 | Titanic |
-| `npm run dev:dust` | 5176 | Dust |
-| `npm run dev:timelapse` | 5177 | Timelapse |
-| `npm run dev:skullcracker` | 5178 | Skull Cracker (experimental) |
+| `npm run dev -w taoot` | 5175 | Titanic |
+| `npm run dev -w dust` | 5176 | Dust |
+| `npm run dev -w timelapse` | 5177 | Timelapse |
+| `npm run dev -w skullcracker` | 5178 | Skull Cracker (experimental) |
+
+Each package owns its own commands. `-w <package>` runs one of them — `npm run
+speedrun -w taoot`, `npm run test:browser -w skullcracker` — and the root has only
+the work that crosses packages (`build`, `test`, `typecheck`, the docs), which it
+fans out over the workspaces rather than naming a game. A new game brings its own
+scripts and the root does not change.
 
 Add `-- --host` to reach one from another machine. A link from one site to
 another **404s in dev with a page telling you which server serves it** — six
@@ -127,7 +133,7 @@ safe because the upload only ever adds and overwrites — see
 ```bash
 npm test                 # the automatic suite
 npm run test:playthrough # the game played end to end, by the clock it runs on
-npm run test:browser     # Playwright against a live dev server
+npm run test:browser -w taoot     # Playwright against a live dev server
 ```
 
 Most of it reads the original game files, which is why the full suite runs on a

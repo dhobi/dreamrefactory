@@ -18,7 +18,7 @@
  *     hand, which is how the three-tag release that
  *     [cancelled two of its own runs](../../.github/workflows/deploy.yml) went out.
  *
- * The lane itself is generic — `npm run build:<target>` writes `dist/<target>` and
+ * The lane itself is generic — `npm run build -w <target>` writes `dist/<target>` and
  * that is mirrored to `<target>/` — so adding a game is only ever these four lines
  * plus a build script, and this is what says all five are present. It reads the
  * workflow as TEXT rather than parsing the YAML: what is being checked is that a
@@ -32,9 +32,6 @@ import { GAMES } from "@dreamfactory/site/games";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const workflow = readFileSync(`${ROOT}/.github/workflows/deploy.yml`, "utf8");
-const pkg = JSON.parse(readFileSync(`${ROOT}/package.json`, "utf8")) as {
-  scripts: Record<string, string>;
-};
 
 /** the four places a target has to be named, as the patterns that find it */
 const places = (target: string): { where: string; found: boolean }[] => [
@@ -72,9 +69,14 @@ test("no tag pattern releases something that is not a game or the site", () => {
 });
 
 test("each lane has the build script it runs", () => {
-  // the workflow's build step is `npm run build:${target}` and nothing else, so a
-  // lane without the script fails after the checkout rather than before the tag
+  // The workflow's build step is `npm run build -w ${target}`, so the script has
+  // to be in THAT package rather than at the root — a lane without it fails after
+  // the checkout rather than before the tag. The root has no per-game build script
+  // any more: each package carries its own, and `npm run build` fans out.
   for (const target of ["site", ...GAMES.map((g) => g.dir)]) {
-    expect(pkg.scripts[`build:${target}`], `package.json has no build:${target}`).toBeTruthy();
+    const pkg = JSON.parse(readFileSync(`${ROOT}/${target}/package.json`, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    expect(pkg.scripts?.build, `${target}/package.json has no build script`).toBeTruthy();
   }
 });

@@ -1,8 +1,8 @@
 /**
  * Does the page make the game's own noise?
  *
- *   npm run dev:skullcracker                  # in one terminal
- *   npm run test:browser:skullcracker:sound   # in another
+ *   npm run dev -w skullcracker                  # in one terminal
+ *   npm run test:browser:sound -w skullcracker   # in another
  *
  * Sound is the one thing on this page that a screenshot cannot show and a pixel
  * count cannot count, so this probe counts SOURCES: it wraps

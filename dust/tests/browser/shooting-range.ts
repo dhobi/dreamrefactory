@@ -1,7 +1,7 @@
 /**
  * Are the shooting range's targets ON THE CANVAS?
  *
- *   npm run dev:dust
+ *   npm run dev -w dust
  *   npx tsx dust/tests/browser/shooting-range.ts
  *
  * The headless test beside this one (dust/tests/targets.ts) proves the range is
