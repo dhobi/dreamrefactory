@@ -43,10 +43,18 @@ nothing, while filtering the suite would save a fifth as much and introduce the
 one failure this repository cannot afford — a change landing green with its tests
 unrun.
 
-The rule is deliberately blunt. Only a diff confined to GAME PACKAGES narrows
-anything; `engine/`, `site/`, `tools/`, a root config, a workflow or anything else
-runs every playthrough, because everything depends on those. A game package with
-no playthrough of its own narrows to nothing at all.
+The rule is deliberately blunt. Only a diff confined to GAME PACKAGES — or to
+prose — narrows anything; `engine/`, `site/`, `tools/`, a root config, a workflow
+or anything else runs every playthrough, because everything depends on those. A
+game package with no playthrough of its own narrows to nothing at all, so a
+Dust-only or Skull Cracker-only change runs none.
+
+Prose is dropped before any of that: a playthrough drives the rip and asserts a
+recorded trace, and neither is reachable from `docs/` or from markdown anywhere.
+Whatever does read those — the front-door and manifest suites walk the tree — is
+in the automatic suite, which is never filtered. Measured over the last forty
+commits on master, three were prose alone and three were confined to a game
+package: this narrows six of forty and leaves the rest exactly as they were.
 
 And it decides rather than skips. A `paths:` filter that skips the job would make
 the required status check never report, and a pull request waits on that forever

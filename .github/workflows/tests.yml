@@ -134,9 +134,10 @@ jobs:
       # saving is taken where the seconds are, and the safety net stays under
       # everything.
       #
-      # Conservative by construction. ONLY a change confined to game packages
-      # narrows anything; touch `engine/`, `site/`, `tools/`, a root config or a
-      # workflow and every playthrough runs, because everything depends on those.
+      # Conservative by construction. ONLY a change confined to game packages —
+      # or to prose, which reaches nothing — narrows anything; touch `engine/`,
+      # `site/`, `tools/`, a root config or a workflow and every playthrough runs,
+      # because everything depends on those.
       #
       # It decides rather than SKIPS, and that is not a style choice: a required
       # status check that never reports blocks a pull request forever with its
@@ -160,6 +161,17 @@ jobs:
           games=""
           while IFS= read -r f; do
             [ -n "$f" ] || continue
+
+            # Prose cannot reach a playthrough. A playthrough drives the rip and
+            # asserts a recorded trace; neither is reachable from `docs/` or from
+            # any markdown, VitePress config included. Anything that DOES read
+            # this — the front-door and manifest suites read the tree — is in the
+            # automatic suite above, which is never filtered, so dropping these
+            # here narrows the playthroughs and nothing else.
+            case "$f" in
+              docs/*|*.md) continue ;;
+            esac
+
             d="${f%%/*}"
             # A file at the root, or under something that is not a package, or
             # under one every game depends on, is a change this cannot reason
