@@ -74,7 +74,11 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, taoot-gamefiles]
     steps:
+      # Full history, because the step that picks the playthroughs diffs against
+      # the base commit and the default depth of 1 does not contain it.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # `actions/checkout` cleans with `git clean -ffdx`, and -x takes IGNORED
       # files too — so the links below are deleted on every run and have to be
@@ -118,10 +122,82 @@ jobs:
       - name: Automatic suite
         run: npm test
 
+      # Which playthroughs this change needs — and why the automatic suite above
+      # is deliberately NOT filtered the same way.
+      #
+      # Measured on the run that merged #333: the playthrough is 73 s of this
+      # job's 168 s, and it is ONE GAME's. A change confined to another game's
+      # package pays all of it for nothing. The automatic suite is ~15 s of the
+      # same job — filtering that would save a fifth as much and could, if the
+      # mapping were ever wrong, let a change land with its tests unrun. So the
+      # suite always runs in full and only the playthroughs are chosen: the
+      # saving is taken where the seconds are, and the safety net stays under
+      # everything.
+      #
+      # Conservative by construction. ONLY a change confined to game packages
+      # narrows anything; touch `engine/`, `site/`, `tools/`, a root config or a
+      # workflow and every playthrough runs, because everything depends on those.
+      #
+      # It decides rather than SKIPS, and that is not a style choice: a required
+      # status check that never reports blocks a pull request forever with its
+      # jobs green (see the note on this job's name). So the job always runs and
+      # this step always exits 0 — "nothing to run" is a result, not an absence.
+      - name: Which playthroughs this change needs
+        id: pt
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "${BASE:-}" ] || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            echo "no base commit to compare against — running every playthrough"
+            echo "all=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/changed.txt"
+          echo "changed files:"; sed 's/^/  /' "$RUNNER_TEMP/changed.txt"
+
+          all=0
+          games=""
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            d="${f%%/*}"
+            # A file at the root, or under something that is not a package, or
+            # under one every game depends on, is a change this cannot reason
+            # about — so it runs all of them.
+            if [ "$d" = "$f" ] || [ ! -f "$d/package.json" ] || [ "$d" = engine ] || [ "$d" = site ]; then
+              echo "  -> '$f' is not confined to a game package; running every playthrough"
+              all=1
+              break
+            fi
+            case " $games " in *" $d "*) ;; *) games="$games $d" ;; esac
+          done < "$RUNNER_TEMP/changed.txt"
+
+          if [ "$all" = 1 ]; then
+            echo "all=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          want=""
+          for g in $games; do
+            [ -f "$g/vitest.playthrough.config.ts" ] && want="$want $g"
+          done
+          echo "changed game packages:${games:- none}"
+          echo "playthroughs to run:${want:- none}"
+          echo "games=$want" >> "$GITHUB_OUTPUT"
+
       # Timed by ticks and gestures rather than by wall clock, so this number is
       # not a budget — it has come in anywhere from 77 s to 137 s on the same
       # green code, which is why nothing here asserts on seconds.
-      # Fans out over every package that has a playthrough — Titanic's today,
-      # and a second game's the day it grows one, with nothing to change here.
       - name: Playthroughs
-        run: npm run test:playthrough
+        env:
+          ALL: ${{ steps.pt.outputs.all }}
+          GAMES: ${{ steps.pt.outputs.games }}
+        run: |
+          if [ "${ALL:-}" = "1" ]; then
+            # the root script fans out over every package that has one
+            npm run test:playthrough
+          elif [ -z "${GAMES// /}" ]; then
+            echo "no playthrough is affected by this change"
+          else
+            for g in $GAMES; do npm run test:playthrough -w "$g"; done
+          fi
