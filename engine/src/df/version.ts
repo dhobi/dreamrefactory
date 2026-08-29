@@ -35,8 +35,10 @@ export const VERSION_OFFSET = 0x02;
  * container 0 opens `00 00 04 00`, a Mac one `00 04 00 00` — the same two 16-bit
  * halves with their POSITIONS exchanged as well as their bytes, which is what a
  * 32-bit word swap does to a pair of u16s and what no other field here shows any
- * sign of. Every one of Skull Cracker's 66 films reads 4 here, which is the
- * generation its 1996 date and its 512x384 screen would predict.
+ * sign of. Every one of the Mac pressing's 66 films read 4 here, which is the
+ * generation its 1996 date and its 512x384 screen would predict. No big-endian
+ * file is in the corpus now — see {@link file://./byte-order.ts} for why the
+ * path is kept regardless — so this branch is capability rather than daily use.
  *
  * Read as its own case rather than folded into the general rule, because it is
  * not an instance of one: a reader that "just" flipped endianness would find 0

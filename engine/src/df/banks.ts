@@ -68,15 +68,17 @@ const BANK_NAME_MAX = 31;
  * The record count and each record's container location were read here as an
  * i16 followed by two skipped bytes. On a little-endian file that is the same
  * number — the skipped pair is the field's own zero high half — and it went
- * unnoticed for as long as every rip was little-endian. On Skull Cracker's
- * Macintosh rip it is the WRONG half: the count of a one-record table reads 0,
- * so the film's bed is silently empty and the menu plays without its music.
+ * unnoticed for as long as every rip was little-endian. On the Macintosh
+ * pressing of Skull Cracker — read here before the Windows release replaced it —
+ * it was the WRONG half: the count of a one-record table read 0, so the film's
+ * bed was silently empty and the menu played without its music.
  *
  * Read as i32 in the file's own order, both orders get the same field. That the
  * skipped bytes really were the high half rather than something else is measured
  * rather than assumed: reading both ways through the production entry points
  * ({@link readAudioBank} and `readMovFile`) over every bank and film in the three
- * little-endian rips — 1973 films and 646 banks — the two readings differ nowhere.
+ * little-endian rips then in the corpus — 1973 films and 646 banks — the two
+ * readings differ nowhere.
  * So no PC file changes its reading, and the suite that plays those games through
  * is unmoved.
  *
@@ -133,7 +135,8 @@ export function readLoopChunks(data: Uint8Array, byteOrder: ByteOrder = PC): Ban
  * key/filter them as needed.
  *
  * The count is the 32-bit field {@link readLoopTable}'s comment explains: read
- * as an i16 it is the same number on a PC rip and the empty half on a Mac one.
+ * as an i16 it is the same number on a little-endian rip and the empty half on a
+ * big-endian one.
  */
 export function readOneShotChunks(
   data: Uint8Array,
