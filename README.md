@@ -22,7 +22,7 @@ Four of its games are here. Three are adventures the interpreter runs:
 
 | | | |
 |---|---|---|
-| **[Skull Cracker](skullcracker/)** | 1996 | DreamFactory 4 on a **Macintosh** disc — every integer the other way round. A beat-'em-up with no BOOTFILE and no script: its logic is compiled into a PowerPC binary. Its 66 films and its own menu play, and a level is **walkable** — the levels, the moves, the fights, the sounds and the mission read out of `SC.EXE` with a disassembler rather than scripted in the data |
+| **[Skull Cracker](skullcracker/)** | 1996 | DreamFactory 4 with **every integer the other way round** — big-endian, where every other disc here is little. A beat-'em-up with no BOOTFILE and no script: its logic is compiled into the executable. Its 66 films and its own menu play, and a level is **walkable** — the levels, the moves, the fights, the sounds and the mission read out of `SC.EXE` with a disassembler rather than scripted in the data |
 
 **RE is for reverse-engineered.** This is a best-effort re-implementation and not
 a re-release: it needs a copy of a game's own data files, which it does not
@@ -78,7 +78,7 @@ Eight directories, and each of them a thing rather than a kind of file.
   engine's screen with no room on it (`engine/src/web/screen-director.ts`) is what
   made it possible at all
 - **`skullcracker/`** — Skull Cracker: two pages — the films and its own menu, and
-  a walkable level beside them — one Macintosh disc, and its own disassembler
+  a walkable level beside them — one big-endian disc, and its own disassembler
   under `tools/`. It is why `engine/src/df/byte-order.ts` exists
 - **`site/`** — the project's own web presence: the front door, the eight format
   editors, the chrome every page shares, and the UI-language axis
