@@ -12,6 +12,7 @@
     "manifest": "tsx ../tools/mkmanifest.ts ../dist/dust gamefiles public",
     "play": "tsx tests/browser/play.ts",
     "test:built": "tsx tests/browser/built-layout.ts",
+    "test:browser": "tsx tests/browser/load-standpoint.ts && tsx tests/browser/shooting-range.ts && tsx tests/browser/walk-back.ts",
     "test:browser:load": "tsx tests/browser/load-standpoint.ts",
     "test:browser:range": "tsx tests/browser/shooting-range.ts",
     "test:browser:walkback": "tsx tests/browser/walk-back.ts",

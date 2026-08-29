@@ -56,7 +56,7 @@ jobs:
   # the playthrough.
   # ---------------------------------------------------------------------------
   full:
-    name: full auto suite + playthrough
+    name: full auto suite + playthroughs
     # A fork's pull request must never reach the machine that holds the rip:
     # `pull_request` checks out the PR's head, and that head is the fork's code.
     # Same-repo branches only. (GitHub's own advice is to keep self-hosted
@@ -115,5 +115,7 @@ jobs:
       # Timed by ticks and gestures rather than by wall clock, so this number is
       # not a budget — it has come in anywhere from 77 s to 137 s on the same
       # green code, which is why nothing here asserts on seconds.
-      - name: Playthrough
+      # Fans out over every package that has a playthrough — Titanic's today,
+      # and a second game's the day it grows one, with nothing to change here.
+      - name: Playthroughs
         run: npm run test:playthrough
