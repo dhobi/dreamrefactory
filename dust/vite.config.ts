@@ -58,19 +58,19 @@ export default defineConfig({
       },
       {
         path: "taoot",
-        command: "npm run dev:taoot",
+        command: "npm run dev -w taoot",
         port: 5175,
         what: "Titanic",
       },
       {
         path: "timelapse",
-        command: "npm run dev:timelapse",
+        command: "npm run dev -w timelapse",
         port: 5177,
         what: "Timelapse",
       },
       {
         path: "skullcracker",
-        command: "npm run dev:skullcracker",
+        command: "npm run dev -w skullcracker",
         port: 5178,
         what: "Skull Cracker",
       },

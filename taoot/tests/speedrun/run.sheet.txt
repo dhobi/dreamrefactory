@@ -1,10 +1,10 @@
 # =====================================================================
 # THE SPEEDRUN — Titanic: Adventure Out of Time, any%
 #
-#   npm run speedrun            run it, print the splits
-#   npm run speedrun:watch      the same run in a real window
-#   npm run speedrun:lint       parse this file and say nothing else
-#   npm run speedrun -- --verbs what may appear on a line here
+#   npm run speedrun -w taoot            run it, print the splits
+#   npm run speedrun:watch -w taoot      the same run in a real window
+#   npm run speedrun:lint -w taoot       parse this file and say nothing else
+#   npm run speedrun -w taoot -- --verbs what may appear on a line here
 #
 # One action per line. `#` is a comment, `;` separates actions on a line,
 # `xN` repeats, `a, b, c` is one action per argument, `key: value` is an

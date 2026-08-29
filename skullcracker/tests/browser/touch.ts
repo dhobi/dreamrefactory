@@ -1,8 +1,8 @@
 /**
  * Can Skull Cracker be played with a finger?
  *
- *   npm run dev:skullcracker                  # in one terminal
- *   npm run test:browser:skullcracker:touch   # in another
+ *   npm run dev -w skullcracker                  # in one terminal
+ *   npm run test:browser:touch -w skullcracker   # in another
  *
  * `menu.ts` drives this page with a mouse and a keyboard. A phone has neither,
  * and until the shared recogniser was wired in it had no way past the opening

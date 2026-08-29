@@ -66,9 +66,9 @@ export default defineConfig({
     siblingSignposts([
       { path: "editors", command: "npm run dev", port: 5173, what: "The format editors" },
       { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },
-      { path: "taoot", command: "npm run dev:taoot", port: 5175, what: "Titanic" },
-      { path: "dust", command: "npm run dev:dust", port: 5176, what: "Dust" },
-      { path: "timelapse", command: "npm run dev:timelapse", port: 5177, what: "Timelapse" },
+      { path: "taoot", command: "npm run dev -w taoot", port: 5175, what: "Titanic" },
+      { path: "dust", command: "npm run dev -w dust", port: 5176, what: "Dust" },
+      { path: "timelapse", command: "npm run dev -w timelapse", port: 5177, what: "Timelapse" },
     ]),
   ],
   server: {

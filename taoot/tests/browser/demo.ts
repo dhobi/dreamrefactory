@@ -17,7 +17,7 @@
  *
  * Run against a dev server:
  *
- *   npm run dev:taoot &
+ *   npm run dev -w taoot &
  *   npx tsx taoot/tests/browser/demo.ts          # APP_URL to point elsewhere
  *   HEADED=1 npx tsx taoot/tests/browser/demo.ts # ...and watch it
  */

@@ -14,7 +14,8 @@
  * from inside a game's directory with `./gamefiles` — the on-host form in
  * `mkmanifest.ts`'s own examples — the walked path and the served path are the
  * same string. Run from the repository root with `skullcracker/gamefiles`, which
- * is what `npm run manifest*` does, every key came out `skullcracker/gamefiles/…`
+ * is what the manifest scripts did before they moved into the game packages,
+ * every key came out `skullcracker/gamefiles/…`
  * and the page indexed **nothing**: a manifest that parses, reports 113 files and
  * matches none of them. `mkmanifest.ts` normalises the prefix now, the way
  * `tools/vite-gamefiles.ts` already did for the build.

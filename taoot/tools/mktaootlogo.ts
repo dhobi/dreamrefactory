@@ -2,7 +2,7 @@
  * Make Titanic's two page images — the title card and the identity mark — from
  * the artwork in `taoot/assets/`.
  *
- *   npm run mktaootlogo
+ *   npm run mklogo -w site -w taoot
  *
  * A build step rather than checked-in resizes, so each small file is always
  * derivable from the big one and no asset on the page is a mystery. Same shape

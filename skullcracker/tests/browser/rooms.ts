@@ -1,8 +1,8 @@
 /**
  * Do the level's own rooms hold, and how is a door taken?
  *
- *   npm run dev:skullcracker                  # in one terminal
- *   npm run test:browser:skullcracker:rooms   # in another
+ *   npm run dev -w skullcracker                  # in one terminal
+ *   npm run test:browser:rooms -w skullcracker   # in another
  *
  * The rooms and the door between them are read off STREETS.SBK — the street is
  * `newroom` param 3, the basement below it `newroom` param 1, and the `exitroom`

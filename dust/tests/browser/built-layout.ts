@@ -1,7 +1,7 @@
 /**
  * The page as BUILT, not as served in dev.
  *
- *   npm run test:built:dust
+ *   npm run test:built -w dust
  *
  * This exists because a layout bug shipped to production through every gate the
  * project had. `dust/index.html` links the shared chrome and then overrides it in

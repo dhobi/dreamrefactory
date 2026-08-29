@@ -2,8 +2,8 @@
  * The ending, in a real browser, without the forty minutes in front of it.
  *
  *   npm run dev
- *   npm run watch:endgame         # a real window, real narration, ~3 min
- *   npm run test:browser:endgame  # headless, same route, voice waits skipped
+ *   npm run watch:endgame -w taoot         # a real window, real narration, ~3 min
+ *   npm run test:browser:endgame -w taoot  # headless, same route, voice waits skipped
  *
  * The route reaches this in segment 27 and only there, after a whole carried
  * game — so every look at the ending used to cost the whole run. `SEGMENTS=27`

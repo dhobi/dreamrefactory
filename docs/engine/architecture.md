@@ -395,8 +395,8 @@ audio playback, and saving/loading.
 - **Five dev servers, one per root, so they can run at once.** The two that are
   about the whole project come first and the games follow in the order the engine
   shipped them: 5173 the front door and the editors (`npm run dev`), 5174 this
-  documentation (`npm run docs:dev`), 5175 Titanic (`npm run dev:taoot`), 5176
-  Dust (`npm run dev:dust`), 5177 Timelapse (`npm run dev:timelapse`). A link from
+  documentation (`npm run docs:dev`), 5175 Titanic (`npm run dev -w taoot`), 5176
+  Dust (`npm run dev -w dust`), 5177 Timelapse (`npm run dev -w timelapse`). A link from
   one to another 404s in dev with a page naming the server that would serve it —
   five Vite roots cannot be one origin, and the deployed tree has no such
   problem.

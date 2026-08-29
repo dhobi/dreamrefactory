@@ -39,7 +39,7 @@ click-logic container (`patchFlatName`, `patchRegionName`, `patchRegionRect` in
 ## The stage this port wrote itself
 
 One entry in the file picker is not CyberFlix's: **`lang.stg`**, the language
-chooser (`npm run mklang` builds it; it ships in `taoot/public/`, which every
+chooser (`npm run mklang -w taoot` builds it; it ships in `taoot/public/`, which every
 package's Vite plugin lists alongside its `gamefiles/`). It is a good thing to open here, because it is the
 whole round trip in one file — a stage this repository *wrote*, with two flats, six
 click regions and a compiled `mousedown` handler each, which the editor reads like

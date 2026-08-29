@@ -2,7 +2,7 @@
  * Write the front door's artwork into `site/public/`, derived from the canonical
  * originals rather than copied.
  *
- *   npm run mklogo
+ *   npm run mklogo -w site
  *
  * Three images: the project's wordmark, and a card-sized piece of each ported
  * game's own identity. A build step and not checked-in resizes, so every one is

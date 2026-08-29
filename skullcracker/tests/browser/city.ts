@@ -1,8 +1,8 @@
 /**
  * CITY's opening, which was impassable — and the two rules that pass it.
  *
- *   npm run dev:skullcracker                 # in one terminal
- *   npm run test:browser:skullcracker:city   # in another
+ *   npm run dev -w skullcracker                 # in one terminal
+ *   npm run test:browser:city -w skullcracker   # in another
  *
  * Level two is a staircase of rooftops with no floor under it (`CITY`'s ground is
  * y7250 for everything east of x691, 2900 pixels below anything it draws), and

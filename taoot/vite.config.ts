@@ -115,9 +115,9 @@ export default defineConfig({
     siblingSignposts([
       { path: "editors", command: "npm run dev", port: 5173, what: "The format editors" },
       { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },
-      { path: "dust", command: "npm run dev:dust", port: 5176, what: "Dust" },
-      { path: "timelapse", command: "npm run dev:timelapse", port: 5177, what: "Timelapse" },
-      { path: "skullcracker", command: "npm run dev:skullcracker", port: 5178, what: "Skull Cracker" },
+      { path: "dust", command: "npm run dev -w dust", port: 5176, what: "Dust" },
+      { path: "timelapse", command: "npm run dev -w timelapse", port: 5177, what: "Timelapse" },
+      { path: "skullcracker", command: "npm run dev -w skullcracker", port: 5178, what: "Skull Cracker" },
     ]),
   ],
   server: {

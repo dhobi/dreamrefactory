@@ -2,6 +2,23 @@
   "name": "@dreamfactory/skullcracker",
   "version": "0.1.0",
   "private": true,
-  "description": "Skull Cracker (1996) — CyberFlix's own, and the first Macintosh rip this port has read: the same DreamFactory containers with their integers the other way round. Experimental; its own version because it would release on its own tag.",
-  "type": "module"
+  "description": "Skull Cracker (1996) — CyberFlix's own, and the one game here with no BOOTFILE and no script: its logic is compiled into the executable and read back out with a disassembler rather than interpreted. Experimental; its own version because it would release on its own tag.",
+  "type": "module",
+  "//scripts": "Run from anywhere with `-w skullcracker`; npm sets the working directory to this package, which is why every path here is relative to it and `vite`/`vitest` find the configs beside this file with no --config.",
+  "scripts": {
+    "dev": "vite",
+    "preview": "vite preview",
+    "build": "vite build",
+    "manifest": "tsx ../tools/mkmanifest.ts ../dist/skullcracker gamefiles public",
+    "test:browser": "tsx tests/browser/menu.ts",
+    "test:browser:touch": "tsx tests/browser/touch.ts",
+    "test:browser:rooms": "tsx tests/browser/rooms.ts",
+    "test:browser:climb": "tsx tests/browser/climb.ts",
+    "test:browser:speed": "tsx tests/browser/speed.ts",
+    "test:browser:hud": "tsx tests/browser/hud.ts",
+    "test:browser:mission": "tsx tests/browser/mission.ts",
+    "test:browser:foes": "tsx tests/browser/foes.ts",
+    "test:browser:sound": "tsx tests/browser/sound.ts",
+    "test:browser:city": "tsx tests/browser/city.ts"
+  }
 }

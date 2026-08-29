@@ -1,8 +1,8 @@
 /**
  * What a blow does: the spray, the flinch, the death, and the body.
  *
- *   npm run dev:skullcracker                 # in one terminal
- *   npm run test:browser:skullcracker:foes   # in another
+ *   npm run dev -w skullcracker                 # in one terminal
+ *   npm run test:browser:foes -w skullcracker   # in another
  *
  * `skullcracker/src/foes.ts` has every class's numbers and the four addresses
  * each one was read from, and `src/effects.ts` has the spray. What this asserts

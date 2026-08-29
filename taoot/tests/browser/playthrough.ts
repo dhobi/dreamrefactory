@@ -4,11 +4,11 @@
  * traces the headless run asserts.
  *
  *   npm run dev
- *   npm run test:browser:playthrough          # headless, asserts, exits
- *   npm run watch:playthrough                 # a real window, slowed down, stays open
- *   npm run watch:mission0                    # the boot, the flat, the bomb, the crossing
- *   npm run watch:mission1                    # every segment of mission 1 so far
- *   npm run watch:m1p2                        # just the one that starts at phase 2
+ *   npm run test:browser:playthrough -w taoot          # headless, asserts, exits
+ *   npm run watch:playthrough -w taoot                 # a real window, slowed down, stays open
+ *   npm run watch:mission0 -w taoot                    # the boot, the flat, the bomb, the crossing
+ *   npm run watch:mission1 -w taoot                    # every segment of mission 1 so far
+ *   npm run watch:m1p2 -w taoot                        # just the one that starts at phase 2
  *   APP_URL=… HEADED=1 SLOWMO=400 npx tsx taoot/tests/browser/playthrough.ts
  *
  * The per-segment scripts are named for the CHECKPOINT they resume from, not for

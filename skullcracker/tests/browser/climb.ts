@@ -1,8 +1,8 @@
 /**
  * Can level one be finished?
  *
- *   npm run dev:skullcracker                  # in one terminal
- *   npm run test:browser:skullcracker:climb   # in another
+ *   npm run dev -w skullcracker                  # in one terminal
+ *   npm run test:browser:climb -w skullcracker   # in another
  *
  * Gravity is the port's invention and the ONLY one left — every animation script
  * in `SC.EXE` has been enumerated for vertical motion and the player's one

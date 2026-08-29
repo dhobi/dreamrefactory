@@ -224,7 +224,7 @@ export function appUrl(): string {
  * The default is **5175** and not 5173, because each package became its own
  * Vite root with a port of its own: 5173 is the project's front door
  * (`npm run dev`, site/), 5174 the documentation, and then one port per game in
- * the order the engine shipped them — 5175 Titanic (`npm run dev:taoot`), 5176
+ * the order the engine shipped them — 5175 Titanic (`npm run dev -w taoot`), 5176
  * Dust, 5177 Timelapse.
  * This stayed on 5173 through that move, so a bare `npx tsx …/playthrough.ts`
  * asked the front door for a `play/` it does not serve and got the sibling

@@ -101,7 +101,7 @@ down in the port instead, and the page says so in its boot log.
 
 ## The page
 
-`npm run dev:timelapse`, port 5177. It is a game page rather than a report now —
+`npm run dev -w timelapse`, port 5177. It is a game page rather than a report now —
 a title card, a gauge that measures real bytes, and the picture in a moulding
 taken off the title card's own letters — but the **boot log is still the
 deliverable** when something goes wrong on a rip this project is still finding

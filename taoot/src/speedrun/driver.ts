@@ -220,7 +220,7 @@ export interface SpeedrunDriver {
    * Optional because it only means something to a host with a Play button. An
    * unattended CLI run has nobody to press it, so it does not offer this and the
    * verb steps over it with a note — a sheet with breakpoints in it still times
-   * end to end under `npm run speedrun`, which is what makes them safe to leave
+   * end to end under `npm run speedrun -w taoot`, which is what makes them safe to leave
    * in while a leg is being worked on.
    *
    * It THROWS {@link Paused} rather than returning; there is no sensible value

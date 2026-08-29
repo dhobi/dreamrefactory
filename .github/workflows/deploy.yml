@@ -14,7 +14,7 @@ name: Deploy
 # tag — it goes out on any push that touches it (docs.yml → /dreamrefactory/docs/).
 #
 # Adding a game to this lane is four lines and nothing else, because everything
-# below is driven by the TARGET NAME: `npm run build:<target>` writes
+# below is driven by the TARGET NAME: `npm run build -w <target>` writes
 # `dist/<target>` and that directory is mirrored to `<target>/`. What is not
 # automatic is the rip — the runner has none, so a freshly deployed game shows its
 # "no game data" page until the host's own copy and its manifest are in place
@@ -144,8 +144,13 @@ jobs:
 
       # Each script runs tsc across the whole workspace first, so a type error
       # anywhere stops any deploy.
+      # One typecheck over the whole repository, then this target's build. They
+      # are separate because the build script in each package is `vite build`
+      # alone — the types are a property of the tree, not of one game.
       - name: Build
-        run: npm run build:${{ steps.what.outputs.target }}
+        run: |
+          npm run typecheck
+          npm run build -w ${{ steps.what.outputs.target }}
 
       # A runner has no rip, so the manifest this build wrote describes almost
       # nothing. The host's copy is the real one (tools/mkmanifest.ts); this is

@@ -1,18 +1,22 @@
 import { defineConfig } from "vitest/config";
 
+/**
+ * The gate, assembled from whatever packages have suites.
+ *
+ * This file names no game, and that is the point: each package that has an
+ * automatic suite carries its own `vitest.config.ts` next to the tests it
+ * describes, and the glob below finds them. A fifth game joins the gate by
+ * existing, and nothing at the root has to be told about it — the same rule the
+ * dependency graph already follows, applied to the runner.
+ *
+ * Two categories are deliberately not here, and both are excluded by living
+ * somewhere this glob cannot reach rather than by a list that could rot:
+ * playthroughs (`taoot/vitest.playthrough.config.ts` — minutes of game time per
+ * segment, its own budget) and browser suites (each package's `tests/browser/`,
+ * which need a live dev server and are run by `tsx`).
+ */
 export default defineConfig({
   test: {
-    // The suite is headless and file-based (no DOM at runtime).
-    environment: "node",
-    // The automatic category: scenario + unit suites that jump to a state and
-    // probe it. The other two categories are excluded by living elsewhere —
-    // taoot/tests/playthrough/ costs minutes of game time per segment (its own config)
-    // and taoot/tests/browser/ needs a live dev server.
-    include: ["taoot/tests/auto/*.ts", "dust/tests/*.ts", "timelapse/tests/*.ts", "engine/tests/*.ts", "site/tests/*.ts"],
-    // Scenarios boot a real GameSession and drive movies/walks/loops, which
-    // can take a while; the default 5s per test is too tight.
-    testTimeout: 30_000,
-    // Tests within a file mutate a shared virtual clock and run in
-    // registration order — Vitest already runs same-file tests sequentially.
+    projects: ["*/vitest.config.ts"],
   },
 });

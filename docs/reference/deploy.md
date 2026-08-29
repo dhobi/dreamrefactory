@@ -13,11 +13,11 @@ its own:
 
 | tag | build | lands at |
 |---|---|---|
-| `site-v0.1.1` | `npm run build:site` | `/dreamrefactory/` — the front door and the eight format editors |
-| `taoot-v0.9.53` | `npm run build:taoot` | `/dreamrefactory/taoot/` — Titanic's four pages (the front page, `/play/`, `/collection/`, the unlisted `/speedrun/`) |
-| `dust-v0.3.6` | `npm run build:dust` | `/dreamrefactory/dust/` — Dust's two pages (the game, `/collection/`) |
-| `timelapse-v0.1.0` | `npm run build:timelapse` | `/dreamrefactory/timelapse/` — Timelapse's one page |
-| `skullcracker-v0.1.0` | `npm run build:skullcracker` | `/dreamrefactory/skullcracker/` — Skull Cracker's two pages (the films and its menu, `walk.html`) |
+| `site-v0.1.1` | `npm run build -w site` | `/dreamrefactory/` — the front door and the eight format editors |
+| `taoot-v0.9.53` | `npm run build -w taoot` | `/dreamrefactory/taoot/` — Titanic's four pages (the front page, `/play/`, `/collection/`, the unlisted `/speedrun/`) |
+| `dust-v0.3.6` | `npm run build -w dust` | `/dreamrefactory/dust/` — Dust's two pages (the game, `/collection/`) |
+| `timelapse-v0.1.0` | `npm run build -w timelapse` | `/dreamrefactory/timelapse/` — Timelapse's one page |
+| `skullcracker-v0.1.0` | `npm run build -w skullcracker` | `/dreamrefactory/skullcracker/` — Skull Cracker's two pages (the films and its menu, `walk.html`) |
 | *(no tag)* | `npm run docs:build` | `/dreamrefactory/docs/` — on any push that touches `docs/` |
 
 ```bash
@@ -48,8 +48,8 @@ the shell that turns a tag into a target — and
 fails when a game in the registry is missing from any of them, because three of
 the four ways to get it wrong are silent.
 
-The manifest is written by `npm run manifest`, `manifest:dust` or
-`manifest:skullcracker` from the repository root, or by `mkmanifest.ts` run inside
+The manifest is written by `npm run manifest -w <game>` — or by `npm run manifest`,
+which fans out over every package that has one — or by `mkmanifest.ts` run inside
 the game's directory on the host — both produce the same keys now, which was not
 true before: run from the root, every key came out prefixed with the game's own
 directory and the page indexed nothing (`site/tests/manifest-keys.ts`).

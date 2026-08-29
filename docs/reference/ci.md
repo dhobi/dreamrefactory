@@ -150,7 +150,7 @@ Two reasons it must not be 5175, which is Titanic's own port and the driver's
 default:
 
 - the runner shares a machine with a person, and 5175 is where their own
-  `npm run dev:taoot` lives;
+  `npm run dev -w taoot` lives;
 - without `--strictPort`, Vite hops to the next free port and the suite would
   quietly test *their* working tree instead of the checkout.
 
