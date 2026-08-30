@@ -204,18 +204,32 @@
        *   data-color        --raised   the surface, one step up from the page
        *   data-outline-color --border-strong
        *   data-font-color   --accent   the ice the whole site links in
-       *   data-coffee-color #FFDD00    the cup, and the ONE thing left at brand
-       *                                strength: it is the mark, it is the only
-       *                                warm note down here, and at 17px it is
-       *                                the size of a letter
+       *   data-coffee-color #60C0F0    the COFFEE — the small filled path inside
+       *                                the cup, which is the only part of the
+       *                                mark that is not linework. Upstream fills
+       *                                it #FFDD00, a brand swatch; here it is
+       *                                `--accent` (`--ice-400`), the colour of
+       *                                the WORDS beside it, so the drink and the
+       *                                label are one note and the cup around
+       *                                them is the page's. Baked into the art
+       *                                rather than taken from the cascade: an
+       *                                <img> cannot inherit `currentColor`, so
+       *                                the words lighten on hover and the coffee
+       *                                does not.
        *   data-font         Cookie     public/cookie.woff2, below
        *
        * The mark's own linework is #0D0C22 — drawn to sit on a yellow button,
-       * and on this one it disappeared into the surface, leaving the cup a
-       * yellow blob with its lid and steam missing. public/bmc-logo.svg carries
-       * those strokes in --brass-600 instead: the cup stays one warm object
-       * rather than half ice and half yellow, and brass is the colour this
-       * page already gives the porthole ring and the rule under the title.
+       * and on this one it disappeared into the surface, leaving the cup a blob
+       * with its lid and steam missing. public/bmc-logo.svg carries those
+       * strokes in `--border-hover` (`--hull-200`) instead: the colour of this
+       * button's OWN border on hover, so the cup is the button's outline drawn
+       * round again and the drink inside it is the button's text.
+       *
+       * It was --brass-600 first, for the porthole ring and the rule under the
+       * title. That was wrong once the other four pages existed: brass is a
+       * DECORATIVE ramp and every other cup was coming out of its page's
+       * STRUCTURAL one, so this was the single button whose outline was not its
+       * own. All five use --border-hover now and only the ramp changes.
        *
        * In brand yellow the whole thing read as a placard on a dark page and
        * pulled the eye off the Play button; in the page's own blue it reads as
@@ -260,7 +274,7 @@
       /* the same step every other link on the site takes on hover */
       a.bmc:hover {
         border-color: var(--border-hover);
-        color: var(--ice-300);
+        color: var(--accent-hover);
         transform: translateY(-1px);
       }
       a.bmc:active {

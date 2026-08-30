@@ -1,6 +1,6 @@
 {
   "name": "@dreamfactory/skullcracker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Skull Cracker (1996) — CyberFlix's own, and the one game here with no BOOTFILE and no script: its logic is compiled into the executable and read back out with a disassembler rather than interpreted. Experimental; its own version because it would release on its own tag.",
   "type": "module",

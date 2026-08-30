@@ -1,6 +1,6 @@
 {
   "name": "@dreamfactory/timelapse",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "Timelapse: Ancient Civilizations (1996) — the third and last CyberFlix game on this engine, and the one that navigates by cursor. Its own version because it releases on its own tag.",
   "type": "module",

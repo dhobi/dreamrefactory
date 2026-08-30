@@ -1027,6 +1027,132 @@
       #under .k {
         color: var(--ink);
       }
+      /* ------------------------------------------------------------------
+         The ask, under the picture and under the controls.
+
+         Buy Me a Coffee's own button, rebuilt in the page — the same one
+         taoot/index.html carries in its footer, and rebuilt for the same
+         reasons: upstream ships it as a <script> from cdnjs.buymeacoffee.com
+         that writes the markup at runtime and pulls Cookie off Google Fonts,
+         and this site has no third-party script and no third-party font on any
+         page. The widget's data attributes read straight across, so a button in
+         Dust's palette is a configuration of it rather than a departure:
+
+           data-color         --raised     the surface, one step up from the wood
+           data-outline-color --border-strong
+           data-font-color    --accent     the ember the whole page links in
+           data-coffee-color  #E8701F      the COFFEE — the small filled path
+                                           inside the cup, which is the only part
+                                           of the mark that is not linework.
+                                           Upstream fills it #FFDD00, a brand
+                                           swatch; here it is `--accent (--ember-400)`,
+                                           the colour of the WORDS beside it, so
+                                           the drink and the label are one note
+                                           and the cup around them is the page's.
+
+                                           Baked into the art rather than taken
+                                           from the cascade: an <img> cannot
+                                           inherit `currentColor`, and inlining
+                                           8 KB of path data on a game page to
+                                           win a hover is a bad trade. So the
+                                           words lighten on hover and the coffee
+                                           does not — which reads as the label
+                                           responding, not as the mark failing to.
+           data-font          Cookie       public/cookie.woff2, below
+
+         The mark's linework is #0D0C22 upstream, drawn to sit on a yellow
+         button. On a dark surface the parts of it that fall OUTSIDE the cup —
+         lid, steam, outline — vanish into the background. The art redraws
+         them in `--border-hover (--leather-200)`, which is the colour of
+         this button's OWN border on hover: the cup is the button's outline
+         drawn round again, and the drink inside it is the button's text. All
+         five pages do it that way and only the ramp changes — brass was the
+         first try, and it was the one page pulling a decorative colour in
+         where the others had used a structural one.
+
+         Below the controls rather than inside them, and that is the whole
+         reason #foot exists as its own element: #under waits for the picture
+         (`body:not(.playing)` hides it), so an ask living there would be absent
+         from the title card and absent forever for somebody who reads the page
+         and leaves without pressing Start — which is most people, and exactly
+         who is being asked.
+         ------------------------------------------------------------------ */
+      #foot {
+        /* the picture's own width, so it lines up with the frame and the strip
+           above it rather than with the page */
+        width: min(1024px, calc(100% - 2 * var(--pad)));
+        margin: 0 auto var(--pad);
+        padding: 10px 2px;
+        display: flex;
+        align-items: center;
+        /* centred under the picture, unlike the controls above it. Those are a
+           list and read from the left edge like one; this is a single object
+           with the whole width to itself, and left-aligned it read as a fourth
+           control that had lost its row. */
+        justify-content: center;
+      }
+      /* The rule belongs BETWEEN the controls and the ask, so it goes away with
+         them — the same "a hairline with nothing above it" problem that put
+         #under's border on the container rather than on its rows. The selector
+         is #under's own hiding condition, repeated. */
+      #foot {
+        border-top: 1px solid var(--edge);
+      }
+      body:not(.playing) #under:not(:has(#err:not(:empty))) + #foot {
+        border-top: 0;
+      }
+
+      /* Cookie by Ania Kruk, SIL Open Font License 1.1 — the licence travels
+         with the font at public/cookie-OFL.txt. Latin subset, 14 KB, served
+         from this origin. `swap` so a slow font never holds the button back:
+         the fallback is the page's own display face, and the button is legible
+         either way. */
+      @font-face {
+        font-family: "Cookie";
+        src: url("/cookie.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      a.bmc {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3em;
+        padding: 0.1rem 0.8rem;
+        border: 1px solid var(--border-strong);
+        /* the widget's own 5px, which is also this sheet's --radius-lg */
+        border-radius: var(--radius-lg);
+        background: var(--raised);
+        color: var(--accent);
+        font-family: "Cookie", var(--font-display);
+        font-size: 1.05rem;
+        line-height: 1.85;
+        letter-spacing: 0.02em;
+        text-decoration: none;
+        transition:
+          border-color 110ms linear,
+          color 110ms linear,
+          transform 110ms ease-out;
+      }
+      /* the same step every other link on the page takes on hover */
+      a.bmc:hover {
+        border-color: var(--border-hover);
+        color: var(--accent-hover);
+        transform: translateY(-1px);
+      }
+      a.bmc:active {
+        transform: none;
+      }
+      /* Cookie is a script face: its baseline sits high in the box, so the cup
+         is centred on the line box and then nudged to the letters' optical
+         centre rather than the box's. */
+      a.bmc img {
+        height: 1.15em;
+        width: auto;
+        position: relative;
+        top: -0.06em;
+      }
       /* The two levers, in the picture frame's own wood — the same treatment the
          save dialog's buttons get, because they are the same kind of thing: a
          control this port added, not one the game had. */
@@ -1118,7 +1244,6 @@
         #under .touchhint {
           display: inline;
         }
-      }
         /* the word goes and the arrows stay: at the 400px floor the strip has
            room for the hint, the two boxes and the version, and only just — with
            "invert" twice it overflows and the boxes are behind a scroll nobody
@@ -1592,6 +1717,25 @@
         <span id="err"></span>
       </div>
     </div>
+    <!-- The ask, in its own element BELOW the controls strip.
+
+         It was a third row of #under first, which was wrong: that strip waits
+         for the picture (`body:not(.playing)` hides it), so the link vanished
+         on the title card and never appeared at all for somebody who read the
+         page and left without pressing Start — which is most of them, and
+         exactly who an ask is for.
+
+         An anchor in the markup rather than anything injected, so it is there
+         before a script runs and visible to whatever reads the page.
+         `/bmc-mark.svg` is root-absolute because Vite rewrites a `public/` path
+         the MARKUP names per page depth. -->
+    <footer id="foot">
+      <a class="bmc" href="https://buymeacoffee.com/danielhobi" rel="noopener"
+        ><img src="/bmc-mark.svg" alt="" width="35" height="50" /><span
+          >Buy me a coffee</span
+        ></a
+      >
+    </footer>
     <!-- The saved-games dialog, driven by engine/src/web/save-browser.ts (shared with the
          play page — hence the play page's ids). Dust's own SAVE and LOAD levers
          are buttons on NEW.FLT, which run the `savegame` / `opengame` builtins;
