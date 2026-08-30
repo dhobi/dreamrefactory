@@ -85,7 +85,7 @@ tools/setup-runner.sh /srv/taoot/gamefiles
 ```
 
 That downloads the pinned runner (checksum-verified), registers it against this
-repository with the label **`taoot-gamefiles`**, records the rip's path in the
+repository with the label **`dreamrefactory-gamefiles`**, records the rip's path in the
 runner's `.env` as `TAOOT_GAMEFILES`, warms Playwright's Chromium, and installs
 the runner as a service. Pass `--no-service` to run it in the foreground
 instead.
@@ -142,7 +142,7 @@ gh api repos/dhobi/dreamrefactory/actions/runners \
   --jq '.runners[] | {name, status, labels: [.labels[].name]}'
 ```
 
-`status: "online"` and a `taoot-gamefiles` label is the whole check — the
+`status: "online"` and a `dreamrefactory-gamefiles` label is the whole check — the
 workflows select that label, not a hostname, so a replacement machine needs no
 change here.
 
@@ -159,10 +159,27 @@ newer browser than the one the suite pins.
 and Dust's disc — which used to be a `dust/` subdirectory of the first — to
 `dust/gamefiles`. The runner's `.env` names both.
 
-Titanic's is **required** and Dust's is **optional**: Dust's suites skip the disc
-rather than failing without it (`dust/tests/` passes with no rip present), so an
-unset `DUST_GAMEFILES` is a warning naming what will not be covered, not a failed
-run. Demanding it was stricter than the tests are.
+Titanic's is **required**, and Dust's was optional because its suites skip the
+disc rather than failing without it (`dust/tests/` passes with no rip present).
+**Half of that is no longer true.** `dust/vitest.playthrough.config.ts` exists
+now, so the step below selects Dust's playthrough whenever a change can reach
+its route — and that suite does NOT skip: a run asked for by name and answering
+"36 rungs passed" having played none is the one result it exists to prevent. So
+an unset `DUST_GAMEFILES` is still only a warning for the automatic suites, and
+a hard failure for any change that touches `dust/`.
+
+Set it beside `TAOOT_GAMEFILES` in the runner's own `.env` — not in GitHub; no
+secret and no repository variable is involved — and restart the service, which
+reads that file at startup:
+
+```bash
+echo 'DUST_GAMEFILES=/srv/dust/gamefiles' >> .env   # in the runner's directory
+sudo ./svc.sh stop && sudo ./svc.sh start
+```
+
+The path it names must hold the two directories the suites resolve inside it:
+`dustcd/` (the CD) and `save/` (the `.rtd` files the playthrough is checked
+against).
 
 ```yaml
 - uses: actions/checkout@v4
@@ -172,6 +189,36 @@ run. Demanding it was stricter than the tests are.
 ```
 
 `browser.yml` links only Titanic's, because the play page it drives is Titanic's.
+
+**All four games have a variable; two of them are mounted.** `TIMELAPSE_GAMEFILES`
+and `SKULLCRACKER_GAMEFILES` are declared beside the other two in every runner
+file, but their volumes are commented out and no workflow links them yet —
+neither game has a suite that reads a rip. They are there so that adding one is a
+mount and a `ln -sfn`, not a hunt through three deployment files. Do not
+uncomment a volume before the rip is on the host: a bind mount of a path that
+does not exist does not fail, it makes Docker CREATE it, empty and root-owned,
+and an empty rip is harder to diagnose than a missing one.
+
+### The runner is called `dreamrefactory-runner`
+
+It used to be `taoot-runner`, from when the repository was `taoot-web` and
+Titanic was the only game. The unit file, the image, the container and the
+default runner name have all moved; **the `TAOOT_GAMEFILES` variable has not**,
+and should not — that one names Titanic's rip, not the runner, and
+`taoot/tools/gamefiles.ts` reads it under that name.
+
+The LABEL moved too, from `taoot-gamefiles`, and **a label rename has two halves
+that are deployed by different hands**: `runs-on:` changes when a pull request
+merges, and a runner's labels change when you redeploy the container. Change
+either alone and every job queues forever against a label nothing answers to. So
+it was done in two passes — the runner given BOTH names first, `runs-on:` moved
+once a runner answering to the new one was online, then the old name dropped from
+these files. Worth repeating rather than shortcutting the next time a label
+changes.
+
+Upgrading an existing box: stop and disable the old unit before enabling the new
+one. Two runners registered for one repository both take jobs, and which one gets
+a given job is a race.
 
 The ordering is not cosmetic. `actions/checkout` cleans with `git clean -ffdx`,
 and `-x` deletes *ignored* files too — a link made before the checkout is gone
@@ -231,20 +278,20 @@ Everything for it is in
 [`tools/runner/`](https://github.com/dhobi/dreamrefactory/tree/master/tools/runner).
 
 ```bash
-docker build -f tools/runner/Dockerfile -t taoot-runner .   # from the repo root
+docker build -f tools/runner/Dockerfile -t dreamrefactory-runner .   # from the repo root
 ```
 
-Or take the published one, which is the same bytes — `danielhobi/taoot-runner`,
+Or take the published one, which is the same bytes — `danielhobi/dreamrefactory-runner`,
 public, tagged both `latest` and by runner version:
 
 ```bash
-docker pull danielhobi/taoot-runner:2.336.0
+docker pull danielhobi/dreamrefactory-runner:2.336.0
 ```
 
 It carries no game files and no registration, so there is nothing in it that is
 not in this directory. Pulling costs 1.2 GB compressed against a ~2.4 GB pull
 from Microsoft if you build instead, so the reason to prefer it is a pinned set
-of bytes rather than speed. If you do pull it, `taoot-runner.service` passes
+of bytes rather than speed. If you do pull it, `dreamrefactory-runner.service` passes
 `--pull=never` on purpose — change that to `--pull=always` only if you want a
 restart to pick up a newly published image, which also means a rebuild can
 change what runs without you asking.
@@ -284,7 +331,7 @@ Two supervisors, and they are **not** equivalent:
 | | What restarts | Isolation between successive jobs |
 |---|---|---|
 | [`compose.yml`](https://github.com/dhobi/dreamrefactory/blob/master/tools/runner/compose.yml) | `restart: always` restarts the container, **reusing its writable layer** | from the host, yes; from the previous job, no |
-| [`taoot-runner.service`](https://github.com/dhobi/dreamrefactory/blob/master/tools/runner/taoot-runner.service) | `docker run --rm`, a **brand new container** each time | complete — a pristine filesystem per job |
+| [`dreamrefactory-runner.service`](https://github.com/dhobi/dreamrefactory/blob/master/tools/runner/dreamrefactory-runner.service) | `docker run --rm`, a **brand new container** each time | complete — a pristine filesystem per job |
 
 Use the systemd unit if you want the stronger property; compose is the quick
 way to try it.
@@ -306,7 +353,7 @@ definition and out of git.
 Three things differ from `compose.yml`, and each is a thing Portainer cannot do:
 
 - **no `build:`** — there is no checkout to build from, so it pulls
-  `danielhobi/taoot-runner:2.336.0`;
+  `danielhobi/dreamrefactory-runner:2.336.0`;
 - **no `env_file:`** — that wants a file beside the compose file, which a
   web-editor stack has not got;
 - **`RUNNER_EPHEMERAL=0`** — the container stays up and takes job after job.
@@ -328,7 +375,7 @@ have to be rewritten as `deploy.resources.limits`.
 And the temptation Portainer puts one click away: **do not mount
 `/var/run/docker.sock`**. It hands any job root on the host.
 
-The PAT goes in a root-owned `0600` file — `/etc/taoot-runner.env` for systemd,
+The PAT goes in a root-owned `0600` file — `/etc/dreamrefactory-runner.env` for systemd,
 `tools/runner/runner.secret` for compose. The latter is gitignored by pattern
 (`/tools/runner/*.secret`), because a token that can register runners must never
 be committable.
@@ -416,9 +463,9 @@ in `tests.yml`. The list is written as the *inverse* (the ten that need the
 rip) for exactly this reason: the failure mode is "we noticed", not "silently
 untested".
 
-Dust's suites make the other bargain and **skip** without a disc, which is why
-`DUST_GAMEFILES` is optional on the runner while `TAOOT_GAMEFILES` is required.
-If you add a Dust suite that cannot skip, say so — an unset variable there is a
-warning naming what will not be covered, not a failure.
+Dust's automatic suites make the other bargain and **skip** without a disc. Its
+playthrough does not, and that is the exception the rule anticipated: a suite
+that is selected by name, for a change that reaches the thing it checks, must
+not be able to report a pass it did not earn.
 
 Back to the [reference index](README.md).

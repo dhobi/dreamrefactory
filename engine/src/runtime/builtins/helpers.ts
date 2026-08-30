@@ -1,7 +1,7 @@
 import { Value, toNum, toStr, truthy } from "../interp";
 import { bearing } from "../geometry";
 import { BuiltinCtx } from "./context";
-import { packPoint, s16 } from "../point";
+import { packPoint, pointX, pointY, s16 } from "../point";
 import { decodeText, encodeText } from "../../df/text";
 import { latin1 } from "../../df/binary";
 
@@ -172,10 +172,11 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   // calcdeg(fromPacked, toPacked): bearing between two packed (x<<16|y)
   // points in the engine's 0..255 angle space (turntodeg targets)
   r("calcdeg", (_i, [from, to]) => {
-    const fx = (toNum(from ?? 0) >> 16) & 0xffff;
-    const fy = toNum(from ?? 0) & 0xffff;
-    const tx = (toNum(to ?? 0) >> 16) & 0xffff;
-    const ty = toNum(to ?? 0) & 0xffff;
+    // signed halves, for the reason spelled out on calcdist below
+    const fx = pointX(toNum(from ?? 0));
+    const fy = pointY(toNum(from ?? 0));
+    const tx = pointX(toNum(to ?? 0));
+    const ty = pointY(toNum(to ?? 0));
     return bearing(tx - fx, ty - fy);
   });
   // calcmod(a, b): non-negative modulo (TAOOT's bridge wheel getpropdeg maps
@@ -190,13 +191,30 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   // playerxyz(4) = the camera's packed ground position, calcdist between
   // two packed (x<<16|y) points
   r("playerxyz", (_i, [axis]) => listenerAxis(axis));
+  /**
+   * The halves are SIGNED, as {@link packPoint} says and as everything else that
+   * reads a packed point already assumes.
+   *
+   * They were decoded unsigned here, on the grounds that world coordinates run
+   * 0..65535 and the TAOOT corpus never passes a negative point. The first half
+   * is not true of Dust and the second was only ever a statement about TAOOT.
+   * `INVEN.PRP/0294 setupprop ()` puts the Yunni book on Oona's bed at
+   *
+   *     propxyz (me, -28, 138, 60)
+   *
+   * so `realdist ("yunnibook")` — `calcdist (propxyz (me, 4), playerxyz (4))` —
+   * read −28 as 65508 and answered **65124** against a `hotdist ()` of 640. The
+   * book could not be picked up from anywhere in the room: `stdmouse ()` fell
+   * through its distance gate and the click did nothing at all, silently.
+   *
+   * `calcdeg` above decodes the same pair and had the same bug; a bearing
+   * computed from 65508 instead of −28 points the wrong way round.
+   */
   r("calcdist", (_i, [a, b]) => {
-    // halves decoded UNSIGNED here (not pointX/pointY): world coordinates are
-    // 0..65535 in this context and the TAOOT corpus never passes negative points
-    const ax = (toNum(a ?? 0) >> 16) & 0xffff;
-    const ay = toNum(a ?? 0) & 0xffff;
-    const bx = (toNum(b ?? 0) >> 16) & 0xffff;
-    const by = toNum(b ?? 0) & 0xffff;
+    const ax = pointX(toNum(a ?? 0));
+    const ay = pointY(toNum(a ?? 0));
+    const bx = pointX(toNum(b ?? 0));
+    const by = pointY(toNum(b ?? 0));
     return Math.round(Math.hypot(bx - ax, by - ay));
   });
 

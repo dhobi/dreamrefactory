@@ -59,9 +59,9 @@ if [ -f "$_pinned" ]; then
   . "$_pinned"
   echo "pinned from $(basename "$(dirname "$_pinned")")/runner.env: runner ${RUNNER_VERSION}"
 fi
-RUNNER_HOME="${TAOOT_RUNNER_HOME:-$HOME/actions-runner-taoot}"
+RUNNER_HOME="${DREAMREFACTORY_RUNNER_HOME:-${TAOOT_RUNNER_HOME:-$HOME/actions-runner-dreamrefactory}}"
 # The workflows select the machine by this label, not by hostname.
-LABELS="self-hosted,linux,x64,taoot-gamefiles"
+LABELS="self-hosted,linux,x64,dreamrefactory-gamefiles"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
@@ -193,7 +193,7 @@ fi
   --unattended \
   --url "https://github.com/${REPO}" \
   --token "$token" \
-  --name "$(hostname)-taoot" \
+  --name "$(hostname)-dreamrefactory" \
   --labels "$LABELS" \
   --work "_work" \
   --replace

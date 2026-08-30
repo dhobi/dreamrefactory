@@ -21,7 +21,10 @@ So read it with its grain in mind:
   immediately after that step. Stuck, curious, or in a hurry — load it and carry
   on from there. That is the one thing this walkthrough has that no other does.
   The opening minutes have no save of their own — the collection begins at
-  `D1E_001`, a few minutes in — so those steps are taken from the scripts.
+  `D1E_001`, a few minutes in — so those steps are taken from the scripts. They
+  are still checked: [the playthrough](../reference/tests.md) plays them from a
+  cold boot and has to arrive at `D1E_001`, which is the one rung of it with no
+  save at its near end.
 
   To open the game already at one of them, in a real window:
 
@@ -74,13 +77,32 @@ The opening is the one part of this page that comes from `HELP1.PUP` rather than
 from a save, because the collection starts a few minutes after it. It is
 therefore the *exact* sequence rather than an inferred one.
 
-1. **Walk up the street from the gate.** The dog at the edge of town growls twice
-   before it does anything else.
-2. **Talk to the help character.** He is the disc's own hand on your shoulder,
-   and he is rude about it. Three replies are offered; the one that matters is
-   **"Who you calling stupid?"** — it is the only branch that runs
-   `sendtoprop("bone", setupprop("street"))`, which is to say **it is what puts
-   the bone in the street.** Pick the other two and there is no bone.
+1. **Walk up the street from the gate, into the dog.** It is not a waiting game
+   and there is nothing to time: `NITE.SET/0135 keydown` answers the FIRST
+   `uparrow` you press facing north while the dog is visible on day 1, plays
+   `dog1.mov` and brings the help character out (`sendtoactor ("help",
+   setupactor ("dog"))`). The dog's growling and looking about is
+   `EXTRA.CST/0039`'s idle loop on a `random ()` timer — flavour, not a gate.
+2. **Talk to the help character, and let him help.** He is the disc's own hand
+   on your shoulder, he is rude about it, and the bone is three questions deep.
+   `HELP1.PUP/0033` opens on `mainloop ()`, and only one of its three replies
+   keeps the conversation going:
+
+   - *"What should I do?"* (or *"I don't need help."*) → `secondchance ()`
+   - *"So I'll use my brain. Now what?"* → `thirdchance ()`
+   - *"What should I look for?"* (or *"I give up."*) → **the bone**:
+     `sendtoprop ("bone", setupprop ("street"))`
+
+   **Do not pick "Who you calling stupid?"** It is the reply that ends the
+   conversation: it speaks three lines and sets `helpphase = 2`, which is the
+   script's word for having brushed him off. There is no bone on that branch and
+   there is no bone anywhere in `mainloop ()`.
+
+   You are not stuck if you did. Talk to him again and `runyoself ()`'s
+   `helpphase = 2` arm runs `mustappologize ()`; apologise — *"I'm sorry, what
+   should I do?"* — and it sets `helpphase = 1` and falls straight into
+   `thirdchance ()` in the same conversation, where *"What should I look for?"*
+   gives you the bone after all.
 3. **Pick up the Bone, and give it to the dog.** The dog goes away.
 4. **Talk to the help character again.** His script opens with
    `if actorvisible("dog") = false` → `givesring()`: with the dog gone he hands
@@ -151,19 +173,46 @@ talking about: gun, bullets, boots.
 
 5. **Talk to the Mayor's wife again** and mend it — `mwifelike` goes −3 → **+3**.
    [`D2A_002`]
-6. **The undertaker's.** Give the **Pie** to Side. You are wearing the **Boots**.
-   Flippo opens. [`D2A_003`]
-7. **The shooting range at the edge of town.** Nine minutes: you fire five of
-   your six bullets, hit three cans, three bottles and four targets, and score
-   **"good"**. You come away with the **Harmonica**. [`D2A_004`]
-8. **Take the Apple back out of the birdcage.** [`D2A_005`]
-9. **Give the Flowers away**, then back to the saloon: talk to Jones, the Mayor,
-   Oona, Sophie and Trotter, open an **account at the bank** ($22), and play
-   again — **$7 → $800**. [`D2A_006`]
-10. **Give the Sugarcubes to Trotter.** Then the Curiosity Shop (`chin`): buy the
-    town **History** for $35. Ruby and the help thread both move. [`D2A_007`]
-11. **Get the Gun** — from Ruby, and it is a story beat of its own
-    (`rubygunstory`). [`D2ARUBY`]
+6. **The newspaper office, then the undertaker's.** Take the **Jug** in hand
+   first: a gift is offered inside a conversation, from the plaque that names
+   what you are carrying. Flippo drinks it (the jug has to be at least half
+   full) and talks. Then the undertaker's, and the **Pie** to Side — he gives
+   you the **Boots** for it. [`D2A_003`]
+7. **The shooting range at the edge of town.** Say **yes** when Leroy offers to
+   lend you a gun; he takes whatever is in your hand and hands you his. Six
+   shots, reload, five more: three bottles, three cans, four pop-up targets and
+   one shot at nothing — ten hits out of eleven scores **"good"**, and Leroy
+   pays for good with the **Harmonica**. Click the gun itself to break it open,
+   the cylinder to load it, and the gun again to close it. [`D2A_004`]
+8. **Take the Apple back out of the birdcage.** Marie is standing at the
+   Mayor's gate this afternoon, and clicking the gate is talking to her: ask
+   **"Will you let me in your house?"** and answer her quiz — her favourite
+   colour is *yellow*, her father calls her *Black Marie*, and her horse is
+   *Cosimo*. One right answer and she steps aside; two wrong and she is done
+   with you for the day. Inside, you do not reach into the cage: walking back
+   into the dining room puts the apple back on the **table**. Then look in at
+   the courthouse on your way down the street, and wait outside the saloon —
+   the Mayor comes over on his own. [`D2A_005`]
+9. **Finish with the Mayor** — "Time to go." is the only way out of his shop
+   talk — then **Jones**. Take the **Flowers** in hand before you go in — a
+   gift is offered from the plaque that names what you are carrying. Into the
+   saloon and up: **Ruby's door on day 2 is Trotter's**, and the Flowers are
+   for **Sophie**, who lays them back on the grave. Come back down for
+   **Oona**, then step out into the street and back in — that is what moves
+   Trotter downstairs to the bar. Sit down at the blackjack table and play:
+   **$7 → $800**, and an **account at the bank** ($22). [`D2A_006`]
+10. **Give the Sugarcubes to Trotter** at the bar, then knock on Ruby's door
+    upstairs — with Trotter dealt with, this time it really is Ruby. Out and
+    down the street to the Curiosity Shop (`chin`): buy the town **History**
+    for $35. [`D2A_007`]
+11. **Get the Gun.** Ruby will not talk to you empty-handed: her afternoon opens
+    `if propowner ("flowers") = "stranger" & rubyphase = 1 → rubyphase = 0`, so
+    take the **Flowers** back off the grave first — the graves themselves are
+    not walkable, so reach them from Scene C5, the cell the street does reach
+    — and give them to her. Then her door is left open on purpose, and the gun
+    is on the wall in the room beyond — turn **south**. It is a story beat of
+    its own (`rubygunstory`).
+    [`D2ARUBY`]
 12. **Talk to Cobb** in the saloon. [`D2A_008`]
 13. **The bank.** Your account goes to **$587** and your cash to **$200**;
     Jones's thread jumps to 999, which is the game marking that strand finished
@@ -303,10 +352,20 @@ round in circles.
 
 ### The flute
 
-`FLUTE.FLT` builds a five-note string as you play (`flutestr`), one note at a
-time, and resets it to `0,0,0,0,0,` after the fifth. The save that has the room
-solved carries exactly that reset string — so the puzzle is played, not
-remembered, and the saves cannot hand you the tune.
+**Press the five buttons in the order they are numbered: 1, 2, 3, 4, 5.**
+`FLUTE.FLT/0001 evaluate ()` holds the phrase as a literal and compares it word
+for word:
+
+    answerstr = "1,2,3,4,5,"
+
+The saves cannot tell you that, and this is the one puzzle where they actively
+mislead. `FLUTE.FLT` builds `flutestr` a note at a time and, on the far side of
+a completed phrase, resets it to `0,0,0,0,0,` — so the save taken in the solved
+room carries the reset string rather than the answer. It is five presses and not
+six because `FLUTE.SET/0041 mousedown` seeds `flutenum = 1` on the way in and
+each press writes word `flutenum` and then increments: the presses land on words
+1 to 5, the fifth takes the counter to 6, and `if flutenum > 5` is what runs
+`evaluate ()`.
 
 ---
 

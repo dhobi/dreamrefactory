@@ -497,6 +497,9 @@ export class SetViewer implements RoomLayer {
     // ...and now that this set's star table is the one in hand, seat the actors
     // and props that were placed on it from somewhere else — see
     // ActorRuntime.settleStars and PropRuntime.settleStars
+    // ...and remember this set's stars by name, so a script running in another
+    // room can still walk somebody here (GameSession.starRegistry)
+    for (const a of set.actors) session.starRegistry.set(a.identifier.toLowerCase(), a);
     session.actorRuntime.settleStars(set.actors, (n) => session.scheduler.isWalk(n));
     session.propRuntime.settleStars(set.actors, set.version === 1);
     // crickets attenuate/pan against the camera's ground position + facing

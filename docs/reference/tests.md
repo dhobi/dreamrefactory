@@ -139,6 +139,42 @@ The routes are
 one function per segment; the segment-by-segment table of what each crosses is
 **[the route](route.md)**.
 
+## Dust's playthrough — the other kind of evidence
+
+```
+npm run test:playthrough -w dust                                            # the whole route
+npm run test:playthrough -w dust -- -t "D2A_001 → D2A_002"                    # one rung
+```
+
+Titanic's playthrough asserts a **recorded** trace: the game as this project
+last saw it. Dust's asserts something this project cannot forge. `gamefiles/save/`
+holds the 61 `.rtd` files shipped on the disc, and all but one of them are a
+single continuous session played by CyberFlix on `DF.EXE` in 1995 ([the golden
+thread](../dust/thread.md)). A **rung** is the play between two consecutive
+saves, and the runner loads the first, plays, and checks the live game against
+the second — the room, the standpoint, the view, and the globals that rung is
+about. A pass says the port arrived where the original engine arrived.
+
+That shape has a property Titanic's does not: **rungs are independent.** Both
+ends come off the disc, so a rung can be written, run and debugged on its own,
+in any order, and by more than one person at once. Hence the layout —
+[`route.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/playthrough/route.ts)
+is the vocabulary every rung is written in (`walkTo`, `openDoor`, `clickActor`,
+`answer`, `talkOut`, `excuseUs`), and each helper's doc comment records what went
+wrong when it was not used;
+[`rungs/`](https://github.com/dhobi/dreamrefactory/tree/master/dust/tests/playthrough/rungs)
+is one rung per file.
+
+What a rung claims is a judgement, and the ones it does NOT claim are where the
+findings are. `D2A_003 → D2A_004` cannot claim the shooting range's four hit
+counts, because the shipped save kept four names of a five-name `dumpglobal`
+while the port discards the list — and chasing that disagreement across all 55
+saves is what showed that [a global's presence in an `.rtd` is not proof it was
+live](../engine/scripting-language.md): a dumped name keeps its record until
+something is allocated over it, and those four go on the next save that
+allocates anything. Every exclusion is written down beside the segment with its
+reason.
+
 ## Running the browser suite
 
 It drives **Titanic's** page, which is its own dev server on 5175 — so

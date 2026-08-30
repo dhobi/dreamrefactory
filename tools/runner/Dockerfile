@@ -1,7 +1,7 @@
 # A self-hosted runner for this repository's test workflows, in a container.
 #
 # Build from the REPOSITORY ROOT so runner.env is in context:
-#   docker build -f tools/runner/Dockerfile -t taoot-runner .
+#   docker build -f tools/runner/Dockerfile -t dreamrefactory-runner .
 #
 # What is deliberately NOT in this image:
 #
@@ -76,6 +76,8 @@ USER runner
 # "the dev-server manifest's shipped saves are all recognised for seeding".
 ENV TAOOT_GAMEFILES=/srv/taoot/gamefiles
 ENV DUST_GAMEFILES=/srv/dust/gamefiles
+ENV TIMELAPSE_GAMEFILES=/srv/timelapse/gamefiles
+ENV SKULLCRACKER_GAMEFILES=/srv/skullcracker/gamefiles
 
 # No CMD arguments: the entrypoint registers, runs exactly one job, and exits.
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -1,6 +1,6 @@
 import { readContainerFile } from "../df/container";
 import { RawSaveFile } from "../df/savegame";
-import { SetFile, readSetFile } from "../df/set";
+import { Actor, SetFile, readSetFile } from "../df/set";
 import { detectVersion } from "../df/version";
 import { readSetFileAsV4 } from "../df/set-v1-to-v4";
 import { readShpFile } from "../df/shp";
@@ -130,6 +130,32 @@ export class GameSession {
   readonly audioLib = new AudioLibrary();
   readonly propRuntime = new PropRuntime();
   readonly actorRuntime = new ActorRuntime();
+  /**
+   * Every star of every set that has been opened, by its own qualified name.
+   *
+   * A star is named for the set it belongs to — `town.help`, `maydine.cage` —
+   * and `walktostar` is handed one of those names by scripts that are not
+   * standing in that set. Looking only in the OPEN set answers "not found", and
+   * the cost is silent and permanent: `moveactor` is
+   *
+   *     stopwalk (me) / stoploop ("actor", me) / walktostar (me, where)
+   *
+   * so a failed lookup leaves the character with no walk AND no idle loop, and
+   * nothing ever re-arms them. Dust's Mayor paces `town.mwife1` →
+   * `town.marie1` → `town.help` all afternoon; step into a building while he is
+   * mid-stride and his arrival fires `endwalk` → `mayoridle` → `moveactor`
+   * against whatever room YOU are in, and he is frozen for the rest of the day.
+   *
+   * The shipped saves settle it rather than any reasoning about the original's
+   * memory layout: `D2A_003` is taken inside `undertak.set` and its walk table
+   * holds a walk whose destination is **`town.help`**. DF.EXE resolved a star of
+   * a set that was not open, so the port has to be able to as well.
+   *
+   * Accumulated as sets are bound (see the viewer's `settleStars` call), which
+   * means a star is findable exactly once its set has been visited — and the
+   * town is always visited before anybody walks about in it.
+   */
+  readonly starRegistry = new Map<string, Actor>();
   /**
    * What the native plugin bus is holding — Timelapse's `plugin`/`pluginfx`
    * (engine/src/runtime/plugins.ts). Empty for Titanic and Dust, which name no

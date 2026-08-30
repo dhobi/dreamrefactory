@@ -3,7 +3,7 @@
 #   docker compose -f tools/runner/compose.yml up -d --build
 #   docker compose -f tools/runner/compose.yml logs -f
 #
-# ONE CAVEAT, and it is the reason taoot-runner.service exists next to this file:
+# ONE CAVEAT, and it is the reason dreamrefactory-runner.service exists next to it:
 # `restart: always` RESTARTS this container, which reuses its writable layer. So
 # a job is isolated from the HOST, but not from the job before it — leftovers in
 # /home/runner/runner/_work survive. For a runner only you can reach, that is
@@ -17,8 +17,8 @@ services:
       # The repository root — the Dockerfile COPYs tools/runner/runner.env.
       context: ../..
       dockerfile: tools/runner/Dockerfile
-    image: taoot-runner:latest
-    container_name: taoot-runner
+    image: dreamrefactory-runner:latest
+    container_name: dreamrefactory-runner
 
     # The PAT lives in a file you create yourself, next to this one:
     #   printf 'GITHUB_PAT=github_pat_...\n' > tools/runner/runner.secret
@@ -28,10 +28,20 @@ services:
       - runner.secret
 
     environment:
+      # One per game package, each named for the variable that game's own tooling
+      # reads. Renaming the RUNNER did not rename these: `TAOOT_GAMEFILES` is
+      # Titanic's rip, not the runner's, and `taoot/tools/gamefiles.ts` reads it
+      # by that name.
       TAOOT_GAMEFILES: /srv/taoot/gamefiles
       DUST_GAMEFILES: /srv/dust/gamefiles
-      RUNNER_LABELS: self-hosted,linux,x64,taoot-gamefiles
-      # RUNNER_NAME: taoot-box   # defaults to taoot-<container hostname>
+      TIMELAPSE_GAMEFILES: /srv/timelapse/gamefiles
+      SKULLCRACKER_GAMEFILES: /srv/skullcracker/gamefiles
+
+      # What `runs-on:` in .github/workflows/*.yml selects on. Change it here and
+      # there together, or jobs queue forever against a label nothing answers to
+      # — and give a runner both names while the two halves are in flight.
+      RUNNER_LABELS: self-hosted,linux,x64,dreamrefactory-gamefiles
+      # RUNNER_NAME: dreamrefactory-box   # defaults to dreamrefactory-<hostname>
 
     volumes:
       # The rip: READ-ONLY. Every suite only reads it, and a job that could
@@ -39,12 +49,18 @@ services:
       # against. Change the left side to wherever it actually lives.
       - /srv/taoot/gamefiles:/srv/taoot/gamefiles:ro
       - /srv/dust/gamefiles:/srv/dust/gamefiles:ro
+      # Uncomment once that game's rip is actually on the host. A bind mount of a
+      # path that does not exist does not fail — Docker CREATES it, empty and
+      # root-owned, and the suite then reports an empty rip rather than a missing
+      # one, which is the more confusing of the two.
+      # - /srv/timelapse/gamefiles:/srv/timelapse/gamefiles:ro
+      # - /srv/skullcracker/gamefiles:/srv/skullcracker/gamefiles:ro
 
       # Optional: a persistent npm cache, so a fresh container does not
       # re-download the dependency tree on every job. It is shared state between
       # jobs by definition — worth it on a single-owner runner, drop it if you
       # would rather have nothing carried over at all.
-      # - taoot-npm-cache:/home/runner/.npm
+      # - dreamrefactory-npm-cache:/home/runner/.npm
 
     # NO docker socket. Mounting /var/run/docker.sock would hand any job root on
     # the host and make every other line here pointless.
@@ -66,4 +82,4 @@ services:
     restart: always
 
 # volumes:
-#   taoot-npm-cache:
+#   dreamrefactory-npm-cache:

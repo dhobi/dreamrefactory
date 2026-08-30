@@ -59,7 +59,7 @@ jobs:
       github.event_name != 'pull_request' ||
       (startsWith(github.event.label.name, 'full-run-') &&
        github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, linux, x64, taoot-gamefiles]
+    runs-on: [self-hosted, linux, x64, dreamrefactory-gamefiles]
     timeout-minutes: 90
 
     env:
