@@ -1,8 +1,8 @@
 {
   "name": "@dreamfactory/dust",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "private": true,
-  "description": "Dust: A Tale of the Wired West (1995) \u2014 DreamFactory 1, the engine two years before Titanic. Its own version because it releases on its own tag.",
+  "description": "Dust: A Tale of the Wired West (1995) — DreamFactory 1, the engine two years before Titanic. Its own version because it releases on its own tag.",
   "type": "module",
   "//scripts": "Run from anywhere with `-w dust`; npm sets the working directory to this package, which is why every path here is relative to it and `vite`/`vitest` find the configs beside this file with no --config.",
   "scripts": {
