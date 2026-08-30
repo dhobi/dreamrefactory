@@ -98,7 +98,7 @@ and the deck plan the map lands you on; none of them the game's own pace.
 ```
 npm test                        # the gate
 npm run test:playthrough        # 27 segments + 3 property tests — writes out/checkpoints/*.ti
-TAOOT_RECORD=1 npx vitest run --config vitest.playthrough.config.ts   # re-record goldens
+TAOOT_RECORD=1 npx vitest run --config taoot/vitest.playthrough.config.ts   # re-record goldens
 TAOOT_RECHECKPOINT=1 …          # …and rebuild the .ti checkpoints (after a save change)
 npm run watch:m2p0 -w taoot              # watch segment 7 in a real window
 SEGMENTS=9 npx tsx taoot/tests/browser/playthrough.ts    # one segment alone, ~35 s

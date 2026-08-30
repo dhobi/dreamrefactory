@@ -258,26 +258,41 @@ test("BELL.MOV: three bells, three dings, a backward idle loop", () => {
   ]);
 });
 
-test("action frames are 1-based positions in the header", () => {
+test("action frames are 0-based indices in the header", () => {
   if (skip()) return;
-  // MAYBED's is frame 4 — where its bed-click goto lands, what advanceday runs
-  // on; DIARY's is frame 1 — having SEEN the diary is what MAYROOM.SET asks
-  // about, true the moment the chain reaches the film (its goto skips frame 2,
-  // which is what rules a 0-based reading out);
-  // ARMOPEN itself has none, so the flag can only come from the chained film
+  /*
+   * The header names the frame `actionframe (n)` reports on, and the BASE of
+   * that number was read wrong here for a while — inferred from DIARY.MOV, on
+   * the grounds that its click goto skips frame 2 so a 0-based reading could
+   * never fire. The file does not say that: DIARY's frame 1 is reached by frame
+   * 0 falling through it (`action 2, target 1`, no wait), so both readings name
+   * a frame the play passes through and it decides nothing. MAYBED is ambiguous
+   * the same way — its yes-path is [1] → [3] → [4], and the two readings name
+   * [3] and [4].
+   *
+   * The disc decides it. `dust/tools/actionframes.ts` asks every movie whether
+   * the frame its header names can be arrived at: twelve segments name one,
+   * twelve are reachable read 0-based, eight read 1-based. The four that fail —
+   * ABE, SAFEBOX, SALGUN, WELLGUN — fail in a way with consequences: ABE's frame
+   * 15 waits for a click and BOTH its hotspots jump past the frame a 1-based
+   * reading names, so the trade at the stagecoach depot could never complete,
+   * and the shipped `D2A_001` is the original completing it (bullets held,
+   * postcards gone).
+   */
   expect(read("MAYBED.MOV").segments[0].actionFrame1).toBe(4);
   expect(read("DIARY.MOV").segments[0].actionFrame1).toBe(1);
   expect(read("ARMOPEN.MOV").segments[0].actionFrame1).toBe(-1);
-  // ...and through the adapter they are frame NAMES, which v1 frames carry as
-  // their own 1-based position
+  // ...and through the adapter they are frame NAMES, which a v1 frame carries as
+  // its own 1-BASED position — so the name is one more than the index
   const mov = movFileFromV1(read("MAYBED.MOV"));
-  expect(mov.actionFrame1).toBe("4");
-  expect(mov.frames[3].name).toBe("4");
-  // ...which is exactly where its bed-click hotspot goes (goto 0-based 3). The
-  // box is on frame 2, the first frame that owns one — not frame 1, which owns
-  // none and steps straight on (#324).
+  expect(mov.actionFrame1).toBe("5");
+  expect(mov.frames[4].name).toBe("5");
+  // MAYBED's yes-path is [1] -> [3] -> [4]: the bed click goes to 3, and the
+  // frame that lands on offers the goto that ends on 4, which is the index the
+  // header names
   expect(mov.frames[1].regions[0].target).toBe("4");
-  expect(movFileFromV1(read("DIARY.MOV")).actionFrame1).toBe("1");
+  expect(mov.frames[3].regions[0].target).toBe("5");
+  expect(movFileFromV1(read("DIARY.MOV")).actionFrame1).toBe("2");
 });
 
 test("a frame waits because it OWNS hotspots, not because it is frame 0 (#324)", () => {

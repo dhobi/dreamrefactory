@@ -739,8 +739,16 @@ function readProp(d: Uint8Array, at: number): SavedPropV1 {
  * The walks in flight.
  *
  * A slot whose `active` word is clear is not a walk — it is the LAST walk that
- * slot ran, left in place, which is why four of the five shipped saves have a
- * table full of finished journeys and no live one.
+ * slot ran, left in place.
+ *
+ * **And the `active` word does not settle it.** Across the 56 shipped saves the
+ * filter above passes 140 records, and 58 of them have nothing left to walk:
+ * `progress >= dist`, or a `dist` that is NEGATIVE — five of `D2A_008`'s records
+ * read −1941692191, and the same 1941xxxxxx magnitude turns up as `progress` on
+ * three others, which is one junk word read into two fields. Whatever tells
+ * DF.EXE those records are spent is not the flag this reader honours, and is not
+ * yet known. See the note in
+ * [the format doc](../../../docs/engine/formats/savegame-v1.md).
  */
 function readWalks(d: Uint8Array): SavedWalkV1[] {
   const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);

@@ -379,6 +379,20 @@ guessing:
   record's type word — it reads 1 for every sample in the corpus, walkers
   included, so it cannot be what distinguishes a turn from a journey; a turn is
   recognised by going nowhere instead;
+- **what marks a walk record spent.** The `active` word is honoured, and it is
+  not enough: of the 140 records it passes across the 56 shipped saves, **58
+  have nothing left to walk** — `progress >= dist`, or a `dist` that is
+  negative. Five of `D2A_008`'s read −1941692191, and the same 1941xxxxxx
+  magnitude appears as `progress` on three others, which is one junk word landing
+  in two fields. Resumed as live, such a record completes on the first service
+  pass at a destination computed from that junk: loading `D2A_008` puts the
+  Mayor's wife at (−32483, −31698), off the map, and her idle then walks her back
+  from there for the rest of the day, never inside `hotdist ()` again.
+
+  Filtering them out is not the answer either — measured, it strands three
+  playthrough rungs, because for those saves the junk walk completing is the only
+  thing that fires `endwalk` and re-arms the town's idles. So the port resumes
+  them, bug and all, and the reading of this table is not finished;
 - `c13+4`, and the individual roles of `c1` 352–444 and 464–480 (their *purpose*
   is clear — interpolation copies of the standpoint — the field-by-field split is
   not).

@@ -128,7 +128,15 @@ export function createBuiltinCtx(session: GameSession): BuiltinCtx {
     },
     findStar: (name) => {
       const n = toStr(name ?? "").toLowerCase();
-      return session.currentBinding?.set.actors.find((a) => a.identifier.toLowerCase() === n);
+      // the open set first — its record is the live one, and a star it carries
+      // is the one a script standing in it means
+      return (
+        session.currentBinding?.set.actors.find((a) => a.identifier.toLowerCase() === n) ??
+        // ...and then every set that has been opened, because a star is named
+        // for its own set and the caller need not be standing in it. See
+        // GameSession.starRegistry for the shipped save that requires this.
+        session.starRegistry.get(n)
+      );
     },
     sceneCell: (name) => {
       const set = session.currentBinding?.set;

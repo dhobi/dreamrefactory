@@ -24,8 +24,8 @@
 
 services:
   runner:
-    image: danielhobi/taoot-runner:2.336.0
-    container_name: taoot-runner
+    image: danielhobi/dreamrefactory-runner:2.336.0
+    container_name: dreamrefactory-runner
 
     environment:
       # From Portainer's environment-variables box — never hardcoded here.
@@ -37,14 +37,25 @@ services:
       # actually carries over is the npm cache and anything written outside it.
       RUNNER_EPHEMERAL: "0"
 
-      # MUST end in a directory named `gamefiles` — the entrypoint refuses to
-      # start otherwise. taoot/src/save-seed.ts matches shipped saves on a literal
-      # `gamefiles/` path segment, so `/srv/taoot-gamefiles` costs one red test.
+      # One per game package, each named for the variable that game's own tooling
+      # reads. Renaming the RUNNER did not rename these: `TAOOT_GAMEFILES` is
+      # Titanic's rip, not the runner's, and `taoot/tools/gamefiles.ts` reads it
+      # by that name.
+      #
+      # Each MUST end in a directory named `gamefiles` — the entrypoint refuses
+      # to start otherwise. taoot/src/save-seed.ts matches shipped saves on a
+      # literal `gamefiles/` path segment, so `/srv/taoot-gamefiles` costs one
+      # red test.
       TAOOT_GAMEFILES: /srv/taoot/gamefiles
       DUST_GAMEFILES: /srv/dust/gamefiles
+      TIMELAPSE_GAMEFILES: /srv/timelapse/gamefiles
+      SKULLCRACKER_GAMEFILES: /srv/skullcracker/gamefiles
 
-      RUNNER_LABELS: self-hosted,linux,x64,taoot-gamefiles
-      RUNNER_NAME: taoot-portainer
+      # What `runs-on:` in .github/workflows/*.yml selects on. Change it here and
+      # there together, or jobs queue forever against a label nothing answers to
+      # — and give a runner both names while the two halves are in flight.
+      RUNNER_LABELS: self-hosted,linux,x64,dreamrefactory-gamefiles
+      RUNNER_NAME: dreamrefactory-portainer
 
     volumes:
       # LEFT side is the path on the host — change it to wherever the rip lives.
@@ -52,6 +63,12 @@ services:
       # could corrupt the thing the whole suite compares against.
       - /srv/taoot/gamefiles:/srv/taoot/gamefiles:ro
       - /srv/dust/gamefiles:/srv/dust/gamefiles:ro
+      # Uncomment once that game's rip is actually on the host. A bind mount of a
+      # path that does not exist does not fail — Docker CREATES it, empty and
+      # root-owned, and the suite then reports an empty rip rather than a missing
+      # one, which is the more confusing of the two to debug from a Portainer log.
+      # - /srv/timelapse/gamefiles:/srv/timelapse/gamefiles:ro
+      # - /srv/skullcracker/gamefiles:/srv/skullcracker/gamefiles:ro
 
     # NO docker socket. Portainer makes it a one-line temptation; mounting
     # /var/run/docker.sock hands any job root on the host and makes everything

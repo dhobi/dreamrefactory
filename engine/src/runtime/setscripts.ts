@@ -53,15 +53,40 @@ export class SetScripts {
 
     this.main = this.instance(set.mainScript, set.setName);
     for (const scene of set.scenes) {
-      this.sceneScripts.push(this.instance(scene.locationScript, scene.sceneName));
+      this.sceneScripts.push(this.own(this.instance(scene.locationScript, scene.sceneName)));
       for (let v = 0; v < scene.views.length; v++) {
         for (let o = 0; o < scene.views[v].objects.length; o++) {
           const obj = scene.views[v].objects[o];
-          const inst = this.instance(obj.locationScript, obj.identifier);
+          const inst = this.own(this.instance(obj.locationScript, obj.identifier));
           if (inst) this.objectScripts.set(`${scene.index}:${v}:${o}`, inst);
         }
       }
     }
+  }
+
+  /**
+   * A scene's script belongs to its SET, and resolves unqualified calls through
+   * the set's main script.
+   *
+   * Every other kind of script in the engine already says who it belongs to — a
+   * cast member's parent is the cast main (`stdactor`, `endwalk`, `runpuppet`
+   * live there), a prop's is the shop main — and a set's scenes were the one
+   * kind left without one. So a bare call in a scene script skipped its own set
+   * entirely and went to the stage and boot fallbacks, where the name is not.
+   *
+   * What that cost is a whole gunfight. `NITE.SET/0131 openscene ()` is
+   *
+   *     if day = 3 & clock = 3 & phase = 2 …
+   *         openfight ()
+   *
+   * and `openfight ()` is `NITE.SET/0001` — the set main, one container away.
+   * Unparented it logged `? openfight()` and returned, so the five bounty
+   * hunters never came for you on day 3 and `TOWN.SET/0131` carries the same
+   * line for day 4.
+   */
+  private own(inst: ScriptInstance | null): ScriptInstance | null {
+    if (inst) inst.parent = this.main;
+    return inst;
   }
 
   private instance(containerLoc: number, owner: string): ScriptInstance | null {

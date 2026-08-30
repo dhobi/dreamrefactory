@@ -79,6 +79,93 @@ misbehave:
   pointless unless the next line destroys the original. The shipped saves agree
   from the far side: `coal`, `valve1..3`, `pump1`, `pump2` and `savenorth` are
   dumped on a stage close and have a record in **none** of the 109 (#85).
+
+  **It destroys the whole list**, which is what the port has always done — but
+  the shipped saves took a long time to agree, and the reason they seemed not to
+  is worth keeping, because it is a trap that reads like evidence.
+
+  Five teardowns look like controlled experiments. In each, one function creates
+  the whole list unconditionally, one destroys it, and nothing else in the corpus
+  touches the names — so whatever survives ought to say how much of the list the
+  dump took:
+
+  | teardown | dumped | what the saves carry |
+  |---|---|---|
+  | `TARGET.FLT/0005` | `targetshotcount, targethitcount, bottlehitcount, canhitcount, dummyhitcount` | the last four with real values in **12** Dust saves, the first in **none of the twelve** |
+  | `LEROY.PUP/0088` | `borrowgun, saveitem` | `saveitem` carries a real string in 27 saves, and in the 3 taken between the teardown and the next `global borrowgun, saveitem` it stands with `borrowgun` gone |
+  | `FIGHT.FLT/0002` | `dellpower, playerpower, fightover` | `playerpower` and `fightover` in `D1E_009`, `dellpower` in none |
+  | `KID.PUP/0051` | `badcount, wincount` | `runyoself ()` assigns both on adjacent unconditional lines and `talk5 ()` dumps them; `D4E_001` carries `wincount` and no `badcount` |
+  | `map.stg` (TAOOT) | `savenorth, saveeast, savewest` | `saveeast` in 78 of 109 and `savewest` in 85, `savenorth` in none |
+
+  Five of five say **only the first name is destroyed**, and for a long time the
+  only thing against them was `bedsit1.set`, whose fourteen names are all gone
+  from 107 Titanic saves — a dissenter that could be waved off, because
+  everything between its `closeset` and those saves happens across the start of
+  the game proper, which the BOOTFILE rebuilds.
+
+  **What breaks it is that a name can be legible in a save and dead in the
+  game.** [`rungs/d4mines.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/playthrough/rungs/d4mines.ts)
+  found the mechanism at byte level: the globals container is a 32-byte node
+  array and the reader walks it by physical slot, so a destroyed name keeps its
+  node — name, value and all — until something is allocated over it. `D4E_001`
+  and `D4M_MISS` hold `cutdowns` at +3644 and `wincount` at +3676 with a stale
+  *second* `wincount` node at +3708 and seven stale `roundnum` nodes after it.
+  Nothing distinguishes those from live records. So "the save carries the name"
+  is not a measurement of what `dumpglobal` did; it is a measurement of how
+  little has been allocated since.
+
+  Walked across all 55 saves of [the golden thread](../dust/thread.md), every
+  row above dissolves the same way — **a dumped name never changes value again,
+  and it disappears at the first save after new globals are allocated:**
+
+  | name | after its teardown | goes |
+  |---|---|---|
+  | `fightover` | `1` in `D1E_009`, `D2M_001`, `D2M_002` | `D2M_003`, which allocates `slot2, slot3` |
+  | `targethitcount`, `bottlehitcount` | frozen at `3` from `D3M_003` to `D3E_002` | `D3E_003`, which allocates 21 poker globals |
+  | `cutdowns`, `wincount` | `5` and `3` in `D4E_001`, `D4M_MISS` | `D4MINES`, which allocates six underground globals |
+  | `betorder`, `winner`, `playercount`, `playerhand` | unchanged from `D3E_003` to `MSKPZL` | `MESAPZL`, which allocates five over four of their slots |
+
+  And `saveitem` is the one that settles it, because it is `LEROY.PUP/0088`'s
+  **second** name — the one the surviving-tail reading says is spared. It is
+  `"boots"`, then `"sugarcubes"`, and from `D3M_CLAS` onwards it is the number
+  **`0`** and stays `0` for the remaining 83,602 frames of the game. A string
+  global frozen as a number is a released payload in a record nobody has
+  overwritten yet, not a variable anybody is still using.
+
+  So the pattern the five controls all showed — first name gone, tail surviving
+  — is **slot-reclaim order**, not semantics. One function creates the list, so
+  the names are adjacent nodes; the dump frees them together; the next
+  allocation takes the lowest freed node, which is the first name. The two rows
+  that fitted no reading at all now fit this one. `TOWN.SET/0128 openkid ()`
+  dumps ONE name and `D4E_001` still reads `cutdowns = 5` — a save taken before
+  anything was allocated. `SALGAMES.FLT`'s poker teardown appears to keep
+  `hasnopair`, its own list's first name, all the way to `ENDING` — and
+  `hasnopair` sits in the deepest region the teardown freed, which the rest of
+  the game never reaches.
+
+  `GANG.CST/0984`'s `bouncer, dirgo` was withdrawn from the table before any of
+  this and stays withdrawn, for a reason that now reads as corroboration: the
+  two names are written by `isaoidle ()` on different schedules — `bouncer`
+  every pass, `dirgo` only at the ends of Isao's 40° sweep — so they appear and
+  vanish repeatedly across the thread. That is what a live name looks like. The
+  corpses above never move.
+
+      if bouncer = 1 … bouncer = 0 else … bouncer = 1 endif
+      if dirgo = 0
+          actordeg (me, actordeg (me) + 2)
+          if actordeg (me) > 64 + 20    dirgo = 1     ← assigned here only
+      else
+          actordeg (me, actordeg (me) - 2)
+          if actordeg (me) < 64 - 20    dirgo = 0     ← and here
+
+  The port needs no change for any of this: it destroys every name, which is
+  what `DF.EXE` does. What changes is how a save may be read — **a global's
+  presence in an `.rtd` is not proof it was live**, and three playthrough rungs
+  that claimed around the disagreement
+  ([`d2e002`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/playthrough/rungs/d2e002.ts),
+  [`d3a001`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/playthrough/rungs/d3a001.ts),
+  [`d3e003`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/playthrough/rungs/d3e003.ts))
+  were claiming around a table of dead records.
 - The original compiler emitted some **oddities** the parser must tolerate:
   `//` comment lines that tokenize as two division operators, unterminated
   blocks, dead statements before the first `case`, and the occasional

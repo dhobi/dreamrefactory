@@ -72,7 +72,7 @@ jobs:
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, taoot-gamefiles]
+    runs-on: [self-hosted, linux, x64, dreamrefactory-gamefiles]
     steps:
       # Full history, because the step that picks the playthroughs diffs against
       # the base commit and the default depth of 1 does not contain it.

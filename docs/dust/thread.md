@@ -183,6 +183,17 @@ Worth stating before anyone builds a test on it:
   `D3A_001` is twelve seconds; `D3M_001` → `D3M_002` is twenty-two minutes. The thread is what
   one player did, wandering included — so a route reproducing it must reach the
   **state**, never replay the minutes.
+- **A global's presence in a save is not proof it was live.** The globals
+  container is a 32-byte node array and the save writer walks it by physical
+  slot, so a name destroyed by `dumpglobal` keeps its record — name, value and
+  all — until something is allocated over it. Four of the poker table's globals
+  sit unchanged from `D3E_003` to `MSKPZL` and then vanish at `MESAPZL`, forty
+  thousand frames from the saloon, because the mine allocated over them; the
+  shooting range's hit counts do the same at `D3E_003`; `saveitem` goes to the
+  number `0` at `D3M_CLAS` and stays there for the rest of the game. So a rung
+  whose `to` save gains or loses a name has not necessarily done anything to it
+  — [the whole argument is under `dumpglobal`](../engine/scripting-language.md),
+  which this thread is what settled.
 - **A save cannot be matched byte for byte.** Frame counter, cast positions, the
   live loop set and the RNG stream all differ between two runs that played the
   same. The assertion has to be a chosen set of globals and prop owners.

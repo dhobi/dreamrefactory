@@ -23,12 +23,14 @@
 
 set -euo pipefail
 
-REPO="${TAOOT_REPO:-dhobi/dreamrefactory}"
+# `TAOOT_REPO` is still honoured so a box deployed under the old name keeps
+# working across the rename; set `DREAMREFACTORY_REPO` on anything new.
+REPO="${DREAMREFACTORY_REPO:-${TAOOT_REPO:-dhobi/dreamrefactory}}"
 API="${GITHUB_API_URL:-https://api.github.com}"
-LABELS="${RUNNER_LABELS:-self-hosted,linux,x64,taoot-gamefiles}"
+LABELS="${RUNNER_LABELS:-self-hosted,linux,x64,dreamrefactory-gamefiles}"
 # A name per container instance. `--replace` means a restart reclaims its own
 # entry instead of littering the runner list with dead ones.
-NAME="${RUNNER_NAME:-taoot-$(hostname)}"
+NAME="${RUNNER_NAME:-dreamrefactory-$(hostname)}"
 
 die() { printf 'entrypoint: %s\n' "$*" >&2; exit 1; }
 

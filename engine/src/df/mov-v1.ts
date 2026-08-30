@@ -282,16 +282,27 @@ export interface MovSegmentV1 {
    */
   bed: number[];
   /**
-   * 1-BASED position of action frame 1, -1 = none — see the module comment.
-   * 1-based where the goto targets are 0-based, and DIARY.MOV is the file that
-   * says so: its click goto SKIPS frame 2 (0-based 1), so a 0-based reading of
-   * its header's `1` would never fire and MAYROOM.SET's `actionframe(1)` gate
-   * would never open the readable diary. Read as 1-based it names frame 1 —
-   * "the diary was seen" is true the moment the film starts, which is the
-   * fact the script wants.
+   * 0-BASED index of action frame 1, -1 = none — the same base the goto targets
+   * use.
+   *
+   * This was read as 1-based, inferred from DIARY.MOV on the grounds that its
+   * click goto skips frame 2 so a 0-based reading could never fire. That is not
+   * what the file says: DIARY's frame 1 is reached by frame 0 falling through it
+   * (`action 2, target 1`, no wait), so BOTH readings land on the played path
+   * and it cannot decide anything. MAYBED.MOV is ambiguous the same way — its
+   * yes-path is [1] → [3] → [4] and the two readings name [3] and [4].
+   *
+   * What decides it is the four films where only one reading names a frame the
+   * play can reach: ABE.MOV, SAFEBOX.MOV, SALGUN.MOV and WELLGUN.MOV, all
+   * 0-based. ABE.MOV shows the cost — its frame 15 waits for a click and both
+   * hotspots jump PAST the frame a 1-based reading names, so the stagecoach
+   * trade could never complete, and `D2A_001` is the original completing it.
+   *
+   * Swept over the whole disc by `dust/tools/actionframes.ts`: twelve segments
+   * name an action frame, twelve are reachable read 0-based, eight read 1-based.
    */
   actionFrame1: number;
-  /** 1-based position of action frame 2, -1 = none */
+  /** 0-based index of action frame 2, -1 = none */
   actionFrame2: number;
 }
 
@@ -811,10 +822,10 @@ export function movFileFromV1(v1: MovFileV1): MovFile {
           playsThroughRegions: !f.waitsForClick,
         };
       }),
-      // the action frames are 1-based positions and a v1 frame is NAMED its
-      // 1-based position, so the number is already the name the player resolves
-      actionFrame1: sg.actionFrame1 >= 1 ? String(sg.actionFrame1) : "",
-      actionFrame2: sg.actionFrame2 >= 1 ? String(sg.actionFrame2) : "",
+      // a v1 frame is NAMED its 1-based position and the header's action frame
+      // is a 0-BASED index, so the name the player resolves is one more
+      actionFrame1: sg.actionFrame1 >= 0 ? String(sg.actionFrame1 + 1) : "",
+      actionFrame2: sg.actionFrame2 >= 0 ? String(sg.actionFrame2 + 1) : "",
       flags: 0,
       keySkips: true,
       minHoldTicks: sg.framerate,
