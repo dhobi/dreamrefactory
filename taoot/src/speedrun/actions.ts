@@ -1009,6 +1009,56 @@ const move = (name: string): ActionFn => async (c) => {
   );
 };
 
+
+/* ------------------------------------------------------------------ *
+ * Standing watches — `watchFor` (#255)
+ * ------------------------------------------------------------------ */
+
+/**
+ * A rule that is not part of the route: "whenever this becomes true, do that".
+ *
+ * The route is a LINE and the sinking is not. During mission 4 the phase
+ * advances on a mix of real time, how far the player has walked and how many
+ * conversations they have had, so `sink1.mov` arrives at a moment no sheet can
+ * name — it interrupts whatever command is running, blocks input, and the line
+ * waiting on the world times out through no fault of its own. Writing an `esc()`
+ * after every movement, which is the only linear answer, is both unreadable and
+ * wrong: the film is not after any particular move.
+ *
+ * So a watch is polled ALONGSIDE the running step rather than between steps (see
+ * the watchdog in runner.ts). Between steps would be too late — the step that
+ * needs rescuing is the one already waiting.
+ *
+ * EDGE-TRIGGERED. A watch fires when its condition goes from false to true and
+ * not again until it has gone false in between, so a film that is playing for
+ * two hundred frames is one firing and not two hundred. A watch whose condition
+ * is already true when it is registered fires at its first poll.
+ */
+export interface Watch {
+  /** the condition as written, for the report */
+  readonly source: string;
+  /** the compiled JavaScript predicate */
+  readonly expr: string;
+  /** what to do when it fires */
+  readonly action: Step;
+  /** was it true at the last poll? — the edge */
+  armed: boolean;
+  /** how many times it has fired, for the report */
+  fired: number;
+}
+
+const WATCHES: Watch[] = [];
+
+/** the standing watches, in the order they were registered */
+export function watches(): Watch[] {
+  return WATCHES;
+}
+
+/** forget every watch — the runner calls this so one run cannot leak into the next */
+export function clearWatches(): void {
+  WATCHES.length = 0;
+}
+
 export const ACTIONS: Record<string, Action> = {
   // -- raw input ------------------------------------------------------------
   left: {
@@ -2681,6 +2731,37 @@ export const ACTIONS: Record<string, Action> = {
         throw new Error(`mission takes numbers — mission(1, phase: 2)`);
       }
       await loadPoint(c, `m${n}p${phase}`);
+    },
+  },
+  watchfor: {
+    args: [2, 2],
+    once: true,
+    wait: "none",
+    sig: "watchFor(movie == sink1.mov, skipMovie(until: awaiting))",
+    help: "a standing rule: whenever the condition becomes true, run the action. `off` as the action forgets it",
+    run: async (c) => {
+      const cond = c.step.args[0];
+      const body = c.step.args[1];
+      const expr = predicate(cond);
+      const at = WATCHES.findIndex((w) => w.expr === expr);
+      if (body.trim().toLowerCase() === "off") {
+        if (at < 0) throw new Error(`no watch on "${cond}" to turn off`);
+        WATCHES.splice(at, 1);
+        c.say(`stopped watching ${cond}`);
+        return;
+      }
+      // the action is a sheet line like any other, so it is PARSED like one —
+      // which is what makes `watchFor` take every verb rather than a list of
+      // the ones somebody remembered to allow
+      const { parseSheet } = await import("./sheet");
+      const parsed = parseSheet(body, { verbs: VERBS });
+      if (parsed.length !== 1) {
+        throw new Error(`watchFor's action must be exactly one line, got ${parsed.length}: ${body}`);
+      }
+      if (parsed[0].verb === "watchfor") throw new Error(`a watch cannot register a watch`);
+      if (at >= 0) WATCHES.splice(at, 1); // re-registering replaces
+      WATCHES.push({ source: cond, expr, action: parsed[0], armed: false, fired: 0 });
+      c.say(`watching ${cond} -> ${parsed[0].source}`);
     },
   },
   split: {

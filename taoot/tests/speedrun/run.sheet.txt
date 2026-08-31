@@ -840,6 +840,16 @@ skipMovie(until: set == c73)
 settle()
 save(m4p0 cabin)
 
+# The sinking films, which arrive at no line in particular (#255). Mission 4's
+# phase advances on a mix of real time, how far you have walked and how many
+# conversations you have had, so sink1..3 interrupt whatever command is running,
+# block input, and the line waiting on the world times out through no fault of
+# its own. A watch is polled alongside the running step, so the ESC lands while
+# that line is still waiting rather than after it has given up.
+watchFor(movie == sink1.mov, skipMovie(until: quiet, budget: 60000))
+watchFor(movie == sink2.mov, skipMovie(until: quiet, budget: 60000))
+watchFor(movie == sink3.mov, skipMovie(until: quiet, budget: 60000))
+
 # --- M4P0: Penny at the cabin door ------------------------------------
 # The same standpoint and the same gesture as the steward in mission 1: space
 # is the boot script's "the door in front of me", and `c73.set` c9's mousedown

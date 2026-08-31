@@ -11,9 +11,19 @@
  * So everything host-shaped is behind {@link SpeedrunDriver}, and everything
  * presentation-shaped is behind {@link RunHooks}. What is left is the loop.
  */
-import { resolve, type ActionContext } from "./actions";
+import { clearWatches, resolve, watches, type ActionContext, type Watch } from "./actions";
 import type { Step } from "./sheet";
 import type { Clock, SpeedrunDriver, WaitMode } from "./driver";
+
+/**
+ * How often a standing watch is polled while a step runs (#255).
+ *
+ * A quarter of a second: fast enough that an unexpected film is answered while
+ * the line it interrupted is still waiting, slow enough that the poll — one
+ * round trip however many watches there are — is not what the run is spending
+ * its time on. Nothing is polled when no watch is registered.
+ */
+const WATCH_TICK_MS = 250;
 
 /** what one action cost */
 export interface Timing {
@@ -49,6 +59,8 @@ export interface RunHooks {
   onDone?(timing: Timing): void;
   /** when a split closes */
   onSplit?(split: Split): void;
+  /** a standing watch fired while a step was running — see `watchFor` (#255) */
+  onWatch?(watch: Watch, said: string[]): void;
 }
 
 /* ------------------------------------------------------------------ *
@@ -193,11 +205,82 @@ export async function runSheet(
   const splits: Split[] = [];
   let failure: { step: Step; error: Error } | null = null;
 
+  // a watch belongs to the run that registered it, not to the process
+  clearWatches();
+
   const started: Clock = await d.clock();
   let splitFrom = started;
   let splitActions = 0;
   const actionCount = steps.filter((s) => s.verb !== "split").length;
   let index = 0;
+
+  /**
+   * The standing watches, polled ALONGSIDE the running step (#255).
+   *
+   * Not between steps, which would be too late: the step that needs rescuing is
+   * the one already waiting. During mission 4 the sinking films arrive at a
+   * moment no sheet can name, block input, and the line waiting on the world
+   * times out through no fault of its own — so something has to press ESC while
+   * that line is still waiting. This is that something.
+   *
+   * Safe to gesture from, because a step that is WAITING is only polling: the
+   * driver's holds read the page and nothing else. A watch that fires while a
+   * step is mid-gesture is the one hazard, and it is the sheet author's to avoid
+   * — a watch is for recovery (an unexpected film, a stray dialog), not for
+   * playing the game.
+   *
+   * One round trip per tick however many watches there are: they are evaluated
+   * as a single array. Nothing is polled at all when no watch is registered, so
+   * a sheet that does not use them pays nothing.
+   */
+  const runWatches = async (): Promise<void> => {
+    const live = watches();
+    if (!live.length) return;
+    const probe = `[${live.map((w) => `!!(${w.expr})`).join(",")}]`;
+    let now: boolean[];
+    try {
+      now = await d.evaluate<boolean[]>(probe);
+    } catch {
+      return; // a page mid-navigation is not a watch failing
+    }
+    for (let i = 0; i < live.length; i++) {
+      const w = live[i];
+      if (!now[i]) {
+        w.armed = false; // the edge is re-armed by the condition going false
+        continue;
+      }
+      if (w.armed) continue;
+      w.armed = true;
+      w.fired++;
+      const act = resolve(w.action.verb);
+      if (!act) continue;
+      const said: string[] = [];
+      try {
+        await act.run({
+          d,
+          step: w.action,
+          wait: waitOf(w.action),
+          budget: Number(w.action.opts.budget ?? 10_000),
+          gap: Number(w.action.opts.gap ?? 16),
+          say: (m: string) => said.push(m),
+          suggest: () => {},
+        });
+        hooks.onWatch?.(w, said);
+      } catch (e) {
+        hooks.onWatch?.(w, [`failed: ${(e as Error).message}`]);
+      }
+    }
+  };
+
+  /** poll the watches until the step it is running beside is done */
+  const watchdog = (done: () => boolean): Promise<void> =>
+    (async () => {
+      while (!done()) {
+        await runWatches();
+        if (done()) return;
+        await d.sleep(WATCH_TICK_MS);
+      }
+    })();
 
   for (const step of steps) {
     if (step.verb === "split") {
@@ -253,9 +336,18 @@ export async function runSheet(
         say: (m: string) => says.push(m),
         suggest: (line: string) => (suggestion = line),
       };
-      for (let i = 0; i < step.repeat; i++) {
-        await action.run(ctx);
-        if (step.opts.after) await d.pad(Number(step.opts.after));
+      let over = false;
+      const dog = watches().length && step.verb !== "watchfor"
+        ? watchdog(() => over)
+        : null;
+      try {
+        for (let i = 0; i < step.repeat; i++) {
+          await action.run(ctx);
+          if (step.opts.after) await d.pad(Number(step.opts.after));
+        }
+      } finally {
+        over = true;
+        if (dog) await dog;
       }
     } catch (e) {
       failure = { step, error: e as Error };
