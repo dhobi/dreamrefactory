@@ -9330,6 +9330,60 @@ test("engine: a stage swap does not un-black the screen while it loads (#308)", 
   check("...and it lasts through the room the boot opens next",
     viewer.screenOwner() === "held" && !rest.length,
     `owner=${viewer.screenOwner()} lit=${rest.map(([n, o]) => `${n}:${o}`).join(", ")}`);
+
+  // 3. the painting crate, reported against the fix above (#308 reopened): the
+  // same window one statement further on, because the swap is not the end of the
+  // transition — the CLIP is.
+  //
+  // The game's own `transtoflat`, in full, so the order is the boot's and not a
+  // reconstruction of it: `screentoblack("current", 10)`, `blackscreen()`,
+  // `closestagefile()`, `openstagefile("cargo.stg")`, `sendtostage(opencargo())`,
+  // `setvisible(false)`, `playmovie("cratep.mov")`. Nothing in there says what
+  // the screen should look like between the swap and the clip, so the black
+  // `blackscreen()` put up is what has to cover the clip's download — 648 KB of
+  // it — and clearing the level at the swap painted the arriving flat instead,
+  // which is the open crate with the painting in it: the end of the animation,
+  // before the animation. Measured in a browser at 75 frames
+  // (taoot/tests/browser/transition-hold.ts, leg 3).
+  //
+  // The clip's own DOWNLOAD is not in reach here — the harness has the file
+  // already, and a warm provider answers with no frame in between — so what this
+  // samples is the decision that governs it: who owns the screen at the instant
+  // the arm reaches `playmovie`, which in a browser is the whole length of the
+  // fetch.
+  //
+  // A ramp's black still goes, which is check 1's other half: what may not be
+  // lifted here is a screen the script BLANKED (GameSession.fade.blanked).
+  session.fade.queue.length = 0;
+  session.fade.snapshot = null;
+  session.fade.pendingReveal = false;
+  session.fade.level = 0;
+  session.fade.blanked = false;
+  atFetch.clear();
+  const atMovie = new Map<string, string>();
+  const play = session.onPlayMovie;
+  session.onPlayMovie = (name, startFrame) => {
+    atMovie.set(name.toLowerCase(), `${viewer.screenOwner()} level=${session.fade.level}`);
+    return play(name, startFrame);
+  };
+  await session.transToFlat("cargo.stg");
+  check("the crate's own shop is fetched past the swap, still behind the black",
+    atFetch.get("cargo.shp") === "held", `owner=${atFetch.get("cargo.shp") ?? "not fetched"}`);
+  check("...and the stage that arrived under it is the cargo flat",
+    session.stageName === "cargo.stg" && !session.setVisible,
+    `stage=${session.stageName} vis=${session.setVisible}`);
+  check("the clip starts out of the script's own black, not off the open crate",
+    atMovie.get("cratep.mov") === "held level=1", `${atMovie.get("cratep.mov") ?? "not played"}`);
+  session.onPlayMovie = play;
+  // and it is a HOLD, not a black nobody can lift: the darkroom's arm of the
+  // same switch ends on `mixclut("stage", "black", 0, 255, 245)` with no clip and
+  // no fade behind it, so the only thing that can bring that stage up is the
+  // script falling quiet — which is what `pendingReveal` already means.
+  session.fade.snapshot = null;
+  session.tickFade(session.clock.now);
+  check("...so the hold lifts when the script has finished talking",
+    !session.fade.pendingReveal && session.fade.level === 0 && !session.fade.blanked,
+    `level=${session.fade.level} pending=${session.fade.pendingReveal} blanked=${session.fade.blanked}`);
 });
 
 // --- 105. the blackjack deal plays its swing, not its first frame ------------

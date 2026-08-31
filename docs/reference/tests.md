@@ -298,10 +298,16 @@ workbench — `taoot/src/speedrun/` is the in-page half and
 suite can only pin from the inside: a load must not hand the screen back to the
 world while a transition is waiting for it. It samples every
 `ScreenDirector.render` — flagged with whether a composite actually happened —
-and reports any composite that put the lit room on the canvas inside two windows
+and reports any composite that put the lit room on the canvas inside three windows
 the report named: the boot between the menu film and the date caption (CPU
-throttled 4x, because nothing there is a fetch on a warm page), and the first
-open of the map (`map.stg` held back by `STALL_MS`, default 1200). It prints
+throttled 4x, because nothing there is a fetch on a warm page), the first open of
+the map (`map.stg` held back by `STALL_MS`, default 1200), and the painting crate
+— `transtoflat("cargo.stg")`, whose reveal is `cratep.mov` and not a fade, so the
+window runs past the swap and all the way to the clip. Each leg drives the game's
+own `transtoflat` **through `session.track`**, because `scriptBusy` counts tracked
+dispatches and nothing else: an untracked drive looks idle from its first await,
+and every hold that waits for the script to fall quiet is lifted a frame after it
+goes up. It prints
 which build the PAGE is running, read out of the loaded function — a dev server
 that has been up across an edit can serve the browser a stale transform while
 handing curl a fresh one, which is enough to make both arms of a before/after

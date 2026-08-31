@@ -1823,6 +1823,7 @@ export class ScreenDirector {
       this.session.fade.queue.length = 0;
       this.session.fade.snapshot = null;
       this.session.fade.pendingReveal = false;
+      this.session.fade.blanked = false;
       this.session.fade.level = 0;
     }
   }
