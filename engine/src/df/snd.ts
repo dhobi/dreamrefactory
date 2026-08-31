@@ -29,14 +29,28 @@ import type { BankChunk } from "./banks";
  * `unilib.snd` reads out as pageturn, hotbell, doorclose3, dooropen3 … — 22 names
  * for 23 containers.
  *
- * ## Why the count is not read from the header
+ * ## The two counts at 0x18, which are one field read as the wrong width
  *
- * There is an i32 at 0x18 that equals the sound count in 38 of the 40 banks on
- * the disc, and in FLUTE.SND and MINE.SND it reads 327687 and 720896. So it is
- * either not the count or not only the count, and guessing which would cost two
- * banks. The container count answers it exactly instead: `containers - 1` holds
- * on 40 of 40, which is the same fact the layout above already asserts — one
- * container per sound, after the header.
+ * This file used to describe "an i32 at 0x18 that equals the sound count in 38 of
+ * the 40 banks, and reads 327687 and 720896 in FLUTE.SND and MINE.SND" — so
+ * either not the count or not only the count, and not worth guessing at.
+ *
+ * It is **two i16s**, and together they are the bank's own split:
+ *
+ *     0x18   i16: how many ONE-SHOTS the bank holds
+ *     0x1a   i16: how many LOOP chunks — the music bed — follow them
+ *
+ * The two sum to the sound count in **40 of 40** banks on the disc, which is what
+ * says the pair is one field and which way round it is: TOWN.SND is (15, 10) and
+ * its bed is `daymusic1..daymusic10`; NIGHT.SND (16, 5) and `nightwind1..5`;
+ * HELP.SND (0, 11) and `helptheme1..11`; BOUNTY.SND (13, 16) and a bare `1..16`.
+ * The "impossible" values were the halves showing through: 327687 is (7, 5) and
+ * 720896 is (0, 11).
+ *
+ * The sound COUNT is still `containers - 1` rather than the sum, because that is
+ * the same fact the layout above already asserts — one container per sound, after
+ * the header — and it holds on 40 of 40 too. What the pair gives is the split, and
+ * {@link sndLoopChunks} is what needed it.
  */
 
 export interface SndFile {
@@ -51,10 +65,27 @@ export interface SndFile {
    * field, which is a MOV one-shot's idea and does not exist here.
    */
   chunks: BankChunk[];
-  /** what did not read the way this reader expects — empty on all 40 Dust banks */
+  /**
+   * The bank's own split of {@link chunks}: this many one-shots, then the rest are
+   * the loop bed {@link sndLoopChunks} answers with. Read from the pair at 0x18,
+   * and validated against the sound count — the two sum to it on all 40 Dust banks,
+   * which is what identifies the pair (see the module doc).
+   */
+  oneshots: number;
+  loops: number;
+  /**
+   * What did not read the way this reader expects. One shipped bank warns:
+   * `DRUGS.SND` stores a zero-length name at 158 — one sound, `mortar`, and no
+   * `refName`, so nothing can ask for it by name and nothing does. Pinned in
+   * `dust/tests/banks.ts` so a second one would be a finding.
+   */
   warnings: string[];
 }
 
+/** i16: how many ONE-SHOTS the bank holds — the sounds before the bed */
+const ONESHOT_COUNT_AT = 0x18;
+/** i16: how many LOOP chunks follow them (see {@link sndLoopChunks}) */
+const LOOP_COUNT_AT = 0x1a;
 /** the bank's own name */
 const REF_NAME_AT = 158;
 /** the name table, and the stride between its records */
@@ -106,50 +137,50 @@ export function readSndFileFrom(file: DFContainerFile): SndFile {
     }
     chunks.push({ identifier, containerLoc: i + 1, idOffset: o, follow: "" });
   }
-  return { file, version: 1, refName, chunks, warnings };
+
+  // the one-shot/loop split, and the check that makes it a reading: the halves
+  // have to account for every sound the bank holds
+  const dv = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);
+  const oneshots = c0.length >= ONESHOT_COUNT_AT + 2 ? dv.getInt16(ONESHOT_COUNT_AT, true) : 0;
+  const loops = c0.length >= LOOP_COUNT_AT + 2 ? dv.getInt16(LOOP_COUNT_AT, true) : 0;
+  if (oneshots + loops !== count) {
+    warnings.push(`${oneshots} one-shots + ${loops} loops is not the ${count} sounds the bank holds`);
+  }
+  return { file, version: 1, refName, chunks, oneshots, loops, warnings };
 }
 
 /**
  * The bank's LOOP BED — the music `playtheme` plays — as container locations in
  * playback order.
  *
- * A v4 bank keeps a loop ORDER table in a container of its own, and a v1 bank has
- * no tables at all, which is why this file used to answer "no loop chunks" and
- * Dust ran without music. The order is not missing: it is in the NAMES. A bank's
- * bed is the run at the END of its name table that is one stem plus ascending
- * numbers from 1 — `daymusic1..daymusic10`, `nightwind1..nightwind5`,
- * `rag1..rag5`, `helptheme1..helptheme11`, or a bare `1..16`.
+ * A v4 bank keeps a loop ORDER table in a container of its own. A v1 bank has no
+ * such container, which is why this file once answered "no loop chunks" and Dust
+ * ran without music — but the bank does say: the loops are the LAST
+ * `i16 @ 0x1a` sounds of its name table (see the module doc's split).
  *
- * Which is checkable rather than suggestive, because the scripts name the banks
- * they want music out of and there are only eight of them: `town.snd`,
- * `bountytheme`, `saloonsep.snd`, `mission.snd`, `mine`, `isaopractice.sn`,
- * `helptheme` and `flute`. Every one resolves to a bank with such a run, and the
- * run is the music every time — 12 banks between them, because TOWN and NIGHT both
- * answer to `town.snd` (the day bed and the night bed, and the set opens whichever
- * the clock wants) and the three SALOONs all answer to `saloonsep.snd`.
+ * That replaced a name heuristic (#325 item 8), which took the bed to be the run
+ * at the end of the table that is one stem plus ascending numbers from 1, with two
+ * rules to keep dialogue out. It was right about the eight banks the scripts ask
+ * for music from and wrong about three of the forty, in both directions — the
+ * "eight positive cases and no negative control" its own docblock admitted:
  *
- * Two rules keep dialogue out. A stem ending in `.` is a SPEAKER — `ruby.108`,
- * `fear.44`, `bol.98` are lines, not bars — and a run must start at 1, which the
- * line numbering does not. Between them they drop every bank whose tail is
- * dialogue and keep all twelve that are asked for.
+ *  - `DOORLIB.SND` and `SALGAMES.SND` store NO loops (0 either way), and the
+ *    heuristic invented a bed out of `lsing1..3` — three hinge-squeak variants —
+ *    and `discard1..4`, four card sounds. Harmless only because nothing asks
+ *    either bank for a theme;
+ *  - `MISSION.SND` stores **five**, and they are `silence wind1 wind2 chantwind1
+ *    chantwind2` — a bed of two stems, which a single-stem rule cannot find. It
+ *    played the last two, so `playtheme("mission.snd")` was missing three of its
+ *    five bars, and `mission.snd` IS one of the eight.
+ *
+ * The field agrees with the heuristic on the other 37, which is what says the two
+ * were measuring the same thing.
  */
 export function sndLoopChunks(snd: SndFile): number[] {
-  const numbered = (name: string): { stem: string; n: number } | null => {
-    const m = /^(.*?)\s*(\d+)$/.exec(name);
-    return m ? { stem: m[1].toLowerCase(), n: Number(m[2]) } : null;
-  };
-  let i = snd.chunks.length - 1;
-  if (i < 1 || !numbered(snd.chunks[i].identifier)) return [];
-  while (i > 0) {
-    const prev = numbered(snd.chunks[i - 1].identifier);
-    const here = numbered(snd.chunks[i].identifier)!;
-    if (!prev || prev.stem !== here.stem || prev.n !== here.n - 1) break;
-    i--;
-  }
-  const first = numbered(snd.chunks[i].identifier)!;
-  if (first.n !== 1 || first.stem.endsWith(".")) return [];
-  const run = snd.chunks.slice(i);
-  return run.length > 1 ? run.map((c) => c.containerLoc) : [];
+  // a bed of one is not a bed, and a count the bank cannot hold is not a count —
+  // readSndFileFrom has already warned about the latter
+  if (snd.loops <= 1 || snd.loops > snd.chunks.length) return [];
+  return snd.chunks.slice(snd.chunks.length - snd.loops).map((c) => c.containerLoc);
 }
 
 /** the container a named sound lives in, or -1 — the one thing callers want */

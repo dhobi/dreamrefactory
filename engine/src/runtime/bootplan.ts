@@ -190,10 +190,28 @@ function walkStmts(body: Stmt[], onCall: (c: CallExpr) => void): void {
   }
 }
 
-/** the boot library's handlers by lowercase name; the first definition wins,
- *  which is the order events traverse the containers in (GameSession) */
-function bootHandlers(bootfile: Uint8Array): Map<string, CodeBlock> {
-  const codes: Map<string, CodeBlock> = new CaselessMap<CodeBlock>();
+/**
+ * The boot library's handlers by lowercase name — **every** definition of each,
+ * in container order.
+ *
+ * This used to keep the first and drop the rest, "which is the order events
+ * traverse the containers in". That is the right rule for DISPATCH and the wrong
+ * one here, and the difference is not hypothetical: a real BOOTFILE defines
+ * `keydown` TWICE, in containers 1 and 2, and the two are the two ends of one
+ * chain. Container 1's filters `lockevents`, remaps the configurable
+ * `keynorth`/`keyeast`/`keywest`, handles SPACE for doors and forwards to the
+ * scene; container 2's is the LAST link, reached only when the scene passcodes,
+ * and it is what calls `currentscene("strait"/"left"/"right")` — the code that
+ * actually moves you. Timelapse duplicates `mousedown` the same way.
+ *
+ * The runtime never had this wrong: `GameSession` keeps `bootScripts` as a list
+ * and builds passcode chains across all of them, so both halves are reachable.
+ * But this is a RESOURCE SCAN, and a scan that stops at the first definition
+ * cannot see what a later one opens. Visiting all of them removes the tie-break
+ * rather than justifying it (#325 item 8).
+ */
+function bootHandlers(bootfile: Uint8Array): Map<string, CodeBlock[]> {
+  const codes: Map<string, CodeBlock[]> = new CaselessMap<CodeBlock[]>();
   const file = readContainerFile(bootfile);
   for (let i = 1; i < file.containers.length; i++) {
     const tokens = sniffScript(file.containers[i].data);
@@ -206,7 +224,9 @@ function bootHandlers(bootfile: Uint8Array): Map<string, CodeBlock> {
     }
     for (const [name, code] of script.codes) {
       const key = name.toLowerCase();
-      if (!codes.has(key)) codes.set(key, code);
+      const blocks = codes.get(key);
+      if (blocks) blocks.push(code);
+      else codes.set(key, [code]);
     }
   }
   return codes;
@@ -221,7 +241,7 @@ function bootHandlers(bootfile: Uint8Array): Map<string, CodeBlock> {
  * (there is nothing here to boot, and it has to say so rather than crash).
  */
 export function readBootPlan(bootfile: Uint8Array): BootPlan {
-  let codes: Map<string, CodeBlock>;
+  let codes: Map<string, CodeBlock[]>;
   try {
     codes = bootHandlers(bootfile);
   } catch {
@@ -241,21 +261,21 @@ export function readBootPlan(bootfile: Uint8Array): BootPlan {
     const key = handler.toLowerCase();
     if (visited.has(key)) return;
     visited.add(key);
-    const code = codes.get(key);
-    if (!code) return;
-    walkStmts(code.body, (call) => {
-      const name = call.name.toLowerCase();
-      const file = literalArg(call);
-      if (RESOURCE_CALLS.has(name)) {
-        if (file) {
-          add(resources, name === "opensetfile" ? setFileName(file) : file);
-          if (name === "opencastfile") add(casts, file);
+    for (const code of codes.get(key) ?? []) {
+      walkStmts(code.body, (call) => {
+        const name = call.name.toLowerCase();
+        const file = literalArg(call);
+        if (RESOURCE_CALLS.has(name)) {
+          if (file) {
+            add(resources, name === "opensetfile" ? setFileName(file) : file);
+            if (name === "opencastfile") add(casts, file);
+          }
+          return;
         }
-        return;
-      }
-      // an engine command (it has an opcode id) is never a handler to follow
-      if (call.id === undefined) visit(name);
-    });
+        // an engine command (it has an opcode id) is never a handler to follow
+        if (call.id === undefined) visit(name);
+      });
+    }
   };
   visit(BOOT_HANDLER);
 
@@ -264,19 +284,19 @@ export function readBootPlan(bootfile: Uint8Array): BootPlan {
   // through, and the one that matters here is the one a cold boot lands in.
   let landingSet: string | null = null;
   for (const handler of DAY_MACHINE) {
-    const code = codes.get(handler);
-    if (!code || landingSet) continue;
-    walkStmts(code.body, (call) => {
-      if (landingSet || !ROOM_CALLS.has(call.name.toLowerCase())) return;
-      const room = literalArg(call);
-      if (room) landingSet = setFileName(room).toLowerCase();
-    });
+    if (landingSet) break;
+    for (const code of codes.get(handler) ?? []) {
+      walkStmts(code.body, (call) => {
+        if (landingSet || !ROOM_CALLS.has(call.name.toLowerCase())) return;
+        const room = literalArg(call);
+        if (room) landingSet = setFileName(room).toLowerCase();
+      });
+    }
   }
   // The volumes setpath mounts, in the order its `disk = N` arms name them —
   // which is the disc order, and the only place it is stated.
   const volumes: string[] = [];
-  const setpath = codes.get(VOLUME_ROUTINE);
-  if (setpath) {
+  for (const setpath of codes.get(VOLUME_ROUTINE) ?? []) {
     walkStmts(setpath.body, (call) => {
       if (call.name.toLowerCase() !== VOLUME_CALL) return;
       const volume = literalArg(call);

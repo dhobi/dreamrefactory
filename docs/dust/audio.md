@@ -27,13 +27,13 @@ Worse, **several files answer to one name.**
 | `"saloonsep.snd"` | 7 | `SALOON2.SND` |
 | `"saloonsep.snd"` | 4 | `SALOON3.SND` |
 | `"credits"` | 5 | `CREDITS.SND` |
-| `"doorlib"` | 3 | `DOORLIB.SND` |
+| `"doorlib"` | 0 | `DOORLIB.SND` |
 | `"flute"` | 5 | `UNDER/FLUTE.SND` |
 | `"helptheme"` | 11 | `HELP.SND` |
 | `"isaopractice.sn"` | 3 | `ISAOPRAC.SND` |
 | `"mine"` | 11 | `UNDER/MINE.SND` |
-| `"mission.snd"` | 2 | `MISSION.SND` |
-| `"salgames.snd"` | 4 | `SALGAMES.SND` |
+| `"mission.snd"` | 5 | `MISSION.SND` |
+| `"salgames.snd"` | 0 | `SALGAMES.SND` |
 
 **The town appears twice on purpose.** `TOWN.SND` is the day and `NIGHT.SND` is the
 night, under one name — the same doubling the SET side has, where the town is
@@ -47,24 +47,34 @@ v4 banks store `"BEDRAD1.WAV"` and are asked for as `bedrad1.trk`, so the runtim
 strips a suffix there — doing the same here made three of Dust's themes
 unfindable, the town's among them.
 
-## The theme is spelled in the names
+## The bank says how many of its sounds are the theme
 
 A v4 bank has a loop table saying which chunks are the music and in what order. A
-v1 bank has no such table: the music is the **trailing run of consecutively
-numbered chunks**, and the numbering *is* the order — `daymusic1` through
-`daymusic10`.
+v1 bank has no such container — but it has a **pair of i16s at 0x18**: how many
+one-shots it holds, then how many **loop chunks** follow them. The bed is that many
+sounds at the end of the name table, and their order in the table *is* the playback
+order — `daymusic1` through `daymusic10`.
 
-Two rules keep dialogue out of that run, and they are why the count below is 15
-and not 40:
+The pair is identifiable because the two halves sum to the bank's sound count in
+**40 of 40** banks on the disc, and because the loop half lands on the run the
+names already suggested: TOWN.SND is (15, 10) and its bed is `daymusic1..10`;
+NIGHT.SND (16, 5) and `nightwind1..5`; HELP.SND (0, 11) and `helptheme1..11`.
+Read as one i32 the field looks like nonsense — 327687 is (7, 5) and 720896 is
+(0, 11) — which is how it went unidentified.
 
-- a stem ending in `.` is a **speaker**, not a bar: `ruby.108`, `fear.44`,
-  `bol.98` are lines
-- a run must start at **1**, which line numbering does not
+This replaced a heuristic that read the bed **out of the names**: the trailing run
+of one stem plus ascending numbers from 1, with two rules to keep dialogue out (a
+stem ending in `.` is a speaker — `ruby.108`, `fear.44` — and a run must start at
+1). It agreed with the field on 37 of the 40 and was wrong about three, in both
+directions (#325):
 
-Between them they drop every bank whose tail is dialogue and keep the ones that
-are actually asked for.
+- `DOORLIB.SND` and `SALGAMES.SND` hold **no** bed. The heuristic made one out of
+  `lsing1..3`, three hinge squeaks, and `discard1..4`, four card sounds.
+- `MISSION.SND` holds **five**, and they are `silence wind1 wind2 chantwind1
+  chantwind2` — two stems, which a single-stem rule cannot see. It played the last
+  two, so `playtheme("mission.snd")` was three bars short of the mission's theme.
 
-## The other twenty-five are one-shot libraries
+## The rest are one-shot libraries
 
 `DEATH.SND`, `UNILIB.SND`, `HOTROOM.SND`, the six `gossip` banks and the rest hold
 no theme at all — just sounds a script fires by name. Five banks are named
