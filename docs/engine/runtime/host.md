@@ -580,6 +580,12 @@ what `screenOwner` reads to answer **held** above, and the two readings are one
 fact: until the script says what the screen should look like, the screen is still
 the movie's.
 
+A **stage swap** arms the same flag rather than clearing the level, whenever the
+black it finds is one a script blanked on (`fade.blanked` — `blackscreen` or
+`clut("black")`, as against a `screentoblack` ramp, which it still lifts because
+the palette that ramp was against is the one being replaced). See
+[the stage layer](./stage-ui#what-a-swap-does-to-the-black).
+
 **The fades BLOCK, and that is not a detail.** `screentoblack` and
 `blacktoscreen` are a linear lerp between the named surface's palette and the
 black one, and the loop that runs it (`0x435b90` / `0x435be0`) busy-waits one

@@ -282,6 +282,8 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     }
     session.fade.queue.push({ to, steps: n });
     session.fade.pendingReveal = false;
+    // a ramp is a ramp of a named palette — see GameSession.fade.blanked
+    session.fade.blanked = false;
     if (session.hasRealFrames || session.modalMovies) await session.clock.sleep((n * 50) / 3);
   };
   r("screentoblack", (_i, [, steps]) => fade(1, steps));
@@ -312,6 +314,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     session.fade.snapshot = null;
     session.fade.level = 1;
     session.fade.pendingReveal = false;
+    session.fade.blanked = true;
   };
   r("blackscreen", blackNow);
   // currenttheme([layer]): the looping theme currently playing (the layer arg

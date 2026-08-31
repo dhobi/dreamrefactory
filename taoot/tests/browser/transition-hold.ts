@@ -61,6 +61,21 @@ interface Sample {
 }
 
 /**
+ * How a gesture reaches the game: THROUGH `session.track`, which is what the
+ * input path does with every dispatch it starts.
+ *
+ * Not a formality. `scriptBusy` counts tracked dispatches and nothing else, and
+ * it is what tells `tickFade` a script is still talking — so an untracked
+ * `transToFlat` looks, from the first await inside it, like a game sitting idle,
+ * and every hold that waits for the script to fall quiet is lifted a frame after
+ * it goes up. A probe driven that way measures its own shortcut.
+ */
+interface Driven {
+  transToFlat: (n: string) => Promise<void>;
+  track: <T>(p: Promise<T>, label?: string) => Promise<T>;
+}
+
+/**
  * The probe, as an init script.
  *
  * On the PROTOTYPE, for the reason repaint.ts gives: a `changeset` builds a new
@@ -122,17 +137,21 @@ async function loadedArm(page: Page): Promise<string> {
       .dbg.session.stageCtrl.openStageFile.toString(),
   );
   const before = /pendingReveal[\s\S]{0,200}ensureFile/.test(src);
+  const holds = /blanked[\s\S]{0,200}pendingReveal = true/.test(src);
   const after = /ensureFile[\s\S]{0,600}fade\.level = 0/.test(src);
   return before ? "openStageFile clears the fade BEFORE the fetch" :
-    after ? "openStageFile clears the fade after the read (#308 fixed)" : "unrecognised";
+    holds ? "openStageFile holds a blanked screen and clears a ramp (#308 fixed)" :
+    after ? "openStageFile clears the fade after the read (#308 half-fixed)" : "unrecognised";
 }
 
 const read = async (page: Page): Promise<Sample[]> =>
   page.evaluate(() => (window as unknown as { __holdProbe: { samples: Sample[] } }).__holdProbe.samples);
 
-/** hold one file back, so the window a fetch opens is wide enough to see */
-async function stall(page: Page, file: string): Promise<void> {
-  await page.route(`**/${file}`, async (route) => {
+/** hold one file back, so the window a fetch opens is wide enough to see.
+ *  A pattern rather than a name because the rip's own casing is what is served
+ *  (`CARGO/CRATEP.MOV`) while the script asks for `cratep.mov`. */
+async function stall(page: Page, file: string | RegExp): Promise<void> {
+  await page.route(typeof file === "string" ? `**/${file}` : file, async (route) => {
     await new Promise((r) => setTimeout(r, STALL_MS));
     await route.continue();
   });
@@ -285,8 +304,8 @@ async function mapLeg(page: Page): Promise<void> {
   );
   await stall(page, "map.stg");
   await page.evaluate(() => {
-    const s = (window as unknown as { dbg: { session: { transToFlat: (n: string) => Promise<void> } } }).dbg.session;
-    void s.transToFlat("map.stg");
+    const s = (window as unknown as { dbg: { session: Driven } }).dbg.session;
+    void s.track(s.transToFlat("map.stg"), "probe-map");
   });
   await page.waitForFunction(
     () => (window as unknown as { dbg: { session: { stageName: string } } }).dbg.session.stageName === "map.stg",
@@ -319,6 +338,94 @@ async function mapLeg(page: Page): Promise<void> {
     open.stage === "map.stg" && !open.setVisible, `stage=${open.stage} vis=${open.setVisible}`);
 }
 
+/**
+ * Leg 3 — the painting crate (#308, reopened).
+ *
+ * The same window as the map's, on the far side of the swap instead of inside
+ * it. `binl.set`'s crate is `transtoflat("cargo.stg")`, and the boot's own
+ * `transtoflat` ends that arm on a FILM rather than a fade:
+ *
+ *     screentoblack ("current", 10)   blackscreen ()
+ *     closestagefile ()               openstagefile ("cargo.stg")
+ *     sendtostage (opencargo ())      setvisible (false)
+ *     playmovie ("cratep.mov")        visualeffect (plain, 0)
+ *
+ * There is no `blacktoscreen` in it: what reveals the crate is the clip. So
+ * everything between `openstagefile` returning and the clip's first frame has to
+ * stay the black `blackscreen()` put up — and `cratep.mov` is 648 KB, which is a
+ * fetch, which is frames. Reported from play as the painting appearing in the
+ * open crate before the animation that opens it, "a few frames" cold and one
+ * frame warm.
+ *
+ * Driven through the game's own `transtoflat` for the reason the map leg gives;
+ * `propowner("painting")` is `"none"` at boot, which is the arm that plays
+ * `cratep.mov` rather than `cratenop.mov`.
+ */
+async function crateLeg(page: Page): Promise<void> {
+  // Back out of the map leg first: the crate is reached from the room, and
+  // `transtoflat`'s departure switch is keyed on the stage being left. AWAITED,
+  // unlike the drive below — a `void` here let the two script runs overlap, with
+  // `transfromflat`'s reveal ramp still in the queue when `transtoflat` pushed
+  // its fade-out, which is a probe artefact and not anything a player can do.
+  await page.evaluate(async () => {
+    const s = (window as unknown as { dbg: { session: { transFromFlat: () => Promise<void> } } }).dbg.session;
+    await s.transFromFlat();
+  });
+  await page.waitForFunction(
+    () => {
+      const s = (window as unknown as { dbg: { session: { scriptBusy: number }; host: { director: { movieFile: string | null } } } }).dbg;
+      return !s.session.scriptBusy && !s.host.director.movieFile;
+    },
+    null,
+    { timeout: 60000 },
+  );
+  const mark = await page.evaluate(
+    () => (window as unknown as { __holdProbe: { frames: number } }).__holdProbe.frames,
+  );
+  await stall(page, /[cC][rR][aA][tT][eE][pP]\.[mM][oO][vV]/);
+  await page.evaluate(() => {
+    const s = (window as unknown as { dbg: { session: Driven } }).dbg.session;
+    void s.track(s.transToFlat("cargo.stg"), "probe-crate");
+  });
+  await page
+    .waitForFunction(
+      () =>
+        ((window as unknown as { __holdProbe: { samples: Sample[] } }).__holdProbe.samples ?? []).some(
+          (s) => s.movie === "cratep.mov",
+        ),
+      null,
+      { timeout: 60000 },
+    )
+    .catch(() => undefined);
+  const samples = await read(page);
+
+  // the window: the script's own black, to the clip that is the reveal
+  const black = samples.find((s) => s.n > mark && s.level === 1);
+  const clip = samples.find((s) => s.n > mark && s.movie === "cratep.mov");
+  check("crate: the probe saw the fade to black and the clip start",
+    !!black && !!clip && black.n < clip.n,
+    `black=${black?.n ?? "-"} clip=${clip?.n ?? "-"}`);
+  if (!black || !clip || black.n >= clip.n) {
+    dump("crate", samples.filter((s) => s.n >= mark));
+    const tail = await page.evaluate(() =>
+      (window as unknown as { dbg: { log: () => { lines: string[] } } }).dbg.log().lines.slice(-25),
+    );
+    console.log("   engine log tail:\n     " + tail.join("\n     "));
+    return;
+  }
+  const inside = samples.filter((s) => s.n >= black.n && s.n < clip.n);
+  check("crate: the stage and the clip together are frames wide",
+    inside.length >= 10, `${inside.length} frame(s), ${inside.filter((s) => s.painted).length} composited`);
+  dump("crate", samples.filter((s) => s.n >= mark && s.n <= clip.n + 60));
+  const bad = flashes(samples, black.n, clip.n);
+  check("crate: nothing paints the open crate before the clip that opens it",
+    !bad.length,
+    bad.length ? `${bad.length} composite(s): ${bad.slice(0, 4).map(where).join(" | ")}` : `${inside.length} frames clean`);
+  // and the intended outcome, so a clean run cannot be a run that never got there
+  check("crate: the cargo stage is what the clip played over",
+    clip.stage === "cargo.stg" && !clip.setVisible, `stage=${clip.stage} vis=${clip.setVisible}`);
+}
+
 const main = async (): Promise<void> => {
   let browser: Browser | null = null;
   try {
@@ -328,6 +435,7 @@ const main = async (): Promise<void> => {
     await page.addInitScript(INSTALL);
     await bootLeg(page);
     await mapLeg(page);
+    await crateLeg(page);
   } finally {
     await browser?.close();
   }

@@ -654,6 +654,7 @@ export class GameHost {
     session.fade.queue.length = 0;
     session.fade.snapshot = null;
     session.fade.pendingReveal = false;
+    session.fade.blanked = false;
     session.fade.level = 1;
     // the movies the boot plays before anything else, so it cannot stall mid-logo
     const plan = await this.bootPlan();

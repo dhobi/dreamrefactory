@@ -69,6 +69,43 @@ One naming quirk, and it is the script's rather than ours: the darkroom's two
 stages (`photo.stg` white light, `redphoto.stg` red light) are the *same room*
 sharing `photo.shp`, so `redphoto` maps to base name `photo` throughout.
 
+### What a swap does to the black
+
+Opening a stage file is **not** a script saying what the screen should look like,
+and the two things it does to the fade both follow from that.
+
+It lifts a **ramp**. `screentoblack(name, steps)` walks a *named* palette to
+black, so the black belongs to that palette and cannot outlive it — and replacing
+the stage replaces the palette. Timelapse's photo album is the flat that proves
+it: `begininterface` is `screentoblack(curclutname, 10)`, `closestagefile()`,
+`openstagefile("P.Stg")`, `gotoflat(coder)`, `visualeffect(plain, 0)`, and the
+album (panel flat 3) is the one flat whose `openflatx` ends without a
+`blacktoscreen`. A level that survived the swap left its caption, its furniture
+and the photograph painted into a framebuffer nobody could see.
+
+It does **not** lift a black the script put up with `blackscreen()` or
+`clut("black")`. That one is the framebuffer, not a palette, and a stage swap
+draws nothing over it. The painting crate is the sighting
+([#308](https://github.com/dhobi/dreamrefactory/issues/308)): `binl.set`'s crate
+is `transtoflat("cargo.stg")`, and that arm ends on a **film** rather than a fade
+— `screentoblack`, `blackscreen`, swap, `sendtostage(opencargo())`,
+`setvisible(false)`, `playmovie("cratep.mov")`. Nothing between the swap and the
+clip says what the screen should be, because the clip *is* the reveal; lifting the
+black there painted the arriving flat, which is the open crate with the painting
+in it, and left it up for the whole 648 KB of `cratep.mov` — the end of the
+animation, before the animation. The trunk and the Enigma machine are the same
+three lines with their own clip.
+
+A held black is **armed**, not stuck: the swap sets the same `pendingReveal` flag
+a movie's end sets, so `tickFade` lifts it the moment the script falls quiet. So
+every arm of that switch is covered — the three that end on a clip by the clip,
+the darkroom's `mixclut("stage", "black", 0, 255, 245)` by the palette install
+(a clut on the surface being shown is its own reveal), the rest by their own
+`blacktoscreen` — and anything ending on none of them by the quiet.
+
+Where the black *came from* is `GameSession.fade.blanked`, set by `blackscreen` /
+`clut("black")` and cleared by either ramp and by the reveal.
+
 ## The overlay stack: `transtoflat` / `transfromflat`
 
 The inventory doesn't *replace* your screen, it **covers** it — and can cover

@@ -94,10 +94,43 @@ export class StageController {
      * the hold there lit the apartment up — through `bedsit1.set`'s own load and
      * on until the date caption started — which is exactly the flash #209 was
      * about, one stage swap further along.
+     *
+     * ## …unless the script BLANKED the screen (#308 again)
+     *
+     * A ramp is the only black this may lift, because a ramp is the only black
+     * that belongs to the palette being replaced. `blackscreen()` is the
+     * framebuffer — see GameSession.fade.blanked — and a stage swap draws
+     * nothing over it, so it stands.
+     *
+     * The painting crate is the sighting. `binl.set`'s crate is
+     * `transtoflat("cargo.stg")`, and that arm of the boot's `transtoflat` ends
+     * on a FILM rather than a fade: `screentoblack`, `blackscreen`,
+     * `closestagefile`, `openstagefile("cargo.stg")`, `sendtostage(opencargo())`,
+     * `setvisible(false)`, `playmovie("cratep.mov")`. Nothing between the swap
+     * and the clip says what the screen should look like — the clip IS the
+     * reveal — so lifting the black here painted the arriving flat, which is the
+     * open crate with the painting in it, and left it up for the whole 648 KB of
+     * `cratep.mov`: measured at 75 frames, one and a quarter seconds of the end
+     * of the animation before the animation. The trunk and the Enigma machine
+     * are the same three lines with their own clip.
+     *
+     * Held with `pendingReveal` rather than by leaving the level alone, and that
+     * is what makes it safe rather than a black nobody can lift: the flag already
+     * means "the screen is black and nobody has said what comes next", and
+     * `tickFade` lifts it the moment the script falls quiet. Every arm of that
+     * switch is then covered — the three that end on a clip by the clip, the
+     * darkroom's `mixclut("stage", "black", 0, 255, 245)` by the palette install
+     * (ScreenDirector.setClut reveals a clut on the surface being shown), the
+     * rest by their own `blacktoscreen` — and anything that ends on none of them
+     * by the quiet.
      */
-    this.session.fade.queue.length = 0;
-    this.session.fade.snapshot = null;
-    this.session.fade.level = 0;
+    if (this.session.fade.blanked && this.session.fade.level === 1) {
+      this.session.fade.pendingReveal = true;
+    } else {
+      this.session.fade.queue.length = 0;
+      this.session.fade.snapshot = null;
+      this.session.fade.level = 0;
+    }
     // the container the STAGE names, not container 1 — see StgFile.mainScriptLocation
     // (this line hardcoded the index, and did not even use the constant that stood
     // beside the reader for it — #325)

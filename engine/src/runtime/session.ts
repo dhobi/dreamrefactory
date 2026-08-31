@@ -407,6 +407,19 @@ export class GameSession {
      * once the script that played the movie has run out of things to say.
      */
     pendingReveal: false,
+    /**
+     * The black was BLANKED on, not ramped to — `blackscreen()` or
+     * `clut("black")` rather than `screentoblack`.
+     *
+     * The two are different things in TI.EXE and only look alike here. A ramp
+     * walks a NAMED palette to black, so it belongs to that palette and dies
+     * with it — which is why opening a stage file lifts one (StageController.
+     * openStageFile). `blackscreen` is the framebuffer: `0x43e650` clears it and
+     * nothing about swapping a stage draws over it again. Set by `blackNow`
+     * (builtins/scene.ts), cleared by either ramp and by the reveal in
+     * {@link tickFade}.
+     */
+    blanked: false,
   };
   /**
    * A reveal in progress: the screen the game is LEAVING, uncovered a step at a
@@ -609,6 +622,7 @@ export class GameSession {
       // bomb: blackscreen -> bombopen.mov -> setvisible(false), no fade follows).
       if (f.pendingReveal && !f.snapshot && !this.scriptBusy) {
         f.pendingReveal = false;
+        f.blanked = false;
         f.level = 0;
       }
       return;
@@ -1713,6 +1727,7 @@ export class GameSession {
     this.fade.queue.length = 0;
     this.fade.snapshot = null;
     this.fade.pendingReveal = false;
+    this.fade.blanked = false;
     this.fade.level = 1;
     // and the pointer comes BACK. The endgame's `hidecursor()` has no matching
     // `showcursor()` — the game is over — so a restart in the same page would
