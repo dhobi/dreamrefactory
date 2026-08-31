@@ -204,7 +204,15 @@ export const rung: Segment = {
     const held = (): string => String(p.session.interp.globals.get("handitem") ?? "").toLowerCase();
     const talking = (): boolean => !!p.session.puppet;
     const walking = (who: string): boolean => Number(ask(p, "iswalk", [who])) === 1;
-    const onStage = (): string => ask(p, "currentstage").toLowerCase();
+    /**
+     * Which stage FILE is open — `session.stageName`, not `currentstage()`.
+     *
+     * `currentstage()` answers the stage's OWN name, and Dust's stages carry one
+     * (#325): `hotplate.flt` is called `"hotplat.flt"`, so a probe asking
+     * `startsWith("hotplate")` of the builtin's answer said "not on the table"
+     * from the first tick and clicked nothing. The file is what this rung means.
+     */
+    const onStage = (): string => p.session.stageName.toLowerCase();
     /** the cell somebody is standing in, in the 256-unit grid their set is */
     const cellOf = (who: string): { x: number; z: number } => ({
       x: Math.floor(Number(ask(p, "actorxyz", [who, 1])) / 256),

@@ -30,8 +30,12 @@ import {
 /** container 0: the version tag, the palette, the shop name, the group table */
 const C0 = {
   version: 0x02,
-  mainScript: 20,
   palette: 36,
+  /** i32, immediately before the ref name — the offset TI.EXE's shop opener reads
+   *  it from (`mov ecx, [ebx+0x924]` at `0x41584b`); see the reader's own note. It
+   *  was 20 here as well, so a shop this builder wrote named its main script in a
+   *  field no engine reads and left the real one zero (#325). */
+  mainScript: 2340,
   refName: 2344,
   groupCount: 2360,
   groupTable: 2364,

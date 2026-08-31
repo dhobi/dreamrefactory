@@ -45,6 +45,39 @@ group table hovered, so every container it addresses lights up:
 
 <ByteMap map="cuff.shp" />
 
+### Container 0 names two things, and one of them was read at the wrong offset
+
+The header's tail is a **script ref immediately followed by the file's own name** —
+the same idiom a group container uses one level down (its script at +38, its name
+at +42):
+
+| Offset | Field |
+|-------:|-------|
+| `2340` | i32 container ref: the shop's **main script** |
+| `2344` | the shop's own name (`"house"`, `"inven"`) |
+| `2360` | i32 group count |
+| `2364` | the group table, 16 bytes per entry |
+
+The port read the main script from offset **20** instead, with `|| 1` on top —
+which is to say the container-1 convention hardcoded over a field that reads 0 in
+149 of the 207 shipped `.shp`/`.prp` and 1 in the other 58, i.e. never a pointer.
+That is the shape #291 charged us for in `set-v1.ts`. No file in the corpus
+exercises the difference (every shop's main script IS container 1), so both engines
+were read to settle it — TI.EXE's shop opener `0x415780`:
+
+```
+0x41583b: lea  ecx, [ebx + 0x928]   ; the ref name
+0x415843: call 0x435740             ;   -> shop->name
+0x41584b: mov  ecx, [ebx + 0x924]   ; the main script
+0x415853: mov  [esi + 8], ecx
+0x41586b: call 0x4385f0             ; ...and open that container
+```
+
+and DF.EXE's `0x4135c0` carries the same two instructions at the same two offsets,
+so the field is the same in DreamFactory 1 and 4 (#325). A **CST** header's tail is
+identical — `opencastfile`'s parser `0x40dac0` reads `[ebx+0x924]` and
+`[ebx+0x928]` the same way — which is what identified the cast's main script too.
+
 ## Transparency: the prop only paints part of the screen
 
 Unlike a SET background (which fills its rectangle), a prop is a **cut-out** —

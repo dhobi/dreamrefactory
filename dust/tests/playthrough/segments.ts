@@ -423,11 +423,10 @@ export const segment4: Segment = {
      * silently and looks exactly like a route that cannot find its way.
      */
     await p.settle("the fight");
-    const onStage = (): string =>
-      String(
-        (p.session.interp.builtins.get("currentstage") as ((i: unknown, a: unknown[]) => unknown) | undefined)
-          ?.(p.session.interp, []) ?? "",
-      ).toLowerCase();
+    // the stage FILE, not `currentstage()`: a Dust stage carries its own name and
+    // it is not always the filename (`hotplate.flt` is called `"hotplat.flt"`),
+    // and what these waits mean is "is that file still open" (#325)
+    const onStage = (): string => p.session.stageName.toLowerCase();
     await p.pump(() => !onStage().startsWith("fight"), "the fight flat to close", 200_000);
     await p.settle("the street");
 
@@ -622,11 +621,10 @@ export const segment6: Segment = {
      * the sugarcubes are on those same pictures, so clicking round the table is
      * both how you eat and how you leave.
      */
-    const onStage = (): string =>
-      String(
-        (p.session.interp.builtins.get("currentstage") as ((i: unknown, a: unknown[]) => unknown) | undefined)
-          ?.(p.session.interp, []) ?? "",
-      ).toLowerCase();
+    // the stage FILE, not `currentstage()`: a Dust stage carries its own name and
+    // it is not always the filename (`hotplate.flt` is called `"hotplat.flt"`),
+    // and what these waits mean is "is that file still open" (#325)
+    const onStage = (): string => p.session.stageName.toLowerCase();
     /*
      * Where to click is in the file, and `dust/tools/flatprops.ts` prints it:
      * every flat carries a click-logic container of named rectangles, each with

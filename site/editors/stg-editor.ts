@@ -25,7 +25,6 @@ import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import {
   FLAT_NAME_FIELD,
-  MAIN_SCRIPT_LOCATION,
   REGION_NAME_FIELD,
   StgFile,
   StgRegion,
@@ -360,7 +359,7 @@ function buildFlatFields(): void {
   // engine's own default is 512×384. The old constant put Titanic's numbers in a
   // sentence sitting directly above this file's own record saying otherwise.
   $("stageInfo").innerHTML = t("stages.stageInfo", {
-    loc: MAIN_SCRIPT_LOCATION,
+    loc: stg?.mainScriptLocation ?? 0,
     w: stg?.screen.width ?? 0,
     h: stg?.screen.height ?? 0,
   });
@@ -472,7 +471,7 @@ function buildScripts(): void {
   const s = stg!;
   const f = flat();
   const entries: { label: string; loc: number }[] = [
-    { label: t("stages.mainScriptLabel"), loc: MAIN_SCRIPT_LOCATION },
+    { label: t("stages.mainScriptLabel"), loc: s.mainScriptLocation },
   ];
   for (const other of s.flats) {
     if (other.locationScript) {

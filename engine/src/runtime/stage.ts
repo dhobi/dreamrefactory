@@ -98,7 +98,13 @@ export class StageController {
     this.session.fade.queue.length = 0;
     this.session.fade.snapshot = null;
     this.session.fade.level = 0;
-    this.session.stageScript = this.session.instanceFrom(stg.file.containers[1]?.data, key);
+    // the container the STAGE names, not container 1 — see StgFile.mainScriptLocation
+    // (this line hardcoded the index, and did not even use the constant that stood
+    // beside the reader for it — #325)
+    this.session.stageScript = this.session.instanceFrom(
+      stg.file.containers[stg.mainScriptLocation]?.data,
+      key,
+    );
     this.session.refreshFallbacks();
     for (const f of stg.flats) {
       const inst = this.session.instanceFrom(stg.file.containers[f.locationScript]?.data, f.name);
@@ -201,8 +207,8 @@ export class StageController {
 
   /**
    * The open stage's own name — `currentstage()`'s answer, and empty when there is
-   * no stage or the stage is a v1 `.FLT` with no such field (see
-   * {@link StgFile.refName}).
+   * no stage or the field was left blank (see {@link StgFile.refName}; both
+   * versions carry one).
    */
   stageRefName(): string {
     return this.stageFile?.refName ?? "";

@@ -74,13 +74,21 @@ export interface StgFile {
   version: DfVersion;
   paletteRaw: Uint8Array;
   /**
-   * The stage's OWN name, as `currentstage()` answers it — not its filename, and
-   * empty on a v1 `.FLT`, which has no such field.
+   * The stage's OWN name, as `currentstage()` answers it — not its filename.
    *
    * A 16-byte Pascal string abutting the flat count, and it went unnoticed for as
    * long as it did because on Titanic it is a copy of the filename: all fifteen of
    * its stages say `"main.stg"`, `"map.stg"`, `"bomb.stg"` and so on, so answering
    * `currentstage()` with the file was indistinguishable from answering with this.
+   *
+   * A v1 `.FLT` has one too, 20 bytes earlier at c0+2084 — this was read as "v1
+   * has no such field" until DF.EXE's own stage parser was read (`add ebx, 0x824`
+   * then the Pascal-string copy at `0x401146`). All 20 of Dust's carry a real one,
+   * and six of them do NOT match their filename: `CREDITS.FLT` says `"cred.flt"`,
+   * `INVEN/HIST.FLT` `"DBhist.flt"`, `INVEN/PAGES.FLT` `"TORN.flt"`,
+   * `SALGAMES.FLT` `"cardflats"`, `UNDER/SNAKE.FLT` `"puzzle"`, `NEW.FLT` `"new"`
+   * — so on Dust the distinction is visible in the data, the way Timelapse's
+   * `"interface"` made it visible on v4 (#325).
    *
    * Timelapse is where the two part company. Its 155 world stages all say
    * `"stagename"` — the authoring tool's unfilled default, left as shipped — and
@@ -120,16 +128,42 @@ export interface StgFile {
    * whose records carry neither — has any size at all.
    */
   screen: { width: number; height: number };
+  /**
+   * Container index of the stage's MAIN SCRIPT — the one that carries `openstage`
+   * and, in `MAIN.STG`, the shared library every room calls into.
+   *
+   * Read out of both engines, because the corpus cannot tell this field from any
+   * other constant: it holds 1 in all 388 shipped `.stg`/`.flt`. TI.EXE's stage
+   * parser `0x4451b0` takes it from c0+44, right after the screen size it checks
+   * either side of it:
+   *
+   *     0x4452b0: add  eax, 0x838              ; = c0 + 2104, the ref name
+   *     0x4452c0: mov  edx, [eax - 0x80c]      ; = c0 + 44, THIS
+   *     0x4452c8: mov  [edi + 0x18], edx       ;   -> stage->mainScript
+   *     0x4452ea: call 0x4385f0                ; ...and opens that container
+   *
+   * and DF.EXE's `0x4010a0` takes v1's from c0+32, in the same relation to the
+   * same neighbours (`mov eax, [eax+0x20]` at `0x401107`, between the two
+   * `cmp word [ebx+0x1c/0x1e]` screen checks).
+   *
+   * There was no field at all before that: `MAIN_SCRIPT_LOCATION = 1`, "by
+   * convention", and `runtime/stage.ts` did not even use the constant — it
+   * hardcoded `containers[1]`. SET has an offset for this and SHP has one, so STG
+   * having none was the gap, not the format's (#325).
+   */
+  mainScriptLocation: number;
   flats: StgFlat[];
 }
 
 /** container 0: the palette and the flat table, per version */
 const C0_BY_VERSION = {
-  4: { palette: 56, flatCount: 2120, flats: 2124, flatSize: 46, screen: 0x28, refName: 2104 },
-  // 2104 is the first FLAT RECORD on a v1 and not a name at all — the collision is
-  // a coincidence of two layouts, and reading a name there would report the low
-  // bytes of a container ref as one (measured: two NULs on all 20 of Dust's).
-  1: { palette: 36, flatCount: 2100, flats: 2104, flatSize: 28, screen: 0x1c, refName: -1 },
+  4: { palette: 56, flatCount: 2120, flats: 2124, flatSize: 46, screen: 0x28, mainScript: 44, refName: 2104 },
+  // v1's name is 20 bytes before v4's, which is the same shift the palette and the
+  // screen size take (36/56, 0x1c/0x28) — and 2104 is the first FLAT RECORD here,
+  // so reading a name there reported the low bytes of a container ref as one
+  // (measured: two NULs on all 20 of Dust's, which is how the field was mistaken
+  // for absent).
+  1: { palette: 36, flatCount: 2100, flats: 2104, flatSize: 28, screen: 0x1c, mainScript: 32, refName: 2084 },
 } as const;
 
 /** the flat record. `-1` is a field the version does not store. */
@@ -158,8 +192,6 @@ export const REGION_NAME_FIELD = 15;
 /** the stage's own name field, which abuts the flat count 16 bytes later */
 export const STAGE_NAME_FIELD = 15;
 
-/** the stage's main script, by convention (`gotospecial` lives in MAIN.STG's) */
-export const MAIN_SCRIPT_LOCATION = 1;
 
 /**
  * Decode a flat's click-logic container: a 1028-byte header, an int32 region
@@ -214,12 +246,13 @@ export function readStgFile(data: Uint8Array): StgFile {
   const screenH = v.getInt16(C0.screen + 2, true);
 
   const paletteRaw = c0.subarray(C0.palette, C0.palette + 256 * 8);
-  // the stage's own name, where the version has one — see StgFile.refName
+  // the stage's own name — see StgFile.refName
   let refName = "";
-  if (C0.refName >= 0 && c0.length > C0.refName) {
+  if (c0.length > C0.refName) {
     const n = Math.min(c0[C0.refName], STAGE_NAME_FIELD);
     refName = latin1(c0.subarray(C0.refName + 1, C0.refName + 1 + n));
   }
+  const mainScriptLocation = v.getInt32(C0.mainScript, true);
   const count = v.getInt32(C0.flatCount, true);
   const flats: StgFlat[] = [];
   let off = C0.flats;
@@ -244,7 +277,10 @@ export function readStgFile(data: Uint8Array): StgFile {
     });
     off += C0.flatSize;
   }
-  return { file, version, paletteRaw, refName, screen: { width: screenW, height: screenH }, flats };
+  return {
+    file, version, paletteRaw, refName, mainScriptLocation,
+    screen: { width: screenW, height: screenH }, flats,
+  };
 }
 
 // ---------------------------------------------------------------------------

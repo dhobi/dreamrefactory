@@ -84,8 +84,36 @@ export interface ShpFile {
 /** container 0: the file header — version tag, palette, and the group table */
 const C0 = {
   version: 0x02,
-  mainScript: 20,
   palette: 36,
+  /**
+   * The shop's MAIN SCRIPT container, i32 — and it sits immediately before the
+   * ref name, exactly as {@link GROUP.scriptLocation} sits immediately before
+   * {@link GROUP.name}. The same idiom, one level up.
+   *
+   * Read out of both engines rather than measured, because the corpus cannot tell
+   * this field from any other constant: it holds 1 in all 207 shipped
+   * `.shp`/`.prp` (seven Titanic editions, Dust, Timelapse). TI.EXE's shop opener
+   * `0x415780` does exactly two things with container 0 once the version passes:
+   *
+   *     0x41583b: lea ecx, [ebx + 0x928]   ; the ref name
+   *     0x415843: call 0x435740            ;   -> shop->name (esi+0xc)
+   *     0x41584b: mov ecx, [ebx + 0x924]   ; THIS
+   *     0x415853: mov [esi + 8], ecx       ;   -> shop->mainScript
+   *     0x41586b: call 0x4385f0            ; ...and opens that container
+   *
+   * and DF.EXE carries the same `mov ecx, [ebx+0x924]` beside the same `+0x928`,
+   * twice each, so the field is the same in DreamFactory 1 and 4.
+   *
+   * This used to read offset 20, with `|| 1` on top of it — the container-1
+   * convention hardcoded over a field that is 0 in 149 of the 207 and 1 in the
+   * other 58, i.e. never a pointer. That is the shape #291 charged us for in
+   * `set-v1.ts`: a constant read as a ref, working only because the authoring tool
+   * put the script in container 1, until `undertak.set` didn't. Nothing in the
+   * corpus exercises the difference — every shop's main script IS container 1 —
+   * so this is a correctness fix with no behaviour change, which is the only kind
+   * available before a counterexample turns up (#325).
+   */
+  mainScript: 2340,
   refName: 2344,
   groupCount: 2360,
   groupTable: 2364,
@@ -137,10 +165,7 @@ export function readShpFile(data: Uint8Array): ShpFile {
   }
 
   r.seek(C0.mainScript);
-  // Container 0 is always the header, so a stored 0 means "unset" — the main
-  // script lives in container 1 by convention (the stage shops wireless/trunk/
-  // cargo store 0; house/inven store 1 explicitly).
-  const mainScriptLocation = r.i32() || 1;
+  const mainScriptLocation = r.i32();
   const paletteRaw = c0.subarray(C0.palette, C0.palette + 256 * 8);
   r.seek(C0.refName);
   const refName = r.pstr();

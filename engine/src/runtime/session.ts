@@ -2580,7 +2580,8 @@ export class GameSession {
       return false;
     }
     this.actorRuntime.addCast(key, cst);
-    const main = this.instanceFrom(cst.file.containers[1]?.data, key);
+    // the container the CAST names, not container 1 — see CstFile.mainScriptLocation
+    const main = this.instanceFrom(cst.file.containers[cst.mainScriptLocation]?.data, key);
     this.castMains.set(key, main);
     for (const m of cst.members) {
       const inst = this.instanceFrom(cst.file.containers[m.scriptLocation]?.data, m.name);
