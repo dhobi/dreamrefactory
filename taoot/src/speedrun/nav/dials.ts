@@ -365,8 +365,15 @@ async function turnOnce(
 
 /** Push a lever to `want` — one move, since it goes where the cursor is. */
 export async function setLever(d: DialDriver, lever: DragLever, want: number): Promise<DialResult> {
-  const y = lever.top + want * lever.pitch;
-  if (y < lever.top || y > lever.bottom) {
+  // The MIDDLE of the band, not its first pixel. `calcswitchdeg` divides the
+  // clamped cursor Y by the pitch, so every Y in `[top + want*pitch, +pitch)`
+  // gives the same deg — and the first of them is the one pixel of the band that
+  // a rounding error can fall out of. Aiming at the centre spends the tolerance
+  // the control already has (#277); the driver's own aim is exact again
+  // (clientPointFor), so this is belt and braces rather than the fix.
+  const band = lever.top + want * lever.pitch;
+  const y = band + Math.floor((lever.pitch - 1) / 2);
+  if (band < lever.top || band > lever.bottom) {
     return { ok: false, deg: d.propDeg(lever.prop), reason: `deg ${want} is off ${lever.prop}'s travel` };
   }
   const trail: string[] = [];
@@ -386,6 +393,6 @@ export async function setLever(d: DialDriver, lever: DragLever, want: number): P
   return {
     ok: false,
     deg: d.propDeg(lever.prop),
-    reason: `${lever.prop} would not settle on ${want} at y=${y} in ${GRABS} pushes (${trail.join(", ")})`,
+    reason: `${lever.prop} would not settle on ${want} at y=${y} (band ${band}..${band + lever.pitch - 1}) in ${GRABS} pushes (${trail.join(", ")})`,
   };
 }

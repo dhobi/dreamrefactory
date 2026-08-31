@@ -62,6 +62,7 @@ import {
   QUEUE_EMPTY,
   QUIET,
   SHOWING,
+  clientPointFor,
   type Clock,
   type HoldOptions,
   type HoldResult,
@@ -146,15 +147,21 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
       for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(() => r(0)));
     }, CLICK_FRAMES);
 
-  const pagePoint = (x: number, y: number): Promise<Point> =>
-    page.evaluate(
-      ([px, py]: number[]) => {
-        const c = document.getElementById("screen") as HTMLCanvasElement;
-        const r = c.getBoundingClientRect();
-        return { x: r.left + ((px + 0.5) / c.width) * r.width, y: r.top + ((py + 0.5) / c.height) * r.height };
-      },
-      [x, y],
-    );
+  /**
+   * Canvas pixel -> the client point that lands on it. The arithmetic is
+   * {@link clientPointFor}'s and is shared with the page driver on purpose
+   * (#277): the page reads a coordinate back with `Math.floor`, so aiming at the
+   * half-pixel misses by one below a 2x scale. Only the RECT is measured in the
+   * page; the sum is done here so there is one copy of the rule.
+   */
+  const pagePoint = async (x: number, y: number): Promise<Point> => {
+    const m = await page.evaluate(() => {
+      const c = document.getElementById("screen") as HTMLCanvasElement;
+      const r = c.getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height, cw: c.width, ch: c.height };
+    });
+    return clientPointFor(x, y, m, { width: m.cw, height: m.ch });
+  };
 
   /** the wait half of every gesture, and the only thing a `wait:` option moves */
   const settle = async (mode: WaitMode, what: string, budget = timeout): Promise<void> => {

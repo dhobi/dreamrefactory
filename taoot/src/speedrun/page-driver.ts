@@ -40,6 +40,7 @@ import {
   KEY_SAFE,
   Paused,
   SHOWING,
+  clientPointFor,
   waitExpr,
   type Clock,
   type HammerOptions,
@@ -226,13 +227,8 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
   };
 
   /** canvas pixel (512x384) -> a client point, through main.ts's own mapping */
-  const clientPoint = (x: number, y: number): Point => {
-    const r = canvas.getBoundingClientRect();
-    return {
-      x: r.left + ((x + 0.5) / canvas.width) * r.width,
-      y: r.top + ((y + 0.5) / canvas.height) * r.height,
-    };
-  };
+  const clientPoint = (x: number, y: number): Point =>
+    clientPointFor(x, y, canvas.getBoundingClientRect(), canvas);
 
   const pointer = (type: string, at: Point, target: EventTarget = canvas): void => {
     target.dispatchEvent(
