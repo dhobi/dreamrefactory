@@ -710,18 +710,8 @@ export interface SaveGame {
   theme: SavedTheme | null;
   /** the raw file, retained so the writer can reproduce untouched containers. */
   raw: RawSaveFile;
-  /** index of the globals container within `raw.containers`. */
-  globalsIndex: number;
-  /** index of the inventory (all-props) container within `raw.containers`. */
-  inventoryIndex: number;
-  /** index of the actor container within `raw.containers`. */
-  actorsIndex: number;
-  /** index of the open-cast-file list container, or -1. */
-  castIndex: number;
-  /** index of the loops container (crickets/walks follow it), or -1. */
-  schedulerIndex: number;
-  /** index of the open-tracks list container (its 3 arrays per track follow), or -1. */
-  tracksIndex: number;
+  /** where each interesting container sits (see {@link saveIndex}). */
+  index: SaveIndex;
 }
 
 
@@ -730,17 +720,131 @@ export interface SaveGame {
 
 
 // ---------------------------------------------------------------------------
-// Container discovery — HEURISTICS. Which container holds what is not recorded
-// anywhere in the file; these locate the interesting ones by their content.
+// Container discovery — POSITIONAL, and self-validating.
 // ---------------------------------------------------------------------------
 
-/** Locate the globals container: the one holding the core progress variables. */
-function findGlobalsIndex(raw: RawSaveFile): number {
-  for (let i = 0; i < raw.containers.length; i++) {
-    const s = latin1(raw.containers[i].data.subarray(0, raw.containers[i].data.length));
-    if (s.includes("mission") && s.includes("playerdeath") && s.includes("clock")) return i;
+/** how many containers a save has that are not an open track's three */
+const FIXED_CONTAINERS = 7 + 5;
+
+/** where each interesting container sits — computed, never searched for */
+export interface SaveIndex {
+  /** 2 — the cast, n × 160 */
+  actors: number;
+  /** 3 — open cast files, n × 28 */
+  casts: number;
+  /** 4 — every loaded prop, n × 158 */
+  inventory: number;
+  /** 5 — open shop files, n × 28 */
+  shops: number;
+  /** 6 — open tracks, n × 40 descriptors */
+  tracks: number;
+  /** how many audio banks are open — container 6's own record count */
+  trackCount: number;
+  /** 7 + 3·{@link trackCount} — the script globals */
+  globals: number;
+  /** the globals' string pool */
+  pool: number;
+  /** the `makeloop` table */
+  loops: number;
+  /** the `makecricket` table */
+  crickets: number;
+  /** the `walkto` table; the waypoint payloads follow it */
+  walks: number;
+}
+
+/**
+ * Which container is which, from the file's own numbers.
+ *
+ * The writer is ONE routine (`0x413910`, called by `savegame`'s implementation at
+ * `0x4137a0`) emitting one fixed sequence, so nothing here is a search: containers
+ * 0-6 are always the manifest, the standpoint, the cast, the open casts, the
+ * inventory, the open shops and the open-tracks list; container 6's own length
+ * says how many tracks are open; three arrays per track follow; and the globals,
+ * the string pool and the three service tables follow those. See the container
+ * table in `docs/engine/formats/savegame.md`, which has said "every index here is
+ * computed and none is searched for" since the map was read out of the writer.
+ *
+ * It used to be six content probes — `mission`/`playerdeath`/`clock` for the
+ * globals, longest-prop-grid for the inventory, longest-actor-grid for the cast,
+ * an all-records-end-in-`.cst` test, the 1344/1184/1760 size triple, and a
+ * descriptor/array shape check for the tracks. Three reasons they are gone
+ * (#325): the reading already existed and was documented; they ran a second time
+ * inside {@link applyPatch}, so a mis-lock *wrote* to the wrong container; and
+ * one had already misfired — the globals blob is a grid of 32-byte variable nodes
+ * and 32 divides 160, so every fifth node sits one actor stride from the last and
+ * a pair of variable names 64 bytes apart decodes as an actor name/owner record.
+ * Three shipped saves (ENDGAME2 09/12/13) preferred it to their real cast
+ * container on record count alone, and that was patched with an exclusion list
+ * rather than by reading the index. The probes were also silently
+ * Titanic-specific: a Dust- or Timelapse-shaped save carries none of those three
+ * variable names and read as having no globals at all.
+ *
+ * VALIDATION, which is what makes this a reading rather than a second
+ * convention, and two-sided in both directions:
+ *
+ *  - the track count has to divide container 6 exactly, and each track's three
+ *    arrays have to be as long as the descriptor's own three counts say — so a
+ *    file with one track too many or too few fails on the array it lands on;
+ *  - the three service tables are fixed sizes (32 × 42, 16 × 74, 16 × 110), so
+ *    the tail of the map has to land on all three.
+ *
+ * Measured on all 654 shipped saves (109 × six editions): every one satisfies
+ * both, and the map agrees with what the six probes used to return in every case.
+ */
+export function saveIndex(raw: RawSaveFile): SaveIndex {
+  const n = raw.containers.length;
+  if (n < FIXED_CONTAINERS) {
+    throw new Error(`save: ${n} containers, fewer than the ${FIXED_CONTAINERS} every save has`);
   }
-  return -1;
+  const list = raw.containers[6].data;
+  if (list.length % TRACK_STRIDE) {
+    throw new Error(`save: open-tracks list is ${list.length} bytes, not a multiple of ${TRACK_STRIDE}`);
+  }
+  const trackCount = list.length / TRACK_STRIDE;
+  const globals = 7 + 3 * trackCount;
+  if (globals + 5 > n) {
+    throw new Error(`save: ${trackCount} open tracks needs ${globals + 5} containers, file has ${n}`);
+  }
+  // each track's registered / playing / looping arrays, against the descriptor's
+  // own counts — the check the old tracks probe used to search WITH
+  const dv = new DataView(list.buffer, list.byteOffset, list.byteLength);
+  for (let k = 0; k < trackCount; k++) {
+    for (const [j, off] of TRACK_COUNTS.entries()) {
+      const want = dv.getInt16(k * TRACK_STRIDE + off, true) * SOUND_STRIDE;
+      const got = raw.containers[7 + 3 * k + j].data.length;
+      if (got !== want) {
+        throw new Error(
+          `save: track ${k} array ${j} is ${got} bytes, descriptor says ${want}`,
+        );
+      }
+    }
+  }
+  // and the tail: three service tables of fixed size, in this order
+  for (const [at, size, what] of (
+    [
+      [globals + 2, LOOPS_SIZE, "loops"],
+      [globals + 3, CRICKETS_SIZE, "crickets"],
+      [globals + 4, WALKS_SIZE, "walks"],
+    ] as const
+  )) {
+    const got = raw.containers[at].data.length;
+    if (got !== size) {
+      throw new Error(`save: container ${at} should be the ${what} table (${size} bytes), got ${got}`);
+    }
+  }
+  return {
+    actors: 2,
+    casts: 3,
+    inventory: 4,
+    shops: 5,
+    tracks: 6,
+    trackCount,
+    globals,
+    pool: globals + 1,
+    loops: globals + 2,
+    crickets: globals + 3,
+    walks: globals + 4,
+  };
 }
 
 /** true for a plausible prop-record name (identifier at record+0). */
@@ -808,19 +912,6 @@ function walkPropGrid(d: Uint8Array): { off: number; prop: SavedProp }[] {
   return out;
 }
 
-/** Locate the inventory container: the one with the longest serialized prop grid. */
-function findInventoryIndex(raw: RawSaveFile): number {
-  let best = -1;
-  let bestN = 0;
-  for (let i = 0; i < raw.containers.length; i++) {
-    const n = walkPropGrid(raw.containers[i].data).length;
-    if (n > bestN) {
-      bestN = n;
-      best = i;
-    }
-  }
-  return bestN >= 10 ? best : -1;
-}
 
 /**
  * Decode the actor record whose NAME is at offset `o`, or null if it isn't one.
@@ -892,32 +983,6 @@ function walkActorGrid(d: Uint8Array): { off: number; actor: SavedActor }[] {
   return out;
 }
 
-/**
- * Locate the actor container: the longest 160-byte actor grid, excluding the
- * containers we have already identified as something else.
- *
- * The exclusions are not tidiness. The GLOBALS container is a grid of 32-byte
- * variable nodes, and 32 divides 160 exactly — so every fifth node sits one
- * actor stride from the last, and a pair of variable names 64 bytes apart reads
- * as a perfectly good name/owner record. Three of the shipped saves
- * (ENDGAME2 09/12/13) prefer it to their real actor container on record count
- * alone, and a patch would then write actor owners over variable names. The prop
- * container cannot collide (158 against 160 drifts two bytes a record and fails
- * on the second) but is excluded on the same principle.
- */
-function findActorsIndex(raw: RawSaveFile, exclude: number[]): number {
-  let best = -1;
-  let bestN = 0;
-  for (let i = 0; i < raw.containers.length; i++) {
-    if (exclude.includes(i)) continue;
-    const n = walkActorGrid(raw.containers[i].data).length;
-    if (n > bestN) {
-      bestN = n;
-      best = i;
-    }
-  }
-  return bestN >= 10 ? best : -1;
-}
 
 /**
  * The list of OPEN CAST FILES — one 28-byte record per `opencastfile` still in
@@ -940,27 +1005,6 @@ function findActorsIndex(raw: RawSaveFile, exclude: number[]): number {
 const CAST_STRIDE = 28;
 const CAST_NAME = 12;
 
-/**
- * Locate the open-cast-file list: a container that is a whole number of 28-byte
- * records and whose every record names a `.cst`.
- *
- * "Every record" is what makes it safe. Container 0 mentions the same file names
- * (it is the open-resource list, in a different shape) but its length is not a
- * multiple of the stride, and a partial match is rejected rather than trimmed.
- */
-function findCastIndex(raw: RawSaveFile): number {
-  for (let i = 0; i < raw.containers.length; i++) {
-    const d = raw.containers[i].data;
-    if (d.length < CAST_STRIDE || d.length % CAST_STRIDE !== 0) continue;
-    let ok = true;
-    for (let o = 0; o < d.length && ok; o += CAST_STRIDE) {
-      const name = pstrAtChecked(d, o + CAST_NAME, 1, 12);
-      ok = name !== null && /^[a-z0-9_]+\.cst$/i.test(name);
-    }
-    if (ok) return i;
-  }
-  return -1;
-}
 
 /** Decode the open-cast-file list (see {@link CAST_STRIDE}), lowercased. */
 function decodeCastFiles(d: Uint8Array): string[] {
@@ -1019,20 +1063,6 @@ const WALK_SLOT = {
  */
 const WALK_PATH_HANDLE = 0xa6b4b0;
 
-/** Locate the loops table: the 1344/1184/1760 container triple (present, in
- * this order, in every shipped save — the writer emits them unconditionally). */
-function findSchedulerIndex(raw: RawSaveFile): number {
-  for (let i = 0; i + 2 < raw.containers.length; i++) {
-    if (
-      raw.containers[i].data.length === LOOPS_SIZE &&
-      raw.containers[i + 1].data.length === CRICKETS_SIZE &&
-      raw.containers[i + 2].data.length === WALKS_SIZE
-    ) {
-      return i;
-    }
-  }
-  return -1;
-}
 
 /** Decode the live `makeloop` table (see {@link SavedLoop}). */
 function decodeLoops(d: Uint8Array): SavedLoop[] {
@@ -1212,32 +1242,6 @@ const TRACK_COUNTS = [4, 6, 8] as const;
 /** one 104-byte sound record: index u16, track# u16, volume u16, pan u16, name pstr@8. */
 const SOUND_STRIDE = 104;
 
-/**
- * Locate the open-tracks list: the container of 40-byte descriptors whose names
- * are audio banks and whose three per-descriptor counts match the sizes of the
- * 3×n containers that follow it. Positionally it is container 6 in every
- * shipped save, but the shape is cheap to verify so nothing relies on that.
- */
-function findTracksIndex(raw: RawSaveFile): number {
-  for (let i = 2; i < raw.containers.length; i++) {
-    const d = raw.containers[i].data;
-    if (!d.length || d.length % TRACK_STRIDE) continue;
-    const n = d.length / TRACK_STRIDE;
-    if (i + 3 * n >= raw.containers.length) continue;
-    let ok = true;
-    for (let k = 0; k < n && ok; k++) {
-      const name = pstrField(d, k * TRACK_STRIDE + TRACK_NAME_OFF).toLowerCase();
-      if (!/\.(trk|sfx)$/.test(name)) ok = false;
-      const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
-      for (const [j, off] of TRACK_COUNTS.entries()) {
-        const count = dv.getInt16(k * TRACK_STRIDE + off, true);
-        if (raw.containers[i + 1 + 3 * k + j].data.length !== count * SOUND_STRIDE) ok = false;
-      }
-    }
-    if (ok) return i;
-  }
-  return -1;
-}
 
 /**
  * Every open audio bank, in the order the list holds them.
@@ -1336,44 +1340,30 @@ export function parseSave(bytes: Uint8Array): SaveGame {
       ? new DataView(c1.buffer, c1.byteOffset, c1.byteLength).getUint32(C1_FRAME, true)
       : 0;
 
-  const globalsIndex = findGlobalsIndex(raw);
-  const inventoryIndex = findInventoryIndex(raw);
+  const index = saveIndex(raw);
+
   // the string pool is the container right after the globals container — the
   // original loader reads them as a pair (pool handle stored at blob+0x10).
-  const pool = globalsIndex >= 0 ? raw.containers[globalsIndex + 1]?.data : undefined;
-  const vars = globalsIndex >= 0 ? decodeVars(raw.containers[globalsIndex].data, pool) : [];
-  const inventory =
-    inventoryIndex >= 0
-      ? walkPropGrid(raw.containers[inventoryIndex].data).map((r) => r.prop)
-      : [];
-  // the pool is globalsIndex + 1 (see above), and it is a string blob a grid can
-  // just as easily lock onto
-  const actorsIndex = findActorsIndex(raw, [inventoryIndex, globalsIndex, globalsIndex + 1]);
-  const actors =
-    actorsIndex >= 0 ? walkActorGrid(raw.containers[actorsIndex].data).map((r) => r.actor) : [];
+  const vars = decodeVars(raw.containers[index.globals].data, raw.containers[index.pool].data);
+  const inventory = walkPropGrid(raw.containers[index.inventory].data).map((r) => r.prop);
+  const actors = walkActorGrid(raw.containers[index.actors].data).map((r) => r.actor);
 
   // which cast files were open — the crowd is instanced from them, and a load
   // runs no openset to reopen them (#186).
-  const castIndex = findCastIndex(raw);
-  const castFiles = castIndex >= 0 ? decodeCastFiles(raw.containers[castIndex].data) : [];
+  const castFiles = decodeCastFiles(raw.containers[index.casts].data);
 
   // the scheduler tables (loops/crickets/walks) and the open-track sound state —
   // what a load restores instead of re-running the room's openset (#143).
-  const schedulerIndex = findSchedulerIndex(raw);
-  const loops = schedulerIndex >= 0 ? decodeLoops(raw.containers[schedulerIndex].data) : [];
-  const crickets = schedulerIndex >= 0 ? decodeCrickets(raw.containers[schedulerIndex + 1].data) : [];
+  const loops = decodeLoops(raw.containers[index.loops].data);
+  const crickets = decodeCrickets(raw.containers[index.crickets].data);
   // the walks table, and the waypoint payloads that follow it — one per active
   // slot with a route, in slot order (see decodeWalks)
-  const walks =
-    schedulerIndex >= 0
-      ? decodeWalks(
-          raw.containers[schedulerIndex + 2].data,
-          raw.containers.slice(schedulerIndex + 3).map((c) => c.data),
-        )
-      : [];
-  const tracksIndex = findTracksIndex(raw);
-  const trackFiles = decodeTrackFiles(raw, tracksIndex);
-  const theme = decodeTheme(raw, tracksIndex);
+  const walks = decodeWalks(
+    raw.containers[index.walks].data,
+    raw.containers.slice(index.walks + 1).map((c) => c.data),
+  );
+  const trackFiles = decodeTrackFiles(raw, index.tracks);
+  const theme = decodeTheme(raw, index.tracks);
 
   // Split the decoded variables by DFValue type: 2/4 = numbers (inline), 3 =
   // strings (decoded via the pool). First-wins on duplicate names — the engine's
@@ -1409,9 +1399,7 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   return {
     title, disk, set, scene, view, stage, frame, clock, hallside, savedeck,
     vars, numGlobals, strGlobals, inventory, actors, castFiles, trackFiles,
-    loops, crickets, walks, theme, raw,
-    globalsIndex, inventoryIndex, actorsIndex, castIndex,
-    schedulerIndex, tracksIndex,
+    loops, crickets, walks, theme, raw, index,
   };
 }
 
@@ -1598,15 +1586,15 @@ export interface SavePatch {
  * `newVarRecord` does, and the suite asserting the two agree on all 109.
  */
 export function globalsCapacity(bytes: Uint8Array | RawSaveFile): { records: number; free: number } {
-  let raw: RawSaveFile;
+  let d: Uint8Array;
   try {
-    raw = bytes instanceof Uint8Array ? readSaveFile(bytes) : bytes;
+    const raw = bytes instanceof Uint8Array ? readSaveFile(bytes) : bytes;
+    d = raw.containers[saveIndex(raw).globals].data;
   } catch {
+    // a file that is not a save, or not shaped like one — the ranker asks this of
+    // whatever it is handed, so "no capacity" is the answer rather than a throw
     return { records: 0, free: 0 };
   }
-  const gi = findGlobalsIndex(raw);
-  if (gi < 0) return { records: 0, free: 0 };
-  const d = raw.containers[gi].data;
   return { records: recordOffsets(d).size, free: freeVarSlots(d) };
 }
 
@@ -1638,86 +1626,93 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
   // deep-copy so we can mutate container data without touching the base.
   const containers: Container[] = base.containers.map((c) => ({ id: c.id, data: c.data.slice() }));
   const raw: RawSaveFile = { header: base.header.slice(), table: base.table.slice(), containers };
+  /**
+   * Read once, up front, and valid for the whole patch — which is a property of
+   * the map rather than luck. Nothing below changes container 6 or the count of
+   * containers before the walks table; the scheduler block truncates the tail to
+   * re-emit the waypoint payloads, and every index it and the theme block use
+   * sits at or before that cut. (Six searches used to run here instead, on the
+   * copy, and a mis-lock would have WRITTEN to the wrong container — #325.)
+   */
+  const index = saveIndex(raw);
 
   // globals: overwrite each variable's DFValue (type at slot+24, value at
   // slot+26 — the slot recordOffsets maps to already accounts for the
   // name/value node pairing). Numbers are written inline and tagged type 4;
   // strings are written as a pool offset (type 3) when the value exists in the
   // base's string pool — see {@link SavePatch.strGlobals}.
-  const gi = findGlobalsIndex(raw);
-  if (gi >= 0) {
-    // fetched per write: appending a record can REPLACE the container's array
-    // (it grows), so a DataView taken once would end up writing into the old one
-    const view = (): DataView => {
-      const d = containers[gi].data;
-      return new DataView(d.buffer, d.byteOffset, d.byteLength);
-    };
-    const writeVar = (name: string, off: number): boolean => {
-      const num = patch.numGlobals.get(name);
-      if (num !== undefined) {
-        const dv = view();
-        // 32 bits, the node's full value field — see decodeVars. A word here
-        // clamped `paintframe`/`secframe`/`lastsail` to 32767 the moment a
-        // session ran past 27 minutes, which is where every frame stamp in a
-        // real playthrough lives (#221).
-        const v = Math.max(-0x80000000, Math.min(0x7fffffff, num | 0));
-        // Type 2 is BOOLEAN, not a second number tag, and TI.EXE's commands
-        // check: propvisible's argument fetch is `cmp word [esp], 2` and a 4
-        // there is the DosBox scripting error "Bad argument type." (found by
-        // bisecting a port save down to exactly ten 02->04 tag bytes). The
-        // port's interpreter carries booleans as 0/1 numbers, so the
-        // boolean-ness survives only in the base record's tag: a tag-2 record
-        // stays tag 2 while the value is still boolean-shaped, and a real
-        // number retypes it, the way an assignment in the original would.
-        const keepBool = dv.getUint16(off + NODE_TYPE, true) === DFVALUE_BOOLEAN && (v === 0 || v === 1);
-        dv.setInt32(off + NODE_VALUE, v, true);
-        if (!keepBool) dv.setUint16(off + NODE_TYPE, DFVALUE_NUMBER_WRITTEN, true);
-        return true;
-      }
-      const str = patch.strGlobals?.get(name);
-      if (str === undefined || !containers[gi + 1]) return false;
-      const p = poolIntern(containers[gi].data, containers[gi + 1], str);
-      if (p < 0) return false;
+  const gi = index.globals;
+  // fetched per write: appending a record can REPLACE the container's array
+  // (it grows), so a DataView taken once would end up writing into the old one
+  const view = (): DataView => {
+    const d = containers[gi].data;
+    return new DataView(d.buffer, d.byteOffset, d.byteLength);
+  };
+  const writeVar = (name: string, off: number): boolean => {
+    const num = patch.numGlobals.get(name);
+    if (num !== undefined) {
       const dv = view();
-      // the whole field, so a node that used to hold a wide number (a frame
-      // stamp) doesn't keep its high word behind the new pool offset — a
-      // string's high word is 0 in all 3380 shipped string records
-      dv.setUint32(off + NODE_VALUE, p, true);
-      dv.setUint16(off + NODE_TYPE, DFVALUE_STRING, true);
+      // 32 bits, the node's full value field — see decodeVars. A word here
+      // clamped `paintframe`/`secframe`/`lastsail` to 32767 the moment a
+      // session ran past 27 minutes, which is where every frame stamp in a
+      // real playthrough lives (#221).
+      const v = Math.max(-0x80000000, Math.min(0x7fffffff, num | 0));
+      // Type 2 is BOOLEAN, not a second number tag, and TI.EXE's commands
+      // check: propvisible's argument fetch is `cmp word [esp], 2` and a 4
+      // there is the DosBox scripting error "Bad argument type." (found by
+      // bisecting a port save down to exactly ten 02->04 tag bytes). The
+      // port's interpreter carries booleans as 0/1 numbers, so the
+      // boolean-ness survives only in the base record's tag: a tag-2 record
+      // stays tag 2 while the value is still boolean-shaped, and a real
+      // number retypes it, the way an assignment in the original would.
+      const keepBool = dv.getUint16(off + NODE_TYPE, true) === DFVALUE_BOOLEAN && (v === 0 || v === 1);
+      dv.setInt32(off + NODE_VALUE, v, true);
+      if (!keepBool) dv.setUint16(off + NODE_TYPE, DFVALUE_NUMBER_WRITTEN, true);
       return true;
-    };
-    const offs = recordOffsets(containers[gi].data);
-    // A record the patch was not asked about is not a loss: the base keeps its own
-    // value, which is the whole design. Reporting one as dropped was noise that
-    // grew with the base — a session holding 100 globals patched onto a 126-record
-    // save would have complained about the other 26, and with the wrong reason
-    // ("no pool room"). Only a global we were given and could not store is news.
-    const asked = (name: string) => patch.numGlobals.has(name) || !!patch.strGlobals?.has(name);
-    for (const [name, off] of offs) {
-      if (!asked(name)) continue;
-      if (!writeVar(name, off)) patch.onDrop?.(name, "no pool room");
     }
-    // and the globals the base has no record for at all — a save from before the
-    // engine had ever assigned them. Making the record is what stops `savedeck`
-    // and `hallside` being dropped; the base's free slots are finite, so the ones
-    // a load cannot do without go first (see {@link NEW_RECORD_PRIORITY}).
-    const wanted = [...patch.numGlobals.keys(), ...(patch.strGlobals?.keys() ?? [])].filter(
-      (n) => !offs.has(n),
-    );
-    wanted.sort((a, b) => {
-      const ra = NEW_RECORD_PRIORITY.indexOf(a);
-      const rb = NEW_RECORD_PRIORITY.indexOf(b);
-      return (ra < 0 ? NEW_RECORD_PRIORITY.length : ra) - (rb < 0 ? NEW_RECORD_PRIORITY.length : rb);
-    });
-    for (const name of wanted) {
-      const slot = newVarRecord(containers[gi], name);
-      if (slot < 0) {
-        patch.onDrop?.(name, "the base save has no record and no free slot for it");
-        continue;
-      }
-      offs.set(name, slot);
-      if (!writeVar(name, slot)) patch.onDrop?.(name, "no pool room");
+    const str = patch.strGlobals?.get(name);
+    if (str === undefined || !containers[gi + 1]) return false;
+    const p = poolIntern(containers[gi].data, containers[gi + 1], str);
+    if (p < 0) return false;
+    const dv = view();
+    // the whole field, so a node that used to hold a wide number (a frame
+    // stamp) doesn't keep its high word behind the new pool offset — a
+    // string's high word is 0 in all 3380 shipped string records
+    dv.setUint32(off + NODE_VALUE, p, true);
+    dv.setUint16(off + NODE_TYPE, DFVALUE_STRING, true);
+    return true;
+  };
+  const offs = recordOffsets(containers[gi].data);
+  // A record the patch was not asked about is not a loss: the base keeps its own
+  // value, which is the whole design. Reporting one as dropped was noise that
+  // grew with the base — a session holding 100 globals patched onto a 126-record
+  // save would have complained about the other 26, and with the wrong reason
+  // ("no pool room"). Only a global we were given and could not store is news.
+  const asked = (name: string) => patch.numGlobals.has(name) || !!patch.strGlobals?.has(name);
+  for (const [name, off] of offs) {
+    if (!asked(name)) continue;
+    if (!writeVar(name, off)) patch.onDrop?.(name, "no pool room");
+  }
+  // and the globals the base has no record for at all — a save from before the
+  // engine had ever assigned them. Making the record is what stops `savedeck`
+  // and `hallside` being dropped; the base's free slots are finite, so the ones
+  // a load cannot do without go first (see {@link NEW_RECORD_PRIORITY}).
+  const wanted = [...patch.numGlobals.keys(), ...(patch.strGlobals?.keys() ?? [])].filter(
+    (n) => !offs.has(n),
+  );
+  wanted.sort((a, b) => {
+    const ra = NEW_RECORD_PRIORITY.indexOf(a);
+    const rb = NEW_RECORD_PRIORITY.indexOf(b);
+    return (ra < 0 ? NEW_RECORD_PRIORITY.length : ra) - (rb < 0 ? NEW_RECORD_PRIORITY.length : rb);
+  });
+  for (const name of wanted) {
+    const slot = newVarRecord(containers[gi], name);
+    if (slot < 0) {
+      patch.onDrop?.(name, "the base save has no record and no free slot for it");
+      continue;
     }
+    offs.set(name, slot);
+    if (!writeVar(name, slot)) patch.onDrop?.(name, "no pool room");
   }
 
   // container 1: set/scene/view live in 16-byte fields at fixed offsets.
@@ -1802,255 +1797,247 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
   // there preserves the 158-byte grid (the value field trailing owner is ignored
   // on read — see docs/engine/formats/savegame.md).
   if (patch.inventory?.length) {
-    const ii = findInventoryIndex(raw);
-    if (ii >= 0) {
-      const d = containers[ii].data;
-      const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
-      const offs = new Map(walkPropGrid(d).map((r) => [r.prop.name, r.off]));
-      for (const sp of patch.inventory) {
-        const off = offs.get(sp.name.toLowerCase());
-        // A prop the base has no record for. The original writes one record per
-        // prop it has LOADED, so a save taken with a room's own shop open holds
-        // more than the 72 boot-shop ones — and a container cannot be grown here.
-        // Not a loss worth reporting: the caller offers every loaded prop and the
-        // extras are per-room furniture the arriving room rebuilds anyway.
-        if (off === undefined) continue;
-        if (sp.view !== undefined) writePstrField(d, off + PROP_VIEW_OFF, sp.view);
-        writePstrField(d, off + PROP_OWNER_OFF, sp.owner);
-        // the numeric half — where and how the prop draws. Bounds-checked like
-        // the reader: the fields sit BEFORE the name and the first record's
-        // begin at offset 0 of the container.
-        const put = (at: number, value: number | undefined, wide = false): void => {
-          if (value === undefined) return;
-          const p = off + at;
-          if (p < 0 || p + (wide ? 4 : 2) > d.length) return;
-          if (wide) dv.setInt32(p, value | 0, true);
-          else dv.setInt16(p, clampI16(value), true);
-        };
-        put(PROP_FIELDS.visible, sp.visible === undefined ? undefined : sp.visible ? 1 : 0);
-        put(PROP_FIELDS.is3d, sp.is3d === undefined ? undefined : sp.is3d ? 1 : 0);
-        put(PROP_FIELDS.x, sp.x);
-        put(PROP_FIELDS.y, sp.y);
-        put(PROP_FIELDS.deg, sp.deg);
-        put(PROP_FIELDS.dist, sp.dist);
-        put(PROP_FIELDS.scale, sp.scale);
-        // propvalue is the record's one u32 (its getter reads a dword)
-        put(PROP_FIELDS.value, sp.value, true);
-        put(PROP_FIELDS.zclip, sp.zclip);
-      }
+    const ii = index.inventory;
+    const d = containers[ii].data;
+    const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+    const offs = new Map(walkPropGrid(d).map((r) => [r.prop.name, r.off]));
+    for (const sp of patch.inventory) {
+      const off = offs.get(sp.name.toLowerCase());
+      // A prop the base has no record for. The original writes one record per
+      // prop it has LOADED, so a save taken with a room's own shop open holds
+      // more than the 72 boot-shop ones — and a container cannot be grown here.
+      // Not a loss worth reporting: the caller offers every loaded prop and the
+      // extras are per-room furniture the arriving room rebuilds anyway.
+      if (off === undefined) continue;
+      if (sp.view !== undefined) writePstrField(d, off + PROP_VIEW_OFF, sp.view);
+      writePstrField(d, off + PROP_OWNER_OFF, sp.owner);
+      // the numeric half — where and how the prop draws. Bounds-checked like
+      // the reader: the fields sit BEFORE the name and the first record's
+      // begin at offset 0 of the container.
+      const put = (at: number, value: number | undefined, wide = false): void => {
+        if (value === undefined) return;
+        const p = off + at;
+        if (p < 0 || p + (wide ? 4 : 2) > d.length) return;
+        if (wide) dv.setInt32(p, value | 0, true);
+        else dv.setInt16(p, clampI16(value), true);
+      };
+      put(PROP_FIELDS.visible, sp.visible === undefined ? undefined : sp.visible ? 1 : 0);
+      put(PROP_FIELDS.is3d, sp.is3d === undefined ? undefined : sp.is3d ? 1 : 0);
+      put(PROP_FIELDS.x, sp.x);
+      put(PROP_FIELDS.y, sp.y);
+      put(PROP_FIELDS.deg, sp.deg);
+      put(PROP_FIELDS.dist, sp.dist);
+      put(PROP_FIELDS.scale, sp.scale);
+      // propvalue is the record's one u32 (its getter reads a dword)
+      put(PROP_FIELDS.value, sp.value, true);
+      put(PROP_FIELDS.zclip, sp.zclip);
     }
   }
 
   // actors: the same in-place write — the memory of the player (owner, conversation
   // count) and, when the caller supplies one, the whole placement half.
   if (patch.actors?.length) {
-    const ai = findActorsIndex(raw, [findInventoryIndex(raw), gi, gi + 1]);
-    if (ai >= 0) {
-      /** a field at `at` bytes from the name; false when it falls outside the slice.
-       *  Every placement offset is NEGATIVE, so the lower bound matters as much as
-       *  the upper one — a container's first record can begin before the slice.
-       *  The view is fetched per write: appending a record replaces the array. */
-      const put = (at: number, value: number, wide = false): boolean => {
-        const d = containers[ai].data;
-        if (at < 0 || at + (wide ? 4 : 2) > d.length) return false;
-        const view = new DataView(d.buffer, d.byteOffset, d.byteLength);
-        if (wide) view.setInt32(at, value | 0, true);
-        else view.setInt16(at, value, true);
-        return true;
-      };
-      /**
-       * Grow the actor container by one blank record and answer its NAME offset.
-       *
-       * Growable where the globals blob is not: the actor container has no
-       * self-declared capacity — TI.EXE's save writer dumps the live actor-list
-       * handle and its loader (0x4143d2) stores the read container's handle
-       * straight back into the list global, so the record count is implicit in
-       * the container's size. The grid also starts at offset 0 in all 109
-       * shipped saves, so "the end of the last record" is just the length.
-       * This is what lets a save carry the crowd (`setupgroup`'s per-room
-       * extras), which a load must place from the file now that it no longer
-       * re-runs the room's own scripts (#143).
-       */
-      const append = (): number => {
-        const d = containers[ai].data;
-        const grid = walkActorGrid(d);
-        // the last record ends 80 bytes past its name (name at +0x50 of 160);
-        // records are back to back from 0, so that must be the length — refuse
-        // a container whose grid doesn't end there (unknown trailing bytes are
-        // not ours to bury)
-        const end = grid.length ? grid[grid.length - 1].off - ACTOR_RECORD_OFF : 0;
-        if (end !== d.length) return -1;
-        const grown = new Uint8Array(d.length + ACTOR_STRIDE);
-        grown.set(d, 0);
-        containers[ai].data = grown;
-        return d.length - ACTOR_RECORD_OFF; // the new record's NAME offset
-      };
-      const offs = new Map(walkActorGrid(containers[ai].data).map((r) => [r.actor.name, r.off]));
-      for (const sa of patch.actors) {
-        let off = offs.get(sa.name.toLowerCase());
-        if (off === undefined) {
-          // No record in the base — the crowd extras, which `setupgroup` makes
-          // per room (the shipped saves hold 25 to 64 records for exactly this
-          // reason). Append one; a load places the crowd from the file now.
-          // Only a PLACED actor is worth a record: an unplaced one carries
-          // nothing a fresh instance doesn't.
-          if (!sa.placement?.set && sa.owner === "none" && !sa.value) continue;
-          const at = sa.name.length <= 15 && isPropName(sa.name) ? append() : -1;
-          if (at < 0) {
-            patch.onDrop?.(`actor(${sa.name})`, "no record in the base save and none appendable");
-            continue;
-          }
-          writePstrField(containers[ai].data, at, sa.name);
-          offs.set(sa.name.toLowerCase(), at);
-          off = at;
-        }
-        const d = containers[ai].data;
-        // the field is a length byte + 15 characters, and the longest owner any
-        // script assigns is "readhackerclue" at 14 — but a truncated owner would
-        // be a DIFFERENT rung of somebody's ladder, so refuse rather than trim
-        if (sa.owner.length > 15) {
-          patch.onDrop?.(`actorowner(${sa.name})`, `"${sa.owner}" is longer than the record's 15 characters`);
+    const ai = index.actors;
+    /** a field at `at` bytes from the name; false when it falls outside the slice.
+     *  Every placement offset is NEGATIVE, so the lower bound matters as much as
+     *  the upper one — a container's first record can begin before the slice.
+     *  The view is fetched per write: appending a record replaces the array. */
+    const put = (at: number, value: number, wide = false): boolean => {
+      const d = containers[ai].data;
+      if (at < 0 || at + (wide ? 4 : 2) > d.length) return false;
+      const view = new DataView(d.buffer, d.byteOffset, d.byteLength);
+      if (wide) view.setInt32(at, value | 0, true);
+      else view.setInt16(at, value, true);
+      return true;
+    };
+    /**
+     * Grow the actor container by one blank record and answer its NAME offset.
+     *
+     * Growable where the globals blob is not: the actor container has no
+     * self-declared capacity — TI.EXE's save writer dumps the live actor-list
+     * handle and its loader (0x4143d2) stores the read container's handle
+     * straight back into the list global, so the record count is implicit in
+     * the container's size. The grid also starts at offset 0 in all 109
+     * shipped saves, so "the end of the last record" is just the length.
+     * This is what lets a save carry the crowd (`setupgroup`'s per-room
+     * extras), which a load must place from the file now that it no longer
+     * re-runs the room's own scripts (#143).
+     */
+    const append = (): number => {
+      const d = containers[ai].data;
+      const grid = walkActorGrid(d);
+      // the last record ends 80 bytes past its name (name at +0x50 of 160);
+      // records are back to back from 0, so that must be the length — refuse
+      // a container whose grid doesn't end there (unknown trailing bytes are
+      // not ours to bury)
+      const end = grid.length ? grid[grid.length - 1].off - ACTOR_RECORD_OFF : 0;
+      if (end !== d.length) return -1;
+      const grown = new Uint8Array(d.length + ACTOR_STRIDE);
+      grown.set(d, 0);
+      containers[ai].data = grown;
+      return d.length - ACTOR_RECORD_OFF; // the new record's NAME offset
+    };
+    const offs = new Map(walkActorGrid(containers[ai].data).map((r) => [r.actor.name, r.off]));
+    for (const sa of patch.actors) {
+      let off = offs.get(sa.name.toLowerCase());
+      if (off === undefined) {
+        // No record in the base — the crowd extras, which `setupgroup` makes
+        // per room (the shipped saves hold 25 to 64 records for exactly this
+        // reason). Append one; a load places the crowd from the file now.
+        // Only a PLACED actor is worth a record: an unplaced one carries
+        // nothing a fresh instance doesn't.
+        if (!sa.placement?.set && sa.owner === "none" && !sa.value) continue;
+        const at = sa.name.length <= 15 && isPropName(sa.name) ? append() : -1;
+        if (at < 0) {
+          patch.onDrop?.(`actor(${sa.name})`, "no record in the base save and none appendable");
           continue;
         }
-        writePstrField(d, off + ACTOR_OWNER_OFF, sa.owner);
-        put(off + ACTOR_VALUE_OFF, Math.max(0, Math.trunc(sa.value)), true);
-        const p = sa.placement;
-        if (!p) continue;
-        // A name that will not fit is refused rather than trimmed, for the same
-        // reason as the owner: half a set name is a different room.
-        const tooLong = ([["set", p.set], ["star", p.star], ["pose", p.pose]] as const)
-          .find(([, v]) => v.length > 15);
-        if (tooLong) {
-          patch.onDrop?.(`actor${tooLong[0]}(${sa.name})`, `"${tooLong[1]}" is longer than the record's 15 characters`);
-          continue;
-        }
-        writePstrField(d, off + ACTOR_SET_OFF, p.set);
-        writePstrField(d, off + ACTOR_STAR_OFF, p.star);
-        writePstrField(d, off + ACTOR_POSE_OFF, p.pose);
-        put(off + ACTOR_PLACEMENT.visible, p.visible ? 1 : 0);
-        put(off + ACTOR_PLACEMENT.deg, p.deg & 0xff);
-        // the coordinate fields are i16 in the original and the world is inside
-        // that range (measured over the corpus: x 0..18414, y 0..16336,
-        // z -2441..6800), but a clamp is cheaper than a wrapped position
-        put(off + ACTOR_PLACEMENT.x, clampI16(p.x));
-        put(off + ACTOR_PLACEMENT.y, clampI16(p.y));
-        put(off + ACTOR_PLACEMENT.z, clampI16(p.z));
-        put(off + ACTOR_PLACEMENT.speed, clampI16(p.speed));
-        put(off + ACTOR_PLACEMENT.turn, clampI16(p.turn));
-        put(off + ACTOR_PLACEMENT.scale, clampI16(p.scale));
-        put(off + ACTOR_PLACEMENT.zclip, clampI16(p.zclip));
+        writePstrField(containers[ai].data, at, sa.name);
+        offs.set(sa.name.toLowerCase(), at);
+        off = at;
       }
+      const d = containers[ai].data;
+      // the field is a length byte + 15 characters, and the longest owner any
+      // script assigns is "readhackerclue" at 14 — but a truncated owner would
+      // be a DIFFERENT rung of somebody's ladder, so refuse rather than trim
+      if (sa.owner.length > 15) {
+        patch.onDrop?.(`actorowner(${sa.name})`, `"${sa.owner}" is longer than the record's 15 characters`);
+        continue;
+      }
+      writePstrField(d, off + ACTOR_OWNER_OFF, sa.owner);
+      put(off + ACTOR_VALUE_OFF, Math.max(0, Math.trunc(sa.value)), true);
+      const p = sa.placement;
+      if (!p) continue;
+      // A name that will not fit is refused rather than trimmed, for the same
+      // reason as the owner: half a set name is a different room.
+      const tooLong = ([["set", p.set], ["star", p.star], ["pose", p.pose]] as const)
+        .find(([, v]) => v.length > 15);
+      if (tooLong) {
+        patch.onDrop?.(`actor${tooLong[0]}(${sa.name})`, `"${tooLong[1]}" is longer than the record's 15 characters`);
+        continue;
+      }
+      writePstrField(d, off + ACTOR_SET_OFF, p.set);
+      writePstrField(d, off + ACTOR_STAR_OFF, p.star);
+      writePstrField(d, off + ACTOR_POSE_OFF, p.pose);
+      put(off + ACTOR_PLACEMENT.visible, p.visible ? 1 : 0);
+      put(off + ACTOR_PLACEMENT.deg, p.deg & 0xff);
+      // the coordinate fields are i16 in the original and the world is inside
+      // that range (measured over the corpus: x 0..18414, y 0..16336,
+      // z -2441..6800), but a clamp is cheaper than a wrapped position
+      put(off + ACTOR_PLACEMENT.x, clampI16(p.x));
+      put(off + ACTOR_PLACEMENT.y, clampI16(p.y));
+      put(off + ACTOR_PLACEMENT.z, clampI16(p.z));
+      put(off + ACTOR_PLACEMENT.speed, clampI16(p.speed));
+      put(off + ACTOR_PLACEMENT.turn, clampI16(p.turn));
+      put(off + ACTOR_PLACEMENT.scale, clampI16(p.scale));
+      put(off + ACTOR_PLACEMENT.zclip, clampI16(p.zclip));
     }
   }
 
   // the scheduler: the three fixed-size service tables, written whole.
   if (patch.scheduler) {
-    const si = findSchedulerIndex(raw);
-    if (si < 0) {
-      patch.onDrop?.("scheduler", "the base save has no loops/crickets/walks tables");
-    } else {
-      const loops = new Uint8Array(LOOPS_SIZE);
-      const ldv = new DataView(loops.buffer);
-      for (const [i, l] of patch.scheduler.loops.slice(0, 32).entries()) {
-        const kind = LOOP_KINDS.indexOf(l.kind as (typeof LOOP_KINDS)[number]);
-        if (kind <= 0 || l.name.length > 15 || l.handler.length > 15) {
-          patch.onDrop?.(`makeloop(${l.kind}, ${l.name})`, "kind or name not representable");
-          continue;
-        }
-        const s = i * 42;
-        ldv.setUint16(s, 1, true); // active; +2 stays 0 (not mid-service)
-        ldv.setUint16(s + 4, kind, true);
-        ldv.setUint32(s + 6, Math.max(1, l.period | 0), true);
-        writePstrField(loops, s + 10, l.name);
-        writePstrField(loops, s + 26, l.handler);
+    const si = index.loops;
+    const loops = new Uint8Array(LOOPS_SIZE);
+    const ldv = new DataView(loops.buffer);
+    for (const [i, l] of patch.scheduler.loops.slice(0, 32).entries()) {
+      const kind = LOOP_KINDS.indexOf(l.kind as (typeof LOOP_KINDS)[number]);
+      if (kind <= 0 || l.name.length > 15 || l.handler.length > 15) {
+        patch.onDrop?.(`makeloop(${l.kind}, ${l.name})`, "kind or name not representable");
+        continue;
       }
-      containers[si].data = loops;
-      const crickets = new Uint8Array(CRICKETS_SIZE);
-      const cdv = new DataView(crickets.buffer);
-      for (const [i, c] of patch.scheduler.crickets.slice(0, 16).entries()) {
-        if (c.name.length > 15 || c.set.length > 15) {
-          patch.onDrop?.(`makecricket(${c.name})`, "name not representable");
-          continue;
-        }
-        const s = i * 74;
-        cdv.setUint16(s, 1, true);
-        cdv.setInt16(s + 4, clampI16(c.x), true);
-        cdv.setInt16(s + 6, clampI16(c.y), true);
-        cdv.setUint32(s + 8, Math.max(0, c.radius | 0), true);
-        cdv.setUint32(s + 0x0c, Math.max(0, c.base | 0), true);
-        cdv.setInt32(s + 0x10, c.jitter | 0, true);
-        cdv.setUint32(s + 0x14, Math.max(0, c.next | 0), true);
-        // +0x18.. (listener position, distance, pan) are the service pass's own
-        // working state, recomputed when the cricket next fires; pan centred.
-        cdv.setUint16(s + 0x20, 128, true);
-        writePstrField(crickets, s + 0x2a, c.set);
-        writePstrField(crickets, s + 0x3a, c.name);
-      }
-      containers[si + 1].data = crickets;
-      const walks = new Uint8Array(WALKS_SIZE);
-      const wdv = new DataView(walks.buffer);
-      const payloads: Uint8Array[] = [];
-      let slot = 0;
-      for (const w of patch.scheduler.walks ?? []) {
-        // the table is 16 fixed slots, and a walk past them is LOST, not queued —
-        // say so, the way every other unwritable item here is said (#191 review:
-        // the corpus itself shows 12 concurrent turns in one save, so a crowded
-        // room can genuinely reach the wall)
-        if (slot >= 16) {
-          patch.onDrop?.(`walk(${w.actor})`, "the walks table holds 16 slots");
-          continue;
-        }
-        if (w.actor.length > 15 || w.star.length > 15) {
-          patch.onDrop?.(`walk(${w.actor})`, "actor or arrival star not representable");
-          continue;
-        }
-        // a route without its waypoints is a slot claiming the path mover with
-        // nothing behind it — a shape no shipped save has (hasPayload ⇔ type 3
-        // across the corpus) and neither loader is specified for. The caller's
-        // hasPayload is not consulted: it is the DECODER's report, and this is
-        // the one place the rule is enforced (#191 review).
-        const path = w.type === 3 ? w.path : undefined;
-        if (w.type === 3 && (!path || path.length < 2)) {
-          patch.onDrop?.(`walk(${w.actor})`, "a route with no waypoints");
-          continue;
-        }
-        const s = slot++ * 110;
-        wdv.setUint16(s + WALK_SLOT.active, 1, true);
-        wdv.setUint16(s + WALK_SLOT.paused, w.paused ? 1 : 0, true);
-        wdv.setInt16(s + WALK_SLOT.type, w.type, true);
-        // the facing TARGET, and -1 once the turn is done — which is what all
-        // three shipped routes carry, and what the loader reads back as "no turn"
-        wdv.setInt16(s + WALK_SLOT.turnTo, w.turnTo, true);
-        wdv.setInt16(s + WALK_SLOT.deg, w.deg & 0xff, true);
-        wdv.setInt16(s + WALK_SLOT.x, clampI16(w.startX), true);
-        wdv.setInt16(s + WALK_SLOT.y, clampI16(w.startY), true);
-        wdv.setInt16(s + WALK_SLOT.z, clampI16(w.startZ), true);
-        wdv.setInt32(s + WALK_SLOT.progress, w.progress | 0, true);
-        // the deltas are SUBTRACTED — `pos = start - delta * progress / dist`
-        // (see {@link SavedWalk}) — so what goes in the record is start - dest,
-        // and a caller holding dest - start has the sign the mover does not
-        wdv.setInt32(s + WALK_SLOT.dx, (w.startX - w.destX) | 0, true);
-        wdv.setInt32(s + WALK_SLOT.dy, (w.startY - w.destY) | 0, true);
-        wdv.setInt32(s + WALK_SLOT.dz, (w.startZ - w.destZ) | 0, true);
-        wdv.setInt32(s + WALK_SLOT.dist, w.dist | 0, true);
-        writePstrField(walks, s + WALK_SLOT.actor, w.actor);
-        writePstrField(walks, s + WALK_SLOT.star, w.star);
-        // a route's waypoints go in a container of their own, and +0x12 says so
-        if (path) {
-          wdv.setUint32(s + WALK_SLOT.payload, WALK_PATH_HANDLE, true);
-          payloads.push(encodeWalkPath(path));
-        }
-      }
-      containers[si + 2].data = walks;
-      // The payloads follow the walks table, one per type-3 slot in slot order —
-      // and the base's own payloads go UNCONDITIONALLY, walks passed or not:
-      // they belong to the base's moment (dropping them is the whole reason the
-      // table used to be zeroed, see {@link SavePatch.scheduler}), the zeroed
-      // table references none, and one behaviour means `walks: []` and an
-      // omitted `walks` produce the same bytes (#191 review).
-      containers.length = si + 3;
-      for (const p of payloads) containers.push({ id: containers.length, data: p });
+      const s = i * 42;
+      ldv.setUint16(s, 1, true); // active; +2 stays 0 (not mid-service)
+      ldv.setUint16(s + 4, kind, true);
+      ldv.setUint32(s + 6, Math.max(1, l.period | 0), true);
+      writePstrField(loops, s + 10, l.name);
+      writePstrField(loops, s + 26, l.handler);
     }
+    containers[si].data = loops;
+    const crickets = new Uint8Array(CRICKETS_SIZE);
+    const cdv = new DataView(crickets.buffer);
+    for (const [i, c] of patch.scheduler.crickets.slice(0, 16).entries()) {
+      if (c.name.length > 15 || c.set.length > 15) {
+        patch.onDrop?.(`makecricket(${c.name})`, "name not representable");
+        continue;
+      }
+      const s = i * 74;
+      cdv.setUint16(s, 1, true);
+      cdv.setInt16(s + 4, clampI16(c.x), true);
+      cdv.setInt16(s + 6, clampI16(c.y), true);
+      cdv.setUint32(s + 8, Math.max(0, c.radius | 0), true);
+      cdv.setUint32(s + 0x0c, Math.max(0, c.base | 0), true);
+      cdv.setInt32(s + 0x10, c.jitter | 0, true);
+      cdv.setUint32(s + 0x14, Math.max(0, c.next | 0), true);
+      // +0x18.. (listener position, distance, pan) are the service pass's own
+      // working state, recomputed when the cricket next fires; pan centred.
+      cdv.setUint16(s + 0x20, 128, true);
+      writePstrField(crickets, s + 0x2a, c.set);
+      writePstrField(crickets, s + 0x3a, c.name);
+    }
+    containers[si + 1].data = crickets;
+    const walks = new Uint8Array(WALKS_SIZE);
+    const wdv = new DataView(walks.buffer);
+    const payloads: Uint8Array[] = [];
+    let slot = 0;
+    for (const w of patch.scheduler.walks ?? []) {
+      // the table is 16 fixed slots, and a walk past them is LOST, not queued —
+      // say so, the way every other unwritable item here is said (#191 review:
+      // the corpus itself shows 12 concurrent turns in one save, so a crowded
+      // room can genuinely reach the wall)
+      if (slot >= 16) {
+        patch.onDrop?.(`walk(${w.actor})`, "the walks table holds 16 slots");
+        continue;
+      }
+      if (w.actor.length > 15 || w.star.length > 15) {
+        patch.onDrop?.(`walk(${w.actor})`, "actor or arrival star not representable");
+        continue;
+      }
+      // a route without its waypoints is a slot claiming the path mover with
+      // nothing behind it — a shape no shipped save has (hasPayload ⇔ type 3
+      // across the corpus) and neither loader is specified for. The caller's
+      // hasPayload is not consulted: it is the DECODER's report, and this is
+      // the one place the rule is enforced (#191 review).
+      const path = w.type === 3 ? w.path : undefined;
+      if (w.type === 3 && (!path || path.length < 2)) {
+        patch.onDrop?.(`walk(${w.actor})`, "a route with no waypoints");
+        continue;
+      }
+      const s = slot++ * 110;
+      wdv.setUint16(s + WALK_SLOT.active, 1, true);
+      wdv.setUint16(s + WALK_SLOT.paused, w.paused ? 1 : 0, true);
+      wdv.setInt16(s + WALK_SLOT.type, w.type, true);
+      // the facing TARGET, and -1 once the turn is done — which is what all
+      // three shipped routes carry, and what the loader reads back as "no turn"
+      wdv.setInt16(s + WALK_SLOT.turnTo, w.turnTo, true);
+      wdv.setInt16(s + WALK_SLOT.deg, w.deg & 0xff, true);
+      wdv.setInt16(s + WALK_SLOT.x, clampI16(w.startX), true);
+      wdv.setInt16(s + WALK_SLOT.y, clampI16(w.startY), true);
+      wdv.setInt16(s + WALK_SLOT.z, clampI16(w.startZ), true);
+      wdv.setInt32(s + WALK_SLOT.progress, w.progress | 0, true);
+      // the deltas are SUBTRACTED — `pos = start - delta * progress / dist`
+      // (see {@link SavedWalk}) — so what goes in the record is start - dest,
+      // and a caller holding dest - start has the sign the mover does not
+      wdv.setInt32(s + WALK_SLOT.dx, (w.startX - w.destX) | 0, true);
+      wdv.setInt32(s + WALK_SLOT.dy, (w.startY - w.destY) | 0, true);
+      wdv.setInt32(s + WALK_SLOT.dz, (w.startZ - w.destZ) | 0, true);
+      wdv.setInt32(s + WALK_SLOT.dist, w.dist | 0, true);
+      writePstrField(walks, s + WALK_SLOT.actor, w.actor);
+      writePstrField(walks, s + WALK_SLOT.star, w.star);
+      // a route's waypoints go in a container of their own, and +0x12 says so
+      if (path) {
+        wdv.setUint32(s + WALK_SLOT.payload, WALK_PATH_HANDLE, true);
+        payloads.push(encodeWalkPath(path));
+      }
+    }
+    containers[si + 2].data = walks;
+    // The payloads follow the walks table, one per type-3 slot in slot order —
+    // and the base's own payloads go UNCONDITIONALLY, walks passed or not:
+    // they belong to the base's moment (dropping them is the whole reason the
+    // table used to be zeroed, see {@link SavePatch.scheduler}), the zeroed
+    // table references none, and one behaviour means `walks: []` and an
+    // omitted `walks` produce the same bytes (#191 review).
+    containers.length = si + 3;
+    for (const p of payloads) containers.push({ id: containers.length, data: p });
   }
 
   // the theme: empty every track's playing/looping lists, then write the named
@@ -2064,56 +2051,52 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
   // Counts and container lengths move together so the file stays the shape the
   // original writes.
   if (patch.theme !== undefined) {
-    const ti = findTracksIndex(raw);
-    if (ti < 0) {
-      patch.onDrop?.("theme", "the base save has no open-tracks list");
-    } else {
-      const d = containers[ti].data;
-      const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
-      const want = patch.theme?.track.toLowerCase() ?? null;
-      const volume = patch.theme?.volume ?? 255;
-      // playing = the bank's loop records in table order; looping = the play
-      // order expanded over them. All shipped records: +2 = 0, pan = 128.
-      const soundRecord = (c: { index: number; name: string }): Uint8Array => {
-        const rec = new Uint8Array(SOUND_STRIDE);
-        const rdv = new DataView(rec.buffer);
-        rdv.setUint16(0, c.index, true);
-        rdv.setUint16(4, volume, true);
-        rdv.setUint16(6, 128, true);
-        writePstrField(rec, 8, c.name);
-        return rec;
-      };
-      const playing = patch.theme?.chunks ?? [];
-      const looping = (patch.theme?.order ?? [])
-        .map((v) => playing[v - 1])
-        .filter((c): c is { index: number; name: string } => c !== undefined);
-      const pack = (list: { index: number; name: string }[]): Uint8Array => {
-        const out = new Uint8Array(list.length * SOUND_STRIDE);
-        list.forEach((c, r) => out.set(soundRecord(c), r * SOUND_STRIDE));
-        return out;
-      };
-      let written = false;
-      for (let k = 0; k < d.length / TRACK_STRIDE; k++) {
-        const name = pstrField(d, k * TRACK_STRIDE + TRACK_NAME_OFF).toLowerCase();
-        for (const [j, cOff, list] of (
-          [[1, TRACK_COUNTS[1], playing], [2, TRACK_COUNTS[2], looping]] as const
-        )) {
-          const idx = ti + 1 + 3 * k + j;
-          if (name === want && playing.length) {
-            containers[idx].data = pack([...list]);
-            dv.setInt16(k * TRACK_STRIDE + cOff, list.length, true);
-            written = true;
-          } else {
-            containers[idx].data = new Uint8Array(0);
-            dv.setInt16(k * TRACK_STRIDE + cOff, 0, true);
-          }
+    const ti = index.tracks;
+    const d = containers[ti].data;
+    const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+    const want = patch.theme?.track.toLowerCase() ?? null;
+    const volume = patch.theme?.volume ?? 255;
+    // playing = the bank's loop records in table order; looping = the play
+    // order expanded over them. All shipped records: +2 = 0, pan = 128.
+    const soundRecord = (c: { index: number; name: string }): Uint8Array => {
+      const rec = new Uint8Array(SOUND_STRIDE);
+      const rdv = new DataView(rec.buffer);
+      rdv.setUint16(0, c.index, true);
+      rdv.setUint16(4, volume, true);
+      rdv.setUint16(6, 128, true);
+      writePstrField(rec, 8, c.name);
+      return rec;
+    };
+    const playing = patch.theme?.chunks ?? [];
+    const looping = (patch.theme?.order ?? [])
+      .map((v) => playing[v - 1])
+      .filter((c): c is { index: number; name: string } => c !== undefined);
+    const pack = (list: { index: number; name: string }[]): Uint8Array => {
+      const out = new Uint8Array(list.length * SOUND_STRIDE);
+      list.forEach((c, r) => out.set(soundRecord(c), r * SOUND_STRIDE));
+      return out;
+    };
+    let written = false;
+    for (let k = 0; k < d.length / TRACK_STRIDE; k++) {
+      const name = pstrField(d, k * TRACK_STRIDE + TRACK_NAME_OFF).toLowerCase();
+      for (const [j, cOff, list] of (
+        [[1, TRACK_COUNTS[1], playing], [2, TRACK_COUNTS[2], looping]] as const
+      )) {
+        const idx = ti + 1 + 3 * k + j;
+        if (name === want && playing.length) {
+          containers[idx].data = pack([...list]);
+          dv.setInt16(k * TRACK_STRIDE + cOff, list.length, true);
+          written = true;
+        } else {
+          containers[idx].data = new Uint8Array(0);
+          dv.setInt16(k * TRACK_STRIDE + cOff, 0, true);
         }
       }
-      if (want && playing.length && !written) {
-        patch.onDrop?.(`theme(${want})`, "the base save has no such track open — the room will load silent");
-      } else if (want && !playing.length) {
-        patch.onDrop?.(`theme(${want})`, "the bank's loop table was not readable — the room will load silent");
-      }
+    }
+    if (want && playing.length && !written) {
+      patch.onDrop?.(`theme(${want})`, "the base save has no such track open — the room will load silent");
+    } else if (want && !playing.length) {
+      patch.onDrop?.(`theme(${want})`, "the bank's loop table was not readable — the room will load silent");
     }
   }
 

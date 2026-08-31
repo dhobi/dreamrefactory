@@ -51,8 +51,10 @@ record strides.
 
 The writer emits one container per step, in a fixed order, and the count is
 therefore `7 + 3·banks + 5 + payloads` — so every index is **computed**, never
-searched for. (v4 has to hunt by content; its globals probe looks for the strings
-`mission` and `playerdeath`, which no Dust save contains.)
+searched for. v4's map is computed the same way (`saveIndex`), and this is the
+side that got there first: v4 used to hunt by content, and its globals probe
+looked for the strings `mission` and `playerdeath`, which no Dust save contains —
+so a Dust-shaped `.ti` read as having no globals at all (#325).
 
 | # | Contents | Stride |
 |---|----------|--------|
