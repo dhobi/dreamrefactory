@@ -49,6 +49,63 @@ export interface Point {
 }
 
 /**
+ * The client coordinate that lands on canvas pixel `v` — and it is not
+ * `origin + (v + 0.5) * scale` ([#277](https://github.com/dhobi/dreamrefactory/issues/277)).
+ *
+ * Both drivers aim in CANVAS pixels and the page reads them back with
+ * `canvasCoords` (taoot/src/main.ts), which is
+ * `Math.floor((client - origin) / size * n)`. Half a canvas pixel of centring
+ * survives that round trip only while a canvas pixel is at least two client
+ * pixels wide, because the coordinate that actually arrives is an INTEGER: the
+ * browser delivers `clientX`/`clientY` whole, so half a pixel of aim plus a
+ * fractional `rect.top` rounds DOWN into the pixel before the one asked for.
+ *
+ * Measured against the play page at nine widths, aiming at the coal lever's
+ * twenty-one stops: at 1024px (a 2x scale) all 21 land, at 800px four miss, at
+ * 700px eight, at 640px five, and at 512px — a 1:1 scale, where half a canvas
+ * pixel is half a client pixel — twenty of the twenty-one miss. Every single
+ * miss is low by exactly one.
+ *
+ * It reads as a dial bug because the coal lever is the one control with no
+ * tolerance: `calcswitchdeg` clamps the cursor to 245..345 and divides by 5, so
+ * one pixel is one whole setting and `dial(slider, 7)` lands on 6. Everything
+ * else the driver clicks is a hotspot many pixels wide, which is why a one-pixel
+ * error went unnoticed at every other gesture.
+ *
+ * So aim at an INTEGER inside the client interval that maps back to `v`:
+ *
+ *     origin + v * size / n  <=  client  <  origin + (v + 1) * size / n
+ *
+ * preferring the middle, so the aim is as far from both edges as the interval
+ * allows. Below a 1:1 scale that interval can contain no integer at all — the
+ * canvas pixel is then genuinely unaddressable, several of them sharing one
+ * client pixel — and the nearest integer is returned rather than a fraction,
+ * because a fraction is not what will arrive.
+ */
+export function clientAxis(v: number, origin: number, size: number, n: number): number {
+  const lo = origin + (v * size) / n;
+  const hi = origin + ((v + 1) * size) / n;
+  const mid = Math.round((lo + hi) / 2);
+  if (mid >= lo && mid < hi) return mid;
+  // the middle rounded out of the interval — take the first integer inside it
+  const first = Math.ceil(lo);
+  return first < hi ? first : mid;
+}
+
+/** {@link clientAxis} on both axes: the client point that lands on canvas (x, y) */
+export function clientPointFor(
+  x: number,
+  y: number,
+  rect: { left: number; top: number; width: number; height: number },
+  canvas: { width: number; height: number },
+): Point {
+  return {
+    x: clientAxis(x, rect.left, rect.width, canvas.width),
+    y: clientAxis(y, rect.top, rect.height, canvas.height),
+  };
+}
+
+/**
  * What the run is measured in.
  *
  * Two numbers, because neither alone is honest. Wall clock is the speedrun — it
