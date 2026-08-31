@@ -79,8 +79,11 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
     // no volume at all, and keeps the base's field. See SavePatch.disk.
     disk: session.mountedCd || undefined,
     // the frame counter, on the same scale as the frame stamps the globals
-    // above carry (`paintframe`, `lastsail`, `secframe`) — the game reads the
-    // two as a difference, so one without the other is meaningless (#221)
+    // above carry (`paintframe`, `lastsail`, `secframe`, `jonesframe`) — the
+    // game reads the two as a difference, so one without the other is
+    // meaningless (#221). The load side owes the same consistency from the
+    // other direction: a stamp the file does not carry cannot be allowed to
+    // outlive the counter it is measured against (#340, see loadGame).
     frame: session.frameCounter,
     setFile: setFileSnapshot(session),
     inventory: inventorySnapshot(session),
@@ -387,8 +390,91 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     session.onLog(`opengame: saved game is from a different version ("${save.title}")`);
     return false;
   }
+
+  /*
+   * THE POINT OF NO RETURN, and the first thing past it: every script still
+   * running belongs to the game being replaced, so none of them may run another
+   * statement (#340). See Interpreter.abandonRunning for why this is a load's
+   * only way to do it and why the CTL lever survives it.
+   *
+   * Before the teardown below rather than after, because the teardown is what
+   * WAKES them: `onAbandonMovie` releases a script parked in `playmovie` the
+   * same way the film ending would, and released before the epoch moved it ran
+   * on into the next film — measured, `playmovie("debris.mov")` reaching the log
+   * while this function was still rebuilding the room.
+   *
+   * Above the two `return false` arms rather than at the top of the function: a
+   * file we refuse to read has replaced nothing, and the panel goes back exactly
+   * as it was.
+   */
+  session.interp.abandonRunning();
+  /*
+   * ...and the POINTER comes back, for the reason prepareRestart says: the
+   * endgame's `hidecursor()` has no matching `showcursor()` — the game is over —
+   * and a script cut off mid-arm may not reach its own. `cursorDepth` is a
+   * counter and a load is a boundary the original unwinds at.
+   */
+  session.cursorDepth = 0;
+
   // The DISC, before anything reads a byte off one. See mountSavedDisc.
   mountSavedDisc(session, save.disk);
+
+  /*
+   * The globals the file does NOT name, which have to GO — the third twin of
+   * `resetCast` and the shop close below, and the last one missing (#340).
+   *
+   * A save's variable records are not a patch over the live session: they are
+   * TI.EXE's whole variable list, written out and read back wholesale (the
+   * string pool with them, which is why its offsets stay valid across
+   * processes — see decodeVars). A global with no record did not exist when the
+   * game was saved, so after `opengame` it does not exist either. The port only
+   * ever `set` them, so it kept everything the file was silent about.
+   *
+   * Normally that silence is a room's own doing and the room cleans up after
+   * itself: `dumpglobal` (interp.ts) discards a room's globals from `closeset`
+   * or `closestage`, and all 64 sites in the corpus sit in a teardown. A load
+   * runs no scripts, so no teardown runs, so nothing is dumped.
+   *
+   * Reported as the boat deck's Gorse-Joneses going missing after a checkpoint.
+   * `DECKBD2.SET` c1012 opens their lifeboat offer on
+   * `frame() - jonesframe > 2000 & jonesphase = 0`, and `jonesframe` is never
+   * initialised anywhere — it springs into existence the first time the offer
+   * fires. So 101 of the 109 shipped saves have no record for it (the 8 that do
+   * are ENDGAME2 saves taken after it fired), and `session.frameCounter =
+   * save.frame` below then rewinds the clock underneath the value that survived:
+   * measured at frame 38365 against a jonesframe of 337079, the gate's
+   * difference is -298714 and it reopens after 300714 more frames, which is
+   * five and a half hours of play. `jonesphase` restores from the file and looks
+   * innocent, which is why the report named the flag and not the stamp.
+   *
+   * Deleted rather than zeroed: a `global` declaration recreates a missing name
+   * at 0 (interp.ts), which is exactly what the original hands a script reading
+   * a variable its restored list has no node for.
+   *
+   * ## What this is safe against
+   *
+   * The port's own saves are a PATCH onto a shipped base, and a base has only so
+   * many free variable slots — so in principle a checkpoint can be silent about a
+   * global merely because it did not fit, and deleting that would lose live
+   * state. Measured, it does not happen: the corpus knows 163 distinct globals
+   * between all 109 saves and the roomiest base holds 139, but no single session
+   * ever holds 163. Restoring each shipped save into a session and writing a
+   * checkpoint from it onto the roomiest base drops NOTHING in any of them — the
+   * live count runs 85..127 against that 139. And a global that did not fit is
+   * already reported at the moment it is written, loudly and by name, rather
+   * than left to be discovered later (see snapshotSave's `onDrop`).
+   *
+   * `__`-prefixed names are the port's own bookkeeping and not game state, so
+   * they are not the file's to speak for: `__propsinit` is a once-guard on
+   * TAOOT's inven.shp initprops and a load must not re-arm it. snapshotSave
+   * skips the same prefix when writing, for the same reason. Everything else a
+   * booted session holds is carried by all 109 saves.
+   */
+  for (const name of [...session.interp.globals.keys()]) {
+    if (name.startsWith("__")) continue;
+    if (save.numGlobals.has(name) || save.strGlobals.has(name)) continue;
+    session.interp.globals.delete(name);
+  }
 
   // script globals: numbers (mission/phase/counters/puzzles) and strings
   // (hallside, savedeck, handitem, fusebox, savestage/saveflat stack, …) both

@@ -23,9 +23,17 @@ export type Signal =
   | { s: "normal" }
   | { s: "exitcode" }
   | { s: "passcode" }
-  | { s: "return"; value: Value };
+  | { s: "return"; value: Value }
+  /**
+   * The game this script belonged to is GONE — see
+   * {@link Interpreter.abandonRunning}. Unwinds like any other non-normal
+   * signal, and every `if`/`switch`/`while`/`for` already propagates one, so it
+   * reaches the top of the chain from any depth.
+   */
+  | { s: "abandoned" };
 
 const NORMAL: Signal = { s: "normal" };
+const ABANDONED: Signal = { s: "abandoned" };
 
 export interface CallCtx {
   /** object owning the running script */
@@ -92,6 +100,13 @@ export class Frame {
      * drained on the tick boundary the heartbeat also fires on.
      */
     readonly dispatch = handler,
+    /**
+     * Which GAME this frame belongs to — {@link Interpreter.epoch} as it stood
+     * when the frame was made. A load bumps the epoch, and every frame still
+     * carrying the old one stops at its next statement. See
+     * {@link Interpreter.abandonRunning}.
+     */
+    readonly epoch = 0,
   ) {}
 }
 
@@ -200,6 +215,51 @@ export class Interpreter {
   }
 
   /**
+   * Which GAME is running. Every {@link Frame} is stamped with it, and
+   * {@link execBlock} refuses to run a statement for a frame that does not
+   * match — see {@link abandonRunning}.
+   */
+  private epoch = 0;
+
+  /**
+   * Throw away every script now in flight: the game they were running in does
+   * not exist any more (a load).
+   *
+   * Bumping the epoch is all it takes, because a suspended script is suspended
+   * INSIDE a builtin — `playmovie`, `delay`, `voicewait` — and the load already
+   * releases those (`onAbandonMovie`, the scheduler reset). What it did not do
+   * was stop the script that was released: it went on to its next statement, in
+   * a game that had just been replaced under it. Now it unwinds instead, from
+   * whatever depth it had reached, and its dispatch promise resolves so
+   * `scriptBusy` clears with it.
+   *
+   * This is a load's only way to do it. `settle()` — what {@link
+   * GameSession.prepareRestart} uses — waits for the in-flight dispatches to
+   * finish, and the workbench's checkpoint chips call the load from INSIDE
+   * `session.track(...)`, so a load that settled would be waiting for itself.
+   *
+   * Reported as the ending sequence surviving a checkpoint
+   * ([#340](https://github.com/dhobi/dreamrefactory/issues/340)). BOOTFILE's
+   * `advanceday()` endgame arm is one straight-line script — leave.mov,
+   * debris.mov, the narend.stg slideshow, then `if mission = "good"` — so a load
+   * taken during it resumed at the next film and reached that test with the
+   * CHECKPOINT's mission in the global. Measured in a browser: narend scored the
+   * good ending, the load replaced `mission` with the checkpoint's, and the
+   * surviving script played the bad ending's `playmore.mov` over the loaded room
+   * and quit to the boot menu.
+   *
+   * Safe for the load lever the game itself owns. CTL.STG's button is
+   * `opengame("Titanic 1.0")` and then only
+   * `if currentstage() != "ctl.stg" exitcode`, and a completed load has already
+   * reopened main.stg — so the tail this cuts is the `exitcode` it was going to
+   * take anyway. The cancel arm never gets here: `opengame` returns before
+   * loading when the file is refused.
+   */
+  abandonRunning(): void {
+    this.epoch++;
+  }
+
+  /**
    * Nested handler dispatch depth. The async interpreter has no natural
    * call-stack limit — a dispatch cycle in game data would allocate
    * promises until the tab dies. Legitimate nesting (TAOOT's double gstair
@@ -264,7 +324,7 @@ export class Interpreter {
     // The outermost handler names the event for everything under it, so a chain
     // runner does not have to declare it and a re-route (sendtoscene(…,
     // keydown(arg))) keeps the name it already had — see Frame.dispatch.
-    const frame = new Frame(inst, ctx, handler, parent?.dispatch ?? handler);
+    const frame = new Frame(inst, ctx, handler, parent?.dispatch ?? handler, this.epoch);
     for (let i = 0; i < block.params.length; i++) {
       frame.locals.set(block.params[i], args[i] ?? 0);
     }
@@ -288,6 +348,7 @@ export class Interpreter {
 
   async execBlock(stmts: Stmt[], frame: Frame): Promise<Signal> {
     for (const st of stmts) {
+      if (frame.epoch !== this.epoch) return ABANDONED;
       const sig = await this.execStmt(st, frame);
       if (sig.s !== "normal") return sig;
     }
@@ -359,6 +420,9 @@ export class Interpreter {
         let guard = 0;
         let lastYield = this.realYieldSeq();
         while (truthy(await this.evalExpr(st.cond, frame))) {
+          // here as well as in execBlock, because a body with no statements
+          // never reaches that check and would spin on the condition alone
+          if (frame.epoch !== this.epoch) return ABANDONED;
           const sig = await this.execBlock(st.body, frame);
           if (sig.s !== "normal") return sig;
           const y = this.realYieldSeq();

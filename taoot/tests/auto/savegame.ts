@@ -6,7 +6,7 @@
  */
 import { test, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   readSaveFile,
   writeSaveFile,
@@ -2902,4 +2902,130 @@ test("a load closes the room it is leaving, shop and all (#339)", async () => {
   const kept = [...session.propRuntime.shops.keys()].sort();
   check("the boot's own shops survive it", kept.includes("house.shp") && kept.includes("inven.shp"), kept.join(", "));
   check("...with the 72 records applied", !!session.propRuntime.get("life"));
+});
+
+/**
+ * ...and the globals with it (#340).
+ *
+ * The variable records are the game's whole variable list, not a patch: a global
+ * the file is silent about did not exist when the save was taken. The boat-deck
+ * Gorse-Joneses are what noticed — `DECKBD2.SET` c1012 gates their lifeboat
+ * offer on `frame() - jonesframe > 2000`, `jonesframe` is never initialised, and
+ * 101 of the 109 shipped saves therefore have no record for it. Left standing
+ * while `frameCounter` rewinds to the save's, the difference goes hugely
+ * negative and the offer can never come again.
+ */
+test("a load drops the globals the file does not carry (#340)", async () => {
+  const { session } = await newHost();
+  await session.ensureBooted();
+  const g = session.interp.globals;
+
+  const bytes = new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti")));
+  const save = parseSave(bytes);
+  const carried = (n: string): boolean => save.numGlobals.has(n) || save.strGlobals.has(n);
+  check("the save has no jonesframe record", !carried("jonesframe"));
+  check("...but it does carry jonesphase", carried("jonesphase"));
+
+  // as the boat deck leaves it once the offer has been made this run
+  g.set("jonesframe", 337_079);
+  g.set("jonesphase", 0);
+  session.frameCounter = 337_100;
+  // a room global from somewhere else entirely, and the port's own bookkeeping
+  g.set("mazenumber", 3);
+  g.set("__propsinit", 1);
+
+  check("it loads", await session.loadGame(bytes));
+  await session.settle();
+
+  check("the stamp the file cannot speak for is gone", !g.has("jonesframe"),
+    `jonesframe = ${String(g.get("jonesframe"))}`);
+  check("...so the offer's gate is open again at the restored frame",
+    session.frameCounter - Number(g.get("jonesframe") ?? 0) > 2000,
+    `frame() ${session.frameCounter} - jonesframe ${String(g.get("jonesframe") ?? 0)}`);
+  // ...and a room global from elsewhere is no longer the last climb's. It is
+  // back rather than absent because the arriving room's openset DOES run on a
+  // load and its `global mazenumber` declaration recreates the name at 0 — the
+  // fresh-game value, and exactly what the original hands a script reading a
+  // variable its restored list has no node for.
+  check("a room global from elsewhere is reset, not carried over",
+    g.get("mazenumber") !== 3, `mazenumber = ${String(g.get("mazenumber"))}`);
+  check("the port's own bookkeeping stays — the file is not its owner",
+    g.get("__propsinit") === 1);
+
+  // and everything the file DOES carry is restored, not collateral
+  const missing = [...save.numGlobals.keys(), ...save.strGlobals.keys()].filter((n) => !g.has(n));
+  check("every global the file carries survives", !missing.length, missing.join(", "));
+  check("jonesphase came back from the file", g.get("jonesphase") === save.numGlobals.get("jonesphase"));
+});
+
+/**
+ * The same rule over the whole corpus: a load leaves the session holding exactly
+ * what the file names (plus the port's `__` bookkeeping), whichever save it is.
+ */
+test("after any shipped save loads, the session holds exactly that save's globals (#340)", async () => {
+  const { session } = await newHost();
+  await session.ensureBooted();
+  for (const path of allSaves()) {
+    const bytes = new Uint8Array(readFileSync(path));
+    const save = parseSave(bytes);
+    await session.loadGame(bytes);
+    const named = new Set([...save.numGlobals.keys(), ...save.strGlobals.keys()]);
+    const extra = [...session.interp.globals.keys()]
+      .filter((n) => !n.startsWith("__") && !named.has(n));
+    check(`${basename(path)}: nothing survives that the file does not name`, !extra.length, extra.join(", "));
+  }
+});
+
+/**
+ * ...and the SCRIPT that was running, which the game it belonged to no longer
+ * has a use for (#340).
+ *
+ * BOOTFILE's `advanceday()` endgame arm is one straight-line script — leave.mov,
+ * debris.mov, the narend.stg slideshow, then `if mission = "good"` picking the
+ * credits or `playmore.mov`. A load releases the film the script is parked in
+ * (`onAbandonMovie`, the way the film ending would) but used not to stop the
+ * script, so it ran on through the remaining segments and reached that test with
+ * the CHECKPOINT's mission in the global — the reported "I got the good ending,
+ * but ended up at the restart screen after the bad ending".
+ *
+ * Driven with a stand-in for the browser's MoviePlayer, which is the pair that
+ * matters: `playmovie` blocks, `abandon` resolves it. Headless cannot carry the
+ * ending past `transtoflat("narend.stg")`, so this asserts what it can reach —
+ * that the script is released and does NOT play the next film.
+ */
+test("a load stops the script the abandoned game was running (#340)", async () => {
+  const { session } = await newHost();
+  await session.ensureBooted();
+  const played: string[] = [];
+  let release: (() => void) | null = null;
+  session.modalMovies = true;
+  session.onPlayMovie = (name: string) => {
+    played.push(name.toLowerCase());
+    return new Promise<void>((r) => { release = r; });
+  };
+  session.onAbandonMovie = () => { const r = release; release = null; r?.(); };
+
+  session.interp.globals.set("clock", "endgame");
+  session.interp.globals.set("mission", "good");
+  session.interp.globals.set("phase", 1);
+  const ending = session.track(session.runGlobal("advanceday", []));
+
+  for (let i = 0; i < 500 && !release; i++) await drain();
+  check("the ending is parked in its first film", played[0] === "leave.mov", played.join(" -> "));
+  check("...and the session knows a script is running", session.scriptBusy);
+
+  const bytes = new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti")));
+  check("it loads", await session.loadGame(bytes));
+  for (let i = 0; i < 500; i++) await drain();
+
+  check("the ending did not run on into its next film", played.length === 1, played.join(" -> "));
+  check("...the dispatch came back", await Promise.race([ending.then(() => true), drain().then(() => false)]));
+  check("...and nothing is left running", !session.scriptBusy);
+  // the room the file named is the one we are in, not one the ending chose
+  check("the loaded room is the one standing", session.currentSetName === parseSave(bytes).set,
+    `${session.currentSetName} vs ${parseSave(bytes).set}`);
+  // the branch the ending would have read is the checkpoint's, which is exactly
+  // why it must not be allowed to read it
+  check("mission is the checkpoint's", session.interp.globals.get("mission") !== "good",
+    String(session.interp.globals.get("mission")));
 });
