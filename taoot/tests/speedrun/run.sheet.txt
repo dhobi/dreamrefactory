@@ -1033,7 +1033,11 @@ right(x2)
 up()
 right(x2)
 settle()
-click(vlad)
+# One click, not two. The second was here because a click at somebody who is
+# TURNING lands on the scenery they have just turned away from, so the first
+# regularly did nothing (#338) — clickThing now lets a target stand still before
+# it aims. With the bug gone the second click jams against the conversation the
+# first one opened.
 click(vlad)
 wait(talking)
 say([101,101,101,101,101,103])

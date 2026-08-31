@@ -625,8 +625,53 @@ async function converse(
  * ------------------------------------------------------------------ */
 
 /** click a named thing, through the engine's own hit test */
+/**
+ * A named actor is STANDING STILL — nothing in the scheduler's walk table is
+ * moving them ([#338](https://github.com/dhobi/dreamrefactory/issues/338)).
+ *
+ * An aim is a PIXEL, found by sweeping the engine's own hit test, and a hit test
+ * is per-pixel against the actor's current pose frame
+ * (`ActorRuntime.actorAt`). Aim at somebody who is turning and the pixel is
+ * where they WERE: by the time the click is dispatched the sprite has stepped to
+ * the next facing and the point that named them names the scenery behind them.
+ * The click is not lost — it lands, on nothing — so nothing runs, and the run
+ * then waits out its budget for a conversation that was never opened.
+ *
+ * Distinct from the queued-and-flushed click {@link IDLE} guards against, and
+ * measured to be so: at the moment both clicks on Vlad went missing the gate was
+ * OPEN and `session.events` was empty, while `scheduler.walks` had him and his
+ * `deg` was running 108 -> 128 -> 158 -> 171. Waiting for that to finish is what
+ * makes the click land.
+ *
+ * A turn is what a character does when you walk up to them, which is why this is
+ * the shape the report describes from three different beats — Vlad first
+ * approached, Vlad with his back turned waiting for his package, and Murdoch
+ * caught mid-stride outside the wireless room. The route's own workaround for
+ * the same thing is the double `click(vlad)` at the top of the stairs.
+ *
+ * Bounded, and false is not an error: somebody on a walk loop that never ends
+ * has to be clicked at anyway, and that is what a player does too.
+ */
+const STANDING = (name: string): string =>
+  `(() => {
+  const w = window.dbg.session.scheduler.walks;
+  return !w || !w.has(${JSON.stringify(name.toLowerCase())});
+})()`;
+
+/** how long to let a target settle before aiming at it — see {@link STANDING} */
+const SETTLE_MS = 3000;
+
+/** aim at a thing, having first let it stop moving (see {@link STANDING}) */
+async function aimAtSettled(
+  c: ActionContext,
+  name: string,
+): Promise<{ x: number; y: number } | null> {
+  await c.d.tryHold(STANDING(name), Math.min(c.budget, SETTLE_MS));
+  return c.d.aim("thing", name);
+}
+
 async function clickThing(c: ActionContext, name: string, wait = c.wait): Promise<void> {
-  const at = await c.d.aim("thing", name);
+  const at = await aimAtSettled(c, name);
   if (!at) throw new Error(`nothing called "${name}" is clickable from here`);
   await c.d.clickAt(at.x, at.y, wait, c.budget);
 }
@@ -1692,7 +1737,9 @@ export const ACTIONS: Record<string, Action> = {
         // lands, he stops shovelling and crosses the room, and the puppet opens
         // when he arrives. `patience` is what covers that walk, not a retry.
         await c.d.tryHold(IDLE, Math.min(patience, 8000));
-        const at = await c.d.aim("thing", who);
+        // ...and let them stand still, or the aim is a pixel they have already
+        // turned away from — see STANDING (#338)
+        const at = await aimAtSettled(c, who);
         if (at) {
           // wait: none, deliberately. A click that OPENS a conversation is not
           // consumed in the ordinary way: the puppet suspends holding the
