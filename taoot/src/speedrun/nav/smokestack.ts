@@ -32,6 +32,23 @@
  * in 18 moves and maze 3 from scene38 in 20. Since `smstack1` is where you choose
  * which scene to come up into, {@link planStack} is handed all four and picks one
  * that works.
+ *
+ * ## The entry is also what the maze LOOKS like (#339)
+ *
+ * The published runner rules — climb, turn right, and read the crates: blocked at
+ * once is maze 4, crates across the shaft is maze 3, nothing is 1 or 2 — are
+ * relative to ONE ladder, `smstack1`'s View42 into scene37. They have to be: the
+ * crate list is positions on the ring, so coming up somewhere else on it shows a
+ * different part of the same maze, and two of those views are another maze's
+ * signature exactly (maze 1 from scene38 reads as maze 3). That is not a bug, and
+ * taoot/tests/auto/smokestack.ts pins it alongside the rules themselves so it is
+ * not reported as one. (The bug the same report carried was a load leaving the
+ * previous climb's crates on the floor — see runtime/saveload.ts.)
+ *
+ * That ladder is also the one to take: all four mazes solve from scene37 in 18
+ * moves, so a route memorised per maze needs no branch on the entry. The order of
+ * {@link STACK_ENTRIES} puts it first, which is why {@link pickEntry} answers
+ * scene37 for every maze — intent, not luck.
  */
 
 /** the ring, in order; every other one has a ladder */
@@ -156,7 +173,9 @@ export function planStack(maze: number, entry: string): StackMove[] | null {
   return null;
 }
 
-/** The first of `smstack1`'s four ways up that this maze can be climbed from. */
+/** The first of `smstack1`'s four ways up that this maze can be climbed from —
+ *  scene37 for all four, and see the note at the top of this file for why that is
+ *  the one to want rather than merely the one that comes first. */
 export function pickEntry(maze: number): { entry: { stand: string; scene: string }; plan: StackMove[] } | null {
   for (const entry of STACK_ENTRIES) {
     const plan = planStack(maze, entry.scene);

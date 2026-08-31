@@ -2860,3 +2860,46 @@ test("a save names the disc it was taken on, across the mission-4 crossing (#231
       !reloadLogs.some((l) => /disc 2 .* mounted/.test(l)),
     `currentcd() = "${reloaded.mountedCd}" | ${JSON.stringify(reloadLogs.filter((l) => /disc/.test(l)))}`);
 });
+
+// --- a load leaves no ROOM behind it -----------------------------------------
+//
+// The prop half of `resetCast`, missing until #339 found it in the false
+// smokestack. A save's prop table is the BOOT shops and nothing else — all 109
+// shipped saves carry exactly 72 records — so `restoreProps` speaks for those and
+// leaves every other prop in the state the abandoned game left it. With the
+// departing room's shop still loaded, its props came along: the smokestack's
+// crates are the visible case, because they are the maze.
+//
+// Asserted over the shops rather than one game's props: what must not survive a
+// load is a ROOM, and the two persistent shops are the two that must.
+test("a load closes the room it is leaving, shop and all (#339)", async () => {
+  const { session } = await newHost();
+  await session.ensureBooted();
+  const nonPersistent = (): string[] =>
+    [...session.propRuntime.shops.entries()].filter(([, v]) => !v.persistent).map(([k]) => k);
+
+  // a room with a shop of its own, entered through the game's own changeset so
+  // its openset opens the shop exactly as play does
+  await session.runGlobal("changeset", ["smstack1", "scene14", "view40"]);
+  session.interp.globals.set("mazenumber", 3);
+  session.interp.globals.set("stacklevel", 2);
+  await session.runGlobal("changeset", ["smstack2", "scene37", "view50"]);
+  await session.settle();
+  const inTheRoom = nonPersistent();
+  check("the room opened a shop of its own", inTheRoom.includes("smstack.shp"), inTheRoom.join(", "));
+  check("...and its crates are up", !!session.propRuntime.get("block3")?.visible);
+
+  // ...and a save from somewhere else, which cannot possibly speak for them
+  const bytes = new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti")));
+  check("the save is from another room", parseSave(bytes).set !== "smstack2");
+  check("it loads", await session.loadGame(bytes));
+  await session.settle();
+  const left = nonPersistent().filter((f) => inTheRoom.includes(f));
+  check("the room being left keeps no shop open across it", !left.length, left.join(", "));
+  check("...so none of its props are still on screen",
+    !session.propRuntime.get("block3"), `block3 ${session.propRuntime.get("block3") ? "still exists" : "gone"}`);
+  // and the two the load DOES speak for are still here to receive their records
+  const kept = [...session.propRuntime.shops.keys()].sort();
+  check("the boot's own shops survive it", kept.includes("house.shp") && kept.includes("inven.shp"), kept.join(", "));
+  check("...with the 72 records applied", !!session.propRuntime.get("life"));
+});
