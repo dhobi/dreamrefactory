@@ -325,6 +325,20 @@ export interface MovFileV1 {
    * segment was read.
    */
   unaccounted: number;
+  /**
+   * Everything that did not fit the reading — a picture that is neither a frame
+   * nor a header, a frame count no segment could hold, audio before the first
+   * segment.
+   *
+   * This is what makes the two sniffs in this file self-validating rather than
+   * hopeful: frames are located by plausible dimensions and a segment's audio by
+   * "the last header before it", so anything the shape does not explain has to
+   * land here. Measured across the whole disc for #325: **247 of Dust's 258
+   * `.mov` read with an empty list**, and the 11 that do not read at all are the
+   * whole of `MOVIES/ZUNUSED/` — cut content, container 0 saying version 0, which
+   * the game never opens. So the sniffs have no unexplained residue anywhere on
+   * the disc.
+   */
   warnings: string[];
 }
 

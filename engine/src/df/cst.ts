@@ -103,12 +103,34 @@ export interface CastMember {
 export interface CstFile {
   file: DFContainerFile;
   paletteRaw: Uint8Array;
+  /**
+   * Container index of the cast's MAIN SCRIPT — the shared handlers every member
+   * of the file falls back to.
+   *
+   * Read out of TI.EXE rather than measured, because there are only 13 `.cst`
+   * files in the whole corpus and every one of them puts it in container 1, so no
+   * counterexample is even possible from data. `opencastfile`'s parser `0x40dac0`
+   * does the same two things the shop parser does, at the same two offsets — the
+   * cast header's tail is the shop header's tail:
+   *
+   *     0x40db7b: lea ecx, [ebx + 0x928]   ; the ref name
+   *     0x40db8b: mov ecx, [ebx + 0x924]   ; THIS
+   *     0x40db93: mov [esi + 8], ecx       ;   -> cast->mainScript
+   *
+   * `runtime/session.ts` used to reach for `containers[1]` with no constant, no
+   * comment and no docs entry (#325).
+   */
+  mainScriptLocation: number;
   members: CastMember[];
 }
 
 /** container 0: the palette and the member directory */
 const C0 = {
   palette: 36,
+  /** i32, immediately before the ref name at 0x928 — see
+   *  {@link CstFile.mainScriptLocation}. Identical to SHP's, which is what makes
+   *  the pair identifiable: a script ref and then the file's own name. */
+  mainScript: 0x924,
   memberCount: 0x938,
   memberTable: 0x93c,
   memberEntrySize: 16,
@@ -150,6 +172,8 @@ export function readCstFile(data: Uint8Array): CstFile {
   const file = readContainerFile(data);
   const c0 = file.containers[0].data;
   const r0 = new BinaryReader(c0);
+  r0.seek(C0.mainScript);
+  const mainScriptLocation = r0.i32();
   r0.seek(C0.memberCount);
   const count = r0.i32();
   const members: CastMember[] = [];
@@ -212,7 +236,12 @@ export function readCstFile(data: Uint8Array): CstFile {
     }
     members.push({ name: name.toLowerCase(), logicLocation, scriptLocation, poses });
   }
-  return { file, paletteRaw: c0.subarray(C0.palette, C0.palette + 2048), members };
+  return {
+    file,
+    paletteRaw: c0.subarray(C0.palette, C0.palette + 2048),
+    mainScriptLocation,
+    members,
+  };
 }
 
 // ---------------------------------------------------------------------------

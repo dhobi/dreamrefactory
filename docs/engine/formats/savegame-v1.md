@@ -51,8 +51,10 @@ record strides.
 
 The writer emits one container per step, in a fixed order, and the count is
 therefore `7 + 3·banks + 5 + payloads` — so every index is **computed**, never
-searched for. (v4 has to hunt by content; its globals probe looks for the strings
-`mission` and `playerdeath`, which no Dust save contains.)
+searched for. v4's map is computed the same way (`saveIndex`), and this is the
+side that got there first: v4 used to hunt by content, and its globals probe
+looked for the strings `mission` and `playerdeath`, which no Dust save contains —
+so a Dust-shaped `.ti` read as having no globals at all (#325).
 
 | # | Contents | Stride |
 |---|----------|--------|
@@ -69,6 +71,24 @@ searched for. (v4 has to hunt by content; its globals probe looks for the string
 | +3 | loops | 42 (same as v4) |
 | +4 | crickets | **48** (v4: 74) |
 | +5 | walks | **82** (v4: 110) |
+
+The count *proposes* `banks` and the file *confirms* it, because three waypoint
+payloads cost exactly what one more sound bank costs. Three checks, and each
+catches something the others cannot (#325):
+
+- the three service tables are **fixed sizes** (`0x540` / `0x300` / `0x520`), so
+  the tail of the map has to land on all three. Over the 56 shipped saves exactly
+  one `banks` value does that in each, so when the count's proposal fails, solving
+  for the one that fits recovers the map rather than giving up;
+- the leftover container count has to equal the number of **active walk slots that
+  declare a payload** (`+0x24` non-zero) — the check that catches a `banks` off by
+  one in the direction the fixed sizes cannot see;
+- and container 6 has to have room for the banks (38 bytes each).
+
+No shipped save reaches three payloads — 43 carry none and 13 carry one — so the
+count alone has never been wrong on a real file. A save this port writes can be,
+which is why the reader survives its own output rather than trusting the
+arithmetic.
 
 Container payload sizes are always a multiple of 32 because the writer stores
 `GlobalSize(handle)` rather than the used length (`0x421360`), which is why every

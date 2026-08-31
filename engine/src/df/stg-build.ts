@@ -18,7 +18,7 @@ import { encodeFrame } from "./image";
 import { FLAT_NAME_FIELD, REGION_NAME_FIELD, STAGE_NAME_FIELD } from "./stg";
 
 /** offsets in container 0 and in one flat record — the reader's constants */
-const C0 = { palette: 56, refName: 2104, flatCount: 2120, flats: 2124, flatSize: 46 } as const;
+const C0 = { palette: 56, mainScript: 44, refName: 2104, flatCount: 2120, flats: 2124, flatSize: 46 } as const;
 const FLAT = { condition: 0, script: 6, frame: 10, clickLogic: 14, height: 22, width: 24, name: 30 } as const;
 const REGION = { count: 1028, first: 1032, size: 32, top: 4, script: 12, name: 16 } as const;
 
@@ -61,9 +61,9 @@ export interface StgBuildOptions {
   /** the colour table, as RGB triples (up to 256 entries) */
   palette: ArrayLike<number>;
   /**
-   * The stage's main script (container 1 by convention — `MAIN_SCRIPT_LOCATION`).
-   * Its `openstage` handler runs before any flat is shown. Omitted, a minimal
-   * empty script is written, because the slot itself is conventional.
+   * The stage's main script, named by container 0 at +44 the way TI.EXE reads it
+   * (see {@link StgFile.mainScriptLocation}). Its `openstage` handler runs before
+   * any flat is shown. Omitted, a minimal empty script is written.
    */
   main?: Uint8Array;
   /**
@@ -115,8 +115,9 @@ export function buildStgFile(opts: StgBuildOptions): DFContainerFile {
   // container 0: the palette and (patched at the end) the flat table
   const { data: c0 } = b.reserve(C0.flats + flats.length * C0.flatSize);
   c0.set(paletteBlock(palette), C0.palette);
-  // container 1: the stage main, by convention
-  b.add(opts.main ?? emptyScript());
+  // the stage main — written wherever the builder puts it, and NAMED, rather than
+  // left in container 1 for the reader to assume (#325)
+  i32(c0, C0.mainScript, b.add(opts.main ?? emptyScript()));
   for (let g = 0; g < (opts.gaps ?? 0); g++) b.gap();
 
   if (opts.refName) {

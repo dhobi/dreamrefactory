@@ -73,9 +73,17 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    *
    * The pair is the convention `hittest`/`indextoprop` already use, and the game
    * reads both halves: `begininterface` is `laststage = currentstage ()` and then
-   * `laststage = result ()`. A v1 `.FLT` has no name field at all, so Dust falls
-   * back to the file — and to the `"none"` sentinel when no stage is open, which
-   * is the only thing its own `currentstage () != "none"` asks.
+   * `laststage = result ()`. The `"none"` sentinel when no stage is open is what
+   * Dust's own `currentstage () != "none"` asks.
+   *
+   * Dust used to fall back to the file too, because a v1 `.FLT` was read as having
+   * no name field. It has one, 20 bytes before v4's (#325), and three of its own
+   * tests were failing on the difference: `HOUSE.PRP`'s inventory-book handler asks
+   * for `"scorp"` and `"yunnibox"` where the files are `SCORP.FLT` and
+   * `YUNNIBOX.FLT`, and `NEW.FLT`'s asks for `"new"`. Its four other cases
+   * (`"fight.flt"`, `"flute.flt"`, `"tumble.flt"`, `"sundial.flt"`) name stages
+   * whose own name IS their filename, which is why the gap showed as three
+   * unreachable branches rather than as a broken game.
    */
   r("currentstage", () => {
     session.lastResult = session.stageName;

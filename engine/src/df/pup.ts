@@ -1,4 +1,5 @@
 import { BinaryReader, latin1 } from "./binary";
+import { little } from "./byte-order";
 import { DFContainerFile, readContainerFile } from "./container";
 import { DEFAULT_ENCODING, DfEncoding, decodeText, encodeText } from "./text";
 import { versionOf } from "./version";
@@ -105,8 +106,35 @@ export interface PupLayer {
 export const MAX_LAYER_FRAMES = 32;
 /** the bytes one stance record occupies — {@link PUP_LAYERS} layers of 262 */
 const STANCE_SIZE = 22 + 11 * 262;
-/** a DreamFactory 1 puppet's single stance is this container — see readPupFile */
-const V1_STANCE = 3;
+/**
+ * The three containers a puppet's header does NOT name — and neither engine names
+ * them either, which is the answer rather than the problem.
+ *
+ * Container 0 carries three read container refs (`bandLocation`, and per dialogue
+ * line the `audioLocation`/`animLogicLocation` pair), so this is a ref-bearing
+ * header with literals in it, and #325 listed the literals as suspect on exactly
+ * that ground. They are not. Both engines' puppet openers read containers 0..3 as
+ * IMMEDIATES, one call each, into four globals:
+ *
+ *     TI.EXE 0x43ef30            DF.EXE 0x435910
+ *       push 0; ... 0x489ff0       push 0; ... 0x460be6
+ *       push 1; ... 0x489fec       push 1; ... 0x460be2
+ *       push 2; ... 0x489fe8       push 2; ... 0x460bde
+ *       push 3; ... 0x489ff4       push 3; ... 0x460bea
+ *
+ * and each global is then used for one thing: container 2 is the script table
+ * (`cmp word [eax+0x16]` for the count, records from `+0x18` — this reader's 22
+ * and 24), and container 3 is the stance side. DF.EXE walks its container 3 with
+ * the 262-byte layer stride directly (`shl ecx,6; add ecx,eax; lea ebx,[eax+ecx*2]`
+ * at `0x4359f7`), which is the second reading of "a v1 puppet has exactly one
+ * stance and container 3 IS it" — the first was the corpus.
+ *
+ * So this is a `byte-order.ts`-shaped answer: no field exists because the
+ * format has no field, and the literals are the engine's own. Named here so the
+ * next audit reads the proof instead of repeating the search.
+ */
+const PUP_SCRIPTS = 2;
+const PUP_STANCES = 3;
 
 export interface PupStance {
   location: number;
@@ -194,15 +222,16 @@ export function readAnimLogic(pup: PupFile, location: number): PupAnimFrame[] {
   const c = pup.file.containers[location]?.data;
   if (!c || c.length < 82 || c.length % 82 !== 0) return [];
   const dv = new DataView(c.buffer, c.byteOffset, c.byteLength);
+  const le = little(pup.file.order);
   const out: PupAnimFrame[] = [];
   for (let r = 0; r < c.length / 82; r++) {
     const layers: { frame: number; y: number; x: number }[] = [];
     for (let l = 0; l < 11; l++) {
       const o = r * 82 + 16 + l * 6;
       layers.push({
-        frame: dv.getInt16(o, true),
-        y: dv.getInt16(o + 2, true),
-        x: dv.getInt16(o + 4, true),
+        frame: dv.getInt16(o, le),
+        y: dv.getInt16(o + 2, le),
+        x: dv.getInt16(o + 4, le),
       });
     }
     out.push({ layers });
@@ -218,7 +247,22 @@ export function readAnimLogic(pup: PupFile, location: number): PupAnimFrame[] {
 export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENCODING): PupFile {
   const file = readContainerFile(data);
   const c0 = file.containers[0].data;
-  const r0 = new BinaryReader(c0);
+  /**
+   * Which way round this file's integers are — and one shipped puppet needs asking.
+   *
+   * `taoot/gamefiles/de/titanic1/PUPPETS2/bsea2.pup` is a MACINTOSH build that got
+   * into the German Windows rip: `detectByteOrder` says `be` for it and `le` for
+   * the other 353 puppets in the three rips, including the English copy of the same
+   * file. `readContainerFile` already honoured that and handed back its 209
+   * containers correctly; this reader then read every field little-endian, so the
+   * dialogue count came out 16896 instead of 66 (0x0042 the other way round), the
+   * loop walked off container 0, and Ben-Sea did not load at all in that edition.
+   *
+   * Nothing subtle was wrong — the order was simply never threaded through. Found
+   * by the corpus audit in `engine/tests/container-refs.ts` (#325).
+   */
+  const order = file.order;
+  const r0 = new BinaryReader(c0, 0, order);
 
   const dialogue = new Map<string, PupDialogue>();
   r0.seek(2158);
@@ -246,9 +290,20 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
   }
 
   const scripts: PupScriptRef[] = [];
-  const r2 = new BinaryReader(file.containers[2].data);
+  const c2 = file.containers[PUP_SCRIPTS]?.data ?? new Uint8Array(0);
+  const r2 = new BinaryReader(c2, 0, order);
   r2.seek(22);
-  const scount = r2.i16();
+  /**
+   * The declared count, CLAMPED to what the container actually holds.
+   *
+   * Not defensiveness: one shipped file needs it. The German `bsea2.pup` says 512
+   * scripts in a 104-byte container — room for two — and the loop walked straight
+   * off the end, so `readPupFile` threw and the puppet did not load at all in that
+   * edition. Every other one of the 354 puppets in the three rips agrees with its
+   * own container, so this is a bad word in one build rather than a misread offset,
+   * and the container's own size is the reading that survives it (#325).
+   */
+  const scount = Math.max(0, Math.min(r2.i16(), Math.floor((c2.length - 24) / 40)));
   for (let i = 0; i < scount; i++) {
     r2.seek(24 + i * 40);
     const location = r2.i32();
@@ -260,7 +315,7 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
   const readStance = (location: number): PupStance | null => {
     const data = file.containers[location]?.data;
     if (!data || data.length < STANCE_SIZE) return null;
-    const rs = new BinaryReader(data);
+    const rs = new BinaryReader(data, 0, order);
     const layers: PupLayer[] = [];
     for (let l = 0; l < PUP_LAYERS.length; l++) {
       rs.seek(22 + l * 262);
@@ -291,10 +346,12 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
    */
   const stances: PupStance[] = [];
   if (versionOf(c0) === 1) {
-    const only = readStance(V1_STANCE);
+    const only = readStance(PUP_STANCES);
     if (only) stances.push(only);
   } else {
-    const r3 = new BinaryReader(file.containers[3].data);
+    // guarded, unlike the sibling reads it used to sit beside: a puppet with fewer
+    // than four containers is malformed, and answering "no stances" beats throwing
+    const r3 = new BinaryReader(file.containers[PUP_STANCES]?.data ?? new Uint8Array(0), 0, order);
     for (let t = 0; t < 64; t++) {
       r3.seek(22 + t * 4);
       const location = r3.i32();

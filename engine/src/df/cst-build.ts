@@ -18,7 +18,7 @@ import { MEMBER_NAME_FIELD, POSE_NAME_FIELD } from "./cst";
 import { ShpFrame, encodeShpFrame } from "./shp";
 
 /** container 0: the palette, the member count, the member table */
-const C0 = { palette: 36, memberCount: 0x938, members: 0x93c, memberSize: 16 } as const;
+const C0 = { palette: 36, mainScript: 0x924, memberCount: 0x938, members: 0x93c, memberSize: 16 } as const;
 
 /** a member's logic container: script, name, then the pose table */
 const MEMBER = { script: 0x26, name: 0x2a, poseCount: 0x5a, poses: 0x5e, poseSize: 32, poseName: 16 } as const;
@@ -70,6 +70,14 @@ export interface CstBuildMember {
 export interface CstBuildOptions {
   /** the colour table, as RGB triples (up to 256 entries) */
   palette: ArrayLike<number>;
+  /**
+   * The cast's MAIN SCRIPT — the shared handlers (`stdactor`, `stdscale`,
+   * `endwalk`) every member falls back to, named by container 0 at +0x924 the way
+   * TI.EXE reads it (see {@link CstFile.mainScriptLocation}). Omitted, a minimal
+   * empty script is written: a built cast used to name none at all, so the reader
+   * had nothing to open (#325).
+   */
+  main?: Uint8Array;
   members: CstBuildMember[];
   /** dummy gap containers, as the shipped casts carry */
   gaps?: number;
@@ -96,6 +104,7 @@ export function buildCstFile(opts: CstBuildOptions): CstBuildResult {
   const b = new ContainerBuilder();
   const { data: c0 } = b.reserve(C0.members + members.length * C0.memberSize);
   c0.set(paletteBlock(opts.palette), C0.palette);
+  i32(c0, C0.mainScript, b.add(opts.main ?? emptyScript()));
   for (let g = 0; g < (opts.gaps ?? 0); g++) b.gap();
 
   const spriteLocs = new Map<ShpFrame, ContainerRef>();

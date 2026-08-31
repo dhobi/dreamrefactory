@@ -772,10 +772,11 @@ The last three fixed containers are the **master service pass's own tables,
 dumped verbatim**. `0x442530` sits directly in front of the service pass
 `0x442550` and hands back pointers to `0x48bcd0` (loops), `0x48b830` (crickets)
 and `0x48b150` (walks); the writer `memcpy`s all three, which is why their
-lengths are constants — 1344 / 1184 / 1760 — in every save. The triple is also
-the cheapest fingerprint for finding them:
-[`findSchedulerIndex`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame.ts)
-looks for three consecutive containers of exactly those sizes.
+lengths are constants — 1344 / 1184 / 1760 — in every save. They are not
+searched for by those sizes; they are the tail of the computed map, and
+[`saveIndex`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame.ts)
+uses the triple the other way round — as the check that the map landed where it
+should.
 
 There is **no separate "puppet container"**. The parked-conversation state this
 page used to list as an unknown is the walks table plus its per-walk payload —
@@ -926,11 +927,12 @@ is followed by three containers of its own further down the file:
 | +0xa / +0xe / +0x12 | u32 | the three arrays' heap pointers |
 | +0x16 | pstr16 | track name — `inven.trk`, `unilib.trk`, `cricket.sfx`, `deckbd.trk` |
 
-The counts match the following containers' record counts in every save, which is
-what
-[`findTracksIndex`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame.ts)
-verifies rather than trusting the position. Each of the three arrays is a grid of
-**104-byte sound records**:
+The counts match the following containers' record counts in every save, and that
+is the half of
+[`saveIndex`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame.ts)'s
+validation that catches an open-track count read one too high or one too low —
+the map is positional, the descriptor's own counts are what confirm it. Each of
+the three arrays is a grid of **104-byte sound records**:
 
 | Offset | Type | Field |
 |-------:|------|-------|

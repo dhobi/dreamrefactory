@@ -44,9 +44,7 @@ const SHIPPED_VTABLE = 0x00431e0f;
 /** the globals container, found the way the reader finds it */
 function globalsContainer(bytes: Uint8Array): Uint8Array {
   const raw = readSaveFile(bytes);
-  const i = parseSave(bytes).globalsIndex;
-  expect(i).toBeGreaterThanOrEqual(0);
-  return raw.containers[i].data;
+  return raw.containers[parseSave(bytes).index.globals].data;
 }
 
 /** the vtable word of the node list's first node (the list starts at +28) */
@@ -98,7 +96,7 @@ test("it names the cast files it had open, crowd included (#186)", () => {
   const save = parseSave(SAVE);
   // the reporter was in the first class lounge, which opens extra.cst from its
   // openset — and a load runs no openset, so this list is the only record of it
-  expect(save.castIndex).toBe(3);
+  expect(save.index.casts).toBe(3);
   expect(save.castFiles).toEqual(["gang.cst", "extra.cst"]);
   // the eight members the lounge's diners are instanced from live in that file;
   // the records naming them are the ones a load used to drop

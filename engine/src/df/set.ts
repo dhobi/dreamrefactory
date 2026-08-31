@@ -634,36 +634,38 @@ export const C0 = {
   setDimensionsX: 0x2e, // i16
   transitionRegister: 0x54, // i32 container ref (sceneRegister at 0x50: unused)
   /**
-   * Three i32 container refs — and all three are CONSTANTS in every set we have.
-   * Across all 474 `.set` files in the seven editions and the demo, 0x58 reads 3,
-   * 0x5c reads 1 and 0x60 reads 2, without exception. So nothing in this corpus
-   * has ever tested any of them as a pointer, and within it they are
-   * indistinguishable from any other constant word of the same value.
+   * Three i32 container refs, and the corpus cannot tell them from constants:
+   * across all 474 `.set` files in the seven editions and the demo, 0x58 reads 3,
+   * 0x5c reads 1 and 0x60 reads 2, without exception. That is exactly the shape of
+   * the v1 bug — `set-v1.ts`'s old `mainScript` was a word that read 1 in all 35
+   * Dust sets and turned out not to be a pointer at all, which cost `undertak.set`
+   * its whole script (#291).
    *
-   * That is exactly the shape of the v1 bug: `set-v1.ts`'s old `mainScript` was a
-   * word that read 1 in all 35 Dust sets, and it turned out not to be a pointer
-   * at all — reading it cost `undertak.set` its whole script, because that is the
-   * one set on either disc whose main script is not container 1 (#291).
+   * **The disassembly settles all three, and they are pointers.** `opensetfile`'s
+   * header parser is `0x4076f0`, with `edi` on container 0, and each of the three
+   * goes straight into the container-read routine `0x4385f0`:
    *
-   * What keeps these three as read is layout, not value: they sit in a run with
-   * four refs that demonstrably ARE pointers (mapLight 0x18, mapDark 0x1c, 0x50,
-   * transitionRegister 0x54 — 62 distinct values each). And those four are
-   * provably positional rather than fixed: in every set they are the file's last
-   * four containers, except `FORE.SET` (all editions), which has 739 containers
-   * and points at 733-736 — two spare containers past the end of the run. A field
-   * that tracks the file is a pointer.
+   *     0x4077f4: mov eax, [edi + 0x5c]   ; -> set->mainScript   (esi+0x10)
+   *     0x4077fc: call 0x4385f0            ;    ...and open it
+   *     0x4078d4: mov ecx, [edi + 0x60]   ; -> scene register    (esi+0x74)
+   *     0x4078dd: mov eax, [edi + 0x64]   ; -> its record count  (esi+0x78)
+   *     0x4078e9: call 0x4385f0
+   *     0x407904: mov ecx, [edi + 0x58]   ; -> actor register    (esi+0x6c)
+   *     0x407913: call 0x4385f0
    *
-   * Titanic is not in undertak.set's position today, which is why this is a note
-   * and not a fix: the sets whose container 1 holds no script have no set-level
-   * main to miss — every script container in them that no scene or object
-   * references is a short stub that decompiles to nothing, and their per-view
-   * keydown lives in scene scripts that ARE referenced.
+   * The layout argument that used to stand in for this was the right one — they sit
+   * in a run with four refs that demonstrably ARE pointers (mapLight 0x18, mapDark
+   * 0x1c, 0x50, transitionRegister 0x54 — 62 distinct values each, and provably
+   * positional: in every set they are the file's last four containers except
+   * `FORE.SET`, which has 739 and points at 733-736) — and now it is a reading
+   * rather than an inference (#325). `set-build.ts` writes all four back at these
+   * offsets, and {@link C0.sceneCount} at 0x64 is confirmed twice over: TI.EXE
+   * stores it beside the register it counts, it equals the scene count in all 474
+   * v4 sets, and a save's container 1 dumps the same pair at +652/+656.
    *
-   * Only the disassembly settles it, the way `[edi + 0x1b78]` settled v1, and
-   * TI.EXE is not in the rip (only the CD launcher). Until then: if a v4 set ever
-   * turns up whose container 3 is not its actor register, look here first.
-   * `set-build.ts` writes all three back at these offsets, so a wrong reading is
-   * a wrong writing too.
+   * (TI.EXE is `<lang>/titanic1/install/bin/ti.exe` — the 461 KB engine, not the
+   * 83 KB CD launcher beside the data. This note used to say the rip had only the
+   * launcher.)
    */
   actorRegister: 0x58,
   mainScript: 0x5c,

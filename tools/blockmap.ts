@@ -59,7 +59,7 @@ import { readSndFile } from "@dreamfactory/engine/df/snd";
 import { readSaveFile } from "@dreamfactory/engine/df/savegame";
 import { v1Index } from "@dreamfactory/engine/df/savegame-v1";
 import { readMovFileV1, movFileFromV1 } from "@dreamfactory/engine/df/mov-v1";
-import { readStgFile, readStgRegions, MAIN_SCRIPT_LOCATION } from "@dreamfactory/engine/df/stg";
+import { readStgFile, readStgRegions } from "@dreamfactory/engine/df/stg";
 import { readAudioHeader } from "@dreamfactory/engine/df/audio";
 import { readBankTables } from "@dreamfactory/engine/df/banks";
 import { readMovFile, type MovFile } from "@dreamfactory/engine/df/mov";
@@ -310,7 +310,7 @@ function annotateStg(data: Uint8Array): { roles: Roles; note: string } {
     label: "header container",
     detail: `the stage record: the 2048-byte palette and the table of ${stg.flats.length} flats, 46 bytes each`,
   });
-  claim(roles, MAIN_SCRIPT_LOCATION, {
+  claim(roles, stg.mainScriptLocation, {
     kind: "script",
     via: 0,
     label: "stage main script",

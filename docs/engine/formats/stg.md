@@ -20,15 +20,15 @@ inventory, the exact click order — is in
 A STG's screens are called **flats** — a flat is a **512×384 full-screen
 image** plus its scripts and click regions. `MAIN.STG` is the always-present
 stage: its flat image is the background the UI band sits on, and its main
-script (container 1) defines `gotospecial` — a core travel routine used
-game-wide.
+script defines `gotospecial` — a core travel routine used game-wide.
 
 ## What's in the file
 
 | Where | Contents |
 |-------|----------|
 | Palette @ `56` | the colour table for this file |
-| Container 1 | the stage's **main script** |
+| Main script @ `44` | i32 container ref: the stage's **main script**, the one that carries `openstage` |
+| Stage name @ `2104` | the stage's own name, which is not always its filename — `currentstage()`'s answer |
 | Flat table @ `2124` | one **46-byte record per flat** — pointers to that flat's script, image, and click-logic containers |
 | Image containers | flat images, in the common [image codec](image-codec.md) |
 
@@ -44,6 +44,47 @@ this project wrote from nothing, which is also the one DF file that ships in thi
 repository. Two flats, and the picture each one draws is nearly all of it:
 
 <ByteMap map="lang.stg" />
+
+### The main script, and where it is named
+
+Container 0 names it, at **+44** on a v4 `.stg` and **+32** on a v1 `.flt` — right
+after the screen size, which sits at `0x28`/`0x1c` for the same reason (v1's header
+runs 12 bytes earlier, and its palette 20). The port did not read it at all until
+#325: it had `MAIN_SCRIPT_LOCATION = 1`, "by convention", and the runtime
+hardcoded `containers[1]` without even using that constant. SET names its main
+script and SHP names its own, so STG having no field was the gap in the port
+rather than in the format.
+
+The corpus cannot settle it — container 1 IS the main script in all 388 shipped
+`.stg`/`.flt` — so both engines were read instead. TI.EXE's stage parser
+`0x4451b0`:
+
+```
+0x4452b0: add  eax, 0x838          ; = c0 + 2104, the stage name
+0x4452c0: mov  edx, [eax - 0x80c]  ; = c0 + 44, the main script
+0x4452c8: mov  [edi + 0x18], edx
+0x4452ea: call 0x4385f0            ; ...and open that container
+```
+
+and DF.EXE's `0x4010a0` takes v1's the same way, between the two screen-size
+checks it makes either side of it:
+
+```
+0x401107: mov  eax, [eax + 0x20]   ; = c0 + 32, the main script
+0x40110d: cmp  word [ebx + 0x1c], 0x200   ; 512 wide
+0x401124: cmp  word [ebx + 0x1e], 0x180   ; 384 high
+0x40113e: add  ebx, 0x824          ; = c0 + 2084, the stage name
+```
+
+Which turned up the v1 **stage name** as well. This page and the reader both said
+a `.flt` had none, because reading it at v4's 2104 lands on the first flat record
+and comes back with two NULs. It is 20 bytes earlier, all 20 of Dust's carry a
+real one, and six do not match their filename — `CREDITS.FLT` is `"cred.flt"`,
+`INVEN/HIST.FLT` is `"DBhist.flt"`, `SALGAMES.FLT` is `"cardflats"`,
+`UNDER/SNAKE.FLT` is `"puzzle"`, `NEW.FLT` is `"new"`. Three of Dust's own
+`currentstage()` tests ask for those names, so three branches were unreachable:
+`HOUSE.PRP`'s avatar forwards a click to the flat's `handleit()` on `"scorp"` and
+`"yunnibox"`, and `NEW.FLT` arms its cash-update loop on `"new"`.
 
 ## How STG fits the render stack
 
@@ -99,7 +140,7 @@ a shipped file is a stronger one. Every format here has a builder now
 
 - **[`engine/src/df/stg-build.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/stg-build.ts)**
   — `buildStgFile({ palette, main, flats })` lays out container 0 (palette at 56,
-  flat table at 2124), the main script at container 1, and per flat a script, an
+  flat table at 2124), the main script named at 44, and per flat a script, an
   [`encodeFrame`](image-codec.md) image and a click-logic container of 32-byte
   region records.
 - **`encodeScript`** in

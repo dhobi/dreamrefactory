@@ -161,10 +161,10 @@ test("a new pool string is allocated inside the pool, at its watermark", () => {
   const path = savePath("1", "01 - April 14th, 1942.ti");
   const save = parseSave(new Uint8Array(readFileSync(path)));
   const poolOf = (s: ReturnType<typeof parseSave>) => {
-    const g = s.raw.containers[s.globalsIndex].data;
+    const g = s.raw.containers[s.index.globals].data;
     const dv = new DataView(g.buffer, g.byteOffset, g.byteLength);
     return {
-      len: s.raw.containers[s.globalsIndex + 1].data.length,
+      len: s.raw.containers[s.index.pool].data.length,
       mark: dv.getUint32(8, true),
       size: dv.getUint32(12, true),
     };
@@ -957,21 +957,35 @@ test("parseSave decodes the crew's actorowner state", () => {
   expect(owner("penny"), "and one who wants nothing").toBe("none");
 });
 
-// The grid must be found in every shipped save, and must not be confused with a
-// container that merely looks like it. The globals container is the trap: it is a
-// grid of 32-byte variable nodes and 32 divides 160, so every fifth node sits one
-// actor stride from the last and a pair of variable names 64 bytes apart decodes
-// as a name/owner record. Three ENDGAME2 saves prefer it on record count alone,
-// and a patch would then write actor owners over variable names.
-test("every shipped save yields a real actor grid, not a look-alike", () => {
+// The container map is the writer's own walk (0x413910) and every index is
+// COMPUTED from the file's numbers — container 6's length gives the open-track
+// count and that places everything after it. This is the guard on that reading
+// (#325): the six content probes it replaced are gone, so the map has to hold on
+// every shipped file, and one of them — the actor grid — has to decode out of the
+// container the map names rather than out of a look-alike. The globals blob was
+// the trap: a grid of 32-byte variable nodes, and 32 divides 160, so every fifth
+// node sits one actor stride from the last and a pair of variable names 64 bytes
+// apart decodes as a name/owner record. Three ENDGAME2 saves preferred it to
+// their real cast container on record count alone.
+test("every shipped save matches the positional container map", () => {
   const saves = allSaves();
   expect(saves.length).toBeGreaterThan(0);
   for (const path of saves) {
     const save = parseSave(new Uint8Array(readFileSync(path)));
-    check(`${path}: actor container found`, save.actorsIndex >= 0, `index ${save.actorsIndex}`);
-    check(`${path}: not the globals container`, save.actorsIndex !== save.globalsIndex);
-    check(`${path}: not the string pool`, save.actorsIndex !== save.globalsIndex + 1);
-    check(`${path}: not the prop container`, save.actorsIndex !== save.inventoryIndex);
+    const ix = save.index;
+    check(`${path}: the cast is container 2`, ix.actors === 2, `${ix.actors}`);
+    check(`${path}: the open casts are container 3`, ix.casts === 3, `${ix.casts}`);
+    check(`${path}: the inventory is container 4`, ix.inventory === 4, `${ix.inventory}`);
+    check(`${path}: the open tracks are container 6`, ix.tracks === 6, `${ix.tracks}`);
+    check(
+      `${path}: the globals are 7 + 3 x tracks`,
+      ix.globals === 7 + 3 * ix.trackCount,
+      `${ix.globals} for ${ix.trackCount} tracks`,
+    );
+    // the globals blob is the look-alike the map has to be right about: it must
+    // not be where the cast is read from, and it must decode as variables
+    check(`${path}: the cast is not the globals blob`, ix.actors !== ix.globals);
+    check(`${path}: the globals decode`, save.numGlobals.has("mission"), `${save.vars.length} vars`);
     // the cast is the ship's company, and the Purser is in all of it
     check(`${path}: the cast is there`, save.actors.length >= 10, `${save.actors.length} actors`);
     check(`${path}: purs is in it`, save.actors.some((a) => a.name === "purs"));
@@ -1228,14 +1242,14 @@ test("the template picker lends the base that can hold the most", () => {
 test("a patch never changes a container's length, however much is thrown at it", () => {
   const saves = allSaves();
   const shape = (s: ReturnType<typeof parseSave>) => {
-    const g = s.raw.containers[s.globalsIndex].data;
+    const g = s.raw.containers[s.index.globals].data;
     const dv = new DataView(g.buffer, g.byteOffset, g.byteLength);
     return {
       lens: s.raw.containers.map((c) => c.data.length),
       cap: dv.getUint16(2, true),
       globals: g.length,
       poolSize: dv.getUint32(12, true),
-      pool: s.raw.containers[s.globalsIndex + 1].data.length,
+      pool: s.raw.containers[s.index.pool].data.length,
     };
   };
   for (const path of saves) {
@@ -2707,7 +2721,7 @@ test("the open-cast-file list decodes, and it is what the rooms with a crowd nee
   for (const path of allSaves()) {
     const save = parseSave(new Uint8Array(readFileSync(path)));
     // container 3 in every shipped save, and every record names a .cst
-    expect.soft(save.castIndex, path).toBe(3);
+    expect.soft(save.index.casts, path).toBe(3);
     expect.soft(save.castFiles[0], path).toBe("gang.cst"); // the boot cast, always
     seen.set(save.castFiles.join(","), (seen.get(save.castFiles.join(",")) ?? 0) + 1);
   }

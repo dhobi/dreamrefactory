@@ -53,6 +53,35 @@ use the [SHP transparent codec](shp.md)):
 | Container 2 | **script table**: count i16 @ `22`, then 40-byte records @ `24` (`{i32 location, i32, pascal name[31]}`) |
 | Container 3 | **stance register**: up to 64 × i32 @ `22`, each pointing at a stance container |
 
+Containers 2 and 3 are **not named by the header, and neither engine names them
+either** — that is the answer rather than a gap. #325 listed the two literals as
+suspect on the good ground that container 0 does carry container refs (the answer
+band, and each dialogue line's audio/animLogic pair), so a header with refs in it
+having hardcoded neighbours is worth a look. Both engines' puppet openers push the
+container numbers as immediates, one call each, into four globals:
+
+```
+TI.EXE 0x43ef30            DF.EXE 0x435910
+  push 0; ... 0x489ff0       push 0; ... 0x460be6
+  push 1; ... 0x489fec       push 1; ... 0x460be2
+  push 2; ... 0x489fe8       push 2; ... 0x460bde
+  push 3; ... 0x489ff4       push 3; ... 0x460bea
+```
+
+So the port's literals are the engine's own, and DF.EXE walking its container 3
+with the 262-byte layer stride directly (`shl ecx,6; add ecx,eax; lea ebx,[eax+ecx*2]`
+at `0x4359f7`) is a second reading of "a DreamFactory 1 puppet has exactly one
+stance and container 3 IS it" — the first was the corpus.
+
+Two things the audit did change here. A `.pup` is read with **the byte order the
+file declares**, not always little-endian: the German
+`titanic1/PUPPETS2/bsea2.pup` is a Macintosh build that got into a Windows rip, and
+`readContainerFile` had been honouring that while `readPupFile` read every field the
+other way round — its dialogue count came out 16896 instead of 66 (`0x0042`
+reversed), the record walk ran off container 0, and Ben-Sea did not load at all in
+that edition. And both table counts are now **clamped to the container that holds
+them**: the same file says 512 scripts in a 104-byte container, room for two.
+
 `BLKJACK1.PUP` laid out — a puppet is mostly *voice*, and the faces are the small
 part. Hover the header container to see the fan-out: the stances, the scripts,
 the answer band and every line's audio all hang off it.
@@ -143,9 +172,14 @@ for.
 
 ## CST — the body that scales with distance
 
-Container 0 carries the palette @ `36` and the member directory: a count i32
-@ `0x938`, then 16-byte records @ `0x93C` pointing at each member's **logic
-container**:
+Container 0 carries the palette @ `36`, the cast's **main script** as an i32
+container ref @ `0x924` (the shared `stdactor`/`stdscale`/`endwalk` handlers every
+member falls back to, with the file's own name right after it at `0x928` — the
+[SHP header's tail exactly](shp.md), and read out of `opencastfile`'s parser
+`0x40dac0` for the same reason: there are only 13 `.cst` files in the corpus, all
+of which put it in container 1, so no counterexample is possible from data), and
+the member directory: a count i32 @ `0x938`, then 16-byte records @ `0x93C`
+pointing at each member's **logic container**:
 
 | Offset | Type | Field |
 |-------:|------|-------|
