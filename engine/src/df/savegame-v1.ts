@@ -38,13 +38,13 @@
  * | +5 | walks, `0x520` = 16 × 82 | `0x45F170`, `add esi,0x52` |
  * | (var) | one waypoint payload per active walk carrying one | `0x41A41F` |
  *
- * Which means the indices are **positional**, not searched for. v4 has to hunt
- * for its containers by content (its writer emits a variable number of them and
- * the port meets saves from six editions); here the count is
- * `7 + 3·banks + 5 + payloads`, so `banks` follows from the count and every
- * index follows from `banks`. No heuristics, and none of v4's — its globals
- * probe looks for the strings `mission` and `playerdeath`, which are TAOOT's
- * vocabulary and appear in no Dust save.
+ * Which means the indices are **positional**, not searched for: the count is
+ * `7 + 3·banks + 5 + payloads`, so `banks` follows from the count and every index
+ * follows from `banks`, checked against the file's own structures (see
+ * {@link v1Index}). v4 is read the same way now — it used to hunt by content, and
+ * its globals probe looked for the strings `mission` and `playerdeath`, which are
+ * TAOOT's vocabulary and appear in no Dust save, so a Dust-shaped `.ti` read as
+ * having no globals at all (#325).
  *
  * ## What a load may and may not touch
  *
@@ -618,18 +618,64 @@ export interface V1Index {
   walks: number;
 }
 
+/** the three service tables' fixed sizes — the writer `memcpy`s them whole, so
+ *  these are constants in every save, and the triple is what says the tail of the
+ *  map landed where it should (32 × 42, 16 × 48, 16 × 82) */
+const V1_LOOPS_SIZE = 0x540;
+const V1_CRICKETS_SIZE = 0x300;
+const V1_WALKS_SIZE = 0x520;
+
+/** does `banks` put the three service tables where they belong? */
+function tailFits(raw: RawSaveFile, banks: number): boolean {
+  const g = 7 + 3 * banks;
+  return (
+    raw.containers[g + 2]?.data.length === V1_LOOPS_SIZE &&
+    raw.containers[g + 3]?.data.length === V1_CRICKETS_SIZE &&
+    raw.containers[g + 4]?.data.length === V1_WALKS_SIZE
+  );
+}
+
 /**
- * Which container is which, from the count alone.
+ * Which container is which, from the file's own numbers.
  *
  * `count = 7 + 3·banks + 5 + payloads`, and a payload only exists for an active
- * walk carrying waypoints, which a good many of the shipped saves do have. Deriving
- * `banks` from the count and cross-checking it against container 6's own size
- * (38 bytes per bank) is what makes the map self-validating: if the two
- * disagree, this is not the file we think it is.
+ * walk carrying waypoints. `banks` therefore follows from the count — but only
+ * while `payloads < 3`, because three payloads and one extra bank cost the same
+ * three containers. Every shipped save carries at most one (measured: 43 with
+ * none, 13 with one, across all 56), so the count alone has never been wrong on
+ * a real file; our own writer can produce a save with more.
+ *
+ * So the count proposes and the file confirms, and the confirmation is what makes
+ * this a reading rather than a second convention (#325 — the check used to be
+ * container 6's capacity alone, which is one-sided: an over-derived count that
+ * still fits the array passed silently):
+ *
+ *  - the three service tables are FIXED sizes, so the tail of the map has to land
+ *    on all three. Measured over the 56 shipped saves, exactly one `banks` value
+ *    satisfies that in each — so when the count's proposal fails, solving for the
+ *    one that fits recovers the map rather than giving up;
+ *  - the leftover container count then has to equal the number of active walk
+ *    slots that DECLARE a payload (`+0x24` non-zero). True in all 56, and it is
+ *    the check that catches a `banks` off by one in the direction the fixed sizes
+ *    cannot see;
+ *  - and container 6 still has to have room for the banks.
  */
 export function v1Index(raw: RawSaveFile): V1Index {
   const n = raw.containers.length;
-  const banks = Math.max(0, Math.floor((n - FIXED_CONTAINERS) / 3));
+  const proposed = Math.max(0, Math.floor((n - FIXED_CONTAINERS) / 3));
+  let banks = proposed;
+  if (!tailFits(raw, banks)) {
+    // three payloads cost what a bank costs; the fixed tables say which it was
+    const fits: number[] = [];
+    for (let b = 0; FIXED_CONTAINERS + 3 * b <= n; b++) if (tailFits(raw, b)) fits.push(b);
+    if (fits.length !== 1) {
+      throw new Error(
+        `v1 save: ${n} containers proposes ${proposed} sound banks, and ` +
+          `${fits.length} value${fits.length === 1 ? "" : "s"} put the loops/crickets/walks tables at the tail`,
+      );
+    }
+    banks = fits[0];
+  }
   const room = Math.floor((raw.containers[6]?.data.length ?? 0) / BANK_STRIDE);
   // the bank array is capacity-sized, so it may have room to spare — but never
   // less room than there are banks
@@ -637,7 +683,26 @@ export function v1Index(raw: RawSaveFile): V1Index {
     throw new Error(`v1 save: ${banks} sound banks by container count, room for ${room} in container 6`);
   }
   const globals = 7 + 3 * banks;
+  // the tail's own count, against the walks table's own answer
+  const payloads = n - (FIXED_CONTAINERS + 3 * banks);
+  const declared = declaredPayloads(raw.containers[globals + 4].data);
+  if (payloads !== declared) {
+    throw new Error(
+      `v1 save: ${payloads} container${payloads === 1 ? "" : "s"} past the walks table, ` +
+        `but ${declared} walk slot${declared === 1 ? "" : "s"} declare${declared === 1 ? "s" : ""} waypoints`,
+    );
+  }
   return { banks, globals, pool: globals + 1, loops: globals + 2, crickets: globals + 3, walks: globals + 4 };
+}
+
+/** how many active walk slots carry a waypoint container of their own */
+function declaredPayloads(walks: Uint8Array): number {
+  const dv = new DataView(walks.buffer, walks.byteOffset, walks.byteLength);
+  let n = 0;
+  for (let at = 0; at + WALK_STRIDE <= walks.length; at += WALK_STRIDE) {
+    if (dv.getUint16(at + WALK_ACTIVE, true) && dv.getUint32(at + WALK_PAYLOAD, true)) n++;
+  }
+  return n;
 }
 
 /** a Pascal string field, or "" — the 16-byte fields hold 15 characters */
@@ -1358,6 +1423,13 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       if (w.hasPath) drop(w.actor, "walking an authored route — written as the straight line");
       slot++;
     }
+    // No slot references a waypoint container any more, so the base's own
+    // payloads go with the table that named them. DF.EXE's loader reads one
+    // container per DECLARING slot, so leaving them would be harmless to it —
+    // but it would leave the file's own count disagreeing with its own walks
+    // table, which is exactly what {@link v1Index} validates (#325), and v4's
+    // `applyPatch` re-emits the tail for the same reason.
+    out.containers.length = index.walks + 1;
   }
 
   return writeSaveFile(out);

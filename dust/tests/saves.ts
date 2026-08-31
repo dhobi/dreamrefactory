@@ -75,9 +75,14 @@ test("a Dust save is the same container a Titanic save is", () => {
      * (v1Index), so a save with one open sound bank is 15 and one carrying an
      * active walk's waypoints is 19. A larger collection has both: `D2E_001`
      * with one bank, `D1E_005` with a walk payload. What IS a property is that
-     * the bank count the count implies matches container 6's own capacity, and
+     * the map the count implies lands on the file's own structures, and
      * `v1Index` throws when it does not — so parsing is the assertion, and the
      * arithmetic is checked here rather than a magic number.
+     *
+     * Three things it now throws on rather than one (#325): container 6 having
+     * no room for the banks (the original, one-sided check), the three service
+     * tables not being at the tail the count puts them at, and the leftover
+     * container count disagreeing with how many walk slots declare waypoints.
      */
     const index = v1Index(raw);
     const payloads = raw.containers.length - (FIXED_V1_CONTAINERS + 3 * index.banks);
@@ -86,6 +91,51 @@ test("a Dust save is the same container a Titanic save is", () => {
       .toBeGreaterThanOrEqual(0);
     expect.soft(index.banks, `${f}: at least the boot's own bank is open`).toBeGreaterThan(0);
   }
+});
+
+/**
+ * The case the container count alone cannot answer.
+ *
+ * `count = 7 + 3·banks + 5 + payloads`, so THREE waypoint payloads cost exactly
+ * what one more sound bank costs, and the count proposes a `banks` one too high.
+ * No shipped save reaches three (the most any carries is one), but a save this
+ * port writes can, and the reader has to survive its own output. Built here by
+ * appending three payload containers to a real save and arming three walk slots
+ * to declare them, which is the shape the original writer would have emitted.
+ */
+test("v1Index recovers the map when three walk payloads look like a bank", () => {
+  const files = dustSaves();
+  if (!files.length) return;
+  const bytes = new Uint8Array(readFileSync(join(SAVE_DIR, files[0])));
+  const raw = readSaveFile(bytes);
+  const before = v1Index(raw);
+  const walks = raw.containers[before.walks].data;
+  const dv = new DataView(walks.buffer, walks.byteOffset, walks.byteLength);
+  // three active slots, each claiming a waypoint container (82-byte records;
+  // +0 active, +0x24 the payload handle — any non-zero value is "I have one")
+  for (let s = 0; s < 3; s++) {
+    dv.setUint16(s * 82, 1, true);
+    dv.setUint32(s * 82 + 36, 0xa6b4b0, true);
+  }
+  // and the containers they name, replacing whatever the base's own tail held
+  raw.containers.length = before.walks + 1;
+  for (let s = 0; s < 3; s++) raw.containers.push({ id: raw.containers.length, data: new Uint8Array(8) });
+
+  const naive = Math.floor((raw.containers.length - FIXED_V1_CONTAINERS) / 3);
+  expect(naive, "the count alone proposes one bank too many").toBe(before.banks + 1);
+  expect(v1Index(raw).banks, "the fixed service tables say which it really was").toBe(before.banks);
+  expect(v1Index(raw).globals).toBe(before.globals);
+});
+
+/** ...and the same validation refuses a file whose tail is not the map's. */
+test("v1Index refuses a save whose service tables are not where the count puts them", () => {
+  const files = dustSaves();
+  if (!files.length) return;
+  const raw = readSaveFile(new Uint8Array(readFileSync(join(SAVE_DIR, files[0]))));
+  const index = v1Index(raw);
+  // one container too few: nothing puts the loops/crickets/walks triple at a tail
+  raw.containers.splice(index.globals, 1);
+  expect(() => v1Index(raw)).toThrow(/loops\/crickets\/walks/);
 });
 
 /**
