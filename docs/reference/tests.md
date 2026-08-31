@@ -296,6 +296,41 @@ The same sheet language runs in the browser, on the unlisted `/speedrun/`
 workbench — `taoot/src/speedrun/` is the in-page half and
 `taoot/tests/speedrun/` the Playwright one, over one sheet parser.
 
+### A route is a line; the sinking is not
+
+`watchFor(<condition>, <action>)` is a standing rule — *whenever this becomes
+true, do that* — and it exists because one part of this game cannot be written
+as a line ([#255](https://github.com/dhobi/dreamrefactory/issues/255)). During
+mission 4 the phase advances on a mix of real time, how far the player has
+walked and how many conversations they have had, so `sink1.mov` arrives at a
+moment no sheet can name: it interrupts whatever command is running, blocks
+input, and the line waiting on the world times out through no fault of its own.
+The only linear answer is an `esc()` after every movement, which is unreadable
+and still wrong, because the film is not after any particular move.
+
+```
+watchFor(movie == sink1.mov, skipMovie(until: quiet, budget: 60000))
+watchFor(movie == sink1.mov, off)
+```
+
+The condition is the ordinary condition language, the one `wait` takes, and the
+action is an ordinary sheet line — parsed as one, which is what makes this take
+every verb rather than a list of the ones somebody remembered to allow.
+
+Two things decide whether it works. It is polled **alongside the running step**
+and not between steps, because the step that needs rescuing is the one already
+waiting; the runner starts a watchdog beside each step, one round trip per tick
+however many watches there are, and nothing at all when none is registered. And
+it is **edge-triggered** — a watch fires when its condition goes false→true and
+not again until it has gone false in between — so a film playing for two hundred
+frames is one firing, not two hundred.
+
+Safe to gesture from, because a step that is waiting is only polling. A watch
+that fires while a step is mid-*gesture* is the one hazard, and it is the sheet
+author's to avoid: a watch is for recovery, not for playing the game.
+
+With the three sinking films watched, the route runs cold boot to credits.
+
 Both halves aim through **one** piece of arithmetic, `clientPointFor` in
 `src/speedrun/driver.ts`, and that is not tidiness: a gesture is named in canvas
 pixels, the page reads it back with `Math.floor`, and the coordinate in between

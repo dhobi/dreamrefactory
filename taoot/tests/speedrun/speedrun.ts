@@ -241,6 +241,8 @@ async function main(): Promise<void> {
   // two hosts cannot drift about what a sheet MEANS — only about how a key gets
   // delivered. VERBOSE narrates; the report below is what a run is read from.
   const r = await runSheet(d, steps, {
+    onWatch: (w, said) =>
+      console.log(`  WATCH ${w.source} -> ${w.action.source}${said.length ? `  (${said.join("; ")})` : ""}`),
     onStep: (step, i, total) =>
       process.env.VERBOSE && console.log(`  [${i + 1}/${total}] ${step.source}`),
   });
