@@ -58,6 +58,7 @@ import { join } from "node:path";
 // taoot/src/speedrun/driver.ts now, because the in-page runner needs exactly the same
 // ones — see there for what each mode waits on and why KEY_SAFE is not optional.
 import {
+  HELD_YIELDS,
   KEY_SAFE,
   QUEUE_EMPTY,
   QUIET,
@@ -362,9 +363,10 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
     ): Promise<void> => {
       const from = await pagePoint(at.x, at.y);
       const seq = () => evaluate<number>("window.dbg.session.realYieldSeq");
+      // one turn of the control's `while stilldown()` loop — see HELD_YIELDS
       const held = async (): Promise<void> => {
         const was = await seq();
-        await tryHold(`window.dbg.session.realYieldSeq >= ${was + 4}`, Math.min(budget, 20_000));
+        await tryHold(`window.dbg.session.realYieldSeq >= ${was + HELD_YIELDS}`, Math.min(budget, 20_000));
       };
       await page.mouse.move(from.x, from.y);
       await page.mouse.down();

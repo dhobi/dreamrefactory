@@ -92,6 +92,38 @@ export function clientAxis(v: number, origin: number, size: number, n: number): 
   return first < hi ? first : mid;
 }
 
+/**
+ * How many `realYieldSeq` bumps a held drag waits for after each move, before
+ * making the next one ([#293](https://github.com/dhobi/dreamrefactory/issues/293)).
+ *
+ * A dragged control is a script spinning in `while stilldown() { … forceupdate() }`,
+ * and BOTH of those bump the counter — so one turn of that loop is two bumps and
+ * this is a wait of exactly one turn. It used to be four, which is two turns, and
+ * the dial steps once per turn: the driver was therefore turning every dial at
+ * half the rate the game can be turned at, which is what the report measured
+ * against its author's own hand (~12 s of script against 7–9 s by hand).
+ *
+ * Two is not a proof that the move has been consumed. Within a turn the bumps
+ * are `stilldown` then `forceupdate` with the body between them, and depending
+ * which of the two we sampled after, two bumps either straddle a body that ran
+ * after our move or land just short of one. Four was the number that made it
+ * certain.
+ *
+ * Certainty is not needed, because the gesture is CLOSED-LOOP: `turnOnce` reads
+ * the deg every iteration and keeps swinging until it reads the one asked for,
+ * so a move the loop did not see costs one more move and nothing else. The
+ * direction cannot be lost with it — `limiter` reads only the sign of the
+ * bearing change, and two of our moves accumulated into one read is the same
+ * sign as one.
+ *
+ * Measured over the plant's six dials from one seed, so the scatter `openstage`
+ * deals them is identical: 5.3 s of dialling at four bumps, 4.7 s at three, 3.7 s
+ * at two and 3.5 s at one. One buys nothing over two and guarantees no turn at
+ * all, so two it is — and the floor under both is the game's own loop, which is
+ * the floor a hand has too. Landed on all six across four different seeds.
+ */
+export const HELD_YIELDS = 2;
+
 /** {@link clientAxis} on both axes: the client point that lands on canvas (x, y) */
 export function clientPointFor(
   x: number,
