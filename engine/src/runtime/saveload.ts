@@ -524,6 +524,35 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     resetCast(session);
     restoreActors(session, save.actors);
 
+    // The departing ROOM's props, which the file cannot speak for — the prop
+    // half of `resetCast` above, and it was missing (#339).
+    //
+    // A save's prop table is the BOOT shops and nothing else: all 109 shipped
+    // saves carry exactly 72 records, the two persistent shops' props, including
+    // the ones taken inside rooms whose own shop was open at the time. That is
+    // the original's answer to the question — a room's props are the room's, and
+    // a load rebuilds the room. `restoreProps` below applies the records it has
+    // and leaves everything else exactly as the abandoned game left it, so a
+    // room shop still loaded from the room being left kept its props, visible,
+    // over whatever came next.
+    //
+    // Reported from the false smokestack, which is where it shows because the
+    // smokestack's crates ARE its state: `SMSTACK2.SET setupblocks()` makes the
+    // gaps of this (maze, level) visible and nothing ever hides one, so a
+    // checkpoint loaded out of the stack and a walk back in put the previous
+    // climb's crates on top of the new maze's — the debug readout naming maze 1
+    // beside a floor wearing maze 3's crates.
+    //
+    // Closed rather than hidden, and only the non-persistent ones: a room shop
+    // belongs to a room that is being thrown away, and the room ARRIVING opens
+    // its own from its `openset` — which does run on a load (`restoringSave`
+    // gates the scene half, not the set half; see SetViewer.start). The two boot
+    // shops are persistent, so their 72 props are still here to receive the
+    // records the file does carry.
+    for (const shop of [...session.propRuntime.shops.entries()]) {
+      if (!shop[1].persistent) await session.closeShop(shop[0]);
+    }
+
     // Every prop, both halves, from the file. This replaces the whole family of
     // script re-runs the old load fought with: initprops' mission defaults, the
     // house.shp openshop/initprops/showinterface dance, the hand-mirrored open

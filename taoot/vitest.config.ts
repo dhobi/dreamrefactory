@@ -35,6 +35,7 @@ const NEEDS_THE_RIP = [
   "sound-channels",
   "shp-play-order",
   "cst-play-order",
+  "smokestack",
 ];
 
 export default defineConfig({

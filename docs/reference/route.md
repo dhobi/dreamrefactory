@@ -153,6 +153,27 @@ stricter test than a fixed value. It has to solve: **one of the sixteen (maze, e
 pairs is a dead end**, maze 4 into scene39, both gaps closed. Maze 4 is the hard one
 and it climbs in 18 moves.
 
+Two things about the maze are worth knowing before reading a walkthrough, and
+[#339](https://github.com/dhobi/dreamrefactory/issues/339) is where both surfaced.
+
+**A load used to leave the last climb's crates behind.** `setupblocks()` only ever
+makes gaps visible, so a checkpoint loaded out of the stack and a walk back in put two
+mazes on one floor — the readout naming maze 1 beside crates from maze 3. The cause is
+not the maze at all: a save's prop table is the boot shops and nothing else (all 109
+shipped saves carry exactly 72 records), so `restoreProps` left the departing room's
+props exactly as the abandoned game had them, and the load now closes that room's shop
+the way `resetCast` has always emptied its cast.
+
+**The entry is also what the maze *looks* like.** Runners identify it by climbing,
+turning right and reading the crates — blocked at once is maze 4, crates across the
+shaft is maze 3, nothing is 1 or 2 — and those rules are relative to **one** of
+`smstack1`'s four ladders, View42 into Scene37. The crate list is positions on the
+ring, so coming up elsewhere on it shows a different part of the same maze, and two of
+those views are another maze's signature exactly: maze 1 from Scene38 reads as maze 3.
+That one is not a bug, and `taoot/tests/auto/smokestack.ts` pins it alongside the rest
+so it is not reported as one. All four mazes solve from Scene37 in 18 moves, so that is
+the ladder to take.
+
 **The necklace sub-plot** (segment 6) is what clears `onehappens`, and it is the
 longest chain on the route: `neckphase` 0 → 1 → 2 → 5 → 6 → 7 → 8 → 9, through
 Georgia on three decks, Charles in the smoking room, the A-deck fusebox twice (cut
