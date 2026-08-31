@@ -33,7 +33,7 @@ writes:
   loaded, and the story crosses back to disc 1 at mission 4 without either of
   them changing — so a save written after that crossing used to claim the disc it
   had come *from*. It matters at both ends: the original engine asks for that CD
-  by name, and a load in this port mounts it (step 2 below),
+  by name, and a load in this port mounts it (step 3 below),
 - the **props**: **every prop the engine has loaded**, in the engine's own list
   order, and the whole record — `propowner` and `propview`, plus the numeric half
   (`propvisible`, the screen anchor, `deg`, `dist`, `scale`, `value`, `zclip`) —
@@ -74,7 +74,7 @@ writes:
   a payload, so this only ever appends past the end.
 
   The round trip used to be **asymmetric** — a walk in a shipped save was resumed on
-  the way in (step 11 below) and one of ours was lost on the way out, so saving
+  the way in (step 13 below) and one of ours was lost on the way out, so saving
   mid-conversation-approach reloaded to a character parked where they happened to be.
   Both halves are ours, which is why nothing in the port noticed.
 - the **theme** that is playing, written into the track state
@@ -219,7 +219,34 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
 
 1. Parse and validate (`"Titanic 1.0"`; a foreign file is rejected with the
    original's error).
-2. **Mount the disc the save was taken on**, before a byte is read off one. 93
+2. **Abandon every script still running**, because the game they belong to has
+   just been replaced. `Interpreter.abandonRunning` bumps an epoch that every
+   frame is stamped with, and a frame carrying the old one stops at its next
+   statement and unwinds; the pointer comes back with it, since a script cut off
+   mid-arm may never reach its own `showcursor`.
+
+   A suspended script is suspended *inside* a builtin, and the teardown below
+   already releases those — so this has to come first, or the release wakes a
+   script that then runs on into a game that no longer exists. That is what the
+   ending did ([#340](https://github.com/dhobi/dreamrefactory/issues/340)):
+   BOOTFILE's `advanceday()` endgame arm is one straight-line script, so a
+   checkpoint pressed during it resumed at the next film and reached
+   `if mission = "good"` with the checkpoint's mission in the global. Measured in
+   a browser — `narend.stg` scored the good ending, the load replaced `mission`,
+   and the surviving script played the bad ending's `playmore.mov` over the
+   loaded room and quit to the boot menu.
+
+   `settle()` cannot do this job. It waits for the in-flight dispatches to
+   finish, and the workbench's checkpoint chips call the load from *inside*
+   `session.track(...)`, so a load that settled would be waiting for itself.
+   (`prepareRestart` can settle because a restart is not reached that way.)
+
+   Safe for the game's own load lever: CTL.STG's button is
+   `opengame("Titanic 1.0")` followed only by
+   `if currentstage() != "ctl.stg" exitcode`, and a completed load has already
+   reopened `main.stg` — so the tail this cuts is the `exitcode` it was going to
+   take. The cancel arm never reaches here.
+3. **Mount the disc the save was taken on**, before a byte is read off one. 93
    basenames ship on both CDs — the public rooms, once per act — and 70 of them
    differ byte for byte, 19 being `.set` rooms; which copy the engine reads is
    `setpath(disk)`'s to say, and `BOOTFILE` only calls it on a story transition or
@@ -230,32 +257,71 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    which is 78 of the 109 shipped saves opening the wrong act's rooms, and is how
    the starboard vestibule door came out on A deck
    ([#231](https://github.com/dhobi/dreamrefactory/issues/231)).
-3. Restore all number and string globals, `clock` and `hallside` among them
-   (without a valid `hallside`, halla's `keydown` guard swallows every key;
-   `savedeck` keeps a set-derived deck-letter fallback for the four pre-boarding
-   saves that predate the variable).
-4. Force **`lockevents = 0`** — every save is taken from the CTL menu with
+4. **Drop every global the file does not name**, then restore all number and
+   string globals, `clock` and `hallside` among them (without a valid
+   `hallside`, halla's `keydown` guard swallows every key; `savedeck` keeps a
+   set-derived deck-letter fallback for the four pre-boarding saves that predate
+   the variable).
+
+   The records are not a patch over the live session: they are TI.EXE's whole
+   variable list, written out and read back wholesale. A global with no record
+   did not exist when the game was saved, so after `opengame` it does not exist
+   either. Normally that silence is a room's own doing and the room cleans up
+   after itself — `dumpglobal` discards a room's globals from its `closeset` or
+   `closestage`, and all 64 sites in the corpus sit in a teardown — but a load
+   runs no scripts, so nothing is dumped. The port only ever `set` them, and
+   kept everything the file was silent about: BEDSIT1's `radiostate`,
+   `ladycount`, `bombmebaby` and the nine `xx…` clippings survived every load in
+   the game.
+
+   The boat deck is where it was reported
+   ([#340](https://github.com/dhobi/dreamrefactory/issues/340)). `DECKBD2.SET`
+   c1012 opens the Gorse-Joneses' lifeboat offer on
+   `frame() - jonesframe > 2000 & jonesphase = 0`, and `jonesframe` is never
+   initialised anywhere — it springs into existence the first time the offer
+   fires, so 101 of the 109 shipped saves have no record for it. Left standing
+   while the frame counter rewinds to the save's, the gate's difference
+   goes hugely negative: measured at frame 38365 against a `jonesframe` of
+   337079 it reads −298714 and reopens after 300714 more frames, five and a half
+   hours of play. `jonesphase` restores from the file and looks innocent, which
+   is why the report named the flag and not the stamp.
+
+   Deleted rather than zeroed, because a `global` declaration recreates a
+   missing name at 0 — which is what the original hands a script reading a
+   variable its restored list has no node for. `__`-prefixed names are the
+   port's own bookkeeping and not the file's to speak for (`__propsinit` is a
+   once-guard on inven.shp's `initprops`); `snapshotSave` skips the same prefix
+   when writing. Everything else a booted session holds is carried by all 109
+   saves.
+
+   Safe against the port's own saves being *patches* onto a base with finitely
+   many free variable slots, which could in principle be silent about a global
+   merely because it did not fit: measured, no single session ever holds enough
+   globals for that to happen (the corpus knows 163 between all 109 saves, the
+   roomiest base holds 139, and a live session runs 85–127). A global that did
+   not fit is already reported by name at the moment it is written.
+5. Force **`lockevents = 0`** — every save is taken from the CTL menu with
    world input frozen, so every save *carries* the freeze; a load returns you
    to interactive control.
-5. Tear down timed state (`scheduler.reset()`), **silence the voice channel** (the
-   theme is halted and re-scored from the file at step 11), drop any pending
+6. Tear down timed state (`scheduler.reset()`), **silence the voice channel** (the
+   theme is halted and re-scored from the file at step 12), drop any pending
    [overlay-stack](stage-ui.md#the-overlay-stack-transtoflat-transfromflat)
    frames, reopen `main.stg`, and make the set visible.
-6. **Mute the set lifecycle** (`GameSession.restoringSave`) for everything below.
+7. **Mute the set lifecycle** (`GameSession.restoringSave`) for everything below.
    The departing room is *detached*, not closed: its `closeset` does not run, its
    timed state died with the scheduler reset, and the host releases its files when
    the new set activates.
-7. **Reopen the cast files the save had open** (container 3 — `gang.cst` always,
+8. **Reopen the cast files the save had open** (container 3 — `gang.cst` always,
    plus `extra.cst` in the three rooms with a crowd), before a single record is
    applied. The extras a room places are instanced from `extra.cst`, which the
-   room's own `openset` opens — and step 6 just muted that. Skipping this step
+   room's own `openset` opens — and step 7 just muted that. Skipping this step
    dropped 344 characters across 39 of the 109 shipped saves, in the endgame's
    most populated rooms, with nothing but a log line to say so
    ([#186](https://github.com/dhobi/dreamrefactory/issues/186); [the container's
    story](../formats/savegame.md#the-crowd-comes-from-this-container)). The list
    is the file's own rather than a guess from the set being entered, and
    `opencastfile` is idempotent, so the boot cast costs nothing.
-8. **Put the cast back, wholesale.** The live actor list is wiped first —
+9. **Put the cast back, wholesale.** The live actor list is wiped first —
    `actorinstance` copies removed, cast members put down — because the original
    replaces its list with the container it read, and then every record is applied:
    owner and value, set, star, pose, position, facing, speed, `actorturn`,
@@ -268,7 +334,7 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    `actorvisible` verbatim is what makes wholesale restore safe at all:
    `putdownactor` hides a character without touching `actorset`, so "place everyone
    whose set matches" would resurrect everybody who ever walked through the room.
-9. **Put every prop back, both halves** — owner, view, and the numeric fields that
+10. **Put every prop back, both halves** — owner, view, and the numeric fields that
    say where and how it draws. This one step replaces the whole family of script
    re-runs the load used to negotiate with: `initprops`' mission defaults, the
    `house.shp` `openshop`/`initprops`/`showinterface` dance, the hand-mirrored open
@@ -276,22 +342,22 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    hand either — it restores from its variable record like every global, and every
    shipped save carries `""` there: a save is taken from the CTL panel, which you
    cannot reach mid-drag.)
-10. **Restore the scheduler tables mid-count** — every `makeloop` with the ticks it
+11. **Restore the scheduler tables mid-count** — every `makeloop` with the ticks it
    had left, every `makecricket` with its position, radius, period, jitter and time
    to next fire. This is what used to need the arriving room's `openset`: the idles
    that make characters act, the scene timers, the room's positional ambience.
-11. **Reopen every audio bank the save had open, then score the room from the
+12. **Reopen every audio bank the save had open, then score the room from the
    file**: the track whose playing/looping arrays are non-empty is the theme, and
    it is played at the player's `themevolume`. The *other* open banks matter as
    much, and opening only the theme's was
-   [#199](https://github.com/dhobi/dreamrefactory/issues/199): step 9 just restored
+   [#199](https://github.com/dhobi/dreamrefactory/issues/199): step 11 just restored
    loops and crickets that play out of banks with nothing sounding in them, so
    the sinking's groaning metal came back as a live loop with no bank under it —
    `sound not found: `, with an empty name, for the rest of the game. Across the
    18 shipped saves with a cricket table, 49 of 50 cricket records cannot resolve
    their sound from the theme's bank alone. See [an open bank is not a playing
    bank](../formats/savegame.md#an-open-bank-is-not-a-playing-bank).
-12. **Walks come back mid-stride.** The walks table is TI.EXE's own service table,
+13. **Walks come back mid-stride.** The walks table is TI.EXE's own service table,
     and its record carries the walk's origin, its deltas, its total distance, how
     far along it is and the star it lands on — so the walk is *restored*, not
     restarted: the walker sets off from where the save caught them with only what
@@ -314,7 +380,7 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
     script](../formats/pup-cst.md#the-play-script-says-how-long-a-picture-is-held)
     whether a walk is running or not, so a drop that left the pose alone left a
     character treadmilling on the spot.
-13. Open the saved set/scene/view through the engine's set machinery, still with the
+14. Open the saved set/scene/view through the engine's set machinery, still with the
     lifecycle muted. The scene is recorded as current, so the first turn or step
     fires `openscene` normally.
 
