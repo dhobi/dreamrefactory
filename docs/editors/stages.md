@@ -21,7 +21,7 @@ caption reads the size out of the file rather than assuming one.
 | a **flat** | pick one, see its full-screen art, and rename it. Unlike the shop's name this one *is* a lookup key — `gotoflat`/`transtoflat` ask for it and `currentflat()` answers it — so the scripts that call for a flat have to be renamed with it |
 | its **regions** | the clickable "buttons" `sendtobutton`/`pointinbutton` reach, drawn over the picture with their names: rename one, or move/resize its rectangle by its four edges and watch the overlay follow. The rectangles are stored top/left/bottom/right and shown x-first, in screen pixels, because a flat *is* the whole screen |
 | the **art** | export it as a PNG or replace it. A flat is self-contained (nothing delta-codes against it), so unlike a SET frame there is no ring to keep consistent |
-| the **scripts** and **palette** | the stage main script (container 1 by convention — `MAIN.STG`'s defines the game-wide `gotospecial`), every flat's, and every region's on the selected flat, decompiled on demand; plus all 256 colours, which a full-screen flat uses where a room view uses 128 |
+| the **scripts** and **palette** | the stage main script (the container the header names at +44 — `MAIN.STG`'s defines the game-wide `gotospecial`), every flat's, and every region's on the selected flat, decompiled on demand; plus all 256 colours, which a full-screen flat uses where a room view uses 128 |
 
 A flat with no click-logic container has nothing clickable on it, and the page
 says that rather than showing an empty list.
