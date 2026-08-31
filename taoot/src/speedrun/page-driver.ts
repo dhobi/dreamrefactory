@@ -37,6 +37,7 @@
  *     (`beginTouch`).
  */
 import {
+  HELD_YIELDS,
   KEY_SAFE,
   Paused,
   SHOWING,
@@ -455,15 +456,14 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
 
     dragProp: async (at, next, budget = timeout) => {
       const from = clientPoint(at.x, at.y);
-      // `realYieldSeq` counts the frames a script has given up, bumped once per
-      // turn of exactly the `while stilldown()` loop holding the drag. Waiting
-      // for +4 means a whole iteration has begun and finished since the cursor
-      // moved, so the dial has seen where it now is. Four and not two because
-      // the `stilldown()` opening the turn and the `forceupdate()` closing it
-      // both bump it, so +2 can be satisfied with the body never having run.
+      // `realYieldSeq` counts the frames a script has given up, bumped twice per
+      // turn of exactly the `while stilldown()` loop holding the drag — the
+      // `stilldown()` opening the turn and the `forceupdate()` closing it. So
+      // this waits one turn, which is the rate the dial itself steps at; see
+      // HELD_YIELDS for why one turn rather than the two this used to take.
       const held = async (): Promise<void> => {
         const was = run<number>("window.dbg.session.realYieldSeq");
-        await until(`window.dbg.session.realYieldSeq >= ${was + 4}`, Math.min(budget, 20_000));
+        await until(`window.dbg.session.realYieldSeq >= ${was + HELD_YIELDS}`, Math.min(budget, 20_000));
       };
       movePointer(from);
       pointer("pointerdown", from);

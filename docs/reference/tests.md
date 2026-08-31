@@ -310,6 +310,21 @@ nearest whole coordinate rather than a fraction that will not arrive, and
 `setLever` aims at the MIDDLE of a setting's band to spend the tolerance the
 control already has.
 
+They also pace a held drag through one constant, `HELD_YIELDS`. A dragged
+control is a script spinning in `while stilldown() { … forceupdate() }` and both
+of those bump `realYieldSeq`, so one turn of that loop is two bumps — and the
+dial steps once per turn. Waiting four bumps between moves, as both drivers used
+to, turned every dial at half the rate the game can be turned at
+([#293](https://github.com/dhobi/dreamrefactory/issues/293)). Two is not a proof
+that the move was consumed, and does not need to be: the gesture is closed-loop,
+so a move the loop missed costs one more move and nothing else, and `limiter`
+reads only the SIGN of the bearing change, which two accumulated moves do not
+change. Measured over the plant's six dials from one seed, so `openstage` deals
+the same scatter each time: **5.3 s of dialling at four bumps, 4.7 s at three,
+3.7 s at two, 3.5 s at one**. One buys nothing over two and guarantees no turn at
+all. The floor under both is the game's own loop rate, which is the floor a hand
+has too.
+
 `browser/transition-hold.ts` is the browser half of one decision the headless
 suite can only pin from the inside: a load must not hand the screen back to the
 world while a transition is waiting for it. It samples every
