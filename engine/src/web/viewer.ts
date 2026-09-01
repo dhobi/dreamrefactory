@@ -305,6 +305,48 @@ export class SetViewer implements RoomLayer {
    * grand-staircase exit teleports to recept1c's arrival scene, then walks into
    * the reception hall).
    */
+  /**
+   * Point the NAMED jump hooks at this viewer, for as long as it is the room.
+   *
+   * `currentscene ("sceneNNN")` + `currentview ("viewNNN")` is a teleport, and a
+   * teleport is not a MOVE. The gesture gate exists to keep an arrival script's
+   * `currentscene ("right")` from driving the camera after the keypress that
+   * owns movement is over — that is #47, Scotland Road, and every case the
+   * disarm's own note cites is a DIRECTION. A name is the script saying where
+   * you are, which is the one thing only it can know.
+   *
+   * `NEW.FLT/0001 initall` is where the difference shows. It saves the
+   * standpoint, swaps the day town for the night one, and puts the standpoint
+   * back:
+   *
+   *     if currentset () = newname
+   *         thescene = currentscene ()
+   *         thedir = currentview ()
+   *     endif
+   *     ... opensetfile (newset)
+   *     if thescene != 0
+   *         currentscene (thescene)
+   *         currentview (thedir)
+   *     endif
+   *
+   * The restore runs from a `sendtostage` chain that outlives the openscene it
+   * was spawned from, so by the time it lands `navGestureActive` is false and
+   * both calls went nowhere: Dust's day-4 night arrived at nite.set's default
+   * `scene g15` facing north where the original's own save says `scene g5`
+   * facing south. Measured — the reads were correct, `scene g5` and `south`; it
+   * was the writes that were inert.
+   *
+   * Runaway jumps are held off by {@link SetScripts.inLifecycle} rather than by
+   * this gate, which is why lifting it here is safe: the fourteen Dust openscene
+   * handlers that jump — `hotupper.set`'s among them, which hangs the tab — are
+   * stopped inside {@link teleport} and always were.
+   */
+  bindJumpHooks(): void {
+    this.pendingJumpScene = null;
+    this.session.onSceneJump = this.sceneJump;
+    this.session.onViewJump = this.viewJump;
+  }
+
   armNavHooks(): NavHooks {
     const prev: NavHooks = {
       onNavigate: this.session.onNavigate,
@@ -356,8 +398,9 @@ export class SetViewer implements RoomLayer {
   disarmNavHooks(prev?: NavHooks): void {
     this.session.navGestureActive = prev?.active ?? false;
     this.session.onNavigate = prev?.onNavigate ?? (() => {});
-    this.session.onSceneJump = prev?.onSceneJump ?? (() => {});
-    this.session.onViewJump = prev?.onViewJump ?? (() => {});
+    // the NAMED jump outlives the gesture — see bindJumpHooks
+    this.session.onSceneJump = prev?.onSceneJump ?? this.sceneJump;
+    this.session.onViewJump = prev?.onViewJump ?? this.viewJump;
   }
 
   /**
@@ -472,6 +515,8 @@ export class SetViewer implements RoomLayer {
     // does this itself on activation (GameHost.activateSet) and undoes it on
     // release; a bare viewer with a director of its own has to say so here.
     if (!director) this.dir.setRoom(this);
+    // a bare viewer is its own room, so it owns the named jump too
+    if (!director) this.bindJumpHooks();
     this.scripts = new SetScripts(set, session);
     this.scripts.onLog = (l) => this.onLog(l);
     session.currentSceneName = () => this.scene.sceneName.toLowerCase();
@@ -1739,7 +1784,29 @@ export class SetViewer implements RoomLayer {
    */
   advanceRoom(now: number): CachedFrame | null {
     if (this.animation) {
-      if (!this.lastTick) this.lastTick = now;
+      // The first frame is due NOW, not one interval from now (#352).
+      //
+      // Backdating the stamp by a whole interval is what makes the frame below
+      // due on this very tick. Stamping `now` instead spent the first tick of
+      // every animation initialising the clock and drawing nothing, so a move
+      // took one interval longer than the frames in it — 200 ms for a 3-frame
+      // turn paced at 50.
+      //
+      // The original draws it inside the gesture: 0x439e10 shows frame 0 before
+      // the keypress returns, which is the same disassembly {@link walk} reads
+      // for why a register's end rows are never presented. So the interval is
+      // the port's, and it is not a rounding error — it is a full standpoint's
+      // worth of stillness on every turn and every walk.
+      //
+      // C59 is where it was reported. Zeitel's entry turns you to face the door
+      // with `while currentview() != "view29": currentscene("right")`, and the
+      // road lands you four standpoints away, so the loop makes four turns of
+      // three frames each. At 200 ms apiece the camera stopped dead on each
+      // standpoint for 50 ms and the sweep read as separate turns; at 150 the
+      // next turn starts on the tick the last one settles and it is one motion.
+      // Measured, turn starts from the keypress: 400/600/800/1000 ms before,
+      // 350/500/650/800 after.
+      if (!this.lastTick) this.lastTick = now - this.animationPace;
       // ONE frame a tick, normally — and more than one only when the pace asks
       // for a frame more often than the host ticks (#222).
       //

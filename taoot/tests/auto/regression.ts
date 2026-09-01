@@ -9824,8 +9824,9 @@ test("movement speed: the player's pace is theirs, a script's is the game's (#22
    * what the headless host runs at, so the counts below are the browser's too
    * for any pace at or above it.
    *
-   * `ticks` counts the FIRST tick as well, and that one never draws: it is where
-   * the animation's clock starts (`lastTick`), so every count here is n+1.
+   * Every tick here draws: the animation's clock is backdated one interval when
+   * it starts, so frame 0 is due on the first tick rather than the second (#352).
+   * That is what makes these counts the frame counts and not n+1.
    */
   const turnRight = (): { ticks: number; frames: number; drawn: string[]; landed: number } => {
     v.turn(RIGHTTURNS);
@@ -9846,8 +9847,8 @@ test("movement speed: the player's pace is theirs, a script's is the game's (#22
   const orig = turnRight();
   check("the ring is worth measuring", orig.frames >= 2 && orig.landed !== from,
     `frames=${orig.frames} ${from} -> ${orig.landed}`);
-  check("original: one frame a tick, which is what it has always been",
-    orig.ticks === orig.frames + 1, `${orig.ticks} ticks for ${orig.frames} frames`);
+  check("original: one frame a tick, and no tick spent on neither (#352)",
+    orig.ticks === orig.frames, `${orig.ticks} ticks for ${orig.frames} frames`);
 
   // back to where we started, so every speed turns the same ring
   const backTo = (idx: number): void => {
@@ -9860,15 +9861,19 @@ test("movement speed: the player's pace is theirs, a script's is the game's (#22
   backTo(from);
   session.moveSpeed = "slow";
   const slow = turnRight();
+  // frame 0 is due at once (#352) and each one after it two ticks later, so a
+  // pace of two ticks costs 2(n-1)+1 rather than 2n — the interval is BETWEEN
+  // frames, and the last frame ends the animation on the tick that draws it
   check("slow: 100 ms a frame is two ticks each, and the same frames",
-    slow.frames === orig.frames && slow.ticks === 2 * orig.frames + 1 && slow.landed === orig.landed,
+    slow.frames === orig.frames && slow.ticks === 2 * (orig.frames - 1) + 1 &&
+      slow.landed === orig.landed,
     `${slow.ticks} ticks for ${slow.frames} frames -> ${slow.landed}`);
 
   backTo(from);
   session.moveSpeed = "fast";
   const fast = turnRight();
   check("fast: 25 ms a frame is two frames a tick, and the same landing",
-    fast.frames === orig.frames && fast.ticks === Math.ceil(orig.frames / 2) + 1 &&
+    fast.frames === orig.frames && fast.ticks === Math.ceil(orig.frames / 2) &&
       fast.landed === orig.landed,
     `${fast.ticks} ticks for ${fast.frames} frames -> ${fast.landed}`);
 
@@ -9904,6 +9909,6 @@ test("movement speed: the player's pace is theirs, a script's is the game's (#22
     v.tick((clock += ENGINE_STEP_MS));
   }
   check("a scripted move still spends one pass a frame, whatever the player asked for",
-    scripted === orig.frames && scriptTicks === orig.frames + 1,
+    scripted === orig.frames && scriptTicks === orig.frames,
     `${scriptTicks} ticks for ${scripted} frames at moveSpeed=${session.moveSpeed}`);
 });

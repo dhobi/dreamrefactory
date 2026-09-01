@@ -412,6 +412,14 @@ export class GameHost {
     // script passcodes — drives THIS viewer (walking into the arrived-in room)
     // rather than the old, discarded one. Outside a gesture the hooks stay inert.
     if (session.navGestureActive) viewer.armNavHooks();
+    // ...and the NAMED jump either way. A set swap's whole point is that the
+    // script then says where in the new set you are — `NEW.FLT/0001 initall`
+    // saves `currentscene ()`/`currentview ()`, opens the night set over the
+    // day one and puts them back — and that restore arrives after the gesture
+    // that started the chain has already been disarmed. Gating it left the
+    // player at the arrived set's DEFAULT standpoint. See
+    // {@link SetViewer.bindJumpHooks} for why a NAME is not a MOVE.
+    viewer.bindJumpHooks();
     viewer.onHud = (t) => this.ui.hud(t);
     viewer.onLog = (l) => this.ui.log(l);
     // movies aren't prefetched: fetch on demand, then play. Returns the play
