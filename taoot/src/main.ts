@@ -369,7 +369,7 @@ function detailsWanted(): boolean {
  */
 const cursors = new CursorSheet(TI_CURSORS);
 
-/** the name last answered, so a resize can redraw it at the new size */
+/** the name last answered, so a change of size can redraw it at the new one */
 let cursorShown = "";
 
 /**
@@ -387,7 +387,14 @@ function showCursor(name: string): void {
   // drew it at against a doubled picture
   screen.style.cursor = cursors.css(name || "arrow", rect.width / screen.width);
 }
-addEventListener("resize", () => showCursor(cursorShown));
+/**
+ * Redrawn whenever the PICTURE changes size, which a window resize is only one
+ * way to do: the workbench lets the reader pick a whole-number scale for the
+ * screen (taoot/src/speedrun-widths.ts) and that fires no resize event at all, so
+ * the art stayed at the old scale until the window happened to move. Watching
+ * the canvas catches both, and asks nothing of whatever changed it.
+ */
+new ResizeObserver(() => showCursor(cursorShown)).observe(screen);
 
 /**
  * The bar the player watches while the game is fetched (GameHost.preload).
