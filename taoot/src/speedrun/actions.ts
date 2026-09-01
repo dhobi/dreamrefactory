@@ -457,15 +457,86 @@ interface TalkState {
  * player out of the conversation (#131), so a blind ESC hammer through a
  * conversation does not skip it fast — it abandons it, and the story quietly
  * does not happen. `arm` on the hammer is that rule.
+ *
+ * ## Two different questions, two different options (#265)
+ *
+ * `otherwise:` answers "the plaque offered is not the one I named". `then:`
+ * answers "I have said everything I came to say". They used to be the same
+ * `else` branch, which is why a bevel list had to run to the end of the
+ * conversation or throw: a run that only needs a beat — Sasha hands over Vlad's
+ * package on the third answer and the last two turns are pleasantries — could
+ * not say so.
+ *
+ * They are kept apart because folding them together would make a MIS-TYPED bevel
+ * walk out of a conversation instead of failing, which is the story quietly not
+ * happening again, one letter at a time. A wrong bevel still hits `otherwise:`
+ * and still stops the run.
+ *
+ * `then: leave` is one ESC AT THE PLAQUE, which is not a different mechanism
+ * from answering -1 — it is the same one. `PuppetCtrl.key` (puppet.ts, quoting
+ * 0x4418a7) calls `p.eventWaiter?.(-1)` for an ESC that arrives while the
+ * choices are up, so the key IS the answer and there is nothing faster to send.
+ * What it saves is the turns not taken: a click, the hold for the answer to be
+ * taken, and every line the reply would have spoken.
+ *
+ * It is one press rather than {@link bailout}'s hammer because this loop already
+ * knows the plaque is up — `awaiting` was read a line ago — and that is the one
+ * moment ESC is unambiguous. Reach for `bailOut()` when nothing is holding up
+ * that end of the conversation; reach for this when something is.
+ *
+ * What it is NOT is a conversation that did not happen: every one of the tree's
+ * 516 `puppetevent` calls has an authored `case -1` arm, and the engine
+ * deliberately does not set the skip flag on this key "because the script's own
+ * -1 arm may have a parting line to say". So a bail runs script, and the loop
+ * below carries on skipping lines until the puppet actually closes.
  */
+/**
+ * `otherwise:` — what to answer when the plaque offered is not the one named.
+ *
+ * Read through a function rather than cast at each call site so the two verbs
+ * that take it cannot drift, and so a typo is a named refusal rather than a
+ * silent `stop`: `otherwise: lsat` used to parse (the parser checks option KEYS,
+ * not their values) and then quietly meant "throw on anything unplanned".
+ */
+function otherwiseOf(step: Step): "stop" | "first" | "last" {
+  const asked = step.opts.otherwise;
+  if (asked === undefined) return "stop";
+  const v = asked.trim().toLowerCase();
+  if (v !== "stop" && v !== "first" && v !== "last") {
+    throw new Error(`sheet line ${step.line}: otherwise: ${asked} is not stop|first|last`);
+  }
+  return v;
+}
+
+/**
+ * `then:` — what to do once the bevel list has run out (#265).
+ *
+ * `leave` answers the next plaque -1 and walks out; `stop` hands back with the
+ * plaque still standing, which is what lets a sheet put a `split()` inside a
+ * conversation and close it on its own line. Absent is the answer this language
+ * gave before there was an option: fall through to `otherwise:`.
+ */
+function thenOf(step: Step): "leave" | "stop" | undefined {
+  const asked = step.opts.then;
+  if (asked === undefined) return undefined;
+  const v = asked.trim().toLowerCase();
+  if (v !== "leave" && v !== "stop") {
+    throw new Error(`sheet line ${step.line}: then: ${asked} is not leave|stop`);
+  }
+  return v;
+}
+
 async function converse(
   c: ActionContext,
   bevels: number[],
   otherwise: "stop" | "first" | "last",
+  then?: "leave" | "stop",
 ): Promise<void> {
   const { d } = c;
   const wanted = [...bevels];
   const picked: number[] = [];
+  /** how many plaques were answered -1 on the way out — `then: leave` */
+  let bailed = 0;
   const maxTurns = Number(c.step.opts.maxturns ?? 60);
   const deadline = Date.now() + c.budget;
 
@@ -534,7 +605,10 @@ async function converse(
           `conversation ended before saying ${wanted.join(",")} (picked ${picked.join(",") || "nothing"})`,
         );
       }
-      c.say(`said ${picked.join(",") || "nothing"}`);
+      c.say(
+        `said ${picked.join(",") || "nothing"}` +
+          (bailed ? `, then left (-1${bailed > 1 ? ` x${bailed}` : ""})` : ""),
+      );
       return;
     }
     if (!s.awaiting) {
@@ -596,6 +670,26 @@ async function converse(
     let idx = wanted.length ? choices.findIndex((ch) => ch.id === wanted[0]) : -1;
     if (idx >= 0) {
       picked.push(wanted.shift()!);
+    } else if (!wanted.length && then) {
+      /*
+       * Everything on the line has been said, and the line said what to do next.
+       *
+       * Before `otherwise:` and not after, so `then:` decides the exhausted case
+       * on its own — but only when it is written. Left out, this falls through
+       * exactly as it always did, which is what keeps `say([101,102],
+       * otherwise: last)` answering to the end of the conversation in the sheets
+       * that already say it.
+       */
+      if (then === "stop") {
+        c.say(`said ${picked.join(",") || "nothing"} — left them waiting`);
+        return;
+      }
+      // `leave`: the plaque is up, so this ESC is the -1 answer and nothing else
+      // (see the note above). Then round the loop, which skips whatever the -1
+      // arm has to say and returns when the puppet closes.
+      await d.key("Escape", "none", left());
+      bailed++;
+      continue;
     } else if (otherwise === "last") {
       idx = choices.length - 1;
     } else if (otherwise === "first") {
@@ -1510,17 +1604,18 @@ export const ACTIONS: Record<string, Action> = {
     args: [1, 1],
     bevels: true,
     wait: "none",
-    opts: ["otherwise", "maxturns"],
+    opts: ["otherwise", "maxturns", "then"],
     sig: "talk(purser[102,101])",
-    help: "click someone and answer them — talk(purser[1,3,5])",
+    help: "click someone and answer them — talk(purser[1,3,5]); then: leave|stop once the list runs out",
     run: async (c) => {
+      const then = thenOf(c.step);
       await clickThing(c, c.step.args[0], "none");
       await c.d.hold(
         `!!(window.dbg.viewer && window.dbg.viewer.conversing)`,
         `${c.step.args[0]} to start talking`,
         c.budget,
       );
-      await converse(c, c.step.bevels ?? [], (c.step.opts.otherwise as "stop" | "first" | "last") ?? "stop");
+      await converse(c, c.step.bevels ?? [], otherwiseOf(c.step), then);
     },
   },
   /**
@@ -1547,15 +1642,16 @@ export const ACTIONS: Record<string, Action> = {
     args: [0, 0],
     bevels: true,
     wait: "none",
-    opts: ["otherwise", "maxturns", "patience"],
+    opts: ["otherwise", "maxturns", "patience", "then"],
     sig: "say([102,101])",
-    help: "answer a conversation — say([1,3,5]), or say(patience: 3000) for one that is still arriving",
+    help: "answer a conversation — say([1,3,5]); then: leave|stop once the list runs out; patience: 3000 for one still arriving",
     run: async (c) => {
+      const then = thenOf(c.step);
       const patience = Number(c.step.opts.patience ?? 0);
       if (patience > 0 && !(await c.d.evaluate<boolean>(predicate("talking")))) {
         if (await c.d.tryHold(predicate("talking"), patience)) c.say("waited for them to start");
       }
-      return converse(c, c.step.bevels ?? [], (c.step.opts.otherwise as "stop" | "first" | "last") ?? "stop");
+      return converse(c, c.step.bevels ?? [], otherwiseOf(c.step), then);
     },
   },
   skiplines: {
@@ -1824,6 +1920,13 @@ export const ACTIONS: Record<string, Action> = {
       // to a run that already has what it came for. Its own verb precisely so it
       // can never happen by accident: `skipLines` stops dead at a plaque, and
       // only this one presses through one.
+      //
+      // For a conversation this run is ANSWERING, `say([...], then: leave)` is
+      // the cheaper form of the same idea (#265): the loop in `converse` already
+      // knows the plaque is up, so it spends one press where this spends a
+      // hammer. This one is for the conversations nothing is holding up that end
+      // of — an interruption to walk out of, a puppet already talking when the
+      // line is reached.
       //
       // Whatever the puppet would have said after the plaque is forfeit, so a
       // bail is only correct where the beat is already banked.
