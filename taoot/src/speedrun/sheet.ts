@@ -19,6 +19,7 @@
  *     wait(set == c73, budget: 90000)   # a condition, then a named argument
  *     left(x3)                          # the same action three times
  *     split(flat scored)                # the whole inside is the name
+ *     move(u,r,u,o)                     # a path: four actions on one line
  *
  * Four token shapes inside the brackets, separated by commas:
  *
@@ -114,6 +115,26 @@ export interface VerbSpec {
   sig?: string;
   /** one line of help, printed by `--verbs` */
   help: string;
+  /**
+   * Turn this call into the actions it stands for, at PARSE time.
+   *
+   * One call is one action everywhere but here. `move(u,r,u)` is a path written
+   * short ([#250](https://github.com/dhobi/dreamrefactory/issues/250)) and it
+   * becomes `up()`, `right()`, `up()` — three real steps on the one line, which
+   * is a shape the rest of this harness already has: `left(); up(); left()` is
+   * three actions on a line too, and the pointer counts them with `skip`.
+   *
+   * Expanding here rather than looping inside a `run` is what keeps everything
+   * downstream honest, and none of it had to be told: each move gets its own row
+   * in the report and its own FRAMES, a Pause lands between two of them, the
+   * sheet's own summary counts them, and a failure names the action that failed
+   * rather than the line it was on the end of.
+   *
+   * Throw a {@link SheetError} to refuse — a path with a letter nobody defined is
+   * exactly the typo this parser exists to catch before the run rather than at
+   * minute nineteen of it.
+   */
+  expand?(step: Step): Step[];
 }
 
 /**
@@ -380,7 +401,8 @@ function parseStatement(
     throw new SheetError(line, `${verb} needs someone to talk to`, source);
   }
 
-  return [{ verb, args, opts, bevels, repeat, line, source, note }];
+  const step: Step = { verb, args, opts, bevels, repeat, line, source, note };
+  return spec.expand ? spec.expand(step) : [step];
 }
 
 const unquote = (s: string): string => s.replace(/^"([\s\S]*)"$/, "$1");

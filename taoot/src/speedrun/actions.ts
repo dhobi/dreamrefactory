@@ -29,7 +29,7 @@
  * the engine the same question the browser suite asks, through the same
  * `nav/aim.ts` sweep, and never moves the game by writing to it.
  */
-import type { Step, VerbSpec } from "./sheet";
+import { SheetError, type Step, type VerbSpec } from "./sheet";
 import type { SpeedrunDriver, WaitMode } from "./driver";
 import { QUIET, SHOWING } from "./driver";
 import { jumpTo, pageButton, jumpableSets } from "./nav/mapjumps";
@@ -918,7 +918,7 @@ const key = (name: string): ActionFn => async (c) => {
  * Set, scene and view are the standpoint, and for almost every press they are the
  * whole answer.
  *
- * {@link move} confirms a press by the world moving, and for almost every press
+ * {@link arrow} confirms a press by the world moving, and for almost every press
  * "the world moved" is "I am standing somewhere else". Not for all of them. Walk
  * into the Purser's office and GSTAIR3's `dopuppet()` answers the ArrowUp by
  * playing `mainc.mov`, which PARKS on its regions — the set, the scene and the
@@ -991,7 +991,7 @@ const IDLE = `(() => {
   return !v.inputLocked && s.events.length === 0;
 })()`;
 
-const move = (name: string): ActionFn => async (c) => {
+const arrow = (name: string): ActionFn => async (c) => {
   if (c.step.opts.confirm === "no") {
     await c.d.key(name, c.wait, c.budget);
     return;
@@ -1141,6 +1141,55 @@ export interface Watch {
   fired: number;
 }
 
+/**
+ * The letters a path is written in, and the action each one is.
+ *
+ * Five, and no more: these are the gestures that get you from one room to
+ * another and nothing else belongs in a line whose whole point is that it can be
+ * read at a glance. `o` is a whole `door()` — space, walk through, and wait for
+ * the room beyond — because that is what a door is in this language.
+ */
+const MOVES: Record<string, string> = { l: "left", r: "right", u: "up", d: "down", o: "door" };
+
+/** `move(u,r,u)` → `up()`, `right()`, `up()` — see the verb below and #250 */
+function path(step: Step): Step[] {
+  const moves: string[] = [];
+  for (const arg of step.args) {
+    for (const letter of arg.toLowerCase()) {
+      const verb = MOVES[letter];
+      if (!verb) {
+        throw new SheetError(
+          step.line,
+          `move has no "${letter}"${arg.length > 1 ? ` (in "${arg}")` : ""} — a path is written in ` +
+            `l(eft), r(ight), u(p), d(own) and o(pen a door)`,
+          step.source,
+        );
+      }
+      moves.push(verb);
+    }
+  }
+  const out: Step[] = [];
+  // `xN` repeats the PATH. Repeating each move in turn would be `move(uu,rr)`,
+  // which is a different route and one the writer can still ask for.
+  for (let again = 0; again < step.repeat; again++) {
+    for (const verb of moves) {
+      out.push({
+        verb,
+        args: [],
+        // the line's options belong to every move on it — a `move` line is the
+        // lines it stands for, written together
+        opts: step.opts,
+        repeat: 1,
+        line: step.line,
+        source: `${verb}()`,
+        // ...but its comment is the LINE's, and the report should echo it once
+        note: out.length === 0 ? step.note : undefined,
+      });
+    }
+  }
+  return out;
+}
+
 const WATCHES: Watch[] = [];
 
 /** the standing watches, in the order they were registered */
@@ -1159,19 +1208,19 @@ export const ACTIONS: Record<string, Action> = {
     args: [0, 0], wait: "none", opts: ["confirm"],
     sig: "left()",
     help: "turn left (ArrowLeft), confirmed by the view changing",
-    run: move("ArrowLeft"),
+    run: arrow("ArrowLeft"),
   },
   right: {
     args: [0, 0], wait: "none", opts: ["confirm"],
     sig: "right()",
     help: "turn right (ArrowRight), confirmed by the view changing",
-    run: move("ArrowRight"),
+    run: arrow("ArrowRight"),
   },
   up: {
     args: [0, 0], wait: "none", opts: ["confirm"],
     sig: "up()",
     help: "walk forward (ArrowUp), confirmed by the standpoint changing",
-    run: move("ArrowUp"),
+    run: arrow("ArrowUp"),
   },
   space: {
     args: [0, 0], wait: "ready", opts: ["confirm"],
@@ -1193,7 +1242,7 @@ export const ACTIONS: Record<string, Action> = {
    *   - the space waits `ready`, the fade gate. A door opening is exactly the
    *     ramp in which the NEXT key press is silently discarded (the note on
    *     `pressNav`), so walking without that gate is how an ArrowUp goes missing.
-   *   - the walk waits for nothing, because {@link move} already confirms it by
+   *   - the walk waits for nothing, because {@link arrow} already confirms it by
    *     the standpoint changing and presses again if it did not. A settle here
    *     would be paid twice over, once in the middle and once at the end.
    *   - the settle at the end is `wait:`, so `door(wait: ready)` is available to a
@@ -1211,8 +1260,59 @@ export const ACTIONS: Record<string, Action> = {
     help: "open the door you are facing and walk through it — space(), up(), settle()",
     run: async (c) => {
       await key(" ")({ ...c, wait: "ready" });
-      await move("ArrowUp")({ ...c, wait: "none" });
+      await arrow("ArrowUp")({ ...c, wait: "none" });
       await c.d.settle(c.wait, "the room through the door", c.budget);
+    },
+  },
+  /**
+   * The fourth arrow, and the one that is a navigation key almost nowhere.
+   *
+   * ArrowDown goes to the script chain like any other key and hardly anything
+   * reads it — `SMSTACK2`/`SMSTACK3` views 43, 50, 54 and 56 are the exceptions,
+   * the false smokestack's ladder platforms whose scene `keydown` is the only way
+   * down a level (engine/src/web/keys.ts, and #100 for the soft-lock that got it
+   * bound at all). So this is confirmed like the other three and will say so
+   * anywhere it does nothing, which is most places and is the right answer there.
+   */
+  down: {
+    args: [0, 0], wait: "none", opts: ["confirm"],
+    sig: "down()",
+    help: "climb down a level (ArrowDown) — the smokestack ladders, and nowhere else",
+    run: arrow("ArrowDown"),
+  },
+  /**
+   * A path, written short (#250).
+   *
+   * Twenty-one lines of `up()` and `right()` is what a corridor looks like in a
+   * sheet, four times over for the one from the F deck stairs to the turbine
+   * room, and none of those lines is tuned or ever will be — they are the way
+   * there. So a path may be one line, in the five letters a path is made of.
+   *
+   * It is EXPANDED rather than executed: `move(u,r,o)` is parsed into `up()`,
+   * `right()`, `door()` and the run never sees a `move` at all (see `expand` in
+   * sheet.ts). Which is why nothing else in the harness had to learn about it —
+   * every move keeps its own row in the report and its own FRAMES, a Pause lands
+   * between two of them, and a failure names `up()` rather than the whole line.
+   *
+   * The commas are grouping and nothing more: `move(u,r,u)` and `move(uru)` are
+   * the same path, and a long one reads better in runs — `move(o, ururururur,
+   * o)` is the corridor above with its doors at either end. Options ride on every
+   * move in the line, because the line is the moves: `move(u,r, confirm: no)` is
+   * `up(confirm: no); right(confirm: no)`, and `x2` repeats the whole path rather
+   * than each step of it.
+   */
+  move: {
+    args: [1, Infinity],
+    // no `wait` of its own: every move on the line takes the one its own verb
+    // takes, which is what makes a path the lines it stands for
+    opts: ["confirm"],
+    sig: "move(u,r,u,l,u,o)",
+    help: "a path in one line — l(eft) r(ight) u(p) d(own) o(pen a door), e.g. move(o,ururur,o)",
+    expand: path,
+    run: async () => {
+      // unreachable: the parser turns every `move` into the moves it names, and
+      // a `move` that reached the runner would be a Step nobody expanded
+      throw new Error("a move is expanded when the sheet is parsed and cannot be run");
     },
   },
   esc: {
@@ -1903,7 +2003,7 @@ export const ACTIONS: Record<string, Action> = {
           }
         }
         if (turn === turns) break;
-        await move("ArrowRight")({ ...c, wait: "none" });
+        await arrow("ArrowRight")({ ...c, wait: "none" });
       }
       throw new Error(`turned the whole ring and ${who} never started talking`);
     },
@@ -1955,7 +2055,7 @@ export const ACTIONS: Record<string, Action> = {
           if (turn) c.say(`${turn} turns`);
           return;
         }
-        await move(dir)({ ...c, wait: "none" });
+        await arrow(dir)({ ...c, wait: "none" });
       }
       throw new Error(
         `turned the whole ring and never faced ${want} — it is not a view of this ` +
@@ -2630,7 +2730,7 @@ export const ACTIONS: Record<string, Action> = {
       try {
         for (const step of steps) {
           await ACTIONS.face.run({ ...c, step: { ...c.step, args: [step.face] }, wait: "none" });
-          await move("ArrowUp")({ ...c, wait: "none" });
+          await arrow("ArrowUp")({ ...c, wait: "none" });
         }
         await ACTIONS.face.run({ ...c, step: { ...c.step, args: [want] }, wait: "none" });
       } catch (e) {
@@ -2890,14 +2990,17 @@ export const ACTIONS: Record<string, Action> = {
 };
 
 /** the grammar half of the table, for the parser */
+/**
+ * By SUBTRACTION, not by listing.
+ *
+ * This used to name the grammar fields one by one, and a field added to
+ * {@link VerbSpec} then reached the parser only if somebody remembered to add it
+ * here as well — which is how `move`'s `expand` came to be declared, tested and
+ * silently ignored (#250). Dropping the three fields that are about EXECUTION
+ * leaves the grammar whatever it is, so the next one arrives on its own.
+ */
 export const VERBS: Record<string, VerbSpec> = Object.fromEntries(
-  Object.entries(ACTIONS).map(([name, a]) => [
-    name,
-    {
-      args: a.args, bevels: a.bevels, groups: a.groups, opts: a.opts, rest: a.rest,
-      once: a.once, sig: a.sig, help: a.help,
-    },
-  ]),
+  Object.entries(ACTIONS).map(([name, { run, wait, interruptible, ...grammar }]) => [name, grammar]),
 );
 
 /**
