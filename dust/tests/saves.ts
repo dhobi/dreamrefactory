@@ -860,6 +860,20 @@ test("moving a save to another room takes that room's registers and palette with
   expect(parseSaveV1(bytes)!.standpoint.setFile, "the room").toBe("mayupper.set");
 });
 
+/** one turn of the microtask queue, for a dispatch that is not awaited */
+const drain = (): Promise<void> => new Promise<void>((r) => setImmediate(r));
+
+/** a session with the disc behind it, at the version Dust boots at */
+function bareSession(): GameSession {
+  const session = new GameSession((n) => {
+    const path = `${DATA_DIR}/${n.toUpperCase()}`;
+    return existsSync(path) ? new Uint8Array(readFileSync(path)) : null;
+  }, new NullAudioSink());
+  session.onLog = () => {};
+  session.dfVersion = 1;
+  return session;
+}
+
 /**
  * Every global a session holds survives being written and read back (#357).
  *
@@ -895,14 +909,29 @@ test("a save carries every global the session holds", async () => {
 
   const bad: string[] = [];
   for (const file of files) {
-    const session = new GameSession((n) => {
-      const path = `${DATA_DIR}/${n.toUpperCase()}`;
-      return existsSync(path) ? new Uint8Array(readFileSync(path)) : null;
-    }, new NullAudioSink());
-    session.onLog = () => {};
-    session.dfVersion = 1;
+    const session = bareSession();
     const bytes = new Uint8Array(readFileSync(join(SAVE_DIR, file)));
     expect(await session.loadGame(bytes), `${file} loads`).toBe(true);
+
+    /*
+     * Grow the session past its base before writing, because otherwise this
+     * proves nothing.
+     *
+     * Since #344 a load PRUNES the globals to exactly what the file carries, so
+     * a session that has only just loaded holds nothing the base has no record
+     * for — every name round trips by construction and a broken writer sails
+     * through. Real play is the opposite: rooms and puzzles declare as they go,
+     * and by the middle of the game a session holds 150-odd against a base built
+     * for 92 to 142.
+     *
+     * So stand in for that. Forty numbers and ten strings is past every shipped
+     * base's ceiling (94 to 160 over the 56 files, 2 to 18 free nodes each), which
+     * is what makes the recycling, the node growth and the pool all run. The names
+     * are short enough to sit in the 12-byte field and long enough not to collide
+     * with the game's own.
+     */
+    for (let i = 0; i < 40; i++) session.interp.globals.set(`zzprobe${i}`, 1000 + i);
+    for (let i = 0; i < 10; i++) session.interp.globals.set(`zzstr${i}`, `probe-${i}`);
 
     const live = new Map<string, string | number>();
     for (const [k, v] of session.interp.globals) {
@@ -915,28 +944,30 @@ test("a save carries every global the session holds", async () => {
       bad.push(`${file}: nothing written`);
       continue;
     }
-    const back = parseSaveV1(written);
+    /*
+     * Compared through an actual LOAD, not through the parsed maps.
+     *
+     * A save can hold one name twice with different tags — `parseSaveV1` files
+     * those in `numGlobals` AND `strGlobals`, and picking one map over the other
+     * answers a question the game never asks. `loadGameV1` restores the numbers
+     * and then the strings, so the string wins; a checker that reads `numGlobals`
+     * first disagrees with the engine and reports losses that are not there.
+     * Titanic's `coalchute` is exactly that shape — `num=0` and `str="coal4"` in
+     * the shipped file — and an earlier version of this comparison called it a
+     * bug (#361, closed as not one) before the reload settled it.
+     *
+     * So the oracle is the session: write the file, load it into a fresh one, and
+     * ask what it is holding. That is the only resolution that matters.
+     */
+    const reloaded = bareSession();
+    expect(await reloaded.loadGame(written), `${file} reloads`).toBe(true);
     for (const [name, want] of live) {
-      const got = back.numGlobals.has(name) ? back.numGlobals.get(name) : back.strGlobals.get(name);
+      const got = reloaded.interp.globals.get(name);
       if (got !== want) bad.push(`${file}: ${name} ${JSON.stringify(want)} -> ${JSON.stringify(got)}`);
     }
   }
   expect(bad, `${bad.length} global(s) did not survive the round trip`).toEqual([]);
 });
-
-/** one turn of the microtask queue, for a dispatch that is not awaited */
-const drain = (): Promise<void> => new Promise<void>((r) => setImmediate(r));
-
-/** a session with the disc behind it, at the version Dust boots at */
-function bareSession(): GameSession {
-  const session = new GameSession((n) => {
-    const path = `${DATA_DIR}/${n.toUpperCase()}`;
-    return existsSync(path) ? new Uint8Array(readFileSync(path)) : null;
-  }, new NullAudioSink());
-  session.onLog = () => {};
-  session.dfVersion = 1;
-  return session;
-}
 
 /**
  * A load drops the globals the file does not carry (#344).
