@@ -724,6 +724,60 @@ export const segment7: Segment = {
     await p.pump(() => room(p).startsWith("store"), "the store");
 
     // 3. Bolivar
+    /*
+     * Stand where he is before clicking him.
+     *
+     * `GANG.CST/1010 mousedown ()` drops the click twice over — `if iswalk (me)
+     * exitcode` and `if realdist (me) < hotdist ()` — and Bolivar spends the
+     * morning walking between `store.check` at the counter and `store.bolivar2`
+     * in the aisle. The route used to click him from the arrival standpoint and
+     * get away with it, because he happened to be at the counter by the time the
+     * first click landed. #352 took a tick off every move, he settles in the
+     * aisle instead, and 40 clicks from scene d2 all fell outside `hotdist` —
+     * `converse` saw no puppet open at all in 48000 ticks.
+     *
+     * So ask the engine where he is, as `rungs/d3m005.ts` does for Jones, and go
+     * there. Which star he idles on stops mattering.
+     */
+    const store = set("STORE");
+    const cellOf = (who: string): { x: number; z: number } => ({
+      x: Math.floor(Number(ask(p, "actorxyz", [who, 1])) / 256),
+      z: Math.floor(Number(ask(p, "actorxyz", [who, 2])) / 256),
+    });
+    /**
+     * Every standpoint of the set, nearest to Bolivar first — his own cell if it
+     * is one, then outwards. Not every cell a character stands on is a cell the
+     * player may stand on: he idles in Scene C1, which has no route into it from
+     * anywhere, so "walk to where he is" has to mean "walk to the nearest place
+     * there is" and then find out whether that was near enough.
+     */
+    const nearestStandpoints = (to: { x: number; z: number }) =>
+      [...store.scenes]
+        .sort(
+          (a, b) =>
+            (a.x - to.x) ** 2 + (a.z - to.z) ** 2 - ((b.x - to.x) ** 2 + (b.z - to.z) ** 2),
+        )
+        .slice(0, 4);
+
+    for (let round = 0; round < 6 && !p.session.puppet; round++) {
+      await p.pump(() => Number(ask(p, "iswalk", ["bolivar"])) === 0, "Bolivar to stand still");
+      for (const stand of nearestStandpoints(cellOf("bolivar"))) {
+        for (const view of ["north", "east", "south", "west"]) {
+          try {
+            await walkTo(p, store, { x: stand.x, z: stand.z, view });
+          } catch {
+            continue; // that facing has no route; the next one may
+          }
+          try {
+            await clickActor(p, "bolivar", "the shopkeeper", 2);
+          } catch {
+            continue; // too far, or he moved; try the next standpoint
+          }
+          if (p.session.puppet) break;
+        }
+        if (p.session.puppet) break;
+      }
+    }
     await converse(
       p,
       "bolivar",
@@ -1565,9 +1619,63 @@ export const segment13: Segment = {
     await p.pump(() => room(p).startsWith("town"), "the street again");
 
     // ---- and stand outside the saloon until the Mayor comes over -----------
-    await walkTo(p, town, { x: 6, z: 7, view: "south" });
+    /*
+     * Stand where the Mayor is, and let him notice us.
+     *
+     * `GANG.CST/1097 mayoridle ()` only accosts from close up: `if realdist (me)
+     * < hotdist ()` turns him to face the camera and, on day 2 evening with
+     * `mayorphase = 0`, arms `hasattention (6)`. Fail that test and he takes the
+     * other branch — `clearattention ()`, then a `random (100) < 6` wander
+     * between `town.mwife1`, `town.help` and `town.marie1`.
+     *
+     * So which of the three he is on when we arrive decides whether he ever
+     * comes, and that is a draw from the seeded stream rather than anything the
+     * route does. It used to land near: he was mid-walk towards us the moment we
+     * stopped. #352 took a tick off every move, the stream moved with it, and he
+     * was parked at `town.help` a cell and a half away — 20000 steps of standing
+     * outside the saloon and `clearattention ()` every one of them.
+     *
+     * Waiting where HE is rather than where the original stood keeps the accost
+     * (his `mousedown` would open the same file, but it also counts an
+     * `actorvalue` the accost does not).
+     */
+    const mayorCell = (): { x: number; z: number } => ({
+      x: Math.floor(Number(ask(p, "actorxyz", ["mayor", 1])) / 256),
+      z: Math.floor(Number(ask(p, "actorxyz", ["mayor", 2])) / 256),
+    });
+    const talking = (): boolean => !!p.session.puppet;
+    for (let round = 0; round < 8 && !talking(); round++) {
+      await p.pump(() => Number(ask(p, "iswalk", ["mayor"])) === 0 || talking(), "the Mayor to stand");
+      if (talking()) break;
+      const at = mayorCell();
+      const near = [...town.scenes]
+        .sort((a, b) => (a.x - at.x) ** 2 + (a.z - at.z) ** 2 - ((b.x - at.x) ** 2 + (b.z - at.z) ** 2))
+        .slice(0, 3);
+      for (const stand of near) {
+        if (talking()) break;
+        for (const view of ["south", "west", "north", "east"]) {
+          try {
+            await walkTo(p, town, { x: stand.x, z: stand.z, view }, talking);
+          } catch {
+            continue; // no route at that facing; the next one may have one
+          }
+          // `hasattention (6)` wants us to linger, not to arrive
+          await p.pump(
+            () => talking() || Number(ask(p, "iswalk", ["mayor"])) === 1,
+            "the Mayor to notice us",
+            2_000,
+          ).catch(() => {});
+          break;
+        }
+      }
+    }
+    if (!talking()) throw new Error("the Mayor never came over");
     await p.pump(() => !!p.session.puppet, "the Mayor to come over", 20_000);
-    await walkTo(p, town, { x: 6, z: 7, view: "south" });
+    // he accosts us where HE is now, which need not be outside the saloon, so
+    // the conversation is finished before the walk back rather than answered
+    // one reply at a time by `walkTo`'s own interruption handling
+    await talkOut(p, LEAVING, "the Mayor", 3);
+    await walkTo(p, town, { x: 6, z: 7, view: "south" }, undefined, 8);
   },
 };
 

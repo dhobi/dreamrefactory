@@ -113,6 +113,17 @@ import {
  * of ticks. The `>= 56` guard is margin: the runner's own closing `settle`
  * advances the loop two more steps, and 56 is far enough from the 44° turn that
  * two steps cannot carry `dirgo` past it.
+ *
+ * `bouncer` needs a second guard, and the sweep's margin is no help with it.
+ * Measured, the flip has a period of FOUR ticks — `1 1 0 0` — so where in the
+ * pair the pump stops decides what the closing `settle` reads three ticks later:
+ * stopping on the first `1` lands on `0`, stopping on the second lands back on
+ * `1` (and on `1` again at four ticks, so it is robust to a settle of either
+ * length). The predicate therefore waits for the second tick of the pair rather
+ * than for the value, which is the difference between landing on a phase and
+ * landing on a phase from a known side. Before #352 shortened every move by one
+ * tick the pump happened to stop on the second anyway, which is exactly the kind
+ * of luck a rung should not be built on.
  */
 export const rung: Segment = {
   from: "D2A_005",
@@ -224,8 +235,15 @@ export const rung: Segment = {
      * phase rather than an outcome; this is the one thing on the rung that has
      * to be waited for rather than done.
      */
+    let wasUp = false;
     await p.pump(
-      () => num("bouncer") === 1 && num("dirgo") === 1 && Number(ask(p, "actordeg", ["isao"])) >= 56,
+      () => {
+        // the SECOND tick of the pair, not the first — see the note above
+        const up = num("bouncer") === 1;
+        const second = up && wasUp;
+        wasUp = up;
+        return second && num("dirgo") === 1 && Number(ask(p, "actordeg", ["isao"])) >= 56;
+      },
       "Isao's lean to come round to where the save caught it",
     );
   },

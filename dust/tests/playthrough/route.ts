@@ -449,10 +449,28 @@ export async function openDoor(
       (p.session.interp.builtins.get("propowner") as ((i: unknown, a: unknown[]) => unknown) | undefined)
         ?.(p.session.interp, ["door"]) ?? "",
     ).toLowerCase() === owner;
-  for (let i = 0; i < tries && !opened(); i++) {
+  /*
+   * Which side of the door we started on — because sometimes we are through it
+   * before this function gets to press anything.
+   *
+   * `p.fire` does not await its click, so the `settle` after it is where a press
+   * that is still in the queue lands, and at a door standpoint an ungated
+   * `uparrow` is `currentscene ("strait")` — straight through the door the click
+   * has just opened. The prop is then the ARRIVED set's `door`, which is nobody's,
+   * so `opened()` says no and the retry walks... in a set the `from` standpoint
+   * does not exist in ("no route to Scene G12 facing west from jail scene a1").
+   *
+   * Going through is what the caller wanted, so notice it and stop rather than
+   * insisting on the ceremony. Found on `rungs/d3e005.ts` at the jail door after
+   * #352 shortened every move by a tick and moved which press was outstanding.
+   */
+  const startedIn = p.session.currentSetFile;
+  const wentThrough = (): boolean => p.session.currentSetFile !== startedIn;
+  for (let i = 0; i < tries && !opened() && !wentThrough(); i++) {
     // the standpoint is re-taken every try: a click only reaches a door from the
     // cell and facing whose script owns it, and the world turns you around
     if (from) await walkTo(p, from.set, { x: from.x, z: from.z, view: from.view });
+    if (wentThrough()) return;
     const at = aim();
     if (!at) {
       // somebody is standing across the whole of it; give them a moment to move
@@ -461,7 +479,9 @@ export async function openDoor(
     }
     p.fire(at.x, at.y);
     await p.settle(what);
+    if (wentThrough()) return;
   }
+  if (wentThrough()) return;
   if (!opened()) {
     throw new Error(
       `${what} did not open — the door prop is not "${owner}", standing at ` +
