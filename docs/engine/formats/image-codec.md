@@ -40,10 +40,21 @@ Two engine quirks the decoder reproduces (they come straight from DFET's
 bitmap writer):
 
 - **Index 0 is forced to black.**
-- When a file uses all **256** colours, **index 255 is forced to white.**
+- **Index 255 is forced to white.**
 
-And one SET-specific rule worth remembering: **SET room frames only use the
-first 128 palette entries**; the full 256 are used for map/overview images.
+Both are forced whatever `colorCount` the caller asks for, because the reserved
+pair belongs to the Windows *display* and `colorCount` describes a *contributor*.
+Every DF palette on disc stores the opposite pair — white at 0, black at 255 —
+because DreamFactory was authored on a Mac, whose system palette reserves the
+other way round.
+
+And one SET-specific rule worth remembering: **a SET fills only the first 128
+palette entries**, the stage owning 128–255; the full 256 are used for
+map/overview images. That is a rule about who *writes* the CLUT, not about who
+reads it — room frames may still draw through the upper half, and two Titanic
+sets do. c73 and lnghall each stray onto index 255 and nothing else: in c73 that
+is 6811 pixels of the mission-4 cabin's ceiling light and table-lamp pool, which
+rendered as black blobs for as long as the white above was conditional (#351).
 
 ### The palette bytes are not the colours you draw
 

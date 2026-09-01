@@ -472,6 +472,27 @@ function decodeZLayer(
  *     between two frames of night sky. A single full-screen frame in the middle
  *     of a storm is a lightning flash, so that entry is white, which is what the
  *     file says it is.
+ *
+ * ## The reserve does not depend on `colorCount`
+ *
+ * Both ends are forced whatever `colorCount` says, because the reserve belongs to
+ * the DISPLAY and `colorCount` describes a CONTRIBUTOR. A set contributes entries
+ * 0..127 and the stage owns the rest ({@link file://./set.ts}'s `colorCount`), so
+ * the room view asks for 128 — and used to get an upper half of nothing, which is
+ * opaque black once {@link indexedToRGBA} stamps the alpha on.
+ *
+ * That was #351. Two sets in the corpus draw a view pixel above 127 — c73 and
+ * lnghall, the same two `SetViewer.bandPropPalette` names — and the only index
+ * either of them strays onto is 255. In c73 that is 6811 pixels: the ceiling
+ * light and the pool under the table lamp in the mission-4 cabin, which came out
+ * as black blobs in the middle of the highlight. The pixels touching one average
+ * rgb(210,208,179), so they are the brightest part of a bright thing, and 255 on
+ * a Windows display is white.
+ *
+ * The file itself says rgb(0,0,0) there — c73's stored entry 255 and main.stg's
+ * are the Mac reserved black, byte for byte identical across all 128 upper
+ * entries — which is exactly why this correction exists, and why it cannot be
+ * conditional on who filled the lower half.
  */
 export function paletteToRGBA(
   paletteRaw: Uint8Array,
@@ -492,9 +513,7 @@ export function paletteToRGBA(
   rgba[3] = 255;
   if (pc) {
     rgba[0] = rgba[1] = rgba[2] = 0;
-    if (colorCount === 256) {
-      rgba[255 * 4] = rgba[255 * 4 + 1] = rgba[255 * 4 + 2] = 255;
-    }
+    rgba[255 * 4] = rgba[255 * 4 + 1] = rgba[255 * 4 + 2] = rgba[255 * 4 + 3] = 255;
   }
   return rgba;
 }

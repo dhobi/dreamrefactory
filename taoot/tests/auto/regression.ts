@@ -8825,6 +8825,63 @@ test("a new game after a bad ending starts with nothing carried (#89)", async ()
 }
 );
 
+// --- 12g. the reserved white a room view is still allowed to use (#351) -------
+// A set fills CLUT entries 0..127 and the stage owns the rest, so `SetViewer`
+// builds the view palette with `colorCount` (128) — and `paletteToRGBA` used to
+// give the reserve back only when it was handed all 256. The upper half came out
+// as unwritten zeroes, which `indexedToRGBA` stamps opaque, so every view pixel
+// above 127 rendered BLACK.
+//
+// Two sets in the corpus have such pixels — c73 and lnghall — and the only index
+// either strays onto is 255, the entry a Windows display reserves for WHITE. In
+// c73 that is the ceiling light and the pool under the table lamp of the
+// mission-4 cabin: 6811 pixels of highlight, drawn as black blobs.
+test("a room view's index-255 pixels are the display's white, not unwritten black (#351)", async () => {
+  // the arithmetic, with no set in it: 128 entries in, both ends of the reserve out
+  const raw = new Uint8Array(256 * 8);
+  for (let i = 0; i < 256; i++) {
+    raw[i * 8 + 3] = raw[i * 8 + 5] = raw[i * 8 + 7] = 0x40; // mid grey everywhere
+  }
+  const half = paletteToRGBA(raw, 128);
+  check("entry 0 is black when only the lower half was given",
+    half[0] === 0 && half[1] === 0 && half[2] === 0, `${half[0]},${half[1]},${half[2]}`);
+  check("and entry 255 is opaque white, not the zeroes nobody wrote",
+    half[255 * 4] === 255 && half[255 * 4 + 1] === 255 && half[255 * 4 + 2] === 255 &&
+      half[255 * 4 + 3] === 255,
+    `${half[255 * 4]},${half[255 * 4 + 1]},${half[255 * 4 + 2]},${half[255 * 4 + 3]}`);
+  check("the entries between the halves are still nobody's",
+    half[200 * 4] === 0 && half[200 * 4 + 1] === 0 && half[200 * 4 + 2] === 0,
+    `${half[200 * 4]},${half[200 * 4 + 1]},${half[200 * 4 + 2]}`);
+
+  // ...and the room the report was filed against
+  const { session, viewer } = await newSession();
+  await session.openSetFile("c73.set", "scene49", "view69");
+  const v = viewer();
+  check("the set contributes the lower half only", v.set.colorCount === 128, `${v.set.colorCount}`);
+  // the file's own bytes there are the MAC reserved pair, which is why the
+  // correction has to override them rather than read them
+  const stored = [3, 5, 7].map((k) => v.set.paletteRaw[255 * 8 + k]);
+  check("c73 stores black at entry 255, as every DF palette does",
+    stored.every((c) => c === 0), stored.join(","));
+
+  const shown = (v as unknown as { palette: Uint8ClampedArray }).palette;
+  check("but the view palette renders it white",
+    shown[255 * 4] > 240 && shown[255 * 4 + 1] > 240 && shown[255 * 4 + 2] > 240,
+    `${shown[255 * 4]},${shown[255 * 4 + 1]},${shown[255 * 4 + 2]}`);
+
+  // and there are real pixels riding on it, in this very view
+  const scene = v.set.scenes.find((s) => s.sceneName.toLowerCase() === "scene49")!;
+  const fb = new FrameBuffer();
+  let stray = 0;
+  for (const fi of scene.turns[0].frames) {
+    if (!fi.frameContainerLoc) continue;
+    const f = decodeFrame(v.set.file.containers[fi.frameContainerLoc].data, fb);
+    for (let i = 0; i < f.width * f.height; i++) if (fb.pixels[i] === 255) stray++;
+  }
+  check("scene49 really does draw through the reserved entry", stray > 1000, `${stray} pixels`);
+}
+);
+
 // --- 100. an item you are handed takes the HELP button down with it (#123) ----
 // `addinven` is how anything reaches your hand, and its FIRST line is the clear:
 //
