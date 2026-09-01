@@ -262,7 +262,90 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
   }
   session.onLog(`opengame: ${describeSaveV1(save)}`);
 
+  /*
+   * The point of no return, and the first thing past it: stop the scripts the
+   * abandoned game was running (#344).
+   *
+   * A suspended script is suspended INSIDE a builtin, and the teardown below
+   * releases exactly those — `scheduler.reset()`, `puppetCtrl.closePuppetFile()`,
+   * `endWipe()`, `onAbandonMovie`. Released and not stopped, a script runs its
+   * next statement in a game that no longer exists, reading the globals the load
+   * has just replaced. On the Titanic side that was the reported symptom: the
+   * ending's straight-line script resumed at the next film after a checkpoint
+   * load and reached its `if mission = "good"` branch holding the checkpoint's
+   * mission, so the good ending finished on the bad ending's restart screen.
+   *
+   * Before the teardown, not after, so nothing is ever woken into the gap. The
+   * epoch machinery is `Interpreter.abandonRunning()` — every `Frame` carries the
+   * epoch it was made in and `execBlock` checks it before each statement, so a
+   * frame from the previous game unwinds at its next statement and its dispatch
+   * promise resolves. Frames made after the bump carry the new epoch and are
+   * untouched, which is why the load's own scripts are not affected.
+   *
+   * Dust's lever is a button on the inventory panel rather than TAOOT's control
+   * panel, so the caller's tail is worth reading before assuming the abandon is
+   * free. There are two, both `mousedown` in `NEW.FLT`, and the abandon reaches
+   * both of them — they are frames of the epoch it just closed.
+   *
+   *     0034:  opengame ("dust 0.3")                                  <- nothing after
+   *     0025:  opengame ("dust 0.3")
+   *            if currentflat () = "score"
+   *                makeloop ("flat", currentflat (), "update", 10)
+   *            endif
+   *
+   * 0025's tail is a no-op on the path that reaches it: a load that got this far
+   * has already run `gotoFlat(PLAY_FLAT)` below, so `currentflat ()` is the play
+   * flat and the `if` is false. Skipping it and running it come to the same
+   * thing. A load that FAILS never gets here — the parse and title checks return
+   * above this line — so a failed load still hands its caller back intact.
+   */
+  session.interp.abandonRunning();
+  session.cursorDepth = 0;
+
   // ---- the state that is not in a room ------------------------------------
+  /*
+   * Drop what the file is silent about, before restoring what it carries (#344).
+   *
+   * The variable records are not a patch over the live session, they are the
+   * engine's WHOLE variable list, written out and read back wholesale —
+   * `df/savegame-v1.ts` shares `save-vars.ts` with v4, "the variable list both
+   * versions share". A global with no record did not exist when the game was
+   * saved, and after `opengame` it should not exist either. Normally a room
+   * cleans up after itself with `dumpglobal` from a teardown, but a load runs no
+   * scripts, so nothing is dumped and the abandoned game's value stands under a
+   * file that never mentioned it.
+   *
+   * Measured over the 56 shipped `.RTD`s: 170 distinct globals between them, 79
+   * carried by some and not others — the blackjack and poker tables, the fight,
+   * the flute puzzle, `borrowgun`, `blackout`, `juglevel`, `bottles`. Loading a
+   * save from before a puzzle was touched left that puzzle's live state standing
+   * underneath it.
+   *
+   * The sharper edge is the frame stamps. `session.frameCounter` is set from the
+   * file below, and the game reads a stamp only as `frame() - stamp`; shipped
+   * counters span 4885 to 261166, so a stamp that survives a load while the
+   * counter rewinds under it goes negative and stays there. Dust's own
+   * `attentionspan` is carried by all 56 and is safe by luck — the same luck
+   * Titanic's `jonesframe` did not have, 8 of 109, which is how #340 was
+   * reported.
+   *
+   * Deleted rather than zeroed: a `global` declaration recreates a missing name
+   * at 0, which is what the original hands a script reading a variable its
+   * restored list has no node for. `__` names are the port's own bookkeeping and
+   * not the file's to speak for — `snapshotSaveV1` skips the same prefix writing.
+   *
+   * This is safe only because the writer is honest about capacity. Dust's bases
+   * are small and it used to drop what would not fit, which meant a file could
+   * be silent about a global that DID exist — 164 of them over the playthrough,
+   * `handitem` among them. Deleting on top of that would have turned every one
+   * into lost state. #357 closed it, and `dust/tests/saves.ts`'s round trip is
+   * what keeps it closed.
+   */
+  for (const name of [...session.interp.globals.keys()]) {
+    if (name.startsWith("__")) continue;
+    if (save.numGlobals.has(name) || save.strGlobals.has(name)) continue;
+    session.interp.globals.delete(name);
+  }
   for (const [k, v] of save.numGlobals) session.interp.globals.set(k, v);
   for (const [k, v] of save.strGlobals) session.interp.globals.set(k, v);
   /*

@@ -21,6 +21,10 @@ import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { applyPatchV1, parseSaveV1, v1Index } from "@dreamfactory/engine/df/savegame-v1";
 import { snapshotSaveV1 } from "@dreamfactory/engine/runtime/saveload-v1";
+import { parseScript } from "@dreamfactory/engine/runtime/parser";
+import { ScriptInstance } from "@dreamfactory/engine/runtime/interp";
+import { compileScript } from "@dreamfactory/engine/df/script-asm";
+import { decodeScript } from "@dreamfactory/engine/df/script";
 import { readSetFileV1 } from "@dreamfactory/engine/df/set-v1";
 
 /** `7 + 5` — the containers every v1 save has, whatever it had open (v1Index) */
@@ -918,4 +922,111 @@ test("a save carries every global the session holds", async () => {
     }
   }
   expect(bad, `${bad.length} global(s) did not survive the round trip`).toEqual([]);
+});
+
+/** one turn of the microtask queue, for a dispatch that is not awaited */
+const drain = (): Promise<void> => new Promise<void>((r) => setImmediate(r));
+
+/** a session with the disc behind it, at the version Dust boots at */
+function bareSession(): GameSession {
+  const session = new GameSession((n) => {
+    const path = `${DATA_DIR}/${n.toUpperCase()}`;
+    return existsSync(path) ? new Uint8Array(readFileSync(path)) : null;
+  }, new NullAudioSink());
+  session.onLog = () => {};
+  session.dfVersion = 1;
+  return session;
+}
+
+/**
+ * A load drops the globals the file does not carry (#344).
+ *
+ * The variable records are the engine's WHOLE list, not a patch over the live
+ * session, so a global with no record did not exist when the save was taken. A
+ * room normally clears its own with `dumpglobal` from a teardown; a load runs no
+ * scripts, so without this the abandoned game's value stands under a file that
+ * never mentioned it.
+ *
+ * The name below is chosen from the measurement rather than invented: of the 170
+ * globals across the 56 shipped saves, 79 are carried by some and not others, and
+ * `juglevel` is one of the puzzle counters in that set.
+ */
+test("a load drops the globals the file does not carry (#344)", async () => {
+  if (!existsSync(DATA_DIR) || !existsSync(join(SAVE_DIR, "D1E_001.RTD"))) {
+    console.warn(`no ${DATA_DIR} — skipping (needs the Dust rip)`);
+    return;
+  }
+  const bytes = new Uint8Array(readFileSync(join(SAVE_DIR, "D1E_001.RTD")));
+  const carried = parseSaveV1(bytes);
+  const absent = [...["juglevel", "borrowgun", "blackout", "bottles"]].filter(
+    (n) => !carried.numGlobals.has(n) && !carried.strGlobals.has(n),
+  );
+  expect(absent.length, "the save is silent about at least one puzzle global").toBeGreaterThan(0);
+
+  const session = bareSession();
+  // stand in for the game that is being abandoned
+  for (const name of absent) session.interp.globals.set(name, 4242);
+  session.interp.globals.set("__port_only", 7);
+  expect(await session.loadGame(bytes), "the save loads").toBe(true);
+
+  const still = absent.filter((n) => session.interp.globals.has(n));
+  expect(still, "no global the file is silent about survives the load").toEqual([]);
+  // ...and the port's own bookkeeping is not the file's to speak for
+  expect(session.interp.globals.get("__port_only"), "`__` names are left alone").toBe(7);
+  // what the file DOES carry is still there
+  const [name, value] = [...carried.numGlobals][0];
+  expect(session.interp.globals.get(name), `${name} restored`).toBe(value);
+});
+
+/**
+ * A load stops the scripts the abandoned game was running (#344, second half).
+ *
+ * A suspended script is suspended inside a builtin, and the teardown in
+ * `loadGameV1` RELEASES those without stopping them — so before
+ * `abandonRunning()` the next statement ran in a game that no longer existed,
+ * against globals the load had just replaced.
+ *
+ * A movie stands in for the suspension because it is the one this is reported
+ * through: `onPlayMovie` returns a promise the test holds open, and
+ * `onAbandonMovie` is what the loader calls to release it.
+ */
+test("a load stops the script the abandoned game was running (#344)", async () => {
+  if (!existsSync(DATA_DIR) || !existsSync(join(SAVE_DIR, "D1E_001.RTD"))) {
+    console.warn(`no ${DATA_DIR} — skipping (needs the Dust rip)`);
+    return;
+  }
+  const session = bareSession();
+  const played: string[] = [];
+  let release: (() => void) | null = null;
+  session.modalMovies = true;
+  session.onPlayMovie = (name: string) => {
+    played.push(name.toLowerCase());
+    return new Promise<void>((r) => {
+      release = r;
+    });
+  };
+  session.onAbandonMovie = () => {
+    const r = release;
+    release = null;
+    r?.();
+  };
+
+  // two films back to back: the load lands between them, and the second is the
+  // statement that must never run
+  const source = `code probe ()\n\tplaymovie ("first.mov")\n\tplaymovie ("second.mov")\nendcode\n`;
+  const inst = new ScriptInstance("probe", parseScript(decodeScript(compileScript(source))));
+  const running = session.track(session.interp.runHandler(inst, "probe", [], { me: "probe", target: "probe" }));
+  for (let i = 0; i < 500 && !release; i++) await drain();
+  expect(played, "parked in the first film").toEqual(["first.mov"]);
+  expect(session.scriptBusy, "and the session knows a script is running").toBe(true);
+
+  expect(await session.loadGame(new Uint8Array(readFileSync(join(SAVE_DIR, "D1E_001.RTD")))), "loads").toBe(true);
+  for (let i = 0; i < 500; i++) await drain();
+
+  expect(played, "the script did not run on into its second film").toEqual(["first.mov"]);
+  expect(
+    await Promise.race([running.then(() => true), drain().then(() => false)]),
+    "the dispatch came back",
+  ).toBe(true);
+  expect(session.scriptBusy, "and nothing is left running").toBe(false);
 });
