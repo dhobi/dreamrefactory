@@ -20,6 +20,7 @@ import { readSaveFile, writeSaveFile } from "@dreamfactory/engine/df/savegame";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { applyPatchV1, parseSaveV1, v1Index } from "@dreamfactory/engine/df/savegame-v1";
+import { snapshotSaveV1 } from "@dreamfactory/engine/runtime/saveload-v1";
 import { readSetFileV1 } from "@dreamfactory/engine/df/set-v1";
 
 /** `7 + 5` — the containers every v1 save has, whatever it had open (v1Index) */
@@ -853,4 +854,68 @@ test("moving a save to another room takes that room's registers and palette with
   expect([dv0.getInt16(255 * 8, true), dv0.getInt16(255 * 8 + 2, true)], "entry 255 is white").toEqual([255, -1]);
   // and the standpoint still says what it said
   expect(parseSaveV1(bytes)!.standpoint.setFile, "the room").toBe("mayupper.set");
+});
+
+/**
+ * Every global a session holds survives being written and read back (#357).
+ *
+ * The oracle this fix was built against, kept as a test because it is the only
+ * thing that says when the writer is honest. Counting the writer's own `onDrop`
+ * reports is not enough: on master those named 31 rungs of the playthrough, and
+ * the round trip below found 22 rungs losing 164 globals — the difference being
+ * everything that was written to a slot no reader would look at.
+ *
+ * Three separate faults were in that gap, and each one is invisible without the
+ * comparison:
+ *
+ *  - `newVarRecord` never fixed the PREVIOUS node's vtable, which is what
+ *    validates the new name, so on a base whose list ends on a junk one every
+ *    new record was written to the same invisible slot. Five calls in a row
+ *    answered 3132 on `D1E_001.RTD` and the record count never moved.
+ *  - the writer patched the FIRST slot a duplicated name decodes at and
+ *    `parseSaveV1` keeps the LAST, so `mwifelike` came back as the other copy.
+ *  - `poolIntern` refuses to allocate unless the pool header and container agree
+ *    on the size, and `BLDSTPZ.RTD`'s disagree by its own alignment padding.
+ *
+ * Loading and immediately writing back is the weakest form of this — the
+ * playthrough exercises sessions that have grown well past their base — but it
+ * is the form that needs no route, and it catches all three.
+ */
+test("a save carries every global the session holds", async () => {
+  if (!existsSync(DATA_DIR) || !existsSync(SAVE_DIR)) {
+    console.warn(`no ${DATA_DIR} — skipping (needs the Dust rip)`);
+    return;
+  }
+  const files = readdirSync(SAVE_DIR).filter((n) => /\.rtd$/i.test(n)).sort();
+  expect(files.length, "shipped saves to round trip").toBeGreaterThan(20);
+
+  const bad: string[] = [];
+  for (const file of files) {
+    const session = new GameSession((n) => {
+      const path = `${DATA_DIR}/${n.toUpperCase()}`;
+      return existsSync(path) ? new Uint8Array(readFileSync(path)) : null;
+    }, new NullAudioSink());
+    session.onLog = () => {};
+    session.dfVersion = 1;
+    const bytes = new Uint8Array(readFileSync(join(SAVE_DIR, file)));
+    expect(await session.loadGame(bytes), `${file} loads`).toBe(true);
+
+    const live = new Map<string, string | number>();
+    for (const [k, v] of session.interp.globals) {
+      // `__` names are the port's own bookkeeping and no save's to carry
+      if (!k.startsWith("__") && (typeof v === "number" || typeof v === "string")) live.set(k, v);
+    }
+    session.saveTemplate = () => bytes;
+    const written = await snapshotSaveV1(session);
+    if (!written) {
+      bad.push(`${file}: nothing written`);
+      continue;
+    }
+    const back = parseSaveV1(written);
+    for (const [name, want] of live) {
+      const got = back.numGlobals.has(name) ? back.numGlobals.get(name) : back.strGlobals.get(name);
+      if (got !== want) bad.push(`${file}: ${name} ${JSON.stringify(want)} -> ${JSON.stringify(got)}`);
+    }
+  }
+  expect(bad, `${bad.length} global(s) did not survive the round trip`).toEqual([]);
 });

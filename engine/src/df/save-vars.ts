@@ -221,6 +221,33 @@ export function decodeVars(d: Uint8Array, pool?: Uint8Array): SavedVar[] {
  * {@link decodeVars}), that is the slot before the one carrying the name;
  * type/value live at that offset +24/+26. First occurrence wins (list order).
  */
+/**
+ * Every slot a name decodes at, not just the first — because a shipped save can
+ * hold the same name more than once and the two ends of this format disagree
+ * about which one counts.
+ *
+ * {@link recordOffsets} keeps the FIRST, and that is what the writer patches.
+ * A reader building a map — `parseSaveV1`'s `numGlobals.set(v.name, …)` over
+ * {@link decodeVars} — keeps the LAST. So on a base with a duplicate, a value
+ * written perfectly reads back as whatever the other copy held: Dust's
+ * `D2A_001.RTD` carries `mwifelike` at two adjacent slots, and a patch that set
+ * it to 3 came back as -3.
+ *
+ * The duplicates are the base's own — measured before any patch touches it,
+ * `mwifelike` twice and `dealercount`, `dealerstand` and `dealerdowncard` three
+ * times each, the same blackjack records {@link poolFloor} already knows hold
+ * stale pool offsets. Whether they are real list nodes or leftovers this
+ * scanner is permissive enough to accept, they are the same VARIABLE, so the
+ * answer is not to pick a winner: write them all, and every reader agrees.
+ */
+export function recordSlots(d: Uint8Array): Map<string, number[]> {
+  const out = new Map<string, number[]>();
+  for (const { name, valueSlot } of decodeVarSlots(d)) {
+    out.set(name, [...(out.get(name) ?? []), valueSlot]);
+  }
+  return out;
+}
+
 export function recordOffsets(d: Uint8Array): Map<string, number> {
   const out = new Map<string, number>();
   const vars = decodeVarSlots(d);
@@ -298,6 +325,25 @@ export function newVarRecord(container: { data: Uint8Array }, name: string): num
   // and a node stamped with a different one is a node neither reader finds.
   const vt = nodeVtable(d);
   if (vt === null) return -1;
+  /*
+   * The vtable the NEW name is validated by is the PREVIOUS node's, and on a
+   * base whose list ends here it has never had to be right.
+   *
+   * `decodeVarSlots` checks `vtableAt(slot - NODE_STRIDE)` for a name at `slot`,
+   * so a record made at the frontier is read through the bytes at `valueSlot`,
+   * which is the last existing record's own name slot. Nothing in the original
+   * ever reads that one — no node followed it — so it can be anything, and on
+   * Dust's `D1E_001.RTD` it is not the vtable. The record was written, returned a
+   * slot, and then simply did not exist: five calls in a row all answered 3132
+   * and `decodeVarSlots` stayed at 92 records, so a patch needing eleven new
+   * globals kept overwriting one invisible node and lost all but the last.
+   *
+   * Only the bytes the previous name does not occupy, mirroring `vtableAt`'s own
+   * tolerance: a name over 11 characters legitimately spills into the low bytes,
+   * and putting the vtable back over it would truncate the name instead.
+   */
+  const prevSkip = Math.max(0, Math.min(4, d[valueSlot + NODE_NAME] - 11));
+  for (let i = prevSkip; i < 4; i++) d[valueSlot + NODE_VTABLE + i] = (vt >>> (8 * i)) & 0xff;
   // The vtable FIRST, then the name over the top of it. That order is the format's
   // own: the name field holds 1 length byte + 11 characters before it runs into the
   // vtable, and a longer name overflows into it — which is why `attentionspan` and
@@ -308,6 +354,144 @@ export function newVarRecord(container: { data: Uint8Array }, name: string): num
   d[nameSlot + NODE_NAME] = name.length;
   for (let j = 0; j < name.length; j++) d[nameSlot + NODE_NAME + 1 + j] = name.charCodeAt(j) & 0xff;
   return valueSlot;
+}
+
+/**
+ * Make room in the globals blob and its string pool for every name a patch is
+ * about to write, so nothing has to be dropped (#357).
+ *
+ * Dust is why this exists. Its bases are small — 92 to 142 records across the 56
+ * shipped `.RTD` files, with 2 to 18 free nodes each and a ceiling of 94 to 160
+ * against the 170 globals known between them — so a session that has grown past
+ * its base has nowhere to put the difference. Measured at every rung of the
+ * playthrough, with each rung's own save as its base, 31 of 55 dropped something,
+ * `handitem` twice: the item in the player's hand, lost to a full string pool.
+ *
+ * Two ways of finding room, in this order, because they cost different things:
+ *
+ *  1. **Recycle a dead record.** The variable list is the engine's WHOLE list,
+ *     saved and read back wholesale (see the note on {@link decodeVars}), so a
+ *     record for a name the patch does not carry describes a variable that no
+ *     longer exists. Renaming it in place is free: the node keeps its vtable and
+ *     its paired DFValue slot, and the file grows by nothing. The vtable is
+ *     rewritten before the name for the reason {@link newVarRecord} gives —
+ *     a name over 11 characters clobbers the low bytes, and a rename that
+ *     shortens one has to put them back.
+ *  2. **Grow the container**, by whole nodes, and only by as many as are still
+ *     missing. A zeroed tail is invisible to {@link decodeVarSlots}, which skips
+ *     any slot without a name and a matching vtable, and {@link writeSaveFile}
+ *     takes each container's length from its data — so a longer blob is a longer
+ *     file with a rebuilt position table and nothing else.
+ *
+ * The pool is grown the same way when the strings a patch wants will not fit,
+ * with the capacity word in the blob header moved with it: {@link poolIntern}
+ * refuses to allocate unless the header and the container agree on the size.
+ *
+ * Growing is a departure from this file's usual rule — reproduce every byte you
+ * were given — and it is taken deliberately and narrowly. A patch that fits grows
+ * nothing and is byte-for-byte what it was before. What the original's own reader
+ * makes of a longer blob is untested: it is a heap block with its length in the
+ * container table, so there is reason to think it is read back the same way, but
+ * nothing here has confirmed it against DUST.EXE.
+ */
+export function ensureVarRoom(
+  globals: { data: Uint8Array },
+  pool: { data: Uint8Array },
+  names: Iterable<string>,
+  strings: Iterable<string>,
+): void {
+  const want = [...names].filter((n) => n.length > 0 && n.length <= 15);
+  const have = recordOffsets(globals.data);
+  const missing = want.filter((n) => !have.has(n));
+  if (missing.length) {
+    /*
+     * 1. Dead records first — a name the patch does not carry no longer exists.
+     *
+     * Only where BOTH names fit the 12-byte field, and that guard is the whole
+     * of the care this needs. A node's vtable is the validator for the NEXT
+     * node's name (`decodeVarSlots` checks `vtableAt(slot - NODE_STRIDE)`), and
+     * a name over 11 characters spills into it — so a rename across that
+     * boundary either clobbers a vtable that was intact or restores one that was
+     * legitimately clobbered, and either way the record one stride along changes
+     * its mind about existing.
+     *
+     * Restoring is the worse of the two: it resurrects whatever leftover bytes
+     * sit in the next slot as a record. Measured before this guard, writing the
+     * vtable on every rename brought `dealercount` and `dealerstand` back from
+     * the dead three times over and gave `mwifelike` a twin one stride along,
+     * which the writer then filled from a different variable — the round trip
+     * read 3 back as -3.
+     *
+     * Both names short means the vtable is untouched by either the old name or
+     * the new one, so it is left exactly as it was and nothing downstream moves.
+     * A name of 12 to 15 characters does not recycle; it grows instead.
+     */
+    const FITS_FIELD = 11;
+    const wanted = new Set(want);
+    const dead = decodeVarSlots(globals.data)
+      .filter((v) => !wanted.has(v.name) && v.name.length <= FITS_FIELD)
+      .map((v) => v.valueSlot + NODE_STRIDE);
+    let taken = 0;
+    for (const name of missing) {
+      if (taken >= dead.length) break;
+      if (name.length > FITS_FIELD) continue;
+      const at = dead[taken++];
+      if (at + NODE_STRIDE > globals.data.length) continue;
+      const d = globals.data;
+      // the name field only — bytes 8..19. The vtable at 20 is the next node's
+      // validator and is none of this rename's business.
+      for (let j = 0; j < 12; j++) d[at + NODE_NAME + j] = 0;
+      d[at + NODE_NAME] = name.length;
+      for (let j = 0; j < name.length; j++) d[at + NODE_NAME + 1 + j] = name.charCodeAt(j) & 0xff;
+    }
+    // 2. and grow for whatever is still homeless
+    const short = missing.length - taken - freeVarSlots(globals.data);
+    if (short > 0) {
+      const grown = new Uint8Array(globals.data.length + short * NODE_STRIDE);
+      grown.set(globals.data);
+      globals.data = grown;
+    }
+  }
+
+  /*
+   * The pool: what these strings cost, against what is left above the floor.
+   *
+   * {@link poolIntern} will not allocate unless the header's size word and the
+   * container agree, and on one shipped Dust save they do not: `BLDSTPZ.RTD`
+   * carries a 4128-byte pool container whose header says 4106. The difference is
+   * the container's own alignment padding, not a pool that is short — but the
+   * mismatch drops `poolIntern` into reuse-only for the whole file, which is why
+   * carrying the chest out of the building put `handitem` beyond saving.
+   *
+   * So the header is corrected to the room that is actually there, and the
+   * container grown past it only when the strings will not fit even then. A
+   * header claiming MORE than the container holds is the one case left alone:
+   * that is not padding, it is a file this cannot reason about.
+   */
+  const dv = new DataView(globals.data.buffer, globals.data.byteOffset, globals.data.byteLength);
+  let capacity = dv.getUint32(POOL_SIZE, true);
+  if (capacity > pool.data.length) return;
+  if (capacity < pool.data.length) {
+    // padding, not a short pool — say so, or poolIntern stays in reuse-only for
+    // the whole file however much room is really there
+    capacity = pool.data.length;
+    dv.setUint32(POOL_SIZE, capacity, true);
+  }
+  const floor = poolFloor(globals.data, pool.data, dv.getUint32(POOL_MARK, true));
+  let need = 0;
+  for (const text of strings) {
+    if (text.length > 0xff) continue; // never storable; poolIntern reports it
+    if (poolFind(pool.data, text, floor) >= 0) continue;
+    need += 1 + text.length;
+  }
+  if (floor + need <= capacity) return;
+  const size = Math.max(pool.data.length, floor + need);
+  if (size > pool.data.length) {
+    const grown = new Uint8Array(size);
+    grown.set(pool.data);
+    pool.data = grown;
+  }
+  dv.setUint32(POOL_SIZE, size, true);
 }
 
 /**

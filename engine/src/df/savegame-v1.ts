@@ -72,9 +72,10 @@ import {
   NODE_VALUE,
   SavedVar,
   decodeVars,
+  ensureVarRoom,
   newVarRecord,
   poolIntern,
-  recordOffsets,
+  recordSlots,
   writePstrField,
 } from "./save-vars";
 
@@ -1126,8 +1127,18 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
   const globals = out.containers[index.globals];
   const pool = out.containers[index.pool];
   if (globals && pool) {
+    // Room for everything, BEFORE the DataView below is taken over the blob —
+    // this may replace both containers' buffers. Without it a base with no free
+    // node or no pool room simply drops the difference, which on Dust's small
+    // bases is real state and twice over is `handitem` (#357).
+    ensureVarRoom(
+      globals,
+      pool,
+      [...patch.numGlobals.keys(), ...(patch.strGlobals?.keys() ?? [])],
+      patch.strGlobals?.values() ?? [],
+    );
     const gv = new DataView(globals.data.buffer, globals.data.byteOffset, globals.data.byteLength);
-    let slots = recordOffsets(globals.data);
+    let slots = recordSlots(globals.data);
     /**
      * Where this variable's DFValue is, or null if it cannot be placed.
      *
@@ -1142,15 +1153,17 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
      * the variable the entire five-day story is counted in, and a save that
      * could not write it would come back on the wrong day.
      */
-    const slotFor = (name: string): number | null => {
-      const have = slots.get(name);
-      if (have !== undefined) return have + NODE_TYPE >= 0 ? have : null;
+    const slotFor = (name: string): number[] | null => {
+      // EVERY slot the name decodes at, because a reader keeps the last and this
+      // writer used to patch only the first — see {@link recordSlots}
+      const have = slots.get(name)?.filter((at) => at + NODE_TYPE >= 0);
+      if (have?.length) return have;
       // the base has no record for this variable: make one in the free tail of
       // its node array, exactly as a script assigning a new global would
       const made = newVarRecord(globals, name);
       if (made < 0) return null;
-      slots = recordOffsets(globals.data);
-      return made;
+      slots = recordSlots(globals.data);
+      return [made];
     };
     for (const [name, value] of patch.numGlobals) {
       const at = slotFor(name);
@@ -1158,13 +1171,16 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
         drop(name, "no record and no free node in the base");
         continue;
       }
-      // Keep a boolean a boolean: the two tags are distinct runtime types and
-      // DF.EXE's boolean-taking commands check for exactly 2 (see DFVALUE_BOOLEAN
-      // in save-vars.ts). A 0/1 in a slot the base wrote as boolean stays one.
-      const was = gv.getUint16(at + NODE_TYPE, true);
-      const tag = was === DFVALUE_BOOLEAN && (value === 0 || value === 1) ? DFVALUE_BOOLEAN : DFVALUE_NUMBER_WRITTEN;
-      gv.setUint16(at + NODE_TYPE, tag, true);
-      gv.setInt32(at + NODE_VALUE, value | 0, true);
+      for (const slot of at) {
+        // Keep a boolean a boolean: the two tags are distinct runtime types and
+        // DF.EXE's boolean-taking commands check for exactly 2 (see DFVALUE_BOOLEAN
+        // in save-vars.ts). A 0/1 in a slot the base wrote as boolean stays one.
+        const was = gv.getUint16(slot + NODE_TYPE, true);
+        const tag =
+          was === DFVALUE_BOOLEAN && (value === 0 || value === 1) ? DFVALUE_BOOLEAN : DFVALUE_NUMBER_WRITTEN;
+        gv.setUint16(slot + NODE_TYPE, tag, true);
+        gv.setInt32(slot + NODE_VALUE, value | 0, true);
+      }
     }
     for (const [name, text] of patch.strGlobals ?? []) {
       const at = slotFor(name);
@@ -1177,8 +1193,10 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
         drop(name, `no room in the string pool for ${JSON.stringify(text)}`);
         continue;
       }
-      gv.setUint16(at + NODE_TYPE, DFVALUE_STRING, true);
-      gv.setInt32(at + NODE_VALUE, off, true);
+      for (const slot of at) {
+        gv.setUint16(slot + NODE_TYPE, DFVALUE_STRING, true);
+        gv.setInt32(slot + NODE_VALUE, off, true);
+      }
     }
   }
 
