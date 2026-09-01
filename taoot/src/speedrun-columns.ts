@@ -46,7 +46,17 @@ const KEY = "taoot:speedrun:columns";
  * exactly this, so a hand-edited or stale entry cannot hide a section or invent
  * one. Anything else and the markup's own order stands.
  */
-const MOVABLE: readonly string[] = ["srtimer", "srpanel", "details"];
+export const MOVABLE: readonly string[] = ["srtimer", "srpanel", "details"];
+
+/**
+ * Said on the row once the tree has been put in an order.
+ *
+ * The widths beside this one (taoot/src/speedrun-widths.ts) hang a grip off each
+ * column, and a grip is a sibling in the row: reordering the sections leaves
+ * them behind. Rather than have that module watch the tree — a MutationObserver
+ * that would see its own repairs — the module that DID the moving says so.
+ */
+export const COLUMNS_CHANGED = "taoot:columns";
 
 /**
  * What they are placed after: the canvas keeps the head of the row.
@@ -107,7 +117,7 @@ function stored(): string[] | null {
  * Put the tree in `order`.
  *
  * Walked from the canvas outwards, each one placed after the last — which needs
- * no arithmetic and no knowledge of how many there are. The `nextElementSibling`
+ * no arithmetic and no knowledge of how many there are. The {@link nextPanel}
  * test is not an optimisation: re-inserting a node that is already where it
  * belongs still tears down and rebuilds its rendering, which for the sheet means
  * a textarea losing its selection every time anything moves.
@@ -118,9 +128,24 @@ function apply(order: string[]): void {
   for (const id of order) {
     const el = document.getElementById(id);
     if (!el) continue;
-    if (after.nextElementSibling !== el) after.after(el);
+    if (nextPanel(after) !== el) after.after(el);
     after = el;
   }
+  document.getElementById("srlayout")?.dispatchEvent(new CustomEvent(COLUMNS_CHANGED));
+}
+
+/**
+ * The next sibling that is one of OURS.
+ *
+ * Not `nextElementSibling`, because the row holds more than the panels: a width
+ * grip sits between each pair (taoot/src/speedrun-widths.ts), and against a raw
+ * sibling every panel looks out of place — so every one of them is re-inserted,
+ * which is precisely the teardown the note above says must not happen.
+ */
+function nextPanel(el: Element): Element | null {
+  let n = el.nextElementSibling;
+  while (n && !MOVABLE.includes(n.id)) n = n.nextElementSibling;
+  return n;
 }
 
 /**

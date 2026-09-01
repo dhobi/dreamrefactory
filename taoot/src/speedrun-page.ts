@@ -69,6 +69,7 @@ import { attachEditor } from "./speedrun-editor";
 import { attachRecorder } from "./speedrun-recorder";
 import { attachInputMonitor } from "./speedrun-inputs";
 import { installColumnOrder } from "./speedrun-columns";
+import { installColumnWidths, installPictureScale } from "./speedrun-widths";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -815,6 +816,14 @@ attachInputMonitor({
 // Installed early, before anything is drawn into either of them: the sections
 // are MOVED, and moving one after the fact would be a visible jump.
 installColumnOrder();
+// …and how wide each of them is, dragged by the edge between them. After the
+// order and not before: a grip is made beside the section it belongs to, so the
+// sections have to be where the reader left them first.
+installColumnWidths();
+// …and how much of the row the picture itself takes, which is the width the
+// other three are measured against — and the one that decides whether there is
+// a row at all on a narrow desk.
+installPictureScale();
 
 function setRecording(on: boolean): void {
   recorder.set(on);

@@ -48,16 +48,38 @@
         margin-top: 0.9rem;
       }
 
+      /* ---- how big the picture is ----
+         The framebuffer is 512x384 and the canvas is `pixelated`, so the only
+         widths that keep every game pixel the same size as its neighbour are
+         WHOLE multiples of it. 2x is what this page has always shown and is
+         still what it opens at; the reader picks another with the segments under
+         the screen (#srscale, taoot/src/speedrun-widths.ts).
+
+         Written as `data-px` on the DOCUMENT element rather than as a class on
+         anything nearer, because the row's own break has to read it — a media
+         query can see nothing but the document, and how much window the row
+         needs is mostly a question of how much of it the picture is taking. */
+      :root {
+        --px: 2;
+      }
+      :root[data-px="1"] {
+        --px: 1;
+      }
+      :root[data-px="3"] {
+        --px: 3;
+      }
+
       /* The renderer always presents a fixed 512x384 (4:3) framebuffer — see
          engine/src/web/screen.ts. `aspect-ratio` derives the height from the element's own
          width instead of from the image inside it, so the layout no longer
          reflows when a scene switches between a full-screen flat and a bare
-         room view. 1024px is a crisp 2x integer scale of 512x384; use the
-         Fullscreen button to fit the screen to the display instead. */
+         room view. The width is a whole multiple of the framebuffer's own and
+         nothing else; use the Fullscreen button to fit the screen to the display
+         instead, which is the one place a fractional scale is the right answer. */
       #screen {
         image-rendering: pixelated;
         aspect-ratio: 4 / 3;
-        width: 1024px;
+        width: calc(512px * var(--px));
         max-width: 96vw;
         background: #000;
         display: block;
@@ -228,6 +250,28 @@
         width: 50%;
         height: auto;
       }
+      /* …but never less than 200px of drawing. The Timer is the column a reader
+         squeezes — its floor is 200px where the others stop at 512 — and half of
+         a squeezed column is a display too small to catch out of the corner of
+         the eye, which is the only job this drawing has.
+
+         400 is where the two rules meet: half of 400 IS 200, so below it the
+         half is what would take the drawing under the floor, and the whole width
+         is what is left to give. The one place it still comes out under 200 is a
+         column dragged to within a hair of its own 200px floor, where 200px of
+         drawing does not exist to be had.
+
+         Asked of the COLUMN and not of the window, because the column is dragged
+         as well as laid out (taoot/src/speedrun-widths.ts) and the window says
+         nothing about how wide the reader left it. A container query measures
+         the content box — this column's own width less its 0.5rem of side
+         padding — so the turn happens at about 416px of section, which is near
+         enough that writing 384 here would cost more than it explained. */
+      @container srtimer (max-width: 400px) {
+        #inputs .sr-keys {
+          width: 100%;
+        }
+      }
       /* A key at rest: the same hairline the page draws everything else with.
          Nothing here is brighter than the canvas until it is pressed — the rule
          the whole site is built on, and the reason a lit key reads at all. */
@@ -340,6 +384,13 @@
       .seg label:has(input:focus-visible) {
         outline: 1px solid var(--ice-400);
         outline-offset: -1px;
+      }
+
+      /* The picture-size segments, under the screen and set in from it: the
+         canvas already carries a lit rim, and a control butted against it would
+         read as part of the frame. */
+      #srscale {
+        margin-top: 0.9rem;
       }
 
       /* ---- where the game says where you are, and what it is doing ----
@@ -694,6 +745,15 @@
         gap: 0.6rem;
       }
 
+      /* What is in this column is drawn to fit it, so it has to be askable: the
+         input display takes half the width at a normal size and all of it once
+         the column is dragged down small (#inputs .sr-keys above). Only this
+         column is a container, and only on the inline axis — nothing here sizes
+         itself from its contents, so there is no height to contain. */
+      #srtimer {
+        container: srtimer / inline-size;
+      }
+
       /* ---- one column, or two, or three ----
          The screen, the sheet, and the X pane. Stacked in that order on a narrow
          window, beside each other on a wide one. The sheet is READ WHILE THE RUN
@@ -702,20 +762,53 @@
          768 px-tall canvas, so watching means scrolling away from the text and
          vice versa.
 
-         The break is 1740px because that is what the screen and the sheet
-         actually need: 1024 for the screen (a crisp 2x of 512x384 — the canvas
-         is `pixelated`, and shrinking it to fit a column would make every pixel
-         a different size), the sheet's own 650px floor (`wait(js: ...)` lines and
-         the splits table wrap below it), plus the gap and the padding — 1718, so
-         1740. It was 1500 while the sheet had no floor and would simply take
-         what was left; at that width the floor made it wrap under the canvas
-         instead, which is the one thing this layout exists to prevent. Below the
-         break the stacked layout is not a fallback — it is the right answer for
-         the window.
+         The break is the picture plus one column, and nothing else: the screen
+         at whatever whole scale it is drawn at, a column at the 512px floor the
+         sheet and the pane share, and the gap and the padding between and around
+         them. Measured on those two and not on the Timer, which can be dragged
+         down to 200 — the question the break answers is whether a sheet fits
+         beside the game, not whether a clock does. At 2x
+         that is 1024 + 512 + 22 + 22 = 1581, so 1600. It was 1500 while the
+         columns had no floor and would simply take what was left; at that width
+         a floor made the sheet wrap under the canvas instead, which is the one
+         thing this layout exists to prevent. Below the break the stacked layout
+         is not a fallback — it is the right answer for the window.
 
+         And it MOVES with the picture, because the picture is most of what it
+         measures. Turn the screen down to 1x and the sum is 1069, so a 1280
+         laptop can hold a column beside the game after all; turn it up to 3x and
+         it is 2093 and takes a wide desk. Three thresholds, one per scale, each
+         with the same ~20px of cushion. They cannot be three copies of the
+         layout — a media query cannot read a custom property, so the queries set
+         a FLAG and one style query below reads it. The no-attribute case is 2x's,
+         so a page whose script never ran breaks where the markup says it should.
+
+         WHICH column lands beside the picture is the reader's, not ours: the row
+         wraps in the order the headings are in, so with the shipped order it is
+         the Timer, and dragging the sheet's heading onto it puts the sheet there
+         instead (taoot/src/speedrun-columns.ts). */
+      :root {
+        --row: 0;
+      }
+      @media (min-width: 1090px) {
+        :root[data-px="1"] {
+          --row: 1;
+        }
+      }
+      @media (min-width: 1600px) {
+        :root:not([data-px="1"]):not([data-px="3"]) {
+          --row: 1;
+        }
+      }
+      @media (min-width: 2115px) {
+        :root[data-px="3"] {
+          --row: 1;
+        }
+      }
+      /* ---- and the row itself ----
          The row WRAPS, which is how the pane gets a third column only where one
-         fits: over the break but short of 1024 + sheet + pane, the pane drops to
-         its own line at full width instead of taking the sheet's room. It used
+         fits: over the break but short of the picture + sheet + pane, the pane
+         drops to its own line at full width instead of taking the sheet's room. It used
          to be a `position: fixed` rail with this layout padded by the rail's
          width to keep clear of it — and #249 is what that cost, because the
          BODY was padded by the same width as well, so at 1920 with the pane open
@@ -735,7 +828,7 @@
         align-items: center;
       }
 
-      @media (min-width: 1740px) {
+      @container style(--row: 1) {
         #srlayout {
           flex-direction: row;
           flex-wrap: wrap;
@@ -751,23 +844,45 @@
           box-sizing: border-box;
         }
         /* the screen's own width, held whether or not the game has booted, so
-           the columns do not jump sideways when #booting gives way to #stage */
+           the columns do not jump sideways when #booting gives way to #stage —
+           and it follows the scale, which is what gives the other columns room
+           when the reader turns the picture down */
         #srgame {
-          flex: 0 0 1024px;
-          width: 1024px;
+          flex: 0 0 calc(512px * var(--px));
+          width: calc(512px * var(--px));
         }
         #srpanel {
-          flex: 1 1 26rem;
-          /* A floor, not a preference: `wait(js: ...)` lines are what this column
-             is read for, and below this they wrap. It is a FLOOR rather than a
-             basis so the row's wrap decision respects it — which is why the
-             timer and the X pane drop to their own line on a window that cannot
-             hold 1024 + this + them. Only in here: stacked, the column is the
-             page's width and a floor would push a phone sideways. */
-          min-width: 650px;
-          /* the screen's own width: the sheet may grow to match the canvas it is
-             read beside, and no further — the base rule below the query caps the
-             stacked column at the same 1024 */
+          /* The share the row gives it, and the reader's own answer if they have
+             one: taoot/src/speedrun-widths.ts writes both halves onto the section
+             when its edge is dragged. `--col-grow` is the half that makes the
+             drag land where the pointer is — a column still growing takes a
+             share of the row's spare space on TOP of its basis, so its edge
+             moves by a fraction of the distance dragged. Custom properties
+             rather than an inline `flex`, because these three rules are the only
+             place they are read: below the break #srlayout is a column, where a
+             basis is a HEIGHT, and a width chosen on a desktop would come back
+             as a height on a phone. */
+          flex: var(--col-grow, 1) 1 var(--col-w, 26rem);
+          /* 512: the picture's own width at 1x, and the floor this column shares
+             with the X pane — the Timer goes narrower, being a readout rather
+             than something read. It is a FLOOR rather than a basis so the row's
+             wrap decision respects it, and it is what a drag on the grip stops
+             at (taoot/src/speedrun-widths.ts reads it back rather than repeating
+             it). Only in here: stacked, the column is the page's width and a
+             floor would push a phone sideways.
+
+             It was 650, which is where a long `wait(js: ...)` line stops fitting
+             on one line — a real limit, and the wrong one to spend the row's
+             width on: those lines are a minority of a sheet and they wrap
+             rather than break, while the column that cannot be made narrower
+             costs every OTHER column its place beside the picture. One floor
+             for all three, at the width of the smallest picture, so what fits
+             the row is a question about the row and not about which panel
+             happens to be in it. */
+          min-width: 512px;
+          /* the picture at 2x: the sheet may grow to the width the screen is
+             usually read beside, and no further — the base rule below the query
+             caps the stacked column at the same 1024 */
           max-width: 1024px;
           margin: 0.9rem 0;
           /* An ordinary column, like the X pane beside it — it used to be
@@ -777,15 +892,19 @@
           max-height: calc(100vh - 1.4rem);
           overflow: auto;
         }
-        /* What the run produced, in its own column. Its floor is the splits
-           table: five columns of tabular mono, and under it the split names wrap
-           against the numbers. Narrower than the sheet's, because a reading is
-           shorter than the line that produced it — and it is the column the row
-           gives up first, since a run can be read after it finishes and the
-           sheet has to be beside the picture while it plays. */
+        /* What the run produced, in its own column, and the one exception to the
+           row's 512 floor. A reading is shorter than the line that produced it:
+           the clock is six characters and a split is a name and a number, so a
+           column narrow enough to be useless for a sheet is still a usable
+           readout — and this is the column a reader squeezes when they want the
+           other two wide. 200 is well under the 380 the splits table wants (five
+           columns of tabular mono; under that the split names wrap against the
+           numbers), which is the trade being made rather than an oversight: a
+           dragged-down Timer wraps its splits, and dragging it back unwraps
+           them. */
         #srtimer {
-          flex: 1 1 22rem;
-          min-width: 380px;
+          flex: var(--col-grow, 1) 1 var(--col-w, 22rem);
+          min-width: 200px;
           max-width: 1024px;
           margin: 0.9rem 0;
           max-height: calc(100vh - 1.4rem);
@@ -799,15 +918,17 @@
            thing being worked in, and the pane is a readout that may scroll away
            with the page. */
         #srlayout > #details {
-          flex: 1 1 20rem;
+          flex: var(--col-grow, 1) 1 var(--col-w, 20rem);
           width: auto;
           /* A floor and a ceiling, both in here only: stacked, the pane is the
              screen's column at 96vw and a floor would push a phone sideways.
-             The floor is what the ceiling used to be — the pane is never
-             narrower than it was at its widest — and it feeds the row's wrap
-             decision, so a window that cannot hold the canvas and a 480px pane
-             drops the pane to its own line rather than shaving it thin. */
-          min-width: 480px;
+             The floor was 480 — what the pane's ceiling used to be, back when it
+             was a fixed rail — and is now the row's shared 512, near enough that
+             the state list reads the same and near enough that one number can
+             answer for all three columns. It feeds the row's wrap decision, so a
+             window that cannot hold the picture and a 512px pane drops the pane
+             to its own line rather than shaving it thin. */
+          min-width: 512px;
           max-width: 1024px;
           display: flex;
           flex-direction: column;
@@ -906,6 +1027,100 @@
       #srlayout > .dropping {
         outline: 1px dashed var(--ice-500);
         outline-offset: 5px;
+      }
+
+      /* ---- the column grips ----
+         The edge between two columns, held and dragged: how much of the row
+         each panel takes is the reader's answer too, and the shares above are
+         only a guess at it (taoot/src/speedrun-widths.ts). Nothing at all below
+         the break — stacked, every column is the page's width and there is no
+         edge to pull — and the module needs no knowledge of the number, because
+         a grip it cannot draw is a grip nobody can grab.
+
+         A sibling in the row rather than something inside a section, which is
+         the one placement that survives: the sections scroll, so anything
+         positioned in one is clipped by that `overflow` or scrolls away under
+         it, and the corner grip `resize: horizontal` would draw lands on top of
+         the scrollbar.
+
+         Zero-width, and the negative margins are why. #srlayout spaces its
+         children with `gap`, so an item BETWEEN two columns buys a second gap
+         and the row's spacing doubles wherever a grip sits; -0.7rem each side
+         gives exactly one of them back. What is left is the original 1.4rem
+         with the grip in the middle of it — over the space, not over either
+         column. */
+      .sr-grip {
+        display: none;
+      }
+      @container style(--row: 1) {
+        /* The grip belonging to whichever column ENDS a line has nowhere to sit:
+           a column that still grows fills the row to its content edge, so the
+           grip lands on the padding beyond it and its hit strip hangs 11px past
+           that — which the page answers with a horizontal scrollbar, over a
+           layout whose whole point is that nothing has to be scrolled to. Clipped
+           rather than moved: the half that hangs over is the half that was off
+           the window anyway, and what is left is a target against the window's
+           own edge, which is the easiest kind there is. `clip` and not `hidden`,
+           which would make the row a scroll container and take the columns'
+           own `max-height` scrolling with it. */
+        #srlayout {
+          overflow-x: clip;
+        }
+        .sr-grip {
+          display: block;
+          flex: 0 0 0;
+          align-self: stretch;
+          margin: 0 -0.7rem;
+          position: relative;
+          z-index: 1;
+          touch-action: none;
+          user-select: none;
+          /* on the element as well as on the strip below: which of the two the
+             browser reads the cursor off depends on which box the pointer is
+             over, and they are the same handle */
+          cursor: col-resize;
+        }
+        /* the part that can actually be hit: the whole gap, not the hairline
+           drawn in it — a 2px target is one nobody finds twice */
+        .sr-grip::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: -0.7rem;
+          width: 1.4rem;
+          cursor: col-resize;
+        }
+        /* and the hairline, drawn only under the pointer and while the drag
+           lasts: at rest this is a layout of columns, not of dividers */
+        .sr-grip::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: -1px;
+          width: 2px;
+          border-radius: 1px;
+          background: var(--ice-500);
+          opacity: 0;
+          transition: opacity 120ms;
+        }
+        .sr-grip:hover::after,
+        .sr-grip.dragging::after {
+          opacity: 0.5;
+        }
+        /* a column that is not on screen has no edge — X closes the pane */
+        #srlayout > [hidden] + .sr-grip {
+          display: none;
+        }
+      }
+      /* While a grip is held. The cursor keeps its meaning wherever the pointer
+         wanders — the drag is captured, so it may wander a long way — and
+         nothing under it takes a selection on the way past. */
+      body.sr-resizing,
+      body.sr-resizing * {
+        cursor: col-resize !important;
+        user-select: none !important;
       }
       /* ---- the sheet editor ----
          A <pre> painted under a transparent <textarea>, scrolled in step, plus
@@ -1523,6 +1738,29 @@
            count, and only once the wait is long enough to be felt. -->
       <div id="netbusy" hidden aria-hidden="true"><span></span></div>
     </div>
+
+      <!-- How big the picture is, in whole multiples of the 512x384 framebuffer
+           (taoot/src/speedrun-widths.ts). Not the bar of settings the note below
+           refuses: this is the picture's answer to the grips that set every
+           other column's width, and it is the one width that decides whether
+           the row fits three columns at all — so unlike a grip it has to be
+           reachable in the STACKED layout, which is exactly where a reader with
+           a 1280 laptop is sitting when they want it. The page's own three-way
+           control, the same one the brightness presets use. -->
+      <span class="seg" id="srscale" role="group" title="How big the picture is drawn — whole multiples of the game's own 512x384, because a fraction of a pixel is not a pixel">
+        <label
+          ><input type="radio" name="picture" value="1" />
+          <span>1x</span></label
+        >
+        <label
+          ><input type="radio" name="picture" value="2" checked />
+          <span>2x</span></label
+        >
+        <label
+          ><input type="radio" name="picture" value="3" />
+          <span>3x</span></label
+        >
+      </span>
 
       <!-- No bar of settings under the screen here. The play page's is
            fullscreen, a bug button, the swipe options and the
