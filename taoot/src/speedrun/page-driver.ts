@@ -341,10 +341,23 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
   };
 
   return {
-    clock: async (): Promise<Clock> => ({
-      ms: performance.now(),
-      frames: run<number>("window.dbg.session.frameCounter"),
-    }),
+    /**
+     * Wall clock, engine frames and the load remover's total (#251), sampled
+     * together — the two page-side numbers in ONE compiled expression, so they
+     * are a reading of one instant rather than of two.
+     *
+     * The wall clock is this window's `performance.now` and the loading total is
+     * measured on the GAME window's, which are two time origins if the game is
+     * ever in a frame. That is harmless and stays harmless: nothing subtracts
+     * one from the other, only a difference of one from a difference of the
+     * other, and both count real milliseconds at the same rate.
+     */
+    clock: async (): Promise<Clock> => {
+      const [frames, loading] = run<[number, number]>(
+        "[window.dbg.session.frameCounter, window.dbg.loading().ms]",
+      );
+      return { ms: performance.now(), frames, loading };
+    },
     evaluate,
     hold,
     tryHold,

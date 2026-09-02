@@ -25,11 +25,33 @@ import type { Clock, SpeedrunDriver, WaitMode } from "./driver";
  */
 const WATCH_TICK_MS = 250;
 
+/**
+ * Every `ms` below is LOAD-REMOVED, and every one of them says how much was
+ * removed ([#251](https://github.com/dhobi/dreamrefactory/issues/251)).
+ *
+ * A route run in a browser spends part of its wall time downloading the game,
+ * and that part belongs to the network rather than to the route: the same sheet
+ * over a cold cache and a warm one is minutes apart with not one gesture
+ * changed, so a wall-clock total cannot be compared with the wall-clock total of
+ * the same sheet run yesterday, let alone somebody else's. So the number a run
+ * is READ from has the loading taken out of it, which is what a PC speedrun's
+ * load remover does and for the same reason.
+ *
+ * `loading` is not a footnote to that — it is how the removal is checkable.
+ * `ms + loading` is the wall clock to the millisecond, so nothing is hidden and
+ * a reader can always get back to what the stopwatch on the desk would have
+ * said. It is also a number worth reading on its own: a leg that removed twenty
+ * seconds is a leg whose real cost is a download, and warming the cache
+ * (taoot/src/cache-warmup.ts) will change the run more than tuning it will.
+ */
 /** what one action cost */
 export interface Timing {
   step: Step;
+  /** wall ms with the loading taken out — what the action cost the route */
   ms: number;
   frames: number;
+  /** ms of it spent waiting on the network, and therefore not in `ms` */
+  loading: number;
   /** ms of `after:` padding inside it — dead time, called out separately */
   padded: number;
   says: string[];
@@ -38,19 +60,41 @@ export interface Timing {
 
 export interface Split {
   name: string;
+  /** wall ms with the loading taken out — see the note above */
   ms: number;
   frames: number;
+  /** ms of it spent waiting on the network, and therefore not in `ms` */
+  loading: number;
   actions: number;
 }
 
 export interface RunResult {
   timings: Timing[];
   splits: Split[];
-  total: { ms: number; frames: number };
+  total: { ms: number; frames: number; loading: number };
   failure: { step: Step; error: Error } | null;
   /** where the game was standing when it stopped — only sampled on failure */
   where: string | null;
 }
+
+/**
+ * The route's own time between two readings: wall time, less the network.
+ *
+ * One function rather than the subtraction written out at each of the four
+ * places a duration is taken, because the two halves have to agree — a split
+ * whose `ms` removed the loading and a total whose did not would put a run's
+ * legs and its headline in different units, and the page adds the legs up and
+ * prints the total beside them.
+ *
+ * Clamped at zero. It cannot go negative from a fetch that began before the
+ * first reading and landed after the second — the loading total only counts
+ * time the wire was busy, which is a subset of the wall time either way — but a
+ * clock that jumps (a suspended tab resuming, a system clock stepping under
+ * `Date.now`) can produce anything, and a negative leg would be read as a
+ * measurement rather than as the artefact it is.
+ */
+const netMs = (from: Clock, to: Clock): number =>
+  Math.max(0, to.ms - from.ms - (to.loading - from.loading));
 
 export interface RunHooks {
   /** before an action runs, so a UI can say what is happening now */
@@ -287,8 +331,9 @@ export async function runSheet(
       const now = await d.clock();
       const split: Split = {
         name: step.args[0] ?? `split ${splits.length + 1}`,
-        ms: now.ms - splitFrom.ms,
+        ms: netMs(splitFrom, now),
         frames: now.frames - splitFrom.frames,
+        loading: now.loading - splitFrom.loading,
         actions: splitActions,
       };
       splits.push(split);
@@ -356,8 +401,9 @@ export async function runSheet(
     const after = await d.clock().catch(() => before);
     const timing: Timing = {
       step,
-      ms: after.ms - before.ms,
+      ms: netMs(before, after),
       frames: after.frames - before.frames,
+      loading: after.loading - before.loading,
       padded: d.padded() - paddedBefore,
       says,
       suggestion,
@@ -372,8 +418,9 @@ export async function runSheet(
   if (splitActions) {
     const split: Split = {
       name: failure ? "(unfinished)" : "(final)",
-      ms: ended.ms - splitFrom.ms,
+      ms: netMs(splitFrom, ended),
       frames: ended.frames - splitFrom.frames,
+      loading: ended.loading - splitFrom.loading,
       actions: splitActions,
     };
     splits.push(split);
@@ -385,7 +432,11 @@ export async function runSheet(
   return {
     timings,
     splits,
-    total: { ms: ended.ms - started.ms, frames: ended.frames - started.frames },
+    total: {
+      ms: netMs(started, ended),
+      frames: ended.frames - started.frames,
+      loading: ended.loading - started.loading,
+    },
     failure,
     where,
   };
