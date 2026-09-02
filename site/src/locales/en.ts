@@ -232,7 +232,19 @@ export const en = {
       "Every script global, and the six the game's own debug readout names" as Text,
     debugAll: "all" as Text,
     debugAllTitle: "Every global, not just the ones that have just moved" as Text,
+    // The input log (#178). "inputs" and not "log": the pane's log is already
+    // there, and what this adds is the other half of it — what was done TO the
+    // game, beside what the game said about it.
+    debugInputs: "inputs" as Text,
+    debugInputsTitle:
+      "Every press and click, what it hit, and what it did — in the log, so a report carries it" as Text,
     debugFilter: "filter" as Text,
+    // What the box accepts, which is not guessable from the word "filter":
+    // several terms at once (#178). The example is the timer, which is the
+    // case the ask came from — `hrs`, `min` and `sec` are only worth watching
+    // together.
+    debugFilterTitle:
+      "One or more terms, | or , apart: hrs|min|sec — matched against a variable's name or a row's type (prop, actor)" as Text,
     debugCopy: "⧉ Copy details" as Text,
     debugCopyTitle: "Copy the state and the whole log, to attach to a bug report" as Text,
     debugCopied: "State and log copied — paste them into the issue." as Text,

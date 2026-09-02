@@ -41,6 +41,7 @@ import { TAOOT_SAVES, useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { readSaveFile } from "@dreamfactory/engine/df/savegame";
 import { FileStore } from "./files";
 import { loadClock } from "./load-clock";
+import { InputLog, clickLabel, inputLabel, type Gate, type Hit } from "./input-log";
 import { StateTrace, snapshotState } from "@dreamfactory/engine/runtime/trace";
 import { seededRng } from "@dreamfactory/engine/runtime/rng";
 import { LangChooser, chooserOrder, preselectedEdition } from "./lang-chooser";
@@ -165,6 +166,7 @@ const details = document.getElementById("details") as HTMLDivElement;
 const scriptlog = document.getElementById("scriptlog") as HTMLPreElement;
 /** the state list inside the pane, and what asks for it (#22) */
 const dbgStateOn = document.getElementById("dbgStateOn") as HTMLInputElement;
+const dbgInputsOn = document.getElementById("dbgInputsOn") as HTMLInputElement;
 const dbgState = document.getElementById("dbgState") as HTMLDivElement;
 const dbgSpine = document.getElementById("dbgSpine") as HTMLDivElement;
 const dbgRows = document.getElementById("dbgRows") as HTMLDivElement;
@@ -339,8 +341,11 @@ function clearLog(): void {
 }
 
 /** X: the scene readout and the log, both or neither. Remembered, so a player
- *  who wants it open gets it open on the next launch too. */
+ *  who wants it open gets it open on the next launch too — and inert where the
+ *  pane is the page (see {@link DETAILS_ALWAYS}), because there is nothing to
+ *  toggle it to. */
 function toggleDetails(): void {
+  if (DETAILS_ALWAYS) return;
   details.hidden = !details.hidden;
   try {
     window.localStorage.setItem(DETAILS_OPEN_KEY, details.hidden ? "0" : "1");
@@ -353,8 +358,11 @@ function toggleDetails(): void {
 /** where the pane's open/shut answer outlives the tab */
 const DETAILS_OPEN_KEY = "taoot.details.open";
 
-/** did the player leave the pane open last time? */
+/** did the player leave the pane open last time? — and yes, always, on a page
+ *  the pane belongs to ({@link DETAILS_ALWAYS}): this is what the boot reads to
+ *  decide whether to shut it, and the workbench's boot must not */
 function detailsWanted(): boolean {
+  if (DETAILS_ALWAYS) return true;
   try {
     return window.localStorage.getItem(DETAILS_OPEN_KEY) === "1";
   } catch {
@@ -735,6 +743,31 @@ const mutesTheme = (): boolean =>
   !!document.querySelector('meta[name="mute-theme"]');
 
 /**
+ * Is the Details pane part of this page rather than something to ask for?
+ *
+ * `<meta name="details-always">`, and the speedrun workbench says it. The pane
+ * is the log and the state list — on the play page that is a debugging aid a
+ * player can call up with X and dismiss again, and on the workbench it is half
+ * of what the page IS: a route is read off the log, and the sheet being tuned is
+ * tuned against what the state list says. A column that has to be summoned
+ * every time is a column that is in the way of the thing it belongs to.
+ *
+ * What it changes is three answers, all of them about the pane and none of them
+ * about the game: the pane starts open, X does not shut it, and the `state` box
+ * defaults to on ({@link installDebugPanel}). Everything else about the pane —
+ * the checkbox still checkable, the filter, the copy button — is the same on
+ * both pages, because the pane is the same pane.
+ *
+ * A page-level fact and not a URL parameter, for the reason {@link skipsIntro}
+ * gives: `/speedrun/` should behave the same however it was reached, and you can
+ * see the declaration by looking at the page. The markup on that page also drops
+ * the `hidden` attribute, so the column is up from the first paint rather than
+ * from whenever the boot gets round to it — this flag is what stops anything
+ * putting it back.
+ */
+const DETAILS_ALWAYS = !!document.querySelector('meta[name="details-always"]');
+
+/**
  * Which copy of the game this PAGE plays, if it is not a question.
  *
  * `<meta name="edition" content="en">`, and the speedrun workbench is the page
@@ -771,6 +804,15 @@ async function runNightdiveIntro(): Promise<Ownership> {
     ensureAudio(); // the first click is also the audio-unlock gesture
     const { x, y } = canvasCoords(e);
     intro.click(x, y);
+    // The intro's regions are its own — the ownership question's two buttons —
+    // so its clicks are named from `regions()` rather than from the engine's hit
+    // test, which has no room to test against yet (#178).
+    const on = intro.regions().find((r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1);
+    inputs.noteAnswered(
+      clickLabel(x, y),
+      "the Nightdive intro",
+      on ? `region "${on.target}"` : "on nothing",
+    );
   };
   // ESC and the volume digits, both through the movie's own key filter — the
   // marker is what that filter insists on for the abort, and the header flag is
@@ -780,7 +822,16 @@ async function runNightdiveIntro(): Promise<Ownership> {
   // credits over a title screen are exactly where a player reaches for the volume.
   const onKey = (e: KeyboardEvent): void => {
     ensureAudio();
-    if (e.key === "Escape") intro.key(".", true);
+    if (e.key === "Escape") {
+      const took = intro.key(".", true);
+      // #171 is exactly this line: an ESC that skipped what it should not have,
+      // and no way to see from the log that a key had been pressed at all
+      inputs.noteAnswered(
+        inputLabel("."),
+        "the Nightdive intro",
+        took ? "skipped the film" : "IGNORED — the film carries no skip flag",
+      );
+    }
     else if (
       e.key.length === 1 &&
       e.key >= "0" &&
@@ -1024,6 +1075,111 @@ void boot();
 // Input: pointer + keyboard, routed into the engine
 // ---------------------------------------------------------------------------
 
+/**
+ * The input log (#178): what the player pressed, what it hit, and what it did,
+ * in the same stream as what the game said about it.
+ *
+ * Wired here because this is where inputs enter — every gesture in this file
+ * goes through one of `pressArrow`, `keyToGame`, `director.press` or the intro's
+ * own two listeners, and the recorder wraps exactly those. A key the PAGE keeps
+ * (M, O, X, the gamma keys, a letter typed into the filter box) never reaches
+ * them and is therefore never logged, which is the right answer and one nobody
+ * has to maintain: what is logged is what the game was given.
+ *
+ * The three questions the recorder asks are answered below rather than inside
+ * it, so the wording can be tested without an engine (taoot/src/input-log.ts).
+ */
+const SESSION_START = performance.now();
+
+/** where the game is standing, in one phrase — the tail of every logged line */
+function whereNow(): string {
+  // the intro is not a room and has none behind it, and it is the one screen
+  // where "what did ESC do" is the whole question (#171)
+  if (liveIntro) return "the Nightdive intro";
+  // a film is what is on screen while it plays, whatever is open behind it
+  if (host.director.moviePlaying && host.director.movieFile) return host.director.movieFile;
+  const flat = session.currentFlat !== "none" ? ` · flat "${session.currentFlat}"` : "";
+  if (session.viewShowing) {
+    // The scene and view as the SET spells them, which is how the state list
+    // above and every golden name them (`snapshotState`) — `currentSceneName()`
+    // is the caseless script-facing name and would have this readout saying
+    // `scene3 / view20` two inches under a pane saying `Scene3 / View20`.
+    const v = host.viewer;
+    const scene = v?.scene?.sceneName ?? session.currentSceneName();
+    const view = v?.scene?.views[v.viewIdx]?.viewName ?? session.currentViewName();
+    return `${session.currentSetName} — ${scene} / ${view}${flat}`;
+  }
+  // a stage with no room behind it: the demo's menu, the deck map, the Enigma
+  if (session.stageOpen) return `${session.stageName}${flat}`;
+  return "no room open";
+}
+
+/**
+ * What will happen to a gesture arriving right now — the same question
+ * {@link KEY_SAFE} asks the page in a speedrun, asked in TypeScript.
+ *
+ * `movingCamera` is a press FILED (`SetViewer.keyDown` posts it coalescing) and
+ * `inputLocked` without it is a press GONE, and the difference between those two
+ * is exactly the fade gap that eats gestures. A log that did not tell them apart
+ * would be no help at all with the reports it exists for.
+ */
+function gateNow(): Gate {
+  const v = host.viewer;
+  if (!v) return "none";
+  // `movingCamera` off the DIRECTOR, which is where it lives: the viewer
+  // forwards `inputLocked` and not this one, so `v.movingCamera` is undefined
+  // (which is also why the speedrun's KEY_SAFE reads it and gets nothing — its
+  // `!inputLocked` clause is the stricter test and carries that gate anyway).
+  // The order is KEY_SAFE's, and the order is the whole of it: a film TAKES a
+  // key (that is how a cutscene is skipped) and a conversation takes one, so
+  // either of those outranks the camera. Measured the other way round first —
+  // every gesture through the boot's logos came out "queued behind a camera
+  // move", including the Space that skipped one.
+  if (v.moviePlaying || v.conversing) return "ready";
+  if (host.director.movingCamera) return "queued";
+  return v.inputLocked ? "locked" : "ready";
+}
+
+const inputs = new InputLog({
+  now: () => performance.now() - SESSION_START,
+  say: log,
+  where: whereNow,
+  gate: gateNow,
+  after: (ms, fn) => {
+    const t = window.setTimeout(fn, ms);
+    return () => window.clearTimeout(t);
+  },
+});
+
+/** what the engine's hit test says is under a point, for a click's own line */
+const hitAt = (x: number, y: number): (() => Hit | null) => () => session.hitTestAt(x, y);
+
+/**
+ * A gesture aimed at the GAME, logged unless the intro owns the screen.
+ *
+ * While the Nightdive intro is up there are two listeners for every press and
+ * every click — the intro's own (it plays on its own MoviePlayer, with its own
+ * frame loop) and the game's, which still forwards to the director as it always
+ * did. Both used to log, so every ESC at the ownership question produced a pair
+ * of lines: `IGNORED — the film carries no skip flag`, which is the answer, and
+ * `— nothing changed` from the director, which reads like a second press.
+ *
+ * The intro's line wins because it is the one with an answer in it (#171), so
+ * the game's side goes quiet rather than the dispatch changing: what is sent to
+ * the director while a film plays is exactly what was sent before.
+ */
+function noteGame(
+  what: string,
+  dispatch: () => Promise<unknown> | unknown,
+  hit?: () => Hit | null,
+): void {
+  if (liveIntro) {
+    void dispatch();
+    return;
+  }
+  inputs.note(what, dispatch, hit);
+}
+
 /** map a mouse event to view-pixel coordinates on the canvas */
 function canvasCoords(e: { clientX: number; clientY: number }): {
   x: number;
@@ -1078,7 +1234,11 @@ screen.addEventListener("pointerdown", (e) => {
   // original asks: house.shp's HELP button reads it inside its own mousedown, so
   // the question is what was held when the click happened.
   session.shiftDown = e.shiftKey;
-  void session.track(host.director.press(x, y), `press ${x},${y}`);
+  noteGame(
+    clickLabel(x, y),
+    () => session.track(host.director.press(x, y), `press ${x},${y}`),
+    hitAt(x, y),
+  );
 });
 
 // release anywhere ends a drag (the pointer may leave the canvas mid-drag).
@@ -1173,7 +1333,7 @@ const touch = new TouchGestures({
   // the same guard: a tap on the demo's menu was dropped for want of a room.
   press: (x, y) => {
     session.pointerDown = true;
-    void session.track(host.director.press(x, y));
+    noteGame(clickLabel(x, y), () => session.track(host.director.press(x, y)), hitAt(x, y));
   },
   release: (x, y) => {
     session.pointerDown = false;
@@ -1207,15 +1367,24 @@ const touch = new TouchGestures({
        * unskippable (it carries no such flag, #171).
        */
       if (liveIntro) {
-        liveIntro.key(ESCAPE_KEY, true);
+        // the answer is the return value and nothing else moves — see
+        // InputLog.noteAnswered, and #171, which is this line's whole subject
+        const took = liveIntro.key(ESCAPE_KEY, true);
+        inputs.noteAnswered(
+          inputLabel(ESCAPE_KEY),
+          whereNow(),
+          took ? "skipped the film" : "IGNORED — the film carries no skip flag",
+        );
         return;
       }
-      void session.track(host.director.keyDown(ESCAPE_KEY, true));
+      noteGame(inputLabel(ESCAPE_KEY), () =>
+        session.track(host.director.keyDown(ESCAPE_KEY, true)),
+      );
       return;
     }
     if (key === "downarrow") {
       const v = host.viewer;
-      if (v) void session.track(v.keyDown("downarrow"));
+      if (v) noteGame(inputLabel("downarrow"), () => session.track(v.keyDown("downarrow")));
       return;
     }
     pressArrow(key);
@@ -1458,14 +1627,22 @@ function bindRememberedBox(
   box: HTMLInputElement,
   key: string,
   apply: (on: boolean) => void,
+  /**
+   * What the box means before anybody has answered — off, unless a caller says
+   * otherwise (the workbench's state list, see {@link DETAILS_ALWAYS}).
+   *
+   * Only the DEFAULT: a stored answer wins over it either way, so a reader who
+   * turns the box off on a page that starts it on gets it off, and keeps it off.
+   */
+  fallback = false,
 ): void {
   let stored: string | null = null;
   try {
     stored = window.localStorage.getItem(key);
   } catch {
-    /* storage can be denied; the box then starts unchecked every launch */
+    /* storage can be denied; the box then starts at the default every launch */
   }
-  box.checked = stored === "1";
+  box.checked = stored === null ? fallback : stored === "1";
   apply(box.checked);
   box.addEventListener("change", () => {
     apply(box.checked);
@@ -1497,6 +1674,9 @@ const REFRESH_MS = 250;
 /** where the state box's answer outlives the tab */
 const DEBUG_STATE_KEY = "taoot.details.state";
 
+/** …and the input log's (#178) */
+const DEBUG_INPUTS_KEY = "taoot.details.inputs";
+
 /** which globals moved lately, so the list can light them for a moment */
 const changeWatch = new ChangeWatch();
 
@@ -1523,14 +1703,31 @@ function installDebugPanel(): void {
     try {
       window.localStorage.setItem(DETAILS_OPEN_KEY, "1");
       window.localStorage.setItem(DEBUG_STATE_KEY, "1");
+      // The input log too, because `?debug=1` is the link somebody is SENT when
+      // a report needs more than it carried, and what that report was missing
+      // is most often which gesture caused the thing (#178).
+      window.localStorage.setItem(DEBUG_INPUTS_KEY, "1");
     } catch {
       /* the link still works for this tab */
     }
   }
-  bindRememberedBox(dbgStateOn, DEBUG_STATE_KEY, (on) => {
-    dbgState.hidden = !on;
-    if (on) refreshState();
-  });
+  bindRememberedBox(
+    dbgStateOn,
+    DEBUG_STATE_KEY,
+    (on) => {
+      dbgState.hidden = !on;
+      if (on) refreshState();
+    },
+    // On where the pane is the page and off where it is a player's aid — the
+    // same rule the column itself follows (DETAILS_ALWAYS). A workbench whose
+    // debug column opened on the log alone would answer half the question it is
+    // there for.
+    DETAILS_ALWAYS,
+  );
+  // The input log (#178), by the same rule and for the same reason: on the
+  // workbench a run IS a sequence of gestures, and on the play page a player who
+  // has not asked should not have their log doubled in length.
+  bindRememberedBox(dbgInputsOn, DEBUG_INPUTS_KEY, (on) => (inputs.on = on), DETAILS_ALWAYS);
   for (const el of [dbgFilter, dbgAll])
     el.addEventListener("input", () => refreshState());
   dbgCopy.addEventListener("click", () => void copyDetails());
@@ -1619,11 +1816,15 @@ installDebugPanel();
 function pressArrow(name: "uparrow" | "leftarrow" | "rightarrow"): void {
   const v = host.viewer;
   if (!v) return;
+  // One label for both routes, because the PLAYER did one thing: which of the
+  // two a press takes is the page's business (an overlay stage takes its own
+  // keys), and the log is a record of gestures rather than of routing.
+  const what = inputLabel(name);
   if (!session.viewShowing && session.stageCtrl.keydownTarget()) {
-    void session.track(v.keyDown(name, false));
+    noteGame(what, () => session.track(v.keyDown(name, false)));
     return;
   }
-  void session.track(v.pressNav(name));
+  noteGame(what, () => session.track(v.pressNav(name)));
 }
 
 screen.addEventListener("mousemove", (e) => {
@@ -1716,7 +1917,7 @@ const GAMMA_KEYS: Record<string, { up: boolean; ch: GammaChannels } | "reset"> =
  * reached yet.
  */
 function keyToGame(name: string, special = false): void {
-  void session.track(host.director.keyDown(name, special));
+  noteGame(inputLabel(name), () => session.track(host.director.keyDown(name, special)));
 }
 
 window.addEventListener("keydown", (e) => {

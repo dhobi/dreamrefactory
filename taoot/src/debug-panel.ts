@@ -71,12 +71,40 @@ export interface StateView {
 }
 
 export interface StateViewOptions {
-  /** substring the reader typed, matched against the name */
+  /** what the reader typed: one or more terms, `|` or `,` apart — see {@link filterTerms} */
   filter?: string;
   /** every global, not just the ones that have moved */
   all?: boolean;
   /** names that changed recently, from {@link ChangeWatch} */
   changed?: ReadonlySet<string>;
+}
+
+/**
+ * The terms a filter names — `hrs|min|sec` and `hrs,min,sec` are the same three
+ * ([#178](https://github.com/dhobi/dreamrefactory/issues/178)).
+ *
+ * One term was enough for "what is `neckphase`", and not enough for the question
+ * the panel is actually opened for: a timer is `hrs`, `min` and `sec` and it is
+ * the RELATION between them that is wrong (#126, #127), so watching one at a
+ * time is watching none of them. Same for a puzzle whose two halves are named
+ * differently. Any-of rather than all-of, because these are alternatives — a
+ * name cannot contain both `hrs` and `sec`, so all-of would answer nothing.
+ *
+ * Both separators, because both were asked for and neither can occur in a
+ * variable name: the game's own tables are `[a-z0-9]` throughout.
+ *
+ * A SPACE is not a separator, and that is deliberate — it is the one character
+ * the type prefixes below are made of. `prop bag` has to mean the prop called
+ * bag; splitting on the space would turn it into "everything of any type, or
+ * anything called bag", which is the opposite of narrowing. So spaces are
+ * trimmed at the ends of a term and literal inside it.
+ */
+export function filterTerms(filter: string): string[] {
+  return filter
+    .toLowerCase()
+    .split(/[|,]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v : String(v));
@@ -91,14 +119,25 @@ const str = (v: unknown): string => (typeof v === "string" ? v : String(v));
  * "what just happened" and `all` answers "what is there", with the six the game
  * itself names always on top either way.
  *
- * Props and actors join the list only under `all`: 27 props and 8 actors have an
- * owner by the end of the game and the unowned majority is noise, which is why the
- * trace drops them too.
+ * Props and actors join the list under `all` — 27 props and 8 actors have an
+ * owner by the end of the game and the unowned majority is noise, which is why
+ * the trace drops them too — and under a filter, which is the reader naming
+ * them. Their rows carry their type (`prop bag`), and the filter searches that,
+ * so the type is a term like any other (#178).
  */
 export function stateView(trace: StateTrace, opts: StateViewOptions = {}): StateView {
   const changed = opts.changed ?? new Set<string>();
-  const want = (opts.filter ?? "").trim().toLowerCase();
-  const matches = (name: string): boolean => !want || name.toLowerCase().includes(want);
+  const terms = filterTerms(opts.filter ?? "");
+  /**
+   * Matched against the LABEL the row will carry, not against the bare name,
+   * which is what makes the type searchable (#178): a prop's row reads `prop
+   * bag`, so `prop` finds every prop and `bag` still finds that one. Before
+   * this, `prop` was matched against the globals' names and answered with
+   * `saveprops`, `saveprops1`, `saveprops2` — the three variables that ENCODE
+   * the props, and the last thing somebody looking for the props wants.
+   */
+  const matches = (label: string): boolean =>
+    !terms.length || terms.some((t) => label.toLowerCase().includes(t));
 
   const spine = SPINE.filter((n) => n in trace.globals).map((n) => ({
     name: SPINE_LABEL[n] ?? n,
@@ -109,7 +148,7 @@ export function stateView(trace: StateTrace, opts: StateViewOptions = {}): State
   // A filter is a question about the whole table, so it searches all of it: typing
   // "phase" to find out what the phases are must not be answered with "none of
   // them moved in the last two seconds".
-  const everything = opts.all || !!want;
+  const everything = opts.all || terms.length > 0;
   const rest: StateRow[] = [];
   let hidden = 0;
   for (const [name, value] of Object.entries(trace.globals)) {
@@ -129,12 +168,19 @@ export function stateView(trace: StateTrace, opts: StateViewOptions = {}): State
     }
     rest.push({ name, value: str(value), changed: changed.has(name) });
   }
-  if (opts.all) {
+  // Under a filter as well as under `all`, and for the same reason the globals
+  // are: the reader has named what they want, and "the props are only visible
+  // when EVERYTHING is" is the shape that made `prop` unanswerable (#178). The
+  // owned props and actors are a couple of dozen rows, so a filter that reaches
+  // them costs nothing when it does not match.
+  if (everything) {
     for (const [name, owner] of Object.entries(trace.props)) {
-      if (matches(name)) rest.push({ name: `prop ${name}`, value: str(owner), changed: false });
+      const label = `prop ${name}`;
+      if (matches(label)) rest.push({ name: label, value: str(owner), changed: false });
     }
     for (const [name, owner] of Object.entries(trace.actors)) {
-      if (matches(name)) rest.push({ name: `actor ${name}`, value: str(owner), changed: false });
+      const label = `actor ${name}`;
+      if (matches(label)) rest.push({ name: label, value: str(owner), changed: false });
     }
   }
   const fading = trace.fade > 0;

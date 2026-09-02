@@ -17,6 +17,12 @@
          no-op here, which it already handles — it returns the moment there is
          no intro on screen. -->
     <meta name="skip-intro" content="1" />
+    <!-- The Details column is part of this page, not something to ask for: the
+         workbench is a debugging tool and the log is how a run is read. So it is
+         up from the first paint and X does not take it away (taoot/src/main.ts
+         detailsAlways). The play page keeps the toggle — there, 161 variable
+         names are an answer to a question the player did not ask. -->
+    <meta name="details-always" content="1" />
     <!-- English, always: a route is a sequence of clicks and bevels in ONE
          edition's data, so there is no picker here and the game's own language
          chooser never opens (taoot/src/main.ts pinnedEdition). -->
@@ -517,8 +523,28 @@
         font-size: 0.78rem;
         color: var(--text-mute);
       }
+      /* A column with the scrollport INSIDE it, not a scrollport with everything
+         in it (#178). The six the game names and the filter box stay put while
+         the list moves under them: the ask was to watch the props and the main
+         states at once, which the one-scrollport shape made impossible — the
+         spine went off the top on the first turn of the wheel, and so did the
+         box you type the filter into, which is worse because you are typing in
+         it while you read.
+
+         `overflow: hidden` here and `overflow-y: auto` on #dbgRows below, so
+         there is exactly one scroller and it is the list. #dbgRows also needs
+         `min-height: 0`: a flex item's floor is its own content, so without it
+         it refuses to shrink, takes the whole column and scrolls nothing. */
       #dbgState {
-        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        /* Stacked, nothing above this bounds the column, so it needs a ceiling
+           of its own — with no scroll there is nothing to pin anything out of,
+           and the spine leaves with the page instead. #scriptlog's own
+           max-height above is the same admission. Side by side, #details hands
+           this a definite height and the media query below drops the ceiling. */
+        max-height: 60vh;
         font-family: var(--font-mono);
         font-size: 0.7rem;
         line-height: 1.6;
@@ -540,12 +566,18 @@
         color: var(--ice-300);
         padding-bottom: 0.35rem;
         border-bottom: 1px solid var(--border);
+        /* Never shrinks and never scrolls: it wraps to two lines at a narrow
+           width and both of them are meant to be readable (#178) */
+        flex: 0 0 auto;
       }
+      /* Pinned with the spine, because it is read with it: a filter box that
+         scrolls away from the list it is filtering is the same complaint (#178) */
       #dbgTools {
         display: flex;
         align-items: center;
         gap: 0.5rem;
         padding: 0.4rem 0;
+        flex: 0 0 auto;
       }
       #dbgTools input[type="search"] {
         flex: 1;
@@ -563,6 +595,12 @@
         font-size: 0.72rem;
         color: var(--text-mute);
         white-space: nowrap;
+      }
+      /* The one thing in the section that scrolls — see #dbgState */
+      #dbgRows {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
       }
       #dbgRows .row {
         display: flex;
@@ -966,6 +1004,9 @@
         #srlayout > #details #dbgState {
           flex: 1 1 auto;
           min-height: 0;
+          /* the column has a definite height here, so the stacked layout's
+             ceiling would only leave a gap under the list (#178) */
+          max-height: none;
         }
       }
       /* A rule UNDER the heading, which is where a section divider belongs: it
@@ -1917,24 +1958,31 @@ split(boot)"></textarea>
 
 
 
-      <!-- X opens this once the game is up; before then, a logged line does
-           (taoot/src/main.ts log), because a boot that never finishes has nothing
-           else to say for itself.
+      <!-- Always here, unlike the play page's copy of it: no `hidden`, so the
+           column is up from the first paint rather than from whenever the boot
+           gets round to un-hiding it, and X cannot take it down (the
+           `details-always` meta in the head).
 
            A column of #srlayout, in flow, and the LAST one: after the game and
            after the sheet, whether the three are side by side or stacked. It
            used to be moved into a fixed rail at the right edge on a wide window
            (#249) — nothing moves it now, the row wraps instead. -->
-      <div id="details" hidden>
+      <div id="details">
         <h2 data-i18n="play.debugHeading">Details</h2>
         <div id="hud"></div>
-        <!-- what the pane can be asked for beyond the log. `state` is off by
-             default: 161 variable names are an answer to a question the player
-             did not ask, and #22 is from someone who did ask. -->
+        <!-- what the pane can be asked for beyond the log. `state` starts ON
+             here and off on the play page, which is the same rule as the column
+             itself: this page has no players to spare 161 variable names from.
+             Still a checkbox, and still remembered — turn it off and it stays
+             off. -->
         <div id="dbgBar">
           <label data-i18n-attr="title:play.debugStateTitle" title="Every script global, and the six the game's own debug readout names"
             ><input type="checkbox" id="dbgStateOn" />
             <span data-i18n="play.debugState">state</span></label
+          >
+          <label data-i18n-attr="title:play.debugInputsTitle" title="Every press and click, what it hit, and what it did — in the log, so a report carries it"
+            ><input type="checkbox" id="dbgInputsOn" />
+            <span data-i18n="play.debugInputs">inputs</span></label
           >
           <button id="dbgCopy" data-i18n="play.debugCopy" data-i18n-attr="title:play.debugCopyTitle" title="Copy the state and the whole log, to attach to a bug report">⧉ Copy details</button>
           <span id="dbgNote" class="note"></span>
@@ -1943,7 +1991,9 @@ split(boot)"></textarea>
         <div id="dbgState" hidden>
           <div id="dbgSpine"></div>
           <div id="dbgTools">
-            <input id="dbgFilter" type="search" data-i18n-attr="placeholder:play.debugFilter" placeholder="filter" />
+            <input id="dbgFilter" type="search"
+              data-i18n-attr="placeholder:play.debugFilter,title:play.debugFilterTitle"
+              placeholder="filter" title="One or more terms, | or , apart: hrs|min|sec — matched against a variable's name or a row's type (prop, actor)" />
             <label data-i18n-attr="title:play.debugAllTitle" title="Every global, not just the ones that have just moved"
               ><input type="checkbox" id="dbgAll" />
               <span data-i18n="play.debugAll">all</span></label
