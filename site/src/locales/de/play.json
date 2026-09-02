@@ -41,6 +41,8 @@
   "debugStateTitle": "Alle Skriptvariablen, und die sechs, die die spieleigene Debug-Anzeige nennt",
   "debugAll": "alle",
   "debugAllTitle": "Alle Variablen, nicht nur die gerade veränderten",
+  "debugInputs": "Eingaben",
+  "debugInputsTitle": "Jeder Tastendruck und Klick, was er getroffen hat und was er bewirkt hat — im Protokoll, damit ein Fehlerbericht es mitnimmt",
   "debugFilter": "filtern",
   "debugFilterTitle": "Ein oder mehrere Begriffe, mit | oder , getrennt: hrs|min|sec — gesucht wird im Namen einer Variable oder in der Art einer Zeile (prop, actor)",
   "debugCopy": "⧉ Details kopieren",

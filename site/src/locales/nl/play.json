@@ -41,6 +41,8 @@
   "debugStateTitle": "Alle scriptvariabelen, en de zes die de eigen debugweergave van het spel noemt",
   "debugAll": "alle",
   "debugAllTitle": "Alle variabelen, niet alleen die net zijn veranderd",
+  "debugInputs": "invoer",
+  "debugInputsTitle": "Elke toetsaanslag en klik, wat die raakte en wat die deed — in het logboek, zodat een rapport het meeneemt",
   "debugFilter": "filteren",
   "debugFilterTitle": "Eén of meer termen, gescheiden door | of , : hrs|min|sec — gezocht in de naam van een variabele of in het type van een regel (prop, actor)",
   "debugCopy": "⧉ Details kopiëren",

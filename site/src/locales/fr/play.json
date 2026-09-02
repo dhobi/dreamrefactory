@@ -41,6 +41,8 @@
   "debugStateTitle": "Toutes les variables du script, et les six que nomme l'affichage de débogage du jeu",
   "debugAll": "toutes",
   "debugAllTitle": "Toutes les variables, pas seulement celles qui viennent de changer",
+  "debugInputs": "saisies",
+  "debugInputsTitle": "Chaque touche et chaque clic, ce qu'il a touché et ce qu'il a fait — dans le journal, pour qu'un rapport l'emporte avec lui",
   "debugFilter": "filtrer",
   "debugFilterTitle": "Un ou plusieurs termes, séparés par | ou , : hrs|min|sec — comparés au nom d'une variable ou au type d'une ligne (prop, actor)",
   "debugCopy": "⧉ Copier les détails",

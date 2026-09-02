@@ -41,6 +41,8 @@
   "debugStateTitle": "すべてのスクリプト変数と、ゲーム自身のデバッグ表示が挙げる6つ",
   "debugAll": "すべて",
   "debugAllTitle": "直前に変化したものだけでなく、すべての変数",
+  "debugInputs": "入力",
+  "debugInputsTitle": "すべてのキー操作とクリック、何に当たり何が起きたか — ログに残るので、報告にそのまま付いていきます",
   "debugFilter": "絞り込み",
   "debugFilterTitle": "「|」または「,」で区切って複数指定できます: hrs|min|sec — 変数名、または行の種類 (prop, actor) に一致します",
   "debugCopy": "⧉ 詳細をコピー",

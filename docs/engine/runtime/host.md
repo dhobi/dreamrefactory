@@ -816,6 +816,42 @@ MutationObserver: a room standing still costs **0 mutations** over 16 refresh
 ticks, one moved global costs 2 (its number and its highlight), and the only writes
 left under `all` are the pocketwatch's own.
 
+**What the input log is.** The other half of the same stream
+([#178](https://github.com/dhobi/dreamrefactory/issues/178)): the log has always
+said what the game DID and never what was done to it, so a report saying "I
+pressed forward and it went wrong" could not be checked against it. With the
+`inputs` box on, every press and click the game is given writes a line —
+what it was, what the engine's own hit test says was under it, and where the game
+stood once the gesture was answered:
+
+```
+[+01:14.8] [Space]         hotspot "door" → deckbd2.set — Scene35 / View102
+[+01:15.9] [Forward]       → wireless.set — Scene10 / View14
+[+01:18.2] [Click 214,180] region "ok" → wireless — wireless 1
+[+01:20.0] [Esc]           — nothing changed
+```
+
+In the log rather than beside it, because the question is cause and effect and in
+one stream the answer is the ORDER — and because `⧉ Copy details` and the Report
+bug button then carry the trail without a reporter having to know they should
+attach it. `?debug=1` turns it on with the rest, since that is the link somebody
+is sent when a report needs more than it carried.
+
+**A gesture that achieved nothing says so**, which is most of the value: a press
+the engine threw away in the fade gap reads `DROPPED — the engine was not
+accepting`, one filed behind a camera move reads `queued`, and ESC at the
+Nightdive intro's ownership question — [#171](https://github.com/dhobi/dreamrefactory/issues/171)
+exactly — reads `IGNORED — the film carries no skip flag`. "The key I pressed is
+not in the log at all" is indistinguishable from "the log is broken".
+
+Keys the PAGE keeps (M, O, X, the gamma keys, a letter typed into the filter box)
+are never logged, and nothing had to be written to exclude them: the recorder
+wraps the four places a gesture reaches the engine, so what is logged is what the
+game was given. A gesture answered within 200 ms is one line; one the game is
+still working on gets its cause line at once — in the right place, above the
+engine lines it caused — and its effect on a second line when it lands, because a
+press at a two-minute film must not have its line land after the film's.
+
 The lines themselves live in a bounded buffer
 ([`log-buffer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/log-buffer.ts)),
 not in the `<pre>`: the pane used to be its own storage and grew without end. A
