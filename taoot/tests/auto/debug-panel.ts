@@ -112,6 +112,95 @@ test("a filter asks about the whole table, not just what moved", () => {
   expect(view.rest.some((r) => r.changed)).toBe(false);
 });
 
+/* ---------------------------------------------------------------- *
+ * The filter, as a question with more than one term in it (#178)
+ * ---------------------------------------------------------------- */
+
+test("several terms are several questions, and | and , ask them the same way (#178)", () => {
+  const trace = endOfGame();
+  // the case it was asked for: a timer is three variables and it is the
+  // RELATION between them that goes wrong (#126, #127), so one at a time is
+  // none of them
+  const bars = stateView(trace, { filter: "hrs|min|sec" }).rest.map((r) => r.name);
+  const commas = stateView(trace, { filter: "hrs,min,sec" }).rest.map((r) => r.name);
+  expect(bars).toEqual(commas);
+  for (const term of ["hrs", "min", "sec"]) {
+    expect(bars.some((n) => n.includes(term)), `${term} is in the list`).toBe(true);
+  }
+  // any-of, not all-of: a name cannot contain both, so all-of would answer
+  // nothing at all
+  expect(bars.every((n) => ["hrs", "min", "sec"].some((t) => n.includes(t)))).toBe(true);
+  // ...and it is the union of asking separately, not something else
+  const apart = new Set(
+    ["hrs", "min", "sec"].flatMap((t) => stateView(trace, { filter: t }).rest.map((r) => r.name)),
+  );
+  expect(new Set(bars)).toEqual(apart);
+});
+
+test("a term is trimmed, an empty one is not a term (#178)", () => {
+  const trace = endOfGame();
+  const tidy = stateView(trace, { filter: "mission|phase" }).rest.map((r) => r.name);
+  expect(stateView(trace, { filter: " mission | phase " }).rest.map((r) => r.name)).toEqual(tidy);
+  // a trailing separator is somebody mid-typing, and must not read as "match
+  // everything" — an empty term would do exactly that
+  expect(stateView(trace, { filter: "mission|phase|" }).rest.map((r) => r.name)).toEqual(tidy);
+  expect(stateView(trace, { filter: "|" }).rest, "no terms at all is no filter").toEqual(
+    stateView(trace).rest,
+  );
+});
+
+test("a space stays inside a term, because the types are spelled with one (#178)", () => {
+  const trace = endOfGame();
+  const [prop] = Object.keys(trace.props);
+  expect(prop, "the fixture owns props").toBeTruthy();
+  const rows = stateView(trace, { filter: `prop ${prop}` }).rest.map((r) => r.name);
+  // one row: the prop named. Splitting on the space would have asked for every
+  // prop OR anything called that, which is the opposite of narrowing
+  expect(rows).toEqual([`prop ${prop}`]);
+});
+
+test("the filter searches a row's TYPE as well as its name (#178)", () => {
+  const trace = endOfGame();
+  const props = stateView(trace, { filter: "prop" }).rest;
+  expect(props.length, "the fixture owns props").toBeGreaterThan(0);
+  // What this used to answer, and the reason it is a bug: `saveprops`,
+  // `saveprops1` and `saveprops2` are the globals that ENCODE the props, which
+  // is the last thing somebody looking for the props wants. They match "prop"
+  // as names and are still here — what changed is that the props themselves are
+  // here too, and they are the majority.
+  expect(props.some((r) => r.name.startsWith("prop ")), "the props themselves").toBe(true);
+  expect(props.filter((r) => r.name.startsWith("prop ")).length).toBe(
+    Object.keys(trace.props).length,
+  );
+  const actors = stateView(trace, { filter: "actor" }).rest;
+  expect(actors.filter((r) => r.name.startsWith("actor ")).length).toBe(
+    Object.keys(trace.actors).length,
+  );
+});
+
+test("a filter reaches the props without `all`, the way it reaches the globals (#178)", () => {
+  const trace = endOfGame();
+  const [prop] = Object.keys(trace.props);
+  // the whole reason `prop` could not be answered before: the props were behind
+  // `all`, so filtering for them meant unfiltering everything else
+  const view = stateView(trace, { filter: `prop ${prop}` });
+  expect(view.rest.map((r) => r.name)).toEqual([`prop ${prop}`]);
+  expect(view.rest[0].value).toBe(String(trace.props[prop]));
+  // and with no filter and no `all` they stay out, which is what keeps the
+  // default list a readout rather than a table
+  expect(stateView(trace).rest.some((r) => r.name.startsWith("prop "))).toBe(false);
+});
+
+test("the spine is not filtered — it is the thing that is always true (#178)", () => {
+  const trace = endOfGame();
+  // pinned out of the scroll in the page (see #dbgState), and unfiltered here:
+  // a filter narrows the LIST, and the six the game names are not in it
+  expect(stateView(trace, { filter: "prop" }).spine.length).toBe(
+    stateView(trace).spine.length,
+  );
+  expect(stateView(trace, { filter: "nothing matches this" }).spine.length).toBeGreaterThan(0);
+});
+
 test("a variable arriving is not a variable changing", () => {
   const watch = new ChangeWatch(1000);
   // 93 globals at boot and 161 by the credits: rooms declare their own as they

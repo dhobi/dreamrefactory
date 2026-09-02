@@ -42,6 +42,7 @@
   "debugAll": "alle",
   "debugAllTitle": "Alle variabelen, niet alleen die net zijn veranderd",
   "debugFilter": "filteren",
+  "debugFilterTitle": "Eén of meer termen, gescheiden door | of , : hrs|min|sec — gezocht in de naam van een variabele of in het type van een regel (prop, actor)",
   "debugCopy": "⧉ Details kopiëren",
   "debugCopyTitle": "Toestand en het hele logboek kopiëren, om bij een foutmelding te voegen",
   "debugCopied": "Toestand en logboek gekopieerd — plak ze in het ticket.",

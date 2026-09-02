@@ -469,6 +469,9 @@
         #playlayout > #details #dbgState {
           flex: 1 1 auto;
           min-height: 0;
+          /* the column has a definite height here, so the stacked layout's
+             ceiling would only leave a gap under the list (#178) */
+          max-height: none;
         }
       }
 
@@ -484,8 +487,28 @@
         font-size: 0.78rem;
         color: var(--text-mute);
       }
+      /* A column with the scrollport INSIDE it, not a scrollport with everything
+         in it (#178). The six the game names and the filter box stay put while
+         the list moves under them: the ask was to watch the props and the main
+         states at once, which the one-scrollport shape made impossible — the
+         spine went off the top on the first turn of the wheel, and so did the
+         box you type the filter into, which is worse because you are typing in
+         it while you read.
+
+         `overflow: hidden` here and `overflow-y: auto` on #dbgRows below, so
+         there is exactly one scroller and it is the list. #dbgRows also needs
+         `min-height: 0`: a flex item's floor is its own content, so without it
+         it refuses to shrink, takes the whole column and scrolls nothing. */
       #dbgState {
-        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        /* Stacked, nothing above this bounds the column, so it needs a ceiling
+           of its own — with no scroll there is nothing to pin anything out of,
+           and the spine leaves with the page instead. #scriptlog's own
+           max-height above is the same admission. Side by side, #details hands
+           this a definite height and the media query below drops the ceiling. */
+        max-height: 60vh;
         font-family: var(--font-mono);
         font-size: 0.7rem;
         line-height: 1.6;
@@ -507,12 +530,18 @@
         color: var(--ice-300);
         padding-bottom: 0.35rem;
         border-bottom: 1px solid var(--border);
+        /* Never shrinks and never scrolls: it wraps to two lines at a narrow
+           width and both of them are meant to be readable (#178) */
+        flex: 0 0 auto;
       }
+      /* Pinned with the spine, because it is read with it: a filter box that
+         scrolls away from the list it is filtering is the same complaint (#178) */
       #dbgTools {
         display: flex;
         align-items: center;
         gap: 0.5rem;
         padding: 0.4rem 0;
+        flex: 0 0 auto;
       }
       #dbgTools input[type="search"] {
         flex: 1;
@@ -530,6 +559,12 @@
         font-size: 0.72rem;
         color: var(--text-mute);
         white-space: nowrap;
+      }
+      /* The one thing in the section that scrolls — see #dbgState */
+      #dbgRows {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
       }
       #dbgRows .row {
         display: flex;
@@ -990,7 +1025,9 @@
         <div id="dbgState" hidden>
           <div id="dbgSpine"></div>
           <div id="dbgTools">
-            <input id="dbgFilter" type="search" data-i18n-attr="placeholder:play.debugFilter" placeholder="filter" />
+            <input id="dbgFilter" type="search"
+              data-i18n-attr="placeholder:play.debugFilter,title:play.debugFilterTitle"
+              placeholder="filter" title="One or more terms, | or , apart: hrs|min|sec — matched against a variable's name or a row's type (prop, actor)" />
             <label data-i18n-attr="title:play.debugAllTitle" title="Every global, not just the ones that have just moved"
               ><input type="checkbox" id="dbgAll" />
               <span data-i18n="play.debugAll">all</span></label

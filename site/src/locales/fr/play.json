@@ -42,6 +42,7 @@
   "debugAll": "toutes",
   "debugAllTitle": "Toutes les variables, pas seulement celles qui viennent de changer",
   "debugFilter": "filtrer",
+  "debugFilterTitle": "Un ou plusieurs termes, séparés par | ou , : hrs|min|sec — comparés au nom d'une variable ou au type d'une ligne (prop, actor)",
   "debugCopy": "⧉ Copier les détails",
   "debugCopyTitle": "Copier l'état et tout le journal, à joindre à un rapport de bogue",
   "debugCopied": "État et journal copiés — collez-les dans le ticket.",

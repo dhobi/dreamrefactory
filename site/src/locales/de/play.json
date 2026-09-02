@@ -42,6 +42,7 @@
   "debugAll": "alle",
   "debugAllTitle": "Alle Variablen, nicht nur die gerade veränderten",
   "debugFilter": "filtern",
+  "debugFilterTitle": "Ein oder mehrere Begriffe, mit | oder , getrennt: hrs|min|sec — gesucht wird im Namen einer Variable oder in der Art einer Zeile (prop, actor)",
   "debugCopy": "⧉ Details kopieren",
   "debugCopyTitle": "Zustand und vollständiges Protokoll kopieren, für einen Fehlerbericht",
   "debugCopied": "Zustand und Protokoll kopiert — im Ticket einfügen.",

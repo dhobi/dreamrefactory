@@ -783,7 +783,20 @@ distinct names over the whole route, of which 108 ever move — but the median n
 that changes between two story beats is 5 and the most ever is 30.
 `all` gives the table, a filter searches it, and the six the
 game's own HELP button answers with (`Mission`, `Phase`, `Letter`, `Necklace`, and
-`Maze`/`Level` in the smokestack) stay on top of both.
+`Maze`/`Level` in the smokestack) stay on top of both — **pinned** out of the
+list's scroll, along with the filter box, so watching the props and the main
+states at once is possible at all ([#178](https://github.com/dhobi/dreamrefactory/issues/178)).
+
+A filter takes **more than one term**, `|` or `,` apart: `hrs|min|sec` is the
+timer, and a timer is only worth watching whole ([#126](https://github.com/dhobi/dreamrefactory/issues/126),
+[#127](https://github.com/dhobi/dreamrefactory/issues/127)) — any-of, since a name
+cannot contain two of them. It matches a row's **type** as well as its name,
+because a prop's row reads `prop bag`: `prop` now answers with the props, where
+it used to answer with `saveprops`, `saveprops1` and `saveprops2` — the three
+globals that *encode* them. A space is not a separator, so `prop bag` still means
+that one prop. Under a filter the owned props and actors join the list without
+`all`, for the same reason the unmoved globals do: the reader has named what they
+want.
 
 The clock is excluded from "what just moved" by
 [`engine/masks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/masks.ts) —

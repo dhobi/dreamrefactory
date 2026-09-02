@@ -42,6 +42,7 @@
   "debugAll": "すべて",
   "debugAllTitle": "直前に変化したものだけでなく、すべての変数",
   "debugFilter": "絞り込み",
+  "debugFilterTitle": "「|」または「,」で区切って複数指定できます: hrs|min|sec — 変数名、または行の種類 (prop, actor) に一致します",
   "debugCopy": "⧉ 詳細をコピー",
   "debugCopyTitle": "状態とログ全体をコピーし、不具合報告に添付します",
   "debugCopied": "状態とログをコピーしました — 報告に貼り付けてください。",
