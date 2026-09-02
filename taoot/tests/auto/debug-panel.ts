@@ -113,6 +113,47 @@ test("a filter asks about the whole table, not just what moved", () => {
 });
 
 /* ---------------------------------------------------------------- *
+ * Whose pane it is: a player's aid, or half of a workbench
+ * ---------------------------------------------------------------- */
+
+/**
+ * The two pages carry the same pane and disagree about it on purpose, and the
+ * disagreement is three lines of markup that are easy to "tidy" back into
+ * agreement — hence a test rather than a comment.
+ *
+ * On the play page the pane is a debugging aid: shut until X calls it up, and
+ * the state list off inside it, because 161 variable names are an answer to a
+ * question the player did not ask. On the workbench there are no players: a
+ * route is read off the log and tuned against the state list, so the column is
+ * up from the first paint (no `hidden`) and X cannot take it away
+ * (`details-always`, read by main.ts).
+ */
+test("the workbench's Details column is the page's; the play page's is the player's", () => {
+  const page = (rel: string) =>
+    parseHTML(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../..", rel), "utf8"))
+      .document;
+
+  const play = page("play/index.html");
+  const bench = page("speedrun/index.html");
+
+  // the workbench says the pane is part of it, and is therefore up already
+  expect(bench.querySelector('meta[name="details-always"]')).toBeTruthy();
+  expect(bench.getElementById("details")!.hasAttribute("hidden")).toBe(false);
+
+  // the play page says nothing, and starts shut — X is what opens it
+  expect(play.querySelector('meta[name="details-always"]')).toBeNull();
+  expect(play.getElementById("details")!.hasAttribute("hidden")).toBe(true);
+
+  // and the pane is otherwise the same pane on both, which is the point of the
+  // flag being a page-level fact rather than a second panel
+  for (const doc of [play, bench]) {
+    for (const id of ["dbgStateOn", "dbgState", "dbgSpine", "dbgTools", "dbgFilter", "dbgRows"]) {
+      expect(doc.getElementById(id), id).toBeTruthy();
+    }
+  }
+});
+
+/* ---------------------------------------------------------------- *
  * The filter, as a question with more than one term in it (#178)
  * ---------------------------------------------------------------- */
 

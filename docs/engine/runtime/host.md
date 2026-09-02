@@ -777,7 +777,12 @@ a 480 px pane and the run sheet was left a few pixels wide.
 **What the state list is.** Every script global, rendered from `snapshotState` —
 the same function the playthrough goldens are recorded with, so what a reporter
 reads and what a golden compares are the same numbers. It is off until asked for
-(the `state` box, or `?debug=1` in the URL) and it answers **what just moved**
+on the play page (the `state` box, or `?debug=1` in the URL) — and on from the
+first paint on the speedrun workbench, whose `<meta name="details-always">` says
+the pane is part of the page rather than something to summon: X cannot shut it
+there, and the `state` box starts checked. A route is read off the log and tuned
+against the state list, so a column that has to be called up every time is a
+column in the way of the thing it belongs to. It answers **what just moved**
 rather than the whole table: 93 globals at boot and 102 by the credits — 143
 distinct names over the whole route, of which 108 ever move — but the median number
 that changes between two story beats is 5 and the most ever is 30.

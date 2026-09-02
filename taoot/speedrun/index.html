@@ -17,6 +17,12 @@
          no-op here, which it already handles — it returns the moment there is
          no intro on screen. -->
     <meta name="skip-intro" content="1" />
+    <!-- The Details column is part of this page, not something to ask for: the
+         workbench is a debugging tool and the log is how a run is read. So it is
+         up from the first paint and X does not take it away (taoot/src/main.ts
+         detailsAlways). The play page keeps the toggle — there, 161 variable
+         names are an answer to a question the player did not ask. -->
+    <meta name="details-always" content="1" />
     <!-- English, always: a route is a sequence of clicks and bevels in ONE
          edition's data, so there is no picker here and the game's own language
          chooser never opens (taoot/src/main.ts pinnedEdition). -->
@@ -1952,20 +1958,23 @@ split(boot)"></textarea>
 
 
 
-      <!-- X opens this once the game is up; before then, a logged line does
-           (taoot/src/main.ts log), because a boot that never finishes has nothing
-           else to say for itself.
+      <!-- Always here, unlike the play page's copy of it: no `hidden`, so the
+           column is up from the first paint rather than from whenever the boot
+           gets round to un-hiding it, and X cannot take it down (the
+           `details-always` meta in the head).
 
            A column of #srlayout, in flow, and the LAST one: after the game and
            after the sheet, whether the three are side by side or stacked. It
            used to be moved into a fixed rail at the right edge on a wide window
            (#249) — nothing moves it now, the row wraps instead. -->
-      <div id="details" hidden>
+      <div id="details">
         <h2 data-i18n="play.debugHeading">Details</h2>
         <div id="hud"></div>
-        <!-- what the pane can be asked for beyond the log. `state` is off by
-             default: 161 variable names are an answer to a question the player
-             did not ask, and #22 is from someone who did ask. -->
+        <!-- what the pane can be asked for beyond the log. `state` starts ON
+             here and off on the play page, which is the same rule as the column
+             itself: this page has no players to spare 161 variable names from.
+             Still a checkbox, and still remembered — turn it off and it stays
+             off. -->
         <div id="dbgBar">
           <label data-i18n-attr="title:play.debugStateTitle" title="Every script global, and the six the game's own debug readout names"
             ><input type="checkbox" id="dbgStateOn" />

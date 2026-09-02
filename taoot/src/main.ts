@@ -339,8 +339,11 @@ function clearLog(): void {
 }
 
 /** X: the scene readout and the log, both or neither. Remembered, so a player
- *  who wants it open gets it open on the next launch too. */
+ *  who wants it open gets it open on the next launch too — and inert where the
+ *  pane is the page (see {@link DETAILS_ALWAYS}), because there is nothing to
+ *  toggle it to. */
 function toggleDetails(): void {
+  if (DETAILS_ALWAYS) return;
   details.hidden = !details.hidden;
   try {
     window.localStorage.setItem(DETAILS_OPEN_KEY, details.hidden ? "0" : "1");
@@ -353,8 +356,11 @@ function toggleDetails(): void {
 /** where the pane's open/shut answer outlives the tab */
 const DETAILS_OPEN_KEY = "taoot.details.open";
 
-/** did the player leave the pane open last time? */
+/** did the player leave the pane open last time? — and yes, always, on a page
+ *  the pane belongs to ({@link DETAILS_ALWAYS}): this is what the boot reads to
+ *  decide whether to shut it, and the workbench's boot must not */
 function detailsWanted(): boolean {
+  if (DETAILS_ALWAYS) return true;
   try {
     return window.localStorage.getItem(DETAILS_OPEN_KEY) === "1";
   } catch {
@@ -733,6 +739,31 @@ const skipsIntro = (): boolean =>
  */
 const mutesTheme = (): boolean =>
   !!document.querySelector('meta[name="mute-theme"]');
+
+/**
+ * Is the Details pane part of this page rather than something to ask for?
+ *
+ * `<meta name="details-always">`, and the speedrun workbench says it. The pane
+ * is the log and the state list — on the play page that is a debugging aid a
+ * player can call up with X and dismiss again, and on the workbench it is half
+ * of what the page IS: a route is read off the log, and the sheet being tuned is
+ * tuned against what the state list says. A column that has to be summoned
+ * every time is a column that is in the way of the thing it belongs to.
+ *
+ * What it changes is three answers, all of them about the pane and none of them
+ * about the game: the pane starts open, X does not shut it, and the `state` box
+ * defaults to on ({@link installDebugPanel}). Everything else about the pane —
+ * the checkbox still checkable, the filter, the copy button — is the same on
+ * both pages, because the pane is the same pane.
+ *
+ * A page-level fact and not a URL parameter, for the reason {@link skipsIntro}
+ * gives: `/speedrun/` should behave the same however it was reached, and you can
+ * see the declaration by looking at the page. The markup on that page also drops
+ * the `hidden` attribute, so the column is up from the first paint rather than
+ * from whenever the boot gets round to it — this flag is what stops anything
+ * putting it back.
+ */
+const DETAILS_ALWAYS = !!document.querySelector('meta[name="details-always"]');
 
 /**
  * Which copy of the game this PAGE plays, if it is not a question.
@@ -1458,14 +1489,22 @@ function bindRememberedBox(
   box: HTMLInputElement,
   key: string,
   apply: (on: boolean) => void,
+  /**
+   * What the box means before anybody has answered — off, unless a caller says
+   * otherwise (the workbench's state list, see {@link DETAILS_ALWAYS}).
+   *
+   * Only the DEFAULT: a stored answer wins over it either way, so a reader who
+   * turns the box off on a page that starts it on gets it off, and keeps it off.
+   */
+  fallback = false,
 ): void {
   let stored: string | null = null;
   try {
     stored = window.localStorage.getItem(key);
   } catch {
-    /* storage can be denied; the box then starts unchecked every launch */
+    /* storage can be denied; the box then starts at the default every launch */
   }
-  box.checked = stored === "1";
+  box.checked = stored === null ? fallback : stored === "1";
   apply(box.checked);
   box.addEventListener("change", () => {
     apply(box.checked);
@@ -1527,10 +1566,19 @@ function installDebugPanel(): void {
       /* the link still works for this tab */
     }
   }
-  bindRememberedBox(dbgStateOn, DEBUG_STATE_KEY, (on) => {
-    dbgState.hidden = !on;
-    if (on) refreshState();
-  });
+  bindRememberedBox(
+    dbgStateOn,
+    DEBUG_STATE_KEY,
+    (on) => {
+      dbgState.hidden = !on;
+      if (on) refreshState();
+    },
+    // On where the pane is the page and off where it is a player's aid — the
+    // same rule the column itself follows (DETAILS_ALWAYS). A workbench whose
+    // debug column opened on the log alone would answer half the question it is
+    // there for.
+    DETAILS_ALWAYS,
+  );
   for (const el of [dbgFilter, dbgAll])
     el.addEventListener("input", () => refreshState());
   dbgCopy.addEventListener("click", () => void copyDetails());
