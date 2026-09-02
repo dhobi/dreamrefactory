@@ -40,6 +40,7 @@ import {
 import { TAOOT_SAVES, useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { readSaveFile } from "@dreamfactory/engine/df/savegame";
 import { FileStore } from "./files";
+import { loadClock } from "./load-clock";
 import { StateTrace, snapshotState } from "@dreamfactory/engine/runtime/trace";
 import { seededRng } from "@dreamfactory/engine/runtime/rng";
 import { LangChooser, chooserOrder, preselectedEdition } from "./lang-chooser";
@@ -220,7 +221,7 @@ const files = new FileStore();
 const BUSY_AFTER_MS = 400;
 
 let busyTimer = 0;
-files.onBusyChange = (inFlight) => {
+files.onBusy((inFlight) => {
   if (inFlight > 0) {
     // already shown, or already counting towards being shown
     if (busyTimer || !netbusy.hidden) return;
@@ -236,7 +237,22 @@ files.onBusyChange = (inFlight) => {
     busyTimer = 0;
   }
   netbusy.hidden = true;
-};
+});
+
+/**
+ * The load remover, subscribed to the same wire as the mark above (#251).
+ *
+ * A second watcher rather than a line inside the first, because the two want
+ * different things from the same edges and neither is the other's business: the
+ * mark waits {@link BUSY_AFTER_MS} before it admits to a wait, and this must not
+ * — a 300 ms fetch is 300 ms a speedrun did not spend on the route, whether or
+ * not it was long enough to be worth telling the player about.
+ *
+ * Wired here because this is where the store is made. Nothing on the play page
+ * reads the total; the workbench does (taoot/src/speedrun-page.ts), and so does
+ * the Playwright runner, through the handle below.
+ */
+files.onBusy((inFlight) => loadClock.busy(inFlight));
 
 /**
  * The Report bug button (site/src/bug-report.ts): a GitHub issue with the room, the
@@ -574,6 +590,20 @@ Object.defineProperty(window, "dbg", {
     snapshotState,
     seededRng,
     log: () => ({ lines: logLines.lines, dropped: logLines.dropped }),
+    /**
+     * The load remover's reading (#251) — cumulative network ms, and whether the
+     * wire is busy right now.
+     *
+     * A function rather than a number, because it is sampled by a speedrun
+     * driver at the top and bottom of every action and has to be the reading AT
+     * THAT MOMENT, not whatever it was when this handle was built.
+     *
+     * It is here because a driver may be in another process: the Playwright
+     * runner measures a page it can only reach by evaluating an expression in it
+     * (taoot/tests/speedrun/driver.ts), and this is the expression. The in-page
+     * one imports `loadClock` and never comes through here.
+     */
+    loading: () => ({ ms: loadClock.ms, waiting: loadClock.waiting }),
   }),
 });
 

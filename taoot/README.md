@@ -252,6 +252,18 @@ and the report says which it was.
 The report gives wall clock *and* `session.frameCounter`. Tune against frames —
 they are immune to machine load — and quote the seconds.
 
+**Loads are removed** ([#251](https://github.com/dhobi/dreamrefactory/issues/251)).
+Every room in this port is a fetch, so an identical sheet over a cold cache and a
+warm one is minutes apart with not one gesture changed — which makes a plain wall
+clock a measurement of the link as much as of the route. So the timer stops while
+the game is downloading, exactly as a PC speedrun's load remover does: the
+fetcher is the only thing that knows a download has begun, so the fetcher is what
+says so (`FileStore.onBusy` → `taoot/src/load-clock.ts`), and the run loop
+subtracts that total from every leg. Nothing is hidden — a `load` column appears
+beside the splits when there was something to remove, and `time + load` is the
+wall clock to the millisecond. On the workbench the clock says `LOADING` while it
+is stopped, so a reading standing still cannot be mistaken for a hung page.
+
 **The workbench.** `/speedrun/` is an unlisted page — nothing links to it, it is
 not in the top bar, it carries `noindex` — that puts an editor under the game:
 write a sheet, press Play, watch it play, read which line broke. It is the play

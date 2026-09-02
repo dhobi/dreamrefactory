@@ -34,13 +34,23 @@
  *
  * Two clocks, and the difference between them is the point:
  *
- *   - **wall** is the speedrun. It is what a stopwatch says, and it moves with
- *     machine load, so a 3 % gain is not distinguishable from a quiet afternoon.
+ *   - **time** is the speedrun. It is what a stopwatch says, less what the run
+ *     spent downloading the game (see **load** below), and it still moves with
+ *     machine load — so a 3 % gain is not distinguishable from a quiet afternoon.
  *   - **frames** is `session.frameCounter`, the engine's own displayed-frame
  *     count. It is reproducible and immune to load, and it is what actually goes
  *     down when a route gets better.
  *
  * Tune against frames. Brag about seconds.
+ *
+ * **load** is the third column, and only appears when there was something to
+ * report ([#251](https://github.com/dhobi/dreamrefactory/issues/251)). It is how
+ * long the leg spent waiting on the network, and it has already been taken OUT
+ * of the time beside it — a load remover, the same device a PC speedrun uses so
+ * that an SSD is not a route improvement. Here it is not a nicety: every room is
+ * a fetch, so a cold cache and a warm one are minutes apart on an identical
+ * sheet. `time + load` is the wall clock, to the millisecond, if that is what
+ * you want.
  *
  * Three things are called out under the splits because they are where the time
  * hides: the slowest actions, every `after:` pad (dead time bought with a guess
@@ -262,7 +272,7 @@ function report(r: {
   steps: Step[];
   timings: Timing[];
   splits: Split[];
-  total: { ms: number; frames: number };
+  total: { ms: number; frames: number; loading: number };
   failure: { step: Step; error: Error } | null;
   where: string | null;
   errors: string[];
@@ -272,14 +282,38 @@ function report(r: {
   console.log(`\n${line}`);
   console.log(`SPLITS${r.seeded === null ? "   (unseeded — a fresh course, dice live)" : `   (seed ${r.seeded} — pinned, not a clean run)`}`);
   console.log(line);
-  console.log(`${pad("split", 34)}${padl("wall", 10)}${padl("frames", 10)}${padl("actions", 9)}`);
+  // `time`, not `wall`, and the difference is the load remover (#251): every
+  // number in the column has the run's downloading taken out of it, and the
+  // `load` column beside it is what came out. A `load` column only when there
+  // was loading to remove — over a warm cache it is a column of zeroes, and the
+  // report is read at 72 characters wide.
+  const loads = r.splits.some((s) => s.loading > 0) || r.total.loading > 0;
+  /** the load cell of a row, or nothing at all when the column is not there */
+  const loadCol = (n: number): string => (loads ? padl(n ? ms(n) : "", 10) : "");
+  const loadHead = loads ? padl("load", 10) : "";
+  console.log(
+    `${pad("split", 34)}${padl("time", 10)}${loadHead}${padl("frames", 10)}${padl("actions", 9)}`,
+  );
   for (const s of r.splits) {
-    console.log(`${pad(s.name, 34)}${padl(ms(s.ms), 10)}${padl(String(s.frames), 10)}${padl(String(s.actions), 9)}`);
+    console.log(
+      `${pad(s.name, 34)}${padl(ms(s.ms), 10)}${loadCol(s.loading)}${padl(String(s.frames), 10)}${padl(String(s.actions), 9)}`,
+    );
   }
   console.log(line);
   console.log(
-    `${pad(r.failure ? "TOTAL (incomplete)" : "TOTAL", 34)}${padl(ms(r.total.ms), 10)}${padl(String(r.total.frames), 10)}${padl(String(r.timings.length), 9)}`,
+    `${pad(r.failure ? "TOTAL (incomplete)" : "TOTAL", 34)}${padl(ms(r.total.ms), 10)}${loadCol(r.total.loading)}${padl(String(r.total.frames), 10)}${padl(String(r.timings.length), 9)}`,
   );
+
+  /**
+   * What an action removed, named on its own row (#251).
+   *
+   * The tuning list is sorted on the load-removed time, which is the right sort
+   * — a step that is slow because it downloads a 37 MB film is not a step to
+   * tune — but it leaves the reader wondering where the film went. So a row that
+   * removed anything says so, and a step whose real cost is the wire can be told
+   * apart from one that is genuinely slow.
+   */
+  const load = (t: Timing): string => (t.loading > 0 ? `  [+${ms(t.loading)} load]` : "");
 
   // -- where the time went -------------------------------------------------
   // --all prints every action in sheet order instead of the worst twelve by
@@ -291,7 +325,9 @@ function report(r: {
     console.log(line);
     for (const t of r.timings) {
       const said = t.says.length ? `  (${t.says.join("; ")})` : "";
-      console.log(`${padl(ms(t.ms), 8)} ${padl(`${t.frames}f`, 7)}  ${pad(`L${t.step.line}`, 6)}${t.step.source}${said}`);
+      console.log(
+        `${padl(ms(t.ms), 8)} ${padl(`${t.frames}f`, 7)}  ${pad(`L${t.step.line}`, 6)}${t.step.source}${said}${load(t)}`,
+      );
     }
   }
   const slowest = [...r.timings].sort((a, b) => b.ms - a.ms).slice(0, 12);
@@ -301,7 +337,7 @@ function report(r: {
     const share = ((t.ms / Math.max(1, r.total.ms)) * 100).toFixed(1);
     const said = t.says.length ? `  (${t.says.join("; ")})` : "";
     console.log(
-      `${padl(ms(t.ms), 8)} ${padl(`${share}%`, 6)}  ${pad(`L${t.step.line}`, 6)}${t.step.source}${said}`,
+      `${padl(ms(t.ms), 8)} ${padl(`${share}%`, 6)}  ${pad(`L${t.step.line}`, 6)}${t.step.source}${said}${load(t)}`,
     );
   }
 
@@ -347,7 +383,15 @@ function report(r: {
     const done = r.timings.length;
     console.log(`  ${done} of ${r.steps.filter((s) => s.verb !== "split").length} actions ran.`);
   } else {
-    console.log(`FINISHED — ${ms(r.total.ms)} wall, ${r.total.frames} engine frames`);
+    // "wall" is what this said before the load remover, and it would be a lie
+    // now: the headline is the route's time with the downloading taken out
+    // (#251). What came out is named beside it rather than left in the table —
+    // this is the line that gets quoted, and a time is only comparable with
+    // another time if both say what they removed.
+    console.log(
+      `FINISHED — ${ms(r.total.ms)}, ${r.total.frames} engine frames` +
+        (r.total.loading > 0 ? ` (${ms(r.total.loading)} of loading removed)` : ""),
+    );
   }
   for (const e of r.errors) console.log(`  page error: ${e}`);
   console.log(line);

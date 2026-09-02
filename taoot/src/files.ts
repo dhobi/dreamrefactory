@@ -133,29 +133,72 @@ export class FileStore {
   onBackgroundLoad: ((key: string, data: Uint8Array) => void) | null = null;
 
   /**
-   * How many fetches are in the air, and a hook that fires whenever that
-   * changes — what the page draws its busy mark from (taoot/src/main.ts).
+   * How many fetches are in the air, and who is told whenever that changes.
    *
    * Every fetch this store makes is one the game is WAITING on, which is what
-   * makes a bare count honest enough to show: `onSetChange` awaits the room and
+   * makes a bare count honest enough to report: `onSetChange` awaits the room and
    * then all of its siblings and casts before anything is composited,
    * `onPlayMovie` awaits the film before a frame of it plays, and {@link
    * provide}'s background fetches are engine misses — it asked, and got null.
    * Nothing here is speculative, so this never sits at 1 through normal play.
    *
    * The count rather than a boolean because the waits overlap: a changeset has
-   * a dozen siblings in flight at once, and the mark should come down when the
-   * last of them lands, not the first.
+   * a dozen siblings in flight at once, and a watcher should see the wire go
+   * quiet when the last of them lands, not the first.
+   *
+   * Watchers rather than one assignable hook ({@link onBusy}), because the
+   * answer is now wanted by two things that neither own nor know about each
+   * other: the play page draws its busy mark from it (taoot/src/main.ts), and
+   * the load remover times it (taoot/src/load-clock.ts) so a speedrun's clock
+   * does not count a download. Under a single slot the second would have had to
+   * take the wire away from the first and hand it the edges by hand.
    */
   private inFlight = 0;
-  onBusyChange: ((inFlight: number) => void) | null = null;
+  private busyWatchers = new Set<(inFlight: number) => void>();
+
+  /**
+   * Watch the wire: called with the new count every time it changes.
+   *
+   * Returns the way to stop watching — a caller whose page or run is over must
+   * be able to let go, and a `Set` of live closures is otherwise a leak that
+   * only shows up as a watcher still counting after the thing it counted for
+   * has gone.
+   *
+   * A watcher that throws is not allowed to take the fetch down with it: what is
+   * being reported is somebody else's readout, and a store that failed a `load`
+   * because a progress bar threw would be the tail wagging the dog.
+   */
+  onBusy(watch: (inFlight: number) => void): () => void {
+    this.busyWatchers.add(watch);
+    return () => {
+      this.busyWatchers.delete(watch);
+    };
+  }
+
+  private sayBusy(): void {
+    for (const watch of this.busyWatchers) {
+      try {
+        watch(this.inFlight);
+      } catch {
+        /* a readout's problem, not the fetch's */
+      }
+    }
+  }
 
   private fetchBegan(): void {
-    this.onBusyChange?.(++this.inFlight);
+    this.inFlight++;
+    this.sayBusy();
   }
 
   private fetchEnded(): void {
-    this.onBusyChange?.(--this.inFlight);
+    this.inFlight--;
+    this.sayBusy();
+  }
+
+  /** how many fetches are in the air right now — what a fresh watcher has
+   *  missed, since it is only told about CHANGES */
+  get busyCount(): number {
+    return this.inFlight;
   }
 
   /**

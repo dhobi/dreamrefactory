@@ -156,6 +156,16 @@ const CLOCK_ALLOWED = new Set([
   // reports is thrown away as soon as it is read. It fetches, counts and
   // discards; nothing it produces reaches a session or a golden.
   "cache-warmup.ts",
+  // The load remover's stopwatch, which measures the NETWORK and nothing else:
+  // how long a fetch was in the air, so a speedrun's clock can decline to count
+  // it (#251). There is no game-clock version of that number — the engine is
+  // not running while a room is on the wire, and the whole point of the
+  // measurement is that it is real seconds off a real link. It is fed the
+  // fetcher's in-flight count, reads the wall clock at the two edges, and hands
+  // a total to a readout; no session waits on it, nothing it produces reaches a
+  // golden, and the engine cannot see it at all. The same boundary
+  // `cache-warmup.ts` above is allowed for.
+  "load-clock.ts",
   // The Dust shell (dust/index.html), which is not the engine and does not run one: it
   // is an experiment in reading a DreamFactory 1 disc, and its two calls are a
   // stopwatch around `coldBoot` printed into a log and thrown away. Nothing it

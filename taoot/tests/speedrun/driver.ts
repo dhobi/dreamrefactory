@@ -133,10 +133,22 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
     log("reset: the game was reloaded");
   };
 
-  const clock = async (): Promise<Clock> => ({
-    ms: Date.now(),
-    frames: await evaluate<number>("window.dbg.session.frameCounter"),
-  });
+  /**
+   * Wall clock, engine frames and the load remover's total (#251).
+   *
+   * The two page-side numbers come back in ONE evaluate, and that is not
+   * tidiness: this driver's readings cost a round trip each, `clock()` is called
+   * at the top and bottom of every action, and a wall clock taken here with a
+   * loading total taken a round trip later are readings of two different
+   * instants — with the second subtracted from the first, so the gap would be
+   * charged to the route.
+   */
+  const clock = async (): Promise<Clock> => {
+    const [frames, loading] = await evaluate<[number, number]>(
+      "[window.dbg.session.frameCounter, window.dbg.loading().ms]",
+    );
+    return { ms: Date.now(), frames, loading };
+  };
 
   /** canvas pixel (512x384) -> page point, so the click is a real mouse event */
   /** the gap a click holds the button down for — see clickAt */

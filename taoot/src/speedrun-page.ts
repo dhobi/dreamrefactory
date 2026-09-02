@@ -64,6 +64,7 @@ import {
 } from "./speedrun/runner";
 import { gamefileSizes } from "./editions";
 import { editionOfUrl, NEUTRAL } from "./files";
+import { loadClock } from "./load-clock";
 import { formatBytes, formatEta, formatRate, warmCache, warmupList } from "./cache-warmup";
 import { attachEditor } from "./speedrun-editor";
 import { attachRecorder } from "./speedrun-recorder";
@@ -101,7 +102,8 @@ const ms = (n: number): string => {
 };
 
 /**
- * The running clock: seconds since Play, counting.
+ * The running clock: seconds since Play, counting — and NOT counting while the
+ * page is downloading the game ([#251](https://github.com/dhobi/dreamrefactory/issues/251)).
  *
  * A route is a time, and until this existed the page did not show one until the
  * run was over — the splits table fills in a row at a time, so a leg with no
@@ -109,31 +111,64 @@ const ms = (n: number): string => {
  * would be showing: it starts on Play, counts while the run does, and stops
  * where the run stopped so the last reading stays on screen to be read.
  *
- * Wall clock, deliberately, and it is the same wall clock the splits are
- * measured on — so the ticking number and the `elapsed` column agree, including
- * across a Pause (a pause is time the run took, and both count it).
+ * ## The load remover
+ *
+ * It is a **load-removed** clock, which is a thing PC speedruns have had for
+ * years and this port needs more than most: every room is a fetch, so the same
+ * sheet against a cold cache and a warm one is minutes apart with not one
+ * gesture changed, and a number that moved by minutes for reasons outside the
+ * route is not a number anybody can tune against. So the wire's total
+ * (taoot/src/load-clock.ts) is subtracted from the wall clock, and while a fetch
+ * is in the air the two grow together and the reading stands still. That is the
+ * pause, and it needs nothing to arm it: the fetcher is the only thing that
+ * knows a download has begun, so the fetcher is what says so
+ * ({@link FileStore.onBusy}).
+ *
+ * It SAYS it has stopped, rather than just stopping — `#srclock.waiting` while
+ * the wire is busy. A stopwatch that freezes with no explanation reads as a
+ * hung page, which is exactly the complaint the busy mark on the canvas exists
+ * to answer (taoot/src/main.ts).
+ *
+ * A Pause is the other way round and deliberately so: pausing a run does not
+ * stop this clock, because a pause is time the run took. Loading is time the
+ * network took.
+ *
+ * Still the same clock the splits are measured on, which is the property that
+ * matters — the runner removes the loading from every leg by the same
+ * subtraction (taoot/src/speedrun/runner.ts), so the ticking number and the
+ * `elapsed` column agree at the moment a split closes rather than drifting
+ * apart by whatever was downloaded.
  *
  * Ticking is a `setInterval` in the page, which is what {@link CLOCK_ALLOWED} in
  * taoot/tests/auto/reproducible.ts already covers this file for: nothing the engine
  * reads hangs off it.
  */
 const clockEl = $<HTMLDivElement>("srclock");
-let clockFrom: number | null = null;
+/** wall clock and network total at Play, as one reading; null when not running */
+let clockFrom: { ms: number; loading: number } | null = null;
 let clockTick: number | null = null;
+
+/** the route's own time since Play: wall time, less what the wire took */
+const clockNow = (from: { ms: number; loading: number }): number =>
+  Math.max(0, performance.now() - from.ms - (loadClock.ms - from.loading));
 
 const showClock = (at: number): void => {
   clockEl.textContent = ms(at);
 };
 
 function startClock(): void {
-  clockFrom = performance.now();
+  clockFrom = { ms: performance.now(), loading: loadClock.ms };
   showClock(0);
   clockEl.classList.add("live");
   if (clockTick !== null) window.clearInterval(clockTick);
   // 100 ms: a tenth is the smallest digit shown, so anything faster redraws a
   // number that has not changed
   clockTick = window.setInterval(() => {
-    if (clockFrom !== null) showClock(performance.now() - clockFrom);
+    if (clockFrom === null) return;
+    showClock(clockNow(clockFrom));
+    // on the same tick as the reading it explains, so the two can never
+    // disagree about whether the number standing still is a download
+    clockEl.classList.toggle("waiting", loadClock.waiting);
   }, 100);
 }
 
@@ -142,15 +177,30 @@ function startClock(): void {
 function stopClock(): void {
   if (clockTick !== null) window.clearInterval(clockTick);
   clockTick = null;
-  if (clockFrom !== null) showClock(performance.now() - clockFrom);
+  if (clockFrom !== null) showClock(clockNow(clockFrom));
   clockFrom = null;
   clockEl.classList.remove("live");
+  // whatever the wire is doing now, it is not this run's wait any more
+  clockEl.classList.remove("waiting");
 }
 
 function say(message: string, kind: "" | "good" | "bad" = ""): void {
   statusEl.textContent = message;
   statusEl.className = kind;
 }
+
+/**
+ * How much loading a leg has to have removed before the table admits to a `load`
+ * column (#251).
+ *
+ * A tenth of a second, because the column is worth a fifth of a narrow panel's
+ * width and what it costs has to buy something. Over a warm cache a leg removes
+ * a few milliseconds — the odd `provide` miss, a movie evicted and asked for
+ * again — and a column of "0.0s" is a column of nothing, sitting where the
+ * numbers a reader came for would otherwise be. Below the threshold the removal
+ * still happened and the rows still add up; it is only not called out.
+ */
+const LOAD_SHOWN_MS = 100;
 
 /**
  * The splits table.
@@ -166,16 +216,29 @@ function say(message: string, kind: "" | "good" | "bad" = ""): void {
  * reader can check the arithmetic, and a paused or resumed run cannot leave the
  * two disagreeing.
  *
+ * A sixth column, `load`, appears when a leg spent real time on the network
+ * (#251): every `time` here has had its loading taken out, and a run whose
+ * legs are quietly a second shorter than the stopwatch said needs somewhere
+ * that says so. It is also the number that says what to DO — a leg that removed
+ * twenty seconds is a leg to warm the cache for rather than to tune. Absent
+ * over a warm cache, which is what a tuning run should be
+ * ({@link LOAD_SHOWN_MS}).
+ *
  * Headed, because none of it is self-evident: four bare numbers in a row is a
  * puzzle, and "28f" only says frames to somebody who already knows. English
  * only, like the legend and for the same reason — this page is a workbench and
  * not part of the translated site.
  */
-function renderSplits(splits: Split[], total?: { ms: number; frames: number }): void {
+function renderSplits(
+  splits: Split[],
+  total?: { ms: number; frames: number; loading: number },
+): void {
   if (!splits.length) {
     splitsEl.textContent = "";
     return;
   }
+  const loads =
+    splits.some((s) => s.loading >= LOAD_SHOWN_MS) || (total?.loading ?? 0) >= LOAD_SHOWN_MS;
   let elapsed = 0;
   const rows = splits
     .map((s) => {
@@ -183,6 +246,7 @@ function renderSplits(splits: Split[], total?: { ms: number; frames: number }): 
       return (
         `<tr><td>${escape(s.name)}</td><td class="n">${ms(s.ms)}</td>` +
         `<td class="n">${ms(elapsed)}</td>` +
+        (loads ? `<td class="n load">${s.loading ? ms(s.loading) : ""}</td>` : "") +
         `<td class="n">${s.frames}f</td><td class="n">${s.actions}</td></tr>`
       );
     })
@@ -194,10 +258,12 @@ function renderSplits(splits: Split[], total?: { ms: number; frames: number }): 
   const totalRow = total
     ? `<tfoot><tr class="total"><td>TOTAL</td><td class="n">${ms(total.ms)}</td>` +
       `<td class="n">${ms(total.ms)}</td>` +
+      (loads ? `<td class="n load">${total.loading ? ms(total.loading) : ""}</td>` : "") +
       `<td class="n">${total.frames}f</td><td class="n"></td></tr></tfoot>`
     : "";
   const head =
     `<thead><tr><th>split</th><th class="n">time</th><th class="n">elapsed</th>` +
+    (loads ? `<th class="n load" title="network time removed from the times beside it">load</th>` : "") +
     `<th class="n">frames</th><th class="n">actions</th></tr></thead>`;
   splitsEl.innerHTML = `<table>${head}<tbody>${rows}</tbody>${totalRow}</table>`;
 }
@@ -593,7 +659,16 @@ async function playing(all: Step[], todo: Step[], once = false): Promise<void> {
       }
     } else {
       setPointer(TOP, true);
-      say(`finished — ${ms(result.total.ms)}, ${result.total.frames} engine frames`, "good");
+      // The removal is named in the headline, not just in the table: this is the
+      // line somebody copies into an issue, and "12.4s" with no word about the
+      // network is a number that cannot be compared with the one they ran
+      // yesterday over a colder cache (#251).
+      const removed =
+        result.total.loading >= LOAD_SHOWN_MS ? `, ${ms(result.total.loading)} of loading removed` : "";
+      say(
+        `finished — ${ms(result.total.ms)}, ${result.total.frames} engine frames${removed}`,
+        "good",
+      );
     }
   } catch (e) {
     if (e instanceof Aborted) say(paused ? `paused at ${where()}` : "stopped.", "");

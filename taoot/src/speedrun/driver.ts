@@ -145,9 +145,27 @@ export function clientPointFor(
  * the engine's own displayed-frame count: reproducible, immune to load, and the
  * thing a route actually shortens when it takes a better path.
  */
+/**
+ * One reading of everything a run is timed against, sampled together.
+ *
+ * `ms` is the wall clock and `loading` is how much of it the page has spent
+ * waiting on the network — the load remover's total (taoot/src/load-clock.ts,
+ * [#251](https://github.com/dhobi/dreamrefactory/issues/251)). Both are
+ * cumulative and monotonic, so a duration is the difference between two
+ * readings, and a duration with the loading taken out of it is the difference of
+ * the differences. The runner does exactly that and reports both halves
+ * ({@link Timing}, {@link Split}).
+ *
+ * Sampled TOGETHER, in one round trip where there is one, because a wall clock
+ * read here and a loading total read a round trip later are readings of two
+ * different instants — and the arithmetic subtracts one from the other, so the
+ * gap between them would come out of the route's time.
+ */
 export interface Clock {
   ms: number;
   frames: number;
+  /** cumulative ms the page has been waiting on the network — see the load remover */
+  loading: number;
 }
 
 export interface HoldOptions {

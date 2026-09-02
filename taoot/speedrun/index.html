@@ -1551,6 +1551,26 @@
         transition: color 120ms linear;
       }
       #srclock.live { color: var(--brass-500, #c89b4a); }
+      /* Paused by the load remover: the run is downloading, so the reading is
+         standing still on purpose (taoot/src/load-clock.ts, #251). It has to SAY
+         that — a stopwatch that stops with no explanation reads as a hung page,
+         which is the same complaint the busy mark on the canvas answers. Ice
+         rather than brass, the page's "waiting on the network" colour, and the
+         word beside it because a colour alone is not a message and this one
+         lands while somebody is watching the picture, not the palette. */
+      #srclock.waiting { color: var(--ice-400, #8fb8d0); }
+      #srclock.waiting::after {
+        content: " loading";
+        font-size: 0.6rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        vertical-align: 0.35em;
+        opacity: 0.8;
+      }
+      /* No pulse, no dots: `prefers-reduced-motion` would have to turn an
+         animation off (site/src/theme.css turns every transition off under it),
+         and what is left when it does has to carry the message on its own — so
+         it may as well be the whole of it. */
 
       /* Its own scrollport, with the headings pinned to the top of it. A full
          run is 23 splits and the panel above it is 26rem of editor plus four
@@ -1598,6 +1618,14 @@
         box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--hull-400) 40%, var(--bg));
       }
       #srsplits th.n { text-align: right; padding-left: 1rem; }
+      /* The `load` column — network time taken OUT of the times beside it (#251).
+         Quieter than they are, and quieter than a plain number column, because
+         it is the one column that is not part of the run: it says what the wire
+         cost, and a reader tuning a route should be able to look past it. The
+         column is only there at all when something was removed (LOAD_SHOWN_MS in
+         taoot/src/speedrun-page.ts). */
+      #srsplits .load { color: var(--ice-400, #8fb8d0); }
+      #srsplits td.load { opacity: 0.55; }
       #srsplits tbody tr:first-child td { padding-top: 0.25rem; }
       #srsplits td { padding: 0.06rem 0; }
       #srsplits td.n { text-align: right; opacity: 0.7; font-variant-numeric: tabular-nums; padding-left: 1rem; }
@@ -1782,7 +1810,12 @@
       <!-- The stopwatch: seconds since Play, counting (taoot/src/speedrun-page.ts).
            Above the splits because it is what the splits are readings OF — while
            a leg with no split in it runs, this is the only thing on the page
-           that moves. It keeps its last reading when the run stops. -->
+           that moves. It keeps its last reading when the run stops.
+
+           Load-removed, and it says so while it is stopped: a fetch in the air
+           holds the reading still and marks it LOADING (#251), because every
+           room in this port is a download and a clock that counted them would
+           move by minutes for reasons that have nothing to do with the route. -->
       <div id="srclock">0.0s</div>
       <div id="srsplits"></div>
       <!-- What the run is pressing (taoot/src/speedrun-inputs.ts). A key lighting is
@@ -1796,7 +1829,10 @@
         faster here than it does under Playwright. Tune here; take the time with
         <code>npm run speedrun -w taoot</code>. The pathfinding verbs
         (<code>travel</code>, <code>hunt</code>, <code>stand</code>) need the
-        Node runner and will say so.
+        Node runner and will say so. Every time on this page has the
+        <em>downloading</em> taken out of it — the clock stops while the game is
+        being fetched, and the <code>load</code> column says how much came out —
+        so a run over a cold cache is comparable with one over a warm one.
       </p>
     </section>
     <!-- /#srtimer -->
