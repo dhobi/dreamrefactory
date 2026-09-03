@@ -1,6 +1,7 @@
 /**
- * The load remover: a run's clock stops while the game is downloading
- * ([#251](https://github.com/dhobi/dreamrefactory/issues/251)).
+ * The load remover: a run's clock stops while the game is DOWNLOADING
+ * ([#251](https://github.com/dhobi/dreamrefactory/issues/251),
+ * [#369](https://github.com/dhobi/dreamrefactory/issues/369)).
  *
  *   npx vitest run taoot/tests/auto/speedrun-loads.ts
  *
@@ -11,25 +12,34 @@
  * ago with a load remover — the timer reads a value the game sets while it loads
  * and declines to count that time — and the port has the same value to read,
  * because every byte comes through one place and that place already knows when
- * it is waiting (`FileStore.onBusy`).
+ * it is waiting (`FileStore.onWire`).
+ *
+ * **What counts as loading is the NETWORK and nothing else** (#369). The first
+ * version stopped the clock for every fetch, and that removed time the run
+ * really did spend: a file already in the browser's memory or disk cache is not
+ * a download, it is a read of the kind the original did off a CD every time it
+ * opened a room, and the original's clock counted those. So a cache hit costs a
+ * route nothing and is removed from nothing.
  *
  * Three pieces, tested at the seams between them rather than through a browser:
  *
- *   1. the fetcher SAYS when the wire is busy, to as many watchers as ask —
- *      the busy mark on the canvas was the first and is not the last;
- *   2. {@link LoadClock} turns those edges into a total, which is the one piece
- *      with arithmetic worth getting wrong: overlapping fetches are one wait,
- *      and the fetch still in the air counts;
+ *   1. the fetcher ANNOUNCES each fetch, by URL, as it starts and ends — the
+ *      busy mark on the canvas wants the count, the load remover wants the
+ *      fetches themselves;
+ *   2. {@link LoadClock} turns those into a total, and it is the piece with
+ *      arithmetic worth getting wrong: overlapping downloads are one wait, the
+ *      download still in the air counts, and a cache hit counts for nothing;
  *   3. the run loop subtracts that total from every leg it reports, and says
  *      what it subtracted.
  *
- * The clock is driven by hand throughout — `LoadClock` takes its `now`, and the
- * runner is given a scripted driver. What is being pinned is arithmetic across
- * overlapping intervals, and a test that had to wait for real milliseconds to
- * pass could neither state the case nor tell a wrong answer from a slow machine.
+ * The clock is driven by hand throughout — `LoadClock` takes its `now` and its
+ * verdict, and the runner is given a scripted driver. What is being pinned is
+ * arithmetic across overlapping intervals, and a test that had to wait for real
+ * milliseconds to pass could neither state the case nor tell a wrong answer from
+ * a slow machine.
  */
 import { test, expect, beforeEach, afterEach, vi } from "vitest";
-import { LoadClock } from "../../src/load-clock";
+import { CACHE_GRACE_MS, LoadClock, unionMs, type Served } from "../../src/load-clock";
 import { FileStore } from "../../src/files";
 import { parseSheet } from "../../src/speedrun/sheet";
 import { VERBS } from "../../src/speedrun/actions";
@@ -40,87 +50,219 @@ import type { Clock, SpeedrunDriver } from "../../src/speedrun/driver";
  * 1. The clock's arithmetic
  * ------------------------------------------------------------------ */
 
-/** a `LoadClock` whose `now` is a variable this test moves */
-function stopwatch(): { clock: LoadClock; at: (ms: number) => void } {
+/**
+ * A `LoadClock` whose clock and whose verdicts this test owns.
+ *
+ * `served` answers per URL, so a case can put a download and a cache hit in the
+ * air together — which is the case the union arithmetic exists for.
+ */
+function stopwatch(verdicts: Record<string, Served | null> = {}) {
   let now = 0;
-  return { clock: new LoadClock(() => now), at: (ms) => void (now = ms) };
+  const clock = new LoadClock({
+    now: () => now,
+    served: (url) => verdicts[url] ?? null,
+  });
+  return {
+    clock,
+    at: (ms: number) => void (now = ms),
+    /** the default: nothing the browser will classify, so duration decides */
+    say: (url: string, how: Served | null) => void (verdicts[url] = how),
+  };
 }
+
+/** a download and a cache hit, named so the verdicts read as English */
+const NET = "gamefiles/bedsit1.set";
+const HIT = "gamefiles/gstair2.set";
+
+test("overlap is counted once, however many files are in the air (#251)", () => {
+  // A changeset has the room, its siblings and its casts in the air together:
+  // the game is blocked until the last of them lands, so the wait is the stretch
+  // the wire was busy. Adding the spans up would remove more time from the run
+  // than the run actually spent.
+  expect(unionMs([{ from: 0, to: 100 }, { from: 50, to: 150 }])).toBe(150);
+  expect(unionMs([{ from: 0, to: 100 }, { from: 0, to: 40 }])).toBe(100);
+  // ...and a gap between two of them is not part of either
+  expect(unionMs([{ from: 0, to: 100 }, { from: 200, to: 250 }])).toBe(150);
+  expect(unionMs([])).toBe(0);
+  // out of order in, right answer out — the store announces fetches as they
+  // FINISH, which is not the order they started in
+  expect(unionMs([{ from: 200, to: 250 }, { from: 0, to: 100 }])).toBe(150);
+});
 
 test("a quiet wire costs nothing (#251)", () => {
   const { clock, at } = stopwatch();
   at(5_000);
   expect(clock.ms).toBe(0);
   expect(clock.waiting).toBe(false);
-  // told about a change to zero without ever having been busy: not an edge
-  clock.busy(0);
+  // an end for a fetch nobody announced is ignored rather than guessed at
+  clock.end(99);
   at(9_000);
   expect(clock.ms).toBe(0);
 });
 
-test("one fetch costs exactly as long as it was in the air (#251)", () => {
-  const { clock, at } = stopwatch();
+test("a download costs exactly as long as it was in the air (#251)", () => {
+  const { clock, at, say } = stopwatch();
+  say(NET, "network");
   at(1_000);
-  clock.busy(1);
+  clock.begin(1, NET);
   at(1_250);
-  clock.busy(0);
+  clock.end(1);
   at(9_000);
   expect(clock.ms).toBe(250);
   expect(clock.waiting).toBe(false);
 });
 
-test("six fetches at once are ONE wait, not six (#251)", () => {
-  // A changeset has the room, its siblings and its casts in the air together:
-  // the game is blocked until the last of them lands, so the wait is the span
-  // the wire was busy. Adding the six durations up would remove more time from
-  // the run than the run actually spent, and a route can only be measured
-  // against another route if the removal cannot exceed the wall clock.
-  const { clock, at } = stopwatch();
-  at(0);
-  clock.busy(1);
-  at(100);
-  clock.busy(2);
-  at(200);
-  clock.busy(3);
-  at(900);
-  clock.busy(2);
-  at(950);
-  clock.busy(1);
+test("a CACHE HIT is a read, not a download, and costs the route nothing (#369)", () => {
+  // The whole of #369. A file already in the browser's cache is not on the wire
+  // — the original read the same bytes off a CD, on its own clock — so a run
+  // over a warm cache has nothing removed from it at all.
+  const { clock, at, say } = stopwatch();
+  say(HIT, "cache");
   at(1_000);
-  clock.busy(0);
+  clock.begin(1, HIT);
+  at(1_300); // a slow read off a warm disk, and still not a download
+  clock.end(1);
+  expect(clock.ms).toBe(0);
+});
+
+test("a download and a cache hit together remove only the download (#369)", () => {
+  const { clock, at, say } = stopwatch();
+  say(NET, "network");
+  say(HIT, "cache");
+  at(0);
+  clock.begin(1, HIT);
+  clock.begin(2, NET);
+  at(20);
+  clock.end(1); // the cache hit lands almost at once
+  at(500);
+  clock.end(2); // the download takes half a second
+  expect(clock.ms).toBe(500);
+});
+
+test("six downloads at once are ONE wait, not six (#251)", () => {
+  const { clock, at, say } = stopwatch();
+  for (let i = 1; i <= 3; i++) say(`f${i}`, "network");
+  at(0);
+  clock.begin(1, "f1");
+  at(100);
+  clock.begin(2, "f2");
+  at(200);
+  clock.begin(3, "f3");
+  at(900);
+  clock.end(1);
+  at(950);
+  clock.end(2);
+  at(1_000);
+  clock.end(3);
   expect(clock.ms).toBe(1_000);
 });
 
-test("the reading includes the fetch still in the air (#251)", () => {
+test("the download still in the air counts, once it has outlived a cache (#251, #369)", () => {
   // The reason this matters is a clock that would otherwise go BACKWARDS: a
   // reading taken during `leave.mov` that counted only finished fetches would
   // say the run had spent nothing on it, so the timer would tick through the
   // download and then jump back when it landed.
-  const { clock, at } = stopwatch();
+  //
+  // It cannot start counting at once, though — whether a fetch went to the
+  // network is only known when it ends — so the grace is the floor: nothing
+  // pauses the clock before it, and the whole span is credited after.
+  const { clock, at, say } = stopwatch();
+  say(NET, "network");
   at(1_000);
-  clock.busy(1);
-  at(1_600);
-  expect(clock.ms).toBe(600);
+  clock.begin(1, NET);
+  at(1_000 + CACHE_GRACE_MS);
+  expect(clock.ms, "a cache could still have answered by now").toBe(0);
   expect(clock.waiting).toBe(true);
   at(2_000);
-  expect(clock.ms).toBe(1_000);
-  clock.busy(0);
-  expect(clock.ms).toBe(1_000);
+  expect(clock.ms).toBe(1_000 - CACHE_GRACE_MS);
+  clock.end(1);
+  expect(clock.ms, "and the whole span is credited when it lands").toBe(1_000);
+});
+
+test("a warm changeset never stops the clock at all (#369)", () => {
+  // Twelve cache hits, one after another, all inside the grace: the reading
+  // never moves and the workbench's stopwatch never says LOADING. This is the
+  // state a route should be tuned in.
+  const { clock, at, say } = stopwatch();
+  let now = 0;
+  for (let i = 1; i <= 12; i++) {
+    say(`hit${i}`, "cache");
+    clock.begin(i, `hit${i}`);
+    now += 2;
+    at(now);
+  }
+  expect(clock.waiting).toBe(false);
+  for (let i = 1; i <= 12; i++) {
+    clock.end(i);
+    now += 1;
+    at(now);
+  }
+  expect(clock.ms).toBe(0);
+});
+
+test("a read off THIS machine is a disk read, not a download (#369)", () => {
+  // A dev-server fetch on loopback transfers bytes as far as the browser is
+  // concerned — Vite serves `gamefiles/` with no caching headers, so a reload
+  // fetches the same 217 KB again — but nothing crossed a link, and how long a
+  // disk takes is a fact about the reader's machine. Counting it made the
+  // workbench's times come out faster than the runner's on the same route,
+  // which is what #369 reported.
+  const { clock, at, say } = stopwatch();
+  say("http://localhost:5175/gamefiles/bedsit1.set", "local");
+  at(0);
+  clock.begin(1, "http://localhost:5175/gamefiles/bedsit1.set");
+  at(600);
+  clock.end(1);
+  expect(clock.ms).toBe(0);
+});
+
+test("where the browser will not say, duration decides (#369)", () => {
+  // A dropped Resource Timing entry, or a browser too old for the field. Nothing
+  // served out of RAM or off a local disk takes CACHE_GRACE_MS; no round trip is
+  // quicker.
+  const quick = stopwatch();
+  quick.at(0);
+  quick.clock.begin(1, "unknown");
+  quick.at(CACHE_GRACE_MS - 1);
+  quick.clock.end(1);
+  expect(quick.clock.ms, "quick enough to have been a cache").toBe(0);
+
+  const slow = stopwatch();
+  slow.at(0);
+  slow.clock.begin(1, "unknown");
+  slow.at(CACHE_GRACE_MS + 400);
+  slow.clock.end(1);
+  expect(slow.clock.ms, "too slow to have been anything else").toBe(CACHE_GRACE_MS + 400);
 });
 
 test("the total only ever goes up, so a duration is a difference (#251)", () => {
   // What every reader of this clock does is subtract two readings — the page's
-  // stopwatch, and the runner at the top and bottom of every action. So it is
-  // never reset and never armed: there is nothing to forget to do before a run,
-  // and a second run of the same sheet needs no more setup than the first.
-  const { clock, at } = stopwatch();
+  // stopwatch, and the runner at the top and bottom of every action — and
+  // `time + load = wall clock` is what makes the removal checkable. A total that
+  // could go DOWN would break both: a leg would come out longer than the wall
+  // clock it happened in. So a period that turns out to have been all cache
+  // keeps whatever it had already shown, rather than refunding it.
+  const { clock, at, say } = stopwatch();
+  say(NET, "network");
+  say(HIT, "cache");
   const readings: number[] = [];
-  for (const [t, n] of [[0, 1], [50, 0], [100, 2], [180, 0], [200, 1]] as const) {
+  at(0);
+  clock.begin(1, NET);
+  for (const t of [100, 300, 600]) {
     at(t);
-    clock.busy(n);
     readings.push(clock.ms);
   }
-  expect(readings).toEqual([0, 50, 50, 130, 130]);
+  clock.end(1);
+  readings.push(clock.ms);
+  // ...and now a long stretch of cache hits, which must not take any of it back
+  at(1_000);
+  clock.begin(2, HIT);
+  at(1_400);
+  readings.push(clock.ms);
+  clock.end(2);
+  readings.push(clock.ms);
   expect([...readings].sort((a, b) => a - b)).toEqual(readings);
+  expect(readings.at(-1)).toBeGreaterThanOrEqual(600);
 });
 
 /* ------------------------------------------------------------------ *
@@ -159,20 +301,66 @@ test("the wire is reported to every watcher, not just the last one to ask (#251)
   // hand — two features in one closure, neither able to be read on its own.
   const files = newStore();
   const mark: number[] = [];
-  const remover: number[] = [];
-  files.onBusy((n) => mark.push(n));
-  files.onBusy((n) => remover.push(n));
+  const remover: string[] = [];
+  files.onWire((e) => mark.push(e.inFlight));
+  files.onWire((e) => remover.push(`${e.done ? "end" : "begin"} ${e.url}`));
 
   await files.load("bedsit1.set");
 
   expect(mark).toEqual([1, 0]);
-  expect(remover).toEqual([1, 0]);
+  // ...and the second watcher gets what the count cannot tell it: WHICH file,
+  // which is what the browser is asked about to classify it (#369)
+  expect(remover).toEqual([
+    "begin /gamefiles/TITANIC1/data/bedsit1.set",
+    "end /gamefiles/TITANIC1/data/bedsit1.set",
+  ]);
+});
+
+test("a background fetch says nobody is waiting for it (#369)", async () => {
+  // `provide` is the engine's synchronous contract: it asked, got null, and
+  // carried on. The run keeps moving while that fetch lands, so the clock must
+  // keep counting — main.ts drops these, and this is the flag it drops them by.
+  const files = newStore();
+  const seen: { waited: boolean; done: boolean }[] = [];
+  files.onWire((e) => seen.push({ waited: e.waited, done: e.done }));
+
+  // a miss: the engine asks, is told "not yet", and a fetch starts behind it
+  expect(files.provide("bedsit1.set")).toBeNull();
+  await vi.waitFor(() => expect(seen).toHaveLength(2));
+  expect(seen).toEqual([
+    { waited: false, done: false },
+    { waited: false, done: true },
+  ]);
+
+  // ...where an awaited load says the opposite, and the game is stopped for it
+  const other = newStore();
+  const awaited: boolean[] = [];
+  other.onWire((e) => awaited.push(e.waited));
+  await other.load("bedsit1.set");
+  expect(awaited).toEqual([true, true]);
+});
+
+test("a fetch's end carries the id its start was given (#369)", async () => {
+  // The clock keeps one span per fetch, so an end has to name which. Ids rather
+  // than URLs, because the same basename can be in the air twice over a reload.
+  const files = newStore();
+  const seen: { id: number; done: boolean }[] = [];
+  files.onWire((e) => seen.push({ id: e.id, done: e.done }));
+  await files.load("bedsit1.set");
+  files.registerServerFile("gstair2.set", "/gamefiles/TITANIC1/data/gstair2.set");
+  await files.load("gstair2.set");
+  expect(seen).toEqual([
+    { id: 1, done: false },
+    { id: 1, done: true },
+    { id: 2, done: false },
+    { id: 2, done: true },
+  ]);
 });
 
 test("a watcher can stop watching (#251)", async () => {
   const files = newStore();
   const seen: number[] = [];
-  const stop = files.onBusy((n) => seen.push(n));
+  const stop = files.onWire((e) => seen.push(e.inFlight));
   await files.load("bedsit1.set");
   stop();
   // a second file, so there is a fetch to miss (the first is cached now)
@@ -188,10 +376,10 @@ test("a watcher that throws does not take the fetch down with it (#251)", async 
   // room over it.
   const files = newStore();
   const seen: number[] = [];
-  files.onBusy(() => {
+  files.onWire(() => {
     throw new Error("the readout is broken");
   });
-  files.onBusy((n) => seen.push(n));
+  files.onWire((e) => seen.push(e.inFlight));
   await expect(files.load("bedsit1.set")).resolves.toEqual(new Uint8Array([1, 2, 3]));
   expect(seen).toEqual([1, 0]);
 });
@@ -204,20 +392,22 @@ test("a cache hit is not a load, and is not reported as one (#251)", async () =>
   const files = newStore();
   await files.load("bedsit1.set");
   const seen: number[] = [];
-  files.onBusy((n) => seen.push(n));
+  files.onWire((e) => seen.push(e.inFlight));
   await files.load("bedsit1.set");
   expect(seen).toEqual([]);
   expect(fetched).toHaveLength(1);
 });
 
-test("the store's edges drive the clock end to end (#251)", async () => {
-  // The two halves wired the way `main.ts` wires them, with time by hand: what
-  // is being checked is that the shapes fit — the count the store reports is the
-  // argument the clock takes — rather than any arithmetic, which is above.
+test("the store's events drive the clock end to end (#251, #369)", async () => {
+  // The two halves wired the way `main.ts` wires them, with time and the verdict
+  // by hand: what is being checked is that the shapes fit — the events the store
+  // reports are the calls the clock takes — rather than any arithmetic, which is
+  // above.
   const files = newStore();
   let now = 0;
-  const clock = new LoadClock(() => now);
-  files.onBusy((n) => clock.busy(n));
+  let served: Served = "network";
+  const clock = new LoadClock({ now: () => now, served: () => served });
+  files.onWire((e) => (e.done ? clock.end(e.id) : clock.begin(e.id, e.url)));
 
   vi.stubGlobal("fetch", async () => {
     now += 400; // the fetch took 400 ms
@@ -228,6 +418,14 @@ test("the store's edges drive the clock end to end (#251)", async () => {
 
   expect(clock.ms).toBe(400);
   expect(clock.waiting).toBe(false);
+
+  // the same fetch again, this time answered out of the cache: the store has it
+  // in memory now, so nothing reaches the wire at all — and were it to, the
+  // verdict would keep it out of the total
+  served = "cache";
+  files.registerServerFile("gstair2.set", "/gamefiles/TITANIC1/data/gstair2.set");
+  await files.load("gstair2.set");
+  expect(clock.ms, "a cache hit is not a download").toBe(400);
 });
 
 /* ------------------------------------------------------------------ *

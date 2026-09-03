@@ -28,6 +28,38 @@ import { encodingOf, isEditionCode } from "./languages";
 /** the CD a manifest URL sits on, from its `titanic1`/`titanic2` path segment */
 export type Disc = 1 | 2;
 
+/** one fetch starting or ending — see {@link FileStore.onWire} */
+export interface WireEvent {
+  /** unique per fetch, so a start and an end can be paired */
+  id: number;
+  /** what was asked for; the load remover asks the browser about this URL */
+  url: string;
+  /** false when it was issued, true when it landed (or failed) */
+  done: boolean;
+  /** how many fetches are in the air after this event */
+  inFlight: number;
+  /**
+   * Is somebody WAITING for this, or was it started on spec?
+   *
+   * {@link FileStore.load} is awaited by whoever called it — a set activation
+   * blocks on the room and all of its siblings and casts before anything is
+   * composited, and `onPlayMovie` blocks on the film before a frame of it plays
+   * — so the game is stopped for the whole of it.
+   *
+   * {@link FileStore.provide} is not. It is the engine's SYNCHRONOUS contract: it
+   * asked, got null, and carried on, and the file is wired into the running
+   * viewer if and when it lands ({@link FileStore.onBackgroundLoad}). The game
+   * keeps playing throughout, so a speedrun clock must keep counting
+   * ([#369](https://github.com/dhobi/dreamrefactory/issues/369)) — otherwise a
+   * route is credited for time it spent playing, which is the complaint that
+   * issue is about.
+   *
+   * The busy MARK reads it the other way and is right to: a fetch in the air is
+   * worth telling the player about however it started.
+   */
+  waited: boolean;
+}
+
 /**
  * The disc a manifest URL sits on: which of `volumes` its path passes through.
  *
@@ -133,31 +165,29 @@ export class FileStore {
   onBackgroundLoad: ((key: string, data: Uint8Array) => void) | null = null;
 
   /**
-   * How many fetches are in the air, and who is told whenever that changes.
+   * Every fetch, announced as it starts and as it ends.
    *
-   * Every fetch this store makes is one the game is WAITING on, which is what
-   * makes a bare count honest enough to report: `onSetChange` awaits the room and
-   * then all of its siblings and casts before anything is composited,
-   * `onPlayMovie` awaits the film before a frame of it plays, and {@link
-   * provide}'s background fetches are engine misses — it asked, and got null.
-   * Nothing here is speculative, so this never sits at 1 through normal play.
+   * Two things watch the wire and they want different things from it. The play
+   * page draws its busy mark from the COUNT (taoot/src/main.ts): a mark is up
+   * while anything is outstanding, whatever it is. The load remover
+   * (taoot/src/load-clock.ts) needs the fetches THEMSELVES — which URL, and how
+   * long it took — because since [#369](https://github.com/dhobi/dreamrefactory/issues/369)
+   * it only stops a speedrun's clock for the ones that went to the network, and
+   * a cache hit is a read the original did off its CD as well.
    *
-   * The count rather than a boolean because the waits overlap: a changeset has
-   * a dozen siblings in flight at once, and a watcher should see the wire go
-   * quiet when the last of them lands, not the first.
-   *
-   * Watchers rather than one assignable hook ({@link onBusy}), because the
-   * answer is now wanted by two things that neither own nor know about each
-   * other: the play page draws its busy mark from it (taoot/src/main.ts), and
-   * the load remover times it (taoot/src/load-clock.ts) so a speedrun's clock
-   * does not count a download. Under a single slot the second would have had to
-   * take the wire away from the first and hand it the edges by hand.
+   * So the event carries both, and the count comes along on every event rather
+   * than being asked for: a watcher that only wants "is anything happening" then
+   * needs nothing else, and the two readouts cannot disagree about the wire
+   * because they are told by the same sentence. It also says whether anything is
+   * WAITING for the fetch ({@link WireEvent.waited}), which the two readouts
+   * again answer differently.
    */
   private inFlight = 0;
-  private busyWatchers = new Set<(inFlight: number) => void>();
+  private nextFetchId = 1;
+  private wireWatchers = new Set<(e: WireEvent) => void>();
 
   /**
-   * Watch the wire: called with the new count every time it changes.
+   * Watch the wire, one fetch at a time.
    *
    * Returns the way to stop watching — a caller whose page or run is over must
    * be able to let go, and a `Set` of live closures is otherwise a leak that
@@ -168,31 +198,34 @@ export class FileStore {
    * being reported is somebody else's readout, and a store that failed a `load`
    * because a progress bar threw would be the tail wagging the dog.
    */
-  onBusy(watch: (inFlight: number) => void): () => void {
-    this.busyWatchers.add(watch);
+  onWire(watch: (e: WireEvent) => void): () => void {
+    this.wireWatchers.add(watch);
     return () => {
-      this.busyWatchers.delete(watch);
+      this.wireWatchers.delete(watch);
     };
   }
 
-  private sayBusy(): void {
-    for (const watch of this.busyWatchers) {
+  private sayWire(e: WireEvent): void {
+    for (const watch of this.wireWatchers) {
       try {
-        watch(this.inFlight);
+        watch(e);
       } catch {
         /* a readout's problem, not the fetch's */
       }
     }
   }
 
-  private fetchBegan(): void {
+  /** announce a fetch and hand back the id its end must carry */
+  private fetchBegan(url: string, waited: boolean): number {
+    const id = this.nextFetchId++;
     this.inFlight++;
-    this.sayBusy();
+    this.sayWire({ id, url, done: false, inFlight: this.inFlight, waited });
+    return id;
   }
 
-  private fetchEnded(): void {
+  private fetchEnded(id: number, url: string, waited: boolean): void {
     this.inFlight--;
-    this.sayBusy();
+    this.sayWire({ id, url, done: true, inFlight: this.inFlight, waited });
   }
 
   /** how many fetches are in the air right now — what a fresh watcher has
@@ -426,7 +459,8 @@ export class FileStore {
     const url = this.urlFor(key);
     if (url && !this.pendingFetches.has(key)) {
       this.pendingFetches.add(key);
-      this.fetchBegan();
+      // `false`: the engine has already been told "not yet" and has moved on
+      const id = this.fetchBegan(url, false);
       void fetch(url)
         .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then((buf) => {
@@ -437,7 +471,7 @@ export class FileStore {
         .catch(() => {})
         .finally(() => {
           this.pendingFetches.delete(key);
-          this.fetchEnded();
+          this.fetchEnded(id, url, false);
         });
     }
     return null;
@@ -466,7 +500,9 @@ export class FileStore {
     }
     const url = this.urlFor(key);
     if (!url) return null;
-    this.fetchBegan();
+    // `true`: every caller of this awaits it, and the game is stopped until it
+    // answers — see WireEvent.waited
+    const id = this.fetchBegan(url, true);
     try {
       const r = await fetch(url);
       if (!r.ok) return null;
@@ -482,7 +518,7 @@ export class FileStore {
     } catch {
       return null;
     } finally {
-      this.fetchEnded();
+      this.fetchEnded(id, url, true);
     }
   }
 }
