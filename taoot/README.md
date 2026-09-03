@@ -252,17 +252,25 @@ and the report says which it was.
 The report gives wall clock *and* `session.frameCounter`. Tune against frames —
 they are immune to machine load — and quote the seconds.
 
-**Loads are removed** ([#251](https://github.com/dhobi/dreamrefactory/issues/251)).
-Every room in this port is a fetch, so an identical sheet over a cold cache and a
-warm one is minutes apart with not one gesture changed — which makes a plain wall
-clock a measurement of the link as much as of the route. So the timer stops while
-the game is downloading, exactly as a PC speedrun's load remover does: the
-fetcher is the only thing that knows a download has begun, so the fetcher is what
-says so (`FileStore.onBusy` → `taoot/src/load-clock.ts`), and the run loop
-subtracts that total from every leg. Nothing is hidden — a `load` column appears
-beside the splits when there was something to remove, and `time + load` is the
-wall clock to the millisecond. On the workbench the clock says `LOADING` while it
-is stopped, so a reading standing still cannot be mistaken for a hung page.
+**Loads are removed** ([#251](https://github.com/dhobi/dreamrefactory/issues/251)),
+and only the ones that crossed a link ([#369](https://github.com/dhobi/dreamrefactory/issues/369)).
+A room fetched over the internet moves the clock for reasons that have nothing to
+do with the route, so the timer stops for it, exactly as a PC speedrun's load
+remover does: the fetcher is the only thing that knows a download has begun, so
+the fetcher is what says so (`FileStore.onWire` → `taoot/src/load-clock.ts`), and
+the run loop subtracts that total from every leg.
+
+What does **not** stop it is a read this machine could have done anyway — the
+browser's memory or disk cache, and a dev server on `localhost`, whose fetch is a
+disk read wearing HTTP. The original read its CD on its own clock and so does
+this one. The practical consequence: run against a dev server and nothing is
+removed, so `time` is the wall clock; run against the deployed page and the
+download comes out.
+
+Nothing is hidden either way — a `load` column appears beside the splits when
+there was something to remove, and `time + load` is the wall clock to the
+millisecond. On the workbench the clock says `LOADING` while it is stopped, so a
+reading standing still cannot be mistaken for a hung page.
 
 **The workbench.** `/speedrun/` is an unlisted page — nothing links to it, it is
 not in the top bar, it carries `noindex` — that puts an editor under the game:

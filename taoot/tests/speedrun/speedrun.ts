@@ -45,12 +45,17 @@
  *
  * **load** is the third column, and only appears when there was something to
  * report ([#251](https://github.com/dhobi/dreamrefactory/issues/251)). It is how
- * long the leg spent waiting on the network, and it has already been taken OUT
- * of the time beside it — a load remover, the same device a PC speedrun uses so
- * that an SSD is not a route improvement. Here it is not a nicety: every room is
- * a fetch, so a cold cache and a warm one are minutes apart on an identical
- * sheet. `time + load` is the wall clock, to the millisecond, if that is what
- * you want.
+ * long the leg spent waiting on a DOWNLOAD, and it has already been taken OUT of
+ * the time beside it — a load remover, the same device a PC speedrun uses so
+ * that an SSD is not a route improvement.
+ *
+ * Only a download counts ([#369](https://github.com/dhobi/dreamrefactory/issues/369)):
+ * a cache hit, and any fetch off a server on this machine, is a disk read of the
+ * kind the original did off its CD, and the original's clock counted those. So
+ * against a dev server this column is **empty and `time` is the wall clock** —
+ * there was no link in the way to take out. It fills in against the deployed
+ * page, where the rip really does arrive over one. `time + load` is the wall
+ * clock either way, to the millisecond.
  *
  * Three things are called out under the splits because they are where the time
  * hides: the slowest actions, every `after:` pad (dead time bought with a guess

@@ -223,7 +223,7 @@ const files = new FileStore();
 const BUSY_AFTER_MS = 400;
 
 let busyTimer = 0;
-files.onBusy((inFlight) => {
+files.onWire(({ inFlight }) => {
   if (inFlight > 0) {
     // already shown, or already counting towards being shown
     if (busyTimer || !netbusy.hidden) return;
@@ -245,16 +245,17 @@ files.onBusy((inFlight) => {
  * The load remover, subscribed to the same wire as the mark above (#251).
  *
  * A second watcher rather than a line inside the first, because the two want
- * different things from the same edges and neither is the other's business: the
- * mark waits {@link BUSY_AFTER_MS} before it admits to a wait, and this must not
- * — a 300 ms fetch is 300 ms a speedrun did not spend on the route, whether or
- * not it was long enough to be worth telling the player about.
+ * different things from the same events and neither is the other's business: the
+ * mark waits {@link BUSY_AFTER_MS} before it admits to a wait and does not care
+ * WHAT was fetched, while this needs each fetch by name — since #369 it stops
+ * the clock only for the ones that went to the network, and a cache hit is a
+ * read the original did off its CD as well.
  *
  * Wired here because this is where the store is made. Nothing on the play page
  * reads the total; the workbench does (taoot/src/speedrun-page.ts), and so does
  * the Playwright runner, through the handle below.
  */
-files.onBusy((inFlight) => loadClock.busy(inFlight));
+files.onWire((e) => (e.done ? loadClock.end(e.id) : loadClock.begin(e.id, e.url)));
 
 /**
  * The Report bug button (site/src/bug-report.ts): a GitHub issue with the room, the

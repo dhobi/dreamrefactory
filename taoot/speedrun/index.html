@@ -1853,10 +1853,12 @@
            a leg with no split in it runs, this is the only thing on the page
            that moves. It keeps its last reading when the run stops.
 
-           Load-removed, and it says so while it is stopped: a fetch in the air
-           holds the reading still and marks it LOADING (#251), because every
-           room in this port is a download and a clock that counted them would
-           move by minutes for reasons that have nothing to do with the route. -->
+           Load-removed, and it says so while it is stopped: a fetch that is
+           coming over a LINK holds the reading still and marks it LOADING
+           (#251), because a room fetched over the internet moves the clock by
+           reasons that have nothing to do with the route. A cache hit or a read
+           off this machine does not stop it — those are what the original did
+           off its CD (#369). -->
       <div id="srclock">0.0s</div>
       <div id="srsplits"></div>
       <!-- What the run is pressing (taoot/src/speedrun-inputs.ts). A key lighting is
@@ -1871,9 +1873,11 @@
         <code>npm run speedrun -w taoot</code>. The pathfinding verbs
         (<code>travel</code>, <code>hunt</code>, <code>stand</code>) need the
         Node runner and will say so. Every time on this page has the
-        <em>downloading</em> taken out of it — the clock stops while the game is
-        being fetched, and the <code>load</code> column says how much came out —
-        so a run over a cold cache is comparable with one over a warm one.
+        <em>downloading</em> taken out of it — the clock stops while the game
+        comes over a link, and the <code>load</code> column says how much came
+        out. Against a dev server on <code>localhost</code> that is nothing at
+        all, and rightly: a fetch off this machine is a disk read, which the
+        original did too.
       </p>
     </section>
     <!-- /#srtimer -->
