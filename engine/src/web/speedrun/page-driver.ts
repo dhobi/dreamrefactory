@@ -69,12 +69,14 @@ export interface PageDriverOptions {
   /** the game canvas — `#screen` inside {@link PageDriverOptions.win} */
   canvas: HTMLCanvasElement;
   /**
-   * Which sheet is running, for {@link saveKey}. Asked per call rather than
+   * Which sheet is running, for {@link SaveKeys.key}. Asked per call rather than
    * passed once: a driver outlives the run that made it only just, but the sheet
    * CAN be renamed while one is in flight, and the answer that matters is the one
    * at the moment `save()` writes.
    */
   sheet(): string;
+  /** where this game's checkpoints live — `saveKeys("taoot")`, see {@link SaveKeys} */
+  keys: SaveKeys;
   timeout?: number;
   gap?: number;
   log?(message: string): void;
@@ -119,32 +121,55 @@ export class Aborted extends Error {
  * route does not name, which is the one state the workbench is built to prevent.
  *
  * Both halves are percent-encoded, so the ":" between them cannot occur inside
- * either and the key can always be taken apart again ({@link parseSaveKey}).
+ * either and the key can always be taken apart again ({@link SaveKeys.parse}).
  *
  * The Node runner has no sheets — a sheet is a FILE there — and keys its saves
  * by name alone under `out/speedrun/`. Nothing is shared between the two stores,
  * which was already true.
+ *
+ * ## ...and a sheet belongs to a GAME
+ *
+ * Hence the factory rather than three constants: `localStorage` is per ORIGIN,
+ * and the deployed site serves every game off one. Titanic's workbench and
+ * Dust's would share a key space, so a `m1p0` written against one disc could be
+ * restored into the other — a save the engine would take (both games write the
+ * same container) and that names rooms the running game does not have.
+ *
+ * The game's own word for itself is the namespace, and Titanic's is `taoot`, so
+ * its keys are the ones already in a player's browser, byte for byte.
  */
-export const SAVE_PREFIX = "taoot:speedrun:save:";
+export interface SaveKeys {
+  /** every key of this game's, and nothing else — what a scan filters on */
+  readonly prefix: string;
+  /** the key one point of one sheet lives at */
+  key(sheet: string, name: string): string;
+  /** the sheet and point a key names, or null if it is not one of this game's
+   *  (or is one of the name-only keys this shape replaced — see the page's
+   *  migration) */
+  parse(key: string): { sheet: string; name: string } | null;
+}
 
-export const saveKey = (sheet: string, name: string): string =>
-  `${SAVE_PREFIX}${encodeURIComponent(sheet)}:${encodeURIComponent(name)}`;
-
-/** the sheet and point a key names, or null if it is not one of ours (or is one
- *  of the name-only keys this shape replaced — see the page's migration) */
-export function parseSaveKey(key: string): { sheet: string; name: string } | null {
-  if (!key.startsWith(SAVE_PREFIX)) return null;
-  const rest = key.slice(SAVE_PREFIX.length);
-  const cut = rest.indexOf(":");
-  if (cut < 0) return null;
-  try {
-    return {
-      sheet: decodeURIComponent(rest.slice(0, cut)),
-      name: decodeURIComponent(rest.slice(cut + 1)),
-    };
-  } catch {
-    return null; // a malformed escape is not a key we wrote
-  }
+/** {@link SaveKeys} for the game that calls itself `game` — `saveKeys("taoot")` */
+export function saveKeys(game: string): SaveKeys {
+  const prefix = `${game}:speedrun:save:`;
+  return {
+    prefix,
+    key: (sheet, name) => `${prefix}${encodeURIComponent(sheet)}:${encodeURIComponent(name)}`,
+    parse(key) {
+      if (!key.startsWith(prefix)) return null;
+      const rest = key.slice(prefix.length);
+      const cut = rest.indexOf(":");
+      if (cut < 0) return null;
+      try {
+        return {
+          sheet: decodeURIComponent(rest.slice(0, cut)),
+          name: decodeURIComponent(rest.slice(cut + 1)),
+        };
+      } catch {
+        return null; // a malformed escape is not a key we wrote
+      }
+    },
+  };
 }
 
 export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
@@ -429,11 +454,15 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
     aim: async (kind, name) => {
       // the engine's own hit test, called directly — this is the sweep the
       // Playwright driver has to inject as source, and here it is simply local
-      const { aimAtThing, aimAtHotspot } = await import("./nav/aim");
+      const { aimAtThing, aimAtHotspot } = await import("./aim");
       const dbg = (win as unknown as { dbg: any }).dbg;
       const s = dbg.session;
       const v = dbg.viewer;
       const adapter = {
+        // the framebuffer's size, not this canvas's: Dust draws 512x384 through
+        // a 1024x768 canvas, and a hit test is asked in framebuffer pixels
+        width: dbg.host.screen.width,
+        height: dbg.host.screen.height,
         hitTest: (x: number, y: number) => s.hitTestAt(x, y),
         propUnder: (x: number, y: number) => {
           const p = v.propUnder(x, y);
@@ -508,10 +537,10 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
     putSave: async (name: string, bytes: Uint8Array) => {
       let bin = "";
       for (const b of bytes) bin += String.fromCharCode(b);
-      localStorage.setItem(saveKey(opts.sheet(), name), btoa(bin));
+      localStorage.setItem(opts.keys.key(opts.sheet(), name), btoa(bin));
     },
     getSave: async (name: string) => {
-      const raw = localStorage.getItem(saveKey(opts.sheet(), name));
+      const raw = localStorage.getItem(opts.keys.key(opts.sheet(), name));
       if (!raw) return null;
       const bin = atob(raw);
       const out = new Uint8Array(bin.length);

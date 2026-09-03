@@ -179,7 +179,10 @@ async function measure(page: Page, url: string): Promise<Measured> {
 
 async function main(): Promise<void> {
   console.log("building dust…");
-  await run("npm", ["run", "build:dust"]);
+  // `-w dust` and not `build:dust`, which the root package.json stopped
+  // carrying when each package took its own commands (#333) — this line went
+  // on naming it and the suite has failed at its first step ever since
+  await run("npm", ["run", "build", "-w", "dust"]);
   const server = await servePreview();
   const browser = await chromium.launch();
   try {

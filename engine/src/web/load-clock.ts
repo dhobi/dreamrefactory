@@ -7,10 +7,15 @@
  * route's: the same sheet, on the same build, over a warm cache against a cold
  * one, is minutes apart with not one gesture changed. PC speedruns have long
  * since answered this with a **load remover** — the timer reads a value the game
- * sets while it loads and stops counting for as long as it is set — and this
- * port has the same value to read, because every byte the game gets comes
- * through one place ({@link FileStore}) and that place already says when it is
- * waiting.
+ * sets while it loads and stops counting for as long as it is set — and a port
+ * that fetches its data has the same value to read, because every byte a game
+ * gets comes through one place ({@link HostFiles}) and that place already says
+ * when it is waiting ({@link WireEvent}).
+ *
+ * It is in the engine and names no game, which is the whole of why it is here:
+ * every DreamFactory port on this site fetches its disc the same way, and a
+ * second copy of this arithmetic would be a second set of times nobody could
+ * compare with the first.
  *
  * ## Only the NETWORK, not every fetch ([#369](https://github.com/dhobi/dreamrefactory/issues/369))
  *
@@ -30,18 +35,18 @@
  *
  * ## And only the fetches the game is STOPPED for
  *
- * The other half of #369, and the half that matters on the deployed page, where
- * the rip really does come over a link. `FileStore.load` is awaited by whoever
+ * The other half of #369, and the half that matters on a deployed page, where
+ * the rip really does come over a link. `HostFiles.load` is awaited by whoever
  * called it — a set activation blocks on the room and all of its siblings and
  * casts before anything is composited — so the game is stopped for the whole of
- * it and the clock should be too. `FileStore.provide` is the opposite: the
+ * it and the clock should be too. `HostFiles.provide` is the opposite: the
  * engine asked, was told "not yet", and carried on, and the file is wired into
  * the running viewer if and when it lands. The run is progressing throughout, so
  * removing that time credits a route for playing the game.
  *
- * `main.ts` does the filtering, because "who is waiting" is the store's fact
- * ({@link WireEvent.waited}) and not this stopwatch's. What is left here is the
- * question of whether a wait was a DOWNLOAD.
+ * {@link watchLoads} does that filtering, on the store's own word for it
+ * ({@link WireEvent.waited}) — the store knows who is waiting and this stopwatch
+ * does not. What is left here is the question of whether a wait was a DOWNLOAD.
  *
  * Where the two rules disagree with each other, the tiebreak is to COUNT the
  * time: under-removing makes a route look slower than it was, which is a number
@@ -56,7 +61,7 @@
  * which is exactly what it should be: there was no network to take out. The
  * remover earns its keep on the deployed page, where the rip really does arrive
  * over a link, and over a warm cache besides — see the Warm button
- * (taoot/src/cache-warmup.ts).
+ * (engine/src/web/cache-warmup.ts).
  *
  * ## Two numbers come out of it, and they are different questions:
  *
@@ -80,8 +85,9 @@
  *
  * ## Where it is wired, and where it is read
  *
- * `main.ts` owns the store, so `main.ts` subscribes {@link loadClock} to it and
- * hands the total out on `window.dbg` — which is how the Playwright driver, in
+ * Whoever owns the store subscribes {@link loadClock} to it — one
+ * {@link watchLoads} call per page (taoot/src/main.ts, dust/src/main.ts) — and
+ * hands the total out on `window.dbg`, which is how a Playwright driver, in
  * another process entirely, reads a number measured in the page
  * (taoot/tests/speedrun/driver.ts). The in-page workbench imports the same
  * singleton directly (taoot/src/speedrun-page.ts).
@@ -94,6 +100,7 @@
  * part of the wall clock that says nothing about either the route or the
  * computer running it.
  */
+import type { HostFiles, WireEvent } from "./host";
 
 /** one fetch's span on the wire */
 export interface Span {
@@ -267,14 +274,46 @@ export class LoadClock {
 /**
  * The page's one load clock.
  *
- * A singleton because there is one wire and one game per document: the workbench
- * and the play page are the same `main.ts` with the same store, and two clocks
- * that had each seen half the fetches would each remove half the loading.
+ * A singleton because there is one wire and one game per document: Titanic's
+ * workbench and its play page are the same `main.ts` with the same store, and
+ * two clocks that had each seen half the fetches would each remove half the
+ * loading. Two GAMES are two documents and so two of these, which is right —
+ * they are two rips down two sets of fetches.
  */
 export const loadClock = new LoadClock({
   now: () => performance.now(),
   served: (url) => servedBy(url),
 });
+
+/**
+ * Subscribe a clock to a store's wire — the one line a page needs.
+ *
+ * The filtering lives here rather than in each page because it is the subtle
+ * part: only the fetches somebody is WAITING for are removed
+ * ({@link WireEvent.waited}, #369), and a page that got that rule slightly wrong
+ * would report times that cannot be compared with any other page's. It was
+ * written out by hand in `taoot/src/main.ts` and would have been written out
+ * again, differently, in Dust's.
+ *
+ * A store with no wire to watch (`onWire` is optional on {@link HostFiles} —
+ * Timelapse has none) is not an error: nothing is subscribed and the clock reads
+ * zero, so a timer on such a page measures the wall clock and says so.
+ *
+ * Returns the way to stop watching, which is what {@link HostFiles.onWire}
+ * returns; a page that never stops can ignore it.
+ */
+export function watchLoads(files: HostFiles, clock: LoadClock = loadClock): () => void {
+  if (!files.onWire) return () => {};
+  return files.onWire((e: WireEvent) => {
+    // Only the fetches the game is STOPPED for. `provide`'s background fetches
+    // are the engine having asked, been told "not yet", and carried on — the run
+    // is progressing while they land, so removing them would credit a route for
+    // time it spent playing (#369).
+    if (!e.waited) return;
+    if (e.done) clock.end(e.id);
+    else clock.begin(e.id, e.url);
+  });
+}
 
 /** a host that is this machine — see the `local` verdict */
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "::1", "[::1]", ""]);

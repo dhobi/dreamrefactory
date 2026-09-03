@@ -40,7 +40,7 @@ import {
 import { TAOOT_SAVES, useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { readSaveFile } from "@dreamfactory/engine/df/savegame";
 import { FileStore } from "./files";
-import { loadClock } from "./load-clock";
+import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import { InputLog, clickLabel, inputLabel, type Gate, type Hit } from "./input-log";
 import { StateTrace, snapshotState } from "@dreamfactory/engine/runtime/trace";
 import { seededRng } from "@dreamfactory/engine/runtime/rng";
@@ -69,7 +69,9 @@ import {
 import { installI18n, t } from "@dreamfactory/site/locales";
 import { installBugReport } from "@dreamfactory/site/bug-report";
 import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
-import { ChangeWatch, RowView, stateDump, stateView } from "./debug-panel";
+import { stateDump } from "@dreamfactory/engine/web/debug-panel";
+import { SPINE } from "./state-spine";
+import { bindRememberedBox, installStateList } from "@dreamfactory/engine/web/state-list";
 import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import {
   GestureKey,
@@ -247,23 +249,20 @@ files.onWire(({ inFlight }) => {
  * A second watcher rather than a line inside the first, because the two want
  * different things from the same events and neither is the other's business: the
  * mark waits {@link BUSY_AFTER_MS} before it admits to a wait and does not care
- * WHAT was fetched, while this needs each fetch by name — since #369 it stops
- * the clock only for the ones that went to the network, and a cache hit is a
- * read the original did off its CD as well.
+ * WHAT was fetched, while the clock needs each fetch by name — since #369 it
+ * stops only for the ones that went to the network, and a cache hit is a read
+ * the original did off its CD as well.
+ *
+ * The subscription itself is the engine's (`watchLoads`), which is where the
+ * "only what the game WAITED for" rule now lives: Dust's page needs the same
+ * rule and a second hand-written copy of it would be a second set of times
+ * nobody could compare with these.
  *
  * Wired here because this is where the store is made. Nothing on the play page
  * reads the total; the workbench does (taoot/src/speedrun-page.ts), and so does
  * the Playwright runner, through the handle below.
  */
-files.onWire((e) => {
-  // Only the fetches the game is STOPPED for. `provide`'s background fetches are
-  // the engine having asked, been told "not yet", and carried on — the run is
-  // progressing while they land, so removing them would credit a route for time
-  // it spent playing (#369).
-  if (!e.waited) return;
-  if (e.done) loadClock.end(e.id);
-  else loadClock.begin(e.id, e.url);
-});
+watchLoads(files);
 
 /**
  * The Report bug button (site/src/bug-report.ts): a GitHub issue with the room, the
@@ -472,7 +471,7 @@ const host = new GameHost(files, audioSink, {
     bootChatter = false;
     clearLog();
     details.hidden = !detailsWanted();
-    changeWatch.reset();
+    stateList.reset();
   },
   mapChanged: () => refreshMap(),
 });
@@ -1624,44 +1623,6 @@ function installMovement(): void {
 /** set by {@link installBrightness} so the F-keys can refresh the presets */
 let onScreenGammaShown: (() => void) | null = null;
 
-/**
- * A checkbox that remembers, and applies what it remembered before anything asks.
- *
- * Was `bindSwipeOption`, named after the two boxes it was written for — and those
- * two have moved into the shared gesture module (`bindSwipeInvert`), which left
- * this one holding the low-memory box and the debug state list and a name that
- * described neither.
- */
-function bindRememberedBox(
-  box: HTMLInputElement,
-  key: string,
-  apply: (on: boolean) => void,
-  /**
-   * What the box means before anybody has answered — off, unless a caller says
-   * otherwise (the workbench's state list, see {@link DETAILS_ALWAYS}).
-   *
-   * Only the DEFAULT: a stored answer wins over it either way, so a reader who
-   * turns the box off on a page that starts it on gets it off, and keeps it off.
-   */
-  fallback = false,
-): void {
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem(key);
-  } catch {
-    /* storage can be denied; the box then starts at the default every launch */
-  }
-  box.checked = stored === null ? fallback : stored === "1";
-  apply(box.checked);
-  box.addEventListener("change", () => {
-    apply(box.checked);
-    try {
-      window.localStorage.setItem(key, box.checked ? "1" : "0");
-    } catch {
-      /* not remembering is survivable — the setting still holds for this tab */
-    }
-  });
-}
 
 /**
  * The state list in the pane (#22), and what turns it on.
@@ -1680,29 +1641,32 @@ function bindRememberedBox(
  */
 const REFRESH_MS = 250;
 
+
 /** where the state box's answer outlives the tab */
 const DEBUG_STATE_KEY = "taoot.details.state";
 
 /** …and the input log's (#178) */
 const DEBUG_INPUTS_KEY = "taoot.details.inputs";
 
-/** which globals moved lately, so the list can light them for a moment */
-const changeWatch = new ChangeWatch();
-
 /**
- * The two lists, each keeping its element in step by touching only what differs.
+ * The variables list — the pane's second half, and the engine's
+ * (engine/src/web/state-list.ts).
  *
- * Rebuilt lists were the first version and the wrong one: the panel polls (the
- * engine has no "a global changed" event), so `replaceChildren` threw away and
- * re-made every row four times a second whether or not the game had done anything.
- * See {@link RowView} — an update over a quiet game now writes nothing.
+ * It owns the checkbox, the filter, the `all` box, the two lists and the poll,
+ * because every one of those is a question about a session and every session is
+ * the same shape. What this page keeps is what is ITS: the spine above, the log
+ * above that, the Copy-details button, and the X that opens the column.
  */
-const spineView = new RowView(
-  dbgSpine,
-  { row: "span", name: "span", value: "span" },
-  "",
-);
-const rowsView = new RowView(dbgRows);
+const stateList = installStateList({
+  state: liveState,
+  spine: SPINE,
+  storageKey: DEBUG_STATE_KEY,
+  // On where the pane is the page and off where it is a player's aid — the same
+  // rule the column itself follows (DETAILS_ALWAYS). A workbench whose debug
+  // column opened on the log alone would answer half the question it is there for.
+  defaultOn: DETAILS_ALWAYS,
+  visible: () => !details.hidden,
+});
 
 function installDebugPanel(): void {
   const asked =
@@ -1720,33 +1684,11 @@ function installDebugPanel(): void {
       /* the link still works for this tab */
     }
   }
-  bindRememberedBox(
-    dbgStateOn,
-    DEBUG_STATE_KEY,
-    (on) => {
-      dbgState.hidden = !on;
-      if (on) refreshState();
-    },
-    // On where the pane is the page and off where it is a player's aid — the
-    // same rule the column itself follows (DETAILS_ALWAYS). A workbench whose
-    // debug column opened on the log alone would answer half the question it is
-    // there for.
-    DETAILS_ALWAYS,
-  );
-  // The input log (#178), by the same rule and for the same reason: on the
-  // workbench a run IS a sequence of gestures, and on the play page a player who
-  // has not asked should not have their log doubled in length.
+  // The input log (#178): on the workbench a run IS a sequence of gestures, and
+  // on the play page a player who has not asked should not have their log
+  // doubled in length. This game's own, because this game's log is.
   bindRememberedBox(dbgInputsOn, DEBUG_INPUTS_KEY, (on) => (inputs.on = on), DETAILS_ALWAYS);
-  for (const el of [dbgFilter, dbgAll])
-    el.addEventListener("input", () => refreshState());
   dbgCopy.addEventListener("click", () => void copyDetails());
-  window.setInterval(() => {
-    // Only while it can be read: the snapshot walks the globals, the props and the
-    // actors, and doing that four times a second behind a shut pane is work for
-    // no one.
-    if (details.hidden || dbgState.hidden) return;
-    refreshState();
-  }, REFRESH_MS);
 }
 
 /** the snapshot the panel and the clipboard both read — the goldens' own */
@@ -1754,32 +1696,6 @@ function liveState(): StateTrace {
   return snapshotState(session, host.viewer ?? null, "live");
 }
 
-function refreshState(): void {
-  const trace = liveState();
-  const changed = changeWatch.update(trace.globals, performance.now());
-  const view = stateView(trace, {
-    filter: dbgFilter.value,
-    all: dbgAll.checked,
-    changed,
-  });
-  // `#hud` is left alone: the viewer owns it (it names the hotspot count too, and
-  // a bug report's title is read off it). The strip here says what the hud cannot
-  // — the six the game names, the theme, and the fade while there is one.
-  spineView.apply([...view.spine, ...view.head]);
-  // Said as a count rather than as a sentence: it is the answer to "is anything
-  // happening", and 156 variables sitting still IS the answer.
-  const rows = view.rest.length
-    ? view.rest
-    : [
-        {
-          name: view.hidden ? `${view.hidden} unchanged` : "—",
-          value: "",
-          changed: false,
-          quiet: true,
-        },
-      ];
-  rowsView.apply(rows);
-}
 
 /**
  * The whole state and the whole log, on the clipboard.

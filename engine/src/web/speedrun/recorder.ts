@@ -35,7 +35,7 @@
  * movie regions and flats, which have no names to aim at — the same division the
  * hand-written sheet already makes.
  */
-import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
+import { focusOwnsKey } from "../keys";
 
 export interface Recorder {
   /** is it armed */

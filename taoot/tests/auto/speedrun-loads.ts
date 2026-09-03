@@ -39,12 +39,12 @@
  * a slow machine.
  */
 import { test, expect, beforeEach, afterEach, vi } from "vitest";
-import { CACHE_GRACE_MS, LoadClock, unionMs, type Served } from "../../src/load-clock";
+import { CACHE_GRACE_MS, LoadClock, unionMs, type Served } from "@dreamfactory/engine/web/load-clock";
 import { FileStore } from "../../src/files";
-import { parseSheet } from "../../src/speedrun/sheet";
-import { VERBS } from "../../src/speedrun/actions";
-import { runSheet } from "../../src/speedrun/runner";
-import type { Clock, SpeedrunDriver } from "../../src/speedrun/driver";
+import { parseSheet } from "@dreamfactory/engine/web/speedrun/sheet";
+import { ACTIONS, VERBS } from "../../src/speedrun/actions";
+import { runSheet } from "@dreamfactory/engine/web/speedrun/runner";
+import type { Clock, SpeedrunDriver } from "@dreamfactory/engine/web/speedrun/driver";
 
 /* ------------------------------------------------------------------ *
  * 1. The clock's arithmetic
@@ -477,7 +477,7 @@ const THREE = sheet(
 
 test("a run's time is the wall clock less the downloading (#251)", async () => {
   const { d } = scripted([{ ms: 1_000 }, { ms: 5_000, loading: 4_500 }, { ms: 500 }]);
-  const r = await runSheet(d, THREE);
+  const r = await runSheet(d, THREE, ACTIONS);
 
   // 6.5 s of wall clock, 4.5 s of it on the wire
   expect(r.total.ms).toBe(2_000);
@@ -488,7 +488,7 @@ test("a run's time is the wall clock less the downloading (#251)", async () => {
 
 test("the removal is charged to the leg that did the waiting (#251)", async () => {
   const { d } = scripted([{ ms: 1_000 }, { ms: 5_000, loading: 4_500 }, { ms: 500 }]);
-  const r = await runSheet(d, THREE);
+  const r = await runSheet(d, THREE, ACTIONS);
 
   expect(r.splits.map((s) => s.name)).toEqual(["first leg", "(final)"]);
   // the first leg downloaded nothing; the second is two presses, one of which
@@ -509,7 +509,7 @@ test("every action says what it removed, so the tuning list is honest (#251)", a
   // step to tune — and that is only readable if the row can still say where the
   // film went.
   const { d } = scripted([{ ms: 1_000 }, { ms: 5_000, loading: 4_500 }, { ms: 500 }]);
-  const r = await runSheet(d, THREE);
+  const r = await runSheet(d, THREE, ACTIONS);
 
   expect(r.timings.map((t) => [t.ms, t.loading])).toEqual([
     [1_000, 0],
@@ -528,7 +528,7 @@ test("a fetch spanning two actions is split between them, not double-counted (#2
     { ms: 1_000, loading: 600 }, // a fetch began 600 ms before this press ended
     { ms: 1_000, loading: 400 }, // ...and landed 400 ms into the next one
   ]);
-  const r = await runSheet(d, sheet("left(confirm: no)\nsplit(a)\nleft(confirm: no)"));
+  const r = await runSheet(d, sheet("left(confirm: no)\nsplit(a)\nleft(confirm: no)"), ACTIONS);
 
   expect(r.timings.map((t) => t.loading)).toEqual([600, 400]);
   expect(r.total.loading).toBe(1_000);
@@ -542,7 +542,7 @@ test("a clock that jumps cannot produce a negative leg (#251)", async () => {
   // anything. A negative leg would be read as a measurement rather than as the
   // artefact it is, and it would make the splits stop adding up to the total.
   const { d } = scripted([{ ms: -5_000 }, { ms: 1_000 }]);
-  const r = await runSheet(d, sheet("left(confirm: no)\nleft(confirm: no)"));
+  const r = await runSheet(d, sheet("left(confirm: no)\nleft(confirm: no)"), ACTIONS);
 
   expect(r.timings.map((t) => t.ms)).toEqual([0, 1_000]);
   expect(r.total.ms).toBe(0);

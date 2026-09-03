@@ -31,7 +31,7 @@ import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
 import { DEFAULT_LANGUAGE } from "../../src/languages";
 import type { NavDriver } from "../playthrough/nav/navigator";
 import type { Standpoint } from "../playthrough/nav/setpath";
-import { aimSource } from "../playthrough/nav/aim";
+import { aimSource } from "@dreamfactory/engine/web/speedrun/aim";
 
 /** what a route may ask about, sampled page-side in one round trip */
 interface Mirror {
@@ -129,7 +129,7 @@ const SAMPLE = `(() => {
 /**
  * Aiming, page-side, using the SAME functions the headless driver uses.
  *
- * nav/aim.ts has no imports and closes over nothing, so its source can be handed
+ * aim.ts has no imports and closes over nothing, so its source can be handed
  * to the page and called there — which it must be, since the sweep is tens of
  * thousands of hit tests and one round trip each is not a thing that finishes.
  * Shipping the source instead of writing a second sweep is not tidiness: whether
@@ -145,6 +145,8 @@ const SAMPLE = `(() => {
 const AIM_ADAPTER = `(() => {
   const dbg = window.dbg, s = dbg.session, v = dbg.viewer;
   return {
+    width: dbg.host.screen.width,
+    height: dbg.host.screen.height,
     hitTest: (x, y) => s.hitTestAt(x, y),
     propUnder: (x, y) => { const p = v.propUnder(x, y); return p ? p.group.name : null; },
     inFlat: !s.viewShowing && !!s.stageScript,
@@ -156,7 +158,7 @@ const AIM_ADAPTER = `(() => {
   };
 })()`;
 
-/** call one of nav/aim.ts's functions inside the page, definitions and all */
+/** call one of aim.ts's functions inside the page, definitions and all */
 const aimCall = (fn: "aimAtThing" | "aimAtHotspot", name: string): string =>
   `(() => { ${aimSource()} return ${fn}(${AIM_ADAPTER}, ${JSON.stringify(name)}); })()`;
 

@@ -5,7 +5,9 @@
   "description": "The CyberFlix DreamFactory engine, reimplemented — container formats (df/) and the runtime that plays them (runtime/). Knows about no particular game.",
   "type": "module",
   "//": "Raw TypeScript, deliberately: every consumer is bundled by Vite or run by tsx/vitest, so there is no build step to keep in sync and no dist/ to go stale. The wildcard means `@dreamfactory/engine/df/set` reads `engine/src/df/set.ts`.",
+  "//css": "A stylesheet is not TypeScript, so it needs its own pattern or the wildcard above appends `.ts` to it — which is how `@import \"@dreamfactory/engine/web/speedrun/panel.css\"` came back ENOENT on `panel.css.ts`. The longer suffix wins in Node's own resolution, so this is consulted first for a .css request and never for anything else.",
   "exports": {
+    "./*.css": "./src/*.css",
     "./*": "./src/*.ts"
   }
 }

@@ -18,7 +18,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseHTML } from "linkedom";
 import type { StateTrace } from "@dreamfactory/engine/runtime/trace";
-import { ChangeWatch, RowView, SPINE, StateRow, stateDump, stateView } from "../../src/debug-panel";
+import {
+  ChangeWatch,
+  RowView,
+  StateRow,
+  stateDump,
+  stateView,
+} from "@dreamfactory/engine/web/debug-panel";
+import { SPINE } from "../../src/state-spine";
 
 const GOLDEN = join(dirname(fileURLToPath(import.meta.url)), "../playthrough/golden");
 
@@ -35,7 +42,7 @@ test("the game's own six come first, however big the table is", () => {
   const trace = endOfGame();
   expect(Object.keys(trace.globals).length, "the real table").toBeGreaterThan(90);
 
-  const view = stateView(trace);
+  const view = stateView(trace, { spine: SPINE });
   // the spelling is the game's own dialog's, not the variable names
   expect(view.spine.map((r) => r.name)).toEqual([
     "Mission",
@@ -46,17 +53,18 @@ test("the game's own six come first, however big the table is", () => {
     "Level",
   ]);
   // and every one of them is a global this game actually declares
-  for (const n of SPINE) expect(n in trace.globals, `${n} is a real global`).toBe(true);
+  for (const v of SPINE)
+    expect(v.name in trace.globals, `${v.name} is a real global`).toBe(true);
   expect(view.where).toContain(trace.set);
 });
 
 test("by default the list is what just moved, and says how much it is not showing", () => {
   const trace = endOfGame();
-  const quiet = stateView(trace);
+  const quiet = stateView(trace, { spine: SPINE });
   expect(quiet.rest, "nothing has moved, so nothing is listed").toEqual([]);
   expect(quiet.hidden, "…and the count says how many are sitting still").toBeGreaterThan(90);
 
-  const moved = stateView(trace, { changed: new Set(["bombphase", "coalchute"]) });
+  const moved = stateView(trace, { spine: SPINE, changed: new Set(["bombphase", "coalchute"]) });
   expect(moved.rest.map((r) => r.name)).toEqual(["bombphase", "coalchute"]);
   expect(moved.rest.every((r) => r.changed)).toBe(true);
 });
@@ -70,19 +78,19 @@ test("by default the list is what just moved, and says how much it is not showin
 test("the pocketwatch does not count as news", () => {
   const trace = endOfGame();
   const ticking = new Set(["sec", "clockcount", "bombphase"]);
-  expect(stateView(trace, { changed: ticking }).rest.map((r) => r.name)).toEqual(["bombphase"]);
+  expect(stateView(trace, { spine: SPINE, changed: ticking }).rest.map((r) => r.name)).toEqual(["bombphase"]);
   // but a reader who names them gets them
   expect(
-    stateView(trace, { changed: ticking, filter: "sec" }).rest.some((r) => r.name === "sec"),
+    stateView(trace, { spine: SPINE, changed: ticking, filter: "sec" }).rest.some((r) => r.name === "sec"),
   ).toBe(true);
-  expect(stateView(trace, { changed: ticking, all: true }).rest.some((r) => r.name === "sec")).toBe(
+  expect(stateView(trace, { spine: SPINE, changed: ticking, all: true }).rest.some((r) => r.name === "sec")).toBe(
     true,
   );
 });
 
 test("the room's own two facts are said where the globals cannot", () => {
   const trace = endOfGame();
-  const head = stateView(trace).head;
+  const head = stateView(trace, { spine: SPINE }).head;
   expect(head[0]).toEqual({ name: "theme", value: trace.theme, changed: false });
   // the last beat of the game is held black behind the credits, so it HAS a fade
   expect(trace.fade).toBe(1);
@@ -93,8 +101,8 @@ test("the room's own two facts are said where the globals cannot", () => {
 
 test("`all` is the whole table, plus who owns what", () => {
   const trace = endOfGame();
-  const all = stateView(trace, { all: true });
-  const globals = Object.keys(trace.globals).length - SPINE.filter((n) => n in trace.globals).length;
+  const all = stateView(trace, { spine: SPINE, all: true });
+  const globals = Object.keys(trace.globals).length - SPINE.filter((v) => v.name in trace.globals).length;
   const owned = Object.keys(trace.props).length + Object.keys(trace.actors).length;
   expect(all.rest.length).toBe(globals + owned);
   expect(all.hidden, "nothing is being held back").toBe(0);
@@ -105,7 +113,7 @@ test("`all` is the whole table, plus who owns what", () => {
 
 test("a filter asks about the whole table, not just what moved", () => {
   const trace = endOfGame();
-  const view = stateView(trace, { filter: "phase" });
+  const view = stateView(trace, { spine: SPINE, filter: "phase" });
   expect(view.rest.length, "there are plenty of phases").toBeGreaterThan(5);
   expect(view.rest.every((r) => r.name.includes("phase"))).toBe(true);
   // the point of this: none of them changed, and the reader still gets an answer
@@ -162,8 +170,8 @@ test("several terms are several questions, and | and , ask them the same way (#1
   // the case it was asked for: a timer is three variables and it is the
   // RELATION between them that goes wrong (#126, #127), so one at a time is
   // none of them
-  const bars = stateView(trace, { filter: "hrs|min|sec" }).rest.map((r) => r.name);
-  const commas = stateView(trace, { filter: "hrs,min,sec" }).rest.map((r) => r.name);
+  const bars = stateView(trace, { spine: SPINE, filter: "hrs|min|sec" }).rest.map((r) => r.name);
+  const commas = stateView(trace, { spine: SPINE, filter: "hrs,min,sec" }).rest.map((r) => r.name);
   expect(bars).toEqual(commas);
   for (const term of ["hrs", "min", "sec"]) {
     expect(bars.some((n) => n.includes(term)), `${term} is in the list`).toBe(true);
@@ -173,20 +181,20 @@ test("several terms are several questions, and | and , ask them the same way (#1
   expect(bars.every((n) => ["hrs", "min", "sec"].some((t) => n.includes(t)))).toBe(true);
   // ...and it is the union of asking separately, not something else
   const apart = new Set(
-    ["hrs", "min", "sec"].flatMap((t) => stateView(trace, { filter: t }).rest.map((r) => r.name)),
+    ["hrs", "min", "sec"].flatMap((t) => stateView(trace, { spine: SPINE, filter: t }).rest.map((r) => r.name)),
   );
   expect(new Set(bars)).toEqual(apart);
 });
 
 test("a term is trimmed, an empty one is not a term (#178)", () => {
   const trace = endOfGame();
-  const tidy = stateView(trace, { filter: "mission|phase" }).rest.map((r) => r.name);
-  expect(stateView(trace, { filter: " mission | phase " }).rest.map((r) => r.name)).toEqual(tidy);
+  const tidy = stateView(trace, { spine: SPINE, filter: "mission|phase" }).rest.map((r) => r.name);
+  expect(stateView(trace, { spine: SPINE, filter: " mission | phase " }).rest.map((r) => r.name)).toEqual(tidy);
   // a trailing separator is somebody mid-typing, and must not read as "match
   // everything" — an empty term would do exactly that
-  expect(stateView(trace, { filter: "mission|phase|" }).rest.map((r) => r.name)).toEqual(tidy);
-  expect(stateView(trace, { filter: "|" }).rest, "no terms at all is no filter").toEqual(
-    stateView(trace).rest,
+  expect(stateView(trace, { spine: SPINE, filter: "mission|phase|" }).rest.map((r) => r.name)).toEqual(tidy);
+  expect(stateView(trace, { spine: SPINE, filter: "|" }).rest, "no terms at all is no filter").toEqual(
+    stateView(trace, { spine: SPINE }).rest,
   );
 });
 
@@ -194,7 +202,7 @@ test("a space stays inside a term, because the types are spelled with one (#178)
   const trace = endOfGame();
   const [prop] = Object.keys(trace.props);
   expect(prop, "the fixture owns props").toBeTruthy();
-  const rows = stateView(trace, { filter: `prop ${prop}` }).rest.map((r) => r.name);
+  const rows = stateView(trace, { spine: SPINE, filter: `prop ${prop}` }).rest.map((r) => r.name);
   // one row: the prop named. Splitting on the space would have asked for every
   // prop OR anything called that, which is the opposite of narrowing
   expect(rows).toEqual([`prop ${prop}`]);
@@ -202,7 +210,7 @@ test("a space stays inside a term, because the types are spelled with one (#178)
 
 test("the filter searches a row's TYPE as well as its name (#178)", () => {
   const trace = endOfGame();
-  const props = stateView(trace, { filter: "prop" }).rest;
+  const props = stateView(trace, { spine: SPINE, filter: "prop" }).rest;
   expect(props.length, "the fixture owns props").toBeGreaterThan(0);
   // What this used to answer, and the reason it is a bug: `saveprops`,
   // `saveprops1` and `saveprops2` are the globals that ENCODE the props, which
@@ -213,7 +221,7 @@ test("the filter searches a row's TYPE as well as its name (#178)", () => {
   expect(props.filter((r) => r.name.startsWith("prop ")).length).toBe(
     Object.keys(trace.props).length,
   );
-  const actors = stateView(trace, { filter: "actor" }).rest;
+  const actors = stateView(trace, { spine: SPINE, filter: "actor" }).rest;
   expect(actors.filter((r) => r.name.startsWith("actor ")).length).toBe(
     Object.keys(trace.actors).length,
   );
@@ -224,22 +232,22 @@ test("a filter reaches the props without `all`, the way it reaches the globals (
   const [prop] = Object.keys(trace.props);
   // the whole reason `prop` could not be answered before: the props were behind
   // `all`, so filtering for them meant unfiltering everything else
-  const view = stateView(trace, { filter: `prop ${prop}` });
+  const view = stateView(trace, { spine: SPINE, filter: `prop ${prop}` });
   expect(view.rest.map((r) => r.name)).toEqual([`prop ${prop}`]);
   expect(view.rest[0].value).toBe(String(trace.props[prop]));
   // and with no filter and no `all` they stay out, which is what keeps the
   // default list a readout rather than a table
-  expect(stateView(trace).rest.some((r) => r.name.startsWith("prop "))).toBe(false);
+  expect(stateView(trace, { spine: SPINE }).rest.some((r) => r.name.startsWith("prop "))).toBe(false);
 });
 
 test("the spine is not filtered — it is the thing that is always true (#178)", () => {
   const trace = endOfGame();
   // pinned out of the scroll in the page (see #dbgState), and unfiltered here:
   // a filter narrows the LIST, and the six the game names are not in it
-  expect(stateView(trace, { filter: "prop" }).spine.length).toBe(
-    stateView(trace).spine.length,
+  expect(stateView(trace, { spine: SPINE, filter: "prop" }).spine.length).toBe(
+    stateView(trace, { spine: SPINE }).spine.length,
   );
-  expect(stateView(trace, { filter: "nothing matches this" }).spine.length).toBeGreaterThan(0);
+  expect(stateView(trace, { spine: SPINE, filter: "nothing matches this" }).spine.length).toBeGreaterThan(0);
 });
 
 test("a variable arriving is not a variable changing", () => {
@@ -384,11 +392,11 @@ test("the strip above the list is the same machinery, spelled differently", () =
 test("the whole real table, twice, writes nothing the second time", () => {
   const { host, view } = list();
   const trace = endOfGame();
-  const rows = stateView(trace, { all: true }).rest;
+  const rows = stateView(trace, { spine: SPINE, all: true }).rest;
   expect(rows.length, "the real thing, not a sample").toBeGreaterThan(120);
   view.apply(rows);
   expect(host.children.length).toBe(rows.length);
-  expect(view.apply(stateView(trace, { all: true }).rest)).toEqual({
+  expect(view.apply(stateView(trace, { spine: SPINE, all: true }).rest)).toEqual({
     added: 0,
     removed: 0,
     updated: 0,

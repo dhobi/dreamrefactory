@@ -8,7 +8,7 @@
  *     Every gesture is a genuine OS-level input event, which is what makes a run
  *     defensible as something a person could have done. It is the clock of
  *     record.
- *   - `taoot/src/speedrun/page-driver.ts` runs INSIDE the page, synthesizing DOM events
+ *   - `page-driver.ts` beside it runs INSIDE the page, synthesizing DOM events
  *     against the canvas. No round trips at all, so the same sheet finishes
  *     faster — a different clock, and deliberately not comparable.
  *
@@ -149,7 +149,7 @@ export function clientPointFor(
  * One reading of everything a run is timed against, sampled together.
  *
  * `ms` is the wall clock and `loading` is how much of it the page has spent
- * waiting on the network — the load remover's total (taoot/src/load-clock.ts,
+ * waiting on the network — the load remover's total (engine/src/web/load-clock.ts,
  * [#251](https://github.com/dhobi/dreamrefactory/issues/251)). Both are
  * cumulative and monotonic, so a duration is the difference between two
  * readings, and a duration with the loading taken out of it is the difference of

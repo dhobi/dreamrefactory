@@ -257,7 +257,7 @@ and only the ones that crossed a link ([#369](https://github.com/dhobi/dreamrefa
 A room fetched over the internet moves the clock for reasons that have nothing to
 do with the route, so the timer stops for it, exactly as a PC speedrun's load
 remover does: the fetcher is the only thing that knows a download has begun, so
-the fetcher is what says so (`FileStore.onWire` → `taoot/src/load-clock.ts`), and
+the fetcher is what says so (`FileStore.onWire` → `engine/src/web/load-clock.ts`), and
 the run loop subtracts that total from every leg.
 
 What does **not** stop it is a read this machine could have done anyway — the
@@ -289,8 +289,11 @@ diverge; the workbench has no need of the memory or picture options, and it skip
 the Nightdive film (`<meta name="skip-intro">`) because it is reloaded to get a
 clean game far more often than it is opened to play one.
 
-It shares the parser, the action table and the run loop with the CLI
-(`taoot/src/speedrun/`), so a sheet cannot mean one thing there and another here. What
+It shares the parser, the action table and the run loop with the CLI — all three
+are the engine's now (`engine/src/web/speedrun/`), with this ship's own verbs
+layered over them (`taoot/src/speedrun/actions.ts`) — so a sheet cannot mean one
+thing there and another here. Dust has the same workbench off the same modules
+and no verbs of its own yet, which is what that split was for. What
 differs is only delivery: the CLI drives real OS-level input over Playwright,
 while the page synthesizes `PointerEvent`/`KeyboardEvent` against the canvas.
 `main.ts` never asks `isTrusted`, so the engine cannot tell — but the synthetic

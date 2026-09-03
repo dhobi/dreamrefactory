@@ -70,6 +70,7 @@ import {
   type StgRegion,
 } from "@dreamfactory/engine/df/stg";
 import { GameHost } from "@dreamfactory/engine/web/host";
+import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import {
   GestureKey,
   PointerEventLike,
@@ -224,7 +225,18 @@ const plate = document.createElement("canvas");
 plate.width = FLAT_W;
 plate.height = FLAT_H;
 const plateCtx = plate.getContext("2d", { alpha: false })!;
-const errEl = document.getElementById("err") as HTMLElement;
+/**
+ * Where a failure is said in words — and null on a page that has no controls
+ * strip to say it in.
+ *
+ * The workbench (dust/speedrun/) carries this game's stage and none of its
+ * settings bar, the same way Titanic's does: what a route needs is the picture
+ * and the panel beside it, not a Fullscreen button. Every other element of that
+ * strip was already optional here (`fsBtn`, `bugBtn`, the swipe boxes); this one
+ * was not, and it is the only reason the workbench had to carry a bar it never
+ * shows. A failure still reaches the log and the console either way.
+ */
+const errEl = document.getElementById("err") as HTMLElement | null;
 const verEl = document.getElementById("ver");
 /* Just the version. The `dust-` prefix was there when this sat in a status
    line under the picture with nothing around it to say which page it
@@ -290,6 +302,17 @@ if (bugBtn) {
   });
 }
 const logEl = document.getElementById("log") as HTMLPreElement;
+
+/**
+ * Does the log BELONG to this page, rather than cover it?
+ *
+ * `<meta name="details-always">`, which the speedrun workbench declares and
+ * Titanic's uses for the same purpose (taoot/src/main.ts). On the game page the
+ * log is an overlay over the picture that `b` lifts, and hiding it once the boot
+ * is read is right; on the workbench it is a column of its own beside the
+ * picture, so there is nothing to lift it off and nothing to hide it for.
+ */
+const DETAILS_ALWAYS = !!document.querySelector('meta[name="details-always"]');
 
 /**
  * The log, and it is now the page's ONLY prose surface.
@@ -571,9 +594,27 @@ const hold = (ms: number): Promise<void> =>
  * and the AudioContext accepts either.
  */
 const BURN_OUT = 520;
+
+/**
+ * Except on a page that says not to wait — `<meta name="autostart">`.
+ *
+ * The speedrun workbench (dust/speedrun/) declares it, and the reason is what
+ * that page is for: it is RELOADED to get a clean game far more often than it is
+ * opened to play one (`reset()` is a line of a sheet), and a gesture asked for
+ * once per boot is a gesture asked for on every run. Titanic's workbench takes
+ * the same exemption from its own opening film (`<meta name="skip-intro">`).
+ *
+ * What the click bought is not lost, only deferred: it is the gesture an
+ * AudioContext wants before it will make a sound, and the browser gives it to
+ * the first click that arrives instead — of which a run makes many. A route
+ * measures gestures and frames, not whether the intro was scored.
+ */
+const AUTOSTART = !!document.querySelector('meta[name="autostart"]');
+
 async function waitForStart(): Promise<void> {
   await hold(BURN_OUT);
   bootEl.classList.add("ready");
+  if (AUTOSTART) return;
   startEl.focus();
   await new Promise<void>((resolve) =>
     startEl.addEventListener("click", () => resolve(), { once: true }),
@@ -801,7 +842,7 @@ async function move(t: V1Transition): Promise<void> {
 }
 
 async function load(name: string, span?: { from: number; to: number }): Promise<void> {
-  errEl.textContent = "";
+  if (errEl) errEl.textContent = "";
   // `span` is the boot's call, where this room is a multi-megabyte fetch the
   // player is waiting on; the browse controls call it without one, where the bar
   // is not on screen to move
@@ -900,7 +941,7 @@ async function browse(): Promise<void> {
     .map((p) => p.split("/").pop()!)
     .sort();
   if (!sets.length) {
-    errEl.textContent = "no Dust sets found under gamefiles/dustcd/DATA/";
+    if (errEl) errEl.textContent = "no Dust sets found under gamefiles/dustcd/DATA/";
     return;
   }
   // the panel first, exactly as boot() does it: openstagefile before any room
@@ -985,6 +1026,24 @@ async function runBoot(): Promise<void> {
     }
     netbusy.hidden = true;
   };
+  /**
+   * The load remover, on the same wire as the mark above
+   * (engine/src/web/load-clock.ts, #251).
+   *
+   * A second watcher rather than a line inside the first, because they want
+   * different things from the same fetches: the mark waits `BUSY_AFTER_MS`
+   * before it admits to a wait and does not care WHAT arrived, while the clock
+   * needs each fetch by name — it stops only for the ones that went to the
+   * network, since a cache hit is a read the original did off its CD as well
+   * (#369).
+   *
+   * Nothing on this page shows the total yet; it is published on `window.dbg`
+   * below, which is where a driver in another process reads it from. It is
+   * subscribed anyway, and here, because the clock has to have seen EVERY fetch
+   * of a run to be able to subtract them — a clock armed when a timer starts has
+   * already missed the boot.
+   */
+  watchLoads(files);
   /**
    * From here the bar is a FETCH COUNT — see HEAD/BOOT_TAIL above.
    *
@@ -1227,6 +1286,19 @@ function play(host: GameHost, files: DustFiles): void {
     },
     log: () => ({ lines: [...logLines], dropped: logDropped }),
     /**
+     * The load remover's reading — cumulative network ms, and whether the wire
+     * is busy right now (engine/src/web/load-clock.ts, #251).
+     *
+     * The same three fields under the same name as the play page's
+     * (taoot/src/main.ts), because that is the expression a speedrun driver
+     * evaluates and it should not have to ask which game it is looking at.
+     *
+     * A function rather than a number, because it is sampled at the top and
+     * bottom of every action and has to be the reading AT THAT MOMENT, not
+     * whatever it was when this handle was built.
+     */
+    loading: () => ({ ms: loadClock.ms, waiting: loadClock.waiting }),
+    /**
      * Load a shipped save by name (`"D1E_002"`), from the disc's own `save/`
      * directory. Returns what `loadgame` returns, and says what it did in the
      * trace — a probe reads the answer, a person reads the line.
@@ -1248,7 +1320,12 @@ function play(host: GameHost, files: DustFiles): void {
   };
   (window as unknown as { dbg: unknown }).dbg = dbg;
   (window as unknown as { dust: unknown }).dust = dbg; // the name this page had first
-  logEl.hidden = true;
+  // The boot's chatter has been read by whoever wanted it; the game gets a clean
+  // picture. Except where the log IS part of the page rather than an overlay on
+  // it ({@link DETAILS_ALWAYS}) — on the workbench it is a column, and a column
+  // that emptied itself the moment the game came up would be a column nobody
+  // could use.
+  if (!DETAILS_ALWAYS) logEl.hidden = true;
   const s = host.session;
   let shownRoom = "";
   let shownSize = "";
@@ -1361,7 +1438,9 @@ addEventListener("keydown", (e) => {
   if (savesOpen()) return;
   if (e.key === "b" || e.key === "B") {
     e.preventDefault();
-    logEl.hidden = !logEl.hidden;
+    // inert where the log is a column rather than an overlay — there is nothing
+    // to toggle it to, which is the same rule Titanic's X follows
+    if (!DETAILS_ALWAYS) logEl.hidden = !logEl.hidden;
     return;
   }
   /**
@@ -1714,7 +1793,7 @@ async function start(): Promise<void> {
 }
 
 start().catch((e) => {
-  errEl.textContent = String(e);
+  if (errEl) errEl.textContent = String(e);
   // a boot that threw has an account of itself and no picture: raise the card so
   // the log has the page, and stop the fuse where it stopped rather than leaving
   // it burning at whatever fraction it had reached

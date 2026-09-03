@@ -1,0 +1,19 @@
+/**
+ * Titanic's workbench sheet: the engine's panel, and nothing of its own yet.
+ *
+ * The panel's structure and its whole palette are
+ * `engine/src/web/speedrun/panel.css` — it is the engine's because the modules
+ * that drive those elements are (`columns.ts`, `widths.ts`, `editor.ts`,
+ * `inputs.ts`, `recorder.ts`), and a copy of a thousand lines of it in each
+ * game's page would be a second thing to keep in step with them.
+ *
+ * This file exists so the page can reach it. Vite resolves a bare package
+ * specifier in a CSS `@import` — the same trick every game's `theme.css` uses to
+ * pull in `site/src/chrome.css` — and does not resolve one in a `<link href>`.
+ *
+ * Anything Titanic wants the panel to look like that the engine does not do goes
+ * BELOW the import, where it wins on order. There is nothing there today, which
+ * is the honest state of it: the panel was Titanic's before it was anybody's, so
+ * the engine's version is already dressed the way this page wants.
+ */
+@import "@dreamfactory/engine/web/speedrun/panel.css";

@@ -84,9 +84,10 @@ time brings its own sink, as `sound-channels.ts` does). **Prefer extending
 
 ## Dust's suites — `dust/tests/`
 
-Dust reads a different disc, so its suites live with it. All three **skip**
-rather than fail without `gamefiles/`, which is the bargain that lets the
-runner treat Dust's rip as optional.
+Dust reads a different disc, so its suites live with it. The ones that open it
+**skip** rather than fail without `gamefiles/`, which is the bargain that lets
+the runner treat Dust's rip as optional; the ones that stub what they read need
+no rip at all.
 
 | Suite | Verifies |
 |-------|----------|
@@ -96,6 +97,7 @@ runner treat Dust's rip as optional.
 | [`saves.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/saves.ts) | the claim the whole Dust save story rests on: a `.rtd` is the SAME container a `.ti` is, so the shared framing reader and writer take Dust's files unchanged — and reproduce every byte of every save that came off a real DOS installation. Plus the store's discovery of them, and the claim the collection is one continuous session ordered by its frame counter |
 | [`cursors.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/cursors.ts) | the mouse cursors out of `DF.EXE`, and DreamFactory 1's set is not v4's: nine, no `godown`/`goup` at all, and a `CURS.TOUCH` drawn differently from Titanic's (the two builds share eight of the nine byte for byte and disagree about the pointing hand). Dust's scripts ask for seven of them 285 times — touch 205, arrow 40, watch 34, sight 3, and one each of gostrait/goright/goleft — and the shell asked for NONE of them: it never called `hover` at all, so every one went nowhere, including the crosshairs and the direction arrows that are the only sign a doorway can be walked through |
 | [`scenegrid.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/scenegrid.ts) | the town as a GRID — `rowcoltoscene` and `scenebuild`, two DreamFactory 1 commands whose ids belong to something else in DreamFactory 4. The two engines' tables (read out of both binaries by [`taoot/tools/exetable.ts`](tools.md)) disagree on **twenty** ids and Dust calls eight of them; most are the same thing renamed — a "ball" is v4's cricket, a "dir" its view — but these two are deferred-call forms in v4, so both logged a complaint and answered 0. What that cost is `extra.cst`'s five bounty hunters: their `isbuild` asks `rowcoltoscene(y, x)` for the scene on a cell and `scenebuild(name)` whether it is built on, so with both answering 0 nothing was ever "none" and nothing ever built, and they treated all 225 cells of the town as open street. The build flag is scene record +12, and what pins it to that field is that on 28 of the disc's 29 sets "the flag is set" is EXACTLY "no transition touches this cell" — TOWN's 173 against the 52 its 526 moves reach |
+| [`loads.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/loads.ts) | Dust's fetches reach the **load remover** — the same clock Titanic's speedrun subtracts ([#251](https://github.com/dhobi/dreamrefactory/issues/251)), now the engine's (`engine/src/web/load-clock.ts`) because two ports that time themselves differently could not be compared. What is Dust's is the wire underneath it: each fetch announced once, by URL, to every watcher that asks, and closed even when it throws — a period the clock never sees the end of reads `waiting` for the rest of the page's life. The flag worth a test of its own is `waited`: only the fetches the game is STOPPED for may be removed (#369), and where Titanic's store gets that free from having two fetch paths, Dust's `provide` starts the same one flight an awaiting caller would — so whether anybody is waiting is a fact about who got there first. Needs no rip: the clock's `now` and its cache verdicts are injected and the fetch is a stub, because a `localhost` fetch is classed `local` and removed from nothing, so a dev server could not answer this either way |
 
 ## Timelapse's own — `timelapse/tests/`
 
@@ -190,6 +192,8 @@ npm run test:browser -w taoot                      # the demo, menu-movie, then 
 npm run test:browser:playthrough -w taoot          # just the route
 npm run test:browser:endgame -w taoot              # just the ending, ~3 min, off a checkpoint
 npm run test:browser:lang -w taoot                 # the language chooser, with real clicks
+npm run test:browser:workbench -w taoot            # the speedrun workbench's panel, and Play
+npm run test:browser:workbench -w dust             # the same, on Dust's disc
 npm run test:browser:demo -w taoot                 # the 1996 demo's menu, ~30 s (skips with no demo rip)
 npm run test:browser:m0 -w taoot                   # segment 1
 npm run test:browser:m1 -w taoot                   # segments 2–6
@@ -266,6 +270,8 @@ npx tsx taoot/tests/browser/menu-movie.ts                 # screenshots + state 
 npx tsx taoot/tests/browser/lang-chooser.ts               # pick a language in a real browser, then check what the boot reads
 npx tsx taoot/tests/browser/repaint.ts                    # does the renderer ever skip a frame it should have drawn?
 npx tsx taoot/tests/browser/transition-hold.ts            # does anything paint the world while a transition waits for bytes? (#308)
+npx tsx taoot/tests/browser/workbench.ts                  # does /speedrun/ assemble, and does Play run a sheet?
+npx tsx dust/tests/browser/workbench.ts                   # the same, for Dust's workbench
 npx tsx dust/tests/browser/built-layout.ts                # Dust's page as BUILT, not as served
 npx tsx dust/tests/browser/load-standpoint.ts             # where a load puts you on a game that has just booted
 npx tsx dust/tests/browser/shooting-range.ts             # are the range's targets actually on the canvas?
@@ -295,8 +301,20 @@ SHEET=taoot/tests/speedrun/any.sheet npm run speedrun -w taoot
 ```
 
 The same sheet language runs in the browser, on the unlisted `/speedrun/`
-workbench — `taoot/src/speedrun/` is the in-page half and
-`taoot/tests/speedrun/` the Playwright one, over one sheet parser.
+workbench, over one sheet parser and one action table. What is where:
+`engine/src/web/speedrun/` holds the half that names no game — the parser, the
+in-page driver, the aim sweep and the panel's own modules —
+`taoot/src/speedrun/` holds Titanic's verbs and its routes' navigation, and
+`taoot/tests/speedrun/` the Playwright driver that is the clock of record.
+
+**Dust has the same workbench** at `dust/speedrun/`, off the same modules, and
+adds no verbs of its own — every gesture a route needs so far is written against
+a DreamFactory session and Dust is one, so a sheet runs on its disc unchanged
+(`dust/src/speedrun/actions.ts` says what would go there and why nothing has
+yet). What each game supplies is five facts about itself: its key namespace, its
+action table, and optionally a Warm list, what that button should say, and a
+sheet to copy (`Workbench` in `engine/src/web/speedrun/workbench.ts`). Dust
+supplies the first two.
 
 Both clocks are **load-removed** ([#251](https://github.com/dhobi/dreamrefactory/issues/251)):
 the timer stops while the game is being fetched, because a route played out of a

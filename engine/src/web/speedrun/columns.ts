@@ -31,13 +31,17 @@
  * the usual other half, and it wants a `setTimeout(0)` — the browser takes the
  * drag image after the `dragstart` handler returns, so a class added there dims
  * the thing being carried as well as the thing left behind. That timer is a wall
- * clock in `src/`, which taoot/tests/auto/reproducible.ts holds the whole tree to, and
- * it is not worth an exemption for: the one you are carrying is the one you
+ * clock, which the workbench declines to read wherever it can (the rule
+ * taoot/tests/auto/reproducible.ts states for Titanic's tree, kept to here
+ * because it is a good rule and not because this file is checked against it).
+ * It is not worth an exemption for: the one you are carrying is the one you
  * grabbed, and the pointer is on it.
  */
 
-/** where the answer outlives the tab — the key shape the rest of this page uses */
-const KEY = "taoot:speedrun:columns";
+import type { PanelKeys } from "./panel-keys";
+
+/** where the answer outlives the tab — see {@link PanelKeys} for whose it is */
+const KEY = (keys: PanelKeys): string => keys.key("columns");
 
 /**
  * The ones that move, in the order the markup declares them.
@@ -51,12 +55,12 @@ export const MOVABLE: readonly string[] = ["srtimer", "srpanel", "details"];
 /**
  * Said on the row once the tree has been put in an order.
  *
- * The widths beside this one (taoot/src/speedrun-widths.ts) hang a grip off each
+ * The widths beside this one (widths.ts) hang a grip off each
  * column, and a grip is a sibling in the row: reordering the sections leaves
  * them behind. Rather than have that module watch the tree — a MutationObserver
  * that would see its own repairs — the module that DID the moving says so.
  */
-export const COLUMNS_CHANGED = "taoot:columns";
+export const COLUMNS_CHANGED = "speedrun:columns";
 
 /**
  * What they are placed after: the canvas keeps the head of the row.
@@ -97,9 +101,9 @@ function current(): string[] {
 }
 
 /** the stored order, if it is one we recognise */
-function stored(): string[] | null {
+function stored(keys: PanelKeys): string[] | null {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY(keys));
     if (!raw) return null;
     const order = JSON.parse(raw) as unknown;
     if (!Array.isArray(order) || order.length !== MOVABLE.length) return null;
@@ -138,7 +142,7 @@ function apply(order: string[]): void {
  * The next sibling that is one of OURS.
  *
  * Not `nextElementSibling`, because the row holds more than the panels: a width
- * grip sits between each pair (taoot/src/speedrun-widths.ts), and against a raw
+ * grip sits between each pair (widths.ts), and against a raw
  * sibling every panel looks out of place — so every one of them is re-inserted,
  * which is precisely the teardown the note above says must not happen.
  */
@@ -156,11 +160,11 @@ function nextPanel(el: Element): Element | null {
  * this page makes — it is a workbench driven with a mouse, the sheet is typed
  * into, and nothing here is reachable from a phone in the first place.
  */
-export function installColumnOrder(): void {
+export function installColumnOrder(keys: PanelKeys): void {
   const row = document.getElementById("srlayout");
   if (!row) return;
 
-  const saved = stored();
+  const saved = stored(keys);
   if (saved) apply(saved);
 
   for (const id of MOVABLE) {
@@ -217,7 +221,7 @@ export function installColumnOrder(): void {
       order.splice(order.indexOf(id), 0, from);
       apply(order);
       try {
-        localStorage.setItem(KEY, JSON.stringify(order));
+        localStorage.setItem(KEY(keys), JSON.stringify(order));
       } catch {
         /* not remembering is survivable — the order still holds for this tab */
       }

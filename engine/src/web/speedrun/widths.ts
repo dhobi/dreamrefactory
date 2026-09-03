@@ -68,10 +68,12 @@
  * touching a grip.
  */
 
-import { COLUMNS_CHANGED, MOVABLE } from "./speedrun-columns";
+import { COLUMNS_CHANGED, MOVABLE } from "./columns";
+import type { PanelKeys } from "./panel-keys";
 
 /** where the answer outlives the tab, beside the order's own key */
-const KEY = "taoot:speedrun:widths";
+/** where the answers outlive the tab — see {@link PanelKeys} for whose they are */
+const KEY = (keys: PanelKeys): string => keys.key("widths");
 
 /**
  * How far the pointer travels before a click becomes a drag.
@@ -125,10 +127,10 @@ function unpin(section: HTMLElement): void {
  * positive number, is dropped rather than trusted. A stale or hand-edited entry
  * can then make a column the wrong width — never make it disappear.
  */
-function stored(): Widths {
+function stored(keys: PanelKeys): Widths {
   const out: Widths = {};
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY(keys));
     if (!raw) return out;
     const val = JSON.parse(raw) as unknown;
     if (!val || typeof val !== "object" || Array.isArray(val)) return out;
@@ -143,9 +145,9 @@ function stored(): Widths {
   return out;
 }
 
-function save(widths: Widths): void {
+function save(keys: PanelKeys, widths: Widths): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(widths));
+    localStorage.setItem(KEY(keys), JSON.stringify(widths));
   } catch {
     /* not remembering is survivable — the widths still hold for this tab */
   }
@@ -166,7 +168,13 @@ function save(widths: Widths): void {
 let pressing = false;
 
 /** hold the grip, move the edge */
-function draggable(section: HTMLElement, grip: HTMLElement, id: string, widths: Widths): void {
+function draggable(
+  keys: PanelKeys,
+  section: HTMLElement,
+  grip: HTMLElement,
+  id: string,
+  widths: Widths,
+): void {
   grip.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     pressing = true;
@@ -200,7 +208,7 @@ function draggable(section: HTMLElement, grip: HTMLElement, id: string, widths: 
       // has had its say by now, and storing the ask would replay a width the
       // layout already refused
       widths[id] = widthOf(section);
-      save(widths);
+      save(keys, widths);
     };
 
     // capture, so the drag survives the pointer leaving a 2px-wide element on
@@ -216,7 +224,7 @@ function draggable(section: HTMLElement, grip: HTMLElement, id: string, widths: 
   grip.addEventListener("dblclick", () => {
     unpin(section);
     delete widths[id];
-    save(widths);
+    save(keys, widths);
   });
 }
 
@@ -224,10 +232,10 @@ function draggable(section: HTMLElement, grip: HTMLElement, id: string, widths: 
  * Hang a grip off the right edge of every movable column, and read the stored
  * widths back.
  *
- * Called after {@link ./speedrun-columns.installColumnOrder}, so the sections are
+ * Called after {@link installColumnOrder}, so the sections are
  * already in the reader's order and each grip is created where it belongs.
  */
-export function installColumnWidths(): void {
+export function installColumnWidths(keys: PanelKeys): void {
   const row = document.getElementById("srlayout");
   if (!row) return;
 
@@ -244,7 +252,7 @@ export function installColumnWidths(): void {
     true,
   );
 
-  const widths = stored();
+  const widths = stored(keys);
   const grips = new Map<string, HTMLElement>();
 
   for (const id of MOVABLE) {
@@ -266,7 +274,7 @@ export function installColumnWidths(): void {
       pin(section, Math.min(max, Math.max(min, w)));
     }
 
-    draggable(section, grip, id, widths);
+    draggable(keys, section, grip, id, widths);
   }
 
   // A reorder moves the sections and leaves the grips where they were, so each
@@ -283,7 +291,7 @@ export function installColumnWidths(): void {
  * ------------------------------------------------------------------------- */
 
 /** the same store as the widths, one key along */
-const SCALE_KEY = "taoot:speedrun:picture";
+const SCALE_KEY = (keys: PanelKeys): string => keys.key("picture");
 
 /** every scale the canvas may be drawn at, and the one it opens at */
 const SCALES = ["1", "2", "3"];
@@ -308,7 +316,7 @@ const DEFAULT_SCALE = "2";
  * twice as wide as its neighbour — a picture that is not the one the artist
  * drew, on a page whose entire subject is what the game actually did.
  */
-export function installPictureScale(): void {
+export function installPictureScale(keys: PanelKeys): void {
   const box = document.getElementById("srscale");
   if (!box) return;
   const radios = [...box.querySelectorAll<HTMLInputElement>('input[name="picture"]')];
@@ -320,7 +328,7 @@ export function installPictureScale(): void {
 
   let start = DEFAULT_SCALE;
   try {
-    const raw = localStorage.getItem(SCALE_KEY);
+    const raw = localStorage.getItem(SCALE_KEY(keys));
     if (raw && SCALES.includes(raw)) start = raw;
   } catch {
     /* unreadable is the same as unset — the page opens at 2x, as it always did */
@@ -332,7 +340,7 @@ export function installPictureScale(): void {
       if (!r.checked) return;
       show(r.value);
       try {
-        localStorage.setItem(SCALE_KEY, r.value);
+        localStorage.setItem(SCALE_KEY(keys), r.value);
       } catch {
         /* not remembering is survivable — the scale still holds for this tab */
       }

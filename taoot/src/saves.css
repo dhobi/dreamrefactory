@@ -1,0 +1,19 @@
+/**
+ * Titanic's saved-games sheet: the engine's dialog, and nothing of its own.
+ *
+ * The dialog is `engine/src/web/save-browser.css` — beside the module that
+ * drives it, because both of this game's pages that carry it (`/play/` and the
+ * unlisted `/speedrun/`) had their own copy of the same 127 lines, and a change
+ * to one silently did not reach the other.
+ *
+ * This file exists so those pages can reach it: Vite resolves a bare package
+ * specifier in a CSS `@import` — the same trick `theme.css` uses for the shared
+ * chrome and `speedrun.css` for the workbench panel — and does not resolve one
+ * in a `<link href>`.
+ *
+ * Anything Titanic wants the dialog to look like that the engine does not do
+ * goes BELOW the import, where it wins on order. There is nothing there, which
+ * is the honest state of it: the dialog was Titanic's before it was anybody's,
+ * so the shared version is already dressed the way these pages want.
+ */
+@import "@dreamfactory/engine/web/save-browser.css";

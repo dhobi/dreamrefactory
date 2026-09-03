@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <!-- Unlisted, like Titanic's workbench: nothing links here and a route
+         workbench is not a page a search engine has any business offering. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- one directory deeper than the game page, so the root is one up -->
+    <meta name="site-root" content="../" />
+    <!-- The Details column BELONGS to this page: the log is one of its columns
+         rather than an overlay over the picture, so nothing hides it and `b` has
+         nothing to toggle. Titanic's workbench declares the same thing
+         (taoot/src/main.ts, DETAILS_ALWAYS). -->
+    <meta name="details-always" content="1" />
+    <!-- Boot without waiting to be asked (dust/src/main.ts `AUTOSTART`). This
+         page is reloaded to get a clean game far more often than it is opened to
+         play one — `reset()` is a line of a sheet — and a Start press per boot is
+         a Start press per run. Titanic's workbench takes the same exemption from
+         its opening film. -->
+    <meta name="autostart" content="1" />
+    <title>Speedrun - Dust: A Tale of the Wired West RE</title>
+    <link rel="icon" type="image/svg+xml" href="/dust-mark.svg" />
+    <!-- The three sheets, in the order they layer: the shared chrome in this
+         game's colours, this game's own stage, and the workbench panel on top
+         (which is the engine's — engine/src/web/speedrun/panel.css — and pulls the
+         stage back into a column on the way past). Where two of them describe the
+         same element the later one has to win by SPECIFICITY and not by order:
+         the build turns each into a bundle and decides the order itself, which is
+         what site/tests/cascade.ts is for. -->
+    <link rel="stylesheet" href="/src/theme.css" />
+    <link rel="stylesheet" href="/src/game.css" />
+    <link rel="stylesheet" href="/src/speedrun.css" />
+  </head>
+  <body class="booting deep nobrand">
+    <!-- The band, cut to the two links that mean anything from here: back to the
+         game this is a workbench for, and out to the project. -->
+    <header class="topbar">
+      <a
+        class="brand"
+        href="../"
+        title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1995 release"
+      >
+        <img class="brand-mark" src="/dust-mark.svg" alt="" width="30" height="30" />
+        <span class="brand-text">
+          <b>Dust</b>
+          <span>Speedrun workbench</span>
+        </span>
+      </a>
+      <span class="version" id="ver"></span>
+      <nav class="topnav">
+        <a href="../">The game</a>
+        <a href="../../" title="dreamREfactory — the engine, and the other two games"
+          >dreamREfactory</a
+        >
+        <a href="../../docs/">Docs</a>
+      </nav>
+    </header>
+
+    <!-- The row: the game, and the panels that drive it. Two columns where
+         Titanic's workbench has three — there is no X pane here, because the
+         state pane is the play page's markup and this game has none of it. The
+         column code tolerates that (engine/src/web/speedrun/columns.ts skips a
+         section it cannot find), which is worth knowing before somebody adds a
+         third and expects to have to teach it. -->
+    <div id="srlayout">
+      <!-- Dust's own stage, exactly as the game page carries it: the same ids,
+           because it is the same `main.ts` reading them, and every one of the
+           nineteen it queries is unguarded. What differs is where it sits — one
+           column of a row rather than the whole window — and `speedrun.css` is
+           what says so. -->
+      <div id="srgame">
+        <div id="stage">
+          <!-- The fuse, and NO title card. The logo and the FLIP animation that
+               lifts it into the top bar are the game page's welcome, and a
+               workbench is opened to work rather than to be greeted — it is also
+               reloaded on every `reset()`, which would mean watching the same
+               animation all day. `main.ts` reads #brand as nullable and skips
+               the move when it is absent; `nobrand` on the body is what closes
+               the band up after it.
+
+               The gauge itself stays: it is a count of the boot's fourteen
+               fetches (dust/src/main.ts says why that is the honest unit), and
+               how far a cold boot has got is worth knowing on the page whose
+               whole subject is how long things take. -->
+          <div id="curtain">
+            <div id="boot">
+              <div id="gauge">
+                <div
+                  id="fuse"
+                  role="progressbar"
+                  aria-label="booting"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  aria-valuenow="0"
+                >
+                  <div id="burn" style="width: 0%"><i id="spark"></i></div>
+                </div>
+                <div id="bootline">
+                  <span id="bootsay">reading the disc…</span>
+                  <span id="bootpct">0%</span>
+                </div>
+              </div>
+              <!-- the gesture the AudioContext needs, asked for at the one moment
+                   when waiting for it costs nothing: see #start in the styles -->
+              <div id="startwrap">
+                <button id="start" type="button">Start</button>
+              </div>
+              <!-- The gesture, taught where there is room to say it properly: under
+                   the Start button, before the picture exists. The strip's version of
+                   this line has to fit beside two checkboxes and a version number at
+                   400px, which leaves it about eighteen characters — not enough for the
+                   half that matters (double-tap is the one thing no one guesses). So
+                   the full sentence lives here, and only on a device that can swipe. -->
+              <p id="touchtip">
+                swipe to walk and turn · double-tap for <b>esc</b>
+              </p>
+            </div>
+          </div>
+          <div id="frame">
+            <canvas id="screen" width="1024" height="768"></canvas>
+            <!-- the game is waiting on the network — shown by dust.ts only after the
+                 wait is long enough to be one (the play page's netbusy, in this
+                 page's wood) -->
+            <div id="netbusy" hidden aria-hidden="true"><span></span></div>
+          </div>
+        </div>
+        <!-- /#stage -->
+
+        <!-- How big the picture is drawn, in whole multiples of the game's own
+             512x384 framebuffer — the same control Titanic's workbench carries,
+             driven by the same module (engine/src/web/speedrun/widths.ts) and
+             styled by the same sheet. It is `data-px` on the document element
+             when pressed, which is what the row's own break reads: how much
+             window the columns need is mostly a question of how much of it the
+             picture is taking. -->
+        <span
+          class="seg"
+          id="srscale"
+          role="group"
+          title="How big the picture is drawn — whole multiples of the game's own 512x384, because a fraction of a pixel is not a pixel"
+        >
+          <label
+            ><input type="radio" name="picture" value="1" />
+            <span>1x</span></label
+          >
+          <label
+            ><input type="radio" name="picture" value="2" checked />
+            <span>2x</span></label
+          >
+          <label
+            ><input type="radio" name="picture" value="3" />
+            <span>3x</span></label
+          >
+        </span>
+      </div>
+      <!-- /#srgame -->
+
+      <!-- The Timer and the sheet, built by the engine
+           (engine/src/web/speedrun/panel.ts). The slot is this page's, so the
+           order of the columns stays where a reader of this page can see it. -->
+      <div id="srpanelslot"></div>
+
+      <!-- The third column: what state the game is in, said in a list.
+           Titanic's play page shows this behind X and its workbench shows it
+           always; this page is a workbench, so it is always.
+
+           The list is the engine's (engine/src/web/state-list.ts) and finds
+           these ids itself — a DreamFactory game's plot lives entirely in
+           script globals, so a snapshot of the globals table IS the game state,
+           and that is the same claim on either disc. What is Dust's is which
+           two of them are worth naming first (dust/src/speedrun-page.ts).
+
+           No `inputs` checkbox and no Copy-details button, which Titanic's pane
+           carries: the first toggles ITS input log (taoot/src/input-log.ts, a
+           thing this game has no equivalent of) and the second dumps a version
+           and an edition only that game has. The boot's own account of itself is
+           still `#log` in the column above, on `b`. -->
+      <div id="details">
+        <h2>Details</h2>
+        <!-- The boot's own account of itself, in full — and here rather than
+             over the picture, which is where the game page keeps it (`b` lifts
+             it there; this page declares `details-always` and it simply stays).
+             Above the variables, the way Titanic's `#scriptlog` is: the log says
+             what just happened and the list says where that left the game. -->
+        <pre id="log"></pre>
+        <div id="dbgBar">
+          <label title="Every script global, and the two this game's own suites reach for"
+            ><input type="checkbox" id="dbgStateOn" />
+            <span>state</span></label
+          >
+        </div>
+        <div id="dbgState" hidden>
+          <div id="dbgSpine"></div>
+          <div id="dbgTools">
+            <input
+              id="dbgFilter"
+              type="search"
+              placeholder="filter"
+              title="One or more terms, | or , apart: day|clock — matched against a variable's name or a row's type (prop, actor)"
+            />
+            <label title="Every global, not just the ones that have just moved"
+              ><input type="checkbox" id="dbgAll" />
+              <span>all</span></label
+            >
+          </div>
+          <div id="dbgRows"></div>
+        </div>
+      </div>
+    </div>
+    <!-- /#srlayout -->
+    <!-- No bar of settings under the screen here, and Titanic's workbench says
+         the same of its own: this game's strip is Fullscreen, a bug report, the
+         swipe options and a line for errors — questions about how the game
+         should look and feel to somebody playing it, and this page is a
+         workbench where a route is timed. Its own controls are the ones the
+         panel builds beside the picture.
+
+         Every element of that strip is optional in dust/src/main.ts, which is
+         what lets this page simply not have one. A failure still reaches the
+         boot log (`b`) and the console. -->
+
+    <!-- The saved-games dialog, driven by engine/src/web/save-browser.ts (shared with the
+         play page — hence the play page's ids). Dust's own SAVE and LOAD levers
+         are buttons on NEW.FLT, which run the `savegame` / `opengame` builtins;
+         those block on the session's host hooks, and dust/src/main.ts points them
+         here. -->
+    <div id="saveModal">
+      <div class="modal-box">
+        <div class="modal-head">
+          <span id="saveModalTitle">Saved Games</span>
+          <button id="saveModalClose" type="button" title="Close">✕</button>
+        </div>
+        <div id="saveList" class="save-list"></div>
+        <div class="modal-foot">
+          <div id="saveNewRow">
+            <input id="saveNameInput" type="text" placeholder="save name" />
+            <button id="saveConfirmBtn" type="button">Save</button>
+          </div>
+          <button id="saveUploadBtn" type="button">⬆ Upload .rtd</button>
+          <input id="saveUploadInput" type="file" accept=".rtd" />
+        </div>
+      </div>
+    </div>
+
+    <!-- main.ts FIRST: it boots the game and publishes `window.dbg`, which is
+         what the workbench drives. Then the workbench, which builds its panel
+         into the slot above and reads the elements inside it at import time. -->
+    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/speedrun-page.ts"></script>
+  </body>
+</html>

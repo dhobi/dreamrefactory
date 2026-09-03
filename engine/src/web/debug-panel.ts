@@ -15,33 +15,28 @@ import { isHarnessPaced } from "@dreamfactory/engine/runtime/masks";
 import type { StateTrace } from "@dreamfactory/engine/runtime/trace";
 
 /**
- * The six variables the game's own debug readout names, in its order.
+ * One variable a game says is worth naming, and what to call it.
  *
- * Not a list we chose. TI.EXE has no such dialog — it is a SCRIPT, on the HELP
- * button of the save panel (house.shp, prop "help"), and shift-clicking it in the
- * original answers `Mission=1, Phase=4, Letter=0, Necklace=0`, with `Maze` and
- * `Level` added in the three smokestack sets. So these are the ones the game's own
- * author reached for when he wanted to know where a player was, which is a better
- * answer than picking six ourselves.
+ * The SPINE is the handful of globals a reader wants before any others — and
+ * which handful is a fact about the game, not about this pane. Titanic's six are
+ * not even a list its port chose: TI.EXE has such a readout, as a SCRIPT on the
+ * HELP button of its save panel (house.shp, prop "help"), and shift-clicking it
+ * in the original answers `Mission=1, Phase=4, Letter=0, Necklace=0`, with `Maze`
+ * and `Level` added in the three smokestack sets. So they are the ones the game's
+ * own author reached for when he wanted to know where a player was, which is a
+ * better answer than picking six ourselves — and no answer at all for a second
+ * game, whose author reached for different ones.
+ *
+ * Hence a parameter (taoot/src/main.ts, dust/src/speedrun-page.ts). A game with
+ * nothing to name passes none and gets the full list under it, which is the
+ * larger half of this pane anyway.
  */
-export const SPINE: readonly string[] = [
-  "mission",
-  "phase",
-  "letterphase",
-  "neckphase",
-  "mazenumber",
-  "stacklevel",
-];
-
-/** what the game's own dialog calls them, so the two readouts can be compared */
-const SPINE_LABEL: Record<string, string> = {
-  mission: "Mission",
-  phase: "Phase",
-  letterphase: "Letter",
-  neckphase: "Necklace",
-  mazenumber: "Maze",
-  stacklevel: "Level",
-};
+export interface SpineVar {
+  /** the global's own name, as the scripts spell it */
+  name: string;
+  /** what to show it as — the game's own word for it where it has one */
+  label: string;
+}
 
 export interface StateRow {
   name: string;
@@ -77,6 +72,14 @@ export interface StateViewOptions {
   all?: boolean;
   /** names that changed recently, from {@link ChangeWatch} */
   changed?: ReadonlySet<string>;
+  /**
+   * The game's own named variables, in its own order — see {@link SpineVar}.
+   *
+   * Empty is a real answer and not a missing one: the rows below the spine are
+   * every global there is, and a game nobody has named a spine for still shows
+   * all of them.
+   */
+  spine?: readonly SpineVar[];
 }
 
 /**
@@ -139,11 +142,15 @@ export function stateView(trace: StateTrace, opts: StateViewOptions = {}): State
   const matches = (label: string): boolean =>
     !terms.length || terms.some((t) => label.toLowerCase().includes(t));
 
-  const spine = SPINE.filter((n) => n in trace.globals).map((n) => ({
-    name: SPINE_LABEL[n] ?? n,
-    value: str(trace.globals[n]),
-    changed: changed.has(n),
-  }));
+  const named = opts.spine ?? [];
+  const spine = named
+    .filter((v) => v.name in trace.globals)
+    .map((v) => ({
+      name: v.label,
+      value: str(trace.globals[v.name]),
+      changed: changed.has(v.name),
+    }));
+  const inSpine = new Set(named.map((v) => v.name));
 
   // A filter is a question about the whole table, so it searches all of it: typing
   // "phase" to find out what the phases are must not be answered with "none of
@@ -152,7 +159,7 @@ export function stateView(trace: StateTrace, opts: StateViewOptions = {}): State
   const rest: StateRow[] = [];
   let hidden = 0;
   for (const [name, value] of Object.entries(trace.globals)) {
-    if (SPINE.includes(name)) continue;
+    if (inSpine.has(name)) continue;
     if (!matches(name)) continue;
     // A counter is not news. `sec` is the pocketwatch's second hand and
     // `clockcount` the call counter it rolls over from, so both move every second

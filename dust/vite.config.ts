@@ -92,6 +92,11 @@ export default defineConfig({
         // port of it. Its download sits beside the rip on the host and is
         // not in this repository.
         collection: join(HERE, "collection/index.html"),
+        // The speedrun workbench: this game's page plus a sheet to drive it
+        // with. Unlisted — nothing links to it and it carries `noindex` — but
+        // built, because a tool that only exists on a dev server is a tool
+        // nobody uses. Titanic's says the same thing about its own.
+        speedrun: join(HERE, "speedrun/index.html"),
       },
     },
   },

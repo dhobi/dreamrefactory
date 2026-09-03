@@ -22,43 +22,22 @@
  * selection, with a documented fallback.
  */
 import { DfEncoding } from "@dreamfactory/engine/df/text";
+import type { WireEvent } from "@dreamfactory/engine/web/host";
 import { NEUTRAL, TITANIC, editionOfUrl as editionOfUrlIn } from "@dreamfactory/site/games";
 import { encodingOf, isEditionCode } from "./languages";
 
 /** the CD a manifest URL sits on, from its `titanic1`/`titanic2` path segment */
 export type Disc = 1 | 2;
 
-/** one fetch starting or ending — see {@link FileStore.onWire} */
-export interface WireEvent {
-  /** unique per fetch, so a start and an end can be paired */
-  id: number;
-  /** what was asked for; the load remover asks the browser about this URL */
-  url: string;
-  /** false when it was issued, true when it landed (or failed) */
-  done: boolean;
-  /** how many fetches are in the air after this event */
-  inFlight: number;
-  /**
-   * Is somebody WAITING for this, or was it started on spec?
-   *
-   * {@link FileStore.load} is awaited by whoever called it — a set activation
-   * blocks on the room and all of its siblings and casts before anything is
-   * composited, and `onPlayMovie` blocks on the film before a frame of it plays
-   * — so the game is stopped for the whole of it.
-   *
-   * {@link FileStore.provide} is not. It is the engine's SYNCHRONOUS contract: it
-   * asked, got null, and carried on, and the file is wired into the running
-   * viewer if and when it lands ({@link FileStore.onBackgroundLoad}). The game
-   * keeps playing throughout, so a speedrun clock must keep counting
-   * ([#369](https://github.com/dhobi/dreamrefactory/issues/369)) — otherwise a
-   * route is credited for time it spent playing, which is the complaint that
-   * issue is about.
-   *
-   * The busy MARK reads it the other way and is right to: a fetch in the air is
-   * worth telling the player about however it started.
-   */
-  waited: boolean;
-}
+/**
+ * One fetch starting or ending.
+ *
+ * The type is the engine's ({@link WireEvent}), because the load remover that
+ * reads it is (`engine/src/web/load-clock.ts`) and both games feed the same one.
+ * What is Titanic's is the two places below that ANNOUNCE — see
+ * {@link FileStore.onWire}.
+ */
+export type { WireEvent };
 
 /**
  * The disc a manifest URL sits on: which of `volumes` its path passes through.
@@ -170,7 +149,7 @@ export class FileStore {
    * Two things watch the wire and they want different things from it. The play
    * page draws its busy mark from the COUNT (taoot/src/main.ts): a mark is up
    * while anything is outstanding, whatever it is. The load remover
-   * (taoot/src/load-clock.ts) needs the fetches THEMSELVES — which URL, and how
+   * (engine/src/web/load-clock.ts) needs the fetches THEMSELVES — which URL, and how
    * long it took — because since [#369](https://github.com/dhobi/dreamrefactory/issues/369)
    * it only stops a speedrun's clock for the ones that went to the network, and
    * a cache hit is a read the original did off its CD as well.

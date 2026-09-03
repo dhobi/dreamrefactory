@@ -110,21 +110,31 @@ const WALL_CLOCK = /\b(setTimeout|setInterval|Date\.now|performance\.now|new Dat
 /**
  * Directories under `src/` that are not the engine and are not held to its rules.
  *
- * `taoot/src/speedrun/` is the speedrun harness — a parser, a driver and a run loop
- * that play the game through real input and TIME it. Reading the wall clock is
- * not a leak there, it is the entire job: a speedrun's headline number is
- * seconds, its per-action budgets are real-world timeouts, and `performance.now`
- * is how both are taken. Nothing in it is reachable from the engine, no golden is
- * compared against anything it produces, and the run it drives is deliberately
- * unseeded — so the determinism this file protects is not a property it has or
- * needs.
+ * `taoot/src/speedrun/` is what is left of the speedrun harness in this tree:
+ * Titanic's own verbs and the navigation its routes are written against. Reading
+ * the wall clock is not a leak there, it is the entire job — a speedrun's
+ * headline number is seconds and its per-action budgets are real-world timeouts.
+ * Nothing in it is reachable from the engine, no golden is compared against
+ * anything it produces, and the run it drives is deliberately unseeded, so the
+ * determinism this file protects is not a property it has or needs.
  *
  * It lives under `src/` rather than `tests/` for one reason: the in-page
  * workbench (`/speedrun/`) is part of the built site and cannot import from the
  * test tree. That is a packaging fact, not a claim that it is engine code.
  *
+ * ## What this walk no longer reaches
+ *
+ * The harness's game-neutral half — the parser, the run loop, the two drivers,
+ * the aim sweep and the panel — is `engine/src/web/speedrun/` now, and SRC below
+ * is this package's `src/` alone. So the rule does not cover those files, and
+ * several of them read the wall clock for the reasons above. That is a GAP in
+ * the rule's coverage and not a decision about them: the engine has no
+ * equivalent walk today (`engine/src/web/host.ts` has always been free to
+ * `setTimeout`), and closing it would need an allow-list of its own. Worth
+ * knowing before the next thing moves.
+ *
  * The engine's own reproducibility is untouched by this exemption — the rule
- * still covers every file the game actually runs.
+ * still covers every file of THIS game that the game actually runs.
  */
 const NOT_THE_ENGINE = new Set(["speedrun"]);
 
@@ -135,42 +145,10 @@ const CLOCK_ALLOWED = new Set([
   "save-seed.ts",
   "booklet.ts",
   "bug-report.ts",
-  // The workbench page and its editor — the same exemption as `taoot/src/speedrun/`
-  // above and for the same reason, but they are files rather than a directory
-  // because they are entry points: `speedrun/index.html` loads them by name.
-  // What they read the clock for is a resume record stamped so a stale one
-  // cannot make the page run itself, and a poll waiting for the game to come
-  // back up after a reload. Neither is reachable from the engine.
-  "speedrun-page.ts",
-  "speedrun-editor.ts",
-  // The workbench's input display, for a third reason of its own: what it times
-  // is how long a key stays LIT, and that has to be the wall clock precisely
-  // because it is not part of the game. A flash paced on `session.clock` would
-  // freeze mid-glow whenever the run paused, stopped or sat on a modal — the
-  // states someone stares at the display hardest in. It draws nothing the engine
-  // reads and holds nothing the engine waits for.
-  "speedrun-inputs.ts",
-  // The cache warmer, which measures a NETWORK: bytes per second off the wire,
-  // over a sliding window of real seconds. There is no game-clock version of
-  // that number — the engine is not even running while it works — and what it
-  // reports is thrown away as soon as it is read. It fetches, counts and
-  // discards; nothing it produces reaches a session or a golden.
-  "cache-warmup.ts",
-  // The load remover's stopwatch, which measures the NETWORK and nothing else:
-  // how long a fetch was in the air, so a speedrun's clock can decline to count
-  // it (#251). There is no game-clock version of that number — the engine is
-  // not running while a room is on the wire, and the whole point of the
-  // measurement is that it is real seconds off a real link. It is fed the
-  // fetcher's in-flight count, reads the wall clock at the two edges, and hands
-  // a total to a readout; no session waits on it, nothing it produces reaches a
-  // golden, and the engine cannot see it at all. The same boundary
-  // `cache-warmup.ts` above is allowed for.
-  "load-clock.ts",
   // The Dust shell (dust/index.html), which is not the engine and does not run one: it
   // is an experiment in reading a DreamFactory 1 disc, and its two calls are a
   // stopwatch around `coldBoot` printed into a log and thrown away. Nothing it
-  // measures reaches a session, a golden or a decision — the same reason
-  // `cache-warmup.ts` is above it.
+  // measures reaches a session, a golden or a decision.
   "dust.ts",
   // Dust's saved games, for the same reason `save-seed.ts` is above: the clock
   // it reads is a FILE's modification time, so a list of saves can put the newest
