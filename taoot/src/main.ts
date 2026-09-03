@@ -255,7 +255,15 @@ files.onWire(({ inFlight }) => {
  * reads the total; the workbench does (taoot/src/speedrun-page.ts), and so does
  * the Playwright runner, through the handle below.
  */
-files.onWire((e) => (e.done ? loadClock.end(e.id) : loadClock.begin(e.id, e.url)));
+files.onWire((e) => {
+  // Only the fetches the game is STOPPED for. `provide`'s background fetches are
+  // the engine having asked, been told "not yet", and carried on — the run is
+  // progressing while they land, so removing them would credit a route for time
+  // it spent playing (#369).
+  if (!e.waited) return;
+  if (e.done) loadClock.end(e.id);
+  else loadClock.begin(e.id, e.url);
+});
 
 /**
  * The Report bug button (site/src/bug-report.ts): a GitHub issue with the room, the

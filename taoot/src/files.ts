@@ -38,6 +38,26 @@ export interface WireEvent {
   done: boolean;
   /** how many fetches are in the air after this event */
   inFlight: number;
+  /**
+   * Is somebody WAITING for this, or was it started on spec?
+   *
+   * {@link FileStore.load} is awaited by whoever called it — a set activation
+   * blocks on the room and all of its siblings and casts before anything is
+   * composited, and `onPlayMovie` blocks on the film before a frame of it plays
+   * — so the game is stopped for the whole of it.
+   *
+   * {@link FileStore.provide} is not. It is the engine's SYNCHRONOUS contract: it
+   * asked, got null, and carried on, and the file is wired into the running
+   * viewer if and when it lands ({@link FileStore.onBackgroundLoad}). The game
+   * keeps playing throughout, so a speedrun clock must keep counting
+   * ([#369](https://github.com/dhobi/dreamrefactory/issues/369)) — otherwise a
+   * route is credited for time it spent playing, which is the complaint that
+   * issue is about.
+   *
+   * The busy MARK reads it the other way and is right to: a fetch in the air is
+   * worth telling the player about however it started.
+   */
+  waited: boolean;
 }
 
 /**
@@ -158,7 +178,9 @@ export class FileStore {
    * So the event carries both, and the count comes along on every event rather
    * than being asked for: a watcher that only wants "is anything happening" then
    * needs nothing else, and the two readouts cannot disagree about the wire
-   * because they are told by the same sentence.
+   * because they are told by the same sentence. It also says whether anything is
+   * WAITING for the fetch ({@link WireEvent.waited}), which the two readouts
+   * again answer differently.
    */
   private inFlight = 0;
   private nextFetchId = 1;
@@ -194,16 +216,16 @@ export class FileStore {
   }
 
   /** announce a fetch and hand back the id its end must carry */
-  private fetchBegan(url: string): number {
+  private fetchBegan(url: string, waited: boolean): number {
     const id = this.nextFetchId++;
     this.inFlight++;
-    this.sayWire({ id, url, done: false, inFlight: this.inFlight });
+    this.sayWire({ id, url, done: false, inFlight: this.inFlight, waited });
     return id;
   }
 
-  private fetchEnded(id: number, url: string): void {
+  private fetchEnded(id: number, url: string, waited: boolean): void {
     this.inFlight--;
-    this.sayWire({ id, url, done: true, inFlight: this.inFlight });
+    this.sayWire({ id, url, done: true, inFlight: this.inFlight, waited });
   }
 
   /** how many fetches are in the air right now — what a fresh watcher has
@@ -437,7 +459,8 @@ export class FileStore {
     const url = this.urlFor(key);
     if (url && !this.pendingFetches.has(key)) {
       this.pendingFetches.add(key);
-      const id = this.fetchBegan(url);
+      // `false`: the engine has already been told "not yet" and has moved on
+      const id = this.fetchBegan(url, false);
       void fetch(url)
         .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then((buf) => {
@@ -448,7 +471,7 @@ export class FileStore {
         .catch(() => {})
         .finally(() => {
           this.pendingFetches.delete(key);
-          this.fetchEnded(id, url);
+          this.fetchEnded(id, url, false);
         });
     }
     return null;
@@ -477,7 +500,9 @@ export class FileStore {
     }
     const url = this.urlFor(key);
     if (!url) return null;
-    const id = this.fetchBegan(url);
+    // `true`: every caller of this awaits it, and the game is stopped until it
+    // answers — see WireEvent.waited
+    const id = this.fetchBegan(url, true);
     try {
       const r = await fetch(url);
       if (!r.ok) return null;
@@ -493,7 +518,7 @@ export class FileStore {
     } catch {
       return null;
     } finally {
-      this.fetchEnded(id, url);
+      this.fetchEnded(id, url, true);
     }
   }
 }

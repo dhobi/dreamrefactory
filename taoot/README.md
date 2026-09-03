@@ -267,6 +267,15 @@ this one. The practical consequence: run against a dev server and nothing is
 removed, so `time` is the wall clock; run against the deployed page and the
 download comes out.
 
+Nor does a fetch **nobody is waiting for**. `FileStore.load` is awaited by its
+caller — a set activation blocks on the room and all of its siblings and casts
+before anything is composited — so the game is stopped for the whole of it.
+`FileStore.provide` is the opposite: the engine asked, was told "not yet", and
+carried on, and the file is wired into the running viewer when it lands. The run
+progresses throughout, so the clock keeps counting. Where two of these rules
+disagree the tiebreak is to **count** the time: a route that looks slower than it
+was misleads nobody, and one that looks faster invents a record.
+
 Nothing is hidden either way — a `load` column appears beside the splits when
 there was something to remove, and `time + load` is the wall clock to the
 millisecond. On the workbench the clock says `LOADING` while it is stopped, so a

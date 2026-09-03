@@ -316,6 +316,30 @@ test("the wire is reported to every watcher, not just the last one to ask (#251)
   ]);
 });
 
+test("a background fetch says nobody is waiting for it (#369)", async () => {
+  // `provide` is the engine's synchronous contract: it asked, got null, and
+  // carried on. The run keeps moving while that fetch lands, so the clock must
+  // keep counting — main.ts drops these, and this is the flag it drops them by.
+  const files = newStore();
+  const seen: { waited: boolean; done: boolean }[] = [];
+  files.onWire((e) => seen.push({ waited: e.waited, done: e.done }));
+
+  // a miss: the engine asks, is told "not yet", and a fetch starts behind it
+  expect(files.provide("bedsit1.set")).toBeNull();
+  await vi.waitFor(() => expect(seen).toHaveLength(2));
+  expect(seen).toEqual([
+    { waited: false, done: false },
+    { waited: false, done: true },
+  ]);
+
+  // ...where an awaited load says the opposite, and the game is stopped for it
+  const other = newStore();
+  const awaited: boolean[] = [];
+  other.onWire((e) => awaited.push(e.waited));
+  await other.load("bedsit1.set");
+  expect(awaited).toEqual([true, true]);
+});
+
 test("a fetch's end carries the id its start was given (#369)", async () => {
   // The clock keeps one span per fetch, so an end has to name which. Ids rather
   // than URLs, because the same basename can be in the air twice over a reload.

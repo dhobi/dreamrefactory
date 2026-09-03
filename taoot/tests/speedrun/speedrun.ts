@@ -57,6 +57,11 @@
  * page, where the rip really does arrive over one. `time + load` is the wall
  * clock either way, to the millisecond.
  *
+ * A fetch nobody is waiting for is not loading either: the engine's own misses
+ * (`FileStore.provide`) are answered "not yet" and the game carries on, so the
+ * run is progressing while they land. Only the fetches the game is STOPPED for
+ * come out of the clock.
+ *
  * Three things are called out under the splits because they are where the time
  * hides: the slowest actions, every `after:` pad (dead time bought with a guess
  * rather than a condition), and every `travel` still in the sheet (the planner,

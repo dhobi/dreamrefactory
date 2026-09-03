@@ -28,7 +28,27 @@
  * decides on duration: nothing served out of RAM or off a local disk takes that
  * long, and no round trip is quicker.
  *
- * Two consequences worth stating, because both look like a bug from the outside:
+ * ## And only the fetches the game is STOPPED for
+ *
+ * The other half of #369, and the half that matters on the deployed page, where
+ * the rip really does come over a link. `FileStore.load` is awaited by whoever
+ * called it — a set activation blocks on the room and all of its siblings and
+ * casts before anything is composited — so the game is stopped for the whole of
+ * it and the clock should be too. `FileStore.provide` is the opposite: the
+ * engine asked, was told "not yet", and carried on, and the file is wired into
+ * the running viewer if and when it lands. The run is progressing throughout, so
+ * removing that time credits a route for playing the game.
+ *
+ * `main.ts` does the filtering, because "who is waiting" is the store's fact
+ * ({@link WireEvent.waited}) and not this stopwatch's. What is left here is the
+ * question of whether a wait was a DOWNLOAD.
+ *
+ * Where the two rules disagree with each other, the tiebreak is to COUNT the
+ * time: under-removing makes a route look slower than it was, which is a number
+ * nobody can be misled by, while over-removing invents a record. Every choice
+ * above is that way round.
+ *
+ * ## Two consequences worth stating, because both look like a bug from the outside:
  * over a warm cache almost NOTHING is removed, and against a dev server on
  * loopback nothing is removed AT ALL — a `localhost` fetch is a disk read
  * wearing HTTP, and its duration is a fact about the reader's disk rather than
