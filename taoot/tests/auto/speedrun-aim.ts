@@ -25,7 +25,7 @@
  * against a real page in taoot/tests/browser (see docs/reference/tests.md).
  */
 import { test, expect } from "vitest";
-import { clientAxis, clientPointFor } from "../../src/speedrun/driver";
+import { clientAxis, clientPointFor } from "@dreamfactory/engine/web/speedrun/driver";
 
 /** the page's own reader, verbatim from main.ts's canvasCoords */
 const canvasCoord = (client: number, origin: number, size: number, n: number): number =>

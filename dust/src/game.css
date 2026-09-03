@@ -1,0 +1,1542 @@
+/**
+ * Dust's game chrome — the stage, the Start screen, the boot gauge and the log.
+ *
+ * Lifted out of `dust/index.html` verbatim when the game got a second page. The
+ * workbench (`dust/speedrun/`) boots the same `main.ts` and so needs the same
+ * nineteen elements it queries by id; a copy of a page's worth of styles beside
+ * a copy of its markup is two things to keep in step, and Titanic's workbench
+ * already shows what that costs — four hundred lines of its play page's
+ * stylesheet live in its speedrun page as well.
+ *
+ * So: this is both pages' now, linked by each of them. The markup is still each
+ * page's own, which is the right split — there is very little of it (Dust's game
+ * is forty lines of it), and where the stage sits in the document is exactly
+ * what differs between a page that IS the game and a page with the game in one
+ * column of three.
+ *
+ * Everything below is as it was, comments and all. It reads as one page's
+ * stylesheet because it was one, and the sentences that say why a rule exists
+ * are the reason it is worth moving whole rather than reorganising on the way.
+ */
+
+/* ------------------------------------------------------------------
+   Deliberately nothing like the play page.
+
+   That page is a game in a cabinet: a menu bar, a settings drawer, a
+   preload gauge, an edition chooser. This is an experiment, and what it
+   has to show is one thing — whether a 1995 disc renders through a 1996
+   engine's port. So the picture is the whole page, and the only chrome is
+   a strip that says where you are standing, because that is the reading
+   the experiment is for.
+
+   The page has two states and one animation between them:
+
+     body.booting  the title card, centred, with a fuse burning under it
+     body.playing  the title card small at the top, the room underneath
+
+   Nothing else changes, and the state is on the BODY rather than in six
+   places, so a rule can say which state it belongs to and be read.
+   ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------
+   The palette is the LOGO's, sampled rather than chosen.
+
+   Every colour below is one of the artwork's own, taken from a histogram
+   of public/dust-logo.png's 221641 opaque pixels — the flame ramp is its
+   four commonest saturated colours in order (#f8130a 6.2%, #fb2f11 5.2%,
+   #fb5011 4.1%, #fc6f13 6.3%) and the two darks are its commonest colours
+   outright (#0a0403 19.1%, #2d120c 9.0%). So the page cannot clash with the
+   title card: there is nothing on it that is not already in the picture.
+   ------------------------------------------------------------------ */
+:root {
+  color-scheme: dark;
+  --ink: #d8cbb4;
+  --dim: #7a6f5e;
+  --edge: #241d16;
+  /* the logo's flame, cool end to hot */
+  --ember: #6e0906;
+  --fire: #f8130a;
+  --flame: #fb5011;
+  --spark: #fc6f13;
+  /* and its two darks: charred wood, and soot */
+  --char: #2d120c;
+  --soot: #0a0403;
+
+  /* ------------------------------------------------------------------
+     The frame's colours, and they are NEW.FLT's.
+
+     Not chosen to go with the game — taken out of it. `mainpanel` already
+     frames itself, and the profile of that frame is legible if you average
+     each edge column down the panel's height instead of reading single
+     pixels (the leather is dithered, so a pixel is noise). Outside in, the
+     left edge runs #4f2d20, dips to #2a2522 at 3px, rises to a lit ridge
+     #5a3527 at 8, and then hits a hard dark rule — #1a1210, luminance 19
+     against a field of 52 — at 13, which is where the frame stops and the
+     panel starts. The bottom edge has the same shape and a deeper valley.
+
+     So the rules below are that profile continued OUTWARD: a lit wooden mat
+     with the panel's own rule on both of its edges. Which is why the frame
+     looks like it belongs to the picture rather than to the web page — it
+     is the picture's own moulding, carried on past the bezel.
+     ------------------------------------------------------------------ */
+  --wood-lit: #6b4230;
+  --wood: #55321f;
+  --wood-dim: #3f2517;
+  --wood-shade: #2a170e;
+  /* the panel's inner rule, and the darkest thing in its frame */
+  --rule: #1a1210;
+
+  --pad: 16px;
+  /* ------------------------------------------------------------------
+     The page has a floor. Below this the strip's one line has nothing like
+     the room it needs, the boot bar's caption is three words wide, and the
+     picture is smaller than the panel it is half made of — so the page stops
+     shrinking and the browser scrolls instead, which degrades honestly where
+     squashing further does not.
+     ------------------------------------------------------------------ */
+  --min-w: 400px;
+  /* how wide the PAGE is, which past the floor is no longer how wide the
+     viewport is — and the canvas below measures itself against the page */
+  --page-w: max(var(--min-w), 100vw);
+  /* The SHARED TOP BAR's height, pinned rather than measured, and pinned for
+     the reason the footer strip used to be: it is the one term that decides
+     how tall the stage is, and a browser that lays that bar out half a pixel
+     differently would cost the canvas its 1:1 scale.
+
+     It replaces `--strip`. The status line used to be a fixed 38px footer and
+     this budget subtracted it; the controls are rows BELOW the picture now,
+     which the page scrolls to, so the only chrome spending viewport height is
+     the bar above. `dust/tests/browser/built-layout.ts` checks this number
+     against the bar the browser actually draws — a pinned height that drifts
+     unnoticed is worse than a measured one. */
+  --bar: 49px;
+  /* The rows under the picture are NOT a term here, and that is deliberate.
+
+     Subtracting them made the picture pay for them: at 1440x900 a perfect
+     1024x768 became 959x719, because 768 plus the mat plus the title card
+     plus the bar plus the rows simply does not fit in 900px. The old fixed
+     strip appeared to fit only because `overflow: hidden` on the body was
+     quietly clipping the difference.
+
+     So the picture is sized against the WINDOW, `#stage` is sized against
+     the FRAME (see its min-height), and the rows follow the stage. When the
+     two together exceed the window the page scrolls, which is the honest
+     outcome and the one that keeps 1:1 art. */
+  --stage-h: calc(100vh - var(--bar));
+
+  /* ------------------------------------------------------------------
+     THE LEFTOVERS, and who gets to spend them.
+
+     Two things want vertical room besides the picture — the risen title card
+     and the frame around the canvas — and the picture is not allowed to pay
+     for either. It is a fixed 768px that may only ever SHRINK, and shrinking
+     it means resampling 1995 art at a non-integer scale, which is the one
+     thing this page is careful never to do.
+
+     So `--spare` is the room genuinely going begging once the canvas, the
+     padding and the strip have had theirs, and the two decorations divide it.
+     Sized by `8.5vh` instead, the card took its band out of the canvas on any
+     window under ~1000px tall: a 1440x900 laptop bought a bigger logo with a
+     resampled game. Now a 1440x900 laptop gets an 8px frame and a 33px mark
+     and keeps all 768 rows; a 1080p desktop has room for the full 22 and 134
+     and still has slack; under about 860px tall both hit their floors and the
+     picture finally gives, which is the right order for it to happen in.
+
+     `round(down, …, 2px)` keeps both EVEN, so every box below it is an
+     integer width and `margin: auto` cannot centre the canvas on a half
+     pixel — which on `image-rendering: pixelated` is a visibly soft picture.
+     ------------------------------------------------------------------ */
+  --spare: calc(var(--stage-h) - 768px - 2 * var(--pad));
+  --frame: clamp(6px, round(down, calc(var(--spare) / 7), 2px), 22px);
+  --brand-h: clamp(
+    28px,
+    round(down, calc(var(--spare) - 2 * var(--frame)), 2px),
+    134px
+  );
+  /* ------------------------------------------------------------------
+     How far the card sits DOWN over the frame, and it is deliberately far
+     enough to cross the wood and BITE INTO THE PICTURE.
+
+     The first version of this kept the lap strictly under the mat, so that
+     the card could never cover a single game pixel. That was the cautious
+     reading and it was the wrong one: a nameplate that stops exactly at the
+     inner edge of the frame reads as a coincidence, and the few rows it
+     costs are the top of the sky. So the lap is the whole mat plus a bite,
+     and the bite is what makes it look nailed on rather than balanced there.
+
+     Nothing is lost to the click: `#curtain` is `pointer-events: none`, so
+     the strip of picture under the card is still the canvas's to handle.
+
+     Last in the chain on purpose — spare feeds the frame, the frame feeds
+     the card, and both feed this — so there is no cycle and no window size
+     is tuned at another's expense.
+     ------------------------------------------------------------------ */
+  --bite: clamp(2px, round(calc(var(--brand-h) * 0.04), 2px), 8px);
+  --lap: calc(var(--frame) + var(--bite));
+  /* how far down the picture starts — nothing while the card is centred */
+  --band: 0px;
+  /* and how far down the pair starts; see body.playing */
+  /* The cap on --drop, where the reasoning lives. Dust's page and
+     Timelapse's are the same composition — a title card over a framed
+     picture — so they cap it at the same 96px and behave alike on a phone. */
+  --drop-max: 96px;
+
+  --drop: 0px;
+
+  /* ------------------------------------------------------------------
+     THE PICTURE'S SIZE, named once because three other rules need it.
+
+     One dimension is chosen and the other is derived, and it has to be that
+     way round. Given `width: 1024px` with a `max-height`, `aspect-ratio`
+     transferred nothing: a definite width already fixes the height at
+     width/ratio, and clamping that height afterwards does not go back and
+     narrow the width. Measured at 1440x860 — a 1024x752 element, ratio
+     1.3617, the picture visibly squashed. So the WIDTH is the min of the
+     three things that can limit it — the art's own 1024, the room across, and
+     the room down converted through 4:3 — and the height follows.
+
+     Declared here AND on body.playing, not hoisted once, because a custom
+     property substitutes its own `var()`s where it is DECLARED: `--band`
+     would freeze at this 0px and the height budget would be out by a whole
+     title card. Two declarations of one formula is the price of that rule.
+     ------------------------------------------------------------------ */
+  --pic-w: min(
+    1024px,
+    calc(var(--page-w) - 2 * var(--pad) - 2 * var(--frame)),
+    calc(
+      (var(--stage-h) - 2 * var(--pad) - var(--band) - 2 * var(--frame)) *
+        4 / 3
+    )
+  );
+  --pic-h: calc(var(--pic-w) * 3 / 4);
+}
+/* ------------------------------------------------------------------
+   The band the picture starts below is the card MINUS THE LAP, which is what
+   sets the card down ON the frame rather than above it — a nameplate on a
+   picture frame, which is what a title card over a framed picture wants to
+   be. `#curtain` is already the layer above `#frame`, so the overlap needs
+   no z-index of its own; it needs the band to be short by --lap.
+
+   The lap is the mat's own width plus `--bite`, so the card always crosses
+   the whole frame and dips 2..8px into the picture — which is the point of
+   deriving it from the frame rather than picking a number: the card lands in
+   the same place relative to the moulding whether the moulding is 6px or 22.
+   ------------------------------------------------------------------ */
+body.playing {
+  --band: calc(var(--brand-h) - var(--lap));
+  /* ------------------------------------------------------------------
+     How far the PAIR sits down from the top of the stage.
+
+     Because the card and the frame have to move together. The frame was
+     centred in its own inset box by `margin: auto`, which on any window
+     taller than the composition put it in the middle of the room below the
+     card and left the card stranded at the top with the lap doing nothing —
+     at 1600x1440, 217px of daylight between a nameplate and the thing it is
+     supposed to be nailed to. So the frame is now TOP-aligned in that box,
+     which is what keeps it under the card at every size, and this is the
+     half of the slack that both of them come down by instead.
+
+     It is zero the moment the picture is being clamped: there is no slack to
+     share then, and the `max()` is what says so rather than a media query
+     guessing where that happens.
+     ------------------------------------------------------------------ */
+  --pic-w: min(
+    1024px,
+    calc(var(--page-w) - 2 * var(--pad) - 2 * var(--frame)),
+    calc(
+      (var(--stage-h) - 2 * var(--pad) - var(--band) - 2 * var(--frame)) *
+        4 / 3
+    )
+  );
+  --pic-h: calc(var(--pic-w) * 3 / 4);
+  /* Half the slack, measured against the picture THERE IS, and never more
+     than --drop-max.
+
+     Written against a flat 768px first, which is only the picture's height
+     when the height is what limits it — at 400x600 the width limits it, the
+     real picture is 267 tall, and the formula saw 768, called the slack
+     negative and left all 231 spare pixels in one lump under the frame.
+
+     Capped, because on a phone half the slack is most of the screen. At
+     412x915 the picture is 273px tall and the drop came out around 240, so
+     the canvas started 389px down a 915px window with 253px below it —
+     reported as "the game canvas moves too far downwards", and true: the
+     composition hung in the middle of the page with a third of the window
+     empty above it. A picture hung a little high with its controls under it
+     is the better answer, and it is the answer Timelapse's page already
+     gives — same composition, same cap, same behaviour. */
+  --drop: min(
+    var(--drop-max),
+    max(
+      0px,
+      round(
+        down,
+        calc(
+          (
+              var(--stage-h) - 2 * var(--pad) - var(--band) -
+                var(--pic-h) - 2 * var(--frame)
+            ) /
+            2
+        ),
+        2px
+      )
+    )
+  );
+}
+/* no logo file, no band: the page is honest about it rather than leaving a
+   gap where a picture failed to arrive (see #brand's onerror) */
+body.nobrand {
+  --brand-h: 0px;
+  --bite: 0px;
+  --lap: 0px;
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  height: 100%;
+}
+/* No `height: 100%` here, and no `min-height` either. The rows under the
+   picture may push the document past one screen — which is the point of
+   them — and the shared chrome already says `min-height: 100vh` on this
+   selector. Saying `100%` as well was the same instruction in different
+   units on the SAME selector, so the build got to pick which applied;
+   `site/tests/cascade.ts` failed on it, which is what that test is for. */
+body {
+  margin: 0;
+  min-width: var(--min-w);
+}
+/*
+ * `html body`, not `body`, and the extra token is load-bearing.
+ *
+ * The shared chrome sets `display: flex; align-items: center` on `body` — the
+ * right thing for the reading pages it was written for, and fatal here. This
+ * page is a grid, and a centred flex child SHRINK-WRAPS: `#stage`'s children
+ * are all absolutely positioned, so it collapsed to its own 2 x --pad, 32px,
+ * and the frame inside it went to a corner 1023px wide in a 1280px window.
+ *
+ * Equal specificity meant the later sheet won, and which sheet is later is
+ * decided by the BUILD, not by this file — dev served the authored order and
+ * looked right, every build inverted it and shipped that. One extra element
+ * in the selector takes the decision away from the bundler.
+ */
+html body {
+  background: var(--soot);
+  color: var(--ink);
+  font:
+    13px/1.5 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  display: grid;
+  /*
+   * THREE rows now: the shared top bar, the stage, the status strip. It was
+   * `1fr auto` for two children, and adding the bar as a third made the bar
+   * itself take the `1fr` — so the stage collapsed to its content and the
+   * strip rode up under the title card. A grid with fewer rows than children
+   * does not complain; it just puts them somewhere else.
+   */
+  grid-template-rows: auto 1fr auto;
+  /*
+   * The shared chrome centres a page's children (`align-items: center` on
+   * body, for the reading pages it was written for). On a grid that centres
+   * each item INSIDE its row instead of letting it fill it, which left the
+   * stage sized to its content and the title card floating off-centre with
+   * the START button over the status strip. This page wants its rows filled.
+   */
+  align-items: stretch;
+  justify-items: stretch;
+  /* NO `overflow: hidden` here any more. It was right when the page was
+     exactly one screen with a fixed footer; the rows under the picture
+     are reachable only if the document is allowed to scroll to them. */
+}
+
+/* the picture, centred, integer-scaled, and never smoothed: this is
+   1995 art and a bilinear filter is a lie about it */
+/* A POSITIONED box, so the canvas's max-height has something definite to
+   be a percentage of. As a centred grid item its `max-height: 100%` did
+   not resolve — the 1fr row is not a definite height for percentage
+   purposes — so a short window clamped the width and left the height at
+   768, and the picture hung off the bottom. Absolute inside a relative
+   parent resolves against the padding box, which is definite. */
+#stage {
+  position: relative;
+  /*
+   * A HEIGHT of its own, because what sits below it is no longer a fixed 38px
+   * the budget could subtract. As a bare `1fr` grid row the stage got whatever
+   * the rows under it left over, so every control added there came out of the
+   * picture: a taller `#under` meant a smaller game.
+   *
+   * Pinned to the viewport minus the bar above instead — which is exactly what
+   * `--stage-h` means — so the WINDOW sizes the picture and the rows are what
+   * the document scrolls to.
+   */
+  /* NOT a height of its own. Pinned to `--stage-h` it claimed the whole
+     window and left the rows a screen below the picture — the picture was
+     sized right and the rows were nowhere near it. As a bare grid row the
+     stage gets what the bar above and the rows below leave, so the rows sit
+     directly under the frame and the canvas's own `max-height: 100%` — which
+     resolves against THIS box — shrinks the picture to fit whatever is left.
+     That last part is why nothing has to be pinned: a row that wraps on a
+     phone takes its space out of the picture automatically. */
+  /* AS TALL AS ITS CONTENT, which is the frame — not the window, and not
+     whatever the grid has left.
+
+     `min-height: var(--stage-h)` claimed the whole window and left the rows
+     a screen below the picture. A bare `0` let the grid hand the stage less
+     than the frame needs, and the frame — absolutely positioned — spilled
+     68px OVER the rows, so the buttons could not be clicked and there was
+     nothing to scroll to either.
+
+     This is the frame's own height, term for term: the two pads, the slack
+     the pair comes down by, the title card's band, the picture, and the mat
+     on both sides of it. So the rows sit directly under the frame at every
+     size, the picture keeps the whole window to be big in, and when the sum
+     is taller than the window the page scrolls. */
+  min-height: calc(
+    2 * var(--pad) + var(--drop) + var(--band) + var(--pic-h) + 2 *
+      var(--frame)
+  );
+  padding: var(--pad);
+}
+/* ------------------------------------------------------------------
+   The frame is what gets POSITIONED; the canvas just sits in it.
+
+   A frame cannot be a border on the canvas. `box-sizing: border-box` is on
+   everything here, so a border would come out of the 1024x768 and resample
+   the picture to pay for its own moulding — and `content-box` on one element
+   to dodge that puts every max-width on the page into a different coordinate
+   system. So the mat is this element's PADDING, its size is the picture plus
+   two mats, and the canvas fills what is left, which is the picture exactly.
+   ------------------------------------------------------------------ */
+#frame {
+  position: absolute;
+  top: calc(var(--pad) + var(--drop) + var(--band));
+  right: var(--pad);
+  bottom: var(--pad);
+  left: var(--pad);
+  /* centred across, TOP-aligned down: see --drop. Centring it down as well
+     let it drift away from the card on a tall window. */
+  margin: 0 auto auto;
+  /* SHRINK-WRAPPED, not sized: the mat is whatever the picture turned out
+     to be plus two --frames, so it stays a uniform width on every side.
+     Given the frame an explicit 1024+2F and a max-height instead, a short
+     window clamped its height but not its width and the picture letterboxed
+     INSIDE the mat — measured at 1440x860: a 984px picture centred in a
+     1024px opening, with 20px of black down both edges of the wood. The
+     constraint belongs on the canvas, where the aspect ratio is. */
+  width: fit-content;
+  height: fit-content;
+  padding: var(--frame);
+  /* the mat: wood, lit from above, in NEW.FLT's own four browns */
+  background: linear-gradient(
+    var(--wood-lit),
+    var(--wood) 34%,
+    var(--wood-dim) 70%,
+    var(--wood-shade)
+  );
+  /* the panel's dark rule on the OUTER edge, and the page beneath it */
+  box-shadow:
+    0 0 0 1px var(--rule),
+    0 30px 74px -26px #000;
+}
+/* a faint upright grain, so the mat is timber rather than a brown box. Two
+   periods that do not divide each other, which is what stops it reading as
+   a pattern at this width. */
+#frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, #ffffff08 0 1px, #0000 1px 3px),
+    repeating-linear-gradient(90deg, #00000012 0 1px, #0000 1px 7px);
+}
+/* The game is waiting on the network — the play page's corner spinner, in
+   this page's wood. Quiet and small: it reports a wait, it does not ask
+   to be looked at, and dust.ts only shows it once the wait is long enough
+   to be one (see BUSY_AFTER_MS there). Its plate carries its own ground —
+   what is under it is whatever the game last drew. */
+#netbusy {
+  position: absolute;
+  right: calc(var(--frame) + 12px);
+  bottom: calc(var(--frame) + 12px);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--wood-lit);
+  border-radius: 50%;
+  background: rgba(10, 4, 3, 0.72);
+  box-shadow: 0 6px 22px -8px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+#netbusy span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-top-color: var(--spark);
+  border-radius: 50%;
+  animation: netspin 700ms linear infinite;
+}
+/* not redundant with the UA sheet: the `display: flex` above beats
+   `[hidden] { display: none }`, the same trap the play page documents */
+#netbusy[hidden] {
+  display: none;
+}
+@keyframes netspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* a reader who has asked for less motion still needs to know it is
+   waiting, so the mark stays and breathes instead of turning */
+@media (prefers-reduced-motion: reduce) {
+  #netbusy span {
+    animation: netpulse 1.4s ease-in-out infinite;
+    border-color: var(--spark);
+  }
+  @keyframes netpulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+#screen {
+  /* ------------------------------------------------------------------
+     1024x768 CSS pixels — the canvas's own size, so one canvas pixel is one
+     screen pixel and the 2x blit inside it is the only scaling that happens.
+     It may only ever SHRINK, for a viewport that cannot fit it.
+
+     `aspect-ratio` is what makes the shrinking safe: with it, clamping the
+     height takes the width down with it and the picture stays 4:3, so
+     `object-fit` never has anything to letterbox and the mat around it stays
+     even. And the ceilings are in VIEWPORT units rather than percentages,
+     because the frame above is shrink-to-fit — a percentage here would be
+     asking the parent how wide it is while the parent is asking this.
+
+     Percentages were also the shape of the bug this replaced: a percentage
+     max-height on an absolutely positioned box resolves against its
+     containing block's padding box, NOT against the insets above it, so
+     `max-height: 100%` let a 768px canvas sit in a 741px slot unclamped and
+     `margin: auto` centred the overflow — 36px past the bottom of the stage
+     at 1280x700, clipped by the body and under the title card at the top.
+     ------------------------------------------------------------------ */
+  image-rendering: pixelated;
+  display: block;
+  /* the swipe gestures (dust/src/main.ts) need every drag on the canvas: without
+     this the browser claims a vertical drag for scrolling and the
+     walk-forward swipe never arrives. Scoped here, so the page still scrolls. */
+  touch-action: none;
+  position: relative; /* over the grain */
+  aspect-ratio: 4 / 3;
+  /* both from --pic-w, which is where the reasoning about them lives */
+  width: var(--pic-w);
+  height: auto;
+  background: #000;
+  /* the panel's own inner rule, on the inner edge of the mat, with the lit
+     lip of the moulding just outside it — the two lines the profile found at
+     x = 13 and x = 8, in the order it found them */
+  box-shadow:
+    0 0 0 2px var(--rule),
+    0 0 0 3px #5a3527;
+}
+#screen.busy {
+  cursor: progress;
+}
+/* the room BLENDS IN rather than appearing: it comes up out of the dark a
+   touch under scale while the title card is still rising, so the two read
+   as one movement instead of a swap. The FRAME comes with it — the moulding
+   belongs to the picture, so it must not be on the page before the picture
+   is. */
+/*
+ * `pointer-events: none` and not only `opacity: 0`, because an invisible
+ * element still takes the click.
+ *
+ * #frame comes after #curtain in the DOM and neither carries a z-index, so
+ * it paints on top and is hit-tested first — over the loader's own START
+ * button, which sits in #boot inside #curtain. Pressing START did nothing:
+ * `document.elementFromPoint` at the middle of the button returned #screen.
+ *
+ * It was a race before, which is why it looked fine here and failed on a
+ * real connection: the canvas has to exist to cover anything, and clicking
+ * the moment the button appeared beat it. The one place that never won that
+ * race was the deployed site.
+ */
+body:not(.playing) #frame {
+  opacity: 0;
+  transform: scale(0.985);
+  pointer-events: none;
+}
+body.playing #frame {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 620ms ease-out 180ms,
+    transform 900ms cubic-bezier(0.28, 0.74, 0.22, 1) 180ms;
+}
+
+/* ------------------------------------------------------------------
+   The title card, and the one animation on the page.
+
+   The logo is 2.7:1 and full of detail — a windmill, a saloon, a skull
+   with a hat on. Shrunk to the 22px a one-line strip can spare it would be
+   mush, so it takes the whole stage for the two seconds the boot lasts and
+   then RISES rather than leaving: a title card that becomes a maker's mark,
+   which is what a title card wants to be once the game is running.
+
+   The move itself is done in JS by FLIP (see raiseTitle in dust.ts) —
+   measure where it is, switch the class, measure where it landed, and play
+   the difference back as a transform. The reason is that the two states
+   size the image differently (centred by max-height, risen by height), and
+   a transition between two different sizing modes has nothing to
+   interpolate. A transform does, it is the one property that animates
+   without touching layout, and the game loop starts in the same frame — so
+   this is also the difference between a smooth rise and a stuttering one.
+
+   `#curtain` is what actually holds the two positions. It is the whole
+   stage while booting and a thin band at the top after, and its child is
+   centred in it either way, so "the middle" and "the top" are one rule.
+   ------------------------------------------------------------------ */
+#curtain {
+  position: absolute;
+  top: var(--pad);
+  right: var(--pad);
+  bottom: var(--pad);
+  left: var(--pad);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  z-index: 3;
+  /* decoration, never a click target: the canvas is under it. The Start
+     button turns this back on for itself alone (#startwrap). */
+  pointer-events: none;
+}
+body.playing #curtain {
+  bottom: auto;
+  top: calc(var(--pad) + var(--drop));
+  height: var(--brand-h);
+  gap: 0;
+}
+/* the light the card sits in while it is the whole page — a low warm glow
+   off the artwork's own fire, so the logo is lit rather than pasted on */
+#curtain::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  /* 100% and not the 130% this started at. Wider than its parent plus a
+     centring `translate` puts scrollable overflow outside the page, and a
+     transformed descendant carries that up: measured at 700x800, a document
+     784px wide and a horizontal scrollbar under a page that fits. Clipping it
+     at #stage would have cost the frame's drop shadow, so the fix is at the
+     source — the falloff below does the softening the extra width was for. */
+  width: min(1100px, 100%);
+  aspect-ratio: 2 / 1;
+  translate: -50% -50%;
+  background: radial-gradient(
+    ellipse at center,
+    #4a220c66,
+    #2d120c22 40%,
+    #0000 74%
+  );
+  opacity: 1;
+  transition: opacity 500ms ease-out;
+}
+body.playing #curtain::before {
+  opacity: 0;
+}
+
+#brand {
+  display: block;
+  width: auto;
+  max-width: min(840px, 100%);
+  max-height: 100%;
+  object-fit: contain;
+  /* the artwork is drawn on white; on this page it wants to sit in its own
+     light rather than on a panel, so it gets a warm glow instead of a box */
+  filter: drop-shadow(0 6px 24px #000) drop-shadow(0 0 40px #3a1f0d);
+}
+body.booting #brand {
+  max-height: 46vh;
+}
+/* Risen: sized by HEIGHT, which is what makes the band exact — and with NO
+   shadow. The glow below is for a card floating on a bare page; once it is
+   resting on the frame's top rail a drop-shadow reads as the card hovering
+   over the wood instead of sitting on it, which is the opposite of what the
+   overlap is for. */
+body.playing #brand {
+  height: 100%;
+  filter: none;
+}
+#brand[hidden] {
+  display: none;
+}
+
+/* ------------------------------------------------------------------
+   The fuse.
+
+   A progress bar, and shaped like one thing rather than styled like
+   nothing: an 1890s fuse burning left to right, because this is a western
+   and because the logo already contains the fire it is drawn in. The trough
+   is the unburnt cord (a striped weave in the artwork's charred brown), the
+   fill is its flame ramp, and the hot spark at the leading edge is the only
+   thing on the page that moves on its own.
+
+   It is driven by real counts, not by a timer — see BOOT_STEPS in dust.ts.
+   The caption under it is the BOOT'S OWN newest line, so what a player
+   watches for two seconds is the engine saying what it opened.
+   ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------
+   One slot, two occupants: the gauge while it is loading and the Start
+   button once it has. A FIXED height with both of them absolutely inside it,
+   so the swap is a crossfade and not a reflow — the title card is 40px above
+   this and a collapsing bar would jog it.
+   ------------------------------------------------------------------ */
+#boot {
+  position: relative;
+  width: min(440px, 76%);
+  height: 48px;
+  transition:
+    opacity 340ms ease-out,
+    translate 460ms ease-out,
+    filter 340ms ease-out;
+}
+#gauge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  transition:
+    opacity 260ms ease-out,
+    transform 320ms ease-out;
+}
+#boot.ready #gauge {
+  opacity: 0;
+  transform: translateY(-70%);
+  pointer-events: none;
+}
+#fuse {
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(#180b07, #241009);
+  box-shadow:
+    inset 0 1px 2px #000000aa,
+    0 0 0 1px #341811;
+}
+/* the weave of the unburnt cord */
+#fuse::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    72deg,
+    #3d1c12 0 2px,
+    #2b120c 2px 6px
+  );
+  opacity: 0.75;
+}
+#burn {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--ember),
+    var(--fire) 42%,
+    var(--flame) 76%,
+    var(--spark)
+  );
+  box-shadow:
+    0 0 14px -2px var(--flame),
+    0 0 5px #f8130acc;
+  /* the width is set from JS; this is what makes each step a slide rather
+     than a jump, and 380ms is under the gap between two boot milestones */
+  transition: width 380ms cubic-bezier(0.32, 0.9, 0.3, 1);
+}
+/* heat coming off the burnt length */
+#burn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fff0 0%, #ffd9a855 50%, #fff0 100%);
+  background-size: 44% 100%;
+  background-repeat: no-repeat;
+}
+#spark {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 15px;
+  height: 15px;
+  margin: -7.5px -7.5px 0 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    #fff6dd 0%,
+    #ffca7a 26%,
+    var(--spark) 46%,
+    #f8130a00 72%
+  );
+}
+/* nothing burning yet, so nothing glowing yet */
+#burn[style*="width: 0%"] > #spark {
+  opacity: 0;
+}
+
+#bootline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 11px;
+  /* a FIXED line box: the caption is the boot's own words and they change
+     length every 200ms, and a bar that jumps a pixel each time one of them
+     wraps is worse than one that clips a long one */
+  height: 17px;
+  overflow: hidden;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+#bootsay {
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#bootpct {
+  color: var(--spark);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+/* ------------------------------------------------------------------
+   The Start button, and why the page needs one at all.
+
+   A browser will not build an AudioContext except from a user gesture, so
+   something has to be clicked before Dust can be heard — and the page was
+   taking that click from whatever the player happened to do first, which
+   meant the game's opening seconds played silently and the theme came in
+   late, on a click meant for a door. This is that gesture, asked for
+   honestly and at the only moment when waiting for it costs nothing: the
+   boot has finished, the room is built, and the only thing left is to look
+   at it. So it is also the ONE gesture — see ensureAudio in dust.ts.
+
+   Dressed as the panel's own HELP plate rather than as a web button: the
+   same four browns as the frame, a lit top edge, and a press that actually
+   goes down. The ember under it is the only thing on the page that asks for
+   attention, and it does it slowly.
+   ------------------------------------------------------------------ */
+#startwrap {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease-out 130ms;
+}
+#boot.ready #startwrap {
+  opacity: 1;
+  pointer-events: auto;
+}
+#start {
+  font:
+    600 13px/1 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  /* the right padding is short by the letter-spacing, which is added AFTER
+     the last letter and would otherwise sit the label left of centre */
+  padding: 14px 22px 14px 30px;
+  color: #ffe9c4;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  background: linear-gradient(
+    var(--wood-lit),
+    var(--wood) 40%,
+    var(--wood-dim)
+  );
+  box-shadow:
+    0 0 0 1px var(--rule),
+    inset 0 1px 0 #8a5a3c77,
+    0 8px 20px -10px #000;
+  transform: scale(0.94);
+  transition:
+    transform 380ms cubic-bezier(0.28, 0.74, 0.22, 1) 130ms,
+    background 160ms ease-out,
+    color 160ms ease-out;
+}
+#boot.ready #start {
+  transform: none;
+}
+#start:hover {
+  background: linear-gradient(#83513a, #663d27 40%, #4b2d1b);
+  color: #fff6dd;
+}
+#start:active {
+  transform: translateY(1px);
+  transition: transform 40ms;
+  box-shadow:
+    0 0 0 1px var(--rule),
+    inset 0 2px 7px #000000aa;
+}
+#start:focus-visible {
+  outline: 2px solid var(--spark);
+  outline-offset: 3px;
+}
+
+/* the gesture line under the Start button. Absolute and hung off the bottom
+   of #boot, which is a fixed 48px with everything in it positioned — so this
+   costs the card no height and cannot move the button it sits under. It
+   arrives with the button and leaves with the whole card. */
+#touchtip {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  translate: -50% 10px;
+  margin: 0;
+  color: var(--dim);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 300ms ease-out 200ms;
+}
+#boot.ready #touchtip {
+  opacity: 1;
+}
+#touchtip b {
+  color: var(--ink);
+  font-weight: 600;
+}
+@media (pointer: coarse) and (hover: none) {
+  #touchtip {
+    display: block;
+  }
+}
+
+/* ------------------------------------------------------------------
+   UNDER THE PICTURE: the controls, as rows.
+
+   Not a bar fixed to the bottom of the window, which is what this was. That
+   cost the picture 38px of every window whether anyone was reading it or
+   not, and it put the only pressable thing on the page — the two swipe
+   boxes — in the corner of a phone that is hardest to reach. Worse, at the
+   400px floor it could not fit its own sentence and ellipsized it.
+
+   A row has no such problem: it is as tall as it needs to be, it wraps, and
+   the page scrolls to it. Which is what the play page does with the same
+   kind of content, so the shape is borrowed rather than invented
+   (taoot/play/index.html: #under, .bar, and the rule between rows).
+   ------------------------------------------------------------------ */
+#under {
+  /* above the picture in the stacking order, always: the frame is absolutely
+     positioned and overlapped these when the budget was wrong, and an
+     unreachable button is a worse failure than a scrollbar */
+  position: relative;
+  z-index: 1;
+  /* as wide as the picture's frame and centred under it, so it reads as
+     belonging to the picture rather than to the page */
+  width: min(1024px, calc(100% - 2 * var(--pad)));
+  margin: 0 auto var(--pad);
+  border-top: 1px solid var(--edge);
+}
+#under .bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 10px 2px;
+  color: var(--dim);
+}
+/* a rule between rows and not around them: the rows are one list, and a box
+   per row would read as one control each */
+#under .bar + .bar {
+  border-top: 1px solid var(--edge);
+}
+/* ------------------------------------------------------------------
+   The controls belong to the PICTURE, so they wait for it.
+
+   Every one of them acts on something that is not on screen yet:
+   fullscreen has nothing to letterbox, the log has nothing to report, the
+   key hints describe keys that do nothing, and the swipe options configure
+   a gesture that has nowhere to land. Before Start they were a row of live
+   buttons under an empty stage, which reads as an interface that is already
+   running.
+
+   So the rule is on #under rather than on each row: while booting AND with
+   nothing in #err, every row is hidden. The moment #err has something to
+   say the whole strip comes back — which is the behaviour a failed boot
+   wants, because that is exactly when the bug reporter is needed and there
+   is no picture to reach it from.
+
+   One rule and not two on purpose. Hiding rows individually and then
+   re-showing them on error gives two selectors of identical specificity
+   whose order decides the outcome, and Dust's swipe options share a row
+   with #err — so a per-row `:has(> #err)` exemption left the options
+   visible under an empty stage.
+
+   And it is on #under itself rather than on its rows, because hiding every
+   row still left the container: #under carries a 1px border, so all three
+   pages drew a stray hairline across the stage under the title card with
+   nothing above or below it. A row that is not there is not a row; a strip
+   with no rows in it is not a strip.
+   ------------------------------------------------------------------ */
+body:not(.playing) #under:not(:has(#err:not(:empty))) {
+  display: none;
+}
+/* ...and the options are for playing whether or not anything went wrong */
+body:not(.playing) #swipeOpts {
+  display: none;
+}
+/* an empty row is not a row — #err is silent almost always */
+#under .bar:not(:has(> *:not(#err))):has(> #err:empty) {
+  display: none;
+}
+#under b {
+  color: var(--ink);
+  font-weight: 600;
+}
+#under .k {
+  color: var(--ink);
+}
+/* ------------------------------------------------------------------
+   The ask, under the picture and under the controls.
+
+   Buy Me a Coffee's own button, rebuilt in the page — the same one
+   taoot/index.html carries in its footer, and rebuilt for the same
+   reasons: upstream ships it as a <script> from cdnjs.buymeacoffee.com
+   that writes the markup at runtime and pulls Cookie off Google Fonts,
+   and this site has no third-party script and no third-party font on any
+   page. The widget's data attributes read straight across, so a button in
+   Dust's palette is a configuration of it rather than a departure:
+
+     data-color         --raised     the surface, one step up from the wood
+     data-outline-color --border-strong
+     data-font-color    --accent     the ember the whole page links in
+     data-coffee-color  #E8701F      the COFFEE — the small filled path
+                                     inside the cup, which is the only part
+                                     of the mark that is not linework.
+                                     Upstream fills it #FFDD00, a brand
+                                     swatch; here it is `--accent (--ember-400)`,
+                                     the colour of the WORDS beside it, so
+                                     the drink and the label are one note
+                                     and the cup around them is the page's.
+
+                                     Baked into the art rather than taken
+                                     from the cascade: an <img> cannot
+                                     inherit `currentColor`, and inlining
+                                     8 KB of path data on a game page to
+                                     win a hover is a bad trade. So the
+                                     words lighten on hover and the coffee
+                                     does not — which reads as the label
+                                     responding, not as the mark failing to.
+     data-font          Cookie       public/cookie.woff2, below
+
+   The mark's linework is #0D0C22 upstream, drawn to sit on a yellow
+   button. On a dark surface the parts of it that fall OUTSIDE the cup —
+   lid, steam, outline — vanish into the background. The art redraws
+   them in `--border-hover (--leather-200)`, which is the colour of
+   this button's OWN border on hover: the cup is the button's outline
+   drawn round again, and the drink inside it is the button's text. All
+   five pages do it that way and only the ramp changes — brass was the
+   first try, and it was the one page pulling a decorative colour in
+   where the others had used a structural one.
+
+   Below the controls rather than inside them, and that is the whole
+   reason #foot exists as its own element: #under waits for the picture
+   (`body:not(.playing)` hides it), so an ask living there would be absent
+   from the title card and absent forever for somebody who reads the page
+   and leaves without pressing Start — which is most people, and exactly
+   who is being asked.
+   ------------------------------------------------------------------ */
+#foot {
+  /* the picture's own width, so it lines up with the frame and the strip
+     above it rather than with the page */
+  width: min(1024px, calc(100% - 2 * var(--pad)));
+  margin: 0 auto var(--pad);
+  padding: 10px 2px;
+  display: flex;
+  align-items: center;
+  /* centred under the picture, unlike the controls above it. Those are a
+     list and read from the left edge like one; this is a single object
+     with the whole width to itself, and left-aligned it read as a fourth
+     control that had lost its row. */
+  justify-content: center;
+}
+/* The rule belongs BETWEEN the controls and the ask, so it goes away with
+   them — the same "a hairline with nothing above it" problem that put
+   #under's border on the container rather than on its rows. The selector
+   is #under's own hiding condition, repeated. */
+#foot {
+  border-top: 1px solid var(--edge);
+}
+body:not(.playing) #under:not(:has(#err:not(:empty))) + #foot {
+  border-top: 0;
+}
+
+/* Cookie by Ania Kruk, SIL Open Font License 1.1 — the licence travels
+   with the font at public/cookie-OFL.txt. Latin subset, 14 KB, served
+   from this origin. `swap` so a slow font never holds the button back:
+   the fallback is the page's own display face, and the button is legible
+   either way. */
+@font-face {
+  font-family: "Cookie";
+  src: url("/cookie.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+a.bmc {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.1rem 0.8rem;
+  border: 1px solid var(--border-strong);
+  /* the widget's own 5px, which is also this sheet's --radius-lg */
+  border-radius: var(--radius-lg);
+  background: var(--raised);
+  color: var(--accent);
+  font-family: "Cookie", var(--font-display);
+  font-size: 1.05rem;
+  line-height: 1.85;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition:
+    border-color 110ms linear,
+    color 110ms linear,
+    transform 110ms ease-out;
+}
+/* the same step every other link on the page takes on hover */
+a.bmc:hover {
+  border-color: var(--border-hover);
+  color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+a.bmc:active {
+  transform: none;
+}
+/* Cookie is a script face: its baseline sits high in the box, so the cup
+   is centred on the line box and then nudged to the letters' optical
+   centre rather than the box's. */
+a.bmc img {
+  height: 1.15em;
+  width: auto;
+  position: relative;
+  top: -0.06em;
+}
+/* The two levers, in the picture frame's own wood — the same treatment the
+   save dialog's buttons get, because they are the same kind of thing: a
+   control this port added, not one the game had. */
+#under button {
+  font:
+    600 12px/1 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  color: var(--ink);
+  background: linear-gradient(var(--wood-lit) 0%, var(--wood-shade) 100%);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#under button:hover {
+  border-color: var(--spark);
+  color: #fff;
+}
+#under button:focus-visible {
+  outline: 2px solid var(--spark);
+  outline-offset: 2px;
+}
+/* what became of the screenshot: said beside the button that took it, and
+   taken down again once it has been read (dust/src/main.ts) */
+#under .note {
+  font-size: 11px;
+  color: var(--spark);
+}
+/* ------------------------------------------------------------------
+   Fullscreen: the picture letterboxed in a black field.
+
+   The STAGE is fullscreened rather than the canvas, so the UA does not take
+   over sizing the letterbox. The wooden frame comes off with everything
+   else: at fullscreen the picture is the whole screen and a moulding drawn
+   around it would be a frame around a frame. Same reasoning as the play
+   page's (taoot/play/index.html #stage:fullscreen).
+   ------------------------------------------------------------------ */
+#stage:fullscreen {
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: 100vh;
+  padding: 0;
+  background: #000;
+}
+#stage:fullscreen #curtain,
+#stage:fullscreen #brand {
+  display: none;
+}
+#stage:fullscreen #frame {
+  position: static;
+  margin: 0;
+  padding: 0;
+  width: auto;
+  height: auto;
+  background: none;
+  box-shadow: none;
+}
+#stage:fullscreen #screen {
+  width: min(100vw, calc(100vh * 4 / 3));
+  height: min(100vh, calc(100vw * 3 / 4));
+  max-width: none;
+  max-height: none;
+}
+/* The hint no longer has to give way to anything: it WRAPS. The strip could
+   not, being one line of fixed height, so the sentence ellipsized and the
+   title attribute carried the rest — which a phone cannot hover to read.
+   Both hints keep their `title` anyway; it costs nothing and a mouse still
+   gets the long form. */
+#under .keyhint,
+#under .touchhint {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#under .touchhint {
+  display: none;
+}
+/* the hint that fits the pointer: keys for a mouse, the gesture for glass.
+   `hover: none` as well as `coarse` so a touchscreen LAPTOP — which has both
+   a finger and arrow keys — keeps the keys line. */
+@media (pointer: coarse) and (hover: none) {
+  #under .keyhint {
+    display: none;
+  }
+  #under .touchhint {
+    display: inline;
+  }
+  /* the word goes and the arrows stay: at the 400px floor the strip has
+     room for the hint, the two boxes and the version, and only just — with
+     "invert" twice it overflows and the boxes are behind a scroll nobody
+     knows is there. The arrow IS the label, and the title still says it. */
+  #swipeOpts .word {
+    display: none;
+  }
+}
+/* the two swipe boxes: one group, so the gap between them is tighter than
+   the strip's own and they read as one question with two answers */
+#swipeOpts {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+#swipeOpts[hidden] {
+  display: none;
+}
+#swipeOpts label {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--dim);
+  cursor: pointer;
+  /* a checkbox on a phone is a TARGET before it is a label: the strip is
+     38px tall and this fills it, so the tap does not have to be accurate */
+  padding: 6px 0;
+}
+#swipeOpts input {
+  /* the tick in the logo's orange, and sized to the line rather than the
+     browser's default 13px, which is a smaller target than a finger */
+  accent-color: var(--spark);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+}
+#swipeOpts input:focus-visible {
+  outline: 2px solid var(--spark);
+  outline-offset: 2px;
+}
+#err {
+  color: #d98b6a;
+}
+
+/* ------------------------------------------------------------------
+   The saved-games modal.
+
+   The IDs and classes are the play page's, deliberately: one module
+   (engine/src/web/save-browser.ts) drives both dialogs, and it finds them by id. What
+   differs is only the skin — this one is built out of the same four browns
+   as the picture frame, because it stands in for a dialog the original drew
+   in the game's own furniture rather than the operating system's.
+
+   Nothing here is a Windows dialog and it should not pretend to be: the
+   original called GetSaveFileNameA and got the system's grey. We have the
+   canvas and nothing else, so the panel is the game's wood with the ember
+   on the one button that commits.
+   ------------------------------------------------------------------ */
+#saveModal {
+  display: none; /* save-browser.ts flips this to flex */
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: #0a0403cc;
+}
+#saveModal .modal-box {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(560px, 100%);
+  background: linear-gradient(var(--wood) 0%, var(--wood-dim) 100%);
+  /* the frame's own profile, outside in — the same two rules the canvas
+     gets, so the dialog reads as another panel in the same cabinet */
+  border: 1px solid var(--wood-lit);
+  box-shadow:
+    0 0 0 1px var(--rule),
+    0 18px 44px #000000cc;
+}
+#saveModal .modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--rule);
+  background: #00000026;
+}
+#saveModalTitle {
+  flex: 1;
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+#saveModalClose,
+#saveConfirmBtn,
+#saveUploadBtn,
+.save-icon {
+  font:
+    600 12px/1 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  color: var(--ink);
+  background: linear-gradient(var(--wood-lit) 0%, var(--wood-shade) 100%);
+  border: 1px solid var(--rule);
+  padding: 6px 9px;
+  cursor: pointer;
+}
+#saveModalClose:hover,
+#saveConfirmBtn:hover,
+#saveUploadBtn:hover,
+.save-icon:hover {
+  border-color: var(--spark);
+  color: #fff;
+}
+#saveConfirmBtn {
+  /* the one button that COMMITS, and the only ember in the dialog */
+  background: linear-gradient(var(--flame) 0%, var(--ember) 100%);
+  border-color: var(--rule);
+}
+.save-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 12px 10px;
+}
+.save-empty {
+  color: var(--dim);
+  padding: 22px 2px;
+  text-align: center;
+  /* the one place in this page a sentence may wrap */
+  white-space: normal;
+  line-height: 1.5;
+}
+.save-group {
+  margin: 12px 0 5px;
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.save-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+}
+.save-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font:
+    400 13px/1.3 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  color: var(--ink);
+  background: #00000026;
+  border: 1px solid transparent;
+  padding: 7px 8px;
+  cursor: pointer;
+}
+.save-name:hover {
+  background: #00000040;
+  border-color: var(--spark);
+}
+.save-icon {
+  padding: 6px 8px;
+}
+#saveModal .modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--rule);
+  background: #00000026;
+}
+#saveNewRow {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+}
+#saveNameInput {
+  flex: 1;
+  min-width: 0;
+  font:
+    400 13px/1 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  color: var(--ink);
+  background: var(--soot);
+  border: 1px solid var(--rule);
+  padding: 7px 8px;
+}
+#saveNameInput:focus-visible,
+#saveModalClose:focus-visible,
+#saveConfirmBtn:focus-visible,
+#saveUploadBtn:focus-visible {
+  outline: 2px solid var(--spark);
+  outline-offset: 2px;
+}
+/* the file picker is reached through its button, never shown itself */
+#saveUploadInput {
+  display: none;
+}
+
+/* the boot log, over the picture. Not up during the boot any more — the
+   fuse's caption carries the newest line and the wall of text fought the
+   title card for the same middle of the same page — so this is now what `b`
+   opens, and what an error opens by itself. */
+#log {
+  position: absolute;
+  top: calc(var(--pad) + var(--band));
+  right: var(--pad);
+  bottom: var(--pad);
+  left: var(--pad);
+  margin: 0;
+  z-index: 4;
+  overflow: auto;
+  padding: 14px 16px;
+  background: #08060488;
+  backdrop-filter: blur(3px);
+  border: 1px solid var(--edge);
+  color: var(--ink);
+  font:
+    12px/1.6 ui-monospace,
+    Menlo,
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* the only two loops on the page, and both are on the fuse: a spark that
+     gutters like a flame does, and the heat sliding along what it has
+     already burnt. Everything else moves once, when the boot ends. */
+  #spark {
+    animation: gutter 1.15s ease-in-out infinite;
+  }
+  #burn::after {
+    animation: heat 1.9s linear infinite;
+  }
+  /* and the ember under the button, once there is a button */
+  #boot.ready #startwrap {
+    animation: ember 2.9s ease-in-out 900ms infinite;
+  }
+}
+@keyframes ember {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 #fb501100);
+  }
+  50% {
+    filter: drop-shadow(0 0 13px #fb501199);
+  }
+}
+@keyframes gutter {
+  0%,
+  100% {
+    opacity: 1;
+    scale: 1;
+  }
+  30% {
+    opacity: 0.72;
+    scale: 0.86;
+  }
+  55% {
+    opacity: 1;
+    scale: 1.1;
+  }
+  78% {
+    opacity: 0.8;
+    scale: 0.94;
+  }
+}
+@keyframes heat {
+  from {
+    background-position: -50% 0;
+  }
+  to {
+    background-position: 150% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #frame,
+  #burn,
+  #boot,
+  #curtain::before {
+    transition-duration: 1ms;
+  }
+}

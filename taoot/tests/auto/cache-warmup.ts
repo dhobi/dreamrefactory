@@ -1,5 +1,5 @@
 /**
- * The cache warmer (taoot/src/cache-warmup.ts).
+ * The cache warmer (engine/src/web/cache-warmup.ts).
  *
  * Everything worth asserting about a 1.2 GB download is a thing you cannot see
  * by running it: whether it holds the bytes, whether one missing file takes the
@@ -16,7 +16,7 @@ import {
   warmCache,
   warmupList,
   type WarmFile,
-} from "../../src/cache-warmup";
+} from "@dreamfactory/engine/web/cache-warmup";
 
 /**
  * A fetch that hands back `chunks` slices of a file and records what happened.

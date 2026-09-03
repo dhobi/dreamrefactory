@@ -1,0 +1,96 @@
+/**
+ * Dust's workbench sheet: the engine's panel, and what this game's own chrome
+ * has to be told to stop doing.
+ *
+ * The panel is `engine/src/web/speedrun/panel.css` — the same structure, the
+ * same palette, the same picture-size control and the same row Titanic's
+ * workbench draws, because a workbench is a tool and a sheet is the same program
+ * on either disc. Imported rather than linked for the reason `theme.css` imports
+ * the shared chrome: Vite resolves a bare package specifier in CSS and not in a
+ * `<link href>`.
+ *
+ * What is left here is the difference between the two games' PAGES. This one
+ * links `game.css` as well, because the workbench boots the same `main.ts` and
+ * that module queries nineteen elements it styles — and `game.css` is written
+ * for a page that IS the game: the stage fills the window, the picture is matted
+ * in wood, and the whole thing is pinned rather than in flow. None of that is
+ * right for one column of three, so the overrides below undo exactly those
+ * three things and nothing else. Dust's own page is untouched by all of it; it
+ * does not link this sheet.
+ *
+ * Every override is written with MORE specificity than the rule it beats
+ * (`#srgame #frame` over `#frame`, `html body.deep` over `body.deep`), never
+ * with less and never relying on order. Both sheets become bundles in a build
+ * and their order is the bundler's to decide — which is the bug
+ * `site/tests/cascade.ts` and `dust/tests/browser/built-layout.ts` were both
+ * written for.
+ */
+@import "@dreamfactory/engine/web/speedrun/panel.css";
+
+/**
+ * The page is a document again, not a grid pinned to the window.
+ *
+ * `game.css` makes `body` a grid whose one row the stage takes, which is right
+ * for a page that is nothing but the game and wrong for one that scrolls through
+ * a row of columns.
+ */
+html body.deep {
+  display: block;
+}
+
+/**
+ * The stage, put back into FLOW.
+ *
+ * On the game page every child of `#stage` is absolutely positioned against it —
+ * the title card, the boot gauge, the picture — which is right for a box pinned
+ * to the window and wrong for one that is a column of a row: with no in-flow
+ * child the stage measured 32px (its two pads) while `#frame` went on being
+ * 800px tall, so eight hundred pixels of invisible wood lay over the sheet and
+ * the controls.
+ *
+ * And it did not merely look wrong. `#frame` is `pointer-events: none` until the
+ * game is running and `auto` after, so the panel worked until the boot finished
+ * and then stopped taking clicks — Play included. That is the second bug
+ * `dust/tests/browser/built-layout.ts` was written for arriving from the other
+ * direction, and `dust/tests/browser/workbench.ts` is what caught it.
+ */
+#srgame #stage {
+  height: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* and no pad of its own: `--pad` is the margin the game page keeps between
+     the cabinet and the window edge, and in a column it made the stage 32px
+     wider than the column it is in — so the picture sat five pixels left of
+     the sheet below it, which reads as a misalignment because it is one */
+  padding: 0;
+}
+
+#srgame #curtain,
+#srgame #frame {
+  position: static;
+  inset: auto;
+  margin: 0 auto;
+}
+
+/**
+ * ...and out of its wooden mat.
+ *
+ * The wood is NEW.FLT's own, drawn around the picture in four browns because on
+ * the game page the picture is the whole point and the frame is the cabinet it
+ * sits in. Here the picture is one thing among three and the mat is 22px of
+ * decoration on every side of it, pushing the sheet's column further away and
+ * making the canvas's real size hard to read against the scale control under it.
+ *
+ * The rim it keeps instead is the workbench's own — a brass hairline with the
+ * ice bleeding past it, on `#srgame #screen` in panel.css, which is the same rim
+ * Titanic's workbench draws around the same framebuffer.
+ */
+#srgame #frame {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  width: fit-content;
+  height: fit-content;
+}

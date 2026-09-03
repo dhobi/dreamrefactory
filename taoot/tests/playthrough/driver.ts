@@ -11,7 +11,7 @@ import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import type { SetViewer } from "@dreamfactory/engine/web/viewer";
 import type { NavDriver } from "./nav/navigator";
-import { type Aim, aimAtHotspot, aimAtThing } from "./nav/aim";
+import { type Aim, aimAtHotspot, aimAtThing } from "@dreamfactory/engine/web/speedrun/aim";
 
 /**
  * The pumping half of the harness (play.ts), which this driver needs for the
@@ -95,8 +95,10 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
       await ticks(1, `${what}: waiting for the cast to be still`);
     }
   };
-  /** the engine's answers to the aiming questions (nav/aim.ts) */
+  /** the engine's answers to the aiming questions (engine/src/web/speedrun/aim.ts) */
   const aim = (): Aim => ({
+    width: host.screen.width,
+    height: host.screen.height,
     hitTest: (x, y) => session.hitTestAt(x, y),
     propUnder: (x, y) => v().propUnder(x, y)?.group.name ?? null,
     inFlat: !session.viewShowing && !!session.stageScript,

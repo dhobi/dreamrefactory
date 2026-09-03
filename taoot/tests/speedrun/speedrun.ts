@@ -71,10 +71,10 @@ import { chromium, type Browser, type Page } from "playwright";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseSheet, describeSheet, type Step } from "../../src/speedrun/sheet";
-import { VERBS, setPlanner } from "../../src/speedrun/actions";
+import { parseSheet, describeSheet, type Step } from "@dreamfactory/engine/web/speedrun/sheet";
+import { ACTIONS, VERBS, setPlanner } from "../../src/speedrun/actions";
 import { speedrunDriver } from "./driver";
-import { runSheet, type Split, type Timing } from "../../src/speedrun/runner";
+import { runSheet, type Split, type Timing } from "@dreamfactory/engine/web/speedrun/runner";
 import { playwrightPlanner } from "./planner";
 import { playUrl } from "../browser/driver";
 import { DEFAULT_LANGUAGE } from "../../src/languages";
@@ -260,7 +260,7 @@ async function main(): Promise<void> {
   // the loop is shared with the in-page previewer (taoot/src/speedrun/runner.ts) so the
   // two hosts cannot drift about what a sheet MEANS — only about how a key gets
   // delivered. VERBOSE narrates; the report below is what a run is read from.
-  const r = await runSheet(d, steps, {
+  const r = await runSheet(d, steps, ACTIONS, {
     onWatch: (w, said) =>
       console.log(`  WATCH ${w.source} -> ${w.action.source}${said.length ? `  (${said.join("; ")})` : ""}`),
     onStep: (step, i, total) =>

@@ -15,7 +15,7 @@ its own:
 |---|---|---|
 | `site-v0.1.1` | `npm run build -w site` | `/dreamrefactory/` — the front door and the eight format editors |
 | `taoot-v0.9.53` | `npm run build -w taoot` | `/dreamrefactory/taoot/` — Titanic's four pages (the front page, `/play/`, `/collection/`, the unlisted `/speedrun/`) |
-| `dust-v0.3.6` | `npm run build -w dust` | `/dreamrefactory/dust/` — Dust's two pages (the game, `/collection/`) |
+| `dust-v0.3.6` | `npm run build -w dust` | `/dreamrefactory/dust/` — Dust's three pages (the game, `/collection/`, the unlisted `/speedrun/`) |
 | `timelapse-v0.1.0` | `npm run build -w timelapse` | `/dreamrefactory/timelapse/` — Timelapse's one page |
 | `skullcracker-v0.1.0` | `npm run build -w skullcracker` | `/dreamrefactory/skullcracker/` — Skull Cracker's two pages (the films and its menu, `walk.html`) |
 | *(no tag)* | `npm run docs:build` | `/dreamrefactory/docs/` — on any push that touches `docs/` |

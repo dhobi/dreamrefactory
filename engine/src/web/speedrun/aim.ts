@@ -21,6 +21,21 @@
  * hit test resolves to the thing. An actor stands in front of a view's hotspots
  * in the click order, so the middle of a doorway can belong to whoever is
  * loitering in it — and a click there is a conversation, not a door.
+ *
+ * ## How big the screen is, is the GAME's fact
+ *
+ * The full-screen sweep used to run `y < 384, x < 512`, which is Titanic's
+ * screen written into the layer that aims at any DreamFactory game. Two of the
+ * three ports on this site are that size — Dust presents 512x384 through a
+ * 1024x768 canvas — and the third is not: Timelapse is 640x480 and says so
+ * (`ScreenPresenter`), so a sweep with Titanic's numbers in it would have
+ * searched five eighths of its screen and called the rest unreachable.
+ *
+ * So the bounds come off the adapter ({@link Aim.width}, {@link Aim.height}),
+ * which every caller answers from `host.screen` — the presenter that owns the
+ * framebuffer the hit test is asked about. That is the one authority: a CANVAS
+ * may be any multiple of it (Dust's is 2x), and a point is aimed in framebuffer
+ * pixels because that is what `hitTestAt` takes.
  */
 
 /** the engine questions aiming needs, however the caller can answer them */
@@ -38,6 +53,10 @@ export interface Aim {
   inFlat: boolean;
   /** the named hotspot's rectangle in the current view, or null */
   hotspot(name: string): { x0: number; y0: number; x1: number; y1: number } | null;
+  /** the game's framebuffer width — `host.screen.width`, never the canvas's */
+  width: number;
+  /** and its height. See the note above on whose fact this is */
+  height: number;
 }
 
 /** the sweep grid — fine enough for a small prop, coarse enough to be quick */
@@ -73,8 +92,8 @@ export function aimAtThing(a: Aim, name: string): { x: number; y: number } | nul
     if (spot) return spot;
   }
   const kinds = ["actor", "prop", "button", "painting"];
-  for (let y = 2; y < 384; y += AIM_STEP) {
-    for (let x = 2; x < 512; x += AIM_STEP) {
+  for (let y = 2; y < a.height; y += AIM_STEP) {
+    for (let x = 2; x < a.width; x += AIM_STEP) {
       const hit = a.hitTest(x, y);
       if (hit.name?.toLowerCase() === want && kinds.includes(hit.type)) return { x, y };
       if (!a.inFlat && a.propUnder(x, y)?.toLowerCase() === want) return { x, y };

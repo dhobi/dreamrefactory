@@ -33,6 +33,45 @@ import { DEFAULT_ENCODING, DfEncoding } from "@dreamfactory/engine/df/text";
 import { indexedDbPhotoStore } from "./photos-idb";
 
 /**
+ * One fetch starting or ending — see {@link HostFiles.onWire}.
+ *
+ * The wire as a sentence, so that two readouts of it cannot disagree: the busy
+ * mark in the canvas corner and the speedrun load remover
+ * (`web/load-clock.ts`) are told by the same event, and both numbers they show
+ * come out of these fields rather than out of two counts kept separately.
+ */
+export interface WireEvent {
+  /** unique per fetch, so a start and an end can be paired */
+  id: number;
+  /** what was asked for; the load remover asks the browser about this URL */
+  url: string;
+  /** false when it was issued, true when it landed (or failed) */
+  done: boolean;
+  /** how many fetches are in the air after this event */
+  inFlight: number;
+  /**
+   * Is somebody WAITING for this, or was it started on spec?
+   *
+   * {@link HostFiles.load} is awaited by whoever called it — a set activation
+   * blocks on the room and all of its siblings and casts before anything is
+   * composited, and `onPlayMovie` blocks on the film before a frame of it plays
+   * — so the game is stopped for the whole of it.
+   *
+   * {@link HostFiles.provide} is not. It is the engine's SYNCHRONOUS contract:
+   * it asked, got null, and carried on, and the file is wired into the running
+   * viewer if and when it lands ({@link HostFiles.onBackgroundLoad}). The game
+   * keeps playing throughout, so a speedrun clock must keep counting
+   * ([#369](https://github.com/dhobi/dreamrefactory/issues/369)) — otherwise a
+   * route is credited for time it spent playing, which is the complaint that
+   * issue is about.
+   *
+   * The busy MARK reads it the other way and is right to: a fetch in the air is
+   * worth telling the player about however it started.
+   */
+  waited: boolean;
+}
+
+/**
  * Where game files come from: `FileStore` in the browser (fetch + cache), the
  * `gamefiles/` index in tests. The engine itself only ever needs the
  * synchronous {@link provide}; the host also wants to *await* a file, because
@@ -73,6 +112,21 @@ export interface HostFiles {
   onBackgroundLoad?: ((key: string, data: Uint8Array) => void) | null;
   /** drop a cached file if it can be fetched again; returns bytes freed */
   evict?(name: string): number;
+  /**
+   * Watch the wire, one fetch at a time; returns the way to stop watching.
+   *
+   * Optional because a store that reads a directory rather than a network has
+   * no wire to report (Timelapse's), and because nothing the engine does needs
+   * this — it is here so that a page's readouts and the load remover's
+   * `watchLoads` (`web/load-clock.ts`) can be handed any game's store and work.
+   *
+   * A store that has one owes its watchers two events per fetch, paired by
+   * {@link WireEvent.id}, and owes them the courtesy of not letting a throwing
+   * watcher take the fetch down with it: what is being reported is somebody
+   * else's readout, and a store that failed a `load` because a progress bar
+   * threw would be the tail wagging the dog.
+   */
+  onWire?(watch: (e: WireEvent) => void): () => void;
 }
 
 /** what the host tells whoever is showing it. Every one is optional. */

@@ -25,9 +25,10 @@
  * press that never happens is as visible as a wrong one.
  */
 import { test, expect } from "vitest";
-import { resolve, type ActionContext } from "../../src/speedrun/actions";
-import type { SpeedrunDriver } from "../../src/speedrun/driver";
-import type { Step } from "../../src/speedrun/sheet";
+import { VERBS, resolve } from "../../src/speedrun/actions";
+import type { ActionContext } from "@dreamfactory/engine/web/speedrun/action";
+import type { SpeedrunDriver } from "@dreamfactory/engine/web/speedrun/driver";
+import type { Step } from "@dreamfactory/engine/web/speedrun/sheet";
 
 /** one beat of a scripted conversation, in the order the puppet reaches them */
 type Beat =
@@ -140,6 +141,9 @@ async function say(
     gap: 16,
     say: (m) => said.push(m),
     suggest: () => {},
+    // `say` never parses a line, so the vocabulary is only here because the
+    // context carries it — this suite drives ONE verb and not a sheet
+    verbs: VERBS,
   };
   try {
     await resolve("say")!.run(c);

@@ -70,7 +70,7 @@ import {
   type Point,
   type SpeedrunDriver,
   type WaitMode,
-} from "../../src/speedrun/driver";
+} from "@dreamfactory/engine/web/speedrun/driver";
 
 export { SHOWING };
 export type { WaitMode, Clock, Point, SpeedrunDriver };
@@ -324,17 +324,19 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
      * Aim at a named thing the way the browser suite does — through the engine's
      * OWN hit test, never a hardcoded pixel.
      *
-     * Shared with taoot/tests/playthrough/nav/aim.ts rather than reimplemented, for the
+     * Shared with engine/src/web/speedrun/aim.ts rather than reimplemented, for the
      * reason that file gives at length: whether a thing is clickable from where
      * you stand decides whether a route walks on, so two different sweeps explore
      * a room differently and end up facing different ways. A speedrun that aimed
      * its own way would be running a different game.
      */
     aim: async (kind: "thing" | "hotspot", name: string): Promise<Point | null> => {
-      const { aimSource } = await import("../playthrough/nav/aim");
+      const { aimSource } = await import("@dreamfactory/engine/web/speedrun/aim");
       const adapter = `(() => {
         const dbg = window.dbg, s = dbg.session, v = dbg.viewer;
         return {
+          width: dbg.host.screen.width,
+          height: dbg.host.screen.height,
           hitTest: (x, y) => s.hitTestAt(x, y),
           propUnder: (x, y) => { const p = v.propUnder(x, y); return p ? p.group.name : null; },
           inFlat: !s.viewShowing && !!s.stageScript,

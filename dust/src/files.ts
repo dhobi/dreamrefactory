@@ -1,4 +1,4 @@
-import type { HostFiles } from "@dreamfactory/engine/web/host";
+import type { HostFiles, WireEvent } from "@dreamfactory/engine/web/host";
 import { siteUrl } from "@dreamfactory/site/site";
 
 /**
@@ -110,6 +110,35 @@ export class DustFiles implements HostFiles {
    *  `FileStore` has the same hook, and the same canvas-corner spinner on it */
   onBusyChange: ((inFlight: number) => void) | null = null;
   /**
+   * The wire, one fetch at a time — what the load remover subtracts
+   * (`engine/src/web/load-clock.ts`, #251).
+   *
+   * {@link onBusyChange} above cannot answer it: the clock needs each fetch by
+   * NAME, because since #369 it stops only for the ones that went to the
+   * network and a cache hit is a read the original did off its CD as well. So
+   * this reports the URL and an id to pair the two ends by, which is the same
+   * sentence Titanic's store says (taoot/src/files.ts) and therefore the same
+   * arithmetic on top of it.
+   */
+  private wireWatchers = new Set<(e: WireEvent) => void>();
+  private wireInFlight = 0;
+  private nextFetchId = 1;
+  /**
+   * Names whose fetch was started by {@link provide} — nobody is waiting for
+   * them ({@link WireEvent.waited}).
+   *
+   * Titanic's store needs no such set because its two paths are two different
+   * fetches; Dust's `provide` starts the SAME {@link load} an awaiting caller
+   * would, so which of them got there first is the only thing that separates
+   * them, and it has to be written down before the flight begins.
+   *
+   * A joiner that really does await a flight this started keeps `waited: false`
+   * for the whole of it, so its download is counted rather than removed. That
+   * is the safe direction and deliberately so: under-removing makes a route look
+   * slower than it was, over-removing invents a record.
+   */
+  private background = new Set<string>();
+  /**
    * Every path the manifest listed, verbatim — not just the disc's.
    *
    * The disc index below is keyed by BASENAME and filtered to `dustcd/`, which
@@ -152,6 +181,43 @@ export class DustFiles implements HostFiles {
       if (!store.urls.has(base)) store.urls.set(base, siteUrl(url));
     }
     return store;
+  }
+
+  /**
+   * Watch the wire, one fetch at a time; returns the way to stop watching.
+   *
+   * {@link HostFiles.onWire}'s implementation for this disc. A watcher that
+   * throws is not allowed to take the fetch down with it — what is being
+   * reported is somebody else's readout.
+   */
+  onWire(watch: (e: WireEvent) => void): () => void {
+    this.wireWatchers.add(watch);
+    return () => {
+      this.wireWatchers.delete(watch);
+    };
+  }
+
+  /** announce a fetch and hand back the id its end must carry */
+  private fetchBegan(url: string, waited: boolean): number {
+    const id = this.nextFetchId++;
+    this.wireInFlight++;
+    this.sayWire({ id, url, done: false, inFlight: this.wireInFlight, waited });
+    return id;
+  }
+
+  private fetchEnded(id: number, url: string, waited: boolean): void {
+    this.wireInFlight--;
+    this.sayWire({ id, url, done: true, inFlight: this.wireInFlight, waited });
+  }
+
+  private sayWire(e: WireEvent): void {
+    for (const watch of this.wireWatchers) {
+      try {
+        watch(e);
+      } catch {
+        /* a readout's problem, not the fetch's */
+      }
+    }
   }
 
   /** how many names the disc offers — a boot that indexed nothing says so */
@@ -215,7 +281,14 @@ export class DustFiles implements HostFiles {
     const have = this.cache.get(key);
     if (have) return have;
     this.misses.push(key);
-    if (this.urls.has(key)) void this.load(key);
+    if (this.urls.has(key)) {
+      // Nobody awaits this one: the engine asked, was told "not yet" and
+      // carried on, so a speedrun's clock must keep counting through it
+      // (#369). Marked BEFORE the fetch, because `load` reads it as the flight
+      // is created — see {@link background}.
+      this.background.add(key);
+      void this.load(key);
+    }
     return null;
   };
 
@@ -231,22 +304,36 @@ export class DustFiles implements HostFiles {
     // one fetch per name however many callers ask at once, which the boot does:
     // `preload` fetches the plan while the scripts are already asking
     const started = !this.inFlight.has(key);
+    // whether anyone is waiting is decided once, for the whole flight, and by
+    // whoever started it — see {@link background}
+    const waited = !this.background.has(key);
     const flight = this.inFlight.get(key) ?? (async () => {
-      const res = await fetch(url);
-      if (!res.ok) return { bytes: null, streamed: false };
-      // STREAMED, which is what `HostFiles.load` has always promised ("where the
-      // source streams, reports each chunk") and what taoot/src/files.ts does.
-      // This store used to buffer the whole body and report it once, so its page
-      // could only ever draw a bar that moved fourteen times.
-      const bytes = res.body
-        ? await this.readStream(key, res.body, onBytes)
-        : new Uint8Array(await res.arrayBuffer());
-      this.partial.delete(key);
-      this.cache.set(key, bytes);
-      this.loads.push(key);
-      this.onFileLoaded?.(key, bytes.byteLength);
-      this.onBackgroundLoad?.(key, bytes);
-      return { bytes, streamed: res.body !== null };
+      // announced from inside the flight, and synchronously: this runs before
+      // the first `await` below, so the wire says "busy" in the same turn the
+      // fetch was issued in rather than a microtask later
+      const id = this.fetchBegan(url, waited);
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return { bytes: null, streamed: false };
+        // STREAMED, which is what `HostFiles.load` has always promised ("where the
+        // source streams, reports each chunk") and what taoot/src/files.ts does.
+        // This store used to buffer the whole body and report it once, so its page
+        // could only ever draw a bar that moved fourteen times.
+        const bytes = res.body
+          ? await this.readStream(key, res.body, onBytes)
+          : new Uint8Array(await res.arrayBuffer());
+        this.partial.delete(key);
+        this.cache.set(key, bytes);
+        this.loads.push(key);
+        this.onFileLoaded?.(key, bytes.byteLength);
+        this.onBackgroundLoad?.(key, bytes);
+        return { bytes, streamed: res.body !== null };
+      } finally {
+        // in a `finally`, so a fetch that THREW still closes its span — a clock
+        // left holding an open period would stop counting for the rest of the
+        // page's life
+        this.fetchEnded(id, url, waited);
+      }
     })();
     this.inFlight.set(key, flight);
     if (started) this.onBusyChange?.(this.inFlight.size);
@@ -259,7 +346,10 @@ export class DustFiles implements HostFiles {
       return bytes;
     } finally {
       this.partial.delete(key);
-      if (this.inFlight.delete(key)) this.onBusyChange?.(this.inFlight.size);
+      if (this.inFlight.delete(key)) {
+        this.background.delete(key);
+        this.onBusyChange?.(this.inFlight.size);
+      }
     }
   }
 

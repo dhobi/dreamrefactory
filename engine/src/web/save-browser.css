@@ -1,0 +1,169 @@
+/**
+ * The saved-games dialog, as structure — the look of what
+ * `web/save-browser.ts` drives.
+ *
+ * Beside the module for the same reason `speedrun/panel.css` is beside the
+ * panel's: the dialog's markup, its styles and the code that works it are one
+ * thing, and one thing should live in one place. That module finds its nine
+ * elements by id and has always said its styles "live in the page"; this is
+ * that sentence stopping being true.
+ *
+ * ## Why it moved
+ *
+ * Titanic has TWO pages with this dialog on it — `/play/` and the unlisted
+ * `/speedrun/` — and each carried its own copy of these 127 lines. They had not
+ * drifted yet, which is the only reason this is a tidy-up rather than a bug
+ * report: a change to the dialog on one page silently did not reach the other,
+ * and nothing anywhere would have said so.
+ *
+ * ## Roles, not one game's palette
+ *
+ * The block was authored inside Titanic's page against `--frost` and
+ * `--ice-500` directly; here those are the roles Titanic's own theme maps them
+ * from, so its two pages render as they did and any game that links this gets
+ * its own colours. The scrim is the one approximation: it was
+ * `rgba(0, 4, 10, 0.76)` and is now the page colour at the same alpha —
+ * Titanic's `--bg` is `#00060f` against that literal's `#00040a`, two units of
+ * green apart behind a 3px blur.
+ *
+ * The plain blacks in the box shadow stay literal: a shadow is not a palette.
+ *
+ * ## What is NOT here
+ *
+ * Dust's dialog. It styles `#saveModal` directly, in its own wood
+ * (`dust/src/game.css`), and has only ever had one copy — so there is nothing
+ * to deduplicate there and nothing to gain by pulling it onto this sheet except
+ * a changed look. Its pages do not link this.
+ *
+ * Imported through a sheet of the game's own (`taoot/src/saves.css`) rather than
+ * linked, because Vite resolves a bare package specifier in CSS and not in a
+ * `<link href>`.
+ */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  backdrop-filter: blur(3px);
+}
+.modal-box {
+  width: 520px;
+  max-width: 92vw;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 24px 70px -18px rgba(0, 0, 0, 0.9),
+    0 0 70px -30px var(--mark-glow);
+  color: var(--text);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+.modal-head span {
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+}
+.modal-head button {
+  background: none;
+  border: none;
+  color: var(--text-mute);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.1rem 0.4rem;
+}
+.modal-head button:hover {
+  color: var(--text-bright);
+  background: none;
+}
+.save-list {
+  overflow-y: auto;
+  padding: 0.4rem 0.9rem 0.6rem;
+  flex: 1;
+}
+.save-empty {
+  color: var(--text-mute);
+  font-size: 0.85rem;
+  padding: 1.4rem 0.2rem;
+  text-align: center;
+}
+.save-group {
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.17em;
+  color: var(--text-mute);
+  margin: 0.8rem 0 0.3rem;
+}
+.save-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.save-name {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.3rem 0.45rem;
+  border-radius: var(--radius);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.save-name:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: var(--accent-line);
+  color: var(--text-bright);
+}
+.save-icon {
+  background: var(--raised);
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--radius);
+}
+.save-icon:hover {
+  border-color: var(--accent-line);
+  color: var(--text-bright);
+}
+.modal-foot {
+  border-top: 1px solid var(--border);
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.save-newrow {
+  display: flex;
+  gap: 0.4rem;
+}
+.save-newrow input {
+  flex: 1;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+}
+.modal-foot button {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.8rem;
+}

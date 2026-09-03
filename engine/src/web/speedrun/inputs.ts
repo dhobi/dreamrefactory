@@ -59,7 +59,7 @@
  * a row that never lights. Anything pressed anyway still shows: it goes to the
  * spare, labelled, which is the other half of why the spare is there.
  */
-import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
+import { focusOwnsKey } from "../keys";
 
 export interface InputMonitorOptions {
   /** the window the game is in — where `main.ts` listens for keys */

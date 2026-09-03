@@ -20,9 +20,9 @@ import { chromium } from "playwright";
 import { speedrunDriver } from "./driver";
 import { playUrl } from "../browser/driver";
 import { DEFAULT_LANGUAGE } from "../../src/languages";
-import { parseSheet } from "../../src/speedrun/sheet";
-import { VERBS } from "../../src/speedrun/actions";
-import { runSheet } from "../../src/speedrun/runner";
+import { parseSheet } from "@dreamfactory/engine/web/speedrun/sheet";
+import { ACTIONS, VERBS } from "../../src/speedrun/actions";
+import { runSheet } from "@dreamfactory/engine/web/speedrun/runner";
 
 const CHECKPOINT = "m4p0 stairtop";
 const MAX_PRESSES = 400;
@@ -73,7 +73,7 @@ const boot = parseSheet(
   ].join("\n"),
   { verbs: VERBS },
 );
-const booted = await runSheet(d, boot);
+const booted = await runSheet(d, boot, ACTIONS);
 if (booted.failure) {
   console.error(`could not reach the stair: ${booted.failure.step.source} — ${booted.failure.error.message}`);
   await browser.close();

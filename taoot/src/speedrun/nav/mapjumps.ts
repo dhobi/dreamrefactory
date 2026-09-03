@@ -43,7 +43,7 @@ export interface MapJump {
    * A name and not a coordinate on purpose: a flat region resolves through the
    * engine's own hittest as `{name, type: "button"}` (SetViewer's session
    * .hitTestAt), so aiming at it goes through the rule the rest of the harness
-   * keeps — only ever click a point the engine agrees IS the thing (nav/aim.ts).
+   * keeps — only ever click a point the engine agrees IS the thing (engine/src/web/speedrun/aim.ts).
    * The names are the artists' own ("Button22"), unique within a plan.
    */
   region: string;

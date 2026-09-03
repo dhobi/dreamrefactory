@@ -11,9 +11,18 @@
  * So everything host-shaped is behind {@link SpeedrunDriver}, and everything
  * presentation-shaped is behind {@link RunHooks}. What is left is the loop.
  */
-import { clearWatches, resolve, watches, type ActionContext, type Watch } from "./actions";
-import type { Step } from "./sheet";
-import type { Clock, SpeedrunDriver, WaitMode } from "./driver";
+import {
+  clearWatches,
+  resolveIn,
+  verbsOf,
+  watches,
+  type Action,
+  type ActionContext,
+  type ActionTable,
+  type Watch,
+} from "./action";
+import type { Step } from "@dreamfactory/engine/web/speedrun/sheet";
+import type { Clock, SpeedrunDriver, WaitMode } from "@dreamfactory/engine/web/speedrun/driver";
 
 /**
  * How often a standing watch is polled while a step runs (#255).
@@ -42,7 +51,7 @@ const WATCH_TICK_MS = 250;
  * a reader can always get back to what the stopwatch on the desk would have
  * said. It is also a number worth reading on its own: a leg that removed twenty
  * seconds is a leg whose real cost is a download, and warming the cache
- * (taoot/src/cache-warmup.ts) will change the run more than tuning it will.
+ * (engine/src/web/cache-warmup.ts) will change the run more than tuning it will.
  */
 /** what one action cost */
 export interface Timing {
@@ -170,8 +179,13 @@ export function pointerAfter(steps: Step[], step: Step): Pointer | null {
   return pointerAt(steps, i + 1);
 }
 
-/** the wait each verb does unless the line says otherwise */
-export function waitOf(step: Step): WaitMode {
+/**
+ * The wait each verb does unless the line says otherwise.
+ *
+ * Takes the table for the same reason {@link runSheet} does: what a verb waits
+ * for is a fact about the vocabulary in play, and there is more than one.
+ */
+export function waitOf(actions: ActionTable, step: Step): WaitMode {
   const asked = step.opts.wait as WaitMode | undefined;
   if (asked) {
     if (!["none", "taken", "ready", "quiet"].includes(asked)) {
@@ -179,7 +193,7 @@ export function waitOf(step: Step): WaitMode {
     }
     return asked;
   }
-  return resolve(step.verb)?.wait ?? "taken";
+  return resolveIn(actions, step.verb)?.wait ?? "taken";
 }
 
 /**
@@ -243,8 +257,28 @@ export const WHERE = `(() => {
 export async function runSheet(
   d: SpeedrunDriver,
   steps: Step[],
+  /**
+   * The vocabulary to run against — the engine's verbs plus this game's
+   * (`taoot/src/speedrun/actions.ts`, `ACTIONS`).
+   *
+   * A parameter and not an import, which is the seam that let this loop into the
+   * engine at all: it used to reach for one module-level table, and that table
+   * was Titanic's. The run loop has no opinion about what verbs exist — it looks
+   * each line's verb up, asks how much to wait for, and calls it — so the table
+   * is the caller's to supply, and a second game supplies its own.
+   *
+   * It also has to be the SAME table the sheet was parsed with. A line that
+   * parsed against one vocabulary and ran against another would fail here as a
+   * missing verb, which is a confusing way to report a mismatch nobody made on
+   * purpose: `parseSheet(text, { verbs: VERBS })` and `runSheet(d, steps,
+   * ACTIONS)` are two halves of one statement.
+   */
+  actions: ActionTable,
   hooks: RunHooks = {},
 ): Promise<RunResult> {
+  const resolve = (verb: string): Action | undefined => resolveIn(actions, verb);
+  /** what `watchFor` parses its action against — see {@link ActionContext.verbs} */
+  const verbs = verbsOf(actions);
   const timings: Timing[] = [];
   const splits: Split[] = [];
   let failure: { step: Step; error: Error } | null = null;
@@ -303,11 +337,12 @@ export async function runSheet(
         await act.run({
           d,
           step: w.action,
-          wait: waitOf(w.action),
+          wait: waitOf(actions, w.action),
           budget: Number(w.action.opts.budget ?? 10_000),
           gap: Number(w.action.opts.gap ?? 16),
           say: (m: string) => said.push(m),
           suggest: () => {},
+          verbs,
         });
         hooks.onWatch?.(w, said);
       } catch (e) {
@@ -354,7 +389,7 @@ export async function runSheet(
       const ctx: ActionContext = {
         d,
         step,
-        wait: waitOf(step),
+        wait: waitOf(actions, step),
         /**
          * TEN SECONDS, and the point of it is the sheet rather than the run.
          *
@@ -380,6 +415,7 @@ export async function runSheet(
         gap: Number(step.opts.gap ?? 16),
         say: (m: string) => says.push(m),
         suggest: (line: string) => (suggestion = line),
+        verbs,
       };
       let over = false;
       const dog = watches().length && step.verb !== "watchfor"
