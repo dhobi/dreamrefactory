@@ -285,7 +285,7 @@ Or take the published one, which is the same bytes — `danielhobi/dreamrefactor
 public, tagged both `latest` and by runner version:
 
 ```bash
-docker pull danielhobi/dreamrefactory-runner:2.336.0
+docker pull danielhobi/dreamrefactory-runner:2.337.0
 ```
 
 It carries no game files and no registration, so there is nothing in it that is
@@ -353,7 +353,7 @@ definition and out of git.
 Three things differ from `compose.yml`, and each is a thing Portainer cannot do:
 
 - **no `build:`** — there is no checkout to build from, so it pulls
-  `danielhobi/dreamrefactory-runner:2.336.0`;
+  `danielhobi/dreamrefactory-runner:2.337.0`;
 - **no `env_file:`** — that wants a file beside the compose file, which a
   web-editor stack has not got;
 - **`RUNNER_EPHEMERAL=0`** — the container stays up and takes job after job.

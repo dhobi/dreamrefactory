@@ -51,8 +51,8 @@ REPO="dhobi/dreamrefactory"
 # The pinned version lives in tools/runner/runner.env so the container build and
 # this script cannot drift apart. These values are the fallback for the case this
 # script was copied to a host on its own — keep them in step when bumping.
-RUNNER_VERSION="2.336.0"
-RUNNER_SHA256="04cf0be1aff4c3ec3554466c39124ca250e3effd8873bb7e8d68535aa9505d5d"
+RUNNER_VERSION="2.337.0"
+RUNNER_SHA256="70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613"
 _pinned="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/runner/runner.env"
 if [ -f "$_pinned" ]; then
   # shellcheck source=tools/runner/runner.env

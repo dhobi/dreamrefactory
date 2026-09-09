@@ -24,7 +24,7 @@
 
 services:
   runner:
-    image: danielhobi/dreamrefactory-runner:2.336.0
+    image: danielhobi/dreamrefactory-runner:2.337.0
     container_name: dreamrefactory-runner
 
     environment:
