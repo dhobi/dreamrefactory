@@ -106,6 +106,22 @@ else
 fi
 
 # --------------------------------------------------------------- register ----
+# A restart is not a new container. `restart: always` restarts THIS one and it
+# keeps its writable layer, so a registration written by the last life is still
+# on disk — and `config.sh` refuses to configure over one: "cannot configure the
+# runner because it is already configured". `--replace` does not help. That
+# reclaims the entry of the same name on GITHUB's side; this file is here.
+#
+# Normally there is nothing to clear: the trap below removes the registration on
+# SIGTERM, and an ephemeral runner removes its own after its one job. What gets
+# past both is a stop that never delivers a signal — a power cut, an OOM kill,
+# `docker kill`. Rare, but it leaves the runner unable to boot at all until
+# somebody recreates the container by hand, which is a poor way to find out.
+if [ -f .runner ]; then
+  echo "entrypoint: a registration from a previous life is still here; clearing it"
+  rm -f .runner .credentials .credentials_rsa
+fi
+
 # --disableupdate  no self-update. An unattended update mid-life would swap the
 #                  binary under a run; the version is pinned in runner.env and
 #                  bumped by rebuilding the image on purpose.
