@@ -1,0 +1,456 @@
+<!doctype html><meta charset="utf-8">
+<!--
+  The drawing board for the bedsit's three pictures. It is opened by
+  taoot/tools/bedsitpics.ts, which puts the bakes of the three on window.__SRC__
+  and screenshots the three plates below. Nothing here is loaded by the site.
+-->
+<style>
+  body { margin: 0; background: #222; }
+  .plate { position: relative; overflow: hidden; }
+  canvas.base { position: absolute; inset: 0; width: 100%; height: 100%; }
+  svg { position: absolute; inset: 0; }
+  #poster { width: 900px; height: 1418px; }
+  #photo  { width: 700px; height: 917px; }
+  #painting { width: 1100px; height: 789px; }
+</style>
+<div class="plate" id="poster"></div>
+<div class="plate" id="photo"></div>
+<div class="plate" id="painting"></div>
+<script>
+const SRC = window.__SRC__;
+
+/** the bake, as an ImageData, upright */
+async function source(id) {
+  const img = new Image();
+  img.src = "data:image/png;base64," + SRC[id].png;
+  await img.decode();
+  const c = document.createElement("canvas");
+  c.width = SRC[id].w; c.height = SRC[id].h;
+  const x = c.getContext("2d");
+  x.drawImage(img, 0, 0);
+  return { data: x.getImageData(0, 0, c.width, c.height), w: c.width, h: c.height };
+}
+
+/** the game dithers into 256 colours: average that away, keeping edges */
+function undither(src, radius = 2, sigma = 46) {
+  const data = src.data;
+  const w = data.width, h = data.height;
+  const out = new ImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const k = (y * w + x) * 4;
+    const c0 = [data.data[k], data.data[k + 1], data.data[k + 2]];
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
+      const xx = Math.min(w - 1, Math.max(0, x + dx)), yy = Math.min(h - 1, Math.max(0, y + dy));
+      const j = (yy * w + xx) * 4;
+      // only neighbours of a similar tone take part, so an edge stays an edge
+      const d = Math.abs(data.data[j] - c0[0]) + Math.abs(data.data[j + 1] - c0[1]) + Math.abs(data.data[j + 2] - c0[2]);
+      const wgt = Math.exp(-(d * d) / (2 * sigma * sigma));
+      r += data.data[j] * wgt; g += data.data[j + 1] * wgt; b += data.data[j + 2] * wgt; n += wgt;
+    }
+    out.data[k] = r / n; out.data[k + 1] = g / n; out.data[k + 2] = b / n; out.data[k + 3] = 255;
+  }
+  return out;
+}
+
+/** put an ImageData on a canvas of its own */
+function toCanvas(im) {
+  const c = document.createElement("canvas");
+  c.width = im.width; c.height = im.height;
+  c.getContext("2d").putImageData(im, 0, 0);
+  return c;
+}
+
+const el = (id) => document.getElementById(id);
+function plate(id, w, h) {
+  const c = document.createElement("canvas");
+  c.className = "base";
+  c.width = w; c.height = h;
+  el(id).appendChild(c);
+  return c.getContext("2d");
+}
+
+/** film grain, so a flat fill does not read as vector art */
+function grain(ctx, w, h, amount) {
+  const im = ctx.getImageData(0, 0, w, h);
+  for (let i = 0; i < im.data.length; i += 4) {
+    const n = (Math.random() - 0.5) * amount;
+    im.data[i] += n; im.data[i + 1] += n; im.data[i + 2] += n;
+  }
+  ctx.putImageData(im, 0, 0);
+}
+
+/** a dark wood frame drawn round the edge: bevel out, bevel in, grain along it */
+function woodFrame(ctx, w, h, t, tone) {
+  // only the ring: the picture is already inside it
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, w, h);
+  ctx.rect(t, t, w - 2 * t, h - 2 * t);
+  ctx.clip("evenodd");
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, tone.top); g.addColorStop(0.5, tone.mid); g.addColorStop(1, tone.bot);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  // the grain: long strokes along each rail
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  for (let i = 0; i < 900; i++) {
+    const along = Math.random();
+    const side = Math.floor(Math.random() * 4);
+    const across = Math.random() * t;
+    ctx.strokeStyle = Math.random() < 0.5 ? "#00000060" : "#ffffff10";
+    ctx.lineWidth = 0.6 + Math.random() * 1.2;
+    ctx.beginPath();
+    if (side < 2) {
+      const y = side === 0 ? across : h - across;
+      ctx.moveTo(along * w, y); ctx.lineTo(along * w + 30 + Math.random() * 90, y + (Math.random() - 0.5) * 2);
+    } else {
+      const x = side === 2 ? across : w - across;
+      ctx.moveTo(x, along * h); ctx.lineTo(x + (Math.random() - 0.5) * 2, along * h + 30 + Math.random() * 90);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.restore();
+  // the profile: a lit arris outside, a scotia stepped in, a bead against the
+  // picture — which is the section the game's own close-up of the frame shows
+  ctx.strokeStyle = "#ffffff16"; ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, w - 2, h - 2);
+  ctx.strokeStyle = "#00000070"; ctx.lineWidth = Math.max(2, t * 0.1);
+  ctx.strokeRect(t * 0.33, t * 0.33, w - t * 0.66, h - t * 0.66);
+  ctx.strokeStyle = "#ffffff10"; ctx.lineWidth = Math.max(1, t * 0.05);
+  ctx.strokeRect(t * 0.42, t * 0.42, w - t * 0.84, h - t * 0.84);
+  ctx.strokeStyle = "#00000090"; ctx.lineWidth = 3;
+  ctx.strokeRect(t - 1.5, t - 1.5, w - 2 * t + 3, h - 2 * t + 3);
+  const inner = ctx.createLinearGradient(0, t, 0, t + 14);
+  inner.addColorStop(0, "#00000090"); inner.addColorStop(1, "#00000000");
+  ctx.fillStyle = inner;
+  ctx.fillRect(t, t, w - 2 * t, 14);
+}
+
+// ---------------------------------------------------------------------------
+// The poster: flat colour and type, so it is rebuilt rather than enlarged.
+// The masks come off the bake — the helmet's shape is the game's, not mine —
+// and only the lettering is set fresh, over the blur it replaces.
+// ---------------------------------------------------------------------------
+const YELLOW = "#c9a23a", INK = "#141110", NAVY = "#22405f", PAPER = "#ded2bd", OXBLOOD = "#4a2a24";
+
+/** a mask at source size, blown up to plate size with smooth edges */
+function blowUp(mask, sw, sh, w, h) {
+  const small = document.createElement("canvas");
+  small.width = sw; small.height = sh;
+  small.getContext("2d").putImageData(mask, 0, 0);
+  const big = document.createElement("canvas");
+  big.width = w; big.height = h;
+  const bx = big.getContext("2d");
+  bx.imageSmoothingEnabled = true;
+  bx.imageSmoothingQuality = "high";
+  bx.drawImage(small, 0, 0, w, h);
+  // threshold what the smoothing blurred, so the edge comes back sharp
+  const im = bx.getImageData(0, 0, w, h);
+  for (let i = 0; i < im.data.length; i += 4) {
+    const on = im.data[i + 3] > 128;
+    im.data[i + 3] = on ? 255 : 0;
+  }
+  bx.putImageData(im, 0, 0);
+  return big;
+}
+
+function maskOf(im, test) {
+  const out = new ImageData(im.width, im.height);
+  for (let i = 0; i < im.data.length; i += 4) {
+    const on = test(im.data[i], im.data[i + 1], im.data[i + 2]);
+    out.data[i] = 255; out.data[i + 1] = 255; out.data[i + 2] = 255;
+    out.data[i + 3] = on ? 255 : 0;
+  }
+  return out;
+}
+
+/** heavy grotesque, squeezed to the width the poster sets it at */
+function setLine(ctx, text, x0, x1, yBase, capHeight, colour) {
+  ctx.save();
+  ctx.fillStyle = colour;
+  ctx.textBaseline = "alphabetic";
+  const px = capHeight / 0.72;            // Liberation Sans cap height
+  ctx.font = `bold ${px}px "Liberation Sans", Arial, sans-serif`;
+  const natural = ctx.measureText(text).width;
+  ctx.translate(x0, yBase);
+  ctx.scale((x1 - x0) / natural, 1);
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+async function poster() {
+  const W = 900, H = 1418, CROP = 3;
+  const src = await source("poster");
+  const im = undither(src, 2);
+  const w = im.width, h = im.height;
+  const ctx = plate("poster", W, H);
+
+  // the ink the poster was printed in, as the frames record it (unlit), and as
+  // it is painted back on (lit). The maroon of the helmet is read off the
+  // reddest pixel of the middle band rather than guessed.
+  let maroon = [40, 20, 16], best = -1;
+  for (let y = (h * 0.18) | 0; y < h * 0.42; y++) for (let x = (w * 0.25) | 0; x < w * 0.78; x++) {
+    const k = (y * w + x) * 4, r = im.data[k], g = im.data[k + 1], b = im.data[k + 2];
+    const lu = r * 0.3 + g * 0.6 + b * 0.1;
+    if (lu > 14 && lu < 48 && r - b > best) { best = r - b; maroon = [r, g, b]; }
+  }
+  const INKS = [
+    { raw: [92, 76, 27], out: YELLOW, kind: "ground" },
+    { raw: [98, 91, 83], out: PAPER, kind: "light" },
+    { raw: [6, 4, 4], out: INK, kind: "dark" },
+    { raw: [24, 22, 20], out: INK, kind: "dark" },
+    { raw: maroon, out: OXBLOOD, kind: "dark" },
+    { raw: [5, 10, 16], out: NAVY, kind: "dark" },
+  ];
+  // where the type will be set fresh, the blur of the type is taken out first:
+  // a pixel there falls to its next-nearest ink, which is the ground behind it
+  const TITLE = 0.155, LOWER = 0.49;
+  const masks = INKS.map(() => new ImageData(w, h));
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const k = (y * w + x) * 4, q = [im.data[k], im.data[k + 1], im.data[k + 2]];
+    const order = INKS.map((ink, idx) => ({ idx, d: (q[0] - ink.raw[0]) ** 2 + (q[1] - ink.raw[1]) ** 2 + (q[2] - ink.raw[2]) ** 2 }))
+      .sort((a, z) => a.d - z.d);
+    let pick = order[0].idx;
+    const band = y / h;
+    // the title is set on plain ground, the lower lines on the figure and the
+    // band behind it: a blurred letter falls back to whichever of those it is on
+    if (band < TITLE && INKS[pick].kind === "dark") pick = order.find((o) => INKS[o.idx].kind === "ground").idx;
+    else if (band > LOWER && (INKS[pick].kind === "light" || INKS[pick].out === OXBLOOD)) pick = order.find((o) => INKS[o.idx].out === INK || INKS[o.idx].out === NAVY).idx;
+    masks[pick].data[k] = 255; masks[pick].data[k + 1] = 255; masks[pick].data[k + 2] = 255;
+    masks[pick].data[k + 3] = 255;
+  }
+  ctx.fillStyle = YELLOW;
+  ctx.fillRect(0, 0, W, H);
+  // the paper, not the plaster: the outermost texels are the bake's own blur
+  const sx = CROP, sy = CROP, sw = w - 2 * CROP, sh = h - 2 * CROP;
+  for (const [idx, ink] of INKS.entries()) {
+    const big = blowUp(masks[idx], w, h, Math.round((W * w) / sw), Math.round((H * h) / sh));
+    const tint = document.createElement("canvas");
+    tint.width = W; tint.height = H;
+    const tx = tint.getContext("2d");
+    tx.fillStyle = ink.out;
+    tx.fillRect(0, 0, W, H);
+    tx.globalCompositeOperation = "destination-in";
+    tx.drawImage(big, -(sx * W) / sw, -(sy * H) / sh);
+    ctx.drawImage(tint, 0, 0);
+  }
+  setLine(ctx, "LONDON", 38, 872, 214, 174, INK);
+  setLine(ctx, "HE'S", 176, 410, 856, 120, PAPER);
+  setLine(ctx, "WATCHING", 176, 750, 1016, 124, PAPER);
+  setLine(ctx, "YOU", 424, 764, 1292, 232, PAPER);
+  grain(ctx, W, H, 13);
+}
+
+// ---------------------------------------------------------------------------
+// The photograph and the painting: both are framed, and the frame in the bake
+// is the game's own, drawn flat and seen from below. So the bake is cropped to
+// the picture inside it and a frame is drawn round that instead.
+// ---------------------------------------------------------------------------
+
+/** the part of a bake that is the picture, as a canvas */
+function crop(im, x0, y0, x1, y1) {
+  const w = Math.round((x1 - x0) * im.width), h = Math.round((y1 - y0) * im.height);
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  c.getContext("2d").drawImage(toCanvas(im), Math.round(x0 * im.width), Math.round(y0 * im.height), w, h, 0, 0, w, h);
+  return c;
+}
+
+/**
+ * Lay a picture inside the frame's rebate, lifted from the room's dim light to
+ * the albedo a lamp can shine on.
+ *
+ * Not by a gain — the frames record this room at night and a gain either leaves
+ * the picture black or burns its highlights out — but by its own ends: the 2nd
+ * and 98th percentile of what is there are stretched to `lo` and `hi`, and an
+ * S-curve puts the contrast back that the stretch flattened.
+ */
+function inset(ctx, canvas, W, H, t, lo, hi, contrast, tint) {
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(canvas, t, t, W - 2 * t, H - 2 * t);
+  ctx.restore();
+  const im = ctx.getImageData(t, t, W - 2 * t, H - 2 * t);
+  const hist = new Float64Array(256);
+  for (let i = 0; i < im.data.length; i += 4) hist[Math.round(im.data[i] * 0.3 + im.data[i + 1] * 0.6 + im.data[i + 2] * 0.1)]++;
+  const total = im.data.length / 4;
+  const at = (frac) => {
+    let run = 0;
+    for (let v = 0; v < 256; v++) { run += hist[v]; if (run >= total * frac) return v; }
+    return 255;
+  };
+  const black = at(0.02), white = Math.max(black + 8, at(0.98));
+  for (let i = 0; i < im.data.length; i += 4) for (let c = 0; c < 3; c++) {
+    let v = (im.data[i + c] - black) / (white - black);
+    v = Math.max(0, Math.min(1, v)) * (hi - lo) + lo;
+    // an S about the middle, which is what a print's shoulder and toe do
+    v = v + contrast * (v - 0.5) * (1 - Math.abs(2 * v - 1));
+    im.data[i + c] = Math.max(0, Math.min(255, v * 255));
+  }
+  if (tint) {
+    // a print is monochrome: taking it there is both true to it and the end of
+    // the palette's dither, which is a colour pattern over a grey picture
+    for (let i = 0; i < im.data.length; i += 4) {
+      const y = im.data[i] * 0.3 + im.data[i + 1] * 0.6 + im.data[i + 2] * 0.1;
+      for (let c = 0; c < 3; c++) im.data[i + c] = Math.min(255, y * tint[c]);
+    }
+  }
+  ctx.putImageData(im, t, t);
+}
+
+/**
+ * The framed photograph: Churchill inspecting a Thompson gun on a visit to the
+ * coastal defences, June 1940, with a soldier of the tin-hat era beside him.
+ *
+ * This one is not rebuilt off the bake. The bake of it is forty-five by sixty
+ * real pixels of two faces, which no cleaning makes into a photograph — and the
+ * picture in it is a press photograph the game did not invent, so the thing to
+ * hang is the photograph. It is cropped to the portrait window the game's own
+ * close-up shows: Churchill left of centre with the gun, the soldier filling the
+ * right third, the man in spectacles just caught at the edge.
+ */
+const CHURCHILL = { x0: 0.172, y0: 0.063, x1: 0.864, y1: 0.959 };
+
+async function photo() {
+  const W = 700, H = 917, T = 40;
+  const ctx = plate("photo", W, H);
+  const img = new Image();
+  img.src = "data:image/jpeg;base64," + SRC.churchill;
+  await img.decode();
+  const cut = document.createElement("canvas");
+  cut.width = Math.round((CHURCHILL.x1 - CHURCHILL.x0) * img.naturalWidth);
+  cut.height = Math.round((CHURCHILL.y1 - CHURCHILL.y0) * img.naturalHeight);
+  cut.getContext("2d").drawImage(img,
+    Math.round(CHURCHILL.x0 * img.naturalWidth), Math.round(CHURCHILL.y0 * img.naturalHeight),
+    cut.width, cut.height, 0, 0, cut.width, cut.height);
+  inset(ctx, cut, W, H, T, 0.06, 0.94, 0.18, [1.03, 1.0, 0.94]);
+  // print behind glass: a little warmth, a corner falloff, one long sheen
+  const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, H * 0.62);
+  vig.addColorStop(0, "#00000000"); vig.addColorStop(1, "#00000055");
+  ctx.fillStyle = vig;
+  ctx.fillRect(T, T, W - 2 * T, H - 2 * T);
+  const sheen = ctx.createLinearGradient(T, T, W - T, H - T);
+  sheen.addColorStop(0, "#ffffff10"); sheen.addColorStop(0.35, "#ffffff00"); sheen.addColorStop(1, "#ffffff06");
+  ctx.fillStyle = sheen;
+  ctx.fillRect(T, T, W - 2 * T, H - 2 * T);
+  grain(ctx, W, H, 8);
+  woodFrame(ctx, W, H, T, { top: "#2a1c12", mid: "#1d130c", bot: "#120c08" });
+}
+
+/**
+ * The painting over the mantel: a lifebuoy on the Atlantic under an overcast
+ * sky. The bake gives the composition — where the horizon is, where the ring
+ * floats, how the swell runs — and it is painted over it, since eight hundred
+ * texels of a dark picture enlarge into mud and a sea is a thing that can be
+ * painted honestly from its own composition.
+ */
+async function painting() {
+  const W = 1100, H = 789, T = 57;
+  const src = await source("painting");
+  const im = undither(src, 3);
+  const ctx = plate("painting", W, H);
+  inset(ctx, crop(im, 0.051, 0.132, 0.959, 0.926), W, H, T, 0.08, 0.80, 0.25);
+
+  const x0 = T, y0 = T, w = W - 2 * T, h = H - 2 * T;
+  const HORIZON = y0 + h * 0.40;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x0, y0, w, h);
+  ctx.clip();
+
+  const sky = ctx.createLinearGradient(0, y0, 0, HORIZON);
+  sky.addColorStop(0, "#6f777e"); sky.addColorStop(0.55, "#98a0a4"); sky.addColorStop(1, "#c2c6c4");
+  ctx.fillStyle = sky;
+  ctx.fillRect(x0, y0, w, HORIZON - y0);
+  // weather: a few soft banks, lighter where the sun is trying
+  for (let i = 0; i < 26; i++) {
+    const cy = y0 + Math.random() * (HORIZON - y0) * 0.9;
+    const cw = w * (0.14 + Math.random() * 0.4), ch = (HORIZON - y0) * (0.04 + Math.random() * 0.1);
+    const g = ctx.createRadialGradient(x0 + Math.random() * w, cy, 0, x0 + Math.random() * w, cy, cw);
+    g.addColorStop(0, Math.random() < 0.5 ? "#ffffff22" : "#5f666d22");
+    g.addColorStop(1, "#00000000");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(x0 + Math.random() * w, cy, cw, ch, 0, 0, 7);
+    ctx.fill();
+  }
+  const sea = ctx.createLinearGradient(0, HORIZON, 0, y0 + h);
+  sea.addColorStop(0, "#5d666b"); sea.addColorStop(0.25, "#3f484e"); sea.addColorStop(1, "#1d2327");
+  ctx.globalAlpha = 0.86;
+  ctx.fillStyle = sea;
+  ctx.fillRect(x0, HORIZON, w, y0 + h - HORIZON);
+  ctx.globalAlpha = 1;
+  // the swell: strokes that lengthen and coarsen as the water comes forward
+  for (let i = 0; i < 520; i++) {
+    const t = Math.pow(Math.random(), 0.6);
+    const y = HORIZON + t * (y0 + h - HORIZON);
+    const len = w * (0.02 + t * 0.16) * (0.5 + Math.random());
+    const x = x0 + Math.random() * w;
+    ctx.strokeStyle = Math.random() < 0.42 ? `rgba(190,198,200,${0.05 + t * 0.16})` : `rgba(12,16,20,${0.05 + t * 0.22})`;
+    ctx.lineWidth = 1 + t * 5;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.bezierCurveTo(x + len * 0.3, y - t * 6, x + len * 0.7, y + t * 6, x + len, y);
+    ctx.stroke();
+  }
+  // the lifebuoy, where the bake has it: a ring lying flat, seen from up the beach
+  const cx = x0 + w * 0.605, cy = y0 + h * 0.575, rx = w * 0.145, ry = h * 0.062, thick = ry * 0.62;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.42)";
+  ctx.beginPath();
+  ctx.ellipse(cx + rx * 0.06, cy + ry * 0.5, rx * 1.05, ry * 0.75, 0, 0, 7);
+  ctx.fill();
+  const ring = new Path2D();
+  ring.ellipse(cx, cy, rx, ry, 0, 0, 7);
+  ring.ellipse(cx, cy, rx - thick, ry - thick * 0.8, 0, 0, 7);
+  ctx.save();
+  ctx.clip(ring, "evenodd");
+  const cork = ctx.createLinearGradient(cx - rx, cy - ry, cx + rx, cy + ry);
+  cork.addColorStop(0, "#efe7d6"); cork.addColorStop(0.5, "#cfc5b2"); cork.addColorStop(1, "#8d8578");
+  ctx.fillStyle = cork;
+  ctx.fillRect(cx - rx, cy - ry, rx * 2, ry * 2);
+  // the four painted panels of a ship's buoy
+  ctx.fillStyle = "#93382a";
+  for (const a of [0.35, 0.35 + Math.PI / 2, 0.35 + Math.PI, 0.35 + (3 * Math.PI) / 2]) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.ellipse(cx, cy, rx, ry, 0, a, a + 0.62);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.strokeStyle = "rgba(30,26,22,0.55)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke(ring);
+  // the becket, and the light coming off the wet cork
+  ctx.strokeStyle = "rgba(226,220,206,0.5)";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - ry * 0.1, rx * 0.94, ry * 0.9, 0, Math.PI * 1.05, Math.PI * 1.75);
+  ctx.stroke();
+  ctx.restore();
+
+  // varnish: warm, and darker at the edges as an old picture is
+  const varn = ctx.createRadialGradient(x0 + w / 2, y0 + h * 0.45, h * 0.15, x0 + w / 2, y0 + h * 0.5, h * 0.9);
+  varn.addColorStop(0, "rgba(120,96,50,0.05)"); varn.addColorStop(1, "rgba(24,16,8,0.42)");
+  ctx.fillStyle = varn;
+  ctx.fillRect(x0, y0, w, h);
+  ctx.restore();
+  grain(ctx, W, H, 7);
+  woodFrame(ctx, W, H, T, { top: "#241a12", mid: "#18110b", bot: "#0f0a07" });
+}
+
+window.__ready = false;
+main();
+async function main() {
+  await document.fonts.ready;
+  await poster();
+  await photo();
+  await painting();
+  window.__ready = true;
+}
+</script>

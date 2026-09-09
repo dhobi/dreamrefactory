@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Day Before</title>
+    <!-- unlisted, like the speedrun workbench: an experiment with a URL, not a
+         page the site offers -->
+    <meta name="robots" content="noindex" />
+    <meta name="site-root" content="../" />
+    <link rel="icon" type="image/png" href="/taoot-mark.png" />
+    <style>
+      /*
+       * The room fills the window and the page is furniture around it, in the
+       * game's own abyss-and-brass. Nothing here is shared with the other three
+       * pages on purpose: this one has no topbar, no language axis and no game —
+       * it is a model of a room and a way to walk in it.
+       */
+      :root {
+        color-scheme: dark;
+        --ink: #d8e4e8;
+        --dim: #7c8f96;
+        --brass: #d9a94c;
+        --ground: #05080a;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--ground);
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      body { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink); }
+      canvas { display: block; width: 100vw; height: 100dvh; cursor: crosshair; }
+      .panel {
+        position: fixed;
+        background: #05080ad9;
+        border: 1px solid #ffffff1f;
+        border-radius: 4px;
+        padding: 8px 10px;
+        backdrop-filter: blur(6px);
+        pointer-events: none;
+      }
+      #hud { top: 10px; left: 10px; min-width: 250px; }
+      #hud b { color: var(--brass); font-weight: 600; }
+      #hud dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 12px; margin: 6px 0 0; }
+      #hud dt { color: var(--dim); }
+      #hud dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+      #hud i { color: var(--dim); font-style: normal; }
+      #hud.hidden { display: none; }
+      /*
+       * The furniture: one box a piece, bottom right, opposite the lights and
+       * clear of the key list along the bottom left.
+       */
+      #furniture {
+        bottom: 10px;
+        right: 10px;
+        pointer-events: auto;
+        min-width: 150px;
+        max-height: 70vh;
+        overflow-y: auto;
+      }
+      #furniture.hidden { display: none; }
+      #furniture b { color: var(--brass); font-weight: 600; }
+      #furniture i { color: var(--dim); font-style: normal; }
+      #furniture label {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0 8px;
+        align-items: center;
+        margin-top: 4px;
+        color: var(--ink);
+      }
+      #furniture input { margin: 0; accent-color: var(--brass); }
+      #furniture-all { display: flex; gap: 6px; margin-top: 6px; }
+      #furniture-all button {
+        font: inherit;
+        flex: 1;
+        color: var(--ink);
+        background: #05080a;
+        border: 1px solid #ffffff26;
+        border-radius: 4px;
+        padding: 2px 0;
+        cursor: pointer;
+      }
+      #furniture-all button:active { background: #d9a94c33; border-color: var(--brass); }
+      body.touch #furniture-all button { padding: 7px 0; }
+      body.touch #furniture { bottom: 10px; left: 10px; right: 10px; }
+      body.touch #furniture label { margin-top: 9px; }
+      body.touch #furniture input { width: 20px; height: 20px; }
+      #keys { bottom: 10px; left: 10px; color: var(--dim); max-width: 46ch; }
+      /*
+       * The lights: one slider per source, top right, for a mouse. A phone gets
+       * none of it — this is a desk instrument, like the readout.
+       */
+      #lights { top: 10px; right: 10px; pointer-events: auto; min-width: 230px; }
+      #lights b { color: var(--brass); font-weight: 600; }
+      #lights label { display: grid; grid-template-columns: 9ch 1fr 3.5ch; gap: 0 8px; align-items: center; margin-top: 5px; color: var(--dim); }
+      #lights label span:last-child { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+      #lights input[type="range"] { width: 100%; margin: 0; accent-color: var(--brass); }
+      /* the one control here that is not a gain: what the shadows cost, which
+         is the first thing to give up on a machine that cannot afford them */
+      #lights select {
+        font: inherit;
+        width: 100%;
+        color: var(--ink);
+        background: #05080a;
+        border: 1px solid #ffffff26;
+        border-radius: 4px;
+        padding: 1px 4px;
+      }
+      #lights.hidden { display: none; }
+      /**
+       * On a phone the panel is a PAGE, not a corner.
+       *
+       * The desktop panel is 230 wide in the top right, out of the way of a
+       * mouse that is looking somewhere else. A thumb has no such luxury: the
+       * sliders are the whole reason the panel was opened, they have to be wide
+       * enough to land on, and the room behind them is not being looked at
+       * while they are. So it spans the screen under the pad, its rows get a
+       * touch target you can actually hit, and it closes from its own button.
+       */
+      body.touch #lights {
+        top: auto;
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        min-width: 0;
+        padding: 12px 14px 14px;
+        background: #12100ee8;
+      }
+      body.touch #lights label { grid-template-columns: 10ch 1fr 4ch; margin-top: 10px; }
+      body.touch #lights input[type="range"] { height: 30px; }
+      body.touch #lights select { height: 30px; }
+      /* "L hides" is a keyboard's instruction, and a phone has no L */
+      body.touch #lights b + i { display: none; }
+      /**
+       * The pad gets out of the way rather than sitting on top of the sliders.
+       *
+       * Both live at the bottom right, which is where a thumb is: with the
+       * panel open, stand/skin/fly/light were drawn straight over the windows
+       * and fill rows. The panel is the thing being read while it is open, so
+       * the pad is what moves — to the top right, which on a touch screen is
+       * empty, since the readout and the key list are hidden there.
+       */
+      body.touch.lit #pad { top: 10px; bottom: auto; }
+      /*
+       * On a touch screen the room is the whole page: the readouts and the list
+       * of keys nobody has all go, and what is left is a stick that appears
+       * under the thumb that put it there, and a pad of the few controls a
+       * finger cannot do by dragging — standpoints, skin, flying, up and down.
+       */
+      #stick {
+        position: fixed;
+        width: 148px;
+        height: 148px;
+        margin: -74px 0 0 -74px;
+        border-radius: 50%;
+        border: 2px solid #ffffff3d;
+        background: #05080a4d;
+        box-shadow: 0 0 0 1px #05080a4d;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 140ms ease-out;
+      }
+      #stick.on { opacity: 1; }
+      #stick i {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 62px;
+        height: 62px;
+        margin: -31px 0 0 -31px;
+        border-radius: 50%;
+        border: 2px solid #ffffff6b;
+        background: #d9a94c66;
+      }
+      #pad {
+        position: fixed;
+        right: 10px;
+        bottom: 10px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        max-width: 60vw;
+      }
+      #pad button {
+        font: inherit;
+        color: var(--ink);
+        background: #05080ad9;
+        border: 1px solid #ffffff2b;
+        border-bottom-width: 2px;
+        border-radius: 6px;
+        padding: 10px 14px;
+        min-width: 44px;
+        backdrop-filter: blur(6px);
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #pad button:active, #pad button.on { background: #d9a94c33; border-color: var(--brass); }
+      body.touch #keys, body.touch #hud { display: none; }
+      body:not(.touch) #pad, body:not(.touch) #stick { display: none; }
+      #keys kbd {
+        color: var(--ink);
+        border: 1px solid #ffffff2b;
+        border-bottom-width: 2px;
+        border-radius: 3px;
+        padding: 0 4px;
+        font: inherit;
+      }
+      /*
+       * The way in: a title, and one button.
+       *
+       * OPAQUE, where this used to be 95% and let the room show faintly through
+       * it. That was right when the room painted itself before anyone pressed
+       * anything; now nothing is painted until the button is, and what would
+       * show through is a bare grey shell.
+       */
+      #splash {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 26px;
+        text-align: center;
+        padding: 24px;
+        background: var(--ground);
+      }
+      #splash h1 { margin: 0; line-height: 0; }
+      /*
+       * The title card is drawn artwork on black, and it is composited with
+       * SCREEN rather than laid down as a rectangle.
+       *
+       * It arrives as a JPEG, so it has no alpha and its ground is black — and
+       * black is the identity for screen, which makes the ground vanish exactly
+       * without anybody having to cut a mask. That also hides the one seam a
+       * crop leaves: the trim keeps pixels a little off black, so squared
+       * against the splash the edge of the picture shows as a faint rectangle.
+       * Screened it cannot, whatever the ground behind it is.
+       */
+      #splash h1 img {
+        display: block;
+        width: min(440px, 78vw);
+        height: auto;
+        mix-blend-mode: screen;
+      }
+      /*
+       * The preloader and the button are ONE cell, and the button is always in
+       * it: a 2px rule and a 47px button swapped by `display` would move the
+       * title, and the cell keeping the button's height needs no number in the
+       * stylesheet to say what that height is.
+       */
+      #way { display: grid; place-items: center; }
+      #way > * { grid-area: 1 / 1; }
+      #bar {
+        width: min(340px, 62vw);
+        height: 2px;
+        background: #d9a94c2e;
+        overflow: hidden;
+      }
+      #bar i {
+        display: block;
+        height: 100%;
+        width: 0;
+        background: var(--brass);
+        transition: width 0.3s linear;
+      }
+      #splash[data-state="ready"] #bar { visibility: hidden; }
+      #splash:not([data-state="ready"]) #load { visibility: hidden; }
+      #load {
+        font: 600 13px/1 inherit;
+        letter-spacing: 0.16em;
+        text-indent: 0.16em;
+        color: var(--brass);
+        background: transparent;
+        border: 1px solid #d9a94c66;
+        border-radius: 3px;
+        padding: 13px 30px;
+        cursor: pointer;
+      }
+      #load:hover, #load:focus-visible { background: #d9a94c1f; border-color: var(--brass); outline: none; }
+      #load:active { background: #d9a94c33; }
+      /*
+       * Pressed, the button goes INVISIBLE rather than away. `display: none`
+       * takes its box with it, the shared cell collapses to the height of a
+       * line of text, and the title drops twelve pixels at the one moment
+       * anybody is looking straight at it. `visibility` leaves the box and
+       * takes the button out of the tab order, which is the whole of what is
+       * wanted here; `disabled` covers the press that is already in flight.
+       */
+      #splash p { margin: 0; color: var(--dim); max-width: 54ch; }
+      /*
+       * THE INTRO. The title card and the intro line stand in the same grid
+       * cell, so a line comes up exactly where the title was rather than
+       * somewhere else on a black screen.
+       *
+       * Both fade on a class, and the fade is the only animation here that has
+       * to keep time: see the bar table in the page, which drives all of it off
+       * the track's own clock.
+       */
+      #card, #line { grid-area: 1 / 1; }
+      #card { display: grid; justify-items: center; gap: 26px; }
+      #card, #line, #splash { transition: opacity 0.55s ease; }
+      /* `#splash p` is an id AND a type, which outweighs a bare id: written as
+         `#line` alone this took the dim grey and the 54ch meant for the note */
+      #splash p#line {
+        color: var(--brass);
+        font-size: clamp(15px, 2.4vw, 20px);
+        letter-spacing: 0.08em;
+        text-indent: 0.08em;
+        max-width: 30ch;
+        opacity: 0;
+      }
+      #splash p#line.on { opacity: 1; }
+      #splash[data-state="intro"] #card { opacity: 0; pointer-events: none; }
+      #splash[data-state="intro"] { cursor: none; }
+      #splash.out { opacity: 0; pointer-events: none; }
+      @media (prefers-reduced-motion: reduce) {
+        #card, #line, #splash { transition-duration: 0.01s; }
+      }
+      #splash.gone { display: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="gl"></canvas>
+    <div class="panel" id="hud"></div>
+    <div class="panel" id="keys">
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk · <kbd>Shift</kbd> run · mouse look ·
+      wheel zoom<br />
+      <kbd>G</kbd> walk/fly · <kbd>Space</kbd>/<kbd>C</kbd> up, down while flying ·
+      <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> or <kbd>T</kbd> stand where the game stands<br />
+      <kbd>P</kbd> painted or bare · <kbd>[</kbd><kbd>]</kbd> exposure · <kbd>L</kbd> lights ·
+      <kbd>X</kbd> readout · <kbd>F</kbd> furniture · <kbd>R</kbd> reset ·
+      <kbd>Esc</kbd> release the mouse
+    </div>
+    <div class="panel" id="lights">
+      <b>lights</b> <i style="color: var(--dim); font-style: normal">· <kbd>L</kbd> hides</i>
+      <label><span>pendant</span><input type="range" min="0" max="2.5" step="0.05" value="0" data-light="0" /><span>0.00</span></label>
+      <label><span>standard</span><input type="range" min="0" max="2.5" step="0.05" value="0.55" data-light="1" /><span>0.55</span></label>
+      <label><span>desk lamp</span><input type="range" min="0" max="2.5" step="0.05" value="0.55" data-light="2" /><span>0.55</span></label>
+      <label><span>windows</span><input type="range" min="0" max="2.5" step="0.05" value="0.1" data-light="sky" /><span>0.10</span></label>
+      <label><span>fill</span><input type="range" min="0" max="2.5" step="0.05" value="0.1" data-light="fill" /><span>0.10</span></label>
+      <label><span>detail</span><select id="detail">
+        <option value="1" selected>full</option>
+        <option value="0.75">three quarters</option>
+        <option value="0.5">half</option>
+        <option value="0.25">a quarter</option>
+        <option value="0.1">a tenth</option>
+      </select><span></span></label>
+      <label><span>MSAA</span><select id="edges">
+        <option value="1" selected>on</option>
+        <option value="0">off</option>
+      </select><span></span></label>
+      <label><span>smoke</span><select id="smoke">
+        <option value="1" selected>on</option>
+        <option value="0">off</option>
+      </select><span></span></label>
+      <label><span>shadows</span><select id="shadows">
+        <option value="5" selected>soft</option>
+        <option value="1">hard</option>
+        <option value="0">off</option>
+      </select><span></span></label>
+      <label><span>music</span><input type="range" min="0" max="1" step="0.05" value="0.5" id="music" /><span>0.50</span></label>
+    </div>
+    <div class="panel hidden" id="furniture">
+      <b>furniture</b> <i>· <kbd>F</kbd> hides</i>
+      <div id="furniture-all"><button type="button" data-all="1">all</button><button type="button" data-all="0">none</button></div>
+    </div>
+    <div id="stick"><i></i></div>
+    <div id="pad">
+      <button id="pad-stand" title="stand where the game stands">stand</button>
+      <button id="pad-skin" title="painted or bare">skin</button>
+      <button id="pad-fly" title="walk or fly">fly</button>
+      <button id="pad-light" title="the lamps, one slider each">light</button>
+      <button id="pad-up" hidden>▲</button>
+      <button id="pad-down" hidden>▼</button>
+    </div>
+    <div id="splash">
+      <div id="card">
+        <h1><img src="the-day-before.jpg" width="685" height="238" alt="The Day Before" /></h1>
+        <div id="way">
+          <div id="bar"><i></i></div>
+          <button id="load" type="button">Start</button>
+        </div>
+        <p id="note"></p>
+      </div>
+      <p id="line"></p>
+    </div>
+    <script type="module" src="/bedsit/src/bedsit-page.ts"></script>
+  </body>
+</html>
