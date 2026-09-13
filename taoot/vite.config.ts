@@ -147,6 +147,16 @@ export default defineConfig({
         // The collection page: the physical release's box and CD artwork, and
         // the offline DBGL downloads that sit beside the rip on the host.
         collection: join(HERE, "collection/index.html"),
+        // The bedsit as a solid, walked in the browser — the room BEDSIT1.SET
+        // never had, worked out of the depth images it ships for occluding
+        // actors. Unlisted like the workbench, and carrying no game data at all:
+        // the model is in the source (bedsit/src/bedsit-room.ts).
+        bedsit: join(HERE, "bedsit/index.html"),
+        // The chimney picker for the bedsit's window: the photograph London is
+        // seen through, and a way to click the flues that smoke in it. Unlisted
+        // too, and built for the same reason the workbench is — a tool that
+        // only exists on a dev server is a tool nobody uses.
+        chimneys: join(HERE, "bedsit/chimneys/index.html"),
       },
     },
   },

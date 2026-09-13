@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The chimneys — Titanic - Adventure Out Of Time RE</title>
+    <!-- unlisted, like the room it belongs to, and under it: a tool with a URL,
+         not a page the site offers -->
+    <meta name="robots" content="noindex" />
+    <meta name="site-root" content="../../" />
+    <link rel="icon" type="image/png" href="/taoot-mark.png" />
+    <style>
+      /*
+       * The photograph on a wall, and a way to point at it. Same abyss-and-brass
+       * as the bedsit next door, and as little else as the job allows.
+       */
+      :root {
+        color-scheme: dark;
+        --ink: #d8e4e8;
+        --dim: #7c8f96;
+        --brass: #d9a94c;
+        --ground: #05080a;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ground); }
+      body {
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        color: var(--ink);
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      canvas { display: block; width: 100vw; height: 100dvh; cursor: crosshair; }
+      .panel {
+        position: fixed;
+        background: #05080ae8;
+        border: 1px solid #1b2a31;
+        border-radius: 4px;
+        padding: 10px 12px;
+      }
+      #help { top: 12px; left: 12px; max-width: 340px; }
+      #help h1 { font: inherit; font-weight: 700; margin: 0 0 6px; color: var(--brass); }
+      #help p { margin: 0 0 6px; color: var(--dim); }
+      #help b { color: var(--ink); font-weight: 400; }
+      #edit { top: 12px; right: 12px; width: 260px; }
+      #edit.none { opacity: 0.45; }
+      #edit h2 { font: inherit; font-weight: 700; margin: 0 0 8px; color: var(--brass); }
+      .row { display: grid; grid-template-columns: 4.2em 1fr 3.4em; align-items: center; gap: 8px; margin-bottom: 6px; }
+      .row label { color: var(--dim); }
+      .row output { text-align: right; }
+      input[type="range"] { width: 100%; accent-color: var(--brass); }
+      button {
+        font: inherit; color: var(--ink); background: #0e1a20;
+        border: 1px solid #24373f; border-radius: 3px; padding: 3px 9px; cursor: pointer;
+      }
+      button:hover { border-color: var(--brass); }
+      button.warn:hover { border-color: #b4553d; }
+      #out {
+        position: fixed; left: 12px; right: 12px; bottom: 12px;
+        display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end;
+      }
+      textarea {
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        color: var(--ink); background: #05080ae8; border: 1px solid #1b2a31; border-radius: 4px;
+        height: 132px; padding: 8px 10px; resize: vertical; white-space: pre; overflow: auto;
+      }
+      #actions { display: flex; flex-direction: column; gap: 6px; }
+      #where { position: fixed; bottom: 158px; left: 12px; color: var(--dim); }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+
+    <div class="panel" id="help">
+      <h1>The chimneys</h1>
+      <p><b>Click</b> a chimney mouth to put a plume on it. <b>Drag</b> one to move it, or the <b>arrow keys</b> for one pixel at a time and <b>shift</b> with them for ten. <b>Backspace</b> deletes the one that is selected.</p>
+      <p><b>Drag the picture</b> to pan it, <b>wheel</b> to zoom. <b>F</b> fits it again.</p>
+      <p>The box at the bottom is <b>src/bedsit-chimneys.ts</b>, ready to paste back over the list in it.</p>
+    </div>
+
+    <div class="panel none" id="edit">
+      <h2 id="which">nothing selected</h2>
+      <div class="row"><label for="w">width</label><input type="range" id="w" min="20" max="240" step="1" /><output id="w-out">—</output></div>
+      <div class="row"><label for="d">density</label><input type="range" id="d" min="0" max="1" step="0.01" /><output id="d-out">—</output></div>
+      <div class="row"><label for="rise">rise</label><input type="range" id="rise" min="0.6" max="3" step="0.05" /><output id="rise-out">—</output></div>
+      <button id="drop" class="warn">delete this one</button>
+    </div>
+
+    <div id="where">—</div>
+
+    <div id="out">
+      <textarea id="table" spellcheck="false" readonly></textarea>
+      <div id="actions">
+        <button id="copy">copy</button>
+        <button id="revert" class="warn">back to the built-in list</button>
+      </div>
+    </div>
+
+    <script type="module" src="/bedsit/src/bedsit-chimneys-page.ts"></script>
+  </body>
+</html>
