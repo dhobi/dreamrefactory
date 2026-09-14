@@ -2458,14 +2458,62 @@ const INTRO = [
   { bar: 3, text: "London awaits another night at war" },
   { bar: 5, text: "We are in Frank\u2019s apartment" },
   // the last line before the room is the title over the door, which is why it
-  // carries the capitals the card does
-  { bar: 7, text: "The Day Before the game starts" },
+  // carries the capitals the card does — and why it is broken where the card
+  // ends: "The Day Before" is the name of the thing, and "the game starts" is
+  // what it says about it. Read as one run it is a sentence; read on two it is
+  // a title with a caption, which is what it is
+  { bar: 7, text: "The Day Before\nthe game starts" },
 ] as const;
 /** the bar the room comes in on: the one the track opens up on */
 const REVEAL = 8;
 const barAt = (n: number): number => DOWNBEAT + (n - 1) * BAR;
 
 const line = document.getElementById("line") as HTMLElement;
+
+/** how long the pen takes to cross a whole line, in seconds */
+const WRITE = 1.3;
+
+/**
+ * Lay a line down a word at a time.
+ *
+ * The stylesheet has the mask that inks one word; this decides when each of
+ * them goes. A word's share of the line is its share of the letters, so the pen
+ * spends longer on "another" than on "at" and crosses the line at ONE SPEED —
+ * an equal slice per word writes a short word slowly and a long one in a
+ * scribble, which is the giveaway that a machine is doing it.
+ *
+ * Each word then takes a little longer than its share, so the one before it is
+ * still arriving as it starts: the overlaps are what make the line read as a
+ * stroke rather than a row of stamps.
+ *
+ * Written out fresh every time rather than reused, which is also what restarts
+ * the animations — a CSS animation runs when its element is created, and four
+ * lines through one element would only ever ink the first.
+ */
+function writeLine(text: string): void {
+  // a newline in the text is a break the LINE asks for, as against one the
+  // width happens to force. The pen does not pause at it: a hand that runs out
+  // of room carries straight on underneath, and the clock below counts every
+  // word in the line whichever row it ends up on
+  const rows = text.split("\n").map((row) => row.split(" "));
+  const letters = rows.flat().reduce((n, w) => n + w.length, 0);
+  const pen = document.createDocumentFragment();
+  let at = 0;
+  for (const [r, words] of rows.entries()) {
+    if (r) pen.append(document.createElement("br"));
+    for (const [i, word] of words.entries()) {
+      if (i) pen.append(" ");
+      const span = document.createElement("span");
+      span.textContent = word;
+      const share = (word.length / letters) * WRITE;
+      span.style.animationDelay = `${at.toFixed(3)}s`;
+      span.style.animationDuration = `${(share * 1.6).toFixed(3)}s`;
+      at += share;
+      pen.append(span);
+    }
+  }
+  line.replaceChildren(pen);
+}
 
 /**
  * The room, and the mouse.
@@ -2544,7 +2592,7 @@ function runIntro(): void {
     if (i !== shown) {
       shown = i;
       if (i < 0) line.classList.remove("on");
-      else { line.textContent = INTRO[i].text; line.classList.add("on"); }
+      else { writeLine(INTRO[i].text); line.classList.add("on"); }
     }
     requestAnimationFrame(frame);
   };
