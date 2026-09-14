@@ -496,6 +496,32 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
       pointer("pointerup", b, win);
     },
 
+    dragOnto: async (from, to, o = {}) => {
+      const budget = o.budget ?? timeout;
+      const a = clientPoint(from.x, from.y);
+      const b = clientPoint(to.x, to.y);
+      movePointer(a);
+      pointer("pointerdown", a);
+      let armed = true;
+      let landed = true;
+      try {
+        // ARM, then move: see the interface note. Capped rather than given the
+        // whole budget, because a loop that has not taken the press in ten
+        // seconds is not going to.
+        if (o.armed) armed = await until(o.armed, Math.min(budget, 10_000));
+        movePointer(b);
+        if (o.landed) landed = await until(o.landed, Math.min(budget, 10_000));
+      } finally {
+        // Released WHEREVER the drag got to, and released even when the waits
+        // above came back false: leaving the button down makes every later
+        // gesture a drag (the same rule holdAt follows).
+        pointer("pointerup", b, win);
+      }
+      // and NOTHING after it — the release is the end of this gesture, and what
+      // it set off belongs to the next line of the sheet
+      return { armed, landed };
+    },
+
     dragProp: async (at, next, budget = timeout) => {
       const from = clientPoint(at.x, at.y);
       // `realYieldSeq` counts the frames a script has given up, bumped twice per

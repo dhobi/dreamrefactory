@@ -108,6 +108,33 @@ const main = async (): Promise<void> => {
   check(/finished/i.test(status), "Play drove the sheet to FINISHED");
   check(/probe/i.test(splits), "and the sheet's split is in the splits table");
 
+  // ---- and a sheet can be TYPED, with the game running behind it ---------
+  //
+  // `page.fill` above assigns `value` and dispatches one `input`, which is not
+  // what a reader does and not what broke: Dust's page took every key at
+  // `window` and `preventDefault`ed it on the way to the game, so the editor
+  // could not be typed into at all while `fill` went on passing. Hence real
+  // keystrokes, and AFTER the boot — before it there is no game to send them to
+  // and the handler lets them past.
+  //
+  // Letters and arrows, because the two are eaten by different arms: a letter is
+  // a game key (`b` toggles Dust's log, Titanic's `x` its pane) and an arrow is
+  // a step, so a caret that cannot be moved is the same bug wearing a hat.
+  await page.click("#srsheet");
+  await page.evaluate(() => {
+    const t = document.getElementById("srsheet") as HTMLTextAreaElement;
+    t.setSelectionRange(t.value.length, t.value.length);
+  });
+  const TYPED = "# abxy typed by hand";
+  await page.keyboard.type(TYPED, { delay: 20 });
+  for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowLeft");
+  const typed = await page.evaluate(() => {
+    const t = document.getElementById("srsheet") as HTMLTextAreaElement;
+    return { tail: t.value.slice(-40), caret: t.value.length - t.selectionStart };
+  });
+  check(typed.tail.includes(TYPED), `the sheet takes typing while the game runs — tail "${typed.tail}"`);
+  check(typed.caret === 4, `and the arrows move the caret, not the camera (${typed.caret} back from the end)`);
+
 
   // ---- the parity the two workbenches are held to -----------------------
   //

@@ -91,6 +91,7 @@ import {
   shippedDustSaves,
 } from "./saves";
 import { setScreenGamma } from "@dreamfactory/engine/web/screen-gamma";
+import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { DustFiles } from "./files";
 import {
   DeferredAudioSink,
@@ -900,7 +901,11 @@ addEventListener("keydown", (e) => {
   // the browser's own controls, only while the GAME is not the one on screen
   if (playing) return;
   if (!live || !at || animating) return;
-  if (e.target instanceof HTMLSelectElement) return;
+  // typed into something on the page, not at the room (see the play handler
+  // below) — this listens on `window`, and a first room is drawn before the
+  // boot finishes, so without this an arrow pressed in the speedrun editor
+  // walked the camera instead of moving the caret
+  if (focusOwnsKey(e.target, e.key)) return;
   const turns = turnsFrom(live.set, at);
   if (e.key === "ArrowRight" && turns[0]) void move(turns[0]);
   else if (e.key === "ArrowLeft" && turns[1]) void move(turns[1]);
@@ -1431,7 +1436,21 @@ function play(host: GameHost, files: DustFiles): void {
  * silently disable half of Dust's controls.
  */
 addEventListener("keydown", (e) => {
-  if (e.target instanceof HTMLSelectElement) return;
+  /**
+   * Typed into something on the PAGE, not at the game
+   * (engine/src/web/keys.ts) — and the reason it is the first question asked.
+   *
+   * This listens on `window` and takes every letter, so anything on the page
+   * with a text field lost it: the speedrun workbench's sheet is a `<textarea>`
+   * and nothing could be typed into it at all, because every keystroke came
+   * here, went to the director as a game key, and was `preventDefault`ed on the
+   * way out. Titanic's handler has always asked (taoot/src/main.ts); what this
+   * one had instead was a bare `e.target instanceof HTMLSelectElement`, which
+   * covered the room picker that used to sit in the strip and nothing else. A
+   * `SELECT` is one of the things `focusOwnsKey` answers for, so that check is
+   * gone rather than kept beside this one.
+   */
+  if (focusOwnsKey(e.target, e.key)) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   // a saved-games dialog is a modal: while it is up the game hears nothing, or
   // an arrow pressed while picking a save walks you down the street behind it

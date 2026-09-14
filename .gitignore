@@ -24,3 +24,14 @@ nohup.out
 
 # scratch notes for the Skull Cracker disassembly work, deliberately local
 assumptions.md
+
+# `tsc -b` writes this beside the config it was pointed at; it is a build cache
+# and says nothing a reader wants.
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# The leg sweep's memory of which legs it has seen pass
+# (dust/tests/browser/legs.ts) — a measurement of one machine's run, and stale
+# the moment a verb changes.
+.legs.json
+.legs.green.json

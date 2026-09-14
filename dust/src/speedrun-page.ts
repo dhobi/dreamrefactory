@@ -15,12 +15,15 @@
  *     download. Dust is one volume and a boot touches fourteen files of it, so
  *     there is nothing to choose and little to prefetch; when a route exists and
  *     the download is what it is fighting, the list goes here.
- *   - **No sheet to copy.** There is no Dust route yet. The panel notices and
- *     offers no "copy the full run" button, which is the correct thing for it to
- *     do — the alternative is a button that fetches a 404.
+ *   - ~~**No sheet to copy.**~~ There is one now — `tests/speedrun/run.sheet.txt`,
+ *     published beside this page by the shared `run-sheet` plugin
+ *     (tools/vite-run-sheet.ts) exactly as Titanic's is, so the panel offers
+ *     "copy the full run" here too. It was written against the golden thread
+ *     (docs/dust/thread.md), which is the route this game actually has.
  */
 import { startWorkbench } from "@dreamfactory/engine/web/speedrun/workbench";
 import { installStateList } from "@dreamfactory/engine/web/state-list";
+import { siteUrl } from "@dreamfactory/site/site";
 import { snapshotState } from "@dreamfactory/engine/runtime/trace";
 import type { GameHost } from "@dreamfactory/engine/web/host";
 import type { SpineVar } from "@dreamfactory/engine/web/debug-panel";
@@ -80,4 +83,17 @@ startWorkbench({
   // does not have.
   game: "dust",
   actions: ACTIONS,
+  /**
+   * The repository's own route, published beside this page by the `run-sheet`
+   * plugin (vite.config.ts) — middleware in dev, an emitted asset in a build, at
+   * the same path either way.
+   *
+   * Resolved HERE, through `siteUrl`, and handed over whole: where a page sits in
+   * the deployed tree is `site/`'s question and the engine may not ask it
+   * (site/tests/layering.ts). Titanic's carries the note about the bug this line
+   * used to have there — written "/speedrun/…" it asks the host's root rather
+   * than this game's, so it works in dev and fetches nothing once deployed under
+   * a subdirectory.
+   */
+  fixtureSheet: siteUrl("speedrun/run.sheet.txt"),
 });

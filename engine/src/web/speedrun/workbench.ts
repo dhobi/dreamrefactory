@@ -72,6 +72,7 @@ import { formatBytes, formatEta, formatRate, warmCache, type WarmFile } from "..
 import { attachEditor } from "./editor";
 import { attachRecorder } from "./recorder";
 import { attachInputMonitor } from "./inputs";
+import { installMute } from "./mute";
 import { installColumnOrder } from "./columns";
 import { panelKeys, type PanelKeys } from "./panel-keys";
 import { buildPanel } from "./panel";
@@ -198,7 +199,10 @@ const statusEl = $<HTMLDivElement>("srstatus");
 const splitsEl = $<HTMLDivElement>("srsplits");
 
 /** highlighting, line numbers and a Tab that indents — see speedrun-editor.ts */
-const editor = attachEditor(sheetEl);
+const editor = attachEditor(sheetEl, {
+  // a gutter number names a line and the pointer IS a line — see `pickLine`
+  onPickLine: (line) => pickLine(line),
+});
 
 const ms = (n: number): string => {
   const s = n / 1000;
@@ -526,11 +530,24 @@ window.addEventListener(
  *     line the restored game is standing at.
  *   - STOP, and reaching the end, put it back to the top.
  *
- * Not the caret, not a click in the gutter, not a keyboard shortcut. A pointer
- * you can drop anywhere is a way to run a sheet from a place the game was never
- * brought to, and the run that follows is nonsense you have to be an expert to
- * recognise. The game's state and the pointer are one fact, and only a load can
- * set both.
+ * Not the caret and not a keyboard shortcut — but a CLICK IN THE GUTTER, now,
+ * and this comment used to say otherwise.
+ *
+ * The refusal was right about the hazard and wrong about who it was for. A
+ * pointer dropped anywhere is a way to run a sheet from a place the game was
+ * never brought to, and the run that follows is nonsense; that is still true.
+ * What made it worth allowing is that the alternative was worse in practice: the
+ * only ways to reach line 400 were to Step down to it — four hundred actions the
+ * game actually performs — or to delete everything above it, which changes the
+ * thing being timed. Both are further from "the state and the pointer are one
+ * fact" than a deliberate jump is.
+ *
+ * So the jump is allowed and it is LOUD about what it did not do. The status
+ * line says the game was not moved, every time, because the failure mode is
+ * somebody forgetting that and reading the nonsense as a result — and a `load()`
+ * or a `loadSave()` just below the line is usually what they actually wanted.
+ * Refused outright while a run is in flight: the pointer is being driven by the
+ * run then, and two things writing it is not a jump but a race.
  */
 let pointer: Pointer = TOP;
 
@@ -538,6 +555,36 @@ function setPointer(next: Pointer | null, reveal = false): void {
   pointer = next ?? TOP;
   editor.mark(pointer.line);
   if (reveal) editor.reveal(pointer.line);
+}
+
+/**
+ * The gutter's answer to a click — see the note above for why it is allowed and
+ * why it says so much.
+ */
+function pickLine(line: number): void {
+  if (running) return say("a run is in flight — Pause or Stop it before moving the pointer", "bad");
+  // `skip: 0` and not a count: a line picked by hand means the whole line, and
+  // the only reason `skip` exists is a pause that landed mid-line (see Pointer)
+  setPointer({ line, skip: 0 }, true);
+  /*
+   * Parsed QUIETLY, and a failure is not one. A sheet is edited between runs and
+   * is often mid-thought — moving the pointer is not the moment to refuse over a
+   * line somebody has not finished typing, and `parse()` would print the error
+   * over the message this is about to give.
+   */
+  let next: Step | undefined;
+  try {
+    next = parseSheet(sheetEl.value, { verbs: VERBS }).find((st) => st.line >= line);
+  } catch {
+    /* the sheet does not parse yet; the pointer still moved, which is the ask */
+  }
+  say(
+    next
+      ? `pointer moved to ${where()} — the GAME was not moved, so Play from here` +
+          ` starts at \`${next.source.trim().slice(0, 40)}\` in whatever state it is in`
+      : `pointer moved to ${where()} — nothing left to run below it`,
+    "",
+  );
 }
 
 /** "line 42" / "the top" — how the pointer reads in the status line */
@@ -1269,7 +1316,9 @@ function renderSheets(): void {
     copy.type = "button";
     copy.className = "full";
     copy.textContent = "Copy the full run";
-    copy.title = "a copy of taoot/tests/speedrun/run.sheet.txt, as a sheet of your own";
+    // the path is the GAME's, and there are two games with one now, so the
+    // tooltip names neither: `Workbench.fixtureSheet` is where it came from
+    copy.title = `a copy of this game's own run sheet, as a sheet of your own`;
     copy.addEventListener("click", () => {
       const name = freeName("full run");
       addSheet(name, repoSheet!);
@@ -1820,6 +1869,7 @@ export function startWorkbench(open: Workbench): void {
   installColumnOrder(PANEL);
   installColumnWidths(PANEL);
   installPictureScale(PANEL);
+  installMute(PANEL);
   // No files to warm, no button: the control would be a press that says
   // "nothing to warm", which is a worse answer than not offering it
   warmBtn.hidden = !open.warmup;

@@ -89,9 +89,30 @@ export class Scheduler {
   // ones (multiplesound/dualsound and looped sounds) on channel 2. A slot reads
   // back as its name only while its handle is live.
   private soundChannels: ({ name: string; handle: PlayHandle } | null)[] = [null, null];
+  /**
+   * IDLE IS `"none"`, not the empty string, and that is the engine's word rather
+   * than a convenience.
+   *
+   * Every script that compares this against a NAME works either way, which is
+   * why it read `""` for years. Dust asks it the other way round in three places
+   * — `FLUTE.FLT/0001 mousedown`, its `evaluate ()`, and `FLUTE.PRP/0001
+   * hidestep ()` all open `while currentsound () != "none" endwhile` — and
+   * against `""` that is a loop with no exit: the first note press never
+   * returned, measured as the pump running out at 40,000 steps.
+   *
+   * The convention was already half here: `halttheme ()` writes
+   * `currentThemeName = "none"` and the session initialises it that way, so the
+   * sibling getter for themes has always answered with this word. Nothing in
+   * either corpus compares a sound or voice name to `""`, and nothing is named
+   * "none".
+   *
+   * It was known and worked around in ONE PLACE — a rung of Dust's playthrough
+   * monkeypatched the builtin so the flute room could be played — which meant the
+   * suite was green on a room the browser hung in. Fixed here so both get it.
+   */
   currentSound(channel: number): string {
     const slot = this.soundChannels[channel - 1];
-    return slot && !slot.handle.done ? slot.name : "";
+    return slot && !slot.handle.done ? slot.name : "none";
   }
 
   /**

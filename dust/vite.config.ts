@@ -17,9 +17,20 @@ import { join, resolve } from "node:path";
 import { defineConfig } from "vite";
 import { gamefilesManifest } from "../tools/vite-gamefiles";
 import { siblingSignposts } from "../tools/vite-siblings";
+import { runSheet } from "../tools/vite-run-sheet";
 
 /** this file's own directory, not the working directory */
 const HERE = fileURLToPath(new URL(".", import.meta.url));
+
+/**
+ * Dust's route — the fixture the headless runner drives, and what the panel's
+ * "Copy the full run" button starts you from.
+ *
+ * The same path Titanic uses under its own package, through the same shared
+ * plugin (`tools/vite-run-sheet.ts`), so the two games' routes are found the
+ * same way and neither config knows anything the other does not.
+ */
+const SHEET_SRC = join(HERE, "tests/speedrun/run.sheet.txt");
 
 /** Dust's version — its own number, because it releases on its own tag */
 const VERSION = JSON.parse(readFileSync(join(HERE, "package.json"), "utf8"))
@@ -39,6 +50,7 @@ export default defineConfig({
   appType: "mpa",
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [
+    runSheet(SHEET_SRC),
     gamefilesManifest({
       gamefiles: join(HERE, "gamefiles"),
       publicDir: join(HERE, "public"),

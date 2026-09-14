@@ -13,6 +13,7 @@ import { join, resolve } from "node:path";
 import { Plugin, defineConfig } from "vite";
 import { gamefilesManifest } from "../tools/vite-gamefiles";
 import { siblingSignposts } from "../tools/vite-siblings";
+import { runSheet } from "../tools/vite-run-sheet";
 // RELATIVE, like everything a Vite config reaches: the config is bundled and run
 // under Node, where a bare specifier is left external for a loader that can
 // follow neither the engine's extensionless imports nor a .ts file at all.
@@ -26,46 +27,21 @@ const HERE = fileURLToPath(new URL(".", import.meta.url));
 const VERSION = JSON.parse(readFileSync(join(HERE, "package.json"), "utf8")).version as string;
 
 /**
- * The speedrun workbench's route, served in dev and emitted into the build.
+ * Titanic's route — the fixture the headless runner drives, and what the panel's
+ * "Copy the full run" button starts you from.
  *
- * The sheet is a test fixture (`tests/speedrun/run.sheet.txt`) — the route the
- * headless runner drives — and the page offers a "Copy the full run" button that
- * starts you from it rather than from an empty sheet. It stays in `tests/`
- * because that is where it is run from, and is copied out at build time rather
- * than moved, which would cost every path that names it.
+ * The plugin is `tools/vite-run-sheet.ts`, shared with Dust: the two games differ
+ * only in where the fixture sits.
  */
 const SHEET_SRC = join(HERE, "tests/speedrun/run.sheet.txt");
-const SHEET_URL = "/speedrun/run.sheet.txt";
 
-function runSheet(): Plugin {
-  return {
-    name: "run-sheet",
-    configureServer(server) {
-      server.middlewares.use(SHEET_URL, (_req, res, next) => {
-        if (!existsSync(SHEET_SRC)) return next();
-        res.setHeader("content-type", "text/plain; charset=utf-8");
-        // it is edited constantly; a cached copy is worse than a fetch
-        res.setHeader("cache-control", "no-store");
-        res.end(readFileSync(SHEET_SRC));
-      });
-    },
-    /**
-     * Emitted rather than written, so it lands under the build output wherever
-     * that is and shows up in the build log with everything else. `fileName` and
-     * not `name`, because this one must NOT be content-hashed: the page asks for
-     * it by the path above.
-     */
-    generateBundle() {
-      if (!existsSync(SHEET_SRC)) return; // no sheet, no button — a valid build
-      this.emitFile({
-        type: "asset",
-        fileName: "speedrun/run.sheet.txt",
-        source: readFileSync(SHEET_SRC, "utf8"),
-      });
-    },
-  };
-}
-
+/**
+ * `nightdive.mov` from its GIF, when the GIF is the newer of the two.
+ *
+ * Restored verbatim — extracting the run-sheet plugin to `tools/` took this one
+ * with it for a revision, which `tsc` caught as `Cannot find name
+ * 'nightdiveMovie'` because the plugin list still asked for it.
+ */
 function nightdiveMovie(): Plugin {
   return {
     name: "nightdive-movie",
@@ -111,7 +87,7 @@ export default defineConfig({
   plugins: [
     nightdiveMovie(),
     gamefilesManifest({ gamefiles: join(HERE, "gamefiles"), publicDir: join(HERE, "public") }),
-    runSheet(),
+    runSheet(SHEET_SRC),
     siblingSignposts([
       { path: "editors", command: "npm run dev", port: 5173, what: "The format editors" },
       { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },

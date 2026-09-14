@@ -135,25 +135,26 @@ export const rung: Segment = {
     const flat = (): string => ask(p, "currentflat").toLowerCase();
 
     /*
-     * PORT GAP 1 — `currentsound ()` answers "" for an idle channel.
+     * PORT GAP 1 is FIXED IN THE ENGINE, and the patch that used to be here is
+     * why it is worth a note rather than a deletion.
      *
-     * `Scheduler.currentSound` returns the name of a live handle and the empty
-     * string otherwise, and Dust's flute room asks the question the other way
-     * round: `FLUTE.FLT/0001 mousedown` and `evaluate ()`, and
-     * `FLUTE.PRP/0001 hidestep ()`, all open `while currentsound () != "none"
-     * endwhile`. With "" for silence that is a loop with no exit, and the first
-     * note press never returns — measured, the pump ran out at 40 000 steps.
-     * They are the corpus's only three `!= "none"` tests, which is why nothing
-     * has hit it before. Everything else compares against a NAME
-     * (`SALGAMES.FLT`, `SNAKE.FLT`) and is unaffected either way.
+     * `currentsound ()` answered "" for an idle channel, and Dust's flute room
+     * asks the question the other way round — `FLUTE.FLT/0001 mousedown`, its
+     * `evaluate ()` and `FLUTE.PRP/0001 hidestep ()` all open `while
+     * currentsound () != "none" endwhile`, which against "" is a loop with no
+     * exit. This rung monkeypatched the builtin so it could play the room, and
+     * that made the suite green on a room the BROWSER still hung in: the port gap
+     * was named correctly, then papered over at the one call site that had hit
+     * it.
+     *
+     * The note also said these were "the corpus's only three `!= "none"`
+     * tests". They were the only three on `currentsound`. There are six more on
+     * `currentvoice`, all in `CHECKERS.PRP`, and the one in `win ()` runs when
+     * the player loses a game of checkers — so that hung too, and nothing here
+     * covered it because no rung plays checkers.
+     *
+     * `Scheduler.currentSound` and `currentvoice` both answer "none" now.
      */
-    const builtins = p.session.interp.builtins;
-    const rawSound = builtins.get("currentsound")!;
-    builtins.set("currentsound", async (interp, args, call, ctx) => {
-      const playing = await rawSound(interp, args, call, ctx);
-      return String(playing ?? "") === "" ? "none" : String(playing);
-    });
-
     /*
      * PORT GAP 2 — `propxy (name, 3)` is not the packed POINT.
      *
@@ -170,6 +171,7 @@ export const rung: Segment = {
      * swept one sixteenth-sector, so the largest dial turned one step and then
      * stopped. Packed the way `propxyz (name, 4)` already is, it tracks.
      */
+    const builtins = p.session.interp.builtins;
     const rawXY = builtins.get("propxy")!;
     builtins.set("propxy", (interp, args, call, ctx) => {
       if (args.length !== 2 || Number(args[1]) !== 3) return rawXY(interp, args, call, ctx);

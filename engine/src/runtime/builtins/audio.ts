@@ -25,13 +25,23 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
     }
     voice = { name: toStr(name).toLowerCase(), handle: session.audio.play(channel, audio, { overlap }) };
   };
-  // currentvoice(): name of the voice line playing, "" when idle. `while
-  // currentvoice() = sname endwhile` spins until a line ends — like sounddone,
-  // the empty loop needs a real frame yielded to progress; headless is always
-  // done and resolves at once.
+  /**
+   * `currentvoice()`: the voice line playing, or `"none"` when idle.
+   *
+   * `while currentvoice() = sname endwhile` spins until a line ends — like
+   * `sounddone`, the empty loop needs a real frame yielded to progress; headless
+   * is always done and resolves at once.
+   *
+   * `"none"` for idle for the reason {@link Scheduler.currentSound} gives at
+   * length, and Dust's checkers is where it was felt: SIX `while currentvoice ()
+   * != "none" endwhile` loops in `CHECKERS.PRP`, and the one in `win ()` is on
+   * the path taken when the player LOSES — so the game worked until Bolivar won
+   * it, and then hung with his gloat half-said. The win path has no such loop,
+   * which is why losing was the case that stuck.
+   */
   r("currentvoice", async () => {
     await ctx.yieldFrame();
-    return voice && !voice.handle.done ? voice.name : "";
+    return voice && !voice.handle.done ? voice.name : "none";
   });
   r("voicesound", (_i, [n]) => playNamed(n, "voice"));
   r("singlesound", (_i, [n]) => playNamed(n, "sound"));

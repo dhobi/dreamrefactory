@@ -303,7 +303,10 @@ test("actorinstance clones a cast sprite; actordelete/actordist behave", () => {
 test("countbevels / currentvoice idle defaults", async () => {
   const session = new GameSession(() => null, new NullAudioSink());
   expect(Number(callBuiltin(session, "countbevels"))).toBe(0);
-  expect(await (callBuiltin(session, "currentvoice") as unknown as Promise<string>)).toBe("");
+  // "none" is the engine's word for an idle channel, and it is load-bearing:
+  // Dust opens `while currentvoice () != "none" endwhile` in six places and ""
+  // makes every one of them a loop with no exit
+  expect(await (callBuiltin(session, "currentvoice") as unknown as Promise<string>)).toBe("none");
 });
 
 test("paintings + roadahead drive the nav-arrow (GSTAIR1.SET)", () => {
@@ -372,8 +375,9 @@ test("soundvol/soundpan are per-name get/set with sane defaults", () => {
 test("currentsound is idle by default and reports the playing channel name", async () => {
   const session = new GameSession(() => null, new NullAudioSink());
   const cur = (ch: number) => callBuiltin(session, "currentsound", ch) as unknown as Promise<string>;
-  expect(await cur(1)).toBe("");
-  expect(await cur(2)).toBe("");
+  // as above — `!= "none"` is how Dust's flute room waits for a note to finish
+  expect(await cur(1)).toBe("none");
+  expect(await cur(2)).toBe("none");
 });
 
 test("soundvol/soundpan feed the play, and looping sounds show in currentsound", () => {
@@ -395,7 +399,9 @@ test("soundvol/soundpan feed the play, and looping sounds show in currentsound",
   session.scheduler.playSound("wloop", true);
   expect(session.scheduler.currentSound(2)).toBe("wloop");
   session.scheduler.haltSounds();
-  expect(session.scheduler.currentSound(2)).toBe("");
+  // "none" and not "" — the engine's word for an idle channel, which Dust's
+  // `while currentsound () != "none"` loops are written against
+  expect(session.scheduler.currentSound(2)).toBe("none");
 });
 
 test("path stores/returns slots and gates the CD-copy check correctly", () => {

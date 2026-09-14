@@ -22,6 +22,7 @@ import { parseSheet } from "./sheet";
 import { SHOWING } from "./driver";
 import {
   IDLE,
+  aimAtSettled,
   WATCHES,
   arrow,
   clickThing,
@@ -157,12 +158,46 @@ export const CORE_ACTIONS: ActionTable = {
     help: "a single Escape keypress (skipMovie is the repeating version)",
     run: key("Escape"),
   },
+  /**
+   * Any key, once — or until something is true.
+   *
+   * `until:` is the key half of what {@link CORE_ACTIONS.hammer} is for clicks,
+   * and it exists because a press is sometimes a REQUEST that has to be repeated
+   * rather than a gesture that lands. Dust's growl is the case that asked for it:
+   * `NITE.SET/0135 keydown ()` answers an uparrow facing north with
+   *
+   *     sendtostage (spotmovie ("dog1.mov"))
+   *     sendtoactor ("help", setupactor ("dog"))
+   *
+   * and then `exitcode`s, so the press does not move you — it fetches somebody
+   * into the street. A press that arrives while that film is still up does not
+   * reach the handler at all, so "press until he is out there" is the gesture,
+   * and the playthrough writes it as exactly that:
+   *
+   *     for (let i = 0; i < 4 && !visible("help"); i++) await p.press("uparrow", ...)
+   *
+   * Which is `key(ArrowUp, until: visible.help)` here. Without the option a
+   * sheet has to guess a repeat count, and `xN` presses N times whatever
+   * happens — too few and the thing never happens, too many and the extra
+   * presses land on whatever the first one caused.
+   */
   key: {
     args: [1, 1],
     wait: "ready",
+    opts: ["until"],
     sig: "key(e)",
-    help: "press any key by Playwright name (M, O, X, Escape)",
-    run: async (c) => c.d.key(c.step.args[0], c.wait, c.budget),
+    help: "press any key by Playwright name (M, O, X, Escape); until: presses again until it holds",
+    run: async (c) => {
+      const until = c.step.opts.until;
+      if (!until) return c.d.key(c.step.args[0], c.wait, c.budget);
+      const n = await c.d.hammer(c.step.args[0], {
+        until: condition(until),
+        gap: c.gap,
+        budget: c.budget,
+        what: `${until} (pressing ${c.step.args[0]})`,
+      });
+      c.say(`${n} x ${c.step.args[0]}`);
+    },
   },
 
   // -- clicking -------------------------------------------------------------
@@ -187,12 +222,57 @@ export const CORE_ACTIONS: ActionTable = {
   clickat: {
     args: [2, 2],
     wait: "taken",
+    opts: ["until", "max"],
     sig: "clickAt(169, 311)",
-    help: "click a raw canvas pixel, 512x384 — for movie buttons with no name",
+    help: "click a raw canvas pixel, 512x384 — for movie buttons with no name. `until:` clicks it again until something is true",
     run: async (c) => {
       const [x, y] = c.step.args.map(Number);
       if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error(`clickAt needs two numbers`);
-      await c.d.clickAt(x, y, c.wait, c.budget);
+      if (c.step.opts.until === undefined) {
+        await c.d.clickAt(x, y, c.wait, c.budget);
+        return;
+      }
+      /**
+       * `until:` — CLICK IT AGAIN, and wait before the first one.
+       *
+       * The route's own shape, and the waiting half is the part worth keeping.
+       * `clickThrough` (dust/tests/playthrough/route.ts) makes a gesture and then
+       * "lets it play: a film that ends by itself needs nothing but time", and
+       * only clicks a film that is GENUINELY parked. Eleven of the route's steps
+       * are that: the dollar behind the poster is `spotmovie ("dollar.mov")`,
+       * whose `actionframe (1)` pays out on its own — a click sent into it is a
+       * click on whatever the film does next.
+       *
+       * So: never click a condition that is already true, give it a beat to come
+       * true by itself, and only then start tapping.
+       */
+      const until = condition(c.step.opts.until);
+      const max = Number(c.step.opts.max ?? 40);
+      const deadline = Date.now() + c.budget;
+      const left = () => Math.max(250, deadline - Date.now());
+      if (await c.d.evaluate<boolean>(`!!(${until})`)) {
+        c.say(`${c.step.opts.until} already — no click needed`);
+        return;
+      }
+      // a beat for it to finish on its own before anything is pressed into it
+      if (await c.d.tryHold(until, Math.min(left(), 2000))) {
+        c.say(`${c.step.opts.until} came true on its own`);
+        return;
+      }
+      let taps = 0;
+      for (;;) {
+        if (await c.d.evaluate<boolean>(`!!(${until})`)) break;
+        if (Date.now() > deadline) {
+          throw new Error(
+            `clicked ${x},${y} ${taps} time(s) in ${c.budget} ms and ${c.step.opts.until} never came true`,
+          );
+        }
+        if (taps >= max) throw new Error(`${max} clicks at ${x},${y} and ${c.step.opts.until} never came true`);
+        await c.d.clickAt(x, y, "none", left());
+        taps++;
+        await c.d.sleep(c.gap);
+      }
+      c.say(`${c.step.opts.until} after ${taps} click${taps === 1 ? "" : "s"}`);
     },
   },
 
@@ -457,6 +537,139 @@ export const CORE_ACTIONS: ActionTable = {
   },
 
   // -- conversation ---------------------------------------------------------
+  /**
+   * Click someone until they are actually talking, turning if they are not in
+   * reach.
+   *
+   * TITANIC'S UNTIL IT WAS THE ENGINE'S. It moved here when Dust wanted it, and
+   * the move was an entry moving and nothing else: every part of it is
+   * engine-side (`aimAtSettled`, `IDLE`, `predicate("talking")`, a turn) and only
+   * the measurements below name Titanic's people.
+   *
+   * What Dust wanted it for is worth writing down, because it is a different
+   * reason. A character there does not wait to be spoken to — `GANG.CST`'s idle
+   * scripts arm `hasattention (n)`, and once you have stood in front of somebody
+   * that long their `hasattention ()` fires `sendtoactor (target, mousedown (0))`
+   * and the conversation opens by itself. A route can WAIT for that, which is
+   * what the original player did and what the playthrough transcribes; or it can
+   * do the thing the timer would have done, which is click them. The second is
+   * the same gesture arriving early, and a run has no business waiting out an
+   * attention span.
+   */
+  accost: {
+    args: [1, 1],
+    wait: "none",
+    opts: ["turns", "patience"],
+    sig: "accost(penny)",
+    help: "click someone until they actually start talking, turning if they are not in reach",
+    run: async (c) => {
+      // The browser-capable half of `hunt`. The pathfinder is Node-only because
+      // it plans over `.SET` files read off disk, but the two things this needs —
+      // the engine's own hit test (`aim`) and a turn — both exist in a page, so a
+      // route does not have to give up the workbench to accost someone.
+      //
+      // It exists because a single `click` is genuinely not enough, and the
+      // reason is worth stating: clicking a character starts a WALK to them and
+      // the puppet only opens once they have been reached, so a click can be
+      // taken, be aimed correctly, and still produce no conversation — the run
+      // then waits ninety seconds for a line nobody is going to speak. Measured
+      // on Penny in the gym, from the very standpoint the planner clicks her
+      // from. Turning and trying again is what a player does.
+      const who = c.step.args[0];
+      const turns = Number(c.step.opts.turns ?? 8);
+      const patience = Number(c.step.opts.patience ?? 8000);
+      // Somebody talking to you already IS the accost, and checking costs one
+      // round trip per turn.
+      //
+      // Half this game's characters open the conversation themselves. Morrow
+      // heads you off on the boat deck the moment you arrive, and a run that
+      // walks up and accosts him is a run standing inside an open puppet: the
+      // engine is busy for as long as the conversation lasts, so the hit test
+      // finds nothing clickable, and the turn this verb makes to look again
+      // waits on an engine that will not be idle until the thing it is waiting
+      // to cause has finished. Measured: 2m08s on one `accost(morrow)`, all of
+      // it a single ArrowRight's hold, and the readout said "talking to
+      // morrow1.pup" the whole time.
+      //
+      // WHO it is is reported rather than checked. The puppet's name is the
+      // file's ("morrow1.pup") and the sheet's is the hotspot's, and inventing a
+      // match between the two would turn a working line into a broken one for
+      // every character whose two names differ. If the wrong person opened the
+      // conversation, the bevel numbers on the next line will not be there and
+      // `say` will say so — with this note directly above it in the report.
+      const opened = `(() => {
+        const v = window.dbg.viewer;
+        return v && v.conversing ? String(v.conversingWith || "someone") : "";
+      })()`;
+      for (let turn = 0; turn <= turns; turn++) {
+        const already = await c.d.evaluate<string>(opened);
+        if (already) {
+          c.say(turn ? `${turn} turns, then ${already} spoke first` : `already talking to ${already}`);
+          return;
+        }
+        // Wait for the engine to be able to TAKE the click before making it: one
+        // sent while the camera is still animating is filed rather than
+        // dispatched, and a filed click is one `flushevents()` away from never
+        // having happened (see IDLE).
+        //
+        // ONE press per standpoint, and that is measured rather than assumed.
+        // Clicking Vlad in the boiler room takes 5.2 s to produce a conversation,
+        // which reads exactly like a lost click — but pressing three times took
+        // 10.7 s and still opened at the same moment. The delay is his: the click
+        // lands, he stops shovelling and crosses the room, and the puppet opens
+        // when he arrives. `patience` is what covers that walk, not a retry.
+        await c.d.tryHold(IDLE, Math.min(patience, 8000));
+        // ...and let them stand still, or the aim is a pixel they have already
+        // turned away from — see STANDING (#338)
+        const at = await aimAtSettled(c, who);
+        /*
+         * ASK AGAIN, RIGHT HERE, because the wait above is exactly long enough
+         * for the answer to have changed.
+         *
+         * The press that opened this conversation may be the one from the last
+         * turn of this loop: clicking somebody starts a WALK to them and the
+         * puppet opens when they are reached, so a walk longer than `patience`
+         * looks like a click that did nothing. Press again and the second press
+         * lands on the plaque that has meanwhile appeared, which ANSWERS it.
+         *
+         * Measured twice in one sweep of a route: `accost(gus)` spent his main
+         * menu's first reply and left the sheet's own line looking at a drink
+         * list it had no number for ("unplanned choice from gus.pup: Bourbon...
+         * | Low fat milk... | ..."), and the help character's ladder lost its
+         * first rung the same way.
+         */
+        if (await c.d.evaluate<string>(opened)) {
+          c.say(`${turn ? `${turn} turns, then ` : ""}they were already talking`);
+          return;
+        }
+        if (at) {
+          // wait: none, deliberately. A click that OPENS a conversation is not
+          // consumed in the ordinary way: the puppet suspends holding the
+          // engine, and the press can sit in `GameSession.events` for as long
+          // as the conversation lasts. Waiting for the queue to drain therefore
+          // waits for the very thing the click just caused to finish — measured
+          // in the page as "stuck waiting for click 242,106 to settle" while the
+          // readout said, in the same breath, "talking to penny1.pup".
+          //
+          // The conversation opening IS the acknowledgement, so wait for that.
+          await c.d.clickAt(at.x, at.y, "none", c.budget);
+          if (await c.d.tryHold(predicate("talking"), patience)) {
+            c.say(turn ? `${turn} turns` : "first look");
+            return;
+          }
+        }
+        if (turn === turns) break;
+        // and do not TURN into one either: a turn is a gesture too, and the
+        // conversation may have opened while the press above was being waited on
+        if (await c.d.evaluate<string>(opened)) {
+          c.say(`${turn + 1} turns, then they started talking`);
+          return;
+        }
+        await arrow("ArrowRight")({ ...c, wait: "none" });
+      }
+      throw new Error(`turned the whole ring and ${who} never started talking`);
+    },
+  },
   talk: {
     args: [1, 1],
     bevels: true,
@@ -894,7 +1107,7 @@ export const CORE_ACTIONS: ActionTable = {
     run: async (c) => {
       const cond = c.step.args[0];
       const body = c.step.args[1];
-      const expr = predicate(cond);
+      const expr = condition(cond);
       const at = WATCHES.findIndex((w) => w.expr === expr);
       if (body.trim().toLowerCase() === "off") {
         if (at < 0) throw new Error(`no watch on "${cond}" to turn off`);

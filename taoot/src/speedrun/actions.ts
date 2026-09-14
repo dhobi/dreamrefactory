@@ -174,94 +174,16 @@ export const TITANIC_ACTIONS: ActionTable = {
       c.say(`${after} points`);
     },
   },
-  accost: {
-    args: [1, 1],
-    wait: "none",
-    opts: ["turns", "patience"],
-    sig: "accost(penny)",
-    help: "click someone until they actually start talking, turning if they are not in reach",
-    run: async (c) => {
-      // The browser-capable half of `hunt`. The pathfinder is Node-only because
-      // it plans over `.SET` files read off disk, but the two things this needs —
-      // the engine's own hit test (`aim`) and a turn — both exist in a page, so a
-      // route does not have to give up the workbench to accost someone.
-      //
-      // It exists because a single `click` is genuinely not enough, and the
-      // reason is worth stating: clicking a character starts a WALK to them and
-      // the puppet only opens once they have been reached, so a click can be
-      // taken, be aimed correctly, and still produce no conversation — the run
-      // then waits ninety seconds for a line nobody is going to speak. Measured
-      // on Penny in the gym, from the very standpoint the planner clicks her
-      // from. Turning and trying again is what a player does.
-      const who = c.step.args[0];
-      const turns = Number(c.step.opts.turns ?? 8);
-      const patience = Number(c.step.opts.patience ?? 8000);
-      // Somebody talking to you already IS the accost, and checking costs one
-      // round trip per turn.
-      //
-      // Half this game's characters open the conversation themselves. Morrow
-      // heads you off on the boat deck the moment you arrive, and a run that
-      // walks up and accosts him is a run standing inside an open puppet: the
-      // engine is busy for as long as the conversation lasts, so the hit test
-      // finds nothing clickable, and the turn this verb makes to look again
-      // waits on an engine that will not be idle until the thing it is waiting
-      // to cause has finished. Measured: 2m08s on one `accost(morrow)`, all of
-      // it a single ArrowRight's hold, and the readout said "talking to
-      // morrow1.pup" the whole time.
-      //
-      // WHO it is is reported rather than checked. The puppet's name is the
-      // file's ("morrow1.pup") and the sheet's is the hotspot's, and inventing a
-      // match between the two would turn a working line into a broken one for
-      // every character whose two names differ. If the wrong person opened the
-      // conversation, the bevel numbers on the next line will not be there and
-      // `say` will say so — with this note directly above it in the report.
-      const opened = `(() => {
-        const v = window.dbg.viewer;
-        return v && v.conversing ? String(v.conversingWith || "someone") : "";
-      })()`;
-      for (let turn = 0; turn <= turns; turn++) {
-        const already = await c.d.evaluate<string>(opened);
-        if (already) {
-          c.say(turn ? `${turn} turns, then ${already} spoke first` : `already talking to ${already}`);
-          return;
-        }
-        // Wait for the engine to be able to TAKE the click before making it: one
-        // sent while the camera is still animating is filed rather than
-        // dispatched, and a filed click is one `flushevents()` away from never
-        // having happened (see IDLE).
-        //
-        // ONE press per standpoint, and that is measured rather than assumed.
-        // Clicking Vlad in the boiler room takes 5.2 s to produce a conversation,
-        // which reads exactly like a lost click — but pressing three times took
-        // 10.7 s and still opened at the same moment. The delay is his: the click
-        // lands, he stops shovelling and crosses the room, and the puppet opens
-        // when he arrives. `patience` is what covers that walk, not a retry.
-        await c.d.tryHold(IDLE, Math.min(patience, 8000));
-        // ...and let them stand still, or the aim is a pixel they have already
-        // turned away from — see STANDING (#338)
-        const at = await aimAtSettled(c, who);
-        if (at) {
-          // wait: none, deliberately. A click that OPENS a conversation is not
-          // consumed in the ordinary way: the puppet suspends holding the
-          // engine, and the press can sit in `GameSession.events` for as long
-          // as the conversation lasts. Waiting for the queue to drain therefore
-          // waits for the very thing the click just caused to finish — measured
-          // in the page as "stuck waiting for click 242,106 to settle" while the
-          // readout said, in the same breath, "talking to penny1.pup".
-          //
-          // The conversation opening IS the acknowledgement, so wait for that.
-          await c.d.clickAt(at.x, at.y, "none", c.budget);
-          if (await c.d.tryHold(predicate("talking"), patience)) {
-            c.say(turn ? `${turn} turns` : "first look");
-            return;
-          }
-        }
-        if (turn === turns) break;
-        await arrow("ArrowRight")({ ...c, wait: "none" });
-      }
-      throw new Error(`turned the whole ring and ${who} never started talking`);
-    },
-  },
+  /*
+   * `accost` was here and is now the engine's (actions-core.ts).
+   *
+   * It moved the way this table's header says a verb moves — by its entry
+   * moving — and it moved because Dust needed it: forcing a conversation open
+   * rather than waiting for a character to notice you is what a RUN does, and
+   * nothing in the verb was ever Titanic's. Every part of it is engine-side
+   * already (`aimAtSettled`, `IDLE`, `predicate("talking")`, a turn), and only
+   * its measurements name this ship's people.
+   */
   climbstack: {
     args: [0, 0],
     wait: "none",

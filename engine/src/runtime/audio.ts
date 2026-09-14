@@ -46,6 +46,23 @@ export interface AudioSink {
    * up mid-phrase when the engine runs again. Nothing mutes it; it starves.
    */
   setSuspended(on: boolean): void;
+  /**
+   * SILENCE, kept separately from the volume the game sets.
+   *
+   * A listener's switch, not the game's: `wavevolume ()` and `themevol ()` write
+   * {@link setChannelVolume} whenever a script feels like it — a room change, a
+   * movie, the panel's own sliders — so a mute implemented by writing zero there
+   * is undone by the next thing the game says about volume. This multiplies on
+   * top instead, and the volume underneath is remembered, so unmuting returns to
+   * whatever the game has meanwhile decided rather than to a number we kept.
+   *
+   * Not suspension: {@link setSuspended} stops the context clock, which is right
+   * for a paused game and wrong here — a muted run must still play out at the
+   * speed it would with sound, or the thing being timed is not the thing.
+   *
+   * Optional, so a test sink that has no notion of it stays as it is.
+   */
+  setMuted?(on: boolean): void;
 }
 
 /**
@@ -80,6 +97,7 @@ export class DeferredAudioSink implements AudioSink {
   attach(sink: AudioSink): void {
     this.real = sink;
     if (this.suspended) sink.setSuspended(true);
+    if (this.muted) sink.setMuted?.(true);
     for (const [c, v] of this.volumes) sink.setChannelVolume(c, v);
     this.volumes.clear();
     for (const [c, h] of this.held) {
@@ -123,6 +141,13 @@ export class DeferredAudioSink implements AudioSink {
   /** nothing is audible yet, so there is nothing to hold — but a real sink
    *  attached mid-suspension must arrive suspended, not blaring. */
   private suspended = false;
+  /** and muted, for the same reason: the switch can be flipped before the first
+   *  gesture that is allowed to build an AudioContext */
+  private muted = false;
+  setMuted(on: boolean): void {
+    this.muted = on;
+    this.real?.setMuted?.(on);
+  }
   setSuspended(on: boolean): void {
     this.suspended = on;
     this.real?.setSuspended(on);
@@ -223,6 +248,12 @@ export class NullAudioSink implements AudioSink {
   setSuspended(on: boolean): void {
     this.suspended = on;
   }
+
+  /** recorded so a suite can assert the switch reached the sink */
+  muted = false;
+  setMuted(on: boolean): void {
+    this.muted = on;
+  }
 }
 
 /** browser sink; construct after a user gesture (AudioContext autoplay policy) */
@@ -295,8 +326,26 @@ export class WebAudioSink implements AudioSink {
     await this.ctx.close().catch(() => {});
   }
 
+  /**
+   * What the GAME asked for, kept apart from what is audible.
+   *
+   * The gain node carries the product of this and the mute, so a script writing
+   * a volume while muted changes what unmuting will restore and nothing else.
+   * Seeded with the same defaults the nodes are built with, theme included.
+   */
+  private wanted: Record<AudioChannel, number> = { sound: 1, voice: 1, theme: 0.6 };
+  private muted = false;
+
   setChannelVolume(channel: AudioChannel, volume: number): void {
-    this.gains[channel].gain.value = Math.max(0, Math.min(1, volume));
+    this.wanted[channel] = Math.max(0, Math.min(1, volume));
+    this.gains[channel].gain.value = this.muted ? 0 : this.wanted[channel];
+  }
+
+  setMuted(on: boolean): void {
+    this.muted = on;
+    for (const channel of Object.keys(this.gains) as AudioChannel[]) {
+      this.gains[channel].gain.value = on ? 0 : this.wanted[channel];
+    }
   }
 
   /**
