@@ -9,6 +9,9 @@
     <meta name="robots" content="noindex" />
     <meta name="site-root" content="../" />
     <link rel="icon" type="image/png" href="/taoot-mark.png" />
+    <!-- the intro is written in it twenty-five seconds in, but it is 28 KB and
+         asking for it now means the first line is never drawn in the fallback -->
+    <link rel="preload" as="font" type="font/woff2" href="petit-formal-script.woff2" crossorigin />
     <style>
       /*
        * The room fills the window and the page is furniture around it, in the
@@ -34,6 +37,24 @@
         user-select: none;
       }
       body { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink); }
+      /*
+       * Petit Formal Script by Impallari, Gallo and Fuenzalida, SIL Open Font
+       * License 1.1 — the licence travels with the font at
+       * public/bedsit/petit-formal-script-OFL.txt. Latin subset, 28 KB, served
+       * from this origin.
+       *
+       * A 1930s formal hand, which is what a man in a Kensington bedsit in 1942
+       * would have written a note to himself in, and the only thing on this
+       * page that is not monospace: the room's instruments are a machine's and
+       * the four lines before it are not.
+       */
+      @font-face {
+        font-family: "Petit Formal Script";
+        src: url("petit-formal-script.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
       canvas { display: block; width: 100vw; height: 100dvh; cursor: crosshair; }
       .panel {
         position: fixed;
@@ -310,18 +331,78 @@
          `#line` alone this took the dim grey and the 54ch meant for the note */
       #splash p#line {
         color: var(--brass);
-        font-size: clamp(15px, 2.4vw, 20px);
-        letter-spacing: 0.08em;
-        text-indent: 0.08em;
-        max-width: 30ch;
+        font-family: "Petit Formal Script", "Snell Roundhand", "Segoe Script", cursive;
+        /* a script face carries far less ink per em than the monospace it
+           replaced, so it is set half again as large to read at the same weight */
+        font-size: clamp(27px, 4.4vw, 42px);
+        line-height: 1.4;
+        letter-spacing: normal;
+        /* ems, not ch: `ch` measures the zero of a face whose digits are
+           nothing like its letters, and 30 of them left the longest line on one
+           row at every width */
+        max-width: 15em;
         opacity: 0;
       }
       #splash p#line.on { opacity: 1; }
+      /* IN is instant and OUT takes the fade: the words do their own arriving
+         below, and a container fading up underneath them blunts it. Removing
+         `.on` stops matching this rule, so the shared 0.55s comes back for the
+         way out */
+      #splash p#line.on { transition: none; }
+      /*
+       * The line is WRITTEN, not faded up.
+       *
+       * Each word is a box of its own with a soft-edged mask sliding across it,
+       * so the ink arrives left to right the way a nib lays it down, and the
+       * words start one after another along the line. The mask is 250% wide and
+       * travels from `100%` — where its opaque half sits off to the left of the
+       * word — to `0%`, where that half covers the word exactly.
+       *
+       * Per WORD and not per letter on purpose. This face joins its letters,
+       * and a span around each one shapes it alone: every join in the line
+       * would break. A space is where the pen lifts anyway, so a word is the
+       * smallest piece that can be cut without the hand showing it.
+       *
+       * The padding is what the letters do OUTSIDE their boxes, and a mask
+       * covers the border box and nothing beyond it — so whatever hangs out is
+       * not merely revealed late, it is cut off for good. A script face hangs
+       * out in three directions at once: the descenders of `g` and `y` fall
+       * well below the line box, and the entry stroke of a capital starts to
+       * the left of the origin while the exit swash finishes right of the
+       * advance. Half an em all round, taken straight back off again as margin,
+       * gives the mask something to cover and moves nothing.
+       */
+      #line span {
+        display: inline-block;
+        padding: 0.5em 0.55em;
+        margin: -0.5em -0.55em;
+        -webkit-mask-image: linear-gradient(90deg, #000 0 40%, #0000 48%);
+        mask-image: linear-gradient(90deg, #000 0 40%, #0000 48%);
+        -webkit-mask-size: 250% 100%;
+        mask-size: 250% 100%;
+        -webkit-mask-position: 100% 0;
+        mask-position: 100% 0;
+        /* the delay and the duration are per word, set in the page: both come
+           out of the word's share of the line, so the pen crosses it at one
+           speed rather than spending the same time on "at" as on "another" */
+        animation: ink 0.5s linear both;
+      }
+      @keyframes ink {
+        from { -webkit-mask-position: 100% 0; mask-position: 100% 0; }
+        to { -webkit-mask-position: 0% 0; mask-position: 0% 0; }
+      }
       #splash[data-state="intro"] #card { opacity: 0; pointer-events: none; }
       #splash[data-state="intro"] { cursor: none; }
       #splash.out { opacity: 0; pointer-events: none; }
       @media (prefers-reduced-motion: reduce) {
         #card, #line, #splash { transition-duration: 0.01s; }
+        /* no pen: the line is simply there, and the mask goes with the
+           animation or it would leave every word half inked */
+        #line span {
+          animation: none;
+          -webkit-mask-image: none;
+          mask-image: none;
+        }
       }
       #splash.gone { display: none; }
     </style>
