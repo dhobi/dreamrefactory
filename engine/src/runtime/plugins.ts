@@ -1,10 +1,25 @@
 /**
  * The native plugin bus — `plugin(name, …)` and `pluginfx(name, …)`.
  *
- * DreamFactory 4 could hand work to a *native code plugin* addressed by name,
- * and *Timelapse* (1996) is the only rip here that uses it: 42 `plugin` calls
- * and 4 `pluginfx`, naming three plugins between them. Titanic and Dust name
- * none, which is why the port went this long without the opcode at all.
+ * DreamFactory could hand work to a *native code plugin* addressed by name.
+ * *Timelapse* (1996) is the heaviest user — 42 `plugin` calls and 4 `pluginfx`,
+ * naming three plugins between them — and Titanic names none.
+ *
+ * DUST NAMES ONE, and this file said for a while that it did not. `CHECKERS.PRP`
+ * calls `pluginfx ("checkmove", …)` twice, into the `CHECKERS.DLL` that ships
+ * beside `DF.EXE` in the installer tree, and those two calls are the whole of
+ * Bolivar's play: the script draws the board, validates the drag and counts the
+ * dead, and asks the plugin what the opponent does. Answering 0 to it is not a
+ * missing feature that shows as an error — the player moves, `automove ()` gets
+ * a number where it wanted a move string, its `while findword (move, ",", …)`
+ * loop runs zero times and `playerturn` goes straight back to true. So the game
+ * looks like it is waiting for the player for ever. It is implemented in
+ * {@link ../checkers}, which carries the rules.
+ *
+ * The lesson worth keeping is about the claim rather than the plugin: "no other
+ * rip uses this" was true of the opcode COUNT in the sets and puppets and false
+ * of the game, because a shop's props carry scripts too and they had not been
+ * looked at.
  *
  * A plugin call is not one signature. Each of the three has its own, and each is
  * a small state machine over successive calls rather than a function — the first

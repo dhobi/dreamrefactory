@@ -443,6 +443,17 @@
         >
       </span>
 
+      <!-- Silence, and NOT through the game's own volume flat: the sink carries
+           a mute that multiplies over whatever `wavevolume ()` has asked for
+           (engine/src/runtime/audio.ts), so this leaves no mark on the state a
+           route is timed against and a script turning the theme up while it is
+           on changes only what unticking restores. Wired by
+           engine/src/web/speedrun/mute.ts, remembered per game. -->
+      <label class="srtoggle" id="srmutebox" title="Silence the game — a listener's switch, outside the run: it does not touch the game's own volume settings and does not change how long anything takes">
+        <input type="checkbox" id="srmute" />
+        <span>Mute</span>
+      </label>
+
       <!-- No bar of settings under the screen here. The play page's is
            fullscreen, a bug button, the swipe options and the
            picture/brightness/low-memory rows — questions about how the game

@@ -2,13 +2,16 @@ import { toStr, toNum, Value } from "../interp";
 import { pointX, pointY } from "../point";
 import { CAMERA_ID_TAKEN, CAMERA_NO_PHOTO, CAMERA_OK, PHOTO_X, PHOTO_Y } from "../photos";
 import { BuiltinCtx } from "./context";
+import { checkMove } from "../checkers";
 
 /**
  * `plugin(name, …)` / `pluginfx(name, …)` — the native plugin bus.
  *
- * What each of the three named plugins is, and why only one of them is
+ * What each of Timelapse's three named plugins is, and why only one of them is
  * implemented, is in `engine/src/runtime/plugins.ts` — this module is the
- * dispatch and the argument shapes, that one is the story.
+ * dispatch and the argument shapes, that one is the story. Dust's `checkmove`
+ * has its own file for the same reason (`engine/src/runtime/checkers.ts`): it is
+ * a whole game's rules, not an argument shape.
  */
 export function registerPluginBuiltins(ctx: BuiltinCtx): void {
   const { session, r, log } = ctx;
@@ -148,6 +151,25 @@ export function registerPluginBuiltins(ctx: BuiltinCtx): void {
           return xray(rest);
         case "camera":
           return camera(rest);
+        /**
+         * Bolivar's checkers opponent — the one plugin a game other than
+         * Timelapse asks for, and the reason this bus is not DF4-only.
+         *
+         * `engine/src/runtime/checkers.ts` carries the contract, the move
+         * encoding and the rules. Two things belong here: the arguments, and the
+         * dice. The tie-break is the SESSION's rng rather than `Math.random` so
+         * a seeded run plays the same game twice — the speedrun suites lean on
+         * that, and an opponent that varies under a seed makes a route
+         * unrepeatable for no gain.
+         */
+        case "checkmove": {
+          const board = toStr(rest[0] ?? "");
+          const depth = toNum(rest[1] ?? 0);
+          const side = toNum(rest[2] ?? 0);
+          const answer = checkMove(board, depth, side, (n) => Math.floor(session.rng() * n));
+          if (!board) log(`pluginfx("checkmove"): called with no board`);
+          return answer;
+        }
         case "scrollflat":
           // Unreachable while the memory report keeps `minMemory` true, which is
           // the whole point of that report. If this ever appears in a log, the

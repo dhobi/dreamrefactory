@@ -212,11 +212,28 @@ export interface Editor {
  * Everything is created here rather than in the HTML, so the page keeps working
  * — as an ordinary textarea — if this module fails to load or is removed.
  */
-export function attachEditor(textarea: HTMLTextAreaElement): Editor {
+/**
+ * What the editor cannot decide for itself.
+ *
+ * Only one thing so far, and it is the pointer: a gutter number is a place to
+ * send it, but WHERE the pointer is belongs to the run rather than to the text
+ * (`workbench.ts`), so the click is reported rather than acted on. The editor
+ * does not know whether a run is in flight, and a module that draws lines should
+ * not have to.
+ */
+export interface EditorHooks {
+  /** a gutter number was clicked — a 1-based line the caller may move the pointer to */
+  onPickLine?: (line: number) => void;
+}
+
+export function attachEditor(textarea: HTMLTextAreaElement, hooks: EditorHooks = {}): Editor {
   const wrap = document.createElement("div");
   wrap.className = "sr-editor";
   const gutter = document.createElement("div");
   gutter.className = "sr-gutter";
+  // said here rather than in the page, because whether the numbers do anything
+  // depends on the hook being passed and this is where that is known
+  if (hooks.onPickLine) gutter.title = "Click a line number to move the execution pointer there (the game is not moved)";
   const highlight = document.createElement("pre");
   highlight.className = "sr-highlight";
   highlight.setAttribute("aria-hidden", "true");
@@ -251,6 +268,21 @@ export function attachEditor(textarea: HTMLTextAreaElement): Editor {
       lastLines = rows.length;
       // one span per number so the pointer can light exactly one of them
       gutter.innerHTML = rows.map((_, i) => `<span>${i + 1}</span>`).join("\n");
+      /*
+       * As wide as the widest number, floored at three characters.
+       *
+       * Titanic's run is under a thousand lines and 3ch had never been asked for
+       * more; Dust's transcribed one is fifteen hundred, and a four-digit number
+       * in a three-character column is clipped against the rule. The floor is
+       * what keeps a short sheet looking exactly as it did, and what stops the
+       * column twitching a character wider the moment a sheet crosses from 99
+       * lines to 100 while somebody is typing in it.
+       *
+       * `ch` and not a pixel count because the three text layers are one
+       * monospace font and a character IS the unit here — the band's `left`
+       * reads the same property, so the two cannot drift apart.
+       */
+      wrap.style.setProperty("--gutter", `${Math.max(3, String(rows.length).length)}ch`);
       lit();
     }
     sync();
@@ -291,6 +323,42 @@ export function attachEditor(textarea: HTMLTextAreaElement): Editor {
 
   textarea.addEventListener("input", paint);
   textarea.addEventListener("scroll", sync);
+
+  /**
+   * A CLICK ON A NUMBER SENDS THE POINTER THERE.
+   *
+   * The pointer could only be moved by running, by stopping, or by Clear, so
+   * "start from here" meant scrolling to the top and stepping down — or editing
+   * the sheet to cut everything above the line, which changes the thing being
+   * timed. The number was already the name of the place (`Pointer.line` is a
+   * line in the TEXT and nothing else), so it only had to be clickable.
+   *
+   * Which line is read off the SPAN when there is one and off the pointer's Y
+   * when there is not, because the column is wider than its glyphs: the 10px of
+   * padding between the numbers and the rule belongs to the gutter, and a click
+   * that lands in it means the line beside it, not nothing. The Y arithmetic is
+   * the same one the band is placed with, and it agrees with the layout to the
+   * pixel for the reason the stylesheet gives at length — 18px lines and 11px
+   * padding are both exact in 64ths.
+   */
+  gutter.addEventListener("mousedown", (e) => {
+    if (!hooks.onPickLine || e.button !== 0) return;
+    const rows = textarea.value.split("\n").length;
+    const span = (e.target as HTMLElement | null)?.closest("span");
+    let line: number;
+    if (span && span.parentElement === gutter) {
+      line = [...gutter.children].indexOf(span) + 1;
+    } else {
+      const pad = parseFloat(getComputedStyle(highlight).paddingTop) || 0;
+      const y = e.clientY - gutter.getBoundingClientRect().top + gutter.scrollTop - pad;
+      line = Math.floor(y / lineHeight()) + 1;
+    }
+    if (line < 1 || line > rows) return;
+    // the textarea keeps the focus it would have taken, so a pick does not also
+    // move the caret or drop a selection somebody was about to type over
+    e.preventDefault();
+    hooks.onPickLine(line);
+  });
 
   // Tab indents instead of leaving the field. Only when nothing is selected —
   // a Tab with a selection is far more likely to be someone trying to move on

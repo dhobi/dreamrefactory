@@ -1,0 +1,2092 @@
+# =====================================================================
+# THE SPEEDRUN — Dust: A Tale of the Wired West, any%
+#
+#   Copy the full run    the panel's own button, which is this file
+#   Play                 runs it from the pointer
+#
+# One action per line. `#` is a comment, `;` separates actions on a line,
+# `xN` repeats, `a, b, c` is one action per argument, `key: value` is an
+# option. Every line takes `wait:`, `after:`, `budget:` and `gap:`.
+#
+# EVERY LEG LOADS THE SAVE IT STARTS FROM, which is the thing to
+# understand about this file before reading it. The fifty-five legs below
+# are the golden thread's rungs (docs/dust/thread.md), and a rung is
+# independent of every other one: both its ends are saves the original
+# player left on the disc, and it begins by loading the first of them.
+#
+# So this is not yet a continuous run and its total is not a time. It is
+# the route, leg by leg, each one starting from a state that is exactly
+# right — because a standpoint is not a state. Walking to where a save was
+# taken puts the camera in the right place and leaves the cast wherever the
+# world's clocks have carried it: `click(leroy)` failed that way, with
+# Leroy in the cast and out of the view. `loadSave` settles the standpoint,
+# the cast, the props, the phases and the clock at once.
+#
+# A leg that runs clean is a leg that can then be joined to its neighbour
+# by deleting its `loadSave` — which is how this becomes a run.
+#
+# STATUS: TRANSCRIBED, and not yet driven. The gestures are read from the
+# rungs (dust/tools/rung2sheet.ts) and the rungs are the only place they are
+# written down; what a sheet has no grammar for is marked `# TODO`. It will
+# stop somewhere, and the report names the line and prints where the game
+# was standing. That is how it gets settled.
+#
+# THE VERBS THIS GAME ADDS
+#
+#   loadSave(D1E_001)     the disc's own saved games. NOT load(), which is
+#                         a checkpoint this run wrote with save().
+#   goto(10, 10)          walk to a grid cell of this room. Plans in the
+#                         page, answers what interrupts the walk, re-plans
+#                         from where it actually got to.
+#   doorAt(x0,y0,x1,y1)   click a door's rectangle where the SCENE shows
+#                         through it, then walk in.
+#   takeInHand(mask)      a thing you are CARRYING into your hand, through
+#                         the avatar panel. A thing lying in a ROOM is
+#                         click(mask).
+#   offer(ring)           hand it to whoever you are TALKING to — the
+#                         inventory's 55555 plaque, and its picker.
+#   give(bone, to, dog)   drop it on somebody standing in the room.
+#   meet(jones)           walk to somebody wherever they have got to and
+#                         get them talking. `accost` only turns where it
+#                         stands; this walks.
+#   talkOut([301,201])    leave a conversation, answering whichever of
+#                         those replies is on the plaque — and fine if
+#                         nobody is talking at all.
+#
+# And three the engine grew for this route: `accost` (Titanic's, now
+# shared), `key(ArrowUp, until: visible.help)` — press until something is
+# true — and `or` in a condition, because what a route waits for is
+# usually two things: `until: choosing or global.trotterphase == 4`.
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# D1E_001 — day 1 night, nite.set (10,10)
+#   ladder frame 4885: the thread starts
+# ---------------------------------------------------------------------
+#   this leg ends at nite (10,10) facing south — D1E_001's own standpoint
+# The one leg that starts cold: there is no save before the boot. Its
+# films play before any set is opened, so there is no viewer while they
+# run — which is why the skip asks for one rather than for `quiet` or
+# `nomovie`, both of which read false through the whole opening. 183s of
+# film, skipped in under a second.
+reset()
+skipMovie(until: js == !!window.dbg.viewer, budget: 180000)
+# THE BOOT LEAVES A CONVERSATION OPEN, and this waits for it by name.
+#
+# A viewer is the first moment there is a game, not the last moment of
+# the boot — `coldBoot` runs on past it — so the line after this one was
+# asking before there was anybody to answer: "conversation ended before
+# saying 104 (picked nothing)".
+#
+# Nobody clicks Leroy. `GANG.CST/0002 leroyidle ()` arms
+# `hasattention (10)` and the boot hands over with `curattention =
+# "leroy"` — that timer ALREADY RUN DOWN — so he accosts you as soon as
+# the boot stops, from the standpoint it leaves you on: he stands at
+# town.leroy1, cell (6,13), and you are at (6,14) facing north.
+#
+# So a run does not WAIT for it. `accost` makes the same gesture the
+# timer would have made — `hasattention ()` fires `sendtoactor (target,
+# mousedown (0))`, which is a click on him — and it turns to find him
+# first if the boot left us facing somewhere else.
+accost(leroy)
+talkOut([104])   # Leroy by the sign
+goto(6, 11, north, set: nite)
+key(ArrowUp, until: visible.help, budget: 60000)   # up the street into the dog
+skipMovie(until: quiet, budget: 60000)   # past what that press started
+meet(help)   # the help character outside Chin's
+say([103,102,101], then: stop, patience: 20000)   # What should I do? / So I'll use my brain. Now what? / What should I look for?
+goto(6, 14, north, set: nite)
+takeInHand(bone)   # the Bone in the street
+goto(6, 11, north, set: nite)
+give(bone, to, dog)   # the Bone
+talkOut([102])   # the help character's parting gift
+goto(6, 13, north, set: nite)
+takeInHand(jug)   # the Jug by Leroy's sign
+meet(jones)   # Jones, come up from the bar
+talkOut([104])   # Jones outside the saloon
+goto(10, 10, south, set: nite)
+#   what D1E_001 has to be true of — the rung's own claims, against the 1995 save
+wait(set == nite, budget: 2000)
+wait(view == south, budget: 2000)
+split(d1e_001)
+save(day1night)
+
+# ---------------------------------------------------------------------
+# D1E_002 — day 1 night, sallower.set (2,3)
+#   ladder frame 13307: played cards, `playercash 5→400`, `bouncer 0→1`, `fivecount 1→3`
+# ---------------------------------------------------------------------
+#   this leg ends at sallower (2,3) facing west — D1E_002's own standpoint
+loadSave(D1E_001, budget: 120000)   # nite (10,10) facing south
+hammer(leroy, until: global.leroyphase == 88, gap: 1500, budget: 60000)   # Leroy out by the shooting range
+goto(6, 7, west, set: nite)
+goto(6, 7, west, set: nite)   # the standpoint this door is opened from
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon door
+goto(2, 3, west, set: sallower)
+#   the ladder also records: a card game played here
+#   what D1E_002 has to be true of — the rung's own claims, against the 1995 save
+wait(set == sallower, budget: 2000)
+wait(view == west, budget: 2000)
+wait(global.leroyphase == 88, budget: 2000)
+wait(global.loopsound == outsidesaloon, budget: 2000)
+wait(global.saloonphase == 1, budget: 2000)
+wait(global.townscene == scene g8, budget: 2000)
+wait(global.theset == sallower, budget: 2000)
+wait(global.bouncer == 1, budget: 2000)
+split(d1e_002)
+
+# ---------------------------------------------------------------------
+# D1E_003 — day 1 night, sallower.set (2,2)
+#   ladder frame 13745: played cards, `playercash 400→791`, `handitem "cards"→""`, `fivecount 3→5`
+# ---------------------------------------------------------------------
+#   this leg ends at sallower (2,2) facing west — D1E_003's own standpoint
+loadSave(D1E_002, budget: 120000)   # sallower (2,3) facing west
+goto(2, 0, north, set: sallower)
+meet(gus)   # Gus behind the bar
+say([101,101], then: stop, patience: 20000)   # I'm mighty thirsty, Gus. / Whiskey...
+offer(jug)   # the jug for Gus to fill
+say([103], then: stop, patience: 20000)   # Bye, Gus.
+goto(2, 2, west, set: sallower)
+hammer(trotter, until: global.trotterphase >= 1, gap: 1500, budget: 60000)   # Trotter, first time
+hammer(trotter, until: global.trotterphase >= 2, gap: 1500, budget: 60000)   # Trotter, second time
+hammer(trotter, until: choosing or global.trotterphase == 4, gap: 1500, budget: 60000)   # Trotter, third time
+say([101,101,104], then: stop, patience: 20000)   # Buy you a drink? / Well, who are you? / Well, I gotta go.
+#   the ladder also records: a card game played here
+#   what D1E_003 has to be true of — the rung's own claims, against the 1995 save
+wait(set == sallower, budget: 2000)
+wait(view == west, budget: 2000)
+wait(global.gusphase == 1, budget: 2000)
+wait(global.juglevel == 5, budget: 2000)
+wait(global.trotterphase == 4, budget: 2000)
+wait(!global.handitem, budget: 2000)
+wait(global.counter == 2, budget: 2000)
+wait(global.theset == sallower, budget: 2000)
+split(d1e_003)
+
+# ---------------------------------------------------------------------
+# D1E_004 — day 1 night, salupper.set (0,0)
+#   ladder frame 14481: `playercash 791→781`, `bouncer 1→0`, `oonaphase 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at salupper (0,0) facing north — D1E_004's own standpoint
+loadSave(D1E_003, budget: 120000)   # sallower (2,2) facing west
+hammer(trotter, until: global.trotterphase == 5, gap: 1500, budget: 60000)   # Trotter at the bar
+goto(3, 3, north, set: sallower)   # the rung also passes talking
+meet(oona)   # Oona at the bar
+say([102,101,105], then: stop, patience: 20000)   # Oh, about $3 of good whiskey. / There a game I can get in on? / So long, Oona.
+meet(oona)   # Oona again, for the stairs
+say([101,101], then: stop, patience: 20000)   # I want to go upstairs. / I'll settle up with you.
+goto(3, 5, west, set: sallower)
+key(ArrowUp)   # up the saloon stairs
+goto(0, 0, north, set: salupper)
+#   what D1E_004 has to be true of — the rung's own claims, against the 1995 save
+wait(set == salupper, budget: 2000)
+wait(view == north, budget: 2000)
+wait(global.oonaphase == 1, budget: 2000)
+wait(global.trotterphase == 5, budget: 2000)
+wait(global.playercash == 781, budget: 2000)
+wait(global.counter == 0, budget: 2000)
+split(d1e_004)
+
+# ---------------------------------------------------------------------
+# D1E_005 — day 1 night, hotlower.set (1,2)
+#   ladder frame 16252: take Cigar, take HHKey, give Ring (to ruby), `playercash 781→772`, `phase 2→5`
+# ---------------------------------------------------------------------
+#   this leg ends at hotlower (1,2) facing south — D1E_005's own standpoint
+loadSave(D1E_004, budget: 120000)   # salupper (0,0) facing north
+goto(0, 0, north, set: salupper)
+clickAt(233, 133, wait: quiet)
+talkOut([301,201,104,102,101,103])   # Ruby through the door
+clickAt(233, 133, wait: quiet)
+talkOut([301,201,104,102,101,103])   # Ruby through the door
+clickAt(233, 133, wait: quiet)
+say([999,999,999,999,999,999], then: stop, patience: 20000)   # Ruby, plaque set ${i + 1}
+offer(ring)   # the ring for Ruby
+say([999], then: stop, patience: 20000)   # Goodbye, Miss.
+talkOut([301,201,104,102,101,103])   # Ruby
+goto(0, 1, east, set: salupper)
+clickAt(255, 133, wait: quiet)
+say([104], then: stop, patience: 20000)   # Goodnight Miss.
+talkOut([301,201,104,102,101,103])   # Sophie
+goto(0, 3, east, set: salupper)
+key(ArrowUp)   # down the saloon stairs
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon door
+goto(9, 5, north, set: nite)   # the rung also passes () => !!p.session.puppet
+hammer(blood, until: puppet, gap: 1500, budget: 60000)   # Blood in the street
+say([102,101,102,104,103], then: stop, patience: 20000)   # Thanks for the cigar. / Do you like the Cactus Bed? / the flattering reply — statuschange (1) / Enough about the hotel. / I'm about ready to go.
+talkOut([301,201,104,102,101,103])   # Blood
+goto(0, 0, east, set: hotlower)
+clickAt(363, 234, wait: quiet)
+say([101,101,101,101], then: stop, patience: 20000)   # Yes. / Three nights in advance? / I'll take the room for three nights. / I'm ready to check in now.
+talkOut([301,201,104,102,101,103])   # Fear
+goto(1, 2, south, set: hotlower)
+#   the ladder also records: take the cigar
+#   the ladder also records: take the hhkey
+#   the ladder also records: give the ring to ruby
+#   what D1E_005 has to be true of — the rung's own claims, against the 1995 save
+wait(set == hotlower, budget: 2000)
+wait(view == south, budget: 2000)
+wait(global.rubyphase == 55, budget: 2000)
+wait(global.sophiephase == 1, budget: 2000)
+wait(global.bloodgood == 1, budget: 2000)
+wait(global.fearphase == 2, budget: 2000)
+wait(global.phase == 5, budget: 2000)
+wait(global.playercash == 772, budget: 2000)
+wait(global.handitem == cigar, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+wait(global.theset == hotlower, budget: 2000)
+wait(!global.loopsound, budget: 2000)
+split(d1e_005)
+
+# ---------------------------------------------------------------------
+# D1E_006 — day 1 night, nite.set (3,6)
+#   ladder frame 17863: take BKnife, give Cigar (to laurel), `playercash 772→776`, `phase 5→6`
+# ---------------------------------------------------------------------
+#   this leg ends at nite (3,6) facing west — D1E_006's own standpoint
+loadSave(D1E_005, budget: 120000)   # hotlower (1,2) facing south
+meet(laurel)   # Laurel's conversation to open
+say([101], then: stop, patience: 20000)   # Okay. I'll leave.
+offer(cigar)   # the cigar to Laurel
+say([104,101], then: stop, patience: 20000)   # I'm going... / Goodbye.
+goto(2, 2, south, set: hotlower)
+clickAt(206, 221, wait: quiet)   # the dollar behind the poster
+clickAt(213, 160, until: prop.shootingstar == got money, gap: 500, budget: 45000)   # click the film through, if it parks
+goto(3, 2, north, set: hotlower)
+key(ArrowUp)   # up to the landing
+goto(2, 0, west, set: hotupper)   # the rung also passes talking
+clickAt(255, 157, wait: quiet)
+talkOut([104])   # Buick's first encounter
+goto(2, 3, west, set: hotupper)
+clickAt(249, 157, wait: quiet)
+goto(3, 0, south, set: hotupper)
+key(ArrowUp)   # down to the lobby
+goto(0, 0, west, set: hotlower)   # the standpoint this door is opened from
+doorAt(128, 73, 394, 262, owner: hotout)   # the hotel door
+takeInHand(cards)   # the cards back in hand
+goto(3, 6, west, set: nite)   # the rung also passes talking
+bailOut()   # whoever stopped us in the street
+goto(3, 6, west, set: nite)   # the rung also passes talking
+#   the ladder also records: take the bknife
+#   the ladder also records: give the cigar to laurel
+#   what D1E_006 has to be true of — the rung's own claims, against the 1995 save
+wait(set == nite, budget: 2000)
+wait(view == west, budget: 2000)
+wait(global.laurelgood == 1, budget: 2000)
+wait(global.laurelphase == 1, budget: 2000)
+wait(global.buickphase == 1, budget: 2000)
+wait(global.fearphase == 3, budget: 2000)
+wait(global.phase == 6, budget: 2000)
+wait(global.playercash == 776, budget: 2000)
+wait(global.handitem == cards, budget: 2000)
+split(d1e_006)
+
+# ---------------------------------------------------------------------
+# D1E_007 — day 1 night, maystudy.set (1,1)
+#   ladder frame 18059: `mwifephase 0→2`, `theset "hotlower"→"mayhall"`, `townscene "scene g5"→"scene j9"`
+# ---------------------------------------------------------------------
+#   this leg ends at maystudy (1,1) facing west — D1E_007's own standpoint
+loadSave(D1E_006, budget: 120000)   # nite (3,6) facing west
+meet(mwife)   # her conversation to open
+say([101,101], then: stop, patience: 20000)   # I'm sorry. / Please.
+goto(2, 2, west, set: mayhall)   # the standpoint this door is opened from
+doorAt(142, 77, 368, 263, owner: study)   # the study door
+#   what D1E_007 has to be true of — the rung's own claims, against the 1995 save
+wait(set == maystudy, budget: 2000)
+wait(view == west, budget: 2000)
+split(d1e_007)
+
+# ---------------------------------------------------------------------
+# D1E_008 — day 1 night, nite.set (10,10)
+#   ladder frame 20375: take Postcards, `handitem "Cards"→"postcards"`, `mariephase 0→3`
+# ---------------------------------------------------------------------
+#   this leg ends at nite (10,10) facing south — D1E_008's own standpoint
+loadSave(D1E_007, budget: 120000)   # maystudy (1,1) facing west
+goto(1, 2, east)
+# TODO clickThrough: the stop `() => Number(p.session.interp.globals.get("mwifephase") ?? 0` is not a condition this reads
+talk(marie[101])   # the evening
+goto(3, 1, west, set: maydine)   # the standpoint this door is opened from
+doorAt(120, 20, 388, 263, owner: hall2)   # the dining door
+goto(2, 3, south, set: mayhall)   # the standpoint this door is opened from
+doorAt(165, 58, 356, 263, owner: front)   # the front door
+goto(10, 10, south)
+#   the ladder also records: take the postcards
+#   what D1E_008 has to be true of — the rung's own claims, against the 1995 save
+wait(set == nite, budget: 2000)
+wait(view == south, budget: 2000)
+split(d1e_008)
+
+# ---------------------------------------------------------------------
+# D1E_008B — day 1 night, nite.set (9,10)
+#   ladder frame 20776: take HRKey, `phase 6→8`, `handitem "postcards"→"hrkey"`
+# ---------------------------------------------------------------------
+#   this leg ends at nite (9,10) facing west — D1E_008B's own standpoint
+loadSave(D1E_008, budget: 120000)   # nite (10,10) facing south
+goto(6, 4, east, set: nite)   # the standpoint this door is opened from
+doorAt(200, 91, 305, 203, owner: hotel)   # the hotel door
+talk(fear[101])   # the clerk
+goto(0, 0, west, set: hotlower)   # the standpoint this door is opened from
+doorAt(128, 73, 394, 262, owner: hotout)   # the lobby door
+goto(9, 10, west)
+#   the ladder also records: take the hrkey
+#   what D1E_008B has to be true of — the rung's own claims, against the 1995 save
+wait(set == nite, budget: 2000)
+wait(view == west, budget: 2000)
+split(d1e_008b)
+
+# ---------------------------------------------------------------------
+# D1E_009 — day 1 night, nite.set (9,6)
+#   ladder frame 30998: played cards, `playercash 776→761`, `dirgo 1→0`, `fightover 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at nite (9,6) facing east — D1E_009's own standpoint
+loadSave(D1E_008B, budget: 120000)   # nite (9,10) facing west
+goto(3, 6, south)   # the rung also passes () => squaredUp() || started()
+say([101])   # Dell's opening
+clickAt(256, 190, wait: quiet)
+goto(9, 10, west)
+talk(jenix[101])   # the beggar
+say([101])   # her question
+goto(9, 6, east)
+#   the ladder also records: a card game played here
+#   what D1E_009 has to be true of — the rung's own claims, against the 1995 save
+wait(set == nite, budget: 2000)
+wait(view == east, budget: 2000)
+split(d1e_009)
+
+# ---------------------------------------------------------------------
+# D2M_001 — day 2 morning, hotroom.set (0,0)
+#   ladder frame 34130: take Cigar (from laurel), `playercash 761→760`, `phase 8→0`
+# ---------------------------------------------------------------------
+#   this leg ends at hotroom (0,0) facing east — D2M_001's own standpoint
+loadSave(D1E_009, budget: 120000)   # nite (9,6) facing east
+goto(6, 4, east, set: nite)   # the standpoint this door is opened from
+doorAt(200, 91, 305, 203, owner: hotel)   # the hotel door
+goto(3, 2, north)
+key(ArrowUp)   # up the stairs
+goto(2, 3, west, set: hotupper)   # the standpoint this door is opened from
+doorAt(168, 50, 329, 263, owner: playroom)   # the room door
+goto(0, 0, west)
+# TODO clickThrough: the stop `() => Number(p.session.interp.globals.get("day") ?? 0) >= 2` is not a condition this reads
+#   the ladder also records: take the cigar back from laurel
+#   what D2M_001 has to be true of — the rung's own claims, against the 1995 save
+wait(set == hotroom, budget: 2000)
+wait(view == east, budget: 2000)
+split(d2m_001)
+save(day2morning)
+
+# ---------------------------------------------------------------------
+# D2M_002 — day 2 morning, court.set (1,4)
+#   ladder frame 41393: take Sugarcubes, take Flowers, take Pie, take Biscuits, take Boots, give Cigar (to laurel), `playercash 760→10`, `phase 0→2`
+# ---------------------------------------------------------------------
+#   this leg ends at court (1,4) facing south — D2M_002's own standpoint
+loadSave(D2M_001, budget: 120000)   # hotroom (0,0) facing east
+talkOut([301,201,104,102,101,103])   # whoever is in the room
+goto(1, 0, east, set: hotroom)   # the standpoint this door is opened from
+doorAt(176, 62, 339, 263, owner: inside)   # the room door
+talkOut([301,201,104,102,101,103])   # Jones on the landing
+goto(3, 0, south)
+key(ArrowUp)   # down the stairs
+goto(1, 2, south)
+clickAt(264, 232, wait: quiet)
+talkOut([301,201,104,102,101,103])   # Laurel over breakfast
+talkOut([301,201,104,102,101,103])   # the last of breakfast
+clickAt(216, 137, wait: quiet)
+clickAt(461, 95, wait: quiet)
+clickAt(256, 350, wait: quiet)
+goto(0, 0, west, set: hotlower)   # the standpoint this door is opened from
+doorAt(128, 73, 394, 262, owner: hotout)   # the lobby door
+talkOut([301,201,104,102,101,103])   # anyone in the street
+goto(6, 3, north, set: town)   # the standpoint this door is opened from
+doorAt(160, 22, 338, 214, owner: court)   # the courthouse door
+talkOut([301,201,104,102,101,103])   # anyone inside
+goto(1, 4, south)
+#   the ladder also records: take the sugarcubes
+#   the ladder also records: take the flowers
+#   the ladder also records: take the pie
+#   the ladder also records: take the biscuits
+#   the ladder also records: take the boots
+#   the ladder also records: give the cigar to laurel
+#   what D2M_002 has to be true of — the rung's own claims, against the 1995 save
+wait(set == court, budget: 2000)
+wait(view == south, budget: 2000)
+split(d2m_002)
+
+# ---------------------------------------------------------------------
+# D2M_003 — day 2 morning, salupper.set (0,0)
+#   ladder frame 48319: `playercash 10→7`, `handitem ""→"hhkey"`, `bolivarcount 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at salupper (0,0) facing north — D2M_003's own standpoint
+loadSave(D2M_002, budget: 120000)   # court (1,4) facing south
+talkOut([301,201,104,102,101,103])   # whoever is in the courthouse
+goto(2, 4, south, set: court)   # the standpoint this door is opened from
+doorAt(147, 37, 377, 263, owner: courtout)   # the courthouse door
+talkOut([301,201,104,102,101,103])   # anyone in the street
+goto(6, 9, east, set: town)   # the standpoint this door is opened from
+doorAt(222, 96, 287, 211, owner: store)   # the store door
+# TODO walkTo with a computed goal: p, store, { x: stand.x, z: stand.z, view }
+meet(bolivar)   # the shopkeeper
+# TODO walkTo with a computed goal: p, store, { x: stand.x, z: stand.z, view }
+meet(bolivar)   # the shopkeeper
+# TODO walkTo with a computed goal: p, store, { x: stand.x, z: stand.z, view }
+meet(bolivar)   # the shopkeeper
+# TODO walkTo with a computed goal: p, store, { x: stand.x, z: stand.z, view }
+meet(bolivar)   # the shopkeeper
+talk(bolivar[101])   # the shopkeeper
+talkOut([301,201,104,102,101,103])   # the shopkeeper
+goto(3, 1, east, set: store)   # the standpoint this door is opened from
+doorAt(166, 66, 332, 264, owner: shop)   # the store's own door
+talkOut([301,201,104,102,101,103])   # anyone in the street
+goto(3, 9, east, set: town)   # the standpoint this door is opened from
+doorAt(3, 83, 91, 234, owner: back)   # the saloon's back door
+talkOut([301,201,104,102,101,103])   # anyone in the saloon
+goto(3, 5, west)
+key(ArrowUp)   # up to the landing
+talkOut([301,201,104,102,101,103])   # anyone upstairs
+goto(0, 0, north)
+#   what D2M_003 has to be true of — the rung's own claims, against the 1995 save
+wait(set == salupper, budget: 2000)
+wait(view == north, budget: 2000)
+split(d2m_003)
+
+# ---------------------------------------------------------------------
+# D2M_004 — day 2 morning, mayhall.set (2,2)
+#   ladder frame 49464: take Mask, `handitem "hhkey"→"Mask"`, `mwifelike 0→-3`
+# ---------------------------------------------------------------------
+#   this leg ends at mayhall (2,2) facing north — D2M_004's own standpoint
+loadSave(D2M_003, budget: 120000)   # salupper (0,0) facing north
+talkOut([301,201,104,102,101,103])   # anyone upstairs
+goto(0, 3, east)
+key(ArrowUp)   # down the stairs
+talkOut([301,201,104,102,101,103])   # anyone in the saloon
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon's front door
+talkOut([301,201,104,102,101,103])   # anyone in the street
+goto(9, 8, east)
+clickAt(255, 155, wait: quiet)
+# TODO talkOut with computed replies (like()>-3?201,103:103) — read them off the rung
+key(ArrowUp)   # in at the gate
+talkOut([301,201,104,102,101,103])   # whoever meets us
+goto(2, 2, east, set: mayhall)   # the standpoint this door is opened from
+doorAt(121, 19, 391, 262, owner: dine)   # the dining-room door
+click(apple)   # the apple on the table
+# TODO offerTo(birdcage, apple): the harness's shortcut, which runs offerobject() with no gesture. As a route this is give(apple, to, birdcage) or offer(...)
+click(mask)   # the mask on the wall
+goto(3, 1, west, set: maydine)   # the standpoint this door is opened from
+doorAt(120, 20, 388, 263, owner: hall2)   # the dining door
+talkOut([301,201,104,102,101,103])   # whoever followed us out
+goto(2, 2, north)
+#   the ladder also records: take the mask
+#   what D2M_004 has to be true of — the rung's own claims, against the 1995 save
+wait(set == mayhall, budget: 2000)
+wait(view == north, budget: 2000)
+split(d2m_004)
+
+# ---------------------------------------------------------------------
+# D2A_001 — day 2 afternoon, town.set (4,11)
+#   ladder frame 57077: take Bullets, give Postcards (to limbo), `phase 2→0`, `clock 1→2`
+# ---------------------------------------------------------------------
+#   this leg ends at town (4,11) facing west — D2A_001's own standpoint
+loadSave(D2M_004, budget: 120000)   # mayhall (2,2) facing north
+talkOut([301,201,104,102,101,103])   # anyone in the hall
+goto(2, 3, south, set: mayhall)   # the standpoint this door is opened from
+doorAt(165, 58, 356, 263, owner: front)   # the front door
+talkOut([301,201,104,102,101,103])   # anyone in the street
+goto(6, 7, east, set: town)   # the standpoint this door is opened from
+doorAt(220, 98, 285, 209, owner: stage)   # the depot door
+goto(0, 0, east)
+# TODO offerTo(dead, postcards): the harness's shortcut, which runs offerobject() with no gesture. As a route this is give(postcards, to, dead) or offer(...)
+talkOut([301,201,104,102,101,103])   # Abe
+clickAt(138, 85, wait: quiet)
+# TODO p.fire(x, y) — a computed point; it is in the rung
+goto(0, 1, west, set: stage)   # the standpoint this door is opened from
+doorAt(176, 63, 336, 261, owner: car)   # the depot door out
+# TODO walkTo with a computed goal: p, set("TOWN"), { x, z, view: "south" }, () => clock() >= 2
+bailOut()   # anyone who stops us
+bailOut()   # anyone about
+goto(4, 11, west)
+#   the ladder also records: take the bullets
+#   the ladder also records: give the postcards to limbo
+#   what D2A_001 has to be true of — the rung's own claims, against the 1995 save
+wait(set == town, budget: 2000)
+wait(view == west, budget: 2000)
+split(d2a_001)
+save(day2afternoon)
+
+# ---------------------------------------------------------------------
+# D2A_002 — day 2 afternoon, town.set (3,10)
+#   ladder frame 57445: `countsix 0→5`, `mwifelike -3→3`, `mwifephase 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at town (3,10) facing north — D2A_002's own standpoint
+loadSave(D2A_001, budget: 120000)   # town (4,11) facing west
+# TODO walkTo with a computed goal: p, town, BESIDE[star] ?? BESIDE["town.jones6"], () => !!p.session.puppet
+meet(mwife)   # the Mayor's wife in the street
+# TODO not transcribed: p.session.puppetCtrl.puppetChoose(i)
+talkOut([301,201,104,102,101,103])   # the Mayor's wife
+goto(3, 10, north, set: town)
+#   what D2A_002 has to be true of — the rung's own claims, against the 1995 save
+wait(set == town, budget: 2000)
+wait(view == north, budget: 2000)
+split(d2a_002)
+
+# ---------------------------------------------------------------------
+# D2A_003 — day 2 afternoon, undertak.set (0,1)
+#   ladder frame 58021: give Pie (to side), `handitem ""→"boots"`, `flippophase 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at undertak (0,1) facing north — D2A_003's own standpoint
+loadSave(D2A_002, budget: 120000)   # town (3,10) facing north
+talkOut([301,201,104,102,101,103])   # the Mayor's wife
+takeInHand(jug)   # the jug
+goto(3, 7, west, set: town)
+goto(3, 7, west, set: town)   # the standpoint this door is opened from
+doorAt(213, 98, 282, 211, owner: paper)   # the newspaper office door
+goto(1, 1, south)   # the rung also passes () => !!p.session.puppet
+meet(flippo)   # Flippo at the press
+offer(jug)   # the jug
+say([700,103], then: stop, patience: 20000)   # that's enough talk / Goodbye.
+talkOut([301,201,104,102,101,103])   # Flippo
+goto(1, 1, east, set: paper)   # the standpoint this door is opened from
+doorAt(138, 47, 365, 264, owner: flipout)   # the newspaper office door out
+talkOut([301,201,104,102,101,103])   # anyone in the street
+takeInHand(pie)   # the pie
+goto(0, 6, south, set: town)
+goto(0, 6, south, set: town)   # the standpoint this door is opened from
+doorAt(206, 74, 298, 221, owner: undertak)   # the undertaker's door
+goto(0, 1, north)   # the rung also passes () => !!p.session.puppet
+meet(side)   # Sidewinder at his bench
+offer(pie)   # the pie
+say([101,101,102,102], then: stop, patience: 20000)   # Guess so. What can you give me? / And so manly, too. / Thanks. / Goodbye
+talkOut([301,201,104,102,101,103])   # Sidewinder
+goto(0, 1, north)
+#   the ladder also records: give the pie to side
+#   what D2A_003 has to be true of — the rung's own claims, against the 1995 save
+wait(set == undertak, budget: 2000)
+wait(view == north, budget: 2000)
+split(d2a_003)
+
+# ---------------------------------------------------------------------
+# D2A_004 — day 2 afternoon, town.set (10,10)
+#   ladder frame 68931: take Harmonica, `handitem "boots"→"harmonica"`, `bottlehitcount 0→3`
+# ---------------------------------------------------------------------
+#   this leg ends at town (10,10) facing south — D2A_004's own standpoint
+loadSave(D2A_003, budget: 120000)   # undertak (0,1) facing north
+talkOut([301,201,104,102,101,103])   # Sidewinder
+goto(0, 1, west, set: undertak)   # the standpoint this door is opened from
+doorAt(99, 0, 477, 262, owner: underout)   # the undertaker's door out
+talkOut([301,201,104,102,101,103])   # anyone in the street
+goto(10, 10, south, set: town)
+meet(leroy)   # Leroy at the range
+say([101], then: stop, patience: 20000)   # Yes.
+# TODO p.fire(ox, oy) — a computed point; it is in the rung
+# TODO p.fire(cx, cy) — a computed point; it is in the rung
+# TODO p.fire(sx, sy) — a computed point; it is in the rung
+# TODO p.fire(x, y) — a computed point; it is in the rung
+# TODO p.fire(ox, oy) — a computed point; it is in the rung
+# TODO p.fire(cx, cy) — a computed point; it is in the rung
+# TODO p.fire(sx, sy) — a computed point; it is in the rung
+# TODO p.fire(ox, oy) — a computed point; it is in the rung
+# TODO p.fire(cx, cy) — a computed point; it is in the rung
+# TODO p.fire(sx, sy) — a computed point; it is in the rung
+# TODO p.fire(x, y) — a computed point; it is in the rung
+# TODO p.fire(ox, oy) — a computed point; it is in the rung
+# TODO p.fire(cx, cy) — a computed point; it is in the rung
+# TODO p.fire(sx, sy) — a computed point; it is in the rung
+clickAt(478, 20, wait: quiet)
+clickAt(298, 304, wait: quiet)
+meet(leroy)   # Leroy again
+talkOut([301,201,104,102,101,103])   # Leroy
+goto(10, 10, south, set: town)
+#   the ladder also records: take the harmonica
+#   what D2A_004 has to be true of — the rung's own claims, against the 1995 save
+wait(set == town, budget: 2000)
+wait(view == south, budget: 2000)
+split(d2a_004)
+
+# ---------------------------------------------------------------------
+# D2A_005 — day 2 afternoon, town.set (6,7)
+#   ladder frame 71447: take Apple (from birdcage), `handitem "harmonica"→"Apple"`, `loopsound ""→"outsidesaloon"`
+# ---------------------------------------------------------------------
+#   this leg ends at town (6,7) facing south — D2A_005's own standpoint
+loadSave(D2A_004, budget: 120000)   # town (10,10) facing south
+talkOut([301,201,104,102,101,103])   # Leroy
+goto(9, 8, east, set: town)
+clickAt(255, 155, wait: quiet)
+say([101,103,222], then: stop, patience: 20000)   # whichever of her three openings is offered / Will you let me in your house? / the right answer to her quiz
+talkOut([301,201,104,102,101,103])   # Marie at the gate
+clickAt(255, 155, wait: quiet)
+key(ArrowUp)   # in at the gate
+talkOut([301,201,104,102,101,103])   # whoever meets us
+goto(2, 2, east, set: mayhall)   # the standpoint this door is opened from
+doorAt(121, 19, 391, 262, owner: dine)   # the dining-room door
+click(apple)   # the apple, back on the table
+goto(3, 1, west, set: maydine)   # the standpoint this door is opened from
+doorAt(120, 20, 388, 263, owner: hall2)   # the dining door
+talkOut([301,201,104,102,101,103])   # whoever followed us out
+goto(2, 3, south, set: mayhall)   # the standpoint this door is opened from
+doorAt(165, 58, 356, 263, owner: front)   # the Mayor's front door
+bailOut()   # anyone in the street
+goto(6, 3, north, set: town)   # the standpoint this door is opened from
+doorAt(160, 22, 338, 214, owner: court)   # the courthouse door
+goto(2, 4, south, set: court)   # the standpoint this door is opened from
+doorAt(147, 37, 377, 263, owner: courtout)   # the courthouse door out
+# TODO walkTo with a computed goal: p, town, { x: stand.x, z: stand.z, view }, talking
+# TODO walkTo with a computed goal: p, town, { x: stand.x, z: stand.z, view }, talking
+# TODO walkTo with a computed goal: p, town, { x: stand.x, z: stand.z, view }, talking
+# TODO walkTo with a computed goal: p, town, { x: stand.x, z: stand.z, view }, talking
+talkOut([301,201,104,102,101,103])   # the Mayor
+goto(6, 7, south, set: town)   # the rung also passes undefined
+#   the ladder also records: take the apple back from birdcage
+#   what D2A_005 has to be true of — the rung's own claims, against the 1995 save
+wait(set == town, budget: 2000)
+wait(view == south, budget: 2000)
+split(d2a_005)
+
+# ---------------------------------------------------------------------
+# D2A_006 — day 2 afternoon, sallower.set (2,3)
+#   ladder frame 76758: give Flowers, played cards, `playercash 7→800`, `handitem "Apple"→"Harmonica"`
+# ---------------------------------------------------------------------
+#   this leg ends at sallower (2,3) facing west — D2A_006's own standpoint
+loadSave(D2A_005, budget: 120000)   # town (6,7) facing south
+say([102,555], then: stop, patience: 20000)   # These shops seem out of a lot of items. / Time to go.
+meet(jones)   # Jones in the street
+say([101,104], then: stop, patience: 20000)   # What chores? / So long.
+takeInHand(flowers)   # the flowers for Sophie
+goto(6, 7, west, set: town)
+goto(6, 7, west, set: town)   # the standpoint this door is opened from
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon door
+goto(3, 5, west, set: sallower)
+key(ArrowUp)   # up the saloon stairs
+goto(0, 0, north, set: salupper)
+clickAt(233, 133, wait: quiet)
+say([101], then: stop, patience: 20000)   # Just looking around..
+goto(0, 1, east, set: salupper)
+clickAt(255, 133, wait: quiet)
+offer(flowers)   # the flowers for Sophie
+say([101,101], then: stop, patience: 20000)   # Where's my surprise? / Okay, I'll go meet him.
+takeInHand(harmonica)   # the harmonica
+goto(0, 3, east, set: salupper)
+key(ArrowUp)   # down the saloon stairs
+goto(3, 3, north, set: sallower)
+meet(oona)   # Oona at the bar
+talkOut([301,201,104,102,101,103])   # Oona
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon door out
+goto(6, 7, west, set: town)
+goto(6, 7, west, set: town)   # the standpoint this door is opened from
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon door again
+goto(2, 3, west, set: sallower)
+#   the ladder also records: give the flowers
+#   the ladder also records: a card game played here
+#   what D2A_006 has to be true of — the rung's own claims, against the 1995 save
+wait(set == sallower, budget: 2000)
+wait(view == west, budget: 2000)
+wait(global.mayorphase == 1, budget: 2000)
+wait(global.jonesphase == 1, budget: 2000)
+wait(global.trotterphase == 3, budget: 2000)
+wait(global.sophiephase == 1, budget: 2000)
+wait(global.oonaphase == 1, budget: 2000)
+wait(global.bouncer == 1, budget: 2000)
+wait(global.dirgo == 1, budget: 2000)
+wait(global.handitem == harmonica, budget: 2000)
+wait(global.townscene == scene g8, budget: 2000)
+wait(global.theset == sallower, budget: 2000)
+split(d2a_006)
+
+# ---------------------------------------------------------------------
+# D2A_007 — day 2 afternoon, chin.set (1,1)
+#   ladder frame 95437: take History, give Sugarcubes (to TROTTER), `playercash 800→765`, `handitem "Harmonica"→"history"`
+# ---------------------------------------------------------------------
+#   this leg ends at chin (1,1) facing east — D2A_007's own standpoint
+loadSave(D2A_006, budget: 120000)   # sallower (2,3) facing west
+goto(2, 3, west, set: sallower)
+meet(trotter)   # Trotter at the bar
+offer(sugarcubes)   # the sugarcubes for Trotter
+talkOut([301,201,104,102,101,103])   # Trotter
+goto(3, 5, west, set: sallower)
+key(ArrowUp)   # up the saloon stairs
+goto(0, 0, north, set: salupper)
+clickAt(233, 133, wait: quiet)
+talkOut([301,201,104,102,101,103])   # Ruby through the door
+goto(0, 3, east, set: salupper)
+key(ArrowUp)   # down the saloon stairs
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon door
+goto(6, 11, east, set: town)
+goto(6, 11, east, set: town)   # the standpoint this door is opened from
+doorAt(218, 100, 278, 204, owner: chin)   # the Curiosity Shop door
+goto(1, 1, east, set: chin)
+meet(help)   # Chin behind his counter
+say([201,101,101], then: stop, patience: 20000)   # What's for sale? / Yes. / Thanks.
+talkOut([301,201,104,102,101,103])   # Chin
+goto(1, 1, east, set: chin)
+#   the ladder also records: take the history
+#   the ladder also records: give the sugarcubes to trotter
+#   what D2A_007 has to be true of — the rung's own claims, against the 1995 save
+wait(set == chin, budget: 2000)
+wait(view == east, budget: 2000)
+wait(global.trotterphase == 5, budget: 2000)
+wait(global.rubyphase == 1, budget: 2000)
+wait(global.helpphase == 1, budget: 2000)
+wait(global.playercash == 765, budget: 2000)
+wait(global.handitem == history, budget: 2000)
+wait(global.townscene == scene g12, budget: 2000)
+wait(global.theset == chin, budget: 2000)
+wait(global.loopsound == chinchime, budget: 2000)
+# TODO D2A_007 claims `bouncer` and its save does not record one
+# TODO D2A_007 claims `fxcount` and its save does not record one
+split(d2a_007)
+
+# ---------------------------------------------------------------------
+# D2ARUBY — day 2 afternoon, salroom.set (1,0)
+#   ladder frame 99020: take Gun, `handitem "history"→"gun"`, `dirgo 1→0`
+# ---------------------------------------------------------------------
+#   this leg ends at salroom (1,0) facing south — D2ARUBY's own standpoint
+loadSave(D2A_007, budget: 120000)   # chin (1,1) facing east
+goto(0, 1, west, set: chin)
+goto(0, 1, west, set: chin)   # the standpoint this door is opened from
+doorAt(100, 2, 408, 263, owner: rice)   # the laundry's street door
+goto(2, 4, north, set: town)
+takeInHand(flowers)   # the flowers off the grave
+goto(6, 7, west, set: town)
+goto(6, 7, west, set: town)   # the standpoint this door is opened from
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon door
+goto(3, 5, west, set: sallower)
+key(ArrowUp)   # up the saloon stairs
+goto(0, 0, north, set: salupper)
+clickAt(233, 133, wait: quiet)
+say([999])   # Ruby's afternoon
+offer(flowers)   # the flowers for Ruby
+talkOut([301,201,104,102,101,103])   # Ruby
+key(ArrowUp)   # into Ruby's room
+goto(1, 0, south)
+# TODO clickThrough: the stop `() => Number(p.session.interp.globals.get("rubygunstory") ??` is not a condition this reads
+#   the ladder also records: take the gun
+#   what D2ARUBY has to be true of — the rung's own claims, against the 1995 save
+wait(set == salroom, budget: 2000)
+wait(view == south, budget: 2000)
+wait(global.rubyphase == 2, budget: 2000)
+wait(global.rubygunstory == 1, budget: 2000)
+wait(global.handitem == gun, budget: 2000)
+wait(global.savescene == scene a1, budget: 2000)
+wait(global.townscene == scene g8, budget: 2000)
+wait(global.theset == sallower, budget: 2000)
+wait(global.loopsound == outsidesaloon, budget: 2000)
+split(d2aruby)
+
+# ---------------------------------------------------------------------
+# D2A_008 — day 2 afternoon, sallower.set (2,1)
+#   ladder frame 99439: `bouncer 0→1`, `cobbphase 0→1`, `dirgo 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at sallower (2,1) facing east — D2A_008's own standpoint
+loadSave(D2ARUBY, budget: 120000)   # salroom (1,0) facing south
+goto(1, 0, east, set: salroom)   # the standpoint this door is opened from
+doorAt(170, 48, 341, 263, owner: salroom)   # the door out of Ruby's room
+goto(0, 3, east, set: salupper)
+key(ArrowUp)   # down the saloon stairs
+goto(2, 3, west, set: sallower)
+meet(cobb)   # Cobb Belcher at the bar
+say([111,101,102], then: stop, patience: 20000)   # You Cobb Belcher? / Could be.
+goto(2, 1, east, set: sallower)
+#   what D2A_008 has to be true of — the rung's own claims, against the 1995 save
+wait(set == sallower, budget: 2000)
+wait(view == east, budget: 2000)
+wait(global.rubyphase == 1, budget: 2000)
+wait(global.cobbphase == 1, budget: 2000)
+wait(global.counter == 0, budget: 2000)
+wait(!global.playerdeath, budget: 2000)
+split(d2a_008)
+
+# ---------------------------------------------------------------------
+# D2A_009 — day 2 afternoon, town.set (7,10)
+#   ladder frame 100484: `playercash 765→200`, `phase 0→1`, `bouncer 1→0`
+# ---------------------------------------------------------------------
+#   this leg ends at town (7,10) facing west — D2A_009's own standpoint
+loadSave(D2A_008, budget: 120000)   # sallower (2,1) facing east
+# TODO not transcribed: p.session.puppetCtrl.puppetChoose(at(id))
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon door
+goto(6, 5, west, set: town)
+goto(6, 5, west, set: town)   # the standpoint this door is opened from
+doorAt(200, 81, 306, 232, owner: bank)   # the bank door
+goto(3, 2, west, set: bank)
+clickAt(248, 135, wait: quiet)
+goto(3, 1, east, set: bank)   # the standpoint this door is opened from
+doorAt(177, 30, 339, 263, owner: dollar)   # the bank door out
+# TODO walkTo with a computed goal: p, town, { ...stand, view: "east" }
+# TODO not transcribed: p.session.track( p.session.interp.runHandler(hers, "mousedown", ["mwife"], { me: "mwife", target: "mwife" }), 
+goto(3, 7, west, set: town)
+goto(3, 7, west, set: town)   # the standpoint this door is opened from
+doorAt(213, 98, 282, 211, owner: paper)   # the newspaper office door
+goto(1, 1, south, set: paper)   # the rung also passes () => !!p.session.puppet
+meet(flippo)   # Flippo at the press
+goto(1, 1, east, set: paper)   # the standpoint this door is opened from
+doorAt(138, 47, 365, 264, owner: flipout)   # the newspaper office door out
+goto(7, 10, west, set: town)
+# TODO not transcribed: p.session.track( p.session.interp.runHandler(his, "mousedown", ["todd"], { me: "todd", target: "todd" }), )
+#   what D2A_009 has to be true of — the rung's own claims, against the 1995 save
+wait(set == town, budget: 2000)
+wait(view == west, budget: 2000)
+wait(global.playercash == 200, budget: 2000)
+wait(global.playeraccount == 587, budget: 2000)
+wait(global.tellervalue == 5, budget: 2000)
+wait(global.counter == 0, budget: 2000)
+wait(global.flippophase == 2, budget: 2000)
+wait(global.jonesphase == 999, budget: 2000)
+wait(global.phase == 1, budget: 2000)
+wait(global.theset == town, budget: 2000)
+wait(global.townscene == scene d8, budget: 2000)
+wait(!global.loopsound, budget: 2000)
+# TODO D2A_009 claims `bouncer` and its save does not record one
+split(d2a_009)
+
+# ---------------------------------------------------------------------
+# D2E_001 — day 2 night, jail.set (0,0)
+#   ladder frame 101002: take Badge, `phase 1→0`, `clock 2→3`
+# ---------------------------------------------------------------------
+#   this leg ends at jail (0,0) facing east — D2E_001's own standpoint
+loadSave(D2A_009, budget: 120000)   # town (7,10) facing west
+goto(6, 11, south)
+click(gun)   # the gun out of the panel
+# TODO p.fire(frame.x, frame.y) — a computed point; it is in the rung
+# TODO p.fire(chamber.x, chamber.y) — a computed point; it is in the rung
+# TODO p.fire(frame.x, frame.y) — a computed point; it is in the rung
+meet(cobb)   # Cobb outside the store
+say([101], then: stop, patience: 20000)   # Get away from that store.
+# TODO p.fire(at.x, at.y) — a computed point; it is in the rung
+click(gun)   # the gun back into the panel
+bailOut()   # Dell over the body
+meet(mayor)   # the Mayor coming over to swear us in
+talkOut([102,103])   # the Mayor swearing us in
+#   the ladder also records: take the badge
+#   what D2E_001 has to be true of — the rung's own claims, against the 1995 save
+wait(set == jail, budget: 2000)
+wait(view == east, budget: 2000)
+wait(global.clock == 3, budget: 2000)
+wait(global.phase == 0, budget: 2000)
+wait(global.bulletcount == 5, budget: 2000)
+wait(!global.handitem, budget: 2000)
+wait(global.savedir == east, budget: 2000)
+wait(global.savescene == scene c4, budget: 2000)
+wait(global.townscene == scene g12, budget: 2000)
+wait(global.cobbphase == 0, budget: 2000)
+wait(global.flippophase == 0, budget: 2000)
+wait(global.helpphase == 0, budget: 2000)
+wait(global.jonesphase == 0, budget: 2000)
+wait(global.mayorphase == 0, budget: 2000)
+wait(global.mwifephase == 0, budget: 2000)
+wait(global.oonaphase == 0, budget: 2000)
+wait(global.rubyphase == 0, budget: 2000)
+wait(global.sidephase == 0, budget: 2000)
+wait(global.sophiephase == 0, budget: 2000)
+wait(global.trotterphase == 0, budget: 2000)
+split(d2e_001)
+save(day2night)
+
+# ---------------------------------------------------------------------
+# D2E_002 — day 2 night, salupper.set (0,1)
+#   ladder frame 105381: `handitem ""→"Harmonica"`, `buickphase 0→1`, `countsix 4→0`
+# ---------------------------------------------------------------------
+#   this leg ends at salupper (0,1) facing east — D2E_002's own standpoint
+loadSave(D2E_001, budget: 120000)   # jail (0,0) facing east
+goto(1, 1, east, set: jail)
+meet(dell)   # Dell in the jail
+say([101], then: stop, patience: 20000)   # It's a free country.
+goto(0, 0, west, set: jail)
+goto(0, 0, west, set: jail)   # the standpoint this door is opened from
+doorAt(183, 34, 361, 263, owner: lock)   # the jail door
+goto(6, 11, east, set: nite)   # the rung also passes talking
+key(ArrowUp)   # into Chin's, which is Help first
+# TODO talkOut with computed replies () — read them off the rung
+goto(6, 11, east, set: nite)
+goto(6, 11, east, set: nite)   # the standpoint this door is opened from
+doorAt(218, 100, 278, 204, owner: chin)   # Chin's door
+goto(0, 1, west, set: chin)   # the standpoint this door is opened from
+doorAt(100, 2, 408, 263, owner: rice)   # Chin's door out
+# TODO walkTo with a computed goal: p, town, { x: at.x, z: at.z, view: "north" }, talking
+meet(marie)   # Marie in the street
+say([102,101,202], then: stop, patience: 20000)   # No, I'm sheriff. / Are you angry? / Good night, Marie.
+# TODO walkTo with a computed goal: p, town, { x: at.x, z: at.z, view: "north" }, talking
+meet(buick)   # Buick loose in the street
+say([102], then: stop, patience: 20000)   # I should get moving.
+talkOut([102,101])   # Buick's parting question
+goto(6, 3, north, set: nite)   # the standpoint this door is opened from
+doorAt(160, 22, 338, 214, owner: court)   # the mission gate
+goto(2, 2, north, set: nitecour)   # the rung also passes talking
+meet(sonoma)   # Sonoma in the courtyard
+say([101], then: stop, patience: 20000)   # Who are you?
+goto(2, 4, south, set: nitecour)   # the standpoint this door is opened from
+doorAt(147, 37, 377, 263, owner: courtout)   # the mission gate out
+goto(6, 7, west, set: nite)   # the standpoint this door is opened from
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon door
+goto(2, 2, west, set: sallower)   # the rung also passes talking
+meet(jones)   # Jones in the saloon
+say([103], then: stop, patience: 20000)   # Goodbye
+goto(3, 3, north, set: sallower)   # the rung also passes talking
+meet(oona)   # Oona at the bar
+say([203], then: stop, patience: 20000)   # Time to go.
+goto(3, 5, west, set: sallower)
+key(ArrowUp)   # up the saloon stairs
+goto(0, 1, east, set: salupper)
+takeInHand(harmonica)   # the harmonica
+#   what D2E_002 has to be true of — the rung's own claims, against the 1995 save
+wait(set == salupper, budget: 2000)
+wait(view == east, budget: 2000)
+wait(global.dellphase == 1, budget: 2000)
+wait(global.helpphase == 1, budget: 2000)
+wait(global.mariephase == 1, budget: 2000)
+wait(global.buickphase == 1, budget: 2000)
+wait(global.sonomaphase == 1, budget: 2000)
+wait(global.saloonphase == 1, budget: 2000)
+wait(global.jonesphase == 1, budget: 2000)
+wait(global.oonaphase == 1, budget: 2000)
+wait(global.handitem == harmonica, budget: 2000)
+wait(global.loopsound == outsidesaloon, budget: 2000)
+wait(global.theset == sallower, budget: 2000)
+wait(global.townscene == scene g8, budget: 2000)
+split(d2e_002)
+
+# ---------------------------------------------------------------------
+# D2E_003 — day 2 night, salroom.set (1,0)
+#   ladder frame 106540: take Hairpin, `handitem "Harmonica"→"hairpin"`, `rubyphase 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at salroom (1,0) facing west — D2E_003's own standpoint
+loadSave(D2E_002, budget: 120000)   # salupper (0,1) facing east
+goto(0, 1, east, set: salupper)
+clickAt(255, 133, wait: quiet)
+say([101,102,103,104], then: stop, patience: 20000)   # Now why would I do that? / How could you have known Cobb wanted to kill me? / Maybe I have a surprise for YOU, this time. / Goodnight, Sophie.
+goto(0, 0, north, set: salupper)
+goto(0, 2, east, set: salupper)
+goto(0, 2, east, set: salupper)   # the standpoint this door is opened from
+doorAt(133, 2, 357, 263, owner: oona)   # Oona's door
+#   the ladder also records: take the hairpin
+#   what D2E_003 has to be true of — the rung's own claims, against the 1995 save
+wait(set == salroom, budget: 2000)
+wait(view == west, budget: 2000)
+wait(global.sophiephase == 1, budget: 2000)
+wait(global.rubyphase == 1, budget: 2000)
+wait(global.handitem == hairpin, budget: 2000)
+wait(global.savescene == scene a3, budget: 2000)
+wait(global.savedir == west, budget: 2000)
+split(d2e_003)
+
+# ---------------------------------------------------------------------
+# D2E_004 — day 2 night, hotlower.set (1,2)
+#   ladder frame 108846: take Yunnibook, `playercash 200→150`, `handitem "hairpin"→""`
+# ---------------------------------------------------------------------
+#   this leg ends at hotlower (1,2) facing south — D2E_004's own standpoint
+loadSave(D2E_003, budget: 120000)   # salroom (1,0) facing west
+click(yunnibook)   # the Yunni book on the bed
+goto(1, 0, east, set: salroom)
+goto(1, 0, east, set: salroom)   # the standpoint this door is opened from
+doorAt(170, 48, 341, 263, owner: salroom)   # the rice-paper door
+say([101,101], then: stop, patience: 20000)   # That's night! What do you want Riviera? / Yes, I will pay.
+goto(0, 3, east, set: salupper)
+key(ArrowUp)   # down the saloon stairs
+goto(3, 0, east, set: sallower)
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon door
+goto(6, 4, east, set: nite)
+goto(6, 4, east, set: nite)   # the standpoint this door is opened from
+doorAt(200, 91, 305, 203, owner: hotel)   # the hotel door
+goto(0, 0, east, set: hotlower)
+meet(fear)   # the clerk at the hotel desk
+offer(yunnibook)   # the Yunni book
+say([103], then: stop, patience: 20000)   # Bye.
+hammer(fear, until: global.counter == 0, gap: 1500, budget: 60000)   # Fear a second time
+goto(1, 2, south, set: hotlower)
+#   the ladder also records: take the yunnibook
+#   what D2E_004 has to be true of — the rung's own claims, against the 1995 save
+wait(set == hotlower, budget: 2000)
+wait(view == south, budget: 2000)
+wait(global.buickphase == 2, budget: 2000)
+wait(global.fearphase == 1, budget: 2000)
+wait(global.playercash == 150, budget: 2000)
+wait(!global.handitem, budget: 2000)
+wait(global.counter == 0, budget: 2000)
+wait(!global.loopsound, budget: 2000)
+wait(global.theset == hotlower, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+split(d2e_004)
+
+# ---------------------------------------------------------------------
+# D3M_001 — day 3 morning, hotroom.set (0,0)
+#   ladder frame 109128: `day 2→3`, `clock 3→1`, `buickphase 2→0`
+# ---------------------------------------------------------------------
+#   this leg ends at hotroom (0,0) facing east — D3M_001's own standpoint
+loadSave(D2E_004, budget: 120000)   # hotlower (1,2) facing south
+goto(3, 2, north)   # the rung also passes undefined
+key(ArrowUp)   # up the stairs
+talkOut([301,201,104,102,101,103])   # anyone on the landing
+goto(2, 3, west, set: hotupper)   # the standpoint this door is opened from
+doorAt(168, 50, 329, 263, owner: playroom)   # the room door
+goto(0, 0, west)
+# TODO clickThrough: the stop `() => Number(p.session.interp.globals.get("day") ?? 0) >= 3` is not a condition this reads
+#   what D3M_001 has to be true of — the rung's own claims, against the 1995 save
+wait(set == hotroom, budget: 2000)
+wait(view == east, budget: 2000)
+wait(global.day == 3, budget: 2000)
+wait(global.clock == 1, budget: 2000)
+wait(global.phase == 0, budget: 2000)
+wait(global.savescene == scene c4, budget: 2000)
+wait(global.savedir == east, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+wait(global.buickphase == 0, budget: 2000)
+wait(global.dellphase == 0, budget: 2000)
+wait(global.fearphase == 0, budget: 2000)
+wait(global.helpphase == 0, budget: 2000)
+wait(global.jonesphase == 0, budget: 2000)
+wait(global.mariephase == 0, budget: 2000)
+wait(global.oonaphase == 0, budget: 2000)
+wait(global.rubyphase == 0, budget: 2000)
+wait(global.sonomaphase == 0, budget: 2000)
+wait(global.sophiephase == 0, budget: 2000)
+split(d3m_001)
+save(day3morning)
+
+# ---------------------------------------------------------------------
+# D3M_002 — day 3 morning, town.set (6,6)
+#   ladder frame 135871: take Sugarcubes (from TROTTER), `phase 0→2`, `handitem ""→"sugarcubes"`
+# ---------------------------------------------------------------------
+#   this leg ends at town (6,6) facing north — D3M_002's own standpoint
+loadSave(D3M_001, budget: 120000)   # hotroom (0,0) facing east
+goto(1, 0, east, set: hotroom)   # the standpoint this door is opened from
+doorAt(176, 62, 339, 263, owner: inside)   # the room door
+# TODO talkOut with computed replies () — read them off the rung
+goto(3, 0, south, set: hotupper)
+key(ArrowUp)   # down the stairs
+goto(1, 2, south, set: hotlower)   # the rung also passes undefined
+clickAt(264, 232, wait: quiet)
+talkOut([201])   # Buick over breakfast
+clickAt(264, 232, wait: quiet)
+talkOut([301,201,104,102,101,103])   # anything left at the table
+clickAt(216, 137, wait: quiet)
+clickAt(461, 94, wait: quiet)
+clickAt(256, 350, wait: quiet)
+goto(0, 0, east, set: hotlower)   # the rung also passes undefined
+meet(fear)   # Fear at the desk
+say([103], then: stop, patience: 20000)   # Bye.
+hammer(buick, until: global.buickphase == 1, gap: 1500, budget: 60000)   # Buick after breakfast
+goto(0, 0, west, set: hotlower)   # the standpoint this door is opened from
+doorAt(128, 73, 192, 207, owner: hotout)   # the lobby door
+# TODO walkTo with a computed goal: p, town, { x: at.x, z: at.z, view: "north" }, talking
+meet(jones)   # Jones down by the bone
+say([101,102,104,105], then: stop, patience: 20000)   # Why so glum? / What's bothering you? / Marriage is a big step. / I'll try to find you a ring.
+# TODO walkTo with a computed goal: p, town, { x: at.x, z: at.z, view: "north" }, talking
+meet(mwife)   # the Mayor's wife in the street
+say([101,111,112,103], then: stop, patience: 20000)   # What happened? / Probably not. / I can't imagine. / You're strong. You'll survive. Anything else?
+goto(6, 6, north, set: town)
+#   the ladder also records: take the sugarcubes back from trotter
+#   what D3M_002 has to be true of — the rung's own claims, against the 1995 save
+wait(set == town, budget: 2000)
+wait(view == north, budget: 2000)
+wait(global.phase == 2, budget: 2000)
+wait(global.buickphase == 1, budget: 2000)
+wait(global.fearphase == 1, budget: 2000)
+wait(global.jonesphase == 1, budget: 2000)
+wait(global.jonesringstory == 1, budget: 2000)
+wait(global.mwifephase == 1, budget: 2000)
+wait(global.handitem == sugarcubes, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+split(d3m_002)
+
+# ---------------------------------------------------------------------
+# D3M_003 — day 3 morning, town.set (10,10)
+#   ladder frame 140095: take Matchbox, played cards, `phase 2→3`, `handitem "sugarcubes"→"matchbox"`
+# ---------------------------------------------------------------------
+#   this leg ends at town (10,10) facing south — D3M_003's own standpoint
+loadSave(D3M_002, budget: 120000)   # town (6,6) facing north
+talkOut([301,201,104,102,101,103])   # the Mayor's wife
+goto(9, 8, east, set: town)   # the rung also passes () => !!p.session.puppet
+clickAt(255, 155, wait: quiet)
+say([104], then: stop, patience: 20000)   # Goodbye, Marie.
+talkOut([301,201,104,102,101,103])   # Marie at the gate
+goto(10, 10, south, set: town)
+meet(leroy)   # Leroy at the range
+say([101], then: stop, patience: 20000)   # Yes.
+# TODO p.fire(x, y) — a computed point; it is in the rung
+# TODO p.fire(ox, oy) — a computed point; it is in the rung
+# TODO p.fire(cx, cy) — a computed point; it is in the rung
+# TODO p.fire(sx, sy) — a computed point; it is in the rung
+# TODO p.fire(up[1], up[2]) — a computed point; it is in the rung
+clickAt(298, 304, wait: quiet)
+hammer(leroy, until: puppet or global.handitem == matchbox, gap: 1500, budget: 60000)   # Leroy again
+talkOut([301,201,104,102,101,103])   # Leroy
+goto(6, 11, west, set: town)
+goto(6, 11, west, set: town)   # the standpoint this door is opened from
+doorAt(122, 77, 218, 230, owner: jail)   # the jail door
+goto(1, 1, south, set: jail)   # the rung also passes () => !!p.session.puppet
+meet(mayor)   # the Mayor in the jail
+say([101,102,105,103], then: stop, patience: 20000)   # I guess so. / Why am I taking orders from you? / Anything else? / Bye.
+talkOut([301,201,104,102,101,103])   # the Mayor
+goto(1, 1, south, set: jail)   # the rung also passes () => !!p.session.puppet
+hammer(dell, until: puppet or global.dellphase == 1, gap: 1500, budget: 60000)   # Dell in his cell
+talkOut([301,201,104,102,101,103])   # Dell
+goto(0, 0, west, set: jail)   # the standpoint this door is opened from
+doorAt(183, 34, 361, 263, owner: lock)   # the jail door out
+goto(6, 11, east, set: town)   # the standpoint this door is opened from
+doorAt(218, 100, 278, 204, owner: chin)   # Chin's door
+goto(1, 1, east, set: chin)   # the rung also passes () => !!p.session.puppet
+hammer(help, until: puppet or global.helpphase == 1, gap: 1500, budget: 60000)   # Help behind the counter
+say([103], then: stop, patience: 20000)   # Goodbye.
+talkOut([301,201,104,102,101,103])   # Help
+goto(0, 1, west, set: chin)   # the standpoint this door is opened from
+doorAt(100, 2, 408, 263, owner: rice)   # Chin's door out
+goto(10, 10, south, set: town)
+#   the ladder also records: take the matchbox
+#   the ladder also records: a card game played here
+#   what D3M_003 has to be true of — the rung's own claims, against the 1995 save
+wait(set == town, budget: 2000)
+wait(view == south, budget: 2000)
+wait(global.score == fair, budget: 2000)
+wait(global.bulletcount == 3, budget: 2000)
+wait(global.handitem == matchbox, budget: 2000)
+wait(global.phase == 3, budget: 2000)
+wait(global.mariephase == 1, budget: 2000)
+wait(global.mayorphase == 1, budget: 2000)
+wait(global.dellphase == 1, budget: 2000)
+wait(global.helpphase == 1, budget: 2000)
+wait(global.townscene == scene g12, budget: 2000)
+wait(global.theset == chin, budget: 2000)
+wait(global.leroyphase == 0, budget: 2000)
+split(d3m_003)
+
+# ---------------------------------------------------------------------
+# D3M_CLAS — day 3 morning, school.set (1,1)
+#   ladder frame 141068: `laurelphase 0→1`, `saveitem "sugarcubes"→""`, `sonomaphase 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at school (1,1) facing north — D3M_CLAS's own standpoint
+loadSave(D3M_003, budget: 120000)   # town (10,10) facing south
+goto(6, 3, north, set: town)
+meet(laurel)   # Laurel at the courthouse corner
+say([101,102,111], then: stop, patience: 20000)   # Why? / What happened next? / Where's he now?
+goto(6, 3, north, set: town)   # the standpoint this door is opened from
+doorAt(160, 22, 338, 214, owner: court)   # the courthouse door
+goto(2, 2, north, set: court)   # the rung also passes () => !!p.session.puppet
+meet(sonoma)   # Sonoma in the courtyard
+say([111,103,111,102,103,104,103], then: stop, patience: 20000)   # Are you Sonoma? / Do you seek justice? / What do you mean? / Can I help? / What's that? / You're talking about the Devil's Breath Mine? / How will I know what these items look like?
+goto(2, 2, north, set: court)   # the standpoint this door is opened from
+doorAt(148, 45, 355, 263, owner: schoolin)   # the schoolhouse door
+#   what D3M_CLAS has to be true of — the rung's own claims, against the 1995 save
+wait(set == school, budget: 2000)
+wait(view == north, budget: 2000)
+wait(global.laurelphase == 1, budget: 2000)
+wait(global.sonomaphase == 1, budget: 2000)
+wait(global.theset == court, budget: 2000)
+wait(global.townscene == scene g4, budget: 2000)
+split(d3m_clas)
+
+# ---------------------------------------------------------------------
+# D3M_004 — day 3 morning, salupper.set (0,2)
+#   ladder frame 148213: give Matchbox (to scorpion), `handitem "matchbox"→"hhkey"`, `theset "court"→"sallower"`
+# ---------------------------------------------------------------------
+#   this leg ends at salupper (0,2) facing east — D3M_004's own standpoint
+loadSave(D3M_CLAS, budget: 120000)   # school (1,1) facing north
+goto(0, 1, north, set: school)
+clickAt(286, 225, wait: quiet)
+# TODO not transcribed: p.session.setPointer(256, 132)
+# TODO not transcribed: p.session.track( p.session.interp.runHandler(matchbox, "mousedown", [inTheDrawer], { me: "matchbox
+clickAt(94, 323, wait: quiet)
+goto(1, 1, south, set: school)   # the standpoint this door is opened from
+doorAt(147, 78, 376, 263, owner: schoolout)   # the schoolroom's rice-paper door
+goto(2, 4, south, set: court)   # the standpoint this door is opened from
+doorAt(147, 37, 377, 263, owner: courtout)   # the mission gate
+goto(3, 9, east, set: town)   # the standpoint this door is opened from
+doorAt(3, 83, 91, 234, owner: back)   # the saloon's back door
+goto(2, 3, south, set: sallower)
+meet(isao)   # Isao at the piano
+say([101], then: stop, patience: 20000)   # Practicing a new song?
+# TODO p.fire((key.x0 + key.x1) / 2, (key.y0 + key.y1) / 2) — a computed point; it is in the rung
+# TODO not transcribed: p.session.track(p.v().keyDown(".", true))
+goto(3, 5, west, set: sallower)
+key(ArrowUp)   # up the saloon stairs
+goto(0, 2, east, set: salupper)
+#   the ladder also records: give the matchbox to scorpion
+#   what D3M_004 has to be true of — the rung's own claims, against the 1995 save
+wait(set == salupper, budget: 2000)
+wait(view == east, budget: 2000)
+wait(global.handitem == hhkey, budget: 2000)
+wait(global.theset == sallower, budget: 2000)
+wait(global.townscene == scene g8, budget: 2000)
+split(d3m_004)
+
+# ---------------------------------------------------------------------
+# D3M_005 — day 3 morning, town.set (6,3)
+#   ladder frame 162429: take Pages, take Matchbox (from scorpion), `handitem "hhkey"→"pages"`, `dirgo 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at town (6,3) facing south — D3M_005's own standpoint
+loadSave(D3M_004, budget: 120000)   # salupper (0,2) facing east
+goto(0, 0, north, set: salupper)
+# TODO p.fire((x0 + x1) / 2, (y0 + y1) / 2) — a computed point; it is in the rung
+say([102], then: stop, patience: 20000)   # I need my ring back.
+goto(0, 1, east, set: salupper)
+# TODO p.fire((x0 + x1) / 2, (y0 + y1) / 2) — a computed point; it is in the rung
+say([999], then: stop, patience: 20000)   # Goodbye, Sophie.
+goto(0, 3, east, set: salupper)
+key(ArrowUp)   # down the saloon stairs
+goto(3, 0, east, set: sallower)
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon's street door
+goto(6, 9, east, set: town)
+goto(6, 9, east, set: town)   # the standpoint this door is opened from
+doorAt(222, 96, 287, 211, owner: store)   # the store door
+goto(2, 1, north, set: store)
+meet(oona)   # Oona behind the counter
+say([444,103], then: stop, patience: 20000)   # I need that ring back. / Have a good morning, Oona.
+goto(3, 1, east, set: store)
+goto(3, 1, east, set: store)   # the standpoint this door is opened from
+doorAt(166, 66, 332, 264, owner: shop)   # the store's street door
+goto(3, 9, east, set: town)
+goto(3, 9, east, set: town)   # the standpoint this door is opened from
+doorAt(3, 83, 91, 234, owner: back)   # the saloon's back door
+goto(2, 3, south, set: sallower)
+meet(isao)   # Isao at the piano
+say([101], then: stop, patience: 20000)   # I need that ring.
+# TODO p.fire((best.x0 + best.x1) / 2, (best.y0 + best.y1) / 2) — a computed point; it is in the rung
+goto(3, 0, east, set: sallower)
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon's street door
+# TODO walkTo with a computed goal: p, town, { x: at.x, z: at.z, view: "north" }, talking
+meet(jones)   # Jones down by the bone
+offer(ring)   # the ring for Jones
+goto(0, 6, south, set: town)
+goto(6, 3, north, set: town)
+goto(6, 3, north, set: town)   # the standpoint this door is opened from
+doorAt(160, 22, 338, 214, owner: court)   # the courthouse door
+goto(2, 2, north, set: court)
+goto(2, 2, north, set: court)   # the standpoint this door is opened from
+doorAt(148, 45, 355, 263, owner: schoolin)   # the mission school's door
+goto(0, 1, north, set: school)
+clickAt(286, 225, wait: quiet)
+click(thematch)   # the ${"matchbox"} in the drawer
+click(thepages)   # the ${"pages"} in the drawer
+clickAt(94, 323, wait: quiet)
+goto(1, 1, south, set: school)
+goto(1, 1, south, set: school)   # the standpoint this door is opened from
+doorAt(147, 78, 376, 263, owner: schoolout)   # the school's own door
+goto(2, 4, south, set: court)
+goto(2, 4, south, set: court)   # the standpoint this door is opened from
+doorAt(147, 37, 377, 263, owner: courtout)   # the courthouse's street door
+#   the ladder also records: take the pages
+#   the ladder also records: take the matchbox back from scorpion
+#   what D3M_005 has to be true of — the rung's own claims, against the 1995 save
+wait(set == town, budget: 2000)
+wait(view == south, budget: 2000)
+wait(global.rubyphase == 1, budget: 2000)
+wait(global.sophiephase == 1, budget: 2000)
+wait(global.oonaphase == 1, budget: 2000)
+wait(global.trotterphase == 1, budget: 2000)
+wait(global.handitem == pages, budget: 2000)
+wait(global.townscene == scene g4, budget: 2000)
+wait(global.theset == sallower, budget: 2000)
+split(d3m_005)
+
+# ---------------------------------------------------------------------
+# D3A_001 — day 3 afternoon, town.set (6,10)
+#   ladder frame 162714: played cards, `phase 3→0`, `clock 1→2`, `handitem "pages"→""`
+# ---------------------------------------------------------------------
+#   this leg ends at town (6,10) facing north — D3A_001's own standpoint
+loadSave(D3M_005, budget: 120000)   # town (6,3) facing south
+# TODO walkTo with a computed goal: p, town, { x, z, view }, () => clock() >= 2
+bailOut()   # anyone who stops us
+bailOut()   # whoever comes over in the new afternoon
+goto(6, 10, north, set: town)   # the rung also passes () => there() || !!p.session.puppet
+bailOut()   # whoever came over last
+goto(6, 10, north, set: town)
+#   the ladder also records: a card game played here
+#   what D3A_001 has to be true of — the rung's own claims, against the 1995 save
+wait(set == town, budget: 2000)
+wait(view == north, budget: 2000)
+wait(global.clock == 2, budget: 2000)
+wait(global.phase == 0, budget: 2000)
+wait(!global.handitem, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+wait(global.loopsound == chinchime, budget: 2000)
+wait(global.scenecounter == 0, budget: 2000)
+wait(global.buickphase == 0, budget: 2000)
+wait(global.dellphase == 0, budget: 2000)
+wait(global.fearphase == 0, budget: 2000)
+wait(global.helpphase == 0, budget: 2000)
+wait(global.jonesphase == 0, budget: 2000)
+wait(global.laurelphase == 0, budget: 2000)
+wait(global.mariephase == 0, budget: 2000)
+wait(global.mayorphase == 0, budget: 2000)
+wait(global.mwifephase == 0, budget: 2000)
+wait(global.oonaphase == 0, budget: 2000)
+wait(global.rubyphase == 0, budget: 2000)
+wait(global.sonomaphase == 0, budget: 2000)
+wait(global.sophiephase == 0, budget: 2000)
+wait(global.trotterphase == 0, budget: 2000)
+split(d3a_001)
+save(day3afternoon)
+
+# ---------------------------------------------------------------------
+# D3A_002 — day 3 afternoon, apoth.set (2,1)
+#   ladder frame 163786: take RX, `handitem ""→"RX"`, `docphase 0→2`
+# ---------------------------------------------------------------------
+#   this leg ends at apoth (2,1) facing west — D3A_002's own standpoint
+loadSave(D3A_001, budget: 120000)   # town (6,10) facing north
+goto(6, 4, west, set: town)
+# TODO not transcribed: p.session.track( p.session.interp.runHandler(mayor, "mousedown", ["mayor"], { me: "mayor", target: "mayor" }), 
+say([101,102,103], then: stop, patience: 20000)   # Who? Me? / What precautions are those? / What do you get out of all this?
+goto(6, 4, west, set: town)   # the standpoint this door is opened from
+doorAt(215, 85, 299, 225, owner: doctor)   # the doctor's door
+goto(1, 0, west, set: doctor1)   # the rung also passes talking
+meet(doc)   # the Doc in his front room
+say([101,102,103], then: stop, patience: 20000)   # What's wrong? / Where? / What do I need?
+goto(1, 0, east, set: doctor1)   # the standpoint this door is opened from
+doorAt(204, 67, 321, 263, owner: doc2)   # the doctor's door out
+goto(6, 8, east, set: town)
+goto(6, 8, east, set: town)   # the standpoint this door is opened from
+doorAt(218, 94, 286, 205, owner: apoth)   # the apothecary's door
+#   the ladder also records: take the rx
+#   what D3A_002 has to be true of — the rung's own claims, against the 1995 save
+wait(set == apoth, budget: 2000)
+wait(view == west, budget: 2000)
+wait(global.mayorphase == 1, budget: 2000)
+wait(global.docphase == 2, budget: 2000)
+wait(global.handitem == rx, budget: 2000)
+wait(global.theset == doctor1, budget: 2000)
+wait(global.townscene == scene g9, budget: 2000)
+wait(global.loopsound == outsidesaloon, budget: 2000)
+split(d3a_002)
+
+# ---------------------------------------------------------------------
+# D3A_003 — day 3 afternoon, doctor1.set (1,0)
+#   ladder frame 165539: `bottles ""→"1,1,0,0,1,0,1,1,"`, `docphase 2→6`, `loopsound "outsidesaloon"→""`
+# ---------------------------------------------------------------------
+#   this leg ends at doctor1 (1,0) facing west — D3A_003's own standpoint
+loadSave(D3A_002, budget: 120000)   # apoth (2,1) facing west
+goto(2, 1, east, set: apoth)   # the standpoint this door is opened from
+doorAt(163, 33, 336, 263, owner: pharm)   # the apothecary door out
+hammer(watson, until: global.docphase >= 3, gap: 1500, budget: 60000)   # Watson in the street
+goto(6, 8, east, set: town)   # the standpoint this door is opened from
+doorAt(218, 94, 286, 205, owner: apoth)   # the apothecary door
+goto(0, 1, north, set: apoth)
+# TODO p.fire(onShelf[0], onShelf[1]) — a computed point; it is in the rung
+# TODO p.fire(x, y) — a computed point; it is in the rung
+clickAt(110, 324, wait: quiet)
+goto(2, 1, east, set: apoth)   # the standpoint this door is opened from
+doorAt(163, 33, 336, 263, owner: pharm)   # the apothecary door out
+goto(6, 4, west, set: town)
+goto(6, 4, west, set: town)   # the standpoint this door is opened from
+doorAt(215, 85, 299, 225, owner: doctor)   # the doctor's door
+goto(1, 0, west)
+#   what D3A_003 has to be true of — the rung's own claims, against the 1995 save
+wait(set == doctor1, budget: 2000)
+wait(view == west, budget: 2000)
+# TODO D3A_003 claims `bottles` is "1,1,0,0,1,0,1,1," — a wait line cannot carry a comma
+wait(global.docphase == 6, budget: 2000)
+wait(!global.loopsound, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+split(d3a_003)
+
+# ---------------------------------------------------------------------
+# D3A_004 — day 3 afternoon, doctor2.set (0,0)
+#   ladder frame 167128: take Flute, give RX, `handitem "RX"→"flute"`, `countsix 0→2`
+# ---------------------------------------------------------------------
+#   this leg ends at doctor2 (0,0) facing south — D3A_004's own standpoint
+loadSave(D3A_003, budget: 120000)   # doctor1 (1,0) facing west
+hammer(doc, until: puppet, gap: 1500, budget: 60000)   # the Doc, with the mixture
+talkOut([101])   # the Doc taking the mixture
+goto(1, 0, east, set: doctor1)   # the standpoint this door is opened from
+doorAt(204, 67, 321, 263, owner: doc2)   # the doctor's door out
+goto(6, 4, west, set: town)   # the standpoint this door is opened from
+doorAt(215, 85, 299, 225, owner: doctor)   # the doctor's door
+hammer(doc, until: global.docphase == 8, gap: 1500, budget: 60000)   # the Doc, a second time
+goto(1, 0, west, set: doctor1)   # the standpoint this door is opened from
+doorAt(190, 65, 307, 261, owner: doc1)   # the rice curtain
+talkOut([101])   # Trotter and the flute
+#   the ladder also records: take the flute
+#   the ladder also records: give the rx
+#   what D3A_004 has to be true of — the rung's own claims, against the 1995 save
+wait(set == doctor2, budget: 2000)
+wait(view == south, budget: 2000)
+wait(global.docphase == 9, budget: 2000)
+wait(global.trotterphase == 1, budget: 2000)
+wait(global.handitem == flute, budget: 2000)
+wait(global.theset == doctor2, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+split(d3a_004)
+
+# ---------------------------------------------------------------------
+# D3E_001 — day 3 night, nite.set (6,8)
+#   ladder frame 167526: `clock 2→3`, `handitem "flute"→""`, `deadphase 1→0`
+# ---------------------------------------------------------------------
+#   this leg ends at nite (6,8) facing south — D3E_001's own standpoint
+loadSave(D3A_004, budget: 120000)   # doctor2 (0,0) facing south
+goto(0, 0, east, set: doctor2)   # the standpoint this door is opened from
+doorAt(205, 68, 319, 262, owner: doc4)   # the doctor's inner door
+goto(1, 0, east, set: doctor1)   # the standpoint this door is opened from
+doorAt(204, 67, 321, 263, owner: doc2)   # the doctor's door out
+# TODO walkTo with a computed goal: p, town, { x, z, view }, () => clock() >= 3
+bailOut()   # anyone who stops us
+bailOut()   # whoever comes over in the new night
+goto(6, 8, south, set: nite)   # the rung also passes () => there() || !!p.session.puppet
+bailOut()   # whoever came over last
+goto(6, 8, south, set: nite)
+#   what D3E_001 has to be true of — the rung's own claims, against the 1995 save
+wait(set == nite, budget: 2000)
+wait(view == south, budget: 2000)
+wait(global.clock == 3, budget: 2000)
+wait(global.phase == 0, budget: 2000)
+wait(!global.handitem, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+wait(global.theset == town, budget: 2000)
+wait(global.loopsound == outsidesaloon, budget: 2000)
+wait(global.scenecounter == 0, budget: 2000)
+wait(global.deadphase == 0, budget: 2000)
+wait(global.dellphase == 0, budget: 2000)
+wait(global.docphase == 0, budget: 2000)
+wait(global.fearphase == 0, budget: 2000)
+wait(global.laurelphase == 0, budget: 2000)
+wait(global.mariephase == 0, budget: 2000)
+wait(global.mayorphase == 0, budget: 2000)
+wait(global.mwifephase == 0, budget: 2000)
+wait(global.trotterphase == 0, budget: 2000)
+split(d3e_001)
+save(day3night)
+
+# ---------------------------------------------------------------------
+# D3E_002 — day 3 night, sallower.set (2,2)
+#   ladder frame 169015: `bouncer 0→1`, `buickphase 0→1`, `countsix 2→0`
+# ---------------------------------------------------------------------
+#   this leg ends at sallower (2,2) facing west — D3E_002's own standpoint
+loadSave(D3E_001, budget: 120000)   # nite (6,8) facing south
+meet(laurel)   # Laurel in the street outside the saloon
+say([101,103], then: stop, patience: 20000)   # No. / Goodbye, Laurel.
+goto(6, 4, east, set: nite)
+goto(6, 4, east, set: nite)   # the standpoint this door is opened from
+doorAt(200, 91, 305, 203, owner: hotel)   # the hotel door
+goto(0, 0, east, set: hotlower)
+clickAt(363, 234, wait: quiet)
+say([103], then: stop, patience: 20000)   # Bye.
+goto(3, 2, north, set: hotlower)
+key(ArrowUp)   # up the hotel stairs
+goto(2, 0, west, set: hotupper)   # the rung also passes () => num("buickphase") === 1
+clickAt(255, 157, wait: quiet)
+bailOut()   # Buick's bank hint through the door
+goto(3, 0, south, set: hotupper)
+key(ArrowUp)   # down the hotel stairs
+goto(0, 0, west, set: hotlower)
+goto(0, 0, west, set: hotlower)   # the standpoint this door is opened from
+doorAt(128, 73, 394, 262, owner: hotout)   # the hotel's street door
+goto(4, 3, north, set: nite)
+clickAt(300, 55, wait: quiet)
+# TODO p.fire(out.x, out.y) — a computed point; it is in the rung
+goto(2, 4, north, set: nite)
+# TODO clickActor(marie) presses until `setOff` — say that as a condition   # Marie at the cemetery gate
+say([101,111,111], then: stop, patience: 20000)   # Why did you need to see me? / Perhaps. / No, I know your plans.
+goto(6, 7, west, set: nite)
+goto(6, 7, west, set: nite)   # the standpoint this door is opened from
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon door
+goto(2, 2, west, set: sallower)
+#   what D3E_002 has to be true of — the rung's own claims, against the 1995 save
+wait(set == sallower, budget: 2000)
+wait(view == west, budget: 2000)
+wait(global.laurelphase == 1, budget: 2000)
+wait(global.fearphase == 1, budget: 2000)
+wait(global.buickphase == 1, budget: 2000)
+wait(global.mariephase == 1, budget: 2000)
+wait(global.saloonphase == 2, budget: 2000)
+wait(global.theset == sallower, budget: 2000)
+wait(global.townscene == scene g8, budget: 2000)
+split(d3e_002)
+
+# ---------------------------------------------------------------------
+# D3E_003 — day 3 night, sallower.set (2,1)
+#   ladder frame 170249: take Tbird, played cards, `playercash 150→168`, `phase 0→2`
+# ---------------------------------------------------------------------
+#   this leg ends at sallower (2,1) facing east — D3E_003's own standpoint
+loadSave(D3E_002, budget: 120000)   # sallower (2,2) facing west
+meet(flippo)   # Flippo at the bar
+say([109,103], then: stop, patience: 20000)   # Where is Jackalope? / Goodbye Mr. Flippo.
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon door out
+goto(4, 10, west, set: nite)
+key(ArrowUp)   # west into the chicken pen
+goto(1, 10, west, set: nite)   # the rung also passes () => !!p.session.puppet
+say([101,102,201], then: stop, patience: 20000)   # Yes. / You try talking to Laurel? / What'll you do now?
+meet(laurel)   # Laurel in the street
+say([111,101,102,103,104], then: stop, patience: 20000)   # I've seen Jackalope. He says he's sorry. / Yes, he did. / Honest. / I could ask him for you. / I sure will Laurel.
+goto(1, 10, west, set: nite)   # the rung also passes () => !!p.session.puppet
+hammer(jones, until: star.jones != town.seek1, gap: 1500, budget: 60000)   # Jackalope in the chicken pen
+say([101], then: stop, patience: 20000)   # I spoke with Laurel. Everything's okay.
+goto(6, 7, west, set: nite)
+goto(6, 7, west, set: nite)   # the standpoint this door is opened from
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon door
+goto(2, 1, east, set: sallower)
+# TODO not transcribed: p.session.track( p.session.interp.runHandler(gamblers, "mousedown", ["gamblers"], { me: "gamblers", target
+goto(2, 1, east, set: sallower)
+#   the ladder also records: take the tbird
+#   the ladder also records: a card game played here
+#   what D3E_003 has to be true of — the rung's own claims, against the 1995 save
+wait(set == sallower, budget: 2000)
+wait(view == east, budget: 2000)
+wait(global.flippophase == 1, budget: 2000)
+wait(global.jonesphase == 1, budget: 2000)
+wait(global.laurelphase == 2, budget: 2000)
+wait(global.phase == 2, budget: 2000)
+wait(global.saloonphase == 0, budget: 2000)
+wait(global.mezphase == 2, budget: 2000)
+wait(global.zebpetephase == 1, budget: 2000)
+wait(global.hasquitpoker == 1, budget: 2000)
+wait(global.theset == sallower, budget: 2000)
+split(d3e_003)
+
+# ---------------------------------------------------------------------
+# D3E_004 — day 3 night, hotroom.set (0,0)
+#   ladder frame 177269: take Tstone, `phase 2→3`, `handitem "tbird"→"hrkey"`
+# ---------------------------------------------------------------------
+#   this leg ends at hotroom (0,0) facing west — D3E_004's own standpoint
+loadSave(D3E_003, budget: 120000)   # sallower (2,1) facing east
+goto(3, 0, east, set: sallower)
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon's front door
+goto(6, 7, south, set: nite)   # the rung also passes () => !alive("bounty1")
+goto(6, 7, south, set: nite)   # the rung also passes () => !alive("bounty1")
+# TODO walkTo with a computed goal: p, nite, spot, () => !alive("bounty1")
+key(ArrowRight)   # looking round for them
+# TODO p.fire(aim.x, aim.y) — a computed point; it is in the rung
+goto(6, 7, south, set: nite)   # the rung also passes () => !alive("bounty2")
+goto(6, 7, south, set: nite)   # the rung also passes () => !alive("bounty2")
+# TODO walkTo with a computed goal: p, nite, spot, () => !alive("bounty2")
+key(ArrowRight)   # looking round for them
+# TODO p.fire(aim.x, aim.y) — a computed point; it is in the rung
+goto(3, 6, west, set: nite)   # the rung also passes () => !alive("bounty3")
+goto(3, 6, west, set: nite)   # the rung also passes () => !alive("bounty3")
+# TODO walkTo with a computed goal: p, nite, spot, () => !alive("bounty3")
+key(ArrowRight)   # looking round for them
+# TODO p.fire(aim.x, aim.y) — a computed point; it is in the rung
+goto(6, 12, west, set: nite)   # the rung also passes () => !alive("bounty4")
+goto(6, 12, west, set: nite)   # the rung also passes () => !alive("bounty4")
+# TODO walkTo with a computed goal: p, nite, spot, () => !alive("bounty4")
+key(ArrowRight)   # looking round for them
+# TODO p.fire(aim.x, aim.y) — a computed point; it is in the rung
+goto(6, 5, south, set: nite)   # the rung also passes () => !alive("bounty5")
+goto(6, 5, south, set: nite)   # the rung also passes () => !alive("bounty5")
+# TODO walkTo with a computed goal: p, nite, spot, () => !alive("bounty5")
+key(ArrowRight)   # looking round for them
+# TODO p.fire(aim.x, aim.y) — a computed point; it is in the rung
+key(ArrowRight)   # turning away from the bodies
+meet(trotter)   # Trotter after the fight
+say([103], then: stop, patience: 20000)   # That all?
+# TODO talkOut with computed replies () — read them off the rung
+goto(6, 5, west, set: nite)
+clickAt(253, 157, wait: quiet)
+goto(3, 0, west, set: bank)
+clickAt(261, 131, wait: quiet)
+clickAt(385, 176, wait: quiet)
+# TODO p.fire(Math.round((box.x0 + box.x1) / 2), Math.round((box.y0 + box.y1) / 2)) — a computed point; it is in the rung
+goto(3, 1, east, set: bank)   # the standpoint this door is opened from
+doorAt(177, 30, 339, 263, owner: dollar)   # the bank's door
+goto(6, 4, east, set: nite)   # the standpoint this door is opened from
+doorAt(200, 91, 305, 203, owner: hotel)   # the hotel door
+goto(0, 0, east, set: hotlower)
+meet(fear)   # Fear at the hotel desk
+say([103], then: stop, patience: 20000)   # Bye.
+# TODO talkOut with computed replies () — read them off the rung
+goto(3, 2, north, set: hotlower)
+key(ArrowUp)   # up the hotel stairs
+goto(2, 3, west, set: hotupper)   # the standpoint this door is opened from
+doorAt(168, 50, 329, 263, owner: playroom)   # the door of the player's room
+goto(0, 0, west, set: hotroom)
+#   the ladder also records: take the tstone
+#   what D3E_004 has to be true of — the rung's own claims, against the 1995 save
+wait(set == hotroom, budget: 2000)
+wait(view == west, budget: 2000)
+wait(global.phase == 3, budget: 2000)
+wait(global.mezphase == 3, budget: 2000)
+wait(global.fighton == 0, budget: 2000)
+wait(!global.loopsound, budget: 2000)
+wait(global.buickphase == 0, budget: 2000)
+wait(global.flippophase == 0, budget: 2000)
+wait(global.jonesphase == 0, budget: 2000)
+wait(global.laurelphase == 0, budget: 2000)
+wait(global.mariephase == 0, budget: 2000)
+wait(global.trotterphase == 1, budget: 2000)
+wait(global.fearphase == 1, budget: 2000)
+wait(global.bloodphase == 0, budget: 2000)
+wait(global.bounty1 == 4, budget: 2000)
+wait(global.bounty2 == 4, budget: 2000)
+wait(global.bounty3 == 2, budget: 2000)
+wait(global.bounty4 == 2, budget: 2000)
+wait(global.bounty5 == 2, budget: 2000)
+# TODO D3E_004 claims `combo` is "08,23,41," — a wait line cannot carry a comma
+wait(global.curtwist == 4, budget: 2000)
+wait(global.turnright == 2, budget: 2000)
+wait(global.handitem == hrkey, budget: 2000)
+wait(global.theset == hotlower, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+wait(global.savescene == scene c4, budget: 2000)
+split(d3e_004)
+
+# ---------------------------------------------------------------------
+# D3E_005 — day 3 night, hotroom.set (0,0)
+#   ladder frame 180792: `playercash 168→167`, `phase 3→4`, `bloodphase 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at hotroom (0,0) facing west — D3E_005's own standpoint
+loadSave(D3E_004, budget: 120000)   # hotroom (0,0) facing west
+goto(1, 0, east, set: hotroom)
+goto(1, 0, east, set: hotroom)   # the standpoint this door is opened from
+doorAt(176, 62, 339, 263, owner: inside)   # the room door
+goto(3, 0, south, set: hotupper)
+key(ArrowUp)   # down the hotel stairs
+goto(0, 0, west, set: hotlower)   # the standpoint this door is opened from
+doorAt(128, 73, 394, 262, owner: hotout)   # the hotel's front door
+goto(6, 7, west, set: nite)   # the standpoint this door is opened from
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon door
+meet(oona)   # Oona on the saloon floor
+talkOut([103])   # Oona on the saloon floor
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon's front door
+goto(6, 11, west, set: nite)   # the standpoint this door is opened from
+doorAt(122, 77, 218, 230, owner: jail)   # the jail door
+goto(1, 0, east, set: jail)
+hammer(dell, until: global.dellphase == 1, gap: 1500, budget: 60000)   # Dell in his cell
+goto(0, 0, west, set: jail)   # the standpoint this door is opened from
+doorAt(183, 34, 361, 263, owner: lock)   # the jail's door out
+goto(4, 3, north, set: nite)
+clickAt(300, 55, wait: quiet)   # the church bell
+clickAt(256, 230, until: star.marie == town.cem1, gap: 500, budget: 45000)   # click the film through, if it parks
+goto(2, 4, west, set: nite)   # the rung also passes () => !!p.session.puppet
+hammer(marie, until: star.marie != town.cem1 or puppet, gap: 1500, budget: 60000)   # Marie at the cemetery gate
+say([101,111,111], then: stop, patience: 20000)   # Why did you need to see me? / Perhaps. / No, I know your plans.
+goto(6, 4, east, set: nite)   # the standpoint this door is opened from
+doorAt(200, 91, 305, 203, owner: hotel)   # the hotel door
+goto(3, 2, north, set: hotlower)
+key(ArrowUp)   # up the hotel stairs
+goto(2, 0, west, set: hotupper)   # the rung also passes () => !!p.session.puppet
+clickAt(255, 157, wait: quiet)
+say([101,103,104], then: stop, patience: 20000)   # Shut up, Riviera. / Tell me what? / All right, here's a dollar...
+goto(2, 3, east, set: hotupper)
+goto(2, 3, west, set: hotupper)   # the standpoint this door is opened from
+doorAt(168, 50, 329, 263, owner: playroom)   # the door of the player's room
+goto(0, 0, west, set: hotroom)
+#   what D3E_005 has to be true of — the rung's own claims, against the 1995 save
+wait(set == hotroom, budget: 2000)
+wait(view == west, budget: 2000)
+wait(global.phase == 4, budget: 2000)
+wait(global.saloonphase == 1, budget: 2000)
+wait(global.oonaphase == 1, budget: 2000)
+wait(global.dellphase == 1, budget: 2000)
+wait(global.mariephase == 1, budget: 2000)
+wait(global.buickphase == 2, budget: 2000)
+wait(global.bloodphase == 1, budget: 2000)
+wait(global.playercash == 167, budget: 2000)
+wait(global.theset == hotlower, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+wait(global.handitem == hrkey, budget: 2000)
+split(d3e_005)
+
+# ---------------------------------------------------------------------
+# D4M_001 — day 4 morning, hotupper.set (2,0)
+#   ladder frame 181090: played cards, `phase 4→0`, `day 3→4`, `clock 3→1`
+# ---------------------------------------------------------------------
+#   this leg ends at hotupper (2,0) facing west — D4M_001's own standpoint
+loadSave(D3E_005, budget: 120000)   # hotroom (0,0) facing west
+goto(0, 0, west)
+# TODO clickThrough: the stop `() => Number(p.session.interp.globals.get("day") ?? 0) >= 4` is not a condition this reads
+talkOut([301,201,104,102,101,103])   # anyone in the room
+goto(1, 0, east, set: hotroom)   # the standpoint this door is opened from
+doorAt(176, 62, 339, 263, owner: inside)   # the room door
+goto(2, 0, west)
+#   the ladder also records: a card game played here
+#   what D4M_001 has to be true of — the rung's own claims, against the 1995 save
+wait(set == hotupper, budget: 2000)
+wait(view == west, budget: 2000)
+wait(global.day == 4, budget: 2000)
+wait(global.clock == 1, budget: 2000)
+wait(global.phase == 0, budget: 2000)
+wait(!global.handitem, budget: 2000)
+wait(global.savescene == scene c4, budget: 2000)
+wait(global.savedir == east, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+wait(global.bloodphase == 0, budget: 2000)
+wait(global.buickphase == 0, budget: 2000)
+wait(global.dellphase == 0, budget: 2000)
+wait(global.fearphase == 0, budget: 2000)
+wait(global.mariephase == 0, budget: 2000)
+wait(global.oonaphase == 0, budget: 2000)
+wait(global.trotterphase == 0, budget: 2000)
+wait(global.mezphase == 0, budget: 2000)
+wait(global.zebpetephase == 0, budget: 2000)
+wait(global.hasquitpoker == 0, budget: 2000)
+wait(global.bounty1 == 0, budget: 2000)
+wait(global.bounty2 == 0, budget: 2000)
+wait(global.bounty3 == 0, budget: 2000)
+wait(global.bounty4 == 0, budget: 2000)
+wait(global.bounty5 == 0, budget: 2000)
+split(d4m_001)
+save(day4morning)
+
+# ---------------------------------------------------------------------
+# D4M_002 — day 4 morning, sallower.set (2,0)
+#   ladder frame 183616: `phase 0→1`, `handitem ""→"hhkey"`, `dellphase 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at sallower (2,0) facing east — D4M_002's own standpoint
+loadSave(D4M_001, budget: 120000)   # hotupper (2,0) facing west
+goto(3, 0, south)
+key(ArrowUp)   # down the hotel stairs
+goto(0, 0, north)   # the rung also passes () => num("fearphase") >= 1
+hammer(fear, until: global.fearphase >= 1, gap: 1500, budget: 60000)   # the clerk at the desk
+talkOut([301,201,104,102,101,103])   # the clerk
+goto(0, 0, west, set: hotlower)   # the standpoint this door is opened from
+doorAt(128, 73, 394, 262, owner: hotout)   # the hotel door
+talkOut([301,201,104,102,101,103])   # anyone in the street
+goto(6, 11, west, set: town)   # the standpoint this door is opened from
+doorAt(122, 77, 218, 230, owner: jail)   # the jail door
+goto(1, 0, east)
+hammer(dell, until: global.dellphase >= 1, gap: 1500, budget: 60000)   # Dell behind the bars
+talkOut([301,201,104,102,101,103])   # Dell
+goto(0, 0, west, set: jail)   # the standpoint this door is opened from
+doorAt(183, 34, 361, 263, owner: lock)   # the jail's own door
+talkOut([301,201,104,102,101,103])   # anyone in the street
+goto(3, 9, east, set: town)   # the standpoint this door is opened from
+doorAt(3, 83, 91, 234, owner: back)   # the saloon's back door
+goto(2, 2, west)
+hammer(trotter, until: global.trotterphase >= 1, gap: 1500, budget: 60000)   # Trotter, first
+hammer(trotter, until: global.trotterphase >= 2, gap: 1500, budget: 60000)   # Trotter, again
+hammer(jones, until: global.jonesphase >= 1, gap: 1500, budget: 60000)   # Jones, first
+hammer(jones, until: global.jonesphase >= 2, gap: 1500, budget: 60000)   # Jones, again
+goto(2, 0, east)
+#   what D4M_002 has to be true of — the rung's own claims, against the 1995 save
+wait(set == sallower, budget: 2000)
+wait(view == east, budget: 2000)
+wait(global.day == 4, budget: 2000)
+wait(global.clock == 1, budget: 2000)
+wait(global.phase == 1, budget: 2000)
+wait(global.handitem == hhkey, budget: 2000)
+wait(global.townscene == scene g8, budget: 2000)
+wait(global.theset == sallower, budget: 2000)
+wait(global.fearphase == 1, budget: 2000)
+wait(global.dellphase == 1, budget: 2000)
+wait(global.jonesphase == 2, budget: 2000)
+wait(global.trotterphase == 2, budget: 2000)
+split(d4m_002)
+
+# ---------------------------------------------------------------------
+# D4E_001 — day 4 night, nite.set (6,4)
+#   ladder frame 188156: take Blade, `phase 1→0`, `clock 1→3`
+# ---------------------------------------------------------------------
+#   this leg ends at nite (6,4) facing south — D4E_001's own standpoint
+loadSave(D4M_002, budget: 120000)   # sallower (2,0) facing east
+goto(3, 0, east, set: sallower)
+goto(3, 0, east, set: sallower)   # the standpoint this door is opened from
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon's front door
+key(ArrowRight)   # turning away from the bodies
+goto(6, 7, south, set: town)   # the rung also passes done
+# TODO p.fire(aim.x, aim.y) — a computed point; it is in the rung
+# TODO walkTo with a computed goal: p, town, spots[0], () => !alive(target)
+key(ArrowRight)   # looking round for them
+# TODO walkTo with a computed goal: p, town, cover[phase], () => number("fightphase") !== phase
+key(ArrowRight)   # giving the street back to them
+# TODO walkTo with a computed goal: p, town, stations[phase][next][0], done
+# TODO p.fire(aim.x, aim.y) — a computed point; it is in the rung
+key(ArrowRight)   # letting ${next} take his position
+# TODO walkTo with a computed goal: p, town, stations[phase][next][at % stations[phase][next].length], done
+key(ArrowRight)   # looking for ${next}
+goto(6, 3, south, set: town)
+# TODO not transcribed: p.session.track(p.v().keyDown("uparrow"))
+say([101,101,101,101,101], then: stop, patience: 20000)   # the Kid, round ${round + 1}
+# TODO p.fire(Math.round((box.x0 + box.x1) / 2), Math.round((box.y0 + box.y1) / 2)) — a computed point; it is in the rung
+#   the ladder also records: take the blade
+#   what D4E_001 has to be true of — the rung's own claims, against the 1995 save
+wait(set == nite, budget: 2000)
+wait(view == south, budget: 2000)
+wait(global.day == 4, budget: 2000)
+wait(global.clock == 3, budget: 2000)
+wait(global.phase == 0, budget: 2000)
+wait(global.fighton == 1, budget: 2000)
+wait(global.fightphase == 4, budget: 2000)
+wait(!global.handitem, budget: 2000)
+wait(global.theset == town, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+wait(global.bulletcount == 6, budget: 2000)
+wait(!global.playerdeath, budget: 2000)
+wait(global.dellphase == 0, budget: 2000)
+wait(global.fearphase == 0, budget: 2000)
+wait(global.jonesphase == 0, budget: 2000)
+wait(global.trotterphase == 0, budget: 2000)
+split(d4e_001)
+save(day4night)
+
+# ---------------------------------------------------------------------
+# D4M_MISS — day 4 night, padre.set (0,1)
+#   ladder frame 189856: `handitem ""→"Blade"`, `sonomaphase 0→1`, `theset "town"→"court"`
+# ---------------------------------------------------------------------
+#   this leg ends at padre (0,1) facing south — D4M_MISS's own standpoint
+loadSave(D4E_001, budget: 120000)   # nite (6,4) facing south
+goto(6, 3, north, set: nite)
+goto(6, 3, north, set: nite)   # the standpoint this door is opened from
+doorAt(160, 22, 338, 214, owner: court)   # the courthouse door at night
+goto(2, 2, north, set: nitecour)   # the rung also passes () => !!p.session.puppet
+meet(sonoma)   # Sonoma in the night courtyard
+say([101], then: stop, patience: 20000)   # What happens after that?
+goto(2, 2, north, set: nitecour)   # the standpoint this door is opened from
+doorAt(148, 45, 355, 263, owner: schoolin)   # the schoolhouse door
+goto(0, 1, west, set: nitescho)   # the standpoint this door is opened from
+doorAt(207, 79, 320, 263, owner: padre)   # the padre's door
+goto(0, 1, south, set: padre)
+takeInHand(blade)   # the obsidian blade for the box
+#   what D4M_MISS has to be true of — the rung's own claims, against the 1995 save
+wait(set == padre, budget: 2000)
+wait(view == south, budget: 2000)
+wait(global.sonomaphase == 1, budget: 2000)
+wait(global.theset == court, budget: 2000)
+wait(global.townscene == scene g4, budget: 2000)
+wait(global.handitem == blade, budget: 2000)
+split(d4m_miss)
+
+# ---------------------------------------------------------------------
+# D4MINES — day 4 night, hub.set (3,6)
+#   ladder frame 191358: give Tstone (to box), `handitem "Blade"→""`, `blackout 0→-1`
+# ---------------------------------------------------------------------
+#   this leg ends at hub (3,6) facing north — D4MINES's own standpoint
+loadSave(D4M_MISS, budget: 120000)   # padre (0,1) facing south
+takeInHand(tstone)   # the yunni stone the box is cut for
+goto(0, 2, east, set: padre)
+# TODO clickThrough: the stop `() => stage().startsWith("yunnibox")` is not a condition this reads
+# TODO clickThrough: the stop `() => flat() === "flat 1"` is not a condition this reads
+# TODO not transcribed: dragTo(p, "Tstone", { x: 247, y: 150 }, "the yunni stone into the box")
+# TODO clickThrough: the stop `() => !stage().startsWith("yunnibox")` is not a condition this reads
+goto(0, 1, east, set: padre)   # the standpoint this door is opened from
+doorAt(193, 81, 303, 264, owner: padreout)   # the padre's door from the inside
+goto(1, 1, south, set: nitescho)   # the standpoint this door is opened from
+doorAt(147, 78, 376, 263, owner: schoolout)   # the schoolroom's rice-paper door
+goto(2, 2, south, set: nitecour)
+# TODO clickThrough: the stop `() => room(p).startsWith("hub")` is not a condition this reads
+key(ArrowLeft)   # the dark under the mission
+#   the ladder also records: give the tstone to box
+#   what D4MINES has to be true of — the rung's own claims, against the 1995 save
+wait(set == hub, budget: 2000)
+wait(view == north, budget: 2000)
+wait(!global.handitem, budget: 2000)
+wait(global.blackout == -1, budget: 2000)
+wait(global.nextroom == 0, budget: 2000)
+wait(global.minepuzzle == 0, budget: 2000)
+wait(global.snakepuzzle == 0, budget: 2000)
+wait(global.tbirdpuzzle == 0, budget: 2000)
+wait(global.flutepuzzle == 0, budget: 2000)
+split(d4mines)
+
+# ---------------------------------------------------------------------
+# FLUTEPZL — day 4 night, flute.set (1,3)
+#   ladder frame 195037: `blackout -1→0`, `smalldial 0→8`
+# ---------------------------------------------------------------------
+#   this leg ends at flute (1,3) facing north — FLUTEPZL's own standpoint
+loadSave(D4MINES, budget: 120000)   # hub (3,6) facing north
+goto(3, 4, north, set: hub)
+clickAt(257, 166, wait: quiet)
+# TODO not transcribed: p.session.setPointer(from.x, from.y)
+# TODO p.fire(from.x, from.y) — a computed point; it is in the rung
+# TODO not transcribed: p.session.setPointer(at.x, at.y)
+clickAt(93, 324, wait: quiet)
+goto(6, 3, east, set: hub)
+key(ArrowUp)   # into the dark
+#   what FLUTEPZL has to be true of — the rung's own claims, against the 1995 save
+wait(set == flute, budget: 2000)
+wait(view == north, budget: 2000)
+wait(global.blackout == 0, budget: 2000)
+wait(global.largedial == 0, budget: 2000)
+wait(global.meddial == 0, budget: 2000)
+wait(global.smalldial == 8, budget: 2000)
+wait(global.nextroom == 0, budget: 2000)
+split(flutepzl)
+
+# ---------------------------------------------------------------------
+# DAGRPZL — day 4 night, snake.set (1,3)
+#   ladder frame 199636: give Flute (to temple), `handitem ""→"Yunnibook"`, `flutenum 0→1`
+# ---------------------------------------------------------------------
+#   this leg ends at snake (1,3) facing north — DAGRPZL's own standpoint
+loadSave(FLUTEPZL, budget: 120000)   # flute (1,3) facing north
+# TODO not transcribed: rawXY(interp, args, call, ctx)
+# TODO not transcribed: rawXY(interp, [args[0], 1], call, ctx)
+# TODO not transcribed: rawXY(interp, [args[0], 2], call, ctx)
+takeInHand(flute)   # the flute the temple wants
+clickAt(424, 232, wait: quiet)
+# TODO not transcribed: dragTo(p, "Flute", { x: 256, y: 150 }, "the flute into the temple")
+# TODO p.fire(x, y) — a computed point; it is in the rung
+key(ArrowLeft, until: !global.blackout != -1, budget: 60000)   # the dark
+skipMovie(until: quiet, budget: 60000)   # past what that press started
+goto(3, 4, north)
+clickAt(257, 166, wait: quiet)
+clickAt(93, 324, wait: quiet)
+goto(0, 3, west)
+key(ArrowUp)   # into the dark under the west arm
+# TODO key(ArrowLeft) is pressed until `!room(p).startsWith("snake")` — say that as a condition   # on through the dark
+takeInHand(yunnibook)   # the book about the Yunni
+#   the ladder also records: give the flute to temple
+#   what DAGRPZL has to be true of — the rung's own claims, against the 1995 save
+wait(set == snake, budget: 2000)
+wait(view == north, budget: 2000)
+wait(global.flutepuzzle == done, budget: 2000)
+wait(global.flutenum == 1, budget: 2000)
+# TODO DAGRPZL claims `flutestr` is "0,0,0,0,0," — a wait line cannot carry a comma
+wait(global.handitem == yunnibook, budget: 2000)
+wait(global.largedial == 8, budget: 2000)
+wait(global.meddial == 12, budget: 2000)
+wait(global.smalldial == 4, budget: 2000)
+wait(global.theset == hub, budget: 2000)
+split(dagrpzl)
+
+# ---------------------------------------------------------------------
+# MSKPZL — day 4 night, hub.set (3,4)
+#   ladder frame 211054: give Blade (to snake), `blackout 0→-1`, `snakepuzzle ""→"done"`
+# ---------------------------------------------------------------------
+#   this leg ends at hub (3,4) facing north — MSKPZL's own standpoint
+loadSave(DAGRPZL, budget: 120000)   # snake (1,3) facing north
+goto(1, 2, south, set: snake)
+clickAt(350, 162, wait: quiet)
+# TODO not transcribed: p.session.setPointer(grip.x, grip.y)
+# TODO p.fire(grip.x, grip.y) — a computed point; it is in the rung
+# TODO not transcribed: p.session.setPointer(best.x, best.y)
+clickAt(414, 202, wait: quiet)
+clickAt(82, 324, wait: quiet)
+clickAt(256, 193, wait: quiet)
+key(ArrowUp, until: !global.blackout != -1, budget: 60000)   # the dark in the hub
+skipMovie(until: quiet, budget: 60000)   # past what that press started
+goto(3, 4, north, set: hub)
+#   the ladder also records: give the blade to snake
+#   what MSKPZL has to be true of — the rung's own claims, against the 1995 save
+wait(set == hub, budget: 2000)
+wait(view == north, budget: 2000)
+wait(global.snakepuzzle == done, budget: 2000)
+wait(global.blackout == -1, budget: 2000)
+wait(global.phase == 0, budget: 2000)
+wait(global.nextroom == 0, budget: 2000)
+wait(global.largedial == 8, budget: 2000)
+wait(global.meddial == 12, budget: 2000)
+wait(global.smalldial == 4, budget: 2000)
+split(mskpzl)
+
+# ---------------------------------------------------------------------
+# MESAPZL — day 4 night, tbird.set (1,3)
+#   ladder frame 219600: give Mask (to skeleton), played cards, `handitem "Yunnibook"→""`, `blackout -1→0`
+# ---------------------------------------------------------------------
+#   this leg ends at tbird (1,3) facing north — MESAPZL's own standpoint
+loadSave(MSKPZL, budget: 120000)   # hub (3,4) facing north
+# TODO not transcribed: until()
+# TODO key(ArrowUp) is pressed until `!until()` — say that as a condition   # feeling for ${what}
+# TODO not transcribed: until()
+clickAt(451, 324, wait: quiet)
+takeInHand(mask)   # the Mask, for the skeleton to be findable at all
+clickAt(317, 333, wait: quiet)
+goto(3, 4, north, set: hub)
+clickAt(257, 166, wait: quiet)
+clickAt(93, 324, wait: quiet)
+goto(3, 0, north, set: hub)
+key(ArrowUp)   # into the dark at the north arm
+# TODO walkTo with a computed goal: p, mine, ends[which]
+key(ArrowUp)   # wrapping the mine ${which}
+# TODO walkTo with a computed goal: p, mine, { ...cell, view }
+# TODO walkTo with a computed goal: p, mine, { ...cell, view }
+# TODO walkTo with a computed goal: p, mine, { ...cell, view }
+# TODO walkTo with a computed goal: p, mine, { ...cell, view }
+# TODO offerTo(skeleton, mask): the harness's shortcut, which runs offerobject() with no gesture. As a route this is give(mask, to, skeleton) or offer(...)
+goto(3, 4, north, set: hub)
+clickAt(257, 166, wait: quiet)
+clickAt(93, 324, wait: quiet)
+goto(3, 6, south, set: hub)
+key(ArrowUp)   # into the dark at the south arm
+#   the ladder also records: give the mask to skeleton
+#   the ladder also records: a card game played here
+#   what MESAPZL has to be true of — the rung's own claims, against the 1995 save
+wait(set == tbird, budget: 2000)
+wait(view == north, budget: 2000)
+wait(global.minepuzzle == done, budget: 2000)
+wait(!global.handitem, budget: 2000)
+wait(global.blackout == 0, budget: 2000)
+wait(global.largedial == 12, budget: 2000)
+wait(global.meddial == 4, budget: 2000)
+wait(global.smalldial == 8, budget: 2000)
+split(mesapzl)
+
+# ---------------------------------------------------------------------
+# ENDPZL — day 4 night, hub.set (2,4)
+#   ladder frame 222320: give Tbird (to temple), `phase 0→1`, `handitem ""→"Yunnibook"`
+# ---------------------------------------------------------------------
+#   this leg ends at hub (2,4) facing north — ENDPZL's own standpoint
+loadSave(MESAPZL, budget: 120000)   # tbird (1,3) facing north
+clickAt(451, 324, wait: quiet)
+takeInHand(tbird)   # the Thunder Bird, to have something to give the temple
+clickAt(317, 333, wait: quiet)
+goto(1, 1, north, set: tbird)
+clickAt(261, 147, wait: quiet)
+# TODO not transcribed: dragTo(p, "tbird", { x: 256, y: 132 }, "the Thunder Bird into the temple")
+# TODO p.fire(x, forward ? at.down : at.up) — a computed point; it is in the rung
+clickAt(254, 219, wait: quiet)
+clickAt(451, 324, wait: quiet)
+takeInHand(yunnibook)   # the Yunni book, while the panel is open anyway
+clickAt(317, 333, wait: quiet)
+key(ArrowUp)   # feeling for the hub
+goto(2, 4, north, set: hub)
+#   the ladder also records: give the tbird to temple
+#   what ENDPZL has to be true of — the rung's own claims, against the 1995 save
+wait(set == hub, budget: 2000)
+wait(view == north, budget: 2000)
+wait(global.tbirdpuzzle == done, budget: 2000)
+wait(global.phase == 1, budget: 2000)
+wait(global.handitem == yunnibook, budget: 2000)
+wait(global.blackout == -1, budget: 2000)
+split(endpzl)
+
+# ---------------------------------------------------------------------
+# BLDSTPZ — day 4 night, tbird.set (1,1)
+#   ladder frame 223762: take Tbird (from temple), give Gun, `phase 1→5`, `handitem "Yunnibook"→"tbird"`
+# ---------------------------------------------------------------------
+#   this leg ends at tbird (1,1) facing north — BLDSTPZ's own standpoint
+loadSave(ENDPZL, budget: 120000)   # hub (2,4) facing north
+goto(3, 4, north, set: hub)
+clickAt(257, 166, wait: quiet)
+# TODO not transcribed: p.session.setPointer(from.x, from.y)
+# TODO p.fire(from.x, from.y) — a computed point; it is in the rung
+# TODO not transcribed: p.session.setPointer(at.x, at.y)
+clickAt(93, 324, wait: quiet)
+# TODO p.fire(hit.x, hit.y) — a computed point; it is in the rung
+say([101])   # Bloodstone under the hub
+goto(1, 1, north, set: tbird)
+#   the ladder also records: take the tbird back from temple
+#   the ladder also records: give the gun
+#   what BLDSTPZ has to be true of — the rung's own claims, against the 1995 save
+wait(set == tbird, budget: 2000)
+wait(view == north, budget: 2000)
+wait(global.phase == 5, budget: 2000)
+wait(global.handitem == tbird, budget: 2000)
+wait(global.theset == tbird, budget: 2000)
+wait(global.nextroom == hub, budget: 2000)
+wait(global.largedial == 12, budget: 2000)
+wait(global.meddial == 4, budget: 2000)
+wait(global.smalldial == 12, budget: 2000)
+split(bldstpz)
+
+# ---------------------------------------------------------------------
+# ENDING — day 5 morning, town.set (6,3)
+#   ladder frame 224670: take chest, `phase 5→0`, `day 4→5`
+# ---------------------------------------------------------------------
+#   this leg ends at town (6,3) facing south — ENDING's own standpoint
+loadSave(BLDSTPZ, budget: 120000)   # tbird (1,1) facing north
+clickAt(261, 147, wait: quiet)
+# TODO not transcribed: dragTo(p, "tbird", { x: 256, y: 150 }, "the Tbird stone into the temple")
+clickAt(254, 219, wait: quiet)
+#   the ladder also records: take the chest
+#   what ENDING has to be true of — the rung's own claims, against the 1995 save
+wait(set == town, budget: 2000)
+wait(view == south, budget: 2000)
+# TODO ENDING claims `advanceday ()` and its save does not record one
+# TODO ENDING claims `initall ()` and its save does not record one
+wait(global.day == 5, budget: 2000)
+wait(global.clock == 1, budget: 2000)
+wait(global.phase == 0, budget: 2000)
+wait(global.handitem == chest, budget: 2000)
+wait(global.theset == town, budget: 2000)
+wait(global.townscene == scene g5, budget: 2000)
+wait(global.sonomaphase == 0, budget: 2000)
+# TODO ENDING claims `gototbird ()` and its save does not record one
+# TODO ENDING claims `blackout` and its save does not record one
+# TODO ENDING claims `nextroom` and its save does not record one
+# TODO ENDING claims `largedial` and its save does not record one
+# TODO ENDING claims `meddial` and its save does not record one
+# TODO ENDING claims `flutenum` and its save does not record one
+# TODO ENDING claims `flutestr` and its save does not record one
+# TODO ENDING claims `flutepuzzle` and its save does not record one
+# TODO ENDING claims `minepuzzle` and its save does not record one
+# TODO ENDING claims `tbirdpuzzle` and its save does not record one
+split(ending)
+save(day5morning)

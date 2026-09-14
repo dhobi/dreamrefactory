@@ -370,6 +370,32 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
      * sooner, it makes the next read a frame stale, and a stale `deg` sends the
      * next swing the wrong way — which costs a whole extra pass around the dial.
      */
+    /** the twin of the page driver's — see {@link SpeedrunDriver.dragOnto} for
+     *  why this one returns at the release and `dragProp` does not */
+    dragOnto: async (
+      from: Point,
+      to: Point,
+      o: { armed?: string; landed?: string; budget?: number } = {},
+    ): Promise<{ armed: boolean; landed: boolean }> => {
+      const budget = o.budget ?? timeout;
+      const a = await pagePoint(from.x, from.y);
+      const b = await pagePoint(to.x, to.y);
+      await page.mouse.move(a.x, a.y);
+      await page.mouse.down();
+      let armed = true;
+      let landed = true;
+      try {
+        if (o.armed) armed = await tryHold(o.armed, Math.min(budget, 10_000));
+        await page.mouse.move(b.x, b.y);
+        if (o.landed) landed = await tryHold(o.landed, Math.min(budget, 10_000));
+      } finally {
+        // released whatever the waits said, and at the far end — a button left
+        // down turns every later gesture into a drag
+        await page.mouse.up();
+      }
+      return { armed, landed };
+    },
+
     dragProp: async (
       at: Point,
       next: (start: Point) => Point | null | Promise<Point | null>,

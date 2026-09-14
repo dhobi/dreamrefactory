@@ -1,6 +1,6 @@
 {
   "name": "@dreamfactory/dust",
-  "version": "0.3.18",
+  "version": "0.3.19",
   "private": true,
   "description": "Dust: A Tale of the Wired West (1995) — DreamFactory 1, the engine two years before Titanic. Its own version because it releases on its own tag.",
   "type": "module",
@@ -18,6 +18,9 @@
     "test:browser:range": "tsx tests/browser/shooting-range.ts",
     "test:browser:walkback": "tsx tests/browser/walk-back.ts",
     "test:browser:workbench": "tsx tests/browser/workbench.ts",
-    "mklogo": "tsx tools/mkdustlogo.ts"
+    "mklogo": "tsx tools/mkdustlogo.ts",
+    "speedrun:sheet": "tsx tools/mkrunsheet.ts",
+    "speedrun:rung": "tsx tools/rung2sheet.ts",
+    "speedrun:legs": "tsx tests/browser/legs.ts"
   }
 }

@@ -294,6 +294,43 @@ export interface SpeedrunDriver {
   dragProp(at: Point, next: (start: Point) => Point | null | Promise<Point | null>, budget?: number): Promise<void>;
 
   /**
+   * Press on something, drag it onto a point, and let go there — RETURNING AT
+   * THE RELEASE, not at what the release causes.
+   *
+   * The opposite end of {@link dragProp} from the same two events, and the
+   * difference is the whole reason both exist. A dial snaps when the button comes
+   * up, so a caller has to wait for the release to be acted on before it can read
+   * anything. A DROP is the start of something instead: Dust's `offerobject ()`
+   * handlers play films, turn the camera and open conversations, so "the release,
+   * acted on" is a cutscene — and a verb that waited for it would hold the sheet
+   * through the very thing the sheet wants to skip its own way. Reported as
+   * exactly that: "give(bone, to, dog) waits until the dog movie is played out".
+   *
+   * Two predicates instead, both BEFORE the release, because they are about the
+   * gesture rather than its consequences:
+   *
+   *   - `armed` — the thing being dragged has the press. A script sitting in
+   *     `while stilldown ()` is not listening the instant the button goes down,
+   *     and a press that beats the loop is dropped in silence.
+   *   - `landed` — it has been REDRAWN under the pointer. The dragged thing is
+   *     its own progress bar (`propxy (what, pointx (arg), pointy (arg))` every
+   *     turn), which is what makes one move enough where a real hand would sweep:
+   *     the wait, not the path, is what carries the item across. The headless
+   *     twin of this gesture does the same single jump and the same wait
+   *     (`dropOn`, dust/tests/playthrough/route.ts).
+   *
+   * Neither is required and neither throws — they are RETURNED, because "nothing
+   * took the press" and "it never arrived" are different findings and the verb
+   * that asked is the only thing that knows which of them is fatal. The release
+   * happens either way: a button left down turns every later gesture into a drag.
+   */
+  dragOnto(
+    from: Point,
+    to: Point,
+    opts?: { armed?: string; landed?: string; budget?: number },
+  ): Promise<{ armed: boolean; landed: boolean }>;
+
+  /**
    * Keep a savegame between runs, and fetch one back.
    *
    * Optional because WHERE a save lives is the one thing the two hosts cannot
@@ -367,6 +404,36 @@ export class Paused extends Error {
  * ------------------------------------------------------------------ */
 
 /**
+ * WHO to ask about the screen — the viewer if there is one, the DIRECTOR if there
+ * is not.
+ *
+ * Not a guess standing in for an answer. Every reading below is the director's
+ * already: the viewer's `moviePlaying`, `movieFile`, `movieRegions`,
+ * `awaitingInput`, `conversing` and `inputLocked` are one-line delegations to
+ * `this.dir` (engine/src/web/viewer.ts), so this reads IDENTICALLY wherever a
+ * viewer is up. Titanic's boot films play with one up, which is why
+ * `skipMovie(until: awaiting)` has always worked there and why nothing about that
+ * game changes here.
+ *
+ * Dust's whole opening is the case with no viewer. `dust/src/main.ts` starts the
+ * frame loop and publishes `window.dbg`, and THEN `coldBoot` plays `intro.mov` ->
+ * `intro2.mov` -> `intro3.mov` — all of it before a SET is opened. Measured on
+ * the workbench page, mid-`intro.mov`:
+ *
+ *     movie=intro.mov  dir.moviePlaying=true  dbg.viewer=false
+ *     viewer-first:  KEY_SAFE=false  SHOWING=false
+ *     director:      KEY_SAFE=true   SHOWING=true
+ *
+ * So `esc()` never dispatched a key at all — it died on its own gate, "stuck
+ * waiting for the engine to accept Escape" — and `skipMovie` never armed, while
+ * the same ESC pressed BY HAND skipped the film. That asymmetry was the whole
+ * bug: the page's key handler had already been moved off `host.viewer` for
+ * exactly this reason (the long note on it in dust/src/main.ts), and the driver
+ * is the half that was left behind.
+ */
+export const SCREEN = `(window.dbg && (window.dbg.viewer || (window.dbg.host && window.dbg.host.director)))`;
+
+/**
  * A key is safe to send — that is, it will not be silently dropped.
  *
  * Read straight off `SetViewer.keyDown`'s own order of business: a playing movie
@@ -385,9 +452,17 @@ export class Paused extends Error {
  * `movingCamera` is private in TypeScript and a plain getter at runtime. This is
  * evaluated rather than compiled, so it reads it directly — deliberately, because
  * the alternative is duplicating an engine predicate that would then drift.
+ *
+ * Though it is the DIRECTOR's getter and not the viewer's (screen-director.ts;
+ * the viewer's own camera flag is the private `animating`), so this clause has
+ * always read `undefined` through a viewer and answers for real only where
+ * {@link SCREEN} falls through to the director. Left exactly that way rather than
+ * pointed at `v.busy`: a live clause here would let a key through a camera move
+ * on the play pages too, which is a change to every existing route and not this
+ * one's business.
  */
 export const KEY_SAFE = `(() => {
-  const v = window.dbg && window.dbg.viewer;
+  const v = ${SCREEN};
   if (!v) return false;
   if (v.moviePlaying) return true;
   if (v.conversing) return true;
@@ -402,7 +477,7 @@ export const QUEUE_EMPTY = `window.dbg.session.events.length === 0`;
 export const QUIET = `(() => { const v = window.dbg && window.dbg.viewer; return !!v && (v.quiescent || v.conversing); })()`;
 
 /** a cutscene is on screen and is not asking anything — the one state ESC is for */
-export const SHOWING = `(() => { const v = window.dbg && window.dbg.viewer; return !!v && v.moviePlaying && v.movieRegions.length === 0; })()`;
+export const SHOWING = `(() => { const v = ${SCREEN}; return !!v && v.moviePlaying && v.movieRegions.length === 0; })()`;
 
 /** the expression a given wait mode waits on, or null for `none` */
 export function waitExpr(mode: WaitMode): string | null {

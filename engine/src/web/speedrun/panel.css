@@ -501,7 +501,13 @@ body.sr-resizing * {
 .sr-editor {
   position: relative;
   display: grid;
-  grid-template-columns: 3ch minmax(0, 1fr);
+  /* The gutter is as wide as the widest number in it — `--gutter`, written by
+     editor.ts from the row count, floored at 3ch so a short sheet looks as it
+     always did and so the column does not twitch while a line is typed. Dust's
+     transcribed run is fifteen hundred lines and four digits did not fit in
+     3ch: the numbers were clipped against the rule, which is a gutter that
+     cannot be read exactly when a long sheet needs it most. */
+  grid-template-columns: var(--gutter, 3ch) minmax(0, 1fr);
   /* A DEFINITE height, and both parts of that matter. The row must be
      `minmax(0, 1fr)` or it sizes to the content — a 500-line sheet then
      makes the editor 500 lines tall and the PAGE scrolls instead of the
@@ -532,6 +538,13 @@ body.sr-resizing * {
   white-space: pre;
   user-select: none;
   border-right: 1px solid #161c24;
+  /* A number is a place to send the pointer (editor.ts), so it reads as one.
+     The whole column takes the click, not just the glyph — aiming at three
+     characters of 12px text is not a control. */
+  cursor: pointer;
+}
+.sr-gutter span:hover {
+  color: #8b96a2;
 }
 .sr-highlight,
 #srsheet {
@@ -566,7 +579,7 @@ body.sr-resizing * {
    it cannot take a click meant for the editor. */
 .sr-cursor {
   position: absolute;
-  left: 3ch;
+  left: var(--gutter, 3ch);
   right: 0;
   pointer-events: none;
   /* NOT the shared padding of `.sr-editor > *` above. That rule is there so
@@ -1157,6 +1170,32 @@ body.sr-resizing * {
    read as part of the frame. */
 #srscale {
   margin-top: 0.9rem;
+}
+
+/* The mute switch, on the same line of thought as the segments above it and set
+   in from the screen for the same reason. A checkbox rather than a segmented
+   pair, because it is one question with a yes and a no and the box already says
+   which it is; sized in `em` so it tracks the label rather than the root. */
+.srtoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  margin-top: 0.6rem;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text-mute);
+  cursor: pointer;
+  user-select: none;
+}
+.srtoggle > input {
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--rule-mid);
+}
+.srtoggle:hover {
+  color: var(--text);
 }
 
 /* ==================================================================== *

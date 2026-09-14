@@ -36,7 +36,7 @@
  */
 import { SheetError, type Step, type VerbSpec } from "./sheet";
 import type { SpeedrunDriver, WaitMode } from "./driver";
-import { SHOWING } from "./driver";
+import { SCREEN, SHOWING } from "./driver";
 
 export interface ActionContext {
   d: SpeedrunDriver;
@@ -138,14 +138,23 @@ export const CONDITIONS: { name: string; help: string }[] = [
   { name: "flat == <name>", help: "that full-screen overlay is open" },
   { name: "noflat", help: "no overlay is open; the room is showing" },
   { name: "global.<n> == <v>", help: "a script global, also < > <= >= != , e.g. global.phase == 1" },
+  { name: "global.<n>", help: "that global is set to something — `!global.handitem` is an empty hand" },
   { name: "owns.<prop>", help: "the player is carrying it, e.g. owns.map" },
+  { name: "prop.<name> == <owner>", help: "who owns it — prop.ring == ruby; prop.ring alone means it exists" },
   { name: "actor.<name>", help: "that character is loaded" },
   { name: "actor.<name> == <owner>", help: "and their actorowner is that, e.g. actor.purs == sentgram" },
+  { name: "star.<name> == <star>", help: "the star they were last placed on, e.g. star.jones == town.seek1" },
   { name: "visible.<name>", help: "that character is on screen and placed" },
   { name: "walking.<name>", help: "that character is mid-walk or mid-turn — the scripts' own iswalk" },
   { name: "quiet", help: "the engine is idle — nothing playing, moving or fading" },
   { name: "talking", help: "a conversation is open" },
+  { name: "puppet", help: "a conversation puppet is loaded — the earliest sign a character took the gesture" },
+  { name: "choosing", help: "a conversation is parked on a plaque, waiting to be answered" },
   { name: "asking", help: "a movie is parked on clickable regions" },
+  // Missing from this table until now, though it is the panel's OWN example of a
+  // skip target (panel.ts) and what `watchFor`'s signature shows — so the legend
+  // documented every condition except the one a route reaches for first.
+  { name: "awaiting", help: "the engine has stopped and wants a click — the boot menu, not a clip passing through regions" },
   { name: "playing", help: "a movie is on screen, asking or not" },
   { name: "nomovie", help: "no movie is on screen" },
   { name: "movie == <file>", help: "that specific clip is up" },
@@ -154,6 +163,7 @@ export const CONDITIONS: { name: string; help: string }[] = [
   { name: "locked", help: "`lockevents` is set — the world is frozen and a gesture is DROPPED" },
   { name: "polling", help: "a script is sitting in a `button()`/`stilldown()` loop, waiting for the mouse" },
   { name: "js == <expr>", help: "escape hatch: any JavaScript over window.dbg" },
+  { name: "a or b", help: "either — also `and`, a leading `!`, and parentheses to group" },
 ];
 
 /**
@@ -175,6 +185,9 @@ export const CONDITIONS: { name: string; help: string }[] = [
  * global has taken `>`, `<`, `>=`, `<=` and `!=` since the beginning and only
  * equality was spelled with one character. Whitespace round any of them is
  * optional.
+ *
+ * ONE condition. `!`, `or` and `and` belong to `condition()` below, which is
+ * what every sheet-facing `until:` and `wait()` actually calls.
  */
 const SHAPE = /^([A-Za-z_][A-Za-z0-9_]*)(?:\.([A-Za-z0-9_.-]+))?\s*(==|!=|>=|<=|>|<)?\s*([\s\S]*)$/;
 
@@ -250,16 +263,81 @@ export function predicate(text: string): string {
     case "global":
     case "g": {
       const name = about();
-      if (!op || !value) throw new Error(`global.${name} needs a comparison — \`global.${name} == 1\``);
+      if (op && !value) {
+        throw new Error(
+          `global.${name} == with nothing after it — for the empty string write ` +
+            `\`!global.${name}\`, and for "is it set" write \`global.${name}\``,
+        );
+      }
       const got = `window.dbg.session.interp.globals.get(${q(name)})`;
-      if (op === "==") return `String(${got} ?? "") === ${JSON.stringify(value)}`;
-      if (op === "!=") return `String(${got} ?? "") !== ${JSON.stringify(value)}`;
+      /**
+       * `global.handitem` with NO comparison — is it set to anything at all.
+       *
+       * The accessor form the other named conditions already have (`owns.map`,
+       * `actor.purs`), and it is here because the empty string is a real value
+       * in this game rather than an absence: `handitem` is "" with nothing in
+       * hand, `loopsound` is "" with no ambience running, `playerdeath` is ""
+       * while you are alive. Sixteen of the route's own claims are exactly
+       * those, and `global.handitem == ` with nothing after it is not a
+       * condition a reader can see the meaning of.
+       *
+       * So "empty" is spelled `!global.handitem` and "holding something" is
+       * `global.handitem`. Meaningless for a NUMERIC global — 0 stringifies to
+       * "0", which is not empty — and that is why this is documented rather than
+       * clever: a number wants `global.phase == 0`.
+       */
+      if (!op) return `String(${got} ?? "") !== ""`;
+      /*
+       * CASE-INSENSITIVE, like every other string condition here.
+       *
+       * `set ==`, `scene ==`, `view ==`, `flat ==`, `actor.x == owner` and
+       * `prop.x == owner` all lower both sides; this one lowered only the sheet's
+       * half, and was the only string comparison in the grammar that could fail
+       * on capitalisation alone. Which it did: the route's own claim is
+       * `handitem == cards` and the engine answers "Cards", so a leg that had
+       * done everything asked of it failed its last assertion. The playthrough
+       * compares the same pair and lowers both (`playthrough.ts`), which is the
+       * reading this now matches.
+       */
+      const lower = `String(${got} ?? "").toLowerCase()`;
+      if (op === "==") return `${lower} === ${q(value)}`;
+      if (op === "!=") return `${lower} !== ${q(value)}`;
       return `Number(${got}) ${op} ${Number(value)}`;
     }
     case "owns": {
       const prop = about();
       if (op) throw new Error(`owns.${prop} is the whole condition — it takes no comparison`);
-      return `(() => { const p = window.dbg.session.propRuntime.get(${q(prop)}); return !!p && String(p.owner) === "frank"; })()`;
+      /*
+       * WHOSE HAND IS THE PLAYER'S depends on the disc. Titanic's hero is
+       * `frank` and Dust's is `stranger` — its own data agrees, and the save
+       * files call him that ("the player's own owner string is `stranger`, and
+       * Dust's hero has no name"). Hardcoded to one of them, this condition was
+       * simply always false on the other game, which is a sheet line that can
+       * never come true and says nothing about why.
+       */
+      return `(() => {
+        const p = window.dbg.session.propRuntime.get(${q(prop)});
+        if (!p) return false;
+        const o = String(p.owner || "").toLowerCase();
+        return o === "frank" || o === "stranger";
+      })()`;
+    }
+    /**
+     * WHO OWNS A PROP — `prop.ring == ruby`, and `prop.ring` for "anybody".
+     *
+     * The counterpart to `actor.<name> == <owner>`, and the thing the
+     * playthrough's rungs check more than any other: a gift landing is
+     * `Ring@stranger -> Ring@ruby` in the save and `owner ("ring") !== "ruby"`
+     * in the rung. `owns.<prop>` answers only about the player, so a route had
+     * no way to say where something else went.
+     */
+    case "prop": {
+      const name = about();
+      const got = `String((window.dbg.session.propRuntime.get(${q(name)}) || {}).owner || "").toLowerCase()`;
+      if (!op) return `!!window.dbg.session.propRuntime.get(${q(name)})`;
+      if (op !== "==" && op !== "!=") throw new Error(`a prop's owner compares with == or != , not ${op}`);
+      const same = `${got} === ${q(value)}`;
+      return op === "==" ? same : `!(${same})`;
     }
     /**
      * A character is loaded — and optionally, what their `actorowner` is.
@@ -278,6 +356,27 @@ export function predicate(text: string): string {
       if (!op) return `(() => { const a = ${got}; return !!a; })()`;
       if (op !== "==" && op !== "!=") throw new Error(`an actorowner compares with == or != , not ${op}`);
       const same = `(() => { const a = ${got}; return !!a && String(a.owner || "").toLowerCase() === ${q(value)}; })()`;
+      return op === "==" ? same : `!${same}`;
+    }
+    /**
+     * WHERE a character is standing — the star they were last placed on.
+     *
+     * `actorstar` is how Dust moves its cast about: a script sets the name and
+     * the scheduler walks them there, so "has Jackalope left the first hiding
+     * place" is `star.jones != town.seek1` and nothing else says it. `visible.`
+     * is the wrong question (he is visible at both) and `global.` cannot see it
+     * (the name lives on the actor, not in a script variable).
+     *
+     * Reads the same field the `actorstar` getter does, which means it answers
+     * the DESTINATION the moment the walk is ordered rather than when it lands —
+     * exactly what a route waiting to stop clicking wants to know.
+     */
+    case "star": {
+      const name = about();
+      const got = `window.dbg.session.actorRuntime.actors.get(${q(name)})`;
+      if (!op) throw new Error(`star.${name} needs a comparison — \`star.${name} == town.seek1\``);
+      if (op !== "==" && op !== "!=") throw new Error(`a star compares with == or != , not ${op}`);
+      const same = `(() => { const a = ${got}; return !!a && String(a.starName || "").toLowerCase() === ${q(value)}; })()`;
       return op === "==" ? same : `!${same}`;
     }
     /**
@@ -337,7 +436,7 @@ export function predicate(text: string): string {
      * `skipMovie until: asking` to stop at the logos and call it the menu.
      */
     case "awaiting":
-      return bare(`!!(window.dbg.viewer && window.dbg.viewer.awaitingInput)`);
+      return bare(`!!(${SCREEN} && ${SCREEN}.awaitingInput)`);
     /**
      * No fade is ramping. Worth having as its own condition because it is
      * exactly the gap in which a key press is DROPPED (viewer.ts's note on
@@ -380,10 +479,34 @@ export function predicate(text: string): string {
       return bare(`window.dbg.session.pollingInput()`);
     case "talking":
       return bare(`!!(window.dbg.viewer && window.dbg.viewer.conversing)`);
+    /**
+     * A puppet EXISTS. The earliest sign that a character accepted a gesture and
+     * is loading their conversation, which is why the rungs hammer against this
+     * one and not against `talking` — `walktopuppet()` can spend seconds getting
+     * there, and every extra click in the meantime is a click the script may
+     * spend on something else.
+     */
+    case "puppet":
+      return bare(`!!window.dbg.session.puppet`);
+    /**
+     * A plaque is up AND the script is suspended on it. Not "are there bevels?":
+     * an answered list stays framed until the PUP script clears it, so bevels
+     * outlive the question they asked. `eventWaiter` is the question itself, and
+     * it is the only reading a `say` can be handed to without racing.
+     */
+    case "choosing":
+      return bare(`!!(window.dbg.viewer && window.dbg.viewer.awaitingChoice)`);
     case "nomovie":
-      return bare(`!(window.dbg.viewer && window.dbg.viewer.moviePlaying)`);
+      return bare(`!(${SCREEN} && ${SCREEN}.moviePlaying)`);
     /**
      * A film is on screen, asking or not.
+     *
+     * Asked of {@link SCREEN} rather than of `window.dbg.viewer` — as are
+     * `nomovie`, `asking`, `awaiting` and `movie ==`, the five conditions that
+     * are about the SCREEN rather than about a room. Dust's intro films play
+     * before any set is opened, so a viewer-first reading answered "no film"
+     * through the whole opening and nothing could skip it; the measurement is in
+     * the note on SCREEN (driver.ts).
      *
      * Distinct from `asking` (parked on regions) and from `nomovie`, and needed
      * because a close-up is FETCHED OVER HTTP: for a moment after the click there
@@ -392,11 +515,11 @@ export function predicate(text: string): string {
      * parked, and the next key press sat against it for 2m10s.
      */
     case "playing":
-      return bare(`!!(window.dbg.viewer && window.dbg.viewer.moviePlaying)`);
+      return bare(`!!(${SCREEN} && ${SCREEN}.moviePlaying)`);
     case "movie":
-      return reads(`String((window.dbg.viewer && window.dbg.viewer.movieFile) || "").toLowerCase()`);
+      return reads(`String((${SCREEN} && ${SCREEN}.movieFile) || "").toLowerCase()`);
     case "asking":
-      return bare(`!!(window.dbg.viewer && window.dbg.viewer.movieRegions.length)`);
+      return bare(`!!(${SCREEN} && ${SCREEN}.movieRegions.length)`);
     case "theme":
       return reads(`String(window.dbg.session.currentThemeName || "").toLowerCase()`);
     /**
@@ -409,18 +532,78 @@ export function predicate(text: string): string {
     default:
       throw new Error(
         `unknown condition "${text}" — try set == , scene == , view == , flat == , noflat, ` +
-          `global.name == v, owns.prop, actor.name, actor.name == owner, visible.name, ` +
-          `walking.name, quiet, talking, nomovie, movie == , asking, theme == , faded, locked, ` +
+          `global.name == v, owns.prop, actor.name, actor.name == owner, star.name == s, visible.name, ` +
+          `walking.name, quiet, talking, puppet, choosing, nomovie, movie == , asking, theme == , faded, locked, ` +
           `or js == <expression>`,
       );
   }
 }
 
-/** a condition, optionally negated — `!walking.morrow`, `!locked` */
+/**
+ * Split on a joining word that is not inside parentheses. Character-wise rather
+ * than by regex because `or` and `and` are ordinary English and turn up inside
+ * the operands — a `movie == cordon.avi` has neither, but `js ==` can hold
+ * anything at all, which is why the caller keeps that form whole.
+ */
+const splitTop = (text: string, word: "or" | "and"): string[] => {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    else if (depth === 0 && /\s/.test(ch)) {
+      const m = /^\s+(or|and)\s+/i.exec(text.slice(i));
+      if (m && m[1].toLowerCase() === word) {
+        parts.push(text.slice(start, i));
+        i += m[0].length;
+        start = i;
+        continue;
+      }
+    }
+    i++;
+  }
+  parts.push(text.slice(start));
+  return parts;
+};
+
+/** one condition, with any number of leading `!`s and optional parentheses */
+const atom = (text: string): string => {
+  let t = text.trim();
+  let negated = false;
+  while (t.startsWith("!")) {
+    negated = !negated;
+    t = t.slice(1).trim();
+  }
+  if (!t) throw new Error(`a "!" with nothing after it`);
+  const inner =
+    !/^js\b/i.test(t) && t.startsWith("(") && t.endsWith(")") ? condition(t.slice(1, -1)) : predicate(t);
+  return negated ? `!(${inner})` : inner;
+};
+
+const andList = (text: string): string => {
+  const parts = splitTop(text, "and");
+  return parts.length > 1 ? `(${parts.map(atom).join(" && ")})` : atom(text);
+};
+
+/**
+ * A condition, optionally negated — `!walking.morrow`, `!locked` — and
+ * optionally joined: `choosing or global.dellphase == 1`.
+ *
+ * The joins are here because the routes being written down have disjunctive
+ * stop-conditions and nothing else to say them with. Every rung that hammers a
+ * character stops on "either they are talking OR their phase moved on", and a
+ * grammar without `or` has to drop one half and hope. `or` binds loosest, then
+ * `and`, then a leading `!`; parentheses group. `js ==` is handed through whole
+ * — it is the escape hatch, and its expression writes its own `||`.
+ */
 export const condition = (text: string): string => {
-  const negated = text.trim().startsWith("!");
-  const body = negated ? text.trim().slice(1) : text;
-  return negated ? `!(${predicate(body)})` : predicate(body);
+  const t = text.trim();
+  if (/^js\b/i.test(t)) return predicate(t);
+  const parts = splitTop(t, "or");
+  return parts.length > 1 ? `(${parts.map(andList).join(" || ")})` : andList(t);
 };
 
 /* ------------------------------------------------------------------ *
@@ -537,6 +720,10 @@ export function thenOf(step: Step): "leave" | "stop" | undefined {
   return v;
 }
 
+/** the plaque's reply ids, joined — "has the question changed" in one read */
+export const QUESTION_IDS =
+  `((window.dbg.viewer && window.dbg.viewer.choices) || []).map((ch) => ch.id).join(",")`;
+
 export async function converse(
   c: ActionContext,
   bevels: number[],
@@ -545,6 +732,26 @@ export async function converse(
 ): Promise<void> {
   const { d } = c;
   const wanted = [...bevels];
+  /*
+   * A LIST IS ONE BEVEL PER PLAQUE, and the loop below is what guarantees it —
+   * worth saying here because a whole transcription was written around the
+   * belief that it is not.
+   *
+   * Every pick ends on `hold(!awaitingChoice)`: the plaque has to be CONSUMED
+   * before the loop comes round, and the branch above the picking one then waits
+   * for the next `puppetevent` to park. So `say([101,101])` answers two
+   * different plaques that happen to share a number — Gus's "I'm mighty thirsty"
+   * and "Whiskey..." — and cannot answer the first one twice however fast it is
+   * driven.
+   *
+   * The playthrough's `answer` needs its fourth argument (the question just
+   * answered) because it reads `puppet.bevels`, and an ANSWERED list stays
+   * framed until the script clears it. This reads `eventWaiter`, which is the
+   * question itself. That difference is why a rung's three `answer` calls are
+   * one `say` line here, and it is the reason there is no `fresh:` option: the
+   * one that existed waited for a plaque to change that was already the right
+   * plaque, and spent its whole patience doing it.
+   */
   const picked: number[] = [];
   /** how many plaques were answered -1 on the way out — `then: leave` */
   let bailed = 0;
@@ -709,7 +916,14 @@ export async function converse(
       throw new Error(
         wanted.length
           ? `bevel ${wanted[0]} not offered by ${s.with || "them"}; got ${choices.map((ch) => `${ch.id}:${ch.text}`).join(" | ")}`
-          : `unplanned choice from ${s.with || "them"}: ${choices.map((ch) => ch.text).join(" | ")}`,
+          : `unplanned choice from ${s.with || "them"}: ` +
+            `${choices.map((ch) => `${ch.id}:${ch.text}`).join(" | ")}` +
+            // the IDS, because a sheet speaks in numbers and this message used
+            // to speak only in words — which made a whole class of failures
+            // undiagnosable from the report. `then: stop` is usually what the
+            // line wanted, so it is named.
+            `. The list ran out and it is still asking; a line that means to answer` +
+            ` one plaque and hand back wants then: stop`,
       );
     }
     const at = (s.rects ?? [])[idx];
