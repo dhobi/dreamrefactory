@@ -2,7 +2,7 @@
  * matchbox: an imported mesh, baked by `taoot/tools/bedsitglb.ts`. Do not edit —
  * re-run the tool. In the room's own frame: +x is the back, y is the length
  * about 0, z is up from the floor, stretched to the measured
- * 119 x 82 x 24 the whole piece is known to be.
+ * 119 x 82 x 44 the whole piece is known to be.
  *
  * 202 triangles, 224 vertices, positions quantized to 16 bits over
  * {@link BOX}. Normals are not stored: `Builder.mesh` averages them from the
@@ -16,7 +16,7 @@
  *  over this mesh measures itself against */
 export const BOX = {
   lo: [-41.0, -59.5, 0.0] as const,
-  hi: [41.0, 59.5, 24.0] as const,
+  hi: [41.0, 59.5, 44.0] as const,
 };
 
 /** base64 of the packed vertices, then of the triangle indices */
