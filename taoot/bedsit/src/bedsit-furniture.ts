@@ -1014,7 +1014,18 @@ export const DESK_PROPS = {
    * it and 139 is what they have to clear.
    */
   ashtray: { x: 3741, y: 9018, r: 139 },
-  matches: { x: 3605, y: 8694, w: 119, d: 82, h: 24, turn: 1.516 },
+  /**
+   * The matchbox, and the one of its three sizes that was never measured.
+   *
+   * `w` and `d` come off the plan view. `h` did not: it was 24 because the
+   * drawn slab that stood here was 24, and nothing ever asked what a matchbox
+   * is. The Science Museum has the box this one wears — Bryant & May's Pearl,
+   * Fairfield Works at Bow, catalogued 1890 to 1940 — at 21 by 57 by 38 mm.
+   * Against that, 119 and 82 are this desk's third over life size to within
+   * three per cent, and 24 was 0.74 OF life size: a box squashed flat in the
+   * one direction nobody had a number for. 21 mm at the same third over is 44.
+   */
+  matches: { x: 3605, y: 8694, w: 119, d: 82, h: 44, turn: 1.516 },
   /**
    * The pocket watch: where its CASE is, how wide that case is, and which way
    * its bow points.
