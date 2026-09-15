@@ -70,6 +70,32 @@ const RESOURCE_CALLS = new Set([
 const ROOM_CALLS = new Set(["initall", "changeset", "opensetfile", "gotospecial"]);
 
 /**
+ * The call that sets how conversation text is DRAWN, which a boot may move
+ * before any conversation happens — and TAOOT's does.
+ *
+ * `openpuppetfile` seeds every slot from TI.EXE's own defaults (0x4296e4), so a
+ * game that never says otherwise gets those. TAOOT says otherwise in the opening
+ * statements of `boot()` — `puppetparam (9, 1)` then `puppetparam (10, 25)` — and
+ * it never puts either back. Slot 10 is the left margin of the answer rows, and 25
+ * is what clears the RIVETS on the answer band's plaques — the plate is a
+ * picture shipped inside every PUP, with a screw drawn at each end of every row,
+ * and at the un-booted default of 8 the text starts on top of the left one.
+ *
+ * Which is invisible in a game that runs its own `boot()` and unmissable in
+ * anything that does not: Titanic's three standalone minigame pages parse the
+ * BOOTFILE for its script library and deliberately never run `boot()` (there is
+ * no voyage to begin), so until this was read every answer Buick and Willie
+ * offered was drawn over a screw (#391).
+ *
+ * Collected across the same startup walk as {@link RESOURCE_CALLS} rather than
+ * from `boot()`'s own body, so a game that sets its params in a helper the boot
+ * calls is read too; the walk's boundary ({@link DAY_MACHINE}) is what keeps the
+ * story's own transient params — TAOOT flips slot 8 around three puppets' lines
+ * — out of it. Later writes win, as they would if the boot had run.
+ */
+const PARAM_CALL = "puppetparam";
+
+/**
  * The routine that mounts a volume, and the call inside it that names one.
  *
  * `setpath(disk)` is how a multi-CD DreamFactory game switches discs, and it says
@@ -114,11 +140,22 @@ export interface BootPlan {
    * that ships twice wins", which used to be a `/titanic([12])/` regex.
    */
   volumes: string[];
+  /**
+   * The {@link PARAM_CALL} slots the startup path writes, in the order it writes
+   * them — TAOOT's `[[9, 1], [10, 25]]`.
+   *
+   * For a caller that holds the boot LIBRARY without having run `boot()`, which
+   * is the one thing besides its resources a shell can want off a BOOTFILE: the
+   * scripts are callable, and the screen they draw a conversation on is still
+   * set up the way a game that had never booted would draw it. Empty for a boot
+   * that leaves the defaults alone.
+   */
+  puppetParams: [number, number][];
 }
 
 /** what a tree with no readable BOOTFILE plans: nothing, and nothing to boot */
 export const EMPTY_BOOT_PLAN: BootPlan = {
-  resources: [], casts: [], landingSet: null, volumes: [],
+  resources: [], casts: [], landingSet: null, volumes: [], puppetParams: [],
 };
 
 /** the call's first argument if it is a non-empty string literal */
@@ -251,6 +288,7 @@ export function readBootPlan(bootfile: Uint8Array): BootPlan {
 
   const resources: string[] = [];
   const casts: string[] = [];
+  const params = new Map<number, number>();
   const add = (into: string[], file: string): void => {
     const key = file.toLowerCase();
     if (!into.includes(key)) into.push(key);
@@ -270,6 +308,16 @@ export function readBootPlan(bootfile: Uint8Array): BootPlan {
             add(resources, name === "opensetfile" ? setFileName(file) : file);
             if (name === "opencastfile") add(casts, file);
           }
+          return;
+        }
+        // Both arguments literal, because that is the only form this can read:
+        // `puppetparam (slot)` with no value is the GETTER, and a computed value
+        // is a number this scan has no way to work out without running the boot.
+        // TAOOT writes constants, and a boot that does not is one whose params
+        // are simply not derivable from the file.
+        if (name === PARAM_CALL) {
+          const [slot, value] = call.args;
+          if (slot?.t === "int" && value?.t === "int") params.set(slot.v, value.v);
           return;
         }
         // an engine command (it has an opcode id) is never a handler to follow
@@ -303,5 +351,5 @@ export function readBootPlan(bootfile: Uint8Array): BootPlan {
       if (volume && !volumes.includes(volume.toLowerCase())) volumes.push(volume.toLowerCase());
     });
   }
-  return { resources, casts, landingSet, volumes };
+  return { resources, casts, landingSet, volumes, puppetParams: [...params] };
 }

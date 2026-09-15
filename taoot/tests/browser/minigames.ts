@@ -110,8 +110,24 @@ async function boot(path: string): Promise<Probe> {
  * scripts make. Fencing must then have Willie ask for another (`SQUASH.SET`'s own
  * loop, run by the page), and blackjack must land back on the chooser, which is
  * the only way out of a game that cannot be walked back onto a ship.
+ *
+ * It is also where all three of #391's faults live, because all three are about
+ * the conversation that ends a game rather than the game — so what that screen
+ * LOOKS LIKE is measured here as well: whether there is a picture behind the
+ * character, where his answers are drawn, and whether ESC gets past them.
  */
-async function afterTheGame(path: string): Promise<{ bevels: string[]; url: string }> {
+async function afterTheGame(path: string): Promise<{
+  bevels: string[];
+  url: string;
+  /** puppetparam slot 10, the answer rows' left margin: 25 booted, 8 not */
+  margin: number;
+  /** how much of the 512×264 close-up region is black — 100 is nothing behind him */
+  blackPct: number;
+  /** the same count with the backdrop taken away, which is what the fault looked like */
+  blackBare: number;
+  /** did ESC end the plaque, as `puppetevent (-1)` in the original does? */
+  escTaken: boolean;
+}> {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
   // the fight says who won before it leaves; an undismissed dialog blocks the
@@ -137,9 +153,70 @@ async function afterTheGame(path: string): Promise<{ bevels: string[]; url: stri
     .evaluate(`(() => { const s = window.dbgMini && window.dbgMini.session;
       return s && s.puppet ? s.puppet.bevels.map(b => b.text) : []; })()`)
     .catch(() => [])) as string[];
+  const margin = (await page
+    .evaluate(`(() => { const s = window.dbgMini && window.dbgMini.session;
+      return s ? s.puppetParams.get(10) : -1; })()`)
+    .catch(() => -1)) as number;
+  /*
+   * COUNTED OFF THE CANVAS, not read back off the backdrop field, because the
+   * field being set is not the claim — the claim is that there is a picture on
+   * screen behind him. The region is the close-up's own 512×264 (PUPPET_ART_H).
+   *
+   * Measured BOTH WAYS in the one page rather than against a threshold. A
+   * stance is a cutout, so a working screen is never near 0% black, and how far
+   * from it depends on which of the bout's fifteen flats the last hit left up —
+   * 34% on one run and 49% on the next, with the broken build at 73%. A fixed
+   * bar between those is a coin toss. So the backdrop is taken away and the same
+   * count repeated: the difference between the two IS the backdrop, whichever
+   * flat it was, and the picture is put back afterwards.
+   */
+  const count = `(() => {
+      const c = document.getElementById("screen");
+      const d = c.getContext("2d").getImageData(0, 0, 512, 264).data;
+      let black = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] < 12 && d[i+1] < 12 && d[i+2] < 12) black++;
+      return (black / (d.length / 4)) * 100;
+    })()`;
+  const blackPct = (await page.evaluate(count).catch(() => 100)) as number;
+  await page
+    .evaluate(`(() => { const d = window.dbgMini.host.director;
+      window.__held = d.puppetBackdrop; d.puppetBackdrop = null; })()`)
+    .catch(() => {});
+  // two frames, so the composite is rebuilt: PuppetView keys its cache on the
+  // backdrop's own pixels/palette references, and null is a new key
+  await page.waitForTimeout(200);
+  const blackBare = (await page.evaluate(count).catch(() => 100)) as number;
+  await page
+    .evaluate(`(() => { const d = window.dbgMini.host.director;
+      d.puppetBackdrop = window.__held; })()`)
+    .catch(() => {});
+  await page.waitForTimeout(200);
+  /*
+   * And the key, pressed as a PLAYER presses it — on the page, not handed to
+   * `director.keyDown` — because the fault was never in the engine: it takes ESC
+   * and always did (`PuppetCtrl.key`), and the page simply never delivered one.
+   * A probe that called the director would have passed on the broken build.
+   */
+  const before = bevels.length;
   const url = page.url();
+  if (before) await page.keyboard.press("Escape");
+  await page.waitForTimeout(900);
+  /*
+   * Taken looks like one of two things, and BOTH have to count. ESC at a plaque
+   * is `puppetevent (-1)`, so what happens next is the script's own `case -1`
+   * arm: Willie's leaves `willphase` at 202, which is "no", which on a page with
+   * no ship to be walked back onto is the chooser — the run that first proved
+   * this navigated away mid-probe and read as a crash. Buick's says a parting
+   * line first. So: the rows went, or the page did.
+   */
+  const gone = page.url() !== url;
+  const after = (await page
+    .evaluate(`(() => { const s = window.dbgMini && window.dbgMini.session;
+      return s && s.puppet && s.puppet.bevels ? s.puppet.bevels.length : 0; })()`)
+    .catch(() => 0)) as number;
+  const escTaken = !!before && (gone || after !== before);
   await browser.close();
-  return { bevels, url };
+  return { bevels, url, margin, blackPct, blackBare, escTaken };
 }
 
 const main = async (): Promise<void> => {
@@ -278,6 +355,41 @@ const main = async (): Promise<void> => {
   const fenceAsks = fenceEnd.bevels.some((b) => /fence/i.test(b));
   console.log(`${fenceAsks ? "ok  " : "FAIL"} fence: willie asks for another (${fenceEnd.bevels.join(" / ") || "nothing"})`);
   if (!fenceAsks) bad++;
+
+  /**
+   * ...and what that conversation LOOKS like, which is all of #391.
+   *
+   * Fencing is where all three faults showed, because it is the one game whose
+   * closing conversation happens after its stage has gone: no picture behind
+   * him (the close-up region measured 72.7% black — a cutout character in a
+   * void), his answers drawn at margin 8 and therefore over the screw at the
+   * left end of each plaque, and no way past any of it, because the page bound
+   * no keys at all.
+   *
+   * The margin is asserted as the BOOT's 25 rather than as "not 8": it is
+   * TAOOT's own number, read out of the BOOTFILE the page holds without running
+   * (BootPlan.puppetParams), so a page that stopped reading it would fail here
+   * even if something else happened to indent the text.
+   */
+  /*
+   * Fifteen points of picture. Both counts are of the SAME frame with one thing
+   * changed, so the gap is deterministic for a given flat and only the flat
+   * moves it: measured at 38 points on `fence 8` and 23 on the flat a finished
+   * bout usually leaves up (49.2% against 72.7%). Fifteen sits clear of the
+   * narrower of those and nowhere near a build with no backdrop at all, where
+   * the two counts are the same number.
+   */
+  const bd = fenceEnd.blackBare - fenceEnd.blackPct > 15;
+  console.log(
+    `${bd ? "ok  " : "FAIL"} fence: the piste is still behind him ` +
+      `(${fenceEnd.blackPct.toFixed(1)}% black, ${fenceEnd.blackBare.toFixed(1)}% with it taken away)`,
+  );
+  if (!bd) bad++;
+  const indented = fenceEnd.margin === 25;
+  console.log(`${indented ? "ok  " : "FAIL"} fence: his answers clear the screws (puppetparam 10 = ${fenceEnd.margin})`);
+  if (!indented) bad++;
+  console.log(`${fenceEnd.escTaken ? "ok  " : "FAIL"} fence: ESC gets past the conversation`);
+  if (!fenceEnd.escTaken) bad++;
 
   const fightEnd = await afterTheGame("minigames/fight/");
   const fightLeaves = fightEnd.url.endsWith("/minigames/");

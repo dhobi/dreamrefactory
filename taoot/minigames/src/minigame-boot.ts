@@ -36,6 +36,7 @@
 import { DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
+import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { TI_CURSORS } from "../../src/cursor-art";
 import { FileStore } from "../../src/files";
 import { editionsIn, gamefileManifest } from "../../src/editions";
@@ -284,12 +285,73 @@ export async function bootMinigame(game: Minigame): Promise<void> {
   if (!(await host.session.bootedByGame())) {
     say("no BOOTFILE in this edition — the stage will run, its music will not");
   }
+  /**
+   * ...AND THE TWO LINES OF `boot ()` THAT ARE ABOUT THE SCREEN, which not
+   * running it left out.
+   *
+   * `boot ()` opens with `puppetparam (9, 1)` and `puppetparam (10, 25)` and
+   * never puts either back, so aboard they hold for every conversation in the
+   * game. Slot 10 is the left margin of the answer rows, and 25 is the number
+   * that clears the SCREWS: the answer band is a picture inside every PUP with a
+   * rivet drawn at each end of all five plaques, and at the un-booted default of
+   * 8 the text starts on top of the left one — reported against all three of
+   * these pages, and visible in the shot on #391 as Buick's "Yes, I'll play
+   * another hand." beginning inside the screw.
+   *
+   * Read from the BOOTFILE rather than written here, because 25 is TAOOT's
+   * number and not the port's — see BootPlan.puppetParams. Applied AFTER
+   * `bootedByGame`, which is where the file is parsed, and before any puppet is
+   * opened.
+   */
+  for (const [slot, value] of plan.puppetParams) host.session.puppetParams.set(slot, value);
 
   say(`opening ${game.stage}…`);
   if (!(await host.session.stageCtrl.openStageFile(game.stage))) {
     say(`could not open ${game.stage} — is the ${edition} tree installed?`);
     return;
   }
+  /** the stage this page is the game of, as the session names it */
+  const ours = game.stage.toLowerCase();
+  /**
+   * KEEP THE PICTURE THE GAME IS PLAYED ON, for the conversation that comes
+   * after it.
+   *
+   * A close-up is a cutout, and what fills the 512×264 around it is the room
+   * behind the character. These pages have no room, so until this existed the
+   * end of a fencing bout put Willie in the dark: `transfromflat ()` puts the
+   * stage down — which is the very thing `watchForLeaving` is watching for — and
+   * the flat he was standing on goes with it, half a second before he asks for a
+   * rematch (#391). Aboard there is no gap, because the squash court is
+   * underneath the whole time.
+   *
+   * So the flat is held while it is ours to hold and handed to the director as
+   * the conversation's backdrop. Deliberately NOT cleared when the stage closes:
+   * the last picture of the bout is precisely the one wanted, and it is wanted
+   * at the moment there is no longer a stage to read it from.
+   *
+   * Cheap enough for the frame loop — `flatBackdrop` is two memoised lookups —
+   * but guarded on the flat's NAME anyway, so the common frame does no work at
+   * all and the director's field keeps one stable pair of references for
+   * `PuppetView.composite` to cache against.
+   */
+  let backdropOf = "";
+  const holdBackdrop = (): void => {
+    const s = host.session;
+    if (s.stageName !== ours) {
+      // No stage of ours: keep what is held — that is the whole point — but
+      // forget WHICH it was, so a rematch's reopened stage is taken afresh
+      // rather than matched against a name whose pixels have been dropped
+      // (closeStageFile clears the flat cache these references come out of).
+      backdropOf = "";
+      return;
+    }
+    if (s.currentFlat === backdropOf) return;
+    const held = host.director.flatBackdrop();
+    if (!held) return;
+    host.director.puppetBackdrop = held;
+    backdropOf = s.currentFlat;
+  };
+
   /**
    * THE FRAME LOOP FIRST, and then whatever the game needs said to it.
    *
@@ -302,6 +364,7 @@ export async function bootMinigame(game: Minigame): Promise<void> {
    * needs nothing said to it and so never awaited anything.
    */
   const loop = (now: number): void => {
+    holdBackdrop();
     host.director.tick(now);
     host.director.render(ctx);
     requestAnimationFrame(loop);
@@ -328,7 +391,6 @@ export async function bootMinigame(game: Minigame): Promise<void> {
    * reaching `transfromflat ()`. Neither announces itself; both put the stage
    * down, and that is visible from here.
    */
-  const ours = game.stage.toLowerCase();
   const watchForLeaving = (): void => {
     const watch = window.setInterval(() => {
       if (host.session.stageName === ours) return;
@@ -385,5 +447,38 @@ export async function bootMinigame(game: Minigame): Promise<void> {
   canvas.addEventListener("pointermove", (e) => {
     const p = at(e);
     void host.director.hover(p.x, p.y).then(showCursor);
+  });
+
+  /**
+   * THE ONE KEY THESE PAGES HAVE, and they had none at all.
+   *
+   * Everything in all three games is done with the pointer — a buttonbar, two
+   * plates, a fist — so the boot wired pointers and stopped, and the conversation
+   * that ends a game was therefore unskippable: Willie's and Buick's lines play
+   * out in full, with no way past them (#391). ESC is what the original gives you
+   * there, and the engine has always been ready for it —
+   * `ScreenDirector.keyDown` hands it to `PuppetCtrl.key`, which skips the line
+   * being spoken or, at the plaque, answers the script's own `case -1` arm.
+   *
+   * `ESCAPE_KEY` and not `"Escape"`: the engine spells the key the way TI.EXE
+   * does (`"."` plus the 0x1fa0 marker, which is `special`), and a shell that
+   * invents a name of its own gets a key that reaches the script chain and skips
+   * nothing.
+   *
+   * ESC alone, deliberately. The play page routes every key the focus does not
+   * own, because there it means something — the movement keys are the game's own
+   * bindings and SPACE opens doors. Here there is no room to walk and no door: of
+   * the BOOTFILE's `keydown`, only the branches gated on `currentset ()` and
+   * `stagevisible ()` could fire, and the one that could would be forwarding
+   * letters to a fencing flat that has never defined a handler for them.
+   *
+   * On `window`, because there is nothing on these pages to focus — and
+   * `focusOwnsKey` all the same, so the language menu's own keyboard still works
+   * while a game is up.
+   */
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || focusOwnsKey(e.target, e.key)) return;
+    e.preventDefault();
+    void host.session.track(host.director.keyDown(ESCAPE_KEY, true), "escape");
   });
 }

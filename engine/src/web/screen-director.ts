@@ -64,7 +64,7 @@ import type { ShpFrame } from "@dreamfactory/engine/df/shp";
 import type { Occlusion } from "@dreamfactory/engine/runtime/actors";
 import type { WorldCamera } from "@dreamfactory/engine/runtime/props";
 import { MoviePlayer } from "./movie-player";
-import { PUPPET_ART_H, PuppetView } from "./puppet-view";
+import { PUPPET_ART_H, PuppetBackdrop, PuppetView } from "./puppet-view";
 import type { CachedFrame } from "./ring-cache";
 import { ScreenPresenter } from "./screen-presenter";
 import { PHOTO_H, PHOTO_W } from "../runtime/photos";
@@ -207,6 +207,26 @@ export class ScreenDirector {
   readonly puppetView: PuppetView;
 
   onLog: (line: string) => void = () => {};
+
+  /**
+   * What a conversation composites over when there is no ROOM — the host's to
+   * set, and nothing in here ever writes it.
+   *
+   * A close-up is a cutout: the stances are the character and nothing else, and
+   * the 512×264 behind them is whatever the screen was already showing, which
+   * with a room is {@link RoomLayer.roomFrame}. A game played without its world
+   * has no such frame and gets black, which is right for a title that never had
+   * a room and wrong for one that has merely left it — Titanic's standalone
+   * fencing page ends its bout by putting the stage down, exactly as the ship's
+   * `transfromflat ()` does, and Willie then asks for a rematch floating in the
+   * dark (#391). What belongs behind him is the piste he is standing on, so the
+   * page keeps the flat it was last drawn on ({@link flatBackdrop}) and hands it
+   * back here.
+   *
+   * The room still wins wherever there is one: this is the fallback, not an
+   * override, so nothing a game with a world does can be displaced by it.
+   */
+  puppetBackdrop: PuppetBackdrop | null = null;
 
   /** the reused signature accumulator — no per-frame garbage */
   private readonly sig = new DrawSignature();
@@ -611,9 +631,35 @@ export class ScreenDirector {
             height: cur.height,
             palette: this.room!.roomPalette(),
           }
-        : null,
+        : this.puppetBackdrop,
     );
     this.screen.frameValid = true;
+  }
+
+  /**
+   * The stage flat as a conversation backdrop, or null while no stage is open.
+   *
+   * Exposed for {@link puppetBackdrop}: a host that wants to keep the picture a
+   * conversation happens over has to take it while the stage that owns it is
+   * still up, and has no other way to reach the flat's palette — `flatPalette`
+   * is this class's own, and a raw `flatImage ()` palette has been through
+   * neither the stage's `mixclut` dim nor the display gamma.
+   *
+   * Both fields come back MEMOISED by identity — `flatImage` from the stage's
+   * own cache, the palette from {@link flatPalette} — which is what lets a caller
+   * poll this every frame: {@link PuppetView.composite} keys its composite on
+   * those two references, so an unchanged flat is a cache hit rather than a
+   * 512×264 rebuild.
+   */
+  flatBackdrop(): PuppetBackdrop | null {
+    const flat = this.session.stageCtrl.flatImage();
+    if (!flat) return null;
+    return {
+      pixels: flat.pixels,
+      width: flat.width,
+      height: flat.height,
+      palette: this.flatPalette(flat.palette),
+    };
   }
 
   private paint(ctx: CanvasRenderingContext2D): void {
