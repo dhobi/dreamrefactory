@@ -274,7 +274,28 @@ export class ScreenDirector {
       // change fades around `changeset`, so by the time the ramp runs the set
       // underneath has already been replaced and only the buffer still holds
       // the room being left.
-      if (this.session.puppet?.visible && !this.session.fade.snapshot) {
+      //
+      // ...AND A FILM THAT HAS JUST ENDED IS ONE OF THOSE, even though a
+      // conversation is loaded. `pendingReveal` means precisely "a movie ended
+      // and nothing has said what the screen should look like since", so the
+      // buffer holds the clip's LAST FRAME and that is the picture the ramp is
+      // meant to take down. Rebuilding the close-up instead fades the puppet's
+      // 512x264 BACKDROP, which is a different picture entirely — and #380 is
+      // what that looks like from the chair: `ELEV1.PUP doelev ()` plays
+      // `elevgs.mov` with the liftboy still loaded, so the gate finishes OPEN,
+      // the script's next statement fades, and the snapshot is `elev1.pup`'s
+      // backdrop — the lift's CLOSED DOORS. The player watches them shut and
+      // then ramp to black. Traced in the page at the arrival: the frame after
+      // `mov:elevgs.mov@10` is `faded … SNAP` with `pup:VIS`, and the reveal
+      // never runs at all.
+      //
+      // The subtitle case this exception exists for is unaffected: a line
+      // ending is not a film ending, and nothing arms `pendingReveal` there.
+      if (
+        this.session.puppet?.visible &&
+        !this.session.fade.snapshot &&
+        !this.session.fade.pendingReveal
+      ) {
         this.compositePuppetScreen();
       }
       const shot = this.screen.capture();
