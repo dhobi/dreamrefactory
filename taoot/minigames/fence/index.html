@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="minigames.fenceDoc">
+      Fencing — Titanic - Adventure Out Of Time RE
+    </title>
+    <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
+    <meta name="site-root" content="../../" />
+    <link rel="icon" type="image/png" href="/taoot-mark.png" />
+    <link rel="stylesheet" href="/src/theme.css" />
+    <link rel="stylesheet" href="/minigames/minigame.css" />
+  </head>
+  <body class="deep">
+    <header class="topbar">
+      <a
+        class="brand"
+        href="../../"
+        title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1996 release"
+        data-i18n-attr="title:site.brandTitle"
+      >
+        <img class="brand-mark" src="/taoot-mark.png" alt="" width="30" height="30" />
+        <span class="brand-text">
+          <b>Titanic</b>
+          <span>Adventure Out Of Time RE</span>
+        </span>
+      </a>
+      <nav class="topnav">
+        <a href="../../play/" data-i18n="site.navPlay">Play</a>
+        <a href="../../minigames/" class="here" data-i18n="site.navMinigames">Minigames</a>
+        <a href="../../collection/" data-i18n="site.navCollection">Collection</a>
+        <a href="../../../" title="dreamREfactory — the engine, and the other two games">dreamREfactory</a>
+        <a href="../../../docs/" data-i18n="site.navDocs">Docs</a>
+        <a href="https://github.com/dhobi/dreamrefactory" data-i18n="site.navSource">Source</a>
+      </nav>
+    </header>
+    <main class="minigame">
+      <h1 data-i18n="minigames.fence">Fencing</h1>
+      <p class="sub" data-i18n="minigames.fenceSub">The bout with Haderlitz in the squash court.</p>
+      <!-- Aboard, the difficulty is a sentence you say: Haderlitz asks whether
+           Colonel Zeitel was right about you, and the reply sets fencelevel
+           (WILFENC1.PUP/0006 — 25, 15 and 5). No conversation here, so his three
+           replies are offered as themselves. Higher is easier: it is what gates
+           his openings and his pace. -->
+      <p class="options">
+        <span data-i18n="minigames.level">How well do you fence?</span>
+        <a href="?level=novice" data-i18n="minigames.levelNovice">Not at all</a>
+        <a href="?level=mediocre" data-i18n="minigames.levelMediocre">Mediocre</a>
+        <a href="?level=excellent" data-i18n="minigames.levelExcellent">Excellent</a>
+      </p>
+      <canvas id="screen" width="512" height="384"></canvas>
+      <p id="status" class="status" data-i18n="minigames.loading">loading…</p>
+      <p class="leave"><a href="../" data-i18n="minigames.back">← All minigames</a></p>
+    </main>
+    <script type="module" src="/minigames/src/fence-page.ts"></script>
+  </body>
+</html>

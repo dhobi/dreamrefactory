@@ -14,6 +14,7 @@ import front from "./front.json";
 import home from "./home.json";
 import play from "./play.json";
 import collection from "./collection.json";
+import minigames from "./minigames.json";
 import editors from "./editors.json";
 import puppets from "./puppets.json";
 import casts from "./casts.json";
@@ -23,5 +24,5 @@ import stages from "./stages.json";
 import movies from "./movies.json";
 import tracks from "./tracks.json";
 
-const ru: Catalogue = { common, counts, site, front, home, play, collection, editors, puppets, casts, sets, shops, stages, movies, tracks };
+const ru: Catalogue = { common, counts, site, front, home, play, collection, minigames, editors, puppets, casts, sets, shops, stages, movies, tracks };
 export default ru;
