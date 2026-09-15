@@ -38,6 +38,25 @@ void bootMinigame({
   title: "Blackjack — Buick deals",
   start: async (host) => {
     const g = host.session.interp.globals;
+    /**
+     * THE DEALER HIMSELF, because the rematch is his line.
+     *
+     * When a hand is settled the table asks him, not us: `BLKJACK.STG/0002` ends
+     * `puppetvisible (true); puppetgrab (false); visualeffect (wipeleft, 20);
+     * return sendtopuppetfx ("boot script", playagain ())`, and his `playagain`
+     * reacts to who won (`playerwin ()`, `buickwin ()`, `draw ()`) before
+     * offering "Yes, I'll play another hand." / "No, I've got to go now.".
+     *
+     * With no puppet loaded that dispatch finds nobody, `playagain ()` answers
+     * nothing, and `newgame ()` takes its `if not playagain ()` branch straight to
+     * `closecards ()` — one hand and the table shuts. So he is opened before the
+     * first deal, which is also where the ship has him: his conversation is what
+     * gets you to the table in the first place.
+     *
+     * Not `runyoself` though — that is the "have we met?" conversation, and it is
+     * the one thing here the ship does that this page deliberately does not.
+     */
+    await host.session.puppetCtrl.openPuppetFile("blkjack1.pup");
     g.set("playingcards", deck());
     // the two the dealer's conversation would have left behind
     g.set("firsthand", 1);

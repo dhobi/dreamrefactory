@@ -65,6 +65,19 @@ export interface Minigame {
    * conversation would have left behind.
    */
   readonly start?: (host: GameHost) => Promise<void> | void;
+  /**
+   * What happens when the game's own scripts LEAVE the stage — which is how both
+   * of these end. Blackjack's `closecards ()` and fencing's post-bout
+   * `transfromflat ()` both pop the overlay, so "the stage is no longer ours" is
+   * the one signal that means "the player is done with this hand/bout", whichever
+   * game it is.
+   *
+   * Answer `"again"` to have the stage reopened and {@link start} run over it —
+   * fencing's rematch, which aboard is the squash court reopening the flat.
+   * Answer `"done"`, or leave this out, and the page goes back to the chooser:
+   * declining is the only way out of a game that has no ship to be put back on.
+   */
+  readonly onLeave?: (host: GameHost) => Promise<"again" | "done"> | "again" | "done";
 }
 
 /** the edition to read the files from — `?edition=de` for a localised tree */
@@ -191,6 +204,24 @@ export async function bootMinigame(game: Minigame): Promise<void> {
     say(`could not open ${game.stage} — is the ${edition()} tree installed?`);
     return;
   }
+  /**
+   * THE FRAME LOOP FIRST, and then whatever the game needs said to it.
+   *
+   * `start` runs the game's own scripts, and a DreamFactory script that deals
+   * cards waits for frames while it does: `dealcards ()` walks the shoe a card at
+   * a time and every step of it is a tick this loop has to provide. Started after
+   * `start` instead, the two wait for each other for ever — measured as a
+   * blackjack page whose `render` had run exactly 0 times, frameValid false, and
+   * a canvas that was simply black. Fencing hid it completely, because fencing
+   * needs nothing said to it and so never awaited anything.
+   */
+  const loop = (now: number): void => {
+    host.director.tick(now);
+    host.director.render(ctx);
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+
   await game.start?.(host);
   /*
    * Only NOW is the game running: the stage is open, its `openstage ()` has run
@@ -202,13 +233,41 @@ export async function bootMinigame(game: Minigame): Promise<void> {
   dbg.ready = true;
   say(game.title);
 
-  /** the engine's own frame loop, on the engine's own screen */
-  const loop = (now: number): void => {
-    host.director.tick(now);
-    host.director.render(ctx);
-    requestAnimationFrame(loop);
+  /**
+   * ...and watch for the game letting go of its own stage.
+   *
+   * Polled rather than hooked because the thing being watched is the GAME's
+   * decision, taken inside its own scripts several calls deep — `newgame ()`
+   * reaching `closecards ()` when the dealer is told no, or the bout's last hit
+   * reaching `transfromflat ()`. Neither announces itself; both put the stage
+   * down, and that is visible from here.
+   */
+  const ours = game.stage.toLowerCase();
+  const watchForLeaving = (): void => {
+    const watch = window.setInterval(() => {
+      if (host.session.stageName === ours) return;
+      window.clearInterval(watch);
+      void (async () => {
+        const verdict = (await game.onLeave?.(host)) ?? "done";
+        if (verdict === "done") {
+          window.location.href = "../";
+          return;
+        }
+        // Another go: the stage again, whatever had to be said to it, and the
+        // watch re-armed — the rematch has an end of its own, and a watch that
+        // fired once would leave the second bout with no way out but the tab.
+        if (!(await host.session.stageCtrl.openStageFile(game.stage))) {
+          say(`could not reopen ${game.stage}`);
+          return;
+        }
+        await game.start?.(host);
+        say(game.title);
+        watchForLeaving();
+      })();
+    }, 250);
   };
-  requestAnimationFrame(loop);
+  watchForLeaving();
+
 
   /** where a pointer event lands in the engine's 512x384, whatever the CSS size */
   const at = (e: PointerEvent): { x: number; y: number } => {
