@@ -1,5 +1,5 @@
 /**
- * Do the two minigames boot without the ship?
+ * Do the three minigames boot without the ship?
  *
  *   npx tsx taoot/tests/browser/minigames.ts        (needs a dev server; APP_URL to move it)
  *
@@ -34,6 +34,7 @@ const read = `(() => {
   if (!s) return null;
   const g = {};
   for (const k of ["fighting","willieside","playerblock","attacktot","fencelevel",
+                   "vladpower","playerpower","fightover",
                    "firsthand","playertotal","dealertotal","cardstring","playerphase"]) {
     const v = s.interp.globals.get(k);
     if (v !== undefined) g[k] = typeof v === "string" ? v.slice(0, 24) : v;
@@ -106,6 +107,9 @@ async function boot(path: string): Promise<Probe> {
 async function afterTheGame(path: string): Promise<{ bevels: string[]; url: string }> {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+  // the fight says who won before it leaves; an undismissed dialog blocks the
+  // navigation this function is waiting for
+  page.on("dialog", (d) => void d.dismiss());
   await page.goto(`${APP}${path}`);
   await page.waitForFunction(`!!(window.dbgMini && window.dbgMini.ready)`, null, { timeout: BOOT_MS });
   await page.waitForTimeout(800);
@@ -159,6 +163,23 @@ const main = async (): Promise<void> => {
       what: "willie is on guard, at a difficulty somebody chose",
     },
     {
+      path: "minigames/fight/",
+      stage: "fight.stg",
+      flat: "flat 0",
+      /**
+       * `openfight ()` seeds all of these itself — both fighters on 512 and the
+       * bout live. Vlad is already throwing punches by the time this samples, so
+       * the powers are asserted as "on the board" rather than as 512 exactly.
+       */
+      played: (g: Record<string, unknown>) =>
+        typeof g.vladpower === "number" &&
+        typeof g.playerpower === "number" &&
+        (g.vladpower as number) > 0 &&
+        (g.playerpower as number) > 0,
+      puppet: false,
+      what: "both fighters are up, and it has started",
+    },
+    {
       path: "minigames/blackjack/",
       stage: "blkjack.stg",
       flat: "blkjack",
@@ -193,12 +214,17 @@ const main = async (): Promise<void> => {
   console.log(`${fenceAsks ? "ok  " : "FAIL"} fence: willie asks for another (${fenceEnd.bevels.join(" / ") || "nothing"})`);
   if (!fenceAsks) bad++;
 
+  const fightEnd = await afterTheGame("minigames/fight/");
+  const fightLeaves = fightEnd.url.endsWith("/minigames/");
+  console.log(`${fightLeaves ? "ok  " : "FAIL"} fight: the bout ends and goes back to the chooser (${fightEnd.url})`);
+  if (!fightLeaves) bad++;
+
   const bjEnd = await afterTheGame("minigames/blackjack/");
   const bjLeaves = bjEnd.url.endsWith("/minigames/");
   console.log(`${bjLeaves ? "ok  " : "FAIL"} blackjack: declining goes back to the chooser (${bjEnd.url})`);
   if (!bjLeaves) bad++;
 
-  console.log(bad ? `\n${bad} check(s) failed` : "\nboth games boot, and both know how to end");
+  console.log(bad ? `\n${bad} check(s) failed` : "\nall three boot, and all three know how to end");
   process.exit(bad ? 1 : 0);
 };
 
