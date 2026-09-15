@@ -769,6 +769,46 @@ export const en = {
    * verbatim: opening a file, failing to, listing what the dev server offers,
    * writing one back out.
    */
+  /**
+   * The three diversions aboard that are games rather than puzzles, each played
+   * without the ship around it (taoot/minigames/).
+   */
+  minigames: {
+    docTitle: "Minigames — Titanic - Adventure Out Of Time RE" as Text,
+    h1: "Minigames" as Text,
+    intro:
+      "Three of the ship's diversions are whole games in their own right: each is a stage with its own art, its own music and its own rules, keeping state nothing else aboard reads. So each can be played without the voyage around it." as Text,
+    blackjack: "Blackjack" as Text,
+    blackjackCard:
+      "Buick's table in the smoking room. The dealer stands on seventeen and the shoe is reshuffled when it runs low — the rules are the script's, not ours." as Text,
+    blackjackDoc: "Blackjack — Titanic - Adventure Out Of Time RE" as Text,
+    blackjackSub: "Buick's table in the smoking room." as Text,
+    blackjackBegin: "Deal the first hand" as Text,
+    cards: "Cards" as Text,
+    cardsTitanic: "Titanic" as Text,
+    cardsDust: "Dust" as Text,
+    fight: "A fist fight with Vlad" as Text,
+    fightCard:
+      "Below decks, bare knuckles. Two power bars, three punches and a kick, and he is watching which side you guard. One bout settles it." as Text,
+    fightDoc: "A fist fight with Vlad — Titanic - Adventure Out Of Time RE" as Text,
+    fightSub: "Vlad in the hold. One bout, and it settles it." as Text,
+    fightBegin: "Put your fists up" as Text,
+    fightWon: "Vlad is down. You win." as Text,
+    fightLost: "Vlad puts you down. You lose." as Text,
+    fightDrawn: "The fight ended with nothing between you." as Text,
+    fence: "Fencing" as Text,
+    fenceCard:
+      "Haderlitz in the squash court. Parry high or low on either side and watch which way he turns; he is reading you the same way." as Text,
+    fenceDoc: "Fencing — Titanic - Adventure Out Of Time RE" as Text,
+    fenceSub: "The bout with Haderlitz in the squash court." as Text,
+    level: "How well do you fence?" as Text,
+    levelNovice: "Not at all" as Text,
+    levelMediocre: "Mediocre" as Text,
+    levelExcellent: "Excellent" as Text,
+    back: "← All minigames" as Text,
+    loading: "loading…" as Text,
+    noData: "no game data — the rip belongs under taoot/gamefiles/" as Text,
+  },
   common: {
     pickFromGamefiles: "or pick one from gamefiles/" as Text,
     // the movie editor warns as well, because a .MOV is not a small download

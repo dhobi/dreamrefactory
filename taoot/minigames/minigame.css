@@ -11,15 +11,35 @@
  * workbench next door: those are single pages and can own their own rule, and two
  * pages that must look like one place cannot each own the rule that makes them.
  */
+/*
+ * A CENTRED COLUMN WHOSE ITEMS MAY NOT SIZE IT.
+ *
+ * `align-items: center` makes every child fit-content, and one of these children
+ * is a status line carrying whatever the engine last said. So a long log line
+ * widened the column, and the picture — sized `min(100%, …)` against that column
+ * — grew with it: measured at the end of a fencing bout, where Willie's first
+ * spoken line took the canvas from 514 px to 668 and back again as the next,
+ * shorter line replaced it. The game appeared to breathe.
+ *
+ * `width: 100%` on the column pins it to the page rather than to its contents,
+ * and every child that could otherwise stretch it is held to `max-width: 100%`
+ * below. Nothing a script says can move the picture now.
+ */
 .minigame {
   padding: 1.6rem clamp(0.9rem, 4vw, 2rem) 3.5rem;
-  max-width: 64rem;
+  width: 100%;
+  /* 64rem of picture plus the padding either side, so the canvas below can
+     reach a whole 1024 — see the note on #screen about why 2x and not 1.875x */
+  max-width: calc(64rem + 2 * clamp(0.9rem, 4vw, 2rem));
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
   text-align: center;
+}
+.minigame > * {
+  max-width: 100%;
 }
 .minigame h1 {
   font-family: var(--font-display);
@@ -55,10 +75,19 @@
  * The picture, doubled where there is room for it.
  *
  * `image-rendering: pixelated` because the framebuffer IS 512x384 and a browser
- * smoothing it up to 1024 is inventing pixels nobody drew — the same reason the
- * play page pins its own scale. `touch-action: none` because both games poll
- * `stilldown ()` and a press-drag on the buttonbar must not scroll the page out
- * from under the bout.
+ * smoothing it up is inventing pixels nobody drew — the same reason the workbench
+ * lets a reader pin a whole-number scale (taoot/src/speedrun-widths.ts).
+ *
+ * Which is also why the ceiling is 1024 and the column above is sized to let it
+ * get there: 1024 is 512 DOUBLED, and at an exact 2x every source pixel becomes
+ * four. Left to fill a 960-wide column it landed on 1.875x, where `pixelated`
+ * has to make some pixels two wide and some three, and the mesh of Willie's mask
+ * shimmers along the seams. Below 1024 the picture scales freely rather than
+ * stepping down to 512 — a small window wants the biggest picture it can have
+ * more than it wants a whole multiple.
+ *
+ * `touch-action: none` because both games poll `stilldown ()` and a press-drag on
+ * the buttonbar must not scroll the page out from under the bout.
  */
 .minigame #screen {
   display: block;
@@ -74,12 +103,22 @@
 }
 
 /* what the boot is doing, and afterwards what the game last said */
+/*
+ * What the boot is doing, and afterwards whatever the game last said.
+ *
+ * `width: 100%` rather than fit-content, so a long line WRAPS inside the column
+ * instead of widening it — see the note on `.minigame`. The two that follow keep
+ * a single unbroken token (a filename, a path) from doing the same thing by
+ * another route.
+ */
 .minigame .status {
   color: var(--text-mute);
   margin: 0;
+  width: 100%;
   min-height: 1.6em;
   font-family: var(--font-mono);
   font-size: 0.85em;
+  overflow-wrap: anywhere;
 }
 .minigame .leave {
   margin: 0.25rem 0 0;
@@ -99,4 +138,33 @@
   text-decoration: none;
   border-bottom: 1px solid var(--mark);
   padding-bottom: 1px;
+}
+
+/*
+ * The hold before a game that starts itself.
+ *
+ * Blackjack deals and the fight starts swinging the moment their stage opens, and
+ * a browser will not start audio without a trusted gesture — so those two pages
+ * wait here. Fencing carries no such button: its own buttonbar has a START, which
+ * is a canvas click and so is the gesture too.
+ */
+.minigame .begin {
+  font: inherit;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  color: var(--text-bright);
+  background: var(--raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 0.55rem 1.4rem;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.minigame .begin:hover,
+.minigame .begin:focus-visible {
+  border-color: var(--border-hover);
+  box-shadow: var(--glow);
 }

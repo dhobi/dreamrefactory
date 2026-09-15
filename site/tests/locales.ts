@@ -38,6 +38,11 @@ const PAGES = [
   "taoot/index.html",
   "taoot/play/index.html",
   "taoot/collection/index.html",
+  // the three diversions that are games on their own, and the door to them
+  "taoot/minigames/index.html",
+  "taoot/minigames/blackjack/index.html",
+  "taoot/minigames/fence/index.html",
+  "taoot/minigames/fight/index.html",
   // the project's own, under site/ — the front door and the eight editor pages
   "site/index.html",
   "site/editors/index.html",
@@ -95,7 +100,9 @@ const STRINGS = new Map([...CATALOGUE].filter((e): e is [string, string] => type
  * rather than imported because the modules touch `document` at load.
  */
 const CODE_KEYS = new Set<string>();
-for (const dir of ["taoot/src", "site/src", "site/editors"]) {
+// `taoot/minigames/src` as well: those pages build strings too — the fight
+// says who won through `t()`, and each game names itself by a catalogue key
+for (const dir of ["taoot/src", "taoot/minigames/src", "site/src", "site/editors"]) {
   const walk = (d: string): void => {
     for (const e of readdirSync(join(ROOT, d), { withFileTypes: true })) {
       if (e.isDirectory()) walk(`${d}/${e.name}`);

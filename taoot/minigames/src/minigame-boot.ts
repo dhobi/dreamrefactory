@@ -38,8 +38,12 @@ import { GameHost } from "@dreamfactory/engine/web/host";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
 import { TI_CURSORS } from "../../src/cursor-art";
 import { FileStore } from "../../src/files";
-import { gamefileManifest } from "../../src/editions";
+import { editionsIn, gamefileManifest } from "../../src/editions";
 import { siteUrl } from "@dreamfactory/site/site";
+import { installI18n, t, uiLanguage } from "@dreamfactory/site/locales";
+import type { Key } from "@dreamfactory/site/locales/en";
+import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
+import { installVersion } from "@dreamfactory/site/version";
 
 /** Titanic's screen, which both of these stages are drawn for */
 const SCREEN = { width: 512, height: 384 };
@@ -57,8 +61,8 @@ const DISC = 2;
 export interface Minigame {
   /** the stage file the game lives in — `fence.stg`, `blkjack.stg` */
   readonly stage: string;
-  /** what it is called, for the page's own chrome and its log lines */
-  readonly title: string;
+  /** the catalogue key for what it is called — shown when the boot is done */
+  readonly title: Key;
   /**
    * Anything the stage's own `openstage ()` does not do for itself, run once the
    * stage is open. Fencing needs none; blackjack needs the two lines its dealer's
@@ -99,12 +103,6 @@ export function markOption(query: string): void {
   }
 }
 
-/** the edition to read the files from — `?edition=de` for a localised tree */
-function edition(): string {
-  const asked = new URLSearchParams(window.location.search).get("edition");
-  return asked && /^[a-z]{2,6}$/.test(asked) ? asked : "en";
-}
-
 /**
  * Boot one of them onto a canvas.
  *
@@ -115,6 +113,16 @@ function edition(): string {
  * about a WORLD: no boot plan, no sets, no saves, no editions chooser.
  */
 export async function bootMinigame(game: Minigame): Promise<void> {
+  /*
+   * The page's own words first, and before anything is written to the status
+   * line: `installI18n` rewrites every `data-i18n` node from the catalogue, and
+   * a status set before it ran would be replaced by "loading…" in the reader's
+   * language a moment later.
+   */
+  await installI18n();
+  void installLanguageMenu();
+  installVersion();
+
   const canvas = document.getElementById("screen") as HTMLCanvasElement;
   const statusEl = document.getElementById("status");
   const say = (line: string): void => {
@@ -137,13 +145,72 @@ export async function bootMinigame(game: Minigame): Promise<void> {
     }
   };
 
+  /**
+   * THE FIRST CLICK, where the game cannot wait for one of its own.
+   *
+   * Two things need it. A browser will not start audio without a trusted
+   * gesture, so a stage that opens its theme in `openstage ()` plays to a muted
+   * sink until the player happens to touch the canvas; and both of these games
+   * begin the instant their stage is open — blackjack deals and the fight has
+   * Vlad throwing punches before the page has finished settling — so a player
+   * who looked away has missed the start of it.
+   *
+   * Fencing needs neither: its own buttonbar carries a START, which is a click
+   * on the canvas and therefore a gesture, and nothing moves until it is pressed.
+   * So this is not a property of the boot but of the page: a page that needs
+   * holding carries a `#begin` button and the others do not.
+   */
+  const begin = document.getElementById("begin") as HTMLButtonElement | null;
+  if (begin) {
+    begin.hidden = false;
+    say("");
+    await new Promise<void>((go) =>
+      begin.addEventListener("click", () => go(), { once: true }),
+    );
+    begin.hidden = true;
+    // the click that got us here is the gesture the sink was waiting for
+    ensureAudio();
+  }
+
   const paths = await gamefileManifest();
   if (!paths.length) {
-    say("no game data — the rip belongs under taoot/gamefiles/");
+    say(t("minigames.noData"));
     return;
   }
   for (const p of paths) files.registerServerFile(p.split("/").pop()!, siteUrl(p));
-  files.setEdition(edition());
+  /**
+   * WHICH TREE THE GAME ITSELF IS READ FROM — and here, uniquely, it is the
+   * page's own language.
+   *
+   * Everywhere else on this site the two are deliberately separate questions:
+   * which of the six the CHROME is written in, and which edition of the GAME is
+   * installed and played. The play page keeps them apart on purpose — a reader
+   * who has chosen a German game and an English interface gets exactly that, and
+   * `chosenEdition` answers the remembered edition before it ever looks at the
+   * UI language.
+   *
+   * These three pages are the exception, and asked for as one. They have no
+   * edition row of their own, so there is nothing here for a reader to have
+   * chosen; the only language they have expressed on this page is the one the
+   * page is written in, and a French page dealing an English hand reads as a
+   * bug rather than as a preference honoured. So the UI language leads, and the
+   * edition a reader picked over on the play page is deliberately NOT consulted.
+   *
+   * `?edition=` still wins, because it is the explicit instruction. And the
+   * answer is sized against what the manifest actually carries, so a reader
+   * whose UI is Japanese and whose install is English gets the English tree
+   * rather than a page of missing files.
+   */
+  const available = editionsIn(paths);
+  const pick = (code: string | null): string | null =>
+    code && available.includes(code.toLowerCase()) ? code.toLowerCase() : null;
+  const edition =
+    pick(new URLSearchParams(window.location.search).get("edition")) ??
+    pick(uiLanguage()) ??
+    pick("en") ??
+    available[0] ??
+    "en";
+  files.setEdition(edition);
   files.setDisc(DISC);
 
   const host = new GameHost(
@@ -220,7 +287,7 @@ export async function bootMinigame(game: Minigame): Promise<void> {
 
   say(`opening ${game.stage}…`);
   if (!(await host.session.stageCtrl.openStageFile(game.stage))) {
-    say(`could not open ${game.stage} — is the ${edition()} tree installed?`);
+    say(`could not open ${game.stage} — is the ${edition} tree installed?`);
     return;
   }
   /**
@@ -250,7 +317,7 @@ export async function bootMinigame(game: Minigame): Promise<void> {
    * and reported as blackjack not booting.
    */
   dbg.ready = true;
-  say(game.title);
+  say(t(game.title));
 
   /**
    * ...and watch for the game letting go of its own stage.
@@ -280,7 +347,7 @@ export async function bootMinigame(game: Minigame): Promise<void> {
           return;
         }
         await game.start?.(host);
-        say(game.title);
+        say(t(game.title));
         watchForLeaving();
       })();
     }, 250);

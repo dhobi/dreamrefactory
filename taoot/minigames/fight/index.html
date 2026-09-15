@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>A fist fight with Vlad — Titanic - Adventure Out Of Time RE</title>
+    <title data-i18n="minigames.fightDoc">
+      A fist fight with Vlad — Titanic - Adventure Out Of Time RE
+    </title>
     <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
     <meta name="site-root" content="../../" />
     <link rel="icon" type="image/png" href="/taoot-mark.png" />
@@ -34,11 +36,15 @@
       </nav>
     </header>
     <main class="minigame">
-      <h1>A fist fight with Vlad</h1>
-      <p class="sub">Vlad in the hold, off the ship. One bout, and it settles it.</p>
+      <h1 data-i18n="minigames.fight">A fist fight with Vlad</h1>
+      <p class="sub" data-i18n="minigames.fightSub">Vlad in the hold. One bout, and it settles it.</p>
+      <!-- the page holds until this is pressed: a trusted gesture for the
+           audio, and a start the player is actually looking at. Fencing has
+           no such button because its own buttonbar carries a START. -->
+      <button id="begin" class="begin" type="button" hidden data-i18n="minigames.fightBegin">Put your fists up</button>
       <canvas id="screen" width="512" height="384"></canvas>
-      <p id="status" class="status">loading…</p>
-      <p class="leave"><a href="../">← All minigames</a></p>
+      <p id="status" class="status" data-i18n="minigames.loading">loading…</p>
+      <p class="leave"><a href="../" data-i18n="minigames.back">← All minigames</a></p>
     </main>
     <script type="module" src="/minigames/src/fight-page.ts"></script>
   </body>

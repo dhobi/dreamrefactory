@@ -43,6 +43,7 @@
  * conversation to borrow, and the page says who won and goes back to the door.
  */
 import { bootMinigame } from "./minigame-boot";
+import { t } from "@dreamfactory/site/locales";
 
 /** the last powers seen while the bout was live — see the note above */
 let lastVlad = 0;
@@ -50,7 +51,7 @@ let lastPlayer = 0;
 
 void bootMinigame({
   stage: "fight.stg",
-  title: "A fist fight with Vlad",
+  title: "minigames.fight",
   start: (host) => {
     const g = host.session.interp.globals;
     lastVlad = 0;
@@ -79,12 +80,18 @@ void bootMinigame({
      */
     const won = lastVlad < lastPlayer;
     const drawn = lastVlad === lastPlayer;
+    /*
+     * Each key on its own `t("…")` rather than one call over a ternary: that is
+     * the shape `site/tests/locales.ts` scans for when it checks that every
+     * string in the catalogue is actually reachable, and a key it cannot see is
+     * a key it reports as dead.
+     */
     window.alert(
       drawn
-        ? "The fight ended with nothing between you."
+        ? t("minigames.fightDrawn")
         : won
-          ? "Vlad is down. You win."
-          : "Vlad puts you down. You lose.",
+          ? t("minigames.fightWon")
+          : t("minigames.fightLost"),
     );
     return "done";
   },

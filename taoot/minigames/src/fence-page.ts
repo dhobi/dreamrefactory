@@ -46,7 +46,7 @@ markOption(`?level=${picked.name}`);
 
 void bootMinigame({
   stage: "fence.stg",
-  title: `Fencing — ${picked.name}`,
+  title: "minigames.fence",
   /**
    * Before the stage opens would be wrong and after is right: `openstage ()` does
    * not touch `fencelevel`, but it DOES start Willie's attack loop, and that loop

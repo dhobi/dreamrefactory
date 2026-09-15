@@ -70,6 +70,13 @@ async function boot(path: string): Promise<Probe> {
   console.log(`opening ${APP}${path}`);
   await page.goto(`${APP}${path}`);
   await page.waitForSelector("#screen", { timeout: 30_000 });
+  /*
+   * Press the hold, where the page has one. Blackjack and the fight wait for a
+   * trusted gesture before they open their stage, so a probe that never clicks
+   * waits out its whole boot timeout on a page that is working perfectly.
+   */
+  const begin = await page.$("#begin");
+  if (begin) await begin.click();
   // the boot is async (manifest, then the stage file); wait for the stage to be open
   await page
     .waitForFunction(
@@ -111,6 +118,9 @@ async function afterTheGame(path: string): Promise<{ bevels: string[]; url: stri
   // navigation this function is waiting for
   page.on("dialog", (d) => void d.dismiss());
   await page.goto(`${APP}${path}`);
+  await page.waitForSelector("#screen", { timeout: 30_000 });
+  const gate = await page.$("#begin");
+  if (gate) await gate.click();
   await page.waitForFunction(`!!(window.dbgMini && window.dbgMini.ready)`, null, { timeout: BOOT_MS });
   await page.waitForTimeout(800);
   await page.evaluate(`window.dbgMini.session.stageCtrl.closeStageFile()`);
@@ -208,6 +218,61 @@ const main = async (): Promise<void> => {
     if (p.errors.length) console.log(`       ERRORS: ${p.errors.slice(0, 3).join(" | ")}`);
     if (!ok) bad++;
   }
+  /**
+   * ...and the hold HOLDS, which is the whole reason it exists.
+   *
+   * A start button that does not actually stop the game starting is worse than
+   * none: it looks like it is doing the job while blackjack deals behind it and
+   * the audio sink is still waiting for its gesture. So this asks the question
+   * the other way round — after four seconds, with no click, has anything begun?
+   */
+  for (const path of ["minigames/blackjack/", "minigames/fight/"]) {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+    await page.goto(`${APP}${path}`);
+    await page.waitForSelector("#begin", { timeout: 30_000 });
+    await page.waitForTimeout(4_000);
+    const started = await page.evaluate(`!!(window.dbgMini && window.dbgMini.ready)`);
+    console.log(`${started ? "FAIL" : "ok  "} ${path} waits for its start button`);
+    if (started) bad++;
+    await browser.close();
+  }
+
+  /**
+   * THE PICTURE DOES NOT BREATHE.
+   *
+   * The status line carries whatever the engine last said, and the column it sits
+   * in centres its children — so a long log line widened the column, and the
+   * canvas, sized against that column, grew with it. Reported from play at the
+   * end of a fencing bout: Willie's first spoken line took the picture from
+   * 514 px to 668 and the next, shorter one put it back.
+   *
+   * So this watches the canvas across a conversation and fails if it ever moves.
+   * Asserted on the BOX rather than on the CSS, because the rule that broke it
+   * was a `width: min(100%, …)` resolving against a container somebody else had
+   * stretched — which reads as correct in the stylesheet and is wrong on screen.
+   */
+  {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(`${APP}minigames/fence/`);
+    await page.waitForFunction(`!!(window.dbgMini && window.dbgMini.ready)`, null, { timeout: BOOT_MS });
+    await page.waitForTimeout(600);
+    await page.evaluate(`window.__seen = new Set();
+      window.__t = setInterval(() => {
+        const r = document.getElementById("screen").getBoundingClientRect();
+        window.__seen.add(Math.round(r.width) + "x" + Math.round(r.height));
+      }, 100);`);
+    // the bout ending is what puts Willie on screen talking
+    await page.evaluate(`window.dbgMini.session.stageCtrl.closeStageFile()`);
+    await page.waitForTimeout(9_000);
+    const sizes = (await page.evaluate(`(clearInterval(window.__t), [...window.__seen])`)) as string[];
+    const steady = sizes.length === 1;
+    console.log(`${steady ? "ok  " : "FAIL"} fence: the picture holds its size while he talks (${sizes.join(", ")})`);
+    if (!steady) bad++;
+    await browser.close();
+  }
+
   // the end of a game, which is where a page with no ship has to say something
   const fenceEnd = await afterTheGame("minigames/fence/");
   const fenceAsks = fenceEnd.bevels.some((b) => /fence/i.test(b));

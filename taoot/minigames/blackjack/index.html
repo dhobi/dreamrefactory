@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Blackjack — Titanic - Adventure Out Of Time RE</title>
+    <title data-i18n="minigames.blackjackDoc">
+      Blackjack — Titanic - Adventure Out Of Time RE
+    </title>
     <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
     <meta name="site-root" content="../../" />
     <link rel="icon" type="image/png" href="/taoot-mark.png" />
@@ -34,20 +36,24 @@
       </nav>
     </header>
     <main class="minigame">
-      <h1>Blackjack</h1>
-      <p class="sub">Buick's table in the smoking room, off the ship.</p>
+      <h1 data-i18n="minigames.blackjack">Blackjack</h1>
+      <p class="sub" data-i18n="minigames.blackjackSub">Buick's table in the smoking room.</p>
       <!-- The disc's own cross-game wink: aboard, the dealer asks whether you met
            at Dust's Hard Drive Saloon, and answering yes deals DUST's card backs
            (BLKJACK.STG/0002 asks it twice while laying the cards out). There is no
            conversation here to answer, so it is offered outright. -->
       <p class="options">
-        <span>Cards</span>
-        <a href="./">Titanic</a>
-        <a href="?deck=dust">Dust</a>
+        <span data-i18n="minigames.cards">Cards</span>
+        <a href="./" data-i18n="minigames.cardsTitanic">Titanic</a>
+        <a href="?deck=dust" data-i18n="minigames.cardsDust">Dust</a>
       </p>
+      <!-- the page holds until this is pressed: a trusted gesture for the
+           audio, and a start the player is actually looking at. Fencing has
+           no such button because its own buttonbar carries a START. -->
+      <button id="begin" class="begin" type="button" hidden data-i18n="minigames.blackjackBegin">Deal the first hand</button>
       <canvas id="screen" width="512" height="384"></canvas>
-      <p id="status" class="status">loading…</p>
-      <p class="leave"><a href="../">← All minigames</a></p>
+      <p id="status" class="status" data-i18n="minigames.loading">loading…</p>
+      <p class="leave"><a href="../" data-i18n="minigames.back">← All minigames</a></p>
     </main>
     <script type="module" src="/minigames/src/blackjack-page.ts"></script>
   </body>

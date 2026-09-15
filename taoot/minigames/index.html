@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Minigames — Titanic - Adventure Out Of Time RE</title>
+    <title data-i18n="minigames.docTitle">
+      Minigames — Titanic - Adventure Out Of Time RE
+    </title>
     <meta
       name="description"
       content="The three things inside Titanic that are games rather than puzzles: blackjack at Buick's table, the fencing bout with Haderlitz and the fist fight with Vlad, played without the ship."
@@ -92,8 +94,8 @@
       </nav>
     </header>
     <main id="minigames">
-      <h1>Minigames</h1>
-      <p>
+      <h1 data-i18n="minigames.h1">Minigames</h1>
+      <p data-i18n="minigames.intro">
         Three of the ship's diversions are whole games in their own right: each is a
         stage with its own art, its own music and its own rules, keeping state
         nothing else aboard reads. So each can be played without the voyage around
@@ -101,28 +103,29 @@
       </p>
       <div class="games">
         <a class="game" href="blackjack/">
-          <h2>Blackjack</h2>
-          <p>
+          <h2 data-i18n="minigames.blackjack">Blackjack</h2>
+          <p data-i18n="minigames.blackjackCard">
             Buick's table in the smoking room. The dealer stands on seventeen and
             the shoe is reshuffled when it runs low — the rules are the script's,
             not ours.
           </p>
         </a>
         <a class="game" href="fight/">
-          <h2>A fist fight with Vlad</h2>
-          <p>
+          <h2 data-i18n="minigames.fight">A fist fight with Vlad</h2>
+          <p data-i18n="minigames.fightCard">
             Below decks, bare knuckles. Two power bars, three punches and a kick,
             and he is watching which side you guard. One bout settles it.
           </p>
         </a>
         <a class="game" href="fence/">
-          <h2>Fencing</h2>
-          <p>
+          <h2 data-i18n="minigames.fence">Fencing</h2>
+          <p data-i18n="minigames.fenceCard">
             Haderlitz in the squash court. Parry high or low on either side and
             watch which way he turns; he is reading you the same way.
           </p>
         </a>
       </div>
     </main>
+    <script type="module" src="/minigames/src/chooser-page.ts"></script>
   </body>
 </html>

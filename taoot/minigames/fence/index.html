@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Fencing — Titanic - Adventure Out Of Time RE</title>
+    <title data-i18n="minigames.fenceDoc">
+      Fencing — Titanic - Adventure Out Of Time RE
+    </title>
     <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
     <meta name="site-root" content="../../" />
     <link rel="icon" type="image/png" href="/taoot-mark.png" />
@@ -34,22 +36,22 @@
       </nav>
     </header>
     <main class="minigame">
-      <h1>Fencing</h1>
-      <p class="sub">The bout with Haderlitz in the squash court, off the ship.</p>
+      <h1 data-i18n="minigames.fence">Fencing</h1>
+      <p class="sub" data-i18n="minigames.fenceSub">The bout with Haderlitz in the squash court.</p>
       <!-- Aboard, the difficulty is a sentence you say: Haderlitz asks whether
            Colonel Zeitel was right about you, and the reply sets fencelevel
            (WILFENC1.PUP/0006 — 25, 15 and 5). No conversation here, so his three
            replies are offered as themselves. Higher is easier: it is what gates
            his openings and his pace. -->
       <p class="options">
-        <span>How well do you fence?</span>
-        <a href="?level=novice">Not at all</a>
-        <a href="?level=mediocre">Mediocre</a>
-        <a href="?level=excellent">Excellent</a>
+        <span data-i18n="minigames.level">How well do you fence?</span>
+        <a href="?level=novice" data-i18n="minigames.levelNovice">Not at all</a>
+        <a href="?level=mediocre" data-i18n="minigames.levelMediocre">Mediocre</a>
+        <a href="?level=excellent" data-i18n="minigames.levelExcellent">Excellent</a>
       </p>
       <canvas id="screen" width="512" height="384"></canvas>
-      <p id="status" class="status">loading…</p>
-      <p class="leave"><a href="../">← All minigames</a></p>
+      <p id="status" class="status" data-i18n="minigames.loading">loading…</p>
+      <p class="leave"><a href="../" data-i18n="minigames.back">← All minigames</a></p>
     </main>
     <script type="module" src="/minigames/src/fence-page.ts"></script>
   </body>

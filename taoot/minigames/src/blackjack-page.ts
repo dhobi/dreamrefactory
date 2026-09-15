@@ -37,7 +37,7 @@ markOption(deck() === "dust" ? "?deck=dust" : "");
 
 void bootMinigame({
   stage: "blkjack.stg",
-  title: "Blackjack — Buick deals",
+  title: "minigames.blackjack",
   start: async (host) => {
     const g = host.session.interp.globals;
     /**
