@@ -1,0 +1,73 @@
+/*
+ * The two minigames and the door to them.
+ *
+ * Shared by all three pages rather than inlined per page, which is the one place
+ * these differ from the bedsit and the workbench next door: those are single
+ * pages and carry their own <style>, and three pages that must look like one
+ * place cannot each own the rule that makes them look like it.
+ *
+ * The palette is the site's own dark ground and brass, and nothing else: what is
+ * worth looking at on these pages is a 512x384 picture from 1996, and every
+ * pixel of chrome around it is competing with that.
+ */
+:root {
+  color-scheme: dark;
+  --ink: #d8e4e8;
+  --dim: #7c8f96;
+  --brass: #d9a94c;
+  --ground: #05080a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--ground); }
+body {
+  font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem 1rem 3rem;
+  gap: 1.25rem;
+}
+header { text-align: center; max-width: 40rem; }
+h1 { font-size: 1.35rem; margin: 0.25rem 0; letter-spacing: 0.02em; }
+.sub { color: var(--dim); margin: 0.25rem 0 0; }
+a { color: var(--brass); }
+.back { display: inline-block; margin-bottom: 0.5rem; text-decoration: none; }
+.back:hover { text-decoration: underline; }
+
+main { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
+/*
+ * The picture, doubled where there is room for it.
+ *
+ * `image-rendering: pixelated` because the framebuffer IS 512x384 and a browser
+ * smoothing it up to 1024 is inventing pixels the artists did not draw — the
+ * same reason the play page pins its own scale.
+ */
+#screen {
+  display: block;
+  width: min(100%, 1024px);
+  aspect-ratio: 512 / 384;
+  height: auto;
+  image-rendering: pixelated;
+  background: #000;
+  border: 1px solid #1b2429;
+  touch-action: none; /* the games poll stilldown(); a drag must not scroll */
+}
+.status { color: var(--dim); margin: 0; min-height: 1.6em; text-align: center; }
+
+/* the chooser */
+.games { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; }
+.game {
+  display: block;
+  width: 20rem;
+  max-width: 100%;
+  padding: 1rem 1.15rem;
+  border: 1px solid #1b2429;
+  border-radius: 3px;
+  text-decoration: none;
+  color: inherit;
+  background: #080d10;
+}
+.game:hover { border-color: var(--brass); }
+.game h2 { font-size: 1.05rem; margin: 0 0 0.35rem; color: var(--brass); }
+.game p { margin: 0; color: var(--dim); font-size: 0.9em; }

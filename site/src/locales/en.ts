@@ -95,6 +95,8 @@ export const en = {
     navPlay: "Play" as Text,
     navEditors: "Editors" as Text,
     navCollection: "Collection" as Text,
+    /** the door to the two diversions aboard that are whole games on their own */
+    navMinigames: "Minigames" as Text,
     navDocs: "Docs" as Text,
     navSource: "Source" as Text,
     /** the label on the edition row — the play page, the editors and the

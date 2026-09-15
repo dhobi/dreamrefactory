@@ -133,6 +133,15 @@ export default defineConfig({
         // too, and built for the same reason the workbench is — a tool that
         // only exists on a dev server is a tool nobody uses.
         chimneys: join(HERE, "bedsit/chimneys/index.html"),
+        // The two diversions aboard that are whole games: blackjack at Buick's
+        // table and the fencing bout with Willie. Each is a STAGE with its own
+        // shapes, track and globals and no room at all, so each opens without
+        // the ship around it (taoot/minigames/src/minigame-boot.ts). LISTED —
+        // the door is linked from this game's own front page, unlike the
+        // workbench and the bedsit beside them here.
+        minigames: join(HERE, "minigames/index.html"),
+        blackjack: join(HERE, "minigames/blackjack/index.html"),
+        fencing: join(HERE, "minigames/fence/index.html"),
       },
     },
   },

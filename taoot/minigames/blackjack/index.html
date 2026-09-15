@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blackjack — Titanic - Adventure Out Of Time RE</title>
+    <meta name="site-root" content="../../" />
+    <link rel="icon" type="image/png" href="/taoot-mark.png" />
+    <link rel="stylesheet" href="/minigames/minigame.css" />
+  </head>
+  <body>
+    <header>
+      <a class="back" href="../">← Minigames</a>
+      <h1>Blackjack</h1>
+      <p class="sub">
+        Buick's table in the smoking room, off the ship.
+        <!-- the disc's own cross-game wink: the dealer asks whether you met at
+             Dust's Hard Drive Saloon, and answering yes deals DUST's card backs
+             (BLKJACK.STG/0002, `if playingcards = "dust"`). No conversation here
+             to answer, so it is offered outright. -->
+        <a href="?deck=dust">Deal with Dust's cards →</a>
+      </p>
+    </header>
+    <main>
+      <canvas id="screen" width="512" height="384"></canvas>
+      <p id="status" class="status">loading…</p>
+    </main>
+    <script type="module" src="/minigames/src/blackjack-page.ts"></script>
+  </body>
+</html>

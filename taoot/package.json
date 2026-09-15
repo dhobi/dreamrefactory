@@ -38,7 +38,8 @@
     "speedrun:lint": "tsx tests/speedrun/speedrun.ts --lint",
     "mklang": "tsx tools/mklangstg.ts",
     "mknightdive": "tsx tools/mknightdive.ts",
-    "mklogo": "tsx tools/mktaootlogo.ts"
+    "mklogo": "tsx tools/mktaootlogo.ts",
+    "test:browser:minigames": "tsx tests/browser/minigames.ts"
   },
   "exports": {
     "./*": "./src/*.ts",
