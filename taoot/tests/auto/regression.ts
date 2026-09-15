@@ -572,6 +572,19 @@ test("bootplan: what the boot needs is read from the BOOTFILE, not known", () =>
     plan.volumes.join() === "titanic1,titanic2",
     plan.volumes.join(),
   );
+  /*
+   * `puppetparam (9, 1)` and `puppetparam (10, 25)`, which `boot ()` runs before
+   * it opens anything — the only two render params TAOOT moves off TI.EXE's
+   * defaults, and it never puts either back. Slot 10 is what the minigame pages needed: at
+   * the un-booted default of 8 every answer in a conversation is drawn over the
+   * screw at the left end of its plaque (#391), and those pages hold the boot
+   * library without ever running `boot ()`.
+   */
+  check(
+    "the params boot() sets on the conversation screen are read too",
+    JSON.stringify(plan.puppetParams) === "[[9,1],[10,25]]",
+    JSON.stringify(plan.puppetParams),
+  );
 }
 );
 
