@@ -80,6 +80,25 @@ export interface Minigame {
   readonly onLeave?: (host: GameHost) => Promise<"again" | "done"> | "again" | "done";
 }
 
+/**
+ * Mark which of a page's options is the one in force.
+ *
+ * The rows on these two pages are a choice the game's own conversation would
+ * have asked for, and a row of links says nothing about which one you are
+ * playing under — the fencing page offered three difficulties and looked
+ * identical at all three. The page knows its own answer as a query string, so
+ * that is what is matched; a defaulted choice passes the query it WOULD have
+ * been asked with, which is why this takes a string rather than reading
+ * `location.search`.
+ */
+export function markOption(query: string): void {
+  for (const a of document.querySelectorAll<HTMLAnchorElement>(".options a")) {
+    const own = new URL(a.href, window.location.href).search;
+    if (own === query) a.setAttribute("aria-current", "true");
+    else a.removeAttribute("aria-current");
+  }
+}
+
 /** the edition to read the files from — `?edition=de` for a localised tree */
 function edition(): string {
   const asked = new URLSearchParams(window.location.search).get("edition");

@@ -24,7 +24,7 @@
  * behind a reply to a question about a saloon in another game. Standalone there
  * is no conversation to answer, so it is a query parameter: `?deck=dust`.
  */
-import { bootMinigame } from "./minigame-boot";
+import { bootMinigame, markOption } from "./minigame-boot";
 
 /** which backs the cards carry — the dealer's question, asked in the URL instead */
 function deck(): string {
@@ -32,6 +32,8 @@ function deck(): string {
     ? "dust"
     : "titanic";
 }
+
+markOption(deck() === "dust" ? "?deck=dust" : "");
 
 void bootMinigame({
   stage: "blkjack.stg",

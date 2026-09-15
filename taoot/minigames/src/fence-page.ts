@@ -30,7 +30,7 @@
  * Haderlitz's own three options, and 15 is the default for the same reason it is
  * the middle reply.
  */
-import { bootMinigame } from "./minigame-boot";
+import { bootMinigame, markOption } from "./minigame-boot";
 
 /** the three the game offers, by the reply that picks each one */
 const LEVELS: Record<string, number> = { novice: 25, mediocre: 15, excellent: 5 };
@@ -42,10 +42,11 @@ function fencelevel(): { level: number; name: string } {
 }
 
 const picked = fencelevel();
+markOption(`?level=${picked.name}`);
 
 void bootMinigame({
   stage: "fence.stg",
-  title: `Fencing — ${picked.name} (fencelevel ${picked.level})`,
+  title: `Fencing — ${picked.name}`,
   /**
    * Before the stage opens would be wrong and after is right: `openstage ()` does
    * not touch `fencelevel`, but it DOES start Willie's attack loop, and that loop
