@@ -128,11 +128,20 @@ import {
   Drip,
   dripCel,
   dripFrames,
+  HOLE,
+  Hole,
+  HAND,
+  Hand,
+  AXE,
+  Axe,
+  BRIDGE,
+  Bridge,
 } from "./props";
 import { DEATH_FILMS, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
 import { CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, WEAPONS, type Flare, type Gun } from "./guns";
 import {
   CEL,
+  CLOCK,
   CLOCK_FULL,
   HudFighter,
   WINDOW,
@@ -1200,6 +1209,14 @@ interface Level {
   pickups: Pickup[][];
   /** the positive-code records — the guns, and the ammunition for them */
   guns: Gun[][];
+  /** level nine's five graves, shut until you come near one */
+  holes: Hole[][];
+  /** and its four hands, up out of the ground while you stand in their rect */
+  hands: Hand[][];
+  /** the swinging blades of levels ten and eleven */
+  axes: Axe[][];
+  /** and level ten's four rope bridges */
+  bridges: Bridge[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1485,6 +1502,27 @@ async function loadLevel(index: number): Promise<void> {
     sprinklers: rooms.map((r) => placed(sbk, r, "initsprinkler", SPRINKLER.rise.cels, (e) => ({ x: e.pointX, y: e.pointY, slot: e.param, top: e.top, left: e.left, bottom: e.bottom, right: e.right }))),
     pickups: rooms.map((r) => pickupsIn(sbk, r)),
     guns: rooms.map((r) => gunsIn(sbk, r)),
+    holes: rooms.map((r) =>
+      placed(sbk, r, "initgrave", [HOLE.shut], (e) => ({
+        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
+        state: "shut" as const, clock: 0,
+      })),
+    ),
+    axes: rooms.map((r) => placed(sbk, r, "initswingaxe", [AXE.swing[0]], (e) => ({ x: e.pointX, y: e.pointY, clock: 0 }))),
+    bridges: rooms.map((r) =>
+      placed(sbk, r, "initbridge", [BRIDGE.whole], (e) => ({
+        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
+        state: "whole" as const, stood: 0, clock: 0,
+      })),
+    ),
+    hands: rooms.map((r) =>
+      placed(sbk, r, "inithand", HAND.underfoot.up.cels, (e) => ({
+        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
+        // `0x420cc4` — the record's own param, not a roll
+        underfoot: e.param === 0, atX: e.pointX, atY: e.pointY,
+        state: "down" as const, clock: 0,
+      })),
+    ),
     crows: rooms.map((r) => crowsIn(sbk, r)),
     // z is the ENGINE's paint order, which is its collection order: the level's
     // frame fn (SC.EXE 0x412c30) collects plane lists p3, p0, then the actors,
@@ -1526,7 +1564,7 @@ async function loadLevel(index: number): Promise<void> {
   // ?clock= starts the mission clock short, which is the only way to reach the
   // last two minutes of an eight-minute dial from a test. It is spent on the
   // first level it is given to, so a timed-out level does not time out again.
-  stats.ticks = startTicks ?? CLOCK_FULL;
+  stats.ticks = startTicks ?? clockFor(sbk);
   startTicks = null;
   stats.shown = null;
   goalOpen = false;
@@ -2683,9 +2721,8 @@ function hurtBox(e: Enemy, c: SbkCel, lvl: Level): { top: number; left: number; 
  *   - **the kill quota** is the disc's per-level figure, set through one of the
  *     four script wrappers around `0x40d4a0`; with no script read, this counts
  *     what is still standing in the level instead.
- *   - **the mission clock** is a per-level figure too (`0x40d350`, and `32000`
- *     means no limit — `0x43be9c` passes exactly that). This page starts every
- *     level with the full dial, which is {@link CLOCK_FULL} frames.
+ *   - **the mission clock** is a per-level figure, and it is a RECORD: see
+ *     {@link clockFor}.
  */
 const stats = {
   score: 0,
@@ -3099,6 +3136,13 @@ function takeHits(): void {
     const cel = lvl.sbk.cels.find((q) => q.id === ibeamCel(b));
     if (!cel?.strike) continue;
     if (hit(cel, b.x, b.y, 1, 0, 0)) return;
+  }
+  // `0x423d29` and the four writes after it — the blade carries a blow of a
+  // hundred at every tag it has, and it has nothing else
+  for (const a of hereOf((l) => l.axes)) {
+    const cel = lvl.sbk.cels.find((q) => q.id === axeCel(a));
+    if (!cel?.strike) continue;
+    if (hit(cel, a.x, a.y, 1, 0, 0)) return;
   }
   // ...and the goop, which carries `obj+0x1a = 0x64` and therefore its cel's own
   // pair unscaled — see {@link dripStrike} for why that is one cel of nine
@@ -3685,6 +3729,186 @@ function stepPickups(): void {
   lvl.pickups[i] = here.filter((q) => !gone.includes(q));
 }
 
+/**
+ * Level nine's graves — `0x421040`, and there is no damage in it anywhere.
+ *
+ * Shut, it is a slab you cannot stand on: `0x4210bd` measures how far into its
+ * own rect you are and `0x42f8b0` throws you back out by that much, with
+ * `0136 grave pull`. Come within a hundred pixels of its point and it opens —
+ * `0x4704e8`, ten cels — and from that frame on it **pulls**: half your speed
+ * away every frame and one more unit of fall added to you. Eighty-six pixels
+ * below its point, `0x402fa0(5)` ends the level.
+ *
+ * So it is a hole and it behaves like one, which is the only thing in the game
+ * that kills without a blow.
+ */
+function stepHoles(): void {
+  const here = hereOf((l) => l.holes);
+  if (!here.length || !player) return;
+  for (const h of here) {
+    // SHUT: a slab you cannot walk through — but only on your feet. `0x4210a7`
+    // lets a jump (player kind 3) and anything off the ground straight past,
+    // which is what makes level nine a jumping level.
+    if (h.state === "shut" && p.onGround && p.x > h.left && p.x < h.right && p.y >= h.top && p.y <= h.bottom) {
+      const half = (h.right - h.left) / 2;
+      const out = Math.abs(Math.abs(h.x - p.x) - half - 1) * (p.x <= h.x ? -1 : 1);
+      p.vx += out / DIVISOR;
+      sound?.effect(FOE_SFX.gravePull, h.x, h.y);
+    }
+    const near = Math.abs(p.x - h.x) < HOLE.nearPx;
+    if (h.state === "shut") {
+      if (near) {
+        h.state = "opening";
+        h.clock = 0;
+      }
+      continue;
+    }
+    h.clock += 1;
+    if (h.state === "opening" && h.clock >= HOLE.opening.cels.length * HOLE.opening.hold) h.state = "open";
+    if (!near) continue;
+    // `0x4211af` and `0x4211c4` — half your speed away and one more unit of fall
+    p.vx = p.vx / 2;
+    p.vyRaw += HOLE.pullPerFrame;
+    // `0x42120c` — `0x402fa0(5)`, which is a DEATH and not a subtraction. There
+    // is no health in this class at all, so it goes down the same path falling
+    // out of the world does, whatever the damage switch says. And the ground
+    // beside a grave is already 98 below its point, so standing there when one
+    // opens is the whole of it: you have to be in the air over it.
+    if (p.y - h.y >= HOLE.deathPx && !film && !h.taken) {
+      h.taken = true;
+      sound?.effect(FOE_SFX.graveTake, h.x, h.y);
+      void died();
+    }
+  }
+}
+
+/** which cel a grave is showing */
+function holeCel(h: Hole): number {
+  if (h.state === "shut") return HOLE.shut;
+  if (h.state === "open") return HOLE.open;
+  return HOLE.opening.cels[Math.min(HOLE.opening.cels.length - 1, Math.floor(h.clock / HOLE.opening.hold))];
+}
+
+/**
+ * ...and the hands between them — `0x420c60`, which is the record's rect and
+ * nothing else. The player's point goes in, one of the two sizes is rolled and
+ * it comes up; it holds for `0x4704b8`'s thirty frames a cel; it goes back down
+ * when the point leaves.
+ *
+ * Its blow is a CODE (−3 or −7) rather than a number, so nothing here is hurt by
+ * one. See {@link HAND}.
+ */
+function stepHands(): void {
+  const here = hereOf((l) => l.hands);
+  if (!here.length) return;
+  // `0x434200` against the player's own POINT, which is the anchor — the feet
+  // stand below every rect in the file (see `poseFeet`)
+  const ay = p.y - p.feet;
+  for (const q of here) {
+    const kind = q.underfoot ? HAND.underfoot : HAND.anywhere;
+    const inside = p.x > q.left && p.x < q.right && ay >= q.top && ay <= q.bottom;
+    q.clock += 1;
+    if (q.state === "down") {
+      // `0x420ca9` — it only comes up under someone standing on the ground
+      if (!inside || !p.onGround) continue;
+      q.state = "up";
+      q.clock = 0;
+      sound?.effect(HAND.sound, q.x, q.y);
+      if (q.underfoot) {
+        // `0x420ce7` and `0x420d1b`: your own x, and two above your feet
+        q.atX = p.x;
+        q.atY = p.y - 2;
+      } else {
+        // `0x420d4b` — anywhere across its own rect, at the record's own height
+        q.atX = q.left + Math.floor(Math.random() * Math.max(1, q.right - q.left));
+        q.atY = q.y;
+      }
+    } else if (q.state === "up") {
+      if (q.clock >= kind.up.cels.length * kind.up.hold) {
+        q.state = "held";
+        q.clock = 0;
+      }
+    } else if (q.state === "held") {
+      // `0x4704b8`'s thirty frames, or twenty if it had hold of anything —
+      // which, its blow being a code this port does not carry, it never has
+      if (q.clock >= HAND.holdFrames) {
+        q.state = "sinking";
+        q.clock = 0;
+      }
+    } else if (q.clock >= kind.down.cels.length * kind.down.hold) {
+      q.state = "down";
+      q.clock = 0;
+    }
+  }
+}
+
+/** which cel a hand is showing, or 0 while it is under the ground */
+function handCel(q: Hand): number {
+  const kind = q.underfoot ? HAND.underfoot : HAND.anywhere;
+  if (q.state === "down") return 0;
+  if (q.state === "held") return kind.hold;
+  const a = q.state === "up" ? kind.up : kind.down;
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(q.clock / a.hold))];
+}
+
+/**
+ * The swinging blades — `0x423d00`, which is three tags handed round in a ring
+ * and nothing else. Twenty-seven cels, one engine frame each, and the blow is a
+ * hundred on every one of them.
+ */
+function stepAxes(): void {
+  for (const a of hereOf((l) => l.axes)) {
+    const was = Math.floor(a.clock) % AXE.swing.length;
+    a.clock += 1;
+    const now = Math.floor(a.clock) % AXE.swing.length;
+    // `0x423d9a` — the sound is at the seam where tag 2 hands back to tag 0
+    if (now === AXE.soundAt && was !== AXE.soundAt) sound?.effect(AXE.sound, a.x, a.y);
+  }
+}
+
+/** which cel a blade is showing */
+function axeCel(a: Axe): number {
+  return AXE.swing[Math.floor(a.clock) % AXE.swing.length];
+}
+
+/**
+ * ...and the rope bridges — `0x422370`. Standing on one for more than five
+ * engine frames, or landing on one from more than a hundred pixels up, starts
+ * it; after that it rocks, falls and is gone, and the gap it was over is a gap.
+ */
+function stepBridges(): void {
+  const here = hereOf((l) => l.bridges);
+  if (!here.length) return;
+  for (const b of here) {
+    const on = p.onGround && Math.abs(p.x - b.x) < BRIDGE.reachPx && Math.abs(p.y - b.y) < 60;
+    if (b.state === "whole") {
+      b.stood = on ? b.stood + 1 : 0;
+      if (on && (b.stood > BRIDGE.standFrames || p.fallPx > BRIDGE.fallPx)) {
+        b.state = "rocking";
+        b.clock = 0;
+        sound?.effect(FOE_SFX.bridgeCrack, b.x, b.y);
+      }
+      continue;
+    }
+    b.clock += 1;
+    if (b.state === "rocking" && b.clock >= BRIDGE.rocking.cels.length * BRIDGE.rocking.hold) {
+      b.state = "falling";
+      b.clock = 0;
+      sound?.effect(FOE_SFX.bridgeFall, b.x, b.y);
+    } else if (b.state === "falling" && b.clock >= BRIDGE.falling.cels.length * BRIDGE.falling.hold) {
+      b.state = "gone";
+    }
+  }
+}
+
+/** which cel a bridge is showing */
+function bridgeCel(b: Bridge): number {
+  if (b.state === "whole") return BRIDGE.whole;
+  if (b.state === "gone") return BRIDGE.gone;
+  const a = b.state === "rocking" ? BRIDGE.rocking : BRIDGE.falling;
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(b.clock / a.hold))];
+}
+
 // ---- the guns ------------------------------------------------------------
 
 /**
@@ -3946,6 +4170,42 @@ function stepGuns(): void {
     g.vy = undefined;
     g.vx = undefined;
   }
+}
+
+/**
+ * How long this level gives you, and it was in the books all along.
+ *
+ * Every chapter's entry function ends with the same block — `0x421e60` is
+ * chapter three's, and `0x4164a2`, `0x43be72` and `0x451582` are its three
+ * siblings. It asks the book for its `timer` records, and:
+ *
+ * ```
+ *   421e8f  mov  eax, [esp]        ; the first record, and +0 is its PARAM
+ *   421e94  call 0x40d340          ; -> [0x4a3b18], the dial's full scale
+ *   421e99  mov  eax, [esp+4]      ; esp moved: the SAME dword again
+ *   421ea1  call 0x40d350          ; -> [0x4a4d68], the clock itself
+ *   421ead  push 0x7d00            ; no record at all: both get 32000
+ * ```
+ *
+ * So one number does both, and it is the record's own `param`. Eleven books
+ * carry one and five do not, and the five that do not have **no time limit** —
+ * `0x40d250` reads 32000 as "no dial". Which is exactly the five you would
+ * expect: PLAYGR and ARCADE, whose bosses the level waits for, and CAVERN,
+ * TOWER and VAT.
+ *
+ * ```
+ *   streets 4000   city 8200   woods 7200   playgr    —
+ *   mall    5220   service 5300  sewer 7200  arcade   —
+ *   grave   2100   cavern   —   ravecave 2500  tower  —
+ *   maze    3200   barrel 8200  lab 2500    vat      —
+ * ```
+ *
+ * This page had been giving all sixteen the full dial, which is `CLOCK_FULL`
+ * — 7200, and so right only for WOODS and SEWER by accident.
+ */
+function clockFor(sbk: SbkFile): number {
+  const rec = sbk.entities.find((e) => e.name === "timer");
+  return rec ? rec.param : CLOCK.noLimit;
 }
 
 /** every roach in the air or on the floor, nest or no nest */
@@ -4652,7 +4912,7 @@ function stepBoss(e: Enemy, foe: Foe, run: number): boolean {
     // a kind with no stirring of its own simply starts walking
     e.anim = foe.wake.stir ?? foe.gait;
     e.clock = 0;
-    sound?.effect(foe.wake.sound, e.x, e.y);
+    if (foe.wake.sound !== undefined) sound?.effect(foe.wake.sound, e.x, e.y);
     return false;
   }
   if (foe.wake?.stir && e.anim === foe.wake.stir) {
@@ -5821,6 +6081,10 @@ function loop(now: number): void {
     stepScenery();
     stepColumns();
     stepPickups();
+    if (frame) stepHoles();
+    if (frame) stepHands();
+    if (frame) stepAxes();
+    if (frame) stepBridges();
     stepGuns();
     if (frame) stepFlares();
     stepCrows();
@@ -5945,6 +6209,13 @@ function loop(now: number): void {
   // the goal's craft and the goo share the play plane with the player: the
   // engine's own effect class is collected with the actors, not the backdrop
   drawCraft(camX, camY);
+  for (const b of hereOf((l) => l.bridges)) drawLevelCel(bridgeCel(b), b.x, b.y, camX, camY);
+  for (const a of hereOf((l) => l.axes)) drawLevelCel(axeCel(a), a.x, a.y, camX, camY);
+  for (const h of hereOf((l) => l.holes)) drawLevelCel(holeCel(h), h.x, h.y, camX, camY);
+  for (const q of hereOf((l) => l.hands)) {
+    const id = handCel(q);
+    if (id) drawLevelCel(id, q.atX, q.atY, camX, camY);
+  }
   drawPickups(camX, camY);
   drawGuns(camX, camY);
   drawFlares(camX, camY);
@@ -6241,6 +6512,10 @@ function loop(now: number): void {
     ...hereOf((l) => l.shacks).filter((k) => k.state !== "shut").map((k) => `shack ${k.state} cel ${shackCel(k)}`),
     ...hereOf((l) => l.barrels).map((b) => `barrel at ${Math.round(b.x)},${Math.round(b.y)}`),
     ...hereOf((l) => l.pipes).map((q) => `pipe at x${q.x}`),
+    ...hereOf((l) => l.holes).map((h) => `grave ${h.state} cel ${holeCel(h)} at x${h.x}`),
+    ...hereOf((l) => l.axes).map((a) => `axe cel ${axeCel(a)} at x${a.x}`),
+    ...hereOf((l) => l.bridges).map((b) => `bridge ${b.state} cel ${bridgeCel(b)} at x${b.x}`),
+    ...hereOf((l) => l.hands).map((q) => `hand ${q.state}${q.underfoot ? " underfoot" : ""} cel ${handCel(q)} at x${Math.round(q.atX)}`),
     ...hereOf((l) => l.bushes).map((q) => `bush at x${q.x}`),
     roaches.length ? `${roaches.length} roaches` : "",
     hereOf((l) => l.sprinklers).length

@@ -243,6 +243,33 @@ export const FOE_SFX = {
   kraggHit: [23, 24] as const,
   kraggFlare: 0x13,
   kraggLoop: 0x17,
+  /**
+   * Chapter THREE's, out of `belfry.snd`, and its names are again the check:
+   * 12..18 are `0040 zombie die`, `0041 zombie a4`, `0042 zombie tak`,
+   * `0043 zombie get`, `0045 zombie bre` and `0046 zombie bre`, 3 is
+   * `0020 hands brea[k]`, 58 is `0136 grave pull` and 49 `0100 skull muff[led]`
+   * — the one the player makes going into a hole.
+   */
+  zombHit: 0xf,
+  zombDeath: 0xc,
+  /** `0x421135` — what a closed grave plays as it throws you off it */
+  gravePull: 0x3a,
+  /** `0x421256` — and what you make on the way down */
+  graveTake: 0x31,
+  /** `0x4211e4` and `0x420c8b` — the hand, coming up and going down */
+  hand: 3,
+  /** `0x42332c` — `0012 bat hit`, and a bat dies to any blow at all */
+  batDeath: 2,
+  /** `0x422bcb` and `0x422cd7` — `0096 GHENGIS ST` and `0090 GHENGIS SN` */
+  ghengisHit: 0x2a,
+  ghengisDeath: 0x2f,
+  /** `0x423ac4` — `0053 skeleton z` */
+  skelHit: 0x16,
+  /** `0x4224xx` — `0124 bridge cru` as one gives way, `0125 bridge cav` after */
+  bridgeCrack: 0x34,
+  bridgeFall: 0x35,
+  /** `0x423d9d` — `0070 swiningbla[de]` */
+  axe: 0x20,
   /** `0x43b6a3` — `mall.snd` names index 32 "#0120 coke mach[ine]" */
   cokeHit: 32,
   /**

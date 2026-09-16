@@ -254,7 +254,7 @@ export interface Foe {
    * The dog has the same mechanism (`0x454c13`) and this page does not give it:
    * WOODS' six are awake from the first frame.
    */
-  wake?: { cel?: number; stir?: FoeAnim; burst?: FoeAnim; sound: number; stirSound?: number; from: string };
+  wake?: { cel?: number; stir?: FoeAnim; burst?: FoeAnim; sound?: number; stirSound?: number; from: string };
   /**
    * The states its class drives while it is alive and unhurt, beyond standing.
    *
@@ -1375,6 +1375,142 @@ export const FOES: Readonly<Record<string, Foe>> = {
     health: Infinity,
     counts: false,
     from: "0x44fc70 / 0x44fa60 / 0x44fb20 / 0x44fbd0",
+  },
+  /**
+   * CHAPTER THREE opens here, and its population is one creature repeated.
+   * Creator `0x41eee0`, class `0x420260`, think `0x420330`, hit `0x4209f0`.
+   *
+   * Twenty-four of them across two levels — sixteen in GRAVE and eight in
+   * CAVERN — and they are the biggest ordinary thing the game has put in front
+   * of the player so far: **a hundred health** against chapter two's gang of 25
+   * and 40, a divisor of 10 against their 7, and **310 points** for one, which
+   * is more than the masked one's 220.
+   *
+   * Its own blow strength is a hundred as well (`0x4202a4`), the same number the
+   * flare carries — so a zombie hits as hard as the chapter's gun.
+   *
+   * Eight scripts, one per state, and the kinds are the states the way they are
+   * everywhere in this engine: `0x470078` is the one dormant cel, `0x470088` the
+   * idle and its fidget, `0x470110` the walk, `0x470180` and `0x4701e0` two
+   * attacks, `0x470148` a fifth thing, `0x470248` the flinches and `0x470270`
+   * the death. What this port drives is the same set it drives for every other
+   * creature: dormant until the player's point is inside the record's rect
+   * (`0x4203b3`), then a patrol, a flinch and a death.
+   */
+  initzomb: {
+    // `0x470110` tag 0 — six cels at TWO frames each, dx 65
+    gait: { cels: [1800, 1801, 1802, 1803, 1804, 1805], hold: 2, dx: [65, 65, 65, 65, 65, 65], from: "0x470110 tag 0" },
+    // `0x420280` — the slowest divisor in the game outside a boss
+    divisor: 10,
+    // `0x470248` tags 0, 1 and 2 at FOUR frames a cel, rolled `0x434540(3)`
+    flinch: [
+      { cels: [1860], hold: 4, from: "0x470248 tag 0" },
+      { cels: [1861], hold: 4, from: "0x470248 tag 1" },
+      { cels: [1862], hold: 4, from: "0x470248 tag 2" },
+    ],
+    // `0x470270` tag 0 — three cels at three frames each
+    death: { cels: [1863, 1864, 1865], hold: 3, from: "0x470270 tag 0" },
+    // `0x4203b3`: it stands on the creator's own single cel until the player's
+    // point is inside its record's rect, and then `0x470088` takes over
+    wake: { cel: 1800, from: "0x4203a6 / 0x420294" },
+    // `0x41ef34` — `0x40e300(0xc8)`, which is `n - (n/2) * difficulty` and so
+    // two hundred at the shipped setting. `obj+0x3c`'s 0x64 is not this: the
+    // hit handler subtracts from `user+0` (`0x420a55`) and the panel is claimed
+    // with the same pair (`0x420388`).
+    health: 200,
+    hitSound: FOE_SFX.zombHit,
+    deathSound: FOE_SFX.zombDeath,
+    // `0x420abf` pays 0x136
+    panel: { health: 200, plate: 13200, award: 310 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x41eee0 / 0x420260 / 0x420330 / 0x4209f0",
+  },
+  /**
+   * The bat — `initbat`, forty-five of them across CAVERN, RAVECAVE and TOWER,
+   * and the only flying thing in the game that is not a boss. Creator
+   * `0x41ead0`, class `0x422e10`, think `0x422ef0`, hit `0x4232f0`.
+   *
+   * Its divisor is **1**, the lowest in the game — every other creature divides
+   * its script's dx by 7, 10, 13 or 20 and the bat divides by nothing. What
+   * saves it from being a blur is that its dx is 3 and 4 rather than 60 and 120.
+   *
+   * And it is FRAIL in the engine's own sense: `0x4232f0` has no subtraction in
+   * it anywhere. It sprays sixty, plays `0012 bat hit`, installs `0x46f140` and
+   * pays seventy points. One blow, whatever the blow. It does not count towards
+   * the level's census either — `0x41ead0` never calls `0x42f870`.
+   */
+  initbat: {
+    // `0x46f060` tag 0 — four cels, dx 3, through a divisor of one
+    gait: { cels: [2200, 2201, 2202, 2203], hold: 1, dx: [3, 3, 3, 3], from: "0x46f060 tag 0" },
+    divisor: 1,
+    floats: true,
+    flinch: [{ cels: [2205], hold: 4, from: "0x46f140 tag 0" }],
+    death: { cels: [2205, 2206], hold: 4, from: "0x46f140 tag 0" },
+    health: 1,
+    frail: true,
+    hitSound: FOE_SFX.batDeath,
+    panel: { health: 1, plate: 13201, award: 70 },
+    counts: false,
+    bleeds: true,
+    vanishes: true,
+    from: "0x41ead0 / 0x422e10 / 0x422ef0 / 0x4232f0",
+  },
+  /**
+   * GHENGIS — `initghengis`, five in CAVERN and three in TOWER. Creator
+   * `0x41ea20`, class `0x4225f0`, think `0x422680`, hit `0x422ad0`.
+   *
+   * Two hundred health, four hundred points, a divisor of 13, and a walk that
+   * comes in two speeds: `0x46ee60` tag 0 at dx 85 and tag 1 at 170 for the
+   * first half of the cycle. It swallows a blow strength of exactly −4
+   * (`0x422b52`), which is the second class in the game with a code in its
+   * ignore test.
+   */
+  initghengis: {
+    gait: { cels: [400, 401, 402, 403, 404, 405], hold: 2, dx: [85, 85, 85, 85, 85, 85], from: "0x46ee60 tag 0" },
+    divisor: 13,
+    // `0x46eee0` tag 0, kind 4 — nine cels, one frame each
+    flinch: [{ cels: [470, 471, 472, 473, 474, 475, 476, 477, 478], hold: 1, from: "0x46eee0 tag 0" }],
+    // `0x46efe0` tag 0, kind 9 — and it changes row half way down
+    death: { cels: [430, 431, 432, 433, 434, 440, 441, 442, 443, 444, 445], hold: 1, from: "0x46efe0 tag 0" },
+    // `0x46ed80` tag 0 — one cel, and the think installs it before anything
+    wake: { cel: 420, from: "0x46ed80 tag 0" },
+    health: 200,
+    hitSound: FOE_SFX.ghengisHit,
+    deathSound: FOE_SFX.ghengisDeath,
+    panel: { health: 200, plate: 13202, award: 400 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x41ea20 / 0x4225f0 / 0x422680 / 0x422ad0",
+  },
+  /**
+   * The skeleton — `initskel`, six in CAVERN and four in TOWER. Creator
+   * `0x41ed70`, class `0x4233e0`, think `0x4234b0`, hit `0x423a30`.
+   *
+   * Two hundred health and **450 points**, the most any ordinary creature in the
+   * game is worth. Nine scripts, and two of them carry a leap in their own
+   * records: `0x46fbc0` tag 0 has `1273` at dy −650 and `0x46fcf0` tag 0 has
+   * `1265` at dx 170, dy −420 — so both its jump and the blow that knocks it
+   * over are authored in the animation rather than applied to it.
+   */
+  initskel: {
+    gait: { cels: [1200, 1201, 1202, 1203, 1204, 1205], hold: 2, dx: [65, 65, 65, 65, 65, 65], from: "0x46fac0 tag 0" },
+    divisor: 13,
+    // `0x46fcf0` tag 0, kind 6 — and its last record carries the throw
+    flinch: [{ cels: [1260, 1261, 1262, 1263, 1263, 1263, 1264, 1265], hold: 2, from: "0x46fcf0 tag 0" }],
+    // `0x46fd90` tag 0, kind 8, three frames a cel
+    death: { cels: [1350, 1351, 1352, 1353, 1354, 1355, 1356, 1357, 1358, 1359], hold: 3, from: "0x46fd90 tag 0" },
+    // `0x46fab0` tag 0 — the one cel the creator stands it on
+    wake: { cel: 1200, from: "0x42340f / 0x46fab0 tag 0" },
+    health: 200,
+    hitSound: FOE_SFX.skelHit,
+    panel: { health: 200, plate: 13203, award: 450 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x41ed70 / 0x4233e0 / 0x4234b0 / 0x423a30",
   },
 };
 

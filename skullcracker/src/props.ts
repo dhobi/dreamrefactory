@@ -1502,3 +1502,215 @@ export interface Pickup {
   right: number;
   clock: number;
 }
+
+/**
+ * A HOLE IN THE GROUND, and the only thing in the game that kills you without
+ * hitting you — `initgrave`, five of them in level nine. Creator `0x41f0e0`,
+ * class `0x420f90`, think `0x421040`.
+ *
+ * It has no health, no hit handler and no blow. What it has is three states and
+ * a hundred pixels:
+ *
+ * ```
+ *   shut   0x4704d0 tag 0, cel 3310   the slab. Stand ON it and 0x4210bd
+ *                                     shoves you back off by the width of its
+ *                                     own rect, with `0136 grave pull`
+ *   near   0x4704d0 tag 1             the frame your x comes within 100 of its
+ *   open   0x4704e8 tag 0, 3310..3319 and now it PULLS: 0x4211af halves your
+ *                                     horizontal velocity and 0x4211c4 adds one
+ *                                     to your fall every frame
+ *   held   0x470540 tag 0, cel 3319   the hole, standing open
+ * ```
+ *
+ * and then `0x42120c`: once the player is **86 pixels below the grave's own
+ * point**, `0x402fa0(5)` — the same call that ends the player anywhere else.
+ * There is no health subtraction anywhere in the class. You do not get hurt by
+ * a grave, you fall into it.
+ */
+export const HOLE = {
+  /** `0x420fb4` — the slab, before anything has happened to it */
+  shut: 3310,
+  /** `0x4704e8` tag 0 — ten cels, one engine frame each, and it does not loop */
+  opening: { cels: [3310, 3311, 3312, 3313, 3314, 3315, 3316, 3317, 3318, 3319], hold: 1, from: "0x4704e8 tag 0" },
+  /** `0x470540` tag 0 — and it stays like that */
+  open: 3319,
+  /** `0x4210bd`'s test and `0x42115a`'s: the two distances that matter */
+  nearPx: 100,
+  /** `0x42121b`'s `sub ecx, 0x56` — how far down is far enough */
+  deathPx: 86,
+  /** `0x4211c4`'s `inc word ptr [eax+0xa]` — one unit of fall a frame */
+  pullPerFrame: 1,
+  /** `0x4211af` — and half your speed along with it */
+  dragHalves: true,
+  from: "0x41f0e0 / 0x420f90 / 0x421040",
+} as const;
+
+export interface Hole {
+  x: number;
+  y: number;
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** "shut" until the player is inside 100, then it opens and stays open */
+  state: "shut" | "opening" | "open";
+  /** `0x421230`'s `cmp word ptr [edi+0xa], 0` — one grave takes one player */
+  taken?: boolean;
+  clock: number;
+}
+
+/**
+ * What comes up out of the ground between them — `inithand`, four of them in
+ * level nine. Creator `0x41f090`, class `0x420bb0`, think `0x420c60`.
+ *
+ * Gravity zero, divisor 10, and the trigger is the player's own point inside the
+ * record's rect (`0x434200`) **while they are on the ground** (`0x420ca9`).
+ *
+ * There are two of them and it is the record's `param` that says which, not a
+ * roll — `0x41f0d8` files the param at `user+8` and `0x420cc4` switches on it:
+ *
+ * - **param 0** takes the PLAYER'S OWN X (`0x420ce7`) and a y of the player's
+ *   drawn bottom less two (`0x42f9f0`, then `0x420d1b`). It comes up under your
+ *   feet wherever you are standing. Script `0x470400` tag 0 — six wide cels.
+ * - **param 1** picks a random x inside its own rect (`0x434540(right - left)
+ *   + left`) and keeps the record's y. Script tag 3 — five narrow ones.
+ *
+ * Each holds on one cel out of `0x4704b8`, whose `ticksPerFrame` is **30**: two
+ * seconds a frame, and that pause is the whole of the hazard. `0x420dc6` lets it
+ * go early — after 20 frames, but only if it has hold of something.
+ *
+ * Its blow strengths are `0xfffd` and `0xfff9` — **−3 and −7**. Those are codes
+ * and not damage, the same kind of number `initbush`'s grab carries and the same
+ * kind the flamethrower's flame carries; what they mean is the receiving
+ * handler's business, and this port does not carry them. So a hand rises, holds
+ * and sinks, and cannot yet take hold of anything.
+ */
+export const HAND = {
+  /** param 0 — `0x470400` tags 0 and 2, `0x4704b8` tag 1. 66px across */
+  underfoot: {
+    up: { cels: [1550, 1551, 1552, 1553, 1554, 1555], hold: 1, from: "0x470400 tag 0" },
+    hold: 1556,
+    down: { cels: [1555, 1554, 1553, 1552, 1551, 1550], hold: 1, from: "0x470400 tag 2" },
+    blow: -3,
+  },
+  /** param 1 — tags 3 and 5, `0x4704b8` tag 4. 38px, and it hits harder */
+  anywhere: {
+    up: { cels: [1557, 1558, 1559, 1560, 1561], hold: 1, from: "0x470400 tag 3" },
+    hold: 1562,
+    down: { cels: [1561, 1560, 1559, 1558, 1557], hold: 1, from: "0x470400 tag 5" },
+    blow: -7,
+  },
+  /** the cel it waits on, out of sight under the ground — `0x4703f0` */
+  hidden: 1550,
+  /** `0x4704b8`'s own `ticksPerFrame` */
+  holdFrames: 30,
+  /** `0x420bcb` */
+  divisor: 10,
+  /** `0x420cba` — `belfry.snd` names 3 "0020 hands brea[k]" */
+  sound: 3,
+  from: "0x41f090 / 0x420bb0 / 0x420c60",
+} as const;
+
+export interface Hand {
+  /** the record's own point and rect — where it may come up */
+  x: number;
+  y: number;
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** the record's `param`: 0 comes up under your feet, 1 anywhere in its rect */
+  underfoot: boolean;
+  /** where THIS rise is happening, which for param 0 is wherever you stood */
+  atX: number;
+  atY: number;
+  state: "down" | "up" | "held" | "sinking";
+  clock: number;
+}
+
+/**
+ * The swinging blade — `initswingaxe`, fifteen in CAVERN and three in RAVECAVE.
+ * Creator `0x41ef90`, class `0x423c60`, think `0x423d00`.
+ *
+ * One script and three tags, and the think does nothing but hand them round in
+ * a ring: `0x423d51` waits for tag 0 to end and installs tag 1, `0x423d7b`
+ * waits for tag 1 and installs tag 2, `0x423db4` waits for tag 2 and goes back
+ * to tag 0 — playing `0070 swiningbla[de]` as it does. Twenty-seven cels, one
+ * engine frame each, for ever.
+ *
+ * Its velocity is written to zero every frame (`0x423d0b`), its gravity is zero
+ * and its blow is a hundred at every single tag. So it is a pendulum that does
+ * not move and cannot be stopped, and every one of its records is the same
+ * 112x287 box hanging over a walkway.
+ */
+export const AXE = {
+  /** `0x4702c8` tags 0, 1 and 2 in the order the think rings them */
+  swing: [
+    4040, 4041, 4042, 4043, 4044, 4045, 4046, 4047,
+    4048, 4049, 4050, 4051, 4052, 4051, 4050, 4049, 4048,
+    4047, 4046, 4045, 4044, 4043, 4042, 4041, 4040, 4040, 4040,
+  ],
+  /** where tag 2 hands back to tag 0 — the frame `0070 swiningbla[de]` plays */
+  soundAt: 0,
+  sound: 0x20,
+  /** `0x423c8d` */
+  divisor: 20,
+  /** `0x423d29` and the four after it — every tag, the same hundred */
+  blow: 100,
+  from: "0x41ef90 / 0x423c60 / 0x423d00",
+} as const;
+
+export interface Axe {
+  x: number;
+  y: number;
+  /** engine frames into the ring of 27 */
+  clock: number;
+}
+
+/**
+ * The rope bridge — `initbridge`, four of them in CAVERN. Creator `0x41e9c0`,
+ * class `0x4222b0`, think `0x422370`.
+ *
+ * A 220x25 record laid across a gap, and three states:
+ *
+ * ```
+ *   whole   0x46ecf8 tag 0, cel 750
+ *   rocking 0x46ed08 tag 0, 750 751 750 751   `0124 bridge cru[mbles]`
+ *   gone    0x46ed30 tag 0, 751..754          then tag 1 (755) and tag 2 (756)
+ * ```
+ *
+ * and the test that starts it (`0x4223c5`) is the player on the ground, within
+ * 300 of it, and EITHER a counter at `user+0xc` past five — how long you have
+ * been on it — or a fall of more than a hundred onto it. So you can cross one
+ * if you keep moving, and you cannot stand on one.
+ */
+export const BRIDGE = {
+  whole: 750,
+  /** `0x46ed08` tag 0 — the warning, and it is two cels alternating */
+  rocking: { cels: [750, 751, 750, 751], hold: 1, from: "0x46ed08 tag 0" },
+  /** `0x46ed30` tag 0 then 1 then 2 */
+  falling: { cels: [751, 752, 753, 754], hold: 2, from: "0x46ed30 tag 0" },
+  gone: 756,
+  /** `0x4223e0`'s `cmp ecx, 0x12c` */
+  reachPx: 300,
+  /** `0x4223f5`'s `cmp word ptr [edx+0xc], 5` — engine frames of standing */
+  standFrames: 5,
+  /** `0x422401`'s `cmp word ptr [eax+0x32], 0x64` — or one hard landing */
+  fallPx: 100,
+  /** `0x4222e1` */
+  divisor: 10,
+  from: "0x41e9c0 / 0x4222b0 / 0x422370",
+} as const;
+
+export interface Bridge {
+  x: number;
+  y: number;
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  state: "whole" | "rocking" | "falling" | "gone";
+  /** how many engine frames the player has been standing on it */
+  stood: number;
+  clock: number;
+}
