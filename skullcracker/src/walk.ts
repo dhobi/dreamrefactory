@@ -3897,6 +3897,18 @@ function stepBridges(): void {
       sound?.effect(FOE_SFX.bridgeFall, b.x, b.y);
     } else if (b.state === "falling" && b.clock >= BRIDGE.falling.cels.length * BRIDGE.falling.hold) {
       b.state = "gone";
+      // and the platform goes with it. Every `initbridge` record in CAVERN has a
+      // `platform` record with the SAME rect laid over it — records 13, 75, 76
+      // and 22 against bridges 72, 73, 74 and 77 — so what you were standing on
+      // is the thing that just fell.
+      const lvl2 = level;
+      if (lvl2) {
+        const r = lvl2.rooms.indexOf(p.room!);
+        if (r >= 0)
+          lvl2.solids[r].platforms = lvl2.solids[r].platforms.filter(
+            (q) => !(q.left === b.left && q.right === b.right && q.top === b.top),
+          );
+      }
     }
   }
 }
@@ -5256,6 +5268,22 @@ function stepEnemies(): void {
         e.thrown = false;
         continue;
       }
+    }
+    /**
+     * ...or it simply comes at you, which is what a bat does.
+     *
+     * `0x422f12` reads the brain's forward distance, clamps it to ±27 and writes
+     * it into `obj+0xc` — the velocity, not the territory. So a chaser leaves its
+     * rect the moment it wakes, and the rect was only ever the alarm.
+     */
+    if (foe.chases && !e.asleep && e.state === "gait") {
+      const dx = p.x - e.x;
+      const dy = p.y - p.feet - e.y;
+      const px = foe.chases.px;
+      e.facing = dx >= 0 ? 1 : -1;
+      e.x += Math.max(-px, Math.min(px, dx)) * TICK_SCALE;
+      if (foe.floats) e.y += Math.max(-px, Math.min(px, dy)) * TICK_SCALE;
+      continue;
     }
     const i = e.state === "gait" ? loopIndex(e.anim, e.clock) : Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
     const step = ((e.anim.dx?.[i] ?? 0) / foe.divisor) * TICK_SCALE;

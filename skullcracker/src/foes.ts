@@ -256,6 +256,15 @@ export interface Foe {
    */
   wake?: { cel?: number; stir?: FoeAnim; burst?: FoeAnim; sound?: number; stirSound?: number; from: string };
   /**
+   * It comes to YOU rather than walking its rect.
+   *
+   * `0x422f12` is the whole of the bat's: the brain's reading of how far ahead
+   * the player is, clamped to `±px` and written straight into `obj+0xc`. A
+   * creature with this ignores its own territory once it is awake; what the
+   * rect is for is waking it.
+   */
+  chases?: { px: number; from: string };
+  /**
    * The states its class drives while it is alive and unhurt, beyond standing.
    *
    * Only the boss has one. Its loop is `0x455e87`: hover a frame, decide on the
@@ -1446,6 +1455,10 @@ export const FOES: Readonly<Record<string, Foe>> = {
     gait: { cels: [2200, 2201, 2202, 2203], hold: 1, dx: [3, 3, 3, 3], from: "0x46f060 tag 0" },
     divisor: 1,
     floats: true,
+    // `0x422f18` and `0x422f26` — the clamp, both ways, and nothing else
+    chases: { px: 0x1b, from: "0x422f12" },
+    // `0x422f50` — the record's rect is what wakes it, not what holds it
+    wake: { cel: 2206, from: "0x422e45 / 0x422f50" },
     flinch: [{ cels: [2205], hold: 4, from: "0x46f140 tag 0" }],
     death: { cels: [2205, 2206], hold: 4, from: "0x46f140 tag 0" },
     health: 1,

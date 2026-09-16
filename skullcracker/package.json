@@ -30,6 +30,7 @@
     "test:browser:arcade": "tsx tests/browser/arcade.ts",
     "test:browser:guns": "tsx tests/browser/guns.ts",
     "test:browser:grave": "tsx tests/browser/grave.ts",
+    "test:browser:cavern": "tsx tests/browser/cavern.ts",
     "test:browser:pickups": "tsx tests/browser/pickups.ts"
   }
 }
