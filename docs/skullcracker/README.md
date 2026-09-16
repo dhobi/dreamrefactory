@@ -777,6 +777,47 @@ before it does anything at all, runs the four cels of `0x474db0` with `dx 65` on
 each, and **removes itself the frame its own point leaves the rect it was born
 in** — which is what keeps them in the room.
 
+### ARCADE is fourteen records and one fight
+
+Level eight is the smallest level in the game and the end of chapter two: one
+room 1845 pixels wide with a flat floor, one boss, seven sprinkler positions, two
+pickups, a `probe` and a `goal` — and the goal is **thirty pixels from where you
+start**. Nothing about it is a route. Chapter two's fourth share is the one
+stored as zero, so the craft does not come until the room is empty, and the room
+is one thing with a thousand health.
+
+**`initkragg` is a global, not a class.** Every other creature in the game is a
+class descriptor, a creator and an instance struct; this one is made once at
+`0x441bd0` and kept in a pointer at `0x4a6ff8`, with its health in a second
+global at `0x4a75c8`. What the level's spawner calls `initkragg`'s creator,
+`0x436180`, does not create: it moves the thing that already exists onto the
+record's point and installs its idle. Which is why that call is made **once**
+rather than once per record.
+
+A divisor of fifty — the slowest thing here — and `0x42f850(obj, 0)`, no gravity
+at all, so it hangs where its record put it with the bottom of its body box 115
+pixels over the floor. A kick from the ground cannot touch it. And it **pays
+nothing**: there is no `0x40d450` anywhere in its code, which no other boss can
+say.
+
+Its takes are sorted by one number, `0x2d`: under 45 a random one of the three
+single cels of `0x473a28`, 45 or over the six-cel `0x473a48`. And there is a
+third kind of blow it tests for before either — a strength of exactly **−9**,
+which gets twenty-six frames of `0x473a88` and an extra sound. Minus nine is the
+flare, and level eight is the level that places a `statflaregun` and a
+`statflare` to throw at it.
+
+**A sprinkler record is not an object.** `0x440800` creates nothing: it walks the
+seven records and files each one's point into a seven-entry table at `0x4a7000`
+indexed by the record's own `param`, which is why ARCADE's seven carry 0 to 6 and
+no two share a number. What comes up is made later, by the boss, with a four-byte
+context and a slot marked taken — and the trigger is the neatest thing in the
+level: `0x441b20` asks which sprinkler's rect contains the **boss's own point**
+and `0x441b60` raises that one, or rolls for a free one if it is already up. So
+the thing you are fighting turns on the water it is standing over. That needs its
+state machine, three thousand bytes at `0x440ab0`, which is not driven here: the
+seven positions and the column's own cels are, and nothing yet sends one up.
+
 ### Gravity was in there all along
 
 It was called this port's last invented number for a long time, on the grounds
@@ -1006,6 +1047,7 @@ all — and that is the whole of the mixer.
 - `skullcracker/tests/browser/mall.ts` — MALL's three regions, its population and its machines
 - `skullcracker/tests/browser/service.ts` — SERVICE's two new classes, its six levers and what they pour
 - `skullcracker/tests/browser/sewer.ts` — SEWER's five locks, its lifts and the way through its thirteen regions
+- `skullcracker/tests/browser/arcade.ts` — ARCADE's one boss, out of reach until you jump at it
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

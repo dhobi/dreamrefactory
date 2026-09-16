@@ -158,12 +158,16 @@ const main = async (): Promise<void> => {
   console.log(`ok    a woken keeper walks to 501 and throws it on by itself`);
 
   // 9. one with the knife fought and felled, for what its handler pays
-  await go(1100);
+  // the fourth of them, at x7634, is the only one in the level with no other
+  // plated thing near it — the other three share their stretch with a masked one
+  // or a bat, and which of the four the panel is showing flips as they patrol
+  await go(7500);
   await page.waitForTimeout(700);
   let dead = false;
-  // the ground stands up 93px at x808 and this one's territory straddles it, so
   // the height has to be part of the reach: a kick aimed over its head misses
-  for (let i = 0; i < 300 && !dead; i++) {
+  let lastX = (await at()).x;
+  let held = 0;
+  for (let i = 0; i < 500 && !dead; i++) {
     await page.waitForTimeout(40);
     const m = /nearest (\w+) (-?\d+)\/(\d+)hp (\w+) at x (-?\d+), y (-?\d+)/.exec(await say());
     if (!m) break;
@@ -177,12 +181,24 @@ const main = async (): Promise<void> => {
     if (Math.abs(d) < 80 && Math.abs(dy) < 60) {
       await page.keyboard.press("k");
       await page.waitForTimeout(190);
+      held = 0;
     } else {
       const key = d > 0 ? "ArrowRight" : "ArrowLeft";
       await page.keyboard.down(key);
       await page.waitForTimeout(80);
       await page.keyboard.up(key);
+      // the 93px step at x808 is in the middle of this one's territory, and a
+      // walk that has stopped against it needs a jump, not more walking
+      if (Math.abs(me.x - lastX) < 2) {
+        held += 1;
+        if (held >= 3) {
+          await page.keyboard.press("j");
+          await page.waitForTimeout(300);
+          held = 0;
+        }
+      } else held = 0;
     }
+    lastX = me.x;
   }
   if (!dead) fail(`never felled one with the knife`);
   await page.waitForTimeout(700);

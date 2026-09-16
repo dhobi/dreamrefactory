@@ -94,6 +94,8 @@ import {
   crushFrames,
   plankCel,
   plankFrames,
+  SPRINKLER,
+  Sprinkler,
   SHACK,
   Shack,
   shackCel,
@@ -1187,6 +1189,8 @@ interface Level {
   bushes: Bush[][];
   /** the room's roach nests — invisible, and only busy while you are in them */
   nests2: Nest2[][];
+  /** the seven places level eight's water can come from, by their own slot */
+  sprinklers: Sprinkler[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1453,6 +1457,7 @@ async function loadLevel(index: number): Promise<void> {
     sewage: rooms.map((r) => placed(sbk, r, "initsewage", [], (e) => ({ top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: SEWAGE.gulpEvery }))),
     bushes: rooms.map((r) => placed(sbk, r, "initbush", BUSH.idle.cels, (e) => ({ x: e.pointX, y: e.pointY + BUSH.below, mirror: Math.random() < 0.5, clock: 0 }))),
     nests2: rooms.map((r) => placed(sbk, r, "initroachmotel", ROACH.run.cels, (e) => ({ x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: -17, made: 0 }))),
+    sprinklers: rooms.map((r) => placed(sbk, r, "initsprinkler", SPRINKLER.rise.cels, (e) => ({ x: e.pointX, y: e.pointY, slot: e.param, top: e.top, left: e.left, bottom: e.bottom, right: e.right }))),
     crows: rooms.map((r) => crowsIn(sbk, r)),
     // z is the ENGINE's paint order, which is its collection order: the level's
     // frame fn (SC.EXE 0x412c30) collects plane lists p3, p0, then the actors,
@@ -5511,6 +5516,7 @@ function loop(now: number): void {
     ...hereOf((l) => l.pipes).map((q) => `pipe at x${q.x}`),
     ...hereOf((l) => l.bushes).map((q) => `bush at x${q.x}`),
     roaches.length ? `${roaches.length} roaches` : "",
+    hereOf((l) => l.sprinklers).length ? `${hereOf((l) => l.sprinklers).length} sprinklers` : "",
   ].filter(Boolean);
   const prop = props.length ? ` · ${props.join(" · ")}` : "";
   const pools = hereOf((l) => l.sewage);

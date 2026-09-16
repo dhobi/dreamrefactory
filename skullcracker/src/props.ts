@@ -1347,3 +1347,55 @@ export interface Roach {
   bottom: number;
   right: number;
 }
+
+
+/**
+ * The seven places water comes out of — `initsprinkler`, seven of them in level
+ * eight and nowhere else. Reader `0x440800`, class `0x440870`, hit `0x440a80`.
+ *
+ * **A sprinkler record is not an object.** `0x440800` does not create anything:
+ * it walks the seven records and files each one's POINT into a seven-entry table
+ * at `0x4a7000`, indexed by the record's own `param` — which is why ARCADE's
+ * seven carry 0 through 6 and no two share a number.
+ *
+ * What comes up out of one is made later, by the boss. `0x441b95` allocates a
+ * four-byte context — `{350, index}` — hands it to the class, and marks the slot
+ * taken at `0x473728 + index*4`; the class's first message reads the point back
+ * out of the table and stands the column there. The column's own script is
+ * `0x473748`: seven cels rising, a spray that loops on two, and the same seven
+ * to go back down.
+ *
+ * And the trigger is the neatest part of level eight. `0x441b20` asks
+ * `0x40b660("initsprinkler", the boss, ...)` — which record's rect contains the
+ * BOSS's own point — and `0x441b60` raises that one, or, if it is already up,
+ * rolls `0x434540(7)` for a free one and tries up to seven times. So the thing
+ * you are fighting turns on the water it is standing over.
+ *
+ * That last part needs the boss's state machine, three thousand bytes at
+ * `0x440ab0`, which this page does not drive. The seven positions and the
+ * column's own cels are here; nothing yet sends one up.
+ */
+export const SPRINKLER = {
+  /** `0x473748` tag 0 — up it comes */
+  rise: { cels: [150, 151, 152, 153, 154, 155, 156], hold: 2, from: "0x473748 tag 0" },
+  /** tag 1 — and this is what it does while it is up */
+  spray: { cels: [157, 158, 157, 158, 156, 157, 158, 157, 158, 156, 157, 156], hold: 2, from: "0x473748 tag 1" },
+  /** `mov word ptr [eax], 0x15e` at `0x441ba3` — the context's own first word */
+  life: 350,
+  /** `mov di, 7` at `0x441b68` — how many slots there are, and how many tries */
+  slots: 7,
+  from: "0x440800 / 0x440870 / 0x441b20 / 0x441b60",
+} as const;
+
+/** one of the seven, as the table keeps it: a point and the index that names it */
+export interface Sprinkler {
+  x: number;
+  y: number;
+  /** the record's `param`, which is its slot in `0x4a7000` */
+  slot: number;
+  /** the record's rect — what the boss has to be standing in to send it up */
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+}

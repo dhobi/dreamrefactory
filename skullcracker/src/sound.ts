@@ -234,6 +234,15 @@ export const FOE_SFX = {
   oxHit: 0x33,
   oxDeath: 0x34,
   oxFlinch: [47, 48, 49] as const,
+  /**
+   * The thing at the end of chapter two. `0x441dc9` takes `0x434540(2) + 0x17`
+   * on every blow — 23 or 24 — and the same pair answers a flare; `0x441d72`
+   * plays 0x13 on top of the flare's own reaction, and `0x441e26` stops the
+   * loop it has been running at 0x17 as it goes down.
+   */
+  kraggHit: [23, 24] as const,
+  kraggFlare: 0x13,
+  kraggLoop: 0x17,
   /** `0x43b6a3` — `mall.snd` names index 32 "#0120 coke mach[ine]" */
   cokeHit: 32,
   /**

@@ -912,6 +912,67 @@ export const FOES: Readonly<Record<string, Foe>> = {
     from: "0x435c70 / 0x43f1e0 / 0x43f2a0 / 0x43f9a0",
   },
   /**
+   * What chapter two ends on — `initkragg`, and there is exactly one of it, in
+   * level eight, in a room 1845 pixels wide with nothing else in it. Creator
+   * `0x436180`, setup `0x441bd0`, think `0x440ab0`, hit `0x441cf0`.
+   *
+   * It is not built like anything else in the game. There is no class descriptor
+   * and no instance struct: the object is made once at `0x441bd0` and kept in a
+   * global at `0x4a6ff8`, its health lives in another global at `0x4a75c8`, and
+   * `initkragg`'s "creator" does not create at all — `0x436180` takes the thing
+   * that already exists, moves it onto the record's point, and installs its idle.
+   * Which is why the level's spawner calls it **once** rather than once a record.
+   *
+   * **A thousand health**, a divisor of fifty — the slowest thing here — no
+   * gravity, and `0x42f870(obj, 1)`, so it is the census; and level eight's share
+   * is the one that stores zero, which means the goal does not come until it is
+   * dead. It also pays **nothing**: there is no `0x40d450` anywhere in its code.
+   *
+   * Its takes are sorted by one number. `0x441ea4`: a blow under `0x2d` picks a
+   * random one of the three single cels of `0x473a28`, and `0x2d` or over gets
+   * the six-cel `0x473a48` tag 3. A blow landed while it is in the air (kind 8)
+   * uses the same threshold for tags 4 and 3 of the same script.
+   *
+   * And there is a third kind of blow it knows about. `0x441d30` tests the
+   * hitter's strength for exactly **-9** before it tests anything else, and
+   * answers with a script of its own — twenty-six frames of `0x473a88` — and an
+   * extra sound. Minus nine is the flare, and level eight is the level that
+   * places a `statflaregun` and a `statflare` to throw at it.
+   *
+   * What is not here is its state machine, which is three thousand bytes at
+   * `0x440ab0` and includes the one thing that makes the room a fight: standing
+   * over one of the seven `initsprinkler` positions and sending it up
+   * ({@link file://./props.ts}).
+   */
+  initkragg: {
+    // `0x473840` — one cel, five frames, and it does not travel
+    gait: { cels: [7040], hold: 5, from: "0x473840 tag 0" },
+    // `mov word ptr [ecx+0xe], 0x32` at `0x441c1a`
+    divisor: 50,
+    flinch: [
+      { cels: [7062], hold: 3, from: "0x473a28 tag 0" },
+      { cels: [7061], hold: 3, from: "0x473a28 tag 1" },
+      { cels: [7063], hold: 3, from: "0x473a28 tag 2" },
+      // `0x473a48` tag 3 — the one a blow of 0x2d or more earns
+      { cels: [7090, 7093, 7091, 7094, 7092, 7095], hold: 2, from: "0x473a48 tag 3" },
+    ],
+    // `0x441ea4` / `0x441e67`: the threshold is 0x2d, and under it the three are
+    // picked with `0x434540(3) - 1`
+    pick: ({ damage }) => (damage >= 45 ? 3 : Math.floor(Math.random() * 3)),
+    // `0x473b60` tag 0, and tag 1 carries `dy -150` twice as it goes up
+    death: { cels: [7033, 7034, 7035, 7036], hold: 1, from: "0x473b60 tag 0" },
+    health: 1000,
+    hitSound: FOE_SFX.kraggHit,
+    // `0x440acf` claims the bar with 0x3332 and 0x3e8; nothing pays for it
+    panel: { health: 1000, plate: 13106, award: 0 },
+    // `0x42f850(obj, 0)` at `0x441c6d`
+    floats: true,
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x436180 / 0x441bd0 / 0x440ab0 / 0x441cf0",
+  },
+  /**
    * The Coke machine — `initcoke`, five of them down level five's arcade, and
    * `mall.snd` names the sound it makes: index 32 is "#0120 coke mach[ine]".
    * Creator `0x4365f0`, class `0x43b500`, frame `0x43b5d0`, hit `0x43b630`.
