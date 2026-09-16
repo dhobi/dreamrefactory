@@ -727,6 +727,56 @@ doors again**: `0x43f736` passes direction 1 to the same `0x436820` the gang of
 level six pass 0 to, after closing to within `0x89` pixels in both axes — the only
 reach test in the game that measures the height as well as the distance.
 
+### The six that were placed and not drawn
+
+Across levels one to seven the books place six `init*` names this port had no
+class for, and none of them is a fighter: not one enters a census and every one
+of their hit handlers is `xor ax,ax; ret`. They are what makes a room a place.
+
+**`initshack`** — eleven of them down CITY, and the smallest state machine in the
+game. A shutter that rolls up as your point crosses its record's rect and rolls
+down again once you have gone (`0x453a60`). The tag is carried across every
+install rather than reset, so the shack's own number survives the cycle, and its
+region is `0xffff` — none — so it draws where it stands rather than belonging to
+a room.
+
+**`initbarrel`** — five in level seven, and they are **stepping stones**. The
+creator calls `0x42fb70` whenever the record's `param` is not negative, which is
+the plank's own "claim the platform record my point is inside", and the level
+lays one over each of them. So they float in the sewage and you cross on them.
+Their wallow is in the script (`dx 22, dy 20` down and `-10, -20` back) and the
+think keeps them honest: the horizontal velocity is clamped to ±7 and the barrel
+is walked three pixels a frame back towards the x its record gave it.
+
+**`initsewage`** — three, and it is **the only thing in the game that hurts you
+for being somewhere**. No art, no hit handler, no health: a rect, a splash when
+you land in it fast, a gulp every ninth frame, and `0x402ac0(0xa)` on every frame
+your point is inside. Ten a frame is a hundred and fifty a second, which is eight
+seconds of wading at the middle difficulty. Behind the damage switch.
+
+**`initpipe`** — four, and one record makes two objects: a mouth on 3400 from the
+class, and the thing pouring out of it built by hand at `0x4360dc` and given cel
+3530 and the five tags of `0x473608`.
+
+**`initbush`** — eight, and the name is the file's rather than a description. A
+58-byte instance struct, a brain table and five animations, hanging **eighty
+pixels below** its record's point with a coin-flip facing. What is drawn here is
+the state it is in when nothing has happened to it. What it does when you come
+near is not, and the reason to be precise about that is two constants:
+`0x43ee9d` and `0x43eedb` write **−3** and **−5** into `obj+0x1a`, and a negative
+blow strength is not damage, it is a code — the one other negative in the game is
+the −6 that level seven's big one swallows at `0x43d25c`. They are grabs.
+
+**`initroachmotel`** — two in MALL, and the level's spawner settles what they are:
+`0x43578f` pushes **−1** rather than the record's `param`, so every one of them is
+a NEST and never a roach. A nest is invisible and only busy while your point is
+inside its rect — a counter climbs, and past −2 it lets a roach out at its own
+position, four of them one to eight frames apart, and then thirty-five frames of
+nothing before the next rush. A roach falls on cel 3300, waits for the ground
+before it does anything at all, runs the four cels of `0x474db0` with `dx 65` on
+each, and **removes itself the frame its own point leaves the rect it was born
+in** — which is what keeps them in the room.
+
 ### Gravity was in there all along
 
 It was called this port's last invented number for a long time, on the grounds
@@ -946,7 +996,7 @@ all — and that is the whole of the mixer.
 - `engine/tests/byte-order.ts` — detection (needs no rip) and the menu (needs one)
 - `skullcracker/tests/browser/menu.ts` — the menu in a real browser
 - `engine/src/df/sbk.ts` — the sprite book reader, and `engine/tests/sbk.ts`
-- `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow, the press, the lever, the goop and the door
+- `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow, the press, the lever, the goop, the door and the scenery that moves
 - `skullcracker/src/foes.ts` — what each `init*` name is, and the numbers behind it
 - `skullcracker/tests/browser/city.ts` — CITY's opening, in a browser
 - `skullcracker/tests/browser/lift.ts` — CITY's five lifts, and the ride to its goal

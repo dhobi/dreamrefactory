@@ -1049,3 +1049,301 @@ export interface Elev {
    */
   floor?: { top: number; bottom: number; left: number; right: number };
 }
+
+
+/**
+ * The shack front — `initshack`, eleven of them down CITY and none anywhere
+ * else. Creator `0x4511b0`, class `0x453980`, think `0x453a60`.
+ *
+ * It is the smallest state machine in the game and the only piece of furniture
+ * that reacts to you without being hit: a shutter that rolls up as you come
+ * level with it and rolls down again once you have gone.
+ *
+ * ```
+ *   kind 0  cel 1220           shut. the player's POINT inside the record's
+ *                              rect installs the opening
+ *   kind 1  1221 … 1226        opening; at the end of it, if the player has
+ *                              LEFT the rect, the closing goes on
+ *   kind 2  1221 … 1225        closing; at the end, back to shut
+ * ```
+ *
+ * Two details worth keeping. The tag is carried across each install
+ * (`0x453a98` pushes `obj+0x44` rather than a constant), so a shack's own tag —
+ * which its creator takes from the record's `param` — survives the whole cycle
+ * and picks which shack it is. And its region is `0xffff`, meaning none, so it
+ * draws wherever it stands rather than belonging to a room.
+ */
+export const SHACK = {
+  /** kind 0 — one cel, and it sits on it */
+  shut: { cels: [1220], hold: 1, from: "0x4787d8" },
+  /** kind 1 — up it goes */
+  opening: { cels: [1221, 1222, 1223, 1224, 1225, 1226], hold: 2, from: "0x4787e8" },
+  /** kind 2 — and down, one cel shorter */
+  closing: { cels: [1221, 1222, 1223, 1224, 1225], hold: 2, from: "0x478820" },
+  from: "0x4511b0 / 0x453980 / 0x453a60",
+} as const;
+
+/** the three kinds of `0x453a60`, named */
+export type ShackState = "shut" | "opening" | "closing";
+
+/** one placed shack front */
+export interface Shack {
+  x: number;
+  y: number;
+  /** the record's own rect — what the player's point has to be inside */
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** the record's `param`, which the creator writes into `obj+0x28` */
+  mirror: boolean;
+  state: ShackState;
+  clock: number;
+}
+
+/** which cel a shack is showing */
+export function shackCel(k: Shack): number {
+  const a = SHACK[k.state];
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(k.clock / a.hold))];
+}
+
+/** how many engine frames the current kind runs for */
+export function shackFrames(k: Shack): number {
+  return SHACK[k.state].cels.length * SHACK[k.state].hold;
+}
+
+/**
+ * The floating barrel — `initbarrel`, five down level seven's sewer and three
+ * more in level fourteen. Creator `0x435d20`, class `0x43fb60`, think
+ * `0x43fc30`.
+ *
+ * **It cannot be hit** — `0x43fe70` is `xor ax,ax; ret` — and it OWNS a platform:
+ * `0x435d6e` calls `0x42fb70` whenever the record's `param` is not negative, and
+ * the level lays a `platform` over each of them. So a barrel is a thing you
+ * stand on that will not stay still.
+ *
+ * Its bob is in the script rather than in the class. `0x473330` is eight frames
+ * at two engine frames each carrying `dx 22, dy 20` on the way down and
+ * `dx -10, dy -20` on the way back, and the think keeps it honest: it clamps the
+ * horizontal velocity to ±7 and walks the barrel three pixels a frame back
+ * towards the x its record gave it, so it wallows around its own point instead
+ * of drifting off down the sewer.
+ */
+export const BARREL = {
+  /** `0x473330` tag 0 — the wallow, and the stride is the animation's own */
+  bob: {
+    cels: [3180, 3181, 3182, 3183, 3184, 3183, 3182, 3181],
+    hold: 2,
+    dx: [22, 0, 0, -10, -10, 0, 0, 22],
+    dy: [20, 0, 0, -20, -20, 0, 0, 20],
+    from: "0x473330 tag 0",
+  },
+  /** `mov word ptr [esi+0xe], 0xa` at `0x43fb7b` */
+  divisor: 10,
+  /** `0x43fc80` / `0x43fc8e` — the horizontal velocity is held inside this */
+  drift: 7,
+  /** `0x43fca6` — and it walks this far back towards its own point each frame */
+  home: 3,
+  from: "0x435d20 / 0x43fb60 / 0x43fc30",
+} as const;
+
+/** one floating barrel, with the platform it claimed */
+export interface Barrel {
+  x: number;
+  y: number;
+  /** where its record put it, which it keeps drifting back to */
+  homeX: number;
+  homeY: number;
+  clock: number;
+  floor?: { top: number; bottom: number; left: number; right: number };
+}
+
+/**
+ * The outfall — `initpipe`, four of them in level seven. Creator `0x436090`,
+ * class `0x440160`, hit `0x440400`.
+ *
+ * One record makes **two** objects. The first is the pipe's mouth, cel 3400 from
+ * the class and the three tags of `0x4735d0` after it; the second is built by
+ * hand at `0x4360dc` with `0x42f610`, given cel `0xdca` — 3530 — and the five
+ * tags of `0x473608`, which is what pours out of it. The record's `param` sign
+ * becomes `obj+0x28`, so a pipe can face either way, and its hit handler is
+ * `xor ax,ax; ret`: it is plumbing, and nothing can break it.
+ */
+export const PIPE = {
+  /** `0x4735d0` — the mouth, and its two open states */
+  mouth: { cels: [3400], hold: 2, from: "0x4735d0 tag 0" },
+  /** `0x473608` tag 1 — what comes out, five cels at three frames each */
+  flow: { cels: [3531, 3532, 3533, 3534, 3535], hold: 3, from: "0x473608 tag 1" },
+  from: "0x436090 / 0x440160 / 0x440400",
+} as const;
+
+/** one placed outfall: a mouth and the thing pouring from it */
+export interface Pipe {
+  x: number;
+  y: number;
+  mirror: boolean;
+  clock: number;
+}
+
+/**
+ * The water you should not be standing in — `initsewage`, three of them in level
+ * seven. Creator `0x436150`, class `0x440460`, think `0x4404c0`.
+ *
+ * It has no art at all: its class writes cel **0** and no hit handler, and the
+ * creator keeps nothing but the record's rect. What it is, is the only thing in
+ * the game that hurts you for being somewhere rather than for touching you:
+ *
+ * ```
+ *   0x4404cf  0x434200(player's point, the rect)     are you in it?
+ *   0x4404e1  if the player's vY > 5                  0x27 — the splash
+ *   0x4404fb  a counter at user+8 counts DOWN
+ *   0x44050b  when it passes zero: 0x26, and reset to 8
+ *   0x440529  0x402ac0(0xa)                           and ten health, every frame
+ * ```
+ *
+ * Ten a frame is a hundred and fifty a second, which against the middle
+ * difficulty's 1200 is eight seconds of wading. Behind the damage switch like
+ * everything else that hits back.
+ */
+export const SEWAGE = {
+  /** `push 0xa` at `0x440529`, spent once per engine frame you are inside */
+  perFrame: 10,
+  /** `0x4404e1` — `cmp word ptr [eax+0xa], 5`, the velocity that makes a splash */
+  splashAbove: 5,
+  /** `0x4404ec` going in fast, `0x440514` every ninth frame you stay */
+  splash: 0x27,
+  gulp: 0x26,
+  /** `mov word ptr [esi+8], 8` at `0x440520` */
+  gulpEvery: 8,
+  from: "0x436150 / 0x440460 / 0x4404c0",
+} as const;
+
+/** one pool of it, which is a rect and nothing else */
+export interface Sewage {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** `user+8` — frames until the next gulp */
+  clock: number;
+}
+
+/**
+ * The thing in the water — `initbush`, eight of them along the floor of level
+ * seven's last hall. Creator `0x435b00` into `0x435ba0`, class `0x43ebf0`, think
+ * `0x43ec80`, hit `0x43f170`.
+ *
+ * The name is the file's, not a description. It has a 58-byte instance struct
+ * and a brain table, five animations, and a hit handler that is `xor ax,ax; ret`
+ * — so it cannot be killed, is not in the census, and is not furniture either.
+ * What this page draws is the state it is in when nothing has happened to it:
+ * `0x472b70`, six cels at one frame each, hanging **eighty pixels below** the
+ * record's point (`0x435bf7 add word ptr [edi+6], 0x50`) and facing whichever
+ * way `0x434540(2)` came out at creation.
+ *
+ * What it does when you come near is not here, and the reason to say so
+ * precisely is the two constants: `0x43ee9d` and `0x43eedb` write **-3** and
+ * **-5** into `obj+0x1a`, and a negative strength is not damage — it is a code.
+ * The one other place a negative shows up is `0x43d25c`, where level seven's big
+ * one swallows a blow of exactly -6. So these are grabs, and the handler that
+ * reads them is the player's.
+ */
+export const BUSH = {
+  /** `0x472b70` tag 0 — what it does while it is waiting */
+  idle: { cels: [5060, 5061, 5062, 5063, 5064, 5065], hold: 1, from: "0x472b70 tag 0" },
+  /** `0x435bf7` — the object hangs this far below the record's point */
+  below: 0x50,
+  /** `mov word ptr [esi+0xe], 0xa` at `0x43ec10` */
+  divisor: 10,
+  from: "0x435b00 / 0x43ebf0 / 0x43ec80 / 0x43f170",
+} as const;
+
+/** one of them, hanging where its record put it */
+export interface Bush {
+  x: number;
+  y: number;
+  mirror: boolean;
+  clock: number;
+}
+
+/**
+ * The roach nest and what comes out of it — `initroachmotel`, two of them in
+ * level five. Creator `0x436500`, class `0x43b0b0`, think `0x43b160`.
+ *
+ * One name and two objects again, and which one you get is the creator's first
+ * argument. **The level's spawner hardcodes it**: `0x43578f` pushes `-1` rather
+ * than the record's `param`, so every `initroachmotel` record in the game is a
+ * NEST — invisible, sitting at the record's point, with `obj+0x18 = 2`.
+ *
+ * `0x43b3a4` is the whole of a nest, and it only runs while the player's point
+ * is inside the record's rect:
+ *
+ * ```
+ *   a counter at user+2 climbs one a frame
+ *   past -2 it makes a roach at the nest's own position, and counts it
+ *   under four: the next gap is 0x434540(8) - 8, one to eight frames
+ *   at four:    the gap is -35, and the count starts again
+ * ```
+ *
+ * So: four roaches in a rush, then a little over two seconds of nothing.
+ *
+ * A roach is the same class with a `param` of zero. It falls on cel 3300 —
+ * `0x43b17f` waits for the ground before doing anything at all — and then runs
+ * the six cels of `0x474db0` with a coin-flip facing and a gravity of 0.6. It
+ * removes itself the moment its own point leaves the rect it was born in
+ * (`0x43b1e8`), which is what keeps them in the room. `0x474de8` is the squash,
+ * two cels of 3406, and its own hit handler `0x43b450` is not here.
+ */
+export const ROACH = {
+  /** `mov word ptr [ecx], 0xce4` at `0x43b0e0` — what it falls on */
+  drop: { cels: [3300], hold: 1, from: "0x43b0e0" },
+  /** `0x474db0` tag 0 — the run, four cels and a stride on every one of them */
+  run: { cels: [3400, 3401, 3402, 3405], hold: 1, dx: [65, 65, 65, 65], from: "0x474db0 tag 0" },
+  /** tag 1 — the leap, one frame of `dx 65, dy -150`; not driven here */
+  leap: { cels: [3400], hold: 1, dx: [65], from: "0x474db0 tag 1" },
+  /** `0x474de8` tag 0 — flattened */
+  squash: { cels: [3406, 3407, 3407], hold: 2, from: "0x474de8 tag 0" },
+  /** `mov word ptr [ecx+0xe], 0xa` at `0x43b0cc` */
+  divisor: 10,
+  /** `0x43b1be` — `0x42f850(obj, 0.6f)`, six tenths of the player's own */
+  gravity: 0.6,
+  /** `0x43b3f3` — how many come out in one rush */
+  burst: 4,
+  /** `0x43b3f9` — `0x434540(8) - 8`, the gap inside a rush */
+  gapIn: 8,
+  /** `mov word ptr [ebx+2], 0xffdd` at `0x43b417` — and the gap between rushes */
+  gapOut: 35,
+  /** `0x43b2d4` as one starts running, `0x43b2ff` as one is squashed */
+  runSound: 1,
+  squashSound: 0,
+  from: "0x436500 / 0x43b0b0 / 0x43b160",
+} as const;
+
+/** one nest, which is a point and a rect and nothing you can see */
+export interface Nest2 {
+  x: number;
+  y: number;
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** `user+2` — counts up to -2 and then lets one out */
+  clock: number;
+  /** `user+4` — how many of the four are out */
+  made: number;
+}
+
+/** one roach, which lives only while it is inside the rect it came from */
+export interface Roach {
+  x: number;
+  y: number;
+  vy: number;
+  facing: number;
+  onGround: boolean;
+  clock: number;
+  /** the nest's rect, which is also its leash */
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+}

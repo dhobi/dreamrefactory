@@ -94,6 +94,21 @@ import {
   crushFrames,
   plankCel,
   plankFrames,
+  SHACK,
+  Shack,
+  shackCel,
+  shackFrames,
+  BARREL,
+  Barrel,
+  PIPE,
+  Pipe,
+  SEWAGE,
+  Sewage,
+  BUSH,
+  Bush,
+  ROACH,
+  Nest2,
+  Roach,
   DOOR,
   Door,
   doorCel,
@@ -1161,6 +1176,17 @@ interface Level {
   doors: Door[][];
   /** the room's sump lifts, each carrying the platform record laid over it */
   elevs: Elev[][];
+  /** the room's shack fronts, which open as you come level with them */
+  shacks: Shack[][];
+  /** the room's floating barrels, each with the platform it claimed */
+  barrels: Barrel[][];
+  /** the room's outfalls, and the pools they have made */
+  pipes: Pipe[][];
+  sewage: Sewage[][];
+  /** the room's `initbush`, hanging where its record put it */
+  bushes: Bush[][];
+  /** the room's roach nests — invisible, and only busy while you are in them */
+  nests2: Nest2[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1406,6 +1432,7 @@ async function loadLevel(index: number): Promise<void> {
   // so the planks claim theirs first and the lifts are told what is already spoken for
   const planks = rooms.map((r, i) => planksIn(sbk, r, solids[i]));
   drips = [];
+  roaches = [];
   level = {
     sbk,
     pal,
@@ -1420,6 +1447,12 @@ async function loadLevel(index: number): Promise<void> {
     nests: rooms.map((r) => nestsIn(sbk, r)),
     doors: rooms.map((r) => doorsIn(sbk, r)),
     elevs: rooms.map((r, i) => elevsIn(sbk, r, solids[i])),
+    shacks: rooms.map((r) => shacksIn(sbk, r)),
+    barrels: rooms.map((r, i) => barrelsIn(sbk, r, solids[i])),
+    pipes: rooms.map((r) => placed(sbk, r, "initpipe", PIPE.mouth.cels, (e) => ({ x: e.pointX, y: e.pointY, mirror: e.param < 0, clock: 0 }))),
+    sewage: rooms.map((r) => placed(sbk, r, "initsewage", [], (e) => ({ top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: SEWAGE.gulpEvery }))),
+    bushes: rooms.map((r) => placed(sbk, r, "initbush", BUSH.idle.cels, (e) => ({ x: e.pointX, y: e.pointY + BUSH.below, mirror: Math.random() < 0.5, clock: 0 }))),
+    nests2: rooms.map((r) => placed(sbk, r, "initroachmotel", ROACH.run.cels, (e) => ({ x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: -17, made: 0 }))),
     crows: rooms.map((r) => crowsIn(sbk, r)),
     // z is the ENGINE's paint order, which is its collection order: the level's
     // frame fn (SC.EXE 0x412c30) collects plane lists p3, p0, then the actors,
@@ -3432,6 +3465,203 @@ function elevsIn(sbk: SbkFile, room: SbkRoom, solids: Solids): Elev[] {
   return out;
 }
 
+/**
+ * Every record of one name in this room, turned into whatever that class is.
+ *
+ * All six of the classes below are placed the same way — the record's point is
+ * where the thing stands and the record's rect is what it watches — so the
+ * filter is one function: the point has to be in the room, and every cel the
+ * class draws has to be in the book, which is what keeps another chapter's
+ * `initbush` out of this one.
+ */
+function placed<T>(
+  sbk: SbkFile,
+  room: SbkRoom,
+  name: string,
+  cels: readonly number[],
+  make: (e: SbkEntity) => T,
+): T[] {
+  const out: T[] = [];
+  for (const e of sbk.entities) {
+    if (!e.isEntity || e.name !== name) continue;
+    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (!cels.every((id) => sbk.byId.has(id))) continue;
+    out.push(make(e));
+  }
+  return out;
+}
+
+/** every `initshack` in this room — CITY places eleven and nothing else places any */
+function shacksIn(sbk: SbkFile, room: SbkRoom): Shack[] {
+  return placed(sbk, room, "initshack", SHACK.opening.cels, (e) => ({
+    x: e.pointX,
+    y: e.pointY,
+    top: e.top,
+    left: e.left,
+    bottom: e.bottom,
+    right: e.right,
+    mirror: e.param !== 0,
+    state: "shut" as const,
+    clock: 0,
+  }));
+}
+
+/**
+ * Every `initbarrel` in this room, with the `platform` it claimed.
+ *
+ * `0x435d6e` calls `0x42fb70` — the plank's own "claim the platform record my
+ * point is inside" — whenever the record's `param` is not negative, and level
+ * seven lays one over each of its five. A barrel you cannot stand on is only
+ * half a barrel.
+ */
+function barrelsIn(sbk: SbkFile, room: SbkRoom, solids: Solids): Barrel[] {
+  return placed(sbk, room, "initbarrel", BARREL.bob.cels, (e) => ({
+    x: e.pointX,
+    y: e.pointY,
+    homeX: e.pointX,
+    homeY: e.pointY,
+    clock: 0,
+    floor: solids.platforms.find(
+      (q) => e.pointX >= q.left && e.pointX <= q.right && e.pointY >= q.top - 40 && e.pointY <= q.bottom + 40,
+    ),
+  }));
+}
+
+/** what of each is in the room the player is in */
+function hereOf<T>(pick: (lvl: Level) => T[][]): T[] {
+  const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
+  return level && i >= 0 ? pick(level)[i] : [];
+}
+
+/** every roach in the air or on the floor, nest or no nest */
+let roaches: Roach[] = [];
+
+/**
+ * Step the six pieces of scenery that do something.
+ *
+ * Each is one paragraph of its own class's think, and the addresses are in
+ * {@link file://./props.ts}. None of them can be hit and none of them is in any
+ * level's census; what they are is the difference between a room and a corridor.
+ */
+function stepScenery(): void {
+  const ay = p.y - p.feet;
+  const inRect = (r: { top: number; left: number; bottom: number; right: number }): boolean =>
+    p.x >= r.left && p.x < r.right && ay >= r.top && ay < r.bottom;
+
+  // `0x453a60`: shut until your point is inside, then up; and down again only
+  // once the opening has finished AND you have gone
+  for (const k of hereOf((l) => l.shacks)) {
+    if (k.state === "shut") {
+      if (inRect(k)) {
+        k.state = "opening";
+        k.clock = 0;
+      }
+      continue;
+    }
+    k.clock += TICK_SCALE;
+    if (k.clock < shackFrames(k)) continue;
+    if (k.state === "opening") {
+      if (inRect(k)) {
+        // `0x453ace`: still there, so it stays up
+        k.clock = shackFrames(k) - 1;
+        continue;
+      }
+      k.state = "closing";
+      k.clock = 0;
+    } else {
+      k.state = "shut";
+      k.clock = 0;
+    }
+  }
+
+  // `0x43fc30`: the script's own bob, clamped, and walked back towards the point
+  // its record gave it
+  for (const b of hereOf((l) => l.barrels)) {
+    const wasX = b.x;
+    const wasY = b.y;
+    b.clock += TICK_SCALE;
+    const i = loopIndex(BARREL.bob, b.clock);
+    b.x += ((BARREL.bob.dx[i] ?? 0) / BARREL.divisor) * TICK_SCALE;
+    b.y += ((BARREL.bob.dy[i] ?? 0) / BARREL.divisor) * TICK_SCALE;
+    if (Math.abs(b.x - b.homeX) > BARREL.drift) b.x += Math.sign(b.homeX - b.x) * BARREL.home * TICK_SCALE;
+    if (Math.abs(b.y - b.homeY) > BARREL.drift) b.y += Math.sign(b.homeY - b.y) * BARREL.home * TICK_SCALE;
+    if (b.floor) {
+      b.floor.left += b.x - wasX;
+      b.floor.right += b.x - wasX;
+      b.floor.top += b.y - wasY;
+      b.floor.bottom += b.y - wasY;
+    }
+  }
+
+  for (const q of hereOf((l) => l.pipes)) q.clock += TICK_SCALE;
+  for (const q of hereOf((l) => l.bushes)) q.clock += TICK_SCALE;
+
+  // `0x4404c0`: the splash going in, the gulp every ninth frame, and the health
+  // — which only leaves when the switch that lets things hit back is on
+  for (const w of hereOf((l) => l.sewage)) {
+    if (!inRect(w)) {
+      w.clock = SEWAGE.gulpEvery;
+      continue;
+    }
+    if (p.vy / TICK_SCALE > SEWAGE.splashAbove) sound?.effect(SEWAGE.splash, p.x, p.y);
+    w.clock -= TICK_SCALE;
+    if (w.clock <= 0) {
+      w.clock = SEWAGE.gulpEvery;
+      sound?.effect(SEWAGE.gulp, p.x, p.y);
+    }
+    if (damageOn && p.act !== "dying") takeHealth(SEWAGE.perFrame * TICK_SCALE);
+  }
+
+  // `0x43b3a4`: four in a rush while you are standing in the rect, and then a
+  // little over two seconds of nothing
+  for (const n of hereOf((l) => l.nests2)) {
+    if (!inRect(n)) continue;
+    n.clock += TICK_SCALE;
+    if (n.clock <= -2) continue;
+    n.made += 1;
+    roaches.push({
+      x: n.x,
+      y: n.y,
+      vy: 0,
+      facing: Math.random() < 0.5 ? 1 : -1,
+      onGround: false,
+      clock: 0,
+      top: n.top,
+      left: n.left,
+      bottom: n.bottom,
+      right: n.right,
+    });
+    if (n.made >= ROACH.burst) {
+      n.clock = -ROACH.gapOut;
+      n.made = 0;
+    } else n.clock = roll(ROACH.gapIn) - ROACH.gapIn;
+  }
+  for (const r of roaches) {
+    r.clock += TICK_SCALE;
+    if (!r.onGround) {
+      // `0x43b17f` waits for the ground before the run starts at all
+      r.vy += PLAYER_GRAVITY * ROACH.gravity * TICK_SCALE;
+      r.y += r.vy * TICK_SCALE;
+      const floor = surfaceUnder(r.x, r.y - CLIMB_PX, r.y + Math.max(r.vy, 0) + STICK_PX);
+      if (floor !== null && r.y >= floor) {
+        r.y = floor;
+        r.vy = 0;
+        r.onGround = true;
+        r.clock = 0;
+        sound?.effect(ROACH.runSound, r.x, r.y);
+      }
+      continue;
+    }
+    // the run carries `dx 65` on every one of its four cels
+    const i = loopIndex(ROACH.run, r.clock);
+    r.x += ((ROACH.run.dx[i] ?? 0) / ROACH.divisor) * TICK_SCALE * r.facing;
+    const floor = surfaceUnder(r.x, r.y - CLIMB_PX, r.y + STICK_PX);
+    if (floor !== null) r.y = floor;
+  }
+  // `0x43b1e8`: it removes itself the frame its own point leaves the rect
+  roaches = roaches.filter((r) => r.x >= r.left && r.x <= r.right && r.y >= r.top - 200 && r.y <= r.bottom + 200);
+}
+
 /** the doors in the room the player is in */
 function doorsHere(): Door[] {
   const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
@@ -4893,6 +5123,7 @@ function loop(now: number): void {
     stepGoop();
     stepDoors();
     stepElevs();
+    stepScenery();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -4986,6 +5217,21 @@ function loop(now: number): void {
   // an open door shows cel 0, which is nothing; a lift is one cel for ever
   for (const d of doorsHere()) if (d.state !== "open") drawLevelCel(doorCel(d), d.x, d.y, camX, camY);
   for (const e of elevsHere()) drawLevelCel(ELEV.cel, e.x, e.y, camX, camY);
+  // the scenery that does something, each on its own class's cels
+  for (const k of hereOf((l) => l.shacks)) drawLevelCel(shackCel(k), k.x, k.y, camX, camY);
+  for (const b of hereOf((l) => l.barrels)) {
+    drawLevelCel(BARREL.bob.cels[loopIndex(BARREL.bob, b.clock)], b.x, b.y, camX, camY);
+  }
+  for (const q of hereOf((l) => l.pipes)) {
+    drawLevelCel(PIPE.mouth.cels[0], q.x, q.y, camX, camY);
+    drawLevelCel(PIPE.flow.cels[loopIndex(PIPE.flow, q.clock)], q.x, q.y, camX, camY);
+  }
+  for (const q of hereOf((l) => l.bushes)) {
+    drawLevelCel(BUSH.idle.cels[loopIndex(BUSH.idle, q.clock)], q.x, q.y, camX, camY);
+  }
+  for (const r of roaches) {
+    drawLevelCel(r.onGround ? ROACH.run.cels[loopIndex(ROACH.run, r.clock)] : ROACH.drop.cels[0], r.x, r.y, camX, camY);
+  }
   for (const d of drips) drawLevelCel(dripCel(d), d.x, d.y, camX, camY);
   for (const c of crowsHere()) drawLevelCel(crowCel(c), c.x, c.y, camX, camY);
   for (const f of feathers) {
@@ -5258,6 +5504,17 @@ function loop(now: number): void {
   const sump = sumps.length
     ? ` · ${sumps.map((e) => `lift x${e.x} ${e.state} y${Math.round(e.y)}`).join(" · ")}`
     : "";
+  // the scenery, so a probe can see the two of it that move on their own
+  const props = [
+    ...hereOf((l) => l.shacks).filter((k) => k.state !== "shut").map((k) => `shack ${k.state} cel ${shackCel(k)}`),
+    ...hereOf((l) => l.barrels).map((b) => `barrel at ${Math.round(b.x)},${Math.round(b.y)}`),
+    ...hereOf((l) => l.pipes).map((q) => `pipe at x${q.x}`),
+    ...hereOf((l) => l.bushes).map((q) => `bush at x${q.x}`),
+    roaches.length ? `${roaches.length} roaches` : "",
+  ].filter(Boolean);
+  const prop = props.length ? ` · ${props.join(" · ")}` : "";
+  const pools = hereOf((l) => l.sewage);
+  const pool = pools.length ? ` · ${pools.length} sewage` : "";
   const nests = nestsHere();
   const goop = nests.length
     ? ` · goop ${nests.filter((n) => n.on).length} of ${nests.length} on, ${drips.length} falling${drips.length ? ` cel ${dripCel(drips[0])} at ${Math.round(drips[0].x)},${Math.round(drips[0].y)}` : ""}`
@@ -5280,7 +5537,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 
