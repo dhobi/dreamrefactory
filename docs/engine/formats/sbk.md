@@ -341,6 +341,19 @@ What the backdrop does **not** store is where the camera starts, because that
 belonged to `SC.EXE`. Composite the layers at their stored positions and you get
 the level *unrolled* — a true picture of the data and a false picture of the game.
 
+**"At its stored position" means the cel's ANCHOR, not its corner**, and the
+distinction is worth spelling out because getting it wrong is silent. A placement
+says where the anchor goes, so the art's top-left is `p − anchor` — `SC.EXE`'s
+rect builder, `0x4026d0` — and a mirrored placement reflects about that anchor
+rather than about the cel's own centre. Add the anchor instead of subtracting it
+and the art lands `2 × anchor` away: nothing at all on a cel anchored near its
+own corner, and 748px on `CITY.SBK`'s sky tiles, whose anchor is (374, 265).
+`tools/dumpsbk.ts` did exactly that until it was caught by a level whose
+platforms appeared to have no buildings under them at all — CITY's rooftop run,
+where in fact every platform sits on its building bay to the pixel. And the paint
+order is the PLANE's (`placementZ`), not the stored depth's: sorting by the 16.16
+factor puts plane 2's lamp-post and cables behind the level instead of in front.
+
 ## The layout, confirmed by the code that read it
 
 Everything above was worked out from the files. `SC.EXE`'s record collector at

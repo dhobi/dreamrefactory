@@ -123,10 +123,16 @@ const main = async (): Promise<void> => {
   if ((await coord("y")) !== floor) fail(`standing still moved the player to y ${await coord("y")}`);
   console.log(`ok    and stays there with no input`);
 
-  // 2. the same window, jumping — must leave the ground and come back to it
+  // 2. the same window, jumping — must leave the ground and come back to it.
+  // A standing jump is tag 2: three frames of crouch (250 251 252) BEFORE 253
+  // launches, so the first 200ms after J are spent on the floor — sample the
+  // whole flight for its highest point rather than one instant of it
   await page.keyboard.down("j");
-  await page.waitForTimeout(150);
-  const apex = await coord("y");
+  let apex = floor;
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(20);
+    apex = Math.min(apex, await coord("y"));
+  }
   await page.keyboard.up("j");
   if (apex >= floor) fail(`a jump did not leave the floor: y ${apex}`);
   await settle();
@@ -178,10 +184,15 @@ const main = async (): Promise<void> => {
   // into 98px and the apex arrives too late — and a poll every 60ms sees 7px of
   // walking but 13px of running, which is how this leg first came out flaky:
   // one slow poll and the run had already carried the player off the roof.
+  // And J is read by the engine FRAME, not the tick: a press within the last
+  // three ticks before the edge is read after the feet have left it, and the
+  // engine's run state does nothing with J in the air — so stop 30px short.
+  // The flight is long enough: a held jump with the lift covers ~300px and the
+  // y895 roof runs from x8690 west past 8300.
   await page.keyboard.down("ArrowLeft");
-  for (let i = 0; i < 300 && (await coord("x")) > 8775; i++) await page.waitForTimeout(60);
+  for (let i = 0; i < 300 && (await coord("x")) > 8800; i++) await page.waitForTimeout(60);
   const edge = await coord("x");
-  if (edge > 8800) fail(`never reached the roof's west edge; stopped at x ${edge}`);
+  if (edge > 8830) fail(`never reached the roof's west edge; stopped at x ${edge}`);
   const still = await coord("y");
   if (!near(still, 980, 8)) fail(`walked off the roof before jumping: x ${edge}, y ${still}`);
   await page.keyboard.down("w");

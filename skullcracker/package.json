@@ -2,7 +2,7 @@
   "name": "@dreamfactory/skullcracker",
   "version": "0.1.1",
   "private": true,
-  "description": "Skull Cracker (1996) — CyberFlix's own, and the one game here with no BOOTFILE and no script: its logic is compiled into the executable and read back out with a disassembler rather than interpreted. Experimental; its own version because it would release on its own tag.",
+  "description": "Skull Cracker (1996) \u2014 CyberFlix's own, and the one game here with no BOOTFILE and no script: its logic is compiled into the executable and read back out with a disassembler rather than interpreted. Experimental; its own version because it would release on its own tag.",
   "type": "module",
   "//scripts": "Run from anywhere with `-w skullcracker`; npm sets the working directory to this package, which is why every path here is relative to it and `vite`/`vitest` find the configs beside this file with no --config.",
   "scripts": {
@@ -19,6 +19,7 @@
     "test:browser:mission": "tsx tests/browser/mission.ts",
     "test:browser:foes": "tsx tests/browser/foes.ts",
     "test:browser:sound": "tsx tests/browser/sound.ts",
-    "test:browser:city": "tsx tests/browser/city.ts"
+    "test:browser:city": "tsx tests/browser/city.ts",
+    "test:browser:lift": "tsx tests/browser/lift.ts"
   }
 }

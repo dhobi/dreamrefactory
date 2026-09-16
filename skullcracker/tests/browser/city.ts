@@ -69,15 +69,29 @@ const main = async (): Promise<void> => {
     for (let i = 0; i < 400 && (await at()).x < want; i++) await page.waitForTimeout(50);
     await page.keyboard.up("ArrowRight");
   };
-  /** a running jump east with the lift held, which is how the game is played */
+  /**
+   * A running jump east with the lift held, BRAKED onto its landing.
+   *
+   * The engine's air control (`0x429fc1`..`0x42a036`): from the second airborne
+   * frame, forward held drives `v.x` to 30px a frame; released, it coasts on
+   * whatever it had; and BACKWARD held turns the player and zeroes it. A run's
+   * leap held the whole way with the lift flies ~360px on the flat — clean over
+   * the walkway this route lands on and onto the tank roof beyond, which the
+   * game allows and which is not the step under test. Tapping back at ~400ms
+   * kills the drift inside the 103..250px the walkway spans.
+   */
   const jump = async (): Promise<void> => {
     await page.keyboard.down("ArrowRight");
     await page.keyboard.down("w");
     await page.keyboard.press("j");
     await page.waitForTimeout(400);
-    await page.keyboard.up("w");
-    await page.waitForTimeout(500);
     await page.keyboard.up("ArrowRight");
+    await page.keyboard.down("ArrowLeft");
+    await page.waitForTimeout(70);
+    await page.keyboard.up("ArrowLeft");
+    await page.waitForTimeout(300);
+    await page.keyboard.up("w");
+    await page.waitForTimeout(450);
   };
 
   const say = async (): Promise<string> => (await hud.textContent()) ?? "";

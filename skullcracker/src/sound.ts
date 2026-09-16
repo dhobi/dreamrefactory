@@ -134,6 +134,10 @@ export const OWN = {
   swing: [6, 7, 8, 9] as const,
   /** `0x429a76` and `0x429e07`: pressing J plays one sound, always this one */
   jump: 7,
+  /** `0x42a172`: the landing tag goes in with this one... */
+  land: 4,
+  /** ...and `0x42a126`, a fall past 360, with this one and ten health off */
+  landHard: 5,
   from: "0x429990 / 0x429b80 / 0x42ae50",
 } as const;
 

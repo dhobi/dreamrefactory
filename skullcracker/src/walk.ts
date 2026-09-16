@@ -38,8 +38,15 @@
  *
  * That matters most for CITY, whose ground is a ledge from x271 to x691 and then
  * y = 7250 for the rest of the level, 2900px below anything it draws. CITY has 73
- * platforms and 20 planks, the most in the game. Its ground is the fall, and the
- * platforms are the level.
+ * platforms, 20 planks and 5 elevators, the most in the game. Its ground is the
+ * fall, and the platforms are the level.
+ *
+ * The elevators are how the top of it is entered at all. CITY places no `ladder`,
+ * its goal sits at y1802, and the walk east tops out around y3590: without the
+ * five cars 45 of its 73 platforms are reachable and the goal is not one of them,
+ * and with them all 73 are. Each owns its landing and carries the record upward,
+ * which is the same mechanism a falling plank uses to take its floor down —
+ * `0x42fcb9`, and {@link file://./props.ts} has both.
  */
 import {
   readSbkFile,
@@ -65,7 +72,25 @@ import { Film } from "./film";
 import { CORPSE_LINGER, FOES, FoeAnim, celAt, loopIndex, type Foe } from "./foes";
 import { CRAFT, Gob, Pop, SPRAY, VANISH, dryTime, gobCount, scatter } from "./effects";
 import { FOE_SFX, OWN, REACH, Sounds } from "./sound";
-import { CROW, Crow, Feather, PLANK, Plank, crowCel, crowFrames, plankCel, plankFrames } from "./props";
+import {
+  CROW,
+  Crow,
+  ELEVATOR,
+  Elevator,
+  IBEAM,
+  Ibeam,
+  Feather,
+  PLANK,
+  Plank,
+  crowCel,
+  crowFrames,
+  elevatorCel,
+  elevatorFrames,
+  ibeamCel,
+  ibeamFrames,
+  plankCel,
+  plankFrames,
+} from "./props";
 import { DEATH_FILMS, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
 import {
   CEL,
@@ -124,7 +149,127 @@ import {
  */
 // launchDx is the WALKING launch (0x471b28 tag 3); a RUNNING jump is tag 4's
 // single record `200(dx 180, dy -420)` and keeps the run's own 180
-const MEASURED = { walk: 95, run: 180, jump: 420, rise: 125, launchDx: 100, runJumpDx: 180, crawl: 47, flyKickDy: 310 };
+const MEASURED = { walk: 95, run: 180, jump: 420, rise: 125, launchDx: 100, runJumpDx: 180, crawl: 47, flyKickDx: 190, flyKickDy: 310, hopDx: 120, hopDy: 210 };
+/**
+ * Where a lift car's cel hangs off its deck: cel 1160 is 133x108 with its anchor
+ * 51 rows down, and the anchor is the object's own position, so the art is drawn
+ * from `y - 51` and the deck is the landing platform's own top edge.
+ */
+const ELEVATOR_ANCHOR_Y = 51;
+
+/**
+ * The player's gravity in the engine's OWN units: `0x42f850(player, 1.0f)` stores
+ * `f * 10.0` into `obj+0x24` (the float at `0x46a110` — read as 100.0 for a long
+ * time, wrongly), and `0x430327` adds it to `obj+0xa` once a frame.
+ * Raw, undivided — the division happens in the mover, once, per frame.
+ */
+const GRAVITY_RAW = 100; // kept for the objects that still integrate raw (planks, gobs)
+
+/**
+ * The player's gravity as the executable stores it: `0x42f850(player, 1.0f)`
+ * multiplies by the float at `0x46a110` — which is **10.0, not 100** — and
+ * truncates (`0x45f270` sets the FPU to round-toward-zero before its `fistp`).
+ * So `obj+0x24` is 10, and `0x430327` adds it to `obj+0xa` once an airborne
+ * frame. `obj+0xa` is a velocity in WHOLE PIXELS per engine frame: the object
+ * stepper `0x42fd80` opens with `pos.y += obj+0xa; pos.x += obj+0xc` and writes
+ * the sum straight back to `obj+6`. Nothing divides it. The earlier "100 raw over
+ * the divisor of 12" was a guess at that constant, and 8.33 is what a float
+ * model needs to reproduce a 73px apex — the real arc is integer, and it is 80.
+ */
+const PLAYER_GRAVITY = 10;
+/**
+ * Airborne steering, `0x429fef`..`0x42a036` in the jump script's tag-0 handler:
+ * while FORWARD is held the horizontal velocity is driven to `0x1e` = **30 pixels
+ * a frame** in the facing direction, first decelerating by `0xa` = 10 a frame if
+ * it was moving the other way. BACKWARD alone goes through `0x402e40`, which swaps
+ * the two flags and flips the facing, and zeroes it — so the next frame the same
+ * key is forward and drives it the other way. Neither held: untouched, it coasts.
+ * This, not the run speed, is what carries the player across a gap; tag 0's
+ * records carry `dx 0`.
+ */
+const AIR_SPEED = 30;
+const AIR_TURN = 10;
+
+/**
+ * The ground's drag — and it is the per-frame reset this page could not find.
+ *
+ * Every object is born with `obj+0x1e = 0x1666` (5734) and `obj+0x20 = 0x800`
+ * in the allocator `0x42f550` (`0x42f5ba`, `0x42f5c0`), the player included:
+ * `0x448875` overwrites two dozen of its fields and leaves those two alone. The
+ * body stepper `0x42fd80` reads the first at `0x4302c0`, only on a frame that
+ * ended on the ground, and takes `v.x * 5734 >> 13` off the velocity — 70% of it,
+ * truncated toward zero, and never less than a whole pixel while anything is
+ * left. So a walk is not 8 pixels a frame: each frame adds 8 and the ground
+ * keeps 30% of what was there, and that settles at **12** — `12 - 8 = 4`,
+ * `4 + 8 = 12`. The run's 15 settles at 22, the crawl's 4 at 6, and a landing
+ * at 30 slides 9, 3, 1 and stops. `0x4302a4` skips it in the air, which is why
+ * a jump coasts.
+ *
+ * The second field is the landing's `0x42ff83`: a body arriving faster than 2
+ * keeps a quarter of its downward speed for a frame, snapped to the floor each
+ * time, and is still for the next. Nothing this page draws depends on it.
+ */
+const DRAG = 5734;
+const DRAG_ONE = 8192;
+function dragged(v: number): number {
+  if (v === 0) return 0;
+  let off = Math.trunc((v * DRAG) / DRAG_ONE);
+  if (off === 0) off = Math.sign(v);
+  return v - off;
+}
+
+/**
+ * Divide the way `0x42f8b0` divides: round AWAY from zero.
+ *
+ * This is the whole of the jump's shape and it took far too long to notice. The
+ * mover does not move an object by a fraction of a pixel — it does an `idiv` with
+ * an explicit away-from-zero adjustment (`sub ax,cx; inc ax` when negative,
+ * `lea eax,[ecx+eax-1]` when positive) and adds a WHOLE number of pixels. So every
+ * frame's step has its magnitude rounded UP, and over a jump that compounds:
+ * stepping `-420` by hand at the player's divisor of 12 gives moves of
+ * `-35 -27 -19 -10 -2` — an apex of 93px where the same numbers integrated as
+ * floats give 73.5. The port had been integrating as floats.
+ */
+function roundAway(v: number): number {
+  return v < 0 ? -Math.ceil(-v) : Math.ceil(v);
+}
+
+/**
+ * One ENGINE frame of vertical motion: move by what the velocity currently says,
+ * then let gravity accumulate — the order `0x42f8b0` and `0x430327` run in.
+ */
+/**
+ * One engine frame of airborne steering — `0x429fef`..`0x42a036`. With a
+ * direction held: if the velocity opposes the facing, pull it 10 toward zero;
+ * otherwise set it to 30 in the facing direction. With none held (`0x4ac3d2`
+ * clear, via the clear-input helper `0x402e40`): zero it.
+ */
+function steerAir(): void {
+  // `0x402be0` names the two flags by swapping them on the facing: `0x4ac3d2` is
+  // FORWARD held and `0x4ac38c` is BACKWARD held. This is the forward branch,
+  // `0x429fef`; the caller has already done backward's turn-and-zero
+  if (p.facing > 0 && p.vx < 0) p.vx += AIR_TURN;
+  else if (p.facing < 0 && p.vx > 0) p.vx -= AIR_TURN;
+  else p.vx = p.facing * AIR_SPEED;
+}
+
+function engineFrame(): void {
+  // `vyRaw` now holds the velocity in whole pixels a frame, as `obj+0xa` does;
+  // the name is kept so the call sites read unchanged. Move by it, then gravity.
+  p.stepPx = p.vyRaw;
+  /**
+   * `obj+0x32`, and it is a sum of VELOCITIES rather than a distance — the
+   * difference decides whether a plank holds. `0x42fdbc` adds `obj+0xa` to it
+   * here, at the top of the body step, BEFORE the move and long before the
+   * landing clips that move short; `0x42fdc2` stores zero instead on any frame
+   * that begins on the ground or that is still rising. So the frame a fall ends
+   * on contributes its whole velocity, not the few pixels left above the floor,
+   * and a jump that lands 14 pixels lower than it left carries a fifth step of
+   * 45 that a jump landing level never reaches.
+   */
+  p.fallPx = p.stepPx > 0 ? p.fallPx + p.stepPx : 0;
+  p.vyRaw += PLAYER_GRAVITY;
+}
 /**
  * The player's own speed divisor, `mov word ptr [eax+0xe], 0xc` at `0x42e412`.
  * It turns {@link MEASURED} into pixels per engine frame — walk 8, run 15, jump
@@ -154,53 +299,35 @@ const DIVISOR = 12;
  * That is the number everything else was missing. The animation stepper advances
  * one cel per frame, so every animation in the game plays at 15fps — this page
  * had been running them at 34, which is why the punch was a blur. And it turns
- * {@link MEASURED}'s per-tick pixels into pixels per SECOND at last: the player
- * walks 8x15 = 120, runs 225, and leaves the ground at 35 in one frame.
+ * {@link MEASURED}'s per-frame pixels into pixels per SECOND at last: the walk's
+ * 8 a frame settles against the ground's drag at 12 — 180 a second — the run's
+ * 15 at 22 (330), and the launch leaves the ground at 35 in one frame.
  */
 const ENGINE_HZ = 15;
 
 /**
- * How much higher than the original this page jumps — the one deliberate
- * departure from the executable, and a dial rather than a rewrite.
- *
- * The measured jump is an apex of 73px in 557ms (see {@link INVENTED.gravityPx}
- * for how that was got off a screen capture of the original). Against a 145px
- * player and 139-142px punks that is half a character, and it plays LOW.
- *
- * This scales the launch impulse only, leaving gravity at its measured value, so
- * height and hang time stay independent: `apex` goes as the square of this and
- * `airtime` goes linearly.
- *
- * ```
- *   1.0   apex  73px   airtime  557ms   the original, exactly
- *   1.2   apex 105px   airtime  668ms   <- here: clears a punk, still snappy
- *   1.41  apex 146px   airtime  787ms   twice the original's height
- * ```
- *
- * The reason not to go to 1.41 by default: STREETS' hardest jump is its 85px roof
- * gap, which sits between the original's plain jump (73) and its jump-with-lift
- * (94), and that is what gives the lift a purpose. Much above 105 and the gap is
- * trivial and the lift is dead weight.
+ * There is no jump scale any more, and the history of the one there was is worth
+ * a paragraph. `JUMP_SCALE = 1.2` was a deliberate 20% boost on the launch, added
+ * because the float-integrated jump "played low" — and then found to be
+ * load-bearing: at 1.0 the port could not clear CITY's first wall. It was
+ * compensating for two misreadings at once. Gravity was taken as `100/12` when
+ * `0x46a110` is 10.0 and `obj+0x24` is simply 10; and the airborne horizontal was
+ * taken as the run speed when tag 5's frames carry `dx 0` and `0x429fef` drives
+ * `obj+0xc` to 30. With the engine's own integer velocity model in place the disc's
+ * numbers clear everything they should at exactly 1.0, and the dial is deleted
+ * rather than parked, so that nothing can quietly lean on it again.
  */
-const JUMP_SCALE = 1.2;
 
 const INVENTED = {
   tickMs: 1000 / 60,
   /**
-   * Not invented at all any more, either of them: `MEASURED` gives the engine's
-   * pixels per engine frame and {@link ENGINE_HZ} gives the frames, so the walk
-   * is 8 x 15/60 = 2px a tick — 120px a second — and the jump leaves the ground
-   * at 35 x 15/60. They were 4.52 and 20 when the frame rate was still unknown.
+   * There is no walk or run speed here any more. The walk's `dx 95` and the run's
+   * `dx 180` are IMPULSES into `obj+0xc` — `round_away(dx/12)`, 8 and 15, once a
+   * frame through `0x42f8b0` — and the ground's drag ({@link dragged}) is what
+   * turns them into a speed: 12 and 22 pixels a frame, 180 and 330 a second. The
+   * two getters that stood here gave 8 and 15 a frame flat, on the belief that
+   * nothing cancelled `obj+0xc` between frames, and the walk ran a third slow.
    */
-  get walkPx(): number {
-    return (MEASURED.walk / DIVISOR) * TICK_SCALE;
-  },
-  get runPx(): number {
-    return (MEASURED.run / DIVISOR) * TICK_SCALE;
-  },
-  get jumpPx(): number {
-    return (MEASURED.jump / DIVISOR) * TICK_SCALE * JUMP_SCALE;
-  },
   /**
    * The extra lift while W is held, and it is the engine's own number:
    * `0x429f00` builds the dword `0xff83` — −125 — and hands it to `0x42f8b0`,
@@ -212,7 +339,7 @@ const INVENTED = {
    * speed at all — see {@link LADDER} — and 35 pixels a tag is the file's.
    */
   get risePx(): number {
-    return (MEASURED.rise / DIVISOR) * TICK_SCALE;
+    return roundAway(MEASURED.rise / DIVISOR) * TICK_SCALE;
   },
   /** how fast backdrop animations (the lamp glow, the strobing sign) cycle —
    *  the frames are the disc's, this cadence is this port's, untraced */
@@ -231,13 +358,15 @@ const INVENTED = {
    *
    * ```
    *   0x402784  0x42f850(player, 1.0f)     ; where the player is placed
-   *   0x42f850  obj+0x24 = f * 100.0       ; so the player's is 100
+   *   0x42f850  obj+0x24 = trunc(f * 10.0) ; 0x46a110 is 10.0 — so the player's is 10
    *   0x430327  if (!landed) obj+0xa = obj+0x24 + <this frame's vy>
    * ```
    *
    * `obj+0xa` is a velocity in the RAW units every script uses, divided by the
    * class's own `obj+0xe` when it moves the object (`0x42f8b0`) — the player's is
-   * 12. So the player accelerates downward by **100/12 = 8.33 pixels a frame²**,
+   * 12 — but `obj+0xa` is never divided: the stepper adds it to the position as it
+   * is. So the player accelerates downward by **10 pixels a frame²** (the 8.33
+   * this once said came from misreading `0x46a110` as 100.0 and then dividing),
    * and the whole engine's gravity is one float per object: a falling plank's is
    * `0x42f850(obj, 3.0f)` — three times the player's — and a thing that should not
    * fall gets 0.
@@ -281,38 +410,36 @@ const INVENTED = {
    * CITY's 101-pixel wall with eleven pixels to spare, which is the check that
    * says this reading of the level is right too.
    *
-   * The value stays as it is, because gravity is the number that sets the SHAPE of
-   * the jump — how long the player hangs — and the shape is the thing that read as
-   * flying. Height is tuned with
-   * {@link JUMP_SCALE} instead, which is the launch, so the two can move
-   * independently. Weakening gravity to gain height couples them: `apex = v²/2g`
-   * and `T = 2v/g`, so halving g doubles the apex and doubles the hang on top of
-   * it — 146px cost 2.2 SECONDS of airtime that way, four times the original's.
+   * (Historical: this paragraph once argued for tuning height at the launch and
+   * leaving gravity alone, because `apex = v²/2g` and `T = 2v/g` couple them. The
+   * argument was sound and the premise was not — there is nothing to tune now that
+   * the player's gravity is read as 10 and integrated as the engine does.)
    *
    * The old 0.2 hung the player in the air for 1.46 SECONDS with a 191px apex,
    * which is why it read as flying; it is 69px and 525ms now, and the engine's
    * own vertical rate constant (10.4px a frame², 0.65 a tick²) sits just above
    * the answer rather than being it.
    */
+  /**
+   * 0.524 px a tick^2 is `8.33 / 16`: the OLD reading of the player's gravity as
+   * `100/12` per engine frame, scaled to sixty ticks. That reading was wrong —
+   * `0x46a110` is 10.0, not 100.0, so the player's `obj+0x24` is 10 and the
+   * player now integrates in whole pixels through {@link engineFrame}. This
+   * value is kept ONLY for the things that still fall as floats here — gobs,
+   * feathers, a dying crow, the enemies' knockback — each of which has its own
+   * `0x42f850(obj, f)` and deserves the same reading before it is trusted.
+   */
   gravityPx: 0.524,
   maxFallPx: 12,
-  /**
-   * How fast the ground drags a sliding thing to a stop, per tick.
-   *
-   * Nothing found in `SC.EXE` cancels a knocked object's velocity: `obj+0xa` and
-   * `obj+0xc` persist, an object that should not drift zeroes them itself, and
-   * a kicked mailbox's frame function `0x44fe10` never does — so on the code
-   * alone it slides for ever, which it plainly does not.
-   *
-   * So this is invented, and calibrated against the one thing about it that can be
-   * observed in the original: a kicked mailbox travels **about a screen width**
-   * before it stops. `0x430470` launches it at 69 pixels an engine frame — 17 a
-   * tick — and it spends the first fifty of them in the air, because a kick's blow
-   * has no vertical component and it has to fall the 37 pixels between its upright
-   * box and its fallen one before the ground can drag on it at all. Measured on
-   * the page rather than solved: 0.7 puts it down 520px from where it stood.
+  /*
+   * There was a `slidePx: 0.7` here — "how fast the ground drags a sliding thing
+   * to a stop", invented because nothing found in `SC.EXE` cancelled a knocked
+   * object's velocity, and calibrated against a kicked mailbox crossing about a
+   * screen. The allocator does: every object is born with `obj+0x1e = 5734`
+   * and the body stepper takes 5734/8192 of `obj+0xc` off it every grounded
+   * frame — see {@link dragged}. That the invented number came out at 0.7 is the
+   * calibration having found 5734/8192 = 0.6999 by eye.
    */
-  slidePx: 0.7,
   /**
    * How far the feet follow the floor without leaving it — a curb you step over
    * rather than jump. It has to exist: STREETS' floor rises and falls by up to
@@ -376,7 +503,7 @@ const ANIM = {
   /** kind 1 (`0x471920`) — twelve cels, one engine tick each, dx 95 */
   walk: [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
   /**
-   * kind 2 (`0x471988`) — twelve cels, dx 180, so 15px a frame and 225px a
+   * kind 2 (`0x471988`) — twelve cels, dx 180, so 15 a frame into the velocity and 330px a
    * second. This is the game's real travelling speed and it is a HELD key: see
    * {@link KEYS}, where W turns out to be the run rather than "up".
    *
@@ -480,7 +607,21 @@ const ANIM = {
    * everything else runs at 15, which is why it reads as a held pose rather than
    * a flutter. Every record's dx and dy is 0: the jump's motion is not in here.
    */
-  air: [251, 252, 251, 250], // the deep-fall flail — see {@link ANIM.tuck}
+  /**
+   * `0x471c68` — tag 5, `251 252 251 250` at FOUR frames a cel, and it is not an
+   * airborne loop. `0x42a109` is in the tag-0 handler's GROUNDED branch: the frame
+   * after a fall of more than 360 lands, this is installed for sixteen frames, with
+   * sound 5 and ten health off through `0x402ac0`. The hard landing. In the air the
+   * tuck holds all the way down. This page used to play it as a mid-air flail past
+   * 360 pixels fallen, which is the same test read on the wrong side of the ground.
+   */
+  air: [251, 252, 251, 250],
+  /**
+   * `0x471b28` tag 1 — the LANDING, `251 252 251 250` at one frame a cel. Every
+   * jump ends in it (`0x42a154`, with sound 4): four frames in which `0x42a182`
+   * reads no key at all and the ground's drag is what slows the slide.
+   */
+  land: [251, 252, 251, 250],
   /**
    * kind 7 (`0x471e78`), the ladder — four tags of four cels, and one tag is one
    * RUNG. Tags 0 and 1 run 400…407 upward, tags 2 and 3 run them back down, and
@@ -676,8 +817,6 @@ const CRAWL_STRIDE_PX = MEASURED.crawl / DIVISOR;
 const AIR_HOLD = 4;
 /** `0x471648`'s — engine frames each idle cel is held */
 const IDLE_HOLD = 2;
-/** `0x471b28`'s — the launch runs at one frame a cel, and there are four */
-const LAUNCH_HOLD = 1;
 /** `0x42a109`'s `cmp word ptr [eax+0x32], 0x168` — the fall that earns the flail */
 const FLAIL_FALL_PX = 360;
 
@@ -815,7 +954,10 @@ const viewH = (): number => (iface ? WINDOW.h : FULL_H);
  * frames. The ladder has its own ({@link LADDER}), and this leaves it alone.
  */
 function poseFeet(): void {
-  const want = p.climbing ? p.feet : !p.onGround && p.airClock >= ANIM.launch.length * LAUNCH_HOLD ? TUCK_FEET : STAND_FEET;
+  // the tuck's cels are 200 and 220: a run's leap from its first frame, a
+  // standing jump's from the frame after 253's launch
+  const tucked = !p.onGround && (p.leap || p.airFrames >= 1);
+  const want = p.climbing ? p.feet : tucked ? TUCK_FEET : STAND_FEET;
   if (want === p.feet) return;
   p.y += want - p.feet;
   p.feet = want;
@@ -929,6 +1071,10 @@ interface Level {
   spawned: Enemy[][];
   /** the room's planks, each holding the platform record it owns */
   planks: Plank[][];
+  /** the room's elevators, each holding the platform record its car IS */
+  elevators: Elevator[][];
+  /** the room's swinging girders, pinned where their records put them */
+  ibeams: Ibeam[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1024,6 +1170,19 @@ const p = {
   room: null as SbkRoom | null,
   /** downward speed in px per tick; 0 while standing */
   vy: 0,
+  /** the engine's vertical velocity, in RAW units and advanced once an ENGINE frame */
+  vyRaw: 0,
+  /**
+   * The horizontal velocity, `obj+0xc`: whole pixels a frame, on the ground and
+   * off it. The gait's dx is an impulse into it and the ground's drag takes it
+   * back ({@link dragged}); in the air the tag-0 handler steers it and nothing
+   * slows it. Ticks move by a quarter of it.
+   */
+  vx: 0,
+  /** this engine frame's whole-pixel vertical step, spread across its four ticks */
+  stepPx: 0,
+  /** ticks into the current engine frame: TICK_SCALE each, so one frame per four */
+  frameAcc: 0,
   onGround: true,
   climbing: false,
   /**
@@ -1047,8 +1206,27 @@ const p = {
   /** the one-shot action playing, and how far into it, in engine frames */
   act: null as string | null,
   actClock: 0,
-  /** engine frames since leaving the ground — the launch and loop clock */
-  airClock: 0,
+  /**
+   * Engine frames completed since leaving the ground. The tag-0 handler — the
+   * lift and the steering — first runs on the second: the launch frame ends the
+   * launch tag, the frame after installs tag 0 (`0x42a1c2`), and only then does
+   * `0x429f1f` read a key.
+   */
+  airFrames: 0,
+  /**
+   * Frames of the launch tag still to play, the last of which is the launch:
+   * four for a standing or walking jump (`250 251 252 253`), one for the run's
+   * (`200`). While it counts the player is on the ground and the keys do nothing.
+   */
+  windup: 0,
+  /** the dx the launch record carries — 0 standing, 100 walking, 180 running */
+  launchDx: 0,
+  /** in the air by a JUMP — the kind-3 state, which steers, lifts and lands in tag 1 */
+  launched: false,
+  /** frames of the landing tag still to play; the keys do nothing until it ends */
+  landLeft: 0,
+  /** and whether that landing is `0x471c68`'s — the fall was more than 360 */
+  hardLand: false,
   /** engine frames spent standing still — the idle fidget's clock */
   idleClock: 0,
   /** S held on the ground — the duck (see {@link ANIM.crouch}) */
@@ -1094,13 +1272,18 @@ async function loadLevel(index: number): Promise<void> {
   const start = pickStart(sbk, rooms);
   const anchorX = start ? (start.left + start.right) / 2 : 0;
   const anchorY = start ? (start.top + start.bottom) / 2 : 0;
+  // planks before lifts: both OWN a platform record and a record has one owner,
+  // so the planks claim theirs first and the lifts are told what is already spoken for
+  const planks = rooms.map((r, i) => planksIn(sbk, r, solids[i]));
   level = {
     sbk,
     pal,
     rooms,
     solids,
     spawned: rooms.map((r) => spawnIn(sbk, r)),
-    planks: rooms.map((r, i) => planksIn(sbk, r, solids[i])),
+    planks,
+    elevators: rooms.map((r, i) => elevatorsIn(sbk, r, solids[i], planks[i])),
+    ibeams: rooms.map((r) => ibeamsIn(sbk, r)),
     crows: rooms.map((r) => crowsIn(sbk, r)),
     // z is the ENGINE's paint order, which is its collection order: the level's
     // frame fn (SC.EXE 0x412c30) collects plane lists p3, p0, then the actors,
@@ -1570,6 +1753,62 @@ function spawnIn(sbk: SbkFile, room: SbkRoom): Enemy[] {
 }
 
 /**
+ * Every `initelevator` in this room, each as a car that IS a platform.
+ *
+ * CITY places five and no other book places any, which is the same shape the
+ * planks have: a class only the second level uses, with its art (cels 1160..1163)
+ * sitting in that book's directory and placed by nothing in its backdrop.
+ *
+ * The record's rect is the SHAFT and the car's surface travels between its two
+ * ends. That is a reading of the data rather than a convenience: the bottom of
+ * all five shafts lands within 9..21 pixels of a real platform top, and #102's
+ * top matches platform #105's to three pixels — the shaft says where the car
+ * goes, not merely where it is drawn.
+ *
+ * The car's floor is APPENDED to the room's platforms because the disc has none
+ * for it. `0x450dc0` calls `0x42fb70`, the plank's "claim the platform record
+ * containing my point", and no elevator's point lands inside any platform in
+ * CITY — all five checked — so the engine is appending one at runtime and so is
+ * this. See {@link ELEVATOR} for the state machine and for the one guess in it.
+ */
+function elevatorsIn(sbk: SbkFile, room: SbkRoom, solids: Solids, planks: readonly Plank[]): Elevator[] {
+  // a platform has ONE owner: `0x42fb70` refuses a record something already
+  // holds, and the planks were claimed first. No CITY landing is also a plank's
+  // floor, so this changes nothing today and stops a level that did from handing
+  // one record to two movers
+  const taken = new Set<unknown>(planks.map((k) => k.floor).filter(Boolean));
+  const out: Elevator[] = [];
+  for (const e of sbk.entities) {
+    if (!e.isEntity || e.name !== "initelevator") continue;
+    const cy = (e.top + e.bottom) >> 1;
+    const cx = (e.left + e.right) >> 1;
+    if (cy < room.top || cy > room.bottom || cx < room.left || cx > room.right) continue;
+    // the cels are one book's, exactly as the planks' are: only CITY carries these
+    if (![...ELEVATOR.car.cels, ...ELEVATOR.idle.cels].every((id) => sbk.byId.has(id))) continue;
+    // `0x42fb70` at the shaft's BOTTOM — the car starts on its landing and owns it
+    const floor = solids.platforms.find(
+      (q) => !taken.has(q) && e.pointX >= q.left && e.pointX < q.right && e.bottom >= q.top && e.bottom < q.bottom,
+    );
+    if (!floor) continue;
+    taken.add(floor);
+    out.push({
+      x: e.pointX,
+      y: e.bottom,
+      winchY: e.top,
+      // from its landing up to 200px shy of the shaft's head — `0x453606`, and
+      // the 200 is the winch's room, not travel
+      bottom: floor.top,
+      top: floor.top - Math.max(0, e.bottom - e.top - ELEVATOR.headroom),
+      state: "idle",
+      clock: 0,
+      dir: -1,
+      floor,
+    });
+  }
+  return out;
+}
+
+/**
  * Every `initplank` standing in this room, each holding the platform it owns.
  *
  * The ownership is the engine's `0x42fb70`, which the plank's creator calls: the
@@ -1882,7 +2121,7 @@ function onLadder(): SbkEntity | undefined {
  *
  * - **on the ground it RUNS.** The walk state `0x429990` tests it first of all
  *   (`cmp word ptr [0x4ac3fe], 0`) and installs `0x471988` tag 0, dx 180, on the
- *   way through. That is 225px a second against the walk's 120, and it is the
+ *   way through. That is 330px a second against the walk's 180, and it is the
  *   speed the game actually travels at.
  * - **on a ladder it CLIMBS.** The ladder state `0x42ae50` tests the same flag
  *   four times over, installing the climb script `0x471e78` and decrementing a
@@ -2529,6 +2768,131 @@ function stepPlanks(): void {
   });
 }
 
+/** the elevators in the room the player is in */
+function elevatorsHere(): Elevator[] {
+  const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
+  return level && i >= 0 ? level.elevators[i] : [];
+}
+
+/** is the player standing on this car right now — their feet on its deck */
+function ridingElevator(e: Elevator): boolean {
+  return p.onGround && p.x >= e.floor.left && p.x < e.floor.right && Math.abs(p.y - e.floor.top) <= 4;
+}
+
+/**
+ * Step every elevator: `0x453470`'s five states, in the order its table runs them.
+ *
+ * The car is moved by moving its floor record, which is how the rider comes with
+ * it — the same trick the plank uses, and it works upward here because the walk's
+ * own "follow the floor" allows {@link INVENTED.stepPx} of climb a tick and the
+ * car climbs one. Four pixels an engine frame is one pixel a tick.
+ *
+ * What is NOT the engine's is when a car decides to go: `obj+0x46` gates every
+ * state in the original and nothing this port has read writes it. Here the rider's
+ * weight is the trigger — see {@link ELEVATOR.trigger}.
+ */
+function stepElevators(): void {
+  const step = (ELEVATOR.speed / ELEVATOR.divisor) * TICK_SCALE;
+  for (const e of elevatorsHere()) {
+    e.clock += TICK_SCALE;
+    if (e.state === "idle") {
+      // `0x453490` waits on `obj+0x46`, and that field is written by exactly one
+      // thing — the animation stepper, when a script's last frame completes. So
+      // tag 0 is not waiting for a rider: it is waiting for its own eighteen
+      // frames of 1160 to run out, and then it goes. The car shuttles whether or
+      // not anyone is aboard, pausing 1.2s at each end; you catch it.
+      if (e.clock < elevatorFrames(e)) continue;
+      // `0x453490`: the direction is whichever end is NOT the one it is sitting at
+      e.dir = e.floor.top <= e.top ? 1 : -1;
+      e.state = "starting";
+      e.clock = 0;
+      sound?.effect(ELEVATOR.soundStart, e.x, e.y);
+      continue;
+    }
+    if (e.state === "starting") {
+      // `0x4534f4` / `0x4535ae`: one beat of wind-up, then the travelling tag
+      if (e.clock >= elevatorFrames(e)) {
+        e.state = e.dir > 0 ? "down" : "up";
+        e.clock = 0;
+      }
+      continue;
+    }
+    // `0x453518` / `0x4535d2`: move, and stop at the end of the shaft
+    const want = e.floor.top + e.dir * step;
+    const at = Math.min(e.bottom, Math.max(e.top, want));
+    const moved = at - e.floor.top;
+    e.floor.top += moved;
+    e.floor.bottom += moved;
+    e.y += moved;
+    if (at === e.top || at === e.bottom) {
+      e.state = "idle";
+      e.clock = 0;
+      sound?.effect(ELEVATOR.soundStop, e.x, e.y);
+    }
+  }
+}
+
+/**
+ * Every `initibeam` in this room, standing where its record's point puts it.
+ *
+ * There is nothing to resolve and nothing to own: the frame function rewrites the
+ * beam's position from the file every tick (`obj+6 = ctx+0`) and zeroes its
+ * velocity, so the record IS the answer. See {@link IBEAM}.
+ */
+function ibeamsIn(sbk: SbkFile, room: SbkRoom): Ibeam[] {
+  const out: Ibeam[] = [];
+  for (const e of sbk.entities) {
+    if (!e.isEntity || e.name !== "initibeam") continue;
+    const cy = (e.top + e.bottom) >> 1;
+    const cx = (e.left + e.right) >> 1;
+    if (cy < room.top || cy > room.bottom || cx < room.left || cx > room.right) continue;
+    // the cels are one book's, as the planks' and the lifts' are
+    if (!IBEAM.across.cels.every((id) => sbk.byId.has(id))) continue;
+    out.push({
+      x: e.pointX,
+      y: e.pointY,
+      state: "out",
+      clock: 0,
+      // the record's own stagger — the creator loads ctx+4 from a word of it, and
+      // CITY gives exactly one of its seven a nonzero one
+      delay: e.param,
+      side: 0,
+    });
+  }
+  return out;
+}
+
+/** the girders in the room the player is in */
+function ibeamsHere(): Ibeam[] {
+  const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
+  return level && i >= 0 ? level.ibeams[i] : [];
+}
+
+/**
+ * Step every girder: the delay, then tag 0 to 1 to 2 and round again.
+ *
+ * `0x4537d0` returns without touching the state machine while `ctx+4` is counting,
+ * and installs the next tag at each script end, flipping `ctx+6`'s low bit so the
+ * passes alternate. It never moves the thing — the arc is entirely in the cels.
+ */
+function stepIbeams(): void {
+  for (const b of ibeamsHere()) {
+    if (b.delay > 0) {
+      b.delay -= TICK_SCALE;
+      continue;
+    }
+    b.clock += TICK_SCALE;
+    if (b.clock < ibeamFrames(b)) continue;
+    b.clock = 0;
+    b.side = b.side ? 0 : 1;
+    if (b.state === "out") b.state = "across";
+    else if (b.state === "across") {
+      b.state = "back";
+      sound?.effect(IBEAM.sound, b.x, b.y);
+    } else b.state = "out";
+  }
+}
+
 /** the crows in the room the player is in */
 function crowsHere(): Crow[] {
   const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
@@ -2700,16 +3064,17 @@ function stepEnemies(): void {
       e.y += e.vy;
       const span = p.room ? roomSpan(p.room) : null;
       if (span) e.x = Math.max(span.lo, Math.min(span.hi, e.x));
-      const floor = groundAt(e.x);
       const base = lvl ? baseOf(e, lvl) : e.y;
+      // the surfaces the PLAYER stands on — platform tops and then the room's
+      // floor — swept along the fall so a fast one cannot tunnel through a ledge
+      const floor = surfaceUnder(e.x, base - Math.max(e.vy, 0) - INVENTED.stepPx, base + 1);
       if (floor !== null && base >= floor) {
         // by the CEL's box, not by where the upright one would have stood
         e.y -= base - floor;
         e.vy = 0;
-        // and on the ground it is dragged to a stop — the one invented number in
-        // this, since nothing in the executable slows a slide down
-        const drag = INVENTED.slidePx;
-        e.vx = Math.abs(e.vx) <= drag ? 0 : e.vx - Math.sign(e.vx) * drag;
+        // and on the ground the allocator's drag takes 70% a frame off it
+        // ({@link dragged}) — once a frame, on the frame's whole pixels
+        if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE)) e.vx = dragged(Math.round(e.vx / TICK_SCALE)) * TICK_SCALE;
       }
     }
     // a terminal flinch holds its last cel for good — the toppled mailbox
@@ -2750,9 +3115,25 @@ function stepEnemies(): void {
       if (e.state === "gait" && (nx < e.left || nx > e.right)) e.facing = -e.facing;
       else e.x = Math.max(e.left - 200, Math.min(e.right + 200, nx));
     }
-    // they stand on the room's floor, the same one the player walks — unless they
-    // are still in the air
-    if (e.vx === 0 && e.vy === 0) e.y = groundAt(e.x) ?? e.y;
+    /**
+     * They stand on the same surfaces the player does — and that is the whole of
+     * this fix. It used to be `groundAt(e.x)` alone, the ROOM's floor, which is
+     * fine in fifteen levels and catastrophic in the sixteenth: CITY's floor is a
+     * ledge to x691 and then y7250, so every one of its eight foes was pinned
+     * 3300 pixels under the level on the first frame and none could ever be
+     * fought. The level's kill quota was unmeetable and its goal therefore
+     * unreachable, which looked exactly like "no opponents spawn".
+     *
+     * A platform top counts, the floor counts, and finding neither within a step
+     * means there is nothing underfoot — so it falls, rather than teleporting to
+     * whatever the region says.
+     */
+    if (e.vx === 0 && e.vy === 0) {
+      const base = lvl ? baseOf(e, lvl) : e.y;
+      const s = surfaceUnder(e.x, base - INVENTED.stepPx, base + INVENTED.stepPx);
+      if (s !== null) e.y += s - base;
+      else e.vy = INVENTED.gravityPx;
+    }
   }
 }
 
@@ -2900,9 +3281,14 @@ function loop(now: number): void {
     lastTick += INVENTED.tickMs;
     // where the tick started, so a fall can be tested along the path it took
     const tickX = p.x;
+    // one ENGINE frame in four ticks: the player's state machine, the impulses and
+    // gravity all belong to the frame tick; the ticks between only move
+    p.frameAcc += TICK_SCALE;
+    const frame = p.frameAcc >= 1 - 1e-9;
+    if (frame) p.frameAcc -= 1;
     // an attack owns the player until it finishes — and it can start in the
     // air, which is where the flying moves live
-    if (p.onGround && !p.act) {
+    if (p.onGround && !p.act && p.windup === 0 && p.landLeft === 0) {
       // W picks the bigger variant of either, which is what both state machines
       // do with `0x4ac3fe` before they look at their own button
       const big = held.up ? "Run" : "";
@@ -2917,9 +3303,15 @@ function loop(now: number): void {
         // the RUN handler's own kick (`0x429db9`) is the FLYING KICK — tag 4 of
         // `0x471d68`, whose first record carries its own leap: dx 190, dy -310
         p.act = "flyingKick";
-        p.vy = -(MEASURED.flyKickDy / DIVISOR) * TICK_SCALE;
+        // through the mover like every other record: -26 up and 16 forward into
+        // the velocity, on top of whatever the run had built
+        p.vyRaw += roundAway(-MEASURED.flyKickDy / DIVISOR);
+        p.vx += p.facing * roundAway(MEASURED.flyKickDx / DIVISOR);
+        engineFrame();
+        p.vy = p.stepPx * TICK_SCALE;
         p.onGround = false;
         p.leap = true;
+        p.airFrames = 0;
       } else if (kickPressed) p.act = held.down ? "duckKick" : `kick${big}`;
       if (p.act) {
         p.actClock = 0;
@@ -2958,7 +3350,14 @@ function loop(now: number): void {
     }
 
     // a ladder is climbed, not walked along, so it is decided before the walk
-    const ladder = p.act ? undefined : held.up || held.down ? onLadder() : undefined;
+    // W or S GRABS a ladder; what lets go of one is a direction or J, not a
+    // release. `0x42ae50` stays in the ladder state until forward, backward or
+    // the jump key is down, and then leaves through the hop below. Letting go on
+    // a release — which this did — dropped the player straight down the rail the
+    // moment the key came up, and whether the step west registered first was a
+    // race between two key events and one tick.
+    const letGo = p.climbing && (held.right !== held.left || held.jump || jumpPressed);
+    const ladder = p.act || letGo ? undefined : p.climbing || held.up || held.down ? onLadder() : undefined;
     const dir = ladder || p.act ? 0 : (held.right ? 1 : 0) - (held.left ? 1 : 0);
     p.moving = dir !== 0;
     /**
@@ -2972,17 +3371,98 @@ function loop(now: number): void {
      * dx 0, so a run-jump carries its speed off the edge.
      */
     p.running = p.moving && held.up && ladder === undefined && !held.down;
-    if (dir) {
-      p.facing = dir;
-      // ducked movement is the CRAWL — 0x4717c8 tag 4's own dx 47, about half
-      // the walk — and it cannot run
-      const speed =
-        held.down && p.onGround
-          ? (MEASURED.crawl / DIVISOR) * TICK_SCALE
-          : p.running
-            ? INVENTED.runPx
-            : INVENTED.walkPx;
-      const nx = p.x + dir * speed;
+    /**
+     * THE ENGINE'S FRAME, in the engine's order. The level loop (`0x417c20`)
+     * runs the player's input handler first — `0x402950` → `0x428080`, the
+     * dispatch on `[player+0x18]` — and then `0x42fc10` steps every script
+     * (`0x45d0f0`: the record's dx/dy into the velocity) and then every body
+     * (`0x42fd80`: the move, the landing, the drag). Think, animate, move. So a
+     * jump pressed on frame A crouches through A, B and C, launches on D, has
+     * tag 0 installed on E and is first steered on F; and a walk's impulse
+     * lands on the same frame's move. Nothing here happens between frames.
+     */
+    if (frame && !ladder) {
+      if (!p.onGround) p.airFrames += 1;
+      // the drag closes the frame before — `0x4302c0`, grounded frames only
+      if (p.onGround) p.vx = dragged(p.vx);
+      // ---- think: the input handler
+      if (p.landLeft > 0) {
+        // tag 1, or 0x471c68's tag 5: `0x42a182` reads ESC and nothing else until
+        // the script ends on the ground. The keys do nothing; the slide is the drag's
+        p.landLeft -= 1;
+      } else if (p.onGround && p.launched) {
+        // `0x42a0f0`, the tag-0 handler's first grounded frame: the allowance back
+        // to 2, and the fall since the apex decides which landing this is
+        p.launched = false;
+        p.hold = HOLD_FRAMES;
+        p.hardLand = p.fallPx > FLAIL_FALL_PX;
+        p.landLeft = p.hardLand ? ANIM.air.length * AIR_HOLD : ANIM.land.length;
+        // 0x402ac0(10) takes ten health here too; this page has no health to take
+        sound?.own(p.hardLand ? OWN.landHard : OWN.land, p.x, p.y);
+      } else if (!p.onGround) {
+        if (p.launched && p.airFrames >= 2) {
+          // `0x429f1f`, tag 0's frame: the lift, then the steering
+          if (held.up && p.hold > 0) {
+            p.vyRaw += roundAway(-MEASURED.rise / DIVISOR);
+            p.hold -= 1;
+          }
+          if (dir && dir !== p.facing) {
+            // backward alone: `0x402e40` turns the player round and `0x429fdf`
+            // zeroes the velocity; next frame the same key is forward
+            p.facing = dir;
+            p.vx = 0;
+          } else if (dir) steerAir();
+        }
+        // a walk or run that left the ground without a jump has no steering: the
+        // walk state installs the idle script's tag 1 (`0x42999e`) and the run
+        // its own tag 1 (`0x429bf0`), and neither handler reads a direction
+      } else if (p.windup === 0) {
+        if (dir) p.facing = dir;
+        if (jumpPressed && !p.act) {
+          // `0x4296d6`, `0x429a76`, `0x429c65`: one sound, then the standing state
+          // installs tag 2, the walk tag 3 and the run tag 4 — three frames of
+          // 250 251 252 before 253 launches, or the run's one record of 200
+          sound?.own(OWN.jump, p.x, p.y);
+          p.leap = p.running;
+          p.windup = p.leap ? 1 : ANIM.launch.length;
+          p.launchDx = p.running ? MEASURED.runJumpDx : p.moving ? MEASURED.launchDx : 0;
+        }
+      }
+      // ---- animate: the current record's dx/dy through the mover, `0x45d196`
+      if (p.onGround && p.landLeft === 0) {
+        if (p.windup > 0) {
+          p.windup -= 1;
+          if (p.windup === 0) {
+            // the launch record: dy -420 and tag 3's dx 100 or tag 4's dx 180,
+            // each divided once, away from zero, into the velocity — -35, 9, 15
+            p.vyRaw += roundAway(-MEASURED.jump / DIVISOR);
+            p.vx += p.facing * roundAway(p.launchDx / DIVISOR);
+            p.onGround = false;
+            p.launched = true;
+            p.airFrames = 0;
+            p.hold = HOLD_FRAMES;
+          }
+        } else if (dir) {
+          // the gait's own dx: the walk's 95, the run's 180, and ducked it is the
+          // CRAWL — 0x4717c8 tag 4's 47, which cannot run
+          const dx = held.down ? MEASURED.crawl : p.running ? MEASURED.run : MEASURED.walk;
+          p.vx += p.facing * roundAway(dx / DIVISOR);
+        }
+      }
+      // ---- the body: this frame's vertical step, and gravity into the velocity
+      if (!p.onGround) engineFrame();
+      // ...and a frame that begins on the ground stores zero over the fall
+      // instead (`0x42fdc2`). This is the engine's order and it is what keeps the
+      // count readable: the think above has already had it, and so has the plank,
+      // whose own frame function runs in the think pass (`0x40c8f0` at 0x417c52,
+      // one call before the body step at 0x417c57)
+      else p.fallPx = 0;
+    }
+    // every tick moves by a quarter of the frame's velocity, in the air and on the
+    // ground alike: the stepper adds `obj+0xc` to the position whatever the input,
+    // so a released jump coasts and a landing slides
+    if (!ladder && p.vx !== 0) {
+      const nx = p.x + p.vx * TICK_SCALE;
       // the room's floor SPAN is the room's extent — you cannot walk off the
       // world. Off a platform you certainly can: the floor is still under it.
       const ahead = groundAt(nx);
@@ -3000,7 +3480,7 @@ function loop(now: number): void {
       if (inRoom && !wall) {
         p.travelled += Math.abs(nx - p.x);
         p.x = nx;
-      }
+      } else p.vx = 0;
     }
 
     // up opens a door and climbs a ladder; jump is its own key, as it is in the
@@ -3072,64 +3552,82 @@ function loop(now: number): void {
         }
       }
       p.vy = 0;
+      p.vx = 0;
       p.climbY = ladder.top + p.rung * spacing;
       const was = p.y;
       p.y = p.climbY + feet;
       p.travelled += Math.abs(p.y - was);
       p.onGround = false;
     } else {
-      if (p.onGround && jumpPressed && !p.act) {
-        // `0x429a76`: one sound, always the same one, on the frame J is read
-        sound?.own(OWN.jump, p.x, p.y);
-        p.vy = -INVENTED.jumpPx;
-        p.onGround = false;
-        p.hold = HOLD_FRAMES;
+      if (wasClimbing && !p.onGround && (dir || held.jump || jumpPressed)) {
         /**
-         * The launch carries horizontal by how the ground was left, and both
-         * numbers are the script's: walking is tag 3, `250 251 252 253(dx 100,
-         * dy -420)`; RUNNING is tag 4, the single record `200(dx 180, dy -420)`
-         * — no wind-up at all, an instant leap already in the tuck, at the run's
-         * own 180. That last is `p.leap`, and the frame picker skips the
-         * wind-up cels for it.
+         * Off the ladder sideways. `0x42ae50` leaves the ladder state on
+         * forward, backward or J — at the end of the rung tag playing — and
+         * `0x42af30` does the leaving: gravity back on, a turn if it was
+         * backward, and tag 6 with J held (the leap's own `200(dx 180, dy
+         * -420)`) or tag 7 without (`200(dx 120, dy -210)`: a HOP, 10 forward
+         * and 18 up). Both tags dispatch to the steering handler from their
+         * first frame, so a held direction drives this to 30 at once. Without
+         * it — which was the old behaviour — the player drops straight down the
+         * rail and misses the roof the ladder was there to reach.
          */
-        p.leap = p.running;
-        const kick = p.running ? MEASURED.runJumpDx : p.moving ? MEASURED.launchDx : 0;
-        if (kick) {
-          const nx = p.x + p.facing * (kick / DIVISOR);
-          p.x = nx;
-        }
+        if (dir) p.facing = dir;
+        const leap = held.jump || jumpPressed;
+        p.vyRaw = roundAway(-(leap ? MEASURED.jump : MEASURED.hopDy) / DIVISOR);
+        p.vx = p.facing * roundAway((leap ? MEASURED.runJumpDx : MEASURED.hopDx) / DIVISOR);
+        p.stepPx = 0;
+        p.launched = true;
+        p.leap = true;
+        p.airFrames = 2;
+        p.hold = HOLD_FRAMES;
+        jumpPressed = false;
       }
       /**
-       * The lift — hold W and go higher, which is the original's own mechanic
-       * and the reason the same key runs, climbs and jumps. `0x429f00` spends
-       * one frame of `0x4723f0` and moves `dy -125` for each frame the key is
-       * down, so this does the same and stops when the allowance is gone.
+       * The jump itself is decided and launched in the frame block above, in
+       * the engine's own order. What is left here is the body: the feet under
+       * the pose, the floor under the feet, and the fall.
        *
-       * It is what makes STREETS' 85px rise clearable without the floaty
-       * gravity that used to do it: 77px from the launch, 21px from the lift.
+       * The lift — hold W and go higher, the original's own mechanic and the
+       * reason the same key runs, climbs and jumps — is up there too: `0x429f55`
+       * calls `0x42f8b0` with `-125`, which is `+= round_away(-125/12)` = -11
+       * on the VELOCITY, once a frame, for the two frames `0x4723f0` lasts, and
+       * only once tag 0 is playing. A held jump is 137 high to a plain one's 80.
        */
-      if (!p.onGround && held.up && p.vy < 0 && p.hold > 0) {
-        p.y -= INVENTED.risePx;
-        p.hold -= TICK_SCALE;
-      }
       poseFeet();
       if (p.onGround) {
         // follow the floor: up a curb, down a step, off an edge
         const s = surfaceUnder(p.x, p.y - INVENTED.stepPx, p.y + INVENTED.stepPx);
-        if (s === null) p.onGround = false;
-        else {
+        if (s === null) {
+          // walked off: airborne on the gait's own velocity, with no steering
+          p.onGround = false;
+          p.airFrames = 0;
+        } else {
           p.y = s;
           p.vy = 0;
+          p.vyRaw = 0;
+          p.stepPx = 0;
         }
       }
       if (!p.onGround) {
-        // fall, and stop at the first surface crossed on the way down
-        p.vy = Math.min(p.vy + INVENTED.gravityPx, INVENTED.maxFallPx);
+        /**
+         * Fall the way `SC.EXE` falls, and stop at the first surface crossed.
+         *
+         * The velocity is advanced ONCE AN ENGINE FRAME in whole pixels and the
+         * frame's step is spread across its four ticks so the sweep still
+         * catches a ledge it crosses diagonally. Integrating this as floats —
+         * which is what this did — loses the away-from-zero rounding on every
+         * single frame, and the jump comes out about a fifth short.
+         */
+        p.vy = Math.min(p.stepPx * TICK_SCALE, INVENTED.maxFallPx);
         const ny = p.y + p.vy;
         const land = p.vy >= 0 ? surfaceCrossed(tickX, p.y, p.x, ny) : null;
         if (land !== null) {
+          // `0x42ff5d`: the feet to the floor and the fall stopped. The
+          // horizontal is left alone — the ground's drag has it from here
           p.y = land;
           p.vy = 0;
+          p.vyRaw = 0;
+          p.stepPx = 0;
           p.onGround = true;
         } else p.y = ny;
         // last resort: under the floor is not a place. Nothing here can be
@@ -3139,20 +3637,17 @@ function loop(now: number): void {
         if (g !== null && p.y > g) {
           p.y = g;
           p.vy = 0;
+          p.vyRaw = 0;
+          p.stepPx = 0;
           p.onGround = true;
         }
       }
     }
-    // the airborne clocks: cels by time, and the fall depth that decides when
-    // the tuck gives way to the flail (0x42a109's 360px test)
-    if (p.onGround) {
-      p.airClock = 0;
-      p.fallPx = 0;
-      p.leap = false;
-    } else {
-      p.airClock += TICK_SCALE;
-      if (p.vy > 0) p.fallPx += p.vy;
-    }
+    // the fall since the apex is kept by the body step above, in the engine's own
+    // units — see {@link engineFrame}. It outlives the landing by the one frame
+    // the tag-0 handler needs to read it (0x42a109's 360 test), and the plank's
+    // handler reads the same field on the same frame ({@link PLANK.hardFallPx})
+    if (p.onGround && p.landLeft === 0 && !p.launched) p.leap = false;
     // the duck: S on the ground with nothing else going on. The engine's is
     // reached the same way — from the standing state, not out of a walk.
     p.crouching = p.onGround && held.down && !p.act && !p.climbing;
@@ -3193,6 +3688,8 @@ function loop(now: number): void {
     if (!p.climbing) ejectFromObstacles();
     if (p.act) landHits();
     stepPlanks();
+    stepElevators();
+    stepIbeams();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -3203,7 +3700,8 @@ function loop(now: number): void {
     if (stats.ticks <= 0 && !film) void ranOut();
     if (fellOut() && !film) void died();
     upPressed = false;
-    jumpPressed = false;
+    // J is read by the frame's think, not by the tick, so it waits for one
+    if (frame) jumpPressed = false;
     punchPressed = false;
     kickPressed = false;
   }
@@ -3269,6 +3767,12 @@ function loop(now: number): void {
 
   // the level's own spawned things, on the play plane with the player
   for (const k of planksHere()) drawPlank(k, camX, camY);
+  // the cage, then the winch that hauls it at the head of its shaft
+  for (const e of elevatorsHere()) {
+    drawLevelCel(ELEVATOR.car.cels[0], e.x, e.y, camX, camY);
+    drawLevelCel(elevatorCel(e), e.x, e.winchY, camX, camY);
+  }
+  for (const b of ibeamsHere()) drawLevelCel(ibeamCel(b), b.x, b.y, camX, camY);
   for (const c of crowsHere()) drawLevelCel(crowCel(c), c.x, c.y, camX, camY);
   for (const f of feathers) {
     const id = CROW.feathers.cels[Math.min(CROW.feathers.cels.length - 1, Math.floor(f.age / CROW.feathers.hold))];
@@ -3290,9 +3794,13 @@ function loop(now: number): void {
     ? acting.cels
     : p.climbing
       ? ANIM.climb[p.climbTag] ?? ANIM.hang
-      : !p.onGround
-        ? ANIM.air
-        : p.crouching
+      : p.landLeft > 0
+        ? p.hardLand
+          ? ANIM.air
+          : ANIM.land
+        : !p.onGround || p.windup > 0
+          ? ANIM.air
+          : p.crouching
           ? ANIM.crouch
           : p.running
             ? ANIM.run
@@ -3321,15 +3829,19 @@ function loop(now: number): void {
       : p.fidget === ANIM.crouchFidget
         ? ANIM.crouchFidget[Math.min(ANIM.crouchFidget.length - 1, Math.floor(p.fidgetClock))]
         : ANIM.crouch[0];
-  else if (seq === ANIM.air) {
-    // the wind-up (skipped by a running leap, which is tag 4's single record),
-    // then the TUCK held — cels 200 and 220, tag 0, which is what the kind-3
-    // dispatch actually installs after any launch — and the flail only past
-    // the 360px fall that 0x42a109 tests for
-    const f = Math.floor(p.airClock / LAUNCH_HOLD) + (p.leap ? ANIM.launch.length : 0);
-    if (f < ANIM.launch.length) id = ANIM.launch[f];
-    else if (p.fallPx > FLAIL_FALL_PX) id = ANIM.air[Math.floor(p.airClock / AIR_HOLD) % ANIM.air.length];
-    else id = ANIM.tuck[Math.min(ANIM.tuck.length - 1, f - ANIM.launch.length)];
+  else if (seq === ANIM.land) id = ANIM.land[Math.min(ANIM.land.length - 1, ANIM.land.length - p.landLeft)];
+  else if (seq === ANIM.air && p.landLeft > 0) {
+    // the hard landing, four frames a cel on the ground
+    const f = Math.floor((ANIM.air.length * AIR_HOLD - p.landLeft) / AIR_HOLD);
+    id = ANIM.air[Math.min(ANIM.air.length - 1, f)];
+  } else if (seq === ANIM.air) {
+    // the wind-up on the ground — 250 251 252 as the count runs down — then 253
+    // for the launch frame, then the TUCK: 200 on the frame tag 0 is installed
+    // and 220 held after. A run's leap is tag 4's single 200, then the same.
+    if (p.windup > 0) id = ANIM.launch[ANIM.launch.length - 1 - p.windup];
+    else if (p.leap) id = ANIM.tuck[Math.min(ANIM.tuck.length - 1, Math.max(0, p.airFrames - 1))];
+    else if (p.airFrames === 0) id = ANIM.launch[ANIM.launch.length - 1];
+    else id = ANIM.tuck[Math.min(ANIM.tuck.length - 1, p.airFrames - 1)];
   } else {
     const f = Math.floor(p.travelled / stride) % seq.length;
     // the footfalls, and the engine fires them off the CYCLE's frame number
@@ -3412,10 +3924,8 @@ function loop(now: number): void {
         ? " · in the air"
         : p.crouching
           ? " · crouching"
-          : p.running
-          ? " · RUNNING 225px/s"
           : p.moving
-            ? " · walking 120px/s"
+            ? ` · ${p.running ? "RUNNING" : "walking"} ${Math.abs(p.vx) * ENGINE_HZ}px/s`
             : "";
   const here = solids();
   const box = playerBox();
@@ -3485,6 +3995,23 @@ function loop(now: number): void {
   const board = boards.length
     ? ` · ${boards.map((k) => `plank ${k.state} cel ${plankCel(k)} x${Math.round(k.x)} crossed ${k.crossings}`).join(" · ")}`
     : "";
+  // the elevators: a probe cannot otherwise tell a car that is waiting from one
+  // it never boarded, and the deck's y is the only way to see a ride happen
+  const cars = elevatorsHere();
+  const car = cars.length
+    ? ` · ${cars
+        .map(
+          (e) =>
+            `lift ${e.state} car ${ELEVATOR.car.cels[0]} winch ${elevatorCel(e)} deck y${Math.round(e.floor.top)} of ${e.top}..${e.bottom}` +
+            `${ridingElevator(e) ? " RIDDEN" : ""}`,
+        )
+        .join(" · ")}`
+    : "";
+  // the girders, so a probe can see a swing happen at all: nothing else moves them
+  const swung = ibeamsHere().filter((b) => b.delay <= 0);
+  const beam = swung.length
+    ? ` · ${swung.slice(0, 3).map((b) => `beam ${b.state} cel ${ibeamCel(b)} at ${b.x},${b.y}`).join(" · ")}`
+    : "";
   const valves = spawnedHere()
     .filter((e) => FOES[e.kind].burst)
     .map((e) => `${e.state === "burst" ? "water" : e.kind} cel ${celOf(e)} at x ${Math.round(e.x)}`);
@@ -3501,7 +4028,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${valve}${board}${bird}${slid}${lives}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${valve}${board}${car}${beam}${bird}${slid}${lives}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 
@@ -3597,11 +4124,24 @@ async function boot(): Promise<void> {
   if (clock !== null && Number.isFinite(Number(clock))) startTicks = Math.max(0, Number(clock));
   const want = Number(params.get("level") ?? "1");
   await loadLevel(Math.min(16, Math.max(1, want)) - 1);
-  // ?x= drops the player at a world x, for looking at a specific spot
+  // ?x= drops the player at a world x, for looking at a specific spot — and ?y=
+  // with it, because in CITY the column under an x is usually the void: its
+  // ground is a ledge and then y7250, so `?x=` alone is a death on arrival for
+  // most of the level and cannot be used to reach anything in it
   const atX = params.get("x");
-  if (atX !== null) {
-    const x = Number(atX);
-    enter(roomAt(x, p.y), x, p.y);
+  const atY = params.get("y");
+  if (atX !== null || atY !== null) {
+    const x = atX !== null ? Number(atX) : p.x;
+    const y = atY !== null ? Number(atY) : p.y;
+    enter(roomAt(x, y), x, y);
+    if (atY !== null) {
+      // `enter` takes the room's FLOOR under x, which is the whole point of it
+      // for a door — and exactly wrong here, because in CITY that floor is the
+      // void. An explicit y is an instruction, so it wins.
+      p.y = y;
+      p.vy = 0;
+      p.onGround = true;
+    }
   }
   requestAnimationFrame(loop);
 }

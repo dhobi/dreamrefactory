@@ -63,6 +63,9 @@ const main = async (): Promise<void> => {
       await page.waitForTimeout(60);
     }
     await page.keyboard.up(key);
+    // and let the slide finish: a walk is a velocity the ground drags down over
+    // three frames (12, 4, 1), and a door taken mid-slide arrives mid-slide
+    await page.waitForTimeout(250);
   };
   const tapUp = async (): Promise<void> => {
     await page.keyboard.down("ArrowUp");

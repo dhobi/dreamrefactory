@@ -248,11 +248,12 @@ punk 20, a hydrant 10, a mailbox 7 — so a kick's 55 against a mailbox comes ou
 69 pixels a frame and throws it most of a screen. Which also settles what
 `obj+0xa`/`obj+0xc` are: a persistent velocity, not a per-frame stride. Anything
 that should not drift cancels them itself, and the hydrant's frame function does it
-on its first two instructions. Nothing found so far slows a slide, so the drag is
-the port's one invented number here, calibrated against the only observable — a
-kicked mailbox crosses about a screen, and measured on the page rather than solved,
-because a kick has no vertical component and the box spends its first fifty frames
-falling the 37 pixels between its upright shape and its fallen one. Where it comes to rest is not invented: each
+on its first two instructions. What slows a slide is the allocator: `0x42f550`
+gives every object `obj+0x1e = 5734` and `obj+0x20 = 2048` at birth, and the body
+stepper takes `v.x × 5734 / 8192` — 70%, truncated, never less than a pixel — off
+the horizontal velocity on every frame that ends on the ground (`0x4302c0`). The
+port had invented a drag of 0.7 a tick here and calibrated it against a kicked
+mailbox crossing about a screen; the calibration had found the field. Where it comes to rest is not invented: each
 cel carries its own collision box, the upright mailbox's reaching 93 pixels below
 the anchor and the fallen one's 56, so a thing that changes shape has to land on the
 box it is currently showing or it floats.
@@ -260,7 +261,7 @@ box it is currently showing or it floats.
 ### CITY's own machinery
 
 Chapter four registers eleven classes and five of them fight; the rest are the
-level. Two are in now, and both are CITY's:
+level. Three are in now, and all three are CITY's:
 
 A **plank** is a board with a platform record laid under it, and it OWNS that
 record — `0x42fb70` claims the platform whose rect contains the object's point,
@@ -269,6 +270,51 @@ has moved, which is how an elevator carries a floor and how a plank takes one
 away. Its frame function gives you six crossings (it sags through cels 1050..1053
 and counts each time that animation ends) unless you land on it hard, and then it
 goes at three times the player's gravity with woods.snd's "0030 woodplankh".
+
+"Hard" is `cmp word ptr [eax+0x32], 0x64`, and what that field counts is worth
+being exact about, because the port had it twelve times too strict and broke a
+plank under any jump at all. `obj+0x32` is a running sum of the DOWNWARD VELOCITY,
+in the whole pixels a frame that `obj+0xa` holds: `0x42fdbc` adds the velocity at
+the top of the body step, before the move and well before a landing clips that
+move short, and `0x42fdc2` stores zero over it on any frame that begins on the
+ground or that is still rising. So the number is not the distance fallen — the
+frame a fall ends on contributes its whole velocity however little of it was used.
+The port had been reading the 100 as a raw value wanting the player's divisor of
+12, which made 8.3 pixels of falling enough.
+
+Read correctly, the limit still says that a plank is for walking across. A jump
+landing back at the height it left counts 125: the rise is 35+25+15+5 and the fall
+5+15+25+35, but the tuck the player holds in flight draws its feet 19 pixels higher
+than the standing cel does (88 against 69, each cel's own box), so the anchor has
+to come down 19 further before the feet reach the floor, and that takes a fifth
+frame worth 45. A jump with the lift counts 168. Stepping down onto one, or
+walking across it, counts nothing at all. Six crossings and then it goes, and
+anything you jump onto it from breaks it where you land.
+
+An **elevator** is the other half of that same sentence, and it is what makes
+level two finishable. Its constructor is a list of denials — divisor 10 where the
+player's is 12, `0x42f850(obj, 0)` for gravity, `obj+0x30 = 0` for never on the
+ground — so it is a rect moved by its own state machine and by nothing else. The
+five states are the five tags of script `0x477db0`: idle on cel 1160, a beat of
+wind-up, and then travel at `0x28` over that divisor of ten, which is **four
+pixels an engine frame, sixty a second**. It owns its landing the way a plank
+owns its floor, and the level authored one landing per lift: applying `0x42fb70`
+at the SHAFT'S BOTTOM — not at the record's stored point, which is the shaft's
+middle and is inside nothing — claims #53, #54, #55, #79 and #103, and those five
+are the only platforms in CITY between 120 and 135 pixels wide.
+
+Why it matters more than it looks: CITY has no `ladder` record, its goal is at
+y1802, and the walk east tops out around y3590. Without the cars **45 of its 73
+platforms are reachable and the goal is not one of them**; with them, all 73 are.
+Every claim about level two being impassable in this repository's history was a
+hole in the port, not a hole in the disc.
+
+One thing in it is not read. `obj+0x46` gates every state and nothing this port
+has disassembled writes it, so what calls a car is a guess — but a guess the code
+constrains: tags 2 and 4 end by installing tag 0, and tag 0 departs again the
+instant the gate is set, so a car held by a standing rider would yo-yo for ever.
+The gate is an EDGE. The page models it as boarding, latched, and says so in
+`ELEVATOR.trigger`.
 
 A **crow** is the first flying thing here, and its constructor says so: divisor 1,
 `obj+0x2e = 0`, gravity 0. It sleeps on cels 1854..1859 with its own sleep sound
@@ -326,7 +372,8 @@ Doors are opened with the up key. See
 That reading also settles a level that cannot be walked at all. CITY's floor is a
 ledge from x271 to x691 and then y = 7250 for the rest of the level, ~2900px
 below anything CITY draws. CITY is not walked; it is played across its 73
-platforms and 20 planks, the most of any level.
+platforms, 20 planks and 5 elevators, the most of any level — and the planks and
+the elevators are CITY's alone, the only book that places either.
 
 Which is why the next thing the walk page grew was the ability to leave the
 floor. `platform` is the commonest object in the game — 263 of them — and
@@ -341,8 +388,12 @@ per-object divisor. A jump is one frame with `dy = −420`; a walk is `dx = 95`;
 run is `dx = 180`. The scale is read too, now: the player's
 divisor is 12 (`0x42e412`) and the game runs at **15 frames a second** —
 `0x4087c0` returns 1/60s units and `0x40e4f0`, reached from all sixteen level
-frame functions, spins until four of them have passed. So the walk is 120px a
-second, the run 225, and every animation plays at 15fps.
+frame functions, spins until four of them have passed. Every animation plays at
+15fps — and the walk is not 8 × 15. The record's dx is an impulse into a velocity
+the ground drags by 70% a frame, so 8 a frame settles at 12 and the run's 15 at 22:
+**180 and 330 pixels a second**. The same velocity is what a jump steers — the
+tag-0 handler drives it to 30 a frame while forward is held, and in the air nothing
+drags it — and what a landing slides on for three frames.
 
 The run took finding, because it hides behind a key nobody would guess. The
 binding table at `0x46b210` maps **W** to action 1, and that action's handler sets
@@ -352,8 +403,8 @@ rung, in the air it adds lift. One key, three jobs. The ladder's rung is literal
 `0x42ae50` keeps a rung index and ends every frame with
 `y = rung * spacing + top`, so a climb is 35px a tag of four cels and nothing in
 between exists. A port that reads `W` as "up"
-therefore has no run at all, and a correctly-measured 120px/s walk feels slow
-because the game's travelling speed is nearly twice it. STREETS is laid out for
+therefore has no run at all, and a walk on its own feels slow because the game's
+travelling speed is nearly twice it. STREETS is laid out for
 the run: two legs of its own route to its goal are not passable at a walk.
 
 ### Gravity was in there all along
@@ -365,13 +416,15 @@ and looking in the wrong place: the fall is not in a script, it is a FIELD.
 
 ```
 0x402784  0x42f850(player, 1.0f)      where the player is placed
-0x42f850  obj+0x24 = f * 100.0        so the player's is 100
+0x42f850  obj+0x24 = trunc(f * 10.0)  0x46a110 is 10.0 — so the player's is 10
 0x430327  if (!landed) obj+0xa = obj+0x24 + <this frame's vy>
 ```
 
 `obj+0xa` is a velocity in the raw units every script uses, divided by the class's
 own `obj+0xe` when the mover applies it — the player's is 12 — so the player
-accelerates downward by **100/12 = 8.33 pixels a frame²**. The whole engine's
+accelerates downward by **10 pixels a frame²** — `obj+0xa` is a velocity in whole
+pixels that the stepper `0x42fd80` adds to the position undivided; the 8.33 this
+page once gave came from reading `0x46a110` as 100.0 and dividing. The whole engine's
 gravity is one float per object: a plank that has given way gets `3.0f`, three
 times the player's, and anything that must not fall gets 0.
 
@@ -385,22 +438,38 @@ apex of **73px at 483ms** and `g = 8.75²/(2×73) = 0.524` a tick², against
 a third of a percent.
 
 The code says one thing the capture could not. The engine steps gravity once a
-FRAME, so the rise is a sum of five terms rather than an integral —
-`35 + 26.7 + 18.3 + 10 + 1.7 = 91.7px`, and 112.5 with the lift's two frames on
-top — and the capture's 73 is that same jump seen through a camera that cannot
-show the first frame's full 35 pixels. Which is what makes CITY's opening
-passable: its first wall wants 101 pixels of lift and the original has 112.
+FRAME and in whole pixels, so the rise is a sum of four terms rather than an
+integral — `35 + 25 + 15 + 5 = 80px` — and the capture's 73 is that same jump seen
+through a camera that cannot show the first frame's full 35 pixels. The lift is
+worth more than it looks: `0x4723f0` allows two frames of `-125`, which is −11 on
+the velocity each, and because the tag-0 handler that spends them is first run two
+frames after the launch (the launch frame ends the launch tag; the next installs
+tag 0; the one after reads a key) they land on the velocity at −15 and −16 rather
+than at the top, and the apex comes out at **137**. Which is what makes CITY's
+opening passable: its first wall wants 101 pixels and a held jump has 137.
+
+The same two-frame delay is the shape of the jump sideways. Steering — 30 pixels
+a frame while forward is held, nothing slowing it in the air — begins on that same
+third airborne frame, so a standing jump with the direction held travels 180 and
+lands at about 220, a held one 330, and a run's leap, which leaves the ground at
+the run's 22 plus its own 15, 360. A jump pressed from a standstill or a walk
+crouches for three frames first (`250 251 252`, dx 0, the walk's velocity draining
+under the drag) and only 253 launches; the run's tag 4 is one record and launches
+at once. Every jump lands in tag 1, four frames of `251 252 251 250` in which the
+handler reads no key and the slide is the drag's — and a fall of more than 360
+since the apex lands in `0x471c68` instead, sixteen frames of the same cels at
+four a cel, with ten health off. There is no mid-air flail: the tuck holds all the
+way down, and this port used to play the hard landing's loop in the air.
 
 STREETS corroborates it from the other side: its hardest jump is an 85px roof gap,
 which sits between the plain jump and the jump-with-lift, and that is what gives
 `0x4723f0` a purpose at all.
 
-This port jumps higher than the original on purpose — `JUMP_SCALE`, 1.2 — because
-half a character height plays low. It scales the launch and leaves gravity where
-the file puts it, which keeps the two separable: `apex = v²/2g` and
-`T = 2v/g`, so buying height by weakening gravity costs hang time quadratically.
-Doubling the apex that way was tried and cost 2.2 SECONDS of airtime, four times
-the original's, which is what "almost feels like I'm flying" means.
+There was a `JUMP_SCALE` here for a while — 1.2, "because half a character height
+plays low" — and it turned out to be compensating for two misreadings at once:
+gravity taken as 100/12 when the float is 10.0, and the airborne horizontal taken
+as the run when the state machine drives it to 30. At the disc's own numbers the
+disc's own gaps close, and the dial is gone.
 
 `PLAYER.SBK` turned out to hold the interface too, and the whole of it: `12000`
 is the upper band and `12001` the lower, both 512 wide, and between them sit the
@@ -557,8 +626,9 @@ all — and that is the whole of the mixer.
 - `engine/tests/byte-order.ts` — detection (needs no rip) and the menu (needs one)
 - `skullcracker/tests/browser/menu.ts` — the menu in a real browser
 - `engine/src/df/sbk.ts` — the sprite book reader, and `engine/tests/sbk.ts`
-- `skullcracker/src/props.ts` — the level's machinery: the plank and the crow
+- `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow
 - `skullcracker/tests/browser/city.ts` — CITY's opening, in a browser
+- `skullcracker/tests/browser/lift.ts` — CITY's five lifts, and the ride to its goal
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

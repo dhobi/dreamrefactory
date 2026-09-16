@@ -69,10 +69,17 @@ export interface PlankAnim {
  * ```
  *
  * So a plank gives you **six crossings** and then goes — or goes at once if you
- * land on it hard, `player+0x32` being the raw downward speed accumulated since
- * the player last touched anything (`0x42fdbc`, zeroed on the ground). 100 raw is
- * 100/12 = 8.3 pixels of falling, so stepping across is safe and dropping onto one
- * is not.
+ * land on it hard, `player+0x32` being the distance fallen since the apex:
+ * `0x42fdbc` adds `obj+0xa` to it on every airborne frame the velocity is
+ * downward, and `0x42fdc2` zeroes it on every frame that ends on the ground.
+ *
+ * And `obj+0xa` is **whole pixels a frame** — the stepper adds it to the position
+ * undivided (`0x42fda7`) — so the 100 this is compared against is 100 PIXELS, not
+ * a raw number wanting the player's divisor. This page divided it by 12 and broke
+ * a plank after 8.3 pixels of falling, which is any jump at all. Against the jump
+ * as the engine actually flies it — 80 pixels plain, 137 with the lift — that is
+ * the difference between "hopping across is safe, leaping onto it is not" and
+ * "the first plank you land on drops you". See {@link hardFallPx}.
  */
 export const PLANK = {
   /** `0x477ca8` — one cel, and the only one that is a plank you can see across */
@@ -88,10 +95,11 @@ export const PLANK = {
   /** `cmp word ptr [edx+0xc], 5` — crossings before it gives way */
   crossings: 5,
   /**
-   * `cmp word ptr [eax+0x32], 0x64` — the raw fall speed that breaks it at once,
-   * in pixels once divided by the player's own 12.
+   * `cmp word ptr [eax+0x32], 0x64` — the fall that breaks it at once, in the
+   * pixels `obj+0x32` counts. A plain jump's 80 sags it; the lift's 137 and any
+   * drop from a ledge above break it.
    */
-  hardFallPx: 100 / 12,
+  hardFallPx: 100,
   /** `cmp edi, 0xc8` — how far above it the player may be and still be on it */
   reach: 200,
   /** `0x40ef30(bank, 3, point)` — WOODS' "0030 woodplankh" */
@@ -297,4 +305,260 @@ export function crowCel(c: Crow): number {
 /** how many engine frames the current script runs for */
 export function crowFrames(c: Crow): number {
   return CROW[c.state].cels.length * CROW[c.state].hold;
+}
+
+/**
+ * The elevator — `initelevator`, five of them in CITY, and the only vertical
+ * transport in the game's second level. Creator `0x450dc0`, class `0x4533a0`,
+ * frame `0x453470`, script `0x477db0`.
+ *
+ * It is what a `ladder` is everywhere else: CITY has no `ladder` records at all,
+ * its goal sits at y1802, and the walk east along the rooftops tops out around
+ * y3590. Without these five the upper half of the level cannot be entered — 45
+ * of its 73 platforms are reachable, and the goal is not one of them.
+ *
+ * ## Not a physical object
+ *
+ * The constructor says so outright, in three writes: `obj+0xe = 0xa` — a speed
+ * divisor of TEN where the player's is twelve, so this thing is not measured in
+ * the player's units; `0x42f850(obj, 0)` — **gravity zero**, which in this
+ * engine is how you say "driven, not falling" (a crow gets the same, a plank
+ * gets 3.0); and `obj+0x30 = 0`, never on the ground. It is a rect that is moved
+ * by its own state machine and by nothing else.
+ *
+ * ## Two objects, and only one of them is the lift
+ *
+ * `0x450dc0` builds a PAIR, and reading the wrong one is an easy mistake to make
+ * because only the second has an animation script. `0x430d40` makes the car and
+ * its constructor sets `obj+0 = 0x47e` — 1150, and `obj+0` is an object's base
+ * cel, which is how a crow's constructor says `0x708` for its own 1800. `0x42f610`
+ * then makes a SECOND object at `obj+0 = 0x488` — 1160 — and hands it script
+ * `0x477db0`.
+ *
+ * So **1150 is the cage you ride** (106x314, its anchor 308 rows down, which is
+ * the foot of it: the art is mostly the cable it hangs from) and **1160..1163 is
+ * the winch** that hauls it, four frames of a turning drum. The car carries no
+ * script at all — nothing installs one — so it simply shows 1150 while the winch
+ * above it animates. Drawing the winch as the car is what this port did first,
+ * and it put a motor where the lift should be.
+ *
+ * ## The five states are the script's five tags
+ *
+ * `0x453470` dispatches on the object's current animation tag through the table
+ * at `0x45366c`, and `0x477db0` carries exactly tags 0..4. So the animation IS
+ * the state, and each handler's job is to install the next tag:
+ *
+ * ```
+ *   0  idle      1160          waits on obj+0x46; on it, sound 9 and a DIRECTION:
+ *                              tag 3 if the far end is below, tag 1 if above
+ *   1  starting  1160 x3, 1163 one beat, then tag 2
+ *   2  down      1161 1162 1163  moves +0x28 a frame and re-installs itself until
+ *                              the end is reached: then sound 10 and back to tag 0
+ *   3  starting  1160 x3, 1161 the mirror of 1, then tag 4
+ *   4  up        1163 1162 1161  moves -0x28 a frame, otherwise as tag 2
+ * ```
+ *
+ * `0x28` is 40, and 40 over the divisor of 10 is **four pixels an engine frame** —
+ * 60 a second, a little over half the player's walk. The two sounds are
+ * `0x40ef30(bank, 9, …)` on departure and `(…, 10, …)` on arrival.
+ *
+ * ## `obj+0x46` is not a trigger
+ *
+ * Every state above gates on it, and this port first read it as a call button and
+ * then as a boarding latch. It is neither. `obj+0x46` is written by exactly one
+ * routine in the executable — the animation stepper `0x45d0f0`, at `0x45d151`
+ * (0) and `0x45d15f` (1) — and it means **"my script's last frame completed this
+ * frame"**. So a state that "waits on `obj+0x46`" is waiting for its own
+ * animation to finish. Tag 0 is eighteen frames of cel 1160; when they run out
+ * the car goes, whether or not anyone is standing on it, and pauses another
+ * eighteen at the far end. The lift shuttles, and the rider catches it.
+ *
+ * ## The car OWNS a platform, and the level authored one for each
+ *
+ * The creator calls `0x42fb70` — the plank's "claim the `platform` record that
+ * contains my point" — and it lands, five times out of five, once the point is
+ * taken at the shaft's BOTTOM rather than at the record's stored point (which is
+ * the shaft's middle and is inside nothing):
+ *
+ * ```
+ *   elevator  #50 (9411,4160) -> platform  #55  129x31
+ *             #51 (7796,3300)              #54  126x26
+ *             #52 (6775,2965)              #53  126x20
+ *             #78 (8611,2561)              #79  126x20
+ *            #102 (7160,3994)             #103  129x31
+ * ```
+ *
+ * Those five are **the only platforms in CITY between 120 and 135 pixels wide** —
+ * a size class of exactly five in a level of seventy-three, one per lift. They
+ * are the LANDINGS: the car at rest is its landing, and riding up carries the
+ * record with it exactly as a falling plank carries its floor down. So nothing
+ * here is appended and nothing is invented; the shaft says how far the car
+ * travels and the landing says where it starts.
+ */
+export const ELEVATOR = {
+  /**
+   * The CAR, and it is one cel: `mov word ptr [esi], 0x47e` at `0x4533c3` sets the
+   * object's base cel to 1150 and nothing ever installs a script over it.
+   */
+  car: { cels: [1150], from: "obj+0 = 0x47e at 0x4533c3" },
+  /** tag 0 — the winch at rest */
+  idle: { cels: [1160], hold: 3, from: "0x477db0 tag 0" },
+  /** tags 1 and 3 — one beat of wind-up before either direction */
+  starting: { cels: [1160, 1160, 1160, 1163], hold: 3, from: "0x477db0 tags 1/3" },
+  /** tag 2 — travelling with `+0x28` a frame */
+  down: { cels: [1161, 1162, 1163], hold: 3, from: "0x477db0 tag 2" },
+  /** tag 4 — travelling with `-0x28` a frame */
+  up: { cels: [1163, 1162, 1161], hold: 3, from: "0x477db0 tag 4" },
+  /** `mov word ptr [esi+0xe], 0xa` at `0x4533bd` — and so not the player's 12 */
+  divisor: 10,
+  /** `mov word ptr [esp+8], 0x28` at `0x45351f` — 40 raw, four pixels a frame */
+  speed: 40,
+  /**
+   * How far below the head of its shaft a car stops — `add ecx, 0xc8` at
+   * `0x453606`, where `ecx` is the shaft's top and the comparison is against the
+   * car's own y. Travel UP runs while `y >= top + 200`, so the last 200 pixels of
+   * the rect are not travel at all: they are the room the winch and its cable
+   * need. Down has no such margin (`0x453549` tests the bottom outright), which
+   * is why a car at rest sits exactly on its landing.
+   */
+  headroom: 200,
+  /** `0x40ef30(bank, 9, pos)` — on departure */
+  soundStart: 9,
+  /** `0x40ef30(bank, 0xa, pos)` — on arrival */
+  soundStop: 10,
+  /** eighteen frames of rest at each end — tag 0's six cels at three ticks — before it goes again */
+  pause: 18,
+  from: "0x450dc0 / 0x4533a0 / 0x453470",
+} as const;
+
+/** what an elevator is doing — the script's own five tags, named */
+export type ElevatorState = "idle" | "starting" | "up" | "down";
+
+/** one placed elevator, and the platform record its car IS */
+export interface Elevator {
+  /** the car's anchor, where the cage is drawn from */
+  x: number;
+  y: number;
+  /** where the winch hangs: the head of the shaft, and it does not move */
+  winchY: number;
+  /** the shaft: the surface travels between these two, inclusive */
+  top: number;
+  bottom: number;
+  state: ElevatorState;
+  /** engine frames into the current script */
+  clock: number;
+  /** which way tag 1/3's wind-up is about to send it: +1 down, -1 up */
+  dir: 1 | -1;
+  /**
+   * The platform the car is. Created by this port rather than read, because the
+   * disc has none for it — see the block comment. It is a live record in the
+   * room's `platforms`, so moving it moves the floor and the rider with it.
+   */
+  floor: { top: number; bottom: number; left: number; right: number };
+}
+
+/** the cel the WINCH is showing — the car is always {@link ELEVATOR.car} */
+export function elevatorCel(e: Elevator): number {
+  const a = ELEVATOR[e.state];
+  const i = Math.floor(e.clock / a.hold);
+  // the travelling states cycle; idle and the wind-up hold their last cel
+  const loop = e.state === "up" || e.state === "down";
+  return a.cels[loop ? i % a.cels.length : Math.min(a.cels.length - 1, i)];
+}
+
+/** how many engine frames the current script runs for */
+export function elevatorFrames(e: Elevator): number {
+  return ELEVATOR[e.state].cels.length * ELEVATOR[e.state].hold;
+}
+
+/**
+ * The swinging girder — `initibeam`, seven of them in CITY and none anywhere
+ * else. Creator `0x450ea0`, class `0x453720`, frame `0x4537d0`, script `0x477e60`.
+ *
+ * Every other placed thing in this level either carries you or fights you. This
+ * one does neither: it is a hazard you time, and the code says so by what it
+ * LEAVES OUT. There is no `0x42fb70` in its creator — it claims no `platform`, so
+ * unlike a plank or a lift car you cannot stand on it — and its frame function
+ * opens by pinning it down:
+ *
+ * ```
+ *   obj+0xc = 0 ; obj+0xa = 0     ; no velocity, ever
+ *   obj+6 = ctx+0                 ; and put back on its record's point, every frame
+ * ```
+ *
+ * A thing that rewrites its own position from the file on every tick is not going
+ * anywhere. What moves is the ART: twelve cels of one red beam seen through its
+ * arc, hung from a cable.
+ *
+ * ## The three tags are the swing
+ *
+ * ```
+ *   0  out    1551 1540 1541 1542 1543   the beam away from you, small and angled
+ *   1  across 1544 1545 1546             face-on and full height (108x361) — the pass
+ *   2  back   1547 1548 1549 1550 1551   away again on the other side, with sound 7
+ * ```
+ *
+ * Each handler installs the next tag and flips `ctx+6`'s low bit, which is the
+ * side it swings from, so consecutive passes alternate. `obj+0x1a` is set to 100
+ * at the top of every cycle, which in this engine is "live" — the same field the
+ * crow resets to stay hittable.
+ *
+ * ## The stagger is in the file
+ *
+ * `ctx+4` is a countdown decremented once a frame, and until it reaches zero the
+ * frame function returns without touching the state machine; on the frame it hits
+ * zero it installs tag 0 and the swing begins. It is loaded once, by the creator,
+ * from a word of the record — which is what the `param` of 4 on CITY's `initibeam`
+ * at x7656 is for, and why seven beams on one construction site do not swing in
+ * lockstep.
+ *
+ * ## Nothing is unread here
+ *
+ * `obj+0x46` at every tag boundary is "my script ended", written only by the
+ * animation stepper — so each tag simply hands to the next as it finishes, and
+ * the beam swings on its own once its delay has run out. See {@link ELEVATOR}.
+ */
+export const IBEAM = {
+  /** tag 0 — swinging away, and where a beam waits out its delay */
+  out: { cels: [1551, 1540, 1541, 1542, 1543], hold: 3, from: "0x477e60 tag 0" },
+  /** tag 1 — face-on and full height: the frames that can reach you */
+  across: { cels: [1544, 1545, 1546], hold: 3, from: "0x477e60 tag 1" },
+  /** tag 2 — away on the other side, with `0x40ef30(bank, 7, pos)` */
+  back: { cels: [1547, 1548, 1549, 1550, 1551], hold: 3, from: "0x477e60 tag 2" },
+  /** `mov word ptr [esi+0xe], 0x14` at `0x453751` — twenty, and it moves nothing */
+  divisor: 20,
+  /** `0x40ef30(bank, 7, pos)` on entering tag 2 */
+  sound: 7,
+  /** `mov word ptr [esi+0x1a], 0x64` — live, the crow's own "hittable" field */
+  health: 100,
+  /** `obj+0x46` is "my script ended" (written only by `0x45d0f0`): each tag hands to the next as it finishes, so it swings on its own */
+  from: "0x450ea0 / 0x453720 / 0x4537d0",
+} as const;
+
+/** which part of its arc a beam is in — the script's own three tags, named */
+export type IbeamState = "out" | "across" | "back";
+
+/** one placed girder, pinned where its record puts it */
+export interface Ibeam {
+  /** the record's own point, and the frame function rewrites the beam here every tick */
+  x: number;
+  y: number;
+  state: IbeamState;
+  /** engine frames into the current tag */
+  clock: number;
+  /** frames still to wait before the first swing — the record's own stagger */
+  delay: number;
+  /** `ctx+6`'s low bit: which side this pass swings from, flipped at every tag */
+  side: 0 | 1;
+}
+
+/** which cel a girder is showing */
+export function ibeamCel(b: Ibeam): number {
+  const a = IBEAM[b.state];
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(b.clock / a.hold))];
+}
+
+/** how many engine frames the current tag runs for */
+export function ibeamFrames(b: Ibeam): number {
+  return IBEAM[b.state].cels.length * IBEAM[b.state].hold;
 }
