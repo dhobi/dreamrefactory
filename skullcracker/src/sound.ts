@@ -134,6 +134,11 @@ export const OWN = {
   swing: [6, 7, 8, 9] as const,
   /** `0x429a76` and `0x429e07`: pressing J plays one sound, always this one */
   jump: 7,
+  /**
+   * Taking one — `0x4490f0` plays `12 + 0x434540(2)`, so 13 or 14, out of the
+   * player's own bank as the blow lands.
+   */
+  hurt: [13, 14] as const,
   /** `0x42a172`: the landing tag goes in with this one... */
   land: 4,
   /** ...and `0x42a126`, a fall past 360, with this one and ten health off */

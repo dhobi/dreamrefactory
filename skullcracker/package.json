@@ -22,6 +22,7 @@
     "test:browser:city": "tsx tests/browser/city.ts",
     "test:browser:lift": "tsx tests/browser/lift.ts",
     "test:browser:woods": "tsx tests/browser/woods.ts",
-    "test:browser:playgr": "tsx tests/browser/playgr.ts"
+    "test:browser:playgr": "tsx tests/browser/playgr.ts",
+    "test:browser:damage": "tsx tests/browser/damage.ts"
   }
 }

@@ -506,6 +506,48 @@ every frame of it carries a strike box — it is the one attack of the six that
 exists to hit you. The charge, by contrast, carries no strike box on any frame: it
 closes the distance and nothing else, so running it costs the player nothing.
 
+### Things that hit back, behind a switch
+
+The port could hit and nothing could hit it, and that was a hole rather than a
+design. It is now filled and **off by default** — `?damage=1` at load or the `h`
+key at any time — because the other suites walk levels end to end and three
+hydraulic presses turn a route test into a fight.
+
+The numbers are all the engine's. Maximum health is `trunc(difficulty × 600) +
+1200` at `0x448ac2`, so 1800 easy, 1200 middle, 600 hard; note the sign, since the
+same difficulty word halves enemy health through `0x40e300` in the other
+direction. The damage a blow does is the blow itself: `0x4490d5` takes
+`0x42f910` of the hitter — the root of the sum of its current cel's own `(dy, dx)`
+pair, scaled by the hitter's strength percentage and with the hitter's own velocity
+added — and `0x449209` spends exactly that. So a hydraulic press, whose cels 4382
+and 4383 carry `(dx 64, dy 5)`, costs 64 a stroke, and a dog's bite costs whatever
+the dog was running at, because its strike cels carry `(0, 0)` and nothing else.
+
+There is one threshold, `cmp di, 0x3c` at `0x449115`: sixty or less is a stagger
+out of `0x4766f0` and more is a knockdown out of `0x476890`, each with a front take
+and a back one chosen by which side the hitter is on. Every record of all four
+carries `dx 0 dy 0` — the throw is not in the script, it is the elastic exchange
+`0x430470` does afterwards with the two objects' divisors as masses.
+
+**The invulnerability is not a timer.** There is no cooldown anywhere in the
+collision path. What protects the player is that `0x4303b3` skips a victim whose
+current cel has a degenerate body box, and every reaction cel in `PLAYER.SBK` has
+none: 5900–5902, 5910–5915, 5940–5944, 9550–9558 and 5020/5021. You are untouchable
+for exactly as long as the reaction plays, and that is the whole mechanism.
+
+Falling is its own path and takes no blow at all. Past 360 of accumulated drop the
+player is cut into the flail (`0x442f3f`); on landing, past 530 it is simply death
+with no health call (`0x443c8a`), and under it a flat ten and a roll. And the life
+is spent when the dying animation ENDS rather than when the health runs out
+(`0x443dea`), with the fourth death — the count goes 3, 2, 1, 0, −1 — turning into
+the game-over state.
+
+What can actually land a blow here is narrower than what could in the original,
+and for a reason worth stating: this port's enemies walk their territory and do not
+run their attack states, so a dog never bites and a punk never swings. The things
+that connect are the machinery — presses and swinging girders — and the level-four
+boss's melee combo, which is the one enemy state this port does drive.
+
 ### Gravity was in there all along
 
 It was called this port's last invented number for a long time, on the grounds
@@ -731,6 +773,7 @@ all — and that is the whole of the mixer.
 - `skullcracker/tests/browser/lift.ts` — CITY's five lifts, and the ride to its goal
 - `skullcracker/tests/browser/woods.ts` — WOODS' population, its two steps and its goal
 - `skullcracker/tests/browser/playgr.ts` — PLAYGR's statue, the fight and the television
+- `skullcracker/tests/browser/damage.ts` — the switch that lets things hit back
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

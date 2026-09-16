@@ -770,7 +770,7 @@ const LADDER = {
  * the RUN state (`0x429b80`) and carries `dx 190, dy -310`, which makes it a
  * flying kick.
  */
-const ACTIONS: Readonly<Record<string, { cels: readonly number[]; dx: readonly number[]; from: string }>> = {
+const ACTIONS: Readonly<Record<string, { cels: readonly number[]; dx: readonly number[]; hold?: number; from: string }>> = {
   // 0x471c90 tag 0 then tag 3 — the guard, then the jab
   punch: { cels: [600, 601, 602], dx: [0, 0, 0], from: "0x471c90 tags 0, 3" },
   // ...or tag 2, the other half of the coin `0x434540(2)` tosses
@@ -799,6 +799,24 @@ const ACTIONS: Readonly<Record<string, { cels: readonly number[]; dx: readonly n
   duckKick: { cels: [720, 721, 722, 723, 724, 724, 722, 720], dx: [0, 0, 0, 0, 0, 0, 0, 0], from: "0x4717c8 tags 8, 9" },
   // S+P+K — the crouch machine reaches into the kick script for tag 6
   duckCombo: { cels: [630, 631, 632], dx: [0, 0, 0], from: "0x471d68 tag 6, from 0x42ab4a" },
+  /**
+   * What a blow does TO the player, and which one is which.
+   *
+   * `0x449115` is the whole of the choice: `cmp di, 0x3c`. Sixty or less is a
+   * stagger out of `0x4766f0` and more is a knockdown out of `0x476890`, and each
+   * has a front take and a back one picked by which side the hitter is on
+   * (`0x44915c` for the knockdown, `0x44919e` for the stagger). Every record of
+   * all four carries `dx 0 dy 0` — the throw is not in the script, it is the
+   * velocity exchange `0x430470` does afterwards.
+   */
+  hurtFront: { cels: [5901, 5901, 5901], dx: [0, 0, 0], from: "0x4766f0 tag 1" },
+  hurtBack: { cels: [5902, 5902, 5902], dx: [0, 0, 0], from: "0x4766f0 tag 2" },
+  downFront: { cels: [5910, 5911, 5912, 5913, 5914, 5915, 5915, 5915, 5915], dx: [0, 0, 0, 0, 0, 0, 0, 0, 0], from: "0x476890 tag 0" },
+  downBack: { cels: [5940, 5941, 5942, 5943, 5944, 5944, 5944], dx: [0, 0, 0, 0, 0, 0, 0], from: "0x476890 tag 2" },
+  /** `0x476758` tag 0, kind 26 — two frames a cel, and the kind that IS being dead */
+  dying: { cels: [5910, 5911, 5912, 5913, 5914, 5915], dx: [0, 0, 0, 0, 0, 0], hold: 2, from: "0x476758 tag 0" },
+  /** `0x476220` tag 5 — four frames a cel, the roll out of a bad landing */
+  landRoll: { cels: [5208, 5207, 5206], dx: [0, 0, 0], hold: 4, from: "0x476220 tag 5" },
   /**
    * The FLYING moves, and they are real — a legitimate question answered by
    * three installs:
@@ -1289,6 +1307,50 @@ const p = {
 };
 /** `mov word ptr [0x4723f0], 2` — the allowance, and it is 2 in all eight places */
 const HOLD_FRAMES = 2;
+
+/**
+ * What a blow does to the PLAYER — read out of `SC.EXE`, and **off by default**.
+ *
+ * Everything in this block is the engine's, and none of it runs unless the switch
+ * below is thrown. The reason is the levels: with damage on, a probe walking east
+ * through WOODS meets three hydraulic presses and every route test in this repo
+ * becomes a fight. So it ships ready and dark, and `?damage=1` or the `h` key
+ * turns it on.
+ *
+ * The numbers:
+ *
+ * ```
+ *   448ac2  max = trunc(difficulty * 600.0) + 0x4b0    ; 1200 at difficulty 0
+ *   4490d5  di = 0x42f910(hitter)                      ; sqrt(blowX² + blowY²)
+ *   449115  cmp di, 0x3c                               ; 60: stagger or knockdown
+ *   449209  0x402ac0(di)                               ; and the damage IS di
+ *   402ad8  health floors at 0, and 0x402fa0(1) starts the dying script
+ * ```
+ *
+ * And the fall, which is its own path (`0x443c2b`) and takes no blow at all:
+ * past 360 of accumulated drop the player is cut into the flail, and on landing
+ * past 530 it is simply death, under that a flat ten and a roll.
+ */
+const HURT = {
+  /** `0x448ad1` at difficulty 0 — the middle of 1800 / 1200 / 600 */
+  max: 1200,
+  /** `0x449115`'s `cmp di, 0x3c` */
+  knockdown: 60,
+  /** `0x442f3f`'s `cmp [player+0x32], 0x168` — the drop that forces the flail */
+  flailFall: 360,
+  /** `0x443c82`'s `cmp [player+0x32], 0x212` — past this a landing is fatal */
+  fatalFall: 530,
+  /** `0x443ce7`'s `push 0xa` — what an ordinary bad landing costs */
+  fallDamage: 10,
+  from: "0x448a90 / 0x448c60 / 0x402ac0 / 0x443c2b",
+} as const;
+
+/**
+ * Is the damage above switched on? `?damage=1` at load, `h` at any time.
+ *
+ * It starts off. See {@link HURT} for why, and for everything it turns on.
+ */
+let damageOn = new URLSearchParams(location.search).get("damage") === "1";
 const held = { left: false, right: false, up: false, down: false, jump: false, punch: false, kick: false, inv: false };
 /**
  * The two edges: a door is entered by PRESSING up, and a jump by pressing jump.
@@ -1364,6 +1426,8 @@ async function loadLevel(index: number): Promise<void> {
   // counts — furniture never calls `0x40d1c0` and is not part of anyone's quota.
   stats.census = level.spawned.reduce((n, r) => n + r.filter((e) => FOES[e.kind].counts).length, 0);
   stats.allowance = allowanceFor(mission(), stats.census);
+  // `0x448ad8` fills it on the way in, and `0x402760` does the same on a respawn
+  stats.health = stats.maxHealth;
   // ?clock= starts the mission clock short, which is the only way to reach the
   // last two minutes of an eight-minute dial from a test. It is spent on the
   // first level it is given to, so a timed-out level does not time out again.
@@ -2242,7 +2306,12 @@ addEventListener("keydown", (e) => {
   if (k === "punch" && !held.punch) punchPressed = true;
   if (k === "kick" && !held.kick) kickPressed = true;
   if (k) held[k] = true;
-  else if (e.key === "[") void loadLevel((levelIndex + 15) % 16);
+  // the damage switch — see {@link HURT}. It starts off, and `?damage=1` is the
+  // same switch thrown before the level loads
+  else if (e.key === "h" || e.key === "H") {
+    damageOn = !damageOn;
+    if (!damageOn) stats.health = stats.maxHealth;
+  } else if (e.key === "[") void loadLevel((levelIndex + 15) % 16);
   else if (e.key === "]") void loadLevel((levelIndex + 1) % 16);
   else if (e.key === "n") cycleSpawn();
   // M is this page's own, and it is the only key here that is: the original's
@@ -2511,6 +2580,9 @@ function hurtBox(e: Enemy, c: SbkCel, lvl: Level): { top: number; left: number; 
 const stats = {
   score: 0,
   lives: 3,
+  /** `[0x4ac3d0]` and `[0x4ac3d8]` — and only {@link damageOn} ever spends it */
+  health: HURT.max as number,
+  maxHealth: HURT.max as number,
   /** what this level stood up with, and how many of them may still stand */
   census: 0,
   allowance: 0,
@@ -2760,6 +2832,124 @@ function claimBar(): void {
   }
   if (!won) return;
   stats.shown = { health: Math.max(0, won.hp), max: won.max, nameCel: FOES[won.kind].panel!.plate };
+}
+
+/**
+ * Where a hitter's strike box is, in the world — the mirror of {@link strikeBox}.
+ *
+ * `0x430375` reads the CURRENT cel's own strike rect and skips a hitter whose is
+ * degenerate, which is what makes a blow two frames of an animation rather than
+ * the whole of it.
+ */
+function strikeOf(
+  cel: SbkCel,
+  x: number,
+  y: number,
+  facing: number,
+): { top: number; left: number; bottom: number; right: number } | null {
+  if (!cel.strike) return null;
+  const band = x - cel.width / 2;
+  const [cx0, cx1] =
+    facing < 0
+      ? [cel.width - (cel.posX + cel.strike.x1), cel.width - (cel.posX + cel.strike.x0)]
+      : [cel.posX + cel.strike.x0, cel.posX + cel.strike.x1];
+  const ay = y - cel.height + cel.posY;
+  return { left: band + cx0, right: band + cx1, top: ay + cel.strike.y0, bottom: ay + cel.strike.y1 };
+}
+
+/**
+ * The player's own body box, from the cel showing now — and the reason a
+ * knockdown is safe.
+ *
+ * `0x4303b3` skips a victim whose current cel has a degenerate body box, and
+ * every reaction cel in `PLAYER.SBK` has none: 5900..5902, 5910..5915,
+ * 5940..5944, 9550..9558 and 5020/5021 all carry a strike box or nothing at all.
+ * So the player cannot be touched for the whole of a stagger, a knockdown or a
+ * death — that, and not a timer, is the invulnerability this engine has.
+ */
+function playerBody(): { top: number; left: number; bottom: number; right: number } | null {
+  const rec = player?.cels.find((c) => c.id === lastCel);
+  if (!rec?.body) return null;
+  const band = p.x - rec.width / 2;
+  const [cx0, cx1] =
+    p.facing < 0
+      ? [rec.width - (rec.posX + rec.body.x1), rec.width - (rec.posX + rec.body.x0)]
+      : [rec.posX + rec.body.x0, rec.posX + rec.body.x1];
+  const ay = p.y - rec.height + rec.posY;
+  return { left: band + cx0, right: band + cx1, top: ay + rec.body.y0, bottom: ay + rec.body.y1 };
+}
+
+/** `0x402ac0` — take it off, floor at zero, and start dying if that empties it */
+function takeHealth(n: number): void {
+  stats.health = Math.max(0, stats.health - Math.round(n));
+  if (stats.health > 0 || p.act === "dying") return;
+  // `0x402f60` refuses a second death while the first is playing, and `0x402fa0`
+  // installs `0x476758` tag 0 — the kind that IS being dead
+  p.act = "dying";
+  p.actClock = 0;
+  p.vx = 0;
+}
+
+/**
+ * Everything that can hit the player, once a frame — `0x430367` onward, which is
+ * the same loop that lets the player hit everything else, run the other way.
+ *
+ * A hitter counts when its own `obj+0x1a` is live, its current cel carries a
+ * strike box, and that box overlaps the victim's body box. Then the victim's
+ * handler runs, and the player's (`0x448c60`) takes the blow's magnitude off the
+ * health and picks a reaction off the one threshold at `0x449115`.
+ *
+ * `0x43045d` disarms a hitter after one connect — but almost every class in this
+ * chapter re-arms itself on the next tick (`0x455065` for the dog, `0x454495` for
+ * the fourth punk, four sites in the girder), so the disarm buys the player one
+ * frame and no more. One blow a frame is therefore the whole of it, which is why
+ * this stops at the first thing it finds: the reaction it installs takes the
+ * player's body box away for the several frames that follow, and THAT is the
+ * invulnerability.
+ */
+function takeHits(): void {
+  if (!damageOn || !level || !player) return;
+  // already staggering, already down, already dead: no body box, nothing to hit
+  if (p.act === "dying") return;
+  const mine = playerBody();
+  if (!mine) return;
+  const hit = (cel: SbkCel, x: number, y: number, facing: number, vx: number, vy: number): boolean => {
+    const box = strikeOf(cel, x, y, facing);
+    if (!box || !cel.blow) return false;
+    if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom)) return false;
+    // `0x42f910`: the cel's own pair plus whatever the hitter was doing, rooted
+    const bx = cel.blow.dx * (facing < 0 ? -1 : 1) + vx;
+    const by = cel.blow.dy + vy;
+    const damage = Math.sqrt(bx * bx + by * by);
+    // `0x44915c` / `0x44919e`: which side it came from decides the take
+    const front = (x > p.x) === (p.facing > 0);
+    p.act = damage > HURT.knockdown ? (front ? "downFront" : "downBack") : front ? "hurtFront" : "hurtBack";
+    p.actClock = 0;
+    sound?.own(OWN.hurt[Math.floor(Math.random() * OWN.hurt.length)], p.x, p.y);
+    takeHealth(damage);
+    return true;
+  };
+  const lvl = level;
+  for (const e of spawnedHere()) {
+    if (e.state === "dead" || e.state === "burst") continue;
+    const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
+    if (!c?.strike) continue;
+    if (hit(c, e.x, e.y, e.facing, e.vx / TICK_SCALE, e.vy / TICK_SCALE)) return;
+  }
+  // `0x454a38` arms a press only while its stroke runs, and only two of its cels
+  // carry a box; `0x4537d0` arms a girder on every frame it has
+  for (const c of crushesHere()) {
+    if (c.state !== "slam") continue;
+    const cel = lvl.sbk.cels.find((q) => q.id === crushCel(c));
+    if (!cel?.strike) continue;
+    if (hit(cel, c.x, c.y, 1, 0, 0)) return;
+  }
+  for (const b of ibeamsHere()) {
+    if (b.delay > 0) continue;
+    const cel = lvl.sbk.cels.find((q) => q.id === ibeamCel(b));
+    if (!cel?.strike) continue;
+    if (hit(cel, b.x, b.y, 1, 0, 0)) return;
+  }
 }
 
 /** the things spawned in the player's room, or none */
@@ -3626,7 +3816,7 @@ function loop(now: number): void {
       p.act = null;
     if (p.act) {
       const a = ACTIONS[p.act];
-      const f = Math.floor(p.actClock);
+      const f = Math.floor(p.actClock / (a.hold ?? 1));
       if (f >= a.cels.length) p.act = null;
       else {
         // the frame's own dx, mirrored by facing, and it may not leave the room
@@ -3912,6 +4102,23 @@ function loop(now: number): void {
         const ny = p.y + p.vy;
         const land = p.vy >= 0 ? surfaceCrossed(tickX, p.y, p.x, ny) : null;
         if (land !== null) {
+          /**
+           * ...and what the drop cost. `0x443c82` is the whole rule: past 530 of
+           * accumulated fall the landing is simply fatal — no blow, no health
+           * call, straight into the dying script — and under it a flat ten and
+           * the roll at `0x476220` tag 5. Both are gated on the flail state,
+           * which `0x442f3f` forces at 360.
+           */
+          if (damageOn && p.fallPx > HURT.flailFall && p.act !== "dying") {
+            if (p.fallPx > HURT.fatalFall) {
+              p.act = "dying";
+              p.actClock = 0;
+            } else {
+              p.act = "landRoll";
+              p.actClock = 0;
+              takeHealth(HURT.fallDamage);
+            }
+          }
           // `0x42ff5d`: the feet to the floor and the fall stopped. The
           // horizontal is left alone — the ground's drag has it from here
           p.y = land;
@@ -3977,6 +4184,8 @@ function loop(now: number): void {
     // the mover after everything else has had its say (`0x430146`)
     if (!p.climbing) ejectFromObstacles();
     if (p.act) landHits();
+    // ...and everything that can hit back, on the frame tick — see {@link takeHits}
+    if (frame) takeHits();
     stepPlanks();
     stepElevators();
     stepIbeams();
@@ -3989,6 +4198,9 @@ function loop(now: number): void {
     // the mission clock runs at the engine's rate, not this page's
     stats.ticks = Math.max(0, stats.ticks - TICK_SCALE);
     if (stats.ticks <= 0 && !film) void ranOut();
+    // `0x443dea`: the life is spent when the dying animation ENDS, not when the
+    // health runs out, and `0x443ec7` turns the last one into the game-over state
+    if (damageOn && stats.health <= 0 && p.act === null && !film) void died();
     if (fellOut() && !film) void died();
     upPressed = false;
     // J is read by the frame's think, not by the tick, so it waits for one
@@ -4105,7 +4317,7 @@ function loop(now: number): void {
   // cannot slide whatever this page's Hz is; and the flight runs on its own.
   const stride = seq === ANIM.run ? RUN_STRIDE_PX : STRIDE_PX;
   let id: number;
-  if (acting) id = seq[Math.min(seq.length - 1, Math.floor(p.actClock))];
+  if (acting) id = seq[Math.min(seq.length - 1, Math.floor(p.actClock / (acting.hold ?? 1)))];
   // a rung is four cels at one engine frame each, and the last of them is what a
   // ladder holds you on when you stop asking to move
   else if (p.climbing) id = seq[Math.min(seq.length - 1, Math.floor(p.climbClock))];
@@ -4187,7 +4399,7 @@ function loop(now: number): void {
     paintHud(ctx, HUD_ART, {
       // nothing here can hurt the player, so the left-hand bar reads full: 1024
       // is the engine's own default max (`0x40d3a0`'s `mov dx, 0x400`)
-      player: { health: 1024, max: 1024, nameCel: CEL.skullcracker },
+      player: { health: stats.health, max: stats.maxHealth, nameCel: CEL.skullcracker },
       enemy: stats.shown,
       score: stats.score,
       lives: stats.lives,
@@ -4330,6 +4542,8 @@ function loop(now: number): void {
   const flew = spawnedHere().find((e) => FOES[e.kind].flies && (e.vx !== 0 || e.dents > 0));
   const slid = flew ? ` · ${flew.kind} at x ${Math.round(flew.x)}` : "";
   const lives = ` · ${stats.lives} ${stats.lives === 1 ? "life" : "lives"}`;
+  // the switch, and what it is spending — a probe has no other way to see either
+  const hurt = damageOn ? ` · <b>damage ON</b> ${Math.round(stats.health)}/${stats.maxHealth}hp` : " · damage off";
   // the panel already shows it in the disc's own digits; this is for the probes,
   // which can read a number out of text and can only count pixels off a canvas
   const points = ` · ${stats.score} points`;
@@ -4337,7 +4551,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${bird}${slid}${lives}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 
