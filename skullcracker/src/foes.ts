@@ -1525,6 +1525,70 @@ export const FOES: Readonly<Record<string, Foe>> = {
     vanishes: true,
     from: "0x41ed70 / 0x4233e0 / 0x4234b0 / 0x423a30",
   },
+  /**
+   * IGOR — `initigor`, three of them and all three in RAVECAVE. Creator
+   * `0x41ee40`, class `0x425180`, think `0x425230`, hit `0x4256d0`.
+   *
+   * Two hundred health, 350 points, divisor 10, and a gait whose second half
+   * carries dx 55. What is peculiar about it is `0x46fea0`, a script whose
+   * `ticksPerFrame` is **zero** and every one of whose five records carries a
+   * NEGATIVE dx — 3104 back to 3100 at −110, −55, −110, −55, −110. It is the
+   * same five cels as the walk, run backwards and travelling backwards: Igor
+   * retreats along its own footprints.
+   */
+  initigor: {
+    // `0x46fe20` tag 0, kind 2 — the first record carries no stride
+    gait: { cels: [3100, 3101, 3102, 3103, 3104], hold: 2, dx: [0, 55, 55, 55, 55], from: "0x46fe20 tag 0" },
+    divisor: 10,
+    // `0x46ff30` tag 0, kind 7 — and its second cel is held three frames
+    flinch: [{ cels: [3120, 3121, 3121, 3121, 3122, 3123], hold: 2, from: "0x46ff30 tag 0" }],
+    // `0x46ff98` tag 1, kind 5
+    death: { cels: [3140, 3141, 3142, 3143, 3144, 3145], hold: 1, from: "0x46ff98 tag 1" },
+    // `0x46fe10` tag 0 — one cel, which is what the class stands it on
+    wake: { cel: 3100, from: "0x4251a7 / 0x46fe10 tag 0" },
+    health: 200,
+    panel: { health: 200, plate: 13204, award: 350 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x41ee40 / 0x425180 / 0x425230 / 0x4256d0",
+  },
+  /**
+   * The WRAITH — `initwraith`, and there is exactly one in the game, at
+   * RAVECAVE's own x13043. Creator `0x41ec80`, class `0x424730`, think
+   * `0x424800`, hit `0x424f80`.
+   *
+   * Seven hundred health (`0x40e300(0x2bc)`), a shove weight of 4, gravity zero
+   * — and **no award at all**: `0x424f80` has no call to `0x40d450` anywhere in
+   * it. Nothing else in the game is worth nothing, and the reason is the level:
+   * chapter three's third stage asks for no kills (`0x4218ca` stores the whole
+   * census as the allowance), so what beating this opens is the way out rather
+   * than a number.
+   *
+   * Its own creator files cel `0x9c4` — 2500 — and there is no cel 2500 in
+   * RAVECAVE.SBK. The think installs `0x46f6c8` before anything is drawn, so
+   * what the level actually shows is the 3200s, and 2500 is a leftover.
+   */
+  initwraith: {
+    // `0x46f6c8` tag 1 — nine cels, dx 20 falling to 10 half way through
+    gait: { cels: [3250, 3251, 3252, 3253, 3252, 3253, 3252, 3251, 3250], hold: 2, dx: [20, 20, 20, 10, 10, 10, 10, 10, 10], from: "0x46f6c8 tag 1" },
+    divisor: 10,
+    floats: true,
+    // `0x46f8a8` tag 0, kind 8
+    flinch: [{ cels: [3200, 3201, 3202, 3203, 3204, 3205, 3206, 3207, 3208], hold: 2, from: "0x46f8a8 tag 0" }],
+    // `0x46f898` tag 0, kind 7 — one cel at four frames, and that is all of it
+    death: { cels: [3243], hold: 4, from: "0x46f898 tag 0" },
+    // `0x46f6c8` tag 0 — the hover, which is the walk with its strides removed
+    wake: { cel: 3250, from: "0x46f6c8 tag 0" },
+    health: 700,
+    hitSound: FOE_SFX.wraithHit,
+    deathSound: FOE_SFX.wraithDeath,
+    panel: { health: 700, plate: 13205, award: 0 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x41ec80 / 0x424730 / 0x424800 / 0x424f80",
+  },
 };
 
 /** how many engine frames one run of an animation lasts */

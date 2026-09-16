@@ -270,6 +270,9 @@ export const FOE_SFX = {
   bridgeFall: 0x35,
   /** `0x423d9d` — `0070 swiningbla[de]` */
   axe: 0x20,
+  /** `0x425058` and `0x4250c8` — the wraith, hit and gone */
+  wraithHit: 0x21,
+  wraithDeath: 0x29,
   /** `0x43b6a3` — `mall.snd` names index 32 "#0120 coke mach[ine]" */
   cokeHit: 32,
   /**
