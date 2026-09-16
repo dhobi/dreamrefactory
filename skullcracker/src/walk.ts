@@ -130,6 +130,7 @@ import {
   dripFrames,
 } from "./props";
 import { DEATH_FILMS, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
+import { CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, WEAPONS, type Flare, type Gun } from "./guns";
 import {
   CEL,
   CLOCK_FULL,
@@ -1197,6 +1198,8 @@ interface Level {
   sprinklers: Sprinkler[][];
   /** the `stat*` records, as the codes their chapter's init hands the creator */
   pickups: Pickup[][];
+  /** the positive-code records — the guns, and the ammunition for them */
+  guns: Gun[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1328,6 +1331,8 @@ const p = {
   /** the one-shot action playing, and how far into it, in engine frames */
   act: null as string | null,
   actClock: 0,
+  /** whether the fire act has already let its round go — `0x42cd53` fires once */
+  fired: false,
   /**
    * Engine frames completed since leaving the ground. The tag-0 handler — the
    * lift and the steering — first runs on the second: the launch frame ends the
@@ -1444,6 +1449,19 @@ async function loadLevel(index: number): Promise<void> {
   drips = [];
   roaches = [];
   columns = new Map();
+  flares = [];
+  // the chapter's own entry function: zero every count, name the chapter's
+  // weapon, and leave the hands empty (`0x4511f0` and its three siblings). It
+  // runs once per CHAPTER, not once per level, and that is the whole reason
+  // SEWER places two `statflare` and no gun to fire them with — you are
+  // expected to still be holding SERVICE's.
+  const chapter = CHAPTER_WEAPON[name.toUpperCase()];
+  if (chapter !== undefined && chapter !== chapterWeapon) {
+    chapterWeapon = chapter;
+    inv.weapon = chapter;
+    inv.armed = false;
+    inv.rounds = {};
+  }
   level = {
     sbk,
     pal,
@@ -1466,6 +1484,7 @@ async function loadLevel(index: number): Promise<void> {
     nests2: rooms.map((r) => placed(sbk, r, "initroachmotel", ROACH.run.cels, (e) => ({ x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: -17, made: 0 }))),
     sprinklers: rooms.map((r) => placed(sbk, r, "initsprinkler", SPRINKLER.rise.cels, (e) => ({ x: e.pointX, y: e.pointY, slot: e.param, top: e.top, left: e.left, bottom: e.bottom, right: e.right }))),
     pickups: rooms.map((r) => pickupsIn(sbk, r)),
+    guns: rooms.map((r) => gunsIn(sbk, r)),
     crows: rooms.map((r) => crowsIn(sbk, r)),
     // z is the ENGINE's paint order, which is its collection order: the level's
     // frame fn (SC.EXE 0x412c30) collects plane lists p3, p0, then the actors,
@@ -2707,6 +2726,25 @@ const stats = {
  * never dies, and `0x44fe80` picks WHICH dent by the same speed — 10 to mark it,
  * 55 to cave it in, so again a punch dents and a kick caves.
  */
+/**
+ * The animation one act plays, including the two that are not in
+ * {@link ACTIONS} because they are not the fists'.
+ *
+ * `reach` is `0x472360`, the game's one kind-14 script, and `fire` is whichever
+ * weapon is in your hands — its own script's wind-up tag followed by whatever
+ * it holds afterwards, which for the flare gun is `2720 2721 2722` then `2723`.
+ */
+function actOf(name: string): { cels: readonly number[]; dx: readonly number[]; hold?: number; from: string } | null {
+  if (name === "reach") return { cels: GRAB.cels, dx: GRAB.cels.map(() => 0), from: GRAB.from };
+  if (name === "fire") {
+    const w = WEAPONS[inv.weapon];
+    if (!w) return null;
+    const cels = [...w.moveset.fire, ...w.moveset.shot];
+    return { cels, dx: cels.map(() => 0), from: w.moveset.from };
+  }
+  return ACTIONS[name] ?? null;
+}
+
 function landHits(): void {
   if (!level || !player || !p.act) return;
   const i = level.rooms.indexOf(p.room!);
@@ -2742,75 +2780,96 @@ function landHits(): void {
     const box = hurtBox(e, c, level);
     if (!(mine.right > box.left && mine.left < box.right && mine.bottom > box.top && mine.top < box.bottom)) continue;
     struck.add(e);
-    const damage = mine.damage;
-    // the spray goes first, exactly as `0x40cba0` is called before the subtract —
-    // and only for the kinds whose handler calls it at all
-    if (foe.bleeds) spray(e, damage, mine.blow);
-    // and the kind's own sound, at the thing that was hit — see FOE_SFX for which
-    // handler plays which index
-    if (foe.hitSound !== undefined) {
-      const set = foe.hitSound;
-      sound?.effect(typeof set === "number" ? set : set[Math.floor(Math.random() * set.length)], e.x, e.y);
-    }
-    // the fourth kind's handler keeps the damage only for the blood and takes a
-    // single point off the health — `0x454821`, and see {@link Foe.oneHitEach}
-    e.hp -= foe.oneHitEach ? 1 : damage;
-    // knocked the way the blow travels, kept inside its own territory — unless it
-    // is bolted down, which a hydrant is (`0x44fb43` re-pins it every frame)
-    if (!foe.rooted) e.x = Math.max(e.left, Math.min(e.right, e.x + p.facing * 20));
-    e.dents += 1;
-    // and the momentum, for the kinds that keep it
-    if (foe.flies) {
-      const v = knockback(foe, { dx: mine.blow.dx * p.facing, dy: mine.blow.dy }, e);
-      e.vx = v.vx;
-      e.vy = v.vy;
-    }
-    // a frail kind's handler never looks at health: one blow, whatever the blow.
-    // The rat is the case, and no corpse lingers — the launch IS the exit.
-    if ((foe.frail || e.hp <= 0) && foe.death) {
-      // the death sound goes through `0x40f090` rather than `0x40ef30`, which is
-      // the same call with a different tail; the port does not tell them apart
-      if (foe.deathSound !== undefined) sound?.effect(foe.deathSound, e.x, e.y);
-      e.state = "dead";
-      e.anim = foe.death;
-      e.clock = 0;
-      e.linger = foe.frail ? 0 : foe.linger ?? CORPSE_LINGER;
-      stats.score += foe.award ?? foe.panel?.award ?? 0;
-      continue;
-    }
-    /**
-     * ...and the blow that puts it over instead. `0x456496` counts the boss's
-     * consecutive hits and every third one installs the knockdown rather than a
-     * take. The get-up follows on {@link FoeAnim.then} at its own rate.
-     */
-    const over = foe.knockdown;
-    if (over && e.dents % over.every === 0) {
-      sound?.effect(over.sound, e.x, e.y);
-      e.state = "flinch";
-      e.anim = over.anim;
-      e.clock = 0;
-      continue;
-    }
-    if (!foe.flinch) continue;
-    // where the blow landed and which way it was facing — the two things the
-    // handler consults besides the damage
-    const blow = {
-      damage,
-      // this blow included: `e.dents` was stepped above, and the boss's handler
-      // counts its consecutive hits in `AI+0x12` (`0x456461`)
-      hits: e.dents,
-      dy: Math.abs((mine.top + mine.bottom) / 2 - (box.top + box.bottom) / 2),
-      facingAway: e.facing === p.facing,
-    };
-    // a progressive kind advances one stage per blow instead of picking; a
-    // hydrant's handler switches on the state it is already showing, not on how
-    // hard it was hit
-    const which = foe.progressive ? e.dents - 1 : foe.pick ? foe.pick(blow) : 0;
-    if (foe.progressive && which >= foe.flinch.length) continue; // beaten in already
-    e.state = "flinch";
-    e.anim = foe.flinch[Math.min(foe.flinch.length - 1, Math.max(0, which))];
-    e.clock = 0;
+    strikeFoe(e, mine.damage, mine.blow, p.facing, (mine.top + mine.bottom) / 2, box);
   }
+}
+
+/**
+ * What a landed blow DOES to one creature — the class handler's own sequence,
+ * lifted out of {@link landHits} so that something other than a fist can land
+ * one. A flare is the other thing: {@link FLARE} gives it 100 and `0x43ad80`
+ * hands it to the same handler a punch goes through.
+ *
+ * `from` is which way the blow travelled (the shove is along it) and `mid` is
+ * how high it landed, which is the second thing a handler's flinch picks on.
+ */
+function strikeFoe(
+  e: Enemy,
+  damage: number,
+  shove: { dx: number; dy: number },
+  from: number,
+  mid: number,
+  box: { top: number; left: number; bottom: number; right: number },
+): void {
+  if (!level) return;
+  const foe = FOES[e.kind];
+  // the spray goes first, exactly as `0x40cba0` is called before the subtract —
+  // and only for the kinds whose handler calls it at all
+  if (foe.bleeds) spray(e, damage, shove);
+  // and the kind's own sound, at the thing that was hit — see FOE_SFX for which
+  // handler plays which index
+  if (foe.hitSound !== undefined) {
+    const set = foe.hitSound;
+    sound?.effect(typeof set === "number" ? set : set[Math.floor(Math.random() * set.length)], e.x, e.y);
+  }
+  // the fourth kind's handler keeps the damage only for the blood and takes a
+  // single point off the health — `0x454821`, and see {@link Foe.oneHitEach}
+  e.hp -= foe.oneHitEach ? 1 : damage;
+  // knocked the way the blow travels, kept inside its own territory — unless it
+  // is bolted down, which a hydrant is (`0x44fb43` re-pins it every frame)
+  if (!foe.rooted) e.x = Math.max(e.left, Math.min(e.right, e.x + from * 20));
+  e.dents += 1;
+  // and the momentum, for the kinds that keep it
+  if (foe.flies) {
+    const v = knockback(foe, { dx: shove.dx * from, dy: shove.dy }, e);
+    e.vx = v.vx;
+    e.vy = v.vy;
+  }
+  // a frail kind's handler never looks at health: one blow, whatever the blow.
+  // The rat is the case, and no corpse lingers — the launch IS the exit.
+  if ((foe.frail || e.hp <= 0) && foe.death) {
+    // the death sound goes through `0x40f090` rather than `0x40ef30`, which is
+    // the same call with a different tail; the port does not tell them apart
+    if (foe.deathSound !== undefined) sound?.effect(foe.deathSound, e.x, e.y);
+    e.state = "dead";
+    e.anim = foe.death;
+    e.clock = 0;
+    e.linger = foe.frail ? 0 : foe.linger ?? CORPSE_LINGER;
+    stats.score += foe.award ?? foe.panel?.award ?? 0;
+    return;
+  }
+  /**
+   * ...and the blow that puts it over instead. `0x456496` counts the boss's
+   * consecutive hits and every third one installs the knockdown rather than a
+   * take. The get-up follows on {@link FoeAnim.then} at its own rate.
+   */
+  const over = foe.knockdown;
+  if (over && e.dents % over.every === 0) {
+    sound?.effect(over.sound, e.x, e.y);
+    e.state = "flinch";
+    e.anim = over.anim;
+    e.clock = 0;
+    return;
+  }
+  if (!foe.flinch) return;
+  // where the blow landed and which way it was facing — the two things the
+  // handler consults besides the damage
+  const blow = {
+    damage,
+    // this blow included: `e.dents` was stepped above, and the boss's handler
+    // counts its consecutive hits in `AI+0x12` (`0x456461`)
+    hits: e.dents,
+    dy: Math.abs(mid - (box.top + box.bottom) / 2),
+    facingAway: e.facing === from,
+  };
+  // a progressive kind advances one stage per blow instead of picking; a
+  // hydrant's handler switches on the state it is already showing, not on how
+  // hard it was hit
+  const which = foe.progressive ? e.dents - 1 : foe.pick ? foe.pick(blow) : 0;
+  if (foe.progressive && which >= foe.flinch.length) return; // beaten in already
+  e.state = "flinch";
+  e.anim = foe.flinch[Math.min(foe.flinch.length - 1, Math.max(0, which))];
+  e.clock = 0;
 }
 
 /**
@@ -3624,6 +3683,269 @@ function stepPickups(): void {
   if (!gone.length) return;
   const i = lvl.rooms.indexOf(p.room!);
   lvl.pickups[i] = here.filter((q) => !gone.includes(q));
+}
+
+// ---- the guns ------------------------------------------------------------
+
+/**
+ * What you are carrying — `0x479434`, `0x479438` and the 21 rounds counts at
+ * `0x4a7f16 + id * 12`.
+ *
+ * All three are GLOBAL, not per level: a chapter's entry function
+ * ({@link CHAPTER_WEAPON}) zeroes every count and names its own weapon as the
+ * selected one, leaving `armed` at 0, and after that the state travels with
+ * you. So a gun taken in WOODS is still in your hands in CITY, and the rounds
+ * in it are still the same rounds.
+ */
+const inv = {
+  /** `0x479434` — which of {@link WEAPONS}, whether or not it is in your hands */
+  weapon: 9,
+  /** `0x479438` — and this is what the fire button reads */
+  armed: false,
+  /** `0x4a7f16 + id * 12`, per weapon */
+  rounds: {} as Record<number, number>,
+};
+
+/** every flare in the air, and they outlive the room they were fired in */
+let flares: Flare[] = [];
+
+/** which chapter's entry function has already run — see {@link CHAPTER_WEAPON} */
+let chapterWeapon: number | null = null;
+
+/**
+ * The positive-code records a room stands up, filed as {@link Gun}s.
+ *
+ * The join from a name to a code is {@link GUN_CODES}, which is the four
+ * per-chapter blocks read together, and the band is the creator's own: not the
+ * record's rect and not the drawn art, but `x ± 55` — `0x45af8a` writes exactly
+ * that into the user struct and `0x45ae90` compares against nothing else.
+ */
+function gunsIn(sbk: SbkFile, room: SbkRoom): Gun[] {
+  const out: Gun[] = [];
+  for (const e of sbk.entities) {
+    if (!e.isEntity) continue;
+    const code = Number(Object.keys(GUN_CODES).find((c) => GUN_CODES[Number(c)].name === e.name) ?? NaN);
+    if (!Number.isFinite(code)) continue;
+    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    out.push({ code, x: e.pointX, y: e.pointY, left: e.pointX - GRAB.bandPx, right: e.pointX + GRAB.bandPx, clock: 0 });
+  }
+  return out;
+}
+
+/** how many rounds are in the named weapon */
+function roundsIn(id: number): number {
+  return inv.rounds[id] ?? 0;
+}
+
+/** `0x45ef30` — add, and clamp to the weapon's own max */
+function loadRounds(id: number, n: number): void {
+  const w = WEAPONS[id];
+  if (!w) return;
+  inv.rounds[id] = Math.min(w.max, roundsIn(id) + n);
+}
+
+/**
+ * Which pickup is under the reach, and it is a POINT test 35 pixels ahead.
+ *
+ * `0x42f017` shifts the player's own point by `0x23` in the direction they face
+ * and hands it to `0x45ae90`, which asks three things of every positive pickup:
+ * that the point is inside its `x ± 55` band, that the two are within 150
+ * pixels vertically, and that `obj+0x30` is set — which a weapon still bouncing
+ * after a swap is not.
+ */
+function gunAhead(): Gun | null {
+  const at = p.x + p.facing * GRAB.aheadPx;
+  for (const g of hereOf((l) => l.guns)) {
+    if (g.dropped && g.vy !== undefined) continue; // still in the air, not yours yet
+    if (at < g.left || at > g.right) continue;
+    if (Math.abs(p.y - g.y) >= GRAB.liftPx) continue;
+    return g;
+  }
+  return null;
+}
+
+/**
+ * Throw down what you are holding — `0x45b060`, called BEFORE the reach begins.
+ *
+ * `0x42f0dc` runs it the moment you press S at a gun that is not the one in
+ * your hands, so the old one is already falling while you bend for the new one.
+ * It comes out at your own point with gravity 1.0 and a bounce of 0.3, and its
+ * `obj+0x30` stays 0 until it settles — which is what stops you catching it
+ * again on the way down.
+ */
+function dropGun(): void {
+  const lvl = level;
+  if (!lvl || !p.room) return;
+  const i = lvl.rooms.indexOf(p.room);
+  if (i < 0) return;
+  lvl.guns[i] = [
+    ...lvl.guns[i],
+    {
+      code: inv.weapon,
+      x: p.x,
+      y: p.y,
+      left: p.x - GRAB.bandPx,
+      right: p.x + GRAB.bandPx,
+      clock: 0,
+      dropped: true,
+      vy: 0,
+      vx: 0,
+    },
+  ];
+  inv.armed = false;
+}
+
+/**
+ * The end of the reach — `0x4287bd`, the kind-14 state, which probes the same
+ * band again and then runs `0x428846`'s table.
+ *
+ * The callback at `user+0xc` has already set the weapon and added the rounds by
+ * the time that table is reached; what the table adds is `0x45eed0` for the
+ * five base weapons, and that is the whole of being armed. The two refills fall
+ * through to `0x42884d` — back to the fists — which is why picking up a tank
+ * with nothing in your hands leaves you with nothing in your hands.
+ */
+function takeGun(): void {
+  const lvl = level;
+  const g = gunAhead();
+  if (!lvl || !g || !p.room) return;
+  const i = lvl.rooms.indexOf(p.room);
+  if (i >= 0) lvl.guns[i] = lvl.guns[i].filter((q) => q !== g);
+  const kind = GUN_CODES[g.code];
+  // `0x428868` — the one code that is not a weapon at all: 150 health and the
+  // player's own sound 0xa, for the thing a dying class drops
+  if (g.code === 2) {
+    stats.health = Math.min(stats.maxHealth, stats.health + 150);
+    sound?.own(0xa, g.x, g.y);
+    return;
+  }
+  if (kind.weapon === null) return;
+  // the callback: the weapon, then the rounds, clamped
+  inv.weapon = kind.weapon;
+  loadRounds(kind.weapon, kind.rounds);
+  // ...and `0x45eed0`, which is the only thing that arms you — plus its own
+  // single round, which is what makes a bare `statflaregun` worth taking
+  if (kind.arms) {
+    inv.armed = true;
+    loadRounds(kind.weapon, 1);
+  }
+}
+
+/**
+ * Fire — `0x42cd53`, which waits for the wind-up's last frame and then calls
+ * the weapon's own function through `0x4a7f10 + id * 12 + 8`.
+ *
+ * Only the flare gun's is here; {@link FLARE} says why the other four are not.
+ * `0x436d43` refuses outright with an empty magazine, so an armed player with
+ * no rounds plays the wind-up and nothing comes out — which is the original's
+ * behaviour and not an omission.
+ */
+function fireGun(): void {
+  if (inv.weapon !== 9 || roundsIn(9) <= 0) return;
+  inv.rounds[9] = roundsIn(9) - 1;
+  sound?.effect(FLARE.sound, p.x, p.y);
+  flares.push({
+    x: p.x + p.facing * FLARE.aheadPx,
+    y: p.y - p.feet,
+    // the script's dx is an impulse through the object's own divisor, and
+    // nothing in the air takes it back again
+    vx: (p.facing * FLARE.dx) / FLARE.divisor,
+    vy: 0,
+    facing: p.facing,
+    wobble: FLARE.wobble.lo + Math.floor(Math.random() * (FLARE.wobble.hi - FLARE.wobble.lo + 1)),
+    sign: -1,
+    burn: null,
+    spent: false,
+  });
+}
+
+/**
+ * The flares, one engine frame at a time.
+ *
+ * `0x43abf0`'s first block is the corkscrew and it is the whole character of the
+ * weapon: the random 13..29 the spawner filed is read down two at a time, and
+ * each frame its value is added to — or, over 7, simply written into — the
+ * flare's vertical velocity, with the sign flipping every frame. So it leaves
+ * the barrel thrashing and straightens out after about seven frames.
+ *
+ * What ends it is `0x43acae`: the ground under it or something it hit, either
+ * of which installs tag 4, the burn-out. Its blow is 100 (`0x43ab2d`) and it
+ * goes through the same class handlers a fist does.
+ */
+function stepFlares(): void {
+  const lvl = level;
+  if (!lvl) return;
+  const i = lvl.rooms.indexOf(p.room!);
+  const pool = i >= 0 ? lvl.spawned[i] : [];
+  for (const f of flares) {
+    if (f.burn !== null) {
+      f.burn += 1;
+      if (f.burn >= FLARE.burn.length * FLARE.burnHold) f.spent = true;
+      continue;
+    }
+    if (f.wobble > 0) {
+      // `0x43ac50` — and the counter goes straight into `obj+0xa`, with no
+      // divisor on it at all. Under 7 it is ADDED and over 7 it is WRITTEN, so
+      // the last few frames are a settle rather than a fresh throw.
+      const v = f.sign * f.wobble;
+      if (f.wobble < FLARE.wobble.settle) f.vy += v;
+      else f.vy = v;
+      f.sign = -f.sign;
+      f.wobble -= FLARE.wobble.step;
+    }
+    // `0x42f850(obj, 0.5)` stores `trunc(0.5 * 10)` — half the player's own
+    f.vy += FLARE.gravity * PLAYER_GRAVITY;
+    const wasY = f.y;
+    f.x += f.vx;
+    f.y += f.vy;
+    // the ground stops it — the same surface test the player falls onto
+    const land = f.vy > 0 ? surfaceUnder(f.x, wasY, f.y) : null;
+    if (land !== null) {
+      f.y = land;
+      f.burn = 0;
+      continue;
+    }
+    // ...and so does anything it reaches, at 100 a time
+    const art = player?.cels.find((c) => c.id === FLARE.flight);
+    const box = {
+      left: f.x - (art ? art.width / 2 : 12),
+      right: f.x + (art ? art.width / 2 : 12),
+      top: f.y - (art ? art.height / 2 : 12),
+      bottom: f.y + (art ? art.height / 2 : 12),
+    };
+    for (const e of pool) {
+      if (e.state === "dead" || e.state === "burst") continue;
+      const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
+      if (!c) continue;
+      const hurt = hurtBox(e, c, lvl);
+      if (!(box.right > hurt.left && box.left < hurt.right && box.bottom > hurt.top && box.top < hurt.bottom)) continue;
+      strikeFoe(e, FLARE.blow, { dx: FLARE.dx, dy: 0 }, f.facing, (box.top + box.bottom) / 2, hurt);
+      f.burn = 0;
+      break;
+    }
+  }
+  flares = flares.filter((f) => !f.spent);
+}
+
+/**
+ * The dropped ones fall — `0x45b060` gives a thrown weapon gravity 1.0 and
+ * clears `obj+0x30`, and the handler's think (`0x45ade5`) re-creates it as a
+ * standing pickup the frame it lands.
+ */
+function stepGuns(): void {
+  for (const g of hereOf((l) => l.guns)) {
+    g.clock += TICK_SCALE;
+    if (!g.dropped || g.vy === undefined) continue;
+    // `0x45b060` — `0x42f850(obj, 1.0)`, the same pull the player takes
+    g.vy += PLAYER_GRAVITY * TICK_SCALE;
+    const wasY = g.y;
+    g.y += g.vy * TICK_SCALE;
+    const land = surfaceUnder(g.x, wasY, g.y);
+    if (land === null) continue;
+    g.y = land;
+    g.vy = undefined;
+    g.vx = undefined;
+  }
 }
 
 /** every roach in the air or on the floor, nest or no nest */
@@ -4813,6 +5135,45 @@ function drawPickups(camX: number, camY: number): void {
   }
 }
 
+/**
+ * The weapons on the floor, out of `PLAYER.SBK` like every other pickup —
+ * `0x45adc0`'s create sets `obj+2` to `0x4abe10`, the shared character book,
+ * whatever level you are standing in.
+ */
+function drawGuns(camX: number, camY: number): void {
+  for (const g of hereOf((l) => l.guns)) {
+    const loc = player?.byId.get(GUN_CODES[g.code]?.cel ?? -1);
+    if (loc === undefined) continue;
+    const art = playerCel(loc);
+    const f = playerFrame(loc);
+    if (!art || !f) continue;
+    const left = g.x - camX + W / 2 - f.posXraw;
+    const top = g.y - camY + VIEW.y - f.posYraw;
+    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) continue;
+    ctx.drawImage(art, left, top);
+  }
+}
+
+/**
+ * The flares — one frame of the muzzle, then `7207` all the way out, then the
+ * four-cel burn-out where it stopped. The art is the LEVEL's, not the player's:
+ * `0x43ab33` files book `0x4a7020`, and 7200..7211 are in MALL, SERVICE, SEWER
+ * and ARCADE and in no other book in the rip — which is the same four levels
+ * that place a `statflare`.
+ */
+function drawFlares(camX: number, camY: number): void {
+  if (!level) return;
+  for (const f of flares) {
+    const id =
+      f.burn !== null
+        ? FLARE.burn[Math.min(FLARE.burn.length - 1, Math.floor(f.burn / FLARE.burnHold))]
+        : f.wobble >= FLARE.wobble.hi - FLARE.wobble.step
+          ? FLARE.muzzle
+          : FLARE.flight;
+    drawLevelCel(id, f.x, f.y, camX, camY);
+  }
+}
+
 /** the green balls, from the shared player book, centred on their own anchors */
 function drawPops(camX: number, camY: number): void {
   for (const q of pops) {
@@ -4918,7 +5279,22 @@ function loop(now: number): void {
       // kick does not — `0x42a670` picks its tag from the keys alone. BOTH
       // together are their own move: the 650s headbutt (`0x429706`).
       const both = (punchPressed && (kickPressed || held.kick)) || (kickPressed && held.punch);
-      if (both) p.act = held.down ? "duckCombo" : "headbutt";
+      // S is the pickup button and the duck button, and which one it is depends
+      // entirely on what is 35 pixels in front of you: `0x4298a1` calls the reach
+      // handler every frame S is held, and `0x42f081` ducks only when the probe
+      // came back empty. See {@link GRAB}.
+      if (held.down && gunAhead()) {
+        p.act = "reach";
+        // `0x42f0dc` — a gun that is not the one you are holding makes you throw
+        // the one you are holding down, and it does it BEFORE the reach plays
+        const want = GUN_CODES[gunAhead()!.code]?.weapon;
+        if (inv.armed && want !== undefined && want !== null && want !== inv.weapon) dropGun();
+      }
+      // ...and with a gun in your hands P is not a fist any more. The five armed
+      // state machines read P (`[0x4ac394]`) and install their own wind-up tag;
+      // none of them has a kick at all.
+      else if (inv.armed && punchPressed && !held.down) p.act = "fire";
+      else if (both) p.act = held.down ? "duckCombo" : "headbutt";
       else if (punchPressed) p.act = held.down ? "duckPunch" : `punch${big}${Math.random() < 0.5 ? "" : "2"}`;
       else if (kickPressed && p.running) {
         // the RUN handler's own kick (`0x429db9`) is the FLYING KICK — tag 4 of
@@ -4936,6 +5312,7 @@ function loop(now: number): void {
       } else if (kickPressed) p.act = held.down ? "duckKick" : `kick${big}`;
       if (p.act) {
         p.actClock = 0;
+        p.fired = false;
         struck.clear();
         struckCrows.clear();
         swing();
@@ -4956,10 +5333,21 @@ function loop(now: number): void {
     if (p.act && (p.act === "airKick" || p.act === "airPunch" || p.act === "flyingKick") && p.onGround && p.actClock > 0)
       p.act = null;
     if (p.act) {
-      const a = ACTIONS[p.act];
-      const f = Math.floor(p.actClock / (a.hold ?? 1));
-      if (f >= a.cels.length) p.act = null;
-      else {
+      const a = actOf(p.act);
+      const f = a ? Math.floor(p.actClock / (a.hold ?? 1)) : 0;
+      if (!a || f >= a.cels.length) {
+        // the reach ENDS in the take — `0x4287bd` is the kind-14 state, and it
+        // probes the band a second time rather than remembering what it found
+        if (p.act === "reach") takeGun();
+        p.act = null;
+      } else {
+        // `0x42cd53` waits for the wind-up tag to END and only then calls the
+        // weapon's own fire function; the tag it installs afterwards is the pose
+        // held while the thing is in the air
+        if (p.act === "fire" && !p.fired && f >= (WEAPONS[inv.weapon]?.moveset.fire.length ?? 1)) {
+          p.fired = true;
+          fireGun();
+        }
         // the frame's own dx, mirrored by facing, and it may not leave the room
         const step = ((a.dx[f] ?? 0) / DIVISOR) * TICK_SCALE * p.facing;
         const nx = p.x + step;
@@ -5433,6 +5821,8 @@ function loop(now: number): void {
     stepScenery();
     stepColumns();
     stepPickups();
+    stepGuns();
+    if (frame) stepFlares();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -5556,6 +5946,8 @@ function loop(now: number): void {
   // engine's own effect class is collected with the actors, not the backdrop
   drawCraft(camX, camY);
   drawPickups(camX, camY);
+  drawGuns(camX, camY);
+  drawFlares(camX, camY);
   drawGobs(camX, camY);
   drawPops(camX, camY);
 
@@ -5563,38 +5955,56 @@ function loop(now: number): void {
   // foreground — the disc's own cels for both facings, so nothing is mirrored
   // what the player is doing decides the script, and the DISTANCE they have
   // covered decides the frame — one cel per STRIDE_PX, the engine's own ratio
-  const acting = p.act ? ACTIONS[p.act] : null;
+  const acting = p.act ? actOf(p.act) : null;
+  /**
+   * The ARMED player is a different player, and the swap is total.
+   *
+   * `0x45eed0` sets `0x479438` and the pickup case installs the weapon's own
+   * script; that script's `kind` becomes `player+0x18`, and `0x4284ed`'s table
+   * sends the whole state machine somewhere else — `0x42cb80` for the flare
+   * gun rather than `0x429690` and its neighbours. Every one of those handlers
+   * re-implements the idle, the walk, the run, the jump, the fall, the landing
+   * and the duck in its weapon's own cels. See {@link Moveset}.
+   */
+  const kit = inv.armed ? WEAPONS[inv.weapon]?.moveset ?? null : null;
   const seq = acting
     ? acting.cels
     : p.climbing
       ? ANIM.climb[p.climbTag] ?? ANIM.hang
       : p.landLeft > 0
         ? p.hardLand
-          ? ANIM.air
-          : ANIM.land
+          ? kit?.fall ?? ANIM.air
+          : kit?.land ?? ANIM.land
         : !p.onGround || p.windup > 0
-          ? ANIM.air
+          ? kit?.jump ?? ANIM.air
           : p.crouching
-          ? ANIM.crouch
+          ? kit?.duck ?? ANIM.crouch
           : p.running
-            ? ANIM.run
+            ? kit?.run ?? ANIM.run
             : p.moving
-              ? ANIM.walk
-              : ANIM.idle;
+              ? kit?.walk ?? ANIM.walk
+              : kit?.idle ?? ANIM.idle;
   // Three clocks, because the engine has three. An action and the idle run on
   // engine frames at their script's own ticksPerFrame; anything that covers
   // ground is clocked by the GROUND it covers, one cel per stride, so the feet
   // cannot slide whatever this page's Hz is; and the flight runs on its own.
-  const stride = seq === ANIM.run ? RUN_STRIDE_PX : STRIDE_PX;
+  const running = seq === (kit?.run ?? ANIM.run);
+  const stride = running ? RUN_STRIDE_PX : STRIDE_PX;
   let id: number;
   if (acting) id = seq[Math.min(seq.length - 1, Math.floor(p.actClock / (acting.hold ?? 1)))];
   // a rung is four cels at one engine frame each, and the last of them is what a
   // ladder holds you on when you stop asking to move
   else if (p.climbing) id = seq[Math.min(seq.length - 1, Math.floor(p.climbClock))];
-  else if (seq === ANIM.idle)
-    id = p.fidget
+  else if (seq === (kit?.idle ?? ANIM.idle))
+    // the fidgets are the fists' own two tags and no weapon script has any
+    id = p.fidget && !kit
       ? p.fidget[Math.min(p.fidget.length - 1, Math.floor(p.fidgetClock / IDLE_HOLD))]
       : seq[Math.floor(p.idleClock / IDLE_HOLD) % seq.length];
+  else if (kit && seq === kit.duck) id = seq[0];
+  else if (kit && (seq === kit.land || seq === kit.fall)) id = seq[Math.min(seq.length - 1, Math.floor(p.actClock))];
+  else if (kit && seq === kit.jump)
+    // two records, the second carrying the dy: the wind-up cel, then the tuck
+    id = seq[p.windup > 0 || p.airFrames === 0 ? 0 : seq.length - 1];
   else if (seq === ANIM.crouch)
     // moving while ducked is the crawl, clocked by ground covered like every
     // gait; still is the held duck, with its rare settle fidget over it
@@ -5678,9 +6088,15 @@ function loop(now: number): void {
       quota: Math.max(0, aliveNow() - stats.allowance),
       ticks: stats.ticks,
       buttons: buttonMask(),
-      // no inventory on this page yet: an empty hand shows an empty gauge, which
-      // is what the engine draws when `[0x479438]` is clear
-      weapon: null,
+      // `0x40d663` — the icon is drawn only while `[0x479438]` is set, but the
+      // four gauge rows are drawn whatever, out of the weapon record's own
+      // `max` and `rounds`. So an empty hand still shows the rounds you are
+      // carrying for the gun you are looking for.
+      weapon: {
+        iconCel: inv.armed ? WEAPONS[inv.weapon]?.icon ?? 0 : 0,
+        ammo: roundsIn(inv.weapon),
+        magazine: WEAPONS[inv.weapon]?.max ?? 0,
+      },
     });
   }
 
@@ -5839,6 +6255,16 @@ function loop(now: number): void {
         return ` · ${got.length} pickups · nearest ${PICKUP.kinds[q.code].name} ${q.code} at x ${q.x}, y ${q.y}`;
       })()
     : "";
+  const arms = hereOf((l) => l.guns);
+  const gun = WEAPONS[inv.weapon];
+  const far = (g: Gun): number => Math.hypot(g.x - p.x, g.y - p.y);
+  const lying = arms.length ? arms.reduce((a, b) => (far(b) < far(a) ? b : a)) : null;
+  const armed =
+    ` · ${inv.armed ? "holding" : "no"} ${gun ? gun.name : inv.weapon} ${roundsIn(inv.weapon)}/${gun ? gun.max : 0}` +
+    (arms.length
+      ? ` · ${arms.length} guns · nearest ${GUN_CODES[lying!.code]?.name ?? lying!.code} at x ${Math.round(lying!.x)}, y ${Math.round(lying!.y)}${gunAhead() ? " IN REACH" : ""}`
+      : "") +
+    (flares.length ? ` · ${flares.length} flares` : "");
   const pools = hereOf((l) => l.sewage);
   const pool = pools.length ? ` · ${pools.length} sewage` : "";
   const nests = nestsHere();
@@ -5863,7 +6289,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 

@@ -894,11 +894,100 @@ first four are on the roofs.** They sit at y914…994 where the street is 1223 a
 the top of a jump is 1099, so twenty jumps from the pavement reach none of them.
 The level's ladder is not a shortcut, it is the way to the pickups.
 
-What is not here is the other creator. `0x45af60` takes POSITIVE codes — the
-weapons: `statflare`, `statflaregun`, `statflamertank`, `statblasterpack`,
-`statsoakertank` — and those are collected by the action button inside a ±55
-pixel band rather than by walking, because they go into an inventory. The flare
-is the one level eight's boss tests for: a blow strength of exactly −9.
+The other creator is the guns, and it is below.
+
+### The guns are the other creator, and taking one makes you a different player
+
+`0x45af60` takes the POSITIVE codes, and nothing about it is the pickups' shape.
+
+**It has a button.** `0x4298a1` is the gate — the idle state calls the reach
+handler `0x42edd0` only while S is held — and `0x42f081` ducks instead when the
+probe comes back empty. One key, two jobs, and which one you get depends
+entirely on what is in front of you.
+
+**It has a facing, and a band rather than a rect.** `0x42f017` shifts the
+player's own point 35 pixels the way they are looking, and `0x45ae90` asks three
+things of it: that it falls inside `x ± 55` — a band the creator writes at
+`user+6` and `user+0xa`, unrelated to the record's rect — that the two are
+within 150 pixels vertically, and that `obj+0x30` is set, which a weapon still
+bouncing after a swap is not.
+
+**And taking one changes the player.** `0x45eed0` sets `0x479438` and the pickup
+case installs the weapon's own script; that script's `kind` becomes
+`player+0x18`, and `0x4284ed`'s table sends the entire state machine somewhere
+else. Five weapons, five kinds, five handlers of about 2,400 bytes each, and
+every one of them re-implements the idle, the walk, the run, the jump, the fall,
+the landing and the duck in its own cels:
+
+```
+  6   blaster    0x471458 kind 22  0x42dbd0   4000s   icon 10304  max 160
+  9   flaregun   0x470a78 kind 20  0x42cb80   2700s   icon 10306  max  16
+  10  flamer     0x470f98 kind 18  0x42b860   1200s   icon 10307  max 160
+  12  soaker     0x471260 kind 19  0x42c1e0   3200s   icon 10311  max 160
+  16  scepter    0x470c40 kind 21  0x42d2b0   3300s   icon 10308  max 160
+```
+
+The whole table lives at `0x4a7f10 + id * 12` as `{ icon, max, rounds, fire }`,
+and it is written by the chapter's own entry function rather than by anything in
+the pickup code. `0x40d681` draws the icon and `0x40d6a2` makes the panel's bar
+out of `rounds * 64 / max`, so the bar is that table read twice.
+
+**The CHAPTER is the unit, not the level.** The four entry functions —
+`0x4511f0` flamer, `0x43bb00` flare gun, `0x421aa0` soaker, `0x416110` blaster —
+each zero all 21 rounds counts and name their own weapon, leaving the hands
+empty. That is why SEWER places two `statflare` and no gun to fire them with:
+you are expected to still be holding SERVICE's. It is also why every `statflamer`
+in the rip is in WOODS or CITY and every `statflare` is in MALL, SERVICE, SEWER
+or ARCADE — the placement scan and the four init functions agree exactly.
+
+Every callback is three instructions and all seven are the same three: the
+weapon, the rounds, the panel. What separates a gun from a refill is one line —
+`statblaster` and `statblasterpack` both give 40 rounds, and only the base
+weapon's pickup case goes on to call `0x45eed0`. Which is why picking up a tank
+with nothing in your hands leaves you with nothing in your hands.
+
+Swapping throws the old one away: `0x42f0dc` calls `0x45b060` the moment you
+press S at a gun that is not the one you are holding, spawning your weapon as a
+falling object with the player's own gravity, before the reach has even played.
+You can only ever carry one. No single level places two kinds, so this only
+happens across a chapter.
+
+**The flare is the gun that is built here.** Its fire function `0x436d40` is a
+shot and does a number:
+
+```
+  436d43  cmp [0x4a7f82], 0        ; rounds left, or nothing happens at all
+  436d5e  0x40ef30(mall.snd, 0x49) ; "#0700 flare gun"
+  436d6d  0x45ef00(1)              ; one round
+  436df0  x = player.x -+ 0x3c     ; sixty pixels ahead, by facing
+  436db0  0x430d40(0x474cb8, …)    ; and there it is, at 0x1a = 100
+```
+
+The corkscrew is the whole character of it. The spawner files a random 13…29 at
+`user+2` and `0x43ac3b` reads it down two at a time, each frame adding that
+value to the flare's vertical velocity and flipping its sign — written outright
+above 7 and added below it. So a flare leaves the barrel thrashing and
+straightens out over about seven frames. It is not aimed and it is not flat.
+A masked one is 40 and a knotted one is 50, so one flare is one kill either way.
+
+The other four fire functions are not here, and the reason is not the same in
+each case. The **flamer**'s `0x44dae0` is a held stream rather than a shot — its
+modes −1 and −2 reach into every live flame to stop it — and the flame's blow
+strength is `0xfff7`, **−9**. That is a code and not a number: it is the same −9
+the kragg tests for, and what it means is each class handler's own business.
+The **soaker**, the **blaster** and the **scepter** belong to chapters this port
+has not reached.
+
+One fact that fell out of reading all five: **the blaster and the flamer spend
+no ammunition at all.** `0x45ef00` appears once in the flare gun's fire function
+and twice each in the soaker's and the scepter's, and not once in either of the
+other two.
+
+The panel had the other half of this waiting: the special-weapon window at
+290,305–380,450 was already painting its plate and its four gauge rows against
+an empty hand, because the reading of `0x40d691` came before there was anything
+to read. It is wired now — the icon appears while `0x479438` is set, and the
+gauge is the weapon record's own `rounds * 64 / max`.
 
 ### Gravity was in there all along
 
@@ -1131,6 +1220,7 @@ all — and that is the whole of the mixer.
 - `skullcracker/tests/browser/sewer.ts` — SEWER's five locks, its lifts and the way through its thirteen regions
 - `skullcracker/tests/browser/arcade.ts` — ARCADE's one boss, out of reach until you jump at it
 - `skullcracker/tests/browser/pickups.ts` — the `stat*` records, and what each one gives
+- `skullcracker/tests/browser/guns.ts` — the weapons, the reach that takes one, and what a flare does
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser
