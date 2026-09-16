@@ -577,7 +577,8 @@ three simply start moving.
 Two of their state machines reach for things that are not in this level at all.
 Both the masked one and the one with the bat have a sub-state for walking to a
 `switch` record and throwing it, and MALL places no `switch` — the cels its script
-wants are not even in the book. The masked one also has a one-in-thirty roll that
+wants are not even in the book. The next level places six of them, and that
+sub-state turns out to be the whole of how it works. The masked one also has a one-in-thirty roll that
 drops a roller behind the player, with a latch so that only one can ever exist.
 
 The Coke machine is furniture worth describing because of how it ends. It holds
@@ -588,6 +589,76 @@ one. **What stops it is its art, not a number** — it has no health word at all
 the emptied cel 8505 carries no body box, so the collision pass stops offering it
 as a victim the moment it shows. That is the same trick as the player's own
 invulnerability while staggering.
+
+### SERVICE is the first level that is a system
+
+Level six is one room nine thousand pixels long with three steps in it, and if
+that were all it were it would be the thinnest level in the game. What it
+actually is is the payoff for two things chapter two had been carrying unused:
+the `switch` the gang all know how to throw, and the `initgoop` nobody had placed.
+
+**Six levers, twenty-two nests, and a `param` joining them.** The levers carry
+501 to 506 and so does every nest, and a lever's only job is to broadcast on its
+own number. `0x436020` makes one on tag 3 of `0x473548` — four tags: 3 is the
+idle it rests in when it is off, 0 the throw up, 1 the loop it rests in when it
+is on, 2 the throw back. At the END of each of the two throws, `0x43c3d0` walks
+the goop class's list and flips the tag of every goop that shares the lever's
+`param`, with a sound at each of them. Both directions broadcast, so the two
+states are symmetrical.
+
+`0x436820(pos, dir)` is the only way either state changes, and it answers only
+the throw that suits: direction **0** moves an off lever to on, direction **1**
+moves an on lever to off, and a lever already mid-throw is ignored. The player
+reaches it through `0x436690`, the chapter's own "what am I standing at" query —
+the same one that answers for `ladder`, `exitroom` and `exitfarm`, which is what
+says a lever is operated the way a door is. The standing state asks it twice a
+frame: once with kind 0 when no direction is held, and once with kind 1 when S
+is. So **stopping on a lever turns it on and S is how you turn it off.**
+
+**What comes out of a running nest is a particle system four objects deep.** One
+name, `initgoop`, covers five different objects and the creator's first argument
+picks between them; the level file only ever asks for the negative one, which is
+the nest — an invisible volume that keeps the record's rect and does nothing at
+all until its tag is 1. Then, once an engine frame, 42 chances in 512, it drips
+from a random point along the top edge of its own rect and tosses for which of
+two strings it gets:
+
+```
+bead   500 501 502 503   still      its script ends -> a DROP where it hung
+drop   504               gravity 1  lands -> gone
+strand 510 … 517         still      at cel 517 -> a GOB 70px below it
+gob    518               gravity 1  lands -> three SPLASHES, and gone
+splash 505 506 504       gravity ½  one random shove, then lands -> gone
+```
+
+Every one of them carries a blow of exactly 100 and its own hit handler is `xor
+ax,ax; ret`, so goop hits and cannot be hit. But **only one cel of the nine can
+touch anything**: 518, the gob, is the only one with a strike box and a blow pair
+(`dy 25, dx -1`). The rest is weather.
+
+**And it is the enemies who turn it on, because goop feeds them.** All four of
+the gang's hit handlers ask which class hit them before anything else, and goop
+is the one answer that is good news: health goes up rather than down, clamped to
+what they started with, with a sound and no spray — sixty for the one with the
+bat and twenty for the other three. So the level's design is legible in the
+records alone. `0x438200` hands a gang member the first unlit lever standing
+inside its own patrol rect; it walks over, and one frame of the reach calls
+`0x436820(lever, 0)`. Direction zero, always: nothing in the game ever asks an
+enemy to turn a lever off. SERVICE places its six levers so that **every one of
+them is inside somebody's territory**, which means running east across the level
+wakes each keeper in turn and leaves the whole service tunnel pouring behind you.
+
+Its two new classes are the fourth of the gang and the thing at the end. The one
+with the knife is the chapter's pattern one more time, sitting exactly where you
+would expect between its siblings: 25 health, 240 points, plate 13104 after their
+13101, 13102 and 13103. The one at the end is built like the boss of level four
+instead — 750 health, a divisor of 13 against the gang's 7, a shove weight
+nothing else in the chapter sets, and a walk whose cels carry no stride at all,
+so it travels on its velocity. Its hit handler is the only one in the chapter
+with **no ignore list**, which means goop, knives and its own allies all land on
+it. The level does not wait for it, though: SERVICE's share is chapter two's
+ordinary 0.75, so the goal opens on the count and this is simply the biggest
+thing standing in front of it.
 
 ### Gravity was in there all along
 
@@ -808,7 +879,7 @@ all — and that is the whole of the mixer.
 - `engine/tests/byte-order.ts` — detection (needs no rip) and the menu (needs one)
 - `skullcracker/tests/browser/menu.ts` — the menu in a real browser
 - `engine/src/df/sbk.ts` — the sprite book reader, and `engine/tests/sbk.ts`
-- `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow, the press
+- `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow, the press, the lever and the goop
 - `skullcracker/src/foes.ts` — what each `init*` name is, and the numbers behind it
 - `skullcracker/tests/browser/city.ts` — CITY's opening, in a browser
 - `skullcracker/tests/browser/lift.ts` — CITY's five lifts, and the ride to its goal
@@ -816,6 +887,7 @@ all — and that is the whole of the mixer.
 - `skullcracker/tests/browser/playgr.ts` — PLAYGR's statue, the fight and the television
 - `skullcracker/tests/browser/damage.ts` — the switch that lets things hit back
 - `skullcracker/tests/browser/mall.ts` — MALL's three regions, its population and its machines
+- `skullcracker/tests/browser/service.ts` — SERVICE's two new classes, its six levers and what they pour
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

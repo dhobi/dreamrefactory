@@ -24,6 +24,7 @@
     "test:browser:woods": "tsx tests/browser/woods.ts",
     "test:browser:playgr": "tsx tests/browser/playgr.ts",
     "test:browser:damage": "tsx tests/browser/damage.ts",
-    "test:browser:mall": "tsx tests/browser/mall.ts"
+    "test:browser:mall": "tsx tests/browser/mall.ts",
+    "test:browser:service": "tsx tests/browser/service.ts"
   }
 }

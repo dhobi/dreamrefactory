@@ -666,3 +666,232 @@ export function crushCel(c: Crush): number {
 export function crushFrames(c: Crush): number {
   return CRUSH[c.state].cels.length * CRUSH[c.state].hold;
 }
+
+
+/**
+ * The wall lever — `switch`, six of them down level six and none anywhere else.
+ * Creator `0x436020`, class `0x43c210`, think `0x43c2c0`.
+ *
+ * It is a two-position lever with a throw in each direction, and its script
+ * `0x473548` carries all four as tags: 3 is the idle it is created on, 0 the
+ * throw up, 1 the loop it rests in once it is on, 2 the throw back down. The
+ * think does nothing but pin the object on its record's point, zero its velocity
+ * pair, and — when the current tag's script has ENDED — install the next one and,
+ * on the two throws, broadcast.
+ *
+ * ## What it is wired to
+ *
+ * `0x43c3d0`, at the end of both throws, walks the goop class's own list and for
+ * every goop carrying the same `param` does `tag ^= 1` on script `0x473458`,
+ * with sound 0x24 at that goop's position. Six switches and twenty-two goop, and
+ * SERVICE's params run 501…506 with both halves of each pair carrying the same
+ * number. `0x43c430` is the other side of the same call, for a param under 500 —
+ * a different class in a different chapter — and no shipped level takes it.
+ *
+ * ## Who throws it
+ *
+ * Both the player and the gang, through the same `0x436820(pos, dir)`.
+ *
+ * - **dir 0 turns it ON.** Only a lever on tag 3 answers: sound 0x4b and the
+ *   throw up.
+ * - **dir 1 turns it OFF.** Only a lever on tag 1 answers: sound 0x4a and the
+ *   throw back.
+ *
+ * The player reaches it through `0x436690`, the chapter's "what am I standing
+ * at" query, which `0x429870` asks twice a frame from the standing state: once
+ * with kind 0 when no direction is held, and once with kind 1 when S is. The
+ * same query answers for `ladder`, `exitroom` and `exitfarm`, which is what says
+ * a switch is operated the way a door is, not the way a punch is. The gang ask
+ * for dir 0 and only dir 0 ({@link file://./foes.ts}), so **everything that is
+ * not the player turns the goop on.**
+ */
+export const SWITCH = {
+  /** tag 3 — created here, and it loops on this until someone throws it */
+  off: { cels: [3264, 3265, 3266], hold: 1, from: "0x473548 tag 3" },
+  /** tag 0 — the throw up. At the end of it the goop toggles */
+  turningOn: { cels: [3263, 3262, 3262, 3262, 3261], hold: 1, from: "0x473548 tag 0" },
+  /** tag 1 — on, and looping */
+  on: { cels: [3260, 3267, 3268], hold: 1, from: "0x473548 tag 1" },
+  /** tag 2 — the throw back, and the goop toggles again at the end of it */
+  turningOff: { cels: [3261, 3262, 3262, 3262, 3263], hold: 1, from: "0x473548 tag 2" },
+  /** `0x436895` — the lever going up */
+  throwOn: 0x4b,
+  /** `0x4368c9` — and coming back down */
+  throwOff: 0x4a,
+  /** `0x43c3f1` — played once per goop the broadcast reaches, at the GOOP's position */
+  toggle: 0x24,
+  /** `mov word ptr [esi+0xe], 0xa` at `0x43c22d`, and it never moves */
+  divisor: 10,
+  from: "0x436020 / 0x43c210 / 0x43c2c0 / 0x436820",
+} as const;
+
+/** the four tags of `0x473548`, named */
+export type SwitchState = "off" | "turningOn" | "on" | "turningOff";
+
+/** one placed lever, pinned on its record's point */
+export interface Switch {
+  x: number;
+  y: number;
+  /** the record's own rect — what the player has to be standing in */
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** the record's `param`, 501…506 — which goop it is wired to */
+  param: number;
+  state: SwitchState;
+  clock: number;
+}
+
+/** which cel a lever is showing */
+export function switchCel(s: Switch): number {
+  const a = SWITCH[s.state];
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(s.clock / a.hold))];
+}
+
+/** how many engine frames the current tag runs for */
+export function switchFrames(s: Switch): number {
+  return SWITCH[s.state].cels.length * SWITCH[s.state].hold;
+}
+
+/**
+ * The thing the levers turn on — `initgoop`, twenty-two of them, and what makes
+ * level six a level rather than a corridor. Creator `0x435db0`, class
+ * `0x437260`, think `0x437310`.
+ *
+ * One name covers five different objects, and the creator's first argument picks
+ * between them. The level file only ever makes the first of them:
+ *
+ * ```
+ *   0x435987   call 0x435db0(-1, point, rect, param)     from the level's records
+ * ```
+ *
+ * A NEGATIVE kind is the **nest**: it keeps the record's rect and param, is given
+ * script `0x473458` — whose two tags are one cel 500 each and whose script kind
+ * is **3**, which is over the `cmp word ptr [ecx+0x18], 2` the class's draw case
+ * tests, so it is never drawn — and sits at region −1 doing nothing until its tag
+ * is 1. That is what the lever toggles.
+ *
+ * ## What a running nest does
+ *
+ * `0x437502`, once an engine frame, while its tag is 1:
+ *
+ * ```
+ *   0x43750b  0x434540(0x200) < 0x2b            42 chances in 512
+ *   0x437531  x = 0x434540(right - left) + left   anywhere across the rect
+ *   0x43755a  kind = 0x434540(2) - 1              one of the two strings
+ *   0x437565  0x435db0(kind, (top, x), rect, 0)
+ * ```
+ *
+ * So about one drip every twelve frames, from the top edge of the rect, at a
+ * random point along it, and half of each kind.
+ *
+ * ## The two strings
+ *
+ * Each is a chain of short-lived objects that make the next one and die. Neither
+ * of the first links moves — `0x42f850(obj, 0)` — and the falling links are given
+ * gravity 1.0, the player's own, so they come down faster than he jumps.
+ *
+ * ```
+ *   bead   500 501 502 503   still     script ends -> a DROP where it hangs, sound 0x1f
+ *   drop   504              gravity 1  lands -> gone
+ *
+ *   strand 510 … 517        still      at cel 517 -> a GOB 70px BELOW it, sound 0x1e
+ *   gob    518              gravity 1  lands -> three SPLASHES, and gone
+ *   splash 505 506 504      gravity ½  one random shove, then lands -> gone
+ * ```
+ *
+ * ## What it does when it touches something
+ *
+ * Every goop object carries `obj+0x1a = 0x64` — a blow of exactly 100, restamped
+ * each frame by the think's own epilogue — and its own hit handler `0x4375a0` is
+ * `xor ax,ax; ret`, so it cannot be hit back. It is a hazard to the player and to
+ * the one thing at the end of the level, whose handler has no ignore list at all.
+ *
+ * To the gang it is **food**. All four of their hit handlers ask whether the
+ * thing that hit them belongs to the goop class before anything else, and if it
+ * does they add health instead of losing it, clamp to what they started with,
+ * play 11 and return: `0x438339` twenty for the third one, `0x438fd9` twenty for
+ * the masked one, `0x439a59` **sixty** for the one with the bat, `0x43a659`
+ * twenty for the one with the knife. Which, with the gang being the only thing
+ * that ever throws a lever on, is the whole design of level six: they turn the
+ * showers on to stand under them, and you turn them off.
+ */
+export const GOOP = {
+  /** `0x43750b` — `0x434540(0x200)` comes back 1…512 and 1…42 fires */
+  chance: 42 / 512,
+  /** kind 0 — the bead gathering, and it hangs where it is */
+  bead: { cels: [500, 501, 502, 503], hold: 3, from: "0x473470 tag 0" },
+  /** kind 2 — what the bead becomes, falling at gravity 1.0 */
+  drop: { cels: [504], hold: 3, from: "0x473470 tag 1" },
+  /** kind 1 — the other string's first link, and it hangs too */
+  strand: { cels: [510, 511, 512, 513, 514, 515, 516, 517], hold: 3, from: "0x4734b8 tag 0" },
+  /** kind 3 — born 70px below the strand at `0x43743a`, falling at gravity 1.0 */
+  gob: { cels: [518], hold: 3, from: "0x4734b8 tag 1" },
+  /** kind 4 — three of them where a gob lands, at gravity ½ and with a shove */
+  splash: { cels: [505, 506, 504], hold: 3, from: "0x473470 tag 2" },
+  /** `0x437427`'s `cmp word ptr [esi], 0x205` — the strand's eighth cel is where the gob comes from */
+  gobAtCel: 517,
+  /** `0x43743a` — `add ax, 0x46` */
+  gobBelow: 70,
+  /** `0x4374ae`, `0x4374c9`, `0x4374e4` — three calls, one after another */
+  splashes: 3,
+  /** `0x4373a9`/`0x4373bf` — `rand(200) - 100` across and `rand(80) - 70` up, through the divisor */
+  splashShove: { x: [-99, 100] as const, y: [-69, 10] as const },
+  /** `mov word ptr [esi+0xe], 0xa` at `0x43727c`, which is what those two are divided by */
+  divisor: 10,
+  /** `0x435e6e` when a drop is released, `0x435ea4` when a gob is */
+  dropSound: 0x1f,
+  gobSound: 0x1e,
+  /** `mov word ptr [esi+0x1a], 0x64` at `0x437574` — and its own handler takes nothing back */
+  damage: 100,
+  /** what it adds to each of the gang, and the ceiling it clamps to — their own starting health */
+  feeds: {
+    initknotboy: 20,
+    initmaskboy: 20,
+    initbatboy: 60,
+    initknifeboy: 20,
+  } as Readonly<Record<string, number>>,
+  /** `0x43a695` and its three counterparts — one sound for being fed */
+  fedSound: 11,
+  from: "0x435db0 / 0x437260 / 0x437310",
+} as const;
+
+/** the five objects `initgoop` makes, named by what they look like */
+export type GoopKind = "bead" | "drop" | "strand" | "gob" | "splash";
+
+/** one invisible nest, which is what a level's `initgoop` record actually is */
+export interface Nest {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** the record's `param` — the lever that toggles it */
+  param: number;
+  /** its tag: created 0, and every broadcast flips it */
+  on: boolean;
+}
+
+/** one link of one string, wherever it has got to */
+export interface Drip {
+  kind: GoopKind;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** engine frames into its own script */
+  clock: number;
+  /** has it already made whatever it makes — the `user+2` latch every branch tests */
+  spent?: boolean;
+}
+
+/** which cel a drip is showing */
+export function dripCel(d: Drip): number {
+  const a = GOOP[d.kind];
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(d.clock / a.hold))];
+}
+
+/** how many engine frames a drip's own script runs for */
+export function dripFrames(d: Drip): number {
+  return GOOP[d.kind].cels.length * GOOP[d.kind].hold;
+}

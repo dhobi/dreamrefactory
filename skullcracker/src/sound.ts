@@ -204,6 +204,21 @@ export const FOE_SFX = {
   maskboyWake: 3,
   batboyWake: 11,
   knotboyWake: 8,
+  /**
+   * Level six's two, out of the same chapter bank.
+   *
+   * The one with the knife takes the gang's shape exactly — `0x439dd0` wakes it
+   * with 14 and `0x43a6d1` plays 15 on a blow — and adds one its siblings share
+   * but MALL never reaches: `0x43a695` plays 11 when the thing that hit it was
+   * GOOP, which heals rather than hurts.
+   *
+   * The one at the end of the level is not of the gang and sounds nothing like
+   * it: one index, `0x43d31b`'s 0x45, on every blow that does not kill it.
+   */
+  knifeboyWake: 14,
+  knifeboyHit: 15,
+  knifeboyFed: 11,
+  hardcoreHit: 0x45,
   /** `0x43b6a3` — `mall.snd` names index 32 "#0120 coke mach[ine]" */
   cokeHit: 32,
   /**

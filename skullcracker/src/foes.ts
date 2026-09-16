@@ -288,6 +288,32 @@ export interface Foe {
    * `AI+0x12` and the third one knocks it over.
    */
   knockdown?: { anim: FoeAnim; every: number; sound: number; from: string };
+  /**
+   * It walks to a `switch` in its own territory and throws it ON.
+   *
+   * Four classes have this and they all have it the same way, three calls deep:
+   * the think tests its own state (`0x439cf4`), `0x438200` hands back the first
+   * object of the switch class whose POSITION is inside the thing's own record
+   * rect **and whose tag is 3**, which is to say an unlit one, and the class
+   * installs its kind-6 script — whose tag 0 is the ordinary walk and whose tag 1
+   * is the reach. Within `0x25` pixels of the lever it stops walking and plays
+   * the reach, and one named frame of that reach calls `0x436820(lever, 0)`.
+   *
+   * Direction ZERO, every time. Nothing in the game ever asks an enemy to turn a
+   * lever off. See {@link file://./props.ts} for what that switches on, and why
+   * a gang that heals under goop wants it on.
+   */
+  lever?: {
+    /** the kind-6 script's tag 1 — the reach */
+    anim: FoeAnim;
+    /** which frame of it makes the call — the script index `obj+0x42` is tested against, less tag 0's six */
+    at: number;
+    /** `cmp eax, 0x25` — how close it has to get before it stops walking */
+    reachPx: number;
+    /** `0x434540(3) == 1` and then `0x434540(2) + 5`: a one-in-three chance of 5 or 6 */
+    sound: readonly number[];
+    from: string;
+  };
   /** how long the body lies there before it goes, in engine frames; Infinity never */
   linger?: number;
   /** what it stood up with — `0x40e300`'s argument in the creator */
@@ -583,6 +609,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * (`0x474868` latches), and it is not here.
    */
   initmaskboy: {
+    lever: { anim: { cels: [1821, 1821, 1822, 1822, 1823, 1823, 1822, 1822, 1821, 1821, 1820, 1821, 1821, 1820], hold: 1, from: "0x4740c8 tag 1" }, at: 10, reachPx: 37, sound: [5, 6], from: "0x438a55 / 0x438aa9 / 0x438ab9" },
     // `0x474230` tag 4 — six cels, and the stride is on four of them
     gait: { cels: [1800, 1801, 1802, 1803, 1804, 1805], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x474230 tag 4" },
     // `0x4386ab`: seven, against chapter four's twelve and twenty
@@ -618,6 +645,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * and twenty for its sibling. MALL places no goop, so it never happens here.
    */
   initbatboy: {
+    lever: { anim: { cels: [1906, 1906, 1920, 1921, 1920, 1921, 1922, 1921, 1920], hold: 1, from: "0x4743b8 tag 1" }, at: 5, reachPx: 37, sound: [5, 6], from: "0x4396c1 / 0x43970d / 0x43971d" },
     gait: { cels: [1900, 1901, 1902, 1903, 1904, 1905], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x474438 tag 4" },
     divisor: 7,
     flinch: [{ cels: [1920], hold: 1, from: "0x474508 tag 0" }],
@@ -646,6 +674,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * straight out of the hit handler rather than carried on the object.
    */
   initknotboy: {
+    lever: { anim: { cels: [1946, 1946, 1961, 1961, 1946, 1946, 1961, 1960, 1961], hold: 1, from: "0x473e50 tag 1" }, at: 6, reachPx: 37, sound: [5, 6], from: "0x437f4b / 0x437fb0 / 0x437fef" },
     gait: { cels: [1940, 1941, 1942, 1943, 1944, 1945], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x473e50 tag 0" },
     divisor: 7,
     flinch: [{ cels: [1960], hold: 1, from: "0x474048 tag 0" }],
@@ -660,6 +689,102 @@ export const FOES: Readonly<Record<string, Foe>> = {
     bleeds: true,
     vanishes: true,
     from: "0x4361e0 / 0x437a50 / 0x437c00 / 0x438260",
+  },
+  /**
+   * The fourth of the gang, and the one level six adds. Creator `0x4363c0`,
+   * class `0x439bd0`, think `0x439ca0`, hit `0x43a580`.
+   *
+   * Everything about it is the chapter's pattern one more time — divisor seven,
+   * blow pinned at 100, one flinch cel installed with no pick rule, the award
+   * paid out of the hit handler — and its numbers sit where you would expect
+   * between its three siblings: 25 health like the one with the bat, and 240 for
+   * killing it, between the bat's 250 and the masked one's 220. Its plate,
+   * `0x3330`, is the fourth in the row 13101, 13102, 13103, **13104**.
+   *
+   * Two things it does are not in MALL, because MALL has nothing for them to do
+   * them to.
+   *
+   * **It throws switches.** `0x439d04` runs when its state is 2 or 4: `0x438200`
+   * hands back the nearest object of the switch class, the thing turns to face
+   * it, walks over on `0x4746a8`, and at frame 7 of that walk `0x43a1c7` calls
+   * `0x436820(switch.pos, 0)` — the same call the player makes by standing at
+   * one. Zero is the ON direction. All four of the gang do this (`0x437fef`,
+   * `0x438ab9`, `0x43971d`, `0x43a1c7`); SERVICE is the first level that places
+   * a `switch` for them to walk to, and what the switches turn on is the goop.
+   *
+   * **Goop heals it.** `0x43a64a` asks whether the thing that hit it belongs to
+   * the goop class before it does anything else, and if it does, adds 20 to its
+   * health, clamps it to the 25 it started with, plays 11, and returns without
+   * spraying or subtracting. Its siblings do the same for 60 and for 20. So the
+   * shower the switches turn on is the gang's, and a player who walks past a
+   * switch the wrong way feeds the level.
+   *
+   * It drops a skateboard when it dies — `0x43a6f9` calls `0x438450`, the same
+   * maker the third one uses — and that is not here.
+   */
+  initknifeboy: {
+    lever: { anim: { cels: [1858, 1857, 1856], hold: 1, from: "0x4746a8 tag 1" }, at: 1, reachPx: 37, sound: [5, 6], from: "0x43a134 / 0x43a188 / 0x43a1c7" },
+    // `0x474648` tag 4 — the same six-cel walk and the same stride as its three
+    // siblings, one book row along
+    gait: { cels: [1840, 1841, 1842, 1843, 1844, 1845], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x474648 tag 4" },
+    divisor: 7,
+    // `0x474770` has three tags of one cel each and `0x43a744` installs tag 0
+    // and only ever tag 0
+    flinch: [{ cels: [1860], hold: 1, from: "0x474770 tag 0" }],
+    death: { cels: [1860, 1861, 1862, 1863, 1864], hold: 1, from: "0x474790 tag 0" },
+    // `0x439da3`: it stands on 1841 with its velocity zeroed until the player's
+    // point is inside its record's rect, and `0x439dd0` sounds as it starts
+    wake: { cel: 1841, sound: FOE_SFX.knifeboyWake, from: "0x439da3 / 0x439dd0" },
+    health: 25,
+    hitSound: FOE_SFX.knifeboyHit,
+    // `0x439cd2` claims the bar with 0x3330; `0x43a711` pays 0xf0
+    panel: { health: 25, plate: 13104, award: 240 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x4363c0 / 0x439bd0 / 0x439ca0 / 0x43a580",
+  },
+  /**
+   * What stands between level six and its goal. Creator `0x436460`, class
+   * `0x43cbb0`, think `0x43cc60`, hit `0x43d250`.
+   *
+   * One of them, at x9017, in a territory that runs from x8418 to the east wall
+   * — which is to say the last six hundred pixels of the level, with the goal
+   * inside it. It is built like the boss of level four rather than like the gang:
+   * **750 health**, nearly twice the whole gang put together, a divisor of 13
+   * against their 7, a shove weight of 12 at `obj+0x26` that nothing else in the
+   * chapter sets, and a walk whose cels carry no stride at all — it travels on
+   * its velocity, not on script impulses.
+   *
+   * Its hit handler is the shortest of the chapter and the only one with **no
+   * ignore list**: the gang name six classes they cannot hurt, and this one names
+   * none, so goop, knives and its own allies all land on it. The one thing it
+   * does test is a blow strength of exactly −6, which it swallows.
+   *
+   * Unlike the boss of level four the level does not wait for it: SERVICE's share
+   * is chapter two's ordinary 0.75, so the goal opens on the count and this is
+   * simply the biggest thing standing in front of it.
+   */
+  inithardcore: {
+    // `0x474960` — twelve frames, two cels' worth of walk cycled twice, and every
+    // dx is zero
+    gait: { cels: [6050, 6051, 6052, 6053, 6054, 6055], hold: 2, from: "0x474960 tag 0" },
+    // `0x43cbcb`: thirteen
+    divisor: 13,
+    // `0x474b88` — four cels that carry their own knockback, dx -100 on two of them
+    flinch: [{ cels: [6030, 6031, 6032, 6033], hold: 2, dx: [0, -100, 0, -100], from: "0x474b88 tag 0" }],
+    // `0x474bb0` — and the first frame throws it, dx -65 dy -180
+    death: { cels: [6000, 6001, 6002, 6003, 6004, 6005], hold: 2, from: "0x474bb0 tag 0" },
+    // `0x43ccda`: the same point-in-rect the gang use, and it holds 6070 until then
+    wake: { cel: 6070, sound: FOE_SFX.hardcoreHit, from: "0x43ccda / 0x43cd1b" },
+    health: 750,
+    hitSound: FOE_SFX.hardcoreHit,
+    // `0x43cca1` claims the bar with 0x3331 and 0x2ee; `0x43d2e8` pays 0x15e
+    panel: { health: 750, plate: 13105, award: 350 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x436460 / 0x43cbb0 / 0x43cc60 / 0x43d250",
   },
   /**
    * The Coke machine — `initcoke`, five of them down level five's arcade, and

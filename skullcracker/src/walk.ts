@@ -94,6 +94,15 @@ import {
   crushFrames,
   plankCel,
   plankFrames,
+  SWITCH,
+  Switch,
+  switchCel,
+  switchFrames,
+  GOOP,
+  Nest,
+  Drip,
+  dripCel,
+  dripFrames,
 } from "./props";
 import { DEATH_FILMS, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
 import {
@@ -902,7 +911,7 @@ const TICK_SCALE = (ENGINE_HZ * INVENTED.tickMs) / 1000;
  * state an object is SPAWNED in — the hydrant's water, which sprays once and is
  * removed ({@link Foe.burst}).
  */
-type FoeState = "gait" | "flinch" | "dead" | "burst";
+type FoeState = "gait" | "lever" | "flinch" | "dead" | "burst";
 
 /** one spawned thing: where it is, which way it faces, and how far it may roam */
 interface Enemy {
@@ -933,6 +942,8 @@ interface Enemy {
   mode?: "hover" | "charge" | "rush" | "combo" | "land" | "melee" | "antiAir";
   /** `AI+4` — decisions left before it breaks off and goes home */
   decisions?: number;
+  /** has the reach already made its one call — `obj+0x42` passes the frame once */
+  thrown?: boolean;
   /**
    * Pixels per TICK, and it persists — `obj+0xa`/`obj+0xc`, which the collision
    * solver `0x430470` writes and which only the kinds that cancel it stop
@@ -1136,6 +1147,10 @@ interface Level {
   /** the room's swinging girders, pinned where their records put them */
   ibeams: Ibeam[][];
   crushes: Crush[][];
+  /** the room's wall levers, each holding the `param` it broadcasts on */
+  switches: Switch[][];
+  /** the room's goop nests — invisible, and off until a lever says otherwise */
+  nests: Nest[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1380,6 +1395,7 @@ async function loadLevel(index: number): Promise<void> {
   // planks before lifts: both OWN a platform record and a record has one owner,
   // so the planks claim theirs first and the lifts are told what is already spoken for
   const planks = rooms.map((r, i) => planksIn(sbk, r, solids[i]));
+  drips = [];
   level = {
     sbk,
     pal,
@@ -1390,6 +1406,8 @@ async function loadLevel(index: number): Promise<void> {
     elevators: rooms.map((r, i) => elevatorsIn(sbk, r, solids[i], planks[i])),
     ibeams: rooms.map((r) => ibeamsIn(sbk, r)),
     crushes: rooms.map((r) => crushesIn(sbk, r)),
+    switches: rooms.map((r) => switchesIn(sbk, r)),
+    nests: rooms.map((r) => nestsIn(sbk, r)),
     crows: rooms.map((r) => crowsIn(sbk, r)),
     // z is the ENGINE's paint order, which is its collection order: the level's
     // frame fn (SC.EXE 0x412c30) collects plane lists p3, p0, then the actors,
@@ -2952,6 +2970,13 @@ function takeHits(): void {
     if (!cel?.strike) continue;
     if (hit(cel, b.x, b.y, 1, 0, 0)) return;
   }
+  // ...and the goop, which carries `obj+0x1a = 0x64` and therefore its cel's own
+  // pair unscaled — see {@link dripStrike} for why that is one cel of nine
+  for (const d of drips) {
+    const cel = dripStrike(d);
+    if (!cel) continue;
+    if (hit(cel, d.x, d.y, 1, d.vx / TICK_SCALE, d.vy / TICK_SCALE)) return;
+  }
 }
 
 /** the things spawned in the player's room, or none */
@@ -3191,6 +3216,291 @@ function stepCrushes(): void {
     if (c.clock < crushFrames(c)) continue;
     c.clock = 0;
     c.state = c.state === "slam" ? "lift" : "idle";
+  }
+}
+
+/**
+ * Every `switch` in this room. SERVICE places six and no other book places one —
+ * which is why level five's gang, who all know how to walk to a lever, never do.
+ *
+ * `0x436020` keeps the record's point as the position and the record's `param`
+ * in its own six-byte context; the rect is what the player has to be standing in
+ * and what an enemy's territory has to contain.
+ */
+function switchesIn(sbk: SbkFile, room: SbkRoom): Switch[] {
+  const out: Switch[] = [];
+  for (const e of sbk.entities) {
+    if (!e.isEntity || e.name !== "switch") continue;
+    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (!SWITCH.off.cels.every((id) => sbk.byId.has(id))) continue;
+    out.push({
+      x: e.pointX,
+      y: e.pointY,
+      top: e.top,
+      left: e.left,
+      bottom: e.bottom,
+      right: e.right,
+      param: e.param,
+      state: "off",
+      clock: 0,
+    });
+  }
+  return out;
+}
+
+/**
+ * Every `initgoop` in this room, as the nest a negative kind makes.
+ *
+ * The level's spawner hands the creator `-1` (`0x435987`), and that branch keeps
+ * the rect and the param and gives the object a script whose kind is 3 — the one
+ * the class's draw case will not paint. So a level's goop records are twenty-two
+ * invisible volumes, and everything you can see comes out of them at run time.
+ */
+function nestsIn(sbk: SbkFile, room: SbkRoom): Nest[] {
+  const out: Nest[] = [];
+  for (const e of sbk.entities) {
+    if (!e.isEntity || e.name !== "initgoop") continue;
+    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (!GOOP.bead.cels.every((id) => sbk.byId.has(id))) continue;
+    out.push({ top: e.top, left: e.left, bottom: e.bottom, right: e.right, param: e.param, on: false });
+  }
+  return out;
+}
+
+/** the levers in the room the player is in */
+function switchesHere(): Switch[] {
+  const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
+  return level && i >= 0 ? level.switches[i] : [];
+}
+
+/** the nests in the room the player is in */
+function nestsHere(): Nest[] {
+  const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
+  return level && i >= 0 ? level.nests[i] : [];
+}
+
+/**
+ * Throw one lever — `0x436820(pos, dir)`, and it is the only way either state
+ * changes.
+ *
+ * Direction zero answers a lever that is OFF and direction one a lever that is
+ * ON; anything else it ignores, which is why a gang member standing at a lever
+ * it has already thrown does nothing at all. The sounds are `0x436895`'s 0x4b
+ * going up and `0x4368c9`'s 0x4a coming back.
+ */
+function throwSwitch(s: Switch, dir: 0 | 1): boolean {
+  if (dir === 0 && s.state === "off") {
+    s.state = "turningOn";
+    s.clock = 0;
+    sound?.effect(SWITCH.throwOn, s.x, s.y);
+    return true;
+  }
+  if (dir === 1 && s.state === "on") {
+    s.state = "turningOff";
+    s.clock = 0;
+    sound?.effect(SWITCH.throwOff, s.x, s.y);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Step every lever, and let the player work one.
+ *
+ * `0x43c2c0` is four lines: pin the object on its point, zero the velocity pair,
+ * and when the current tag's script has ended install the next. The two throws
+ * broadcast as they end — `0x43c3d0` flips the tag of every goop with the same
+ * `param` and plays 0x24 at each of them — and the two resting tags simply
+ * reinstall themselves.
+ *
+ * The player's half is `0x429870`, in the standing state, asking the chapter's
+ * own "what am I at" query twice a frame: with no direction held it asks kind 0,
+ * which throws a lever ON, and with S held it asks kind 1, which throws one OFF.
+ * So stopping on a lever starts the shower and S is how you stop it, which is
+ * exactly backwards from what you want and exactly what the file says.
+ */
+function stepSwitches(): void {
+  const here = switchesHere();
+  if (!here.length) return;
+  const ay = p.y - p.feet;
+  for (const s of here) {
+    const inside = p.x >= s.left && p.x < s.right && ay >= s.top && ay < s.bottom;
+    if (inside && p.act === null) {
+      // `0x4298ab`: S first, and it is the only one of the two that turns it off
+      if (held.down) throwSwitch(s, 1);
+      else if (!held.left && !held.right) throwSwitch(s, 0);
+    }
+    s.clock += TICK_SCALE;
+    if (s.clock < switchFrames(s)) continue;
+    s.clock = 0;
+    if (s.state === "turningOn") {
+      s.state = "on";
+      broadcast(s.param);
+    } else if (s.state === "turningOff") {
+      s.state = "off";
+      broadcast(s.param);
+    }
+  }
+}
+
+/**
+ * `0x438200` — the first unlit lever standing inside this thing's own territory.
+ *
+ * The rect is the enemy record's, and the test is on the LEVER's position, not
+ * the enemy's: a gang member is the keeper of whatever lever its patrol covers,
+ * and SERVICE gives every one of its six a keeper.
+ */
+function leverFor(e: Enemy): Switch | null {
+  for (const s of switchesHere()) {
+    if (s.state !== "off") continue;
+    if (s.x < e.left || s.x > e.right || s.y < e.top || s.y > e.bottom) continue;
+    return s;
+  }
+  return null;
+}
+
+/** `0x43c3d0` — every goop on this `param` flips, and each one sounds */
+function broadcast(param: number): void {
+  for (const n of nestsHere()) {
+    if (n.param !== param) continue;
+    n.on = !n.on;
+    sound?.effect(SWITCH.toggle, (n.left + n.right) / 2, n.top);
+  }
+}
+
+/** every drip of goop in the air, whichever string it belongs to */
+let drips: Drip[] = [];
+
+/** `0x434540(n)` returns 1…n, and these are the three places level six rolls it */
+function roll(n: number): number {
+  return Math.floor(Math.random() * n) + 1;
+}
+
+/**
+ * Run the goop — `0x437502` for the nests and `0x437310`'s other three branches
+ * for what they make.
+ *
+ * A running nest drips 42 times in 512 frames, from anywhere along the top edge
+ * of its own rect, and tosses for which of the two strings it gets. After that
+ * every link is on rails: the two that hang are still and turn into the two that
+ * fall, the gob bursts into three splashes where it lands, and everything is
+ * gone the frame it touches the floor.
+ */
+function stepGoop(): void {
+  const lvl = level;
+  if (!lvl) return;
+  for (const n of nestsHere()) {
+    if (!n.on) continue;
+    if (Math.random() >= GOOP.chance * TICK_SCALE) continue;
+    const kind = roll(2) - 1 === 0 ? "bead" : "strand";
+    drips.push({ kind, x: n.left + roll(n.right - n.left), y: n.top, vx: 0, vy: 0, clock: 0 });
+  }
+  const born: Drip[] = [];
+  for (const d of drips) {
+    d.clock += TICK_SCALE;
+    const done = d.clock >= dripFrames(d);
+    if (d.kind === "bead") {
+      // `0x437350`: the bead hangs still and becomes a drop where it is
+      if (!done) continue;
+      d.spent = true;
+      born.push({ kind: "drop", x: d.x, y: d.y, vx: 0, vy: 0, clock: 0 });
+      sound?.effect(GOOP.dropSound, d.x, d.y);
+      continue;
+    }
+    if (d.kind === "strand") {
+      // `0x437408`: the gob comes at the strand's EIGHTH cel, not at its end
+      if (!d.spent && dripCel(d) === GOOP.gobAtCel) {
+        d.spent = true;
+        born.push({ kind: "gob", x: d.x, y: d.y + GOOP.gobBelow, vx: 0, vy: 0, clock: 0 });
+        sound?.effect(GOOP.gobSound, d.x, d.y + GOOP.gobBelow);
+      }
+      continue;
+    }
+    // the three that move: gravity 1.0 for a drop and a gob, ½ for a splash
+    const g = d.kind === "splash" ? PLAYER_GRAVITY / 2 : PLAYER_GRAVITY;
+    d.vy += g * TICK_SCALE;
+    d.y += d.vy * TICK_SCALE;
+    d.x += d.vx * TICK_SCALE;
+  }
+  drips.push(...born);
+  const floor = (d: Drip): boolean => {
+    const g = groundAt(d.x);
+    return g !== null && d.y >= g;
+  };
+  drips = drips.filter((d) => {
+    if (d.kind === "bead") return d.clock < dripFrames(d);
+    // the strand is removed when its own script ends, gob or no gob
+    if (d.kind === "strand") return d.clock < dripFrames(d);
+    if (!floor(d) && d.clock < dripFrames(d) * 4) return true;
+    if (d.kind === "gob") {
+      // `0x43747c`: three of them, each with its own shove
+      for (let i = 0; i < GOOP.splashes; i++) {
+        drips.push({
+          kind: "splash",
+          x: d.x,
+          y: d.y,
+          vx: Math.round((roll(200) - 100) / GOOP.divisor),
+          vy: Math.round((roll(80) - 70) / GOOP.divisor),
+          clock: 0,
+        });
+      }
+    }
+    return false;
+  });
+  feedTheGang();
+}
+
+/**
+ * Which drips can touch anything at all — and it is **one cel in the whole
+ * family**.
+ *
+ * Of the nine cels the two strings use, only 518, the gob, carries a strike box
+ * (`y -2 … 20`, `x -8 … 11`) and a blow pair (`dy 25, dx -1`). The bead, the
+ * drop it turns into, the strand and the three splashes carry neither, so they
+ * are weather: they fall through the player and through the gang and land. What
+ * the level actually throws at you is the second string's gob, at 25 plus
+ * whatever it has picked up falling, which is under the player's own knockdown
+ * threshold of 60 for about the first three frames of its drop and over it after.
+ */
+function dripStrike(d: Drip): SbkCel | null {
+  const c = level?.sbk.cels.find((q) => q.id === dripCel(d));
+  return c?.strike && c.blow ? c : null;
+}
+
+/**
+ * What goop does to the gang — `0x438339`, `0x438fd9`, `0x439a59`, `0x43a659`.
+ *
+ * Their hit handlers ask which class hit them before they do anything else, and
+ * goop is the one answer that is good news: health goes UP by the class's own
+ * figure, clamped to what it started with, one sound, and no spray and no
+ * subtraction. Sixty for the one with the bat and twenty for the other three.
+ *
+ * It reaches them the same way a blow does — the gob's own strike box against
+ * the body box of the cel they are showing — so it is the same one cel that
+ * feeds them and the same one that hurts you.
+ */
+function feedTheGang(): void {
+  const lvl = level;
+  if (!lvl || !drips.length) return;
+  for (const e of spawnedHere()) {
+    if (e.state === "dead" || e.state === "burst" || e.asleep) continue;
+    const heal = GOOP.feeds[e.kind];
+    if (heal === undefined) continue;
+    const foe = FOES[e.kind];
+    if (e.hp <= 0 || e.hp >= foe.health) continue;
+    const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
+    if (!c) continue;
+    const box = hurtBox(e, c, lvl);
+    const fed = drips.find((d) => {
+      const cel = dripStrike(d);
+      if (!cel) return false;
+      const b = strikeOf(cel, d.x, d.y, 1);
+      return !!b && b.right > box.left && b.left < box.right && b.bottom > box.top && b.top < box.bottom;
+    });
+    if (!fed) continue;
+    e.hp = Math.min(foe.health, e.hp + heal);
+    sound?.effect(GOOP.fedSound, e.x, e.y);
+    drips = drips.filter((d) => d !== fed);
   }
 }
 
@@ -3580,6 +3890,52 @@ function stepEnemies(): void {
       if (foe.drives && e.mode) e.mode = "hover";
       e.clock = 0;
     }
+    /**
+     * ...and a lever of its own, which is the whole of level six.
+     *
+     * `0x438200` is the finder: the first object of the switch class whose
+     * position is inside this thing's own record rect **and whose tag is 3**, an
+     * unlit one. With one in hand the class turns to face it and walks — on the
+     * same six cels it patrols with, because the kind-6 script's tag 0 IS the
+     * walk — and inside `0x25` pixels stops and plays tag 1, the reach. One
+     * named frame of the reach calls `0x436820(lever, 0)`.
+     *
+     * SERVICE lays this out so that every one of its six levers is inside
+     * somebody's territory, which is why a level that starts dry does not stay
+     * dry, and why turning them off is a job rather than a one-off.
+     */
+    const aim = foe.lever && (e.state === "gait" || e.state === "lever") && !e.asleep ? leverFor(e) : null;
+    if (e.state === "lever") {
+      const L = foe.lever!;
+      if (!aim) {
+        e.state = "gait";
+        e.anim = foe.gait;
+        e.clock = 0;
+      } else {
+        if (!e.thrown && e.clock >= L.at * L.anim.hold) {
+          e.thrown = true;
+          // `0x43a191`: one roll in three, and then one of two takes
+          if (roll(3) === 1) sound?.effect(L.sound[roll(L.sound.length) - 1], e.x, e.y);
+          throwSwitch(aim, 0);
+        }
+        if (e.clock >= run) {
+          e.state = "gait";
+          e.anim = foe.gait;
+          e.clock = 0;
+          e.thrown = false;
+        }
+        continue;
+      }
+    } else if (aim) {
+      e.facing = aim.x > e.x ? 1 : -1;
+      if (Math.abs(aim.x - e.x) < foe.lever!.reachPx) {
+        e.state = "lever";
+        e.anim = foe.lever!.anim;
+        e.clock = 0;
+        e.thrown = false;
+        continue;
+      }
+    }
     const i = e.state === "gait" ? loopIndex(e.anim, e.clock) : Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
     const step = ((e.anim.dx?.[i] ?? 0) / foe.divisor) * TICK_SCALE;
     if (step > 0 && e.vx === 0 && e.vy === 0) {
@@ -3602,7 +3958,7 @@ function stepEnemies(): void {
       const blocked = ground !== null && ground < baseNow - CLIMB_PX && reach === null;
       // a flinch that travels is a knockdown: it goes the way it was hit and is
       // not turned round by its own rect
-      if (e.state === "gait" && (nx < e.left || nx > e.right)) e.facing = -e.facing;
+      if (e.state === "gait" && !aim && (nx < e.left || nx > e.right)) e.facing = -e.facing;
       else if (!blocked) e.x = Math.max(e.left - 200, Math.min(e.right + 200, nx));
     }
     /**
@@ -4253,6 +4609,8 @@ function loop(now: number): void {
     stepElevators();
     stepIbeams();
     stepCrushes();
+    stepSwitches();
+    stepGoop();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -4340,6 +4698,10 @@ function loop(now: number): void {
   }
   for (const b of ibeamsHere()) drawLevelCel(ibeamCel(b), b.x, b.y, camX, camY);
   for (const c of crushesHere()) drawLevelCel(crushCel(c), c.x, c.y, camX, camY);
+  // the lever is on the wall behind whatever is standing at it, and the goop is
+  // in front: its class is collected with the actors, the switch's is not
+  for (const w of switchesHere()) drawLevelCel(switchCel(w), w.x, w.y, camX, camY);
+  for (const d of drips) drawLevelCel(dripCel(d), d.x, d.y, camX, camY);
   for (const c of crowsHere()) drawLevelCel(crowCel(c), c.x, c.y, camX, camY);
   for (const f of feathers) {
     const id = CROW.feathers.cels[Math.min(CROW.feathers.cels.length - 1, Math.floor(f.age / CROW.feathers.hold))];
@@ -4596,6 +4958,15 @@ function loop(now: number): void {
   const press = presses.length
     ? ` · ${presses.slice(0, 3).map((c) => `press ${c.state} cel ${crushCel(c)} at ${c.x},${c.y}`).join(" · ")}`
     : "";
+  // level six's levers and what they are pouring, so a probe can see both
+  const levers = switchesHere();
+  const lever = levers.length
+    ? ` · ${levers.map((w) => `switch ${w.param} ${w.state} cel ${switchCel(w)} at x ${w.x}`).join(" · ")}`
+    : "";
+  const nests = nestsHere();
+  const goop = nests.length
+    ? ` · goop ${nests.filter((n) => n.on).length} of ${nests.length} on, ${drips.length} falling${drips.length ? ` cel ${dripCel(drips[0])} at ${Math.round(drips[0].x)},${Math.round(drips[0].y)}` : ""}`
+    : "";
   const valves = spawnedHere()
     .filter((e) => FOES[e.kind].burst)
     .map((e) => `${e.state === "burst" ? "water" : e.kind} cel ${celOf(e)} at x ${Math.round(e.x)}`);
@@ -4614,7 +4985,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 
