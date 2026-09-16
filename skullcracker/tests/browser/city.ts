@@ -77,21 +77,56 @@ const main = async (): Promise<void> => {
    * whatever it had; and BACKWARD held turns the player and zeroes it. A run's
    * leap held the whole way with the lift flies ~360px on the flat — clean over
    * the walkway this route lands on and onto the tank roof beyond, which the
-   * game allows and which is not the step under test. Tapping back at ~400ms
-   * kills the drift inside the 103..250px the walkway spans.
+   * game allows and which is not the step under test. Tapping back part-way
+   * through the flight kills the drift inside the 103..250px the walkway spans.
+   *
+   * The brake is timed from the LAUNCH and not from the keypress, because they
+   * are not the same moment: a jump from a standstill or a walk plays three
+   * frames of 250/251/252 before 253 leaves the ground (`0x4296ed` installs tag
+   * 2, `0x429a8d` tag 3), which is 200ms in which a fixed wait is already
+   * spending its budget. Waiting for the HUD to say the player is airborne makes
+   * the helper independent of how long the wind-up takes.
    */
-  const jump = async (): Promise<void> => {
+  const jump = async (carry: number): Promise<void> => {
+    const from = (await at()).x;
     await page.keyboard.down("ArrowRight");
     await page.keyboard.down("w");
-    await page.keyboard.press("j");
-    await page.waitForTimeout(400);
+    // ...and make sure it actually left the ground. A press is read by the engine
+    // FRAME and not by the tick, so one sent in the same millisecond as the two
+    // key-downs before it can be spent on a frame that has not seen the run yet;
+    // when that happens nothing at all moves and the brake below walks the player
+    // backwards off the lip.
+    let airborne = false;
+    for (let tries = 0; tries < 3 && !airborne; tries++) {
+      await page.keyboard.press("j");
+      for (let i = 0; i < 16; i++) {
+        await page.waitForTimeout(25);
+        if (/in the air/.test((await hud.textContent()) ?? "")) {
+          airborne = true;
+          break;
+        }
+      }
+    }
+    if (!airborne) fail(`pressing jump never left the ground`);
+    // steer until the player has carried far enough, then turn the drift off. A
+    // distance is the only stable cue here: the launch itself is a frame or four
+    // after the keypress depending on whether the run is up, and the flight is
+    // long enough that a fixed wait lands anywhere across a 150px spread.
+    for (let i = 0; i < 80; i++) {
+      await page.waitForTimeout(25);
+      if ((await at()).x - from >= carry) break;
+    }
     await page.keyboard.up("ArrowRight");
     await page.keyboard.down("ArrowLeft");
     await page.waitForTimeout(70);
     await page.keyboard.up("ArrowLeft");
-    await page.waitForTimeout(300);
+    // and stay in the air until the feet are down again, however long that is
+    for (let i = 0; i < 60; i++) {
+      if (!/in the air/.test((await hud.textContent()) ?? "")) break;
+      await page.waitForTimeout(25);
+    }
     await page.keyboard.up("w");
-    await page.waitForTimeout(450);
+    await page.waitForTimeout(300);
   };
 
   const say = async (): Promise<string> => (await hud.textContent()) ?? "";
@@ -139,7 +174,7 @@ const main = async (): Promise<void> => {
   console.log(`ok    walked east to the gap's lip at x ${lip.x}, y ${lip.y}`);
 
   // 3. across it, onto the walkway the file puts at y4041
-  await jump();
+  await jump(150);
   const walkway = await at();
   if (!near(walkway.y, 4041, 8)) fail(`the 103px gap should land on the y4041 walkway; got y ${walkway.y}`);
   if (walkway.x < 1760) fail(`the jump did not cross the gap: x ${walkway.x}`);
@@ -185,7 +220,7 @@ const main = async (): Promise<void> => {
   console.log(`ok    and the wall stops the walk at x ${stopped.x}, the file's own x1873`);
 
   // 6. and the jump goes over it onto the tank's roof
-  await jump();
+  await jump(110);
   const roof = await at();
   if (!near(roof.y, 3920, 8)) fail(`the jump over the wall should land on the y3920 roof; got y ${roof.y}`);
   if (roof.x < 1940) fail(`landed short of the wall's east edge: x ${roof.x}`);

@@ -407,6 +407,65 @@ therefore has no run at all, and a walk on its own feels slow because the game's
 travelling speed is nearly twice it. STREETS is laid out for
 the run: two legs of its own route to its goal are not passable at a walk.
 
+### WOODS is a population and two steps
+
+Level three needed none of CITY's machinery — no plank, no lift, no girder, no
+ladder — and could still not be played, for two reasons that turned out to be the
+same reason twice: the port was reading records at the wrong field.
+
+**A creator places its object at the record's POINT.** The level's spawner
+`0x4503a0` pulls three things out of each 48-byte record and hands them to the
+class's creator: the point as one dword, then the rect's two corners. Every
+creator's first move on the first of those is `mov dword [obj+6], eax`
+(`0x450f90` the dog, `0x450a7b` the punk, `0x450cdc` the husk), and `0x4026d0`
+draws a cel with its anchor at `obj+6`. So the point is where the thing stands and
+the rect is only the territory its AI struct keeps (`0x450fc3` stores both corners
+into it). This port had been standing every enemy on the rect's bottom edge. In
+STREETS and CITY the two are close enough that nothing showed; WOODS' rects are
+wide territories whose bottom edge is well under the ground, so all twenty of its
+enemies spawned inside the terrain and fell through the world.
+
+**A rise of more than fifty pixels is a wall.** `0x42fedc` adds `0x32` to the floor
+found under the body's new position and compares it with that position; if the
+floor is still higher, and no platform was found under the point, `0x42fef3`
+throws the entire move away — the packed position is restored from `obj+6`, the
+horizontal velocity is subtracted back out of the x, the vertical is zeroed and
+what is left bounces off `obj+0x20`. That is the only wall the terrain has, and it
+is why the designers used `obstacle` records where they wanted a hard stop: CITY's
+five include the 60x308 one at x1873. The companion number is 8, from the landing
+test at `0x42ff56` — a floor more than eight pixels below the feet is not
+underfoot, and you are briefly in the air. This port had one invented figure of 26
+doing both jobs. WOODS' ground steps up 68 to 74 pixels in twelve columns at
+x8746 and again at x8890, and those two steps are the whole of the level's
+platforming: everything else is a run east.
+
+Its population is five classes and only four of them count. The dog — `woods.snd`
+calls it a **wolfy** — never calls `0x42f870`, the census, and never calls
+`0x40d1c0`, the health bar; it is worth 200 and nothing to the quota, and six of
+them stand in a level whose kill share is 55% of the other fourteen. It is also
+the only enemy in the chapter with a real repertoire, choosing a trot, a walk, a
+leap that leaves the ground (`dx 160, dy -80` twice) or a flat-out charge from its
+own five distance bands at `0x478240`.
+
+The strangest of them is the husk. Its creator never calls the difficulty scaler
+at all: it writes the literal 3 into its state (`0x450d1c`), and its hit handler
+fetches the blow's damage only to hand to the blood before doing `dec word ptr
+[eax]` (`0x454821`). Three blows of any size. Then the first tag of its death
+calls `0x450a50` — the punk's own creator — at its own position (`0x454690`), so
+what falls over leaves a fresh 250-health punk standing where it was. It pays no
+award, because the thing that climbs out of it carries the 300.
+
+The three `initcrush` records across the path are hydraulic presses, and
+`woods.snd` index 19 is named "0230 hydraulic ". A press has no timer and no
+stagger — its whole trigger is the player's own point inside the record's own rect
+(`0x4549df`), re-tested on every frame it is up, so it works for as long as you
+stand under it. It never moves: every record of its script carries `dx 0, dy 0`
+and `0x4549c3` rewrites it onto its record's point each frame anyway. What travels
+is the drawn ram, 175 pixels in three frames, and only two of its cels — 4382 and
+4383 — carry a strike box. The blow they carry comes out of `0x42f910` as 64,
+which is over the player's own knockdown threshold of `0x3c` at `0x449115`: a
+press does not stagger you.
+
 ### Gravity was in there all along
 
 It was called this port's last invented number for a long time, on the grounds
@@ -626,9 +685,11 @@ all — and that is the whole of the mixer.
 - `engine/tests/byte-order.ts` — detection (needs no rip) and the menu (needs one)
 - `skullcracker/tests/browser/menu.ts` — the menu in a real browser
 - `engine/src/df/sbk.ts` — the sprite book reader, and `engine/tests/sbk.ts`
-- `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow
+- `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow, the press
+- `skullcracker/src/foes.ts` — what each `init*` name is, and the numbers behind it
 - `skullcracker/tests/browser/city.ts` — CITY's opening, in a browser
 - `skullcracker/tests/browser/lift.ts` — CITY's five lifts, and the ride to its goal
+- `skullcracker/tests/browser/woods.ts` — WOODS' population, its two steps and its goal
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

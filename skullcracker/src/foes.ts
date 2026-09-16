@@ -123,7 +123,15 @@ export interface Blow {
   damage: number;
   /** how far up the victim the blow landed */
   dy: number;
-  /** is the victim facing away from whoever hit it */
+  /**
+   * Is the victim facing the same way as whoever hit it — its back to them.
+   *
+   * The handlers test it as `cmp [blow+0x28], [self+0x28]`, two mirror flags, and
+   * jump to the PLAIN flinch when they are equal (`0x44f257` for the punk,
+   * `0x452ac0` for the thrower). So the turned-away one is the ordinary take and
+   * the special one is a blow to the face; this page had the branch the wrong way
+   * round and gave the face take to a back.
+   */
   facingAway: boolean;
 }
 
@@ -198,6 +206,32 @@ export interface Foe {
    * and that is the whole reason its water goes east.
    */
   facesByParam?: boolean;
+  /**
+   * Its hit handler subtracts ONE, whatever the blow.
+   *
+   * `0x454811` fetches the damage and `0x454817` keeps it — but only to hand to
+   * the blood call. What reaches the health is `0x454821 dec word ptr [eax]`. So
+   * the fourth kind is not tough, it is three-hit: its creator never calls the
+   * difficulty scaler at all and simply writes 3 (`0x450d1c`).
+   */
+  oneHitEach?: boolean;
+  /**
+   * What comes OUT of it when it dies, and where in the death that happens.
+   *
+   * `0x454690`, in the first tag of the fourth kind's death: `call 0x450a50` —
+   * the punk's own creator, at the dying thing's own position. The big one is a
+   * husk with a man inside it.
+   */
+  hatches?: { kind: string; afterCels: number; from: string };
+  /**
+   * What killing it pays, when that is not the panel's own figure.
+   *
+   * The two are usually the same call — `0x40d450(n)` — but a kind can pay
+   * without ever claiming the bar. The dog is the case: `0x4551f7` awards 200
+   * and nothing in the class ever calls `0x40d1c0`, so it has an award and no
+   * name plate at all.
+   */
+  award?: number;
   /** what it stood up with — `0x40e300`'s argument in the creator */
   health: number;
   /** the three figures it tells the interface panel, when it claims the bar */
@@ -295,7 +329,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
     ],
     // 0x44f1fd..0x44f280, in the order the handler tests
     pick: ({ damage, dy, facingAway }) =>
-      damage > 50 ? 3 : dy > 50 ? 0 : dy >= 30 && facingAway ? 2 : 1,
+      damage > 50 ? 3 : dy > 50 ? 0 : dy >= 30 && !facingAway ? 2 : 1,
     death: {
       cels: [1960, 1961, 1962, 1963, 1980, 1981, 1982, 1983, 1984, 1985, 1986, 1987],
       hold: 3,
@@ -345,6 +379,136 @@ export const FOES: Readonly<Record<string, Foe>> = {
     bleeds: true,
     vanishes: true,
     from: "0x450b40 / 0x44f300 / 0x44f3d0 / 0x44f8b0",
+  },
+  /**
+   * The dog, and `woods.snd` calls it a **wolfy**. Creator `0x450f60`, class
+   * `0x454b00`, hit `0x4550b0`.
+   *
+   * Ten health, and the only enemy in the chapter with a real repertoire: the AI
+   * at `0x454be0` measures the distance to the player against its own five bands
+   * (`0x478240` = 1200, 650, 410, 320, 180) and picks a state from them — a trot
+   * past 650 (`0x478038`, dx 110), the walk below that (`0x477fe0`, dx 65), a
+   * LEAP at 180..410 (`0x478108`, whose middle records carry `dx 160, dy -80`
+   * twice — it leaves the ground), and inside 180 a flat-out CHARGE
+   * (`0x478070`, eighteen records of dx 150, with `obj+0x26` set to 0 so it
+   * barges through instead of being shouldered aside). A gap of more than 150
+   * pixels in height gets the high pounce instead (`0x4781b0`, `dy -160`). Left
+   * alone it sniffs and barks on a one-in-five roll (`0x454d8f`), and a blow
+   * turns it round and makes it bolt (`0x454ffa`).
+   *
+   * None of that is here. This port's foes walk their territory and nothing more,
+   * because nothing in it can hurt the player yet — the same reason the thrower
+   * does not throw. What is here is the gait, the flinch, the death and the
+   * numbers, all of them the disc's.
+   *
+   * It has **no name plate and no bar** (`0x40d1c0` is never called from any of
+   * its functions) and it is **not in the census** (`0x42f870` likewise), so six
+   * dogs in WOODS change nobody's quota — but it pays 200 (`0x4551f7`), which is
+   * more than the thrower's 50.
+   */
+  initdog: {
+    gait: { cels: [4800, 4801, 4802, 4803, 4804, 4805, 4806, 4807, 4808, 4809], hold: 2, dx: [65, 65, 65, 65, 65, 65, 65, 65, 65, 65], from: "0x477fe0 tag 0" },
+    // `0x454b20`: the lowest in the chapter after the rat's seven
+    divisor: 10,
+    // `0x4781f8` — ONE cel held four frames, and no pick behind it: `0x4551c3`
+    // tests the health and nothing else
+    flinch: [{ cels: [4820], hold: 4, from: "0x4781f8 tag 0" }],
+    death: { cels: [4850, 4851, 4852, 4853, 4854, 4855], hold: 1, from: "0x478208 tag 0" },
+    health: 10,
+    hitSound: FOE_SFX.dogHit,
+    deathSound: FOE_SFX.dogDeath,
+    // `0x4551f7`: `0x40d450(0xc8)`, with no bar to go with it
+    award: 200,
+    counts: false,
+    bleeds: true,
+    vanishes: true,
+    from: "0x450f60 / 0x454b00 / 0x454be0 / 0x4550b0",
+  },
+  /**
+   * The thrower. Creator `0x450bf0`, class `0x452310`, hit `0x452960`.
+   *
+   * WOODS is the first level with one, and it is the first enemy in this port
+   * that fights at RANGE: `0x452b20` is a projectile creator of its own, which
+   * copies the thrower's facing, works the arc out of the height difference to
+   * the player through `0x434630` (a square root) and lets fly — once straight
+   * (`0x4527fd`), and from the far state a fan of six flatter ones as a counter
+   * cycles 0..5 (`0x452851`). The thing thrown is cels 6004..6006 and it bursts
+   * into 7000..7005. None of that is here: nothing in this port can hurt the
+   * player yet, so a thrown rock would be scenery. The cels are in the book and
+   * the addresses are above for when it can.
+   *
+   * Its flinch pick is the punk's, one branch shorter — there is no knockdown for
+   * a heavy blow, because there is no fourth flinch to knock it into.
+   */
+  initwerec: {
+    gait: { cels: [5090, 5091, 5092, 5093, 5094, 5095], hold: 2, dx: [75, 75, 75, 75, 75, 75], from: "0x4778e0 tag 0" },
+    divisor: 20,
+    // 0x477a48, three tags of one cel each, held four frames — the same shape as
+    // the punk's 0x4774f8
+    flinch: [
+      { cels: [6040], hold: 4, from: "0x477a48 tag 0" },
+      { cels: [6041], hold: 4, from: "0x477a48 tag 1" },
+      { cels: [6042], hold: 4, from: "0x477a48 tag 2" },
+    ],
+    // 0x452a87..0x452ae3, and the punk's 0x44f21e is the same four comparisons
+    pick: ({ dy, facingAway }) => (dy > 50 ? 0 : dy >= 30 && !facingAway ? 2 : 1),
+    death: { cels: [6030, 6031, 6032, 6033, 6034, 6035, 6036, 6037], hold: 3, from: "0x477a78 tag 0" },
+    health: 180,
+    // `0x4529ee`: `0x434540(4) + 0x23`, the same four takes the punks use
+    hitSound: FOE_SFX.punkHit,
+    // `0x452a18` — and it is the punk's death sound too
+    deathSound: FOE_SFX.wereaDeath,
+    // `0x452420`: the bar is claimed with plate 0x32cc and `obj+0x3c` is 0x32
+    panel: { health: 180, plate: 13004, award: 50 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x450bf0 / 0x452310 / 0x4523d0 / 0x452960",
+  },
+  /**
+   * The husk. Creator `0x450cb0`, class `0x454330`, hit `0x454790`.
+   *
+   * The biggest thing in the chapter and the strangest: **it dies in three blows
+   * of any size and a punk climbs out of it**. Its creator never calls the
+   * difficulty scaler — it writes the literal 3 into its state (`0x450d1c`) — and
+   * its hit handler fetches the damage only to hand to the blood and then does
+   * `dec word ptr [eax]` (`0x454821`). Then the first tag of its death calls
+   * `0x450a50`, the punk's own creator, at its own position (`0x454690`).
+   *
+   * It has no flinch at all: the class's jump table has no flinch state, and the
+   * one script that holds flinch cels (`0x477b80`, which is the PUNK's 1970..1972)
+   * is referenced by nothing. A blow gets a sound and blood and nothing else.
+   *
+   * It is also immune to its own kind and to one other (`0x4547e1` and
+   * `0x454804` filter the blow by its owner's class), it carries a drag and a
+   * restitution nothing else in the chapter has (`0x45436a`, `0x454378`), and it
+   * pays no award of its own — the punk it hatches carries the 300.
+   */
+  initwered: {
+    gait: { cels: [4870, 4871, 4872, 4873], hold: 1, dx: [190, 190, 190, 190], from: "0x477ae0 tag 0" },
+    divisor: 20,
+    /**
+     * 0x477ba0, its four tags run together: it falls (4890, 4891), the punk comes
+     * out of it (4900, whose record carries dx 190 and dy −140 — the only lift in
+     * either class), and the husk sinks (4905..4911).
+     */
+    death: {
+      cels: [4890, 4891, 4900, 4901, 4902, 4903, 4904, 4905, 4906, 4907, 4908, 4909, 4910, 4911],
+      hold: 2,
+      from: "0x477ba0 tags 0..3",
+    },
+    hatches: { kind: "initwerea", afterCels: 2, from: "0x454690" },
+    oneHitEach: true,
+    health: 3,
+    // `0x454828` — one index, and no random pick behind it
+    hitSound: FOE_SFX.weredHit,
+    deathSound: FOE_SFX.weredDeath,
+    // `0x454465`: plate 0x32cb, bar scaled to 0x64, and `obj+0x3c` is never written
+    panel: { health: 100, plate: 13003, award: 0 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x450cb0 / 0x454330 / 0x454410 / 0x454790",
   },
   /**
    * The rat. Creator `0x4509b0`, class `0x44df70`, hit `0x44e3f0`.

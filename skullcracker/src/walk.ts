@@ -78,7 +78,9 @@ import {
   ELEVATOR,
   Elevator,
   IBEAM,
+  CRUSH,
   Ibeam,
+  Crush,
   Feather,
   PLANK,
   Plank,
@@ -87,7 +89,9 @@ import {
   elevatorCel,
   elevatorFrames,
   ibeamCel,
+  crushCel,
   ibeamFrames,
+  crushFrames,
   plankCel,
   plankFrames,
 } from "./props";
@@ -440,15 +444,37 @@ const INVENTED = {
    * frame — see {@link dragged}. That the invented number came out at 0.7 is the
    * calibration having found 5734/8192 = 0.6999 by eye.
    */
-  /**
-   * How far the feet follow the floor without leaving it — a curb you step over
-   * rather than jump. It has to exist: STREETS' floor rises and falls by up to
-   * 24px between adjacent columns, and without a step the first rise puts the
-   * player UNDER the floor, where nothing is ever below them again. That was the
-   * first thing gravity broke.
+  /*
+   * There was a `stepPx: 26` here — "how far the feet follow the floor without
+   * leaving it" — invented because STREETS' floor rises and falls by up to 24px
+   * between adjacent columns. The engine has both halves of it as literals, and
+   * they are not the same number: see {@link CLIMB_PX} and {@link STICK_PX}.
    */
-  stepPx: 26,
 };
+
+/**
+ * **50 pixels, and a rise steeper than that is a WALL.** `0x42fedc`: the body
+ * stepper adds 0x32 to the floor it found under the object's new position and
+ * compares that against the new y. If the floor is further above than 50 and no
+ * platform was found under the point, `0x42fef3` throws the whole move away —
+ * it restores the packed position from `obj+6`, subtracts `obj+0xc` back out of
+ * the x, zeroes the vertical velocity and bounces what is left of the horizontal
+ * off `obj+0x20`. That is the only terrain wall the engine has.
+ *
+ * So the designers' walls are of two kinds, and CITY uses both: an `obstacle`
+ * record where they wanted to stop you outright (its five include the 60x308 one
+ * at x1873 that this port's own test walks into), and a step over 50 where they
+ * wanted you to jump. WOODS is built on the second — the ground east of x8745
+ * stands 70 pixels up, and there is no record there at all.
+ */
+const CLIMB_PX = 50;
+/**
+ * **8 pixels, and a floor further below than that is not underfoot.** The same
+ * stepper's landing test, `0x42ff56`: `floor - 8 <= newY` is what makes the feet
+ * stick, so walking off anything with more than 8 pixels of air under it puts the
+ * player in the air for the frame it takes to fall the rest.
+ */
+const STICK_PX = 8;
 
 
 /**
@@ -878,6 +904,8 @@ interface Enemy {
   linger: number;
   /** how many blows it has taken, for the kinds whose flinches advance in order */
   dents: number;
+  /** has the husk already let out what was inside it — see {@link Foe.hatches} */
+  hatched?: boolean;
   /**
    * Pixels per TICK, and it persists — `obj+0xa`/`obj+0xc`, which the collision
    * solver `0x430470` writes and which only the kinds that cancel it stop
@@ -1075,6 +1103,7 @@ interface Level {
   elevators: Elevator[][];
   /** the room's swinging girders, pinned where their records put them */
   ibeams: Ibeam[][];
+  crushes: Crush[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1284,6 +1313,7 @@ async function loadLevel(index: number): Promise<void> {
     planks,
     elevators: rooms.map((r, i) => elevatorsIn(sbk, r, solids[i], planks[i])),
     ibeams: rooms.map((r) => ibeamsIn(sbk, r)),
+    crushes: rooms.map((r) => crushesIn(sbk, r)),
     crows: rooms.map((r) => crowsIn(sbk, r)),
     // z is the ENGINE's paint order, which is its collection order: the level's
     // frame fn (SC.EXE 0x412c30) collects plane lists p3, p0, then the actors,
@@ -1715,24 +1745,44 @@ function everyAnim(foe: Foe): FoeAnim[] {
   return [foe.gait, ...(foe.flinch ?? []), ...(foe.death ? [foe.death] : []), ...(foe.burst ? [foe.burst.anim] : [])];
 }
 
-/** every `init*` record standing in this room that this page has cels for */
+/**
+ * Every `init*` record standing in this room that this page has cels for.
+ *
+ * **A creator places its object at the record's POINT**, and reading that settled
+ * what an object's own y is — which {@link foeAnchor} had to leave open. The
+ * level's spawner `0x4503a0` hands every creator the same three things off the
+ * 48-byte record: the point as one dword, then the rect's two corners. Each
+ * creator's second instruction on it is `mov dword [obj+6], eax` with that first
+ * argument (`0x450f90` for the dog, `0x450a7b` for the punk, `0x450cdc` for the
+ * fourth kind), and `0x4026d0` draws a cel with its ANCHOR at `obj+6`. So the
+ * record's point is the anchor, and the rect is only the patrol territory the AI
+ * struct keeps (`0x450fc3` stores both corners into it).
+ *
+ * This page had been standing them on the rect's BOTTOM edge, centred in its
+ * width. In STREETS and CITY the two are close enough that nothing showed; in
+ * WOODS the rects are wide territories whose bottom edge is well under the
+ * ground, so every foe in the level spawned inside the terrain, fell through it
+ * and was still falling thousands of pixels down when the level ended.
+ */
 function spawnIn(sbk: SbkFile, room: SbkRoom): Enemy[] {
   const out: Enemy[] = [];
   for (const e of sbk.entities) {
     const foe = FOES[e.name];
     if (!e.isEntity || !foe) continue;
-    const cy = (e.top + e.bottom) >> 1;
-    const cx = (e.left + e.right) >> 1;
-    if (cy < room.top || cy > room.bottom || cx < room.left || cx > room.right) continue;
+    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
     // every cel it needs has to be in this book, or it is some other level's —
     // and that now includes the flinches and the death, which is the check that
     // would have caught the old cross-chapter mix-up: this chapter's rat has no
     // 3080 to die on and the other chapter's does
     if (!everyAnim(foe).every((a) => a.cels.every((id) => sbk.byId.has(id)))) continue;
+    // this page carries a foe by its FEET and {@link foeAnchor} converts, so the
+    // record's anchor is converted the other way here, through the same gait cel
+    const g = sbk.cels.find((c) => c.id === foe.gait.cels[0]);
+    if (!g) continue;
     out.push({
       kind: e.name,
-      x: cx,
-      y: e.bottom,
+      x: e.pointX + g.width / 2 - g.posX,
+      y: e.pointY + g.height - g.posY,
       // the record's own param, for the kinds whose creator takes it as the
       // facing — everything else stands the way the art is drawn
       facing: foe.facesByParam && e.param ? 1 : -1,
@@ -2521,7 +2571,9 @@ function landHits(): void {
       const set = foe.hitSound;
       sound?.effect(typeof set === "number" ? set : set[Math.floor(Math.random() * set.length)], e.x, e.y);
     }
-    e.hp -= damage;
+    // the fourth kind's handler keeps the damage only for the blood and takes a
+    // single point off the health — `0x454821`, and see {@link Foe.oneHitEach}
+    e.hp -= foe.oneHitEach ? 1 : damage;
     // knocked the way the blow travels, kept inside its own territory — unless it
     // is bolted down, which a hydrant is (`0x44fb43` re-pins it every frame)
     if (!foe.rooted) e.x = Math.max(e.left, Math.min(e.right, e.x + p.facing * 20));
@@ -2542,7 +2594,7 @@ function landHits(): void {
       e.anim = foe.death;
       e.clock = 0;
       e.linger = foe.frail ? 0 : CORPSE_LINGER;
-      stats.score += foe.panel?.award ?? 0;
+      stats.score += foe.award ?? foe.panel?.award ?? 0;
       continue;
     }
     if (!foe.flinch) continue;
@@ -2784,7 +2836,7 @@ function ridingElevator(e: Elevator): boolean {
  *
  * The car is moved by moving its floor record, which is how the rider comes with
  * it — the same trick the plank uses, and it works upward here because the walk's
- * own "follow the floor" allows {@link INVENTED.stepPx} of climb a tick and the
+ * own "follow the floor" allows {@link CLIMB_PX} of climb a frame and the
  * car climbs one. Four pixels an engine frame is one pixel a tick.
  *
  * What is NOT the engine's is when a car decides to go: `obj+0x46` gates every
@@ -2860,6 +2912,60 @@ function ibeamsIn(sbk: SbkFile, room: SbkRoom): Ibeam[] {
     });
   }
   return out;
+}
+
+/**
+ * Every `initcrush` in this room — WOODS places three and no other book places
+ * any, which is the shape the planks, the lifts and the girders all have.
+ *
+ * The record's rect is what arms it and the record's point is where it stands,
+ * and the class uses both without a creator's worth of arithmetic in between
+ * (`0x450f19` keeps the point and both corners in a twelve-byte context, and
+ * `0x4549c3` rewrites the object onto the point every frame).
+ */
+function crushesIn(sbk: SbkFile, room: SbkRoom): Crush[] {
+  const out: Crush[] = [];
+  for (const e of sbk.entities) {
+    if (!e.isEntity || e.name !== "initcrush") continue;
+    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (!CRUSH.slam.cels.every((id) => sbk.byId.has(id))) continue;
+    out.push({ x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, state: "idle", clock: 0 });
+  }
+  return out;
+}
+
+/** the presses in the room the player is in */
+function crushesHere(): Crush[] {
+  const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
+  return level && i >= 0 ? level.crushes[i] : [];
+}
+
+/**
+ * Step every press — `0x4549b0`, and {@link CRUSH} has its nine instructions.
+ *
+ * The trigger is `0x434200(player+6, ctx+4)`: the player's own POINT inside the
+ * record's own rect, which is the same point-in-rect test a ladder and a door
+ * use. It is re-tested on every frame the press is up, so standing under one
+ * works it until you move.
+ */
+function stepCrushes(): void {
+  for (const c of crushesHere()) {
+    if (c.state === "idle") {
+      // the anchor is the point the cel hangs from, which is the player's y less
+      // the feet — the same conversion {@link poseFeet} keeps
+      const ay = p.y - p.feet;
+      const inside = p.x >= c.left && p.x < c.right && ay >= c.top && ay < c.bottom;
+      if (!inside) continue;
+      sound?.effect(CRUSH.sound, c.x, c.y);
+      c.state = "slam";
+      c.clock = 0;
+      continue;
+    }
+    c.clock += TICK_SCALE;
+    if (c.clock < crushFrames(c)) continue;
+    c.clock = 0;
+    c.state = c.state === "slam" ? "lift" : "idle";
+  }
 }
 
 /** the girders in the room the player is in */
@@ -3037,6 +3143,38 @@ function stepEnemies(): void {
     e.clock += TICK_SCALE;
     const run = e.anim.cels.length * e.anim.hold;
     if (e.state === "dead") {
+      /**
+       * ...and what comes out of it. `0x454690` calls the punk's own creator
+       * from the first tag of the husk's death, at the husk's own position, so
+       * the thing that climbs out arrives as the death reaches its second group
+       * of cels ({@link Foe.hatches}).
+       */
+      const born = foe.hatches;
+      if (born && !e.hatched && e.clock >= born.afterCels * e.anim.hold) {
+        e.hatched = true;
+        const kid = FOES[born.kind];
+        const g = lvl?.sbk.cels.find((c) => c.id === kid.gait.cels[0]);
+        if (kid && g) {
+          sound?.effect(FOE_SFX.weredHatch, e.x, e.y);
+          pool.push({
+            kind: born.kind,
+            x: e.x,
+            y: e.y,
+            facing: e.facing,
+            left: e.left,
+            right: e.right,
+            clock: 0,
+            state: "gait",
+            anim: kid.gait,
+            linger: 0,
+            dents: 0,
+            vx: 0,
+            vy: 0,
+            hp: kid.health,
+            max: kid.health,
+          });
+        }
+      }
       // the death animation, then the body, then a green ball where it was
       if (e.clock >= run) {
         e.linger -= TICK_SCALE;
@@ -3067,7 +3205,7 @@ function stepEnemies(): void {
       const base = lvl ? baseOf(e, lvl) : e.y;
       // the surfaces the PLAYER stands on — platform tops and then the room's
       // floor — swept along the fall so a fast one cannot tunnel through a ledge
-      const floor = surfaceUnder(e.x, base - Math.max(e.vy, 0) - INVENTED.stepPx, base + 1);
+      const floor = surfaceUnder(e.x, base - Math.max(e.vy, 0) - CLIMB_PX, base + 1);
       if (floor !== null && base >= floor) {
         // by the CEL's box, not by where the upright one would have stood
         e.y -= base - floor;
@@ -3110,10 +3248,26 @@ function stepEnemies(): void {
     const step = ((e.anim.dx?.[i] ?? 0) / foe.divisor) * TICK_SCALE;
     if (step > 0 && e.vx === 0 && e.vy === 0) {
       const nx = e.x + step * e.facing;
+      /**
+       * ...unless the ground there stands too high to climb, in which case the
+       * whole move is thrown away.
+       *
+       * This is `0x42fef3` — the body stepper's own wall, {@link CLIMB_PX} — and
+       * everything the stepper does applies to every object, not just the player.
+       * Without it a foe that walks into a rise it cannot climb is left standing
+       * where no floor is within reach of its feet, and the pin below then reads
+       * that as thin air and drops it: WOODS' ground steps up 85 pixels in ONE
+       * column at x10230, and the werewolf patrolling east of it fell through the
+       * world every time it walked west into that step.
+       */
+      const baseNow = lvl ? baseOf(e, lvl) : e.y;
+      const ground = groundAt(nx);
+      const reach = surfaceUnder(nx, baseNow - CLIMB_PX, baseNow + STICK_PX);
+      const blocked = ground !== null && ground < baseNow - CLIMB_PX && reach === null;
       // a flinch that travels is a knockdown: it goes the way it was hit and is
       // not turned round by its own rect
       if (e.state === "gait" && (nx < e.left || nx > e.right)) e.facing = -e.facing;
-      else e.x = Math.max(e.left - 200, Math.min(e.right + 200, nx));
+      else if (!blocked) e.x = Math.max(e.left - 200, Math.min(e.right + 200, nx));
     }
     /**
      * They stand on the same surfaces the player does — and that is the whole of
@@ -3130,7 +3284,7 @@ function stepEnemies(): void {
      */
     if (e.vx === 0 && e.vy === 0) {
       const base = lvl ? baseOf(e, lvl) : e.y;
-      const s = surfaceUnder(e.x, base - INVENTED.stepPx, base + INVENTED.stepPx);
+      const s = surfaceUnder(e.x, base - CLIMB_PX, base + STICK_PX);
       if (s !== null) e.y += s - base;
       else e.vy = INVENTED.gravityPx;
     }
@@ -3476,7 +3630,7 @@ function loop(now: number): void {
       // this the player walks INTO the terrain and then falls through it
       // forever, because everything solid is now above them: BARREL's floor
       // climbs 141px between two adjacent columns.
-      const wall = p.onGround && ahead !== null && ahead < p.y - INVENTED.stepPx;
+      const wall = p.onGround && ahead !== null && ahead < p.y - CLIMB_PX;
       if (inRoom && !wall) {
         p.travelled += Math.abs(nx - p.x);
         p.x = nx;
@@ -3596,7 +3750,7 @@ function loop(now: number): void {
       poseFeet();
       if (p.onGround) {
         // follow the floor: up a curb, down a step, off an edge
-        const s = surfaceUnder(p.x, p.y - INVENTED.stepPx, p.y + INVENTED.stepPx);
+        const s = surfaceUnder(p.x, p.y - CLIMB_PX, p.y + STICK_PX);
         if (s === null) {
           // walked off: airborne on the gait's own velocity, with no steering
           p.onGround = false;
@@ -3690,6 +3844,7 @@ function loop(now: number): void {
     stepPlanks();
     stepElevators();
     stepIbeams();
+    stepCrushes();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -3773,6 +3928,7 @@ function loop(now: number): void {
     drawLevelCel(elevatorCel(e), e.x, e.winchY, camX, camY);
   }
   for (const b of ibeamsHere()) drawLevelCel(ibeamCel(b), b.x, b.y, camX, camY);
+  for (const c of crushesHere()) drawLevelCel(crushCel(c), c.x, c.y, camX, camY);
   for (const c of crowsHere()) drawLevelCel(crowCel(c), c.x, c.y, camX, camY);
   for (const f of feathers) {
     const id = CROW.feathers.cels[Math.min(CROW.feathers.cels.length - 1, Math.floor(f.age / CROW.feathers.hold))];
@@ -4012,6 +4168,12 @@ function loop(now: number): void {
   const beam = swung.length
     ? ` · ${swung.slice(0, 3).map((b) => `beam ${b.state} cel ${ibeamCel(b)} at ${b.x},${b.y}`).join(" · ")}`
     : "";
+  // the presses: a probe cannot otherwise tell one that is up and watching from
+  // one that is coming down, and the two cels that hurt are named in CRUSH
+  const presses = crushesHere().filter((c) => c.state !== "idle");
+  const press = presses.length
+    ? ` · ${presses.slice(0, 3).map((c) => `press ${c.state} cel ${crushCel(c)} at ${c.x},${c.y}`).join(" · ")}`
+    : "";
   const valves = spawnedHere()
     .filter((e) => FOES[e.kind].burst)
     .map((e) => `${e.state === "burst" ? "water" : e.kind} cel ${celOf(e)} at x ${Math.round(e.x)}`);
@@ -4028,7 +4190,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${valve}${board}${car}${beam}${bird}${slid}${lives}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${valve}${board}${car}${beam}${press}${bird}${slid}${lives}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 

@@ -165,6 +165,22 @@ export const FOE_SFX = {
   wereaDeath: 0x21,
   /** `0x44f965` — the chain-carrying one drops its chain instead */
   werebDeath: 0x1b,
+  /** `0x454828` — the big one takes ONE sound, with no `0x434540` behind it */
+  weredHit: 0x27,
+  /** `0x45485b` — and dies on this one, through `0x40f090` like the others */
+  weredDeath: 0x1f,
+  /** `0x454669` and `0x4546c4` — the two beats of the hatch, as it splits open */
+  weredHatch: 0x20,
+  /**
+   * The dog's five, and `woods.snd`'s own names are the check on every one of
+   * them: 20 is "0400 wolfy running", 21 "0410 wolfy look", 22 "0415 wolfy hit",
+   * 23 "0420 wolfy bark" and 24 "0440 wolfy death". The class calls 20 when it
+   * breaks into a trot (`0x454caf`), 21 as it sniffs (`0x454dd6`), 23 as it barks
+   * or leaps (`0x454cfb` and three more), 22 on a blow (`0x4551b7`) and 24 on the
+   * one that finishes it (`0x4551d4`).
+   */
+  dogHit: 0x16,
+  dogDeath: 0x18,
   from: "0x44f0a0 / 0x44f8b0 / 0x44e3f0 / 0x44fe80 / 0x44fb20",
 } as const;
 

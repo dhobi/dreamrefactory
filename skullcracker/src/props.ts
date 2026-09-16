@@ -562,3 +562,106 @@ export function ibeamCel(b: Ibeam): number {
 export function ibeamFrames(b: Ibeam): number {
   return IBEAM[b.state].cels.length * IBEAM[b.state].hold;
 }
+
+/**
+ * The hydraulic press — `initcrush`, three of them in WOODS and none anywhere
+ * else, standing across the only path the level has.
+ *
+ * Creator `0x450f00`, class `0x454900`, frame function `0x4549b0`, script
+ * `0x477ed8`. `woods.snd` names the sound it makes: index 19 is
+ * **"0230 hydraulic "**, so the thing is a press and the file says so.
+ *
+ * It is the simplest machine in the game and the most dangerous. Its whole state
+ * machine is nine instructions of dispatch on the script's current tag:
+ *
+ * ```
+ *   4549bb  obj+0xc = 0 ; obj+0xa = 0      it has no velocity, ever
+ *   4549c3  obj+6 = ctx[0]                 and is rewritten onto its record's
+ *                                          point every single frame
+ *   tag 0   4549df  if the PLAYER'S POINT is inside the record's own RECT
+ *           4549ff    0x40ef30(woods.snd, 19, pos)
+ *           454a14    install tag 1
+ *   tag 1   454a21  when the script ends -> tag 2
+ *           454a38  obj+0x1a = 0x64        live, every frame
+ *   tag 2   454a43  when the script ends -> tag 0
+ *           454a5a  obj+0x1a = 0           inert again
+ * ```
+ *
+ * So there is no timer and no stagger — unlike the girder, whose context has room
+ * for one. A press fires when you stand under it and goes on firing for as long
+ * as you stay. Nineteen engine frames a cycle: fourteen down, four up, one to
+ * look.
+ *
+ * **It never moves.** Every record of its script carries `dx 0, dy 0`, and the
+ * position is rewritten from the record anyway. What travels is the drawn ram,
+ * 175 pixels from 59 above the record's point to 116 below it, and it does that
+ * in three frames — 38, then **103**, then 34.
+ *
+ * **What hurts is two cels.** Only 4382 and 4383 carry a strike box (and no cel
+ * carries a body box, so the press cannot be stood on and cannot be hit — its own
+ * hit handler `0x454a70` is `xor ax,ax; ret`). The blow is `dy 5, dx 64`, which
+ * `0x42f910` turns into 64 — over the player's own `cmp di, 0x3c` knockdown
+ * threshold at `0x449115`, so it does not stagger you, it puts you down. Two
+ * frames of the nineteen, after six frames of the head twitching on 4380/4381,
+ * which is the warning.
+ *
+ * Nothing in this port can hurt the player yet ({@link file://./walk.ts}), so
+ * what is here is the machine and its sound. The two cels that would take 64
+ * health off are marked below for when there is health to take.
+ */
+export const CRUSH = {
+  /** tag 0 — up, and watching for you. One cel, and the script sits on it */
+  idle: { cels: [4380], hold: 1, from: "0x477ed8 tag 0" },
+  /**
+   * tag 1 — the stroke. Three twitches on 4380/4381 and then the head comes down
+   * through 4382 and 4383, which are the two that carry a strike box, and settles
+   * through its own recoil.
+   */
+  slam: {
+    cels: [4380, 4381, 4380, 4381, 4380, 4381, 4382, 4383, 4384, 4385, 4386, 4387, 4388, 4389],
+    hold: 1,
+    from: "0x477ed8 tag 1",
+  },
+  /** tag 2 — and back up the way it came */
+  lift: { cels: [4384, 4383, 4382, 4381], hold: 1, from: "0x477ed8 tag 2" },
+  /** the two cels of the stroke that carry a strike box — `0x430375` tests for one */
+  strikeCels: [4382, 4383] as readonly number[],
+  /** `0x42f910` of the blow those two carry: `sqrt(5² + 64²)` */
+  damage: 64,
+  /** `mov word ptr [esi+0xe], 0x14` at `0x454931` — and it moves nothing, so it is dead weight */
+  divisor: 20,
+  /** `0x40ef30(0x4a7910, 0x13, pos)` at `0x454a04`, on entering the stroke */
+  sound: 19,
+  /** `mov word ptr [esi+0x1a], 0x64` at `0x454a38` — live only while the stroke runs */
+  health: 100,
+  from: "0x450f00 / 0x454900 / 0x4549b0",
+} as const;
+
+/** which part of its cycle a press is in — the script's own three tags, named */
+export type CrushState = "idle" | "slam" | "lift";
+
+/** one placed press, pinned where its record puts it */
+export interface Crush {
+  /** the record's own point, which `0x4549c3` rewrites the object onto every frame */
+  x: number;
+  y: number;
+  /** the record's own rect — the volume the player's POINT has to be in to set it off */
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  state: CrushState;
+  /** engine frames into the current tag */
+  clock: number;
+}
+
+/** which cel a press is showing */
+export function crushCel(c: Crush): number {
+  const a = CRUSH[c.state];
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(c.clock / a.hold))];
+}
+
+/** how many engine frames the current tag runs for */
+export function crushFrames(c: Crush): number {
+  return CRUSH[c.state].cels.length * CRUSH[c.state].hold;
+}
