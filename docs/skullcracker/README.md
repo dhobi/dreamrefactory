@@ -548,6 +548,47 @@ run their attack states, so a dog never bites and a punk never swings. The thing
 that connect are the machinery — presses and swinging girders — and the level-four
 boss's melee combo, which is the one enemy state this port does drive.
 
+### MALL is a new chapter, and a new shape of level
+
+Level five opens the second chapter, and none of the classes this port had built
+up over four levels appear in it. It is also laid out unlike anything before it:
+**three regions side by side**, overlapping by six pixels, with no `exitroom`
+between them, and not one `platform` record in the whole level. You walk out of one
+region and into the next, which is what `0x40b940(2, point)` does for every object
+on every frame — the region you are in is whichever one contains your point. What
+had to change here was this port's idea of a room: it had them as places you are
+PUT into, by a door or by the level loading, and never as places you leave on foot.
+
+Its three enemies are built to a pattern of their own, and the differences from
+chapter four are the interesting part. A divisor of seven where the punks have
+twenty, so they are quick and light. A blow pinned at 100 and re-stamped by the
+think's own epilogue on every single frame, so there is no window in which one is
+disarmed. One flinch cel installed unconditionally — no height test, no facing
+test, no random roll anywhere in any of the three handlers, where chapter four's
+punk has four takes and picks between them. An award paid straight out of the hit
+handler rather than carried on the object. And six classes named in an ignore list
+so that they cannot hurt each other.
+
+**They are all statues until you come to them.** Each stands dormant on one cel
+until the player's own point crosses into its record's rect, and then walks. The
+dog has the same mechanism and the level-four boss makes a performance of it; these
+three simply start moving.
+
+Two of their state machines reach for things that are not in this level at all.
+Both the masked one and the one with the bat have a sub-state for walking to a
+`switch` record and throwing it, and MALL places no `switch` — the cels its script
+wants are not even in the book. The masked one also has a one-in-thirty roll that
+drops a roller behind the player, with a latch so that only one can ever exist.
+
+The Coke machine is furniture worth describing because of how it ends. It holds
+exactly four cans: a blow under 30 rocks it and nothing more, 30 to 75 rocks it
+harder and counts, every third counted blow pops a can, and a blow over 75 bursts
+it and throws every can it has left at once. Weak hits still count toward the next
+one. **What stops it is its art, not a number** — it has no health word at all, and
+the emptied cel 8505 carries no body box, so the collision pass stops offering it
+as a victim the moment it shows. That is the same trick as the player's own
+invulnerability while staggering.
+
 ### Gravity was in there all along
 
 It was called this port's last invented number for a long time, on the grounds
@@ -774,6 +815,7 @@ all — and that is the whole of the mixer.
 - `skullcracker/tests/browser/woods.ts` — WOODS' population, its two steps and its goal
 - `skullcracker/tests/browser/playgr.ts` — PLAYGR's statue, the fight and the television
 - `skullcracker/tests/browser/damage.ts` — the switch that lets things hit back
+- `skullcracker/tests/browser/mall.ts` — MALL's three regions, its population and its machines
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

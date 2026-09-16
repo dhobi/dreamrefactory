@@ -247,11 +247,14 @@ export interface Foe {
    * rect, and then gets up.
    *
    * `0x4559e8` is the test — `0x434200(playerPoint, AI+6)`, the same point-in-rect
-   * every trigger in this engine uses — and the two animations are the stirring
-   * and the climb out of the ground. The dog has the same mechanism (`0x454c13`),
-   * which this page does not give it: WOODS' six are awake from the first frame.
+   * every trigger in this engine uses. The level-four boss has two animations for
+   * it, a stirring and a climb out of the ground; **all three of level five's
+   * enemies have none** — their dormant state is one cel and they go straight
+   * into the walk when the player arrives (`0x4388dd`, `0x439365`, `0x437c41`).
+   * The dog has the same mechanism (`0x454c13`) and this page does not give it:
+   * WOODS' six are awake from the first frame.
    */
-  wake?: { stir: FoeAnim; burst: FoeAnim; sound: number; stirSound: number; from: string };
+  wake?: { cel?: number; stir?: FoeAnim; burst?: FoeAnim; sound: number; stirSound?: number; from: string };
   /**
    * The states its class drives while it is alive and unhurt, beyond standing.
    *
@@ -553,6 +556,154 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     from: "0x451050 / 0x455880 / 0x455940 / 0x456310",
+  },
+  /**
+   * The masked one — level five's commonest, nine of them. Creator `0x436280`,
+   * class `0x438690`, think `0x438760`, hit `0x438f00`.
+   *
+   * MALL opens a chapter this port had nothing of, and the two classes here are
+   * built to the same pattern as each other rather than to chapter four's: a
+   * divisor of seven (fast and light), a blow pinned at 100 and re-stamped every
+   * frame by the think's own epilogue, no gravity call and no restitution call, a
+   * single flinch cel with no pick rule at all, and an award paid straight out of
+   * the hit handler rather than carried on the object.
+   *
+   * Its state machine is larger than anything here drives: four distance bands at
+   * `0x474328` choosing between backing off, walking in and a two-sided attack; a
+   * leap when it has been blocked four frames running (`0x438912`); a gloat over
+   * a downed player (`0x438805`); and a whole sub-state for walking to a `switch`
+   * record and throwing it. That last is **dead in MALL** — the level places no
+   * `switch` at all, and the cels its script wants (3260..3268) are not even in
+   * the book — so what the level actually shows is spawn, walk, idle, attack,
+   * leap, flinch and death, which is what is here.
+   *
+   * It is also the only class in the chapter that spawns a hazard: a one-in-thirty
+   * roll each frame, inside 300 pixels and from behind, sends `0x43a790` to put a
+   * roller 600 pixels the far side of the player. Exactly one can exist at a time
+   * (`0x474868` latches), and it is not here.
+   */
+  initmaskboy: {
+    // `0x474230` tag 4 — six cels, and the stride is on four of them
+    gait: { cels: [1800, 1801, 1802, 1803, 1804, 1805], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x474230 tag 4" },
+    // `0x4386ab`: seven, against chapter four's twelve and twenty
+    divisor: 7,
+    // `0x4742d8` tag 0 — ONE cel, and `0x4390df` installs it unconditionally:
+    // this chapter's handlers have no Δy test, no facing test and no random roll
+    flinch: [{ cels: [1820], hold: 1, from: "0x4742d8 tag 0" }],
+    death: { cels: [1820, 1821, 1822, 1823, 1824], hold: 1, from: "0x4742f8 tag 0" },
+    // `0x4388dd`: it stands on cel 1801 doing nothing until the player's point is
+    // inside its own record's rect, and then walks
+    wake: { cel: 1801, sound: FOE_SFX.maskboyWake, from: "0x4388dd / 0x4388f4" },
+    health: 40,
+    hitSound: FOE_SFX.maskboyHit,
+    // `0x439033`'s damage branch plays one sound and the death path plays none
+    panel: { health: 40, plate: 13102, award: 220 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x436280 / 0x438690 / 0x438760 / 0x438f00",
+  },
+  /**
+   * The one with the bat — four of them. Creator `0x436320`, class `0x439170`,
+   * think `0x439240`, hit `0x439980`.
+   *
+   * The same class one number down: twenty-five health where the masked one has
+   * forty, and worth more for it (250 against 220). Its kind numbers are swapped
+   * against its sibling's — its walk is kind 4 where the other's is 5 — and its
+   * wind-up cel 1911 carries a strike box where the masked one's 1811 does not,
+   * so it has four hitting frames to the other's three.
+   *
+   * Both of them can be HEALED, which nothing in chapter four could: a blow from
+   * `initgoop` adds health instead of taking it (`0x439a4a`), sixty for this one
+   * and twenty for its sibling. MALL places no goop, so it never happens here.
+   */
+  initbatboy: {
+    gait: { cels: [1900, 1901, 1902, 1903, 1904, 1905], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x474438 tag 4" },
+    divisor: 7,
+    flinch: [{ cels: [1920], hold: 1, from: "0x474508 tag 0" }],
+    death: { cels: [1920, 1921, 1922, 1923, 1924], hold: 1, from: "0x474528 tag 0" },
+    wake: { cel: 1901, sound: FOE_SFX.batboyWake, from: "0x439365 / 0x43937b" },
+    health: 25,
+    hitSound: FOE_SFX.batboyHit,
+    panel: { health: 25, plate: 13101, award: 250 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x436320 / 0x439170 / 0x439240 / 0x439980",
+  },
+  /**
+   * The third of level five's three, and the one that carries a skateboard.
+   * Creator `0x4361e0`, class `0x437a50`, think `0x437c00`, hit `0x438260`.
+   *
+   * Fifty health, the most of the three, and worth the least — eighty, against
+   * the masked one's 220 and the bat's 250. It drops its board when it dies
+   * (`0x438450` builds cels 2300 and 2302..2311 on their own script), which this
+   * page does not yet pick up.
+   *
+   * The three of them share a handler shape that says a good deal about the
+   * chapter: six classes are named in an ignore list so they cannot hurt each
+   * other, the flinch is one cel installed unconditionally, and the award is paid
+   * straight out of the hit handler rather than carried on the object.
+   */
+  initknotboy: {
+    gait: { cels: [1940, 1941, 1942, 1943, 1944, 1945], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x473e50 tag 0" },
+    divisor: 7,
+    flinch: [{ cels: [1960], hold: 1, from: "0x474048 tag 0" }],
+    death: { cels: [1960, 1961, 1962, 1963, 1964], hold: 1, from: "0x474068 tag 0" },
+    wake: { cel: 1940, sound: FOE_SFX.knotboyWake, from: "0x437c41 / 0x437c5a" },
+    health: 50,
+    hitSound: FOE_SFX.knotboyHit,
+    // `0x437b66`: plate 0x332f, which like the other two lives in PLAYER.SBK;
+    // `0x4383f7` pays 0x50
+    panel: { health: 50, plate: 13103, award: 80 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x4361e0 / 0x437a50 / 0x437c00 / 0x438260",
+  },
+  /**
+   * The Coke machine — `initcoke`, five of them down level five's arcade, and
+   * `mall.snd` names the sound it makes: index 32 is "#0120 coke mach[ine]".
+   * Creator `0x4365f0`, class `0x43b500`, frame `0x43b5d0`, hit `0x43b630`.
+   *
+   * It is furniture you punch, and it holds exactly four cans. `0x43b6ab` sorts
+   * the blow into three: under 30 it rocks on 8501/8502 and nothing else; from 30
+   * to 75 it rocks harder and counts, and every third counted blow pops a can
+   * (`0x43b6f5`); over 75 it bursts through 8550..8558 and throws **all** the cans
+   * it has left at once (`0x43b74f`). Weak hits still count toward the next one.
+   *
+   * **What stops it is its art, not a number.** It has no health word at all: cels
+   * 8500..8504 carry a body box and 8505 — the emptied machine — does not, so
+   * `0x4303b6` stops offering it as a victim the moment it shows that cel. The
+   * same trick is the player's own invulnerability while staggering.
+   *
+   * The cans are not here. Each is an object of its own (cels 8600..8614) that
+   * arcs out, lands, and turns itself into a type-2 pickup through `0x45af60` —
+   * so they belong with the pickups rather than with the machine.
+   */
+  initcoke: {
+    gait: { cels: [8500], hold: 1, dx: [0], from: "0x474e10 tag 0" },
+    // `0x43b51b`: forty-five, and it never moves anyway
+    divisor: 45,
+    flinch: [
+      { cels: [8501, 8502], hold: 1, from: "0x474e70 tag 0" },
+      { cels: [8501, 8502, 8504, 8504, 8503], hold: 1, from: "0x474e70 tag 2" },
+      // 8505 is the emptied machine, and it carries no body box: once it is
+      // showing, nothing can hit it again
+      { cels: [8505], hold: 1, terminal: true, from: "0x474e10 tag 1" },
+    ],
+    /**
+     * `0x43b6ab`'s three bands, with the fourth can as the end of it. Twelve is
+     * this page's arithmetic rather than the disc's — four cans at three counted
+     * blows each — because the engine keeps the can count and the blow count in
+     * its own context and this page keeps only the blows.
+     */
+    pick: ({ damage, hits }) => (hits >= 12 ? 2 : damage < 30 ? 0 : 1),
+    rooted: true,
+    health: Infinity,
+    hitSound: FOE_SFX.cokeHit,
+    counts: false,
+    from: "0x4365f0 / 0x43b500 / 0x43b5d0 / 0x43b630",
   },
   /**
    * The dog, and `woods.snd` calls it a **wolfy**. Creator `0x450f60`, class

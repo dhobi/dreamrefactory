@@ -1872,7 +1872,9 @@ function spawnIn(sbk: SbkFile, room: SbkRoom): Enemy[] {
       decisions: foe.drives?.decisions,
       clock: 0,
       state: "gait",
-      anim: foe.wake ? { ...foe.gait, cels: [foe.gait.cels[0]], dx: [0] } : foe.gait,
+      // a dormant thing holds one cel and goes nowhere — its own, where its class
+      // names one (`0x4386f5` installs cel 1801 over the build's 1940)
+      anim: foe.wake ? { ...foe.gait, cels: [foe.wake.cel ?? foe.gait.cels[0]], dx: [0] } : foe.gait,
       linger: 0,
       dents: 0,
       vx: 0,
@@ -3377,22 +3379,30 @@ function stepBoss(e: Enemy, foe: Foe, run: number): boolean {
     if (!inside) return true;
     e.asleep = false;
     e.mode = undefined;
-    e.anim = foe.wake.stir;
+    // a kind with no stirring of its own simply starts walking
+    e.anim = foe.wake.stir ?? foe.gait;
     e.clock = 0;
     sound?.effect(foe.wake.sound, e.x, e.y);
     return false;
   }
-  if (foe.wake && e.anim === foe.wake.stir) {
+  if (foe.wake?.stir && e.anim === foe.wake.stir) {
     if (e.clock < run) return false;
     // `0x455a67`: the climb out of the ground, with a loop playing under it
-    e.anim = foe.wake.burst;
+    e.anim = foe.wake.burst ?? foe.gait;
     e.clock = 0;
-    sound?.effect(foe.wake.stirSound, e.x, e.y);
+    if (foe.wake.stirSound !== undefined) sound?.effect(foe.wake.stirSound, e.x, e.y);
     return false;
   }
   const d = foe.drives;
-  if (!d) return false;
-  if (foe.wake && e.anim === foe.wake.burst) {
+  if (!d) {
+    // no combat states: the walk is where a woken thing lives
+    if (foe.wake?.burst && e.anim === foe.wake.burst && e.clock >= run) {
+      e.anim = foe.gait;
+      e.clock = 0;
+    }
+    return false;
+  }
+  if (foe.wake?.burst && e.anim === foe.wake.burst) {
     if (e.clock < run) return false;
     e.anim = d.hover;
     e.mode = "hover";
@@ -4535,7 +4545,7 @@ function loop(now: number): void {
   // any of its functions, so it has no bar and no name on the panel — and so is
   // the rat. Without this a probe cannot see either of them at all.
   const plain = spawnedHere()
-    .filter((e) => !FOES[e.kind].panel && FOES[e.kind].death)
+    .filter((e) => !FOES[e.kind].panel && (FOES[e.kind].death || FOES[e.kind].flinch))
     .sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
   const unplated = plain
     ? ` · unplated ${plain.kind} ${Math.round(plain.hp)}/${plain.max}hp ${plain.state}` +

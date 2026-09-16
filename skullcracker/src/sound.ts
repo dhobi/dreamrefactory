@@ -187,6 +187,26 @@ export const FOE_SFX = {
   dogHit: 0x16,
   dogDeath: 0x18,
   /**
+   * Level five's, and these come out of a DIFFERENT bank — `mall.snd`, which
+   * chapter two shares the way chapter four shares `woods.snd`. `0x43906d` plays
+   * 4 on a blow that lands on the masked one and `0x439ad1` plays 12 on the one
+   * with the bat; neither has a death sound of its own, and neither randomises.
+   */
+  maskboyHit: 4,
+  batboyHit: 12,
+  knotboyHit: 9,
+  /**
+   * ...and the three of them waking. Every enemy in level five stands dormant
+   * until the player's point crosses its own record's rect, and each plays one
+   * sound as it starts walking: `0x4388f4` the masked one, `0x43937b` the one
+   * with the bat, `0x437c5a` the third.
+   */
+  maskboyWake: 3,
+  batboyWake: 11,
+  knotboyWake: 8,
+  /** `0x43b6a3` — `mall.snd` names index 32 "#0120 coke mach[ine]" */
+  cokeHit: 32,
+  /**
    * The boss of level four, out of the same `woods.snd` its chapter shares.
    *
    * `0x455a14` wakes it with 0x2c, `0x455a55` runs 0x2b under the stirring as a
