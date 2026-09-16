@@ -4129,6 +4129,17 @@ function loop(now: number): void {
     ? ` · nearest ${near.kind} ${Math.round(near.hp)}/${near.max}hp ${near.state}` +
       ` at x ${Math.round(near.x)}, y ${Math.round(near.y)} cel ${celOf(near)}`
     : "";
+  // ...and the nearest thing that can be fought and claims no PLATE, which the
+  // line above cannot show. The dog is the case — `0x40d1c0` is never called from
+  // any of its functions, so it has no bar and no name on the panel — and so is
+  // the rat. Without this a probe cannot see either of them at all.
+  const plain = spawnedHere()
+    .filter((e) => !FOES[e.kind].panel && FOES[e.kind].death)
+    .sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
+  const unplated = plain
+    ? ` · unplated ${plain.kind} ${Math.round(plain.hp)}/${plain.max}hp ${plain.state}` +
+      ` at x ${Math.round(plain.x)}, y ${Math.round(plain.y)} cel ${celOf(plain)}`
+    : "";
   // the hydrant and its water: neither has a health bar, and the whole point of
   // the burst is that one object turns into two and back into one
   // the crows, which are the only thing on this page that flies
@@ -4190,7 +4201,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${valve}${board}${car}${beam}${press}${bird}${slid}${lives}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${bird}${slid}${lives}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 

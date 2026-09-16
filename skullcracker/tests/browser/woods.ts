@@ -117,7 +117,34 @@ const main = async (): Promise<void> => {
   if (!kid || kid.kind !== "initwerea") fail(`what climbs out is the punk 0x450a50 makes; got ${kid?.kind}`);
   console.log(`ok    three blows fell a husk and a ${kid!.kind} climbs out of it — ${before} spawned, then ${after}`);
 
-  // 5. the floor stands up at x8746, and the walk stops dead against it
+  // 5. the dog: ten health, its own ten-cel gait, 200 points and no effect at all
+  //    on the quota, because it is in nobody's census
+  await go(3300);
+  const before2 = /quota (\d+) of/.exec(await say())?.[1];
+  const seen = new Set<number>();
+  let down = false;
+  for (let i = 0; i < 250 && !down; i++) {
+    await page.waitForTimeout(40);
+    const m = /unplated initdog (-?\d+)\/(\d+)hp (\w+) at x (-?\d+), y (-?\d+) cel (\d+)/.exec(await say());
+    if (!m) break;
+    seen.add(Number(m[6]));
+    if (m[3] === "dead") {
+      down = true;
+      break;
+    }
+    if (Math.abs(Number(m[4]) - (await at()).x) < 70) {
+      await page.keyboard.press("p");
+      await page.waitForTimeout(220);
+    }
+  }
+  const points = Number(/(\d+) points/.exec(await say())?.[1] ?? 0);
+  if (points !== 200) fail(`a dog pays 0x40d450(0xc8); the score reads ${points}`);
+  if (seen.size < 8) fail(`its gait is ten cels, 4800..4809; saw ${[...seen].join(" ")}`);
+  const after2 = /quota (\d+) of/.exec(await say())?.[1];
+  if (after2 !== before2) fail(`a dog is in no census and should not move the quota: ${before2} -> ${after2}`);
+  console.log(`ok    a dog falls for 200 points, shows ${seen.size} of its own cels, and the quota stays at ${after2}`);
+
+  // 6. the floor stands up at x8746, and the walk stops dead against it
   await go(8600);
   await page.keyboard.down("ArrowRight");
   for (let i = 0; i < 60; i++) {
@@ -130,7 +157,7 @@ const main = async (): Promise<void> => {
   if (stopped.x > 8770) fail(`the 70px step at x8746 should stop a walk; walked on to x ${stopped.x}`);
   console.log(`ok    the ground stands up at x8746 and the walk stops at x ${stopped.x}`);
 
-  // 6. ...and a jump clears it, which is the whole of how level three is crossed
+  // 7. ...and a jump clears it, which is the whole of how level three is crossed
   await page.keyboard.down("ArrowRight");
   await page.keyboard.down("w");
   await page.keyboard.press("j");
@@ -140,15 +167,17 @@ const main = async (): Promise<void> => {
   if (over.y > 1100) fail(`it should land on the higher ground, y~1060; got y ${over.y}`);
   console.log(`ok    and a jump puts the player over it, x ${over.x}, y ${over.y}`);
 
-  // 7. the three presses: up and watching until the player's point is inside the
+  // 8. the three presses: up and watching until the player's point is inside the
   //    record's own rect, and then the whole stroke
   await go(7000);
   if (/press \w+ cel/.test(await say())) fail(`a press should be idle until someone stands under it`);
   await page.keyboard.down("ArrowRight");
   const cels = new Set<number>();
   const states = new Set<string>();
-  for (let i = 0; i < 50; i++) {
-    await page.waitForTimeout(80);
+  // every cel of the stroke is held ONE engine frame — the script's ticksPerFrame
+  // is 1 — so a poll slower than 67ms walks straight past the two that matter
+  for (let i = 0; i < 200; i++) {
+    await page.waitForTimeout(20);
     const m = /press (\w+) cel (\d+)/.exec(await say());
     if (m) {
       states.add(m[1]);
@@ -163,7 +192,7 @@ const main = async (): Promise<void> => {
   if (!cels.has(4382) || !cels.has(4383)) fail(`the head should come down through 4382 and 4383; saw ${[...cels].join(" ")}`);
   console.log(`ok    walking under a press works it — ${[...states].join(" and ")}, ${cels.size} of its own cels`);
 
-  // 8. the goal, from the level's own start, on the level's own ground
+  // 9. the goal, from the level's own start, on the level's own ground
   await go();
   await page.keyboard.down("ArrowRight");
   await page.keyboard.down("w");
