@@ -895,3 +895,157 @@ export function dripCel(d: Drip): number {
 export function dripFrames(d: Drip): number {
   return GOOP[d.kind].cels.length * GOOP[d.kind].hold;
 }
+
+
+/**
+ * The lock — `door`, five of them down level seven and none in any level before
+ * it. Creator `0x435f70`, class `0x43ff30`, think `0x43ffd0`.
+ *
+ * A door is a **wall that can be taken away**. `0x435ff0`, called from its own
+ * creator, appends the record's rect to the engine's obstacle table — the same
+ * `0x4a89e2` array every `obstacle` record lives in, counted by `[0x46b9b0]` —
+ * so a closed door is solid in exactly the way a wall is. `0x440060`, at the end
+ * of the opening animation, takes that entry back out again, and `0x435ff0` runs
+ * a second time at the end of the closing one to put it back.
+ *
+ * Its script `0x473508` is four tags at four frames a cel:
+ *
+ * ```
+ *   tag 1  3350         shut, and resting
+ *   tag 2  3351 3352    opening — at the end, the rect leaves the obstacle table
+ *   tag 3  (cel 0)      open, and resting: nothing is drawn
+ *   tag 0  3352 3351    closing — at the end, the rect goes back in, and 0x25 sounds
+ * ```
+ *
+ * The creator installs **tag 1**, so every door in the level starts shut.
+ *
+ * ## What opens it
+ *
+ * `0x43c430(param)`, which is the OTHER half of the switch broadcast — the half
+ * a param under 500 takes, where the goop of level six takes the half over it.
+ * It walks the door list and for every door whose stored number equals the
+ * switch's `param`: a door on tag 1 is given tag 2, a door on tag 3 is given tag
+ * 0. So one lever toggles one door, and throwing the lever back shuts it again.
+ *
+ * The number a door is matched on is `abs(param)` (`0x435fc2`), and the SIGN is
+ * its mirror flag at `obj+0x28` — which is to say which way round the frame is
+ * drawn, not which way it opens. SEWER's five pairs are 1, 2, 4, 7 and 8, and
+ * the doors carrying -1 and -4 are simply the two hung the other way.
+ */
+export const DOOR = {
+  /** tag 1 — shut, and the rect is in the obstacle table */
+  shut: { cels: [3350], hold: 4, from: "0x473508 tag 1" },
+  /** tag 2 — and at the end of it the rect comes out */
+  opening: { cels: [3351, 3352], hold: 4, from: "0x473508 tag 2" },
+  /** tag 3 — cel 0, which is nothing at all */
+  open: { cels: [0], hold: 4, from: "0x473508 tag 3" },
+  /** tag 0 — and at the end of it the rect goes back in, and this sounds */
+  closing: { cels: [3352, 3351], hold: 4, from: "0x473508 tag 0" },
+  /** `0x44001b` — played as it finishes shutting, and never as it opens */
+  shutSound: 0x25,
+  from: "0x435f70 / 0x43ff30 / 0x43ffd0 / 0x43c430",
+} as const;
+
+/** the four tags of `0x473508`, named */
+export type DoorState = "shut" | "opening" | "open" | "closing";
+
+/** one placed door, with the number its lever has to carry */
+export interface Door {
+  x: number;
+  y: number;
+  /** the record's own rect — what is solid while it is shut */
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** `abs(param)` — `0x435fc2`, and what `0x43c430` matches on */
+  param: number;
+  /** `param < 0` — the frame hung the other way round */
+  mirror: boolean;
+  state: DoorState;
+  clock: number;
+}
+
+/** which cel a door is showing, or 0 for the open one, which shows none */
+export function doorCel(d: Door): number {
+  const a = DOOR[d.state];
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(d.clock / a.hold))];
+}
+
+/** how many engine frames the current tag runs for */
+export function doorFrames(d: Door): number {
+  return DOOR[d.state].cels.length * DOOR[d.state].hold;
+}
+
+/**
+ * Chapter two's lift — `initelev`, six of them across the floor of level seven's
+ * last room, and **not** chapter four's `initelevator` ({@link ELEVATOR}), which
+ * is a different class with a different creator in a different chapter.
+ *
+ * Where CITY's lift is a cage on a winch that waits to be ridden, this one never
+ * stops: `0x43d810` is a five-tag cycle on a script (`0x472578`) whose every
+ * frame is the same cel, 3202, so the animation carries nothing and the state is
+ * the tag alone.
+ *
+ * ```
+ *   tag 0   nine frames standing still, and then it decides:
+ *             is the rect's BOTTOM below me?  yes -> tag 1    no -> tag 3
+ *   tag 1   three frames, then tag 2
+ *   tag 2   dy +0x28 a frame through the divisor, capped at 6 — going DOWN,
+ *           until the bottom is reached, and then tag 0
+ *   tag 3   three frames, then tag 4
+ *   tag 4   dy -0x28 a frame, capped by the record's own PARAM — going UP,
+ *           until the top is reached, and then tag 0
+ * ```
+ *
+ * So it rises, pauses, sinks, pauses, for ever, between its record's own top and
+ * bottom. The cap on the way up is the interesting number: `0x43d95d` switches on
+ * the param and allows **10, 20 or 40** pixels a frame for 0, 1 and 2, against a
+ * flat 6 on the way down. SEWER's six carry 0, 2, 1, 2, 2 and 0, so its lifts
+ * rise at 150, 300 and 600 pixels a second and all sink at 90.
+ *
+ * Like every carrier in this engine it OWNS a `platform` record — `0x435a19`
+ * calls `0x42fb70` from the creator — and the level lays one over each of the
+ * six, which is what the rider actually stands on.
+ */
+export const ELEV = {
+  /** every tag is this one cel; the script is a clock, not an animation */
+  cel: 3202,
+  /** `0x472578` tag 0 — three records at three frames each */
+  waitFrames: 9,
+  /** tags 1 and 3 — one record at three frames */
+  startFrames: 3,
+  /** `0x43d8b1` — the impulse, before the divisor */
+  push: 0x28,
+  /** `mov word ptr [esi+0xe], 0xa` at `0x43d77d` */
+  divisor: 10,
+  /** `0x43d8c6` — the cap on the way down, in whole pixels a frame */
+  downCap: 6,
+  /** `0x43d95d`'s switch on the record's param, in whole pixels a frame */
+  upCap: [10, 20, 40] as readonly number[],
+  from: "0x4359a0 / 0x43d760 / 0x43d810",
+} as const;
+
+/** where in the cycle a lift is — the script's own five tags, named */
+export type ElevState = "atBottom" | "startDown" | "down" | "startUp" | "up";
+
+/** one placed lift, with the platform record it carries */
+export interface Elev {
+  x: number;
+  y: number;
+  /** the record's rect: the two heights it travels between */
+  top: number;
+  bottom: number;
+  /** the record's `param` — which of {@link ELEV.upCap} it rises at */
+  param: number;
+  state: ElevState;
+  clock: number;
+  /** pixels a frame, positive down — `obj+0xa`, and it persists */
+  vy: number;
+  /**
+   * The `platform` record it claimed — `0x42fb70` from its own creator, and the
+   * level lays one over each of the six. A live record in the room's
+   * `platforms`, so moving it moves the floor and the rider with it.
+   */
+  floor?: { top: number; bottom: number; left: number; right: number };
+}

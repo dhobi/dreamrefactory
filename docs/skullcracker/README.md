@@ -660,6 +660,73 @@ it. The level does not wait for it, though: SERVICE's share is chapter two's
 ordinary 0.75, so the goal opens on the count and this is simply the biggest
 thing standing in front of it.
 
+### SEWER is a map, and its doors are locks
+
+Level seven is where this game stops being a side-scroller. **Thirteen regions**
+— an entrance, two vertical shafts, a tube room over the top of one of them, a
+sewer under its floor, two halls and a hall of lifts — and you do not walk from
+one end to the other. You go down, back west, up, east, down again.
+
+**Five `door` records hold it together, and every one starts shut.** A door is a
+wall that can be taken away: `0x435ff0`, called from its own creator, appends the
+record's rect to the engine's obstacle table — the same `0x4a89e2` array the
+level's walls are read into — and `0x440060` takes it back out at the end of the
+opening animation. So a shut door is solid in exactly the way an `obstacle` is,
+and an open one is not there at all. Its script is four tags: shut, opening,
+open, closing, with the two resting tags waiting for a lever and the two moving
+ones doing the table work at the end.
+
+**`0x43c430` is the other half of the switch broadcast.** Level six's levers all
+carry a `param` of 500 or more and go to `0x43c3d0`, which flips goop; level
+seven's all carry one under 500 and go here, which flips doors. A door is matched
+on `abs(param)`, and the sign is only its mirror flag — two of SEWER's five are
+simply hung the other way round. And the list it walks is the **stage's**, not
+the room's: four of the five levers stand in a different region from the door
+they open, and the last of them is a shaft and two rooms away.
+
+Getting that wrong is invisible until it is not. This port stepped its doors
+only while the player was in the room with them, so throwing the lever on the
+ledge and walking east found the door still on the second frame of its opening
+animation, and still solid.
+
+**Three things about the port's idea of a room had to go.**
+
+- *Which region you are in is the rect, not the floor.* `0x40b940(2, point)` has
+  no reference to a floor anywhere in it. This page had always asked the narrower
+  question — is the point over this room's own ground — because that is what
+  keeps a walk from carrying on into nothing. For five levels the two agreed.
+  Level seven's regions meet where one floor has ended and the next has not begun,
+  and what bridges them is a `platform` laid across the seam.
+- *The platforms are the level's, not the room's.* The engine rebuilds one table
+  of them every frame — `0x4a69d0`, twelve bytes a row — and searches the whole
+  of it. A region owns a floor; it does not own the ledges. The plank across the
+  bottom of level seven's last two rooms runs from x6147 to x9471, and filing it
+  by its middle left the room next door with nothing under it: the player walked
+  west off the foot of its own shaft and out of the world.
+- *The edge reservation is tested against the end you are walking at.* Testing
+  both ends rejects a move that would improve matters, and a rejected move leaves
+  you where you were — a pin, not a wall. At the foot of the first shaft the floor
+  begins at x2822 and the west wall is right there, so a player standing at x2860
+  could not take a step in either direction.
+
+**The lift never stops.** `initelev` is chapter two's, and not the `initelevator`
+of CITY: no cage, no winch, no waiting to be ridden. `0x43d810` is a five-tag
+cycle between its record's own top and bottom, and the interesting number is in
+`0x43d95d`, which switches on the record's `param` and allows **10, 20 or 40**
+pixels a frame going up against a flat six coming down. SEWER's six carry 0, 2,
+1, 2, 2 and 0, so they rise at 150, 300 and 600 pixels a second and all sink at
+ninety. Like every carrier in this engine each one owns a `platform` record, and
+that is what the rider actually stands on.
+
+Its two new classes are a pair of opposites. The floating eye is the first thing
+in this port with **no gravity at all** — `0x42f850(obj, 0)`, plus a standing rise
+of five pixels a frame written straight into `obj+0xa` — and the flinch it takes
+is chosen by the cel it was caught on, so the eye shuts the way it was open. The
+other has 600 health, the most of anything here, and **goes round shutting the
+doors again**: `0x43f736` passes direction 1 to the same `0x436820` the gang of
+level six pass 0 to, after closing to within `0x89` pixels in both axes — the only
+reach test in the game that measures the height as well as the distance.
+
 ### Gravity was in there all along
 
 It was called this port's last invented number for a long time, on the grounds
@@ -879,7 +946,7 @@ all — and that is the whole of the mixer.
 - `engine/tests/byte-order.ts` — detection (needs no rip) and the menu (needs one)
 - `skullcracker/tests/browser/menu.ts` — the menu in a real browser
 - `engine/src/df/sbk.ts` — the sprite book reader, and `engine/tests/sbk.ts`
-- `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow, the press, the lever and the goop
+- `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow, the press, the lever, the goop and the door
 - `skullcracker/src/foes.ts` — what each `init*` name is, and the numbers behind it
 - `skullcracker/tests/browser/city.ts` — CITY's opening, in a browser
 - `skullcracker/tests/browser/lift.ts` — CITY's five lifts, and the ride to its goal
@@ -888,6 +955,7 @@ all — and that is the whole of the mixer.
 - `skullcracker/tests/browser/damage.ts` — the switch that lets things hit back
 - `skullcracker/tests/browser/mall.ts` — MALL's three regions, its population and its machines
 - `skullcracker/tests/browser/service.ts` — SERVICE's two new classes, its six levers and what they pour
+- `skullcracker/tests/browser/sewer.ts` — SEWER's five locks, its lifts and the way through its thirteen regions
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

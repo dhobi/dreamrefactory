@@ -304,6 +304,14 @@ export interface Foe {
    * a gang that heals under goop wants it on.
    */
   lever?: {
+    /**
+     * Which way it throws — `0x436820`'s second argument, and a lever only
+     * answers the throw that suits it: 0 finds an unlit one and lights it, 1
+     * finds a lit one and puts it out. All four of the gang pass 0. Level
+     * seven's beast passes **1** (`0x43f736`), which is to say it goes round
+     * shutting the doors you have opened.
+     */
+    dir: 0 | 1;
     /** the kind-6 script's tag 1 — the reach */
     anim: FoeAnim;
     /** which frame of it makes the call — the script index `obj+0x42` is tested against, less tag 0's six */
@@ -314,6 +322,16 @@ export interface Foe {
     sound: readonly number[];
     from: string;
   };
+  /**
+   * It has no gravity and stands on nothing — `0x42f850(obj, 0)` in its class.
+   *
+   * One class in the game does: level seven's floating eye, which is given a
+   * standing rise of five pixels a frame on top of the zero (`obj+0xa = -5` at
+   * `0x43dd3c`) and flies on its own script's `dy` impulses. This page holds
+   * such a thing at the height its record's point put it, which is the part of
+   * the behaviour that needs no state machine to be true.
+   */
+  floats?: boolean;
   /** how long the body lies there before it goes, in engine frames; Infinity never */
   linger?: number;
   /** what it stood up with — `0x40e300`'s argument in the creator */
@@ -609,7 +627,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * (`0x474868` latches), and it is not here.
    */
   initmaskboy: {
-    lever: { anim: { cels: [1821, 1821, 1822, 1822, 1823, 1823, 1822, 1822, 1821, 1821, 1820, 1821, 1821, 1820], hold: 1, from: "0x4740c8 tag 1" }, at: 10, reachPx: 37, sound: [5, 6], from: "0x438a55 / 0x438aa9 / 0x438ab9" },
+    lever: { dir: 0, anim: { cels: [1821, 1821, 1822, 1822, 1823, 1823, 1822, 1822, 1821, 1821, 1820, 1821, 1821, 1820], hold: 1, from: "0x4740c8 tag 1" }, at: 10, reachPx: 37, sound: [5, 6], from: "0x438a55 / 0x438aa9 / 0x438ab9" },
     // `0x474230` tag 4 — six cels, and the stride is on four of them
     gait: { cels: [1800, 1801, 1802, 1803, 1804, 1805], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x474230 tag 4" },
     // `0x4386ab`: seven, against chapter four's twelve and twenty
@@ -645,7 +663,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * and twenty for its sibling. MALL places no goop, so it never happens here.
    */
   initbatboy: {
-    lever: { anim: { cels: [1906, 1906, 1920, 1921, 1920, 1921, 1922, 1921, 1920], hold: 1, from: "0x4743b8 tag 1" }, at: 5, reachPx: 37, sound: [5, 6], from: "0x4396c1 / 0x43970d / 0x43971d" },
+    lever: { dir: 0, anim: { cels: [1906, 1906, 1920, 1921, 1920, 1921, 1922, 1921, 1920], hold: 1, from: "0x4743b8 tag 1" }, at: 5, reachPx: 37, sound: [5, 6], from: "0x4396c1 / 0x43970d / 0x43971d" },
     gait: { cels: [1900, 1901, 1902, 1903, 1904, 1905], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x474438 tag 4" },
     divisor: 7,
     flinch: [{ cels: [1920], hold: 1, from: "0x474508 tag 0" }],
@@ -674,7 +692,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * straight out of the hit handler rather than carried on the object.
    */
   initknotboy: {
-    lever: { anim: { cels: [1946, 1946, 1961, 1961, 1946, 1946, 1961, 1960, 1961], hold: 1, from: "0x473e50 tag 1" }, at: 6, reachPx: 37, sound: [5, 6], from: "0x437f4b / 0x437fb0 / 0x437fef" },
+    lever: { dir: 0, anim: { cels: [1946, 1946, 1961, 1961, 1946, 1946, 1961, 1960, 1961], hold: 1, from: "0x473e50 tag 1" }, at: 6, reachPx: 37, sound: [5, 6], from: "0x437f4b / 0x437fb0 / 0x437fef" },
     gait: { cels: [1940, 1941, 1942, 1943, 1944, 1945], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x473e50 tag 0" },
     divisor: 7,
     flinch: [{ cels: [1960], hold: 1, from: "0x474048 tag 0" }],
@@ -723,7 +741,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * maker the third one uses — and that is not here.
    */
   initknifeboy: {
-    lever: { anim: { cels: [1858, 1857, 1856], hold: 1, from: "0x4746a8 tag 1" }, at: 1, reachPx: 37, sound: [5, 6], from: "0x43a134 / 0x43a188 / 0x43a1c7" },
+    lever: { dir: 0, anim: { cels: [1858, 1857, 1856], hold: 1, from: "0x4746a8 tag 1" }, at: 1, reachPx: 37, sound: [5, 6], from: "0x43a134 / 0x43a188 / 0x43a1c7" },
     // `0x474648` tag 4 — the same six-cel walk and the same stride as its three
     // siblings, one book row along
     gait: { cels: [1840, 1841, 1842, 1843, 1844, 1845], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x474648 tag 4" },
@@ -785,6 +803,113 @@ export const FOES: Readonly<Record<string, Foe>> = {
     bleeds: true,
     vanishes: true,
     from: "0x436460 / 0x43cbb0 / 0x43cc60 / 0x43d250",
+  },
+  /**
+   * Level seven's floating eye — `initeyeball`, nine of them, and the first
+   * thing in this port that does not stand on anything. Creator `0x435a30`,
+   * class `0x43dd00`, think `0x43dde0`, hit `0x43e8b0`.
+   *
+   * `0x43dd43` gives it `0x42f850(obj, 0)` — no gravity at all — and the class
+   * writes `obj+0xa = -5` on top of that, a standing rise of five pixels a
+   * frame. It has a shove weight of 3, the lightest thing in the game, and a
+   * divisor of 8.
+   *
+   * Its own state machine flies it: `0x472998` is three tags on the same twelve
+   * cels, a level cruise on 6206 with `dx 20` and then a climb and a dive that
+   * carry `dy -100` and `dy +100` on four frames each. This port holds it at the
+   * height its record's point puts it and cruises; the climb and the dive are
+   * not driven, and nor is `0x4728e0` tag 1, the ten cels of 6600 the death
+   * bursts into.
+   *
+   * **Which flinch it takes is decided by the cel it is showing.** `0x43e9bc`
+   * compares the current cel against 6206, 6207 and 6208 — the three angles the
+   * eye can be caught at — and picks tag 1, 2 or 3 of `0x472878` to match, so
+   * the eye that is hit shuts the way it was open. A blow over `0x46` skips all
+   * three for `0x4727f0`, twelve cels of 6300. Its ignore list is one class
+   * long, and the class is the pipe.
+   */
+  initeyeball: {
+    // `0x472aa0` tag 0 — one cel and a stride, which is the whole of its cruise
+    gait: { cels: [6206], hold: 2, dx: [20], from: "0x472aa0 tag 0" },
+    // `mov word ptr [esi+0xe], 8` at `0x43dd1b`
+    divisor: 8,
+    // `0x472878` tags 1, 2 and 3 — the eye shutting from each of its angles,
+    // and this page's gait holds the first of the three
+    flinch: [
+      { cels: [6006, 6006, 6106, 6206], hold: 3, from: "0x472878 tag 1" },
+      { cels: [6007, 6007, 6107, 6207], hold: 3, from: "0x472878 tag 2" },
+      { cels: [6008, 6008, 6108, 6207], hold: 3, from: "0x472878 tag 3" },
+    ],
+    death: {
+      cels: [6009, 6009, 6109, 6109, 6109, 6209, 6209, 6209, 6209, 6209, 6209, 6209],
+      hold: 1,
+      from: "0x4728e0 tag 0",
+    },
+    health: 50,
+    hitSound: FOE_SFX.eyeballHit,
+    deathSound: FOE_SFX.eyeballDeath,
+    // `0x43de23` claims the bar with 0x32c8; `0x43e99a` pays 0x50
+    panel: { health: 50, plate: 13000, award: 80 },
+    // `0x42f850(obj, 0)` at `0x43dd43`, and `obj+0xa = -5` on top of it
+    floats: true,
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x435a30 / 0x43dd00 / 0x43dde0 / 0x43e8b0",
+  },
+  /**
+   * And what shares the sewer with them — `initox` with 600 health, the most of
+   * anything this port has built. Creator `0x435c70`, class `0x43f1e0`, think
+   * `0x43f2a0`, hit `0x43f9a0`.
+   *
+   * Two of them, one in the tube room and one in the second hall, and each one
+   * stands in a territory that contains a `switch`. **It throws them the other
+   * way.** `0x43f736` calls `0x436820(lever, 1)` — the direction that answers a
+   * lit lever and puts it out — after closing to within `0x89` pixels in BOTH
+   * axes, which is the only reach test in the game that tests the height as well
+   * as the distance. So level seven's two big ones spend their time shutting the
+   * doors you have opened.
+   *
+   * Its other habit is worth the note: `0x472ff0` tag 0 is a charge on the same
+   * twelve cels as its walk carrying `dx 280` against the walk's 85, which over
+   * a divisor of 13 is 323 pixels a second — faster than the player can run.
+   *
+   * A blow is not certain to move it. `0x43fa7e` rolls `0x434540(3)` and does
+   * nothing at all on a 1; on a 2 or a 3 it rolls again for which of the three
+   * takes of `0x473098`, and plays 47, 48 or 49 to match the take it picked.
+   */
+  initox: {
+    gait: { cels: [5090, 5091, 5092, 5093, 5094, 5095], hold: 1, dx: [85, 85, 85, 85, 85, 85], from: "0x472e88 tag 0" },
+    // `mov word ptr [esi+0xe], 0xd` at `0x43f1fb`
+    divisor: 13,
+    flinch: [
+      { cels: [5160, 5161, 5162, 5163, 5164], hold: 1, dx: [85, 85, 85, 85, 0], from: "0x473098 tag 0" },
+      { cels: [5170, 5171, 5172, 5173, 5174, 5175], hold: 1, dx: [85, 85, 105, 0, 0, 0], from: "0x473098 tag 1" },
+      { cels: [5120, 5121, 5122, 5123, 5124, 5123, 5122, 5121, 5120], hold: 1, dx: [85, 85, 105, 0, 0, 0, 0, 0, 0], from: "0x473098 tag 2" },
+    ],
+    // `0x43fa8d`: `0x434540(3) - 1`, a flat one of the three
+    pick: () => Math.floor(Math.random() * 3),
+    death: { cels: [5190, 5190, 5191, 5192, 5193, 5194, 5194, 5195], hold: 2, from: "0x4732d8 tag 0" },
+    lever: {
+      dir: 1,
+      anim: { cels: [5170, 5171, 5172, 5173, 5174, 5175], hold: 1, from: "0x472ff0 tag 1" },
+      // `0x43f723` installs the reach and `0x43f73c` throws on the same frame
+      at: 0,
+      // `cmp eax, 0x89` at `0x43f706` and again at `0x43f71c`
+      reachPx: 137,
+      // `0x43f6b3` — the one it makes as it goes
+      sound: [0x32],
+      from: "0x43f6f4 / 0x43f70d / 0x43f73c",
+    },
+    health: 600,
+    hitSound: FOE_SFX.oxHit,
+    deathSound: FOE_SFX.oxDeath,
+    // `0x43f300` claims the bar with 0x32ce and 0x258; `0x43fa36` pays 0x140
+    panel: { health: 600, plate: 13006, award: 320 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x435c70 / 0x43f1e0 / 0x43f2a0 / 0x43f9a0",
   },
   /**
    * The Coke machine — `initcoke`, five of them down level five's arcade, and

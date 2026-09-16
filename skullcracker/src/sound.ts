@@ -219,6 +219,21 @@ export const FOE_SFX = {
   knifeboyHit: 15,
   knifeboyFed: 11,
   hardcoreHit: 0x45,
+  /**
+   * Level seven's two, out of the same chapter bank again.
+   *
+   * The floating eye takes one sound on every blow (`0x43e8fc`) and has a whole
+   * ceremony for dying: `0x43e942` stops a LOOP it has been running at 0x38 and
+   * `0x43e964` plays 0x3a over the burst. The thing in the pipe is plainer —
+   * 0x33 on a blow, 0x34 as it goes down — but its flinch picks a sound with the
+   * tag: `0x43fa9e` adds the roll to 0x2f, so 47, 48 or 49 with the take.
+   */
+  eyeballHit: 0x39,
+  eyeballLoop: 0x38,
+  eyeballDeath: 0x3a,
+  oxHit: 0x33,
+  oxDeath: 0x34,
+  oxFlinch: [47, 48, 49] as const,
   /** `0x43b6a3` — `mall.snd` names index 32 "#0120 coke mach[ine]" */
   cokeHit: 32,
   /**

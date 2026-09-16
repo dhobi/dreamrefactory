@@ -94,6 +94,12 @@ import {
   crushFrames,
   plankCel,
   plankFrames,
+  DOOR,
+  Door,
+  doorCel,
+  doorFrames,
+  ELEV,
+  Elev,
   SWITCH,
   Switch,
   switchCel,
@@ -1151,6 +1157,10 @@ interface Level {
   switches: Switch[][];
   /** the room's goop nests — invisible, and off until a lever says otherwise */
   nests: Nest[][];
+  /** the room's doors, shut and solid until a lever on their number is thrown */
+  doors: Door[][];
+  /** the room's sump lifts, each carrying the platform record laid over it */
+  elevs: Elev[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1408,6 +1418,8 @@ async function loadLevel(index: number): Promise<void> {
     crushes: rooms.map((r) => crushesIn(sbk, r)),
     switches: rooms.map((r) => switchesIn(sbk, r)),
     nests: rooms.map((r) => nestsIn(sbk, r)),
+    doors: rooms.map((r) => doorsIn(sbk, r)),
+    elevs: rooms.map((r, i) => elevsIn(sbk, r, solids[i])),
     crows: rooms.map((r) => crowsIn(sbk, r)),
     // z is the ENGINE's paint order, which is its collection order: the level's
     // frame fn (SC.EXE 0x412c30) collects plane lists p3, p0, then the actors,
@@ -2157,10 +2169,23 @@ function surfaceUnder(x: number, fromY: number, toY: number): number | null {
   let best: number | null = null;
   const g = groundAt(x);
   if (g !== null && g >= fromY && g <= toY) best = g;
-  for (const e of solids().platforms) {
-    if (x < e.left || x >= e.right) continue;
-    if (e.top < fromY || e.top > toY) continue;
-    if (best === null || e.top < best) best = e.top;
+  /**
+   * ...and the platforms are the LEVEL's, not the room's.
+   *
+   * The engine keeps one table for them — `0x4a69d0`, rebuilt every frame from
+   * every `platform` record in the book, twelve bytes a row — and `0x42fd80`
+   * searches the whole of it. A region owns a floor; it does not own the ledges.
+   * Level seven is where the difference shows: the plank across the bottom of
+   * its last two rooms runs from x6147 to x9471 and its middle is in the second,
+   * so filing it by its centre left the first with nothing under it and dropped
+   * the player out of the world at the foot of its own shaft.
+   */
+  for (const room of level?.solids ?? []) {
+    for (const e of room.platforms) {
+      if (x < e.left || x >= e.right) continue;
+      if (e.top < fromY || e.top > toY) continue;
+      if (best === null || e.top < best) best = e.top;
+    }
   }
   return best;
 }
@@ -2205,7 +2230,7 @@ function ejectFromObstacles(): void {
   // A fixed offset on purpose: the engine's y does not move when the pose does,
   // and the airborne cels' boxes are 19 rows shallower than the standing one's.
   const ay = p.y - p.feet;
-  for (const e of solids().obstacles) {
+  for (const e of blockers()) {
     // `0x434200`: x0 <= x < x1 and y0 <= y < y1, and nothing else
     if (!(p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom)) continue;
     const up = ay - e.top;
@@ -3320,7 +3345,8 @@ function throwSwitch(s: Switch, dir: 0 | 1): boolean {
  * exactly backwards from what you want and exactly what the file says.
  */
 function stepSwitches(): void {
-  const here = switchesHere();
+  // every lever in the LEVEL, because a throw has to finish wherever it was made
+  const here = level?.switches.flat() ?? [];
   if (!here.length) return;
   const ay = p.y - p.feet;
   for (const s of here) {
@@ -3344,27 +3370,236 @@ function stepSwitches(): void {
 }
 
 /**
+ * Every `door` in this room. SEWER places five and no other book places one.
+ *
+ * The creator keeps `abs(param)` as the number its lever has to carry and the
+ * sign as the frame's mirror flag, and hands the record's rect to `0x435ff0`,
+ * which appends it to the engine's own obstacle table — so a shut door is solid
+ * in exactly the way an `obstacle` record is, and an open one is not there at
+ * all ({@link blockers}).
+ */
+function doorsIn(sbk: SbkFile, room: SbkRoom): Door[] {
+  const out: Door[] = [];
+  for (const e of sbk.entities) {
+    if (!e.isEntity || e.name !== "door") continue;
+    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (!DOOR.shut.cels.every((id) => sbk.byId.has(id))) continue;
+    out.push({
+      x: e.pointX,
+      y: e.pointY,
+      top: e.top,
+      left: e.left,
+      bottom: e.bottom,
+      right: e.right,
+      param: Math.abs(e.param),
+      mirror: e.param < 0,
+      state: "shut",
+      clock: 0,
+    });
+  }
+  return out;
+}
+
+/**
+ * Every `initelev` in this room, with the `platform` record it claimed.
+ *
+ * `0x435a19` calls `0x42fb70` from the creator — the same claim a plank and a
+ * girder make — and SEWER lays a `platform` over each of its six lifts, the two
+ * records agreeing to a few pixels. Whichever platform holds the lift's own
+ * point is its floor, and moving one moves the other.
+ */
+function elevsIn(sbk: SbkFile, room: SbkRoom, solids: Solids): Elev[] {
+  const out: Elev[] = [];
+  for (const e of sbk.entities) {
+    if (!e.isEntity || e.name !== "initelev") continue;
+    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (!sbk.byId.has(ELEV.cel)) continue;
+    const floor = solids.platforms.find(
+      (q) => e.pointX >= q.left && e.pointX <= q.right && e.pointY >= q.top - 40 && e.pointY <= q.bottom + 40,
+    );
+    out.push({
+      x: e.pointX,
+      y: e.pointY,
+      top: e.top,
+      bottom: e.bottom,
+      param: e.param,
+      state: "atBottom",
+      clock: 0,
+      vy: 0,
+      floor,
+    });
+  }
+  return out;
+}
+
+/** the doors in the room the player is in */
+function doorsHere(): Door[] {
+  const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
+  return level && i >= 0 ? level.doors[i] : [];
+}
+
+/** the lifts in the room the player is in */
+function elevsHere(): Elev[] {
+  const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
+  return level && i >= 0 ? level.elevs[i] : [];
+}
+
+/**
+ * What the player's anchor may not be inside: the room's `obstacle` records, and
+ * every door in it that is not yet open.
+ *
+ * The engine keeps one table for both — `0x435ff0` appends a door's rect to the
+ * same `0x4a89e2` array the level's walls are read into, and `0x440060` takes it
+ * out again as the door finishes opening — so this is one list there too.
+ */
+function blockers(): { top: number; left: number; bottom: number; right: number }[] {
+  const out: { top: number; left: number; bottom: number; right: number }[] = [...solids().obstacles];
+  for (const d of doorsHere()) if (d.state !== "open") out.push(d);
+  return out;
+}
+
+/**
+ * Step every door — `0x43ffd0`, which is two branches.
+ *
+ * Only the two moving tags do anything: the opening one, when its script ends,
+ * becomes the open tag and takes the rect out of the obstacle table; the closing
+ * one becomes the shut tag, puts the rect back, and sounds. The two resting tags
+ * wait for a lever.
+ */
+function stepDoors(): void {
+  /**
+   * ...and every door in the LEVEL, not in the room.
+   *
+   * Four of level seven's five levers stand in a different region from the door
+   * they open, so a door that only moved while you were looking at it would be
+   * left half open for ever — which is exactly what happened: throw the lever on
+   * the ledge, walk east, and find the door still on the second frame of its
+   * opening animation and still solid.
+   */
+  for (const d of level?.doors.flat() ?? []) {
+    if (d.state === "shut" || d.state === "open") continue;
+    d.clock += TICK_SCALE;
+    if (d.clock < doorFrames(d)) continue;
+    d.clock = 0;
+    if (d.state === "opening") d.state = "open";
+    else {
+      d.state = "shut";
+      sound?.effect(DOOR.shutSound, d.x, d.y);
+    }
+  }
+}
+
+/**
+ * Step every lift — `0x43d810`, and {@link ELEV} has its five tags.
+ *
+ * The cycle needs nothing from outside it: at rest it asks whether the rect's
+ * bottom is below it and goes the other way, and each moving tag adds its
+ * impulse, clamps, and watches for the end of the shaft. Its platform record
+ * goes with it, which is what a rider stands on.
+ */
+function stepElevs(): void {
+  for (const e of elevsHere()) {
+    e.clock += TICK_SCALE;
+    if (e.state === "atBottom") {
+      if (e.clock < ELEV.waitFrames) continue;
+      e.clock = 0;
+      // `0x43d84e`: is the bottom of the shaft below me? then sink; else rise
+      e.state = e.bottom > e.y ? "startDown" : "startUp";
+      continue;
+    }
+    if (e.state === "startDown" || e.state === "startUp") {
+      if (e.clock < ELEV.startFrames) continue;
+      e.clock = 0;
+      e.state = e.state === "startDown" ? "down" : "up";
+      continue;
+    }
+    const was = e.y;
+    if (e.state === "down") {
+      // `0x42f8b0`: the impulse is divided, and the result never exceeds the cap
+      e.vy = Math.min(ELEV.downCap, e.vy + ELEV.push / ELEV.divisor);
+      e.y += e.vy * TICK_SCALE;
+      if (e.y >= e.bottom) {
+        e.y = e.bottom;
+        e.vy = 0;
+        e.state = "atBottom";
+        e.clock = 0;
+      }
+    } else {
+      const cap = ELEV.upCap[e.param] ?? ELEV.upCap[0];
+      e.vy = Math.max(-cap, e.vy - ELEV.push / ELEV.divisor);
+      e.y += e.vy * TICK_SCALE;
+      if (e.y <= e.top) {
+        e.y = e.top;
+        e.vy = 0;
+        e.state = "atBottom";
+        e.clock = 0;
+      }
+    }
+    const moved = e.y - was;
+    if (e.floor && moved !== 0) {
+      e.floor.top += moved;
+      e.floor.bottom += moved;
+      // a rider goes with it, which is what owning a floor MEANS
+      // the rider is not moved here: the platform record IS the floor, and the
+      // player's own pin finds it again where it now is ({@link surfaceUnder})
+    }
+  }
+}
+
+/**
  * `0x438200` — the first unlit lever standing inside this thing's own territory.
  *
  * The rect is the enemy record's, and the test is on the LEVER's position, not
  * the enemy's: a gang member is the keeper of whatever lever its patrol covers,
  * and SERVICE gives every one of its six a keeper.
  */
-function leverFor(e: Enemy): Switch | null {
+function leverFor(e: Enemy, dir: 0 | 1): Switch | null {
+  const want = dir === 0 ? "off" : "on";
   for (const s of switchesHere()) {
-    if (s.state !== "off") continue;
+    if (s.state !== want) continue;
     if (s.x < e.left || s.x > e.right || s.y < e.top || s.y > e.bottom) continue;
     return s;
   }
   return null;
 }
 
-/** `0x43c3d0` — every goop on this `param` flips, and each one sounds */
+/**
+ * What a lever's throw broadcasts, and there are two of them.
+ *
+ * `0x43c3d0` takes a `param` of 500 or more and flips every goop that carries
+ * it. `0x43c430` takes one under 500 and flips every DOOR that carries it: a
+ * shut one starts opening, an open one starts shutting, and a door already
+ * moving is left alone. Level six's levers are all in the first range and level
+ * seven's are all in the second, which is why each level has exactly one of the
+ * two behaviours.
+ */
 function broadcast(param: number): void {
-  for (const n of nestsHere()) {
-    if (n.param !== param) continue;
-    n.on = !n.on;
-    sound?.effect(SWITCH.toggle, (n.left + n.right) / 2, n.top);
+  const lvl = level;
+  if (!lvl) return;
+  if (param >= 500) {
+    for (const n of lvl.nests.flat()) {
+      if (n.param !== param) continue;
+      n.on = !n.on;
+      sound?.effect(SWITCH.toggle, (n.left + n.right) / 2, n.top);
+    }
+    return;
+  }
+  /**
+   * ...and both lists are the LEVEL's, not the room's. The engine holds one
+   * linked list per class for the whole stage, and `0x43c430` walks the lot —
+   * which is the point of level seven's levers: four of its five stand in a
+   * different region from the door they open, and the last of them is two rooms
+   * and a shaft away from it.
+   */
+  for (const d of lvl.doors.flat()) {
+    if (d.param !== param) continue;
+    if (d.state === "shut") {
+      d.state = "opening";
+      d.clock = 0;
+    } else if (d.state === "open") {
+      d.state = "closing";
+      d.clock = 0;
+    }
   }
 }
 
@@ -3904,7 +4139,7 @@ function stepEnemies(): void {
      * somebody's territory, which is why a level that starts dry does not stay
      * dry, and why turning them off is a job rather than a one-off.
      */
-    const aim = foe.lever && (e.state === "gait" || e.state === "lever") && !e.asleep ? leverFor(e) : null;
+    const aim = foe.lever && (e.state === "gait" || e.state === "lever") && !e.asleep ? leverFor(e, foe.lever.dir) : null;
     if (e.state === "lever") {
       const L = foe.lever!;
       if (!aim) {
@@ -3916,7 +4151,7 @@ function stepEnemies(): void {
           e.thrown = true;
           // `0x43a191`: one roll in three, and then one of two takes
           if (roll(3) === 1) sound?.effect(L.sound[roll(L.sound.length) - 1], e.x, e.y);
-          throwSwitch(aim, 0);
+          throwSwitch(aim, foe.lever!.dir);
         }
         if (e.clock >= run) {
           e.state = "gait";
@@ -3955,7 +4190,8 @@ function stepEnemies(): void {
       const baseNow = lvl ? baseOf(e, lvl) : e.y;
       const ground = groundAt(nx);
       const reach = surfaceUnder(nx, baseNow - CLIMB_PX, baseNow + STICK_PX);
-      const blocked = ground !== null && ground < baseNow - CLIMB_PX && reach === null;
+      // a floater has no feet to catch on a step
+      const blocked = !foe.floats && ground !== null && ground < baseNow - CLIMB_PX && reach === null;
       // a flinch that travels is a knockdown: it goes the way it was hit and is
       // not turned round by its own rect
       if (e.state === "gait" && !aim && (nx < e.left || nx > e.right)) e.facing = -e.facing;
@@ -3974,7 +4210,9 @@ function stepEnemies(): void {
      * means there is nothing underfoot — so it falls, rather than teleporting to
      * whatever the region says.
      */
-    if (e.vx === 0 && e.vy === 0) {
+    // ...and a thing with no gravity stands on nothing: it keeps the height its
+    // record's point gave it ({@link Foe.floats})
+    if (e.vx === 0 && e.vy === 0 && !foe.floats) {
       const base = lvl ? baseOf(e, lvl) : e.y;
       const s = surfaceUnder(e.x, base - CLIMB_PX, base + STICK_PX);
       if (s !== null) e.y += s - base;
@@ -4346,15 +4584,46 @@ function loop(now: number): void {
        */
       const span = p.room ? roomSpan(p.room) : null;
       const half = (playerBox().right - playerBox().left) / 2;
-      let inRoom = !span || (nx >= span.lo && nx <= span.hi);
+      /**
+       * Which region you are in is `0x40b940(2, point)`: the one whose RECT
+       * holds the point, with no reference to a floor anywhere in it. This page
+       * has always asked the narrower question — is the point over this room's
+       * own GROUND — because that is what keeps a walk from carrying on into
+       * nothing, and for five levels the two agreed. Level seven is where they
+       * part: its regions are joined at seams where one floor has ended and the
+       * next has not begun, and a `platform` laid across the gap is what you
+       * walk over. So the rect answers first and the ground span second, and the
+       * reservation below is still what stops you leaving the world.
+       */
+      const inRect = !!p.room && nx >= p.room.left && nx <= p.room.right;
+      let inRoom = !span || inRect || (nx >= span.lo && nx <= span.hi);
       if (!inRoom && p.room && level) {
         const next = level.rooms.find((r) => {
           if (r === p.room) return false;
           const sp = roomSpan(r);
           return sp !== null && nx >= sp.lo && nx <= sp.hi && p.y >= r.top && p.y <= r.bottom;
         });
-        if (next) {
-          p.room = next;
+        /**
+         * ...and failing that, the engine's own answer: `0x40b940(2, point)` is
+         * the region whose RECT contains the point, and it knows nothing about
+         * floors at all.
+         *
+         * Level five could be crossed on floors alone, because its three regions
+         * overlap and each carries its own ground the whole way. Level seven
+         * cannot: its thirteen regions meet where one region's floor has ended
+         * and the next one's has not begun, and what bridges the two is a
+         * `platform` record laid across the seam — the walkway from the entrance
+         * into the first shaft is one, from x2567 to x3229, and it belongs to the
+         * shaft because that is where its middle is. So the hand-over has to
+         * happen on the rects, and the floor is found again on the far side.
+         */
+        const rect =
+          next ??
+          level.rooms.find(
+            (r) => r !== p.room && nx >= r.left && nx <= r.right && p.y >= r.top && p.y <= r.bottom,
+          );
+        if (rect) {
+          p.room = rect;
           inRoom = true;
         }
       }
@@ -4366,7 +4635,18 @@ function loop(now: number): void {
         if (reach.length) {
           const lo = Math.min(...reach.map((sp) => sp.lo));
           const hi = Math.max(...reach.map((sp) => sp.hi));
-          if (nx - half < lo || nx + half > hi) inRoom = false;
+          /**
+           * ...and the reservation is tested only against the end you are
+           * WALKING AT.
+           *
+           * Testing both ends rejects a move that would improve matters, and a
+           * rejected move leaves you exactly where you were — which is a pin,
+           * not a wall. The foot of level seven's first shaft is the case: its
+           * floor begins at x2822 and its west wall is right there, so a player
+           * standing at x2860 already has half a body over the line and could
+           * never take a step in EITHER direction.
+           */
+          if (nx > p.x ? nx + half > hi : nx - half < lo) inRoom = false;
         }
       }
       // world. Off a platform you certainly can: the floor is still under it.
@@ -4611,6 +4891,8 @@ function loop(now: number): void {
     stepCrushes();
     stepSwitches();
     stepGoop();
+    stepDoors();
+    stepElevs();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -4701,6 +4983,9 @@ function loop(now: number): void {
   // the lever is on the wall behind whatever is standing at it, and the goop is
   // in front: its class is collected with the actors, the switch's is not
   for (const w of switchesHere()) drawLevelCel(switchCel(w), w.x, w.y, camX, camY);
+  // an open door shows cel 0, which is nothing; a lift is one cel for ever
+  for (const d of doorsHere()) if (d.state !== "open") drawLevelCel(doorCel(d), d.x, d.y, camX, camY);
+  for (const e of elevsHere()) drawLevelCel(ELEV.cel, e.x, e.y, camX, camY);
   for (const d of drips) drawLevelCel(dripCel(d), d.x, d.y, camX, camY);
   for (const c of crowsHere()) drawLevelCel(crowCel(c), c.x, c.y, camX, camY);
   for (const f of feathers) {
@@ -4963,6 +5248,16 @@ function loop(now: number): void {
   const lever = levers.length
     ? ` · ${levers.map((w) => `switch ${w.param} ${w.state} cel ${switchCel(w)} at x ${w.x}`).join(" · ")}`
     : "";
+  // the level's doors, not the room's: one lever in one region opens a door in
+  // another, and the engine holds one list for the stage ({@link broadcast})
+  const gates = level?.doors.flat() ?? [];
+  const gate = gates.length
+    ? ` · ${gates.map((d) => `door ${d.param} ${d.state}`).join(" · ")}`
+    : "";
+  const sumps = elevsHere();
+  const sump = sumps.length
+    ? ` · ${sumps.map((e) => `lift x${e.x} ${e.state} y${Math.round(e.y)}`).join(" · ")}`
+    : "";
   const nests = nestsHere();
   const goop = nests.length
     ? ` · goop ${nests.filter((n) => n.on).length} of ${nests.length} on, ${drips.length} falling${drips.length ? ` cel ${dripCel(drips[0])} at ${Math.round(drips[0].x)},${Math.round(drips[0].y)}` : ""}`
@@ -4985,7 +5280,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 
