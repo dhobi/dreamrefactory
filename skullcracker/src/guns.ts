@@ -311,8 +311,15 @@ export const GRAB = {
  *   `0xfff7`, **−9**. That is a CODE, not a number: it is the same −9 the kragg
  *   tests for, and what it means is each enemy's own hit handler's business.
  *   Drawing the stream without that is drawing a thing that cannot hurt.
- * - the **soaker** (`0x41f820`), the **blaster** (`0x412a70`) and the
- *   **scepter** (`0x41f6b0`) belong to chapters this port has not reached.
+ * - the **soaker** (`0x41f820`) is chapter three's, so it IS reachable now, and
+ *   its droplet is the one of the four with a real number on it —
+ *   `0x4217ba` writes 0x64 into `obj+0x1a`, the same hundred the flare carries,
+ *   and its art (9800..9807) is in all four of the chapter's books. What is not
+ *   built is the shape: like the flamer it is a held STREAM, spawning a droplet
+ *   a frame with a velocity picked per pose ((170, −27), (97, 0), (60, −12),
+ *   (66, 10)) and modes −1 and −2 that reach into every live one to stop it.
+ * - the **blaster** (`0x412a70`) and the **scepter** (`0x41f6b0`) belong to
+ *   chapters this port has not reached.
  *
  * The flare gun's (`0x436d40`) is the one that is a shot, does a NUMBER, and is
  * carried by four of the eight levels that are here.

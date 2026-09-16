@@ -136,6 +136,10 @@ import {
   Axe,
   BRIDGE,
   Bridge,
+  FLOOR,
+  Floor,
+  SURGE,
+  Surge,
 } from "./props";
 import { DEATH_FILMS, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
 import { CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, WEAPONS, type Flare, type Gun } from "./guns";
@@ -1217,6 +1221,10 @@ interface Level {
   axes: Axe[][];
   /** and level ten's four rope bridges */
   bridges: Bridge[][];
+  /** level twelve's five floors, which will not hold either */
+  floors: Floor[][];
+  /** ...and its two surges, the only hazard in the game that gives you something */
+  surges: Surge[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1509,6 +1517,17 @@ async function loadLevel(index: number): Promise<void> {
       })),
     ),
     axes: rooms.map((r) => placed(sbk, r, "initswingaxe", [AXE.swing[0]], (e) => ({ x: e.pointX, y: e.pointY, clock: 0 }))),
+    floors: rooms.map((r) =>
+      placed(sbk, r, "initfloor", [FLOOR.whole], (e) => ({
+        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
+        state: "whole" as const, clock: 0,
+      })),
+    ),
+    surges: rooms.map((r) =>
+      placed(sbk, r, "initsurge", SURGE.arc.cels, (e) => ({
+        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: 0,
+      })),
+    ),
     bridges: rooms.map((r) =>
       placed(sbk, r, "initbridge", [BRIDGE.whole], (e) => ({
         x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
@@ -3921,6 +3940,84 @@ function bridgeCel(b: Bridge): number {
   return a.cels[Math.min(a.cels.length - 1, Math.floor(b.clock / a.hold))];
 }
 
+/**
+ * Level twelve's floors — `0x426f80`, which is level nine's grave told the
+ * other way round. The player's point inside its rect starts it; four frames of
+ * the whole cel, three of `0120 floor crea[ks]`, six of `0121 floor cave[s in]`
+ * — and then `0x402fa0`, the same death a grave gives.
+ */
+function stepFloors(): void {
+  const here = hereOf((l) => l.floors);
+  if (!here.length) return;
+  const ay = p.y - p.feet;
+  for (const f of here) {
+    const inside = p.x > f.left && p.x < f.right && ay >= f.top && ay <= f.bottom;
+    if (f.state === "whole") {
+      if (!inside || !p.onGround) continue;
+      f.state = "creaking";
+      f.clock = 0;
+      sound?.effect(FOE_SFX.floorCreak, f.x, f.y);
+      continue;
+    }
+    f.clock += 1;
+    if (f.state === "creaking" && f.clock >= FLOOR.creaking.cels.length * FLOOR.creaking.hold) {
+      f.state = "caving";
+      f.clock = 0;
+      sound?.effect(FOE_SFX.floorCave, f.x, f.y);
+      // `0x42703e` writes 5 into the floor offset and what is left falls: the
+      // platform laid over it, if the book filed one, goes too
+      const lvl2 = level;
+      if (lvl2) {
+        const r = lvl2.rooms.indexOf(p.room!);
+        if (r >= 0)
+          lvl2.solids[r].platforms = lvl2.solids[r].platforms.filter(
+            (q) => !(q.left >= f.left - 8 && q.right <= f.right + 8 && Math.abs(q.top - f.top) < 220),
+          );
+      }
+    } else if (f.state === "caving" && f.clock >= FLOOR.caving.cels.length * FLOOR.caving.hold) {
+      f.state = "gone";
+      if (inside && !film) {
+        sound?.effect(FOE_SFX.graveTake, f.x, f.y);
+        void died();
+      }
+    }
+  }
+}
+
+/** which cel a floor is showing */
+function floorCel(f: Floor): number {
+  if (f.state === "whole") return FLOOR.whole;
+  if (f.state === "gone") return FLOOR.caving.cels[FLOOR.caving.cels.length - 1];
+  const a = f.state === "creaking" ? FLOOR.creaking : FLOOR.caving;
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(f.clock / a.hold))];
+}
+
+/**
+ * ...and the surges, which are the only hazard in the game that gives you
+ * something: `0x426b21` calls `0x45ef30`, the ammunition adder, and then
+ * `0x40d4f0` to redraw the panel. Its blow is the code −4 and this port does not
+ * carry codes, so what is left of one here is the refill.
+ */
+function stepSurges(): void {
+  const here = hereOf((l) => l.surges);
+  if (!here.length) return;
+  const ay = p.y - p.feet;
+  for (const q of here) {
+    q.clock += 1;
+    if (!inv.armed) continue;
+    if (!(p.x > q.left && p.x < q.right && ay >= q.top && ay <= q.bottom)) continue;
+    const w = WEAPONS[inv.weapon];
+    if (!w || roundsIn(inv.weapon) >= w.max) continue;
+    loadRounds(inv.weapon, 1);
+    if (Math.floor(q.clock) % SURGE.arc.cels.length === 0) sound?.effect(SURGE.sound, q.x, q.y);
+  }
+}
+
+/** which cel a surge is showing */
+function surgeCel(q: Surge): number {
+  return SURGE.arc.cels[Math.floor(q.clock / SURGE.arc.hold) % SURGE.arc.cels.length];
+}
+
 // ---- the guns ------------------------------------------------------------
 
 /**
@@ -6113,6 +6210,8 @@ function loop(now: number): void {
     if (frame) stepHands();
     if (frame) stepAxes();
     if (frame) stepBridges();
+    if (frame) stepFloors();
+    if (frame) stepSurges();
     stepGuns();
     if (frame) stepFlares();
     stepCrows();
@@ -6237,6 +6336,8 @@ function loop(now: number): void {
   // the goal's craft and the goo share the play plane with the player: the
   // engine's own effect class is collected with the actors, not the backdrop
   drawCraft(camX, camY);
+  for (const f of hereOf((l) => l.floors)) drawLevelCel(floorCel(f), f.x, f.y, camX, camY);
+  for (const q of hereOf((l) => l.surges)) drawLevelCel(surgeCel(q), q.x, q.y, camX, camY);
   for (const b of hereOf((l) => l.bridges)) drawLevelCel(bridgeCel(b), b.x, b.y, camX, camY);
   for (const a of hereOf((l) => l.axes)) drawLevelCel(axeCel(a), a.x, a.y, camX, camY);
   for (const h of hereOf((l) => l.holes)) drawLevelCel(holeCel(h), h.x, h.y, camX, camY);
@@ -6542,6 +6643,8 @@ function loop(now: number): void {
     ...hereOf((l) => l.pipes).map((q) => `pipe at x${q.x}`),
     ...hereOf((l) => l.holes).map((h) => `grave ${h.state} cel ${holeCel(h)} at x${h.x}`),
     ...hereOf((l) => l.axes).map((a) => `axe cel ${axeCel(a)} at x${a.x}`),
+    ...hereOf((l) => l.floors).map((f) => `floor ${f.state} cel ${floorCel(f)} at x${f.x}`),
+    ...hereOf((l) => l.surges).map((q) => `surge cel ${surgeCel(q)} at x${q.x}`),
     ...hereOf((l) => l.bridges).map((b) => `bridge ${b.state} cel ${bridgeCel(b)} at x${b.x}`),
     ...hereOf((l) => l.hands).map((q) => `hand ${q.state}${q.underfoot ? " underfoot" : ""} cel ${handCel(q)} at x${Math.round(q.atX)}`),
     ...hereOf((l) => l.bushes).map((q) => `bush at x${q.x}`),

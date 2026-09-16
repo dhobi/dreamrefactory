@@ -1714,3 +1714,78 @@ export interface Bridge {
   stood: number;
   clock: number;
 }
+
+/**
+ * The floor that will not hold — `initfloor`, five of them and all five in
+ * TOWER. Creator `0x41f140`, class `0x426ea0`, think `0x426f80`.
+ *
+ * Level twelve's version of level nine's grave, and it works the same way: no
+ * health, no blow, and `0x402fa0` at the end of it.
+ *
+ * ```
+ *   whole    0x470558 tag 0, cel 9010            and 0x470568 tag 0, four of it
+ *   creaking 0x470568 tag 1, 9011 x3             `0120 floor crea[ks]`
+ *   caving   0x4705a8 tag 0, 9012..9017          `0121 floor cave[s in]`
+ * ```
+ *
+ * `0x42703e` writes 5 into `obj+0x10` — the floor offset — on the way through,
+ * and `0x427100` gives what is left a divisor of 10 and gravity 3.0. Then the
+ * rect test again, and the player goes with it.
+ */
+export const FLOOR = {
+  whole: 9010,
+  /** `0x470568` tag 1 */
+  creaking: { cels: [9011, 9011, 9011], hold: 1, from: "0x470568 tag 1" },
+  /** `0x4705a8` tag 0 */
+  caving: { cels: [9012, 9013, 9014, 9015, 9016, 9017], hold: 1, from: "0x4705a8 tag 0" },
+  /** `0x470568` tag 0 — four frames of the whole cel before it starts */
+  holdFrames: 4,
+  /** `0x427100` — `0x42f850(obj, 3.0)`, three times the player's own pull */
+  gravity: 3,
+  from: "0x41f140 / 0x426ea0 / 0x426f80",
+} as const;
+
+export interface Floor {
+  x: number;
+  y: number;
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  state: "whole" | "creaking" | "caving" | "gone";
+  clock: number;
+}
+
+/**
+ * The SURGE — `initsurge`, two of them, both in TOWER, and it is the only
+ * hazard in the game that gives you something.
+ *
+ * `0x426a90` sets its blow to `0xfffc` — **−4**, a code — and `0x426b21` calls
+ * `0x45ef30`, the ammunition adder, followed by `0x40d4f0` to redraw the panel.
+ * So walking into a live surge fills the weapon in your hands. Its records are
+ * two tall thin columns, 63 by 1310 and 60 by 1122, running the height of the
+ * tower's wall.
+ *
+ * Its divisor is 1 and its script is six cels; what turns it on and off has not
+ * been read, so this page runs it on its own loop.
+ */
+export const SURGE = {
+  /** `0x46f648` tag 0 */
+  arc: { cels: [9060, 9061, 9062, 9063, 9064, 9065], hold: 1, from: "0x46f648 tag 0" },
+  /** `0x426a90` — a code, not damage */
+  blow: -4,
+  /** `0x426aa8` — `0134 surge` */
+  sound: 0x38,
+  divisor: 1,
+  from: "0x41ec20 / 0x426990 / 0x426a70",
+} as const;
+
+export interface Surge {
+  x: number;
+  y: number;
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  clock: number;
+}

@@ -974,9 +974,11 @@ The other four fire functions are not here, and the reason is not the same in
 each case. The **flamer**'s `0x44dae0` is a held stream rather than a shot — its
 modes −1 and −2 reach into every live flame to stop it — and the flame's blow
 strength is `0xfff7`, **−9**. That is a code and not a number: it is the same −9
-the kragg tests for, and what it means is each class handler's own business.
-The **soaker**, the **blaster** and the **scepter** belong to chapters this port
-has not reached.
+the kragg tests for, and what it means is each class handler's own business. The
+**soaker**'s `0x41f820` is the same shape, but its droplet does carry a real
+number — `0x4217ba` writes the same hundred the flare has — so what stops that
+one is the stream rather than the damage. The **blaster** and the **scepter**
+belong to chapters this port has not reached.
 
 One fact that fell out of reading all five: **the blaster and the flamer spend
 no ammunition at all.** `0x45ef00` appears once in the flare gun's fire function
@@ -988,6 +990,113 @@ The panel had the other half of this waiting: the special-weapon window at
 an empty hand, because the reading of `0x40d691` came before there was anything
 to read. It is wired now — the icon appears while `0x479438` is set, and the
 gauge is the weapon record's own `rounds * 64 / max`.
+
+### Chapter three is four levels and eleven classes
+
+GRAVE, CAVERN, RAVECAVE and TOWER share one book pointer (`0x4a6220`), one sound
+bank (`belfry.snd`) and one placer — `0x41e450`, which stands up sixteen kinds
+of thing by name. Eleven of them were new here.
+
+**The zombie** (`0x41eee0`) is the biggest ordinary creature the game has:
+two hundred health against chapter two's 25 and 40, a divisor of 10 against
+their 7, and 310 points. Its own blow is a hundred, which is what a flare does.
+
+**The bat** (`0x41ead0`) has a divisor of **1** — the only creature in the game
+that divides its script's dx by nothing — and it is frail in the engine's own
+sense: `0x4232f0` has no subtraction anywhere in it, so one blow of any size
+fells one. It does not count towards a census either, which is why CAVERN's ten
+leave its at 19 and RAVECAVE's twenty-seven leave its at 4.
+
+And it comes to you. `0x422f12` reads the brain's forward distance, clamps it to
+±27 and writes it straight into `obj+0xc` — the velocity, not the territory. A
+rect on a bat's record is an alarm and not a patrol. This port had no model for
+that; every foe until now walked its own rect and turned at the edges, and
+without it CAVERN's bats hang 180 to 340 pixels over the floor where no jump in
+the game reaches one.
+
+**Ghengis** is 200 and 400 points; the **skeleton** is 200 and **450**, the most
+any ordinary creature is worth; **Igor** is 200 and 350, and it has a script no
+other class has — `0x46fea0`, whose `ticksPerFrame` is zero and whose five
+records all carry a negative dx: the walk run backwards and travelling backwards.
+
+**Two bosses, and neither pays anything.** The wraith (`0x41ec80`, seven
+hundred health, one in the game) and the bishop (`initvpriest`, twelve hundred —
+the same number the player has) both have hit handlers with no `0x40d450` in
+them anywhere. Nothing else in the game can say that, and the reason is the
+levels: chapter three's last two stages ask for no kills at all (`0x4218ca` and
+`0x4218d9` store the whole census as the allowance), so what beating one opens
+is the way out rather than a number.
+
+### Two of them kill you without a blow
+
+`initgrave` and `initfloor` have no health, no blow and no hit handler, and both
+end with `0x402fa0` — the call that ends the player.
+
+A grave is shut and solid: `0x4210bd` measures how far into its rect you are and
+throws you back out by that much. But only on your feet — `0x4210a7` lets a jump
+straight through, and that is the whole of level nine's platforming. Come within
+a hundred pixels of its point and it opens, and from that frame it **pulls**:
+half your speed away and one more unit of fall every frame. Eighty-six pixels
+below its point it takes you, and the ground beside a grave is already 98 below,
+so standing there when one opens is the whole of it.
+
+A floor is the same thing told upwards: four frames whole, three of
+`0120 floor crea[ks]`, six of `0121 floor cave[s in]`, and then it is not there.
+`0x42703e` writes 5 into the floor offset and `0x427100` gives what is left
+gravity 3.0, three times the player's own.
+
+The **hand** (`0x41f090`) is two hands, and the record's `param` says which:
+0 takes the player's own x and comes up under their feet, 1 picks a random x
+inside its rect. Each holds on one cel of `0x4704b8`, whose `ticksPerFrame` is
+thirty — two seconds a frame, and that pause is the hazard. Its blows are −3 and
+−7, codes rather than damage, so it cannot yet take hold of anything.
+
+The **blade** (`0x41ef90`) is a pendulum that does not move: its whole think is
+three tags handed round in a ring, twenty-seven cels at one engine frame each, a
+blow of a hundred on every one, and its velocity written to zero every frame.
+
+The **bridge** (`0x41e9c0`) you can cross and cannot stand on — `0x4223f5` gives
+you five engine frames, or one landing from more than a hundred pixels up — and
+the `platform` record laid over it, which CAVERN files rect for rect against
+each of its four, goes down with it.
+
+The **surge** (`0x41ec20`) is the only hazard in the game that gives you
+something: `0x426b21` is a call to `0x45ef30`, the ammunition adder, followed by
+the panel redraw. Its blow is the code −4.
+
+Not built: `initlightfx`, which is the one class in the chapter with no
+per-record loop at all — `0x41e473` stores its COUNT in `0x46f644` and never
+walks the records, so whatever it is, it is not placed the way everything else
+in the level is.
+
+### The mission clock was a record all along
+
+Every chapter's entry function ends with the same block. `0x421e60` is chapter
+three's, and `0x4164a2`, `0x43be72` and `0x451582` are its three siblings:
+
+```
+  421e8f  mov  eax, [esp]        ; the first `timer` record, and +0 is its PARAM
+  421e94  call 0x40d340          ; -> [0x4a3b18], the dial's full scale
+  421e99  mov  eax, [esp+4]      ; esp moved under the push: the SAME dword
+  421ea1  call 0x40d350          ; -> [0x4a4d68], the clock itself
+  421ead  push 0x7d00            ; no record at all: both get 32000
+```
+
+One number does both, and it is the record's own `param`. Eleven books carry a
+`timer` and five do not, and the five that do not have **no time limit** —
+`0x40d250` reads 32000 as "no dial":
+
+```
+  streets 4000   city 8200   woods 7200   playgr    —
+  mall    5220   service 5300  sewer 7200  arcade   —
+  grave   2100   cavern   —   ravecave 2500  tower  —
+  maze    3200   barrel 8200  lab 2500    vat      —
+```
+
+This page had been giving all sixteen the full dial, which is 7200 and so right
+for WOODS and SEWER by accident. The five without a record are exactly the five
+you would expect: the two whose bosses the level waits for, and chapter three's
+and four's last stages.
 
 ### Gravity was in there all along
 
@@ -1221,6 +1330,10 @@ all — and that is the whole of the mixer.
 - `skullcracker/tests/browser/arcade.ts` — ARCADE's one boss, out of reach until you jump at it
 - `skullcracker/tests/browser/pickups.ts` — the `stat*` records, and what each one gives
 - `skullcracker/tests/browser/guns.ts` — the weapons, the reach that takes one, and what a flare does
+- `skullcracker/tests/browser/grave.ts` — GRAVE's zombies, its graves and the hands between them
+- `skullcracker/tests/browser/cavern.ts` — CAVERN's four creatures, its blades and its bridges
+- `skullcracker/tests/browser/ravecave.ts` — RAVECAVE's Igors, its one wraith and its scepter
+- `skullcracker/tests/browser/tower.ts` — TOWER's floors, its bishop and its surges
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

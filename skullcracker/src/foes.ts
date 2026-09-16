@@ -1589,6 +1589,43 @@ export const FOES: Readonly<Record<string, Foe>> = {
     vanishes: true,
     from: "0x41ec80 / 0x424730 / 0x424800 / 0x424f80",
   },
+  /**
+   * The BISHOP — `initvpriest` in the records and `bishop` in the sound bank,
+   * which is `belfry.snd`'s own name for it (`0060 bishopchar[ge]`,
+   * `0064 bishopthro[w]`, `0067 bishop die`). One of them, at TOWER's x17602,
+   * standing on the goal. Creator `0x41eb70`, class `0x425bc0`, think
+   * `0x425c90`, hit `0x4264f0`.
+   *
+   * **Twelve hundred health** — `0x40e300(0x4b0)`, the same number the player
+   * has — and, like the wraith, no award at all. Chapter three's fourth stage
+   * asks for no kills either (`0x4218d9`), so this is the last thing standing
+   * between the player and the end of the chapter and it pays in exit.
+   *
+   * Gravity zero and a divisor of 10. Its attacks are `0x46f1c0`: tag 0 is
+   * twelve cels of 2600s, tag 1 three records carrying dx −30, −20, −10 — a
+   * recoil authored into the animation — and tag 2 sixteen cels of 2650s.
+   */
+  initvpriest: {
+    // `0x46f170` tag 0, kind 1 — nine cels, two frames each, and no stride in
+    // any of them: it travels on its velocity
+    gait: { cels: [2500, 2501, 2502, 2503, 2504, 2505, 2506, 2507, 2508], hold: 2, from: "0x46f170 tag 0" },
+    divisor: 10,
+    floats: true,
+    // `0x46f3d8` tag 0 — sixteen frames of 2640/2641 flickering, then the 2670s
+    flinch: [{ cels: [2640, 2640, 2641, 2641, 2640, 2640, 2641, 2641], hold: 1, from: "0x46f3d8 tag 0" }],
+    // `0x46f308` tag 0, kind 4
+    death: { cels: [2670, 2671, 2672, 2673, 2674, 2675, 2676, 2677, 2678, 2679, 2680, 2681], hold: 1, from: "0x46f308 tag 0" },
+    // `0x46f160` tag 0 — the one cel the creator stands it on
+    wake: { cel: 2500, from: "0x425be3 / 0x46f160 tag 0" },
+    health: 1200,
+    hitSound: FOE_SFX.priestHit,
+    deathSound: FOE_SFX.priestDeath,
+    panel: { health: 1200, plate: 13206, award: 0 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x41eb70 / 0x425bc0 / 0x425c90 / 0x4264f0",
+  },
 };
 
 /** how many engine frames one run of an animation lasts */

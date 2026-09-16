@@ -273,6 +273,14 @@ export const FOE_SFX = {
   /** `0x425058` and `0x4250c8` — the wraith, hit and gone */
   wraithHit: 0x21,
   wraithDeath: 0x29,
+  /** `0x42704a` and `0x427075` — `0120 floor crea[ks]` then `0121 floor cave[s]` */
+  floorCreak: 0x32,
+  floorCave: 0x33,
+  /** `0x426aa8` — `0134 surge` */
+  surge: 0x38,
+  /** `0x426582` and `0x4265dd` — and belfry.snd calls it the BISHOP */
+  priestHit: 2,
+  priestDeath: 0x1e,
   /** `0x43b6a3` — `mall.snd` names index 32 "#0120 coke mach[ine]" */
   cokeHit: 32,
   /**
