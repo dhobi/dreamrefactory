@@ -3944,14 +3944,67 @@ function loop(now: number): void {
     if (!ladder && p.vx !== 0) {
       const nx = p.x + p.vx * TICK_SCALE;
       // the room's floor SPAN is the room's extent — you cannot walk off the
-      // world. Off a platform you certainly can: the floor is still under it.
-      const ahead = groundAt(nx);
-      // the BODY stays in the room, not just the point under it — otherwise the
-      // last step of a level walks the sprite half off the side of the screen,
-      // because the camera has already stopped at the room's end
+      /**
+       * ...but a room's end is not always the world's. MALL is three regions laid
+       * SIDE BY SIDE with no `exitroom` between them — they share a few pixels of
+       * overlap and the player simply walks from one into the next, which is what
+       * `0x40b940(2, point)` does for every object every frame: the region you are
+       * in is whichever one contains you.
+       *
+       * This page had rooms as places you are put into, by a door or by the level
+       * loading, and never as places you walk out of. So the run east through
+       * level five stopped dead at x6729, the right edge of its first region, with
+       * two thirds of the level and its goal on the other side.
+       */
+      /**
+       * A room is a place you can walk OUT of, and the point is what decides.
+       *
+       * MALL is three regions laid side by side with no `exitroom` between them:
+       * they share six pixels of overlap, and the player walks from one into the
+       * next. That is what `0x40b940(2, point)` does for every object on every
+       * frame — the region you are in is whichever one contains your point.
+       *
+       * This page had rooms as places you are PUT into, by a door or by the level
+       * loading, and never as places you leave on foot, so the run east through
+       * level five stopped at x6729 with two thirds of the level and its goal on
+       * the far side. What stopped it was the old rule here, which reserved half a
+       * sprite at each end of the room — and half a sprite is wider than the
+       * overlap, so the point could never reach the next region at all.
+       *
+       * So: the point may go anywhere its own region's floor reaches, and when it
+       * lands inside a different one that region takes over. The half-sprite is
+       * still reserved, but against the WORLD — the union of the regions standing
+       * at this height — which is what it was really for: without it the last step
+       * of a level walks the sprite half off the side of the screen, because the
+       * camera has already stopped at the end of the floor.
+       */
       const span = p.room ? roomSpan(p.room) : null;
       const half = (playerBox().right - playerBox().left) / 2;
-      const inRoom = !span || (nx - half >= span.lo && nx + half <= span.hi);
+      let inRoom = !span || (nx >= span.lo && nx <= span.hi);
+      if (!inRoom && p.room && level) {
+        const next = level.rooms.find((r) => {
+          if (r === p.room) return false;
+          const sp = roomSpan(r);
+          return sp !== null && nx >= sp.lo && nx <= sp.hi && p.y >= r.top && p.y <= r.bottom;
+        });
+        if (next) {
+          p.room = next;
+          inRoom = true;
+        }
+      }
+      if (inRoom && span && level) {
+        const reach = level.rooms
+          .filter((r) => p.y >= r.top && p.y <= r.bottom)
+          .map((r) => roomSpan(r))
+          .filter((sp): sp is { lo: number; hi: number } => sp !== null);
+        if (reach.length) {
+          const lo = Math.min(...reach.map((sp) => sp.lo));
+          const hi = Math.max(...reach.map((sp) => sp.hi));
+          if (nx - half < lo || nx + half > hi) inRoom = false;
+        }
+      }
+      // world. Off a platform you certainly can: the floor is still under it.
+      const ahead = groundAt(nx);
       // and a floor that rises more than a step is a wall, not a slope. Without
       // this the player walks INTO the terrain and then falls through it
       // forever, because everything solid is now above them: BARREL's floor

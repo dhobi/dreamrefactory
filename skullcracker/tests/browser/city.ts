@@ -70,32 +70,27 @@ const main = async (): Promise<void> => {
     await page.keyboard.up("ArrowRight");
   };
   /**
-   * A running jump east with the lift held, BRAKED onto its landing.
+   * A running jump east with the lift held, braked by LETTING GO.
    *
-   * The engine's air control (`0x429fc1`..`0x42a036`): from the second airborne
-   * frame, forward held drives `v.x` to 30px a frame; released, it coasts on
-   * whatever it had; and BACKWARD held turns the player and zeroes it. A run's
-   * leap held the whole way with the lift flies ~360px on the flat — clean over
-   * the walkway this route lands on and onto the tank roof beyond, which the
-   * game allows and which is not the step under test. Tapping back part-way
-   * through the flight kills the drift inside the 103..250px the walkway spans.
+   * The engine's air control (`0x429fc1`..`0x42a036`) first runs two frames after
+   * the launch, and while forward is held it drives `v.x` to 30 pixels a frame —
+   * twice the run. Released, the flight coasts on the launch impulse alone, which
+   * is 15, and that is the difference between clearing the walkway this route
+   * lands on and stopping on it.
    *
-   * The brake is timed from the LAUNCH and not from the keypress, because they
-   * are not the same moment: a jump from a standstill or a walk plays three
-   * frames of 250/251/252 before 253 leaves the ground (`0x4296ed` installs tag
-   * 2, `0x429a8d` tag 3), which is 200ms in which a fixed wait is already
-   * spending its budget. Waiting for the HUD to say the player is airborne makes
-   * the helper independent of how long the wind-up takes.
+   * It used to tap BACKWARD instead, which is the third branch: `0x429fd5` turns
+   * the player round and zeroes the velocity outright. That worked when it landed
+   * in the air and threw the jump away when it landed a frame after the feet were
+   * down, which is why this suite failed about one run in three. Letting go is
+   * the same brake with no edge to fall off: six runs of it land on the same
+   * pixel.
    */
-  const jump = async (carry: number): Promise<void> => {
-    const from = (await at()).x;
+  const jump = async (): Promise<void> => {
     await page.keyboard.down("ArrowRight");
     await page.keyboard.down("w");
-    // ...and make sure it actually left the ground. A press is read by the engine
-    // FRAME and not by the tick, so one sent in the same millisecond as the two
-    // key-downs before it can be spent on a frame that has not seen the run yet;
-    // when that happens nothing at all moves and the brake below walks the player
-    // backwards off the lip.
+    // a press is read by the engine FRAME, and one sent in the same millisecond
+    // as the key-downs before it can be spent on a frame that has not seen the
+    // run yet; when that happens nothing moves at all, so make sure it flew
     let airborne = false;
     for (let tries = 0; tries < 3 && !airborne; tries++) {
       await page.keyboard.press("j");
@@ -108,25 +103,14 @@ const main = async (): Promise<void> => {
       }
     }
     if (!airborne) fail(`pressing jump never left the ground`);
-    // steer until the player has carried far enough, then turn the drift off. A
-    // distance is the only stable cue here: the launch itself is a frame or four
-    // after the keypress depending on whether the run is up, and the flight is
-    // long enough that a fixed wait lands anywhere across a 150px spread.
-    for (let i = 0; i < 80; i++) {
-      await page.waitForTimeout(25);
-      if ((await at()).x - from >= carry) break;
-    }
     await page.keyboard.up("ArrowRight");
-    await page.keyboard.down("ArrowLeft");
-    await page.waitForTimeout(70);
-    await page.keyboard.up("ArrowLeft");
     // and stay in the air until the feet are down again, however long that is
-    for (let i = 0; i < 60; i++) {
-      if (!/in the air/.test((await hud.textContent()) ?? "")) break;
+    for (let i = 0; i < 70; i++) {
       await page.waitForTimeout(25);
+      if (!/in the air/.test((await hud.textContent()) ?? "")) break;
     }
     await page.keyboard.up("w");
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(400);
   };
 
   const say = async (): Promise<string> => (await hud.textContent()) ?? "";
@@ -174,7 +158,7 @@ const main = async (): Promise<void> => {
   console.log(`ok    walked east to the gap's lip at x ${lip.x}, y ${lip.y}`);
 
   // 3. across it, onto the walkway the file puts at y4041
-  await jump(150);
+  await jump();
   const walkway = await at();
   if (!near(walkway.y, 4041, 8)) fail(`the 103px gap should land on the y4041 walkway; got y ${walkway.y}`);
   if (walkway.x < 1760) fail(`the jump did not cross the gap: x ${walkway.x}`);
@@ -220,7 +204,7 @@ const main = async (): Promise<void> => {
   console.log(`ok    and the wall stops the walk at x ${stopped.x}, the file's own x1873`);
 
   // 6. and the jump goes over it onto the tank's roof
-  await jump(110);
+  await jump();
   const roof = await at();
   if (!near(roof.y, 3920, 8)) fail(`the jump over the wall should land on the y3920 roof; got y ${roof.y}`);
   if (roof.x < 1940) fail(`landed short of the wall's east edge: x ${roof.x}`);
