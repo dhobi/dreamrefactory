@@ -65,30 +65,43 @@ const main = async (): Promise<void> => {
   if (!/kill 100% of 1/.test(await say())) fail(`its share is the one stored as zero: ${/quota[^·]*/.exec(await say())?.[0]}`);
   console.log(`ok    ARCADE is one room with one thing in it, and the quota is all of it`);
 
-  // 2. ...with a thousand health, on its own idle cel, hanging where its record
-  //    put it — `0x42f850(obj, 0)`, so nothing brings it down
+  // 2. a thousand health, no gravity, and it HUNTS: over 250 forward is band 0
+  //    and band 0 is `0x473850`, which closes at the stride that script carries
   const first = await boss();
   if (!first) fail(`the boss should be the nearest plated thing`);
   if (first!.max !== 1000) fail(`0x441c33 gives it 0x3e8; the bar reads ${first!.max}`);
-  if (first!.cel !== 7040) fail(`0x473840 is one cel, 7040; it is showing ${first!.cel}`);
-  const wasY = first!.y;
-  await page.waitForTimeout(3000);
-  if ((await boss())!.y !== wasY) fail(`it has no gravity and should hold its height; y ${wasY} -> ${(await boss())!.y}`);
-  console.log(`ok    it hangs at y ${wasY} with ${first!.max} health, on cel ${first!.cel}`);
+  const wasX = first!.x;
+  const ys = new Set<number>();
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(150);
+    ys.add((await boss())!.y);
+  }
+  const now = await boss();
+  if (wasX - now!.x < 60) fail(`from a thousand away it should close; x ${wasX} -> ${now!.x}`);
+  if (ys.size < 4) fail(`and bob while it does it — `+`0x440ce6 puts ±1 into its vertical velocity every frame; saw ${ys.size} heights`);
+  console.log(`ok    it closes from x ${wasX} to x ${now!.x}, bobbing through ${ys.size} heights as it comes`);
 
-  // 3. seven sprinkler positions, filed by their own param
-  if (!/7 sprinklers/.test(await say())) fail(`ARCADE places seven: ${/\d+ sprinklers/.exec(await say())?.[0]}`);
-  console.log(`ok    and its seven sprinkler positions are read off the records`);
+  // 3. ...and it holds the height its own `0x473ddc` asks for: the player some
+  //    35 pixels below it, with the limits widening when they are not
+  const lo = Math.min(...ys);
+  const hi = Math.max(...ys);
+  if (hi - lo > 90) fail(`the bob is bounded by 0x473dd4/0x473dd8; it ranged y ${lo}..${hi}`);
+  console.log(`ok    and stays inside y ${lo}..${hi}, which is what its own limits allow`);
 
-  // 4. the goal is shut while it lives — and the player starts standing in it
+  // 4. seven sprinkler positions, filed by their own param, and none up yet
+  if (!/7 sprinklers, 0 up/.test(await say())) fail(`ARCADE places seven, all down: ${/\d+ sprinklers[^·]*/.exec(await say())?.[0]}`);
+  console.log(`ok    its seven sprinkler positions are read off the records, and none is up`);
+
+  // 5. the goal is shut while it lives — and the player starts standing in it
+  await go();
   const spawn = await at();
   if (spawn.x > 300) fail(`ARCADE starts at its own initplayer, x125; got x ${spawn.x}`);
   if (!/still to kill/.test(await say())) fail(`the goal should be counting what is left`);
   if (/the television is in|level 8 complete/.test(await say())) fail(`the goal opened with the boss alive`);
   console.log(`ok    the player starts at x ${spawn.x}, inside the goal, and it is shut`);
 
-  // 5. it is out of reach on the ground and not in the air. Its body box bottoms
-  //    out 115 pixels over the floor, so the fight is a jumping one.
+  // 6. it stays out of reach on the ground. Its hover wants the player 35 below
+  //    it, so a kick from the floor is always aimed under its box.
   await go(1300);
   await page.waitForTimeout(500);
   let grounded = 0;
@@ -100,10 +113,51 @@ const main = async (): Promise<void> => {
   if (grounded !== 1000) fail(`a kick from the floor cannot reach it; it lost ${1000 - grounded}`);
   console.log(`ok    twenty-five kicks from the floor take nothing off it`);
 
-  // 6. ...and a jumping one fells it, on its own cels
+  // 7. the dive, and the water it turns on. Band 3 is `0x440e9f`, which does
+  //    nothing at all until the thing has been HURT — so it has to be marked
+  //    first, and then stood next to.
   const cels = new Set<number>();
+  let water = 0;
+  for (let i = 0; i < 8; i++) {
+    const b = await boss();
+    if (!b) break;
+    const d = b.x - (await at()).x;
+    if (Math.abs(d) < 70) {
+      await page.keyboard.press("j");
+      await page.waitForTimeout(240);
+      await page.keyboard.press("k");
+      await page.waitForTimeout(340);
+    } else {
+      const key = d > 0 ? "ArrowRight" : "ArrowLeft";
+      await page.keyboard.down(key);
+      await page.waitForTimeout(150);
+      await page.keyboard.up(key);
+    }
+  }
+  if ((await boss())!.hp >= 1000) fail(`could not mark it at all`);
+  // and now stand inside eighty of it and let it work
+  for (let i = 0; i < 80 && water === 0; i++) {
+    await page.waitForTimeout(150);
+    const b = await boss();
+    if (!b || b.state === "dead") break;
+    cels.add(b.cel);
+    water = Number(/sprinklers, (\d+) up/.exec(await say())?.[1] ?? 0);
+    const d = b.x - (await at()).x;
+    if (Math.abs(d) > 60) {
+      const key = d > 0 ? "ArrowRight" : "ArrowLeft";
+      await page.keyboard.down(key);
+      await page.waitForTimeout(120);
+      await page.keyboard.up(key);
+    }
+  }
+  // nothing else in the level can raise one: `0x441b60` is called from the dive
+  // and from nowhere else, so water standing up IS the dive having happened
+  if (water === 0) fail(`its dive should send a sprinkler up; none came in twelve seconds beside it`);
+  console.log(`ok    standing beside a marked one makes it dive, and ${water} of its sprinklers come up`);
+
+  // 8. ...and a jumping attack fells it, on its own cels
   let dead = false;
-  for (let i = 0; i < 90 && !dead; i++) {
+  for (let i = 0; i < 160 && !dead; i++) {
     const b = await boss();
     if (!b) break;
     cels.add(b.cel);
@@ -112,15 +166,15 @@ const main = async (): Promise<void> => {
       break;
     }
     const d = b.x - (await at()).x;
-    if (Math.abs(d) < 110) {
+    if (Math.abs(d) < 70) {
       await page.keyboard.press("j");
-      await page.waitForTimeout(260);
+      await page.waitForTimeout(240);
       await page.keyboard.press("k");
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(340);
     } else {
       const key = d > 0 ? "ArrowRight" : "ArrowLeft";
       await page.keyboard.down(key);
-      await page.waitForTimeout(90);
+      await page.waitForTimeout(150);
       await page.keyboard.up(key);
     }
   }
@@ -132,13 +186,13 @@ const main = async (): Promise<void> => {
   if (!/quota 0 of 1/.test(await say())) fail(`the census should be clear: ${/quota[^·]*/.exec(await say())?.[0]}`);
   console.log(`ok    a jumping attack fells it — ${cels.size} of its own cels, and the quota is clear`);
 
-  // 7. ...and it pays nothing at all, which no other boss in the game does
+  // 9. ...and it pays nothing at all, which no other boss in the game does
   await page.waitForTimeout(1500);
   const points = Number(/(\d+) points/.exec(await say())?.[1] ?? -1);
   if (points !== 0) fail(`there is no 0x40d450 in its code; the score reads ${points}`);
   console.log(`ok    and pays ${points} points, because nothing in its code awards any`);
 
-  // 8. only then does the craft come, and the goal is where you began
+  // 10. only then does the craft come, and the goal is where you began
   for (let i = 0; i < 60; i++) {
     await page.waitForTimeout(200);
     if (/the television is in|the screen is coming down|level 8 complete|at the goal/.test(await say())) break;

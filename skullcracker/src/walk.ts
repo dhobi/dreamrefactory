@@ -967,6 +967,8 @@ interface Enemy {
   decisions?: number;
   /** has the reach already made its one call — `obj+0x42` passes the frame once */
   thrown?: boolean;
+  /** `[0x473dd0]` — which way the hover is going, +1 down and -1 up */
+  hover?: number;
   /**
    * Pixels per TICK, and it persists — `obj+0xa`/`obj+0xc`, which the collision
    * solver `0x430470` writes and which only the kinds that cancel it stop
@@ -1437,6 +1439,7 @@ async function loadLevel(index: number): Promise<void> {
   const planks = rooms.map((r, i) => planksIn(sbk, r, solids[i]));
   drips = [];
   roaches = [];
+  columns = new Map();
   level = {
     sbk,
     pal,
@@ -3040,6 +3043,14 @@ function takeHits(): void {
     if (!cel) continue;
     if (hit(cel, d.x, d.y, 1, d.vx / TICK_SCALE, d.vy / TICK_SCALE)) return;
   }
+  // ...and level eight's water, on whichever of its cels carries a box
+  for (const [slot, clock] of columns) {
+    const q = hereOf((l) => l.sprinklers).find((w) => w.slot === slot);
+    if (!q) continue;
+    const cel = lvl.sbk.cels.find((c) => c.id === columnCel(clock));
+    if (!cel?.strike) continue;
+    if (hit(cel, q.x, q.y, 1, 0, 0)) return;
+  }
 }
 
 /** the things spawned in the player's room, or none */
@@ -3540,6 +3551,86 @@ function hereOf<T>(pick: (lvl: Level) => T[][]): T[] {
 
 /** every roach in the air or on the floor, nest or no nest */
 let roaches: Roach[] = [];
+
+/** which of the seven slots has water standing in it, and how far into its script */
+let columns = new Map<number, number>();
+
+/**
+ * `0x441b20` and `0x441b60` — send up the sprinkler the boss is standing over.
+ *
+ * The test is on the BOSS's own point, not the player's: `0x40b660` asks which
+ * `initsprinkler` record's rect contains it and hands back that record's `param`,
+ * which is its slot. If the slot is already taken `0x441b60` rolls
+ * `0x434540(7)` for another and tries up to seven times, so a boss that keeps
+ * diving into the same corner still fills the room.
+ *
+ * And it is not free to it: `0x440bf9` takes **three health a frame** off the
+ * boss for standing in water that is already up, which is the whole tactic of
+ * level eight.
+ */
+function raiseSprinkler(e: Enemy): void {
+  const all = hereOf((l) => l.sprinklers);
+  if (!all.length) return;
+  const over = all.find((q) => e.x >= q.left && e.x < q.right && e.y >= q.top && e.y < q.bottom);
+  if (!over) return;
+  if (!columns.has(over.slot)) {
+    columns.set(over.slot, 0);
+    return;
+  }
+  // `0x441b7a`: it is already up, so roll for a free one and try up to seven times
+  for (let i = 0; i < SPRINKLER.slots; i++) {
+    const q = all[roll(all.length) - 1];
+    if (columns.has(q.slot)) continue;
+    columns.set(q.slot, 0);
+    return;
+  }
+}
+
+/**
+ * Step the water — `0x473748`'s own three tags, and what standing in one costs.
+ *
+ * A column rises through seven cels, sprays while its context's own `0x15e`
+ * frames run down, and goes. The boss pays three health a frame for being in one
+ * (`0x440bf9`) and the player pays the blow the spraying cels carry, which is
+ * the same rule every other strike box in the game follows.
+ */
+function stepColumns(): void {
+  const all = hereOf((l) => l.sprinklers);
+  if (!all.length && !columns.size) return;
+  const gone: number[] = [];
+  for (const [slot, clock] of columns) {
+    const next = clock + TICK_SCALE;
+    if (next >= SPRINKLER.rise.cels.length * SPRINKLER.rise.hold + SPRINKLER.life) gone.push(slot);
+    else columns.set(slot, next);
+  }
+  for (const slot of gone) columns.delete(slot);
+  if (!columns.size) return;
+  // and three a frame off whatever boss is standing in one
+  for (const e of spawnedHere()) {
+    if (e.state !== "gait" || !FOES[e.kind].drives?.raises) continue;
+    for (const [slot] of columns) {
+      const q = all.find((w) => w.slot === slot);
+      if (!q || e.x < q.left || e.x >= q.right || e.y < q.top || e.y >= q.bottom) continue;
+      e.hp = Math.max(0, e.hp - 3 * TICK_SCALE);
+      if (e.hp <= 0) {
+        const foe = FOES[e.kind];
+        e.state = "dead";
+        e.anim = foe.death ?? foe.gait;
+        e.clock = 0;
+        e.linger = foe.linger ?? CORPSE_LINGER;
+        stats.score += foe.award ?? foe.panel?.award ?? 0;
+      }
+    }
+  }
+}
+
+/** which cel a standing column is showing, rise then spray */
+function columnCel(clock: number): number {
+  const up = SPRINKLER.rise.cels.length * SPRINKLER.rise.hold;
+  if (clock < up) return SPRINKLER.rise.cels[Math.floor(clock / SPRINKLER.rise.hold)];
+  const i = Math.floor((clock - up) / SPRINKLER.spray.hold) % SPRINKLER.spray.cels.length;
+  return SPRINKLER.spray.cels[i];
+}
 
 /**
  * Step the six pieces of scenery that do something.
@@ -4190,9 +4281,105 @@ function stepBoss(e: Enemy, foe: Foe, run: number): boolean {
     e.decisions = d.decisions;
     return false;
   }
-  if (!e.mode) return false;
+  /**
+   * A boss with no dormancy is in its states from the first frame. The one in
+   * level four is woken by its rect and climbs out of the ground before any of
+   * this runs; level eight's is simply there when the room loads, because
+   * `0x436180` installs its idle and `0x440ab0` takes over on the next frame.
+   */
+  if (!e.mode) {
+    if (foe.wake) return false;
+    e.mode = "hover";
+    e.anim = d.hover;
+    e.clock = 0;
+  }
+  /**
+   * ...and the boss with no gravity holds its own height every frame, not only
+   * on the frames it decides.
+   *
+   * `0x440ce6`: a direction of ±1 goes into the vertical velocity each frame and
+   * is reversed whenever the velocity reaches the limit its distance from the
+   * player allows — the slow pair while the player is within `slack` of the
+   * `offset` it wants them at, the fast pair while they are not.
+   */
+  if (d.bob && foe.floats) {
+    const want = d.bob.offset;
+    // both sides are ANCHORS, as `0x440d6f` compares `obj+6` against `obj+6`:
+    // the player's is their feet less the standing box, and the foe's is what
+    // {@link foeAnchor} converts back to
+    const mine = level ? foeAnchor(e, level) : null;
+    const dy = p.y - p.feet - (mine ? mine.y : e.y);
+    const [lo, hi] = dy < want - d.bob.slack || dy > want + d.bob.slack ? d.bob.far : d.bob.near;
+    if (!e.hover) e.hover = 1;
+    let v = e.vy / TICK_SCALE + e.hover;
+    if (v < lo || v > hi) {
+      e.hover = -e.hover;
+      v = Math.max(lo, Math.min(hi, v));
+    }
+    // the velocity only: the mover below is what turns it into a position
+    e.vy = v * TICK_SCALE;
+    // `0x440db6`: the brain's own forward distance going negative is what turns it
+    const ahead = (p.x - e.x) * e.facing;
+    if (ahead < 0) e.facing = -e.facing;
+  }
   if (e.clock < run) return false;
   e.clock = 0;
+  /**
+   * `0x440ddc`, the frame that decides, when the class has bands rather than one
+   * near edge: `0x45efd0` counts how many of the thresholds are at or above the
+   * forward distance to the player, and `0x441adc` dispatches on the count.
+   */
+  if (d.bands) {
+    /**
+     * Every state but the closing one plays once and hands back to the hover,
+     * and the hover is where the band is read. `0x440ddc` is inside kind 1 and
+     * nowhere else: the attacks do not re-decide, they finish.
+     */
+    if (e.mode !== "hover" && e.mode !== "charge") {
+      // `0x4415a9`: the dive ends over a sprinkler, and that sprinkler goes up
+      if (d.raises && e.mode === d.raises) raiseSprinkler(e);
+      e.mode = "hover";
+      e.anim = d.hover;
+      return false;
+    }
+    const ahead = (p.x - e.x) * e.facing;
+    let band = 0;
+    for (const t of d.bands) {
+      if (t < ahead) break;
+      band += 1;
+    }
+    /**
+     * `0x440df1` / `0x440e0b` / `0x440e48` / `0x440e9f`, and two of the four ask
+     * a second question before they answer:
+     *
+     * - band 1 wants the brain's `side` to be **2**, which `0x45f00c` sets when
+     *   the target's own horizontal velocity is zero — it lunges at someone
+     *   standing still and hangs back from someone moving.
+     * - band 2 splits on two thirds of its health, and band 3 does nothing at
+     *   all until it has been hurt.
+     */
+    const still = Math.abs(p.vx) < 1e-6;
+    const strong = e.hp > (e.max * 2) / 3;
+    const pick: Enemy["mode"] =
+      band === 0
+        ? "charge"
+        : band === 1
+          ? still
+            ? "antiAir"
+            : "hover"
+          : band === 2
+            ? strong
+              ? "combo"
+              : "rush"
+            : e.hp < e.max
+              ? "rush"
+              : "hover";
+    if (pick !== e.mode) {
+      e.mode = pick;
+      e.anim = d[pick as "charge" | "antiAir" | "combo" | "rush" | "hover"];
+    }
+    return false;
+  }
   /**
    * `0x455e87`, the frame that decides, kept to what can be honest here: the
    * distance forward, the one band edge that chooses between closing and
@@ -4303,22 +4490,27 @@ function stepEnemies(): void {
     // its OWN cel's box lands. This has to come before the animation states: the
     // mailbox's topple is four frames and its flight is far longer than that.
     if (e.vx !== 0 || e.vy !== 0) {
-      e.vy = Math.min(e.vy + INVENTED.gravityPx, INVENTED.maxFallPx);
+      // ...and a thing with no gravity keeps whatever velocity it was given:
+      // the hover below is what moves level eight's boss up and down
+      if (!foe.floats) e.vy = Math.min(e.vy + INVENTED.gravityPx, INVENTED.maxFallPx);
       e.x += e.vx;
       e.y += e.vy;
       const span = p.room ? roomSpan(p.room) : null;
       if (span) e.x = Math.max(span.lo, Math.min(span.hi, e.x));
-      const base = lvl ? baseOf(e, lvl) : e.y;
-      // the surfaces the PLAYER stands on — platform tops and then the room's
-      // floor — swept along the fall so a fast one cannot tunnel through a ledge
-      const floor = surfaceUnder(e.x, base - Math.max(e.vy, 0) - CLIMB_PX, base + 1);
-      if (floor !== null && base >= floor) {
-        // by the CEL's box, not by where the upright one would have stood
-        e.y -= base - floor;
-        e.vy = 0;
-        // and on the ground the allocator's drag takes 70% a frame off it
-        // ({@link dragged}) — once a frame, on the frame's whole pixels
-        if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE)) e.vx = dragged(Math.round(e.vx / TICK_SCALE)) * TICK_SCALE;
+      // ...and a thing with no gravity never lands, so none of the rest applies
+      if (!foe.floats) {
+        const base = lvl ? baseOf(e, lvl) : e.y;
+        // the surfaces the PLAYER stands on — platform tops and then the room's
+        // floor — swept along the fall so a fast one cannot tunnel through a ledge
+        const floor = surfaceUnder(e.x, base - Math.max(e.vy, 0) - CLIMB_PX, base + 1);
+        if (floor !== null && base >= floor) {
+          // by the CEL's box, not by where the upright one would have stood
+          e.y -= base - floor;
+          e.vy = 0;
+          // and on the ground the allocator's drag takes 70% a frame off it
+          // ({@link dragged}) — once a frame, on the frame's whole pixels
+          if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE)) e.vx = dragged(Math.round(e.vx / TICK_SCALE)) * TICK_SCALE;
+        }
       }
     }
     // a terminal flinch holds its last cel for good — the toppled mailbox
@@ -4408,7 +4600,9 @@ function stepEnemies(): void {
     }
     const i = e.state === "gait" ? loopIndex(e.anim, e.clock) : Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
     const step = ((e.anim.dx?.[i] ?? 0) / foe.divisor) * TICK_SCALE;
-    if (step > 0 && e.vx === 0 && e.vy === 0) {
+    // a floater's own hover keeps `vy` busy for ever, and its script's stride has
+    // to travel anyway
+    if (step > 0 && e.vx === 0 && (e.vy === 0 || foe.floats)) {
       const nx = e.x + step * e.facing;
       /**
        * ...unless the ground there stands too high to climb, in which case the
@@ -4429,8 +4623,23 @@ function stepEnemies(): void {
       const blocked = !foe.floats && ground !== null && ground < baseNow - CLIMB_PX && reach === null;
       // a flinch that travels is a knockdown: it goes the way it was hit and is
       // not turned round by its own rect
-      if (e.state === "gait" && !aim && (nx < e.left || nx > e.right)) e.facing = -e.facing;
-      else if (!blocked) e.x = Math.max(e.left - 200, Math.min(e.right + 200, nx));
+      /**
+       * ...and a class with states of its own is not on a patrol.
+       *
+       * The rect is a territory for the things that walk up and down one; a boss
+       * hunts. Level eight's record is a **twenty-pixel box** at x1373, and
+       * turning it round at the edges of that pinned it there for ever — while
+       * its own state machine was asking it to close from a thousand away.
+       */
+      if (e.state === "gait" && !aim && !foe.drives && (nx < e.left || nx > e.right)) e.facing = -e.facing;
+      else if (!blocked) {
+        const span = p.room ? roomSpan(p.room) : null;
+        e.x = foe.drives
+          ? span
+            ? Math.max(span.lo, Math.min(span.hi, nx))
+            : nx
+          : Math.max(e.left - 200, Math.min(e.right + 200, nx));
+      }
     }
     /**
      * They stand on the same surfaces the player does — and that is the whole of
@@ -5129,6 +5338,7 @@ function loop(now: number): void {
     stepDoors();
     stepElevs();
     stepScenery();
+    stepColumns();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -5236,6 +5446,10 @@ function loop(now: number): void {
   }
   for (const r of roaches) {
     drawLevelCel(r.onGround ? ROACH.run.cels[loopIndex(ROACH.run, r.clock)] : ROACH.drop.cels[0], r.x, r.y, camX, camY);
+  }
+  for (const [slot, clock] of columns) {
+    const q = hereOf((l) => l.sprinklers).find((w) => w.slot === slot);
+    if (q) drawLevelCel(columnCel(clock), q.x, q.y, camX, camY);
   }
   for (const d of drips) drawLevelCel(dripCel(d), d.x, d.y, camX, camY);
   for (const c of crowsHere()) drawLevelCel(crowCel(c), c.x, c.y, camX, camY);
@@ -5436,7 +5650,9 @@ function loop(now: number): void {
     .sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
   const foe = near
     ? ` · nearest ${near.kind} ${Math.round(near.hp)}/${near.max}hp ${near.state}` +
-      ` at x ${Math.round(near.x)}, y ${Math.round(near.y)} cel ${celOf(near)}`
+      ` at x ${Math.round(near.x)}, y ${Math.round(near.y)} cel ${celOf(near)}` +
+      // the state of the one class that has states, so a probe can see it decide
+      (near.mode ? ` mode ${near.mode}` : "")
     : "";
   // ...and the nearest thing that can be fought and claims no PLATE, which the
   // line above cannot show. The dog is the case — `0x40d1c0` is never called from
@@ -5516,7 +5732,9 @@ function loop(now: number): void {
     ...hereOf((l) => l.pipes).map((q) => `pipe at x${q.x}`),
     ...hereOf((l) => l.bushes).map((q) => `bush at x${q.x}`),
     roaches.length ? `${roaches.length} roaches` : "",
-    hereOf((l) => l.sprinklers).length ? `${hereOf((l) => l.sprinklers).length} sprinklers` : "",
+    hereOf((l) => l.sprinklers).length
+      ? `${hereOf((l) => l.sprinklers).length} sprinklers, ${columns.size} up${columns.size ? ` cel ${columnCel([...columns.values()][0])}` : ""}`
+      : "",
   ].filter(Boolean);
   const prop = props.length ? ` · ${props.join(" · ")}` : "";
   const pools = hereOf((l) => l.sewage);

@@ -811,12 +811,45 @@ flare, and level eight is the level that places a `statflaregun` and a
 seven records and files each one's point into a seven-entry table at `0x4a7000`
 indexed by the record's own `param`, which is why ARCADE's seven carry 0 to 6 and
 no two share a number. What comes up is made later, by the boss, with a four-byte
-context and a slot marked taken — and the trigger is the neatest thing in the
-level: `0x441b20` asks which sprinkler's rect contains the **boss's own point**
-and `0x441b60` raises that one, or rolls for a free one if it is already up. So
-the thing you are fighting turns on the water it is standing over. That needs its
-state machine, three thousand bytes at `0x440ab0`, which is not driven here: the
-seven positions and the column's own cels are, and nothing yet sends one up.
+context and a slot marked taken.
+
+**And the trigger is the whole of how the level is won.** `0x441b20` asks which
+sprinkler's rect contains the **boss's own point** and `0x441b60` raises that one,
+or rolls `0x434540(7)` for a free one if it is already up. The call is inside the
+dive and nowhere else. And standing in water that is already up costs the boss
+**three health a frame** (`0x440bf9`) — so the room is a fight you win by keeping
+it diving into its own sprinklers.
+
+## The boss decides by four distances and its own health
+
+`0x440ab0` is three thousand bytes and the shape of it is four numbers.
+
+Its prologue does two jobs every frame. It **hovers**: a direction of ±1 goes
+into the vertical velocity and is reversed at limits that depend on where the
+player is — it wants them about 35 pixels below it (`0x473ddc`), allows ±5 while
+they are within ten of that and ±9 while they are not. And it **turns**, because
+`0x440db6` tests the brain's own forward distance for a negative.
+
+Then `0x45efd0` counts how many of `0x473dc8`'s thresholds — **250, 150, 80** —
+are at or above the distance to the player, and `0x441adc` dispatches on the
+count:
+
+```
+band 0   over 250     0x473850, and it closes at that script's own stride
+band 1   150 … 250    0x4738a8, and ONLY when the brain's side is 2, which
+                      0x45f00c sets when the player's own velocity is zero:
+                      it lunges at someone standing still and hangs back
+                      from someone moving
+band 2   80 … 150     over two thirds health  -> 0x473900
+                      under                   -> 0x473950, the dive
+band 3   80 or under  hurt at all             -> 0x473950
+                      untouched               -> nothing
+```
+
+Which makes the fight legible: it will not come inside 150 of you on its own, it
+only dives once you have marked it, and the dive is what turns the water on. Two
+things in it are still not driven — the `dy` impulses its scripts carry, and the
+`-9` the flare would hit it with — but the machine that decides is here.
 
 ### Gravity was in there all along
 

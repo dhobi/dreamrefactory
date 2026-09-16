@@ -280,6 +280,44 @@ export interface Foe {
     nearPx: number;
     /** `0x455ef8`'s `cmp eax, 0x6e` — close enough to home to stand down */
     homePx: number;
+    /**
+     * The FORWARD distances that sort what it does, biggest first, as
+     * `0x45efd0` reads them: the band is how many of these are at or above the
+     * distance to the player, so three thresholds make four bands.
+     *
+     * Level eight's is `{250, 150, 80}` at `0x473dc8`, terminated by the zero
+     * `0x45ef9f` stops on. A boss with these is driven by them rather than by
+     * {@link nearPx} and the decision budget.
+     */
+    bands?: readonly number[];
+    /**
+     * How it holds its height, for the one boss that has no gravity.
+     *
+     * `0x440ce6`..`0x440db6`: a direction of ±1 is added to the vertical
+     * velocity every frame and reversed at the limits, and the limits are what
+     * the boss is trying to do — it wants the player `offset` below it, and when
+     * the player is more than `slack` off that it allows the faster pair rather
+     * than the slower.
+     */
+    bob?: {
+      /** `[0x473ddc]` — how far below itself it wants the player */
+      offset: number;
+      /** the `± 0xa` either side of that offset */
+      slack: number;
+      /** `0xfffb` and `5` — the limits while it is near enough */
+      near: readonly [number, number];
+      /** `0xfff7` and `9` — and the limits while it is not */
+      far: readonly [number, number];
+      from: string;
+    };
+    /**
+     * The state that ends over a sprinkler, and what it does when it gets there.
+     *
+     * `0x4415a9`, inside the dive: `0x441b20` asks which `initsprinkler` record's
+     * rect contains the boss's OWN point and `0x441b60` raises that one, or rolls
+     * `0x434540(7)` for a free one and tries up to seven times.
+     */
+    raises?: "rush";
     from: string;
   };
   /**
@@ -961,6 +999,55 @@ export const FOES: Readonly<Record<string, Foe>> = {
     pick: ({ damage }) => (damage >= 45 ? 3 : Math.floor(Math.random() * 3)),
     // `0x473b60` tag 0, and tag 1 carries `dy -150` twice as it goes up
     death: { cels: [7033, 7034, 7035, 7036], hold: 1, from: "0x473b60 tag 0" },
+    /**
+     * Its state machine, as far as `0x440ab0`'s first two states carry it.
+     *
+     * The prologue hovers it — see {@link Foe.drives.bob} — turns it round when
+     * the player is behind (`0x440db6` tests the brain's own `dx` for a
+     * negative), and then sorts what to do by the band the player is in:
+     *
+     * ```
+     *   band 0   over 250 forward    0x473850, and it closes
+     *   band 1   150 … 250           0x4738a8, with 0x15, and only from one side
+     *   band 2   80 … 150            over two thirds health: 0x473900
+     *                                under:                  0x473950
+     *   band 3   80 or under         hurt at all:            0x473950
+     * ```
+     *
+     * `0x473950` is the dive, and the dive is what turns the water on: whichever
+     * `initsprinkler` rect it ends up inside goes up. Standing in one costs it
+     * **three health a frame** (`0x440bf9`) — so the room is a fight you win by
+     * making it stand in its own sprinklers.
+     */
+    drives: {
+      // the idle its creator installs, and what it holds between decisions
+      hover: { cels: [7040], hold: 5, from: "0x473840 tag 0" },
+      // `0x473850` tag 0 — two cels and a stride on the second
+      charge: { cels: [7041, 7042], hold: 2, dx: [0, 120], from: "0x473850 tag 0" },
+      // `0x473950` tag 0..3 — the dive, and `dy -25` on sixteen of its frames
+      rush: { cels: [7040, 7041, 7042, 7043, 7044, 7045, 7046, 7047], hold: 2, from: "0x473950" },
+      // `0x473900` — what it does at the middle band while it is still strong
+      combo: { cels: [7041, 7042, 7043, 7051, 7052, 7053, 7053, 7054, 7055], hold: 2, from: "0x473900" },
+      land: { cels: [7040], hold: 5, from: "0x473840 tag 0" },
+      melee: { cels: [7041, 7042, 7043, 7051, 7052, 7053, 7053, 7054, 7055], hold: 2, from: "0x473900" },
+      // `0x4738a8` — the long one, ten frames at three
+      antiAir: { cels: [7080, 7081, 7082, 7083, 7084, 7085, 7086, 7085, 7086, 7085], hold: 3, from: "0x4738a8" },
+      homeX: 0,
+      decisions: 0,
+      // `0x473dc8`'s last threshold
+      nearPx: 80,
+      homePx: 0,
+      bands: [250, 150, 80],
+      bob: {
+        offset: 35,
+        slack: 10,
+        near: [-5, 5],
+        far: [-9, 9],
+        from: "0x473dd0 … 0x473ddc, driven at 0x440ce6",
+      },
+      raises: "rush",
+      from: "0x440ab0 / 0x441adc / 0x473dc8",
+    },
     health: 1000,
     hitSound: FOE_SFX.kraggHit,
     // `0x440acf` claims the bar with 0x3332 and 0x3e8; nothing pays for it
