@@ -40,7 +40,17 @@ const main = async (): Promise<void> => {
   const go = async (x?: number): Promise<void> => {
     await page.goto(`${BASE}/walk.html?level=10${x === undefined ? "" : `&x=${x}`}`);
     await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
-    await page.waitForTimeout(700);
+    // ...and then wait for the player to stop falling. A flat pause is not
+    // enough on a cold load, and a probe that reads the position mid-fall reads
+    // a y that no rect in the file contains.
+    await page.waitForTimeout(400);
+    let last = "";
+    for (let i = 0; i < 25; i++) {
+      const now = /· x (-?\d+), y (-?\d+)/.exec(await say())?.[0] ?? "";
+      if (now && now === last) return;
+      last = now;
+      await page.waitForTimeout(120);
+    }
   };
   /** fight whatever is nearest until it is down, and answer what it paid */
   const fell = async (kind: string, tries: number): Promise<number> => {
