@@ -466,6 +466,46 @@ is the drawn ram, 175 pixels in three frames, and only two of its cels — 4382 
 which is over the player's own knockdown threshold of `0x3c` at `0x449115`: a
 press does not stagger you.
 
+### PLAYGR is one fight
+
+Level four is seventeen records. One room, one small platform under a pickup, two
+`obstacle` walls holding the ends, three pickups, seven dogs and **one**
+`initwbooly`. The ground is flat from end to end, so there is nothing to jump and
+nothing to climb: the level is the thing standing in front of the goal.
+
+Its kill share is the one that stores zero — everything — and the only thing in
+the census is the boss, because the dog's creator never calls `0x42f870`. So the
+seven dogs are worth 200 apiece and nothing at all to the quota, and the goal
+stays shut until one enemy out of eight is dead. The engine is stricter than that
+even: the completion poll at `0x4502d0` wants the census clear **and** a flag at
+`0x476a94` that only the boss's death path writes (`0x456431`). The two become
+true together, because the boss takes itself out of the census as it starts to
+burn.
+
+**It begins as a statue.** Cel 3040, one frame, doing nothing, until the player's
+own point crosses into the record's rect (`0x4559e8`, the same point-in-rect test
+a ladder and a door use); then it stirs, climbs out of the ground through
+3122..3124, and comes for you. Eight hundred health at `0x4510b8`, four times the
+chained punk and the largest number in the chapter, and 2500 points for it at
+`0x456420`, which is ten times a werewolf. Its divisor is 30 — the heaviest thing
+in the game.
+
+What it does while it lives is a real loop: hover a frame, measure the distance
+forward against its own six bands at `0x478780`, and either close or swing. Inside
+160 pixels it swings a nine-cel combo; outside it charges at eleven pixels a frame,
+or twenty-one when it has had enough and is going home to the point its creator
+gave it. Every third consecutive blow puts it over instead of making it flinch
+(`0x456496`), and getting up is its own script at its own rate — which is why a
+`then` field had to exist, since the knockdown runs two frames a cel and the get-up
+three. Dead, it comes apart over eighteen frames and burns as cel 3140 for ever;
+the object is never destroyed.
+
+The one thing deliberately left out is its fireball. `0x456240` builds a second
+object of its own class with a restitution of 0.8 so the low shot bounces, and
+every frame of it carries a strike box — it is the one attack of the six that
+exists to hit you. The charge, by contrast, carries no strike box on any frame: it
+closes the distance and nothing else, so running it costs the player nothing.
+
 ### Gravity was in there all along
 
 It was called this port's last invented number for a long time, on the grounds
@@ -690,6 +730,7 @@ all — and that is the whole of the mixer.
 - `skullcracker/tests/browser/city.ts` — CITY's opening, in a browser
 - `skullcracker/tests/browser/lift.ts` — CITY's five lifts, and the ride to its goal
 - `skullcracker/tests/browser/woods.ts` — WOODS' population, its two steps and its goal
+- `skullcracker/tests/browser/playgr.ts` — PLAYGR's statue, the fight and the television
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

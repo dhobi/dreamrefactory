@@ -113,6 +113,14 @@ export interface FoeAnim {
    * marks it and it springs back.
    */
   terminal?: boolean;
+  /**
+   * What follows this one when it ends, where a state is two scripts rather than
+   * one. The boss of level four is why: its knockdown (`0x478518`, two frames a
+   * cel) and the get-up that follows it (`0x478578`, three) are separate scripts
+   * with separate rates, and flattening them into one list would play the get-up
+   * a third too fast.
+   */
+  then?: FoeAnim;
   /** the script and tag it was read from */
   from: string;
 }
@@ -121,6 +129,8 @@ export interface FoeAnim {
 export interface Blow {
   /** the blow's strength, in the victim's own health units */
   damage: number;
+  /** how many blows this thing has taken, this one included — some classes count */
+  hits: number;
   /** how far up the victim the blow landed */
   dy: number;
   /**
@@ -232,6 +242,51 @@ export interface Foe {
    * name plate at all.
    */
   award?: number;
+  /**
+   * It stands as a statue until the player's point is inside its own record's
+   * rect, and then gets up.
+   *
+   * `0x4559e8` is the test — `0x434200(playerPoint, AI+6)`, the same point-in-rect
+   * every trigger in this engine uses — and the two animations are the stirring
+   * and the climb out of the ground. The dog has the same mechanism (`0x454c13`),
+   * which this page does not give it: WOODS' six are awake from the first frame.
+   */
+  wake?: { stir: FoeAnim; burst: FoeAnim; sound: number; stirSound: number; from: string };
+  /**
+   * The states its class drives while it is alive and unhurt, beyond standing.
+   *
+   * Only the boss has one. Its loop is `0x455e87`: hover a frame, decide on the
+   * distance to the player, charge or swing, and every so often go home and stand
+   * down again. The charge frames carry no strike box at all — they close the
+   * distance and nothing else — so the whole of it is honest here even though
+   * nothing in this port hits the player back.
+   */
+  drives?: {
+    hover: FoeAnim;
+    charge: FoeAnim;
+    rush: FoeAnim;
+    combo: FoeAnim;
+    land: FoeAnim;
+    melee: FoeAnim;
+    antiAir: FoeAnim;
+    /** `AI+0x10` — the point it returns to, from its creator */
+    homeX: number;
+    /** `AI+4`'s budget: how many decisions before it goes home (`0x455b42`) */
+    decisions: number;
+    /** `0x478780`'s band 5 edge — inside this it swings instead of charging */
+    nearPx: number;
+    /** `0x455ef8`'s `cmp eax, 0x6e` — close enough to home to stand down */
+    homePx: number;
+    from: string;
+  };
+  /**
+   * A blow every so often puts it down instead of making it flinch, and getting
+   * up takes its own animation. `0x456496`: the boss counts consecutive hits in
+   * `AI+0x12` and the third one knocks it over.
+   */
+  knockdown?: { anim: FoeAnim; every: number; sound: number; from: string };
+  /** how long the body lies there before it goes, in engine frames; Infinity never */
+  linger?: number;
   /** what it stood up with — `0x40e300`'s argument in the creator */
   health: number;
   /** the three figures it tells the interface panel, when it claims the bar */
@@ -381,6 +436,125 @@ export const FOES: Readonly<Record<string, Foe>> = {
     from: "0x450b40 / 0x44f300 / 0x44f3d0 / 0x44f8b0",
   },
   /**
+   * The boss of level four. Creator `0x451050`, class `0x455880`, hit `0x456310`.
+   *
+   * PLAYGR places exactly one, and the level is it: seventeen records, of which
+   * seven are dogs that count for nothing and one is this. Its share is the one
+   * that stores zero — everything — and the engine wants two things before the
+   * level will end, the census clear AND a flag at `0x476a94` that only this
+   * thing's death path writes (`0x456431`, tested at `0x4502e2`). They become
+   * true together, because it takes itself out of the census as it starts to burn.
+   *
+   * **It begins as a statue.** Cel 3040, one frame, doing nothing, until the
+   * player's own point crosses into its record's rect; then it stirs, climbs out
+   * of the ground and comes for you. Eight hundred health at `0x4510b8`, four
+   * times the chained punk's and the largest number in the chapter, and 2500
+   * points for it at `0x456420` — ten times a werewolf.
+   *
+   * What it does while it lives is a real loop and most of it is here. What is
+   * NOT here is the fireball: `0x456240` builds a second object of its own class
+   * (cels 7010..7015 in flight, 7016..7019 bursting) with a restitution of 0.8 so
+   * the low shot bounces, and every frame of it carries a strike box — it is the
+   * one attack of the six that exists to hit you, and nothing in this port hits
+   * the player back yet. Its two muzzle points and both velocities are at
+   * `0x455cc3` and `0x455d01` for when they can be used. The charge, by contrast,
+   * carries **no** strike box on any frame: it closes the distance and nothing
+   * else, so it is honest to run it.
+   */
+  initwbooly: {
+    // `0x478340` kind 1 — standing, two frames a cel, going nowhere
+    gait: { cels: [3040, 3041], hold: 2, dx: [0, 0], from: "0x478340 tag 0" },
+    // `0x45589b`: thirty, the highest in the game — it is very heavy
+    divisor: 30,
+    /**
+     * `0x4782e0` tags 1 and 2: four frames of the head lifting, then six of the
+     * thing pulling itself out of the ground. `0x455a14` plays its wake as a
+     * one-shot and `0x455a55` puts a loop under the climb.
+     */
+    wake: {
+      stir: { cels: [3041, 3040, 3041, 3040], hold: 1, from: "0x4782e0 tag 1" },
+      burst: { cels: [3122, 3123, 3124, 3124, 3123, 3122], hold: 1, from: "0x4782e0 tag 2" },
+      sound: FOE_SFX.boolyWake,
+      stirSound: FOE_SFX.boolyStir,
+      from: "0x4559e8 / 0x455a2f / 0x455a67",
+    },
+    /**
+     * `0x455d9b`'s kind 5, the combat loop, and `0x455e87` is the frame that
+     * decides. The bands are its own table at `0x478780` — 1000, 750, 500, 400,
+     * 160, 60 — and what they pick is: inside 160, swing; outside it, charge. The
+     * charge is `dx 310` over a divisor of 30, so eleven pixels a frame, and the
+     * one it uses to get home again is 610, twenty-one.
+     */
+    drives: {
+      hover: { cels: [3000], hold: 1, from: "0x4785e8 tag 4" },
+      charge: { cels: [3000, 3001, 3002, 3003, 3004, 3005, 3006], hold: 1, dx: [310, 310, 310, 310, 310, 310, 310], from: "0x4785e8 tag 1" },
+      rush: { cels: [3000, 3001, 3002, 3003, 3004, 3005, 3006], hold: 1, dx: [610, 610, 610, 610, 610, 610, 610], from: "0x4785e8 tag 5" },
+      combo: { cels: [3060, 3061, 3062, 3063, 3064, 3065, 3066, 3067, 3068], hold: 1, dx: [0, 0, 0, 0, 0, 0, 0, 0, 310], from: "0x4785e8 tag 2" },
+      land: { cels: [3092, 3091, 3090], hold: 1, from: "0x4785e8 tag 3" },
+      melee: { cels: [3052, 3052, 3053, 3054, 3055], hold: 2, from: "0x478448 tag 0" },
+      antiAir: { cels: [3130, 3131, 3132, 3133, 3134], hold: 1, from: "0x4784e8 tag 0" },
+      // `0x4510dd`: the dword at AI+0xe is a packed point, x4650 y2194
+      homeX: 4650,
+      // `0x455b42` seeds AI+4 with ten, and `0x455eae` spends one a decision
+      decisions: 10,
+      nearPx: 160,
+      homePx: 110,
+      from: "0x455d9b / 0x455e87",
+    },
+    /**
+     * `0x478358` — one cel each, three frames. Tag 0 is the take it uses when the
+     * blow lands mid-combat and tag 1 the one it uses standing; this page keeps
+     * both and picks between them the way `0x4564dc` does.
+     */
+    flinch: [
+      { cels: [3080], hold: 3, from: "0x478358 tag 0" },
+      { cels: [3124], hold: 3, from: "0x478358 tag 1" },
+    ],
+    // `0x456470`: a blow arriving while it is already down, throwing or flinching
+    // does nothing at all; `0x4564dc` picks the mid-combat take otherwise
+    pick: ({ hits }) => (hits % 2 === 0 ? 0 : 1),
+    /**
+     * `0x456496`: every third consecutive blow puts it over instead. The get-up
+     * is its own script at its own rate, which is what {@link FoeAnim.then} is
+     * for — `0x478518` runs two frames a cel and `0x478578` three.
+     */
+    knockdown: {
+      anim: {
+        cels: [3070, 3071, 3072, 3073, 3074, 3074],
+        hold: 2,
+        then: { cels: [3110, 3100, 3111, 3101, 3112, 3102, 3113], hold: 3, from: "0x478578 tag 0" },
+        from: "0x478518 tag 0",
+      },
+      every: 3,
+      sound: FOE_SFX.boolyKnock,
+      from: "0x456496",
+    },
+    /**
+     * `0x478370` tags 1 and 2, run together: eighteen frames of it coming apart,
+     * and then cel 3140, the burning wreck, which is where it stays. The object is
+     * never destroyed — `0x4560ed` loops tag 2 for ever — so the body does not go.
+     */
+    death: {
+      cels: [
+        3081, 3080, 3000, 3083, 3083, 3000, 3001, 3000, 3083, 3083, 3000, 3081, 3080, 3070, 3071, 3072, 3073, 3074,
+        3140,
+      ],
+      hold: 2,
+      terminal: true,
+      from: "0x478370 tags 1 and 2",
+    },
+    linger: Infinity,
+    health: 800,
+    hitSound: FOE_SFX.boolyHit,
+    deathSound: FOE_SFX.boolyDeath,
+    // `0x455999`: the bar with plate 0x32d1, which lives in PLAYER.SBK and not in
+    // this level's book; `0x456420` pays 0x9c4
+    panel: { health: 800, plate: 13009, award: 2500 },
+    counts: true,
+    bleeds: true,
+    from: "0x451050 / 0x455880 / 0x455940 / 0x456310",
+  },
+  /**
    * The dog, and `woods.snd` calls it a **wolfy**. Creator `0x450f60`, class
    * `0x454b00`, hit `0x4550b0`.
    *
@@ -397,9 +571,9 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * turns it round and makes it bolt (`0x454ffa`).
    *
    * None of that is here. This port's foes walk their territory and nothing more,
-   * because nothing in it can hurt the player yet — the same reason the thrower
-   * does not throw. What is here is the gait, the flinch, the death and the
-   * numbers, all of them the disc's.
+   * because nothing in this port hits the player back yet — the same reason the
+   * thrower does not throw. What is here is the gait, the flinch, the death and
+   * the numbers, all of them the disc's.
    *
    * It has **no name plate and no bar** (`0x40d1c0` is never called from any of
    * its functions) and it is **not in the census** (`0x42f870` likewise), so six
@@ -433,9 +607,9 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * the player through `0x434630` (a square root) and lets fly — once straight
    * (`0x4527fd`), and from the far state a fan of six flatter ones as a counter
    * cycles 0..5 (`0x452851`). The thing thrown is cels 6004..6006 and it bursts
-   * into 7000..7005. None of that is here: nothing in this port can hurt the
-   * player yet, so a thrown rock would be scenery. The cels are in the book and
-   * the addresses are above for when it can.
+   * into 7000..7005. None of that is here: nothing in this port hits the player
+   * back yet, so a thrown rock would be scenery. The cels are in the book and
+   * the addresses are above for when one can.
    *
    * Its flinch pick is the punk's, one branch shorter — there is no knockdown for
    * a heavy blow, because there is no fourth flinch to knock it into.

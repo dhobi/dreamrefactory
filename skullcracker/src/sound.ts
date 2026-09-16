@@ -181,6 +181,18 @@ export const FOE_SFX = {
    */
   dogHit: 0x16,
   dogDeath: 0x18,
+  /**
+   * The boss of level four, out of the same `woods.snd` its chapter shares.
+   *
+   * `0x455a14` wakes it with 0x2c, `0x455a55` runs 0x2b under the stirring as a
+   * LOOP, `0x456459` takes `0x434540(3) + 0x2c` on a blow — one of 45, 46, 47 —
+   * `0x4564c6` plays 48 as it goes down, and `0x456418` loops 51 over the death.
+   */
+  boolyWake: 0x2c,
+  boolyStir: 0x2b,
+  boolyHit: [45, 46, 47] as const,
+  boolyKnock: 48,
+  boolyDeath: 51,
   from: "0x44f0a0 / 0x44f8b0 / 0x44e3f0 / 0x44fe80 / 0x44fb20",
 } as const;
 

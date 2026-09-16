@@ -605,9 +605,10 @@ export function ibeamFrames(b: Ibeam): number {
  * frames of the nineteen, after six frames of the head twitching on 4380/4381,
  * which is the warning.
  *
- * Nothing in this port can hurt the player yet ({@link file://./walk.ts}), so
- * what is here is the machine and its sound. The two cels that would take 64
- * health off are marked below for when there is health to take.
+ * Nothing in this port hits the player back yet ({@link file://./walk.ts}), so
+ * what is here is the machine and its sound: a press comes down through you and
+ * you walk on. The two cels that carry the blow are named below all the same,
+ * ready for when it lands.
  */
 export const CRUSH = {
   /** tag 0 — up, and watching for you. One cel, and the script sits on it */

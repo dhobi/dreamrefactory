@@ -21,6 +21,7 @@
     "test:browser:sound": "tsx tests/browser/sound.ts",
     "test:browser:city": "tsx tests/browser/city.ts",
     "test:browser:lift": "tsx tests/browser/lift.ts",
-    "test:browser:woods": "tsx tests/browser/woods.ts"
+    "test:browser:woods": "tsx tests/browser/woods.ts",
+    "test:browser:playgr": "tsx tests/browser/playgr.ts"
   }
 }

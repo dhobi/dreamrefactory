@@ -906,6 +906,15 @@ interface Enemy {
   dents: number;
   /** has the husk already let out what was inside it — see {@link Foe.hatches} */
   hatched?: boolean;
+  /** the record's rect, top and bottom — what a sleeper watches ({@link Foe.wake}) */
+  top: number;
+  bottom: number;
+  /** still a statue: the player's point has not been inside that rect yet */
+  asleep?: boolean;
+  /** which of {@link Foe.drives}' states is running, for the one kind that has them */
+  mode?: "hover" | "charge" | "rush" | "combo" | "land" | "melee" | "antiAir";
+  /** `AI+4` — decisions left before it breaks off and goes home */
+  decisions?: number;
   /**
    * Pixels per TICK, and it persists — `obj+0xa`/`obj+0xc`, which the collision
    * solver `0x430470` writes and which only the kinds that cancel it stop
@@ -917,8 +926,13 @@ interface Enemy {
    * Health left, in the disc's own units — {@link Foe.panel}'s figure, so a
    * `LINK` really does stand up with 200 of it, and what a blow takes off is the
    * striking cel's own speed ({@link strikeBox}). The furniture gets `Infinity`
-   * and cannot be killed. Enemies do not hit back yet — damage TO the player is
-   * parked, by request, so the levels stay walkable while this is tested.
+   * and cannot be killed. **Nothing hits the player back yet** — no enemy's
+   * blow, no hydraulic press, no swinging girder, no fall takes health off — so
+   * the classes below carry their attacks as read, the addresses and the cels
+   * and the blow each one would land, with none of it wired to a victim. The
+   * engine's own health word is `0x4ac3d0` and `0x402ac0` is what spends it;
+   * when this page does take damage it will be behind a switch that starts off,
+   * so a level under test stays walkable.
    */
   hp: number;
   /** what it stood up with, for the bar's fraction */
@@ -1788,9 +1802,13 @@ function spawnIn(sbk: SbkFile, room: SbkRoom): Enemy[] {
       facing: foe.facesByParam && e.param ? 1 : -1,
       left: e.left,
       right: e.right,
+      top: e.top,
+      bottom: e.bottom,
+      asleep: foe.wake ? true : undefined,
+      decisions: foe.drives?.decisions,
       clock: 0,
       state: "gait",
-      anim: foe.gait,
+      anim: foe.wake ? { ...foe.gait, cels: [foe.gait.cels[0]], dx: [0] } : foe.gait,
       linger: 0,
       dents: 0,
       vx: 0,
@@ -2593,8 +2611,21 @@ function landHits(): void {
       e.state = "dead";
       e.anim = foe.death;
       e.clock = 0;
-      e.linger = foe.frail ? 0 : CORPSE_LINGER;
+      e.linger = foe.frail ? 0 : foe.linger ?? CORPSE_LINGER;
       stats.score += foe.award ?? foe.panel?.award ?? 0;
+      continue;
+    }
+    /**
+     * ...and the blow that puts it over instead. `0x456496` counts the boss's
+     * consecutive hits and every third one installs the knockdown rather than a
+     * take. The get-up follows on {@link FoeAnim.then} at its own rate.
+     */
+    const over = foe.knockdown;
+    if (over && e.dents % over.every === 0) {
+      sound?.effect(over.sound, e.x, e.y);
+      e.state = "flinch";
+      e.anim = over.anim;
+      e.clock = 0;
       continue;
     }
     if (!foe.flinch) continue;
@@ -2602,6 +2633,9 @@ function landHits(): void {
     // handler consults besides the damage
     const blow = {
       damage,
+      // this blow included: `e.dents` was stepped above, and the boss's handler
+      // counts its consecutive hits in `AI+0x12` (`0x456461`)
+      hits: e.dents,
       dy: Math.abs((mine.top + mine.bottom) / 2 - (box.top + box.bottom) / 2),
       facingAway: e.facing === p.facing,
     };
@@ -3135,6 +3169,93 @@ function strikeCrow(c: Crow, damage: number): void {
  * Turning at the rect's edge is this port's; the class's territory numbers are in
  * the AI struct nothing has read. See {@link FOES}.
  */
+/**
+ * The statue, and the fight it turns into — the two states this page gives the
+ * one class that has them ({@link Foe.wake}, {@link Foe.drives}).
+ *
+ * Returns true only while it is still a statue, which is the one state that has
+ * to suppress everything else. The rest of it just chooses the animation and
+ * lets the ordinary path play and MOVE it, since the charge's eleven pixels a
+ * frame are the script's own `dx` and the gait block already applies those.
+ */
+function stepBoss(e: Enemy, foe: Foe, run: number): boolean {
+  // asleep: one cel, no motion, and `0x434200(playerPoint, AI+6)` every frame
+  if (e.asleep) {
+    if (!foe.wake) return false;
+    const ay = p.y - p.feet;
+    const inside = p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom;
+    if (!inside) return true;
+    e.asleep = false;
+    e.mode = undefined;
+    e.anim = foe.wake.stir;
+    e.clock = 0;
+    sound?.effect(foe.wake.sound, e.x, e.y);
+    return false;
+  }
+  if (foe.wake && e.anim === foe.wake.stir) {
+    if (e.clock < run) return false;
+    // `0x455a67`: the climb out of the ground, with a loop playing under it
+    e.anim = foe.wake.burst;
+    e.clock = 0;
+    sound?.effect(foe.wake.stirSound, e.x, e.y);
+    return false;
+  }
+  const d = foe.drives;
+  if (!d) return false;
+  if (foe.wake && e.anim === foe.wake.burst) {
+    if (e.clock < run) return false;
+    e.anim = d.hover;
+    e.mode = "hover";
+    e.clock = 0;
+    e.decisions = d.decisions;
+    return false;
+  }
+  if (!e.mode) return false;
+  if (e.clock < run) return false;
+  e.clock = 0;
+  /**
+   * `0x455e87`, the frame that decides, kept to what can be honest here: the
+   * distance forward, the one band edge that chooses between closing and
+   * swinging, and the budget that sends it home.
+   *
+   * The engine's own version reads six bands off `0x478780` and has a second
+   * ladder for whether the player is airborne (`0x455bfd` picks the overhead
+   * swat for one in the air and the ground swing for one on his feet). Those two
+   * animations are in {@link Foe.drives} and this does not yet reach for them.
+   */
+  if (e.mode !== "hover") {
+    e.anim = d.hover;
+    e.mode = "hover";
+    return false;
+  }
+  const dx = p.x - e.x;
+  e.decisions = (e.decisions ?? d.decisions) - 1;
+  if (e.decisions <= 0) {
+    // `0x455ec4`: face home, and stand down once it is near enough
+    const home = d.homeX - e.x;
+    if (Math.abs(home) < d.homePx) {
+      e.decisions = d.decisions;
+      e.anim = d.land;
+      e.mode = "land";
+      return false;
+    }
+    e.facing = home > 0 ? 1 : -1;
+    e.anim = d.rush;
+    e.mode = "rush";
+    return false;
+  }
+  e.facing = dx > 0 ? 1 : -1;
+  if (Math.abs(dx) <= d.nearPx) {
+    // `0x455f64`: inside the near band it swings rather than closes
+    e.anim = d.combo;
+    e.mode = "combo";
+    return false;
+  }
+  e.anim = d.charge;
+  e.mode = "charge";
+  return false;
+}
+
 function stepEnemies(): void {
   const lvl = level;
   const pool = spawnedHere();
@@ -3163,6 +3284,8 @@ function stepEnemies(): void {
             facing: e.facing,
             left: e.left,
             right: e.right,
+            top: e.top,
+            bottom: e.bottom,
             clock: 0,
             state: "gait",
             anim: kid.gait,
@@ -3193,6 +3316,9 @@ function stepEnemies(): void {
       if (e.clock >= run) pool.splice(pool.indexOf(e), 1);
       continue;
     }
+    // the one class with states of its own gets them first, and takes the frame
+    // when it is using it — see {@link stepBoss}
+    if (e.state === "gait" && (foe.wake || foe.drives) && stepBoss(e, foe, run)) continue;
     // whatever it is doing, a thing carrying momentum flies, falls, and stops when
     // its OWN cel's box lands. This has to come before the animation states: the
     // mailbox's topple is four frames and its flight is far longer than that.
@@ -3220,6 +3346,13 @@ function stepEnemies(): void {
       e.clock = run;
       continue;
     }
+    // a two-script state hands to its second half at its own rate — the boss's
+    // knockdown into its get-up, {@link FoeAnim.then}
+    if (e.state === "flinch" && e.anim.then && e.clock >= run) {
+      e.anim = e.anim.then;
+      e.clock = 0;
+      continue;
+    }
     if (e.state === "flinch" && e.clock >= run) {
       // out of stages: the LAST stage's frame ending is what bursts a hydrant, and
       // what bursts is a second object of the same class beside it — `0x44fb20`
@@ -3241,7 +3374,10 @@ function stepEnemies(): void {
         e.dents = 0;
       }
       e.state = "gait";
-      e.anim = foe.gait;
+      // `0x456058`: the boss's flinch hands back into the combat loop rather than
+      // to standing — it is still in the fight
+      e.anim = foe.drives && e.mode ? foe.drives.hover : foe.gait;
+      if (foe.drives && e.mode) e.mode = "hover";
       e.clock = 0;
     }
     const i = e.state === "gait" ? loopIndex(e.anim, e.clock) : Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
