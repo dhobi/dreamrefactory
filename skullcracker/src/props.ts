@@ -1399,3 +1399,106 @@ export interface Sprinkler {
   bottom: number;
   right: number;
 }
+
+
+/**
+ * The things you walk over — `stat*`, a hundred and forty records across the
+ * sixteen levels and every one of them placed by the same creator.
+ *
+ * Creator `0x45b160`, class `0x45ada0`, collector `0x45b270`, remover
+ * `0x45b3a0`, and the effects in the player's own think at `0x42827a`.
+ *
+ * ## One creator, nine codes
+ *
+ * Each chapter's init reads its own list of names and hands `0x45b160` a
+ * NEGATIVE code for each one. `0x45b19a` dispatches on `code + 9`, so the nine
+ * are −9 to −1, and each picks a cel and a script:
+ *
+ * ```
+ *   -1  stathealth     19040 … 19043   four cels, three frames each
+ *   -2  statlife       19000 … 19007   eight, two each
+ *   -3  statpunch      18000           ...which is in no shipped book
+ *   -4  statscoreup 2  20340 … 20354   0x478c60 tag 2
+ *   -5  statscoreup 1  20320 … 20334   tag 1
+ *   -6  statscoreup 0  19060 … 19074   tag 0
+ *   -7  statshield     18062           ...also in no shipped book
+ *   -8  stattimer      19080 … 19083   six frames, two each, and it bounces back
+ *   -9  (unnamed)      19100 … 19129   thirty cels at one frame
+ * ```
+ *
+ * `statscoreup` is one name and three pickups: `0x451420` switches on the
+ * RECORD's own `param` and hands −6, −5 or −4 accordingly, which is why the
+ * eleven levels that place one place it with a param.
+ *
+ * All of it is drawn from `PLAYER.SBK`, not from the level's book — which is
+ * what lets one table cover every level. The two that are not there are the two
+ * nothing places: no book in the rip has 18000 or 18062, and no level record
+ * carries `statpunch` or `statshield`.
+ *
+ * ## Walking over one is all it takes
+ *
+ * `0x45b270` is called from the player's own think every frame. It takes the
+ * player's current cel, walks the list, and for each pickup whose code is
+ * negative does two tests: `0x434140` for a rect overlap, and then `0x40e680`,
+ * which is the **pixel-perfect** one — both cels, both positions, both mirror
+ * flags. No button, no facing, no range band. This page does the first test and
+ * not the second, and takes the boxes as drawn.
+ *
+ * ## What each one does
+ *
+ * `0x42827a`'s table, and the sounds all come out of the CHARACTER's bank
+ * (`0x4ac3e0`, `skulz.snd`) rather than the level's:
+ *
+ * ```
+ *   -1  0x402b20(0x190)         four hundred health            sound 0xa
+ *   -2  0x40d400(lives + 1)     one life, and 0x40d400 caps five  0xb
+ *   -3  [0x46b1ac] = 1          a flag, and nothing places it     0xc
+ *   -4  0x40d450(0x2710)        ten thousand points               0xd
+ *   -5  0x40d450(0x1388)        five thousand                     0xd
+ *   -6  0x40d450(0x7d0)         two thousand                      0xd
+ *   -7  (nothing at all)                                          0xc
+ *   -8  0x40d350(-850)          eight hundred and fifty on the clock  0xa
+ *   -9  0x4282c8               walks the level's `initplayer` records for the
+ *                              one whose rect holds it and stores that index at
+ *                              [0x4ac38a] — a CHECKPOINT                0xe
+ * ```
+ */
+export const PICKUP = {
+  /** by code: what it is called, what it shows, and how fast */
+  kinds: {
+    "-1": { name: "stathealth", cels: [19040, 19041, 19042, 19043], hold: 3, sound: 0xa, from: "0x478c38" },
+    "-2": { name: "statlife", cels: [19000, 19001, 19002, 19003, 19004, 19005, 19006, 19007], hold: 2, sound: 0xb, from: "0x478bf0" },
+    "-4": { name: "statscoreup", cels: [20340, 20341, 20342, 20343, 20344, 20345, 20346, 20347, 20348, 20349, 20350, 20351, 20352, 20353, 20354], hold: 1, sound: 0xd, from: "0x478c60 tag 2" },
+    "-5": { name: "statscoreup", cels: [20320, 20321, 20322, 20323, 20324, 20325, 20326, 20327, 20328, 20329, 20330, 20331, 20332, 20333, 20334], hold: 1, sound: 0xd, from: "0x478c60 tag 1" },
+    "-6": { name: "statscoreup", cels: [19060, 19061, 19062, 19063, 19064, 19065, 19066, 19067, 19068, 19069, 19070, 19071, 19072, 19073, 19074], hold: 1, sound: 0xd, from: "0x478c60 tag 0" },
+    "-8": { name: "stattimer", cels: [19080, 19081, 19082, 19083, 19082, 19081], hold: 2, sound: 0xa, from: "0x478ef0" },
+  } as Readonly<Record<string, { name: string; cels: readonly number[]; hold: number; sound: number; from: string }>>,
+  /** `push 0x190` at `0x42844e`, spent through `0x402b20` */
+  health: 400,
+  /** `0x40d400` clamps to five, which is what the panel's five lamps are */
+  maxLives: 5,
+  /** `0x40d450`'s three arguments, by code */
+  score: { "-4": 10000, "-5": 5000, "-6": 2000 } as Readonly<Record<string, number>>,
+  /** `push 0xfffffcae` at `0x42834f` — negative, into a routine that subtracts */
+  clock: 850,
+  from: "0x45b160 / 0x45ada0 / 0x45b270 / 0x42827a",
+} as const;
+
+/** one placed pickup, wherever its record put it */
+export interface Pickup {
+  /** the code its chapter's init handed the creator, −9 … −1 */
+  code: string;
+  x: number;
+  y: number;
+  /**
+   * The record's own rect, which is what the reach is measured against:
+   * `0x45b2ca` hands `0x434140` the pickup's `user+4`, and `0x45b23b` is where
+   * the creator put the record's two corners. The art is drawn from the point
+   * and is not what you touch.
+   */
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  clock: number;
+}

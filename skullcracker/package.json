@@ -27,6 +27,7 @@
     "test:browser:mall": "tsx tests/browser/mall.ts",
     "test:browser:service": "tsx tests/browser/service.ts",
     "test:browser:sewer": "tsx tests/browser/sewer.ts",
-    "test:browser:arcade": "tsx tests/browser/arcade.ts"
+    "test:browser:arcade": "tsx tests/browser/arcade.ts",
+    "test:browser:pickups": "tsx tests/browser/pickups.ts"
   }
 }

@@ -851,6 +851,55 @@ only dives once you have marked it, and the dive is what turns the water on. Two
 things in it are still not driven — the `dy` impulses its scripts carry, and the
 `-9` the flare would hit it with — but the machine that decides is here.
 
+### The pickups are one table and one test
+
+A hundred and forty `stat*` records across the sixteen levels, and until now not
+one of them was drawn. They are the one system the whole game shares: **one
+creator**, `0x45b160`, and **one collector**, `0x45b270`, called from the
+player's own think every frame.
+
+Each chapter's init reads its own list of names and hands the creator a NEGATIVE
+code — `0x45b19a` dispatches on `code + 9`, so the nine are −9 to −1 — and the
+cel and script it picks are all in `PLAYER.SBK` rather than in the level's book,
+which is what lets one table cover every level. Two of the nine are in no book at
+all (18000 and 18062), and those two are exactly the two no level places:
+`statpunch` and `statshield`.
+
+`statscoreup` is **one name and three pickups**. `0x451420` switches on the
+record's own `param` and hands −6, −5 or −4 — worth 2000, 5000 and 10000 — which
+is why the eleven levels that place one place it with a param.
+
+Collecting is two tests and no button: `0x434140` for a rect overlap and then
+`0x40e680`, which compares the two sprites **pixel by pixel**. No facing, no
+range band, no action key — you walk into it. And the reach is the record's own
+rect, filed at `user+4` by the creator; the art is only what is drawn. This page
+does the first test and not the second.
+
+`0x42827a`'s table is what each one does, and every sound comes out of the
+CHARACTER's bank (`skulz.snd`) rather than the level's:
+
+```
+  -1  stathealth    0x402b20(0x190)      four hundred health, clamped
+  -2  statlife      0x40d400(lives + 1)  one life, and 0x40d400 caps five
+  -4  statscoreup   0x40d450(0x2710)     ten thousand
+  -5  statscoreup   0x40d450(0x1388)     five thousand
+  -6  statscoreup   0x40d450(0x7d0)      two thousand
+  -8  stattimer     0x40d350(-850)       eight hundred and fifty back on the clock
+  -9  (unnamed)     walks the level's `initplayer` records for the one whose
+                    rect holds it and stores that index — a CHECKPOINT
+```
+
+One thing the records themselves say, once they are on the screen: **STREETS'
+first four are on the roofs.** They sit at y914…994 where the street is 1223 and
+the top of a jump is 1099, so twenty jumps from the pavement reach none of them.
+The level's ladder is not a shortcut, it is the way to the pickups.
+
+What is not here is the other creator. `0x45af60` takes POSITIVE codes — the
+weapons: `statflare`, `statflaregun`, `statflamertank`, `statblasterpack`,
+`statsoakertank` — and those are collected by the action button inside a ±55
+pixel band rather than by walking, because they go into an inventory. The flare
+is the one level eight's boss tests for: a blow strength of exactly −9.
+
 ### Gravity was in there all along
 
 It was called this port's last invented number for a long time, on the grounds
@@ -1081,6 +1130,7 @@ all — and that is the whole of the mixer.
 - `skullcracker/tests/browser/service.ts` — SERVICE's two new classes, its six levers and what they pour
 - `skullcracker/tests/browser/sewer.ts` — SEWER's five locks, its lifts and the way through its thirteen regions
 - `skullcracker/tests/browser/arcade.ts` — ARCADE's one boss, out of reach until you jump at it
+- `skullcracker/tests/browser/pickups.ts` — the `stat*` records, and what each one gives
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

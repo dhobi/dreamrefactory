@@ -94,6 +94,8 @@ import {
   crushFrames,
   plankCel,
   plankFrames,
+  PICKUP,
+  Pickup,
   SPRINKLER,
   Sprinkler,
   SHACK,
@@ -1193,6 +1195,8 @@ interface Level {
   nests2: Nest2[][];
   /** the seven places level eight's water can come from, by their own slot */
   sprinklers: Sprinkler[][];
+  /** the `stat*` records, as the codes their chapter's init hands the creator */
+  pickups: Pickup[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1461,6 +1465,7 @@ async function loadLevel(index: number): Promise<void> {
     bushes: rooms.map((r) => placed(sbk, r, "initbush", BUSH.idle.cels, (e) => ({ x: e.pointX, y: e.pointY + BUSH.below, mirror: Math.random() < 0.5, clock: 0 }))),
     nests2: rooms.map((r) => placed(sbk, r, "initroachmotel", ROACH.run.cels, (e) => ({ x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: -17, made: 0 }))),
     sprinklers: rooms.map((r) => placed(sbk, r, "initsprinkler", SPRINKLER.rise.cels, (e) => ({ x: e.pointX, y: e.pointY, slot: e.param, top: e.top, left: e.left, bottom: e.bottom, right: e.right }))),
+    pickups: rooms.map((r) => pickupsIn(sbk, r)),
     crows: rooms.map((r) => crowsIn(sbk, r)),
     // z is the ENGINE's paint order, which is its collection order: the level's
     // frame fn (SC.EXE 0x412c30) collects plane lists p3, p0, then the actors,
@@ -3549,6 +3554,78 @@ function hereOf<T>(pick: (lvl: Level) => T[][]): T[] {
   return level && i >= 0 ? pick(level)[i] : [];
 }
 
+/**
+ * Every `stat*` record in this room, as the code its chapter's init hands
+ * `0x45b160`.
+ *
+ * The name is the level's and the code is the executable's, and the join between
+ * them is the four blocks at `0x4512a1`, `0x43bbae`, `0x421b9e` and `0x4161c1` —
+ * one per chapter, all four handing the same negative for the same name. Only
+ * `statscoreup` needs the record as well as the name: `0x451420` switches on its
+ * `param` for −6, −5 or −4.
+ *
+ * The two codes with no name anywhere — `statpunch` at −3 and `statshield` at
+ * −7 — are left out because nothing in the game places them and their art
+ * (18000, 18062) is in no book in the rip.
+ */
+const PICKUP_CODES: Readonly<Record<string, string>> = {
+  stathealth: "-1",
+  statlife: "-2",
+  stattimer: "-8",
+};
+
+function pickupsIn(sbk: SbkFile, room: SbkRoom): Pickup[] {
+  const out: Pickup[] = [];
+  for (const e of sbk.entities) {
+    if (!e.isEntity) continue;
+    // `0x451420`: one name, three codes, picked by the record's own param
+    const code = e.name === "statscoreup" ? String(-6 + Math.min(2, Math.max(0, e.param))) : PICKUP_CODES[e.name];
+    if (!code || !PICKUP.kinds[code]) continue;
+    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    out.push({ code, x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: 0 });
+  }
+  return out;
+}
+
+/**
+ * Step the pickups: animate them, and hand over whichever one the player is
+ * standing in.
+ *
+ * `0x45b270` runs from the player's own think every frame and asks two
+ * questions of each one — `0x434140` for a rect overlap and then `0x40e680`,
+ * which compares the two sprites pixel by pixel. This does the first and not
+ * the second, so the reach here is the drawn boxes rather than the art inside
+ * them. There is no button and no facing: walking over one is the whole of it.
+ *
+ * What each one gives is `0x42827a`'s table, and every sound comes out of the
+ * CHARACTER's bank rather than the level's ({@link PICKUP}).
+ */
+function stepPickups(): void {
+  const lvl = level;
+  if (!lvl || !player) return;
+  const here = hereOf((l) => l.pickups);
+  if (!here.length) return;
+  const mine = playerBox();
+  const gone: Pickup[] = [];
+  for (const q of here) {
+    q.clock += TICK_SCALE;
+    if (!mine) continue;
+    // `0x434140` against the pickup's own RECORD rect, which is what the creator
+    // filed at `user+4` — the art is only what is drawn
+    if (!(mine.right > q.left && mine.left < q.right && mine.bottom > q.top && mine.top < q.bottom)) continue;
+    const kind = PICKUP.kinds[q.code];
+    gone.push(q);
+    sound?.own(kind.sound, q.x, q.y);
+    if (q.code === "-1") stats.health = Math.min(stats.maxHealth, stats.health + PICKUP.health);
+    else if (q.code === "-2") stats.lives = Math.min(PICKUP.maxLives, stats.lives + 1);
+    else if (q.code === "-8") stats.ticks += PICKUP.clock;
+    else stats.score += PICKUP.score[q.code] ?? 0;
+  }
+  if (!gone.length) return;
+  const i = lvl.rooms.indexOf(p.room!);
+  lvl.pickups[i] = here.filter((q) => !gone.includes(q));
+}
+
 /** every roach in the air or on the floor, nest or no nest */
 let roaches: Roach[] = [];
 
@@ -4720,6 +4797,22 @@ function drawEnemy(e: Enemy, camX: number, camY: number): void {
   } else ctx.drawImage(art, left, top);
 }
 
+/** the `stat*` records, from the shared player book, on their record's own point */
+function drawPickups(camX: number, camY: number): void {
+  for (const q of hereOf((l) => l.pickups)) {
+    const kind = PICKUP.kinds[q.code];
+    const loc = player?.byId.get(kind.cels[loopIndex(kind, q.clock)]);
+    if (loc === undefined) continue;
+    const art = playerCel(loc);
+    const f = playerFrame(loc);
+    if (!art || !f) continue;
+    const left = q.x - camX + W / 2 - f.posXraw;
+    const top = q.y - camY + VIEW.y - f.posYraw;
+    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) continue;
+    ctx.drawImage(art, left, top);
+  }
+}
+
 /** the green balls, from the shared player book, centred on their own anchors */
 function drawPops(camX: number, camY: number): void {
   for (const q of pops) {
@@ -5339,6 +5432,7 @@ function loop(now: number): void {
     stepElevs();
     stepScenery();
     stepColumns();
+    stepPickups();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -5461,6 +5555,7 @@ function loop(now: number): void {
   // the goal's craft and the goo share the play plane with the player: the
   // engine's own effect class is collected with the actors, not the backdrop
   drawCraft(camX, camY);
+  drawPickups(camX, camY);
   drawGobs(camX, camY);
   drawPops(camX, camY);
 
@@ -5737,6 +5832,13 @@ function loop(now: number): void {
       : "",
   ].filter(Boolean);
   const prop = props.length ? ` · ${props.join(" · ")}` : "";
+  const got = hereOf((l) => l.pickups);
+  const gots = got.length
+    ? (() => {
+        const q = got.reduce((a, b) => (Math.abs(b.x - p.x) < Math.abs(a.x - p.x) ? b : a));
+        return ` · ${got.length} pickups · nearest ${PICKUP.kinds[q.code].name} ${q.code} at x ${q.x}, y ${q.y}`;
+      })()
+    : "";
   const pools = hereOf((l) => l.sewage);
   const pool = pools.length ? ` · ${pools.length} sewage` : "";
   const nests = nestsHere();
@@ -5751,7 +5853,7 @@ function loop(now: number): void {
   // probe: the flying kinds have no health bar to read
   const flew = spawnedHere().find((e) => FOES[e.kind].flies && (e.vx !== 0 || e.dents > 0));
   const slid = flew ? ` · ${flew.kind} at x ${Math.round(flew.x)}` : "";
-  const lives = ` · ${stats.lives} ${stats.lives === 1 ? "life" : "lives"}`;
+  const lives = ` · ${stats.lives} ${stats.lives === 1 ? "life" : "lives"} · clock ${Math.round(stats.ticks)}`;
   // the switch, and what it is spending — a probe has no other way to see either
   const hurt = damageOn ? ` · <b>damage ON</b> ${Math.round(stats.health)}/${stats.maxHealth}hp` : " · damage off";
   // the panel already shows it in the disc's own digits; this is for the probes,
@@ -5761,7 +5863,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 
