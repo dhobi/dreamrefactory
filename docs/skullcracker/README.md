@@ -1432,6 +1432,71 @@ own name for their punks came out: they are werewolves.
 distance from the middle of the view and nothing 768 pixels past it is played at
 all — and that is the whole of the mixer.
 
+## What is not here
+
+All sixteen levels stand, and this is what is missing from them. The numbers are
+counted from the books and the executable rather than remembered.
+
+### The records
+
+**1,137 of the 1,166 entity records in the sixteen books are placed — 97.5%.**
+The 52 region records are all handled. Seven levels have no gap at all: PLAYGR,
+SEWER, GRAVE, CAVERN, RAVECAVE, BARREL.
+
+```
+  probe            17   streets city woods mall service arcade
+  initbgclawarm     1   vat          initboggshead      1   vat
+  initbgmachinery   1   vat          monkeybar          1   vat
+  wormbounds        1   vat          initlightfx        2   tower
+  initbiggun        2   maze         noskateboards      1   service
+  where             1   lab          inithealth         1   lab
+```
+
+Four of those are not art at all — `probe`, `monkeybar`, `wormbounds` and
+`noskateboards` are TABLES. `0x40b526` fills a buffer at `0x4a9ce0` with every
+`probe` record and keeps the count at `0x46b9c0`; `0x4280d2` tests the player's
+own point against one of them each frame and, on a hit, calls `0x410170` and
+consumes it. What that call does has not been read.
+
+And two of them are dead data. **`where` and `inithealth` do not appear in
+`SC.EXE` anywhere** — LAB places one of each and nothing in the game will ever
+ask for them.
+
+### The classes
+
+**64 of the 70 `init*` classes the levels place are built.** The six that are
+not are `initbiggun`, `initlightfx`, and the four-object Boggs machine less its
+body.
+
+The executable registers **73**, so three classes exist in the game and no level
+places one: `initbeltboth`, `initdoor`, `initpainting` and `inittirepile`.
+(`inithealth` makes the fourth name in the levels with no class at all, the
+other way round.)
+
+### The systems
+
+- **One weapon of five fires.** The flare gun's `0x436d40` is a shot and does a
+  number. The flamer and the soaker are held STREAMS; the blaster's and the
+  scepter's fire functions have not been read. The inventory screen behind
+  `0x42edd0`'s message 1 is not here either.
+- **No blow CODE is carried.** Eight negative strengths exist — −1 through −9 —
+  and every one is a message to a receiving handler rather than damage: Boggs
+  takes only −1, `inithardcore` swallows −6, Ghengis swallows −4, the hand
+  grabs with −3 and −7, the flamethrower burns with −9. This port passes
+  numbers, so a class that tests for a code never sees one. It is the single
+  biggest thing missing, and it is what stops four guns, the hand, the claw, the
+  bush and the last boss.
+- **Two bosses of five have their own state machine** — PLAYGR's `initwbooly`
+  and ARCADE's `initkragg`. RAVECAVE's wraith, TOWER's bishop and VAT's Boggs
+  stand, take blows and die on the generic gait/flinch/death every other
+  creature uses.
+- **A pickup is taken on the rect alone.** `0x45b270` asks `0x434140` for the
+  overlap and then `0x40e680`, which compares the two sprites pixel by pixel;
+  this page does the first test and not the second.
+- **The ending is not read.** Level sixteen wraps to level one.
+- **Damage is off by default**, because with it on a probe walking east through
+  WOODS meets three hydraulic presses and every route test here becomes a fight.
+
 ## Where the pieces are
 
 - `skullcracker/` — the page, its file store and its film loop
