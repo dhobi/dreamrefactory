@@ -157,7 +157,7 @@ import {
   BOGGS,
   Boggs,
 } from "./props";
-import { DEATH_FILMS, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
+import { DEATH_FILMS, ENDING_FILM, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
 import {
   BOLT,
   CHAPTER_WEAPON,
@@ -1801,18 +1801,34 @@ async function ranOut(): Promise<void> {
  * The goal was reached with the quota met: the next mission, briefing first.
  *
  * The score carries and everything else is the new level's own — which is what
- * `loadLevel` already does, the census and the clock included. Sixteen wraps to
- * one; the original has an ending and this page has not read it.
+ * `loadLevel` already does, the census and the clock included.
+ *
+ * ...and the sixteenth is the END. `0x41293d` plays `credits.mov` and drops the
+ * chapter loop, which hands the game back to its title menu — see
+ * {@link ENDING_FILM}. This page has no title menu to hand it to, so it plays
+ * the credits and opens level one with the score kept, which is the nearest
+ * thing to the front that a single page has.
  */
 async function nextLevel(): Promise<void> {
-  const next = (levelIndex + 1) % MISSIONS.length;
-  const brief = MISSIONS[next];
   advancing = true;
+  if (levelIndex === MISSIONS.length - 1) {
+    ended = true;
+    await playFilm(ENDING_FILM);
+    ended = false;
+    await loadLevel(0);
+    advancing = false;
+    return;
+  }
+  const next = levelIndex + 1;
+  const brief = MISSIONS[next];
   await playFilm(brief.film);
   await playFilm(brief.boggs);
   await loadLevel(next);
   advancing = false;
 }
+
+/** true while the credits are running, so a probe can see the ending happen */
+let ended = false;
 
 /** true while the films between two levels are running */
 let advancing = false;
@@ -4020,6 +4036,59 @@ function pickupsIn(sbk: SbkFile, room: SbkRoom): Pickup[] {
  * What each one gives is `0x42827a`'s table, and every sound comes out of the
  * CHARACTER's bank rather than the level's ({@link PICKUP}).
  */
+/**
+ * Is this pixel of a decoded frame opaque? — and mirror by reflecting the COLUMN.
+ *
+ * `decodeShpFrame` already hands back the mask the engine works from: the SHP
+ * stores each row as a run of opaque spans, which is why `0x4320c0` compares
+ * spans rather than pixels, and `opaque` is that run flattened.
+ */
+function opaqueAt(f: ShpFrame, x: number, y: number, mirror: boolean): boolean {
+  if (y < 0 || y >= f.height) return false;
+  const cx = mirror ? f.width - 1 - x : x;
+  return cx >= 0 && cx < f.width && f.opaque[y * f.width + cx] !== 0;
+}
+
+/**
+ * The SECOND test — do the two sprites actually touch?
+ *
+ * `0x40e680` is the whole of it and it is two steps: `0x434140` intersects the
+ * two drawn rects, and `0x4320c0` then walks that intersection looking for a
+ * row where both cels have an opaque span. The rect alone is not the answer —
+ * the player's cel is a tall rectangle with a great deal of nothing in it, and
+ * a pickup sitting in the gap under an outstretched arm passes the rect test
+ * and fails this one.
+ *
+ * The engine returns the centre of the RECT intersection rather than of the
+ * pixels it found (`0x40e782` reads back the rect `0x434140` wrote), so the
+ * pixel walk only ever answers yes or no and can stop at the first hit.
+ */
+function spritesTouch(
+  a: { f: ShpFrame; left: number; top: number; mirror: boolean },
+  b: { f: ShpFrame; left: number; top: number; mirror: boolean },
+): boolean {
+  const x0 = Math.max(a.left, b.left);
+  const x1 = Math.min(a.left + a.f.width, b.left + b.f.width);
+  const y0 = Math.max(a.top, b.top);
+  const y1 = Math.min(a.top + a.f.height, b.top + b.f.height);
+  if (x1 <= x0 || y1 <= y0) return false;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      if (opaqueAt(a.f, x - a.left, y - a.top, a.mirror) && opaqueAt(b.f, x - b.left, y - b.top, b.mirror)) return true;
+    }
+  }
+  return false;
+}
+
+/** the player's own frame and where it is drawn, for {@link spritesTouch} */
+function playerSprite(): { f: ShpFrame; left: number; top: number; mirror: boolean } | null {
+  const loc = player?.byId.get(lastCel);
+  const f = loc === undefined ? null : playerFrame(loc);
+  if (!f) return null;
+  // the same placement the draw uses: centred on `p.x`, standing on `p.y`
+  return { f, left: Math.round(p.x - f.width / 2), top: Math.round(p.y - f.height), mirror: p.facing < 0 };
+}
+
 function stepPickups(): void {
   const lvl = level;
   if (!lvl || !player) return;
@@ -4034,6 +4103,12 @@ function stepPickups(): void {
     // filed at `user+4` — the art is only what is drawn
     if (!(mine.right > q.left && mine.left < q.right && mine.bottom > q.top && mine.top < q.bottom)) continue;
     const kind = PICKUP.kinds[q.code];
+    // ...and then `0x40e680`, which is the art. See {@link spritesTouch}.
+    const loc = player.byId.get(kind.cels[loopIndex(kind, q.clock)]);
+    const pf = loc === undefined ? null : playerFrame(loc);
+    const me = playerSprite();
+    if (pf && me && !spritesTouch(me, { f: pf, left: q.x - pf.posXraw, top: q.y - pf.posYraw, mirror: false }))
+      continue;
     gone.push(q);
     sound?.own(kind.sound, q.x, q.y);
     if (q.code === "-1") stats.health = Math.min(stats.maxHealth, stats.health + PICKUP.health);
@@ -7712,6 +7787,22 @@ function loop(now: number): void {
       : "",
   ].filter(Boolean);
   const prop = props.length ? ` · ${props.join(" · ")}` : "";
+  // what the two tests say about the nearest pickup, which is the only way to
+  // see the second one doing anything — see {@link spritesTouch}
+  const nearPick = hereOf((l) => l.pickups).sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
+  const touch = (() => {
+    if (!nearPick || !player) return "";
+    const box = playerBox();
+    const rect =
+      box.right > nearPick.left && box.left < nearPick.right && box.bottom > nearPick.top && box.top < nearPick.bottom;
+    const kind = PICKUP.kinds[nearPick.code];
+    const loc = player.byId.get(kind.cels[loopIndex(kind, nearPick.clock)]);
+    const pf = loc === undefined ? null : playerFrame(loc);
+    const me = playerSprite();
+    const px =
+      pf && me ? spritesTouch(me, { f: pf, left: nearPick.x - pf.posXraw, top: nearPick.y - pf.posYraw, mirror: false }) : false;
+    return ` · pickup rect ${rect ? "yes" : "no"} pixels ${px ? "yes" : "no"}`;
+  })();
   const got = hereOf((l) => l.pickups);
   const gots = got.length
     ? (() => {
@@ -7764,7 +7855,9 @@ function loop(now: number): void {
       ` cel ${handCel(nearHand)} at x ${Math.round(nearHand.atX)}` +
       ` blow ${(nearHand.underfoot ? HAND.underfoot : HAND.anywhere).blow}`
     : "";
-  const lives = ` · ${stats.lives} ${stats.lives === 1 ? "life" : "lives"} · clock ${Math.round(stats.ticks)}`;
+  const lives =
+    (ended ? " · <b>THE END</b> — credits.mov, and then the front again" : "") +
+    ` · ${stats.lives} ${stats.lives === 1 ? "life" : "lives"} · clock ${Math.round(stats.ticks)}`;
   // the switch, and what it is spending — a probe has no other way to see either
   const hurt = damageOn ? ` · <b>damage ON</b> ${Math.round(stats.health)}/${stats.maxHealth}hp` : " · damage off";
   // the panel already shows it in the disc's own digits; this is for the probes,
@@ -7774,7 +7867,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 

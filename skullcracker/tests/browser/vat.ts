@@ -94,6 +94,35 @@ const main = async (): Promise<void> => {
     fail(`0x416440 gives 40 and 0x45eed0 one more, against 0x412a24's 0xa0; the panel says ${/· (holding|no) \w+ \d+\/\d+/.exec(await say())?.[0]}`);
   console.log(`ok    and the game's one statblaster is here, and it arms you with 41 of 160`);
 
+  /**
+   * ...and the END. `0x41293d` is the last scene of chapter four's runner: with
+   * the outer state still 6 it plays `credits.mov` and drops the chapter loop,
+   * which hands the game back to its title menu.
+   *
+   * `credits.mov` is also the menu's own option 6 (`0x4030f7`), so the file
+   * being in the rip was never evidence of an ending by itself — `0x41293d` is.
+   */
+  await go("&x=5760");
+  await page.keyboard.down("ArrowRight");
+  let reel = "";
+  for (let i = 0; i < 120; i++) {
+    const t = await say();
+    if (/press ESC to skip/.test(t)) { reel = t; break; }
+    await page.waitForTimeout(150);
+  }
+  await page.keyboard.up("ArrowRight");
+  if (!reel) fail(`walking into VAT's goal should end the game; nothing played`);
+  if (!/^credits\.mov/.test(reel)) fail(`the sixteenth level ends on credits.mov; it played ${reel.slice(0, 40)}`);
+  console.log(`ok    and walking into its goal ends the game — ${/credits\.mov[^—]*/.exec(reel)?.[0].trim()}`);
+
+  // ...and then the front again, which is where 0x4032a2 sends it
+  await page.keyboard.press("Escape");
+  await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(600);
+  if (!/level 1 · streets/.test(await say()))
+    fail(`the credits hand the game back to the front; the HUD says ${/level \d+ · \w+/.exec(await say())?.[0]}`);
+  console.log(`ok    ...and hands you back to the front, which is where 0x4032a2 sends it`);
+
   await browser.close();
   console.log("PASS  VAT stands, its furniture is placed, and Boggs is on the screen");
 };

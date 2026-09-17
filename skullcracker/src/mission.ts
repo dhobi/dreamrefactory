@@ -105,6 +105,33 @@ export const MISSIONS: readonly Mission[] = LEVEL_ORDER.map((book, i) => {
 export const TIME_OUT_FILMS = ["time1.mov", "time2.mov", "time3.mov", "time4.mov"] as const;
 
 /**
+ * The ENDING, and it is one line of the game's own shell.
+ *
+ * `0x402fe0` is the outer loop: eleven states through the table at `0x403448`,
+ * of which 1 is the menu, 3..6 are the four chapters, 9 is the death vignette,
+ * 10 goes back to the menu and 11 quits. Chapter four is state 6 and its runner
+ * is `0x412670`, which walks its own scenes in `[0x4abdfc]` — and the last of
+ * them, once the outer state is still 6, is this:
+ *
+ * ```
+ *   41293d  cmp word ptr [0x4abdfe], 6   ; nothing else has taken the game away
+ *   41294c  push 0x46b388                ; "credits.mov"
+ *   41295a  call 0x40e990                ; ...play it
+ *   412962  mov si, 1                    ; and that is the chapter loop over
+ * ```
+ *
+ * `si` ending the loop returns to `0x4032a2`, which finds `[0x4abdfe]` is not
+ * one of the five states that would claim the game, so it sets the scene to 0
+ * and goes to state 1: **the title menu**. So finishing the sixteenth level
+ * plays the credits and puts you back at the front.
+ *
+ * It is worth saying that `credits.mov` is also a menu item — `0x4030f7` plays
+ * the same file for option 6 — so the file being in the rip was never evidence
+ * of an ending on its own. What makes it one is `0x41293d`.
+ */
+export const ENDING_FILM = "credits.mov";
+
+/**
  * The seven films for the other way a level ends.
  *
  * `0x403340` is the same shape as the time-out handler, one state along in the

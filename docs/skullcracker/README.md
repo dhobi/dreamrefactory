@@ -1740,6 +1740,50 @@ is consistent across all four bushes measured — 190 to 215 — so it is system
 rather than one bad record, and it is either the floor under that hall or the
 bush's own y. Left as it reads rather than nudged into working.
 
+## Two tests, and an ending
+
+### A pickup is taken on the ART, not the box
+
+`0x45b270` intersects the two rects with `0x434140` and only then calls
+`0x40e680`, which is the second test and the real one. That walks the
+intersection looking for a row where BOTH cels have an opaque span — and it is
+spans rather than pixels because that is how the SHP stores a row, which is why
+`0x4320c0` compares span lists and never touches a pixel value.
+
+The difference is not academic. The player's cel is a tall rectangle with a
+great deal of nothing in it: STREETS' `statlife` runs 3629..3729, and standing
+at 3600 or 3760 overlaps that rect by a pixel or two while touching none of the
+art. The rect alone hands you the life; the art does not, and the suite asserts
+exactly that pair of positions.
+
+One detail worth keeping: the point `0x40e680` hands back is the centre of the
+RECT intersection (`0x40e782` reads back what `0x434140` wrote), not the centre
+of the pixels it found. So the pixel walk only ever answers yes or no, and can
+stop at the first row that touches.
+
+### ...and the sixteenth level is the end
+
+`0x402fe0` is the game's outer loop: eleven states through `0x403448`, of which
+1 is the title menu, 3..6 are the four chapters, 9 is the death vignette, 10
+goes back to the menu and 11 quits. Chapter four is state 6, its runner is
+`0x412670`, and the last of the scenes it walks is four instructions:
+
+```
+  41293d  cmp word ptr [0x4abdfe], 6   ; nothing else has taken the game away
+  41294c  push 0x46b388                ; "credits.mov"
+  41295a  call 0x40e990                ; ...play it
+  412962  mov si, 1                    ; and that is the chapter loop over
+```
+
+`si` ending the loop returns to `0x4032a2`, which finds the outer state is not
+one of the five that would claim the game, sets the scene to 0 and goes to state
+1. So finishing the sixteenth level plays the credits and puts you back at the
+front.
+
+`credits.mov` is also the menu's own option 6 (`0x4030f7` plays the same file),
+so the film being in the rip was never evidence of an ending on its own. What
+makes it one is `0x41293d`.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are
@@ -1794,10 +1838,8 @@ a level with no class anywhere.
   and ARCADE's `initkragg`. RAVECAVE's wraith, TOWER's bishop and VAT's Boggs
   stand, take blows and die on the generic gait/flinch/death every other
   creature uses.
-- **A pickup is taken on the rect alone.** `0x45b270` asks `0x434140` for the
-  overlap and then `0x40e680`, which compares the two sprites pixel by pixel;
-  this page does the first test and not the second.
-- **The ending is not read.** Level sixteen wraps to level one.
+- **Both of the two tests are here now**, and so is the ending — see the two
+  sections above.
 - **Damage is off by default**, because with it on a probe walking east through
   WOODS meets three hydraulic presses and every route test here becomes a fight.
 

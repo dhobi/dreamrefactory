@@ -64,6 +64,25 @@ const main = async (): Promise<void> => {
   if ((await count()) !== first) fail(`jumping in the street should reach none of them; ${first} -> ${await count()}`);
   console.log(`ok    and twenty jumps from the street reach none of them — they are on the roofs`);
 
+  /**
+   * 3. the SECOND test — `0x40e680`, which is the art rather than the rect.
+   *
+   * `0x45b2ca` intersects the two rects and only then calls it, and it walks
+   * that intersection looking for a row where both cels have an opaque span
+   * (`0x4320c0`). STREETS' statlife is 100 wide and its record runs 3629..3729,
+   * so standing at 3600 or 3760 overlaps the rect by a pixel or two and touches
+   * none of the art — and the pickup has to survive that.
+   */
+  for (const x of [3600, 3760]) {
+    await stand(1, x, 985);
+    const both = /pickup rect (\w+) pixels (\w+)/.exec(await say());
+    if (!both) fail(`no pickup test readout at x ${x}: ${(await say()).slice(0, 140)}`);
+    if (both![1] !== "yes") fail(`x ${x} should graze the statlife's rect; it says rect ${both![1]}`);
+    if (both![2] !== "no") fail(`...and touch none of its art; it says pixels ${both![2]}`);
+    if ((await lives()) !== 3) fail(`a rect graze must not take it; the panel shows ${await lives()} lives`);
+  }
+  console.log(`ok    a rect that grazes by a pixel takes nothing — 0x40e680 is the art, not the box`);
+
   // 3. `statlife`: one life, and walking into it is the whole of it
   await stand(1, 3679, 985);
   if ((await lives()) !== 4) fail(`0x428421 adds one life; the panel shows ${await lives()}`);

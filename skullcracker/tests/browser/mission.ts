@@ -84,28 +84,17 @@ const main = async (): Promise<void> => {
   //    the touch — and it must be out and back, since standing where the goal
   //    will be is not touching a thing that is not there yet.
   await load("level=8");
-  // its spawn point falls inside its own goal rect, so the craft arrives over the
-  // player's head and waits for them to walk out and back
-  const eight = await until(/at the goal — the television is overhead/, 20, 300);
-  console.log(`ok    ARCADE has nothing this page can kill, so its television flies in at once`);
-  if (/screen is coming down/.test(eight)) fail(`ARCADE's goal opened without the player walking to it`);
+  const eight = await say();
+  if (!/quota 1 of 1/.test(eight)) fail(`ARCADE's share is its one boss; the HUD says ${/quota[^·]*/.exec(eight)?.[0]}`);
+  if (/television/.test(eight)) fail(`a television must not fly in with the quota unmet: ${/· [^·]*television[^·]*/.exec(eight)?.[0]}`);
+  console.log(`ok    ARCADE's share is its one initkragg, and no television comes while it lives`);
 
-  await page.keyboard.down("ArrowLeft");
-  await page.waitForTimeout(2600);
-  await page.keyboard.up("ArrowLeft");
-  await page.keyboard.down("ArrowRight");
-  const film = await until(/segment \d+\/\d+/);
-  await page.keyboard.up("ArrowRight");
-  if (!/chp09\.mov/.test(film)) fail(`the goal played "${film.slice(0, 60)}" — the next mission's film is chp09.mov`);
-  console.log(`ok    touching it plays the next briefing: ${film.split(" ·")[0]}`);
-
-  for (let i = 0; i < 12 && /segment/.test(await say()); i++) {
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(300);
-  }
-  const nine = await until(/room \d+ of \d+/);
-  if (!/level 9 · grave/.test(nine)) fail(`after ARCADE the page is at "${nine.slice(0, 40)}" — level 9 is grave`);
-  console.log(`ok    and the level after it is the ninth, grave`);
+  // ...and standing in the goal rect is not enough either. ARCADE's spawn point
+  // falls inside its own goal, which is exactly the case `leftGoal` exists for.
+  await page.waitForTimeout(2000);
+  if (/screen is coming down|level 9/.test(await say()))
+    fail(`ARCADE's goal opened with its boss alive: ${(await say()).slice(0, 120)}`);
+  console.log(`ok    ...and standing in the goal rect from the first frame opens nothing`);
 
   // 4. the clock: 40 frames of an 8-minute dial, then one of the four films
   await load("level=1&clock=40");
