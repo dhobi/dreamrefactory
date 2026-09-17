@@ -57,19 +57,14 @@
  * push a standing player through the floor), and a jump MUST, in the same
  * window, with no other input.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 /** the foot of STREETS' one ladder */
 const START = 9700;
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
 
@@ -230,8 +225,8 @@ const main = async (): Promise<void> => {
   if (!near(gy, 1033, 4)) fail(`the goal is entered from the y1033 roof; standing at y ${gy}`);
   console.log(`ok    reached the goal at x ${await coord("x")}, y ${gy} — the route through STREETS holds`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  STREETS' goal can be walked to, and the way through is the level's own");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

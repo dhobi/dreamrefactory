@@ -59,19 +59,14 @@
  * else, and the "before" count is subtracted rather than assumed to be zero:
  * STREETS' street has a little green in its backdrop.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 /** STREETS' first `initwerea` patrols x2197..2584; this stands inside its reach */
 const AT_A_PUNK = 2300;
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -348,8 +343,8 @@ const main = async (): Promise<void> => {
   if (!/inithydrant cel 9700/.test(await say())) fail(`the hydrant did not shut again: ${await valve()}`);
   console.log(`ok    three kicks burst the hydrant into a second object, and it shuts again`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  a blow sprays, staggers, fells and leaves a body, all on the disc's own cels");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

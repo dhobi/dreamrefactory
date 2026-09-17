@@ -19,17 +19,12 @@
  * suite measures is that one bolt lands and that the healing undoes it; the
  * machine, and the kill it buys, are `tests/browser/vat.ts`.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -113,7 +108,7 @@ const main = async (): Promise<void> => {
   console.log(`ok    and twenty-five bolts take nothing off a cop — ${before![1]}/${before![2]}hp still`);
 
   console.log(`\nPASS  the blaster fires, its bolt is a code, and only Boggs reads it`);
-  await browser.close();
+  await finish(browser);
 };
 
-void main();
+await main();

@@ -15,17 +15,12 @@
  *   - **the test tube** (`inittube`), `#0201 test tube` — one in the game, with
  *     twelve hundred health, the player's own number, and no award.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -114,8 +109,8 @@ const main = async (): Promise<void> => {
   if (tube![2] !== "1200") fail(`0x411be4 gives it 0x40e300(0x4b0); the bar reads ${tube![0]}`);
   console.log(`ok    the test tube carries the player's own twelve hundred health`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  LAB's Puke Boys, its ten arms and its one test tube are all where the records put them");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

@@ -18,17 +18,12 @@
  * See `src/codes.ts` for the census of who sends what and for the two codes
  * nothing sends.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -141,7 +136,7 @@ const main = async (): Promise<void> => {
   console.log(`ok    and BARREL's claw dives, clamps on its own 2456..2459 and holds you with the same -3`);
 
   console.log(`\nPASS  the blow codes are carried: -3 holds you by the art, -7 floors you, -4 shocks you`);
-  await browser.close();
+  await finish(browser);
 };
 
-void main();
+await main();

@@ -36,17 +36,12 @@
  * The probe walks the route rather than teleporting onto it, because `?x=` drops
  * the player at the ground under that column and in CITY that is the void.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
 
@@ -210,8 +205,8 @@ const main = async (): Promise<void> => {
   if (roof.x < 1940) fail(`landed short of the wall's east edge: x ${roof.x}`);
   console.log(`ok    over the wall onto the tank roof at x ${roof.x}, y ${roof.y}`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  CITY's planks give way, its crows wake, and its first step is passable");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

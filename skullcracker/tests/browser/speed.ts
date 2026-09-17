@@ -18,8 +18,21 @@
  *     frame. `0x40dfd0`, which calls it, is called exactly once from each of the
  *     sixteen level frame functions.
  *
- * 95/12 x 15 = **120px a second walking**, 180/12 x 15 = **225 running**. Those
- * two numbers are what this asserts.
+ *   - and the GROUND takes some of it back. `0x4302a4` runs the drag on a frame
+ *     that ended on the ground: `v.x * 5734 >> 13` off the velocity, 70% of it,
+ *     truncated toward zero and never less than a whole pixel. So the stride is
+ *     not the speed — each frame adds the stride and the ground keeps 30% of
+ *     what was already there, and that settles:
+ *
+ * ```
+ *   walk   roundAway(95/12)  = 8    12 - trunc(12*5734/8192) = 4,  4 + 8  = 12
+ *   run    roundAway(180/12) = 15   22 - trunc(22*5734/8192) = 7,  7 + 15 = 22
+ * ```
+ *
+ * 12 x 15 = **180px a second walking**, 22 x 15 = **330 running**. Those two
+ * numbers are what this asserts, and the first version of this file asserted the
+ * strides instead — 120 and 225 — which is the speed of a player the ground
+ * never pushed back on.
  *
  * ## Why the run has its own test
  *
@@ -30,21 +43,18 @@
  * run at all, so it only ever walked, and a correctly-measured 120px/s felt slow
  * because the game's travelling speed is nearly twice that.
  *
- * The ratio matters more than either number: 180/95 is fixed by the two scripts
- * and cannot drift with anything this port invents, so it is asserted tightly
- * while the absolute speeds get room for the browser's scheduling.
+ * The ratio matters more than either number, and after the drag it is 22/12
+ * rather than the scripts' own 180/95 — the truncation does not scale. It is
+ * still fixed by numbers that came out of the binary and cannot drift with
+ * anything this port invents, so it is asserted tightly while the absolute
+ * speeds get room for the browser's scheduling.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
 
@@ -83,18 +93,18 @@ const main = async (): Promise<void> => {
   const from = await coord();
   console.log(`ok    the street opens at x ${from}`);
 
-  // 1. the walk: 95/12 x 15. The HUD is read WHILE the key is down — it reports
+  // 1. the walk: the drag-settled 12 x 15. The HUD is read WHILE the key is down — it reports
   //    what the player is doing, and by the time `rate` returns they have
   //    stopped doing it.
   await page.keyboard.down("ArrowRight");
   await page.waitForTimeout(300);
-  if (!/walking 120px\/s/.test(await say())) fail(`the HUD does not report the walk`);
+  if (!/walking 180px\/s/.test(await say())) fail(`the HUD does not report the walk at its settled 12px a frame: ${/(walking|RUNNING)[^·]*/.exec(await say())?.[0]}`);
   await page.keyboard.up("ArrowRight");
   await page.waitForTimeout(200);
 
   const walk = await rate(["ArrowRight"], 1500);
-  if (Math.abs(walk - 120) > 12) fail(`the walk is ${walk.toFixed(1)}px/s, wanted 120 (dx 95 / 12 x 15fps)`);
-  console.log(`ok    walks at ${walk.toFixed(1)}px/s against the engine's 120`);
+  if (Math.abs(walk - 180) > 18) fail(`the walk is ${walk.toFixed(1)}px/s, wanted 180 (dx 95 / 12, settled at 12 by 0x4302a4, x 15fps)`);
+  console.log(`ok    walks at ${walk.toFixed(1)}px/s against the engine's 180`);
 
   // 2. the run: the same, with W held — and W is the whole point
   await page.keyboard.down("ArrowRight");
@@ -106,15 +116,15 @@ const main = async (): Promise<void> => {
   await page.waitForTimeout(200);
 
   const run = await rate(["ArrowRight", "w"], 1500);
-  if (Math.abs(run - 225) > 22) fail(`the run is ${run.toFixed(1)}px/s, wanted 225 (dx 180 / 12 x 15fps)`);
-  console.log(`ok    runs at ${run.toFixed(1)}px/s against the engine's 225`);
+  if (Math.abs(run - 330) > 33) fail(`the run is ${run.toFixed(1)}px/s, wanted 330 (dx 180 / 12, settled at 22, x 15fps)`);
+  console.log(`ok    runs at ${run.toFixed(1)}px/s against the engine's 330`);
 
-  // 3. the ratio is the two scripts' own, and nothing this port does can move it
+  // 3. the ratio is the settled velocities', and nothing this port does can move it
   const ratio = run / walk;
-  if (Math.abs(ratio - 180 / 95) > 0.1) {
-    fail(`run/walk is ${ratio.toFixed(3)}, but the scripts say 180/95 = ${(180 / 95).toFixed(3)}`);
+  if (Math.abs(ratio - 22 / 12) > 0.1) {
+    fail(`run/walk is ${ratio.toFixed(3)}, but the settled velocities say 22/12 = ${(22 / 12).toFixed(3)}`);
   }
-  console.log(`ok    run/walk is ${ratio.toFixed(3)}, the scripts' own 180/95 = ${(180 / 95).toFixed(3)}`);
+  console.log(`ok    run/walk is ${ratio.toFixed(3)}, the settled 22/12 = ${(22 / 12).toFixed(3)}`);
 
   // 4. and W is still the ladder key: the run must NOT shadow the climb. The
   //    original reuses one flag for both — 0x429990 reads it as the run and
@@ -146,8 +156,8 @@ const main = async (): Promise<void> => {
     `ok    and on the ladder the same key still climbs, y ${y0} to y ${y2} at ${climb.toFixed(1)}px/s against 131`,
   );
 
-  await browser.close();
+  await finish(browser);
   console.log(`PASS  the walk, the run and the ladder all move at the executable's rates`);
 };
 
-void main();
+await main();

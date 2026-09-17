@@ -19,17 +19,12 @@
  * And the level's own clock, which was in the books all along: a `timer` record,
  * whose `param` is the number. GRAVE's is 2100 against the full dial's 7200.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -183,8 +178,8 @@ const main = async (): Promise<void> => {
     fail(`0x470400 tag 0 is 1550..1556; it is showing ${hand![2]}`);
   console.log(`ok    a hand comes up under the player's own feet, on cel ${hand![2]}`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  GRAVE's zombies stand, its graves open and take, and its hands come up");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

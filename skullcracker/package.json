@@ -11,6 +11,8 @@
     "build": "vite build",
     "manifest": "tsx ../tools/mkmanifest.ts ../dist/skullcracker gamefiles public",
     "test:browser": "tsx tests/browser/menu.ts",
+    "test:browser:menu": "tsx tests/browser/menu.ts",
+    "test:browser:all": "tsx tools/runsuites.mts",
     "test:browser:touch": "tsx tests/browser/touch.ts",
     "test:browser:rooms": "tsx tests/browser/rooms.ts",
     "test:browser:climb": "tsx tests/browser/climb.ts",

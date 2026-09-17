@@ -41,19 +41,14 @@
  * film are near-identical animation cels; comparing screenshots would pass on
  * the wrong frame and fail on the right one.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const URL_BASE = process.env.URL ?? "http://localhost:5178/";
 const HEADED = process.env.HEADED === "1";
 /** where the Begin button is, in the game's own 512x384 screen */
 const BEGIN = { x: 400, y: 93 };
 
-const fail = (why: string): never => {
-  console.error(`FAIL: ${why}`);
-  process.exit(1);
-};
-
-const browser = await chromium.launch({ headless: !HEADED });
+const browser = await launch({ headless: !HEADED });
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
 const problems: string[] = [];
 page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
@@ -141,4 +136,4 @@ if (err.trim()) problems.push(`#err: ${err}`);
 if (problems.length) fail(problems.join(" | "));
 
 console.log("PASS — the sequence runs logo → intro → menu, and Begin is live");
-await browser.close();
+await finish(browser);

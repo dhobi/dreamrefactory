@@ -18,17 +18,12 @@
  *     and the only hazard in the game that GIVES you something: `0x426b21` is a
  *     call to `0x45ef30`, the ammunition adder.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -163,8 +158,8 @@ const main = async (): Promise<void> => {
   }
   console.log(`ok    and its bishop works its own bands — ${[...modes].sort().join(" ")} — on its 2500s, 2600s and 2650s`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  TOWER's floors give way, its bishop stands on the goal and its surges arc");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

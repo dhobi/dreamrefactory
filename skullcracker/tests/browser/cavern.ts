@@ -20,17 +20,12 @@
  *     each, a blow of a hundred on every one.
  *   - **the rope bridge** (`0x41e9c0`), which you can cross and cannot stand on.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -154,8 +149,8 @@ const main = async (): Promise<void> => {
   if (lowest < 1300) fail(`and the platform should go with it — the player never fell, reaching only y ${lowest}`);
   console.log(`ok    standing on a bridge runs it through ${[...states].join(" -> ")}, and the floor goes with it`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  CAVERN's four creatures stand, its blades swing and its bridges give way");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

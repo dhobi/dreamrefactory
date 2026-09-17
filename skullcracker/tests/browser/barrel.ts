@@ -18,17 +18,12 @@
  * ten `statblasterpack` refills here and nothing to fire them with, because the
  * gun itself is in VAT.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -106,8 +101,8 @@ const main = async (): Promise<void> => {
   if (!/guns · nearest statblasterpack/.test(await say())) fail(`BARREL places ten statblasterpack and no statblaster`);
   console.log(`ok    and its ten blaster packs have no gun in the level to go in`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  BARREL's conveyors carry, its chairs turn, and its twelve cops stand");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

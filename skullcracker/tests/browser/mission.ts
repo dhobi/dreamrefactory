@@ -22,17 +22,12 @@
  * `?clock=` exists for the last of those: the dial is eight minutes long and a
  * test cannot wait for it.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -131,8 +126,8 @@ const main = async (): Promise<void> => {
   if (!/y 3925/.test(back)) fail(`the respawn is not CITY's own spawn point: ${back.slice(0, 200)}`);
   console.log(`ok    and it costs a life and puts them back where the level starts`);
 
-  await browser.close();
+  await finish(browser);
   console.log(`PASS  the quota gates the goal, the goal ends the level, the clock and the void end it too`);
 };
 
-void main();
+await main();

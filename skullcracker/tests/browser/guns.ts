@@ -22,17 +22,12 @@
  * run once each and name the weapon you are looking for. Which is why SEWER
  * places two `statflare` and no gun — you are meant to still have SERVICE's.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -245,8 +240,8 @@ const main = async (): Promise<void> => {
   if (!back.includes(3200)) fail(`0x428a73 puts the soaker's own idle back; saw ${back.join(" ")}`);
   console.log(`ok    ...holds you still while it is down, and gives the gun back on 3200 when it comes up`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  the guns are placed, reached for, carried between levels and fired");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

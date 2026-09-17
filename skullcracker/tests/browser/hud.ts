@@ -17,14 +17,10 @@
  * a deliberate one: it survives a repaint, a repalette and a rewrite of the
  * drawing order, and it fails the moment a region stops being drawn.
  */
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
-
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
 
 /** how many pixels in a rectangle pass a channel test, off the live canvas */
 const count = (
@@ -49,7 +45,7 @@ const count = (
   );
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
 
@@ -135,8 +131,8 @@ const main = async (): Promise<void> => {
   }
   console.log(`ok    and a kill pays: the score plate went from ${scoreBefore} to ${scoreAfter} green pixels`);
 
-  await browser.close();
+  await finish(browser);
   console.log(`PASS  the panel is the disc's art, wired to the page's own state`);
 };
 
-void main();
+await main();

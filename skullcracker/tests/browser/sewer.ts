@@ -26,19 +26,14 @@
  *   - **two new classes**: the floating eye, which has no gravity at all, and the
  *     600-health thing that goes round shutting the doors again.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
-
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
 
 const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -263,8 +258,8 @@ const main = async (): Promise<void> => {
   const end = await at();
   console.log(`ok    and the whole level plays through to the goal at x ${end.x}, y ${end.y}`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  SEWER's doors are locks, its levers are keys, and its goal can be reached");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

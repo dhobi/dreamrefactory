@@ -20,17 +20,12 @@
  *   - **the alarms and the fans**, which keep their own counters and answer to
  *     nothing in the level at all.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -154,8 +149,8 @@ const main = async (): Promise<void> => {
   if ([...fanCels].some((c) => c < 10020 || c > 10024)) fail(`0x46d478 is 10020..10024; saw ${[...fanCels].join(" ")}`);
   console.log(`ok    a fan turns itself on and off through ${[...fans].join(", ")} on its own counter`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  MAZE's cops work its levers, its cages are wall, and its fans keep their own time");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

@@ -26,19 +26,14 @@
  *   - **one cel of nine can touch you.** Only 518, the gob, carries a strike box
  *     and a blow pair, so the rest of the goop is weather.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
-
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
 
 const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -255,8 +250,8 @@ const main = async (): Promise<void> => {
   const end = await at();
   console.log(`ok    ran the level to the goal at x ${end.x}, y ${end.y}, on ${jumps} jumps, ${lit} of 6 levers lit behind`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  SERVICE's two new classes stand, its levers pour, and its goal can be reached");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

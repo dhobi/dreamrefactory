@@ -23,17 +23,12 @@
  *   - **the life is spent when the dying animation ends**, not when the health
  *     runs out (`0x443dea`).
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -97,8 +92,8 @@ const main = async (): Promise<void> => {
   if (!died) fail(`standing under a press should eventually kill the player`);
   console.log(`ok    and running out of it spends a life and plays its film`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  the damage switch is off by default, and the engine's own numbers when it is not");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

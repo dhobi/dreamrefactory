@@ -42,7 +42,8 @@
  * failure here reads as "the double-tap did nothing" and is worth suspecting
  * before the page is.
  */
-import { chromium, devices } from "playwright";
+import { devices } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const URL_BASE = process.env.URL ?? "http://localhost:5178/";
 const HEADED = process.env.HEADED === "1";
@@ -51,12 +52,7 @@ const BEGIN = { x: 400, y: 93 };
 /** somewhere with no click region on it — the middle of the picture */
 const NOWHERE = { x: 256, y: 300 };
 
-const fail = (why: string): never => {
-  console.error(`FAIL: ${why}`);
-  process.exit(1);
-};
-
-const browser = await chromium.launch({ headless: !HEADED });
+const browser = await launch({ headless: !HEADED });
 // a real phone profile, so `hasTouch` and a coarse pointer both hold — the page
 // picks its hint line off `(pointer: coarse)` and the recogniser off pointerType
 const page = await browser.newPage({ ...devices["Pixel 5"] });
@@ -206,4 +202,4 @@ if (err.trim()) problems.push(`#err: ${err}`);
 if (problems.length) fail(problems.join(" | "));
 
 console.log("PASS — a finger skips films and works the menu");
-await browser.close();
+await finish(browser);

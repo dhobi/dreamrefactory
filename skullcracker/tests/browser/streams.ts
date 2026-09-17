@@ -13,17 +13,12 @@
  * scepter's beam carry a hundred (`0x4217ba`, `0x424630`); the FLAME carries the
  * code -9 (`0x453b9b`), which nothing in these sixteen levels reads.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -114,7 +109,7 @@ const main = async (): Promise<void> => {
   console.log(`ok    and RAVECAVE's scepter fires its one round, spends forty for it, and is empty`);
 
   console.log(`\nPASS  all three held weapons pour, drain and stop, and only two of them hurt anything`);
-  await browser.close();
+  await finish(browser);
 };
 
-void main();
+await main();

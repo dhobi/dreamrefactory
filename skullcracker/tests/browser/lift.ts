@@ -28,17 +28,12 @@
  *     only by the animation stepper and means "my script ended" — so a car
  *     leaves when its eighteen idle frames run out, rider or no rider.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -129,8 +124,8 @@ const main = async (): Promise<void> => {
   }
   console.log(`ok    and #78 delivers the player onto the goal's platform at x ${goal.x}, y ${goal.y}`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  CITY's five lifts carry their riders, and the top of level two can be entered");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

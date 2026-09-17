@@ -1920,6 +1920,53 @@ Its head, its claw arm and its eight machinery objects are still not here, so
 the healing never stops and it still cannot be killed — see the section above
 for why that is the game's own arithmetic rather than a gap.
 
+## One browser, not thirty
+
+Every suite in `tests/browser` used to be its own `tsx` process with its own
+`chromium.launch()`, and that cost twice.
+
+The visible cost was time: each process imports Playwright from scratch, about a
+second apiece, thirty seconds across the set before a single assertion runs.
+
+The cost that mattered was correctness. This machine has around a gigabyte free,
+with several gigabytes held by things that are not this repo, and a Chromium per
+suite is more than that will take. Suites run back to back failed in ways they
+never failed alone, and in one afternoon they did it four different ways:
+
+```
+  woods      a dog pays 0x40d450(0xc8); the score reads 0
+  service    no position in the HUD
+  arcade     TypeError: Cannot read properties of null (reading 'y')
+  guns       0x451520 gives 40 and 0x45eed0 one more: · no flamer 0/160
+```
+
+Every one of those passed on a re-run and every one cost a re-run to tell apart
+from a real regression — which is the actual expense, because the whole point of
+the suites is to say whether a change broke something.
+
+The full set now runs in **993 seconds, one process, one Chromium** — 630MB
+across its helper processes, flat from the first suite to the thirty-first,
+against a machine with about a gigabyte free. It is not a cure for flakiness:
+that first full run still had `codes` and `service` fail and pass again on their
+own, and some of these suites drive the game with fixed waits and will do that
+whatever the browser does. What it removes is the class of failure that came
+from the machine rather than the page.
+
+So a suite no longer owns a browser. It asks `harness.ts` for one, and gets the
+shared Chromium under the runner or a fresh one on its own, and gives back its
+contexts rather than closing anything. The only other change a suite needed is
+that its top level now awaits its own work — importing a suite IS running it —
+and that `fail()` throws rather than exiting, because one `process.exit` would
+take the other twenty-nine with it.
+
+Two suites turned out not to be failing at all. `menu` had no
+`test:browser:menu` script — its script is the bare `test:browser` — so every
+attempt to run it by name had been running nothing and reporting a failure.
+And `speed` asserted the strides, 120px/s and 225, when the drag it documents
+elsewhere settles the walk at 12 a frame and the run at 22: 180 and 330. Both
+were reported red for weeks by a list that could not tell a missing script from
+a broken one.
+
 ## A collision box is a translation, and nothing else
 
 SEWER's bush is the only grabber in the game that comes up out of the floor, and
@@ -1969,32 +2016,74 @@ reading the translate, not by tuning a y until a test went green.
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are
-counted from the books and the executable rather than remembered.
+MEASURED — `npx tsx skullcracker/tools/records.mts` reads every book and checks
+each record's name against what the page actually looks for — because the figure
+that used to be here was counted once by hand and every level built since made it
+a little more wrong.
 
 ### The records
 
-**1,137 of the 1,166 entity records in the sixteen books are placed — 97.5%.**
-The 52 region records are all handled. Six levels have no gap at all: PLAYGR,
-SEWER, GRAVE, CAVERN, RAVECAVE and BARREL.
-
 ```
-  probe            17   streets city woods mall service arcade
-  initbgclawarm     1   vat          initboggshead      1   vat
-  initbgmachinery   1   vat          monkeybar          1   vat
-  wormbounds        1   vat          initlightfx        2   tower
-  initbiggun        2   maze         noskateboards      1   service
-  where             1   lab          inithealth         1   lab
+  1141 of 1167 entity records placed - 97.8%. 52 region records, all handled.
+
+  probe             17   arcade city mall service streets woods
+  initbiggun         2   maze
+  initlightfx        2   tower
+  where              1   lab
+  inithealth         1   lab
+  noskateboards      1   service
+  monkeybar          1   vat
+  wormbounds         1   vat
+
+  no gap at all: BARREL CAVERN GRAVE PLAYGR RAVECAVE SEWER
 ```
 
 Four of those are not art at all — `probe`, `monkeybar`, `wormbounds` and
-`noskateboards` are TABLES. `0x40b526` fills a buffer at `0x4a9ce0` with every
-`probe` record and keeps the count at `0x46b9c0`; `0x4280d2` tests the player's
-own point against one of them each frame and, on a hit, calls `0x410170` and
-consumes it. What that call does has not been read.
+`noskateboards` are TABLES. And two are dead data: **`where` and `inithealth` do
+not appear in `SC.EXE` anywhere** — LAB places one of each and nothing in the
+game will ever ask for them.
 
-And two of them are dead data. **`where` and `inithealth` do not appear in
-`SC.EXE` anywhere** — LAB places one of each and nothing in the game will ever
-ask for them.
+### What a probe is, and the one thing about it still unread
+
+`0x40b526` fills a buffer at `0x4a9ce0` with every `probe` record, 48 bytes
+apiece — the entity record's own stride — and keeps the count at `0x46b9c0`.
+`0x4280d2` then walks that buffer once a frame:
+
+```
+  4280f8  0x434200(player.pos, rec+2)   ; the record's RECT, point-in-rect
+  42811d  ax = word at rec+0            ; ...and its param is a MODE
+  428128  0x410170(player.pos, mode, mode, &0x4a6938)
+  428138  0x402e80(i)                   ; and the record is consumed
+```
+
+`0x402e80` shifts the rest of the table down over it, so a probe fires **once per
+level load** and never again. The mode is the record's `param`, and the seventeen
+shipped ones carry four values between them — 0 eight times, 1 four, 2 three and
+3 twice.
+
+`0x410170` is the same spawner the goal's television comes out of, switched on
+`mode + 1`, and all four probe modes build on book `0x4a3b38` — `PLAYER.SBK`,
+which is why no level book carries the cels:
+
+```
+  mode 0/1  0x41023c  script 0x46bdf0 tag 0 - cels 20200..20207, dx 15
+            X += mirror ? +512 : -512, and the mirror IS the mode
+  mode 2    0x41029c  script 0x46bdf0 tag 1 - cels 20210, 20211
+            Y += 0x100 below you, vY = -10
+  mode 3    0x4102fc  same tag, Y -= 0x100 above you, vY = +10
+```
+
+20210 and 20211 are the television's own hovering cels, so modes 2 and 3 are it
+arriving from under your feet or down out of the sky, and 20200..20207 is
+something else crossing.
+
+What is **not** settled is what then moves any of it, and that is why none of
+this is built. `0x42f550` leaves the object's divisor at zero, `0x410170` never
+writes it, `0x45d090` writes only the kind — and `0x45d1a3`, the script stepper's
+own call to the mover, does an `idiv` by exactly that word. A shipped game does
+not divide by zero, so something writes `obj+0xe` on this object and this reading
+has not found it. Building a flypast on the dx and the vY without it would be
+inventing motion, which is the one thing this page does not do.
 
 ### The classes
 
@@ -2031,6 +2120,12 @@ a level with no class anywhere.
 - `skullcracker/` — the page, its file store and its film loop
 - `engine/src/df/byte-order.ts` — which way round a file is, and how it is asked
 - `engine/tests/byte-order.ts` — detection (needs no rip) and the menu (needs one)
+- `skullcracker/tools/records.mts` — how much of the sixteen books is on the
+  page, counted rather than remembered
+- `skullcracker/tools/runsuites.mts` — **every browser suite, one process, one
+  Chromium**: `npm run test:browser:all -w skullcracker`, or name the ones you
+  want after a `--`
+- `skullcracker/tests/browser/harness.ts` — where a suite gets its browser from
 - `skullcracker/tests/browser/menu.ts` — the menu in a real browser
 - `engine/src/df/sbk.ts` — the sprite book reader, and `engine/tests/sbk.ts`
 - `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow, the press, the lever, the goop, the door and the scenery that moves

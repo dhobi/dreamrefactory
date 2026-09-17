@@ -20,19 +20,14 @@
  *     which is more than three times the biggest thing in level three.
  *   - **the goal is shut until it is dead**, which is what a 100% share means.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
-
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
 
 const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -159,8 +154,8 @@ const main = async (): Promise<void> => {
   }
   console.log(`ok    and the television comes down for it`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  PLAYGR is its seven dogs, its one boss, and a goal that waits for it");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

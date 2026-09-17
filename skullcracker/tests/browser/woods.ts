@@ -30,19 +30,14 @@
  *     is still above it. WOODS' ground has exactly two such steps, at x8746 and
  *     x8890, and clearing them is how the level is crossed.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
-
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
 
 const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -221,8 +216,8 @@ const main = async (): Promise<void> => {
   if (!near(end.x, 11020, 120)) fail(`the goal rect is x11036..11153; arrived at x ${end.x}`);
   console.log(`ok    ran the level end to end and reached the goal at x ${end.x}, y ${end.y}`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  WOODS is populated by its own records and can be crossed to its goal");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

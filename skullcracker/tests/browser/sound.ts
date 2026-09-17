@@ -24,14 +24,9 @@
  * context on the first key, which is what `wakeAudio` has always done for the
  * films — but without the flag a headless run would test nothing and pass.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
-
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
 
 interface Source {
   dur: number;
@@ -39,7 +34,7 @@ interface Source {
 }
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
+  const browser = await launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
 
@@ -132,8 +127,8 @@ const main = async (): Promise<void> => {
   if (!hit.includes(1.07)) fail(`the burst should play woods.snd's 1.07s "0040 hydrant"; got ${hit.join(" ")}`);
   console.log(`ok    the hydrant bursts on its own sound: ${hit.join(" ")}`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  the level's theme is its own arrangement, and the handlers' one-shots are the disc's");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

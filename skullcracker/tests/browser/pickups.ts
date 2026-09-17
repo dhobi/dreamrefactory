@@ -20,17 +20,12 @@
  *   - **the effects are `0x42827a`'s table**: four hundred health, one life,
  *     the three scores, and eight hundred and fifty back on the clock.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -126,8 +121,8 @@ const main = async (): Promise<void> => {
   }
   console.log(`ok    and every level's own records place their own, off one table`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  the stat pickups are placed, drawn from the shared book, and taken by walking into them");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

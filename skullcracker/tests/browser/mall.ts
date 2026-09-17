@@ -23,19 +23,14 @@
  *     climb it. Those two steps are the whole of level five's platforming.
  *   - **the goal is in the third region**, 11000 pixels east of the start.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
-
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
 
 const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -209,8 +204,8 @@ const main = async (): Promise<void> => {
   const end = await at();
   console.log(`ok    ran all three rooms to the goal at x ${end.x}, y ${end.y}, on ${jumps} jumps`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  MALL's three regions hand over on foot, and its goal can be reached");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

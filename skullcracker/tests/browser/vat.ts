@@ -28,17 +28,12 @@
  * allowance is met and `0x46bfbc` is set — which `0x41bdd8` does when Boggs
  * dies. So the ending cannot be walked to past a living Boggs.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -244,8 +239,8 @@ const main = async (): Promise<void> => {
     fail(`the credits hand the game back to the front; the HUD says ${/level \d+ · \w+/.exec(await say())?.[0]}`);
   console.log(`ok    ...and hands you back to the front, which is where 0x4032a2 sends it`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  VAT stands, and Boggs' machine can be broken, Boggs killed, and the game finished");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

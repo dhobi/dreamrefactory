@@ -17,17 +17,12 @@
  *   - **the scepter** (`statscepter`), the fourth chapter weapon, whose pickup
  *     arms you with `0x45eed0(0x10)` — weapon 16, not 17.
  */
-import { chromium } from "playwright";
+import { fail, finish, launch } from "./harness";
 
 const BASE = process.env.BASE ?? "http://localhost:5178";
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -173,8 +168,8 @@ const main = async (): Promise<void> => {
   if (!hovered) fail(`inside sixty it should hover and nothing else (0x424c07)`);
   console.log(`ok    ...and inside sixty it only hovers, and takes hold of nothing — 0x4248ad writes 100 back`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  RAVECAVE's Igors, its one wraith and its scepter are all where the records put them");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();
