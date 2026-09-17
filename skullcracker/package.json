@@ -33,6 +33,8 @@
     "test:browser:cavern": "tsx tests/browser/cavern.ts",
     "test:browser:ravecave": "tsx tests/browser/ravecave.ts",
     "test:browser:tower": "tsx tests/browser/tower.ts",
+    "test:browser:maze": "tsx tests/browser/maze.ts",
+    "test:browser:barrel": "tsx tests/browser/barrel.ts",
     "test:browser:pickups": "tsx tests/browser/pickups.ts"
   }
 }

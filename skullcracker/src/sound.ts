@@ -281,6 +281,17 @@ export const FOE_SFX = {
   /** `0x426582` and `0x4265dd` — and belfry.snd calls it the BISHOP */
   priestHit: 2,
   priestDeath: 0x1e,
+  /**
+   * Chapter FOUR's, out of `lab.snd`, and its names are the check again — they
+   * are also what the classes are actually CALLED. `initcop` is the TCop:
+   * 14..17 are `#0085 TCop eats` and three `TCop punc[h]`es, 13 is
+   * `#0084 TCop Dies`. 19 and 20 are `#0100 claw wizz` and `#0101 clawclamp`.
+   */
+  copHit: [14, 15, 16, 17] as const,
+  copDeath: 13,
+  /** `0x417a7c` and `0x417ab8` — the claw, travelling and closing */
+  clawMove: 19,
+  clawShut: 20,
   /** `0x43b6a3` — `mall.snd` names index 32 "#0120 coke mach[ine]" */
   cokeHit: 32,
   /**

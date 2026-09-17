@@ -1626,6 +1626,79 @@ export const FOES: Readonly<Record<string, Foe>> = {
     vanishes: true,
     from: "0x41eb70 / 0x425bc0 / 0x425c90 / 0x4264f0",
   },
+  /**
+   * CHAPTER FOUR opens with the TCop — `initcop` in the records, and `lab.snd`
+   * calls it that outright: `#0084 TCop Dies`, `#0085 TCop eats`, and three
+   * `#0087..#0089 TCop punc[h]`es. Creator `0x411660`, class `0x413f00`, think
+   * `0x413fd0`, hit `0x4147d0`.
+   *
+   * Nineteen of them, seven in MAZE and twelve in BARREL. **250 health and 550
+   * points** — the most any creature outside a boss is worth, past the
+   * skeleton's 450 — a divisor of 13 and a shove weight of 3.
+   *
+   * It has eleven scripts and two of them are the same walk in reverse:
+   * `0x46c720` tag 0 is 2100..2105 at dx 65 and tag 1 is 2105..2100 at −195,
+   * −130, −65, −65, −65, −65. It backs away faster than it comes on.
+   *
+   * And it dies two ways: `0x4148ed` tests `obj+0x32`, the accumulated fall, and
+   * a cop killed off the ground gets `0x46c8f0` tag 3 instead of `0x46c9a8`.
+   */
+  initcop: {
+    /**
+     * ...and it works the LEVERS. `0x414664` is inside the cop's own think: it
+     * walks to a switch, and inside ten pixels calls `0x412550(point, 0)` —
+     * which finds the `initswitch` at that point and hands its tag 3 to tag 0,
+     * the throw up. Level thirteen's cage doors are opened by its guards, the
+     * way level six's showers are turned on by its gang.
+     */
+    lever: { dir: 0, anim: { cels: [2170, 2171, 2171, 2171], hold: 2, from: "0x46c888 tag 2" }, at: 3, reachPx: 10, sound: [], from: "0x414644 / 0x414664 / 0x412550" },
+    gait: { cels: [2100, 2101, 2102, 2103, 2104, 2105], hold: 2, dx: [65, 65, 65, 65, 65, 65], from: "0x46c720 tag 0" },
+    divisor: 13,
+    // `0x46c828` tag 0, kind 8
+    flinch: [{ cels: [2250, 2251], hold: 2, from: "0x46c828 tag 0" }],
+    // `0x46c9a8` tag 0, kind 11 — the one it gets standing up
+    death: { cels: [2190, 2191, 2192, 2193, 2194], hold: 2, from: "0x46c9a8 tag 0" },
+    // `0x413f40` — the cel the creator stands it on
+    wake: { cel: 2100, from: "0x413f40 / 0x46c628 tag 0" },
+    // `0x4116b5` — `0x40e300(0xfa)`
+    health: 250,
+    hitSound: FOE_SFX.copHit,
+    deathSound: FOE_SFX.copDeath,
+    // `0x41490d` pays 0x226
+    panel: { health: 250, plate: 13301, award: 550 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x411660 / 0x413f00 / 0x413fd0 / 0x4147d0",
+  },
+  /**
+   * The SLURP — `initslurp`, twenty of them and all twenty in MAZE. Creator
+   * `0x411a20`, class `0x414a00`, think `0x414ae0`, hit `0x415100`.
+   *
+   * One cel. `0x46d268`, `0x46d278` and `0x46d458` are three different scripts
+   * of three different kinds and every record in all of them is **2550**, so
+   * whatever state it is in it looks the same.
+   *
+   * Sixty health, no gravity, and `0x414a36` gives it `obj+0xa = 0xfffb` — a
+   * standing vertical velocity of **−5**, so it drifts upward from the moment it
+   * is made. It pays nothing: `0x415100` has no `0x40d450` in it. It counts
+   * towards the census all the same, and twenty of MAZE's twenty-seven are these.
+   */
+  initslurp: {
+    gait: { cels: [2550], hold: 1, from: "0x46d268 tag 0" },
+    divisor: 8,
+    floats: true,
+    flinch: [{ cels: [2550], hold: 1, from: "0x46d278 tag 0" }],
+    death: { cels: [2550], hold: 1, from: "0x46d458 tag 0" },
+    // `0x411a74` — `0x40e300(0x3c)`
+    health: 60,
+    // `0x414b21` claims the bar with plate 0x33f4
+    panel: { health: 60, plate: 13300, award: 0 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x411a20 / 0x414a00 / 0x414ae0 / 0x415100",
+  },
 };
 
 /** how many engine frames one run of an animation lasts */

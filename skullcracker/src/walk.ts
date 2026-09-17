@@ -140,6 +140,18 @@ import {
   Floor,
   SURGE,
   Surge,
+  CAGE,
+  Cage,
+  ALARM,
+  Alarm,
+  FAN,
+  Fan,
+  BELT,
+  Belt,
+  CHAIR,
+  Chair,
+  CLAW,
+  Claw,
 } from "./props";
 import { DEATH_FILMS, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
 import { CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, WEAPONS, type Flare, type Gun } from "./guns";
@@ -1225,6 +1237,15 @@ interface Level {
   floors: Floor[][];
   /** ...and its two surges, the only hazard in the game that gives you something */
   surges: Surge[][];
+  /** level thirteen's seven cage doors, which become obstacles when they shut */
+  cages: Cage[][];
+  /** its six alarms and its eight fans */
+  alarms: Alarm[][];
+  fans: Fan[][];
+  /** level fourteen's forty-two conveyors, its two chairs and its four claws */
+  belts: Belt[][];
+  chairs: Chair[][];
+  claws: Claw[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1492,7 +1513,7 @@ async function loadLevel(index: number): Promise<void> {
     pal,
     rooms,
     solids,
-    spawned: rooms.map((r) => spawnIn(sbk, r)),
+    spawned: ((claimed: Set<SbkEntity>) => rooms.map((r) => spawnIn(sbk, r, claimed)))(new Set<SbkEntity>()),
     planks,
     elevators: rooms.map((r, i) => elevatorsIn(sbk, r, solids[i], planks[i])),
     ibeams: rooms.map((r) => ibeamsIn(sbk, r)),
@@ -1528,6 +1549,37 @@ async function loadLevel(index: number): Promise<void> {
         x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: 0,
       })),
     ),
+    cages: rooms.map((r) =>
+      placed(sbk, r, "initcagedoor", [CAGE.shut], (e) => ({
+        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
+        // a door's own number is the absolute value; SEWER's five are filed the
+        // same way and MAZE's seven run 1, 2, -2, 3, 4, -4, 4
+        param: Math.abs(e.param), state: e.param < 0 ? ("open" as const) : ("shut" as const), clock: 0,
+      })),
+    ),
+    alarms: rooms.map((r) => placed(sbk, r, "initalarm", [ALARM.quiet], (e) => ({ x: e.pointX, y: e.pointY, param: e.param, clock: 0 }))),
+    belts: rooms.map((r) => [
+      ...placed(sbk, r, "initbeltleft", BELT.roll.cels, (e) => ({
+        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
+        dir: -1 as const, param: e.param, clock: 0,
+      })),
+      ...placed(sbk, r, "initbeltright", BELT.roll.cels, (e) => ({
+        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
+        dir: 1 as const, param: e.param, clock: 0,
+      })),
+    ]),
+    chairs: rooms.map((r) => placed(sbk, r, "initchair", CHAIR.runs[0].cels, (e) => ({ x: e.pointX, y: e.pointY, run: 0, clock: 0 }))),
+    claws: rooms.map((r) =>
+      placed(sbk, r, "initclaw", CLAW.running.cels, (e) => ({
+        x: e.pointX, y: e.pointY, left: e.left, right: e.right, state: "idle" as const, clock: 0,
+      })),
+    ),
+    fans: [
+      ...rooms.map((r) => [
+        ...placed(sbk, r, "inithfan", [FAN.h.stopped], (e) => ({ x: e.pointX, y: e.pointY, horizontal: true, state: "off" as const, clock: 0 })),
+        ...placed(sbk, r, "initvfan", [FAN.v.stopped], (e) => ({ x: e.pointX, y: e.pointY, horizontal: false, state: "off" as const, clock: 0 })),
+      ]),
+    ],
     bridges: rooms.map((r) =>
       placed(sbk, r, "initbridge", [BRIDGE.whole], (e) => ({
         x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
@@ -1994,12 +2046,24 @@ function everyAnim(foe: Foe): FoeAnim[] {
  * ground, so every foe in the level spawned inside the terrain, fell through it
  * and was still falling thousands of pixels down when the level ended.
  */
-function spawnIn(sbk: SbkFile, room: SbkRoom): Enemy[] {
+/**
+ * ...and a record belongs to ONE room, which is the engine's own rule.
+ *
+ * `0x40b940`'s kind 2 walks the region table and answers with the FIRST region
+ * whose rect contains the point. Rooms overlap — that is how you walk out of one
+ * and into the next — and a creature standing in a seam was being spawned once
+ * per room it fell in. BARREL's rooms overlap x7464..7691 and its cop at x7521
+ * stands in that seam, which is why a level of twelve had a census of thirteen
+ * and a kill quota that could never be met.
+ */
+function spawnIn(sbk: SbkFile, room: SbkRoom, taken?: Set<SbkEntity>): Enemy[] {
   const out: Enemy[] = [];
   for (const e of sbk.entities) {
     const foe = FOES[e.name];
     if (!e.isEntity || !foe) continue;
+    if (taken?.has(e)) continue;
     if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    taken?.add(e);
     // every cel it needs has to be in this book, or it is some other level's —
     // and that now includes the flinches and the death, which is the check that
     // would have caught the old cross-chapter mix-up: this chapter's rat has no
@@ -3163,6 +3227,12 @@ function takeHits(): void {
     if (!cel?.strike) continue;
     if (hit(cel, a.x, a.y, 1, 0, 0)) return;
   }
+  // `0x417208` — the claw's first blow is a hundred, and its second is the code
+  for (const c of hereOf((l) => l.claws)) {
+    const cel = lvl.sbk.cels.find((q) => q.id === clawCel(c));
+    if (!cel?.strike) continue;
+    if (hit(cel, c.x, c.y, 1, 0, 0)) return;
+  }
   // ...and the goop, which carries `obj+0x1a = 0x64` and therefore its cel's own
   // pair unscaled — see {@link dripStrike} for why that is one cel of nine
   for (const d of drips) {
@@ -3431,7 +3501,10 @@ function stepCrushes(): void {
 function switchesIn(sbk: SbkFile, room: SbkRoom): Switch[] {
   const out: Switch[] = [];
   for (const e of sbk.entities) {
-    if (!e.isEntity || e.name !== "switch") continue;
+    // SERVICE calls them `switch` and MAZE calls them `initswitch`, and they
+    // are the same class: `0x473548` and `0x46c050` have the same four tags on
+    // the same four cel runs, one per chapter's book
+    if (!e.isEntity || (e.name !== "switch" && e.name !== "initswitch")) continue;
     if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
     if (!SWITCH.off.cels.every((id) => sbk.byId.has(id))) continue;
     out.push({
@@ -4018,6 +4091,192 @@ function surgeCel(q: Surge): number {
   return SURGE.arc.cels[Math.floor(q.clock / SURGE.arc.hold) % SURGE.arc.cels.length];
 }
 
+/**
+ * MAZE's cage doors, alarms and fans — three classes that keep their own time.
+ *
+ * `0x413100` is the whole of a cage door: the two moving tags hand over as they
+ * end, and the shutting one calls `0x411460`, which appends its rect to the
+ * engine's obstacle table. That is the only thing that makes it solid, and it is
+ * the same table the level's own `obstacle` records fill.
+ */
+function stepCages(): void {
+  const lvl = level;
+  if (!lvl) return;
+  for (const c of lvl.cages.flat()) {
+    if (c.state === "shut" || c.state === "open") continue;
+    c.clock += 1;
+    const a = c.state === "opening" ? CAGE.opening : CAGE.closing;
+    if (c.clock < a.cels.length * a.hold) continue;
+    c.state = c.state === "opening" ? "open" : "shut";
+    c.clock = 0;
+    if (c.state === "shut") sound?.effect(CAGE.sound, c.x, c.y);
+  }
+}
+
+/** which cel a cage door is showing, or 0 for the open tag — which draws nothing */
+function cageCel(c: Cage): number {
+  if (c.state === "shut") return CAGE.shut;
+  if (c.state === "open") return 0;
+  const a = c.state === "opening" ? CAGE.opening : CAGE.closing;
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(c.clock / a.hold))];
+}
+
+/**
+ * ...the alarms, which are one sweep and one sound handed round for ever
+ * (`0x412fc0`), and the fans, which keep their own counter: `0x41541d` writes
+ * fifteen frames of stillness into `user+0xc` and `0x4155ef` writes sixty of
+ * turning, and nothing in the level starts or stops one.
+ */
+function stepAlarms(): void {
+  for (const a of hereOf((l) => l.alarms)) {
+    const was = Math.floor(a.clock) % (ALARM.flash.cels.length * ALARM.flash.hold);
+    a.clock += 1;
+    if (Math.floor(a.clock) % (ALARM.flash.cels.length * ALARM.flash.hold) < was) sound?.effect(ALARM.sound, a.x, a.y);
+  }
+}
+
+function alarmCel(a: Alarm): number {
+  const i = Math.floor((a.clock % (ALARM.flash.cels.length * ALARM.flash.hold)) / ALARM.flash.hold);
+  return ALARM.flash.cels[Math.min(ALARM.flash.cels.length - 1, i)];
+}
+
+function stepFans(): void {
+  for (const f of hereOf((l) => l.fans)) {
+    const kit = f.horizontal ? FAN.h : FAN.v;
+    f.clock += 1;
+    if (f.state === "off" && f.clock >= FAN.offFrames) {
+      f.state = "up";
+      f.clock = 0;
+      sound?.effect(FAN.spinUp, f.x, f.y);
+    } else if (f.state === "up" && f.clock >= kit.spin.cels.length * kit.spin.hold) {
+      f.state = "on";
+      f.clock = 0;
+    } else if (f.state === "on" && f.clock >= FAN.onFrames) {
+      f.state = "down";
+      f.clock = 0;
+      sound?.effect(FAN.spinDown, f.x, f.y);
+    } else if (f.state === "down" && f.clock >= kit.spin.cels.length * kit.spin.hold) {
+      f.state = "off";
+      f.clock = 0;
+    }
+  }
+}
+
+/** which cel a fan is showing */
+function fanCel(f: Fan): number {
+  const kit = f.horizontal ? FAN.h : FAN.v;
+  if (f.state === "off") return kit.stopped;
+  if (f.state === "on") return kit.held;
+  const i = Math.min(kit.spin.cels.length - 1, Math.floor(f.clock / kit.spin.hold));
+  return f.state === "up" ? kit.spin.cels[i] : kit.spin.cels[kit.spin.cels.length - 1 - i];
+}
+
+/**
+ * BARREL's conveyors — `0x416840`, which is one test and one number.
+ *
+ * The belt asks whether the player's own drawn bottom sits inside its band and
+ * whether they are on the ground, and if so writes twenty into its user struct.
+ * Standing on one carries you; walking on one adds to it, which is what makes
+ * the level's east runs fast and its west runs impossible.
+ *
+ * The strip animates whether or not anybody is on it — `0x46c0d8` at one engine
+ * frame a cel, `0x46c188` at three, and the record's own `param` picks.
+ */
+function stepBelts(): void {
+  const here = hereOf((l) => l.belts);
+  if (!here.length) return;
+  // ...and one belt carries you, not every belt you overlap
+  let carried = false;
+  for (const b of here) {
+    b.clock += 1;
+    if (!p.onGround || carried) continue;
+    // `0x416899` tests the player's own drawn BOX against the strip's bounds,
+    // not their point — and it has to: BARREL lays its belts end to end with a
+    // seven-pixel gap between one record's right and the next one's left, and a
+    // point test drops you in it.
+    const mine = playerBox();
+    if (!mine || mine.right < b.left || mine.left > b.right) continue;
+    if (p.y < b.top - 8 || p.y > b.bottom + BELT.bandPx) continue;
+    p.x += b.dir * BELT.carry;
+    carried = true;
+  }
+}
+
+/** which cel a belt is showing — backwards for a left-hand one, which is tag 1 */
+function beltCel(b: Belt): number {
+  const hold = b.param >= 8 ? BELT.slowHold : BELT.roll.hold;
+  const i = Math.floor(b.clock / hold) % BELT.roll.cels.length;
+  return b.dir < 0 ? BELT.roll.cels[BELT.roll.cels.length - 1 - i] : BELT.roll.cels[i];
+}
+
+/** ...and the chairs, which are four tags handed round and nothing else */
+function stepChairs(): void {
+  for (const c of hereOf((l) => l.chairs)) {
+    c.clock += 1;
+    const run = CHAIR.runs[c.run];
+    const len = run ? run.cels.length * run.hold : 2;
+    if (c.clock < len) continue;
+    c.clock = 0;
+    c.run = (c.run + 1) % (CHAIR.runs.length + 1);
+  }
+}
+
+function chairCel(c: Chair): number {
+  const run = CHAIR.runs[c.run];
+  if (!run) return CHAIR.rest;
+  return run.cels[Math.min(run.cels.length - 1, Math.floor(c.clock / run.hold))];
+}
+
+/**
+ * The claws — `0x4171e0`, a carriage on a rail that follows you.
+ *
+ * Its velocity is clamped to ±26 (`0x417344`, `0x417376`) and its position to
+ * its own record's bounds (`0x417316`), so it tracks the player along its track
+ * and cannot leave it. `0x417289` then measures the gap: inside 300 it reaches
+ * down, past 600 it waits, and in between it runs. Its grab is the code −3,
+ * which this port does not carry — see {@link CLAW}.
+ */
+function stepClaws(): void {
+  const here = hereOf((l) => l.claws);
+  if (!here.length) return;
+  for (const c of here) {
+    c.clock += 1;
+    const want = Math.max(c.left, Math.min(c.right, p.x));
+    const gap = Math.abs(p.x - c.x);
+    if (c.state === "down" || c.state === "shut" || c.state === "up") {
+      const a = c.state === "down" ? CLAW.down : c.state === "shut" ? CLAW.shut : CLAW.up;
+      if (c.clock < a.cels.length * a.hold) continue;
+      c.clock = 0;
+      c.state = c.state === "down" ? "shut" : c.state === "shut" ? "up" : "running";
+      if (c.state === "shut") sound?.effect(CLAW.clamp, c.x, c.y);
+      continue;
+    }
+    // it moves whether or not it is going to reach: `0x417344` is outside the
+    // distance test
+    const step = Math.max(-CLAW.speed, Math.min(CLAW.speed, want - c.x));
+    if (step !== 0 && c.state !== "running") {
+      c.state = "running";
+      c.clock = 0;
+      sound?.effect(CLAW.wizz, c.x, c.y);
+    }
+    c.x += step;
+    if (gap > CLAW.restPx) {
+      c.state = "idle";
+    } else if (gap < CLAW.reachPx && Math.abs(want - c.x) < 4) {
+      c.state = "down";
+      c.clock = 0;
+    }
+  }
+}
+
+/** which cel a claw is showing */
+function clawCel(c: Claw): number {
+  const a =
+    c.state === "idle" ? CLAW.idle : c.state === "running" ? CLAW.running : c.state === "down" ? CLAW.down : c.state === "shut" ? CLAW.shut : CLAW.up;
+  const i = c.state === "idle" || c.state === "running" ? Math.floor(c.clock / a.hold) % a.cels.length : Math.min(a.cels.length - 1, Math.floor(c.clock / a.hold));
+  return a.cels[i];
+}
+
 // ---- the guns ------------------------------------------------------------
 
 /**
@@ -4549,6 +4808,9 @@ function elevsHere(): Elev[] {
 function blockers(): { top: number; left: number; bottom: number; right: number }[] {
   const out: { top: number; left: number; bottom: number; right: number }[] = [...solids().obstacles];
   for (const d of doorsHere()) if (d.state !== "open") out.push(d);
+  // `0x411460` is what a cage door does as it shuts: it appends its own rect to
+  // the level's obstacle table, so it stops being a door and starts being wall
+  for (const c of hereOf((l) => l.cages)) if (c.state === "shut" || c.state === "closing") out.push(c);
   return out;
 }
 
@@ -4685,6 +4947,18 @@ function broadcast(param: number): void {
    * different region from the door they open, and the last of them is two rooms
    * and a shaft away from it.
    */
+  // ...and MAZE's seven cage doors take the same broadcast, out of the same
+  // range: its switches carry 1, 2, 3, 4 the way SEWER's carry -1, 2, 7, 8, -4
+  for (const c of lvl.cages.flat()) {
+    if (c.param !== param) continue;
+    if (c.state === "shut") {
+      c.state = "opening";
+      c.clock = 0;
+    } else if (c.state === "open") {
+      c.state = "closing";
+      c.clock = 0;
+    }
+  }
   for (const d of lvl.doors.flat()) {
     if (d.param !== param) continue;
     if (d.state === "shut") {
@@ -5345,7 +5619,7 @@ function stepEnemies(): void {
         if (!e.thrown && e.clock >= L.at * L.anim.hold) {
           e.thrown = true;
           // `0x43a191`: one roll in three, and then one of two takes
-          if (roll(3) === 1) sound?.effect(L.sound[roll(L.sound.length) - 1], e.x, e.y);
+          if (L.sound.length && roll(3) === 1) sound?.effect(L.sound[roll(L.sound.length) - 1], e.x, e.y);
           throwSwitch(aim, foe.lever!.dir);
         }
         if (e.clock >= run) {
@@ -6212,6 +6486,12 @@ function loop(now: number): void {
     if (frame) stepBridges();
     if (frame) stepFloors();
     if (frame) stepSurges();
+    if (frame) stepCages();
+    if (frame) stepAlarms();
+    if (frame) stepFans();
+    if (frame) stepBelts();
+    if (frame) stepChairs();
+    if (frame) stepClaws();
     stepGuns();
     if (frame) stepFlares();
     stepCrows();
@@ -6336,6 +6616,15 @@ function loop(now: number): void {
   // the goal's craft and the goo share the play plane with the player: the
   // engine's own effect class is collected with the actors, not the backdrop
   drawCraft(camX, camY);
+  for (const c of hereOf((l) => l.cages)) {
+    const id = cageCel(c);
+    if (id) drawLevelCel(id, c.x, c.y, camX, camY);
+  }
+  for (const a of hereOf((l) => l.alarms)) drawLevelCel(alarmCel(a), a.x, a.y, camX, camY);
+  for (const b of hereOf((l) => l.belts)) drawLevelCel(beltCel(b), b.x, b.y, camX, camY);
+  for (const c of hereOf((l) => l.chairs)) drawLevelCel(chairCel(c), c.x, c.y, camX, camY);
+  for (const c of hereOf((l) => l.claws)) drawLevelCel(clawCel(c), c.x, c.y, camX, camY);
+  for (const q of hereOf((l) => l.fans)) drawLevelCel(fanCel(q), q.x, q.y, camX, camY);
   for (const f of hereOf((l) => l.floors)) drawLevelCel(floorCel(f), f.x, f.y, camX, camY);
   for (const q of hereOf((l) => l.surges)) drawLevelCel(surgeCel(q), q.x, q.y, camX, camY);
   for (const b of hereOf((l) => l.bridges)) drawLevelCel(bridgeCel(b), b.x, b.y, camX, camY);
@@ -6644,6 +6933,11 @@ function loop(now: number): void {
     ...hereOf((l) => l.holes).map((h) => `grave ${h.state} cel ${holeCel(h)} at x${h.x}`),
     ...hereOf((l) => l.axes).map((a) => `axe cel ${axeCel(a)} at x${a.x}`),
     ...hereOf((l) => l.floors).map((f) => `floor ${f.state} cel ${floorCel(f)} at x${f.x}`),
+    ...hereOf((l) => l.cages).map((c) => `cage ${c.param} ${c.state} cel ${cageCel(c)} at x${c.x}`),
+    ...hereOf((l) => l.fans).map((q) => `fan ${q.horizontal ? "h" : "v"} ${q.state} cel ${fanCel(q)} at x${q.x}`),
+    hereOf((l) => l.belts).length ? `${hereOf((l) => l.belts).length} belts` : "",
+    ...hereOf((l) => l.chairs).map((c) => `chair ${c.run} cel ${chairCel(c)} at x${c.x}`),
+    ...hereOf((l) => l.claws).map((c) => `claw ${c.state} cel ${clawCel(c)} at x${Math.round(c.x)}`),
     ...hereOf((l) => l.surges).map((q) => `surge cel ${surgeCel(q)} at x${q.x}`),
     ...hereOf((l) => l.bridges).map((b) => `bridge ${b.state} cel ${bridgeCel(b)} at x${b.x}`),
     ...hereOf((l) => l.hands).map((q) => `hand ${q.state}${q.underfoot ? " underfoot" : ""} cel ${handCel(q)} at x${Math.round(q.atX)}`),

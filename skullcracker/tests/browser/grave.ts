@@ -88,15 +88,24 @@ const main = async (): Promise<void> => {
   await go(1050);
   await page.waitForTimeout(700);
   let dead = false;
-  for (let i = 0; i < 260 && !dead; i++) {
+  let lastX: number | null = null;
+  let missed = 0;
+  for (let i = 0; i < 300 && !dead; i++) {
     await page.waitForTimeout(40);
     const m = /nearest initzomb (-?\d+)\/(\d+)hp (\w+) at x (-?\d+)/.exec(await say());
-    if (!m) break;
-    if (m[3] === "dead") {
-      dead = true;
-      break;
+    // the HUD names whichever thing is nearest in x, and sixteen zombies patrol
+    // past each other: a frame in which another is nearer is not the fight ending
+    if (!m) {
+      if (++missed > 40 || lastX === null) break;
+    } else {
+      missed = 0;
+      if (m[3] === "dead") {
+        dead = true;
+        break;
+      }
+      lastX = Number(m[4]);
     }
-    const d = Number(m[4]) - (await at()).x;
+    const d = lastX! - (await at()).x;
     if (Math.abs(d) < 90) {
       await page.keyboard.press("k");
       await page.waitForTimeout(190);

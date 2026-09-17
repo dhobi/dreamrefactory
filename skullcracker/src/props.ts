@@ -1789,3 +1789,243 @@ export interface Surge {
   right: number;
   clock: number;
 }
+
+/**
+ * MAZE's cage doors — `initcagedoor`, seven of them. Creator `0x4113d0`, class
+ * `0x413060`, think `0x413100`.
+ *
+ * Level thirteen's lock, and it is SEWER's told with different art and one
+ * extra move: a shut cage door **adds itself to the engine's obstacle table**.
+ * `0x411460` increments `[0x46b9b0]` and appends the door's own rect at
+ * `0x4a89e2 + n * 48`, which is the same table the level's `obstacle` records
+ * fill — so the door is not a special case to anything that walks, it simply
+ * becomes another piece of wall. `0x413190` takes it out again.
+ *
+ * ```
+ *   closing  0x46c010 tag 0, 2012 2011    four frames a cel
+ *   shut     tag 1, 2010                  ...and now it is an obstacle, with 0x22
+ *   opening  tag 2, 2011 2012
+ *   open     tag 3, cel 0                 nothing drawn, nothing solid
+ * ```
+ *
+ * Its creator files cel 0xbc9 — 3017 — and there is no cel 3017 in MAZE.SBK;
+ * the think installs `0x46c010` before anything is drawn, the same leftover the
+ * wraith's creator carries.
+ */
+export const CAGE = {
+  shut: 2010,
+  /** `0x46c010` tag 0 — and `ticksPerFrame` is FOUR */
+  closing: { cels: [2012, 2011], hold: 4, from: "0x46c010 tag 0" },
+  /** tag 2 */
+  opening: { cels: [2011, 2012], hold: 4, from: "0x46c010 tag 2" },
+  /** `0x413142` — `lab.snd` 0x22 */
+  sound: 0x22,
+  from: "0x4113d0 / 0x413060 / 0x413100",
+} as const;
+
+export interface Cage {
+  x: number;
+  y: number;
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** the record's own `param`, which is the number a switch broadcasts */
+  param: number;
+  state: "shut" | "opening" | "open" | "closing";
+  clock: number;
+}
+
+/**
+ * The alarm — `initalarm`, six of them and all six in MAZE. Creator `0x411370`,
+ * class `0x412f40`, think `0x412fc0`.
+ *
+ * Two tags and a sound. `0x46bfc0` tag 0 is one cel, 3566, and tag 1 is the
+ * whole sweep 3560…3566; the think hands one to the other as each ends and
+ * plays `lab.snd` 0x24 on the way round.
+ */
+export const ALARM = {
+  quiet: 3566,
+  /** `0x46bfc0` tag 1 — seven cels at two frames each */
+  flash: { cels: [3560, 3561, 3562, 3563, 3564, 3565, 3566], hold: 2, from: "0x46bfc0 tag 1" },
+  /** `0x412fea` */
+  sound: 0x24,
+  from: "0x411370 / 0x412f40 / 0x412fc0",
+} as const;
+
+export interface Alarm {
+  x: number;
+  y: number;
+  param: number;
+  clock: number;
+}
+
+/**
+ * The fans — `inithfan` (three) and `initvfan` (five), both in MAZE. Creators
+ * `0x411ae0` and `0x411b40`, classes `0x4152b0` and `0x415870`.
+ *
+ * One script shape between them, four tags: spin up, hold, spin down, stopped.
+ * What turns the wheel is a counter in the fan's OWN user data — `0x41541d`
+ * writes 15 into `user+0xc` and `0x4155ef` writes 60 — so a fan is off for
+ * fifteen frames and on for sixty, for ever, and nothing in the level starts it.
+ *
+ * The horizontal one's blades carry a strike box (10020's runs the full 217
+ * pixels of its own height, 80 wide on the left of its anchor) and the vertical
+ * one's do not, which is the difference between the two.
+ */
+export const FAN = {
+  h: {
+    /** `0x46d478` — tag 0 up, tag 1 held, tag 2 down, tag 3 stopped */
+    spin: { cels: [10020, 10021, 10022, 10023, 10024], hold: 1, from: "0x46d478 tag 0" },
+    held: 10024,
+    stopped: 10020,
+  },
+  v: {
+    spin: { cels: [10030, 10031, 10032, 10033, 10034], hold: 1, from: "0x46d598 tag 0" },
+    held: 10034,
+    stopped: 10030,
+  },
+  /** `0x4155ef` and `0x41541d` — engine frames turning, and engine frames still */
+  onFrames: 0x3c,
+  offFrames: 0xf,
+  /** `0x415430` and `0x415590` */
+  spinUp: 0x16,
+  spinDown: 0x15,
+  divisor: 10,
+  from: "0x411ae0 / 0x4152b0 / 0x4153a0 and 0x411b40 / 0x415870",
+} as const;
+
+export interface Fan {
+  x: number;
+  y: number;
+  /** `inithfan`'s blades have a strike box and `initvfan`'s have none */
+  horizontal: boolean;
+  state: "up" | "on" | "down" | "off";
+  clock: number;
+}
+
+/**
+ * BARREL's conveyors — `initbeltleft` (twenty-six) and `initbeltright`
+ * (sixteen), which share one creator (`0x411500`) and one class (`0x4167c0`).
+ * Think `0x416840`.
+ *
+ * Each record is a 278x36 strip. The think measures the player's own drawn box
+ * (`0x4025b0` then `0x42f9f0`), asks whether their bottom sits inside the
+ * belt's own band (`0x416899` against `user+8` and `user+0xc`) and whether they
+ * are on the ground (`0x4168d0`), and if so writes **0x14 — twenty** into
+ * `user+4`. That is the carry, and it is the same twenty whichever way the belt
+ * runs; the class is what says which way.
+ *
+ * Two scripts and the same five cels in both: `0x46c0d8` runs them at one
+ * engine frame each and `0x46c188` at three. The record's own `param` — 4, 6, 8
+ * or 10 across BARREL's forty-two — is what picks between them.
+ */
+export const BELT = {
+  /** `0x46c0d8` tag 0 — and tag 1 is the same five backwards */
+  roll: { cels: [5570, 5571, 5572, 5573, 5574], hold: 1, from: "0x46c0d8 tag 0" },
+  /** `0x46c188`, the same five at three frames a cel */
+  slowHold: 3,
+  /** `0x416965`'s `mov word ptr [edx+4], 0x14` */
+  carry: 0x14,
+  /** how far below the strip's own point the player's feet may be and still ride */
+  bandPx: 36,
+  from: "0x411500 / 0x4167c0 / 0x416840",
+} as const;
+
+export interface Belt {
+  x: number;
+  y: number;
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** `initbeltleft` is −1 and `initbeltright` is +1 */
+  dir: -1 | 1;
+  /** the record's own param, which picks `0x46c0d8` over `0x46c188` */
+  param: number;
+  clock: number;
+}
+
+/**
+ * The chair — `initchair`, two of them, both in BARREL. Creator `0x411d40`,
+ * class `0x417970`, think `0x4179f0`.
+ *
+ * One script, `0x46dfd8`, four tags of six cels at two frames each: 2200s,
+ * 2210s, 2220s and then 2226 held. The think hands them round in order and
+ * there is nothing else in the class — no health, no blow, no rect test. It is
+ * a piece of the factory that moves.
+ */
+export const CHAIR = {
+  runs: [
+    { cels: [2200, 2201, 2202, 2203, 2204, 2205], hold: 2, from: "0x46dfd8 tag 0" },
+    { cels: [2210, 2211, 2212, 2213, 2214, 2215], hold: 2, from: "0x46dfd8 tag 1" },
+    { cels: [2220, 2221, 2222, 2223, 2224, 2225], hold: 2, from: "0x46dfd8 tag 2" },
+  ],
+  /** tag 3 — one cel, and the think comes back round to tag 0 from it */
+  rest: 2226,
+  from: "0x411d40 / 0x417970 / 0x4179f0",
+} as const;
+
+export interface Chair {
+  x: number;
+  y: number;
+  /** which of the three runs is playing, or 3 for the held cel */
+  run: number;
+  clock: number;
+}
+
+/**
+ * The claw — `initclaw`, four of them, all in BARREL. Creator `0x411ca0`, class
+ * `0x417130`, think `0x4171e0`.
+ *
+ * A carriage on a rail that follows you. `0x417344` and `0x417376` clamp its
+ * horizontal velocity to **±26** and `0x417316` clamps its position to its own
+ * record's bounds, so it tracks the player along a 582-to-1410 pixel track and
+ * cannot leave it. Then `0x417289` measures the distance:
+ *
+ * ```
+ *   inside 300   0x46dd80   the reach: 2420…2426, and it comes down
+ *   over   600   0x46dd18   the idle, with a rolled wait
+ *   between      0x46dc78   the carriage, 2460…2469, running
+ * ```
+ *
+ * It plays `#0100 claw wizz` as it travels and `#0101 clawclamp` as it shuts.
+ *
+ * Its first blow is a hundred and its second is `0xfffd` — **−3**, the same code
+ * `initbush`'s grab and `inithand`'s carry. This port does not carry codes, so a
+ * claw here travels, drops, holds and lifts, and cannot take hold of you.
+ */
+export const CLAW = {
+  /** `0x46dc78` tag 0 — the carriage running its rail */
+  running: { cels: [2460, 2461, 2462, 2463, 2464, 2465, 2466, 2467, 2468, 2469], hold: 2, from: "0x46dc78 tag 0" },
+  /** `0x46dd80` tags 1, 2 and 4 — down, worry, up */
+  down: { cels: [2420, 2421, 2422, 2423, 2424], hold: 2, from: "0x46dd80 tag 1" },
+  shut: { cels: [2424, 2425, 2426, 2425], hold: 2, from: "0x46dd80 tag 2" },
+  up: { cels: [2424, 2423, 2422, 2421, 2420], hold: 2, from: "0x46dd80 tag 4" },
+  /** `0x46dd18` tag 1 — what it does with nobody near */
+  idle: { cels: [2410, 2411, 2412], hold: 1, from: "0x46dd18 tag 1" },
+  /** `0x417344`'s `0x1a` */
+  speed: 0x1a,
+  /** `0x417289`'s `cmp ecx, 0x12c` and `0x41729d`'s `cmp ecx, 0x258` */
+  reachPx: 0x12c,
+  restPx: 0x258,
+  /** `0x41725c` and `0x417385` */
+  wizz: 0x13,
+  clamp: 0x14,
+  /** `0x41714d` */
+  divisor: 0x14,
+  blow: 100,
+  /** `0x41745c` — a code, and not one this port carries */
+  grab: -3,
+  from: "0x411ca0 / 0x417130 / 0x4171e0",
+} as const;
+
+export interface Claw {
+  /** where the carriage is now, and the rail it may not leave */
+  x: number;
+  y: number;
+  left: number;
+  right: number;
+  state: "idle" | "running" | "down" | "shut" | "up";
+  clock: number;
+}

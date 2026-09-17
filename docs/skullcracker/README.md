@@ -1069,6 +1069,87 @@ per-record loop at all — `0x41e473` stores its COUNT in `0x46f644` and never
 walks the records, so whatever it is, it is not placed the way everything else
 in the level is.
 
+### Chapter four is a factory, and its doors are opened by its guards
+
+MAZE and BARREL share one book pointer (`0x4a5178`), one sound bank (`lab.snd`)
+and one placer — `0x410b40`, which stands up twenty-two kinds of thing. Thirteen
+of them were new here and eleven are built.
+
+**The TCop** (`initcop`) is what `lab.snd` calls it outright: `#0084 TCop Dies`,
+`#0085 TCop eats`, three `#0087..#0089 TCop punc[h]`es. Nineteen of them, seven
+in MAZE and twelve in BARREL, at **250 health and 550 points** — the most any
+creature outside a boss is worth. It has eleven scripts and two of them are the
+same walk in reverse: `0x46c720` tag 0 is 2100…2105 at dx 65 and tag 1 is
+2105…2100 at −195, −130, −65, −65, −65, −65. It backs away faster than it comes
+on. And it dies two ways: `0x4148ed` tests `obj+0x32`, the accumulated fall, so
+one killed off the ground gets a different script.
+
+**The slurp** (`initslurp`) is twenty of MAZE's twenty-seven and worth nothing —
+`0x415100` has no `0x40d450` in it. Sixty health, no gravity, and `0x414a36`
+gives it a standing vertical velocity of −5, so it drifts upward from the frame
+it is made. Its three scripts are three different kinds and **every record in all
+three is cel 2550**: whatever state a slurp is in, it looks the same.
+
+**And the cage doors are opened by the cops.** `initswitch` and `initcagedoor`
+are SERVICE's lever and SEWER's door told again — `0x46c050` has the same four
+tags on the same four cel runs `0x473548` does — but nothing the player can do
+throws one. `0x414664` is inside the COP's own think: it walks to a switch and,
+within ten pixels, calls `0x412550`, which hands that switch's tag 3 to tag 0.
+Level thirteen's guards let themselves out.
+
+What makes a shut cage solid is worth saying, because it is not a special case:
+`0x411460` increments `[0x46b9b0]` and appends the door's own rect at
+`0x4a89e2 + n * 48` — **the same obstacle table the level's own `obstacle`
+records fill**. A closed door stops being a door and starts being wall.
+
+**The alarms and the fans answer to nothing.** An alarm is one sweep and one
+sound handed round for ever (`0x412fc0`); a fan keeps its own counter, fifteen
+frames still and sixty turning, written into its own user struct by `0x41541d`
+and `0x4155ef`. The horizontal one's blades carry a strike box and the vertical
+one's do not.
+
+### BARREL is forty-two conveyors and one number
+
+`initbeltleft` (twenty-six) and `initbeltright` (sixteen) share a creator and a
+class. Each record is a 278x36 strip, and `0x416840` is one test and one number:
+is the player's drawn box inside the strip's band and are they on the ground,
+and if so write **0x14 — twenty** into `user+4`.
+
+That it is the BOX and not the point matters. BARREL lays its belts end to end
+with a **seven-pixel gap** between one record's right edge and the next one's
+left; on a point test you fall down the seam and the ride stops dead. The same
+five cels serve both directions, run forwards or backwards, at one engine frame
+each out of `0x46c0d8` or three out of `0x46c188` — and the record's own `param`,
+4, 6, 8 or 10 across the forty-two, is what picks.
+
+Ten `statblasterpack` stand in the level and there is no `statblaster` anywhere
+in it: chapter four names the blaster on the way in and the gun itself is in VAT,
+two levels later.
+
+**The claw** (`initclaw`, four of them) is a carriage on a rail that follows
+you: `0x417344` and `0x417376` clamp its velocity to ±26 and `0x417316` clamps
+its position to its own record's bounds, so it tracks the player along a 582-to-
+1410 pixel track and cannot leave it. `0x417289` then measures the gap — inside
+300 it reaches down, past 600 it waits, and between the two it runs, playing
+`#0100 claw wizz` as it travels and `#0101 clawclamp` as it shuts. Its first
+blow is a hundred and its second is the code −3, so a claw here can hit you and
+cannot take hold of you.
+
+Not built, and said so: **`initbiggun`** (two, a plasma turret — `lab.snd` 3 is
+`#0050 Plasmagun`), and chapter four's own **`initbarrel`**, which is not an
+object at all: `0x411c50` writes eight bytes per record into a table at
+`0x4a89b0` and a count into `0x46dc50`, so those three records are data for
+something else rather than things in the level.
+
+### A record belongs to one room
+
+`0x40b940`'s kind 2 walks the region table and answers with the FIRST region
+whose rect contains the point. Rooms overlap — that is how you walk out of one
+and into the next — and a creature standing in a seam was being spawned once per
+room it fell in. BARREL's two regions overlap x7464…7691 and its cop at x7521
+stands in that seam, so a level of twelve had a census of thirteen and a kill
+quota that could never be met. Each record is claimed once now, first room wins.
+
 ### The mission clock was a record all along
 
 Every chapter's entry function ends with the same block. `0x421e60` is chapter
@@ -1334,6 +1415,8 @@ all — and that is the whole of the mixer.
 - `skullcracker/tests/browser/cavern.ts` — CAVERN's four creatures, its blades and its bridges
 - `skullcracker/tests/browser/ravecave.ts` — RAVECAVE's Igors, its one wraith and its scepter
 - `skullcracker/tests/browser/tower.ts` — TOWER's floors, its bishop and its surges
+- `skullcracker/tests/browser/maze.ts` — MAZE's cops, its cage doors and the switches they throw
+- `skullcracker/tests/browser/barrel.ts` — BARREL's forty-two conveyors and what rides them
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser
