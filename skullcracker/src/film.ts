@@ -16,7 +16,7 @@
  */
 import { MovFile, MovSegment, MovClickRegion } from "@dreamfactory/engine/df/mov";
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "@dreamfactory/engine/df/image";
-import { segmentInterval, frameHoldMs, TICK_MS } from "@dreamfactory/engine/df/mov-pace";
+import { segmentInterval, frameHoldMs } from "@dreamfactory/engine/df/mov-pace";
 import { segmentAudio, soundtrackFor } from "@dreamfactory/engine/df/mov-sound";
 import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
 import { AudioSink, PlayHandle } from "@dreamfactory/engine/runtime/audio";
@@ -54,6 +54,17 @@ export class Film {
   /** when the frame on screen is due to give way */
   private dueAt = 0;
   private bed: PlayHandle | null = null;
+  /**
+   * The film's own one-shots, still playing — the VOICE channel of the original,
+   * in the only sense this page has one.
+   *
+   * They are kept for two reasons: a sound belongs to the film that fired it and
+   * has to die with it, and a frame may be authored to hold until they are done
+   * ({@link MovSegment} `waitsForVoice`).
+   */
+  private events: PlayHandle[] = [];
+  /** the sound a click just fired, so entering its frame does not fire it twice */
+  private clickSound = "";
   private byName = new Map<string, number>();
 
   constructor(
@@ -111,13 +122,48 @@ export class Film {
     this.pos = 0;
     this.dueAt = now + this.holdMs(0);
     this.draw();
+    // ...and the FIRST frame's own sound, which is where nearly all of this
+    // game's audio is. Only three films in the rip carry a loop-table bed
+    // (`menu.mov` and the chapter briefings); everything else — Boggs' spoken
+    // orders, the seven kill vignettes, the four time-out ones — is a one-shot
+    // named by the frame that starts its segment, and this player used to fire
+    // a one-shot only from a CLICKED region. `boggs01.mov` has four segments of
+    // speech (`1a`…`1d`) and played all four in silence.
+    this.enterFrame(0);
   }
 
-  /** how long frame `i` is held: its own authored hold, floored by the film's */
+  /** a frame is now on screen: fire the sound it names, if it names one */
+  private enterFrame(idx: number): void {
+    const name = this.seg.frames[idx]?.sound ?? "";
+    if (name && name.toLowerCase() !== this.clickSound) this.playEvent(name);
+    this.clickSound = "";
+  }
+
+  /**
+   * How long frame `i` is held.
+   *
+   * A segment WITH a bed is paced against the bed, which is what {@link
+   * segmentInterval} computes and what the chapter films want. A segment
+   * without one is paced by its own authored holds and by nothing else: its
+   * `minHoldTicks` IS its frame rate, and `interval`'s 66 ms native-rate floor
+   * — a rule for films that carry no timing at all — must not raise it.
+   *
+   * The films say so themselves. Every inset segment in this rip is authored at
+   * 3 ticks, 50 ms, and the one-shot over it is exactly as long as the picture:
+   *
+   *     KILL1  seg2  186 frames x 50ms = 9.30s   "kill 8"  9.29s
+   *     BOGGS01 seg2 106                = 5.30s   "1a"     5.25s
+   *     BOGGS01 seg3 152                = 7.60s   "1b"     7.57s
+   *     BOGGS01 seg4 127                = 6.35s   "1c"     6.32s
+   *     BOGGS01 seg5 177                = 8.85s   "1d"     8.82s
+   *
+   * At 66 ms those same segments ran a third longer than the line spoken over
+   * them, which is what a floor meant for `logo.mov` does to a film that was
+   * timed by hand.
+   */
   private holdMs(i: number): number {
     const authored = frameHoldMs(this.seg, i);
-    const floor = Math.max(this.interval, this.seg.minHoldTicks * TICK_MS);
-    return Math.max(authored, floor);
+    return this.seg.audioChunks.length ? Math.max(authored, this.interval) : authored;
   }
 
   private draw(): void {
@@ -137,6 +183,13 @@ export class Film {
     if (this.waiting.length) return;
     if (!this.interval && !this.seg.frames[this.pos]?.type) return;
     if (now < this.dueAt) return;
+    // A frame may be authored to hold until the film has finished SPEAKING —
+    // flags bit 0, `MovSegment.waitsForVoice`. Both ends of every inset film in
+    // this rip are one: `kill1.mov`'s segment 0 holds its console still until
+    // `soundout 3` is done, and its last segment holds before the black frame
+    // until `Mon. OFF` is. With no sounds playing this waits on nothing, which
+    // is exactly what it did before the sounds existed.
+    if (this.seg.frames[this.pos]?.waitsForVoice && this.events.some((h) => !h.done)) return;
     this.act(this.seg.frames[this.pos]?.type ?? 6, this.seg.frames[this.pos], now);
   }
 
@@ -155,7 +208,10 @@ export class Film {
   click(x: number, y: number, now: number): boolean {
     for (const r of this.waiting) {
       if (x < r.x0 || x > r.x1 || y < r.y0 || y > r.y1) continue;
-      if (r.sound) this.playEvent(r.sound);
+      if (r.sound) {
+        this.playEvent(r.sound);
+        this.clickSound = r.sound.toLowerCase();
+      }
       this.act(r.type, r, now);
       return true;
     }
@@ -173,9 +229,14 @@ export class Film {
   private playEvent(name: string): void {
     const loc = this.seg.sounds.get(name.toLowerCase());
     if (loc === undefined) return;
-    this.host.audio.play(
-      "sound",
-      decodeAudioContainer(this.mov.file.containers[loc].data, this.mov.file.order),
+    // drop the finished ones as we go, so a long interactive film cannot pile
+    // handles up for as long as it is on screen
+    this.events = this.events.filter((h) => !h.done);
+    this.events.push(
+      this.host.audio.play(
+        "sound",
+        decodeAudioContainer(this.mov.file.containers[loc].data, this.mov.file.order),
+      ),
     );
   }
 
@@ -193,6 +254,7 @@ export class Film {
       this.pos = Math.max(0, Math.min(to, this.seg.frames.length - 1));
       this.dueAt = now + this.holdMs(this.pos);
       this.draw();
+      this.enterFrame(this.pos);
     };
     switch (type) {
       case 1:
@@ -254,6 +316,8 @@ export class Film {
   finish(): void {
     this.bed?.stop();
     this.bed = null;
+    for (const h of this.events) h.stop();
+    this.events = [];
     const last = this.seg.frames[this.pos]?.name ?? "";
     this.host.onEnd(last);
   }

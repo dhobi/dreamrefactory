@@ -1525,6 +1525,44 @@ own name for their punks came out: they are werewolves.
 distance from the middle of the view and nothing 768 pixels past it is played at
 all — and that is the whole of the mixer.
 
+### ...and the films keep their sound somewhere else entirely
+
+None of that mixer reaches a film. A film's audio is in the film, and there are
+two kinds of it: the loop-table **bed** a segment starts by itself, and one-shots
+named by a frame. `menu.mov` and the sixteen chapter briefings have a bed. Nothing
+else does — and "nothing else" is Boggs' spoken orders, the seven kill vignettes
+and the four time-out ones, all of which this page played in silence, because its
+player fired a one-shot only from a CLICKED region and a frame's own sound was
+read and thrown away.
+
+The films are all one shape, and the shape is a television set: a console powers
+down (`soundout 2`, `soundout 3`), a little 160x111 monitor comes on inside it
+(`sound 1`), the piece plays on the monitor, and the monitor snaps off
+(`Mon. OFF`). `boggs01.mov` is that with four segments of speech in the middle —
+`1a`, `1b`, `1c`, `1d` — and `kill1.mov` is the same with one.
+
+Which is also where the pacing was wrong, because the two facts are the same fact.
+Those inset segments are authored at the film's own three ticks, 50ms, and the
+sound over one is exactly as long as its picture:
+
+| segment | frames | picture | its sound |
+| --- | --- | --- | --- |
+| `kill1.mov` seg 2 | 186 | 9.30s | `kill 8` 9.29s |
+| `boggs01.mov` seg 2 | 106 | 5.30s | `1a` 5.25s |
+| `boggs01.mov` seg 3 | 152 | 7.60s | `1b` 7.57s |
+| `boggs01.mov` seg 4 | 127 | 6.35s | `1c` 6.32s |
+| `boggs01.mov` seg 5 | 177 | 8.85s | `1d` 8.82s |
+
+`mov-pace.ts`'s 66ms native floor — a rule for the films that carry no timing at
+all, the publisher logos — was raising every one of them by a third, so the
+picture outran the line spoken over it. A segment with a bed is paced against the
+bed; a segment without one is paced by its own authored holds and by nothing else.
+
+Both ends of every one of these films then hold on a frame whose flags bit 0 says
+**wait for the voice**: `kill1.mov` holds its console still until `soundout 3` is
+done, and holds again before the black frame until `Mon. OFF` is. With no sound
+playing that waits on nothing, which is exactly what it did while there was none.
+
 ## A negative blow is a message, and the grip is the drawing
 
 `obj+0x1a` is what an object hits with, and every ordinary value is a
