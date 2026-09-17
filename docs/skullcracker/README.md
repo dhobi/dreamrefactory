@@ -1141,6 +1141,47 @@ object at all: `0x411c50` writes eight bytes per record into a table at
 `0x4a89b0` and a count into `0x46dc50`, so those three records are data for
 something else rather than things in the level.
 
+### LAB and VAT, and all sixteen levels stand
+
+LAB is three new classes and `lab.snd` names all three. **Puke Boy**
+(`initpuke`) is four hundred health and 440 points, and its run is the only
+alternating stride in the game: `0x46cac0` tag 0's eight records carry 186, 93,
+186, 93, 279, 93, 279, 93. **The arm** (`initarm`, ten of them) has no health at
+all — `0x418b40` sprays, sounds, pays 113 and subtracts nothing, so one blow of
+any size fells one, and it does not count. **The test tube** (`inittube`, one in
+the game) carries twelve hundred, the player's own number, and pays nothing.
+
+VAT is seven showers, two balls, a set of teeth — all one cel apiece — chapter
+four's own gun, and BOGGS.
+
+**The `statblaster` is in VAT and in no other level.** MAZE, BARREL and LAB place
+fourteen `statblasterpack` between them and nothing to put them in; the gun
+itself is 5815 pixels into the last level of the game.
+
+### Boggs is four thousand, and fists do nothing to it
+
+The last thing in the game is four objects — `initboggsbody`, `initboggshead`,
+`initbgclawarm` and `initbgmachinery`, the last of which stands up eight more
+with eight scripts of its own. Three numbers are the whole of why it is the
+boss:
+
+```
+  41be84  0x40e300(0xfa0)                 ; FOUR THOUSAND health
+  41be7c  add word ptr [0x4a50e8], 0x1e   ; and thirty a frame back, clamped
+  41bc6a  cmp word ptr [edi+0x1a], -1     ; and only a blow of -1 lands
+```
+
+Four thousand is three times TOWER's bishop and more than three times the
+player, and it regenerates thirty a frame while two flags at `0x46e080` and
+`0x46e084` are clear. Its hit handler refuses anything whose blow strength is
+not the code −1 — so **a punch does nothing to it**, which is the same kind of
+number `inithand`'s grab and the flamethrower's flame carry, and the reason the
+gun is in its room.
+
+What is here is the body, on the idle `0x46e6b0` gives it: 5988, 5987, 5986,
+5987 at three frames each. The head, the claw arm, the eight machinery objects
+and the −1 are not.
+
 ### A record belongs to one room
 
 `0x40b940`'s kind 2 walks the region table and answers with the FIRST region
@@ -1417,6 +1458,8 @@ all — and that is the whole of the mixer.
 - `skullcracker/tests/browser/tower.ts` — TOWER's floors, its bishop and its surges
 - `skullcracker/tests/browser/maze.ts` — MAZE's cops, its cage doors and the switches they throw
 - `skullcracker/tests/browser/barrel.ts` — BARREL's forty-two conveyors and what rides them
+- `skullcracker/tests/browser/lab.ts` — LAB's Puke Boys, its ten arms and its one test tube
+- `skullcracker/tests/browser/vat.ts` — VAT's furniture, its one blaster and Boggs
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

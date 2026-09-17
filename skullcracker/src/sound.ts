@@ -292,6 +292,16 @@ export const FOE_SFX = {
   /** `0x417a7c` and `0x417ab8` — the claw, travelling and closing */
   clawMove: 19,
   clawShut: 20,
+  /**
+   * LAB's three, and the names are the classes' own: 5 and 6 are
+   * `#0061 Pukeboy d[ies]` and `#0062 Pukeboy p[unched]` — `0x418362` rolls
+   * `0x434540(2) + 5` between them — 0x25 is `#2013 arm hit` and 0x19 is
+   * `#0201 test tube`.
+   */
+  pukeHit: [5, 6] as const,
+  pukeDeath: 5,
+  armHit: 0x25,
+  tube: 0x19,
   /** `0x43b6a3` — `mall.snd` names index 32 "#0120 coke mach[ine]" */
   cokeHit: 32,
   /**

@@ -152,6 +152,10 @@ import {
   Chair,
   CLAW,
   Claw,
+  FITTING,
+  Fitting,
+  BOGGS,
+  Boggs,
 } from "./props";
 import { DEATH_FILMS, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
 import { CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, WEAPONS, type Flare, type Gun } from "./guns";
@@ -1246,6 +1250,9 @@ interface Level {
   belts: Belt[][];
   chairs: Chair[][];
   claws: Claw[][];
+  /** LAB's and VAT's one-cel furniture, and the last thing in the game */
+  fittings: Fitting[][];
+  boggs: Boggs[][];
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
@@ -1574,6 +1581,12 @@ async function loadLevel(index: number): Promise<void> {
         x: e.pointX, y: e.pointY, left: e.left, right: e.right, state: "idle" as const, clock: 0,
       })),
     ),
+    fittings: rooms.map((r) => [
+      ...placed(sbk, r, "initshower", [FITTING.shower.on], (e) => ({ kind: "shower" as const, x: e.pointX, y: e.pointY + FITTING.shower.below, clock: 0 })),
+      ...placed(sbk, r, "initball", [FITTING.ball.cel], (e) => ({ kind: "ball" as const, x: e.pointX, y: e.pointY, clock: 0 })),
+      ...placed(sbk, r, "initteeth", [FITTING.teeth.cel], (e) => ({ kind: "teeth" as const, x: e.pointX, y: e.pointY, clock: 0 })),
+    ]),
+    boggs: rooms.map((r) => placed(sbk, r, "initboggsbody", BOGGS.idle.cels, (e) => ({ x: e.pointX, y: e.pointY, clock: 0 }))),
     fans: [
       ...rooms.map((r) => [
         ...placed(sbk, r, "inithfan", [FAN.h.stopped], (e) => ({ x: e.pointX, y: e.pointY, horizontal: true, state: "off" as const, clock: 0 })),
@@ -4277,6 +4290,22 @@ function clawCel(c: Claw): number {
   return a.cels[i];
 }
 
+/** LAB's and VAT's one-cel furniture, which does nothing but stand where it is */
+function fittingCel(f: Fitting): number {
+  if (f.kind === "ball") return FITTING.ball.cel;
+  if (f.kind === "teeth") return FITTING.teeth.cel;
+  return FITTING.shower.on;
+}
+
+/**
+ * ...and BOGGS, on the idle `0x46e6b0` gives it. Four thousand health, thirty a
+ * frame back, and a hit handler that refuses anything whose blow is not the
+ * code −1 — see {@link BOGGS} for what of that is here and what is not.
+ */
+function boggsCel(b: Boggs): number {
+  return BOGGS.idle.cels[Math.floor(b.clock / BOGGS.idle.hold) % BOGGS.idle.cels.length];
+}
+
 // ---- the guns ------------------------------------------------------------
 
 /**
@@ -6492,6 +6521,7 @@ function loop(now: number): void {
     if (frame) stepBelts();
     if (frame) stepChairs();
     if (frame) stepClaws();
+    if (frame) for (const b of hereOf((l) => l.boggs)) b.clock += 1;
     stepGuns();
     if (frame) stepFlares();
     stepCrows();
@@ -6624,6 +6654,8 @@ function loop(now: number): void {
   for (const b of hereOf((l) => l.belts)) drawLevelCel(beltCel(b), b.x, b.y, camX, camY);
   for (const c of hereOf((l) => l.chairs)) drawLevelCel(chairCel(c), c.x, c.y, camX, camY);
   for (const c of hereOf((l) => l.claws)) drawLevelCel(clawCel(c), c.x, c.y, camX, camY);
+  for (const f of hereOf((l) => l.fittings)) drawLevelCel(fittingCel(f), f.x, f.y, camX, camY);
+  for (const b of hereOf((l) => l.boggs)) drawLevelCel(boggsCel(b), b.x, b.y, camX, camY);
   for (const q of hereOf((l) => l.fans)) drawLevelCel(fanCel(q), q.x, q.y, camX, camY);
   for (const f of hereOf((l) => l.floors)) drawLevelCel(floorCel(f), f.x, f.y, camX, camY);
   for (const q of hereOf((l) => l.surges)) drawLevelCel(surgeCel(q), q.x, q.y, camX, camY);
@@ -6938,6 +6970,8 @@ function loop(now: number): void {
     hereOf((l) => l.belts).length ? `${hereOf((l) => l.belts).length} belts` : "",
     ...hereOf((l) => l.chairs).map((c) => `chair ${c.run} cel ${chairCel(c)} at x${c.x}`),
     ...hereOf((l) => l.claws).map((c) => `claw ${c.state} cel ${clawCel(c)} at x${Math.round(c.x)}`),
+    ...hereOf((l) => l.fittings).map((f) => `${f.kind} cel ${fittingCel(f)} at x${f.x}`),
+    ...hereOf((l) => l.boggs).map((b) => `boggs cel ${boggsCel(b)} at x${b.x}, ${BOGGS.health}hp and only a -1 blow lands`),
     ...hereOf((l) => l.surges).map((q) => `surge cel ${surgeCel(q)} at x${q.x}`),
     ...hereOf((l) => l.bridges).map((b) => `bridge ${b.state} cel ${bridgeCel(b)} at x${b.x}`),
     ...hereOf((l) => l.hands).map((q) => `hand ${q.state}${q.underfoot ? " underfoot" : ""} cel ${handCel(q)} at x${Math.round(q.atX)}`),

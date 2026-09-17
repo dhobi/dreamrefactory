@@ -1699,6 +1699,93 @@ export const FOES: Readonly<Record<string, Foe>> = {
     vanishes: true,
     from: "0x411a20 / 0x414a00 / 0x414ae0 / 0x415100",
   },
+  /**
+   * PUKE BOY — `initpuke`, six of them and all six in LAB, and `lab.snd` names
+   * it: `#0061 Pukeboy d[ies]`, `#0062 Pukeboy p[unched]`. Creator `0x411710`,
+   * class `0x417e20`, think `0x417ed0`, hit `0x418250`.
+   *
+   * Four hundred health, 440 points, a divisor of 13, and **three gaits**: a
+   * walk at dx 93 (`0x46ca30`) and a run whose eight records carry 186, 93,
+   * 186, 93, 279, 93, 279, 93 (`0x46cac0` tag 0). Nothing else in the game
+   * alternates its stride like that — it lurches.
+   */
+  initpuke: {
+    gait: { cels: [3000, 3001, 3002, 3003, 3004], hold: 1, dx: [93, 93, 93, 93, 93], from: "0x46ca30 tag 0" },
+    divisor: 13,
+    // `0x46cb50` tag 0, kind 5 — seven records, the first held three frames
+    flinch: [{ cels: [3034, 3034, 3034, 3033, 3032, 3031, 3030], hold: 1, from: "0x46cb50 tag 0" }],
+    // `0x46cbe0` tag 0, kind 6
+    death: { cels: [3080, 3081, 3082, 3083, 3084, 3085], hold: 2, from: "0x46cbe0 tag 0" },
+    // `0x46c9f8` tag 0 — the six it stands on before anything happens
+    wake: { cel: 3090, from: "0x417e40 / 0x46c9f8 tag 0" },
+    // `0x411753` — `0x40e300(0x190)`
+    health: 400,
+    hitSound: FOE_SFX.pukeHit,
+    deathSound: FOE_SFX.pukeDeath,
+    // `0x418335` pays 0x1b8
+    panel: { health: 400, plate: 13302, award: 440 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x411710 / 0x417e20 / 0x417ed0 / 0x418250",
+  },
+  /**
+   * The ARM — `initarm`, ten of them, all in LAB. `lab.snd` calls it
+   * `#2013 arm hit`, `#2016 armhits g[round]`, `#2019 arm crawl`. Creator
+   * `0x4118f0`, class `0x418710`, think `0x4187a0`, hit `0x418b40`.
+   *
+   * It has no health at all — `0x418b40` sprays, sounds, installs `0x46d0b0`
+   * and pays 113, with nothing subtracted anywhere. One blow, whatever the blow,
+   * the way a bat is. It does not count towards the census either.
+   *
+   * Its own leap is in the animation: `0x46d120` tag 0's seventh record carries
+   * `dx 200, dy -200` and its death's first carries `dy -130`.
+   */
+  initarm: {
+    // `0x46cf10` tag 0, kind 0 — seven cels, three frames each, out and back
+    gait: { cels: [500, 501, 502, 503, 502, 501, 500], hold: 3, from: "0x46cf10 tag 0" },
+    divisor: 13,
+    flinch: [{ cels: [3360, 3361], hold: 3, from: "0x46cfc8 tag 0" }],
+    // `0x46d0b0` tag 0, kind 8 — and the first record throws it 130 up
+    death: { cels: [3390, 3391, 3392, 3393, 3394, 3395], hold: 3, from: "0x46d0b0 tag 0" },
+    health: 1,
+    frail: true,
+    hitSound: FOE_SFX.armHit,
+    // `0x418bc3` pays 0x71
+    panel: { health: 1, plate: 13303, award: 113 },
+    counts: false,
+    bleeds: true,
+    vanishes: true,
+    from: "0x4118f0 / 0x418710 / 0x4187a0 / 0x418b40",
+  },
+  /**
+   * The TEST TUBE — `inittube`, and there is one in the game, in LAB. Creator
+   * `0x411ba0`, class `0x419220`, think `0x4192c0`, hit `0x419990`. `lab.snd`
+   * 0x19 is `#0201 test tube`.
+   *
+   * **Twelve hundred health** — the player's own number, and the third thing in
+   * the game to carry it after TOWER's bishop — a shove weight of 6, and it pays
+   * NOTHING: `0x419990` has no `0x40d450` in it. It counts towards LAB's census
+   * of seven, so what it is worth is the level.
+   *
+   * It stands on one cel: `0x46d790` tag 0 is 5350 and its flinch `0x46da20` is
+   * 5350 again. Only the death moves.
+   */
+  inittube: {
+    gait: { cels: [5350], hold: 1, from: "0x46d790 tag 0" },
+    divisor: 13,
+    flinch: [{ cels: [5350], hold: 1, from: "0x46da20 tag 0" }],
+    // `0x46da30` tag 0, kind 10
+    death: { cels: [5440, 5441, 5442, 5443, 5444, 5445], hold: 3, from: "0x46da30 tag 0" },
+    // `0x411be4` — `0x40e300(0x4b0)`
+    health: 1200,
+    hitSound: FOE_SFX.tube,
+    panel: { health: 1200, plate: 13304, award: 0 },
+    counts: true,
+    bleeds: true,
+    vanishes: true,
+    from: "0x411ba0 / 0x419220 / 0x4192c0 / 0x419990",
+  },
 };
 
 /** how many engine frames one run of an animation lasts */

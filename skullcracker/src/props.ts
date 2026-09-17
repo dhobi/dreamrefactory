@@ -2029,3 +2029,76 @@ export interface Claw {
   state: "idle" | "running" | "down" | "shut" | "up";
   clock: number;
 }
+
+/**
+ * VAT's three pieces of furniture, and all three are one cel apiece.
+ *
+ * - **`initshower`**, seven of them. Creator `0x4117c0`, class `0x41a1d0`.
+ *   `0x46cc68` has two tags of one record: 4060 and 4022. Divisor 20, gravity
+ *   zero, and `0x41a20e` writes `0xff9c` — **−100** — into `obj+0x10`, the floor
+ *   offset, so it hangs a hundred pixels above whatever it stands on.
+ * - **`initball`**, two. Creator `0x4118a0`, class `0x41a720`, cel 4310.
+ * - **`initteeth`**, one in LAB and one in VAT. Creator `0x4119d0`, class
+ *   `0x418c80`, cel 3516.
+ */
+export const FITTING = {
+  shower: { on: 4060, off: 4022, below: -100, from: "0x4117c0 / 0x41a1d0 / 0x46cc68" },
+  ball: { cel: 4310, from: "0x4118a0 / 0x41a720 / 0x46ce38" },
+  teeth: { cel: 3516, from: "0x4119d0 / 0x418c80 / 0x46d1b8" },
+  divisor: 0x14,
+} as const;
+
+export interface Fitting {
+  kind: "shower" | "ball" | "teeth";
+  x: number;
+  y: number;
+  clock: number;
+}
+
+/**
+ * BOGGS — the game's last thing, in VAT, and it is four objects rather than one:
+ * `initboggsbody` (`0x412240`), `initboggshead` (`0x412310`), `initbgclawarm`
+ * (`0x412130`) and `initbgmachinery` (`0x411da0`), which alone stands up eight
+ * more with eight scripts of its own.
+ *
+ * Two numbers make it the boss:
+ *
+ * ```
+ *   41be84  0x40e300(0xfa0)                 ; FOUR THOUSAND health, and the
+ *   41be91  cmp ax, [0x4a50e8]              ; ...cap it is clamped to
+ *   41be7c  add word ptr [0x4a50e8], 0x1e   ; THIRTY a frame, back on
+ *   41bc6a  cmp word ptr [edi+0x1a], -1     ; and only a blow of -1 lands
+ * ```
+ *
+ * Four thousand is three times TOWER's bishop and more than three times the
+ * player. It regenerates thirty a frame while two flags at `0x46e080` and
+ * `0x46e084` are clear. And **fists do nothing to it at all**: its hit handler
+ * refuses anything whose blow strength is not the code −1.
+ *
+ * What is here is the body, on the idle `0x46e6b0` gives it — 5988, 5987, 5986,
+ * 5987 at three frames each. The head, the claw arm and the eight machinery
+ * objects are not, and neither is the −1 that would let you hurt it.
+ */
+export const BOGGS = {
+  /** `0x41bbd6` — the cel the object is made on */
+  cel: 5980,
+  /** `0x46e6b0` tag 0 */
+  idle: { cels: [5988, 5987, 5986, 5987], hold: 3, from: "0x46e6b0 tag 0" },
+  /** `0x41be84` — `0x40e300(0xfa0)` */
+  health: 4000,
+  /** `0x41be7c` */
+  regen: 0x1e,
+  /** `0x41bc6a` — and nothing else touches it */
+  takesBlow: -1,
+  /** `0x41bbe0` — the largest divisor in the game */
+  divisor: 100,
+  /** `0x41bbf0` — and the largest shove weight */
+  weight: 0x50,
+  from: "0x411285 / 0x412240 / 0x41bb80 / 0x41bc50",
+} as const;
+
+export interface Boggs {
+  x: number;
+  y: number;
+  clock: number;
+}
