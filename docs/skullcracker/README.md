@@ -1440,8 +1440,8 @@ counted from the books and the executable rather than remembered.
 ### The records
 
 **1,137 of the 1,166 entity records in the sixteen books are placed — 97.5%.**
-The 52 region records are all handled. Seven levels have no gap at all: PLAYGR,
-SEWER, GRAVE, CAVERN, RAVECAVE, BARREL.
+The 52 region records are all handled. Six levels have no gap at all: PLAYGR,
+SEWER, GRAVE, CAVERN, RAVECAVE and BARREL.
 
 ```
   probe            17   streets city woods mall service arcade
@@ -1468,10 +1468,10 @@ ask for them.
 not are `initbiggun`, `initlightfx`, and the four-object Boggs machine less its
 body.
 
-The executable registers **73**, so three classes exist in the game and no level
-places one: `initbeltboth`, `initdoor`, `initpainting` and `inittirepile`.
-(`inithealth` makes the fourth name in the levels with no class at all, the
-other way round.)
+The executable registers **73**, and four of them exist in the game with no
+level placing one: `initbeltboth`, `initdoor`, `initpainting` and
+`inittirepile`. `inithealth` is the same thing the other way round — a name in
+a level with no class anywhere.
 
 ### The systems
 
