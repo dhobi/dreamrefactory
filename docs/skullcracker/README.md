@@ -1879,6 +1879,56 @@ On BARREL's fourth claw that is 7221 against the point's 7044, and since the jaw
 box sits 77..111 below the anchor, the difference is the whole of whether it
 closes on your chest or 40 pixels above your head.
 
+### The thing in the water lets go by SINKING, and that is why SEWER stopped
+
+`initbush` — the thing that comes up out of level seven's water — held the
+player at x1964 for the rest of the run, which is why this branch's SEWER suite
+had a standing failure and why the level could not be played through.
+
+Two things each waiting for the other. This page had the bush waiting for the
+player to be released before it would sink, and the player waiting for the bush's
+cel to stop gripping before being released. `0x43ef31` says otherwise, and it is
+one test with two arms:
+
+```
+  43ef31  cmp [obj+0x46], 0        ; has its thirteen-cel script ended?
+  43ef65  (no)  y -= 0x28          ; forty a frame UP, to the top of its travel
+  43ef4a  (yes) y += 0xa           ; and ten a frame back down again
+  43f007  at the bottom: install 0x472b70, whose six cels carry no strike box
+```
+
+Neither arm asks whether it still has hold of anybody.
+
+And it sends **two** codes rather than one, latched at `user+0xe`:
+
+```
+  43ee9d  (0)  [obj+0x1a] = -3           ; the grab
+  43eea3  (0)  [obj+8] = player.x        ; and it slides under you
+  43eeb0  (0)  0x402f00 != 0 -> stay     ; ...while the player is still FREE
+  43eec9  (0)  user+0xe = 1              ; ...and moves on once it has you
+  43eedb  (1)  0x402f60 != 0 -> [obj+0x1a] = -5
+```
+
+`0x402f00` returns 0 when the player's kind is 10, 9, 0x18 or 0xd — held,
+knocked down, or freshly spawned — so the latch turns over on the frame AFTER the
+grab takes. `0x402f60` returns 1 while the player's kind is under 0x1a, which is
+**alive**: this page had that one backwards and had written −5 down as "what it
+gives a player who is already dying". It is the opposite. The bush grabs you for
+about a frame and then slumps you — `0x42e8b3`, half gravity, holding nothing.
+
+The held cels 4570..4572 carry a body box, unlike every knockdown cel in the
+book, which is what lets the second blow land on a player the first is still
+holding.
+
+One more thing fell out of the same fix. `0x4285c1` leaves the held state and
+`0x4285db` writes 1 into `obj+0x34` on the way out — the player is SETTLED again,
+not dropped from wherever the grip had them. This page's comment said so and its
+code did not, and in SEWER's hall of lifts that meant a grab that ended a pixel
+above the walkway dropped the player straight through it into the sewage
+underneath. Standing them up is not a free pass: the gait's own `surfaceUnder`
+runs on the next frame and puts them back in the air when there is nothing within
+eight pixels of their feet, which is what a grab over a pit wants.
+
 ## Five weapons, and three of them pour
 
 Each weapon owns a state machine and a fire function, and the table at

@@ -1375,6 +1375,7 @@ async function loadLevel(index: number): Promise<void> {
         restY: e.pointY + BUSH.below,
         mirror: Math.random() < 0.5,
         state: "idle" as const,
+        phase: 0 as const,
         clock: 0,
       })),
     ),
@@ -3373,7 +3374,10 @@ function takeHits(): void {
   for (const q of hereOf((l) => l.bushes)) {
     const cel = lvl.sbk.cels.find((c) => c.id === bushCel(q));
     if (!cel?.strike) continue;
-    if (hit(cel, q.x, q.y, 1, 0, 0, BUSH.grab, () => gripAt(bushCel(q), q.x, q.y), q)) return;
+    // `0x43ee9d` against `0x43eedb`: the grab while it is still reaching, and the
+    // half-gravity slump from the frame it has you — see {@link BUSH.grab}
+    const code = q.phase === 0 ? BUSH.grab : BUSH.slump;
+    if (hit(cel, q.x, q.y, 1, 0, 0, code, () => gripAt(bushCel(q), q.x, q.y), q)) return;
   }
   // ...and TOWER's current, which carries -4 on every cel of its arc
   for (const g of hereOf((l) => l.surges)) {
@@ -4225,12 +4229,21 @@ function stepHeld(): void {
   if (!p.heldBy) return;
   const at = p.heldBy();
   if (!at) {
-    // `0x4285c1` — out through the walk's own script, upright and falling again
+    // `0x4285c1` — out through the walk's own script, and `0x4285db` writes 1
+    // into `obj+0x34` on the way: the player is SETTLED again, not dropped from
+    // wherever the grip had them. This page said so in the comment and did not
+    // do it, which is how SEWER's hall of lifts ended a grab: released a pixel
+    // above its own walkway, still flagged airborne, the player fell straight
+    // through the one-way platform into the sewage under it. Standing them up
+    // is not a free pass — the gait's own `surfaceUnder` runs next and puts
+    // them back in the air if there is nothing within `STICK_PX` of their feet,
+    // which is what a grab over a pit wants.
     p.heldBy = null;
     p.heldWhat = null;
     p.gravityScale = 1;
     p.act = null;
     p.heldClock = 0;
+    p.onGround = true;
     return;
   }
   p.x = at.x;
@@ -5190,33 +5203,39 @@ function stepBushes(): void {
     if (q.state === "idle") {
       if (Math.abs(p.x - q.x) >= BUSH.nearPx || Math.abs(p.y - q.y) >= BUSH.dropPx) continue;
       q.state = "rise";
+      q.phase = 0;
       q.clock = 0;
       sound?.effect(BUSH.sound, q.x, q.y);
       continue;
     }
     if (q.state === "rise") {
-      // `0x43eea3` — it snaps to wherever you are for as long as it is coming up
-      q.x = p.x;
+      // `0x43ef6f` — forty a frame up, and it stops at the top of its travel
+      q.y = Math.max(q.restY - BUSH.below, q.y - BUSH.risePerFrame);
+      // `0x43eeb0` — the latch moves on the frame after the grab has taken, and
+      // `0x43eee1` again once the cel that closes is up
+      if (q.phase === 0 && p.heldWhat === q) q.phase = 1;
+      else if (q.phase === 1 && bushCel(q) >= BUSH.holdsAt) q.phase = 2;
+      // `0x43eea3` — it slides under you, and only while it is still reaching
+      if (q.phase === 0) q.x = p.x;
+      // the script is thirteen cels at one tick each, and when it runs out
+      // `obj+0x46` is set: from that frame `0x43ef31` takes the OTHER arm
       if (q.clock >= BUSH.rise.cels.length * BUSH.rise.hold) {
-        q.state = "hold";
+        q.state = "sink";
         q.clock = 0;
+        sound?.effect(BUSH.sinkSound, q.x, q.y);
       }
       continue;
     }
-    if (q.state === "hold") {
-      // it holds on its last cel for as long as it has you, and `0x402f60`'s
-      // branch — the -5 it gives a dying player — is not modelled
-      if (p.heldWhat === q) continue;
-      q.state = "sink";
-      q.clock = 0;
-      sound?.effect(BUSH.sinkSound, q.x, q.y);
-      continue;
-    }
-    // `0x43ef4a`: ten a frame until it is back under, and then it waits again
+    // `0x43ef4a`: ten a frame back to the bottom of its travel — WITH you, if it
+    // has you, because `0x42857d` re-reads the grip every frame and plants you
+    // at it. Nothing here asks whether it still has hold of anybody.
     q.y += BUSH.sinkPerFrame;
-    if (q.y >= q.restY + BUSH.sinkBelow) {
+    if (q.y > q.restY) {
+      // `0x43f007` installs `0x472b70`, whose cels carry no strike box — which
+      // is what lets go of the player, and the only thing that does
       q.y = q.restY;
       q.state = "idle";
+      q.phase = 0;
       q.clock = 0;
     }
   }
@@ -5225,10 +5244,10 @@ function stepBushes(): void {
 /** which cel a bush is showing */
 function bushCel(q: Bush): number {
   if (q.state === "idle") return BUSH.idle.cels[Math.floor(q.clock / BUSH.idle.hold) % BUSH.idle.cels.length];
-  // holding and sinking are both the script having ENDED — `0x43ef31` tests
-  // `obj+0x46` and moves the object without installing anything, so it keeps
-  // showing its last frame the whole way back down
-  if (q.state !== "rise") return BUSH.rise.cels[BUSH.rise.cels.length - 1];
+  // sinking is the script having ENDED — `0x43ef31` tests `obj+0x46` and moves
+  // the object without installing anything, so it keeps showing its last frame,
+  // grip and all, the whole way back down
+  if (q.state === "sink") return BUSH.rise.cels[BUSH.rise.cels.length - 1];
   return BUSH.rise.cels[Math.min(BUSH.rise.cels.length - 1, Math.floor(q.clock / BUSH.rise.hold))];
 }
 

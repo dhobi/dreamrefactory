@@ -1274,13 +1274,63 @@ export const BUSH = {
   /** `0x43ed19` — and `0x43ef17`'s 0x2a is the one it makes going back down */
   sound: 0x27,
   sinkSound: 0x2a,
-  /** `0x43ee9d` — the grab, and `0x43eedb`'s once you are already dying */
+  /**
+   * It sends TWO codes, one after the other, and which one is a three-state
+   * latch at `user+0xe` rather than anything about the player's health.
+   *
+   * ```
+   *   43ee9d  (0)  [obj+0x1a] = -3           ; the grab
+   *   43eea3  (0)  [obj+8] = player.x        ; and it slides under you
+   *   43eeb0  (0)  0x402f00 != 0 -> stay     ; the player is still FREE
+   *   43eec9  (0)  user+0xe = 1              ; ...it has you
+   *   43eedb  (1)  0x402f60 != 0 -> [obj+0x1a] = -5
+   *   43eee1  (1)  cel >= 0x13a6 -> user+0xe = 2
+   *   43eefa  (2)  0x402f60 != 0 -> [obj+0x1a] = -5
+   * ```
+   *
+   * `0x402f00` returns 0 when the player's kind is 10, 9, 0x18 or 0xd — held,
+   * knocked down, or freshly spawned — so the latch moves on **the frame after
+   * the grab takes**. And `0x402f60` returns 1 while the player's kind is under
+   * 0x1a, which is ALIVE, not dying: this page had that one backwards and
+   * recorded -5 as "what it gives a player who is already dying".
+   *
+   * So the bush grabs you for about a frame and then slumps you: -3 holds, -5 is
+   * `0x42e8b3`'s half-gravity drop and holds nothing. The held cels 4570..4572
+   * carry a body box — unlike every knockdown cel in the book — which is what
+   * lets the second blow land on a player the first one is still holding.
+   */
   grab: -3,
-  dying: -5,
-  /** `0x43ef4a` — ten a frame back down, to `user+0x10` plus this */
+  slump: -5,
+  /**
+   * It moves, and BOTH ways — `0x43ef31` is one test with two arms.
+   *
+   * ```
+   *   43ef31  cmp [obj+0x46], 0        ; has the script ended?
+   *   43ef65  (no)  if ([user+0x10] >= y) nothing else y -= 0x28
+   *   43ef4a  (yes) if ([user+0x10] + 0x50 >= y) y += 0xa else 0x43f007
+   * ```
+   *
+   * `[user+0x10]` is the TOP of its travel and `+0x50` the bottom, which is
+   * where `0x435bf7` put it. So it climbs forty a frame while its thirteen cels
+   * play, and once they have run out it goes back down ten a frame — **whether
+   * or not it still has hold of you**, which is the whole of how a grab ends: it
+   * takes you under with it, and at the bottom `0x43f007` installs `0x472b70`,
+   * whose six cels carry no strike box at all.
+   *
+   * This page had it waiting for the player to be released before it would sink,
+   * and the player waiting for the bush's cel to stop gripping before being
+   * released. Two things each waiting for the other is a level you cannot walk
+   * through: SEWER's entrance bush held you at x1964 for ever.
+   */
+  risePerFrame: 0x28,
   sinkPerFrame: 0xa,
   sinkBelow: 0x50,
-  /** `0x43eef1`'s `cmp word ptr [esi], 0x13a6` — the cel that ends the rise */
+  /**
+   * `0x43eee1`'s `cmp word ptr [esi], 0x13a6` — the CEL ID, 5030, and what it
+   * ends is the sliding rather than the rise: `0x43eea3` snaps the bush to the
+   * player's x, and it is in sub-state 0 only. Reaching 5030 moves the sub-state
+   * on and the bush stops following.
+   */
   holdsAt: 5030,
   /**
    * `0x435bf7` — the object hangs this far below the record's point.
@@ -1303,8 +1353,14 @@ export interface Bush {
   y: number;
   mirror: boolean;
   clock: number;
-  /** where in `0x43ec80`'s own three phases it is */
-  state: "idle" | "rise" | "hold" | "sink";
+  /** `user+0xe` — 0 reaching, 1 it has you, 2 it is closed. See {@link BUSH.grab} */
+  phase: 0 | 1 | 2;
+  /**
+   * Where in `0x43ec80` it is — and there are THREE, not four. "hold" was this
+   * page's own: the engine has the script running or the script ended, and the
+   * moment it ends the thing starts sinking. See {@link BUSH.risePerFrame}.
+   */
+  state: "idle" | "rise" | "sink";
   /** the y it came up from, which is where it goes back to */
   restY: number;
 }
