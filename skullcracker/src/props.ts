@@ -1251,6 +1251,37 @@ export interface Sewage {
 export const BUSH = {
   /** `0x472b70` tag 0 — what it does while it is waiting */
   idle: { cels: [5060, 5061, 5062, 5063, 5064, 5065], hold: 1, from: "0x472b70 tag 0" },
+  /**
+   * `0x472c20` tag 0 — the thirteen cels of it coming up, and the last SEVEN
+   * are the grab.
+   *
+   * 5020..5025 carry no strike box at all; 5026..5032 each carry a big one and
+   * no blow pair, which is the grip signature the hand and the claw have. So it
+   * breaks the water harmlessly and closes on you, and the frame it closes is
+   * the frame it has you.
+   */
+  rise: {
+    cels: [5020, 5021, 5022, 5023, 5024, 5025, 5026, 5027, 5028, 5029, 5030, 5031, 5032],
+    hold: 1,
+    from: "0x472c20 tag 0",
+  },
+  /**
+   * What starts it — `0x43ecf3` and `0x43ed0c`, both absolute differences:
+   * within seventy pixels across and three hundred down.
+   */
+  nearPx: 0x46,
+  dropPx: 0x12c,
+  /** `0x43ed19` — and `0x43ef17`'s 0x2a is the one it makes going back down */
+  sound: 0x27,
+  sinkSound: 0x2a,
+  /** `0x43ee9d` — the grab, and `0x43eedb`'s once you are already dying */
+  grab: -3,
+  dying: -5,
+  /** `0x43ef4a` — ten a frame back down, to `user+0x10` plus this */
+  sinkPerFrame: 0xa,
+  sinkBelow: 0x50,
+  /** `0x43eef1`'s `cmp word ptr [esi], 0x13a6` — the cel that ends the rise */
+  holdsAt: 5030,
   /** `0x435bf7` — the object hangs this far below the record's point */
   below: 0x50,
   /** `mov word ptr [esi+0xe], 0xa` at `0x43ec10` */
@@ -1264,6 +1295,10 @@ export interface Bush {
   y: number;
   mirror: boolean;
   clock: number;
+  /** where in `0x43ec80`'s own three phases it is */
+  state: "idle" | "rise" | "hold" | "sink";
+  /** the y it came up from, which is where it goes back to */
+  restY: number;
 }
 
 /**
@@ -2004,6 +2039,37 @@ export const CLAW = {
   up: { cels: [2424, 2423, 2422, 2421, 2420], hold: 2, from: "0x46dd80 tag 4" },
   /** `0x46dd18` tag 1 — what it does with nobody near */
   idle: { cels: [2410, 2411, 2412], hold: 1, from: "0x46dd18 tag 1" },
+  /**
+   * ...and the OTHER claw, which is the same object in a different kind.
+   *
+   * `0x4171e0` is a seven-kind machine and the 2420s above are kind 4. Kind 1
+   * is `0x46de08`, and it is the one that takes hold of you: of the claw's
+   * fifty-two cels only tag 2's 2456..2459 carry a strike box, and theirs is
+   * `y 77..111, x -76..0` — the jaw hanging below and behind its anchor.
+   *
+   * ```
+   *   41743d  tag 1 ends: hit something -> tag 2 and blow -3
+   *                       else          -> tag 3
+   *   417485  tag 2: blow -3 every frame; ends -> blow 0, tag 3
+   *   4174c7  tag 3 ends -> back to kind 0, the carriage
+   * ```
+   *
+   * What sends it there is a TRACKER rather than a distance: `0x45ef70`
+   * registers one against the player at `0x411d23` with the band table at
+   * `0x46dfc8` — `180, 140, 100` — and `0x41734a` dispatches kind 0 on the band
+   * index. Band 2 is 100 to 140 ahead and installs tag 0; band 3 is 100 or
+   * nearer and installs tag 1 outright. So it reaches at 140 and commits at 100.
+   */
+  dive: { cels: [2450, 2451, 2452, 2453, 2454, 2455, 2456, 2457, 2458, 2459], hold: 1, from: "0x46de08 tag 1" },
+  jaws: {
+    cels: [2456, 2456, 2459, 2459, 2456, 2456, 2459, 2459, 2456, 2456],
+    hold: 1,
+    from: "0x46de08 tag 2",
+  },
+  lift: { cels: [2455, 2454, 2453, 2452, 2451, 2450], hold: 1, from: "0x46de08 tag 3" },
+  /** `0x46dfc8`, the tracker's own bands — reaches at the middle one */
+  bands: [180, 140, 100],
+  reachBand: 140,
   /** `0x417344`'s `0x1a` */
   speed: 0x1a,
   /** `0x417289`'s `cmp ecx, 0x12c` and `0x41729d`'s `cmp ecx, 0x258` */
@@ -2035,8 +2101,18 @@ export interface Claw {
   y: number;
   left: number;
   right: number;
-  state: "idle" | "running" | "down" | "shut" | "up";
+  state: "idle" | "running" | "down" | "shut" | "up" | "dive" | "clamp" | "lift";
   clock: number;
+  /**
+   * `obj+0x2a` — "I hit something", and it is what the dive asks at `0x417448`
+   * before it decides whether to clamp or go straight back up.
+   *
+   * The dive itself carries the ordinary hundred `0x417208` writes at the top of
+   * every think; the code -3 only appears once it is already holding you
+   * (`0x417485`). So the sequence is: the jaw hits you for a real blow, THAT is
+   * what sets this, and the grab is what follows from it.
+   */
+  caught?: boolean;
 }
 
 /**

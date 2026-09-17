@@ -119,6 +119,27 @@ const main = async (): Promise<void> => {
   if (hp && hp[1] !== hp[2]) fail(`a code took health: ${hp[0]}`);
   console.log(`ok    with damage off throughout — a code is a message, and no row of the table spends health`);
 
+  // 7. ...and BARREL's claw, which is the same -3 out of a different class.
+  //    `0x41734a` sends it diving off the tracker's band table (180, 140, 100),
+  //    the dive is an ordinary hundred, and the CLAMP that follows a connected
+  //    dive is what carries the code — `0x417485`.
+  await go(14, 8200);
+  const dived = await until(/· claw dive/, 9000);
+  if (!dived) fail(`the claw reaches at 140px; it never dived: ${/claw \w+[^·]*/.exec(await say())?.[0] ?? "no claw"}`);
+  // the clamp is ten frames and the grab inside it shorter still, so this waits
+  // for the HOLD rather than for the pose and reads them in the same sample
+  let t7 = "";
+  for (let i = 0; i < 140; i++) {
+    t7 = await say();
+    if (/· HELD/.test(t7) && /claw clamp/.test(t7)) break;
+    t7 = "";
+    await page.waitForTimeout(60);
+  }
+  if (!t7) fail(`a dive that connects clamps (0x417448) and the clamp takes hold; never saw both`);
+  if (!/claw clamp cel 24(56|59)/.test(t7))
+    fail(`only 2456..2459 carry a grip; it is holding on ${/claw \w+ cel \d+/.exec(t7)?.[0]}`);
+  console.log(`ok    and BARREL's claw dives, clamps on its own 2456..2459 and holds you with the same -3`);
+
   console.log(`\nPASS  the blow codes are carried: -3 holds you by the art, -7 floors you, -4 shocks you`);
   await browser.close();
 };

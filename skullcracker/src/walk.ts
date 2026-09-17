@@ -1574,7 +1574,16 @@ async function loadLevel(index: number): Promise<void> {
     barrels: rooms.map((r, i) => barrelsIn(sbk, r, solids[i])),
     pipes: rooms.map((r) => placed(sbk, r, "initpipe", PIPE.mouth.cels, (e) => ({ x: e.pointX, y: e.pointY, mirror: e.param < 0, clock: 0 }))),
     sewage: rooms.map((r) => placed(sbk, r, "initsewage", [], (e) => ({ top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: SEWAGE.gulpEvery }))),
-    bushes: rooms.map((r) => placed(sbk, r, "initbush", BUSH.idle.cels, (e) => ({ x: e.pointX, y: e.pointY + BUSH.below, mirror: Math.random() < 0.5, clock: 0 }))),
+    bushes: rooms.map((r) =>
+      placed(sbk, r, "initbush", BUSH.idle.cels, (e) => ({
+        x: e.pointX,
+        y: e.pointY + BUSH.below,
+        restY: e.pointY + BUSH.below,
+        mirror: Math.random() < 0.5,
+        state: "idle" as const,
+        clock: 0,
+      })),
+    ),
     nests2: rooms.map((r) => placed(sbk, r, "initroachmotel", ROACH.run.cels, (e) => ({ x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: -17, made: 0 }))),
     sprinklers: rooms.map((r) => placed(sbk, r, "initsprinkler", SPRINKLER.rise.cels, (e) => ({ x: e.pointX, y: e.pointY, slot: e.param, top: e.top, left: e.left, bottom: e.bottom, right: e.right }))),
     pickups: rooms.map((r) => pickupsIn(sbk, r)),
@@ -1618,8 +1627,23 @@ async function loadLevel(index: number): Promise<void> {
     ]),
     chairs: rooms.map((r) => placed(sbk, r, "initchair", CHAIR.runs[0].cels, (e) => ({ x: e.pointX, y: e.pointY, run: 0, clock: 0 }))),
     claws: rooms.map((r) =>
+      /**
+       * It hangs at the record's BOTTOM, not at its point.
+       *
+       * `0x411ca0` files three of the spawner's dwords into its user struct —
+       * `user+0 = arg0`, `user+4 = arg1`, `user+8 = arg3` — and the state
+       * machine reads them as a rect and a point: `0x4173d1` clamps its x
+       * between `user+2` and `user+6`, which can only be left and right, so
+       * `user+0`/`user+4` are top and bottom and `user+8`/`user+0xa` are the
+       * point. `0x4173c9` then writes `user+4` into `obj+6`.
+       *
+       * On BARREL's fourth claw that is 7221 rather than the point's 7044, and
+       * the difference is the whole of whether it can reach anybody: its jaw
+       * box sits 77..111 below its anchor, so at the point it closes about 40
+       * pixels above the head of a player standing under it.
+       */
       placed(sbk, r, "initclaw", CLAW.running.cels, (e) => ({
-        x: e.pointX, y: e.pointY, left: e.left, right: e.right, state: "idle" as const, clock: 0,
+        x: e.pointX, y: e.bottom, left: e.left, right: e.right, state: "idle" as const, clock: 0,
       })),
     ),
     fittings: rooms.map((r) => [
@@ -3364,7 +3388,19 @@ function takeHits(): void {
   for (const c of hereOf((l) => l.claws)) {
     const cel = lvl.sbk.cels.find((q) => q.id === clawCel(c));
     if (!cel?.strike) continue;
-    const code = c.state === "shut" ? CLAW.grab : CLAW.blow;
+    /**
+     * `obj+0x2a` is set by the COLLISION, not by the damage — `0x43045d` marks a
+     * hitter the frame its box overlaps, whatever the blow pair says. The claw's
+     * jaw cels carry a strike box and no pair at all, so asking `hit` to report
+     * contact would never mark one: the dive would touch you and go back up.
+     */
+    const reach = strikeOf(cel, c.x, c.y, 1);
+    if (c.state === "dive" && reach && reach.right > mine.left && reach.left < mine.right &&
+        reach.bottom > mine.top && reach.top < mine.bottom) c.caught = true;
+    // `0x417208` gives it a hundred at the top of every think and only the
+    // CLAMP (`0x417485`) writes the code, so a dive is a real blow and the grab
+    // is what the blow leads to — see {@link Claw.caught}
+    const code = c.state === "clamp" ? CLAW.grab : CLAW.blow;
     if (hit(cel, c.x, c.y, 1, 0, 0, code, () => gripAt(clawCel(c), c.x, c.y), c)) return;
   }
   /**
@@ -3381,6 +3417,12 @@ function takeHits(): void {
     if (!cel?.strike) continue;
     const kind = q.underfoot ? HAND.underfoot : HAND.anywhere;
     if (hit(cel, q.atX, q.atY, 1, 0, 0, kind.blow, () => gripAt(handCel(q), q.atX, q.atY), q)) return;
+  }
+  // ...and SEWER's bush, whose last seven cels are a grip and whose blow is -3
+  for (const q of hereOf((l) => l.bushes)) {
+    const cel = lvl.sbk.cels.find((c) => c.id === bushCel(q));
+    if (!cel?.strike) continue;
+    if (hit(cel, q.x, q.y, 1, 0, 0, BUSH.grab, () => gripAt(bushCel(q), q.x, q.y), q)) return;
   }
   // ...and TOWER's current, which carries -4 on every cel of its arc
   for (const g of hereOf((l) => l.surges)) {
@@ -4476,8 +4518,13 @@ function chairCel(c: Chair): number {
  * Its velocity is clamped to ±26 (`0x417344`, `0x417376`) and its position to
  * its own record's bounds (`0x417316`), so it tracks the player along its track
  * and cannot leave it. `0x417289` then measures the gap: inside 300 it reaches
- * down, past 600 it waits, and in between it runs. Its grab is the code −3,
- * which this port does not carry — see {@link CLAW}.
+ * down, past 600 it waits, and in between it runs.
+ *
+ * ...and while it runs it can also DIVE, which is the other claw: kind 1, the
+ * 2450s, reached from the tracker's band table rather than from that distance
+ * (`0x41734a`). It reaches at 140 pixels ahead and commits at 100, and if it
+ * comes down on you it clamps with the code -3 on the only four cels of the
+ * fifty-two that carry a grip. See {@link CLAW} and `src/codes.ts`.
  */
 function stepClaws(): void {
   const here = hereOf((l) => l.claws);
@@ -4486,6 +4533,24 @@ function stepClaws(): void {
     c.clock += 1;
     const want = Math.max(c.left, Math.min(c.right, p.x));
     const gap = Math.abs(p.x - c.x);
+    // the DIVE, and it owns the claw until it is back up — `0x4173bf`'s four tags
+    if (c.state === "dive" || c.state === "clamp" || c.state === "lift") {
+      const a = c.state === "dive" ? CLAW.dive : c.state === "clamp" ? CLAW.jaws : CLAW.lift;
+      if (c.clock < a.cels.length * a.hold) continue;
+      c.clock = 0;
+      if (c.state === "dive") {
+        // `0x417448` — `obj+0x2a`, and a dive that touched nothing goes straight
+        // back up without ever showing the code
+        c.state = c.caught ? "clamp" : "lift";
+        c.caught = false;
+        if (c.state === "clamp") sound?.effect(CLAW.clamp, c.x, c.y);
+      } else if (c.state === "clamp") {
+        // `0x417496` writes the blow back to 0 before it rises, which is what
+        // lets go: the grip goes with the cels
+        c.state = "lift";
+      } else c.state = "running";
+      continue;
+    }
     if (c.state === "down" || c.state === "shut" || c.state === "up") {
       const a = c.state === "down" ? CLAW.down : c.state === "shut" ? CLAW.shut : CLAW.up;
       if (c.clock < a.cels.length * a.hold) continue;
@@ -4503,8 +4568,28 @@ function stepClaws(): void {
       sound?.effect(CLAW.wizz, c.x, c.y);
     }
     c.x += step;
+    /**
+     * What it does about the player, nearest test first.
+     *
+     * The original measures two different distances and this page has only ever
+     * had one. `0x417289`'s 300 and 600 are from the RECORD's own point, which
+     * is fixed; the band the diving kind comes off is from the CLAW's x, which
+     * is not. This keeps the single gap the class was built on and orders the
+     * tests by reach, so the nearer behaviour wins — which is what the numbers
+     * say happens anyway: 140 is inside 300.
+     *
+     * `0x45efd0` hands `0x41734a` an index into `0x46dfc8` — 180, 140, 100 —
+     * and only bands 2 and 3 install the diving kind, so it reaches at 140 and
+     * commits at 100. A negative gap is band -1 and reaches for nothing; this
+     * page has no facing on a claw, so it reaches either way and that is the
+     * one liberty taken here.
+     */
     if (gap > CLAW.restPx) {
       c.state = "idle";
+    } else if (gap <= CLAW.reachBand) {
+      c.state = "dive";
+      c.clock = 0;
+      sound?.effect(CLAW.wizz, c.x, c.y);
     } else if (gap < CLAW.reachPx && Math.abs(want - c.x) < 4) {
       c.state = "down";
       c.clock = 0;
@@ -4515,8 +4600,25 @@ function stepClaws(): void {
 /** which cel a claw is showing */
 function clawCel(c: Claw): number {
   const a =
-    c.state === "idle" ? CLAW.idle : c.state === "running" ? CLAW.running : c.state === "down" ? CLAW.down : c.state === "shut" ? CLAW.shut : CLAW.up;
-  const i = c.state === "idle" || c.state === "running" ? Math.floor(c.clock / a.hold) % a.cels.length : Math.min(a.cels.length - 1, Math.floor(c.clock / a.hold));
+    c.state === "idle"
+      ? CLAW.idle
+      : c.state === "running"
+        ? CLAW.running
+        : c.state === "down"
+          ? CLAW.down
+          : c.state === "shut"
+            ? CLAW.shut
+            : c.state === "dive"
+              ? CLAW.dive
+              : c.state === "clamp"
+                ? CLAW.jaws
+                : c.state === "lift"
+                  ? CLAW.lift
+                  : CLAW.up;
+  const i =
+    c.state === "idle" || c.state === "running"
+      ? Math.floor(c.clock / a.hold) % a.cels.length
+      : Math.min(a.cels.length - 1, Math.floor(c.clock / a.hold));
   return a.cels[i];
 }
 
@@ -4859,6 +4961,69 @@ function streamBox(q: Stream, cel: SbkCel | undefined): { top: number; left: num
   if (!cel?.strike) return null;
   const b = q.facing < 0 ? { ...cel.strike, x0: -cel.strike.x1, x1: -cel.strike.x0 } : cel.strike;
   return { left: q.x + b.x0, right: q.x + b.x1, top: q.y + b.y0, bottom: q.y + b.y1 };
+}
+
+/**
+ * The thing in the water — `0x43ec80`, and it is three phases and a rect.
+ *
+ * ```
+ *   43ecf3  |player.x - bush.x| <  0x46    ; seventy across
+ *   43ed0c  |player.y - bush.y| < 0x12c    ; three hundred down
+ *   43ed28  0x45d090(bush, 0x472c20, 0)    ; ...and up it comes
+ *   43eea3  [esi+8] = player.x             ; sliding under you as it rises
+ *   43ef4a  y += 0xa                       ; and ten a frame back down after
+ * ```
+ *
+ * Its blow is the grab code -3 (`0x43ee9d`) and it carries the grip on the last
+ * seven of its thirteen cels, so the first six are it breaking the water and
+ * the rest are it closing. See {@link BUSH}.
+ */
+function stepBushes(): void {
+  for (const q of hereOf((l) => l.bushes)) {
+    q.clock += 1;
+    if (q.state === "idle") {
+      if (Math.abs(p.x - q.x) >= BUSH.nearPx || Math.abs(p.y - q.y) >= BUSH.dropPx) continue;
+      q.state = "rise";
+      q.clock = 0;
+      sound?.effect(BUSH.sound, q.x, q.y);
+      continue;
+    }
+    if (q.state === "rise") {
+      // `0x43eea3` — it snaps to wherever you are for as long as it is coming up
+      q.x = p.x;
+      if (q.clock >= BUSH.rise.cels.length * BUSH.rise.hold) {
+        q.state = "hold";
+        q.clock = 0;
+      }
+      continue;
+    }
+    if (q.state === "hold") {
+      // it holds on its last cel for as long as it has you, and `0x402f60`'s
+      // branch — the -5 it gives a dying player — is not modelled
+      if (p.heldWhat === q) continue;
+      q.state = "sink";
+      q.clock = 0;
+      sound?.effect(BUSH.sinkSound, q.x, q.y);
+      continue;
+    }
+    // `0x43ef4a`: ten a frame until it is back under, and then it waits again
+    q.y += BUSH.sinkPerFrame;
+    if (q.y >= q.restY + BUSH.sinkBelow) {
+      q.y = q.restY;
+      q.state = "idle";
+      q.clock = 0;
+    }
+  }
+}
+
+/** which cel a bush is showing */
+function bushCel(q: Bush): number {
+  if (q.state === "idle") return BUSH.idle.cels[Math.floor(q.clock / BUSH.idle.hold) % BUSH.idle.cels.length];
+  // holding and sinking are both the script having ENDED — `0x43ef31` tests
+  // `obj+0x46` and moves the object without installing anything, so it keeps
+  // showing its last frame the whole way back down
+  if (q.state !== "rise") return BUSH.rise.cels[BUSH.rise.cels.length - 1];
+  return BUSH.rise.cels[Math.min(BUSH.rise.cels.length - 1, Math.floor(q.clock / BUSH.rise.hold))];
 }
 
 /** which cel a stream is showing */
@@ -5221,7 +5386,7 @@ function stepScenery(): void {
   }
 
   for (const q of hereOf((l) => l.pipes)) q.clock += TICK_SCALE;
-  for (const q of hereOf((l) => l.bushes)) q.clock += TICK_SCALE;
+  stepBushes();
 
   // `0x4404c0`: the splash going in, the gulp every ninth frame, and the health
   // — which only leaves when the switch that lets things hit back is on
@@ -7175,9 +7340,7 @@ function loop(now: number): void {
     drawLevelCel(PIPE.mouth.cels[0], q.x, q.y, camX, camY);
     drawLevelCel(PIPE.flow.cels[loopIndex(PIPE.flow, q.clock)], q.x, q.y, camX, camY);
   }
-  for (const q of hereOf((l) => l.bushes)) {
-    drawLevelCel(BUSH.idle.cels[loopIndex(BUSH.idle, q.clock)], q.x, q.y, camX, camY);
-  }
+  for (const q of hereOf((l) => l.bushes)) drawLevelCel(bushCel(q), q.x, q.y, camX, camY);
   for (const r of roaches) {
     drawLevelCel(r.onGround ? ROACH.run.cels[loopIndex(ROACH.run, r.clock)] : ROACH.drop.cels[0], r.x, r.y, camX, camY);
   }
@@ -7532,7 +7695,9 @@ function loop(now: number): void {
     ...hereOf((l) => l.fans).map((q) => `fan ${q.horizontal ? "h" : "v"} ${q.state} cel ${fanCel(q)} at x${q.x}`),
     hereOf((l) => l.belts).length ? `${hereOf((l) => l.belts).length} belts` : "",
     ...hereOf((l) => l.chairs).map((c) => `chair ${c.run} cel ${chairCel(c)} at x${c.x}`),
-    ...hereOf((l) => l.claws).map((c) => `claw ${c.state} cel ${clawCel(c)} at x${Math.round(c.x)}`),
+    ...hereOf((l) => l.claws).map(
+      (c) => `claw ${c.state} cel ${clawCel(c)} at x${Math.round(c.x)} gap ${Math.round(Math.abs(c.x - p.x))}`,
+    ),
     ...hereOf((l) => l.fittings).map((f) => `${f.kind} cel ${fittingCel(f)} at x${f.x}`),
     ...hereOf((l) => l.boggs).map(
       (b) => `boggs cel ${boggsCel(b)} at x${b.x}, y${b.y}, ${Math.round(b.hp)}/${BOGGS.health}hp, +${BOGGS.regen} a frame`,
@@ -7540,7 +7705,7 @@ function loop(now: number): void {
     ...hereOf((l) => l.surges).map((q) => `surge cel ${surgeCel(q)} at x${q.x}`),
     ...hereOf((l) => l.bridges).map((b) => `bridge ${b.state} cel ${bridgeCel(b)} at x${b.x}`),
     ...hereOf((l) => l.hands).map((q) => `hand ${q.state}${q.underfoot ? " underfoot" : ""} cel ${handCel(q)} at x${Math.round(q.atX)}`),
-    ...hereOf((l) => l.bushes).map((q) => `bush at x${q.x}`),
+    ...hereOf((l) => l.bushes).map((q) => `bush ${q.state} cel ${bushCel(q)} at x${Math.round(q.x)}, y${Math.round(q.y)}`),
     roaches.length ? `${roaches.length} roaches` : "",
     hereOf((l) => l.sprinklers).length
       ? `${hereOf((l) => l.sprinklers).length} sprinklers, ${columns.size} up${columns.size ? ` cel ${columnCel([...columns.values()][0])}` : ""}`

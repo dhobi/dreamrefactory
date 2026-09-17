@@ -1576,6 +1576,9 @@ scripts, and this page has the right ones: the creator starts it on kind 6
 (`0x46dc78`, the carriage), and inside 300 pixels kind 0 installs `0x46dd80` —
 kind 4, cels 2420..2426 — which is exactly what is ported.
 
+**The claw grabs now.** What follows is the reading that got it there, and one
+position bug it turned up.
+
 The grabbing kind is reached from somewhere else, and reading the one function
 in the way settles it. The creator registers a TRACKER at `0x411d23` —
 `0x45ef70(&user[0x12], claw, player, 0x46dfc8)` — and `0x45efd0` answers it each
@@ -1593,12 +1596,31 @@ installs `0x46de08` tag 0 and band 3 its tag 1, and those two tags are the only
 route to cels 2456..2459, the only four of the claw's fifty-two that carry a
 grip.
 
-So the claw reaches for you at 140 pixels and commits at 100, and what this page
-ports is the other branch: `0x417291`, which installs the kind-4 clamp whenever
-the RECORD's point is within 300 of the player. Both are real and the port has
-one of them. The remaining work is kind 1's own tag machine at `0x4173bf`, not
-anything about the codes — which is why the claw is listed below rather than
-here.
+So the claw reaches for you at 140 pixels and commits at 100. Kind 1's own tag
+machine is four tags and `0x41743d` is the whole trick:
+
+```
+  41743d  tag 1 ends: obj+0x2a set -> tag 2 and blow -3
+                      else        -> tag 3, straight back up
+  417485  tag 2: blow -3 every frame; ends -> blow 0, tag 3
+  4174c7  tag 3 ends -> kind 0, the carriage again
+```
+
+The DIVE is an ordinary hundred — `0x417208` writes it at the top of every think
+and only the clamp overwrites it. So the jaw hits you for a real blow, that is
+what sets `obj+0x2a`, and the grab is what follows from it. Which also means the
+contact has to be read off the COLLISION and not off the damage: the jaw cels
+carry a strike box and no blow pair at all, so a port that asks "did this hurt
+anything" would watch the claw touch you and go back up.
+
+And it could not have reached anybody anyway, because this page had it hanging
+in the wrong place. `0x411ca0` files three of the spawner's dwords into its user
+struct and `0x4173d1` clamps its x between `user+2` and `user+6` — which can
+only be left and right, so `user+0`/`user+4` are top and bottom. `0x4173c9`
+writes `user+4` into `obj+6`: **it hangs at the record's bottom, not its point.**
+On BARREL's fourth claw that is 7221 against the point's 7044, and since the jaw
+box sits 77..111 below the anchor, the difference is the whole of whether it
+closes on your chest or 40 pixels above your head.
 
 ## Five weapons, and three of them pour
 
@@ -1693,6 +1715,31 @@ finger off draws it again — nothing is spent, nothing is swapped, and no scree
 is drawn. Finding that out cost less than building the screen would have, which
 is the argument for reading the executable before believing a gap.
 
+### The thing in the water comes up, and cannot reach
+
+`0x43ec80` is three phases and a rect, and all of it is built now:
+
+```
+  43ecf3  |player.x - bush.x| <  0x46    ; seventy across
+  43ed0c  |player.y - bush.y| < 0x12c    ; three hundred down
+  43ed28  0x45d090(bush, 0x472c20, 0)    ; ...and up it comes
+  43eea3  [esi+8] = player.x             ; sliding under you as it rises
+  43ef4a  y += 0xa                       ; ten a frame back down afterwards
+```
+
+Its thirteen cels split exactly the way the hand's and the claw's do: 5020..5025
+carry no strike box, and 5026..5032 each carry a big one with no blow pair. So
+the first six are it breaking the water and the last seven are it closing, and
+the frame it closes is the frame it has you — the same authored grip, a third
+time.
+
+What does not work is the reach. The creator puts it at the record's point plus
+eighty (`0x435bf7`), which on SEWER's three hall bushes is y 17321 against a
+floor at 17513, and its grip tops out 200 pixels above the player's feet. That
+is consistent across all four bushes measured — 190 to 215 — so it is systematic
+rather than one bad record, and it is either the floor under that hall or the
+bush's own y. Left as it reads rather than nudged into working.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are
@@ -1738,10 +1785,11 @@ a level with no class anywhere.
 
 - **All five weapons fire now**, and the INV button with them — see the section
   above. There was never an inventory screen to build.
-- **The blow codes are carried now** — see the section above. What is still
-  missing behind them is the two classes that would use one: BARREL's claw is
-  showing the wrong one of its four kinds to have a grip, and the bush's grab
-  and swallow (`0x43ec80`'s three phases) are not built, only its idle.
+- **The blow codes are carried, and so is the claw.** SEWER's bush has its three
+  phases and its thirteen cels now too, but its grip does not reach: it sits
+  about 190 pixels above where this page stands the player, at all four of the
+  bushes measured. Either the floor under that hall is wrong here or the bush's
+  own y is, and which of those it is has not been settled.
 - **Two bosses of five have their own state machine** — PLAYGR's `initwbooly`
   and ARCADE's `initkragg`. RAVECAVE's wraith, TOWER's bishop and VAT's Boggs
   stand, take blows and die on the generic gait/flinch/death every other
