@@ -81,6 +81,52 @@ const main = async (): Promise<void> => {
   if (lowest >= 4000) fail(`the bolt should take 100 off Boggs (0x41bc71); it never dropped below ${lowest}`);
   console.log(`ok    and a bolt lands on Boggs — 4000 down to ${lowest} at its lowest`);
 
+  /**
+   * ...and on the MACHINE, which is the shot that actually matters: `0x41b510`
+   * translates the `-1` the same way `0x41bc71` does, and the machine does not
+   * heal it back.
+   *
+   * This is the check that the bolt can REACH it. Three things were between it
+   * and the machine, all of them this port's:
+   *
+   *   - the bolt is a six-by-six dot (VAT's cel 4000; `PLAYER.SBK`'s 4000 of the
+   *     same number is the player's own pose) travelling two hundred pixels an
+   *     engine frame, and it was tested only where it landed — about five points
+   *     across a whole room, so it went through everything;
+   *   - the room-edge cull ran BEFORE the hit test, and the second machine
+   *     stands past the end of chamber2's floor;
+   *   - and the strike box was the DRAWN extent rather than the cel's authored
+   *     one, which made five pieces of scenery solid that `0x4303b3` says carry
+   *     no collision at all. 5960 is drawn across the whole right half of the
+   *     machine beside it.
+   */
+  // ...walking there rather than reloading, because a reload puts the gun back
+  // on the floor: what you are carrying is not in the URL
+  for (let i = 0; i < 160; i++) {
+    const x = await num(/· x (-?\d+)/);
+    if (Math.abs(x - 6360) < 20) break;
+    const k = x < 6360 ? "ArrowRight" : "ArrowLeft";
+    await page.keyboard.down(k);
+    await page.waitForTimeout(60);
+    await page.keyboard.up(k);
+  }
+  const mach = async (): Promise<[number, number]> => {
+    const m = /machine (\d+)\/3000@x\d+ (\d+)\/3000@x\d+/.exec(await say());
+    return [Number(m?.[1] ?? NaN), Number(m?.[2] ?? NaN)];
+  };
+  const [a0] = await mach();
+  if (a0 !== 3000) fail(`0x41b47f gives each half 0x40e300(0xbb8); the HUD says ${a0}`);
+  const spent = await num(/holding blaster (\d+)\/160/);
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press("p");
+    await page.waitForTimeout(260);
+  }
+  const [a1] = await mach();
+  const fired = spent - (await num(/holding blaster (\d+)\/160/));
+  if (a1 >= a0) fail(`${fired} bolts at the machine from x6360 took nothing: still ${a1}/3000`);
+  if ((a0 - a1) % 100 !== 0) fail(`a bolt is worth a round hundred there; ${fired} took ${a0 - a1}`);
+  console.log(`ok    and ${fired} bolts at its machine take ${a0 - a1} off it — a hundred apiece, and it keeps them`);
+
   // 4. ...and the thirty a frame puts it straight back, which is the fight
   await page.waitForTimeout(1200);
   const healed = await num(/boggs \w+ cel \d+ at x\d+, y\d+, (\d+)\/4000hp/);

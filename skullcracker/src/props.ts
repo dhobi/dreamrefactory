@@ -2244,6 +2244,22 @@ export const BOGGS = {
   divisor: 100,
   /** `0x41bbf0` — and the largest shove weight */
   weight: 0x50,
+  /**
+   * The right-hand bar is Boggs' own, and it enters the competition for it every
+   * frame from its own tick rather than from a census pass:
+   *
+   * ```
+   *   41bead  eax = [0x4a50e0]            ; at the HEAD's point, not the body's
+   *   41beb6  push 0x33fa                 ; the name plate, 106x7 in PLAYER.SBK
+   *   41bebb  0x40e300(0xfa0)             ; against the four thousand
+   *   41bed1  0x40d1c0(0x4a50e8, max, plate, head.pos)
+   * ```
+   *
+   * The MACHINERY does not: `0x41b510` never calls `0x40d1c0`, so the disc shows
+   * no health for either half of it anywhere. What is on this page's own debug
+   * line is this page's.
+   */
+  plate: 0x33fa,
 
   /**
    * The HEAD — `initboggshead` (`0x412310`), its own record in `VAT.SBK`, and

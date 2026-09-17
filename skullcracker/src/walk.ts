@@ -3288,6 +3288,30 @@ function claimBar(): void {
     best = d;
     won = e;
   }
+  /**
+   * ...and BOGGS, which enters the same competition and is not a creature.
+   *
+   * `0x41bead` runs `0x40d1c0(0x4a50e8, 0x40e300(0xfa0), 0x33fa, head.pos)` out
+   * of the body's own tick once a frame, at the HEAD's point. Nothing else in
+   * VAT counts, so without this the last level of the game is the only one whose
+   * right-hand bar never says anything — which is what it did here.
+   *
+   * The machinery does NOT enter it: `0x41b510` never calls `0x40d1c0`, so how
+   * much is left of either breakable half is not a thing the disc ever shows
+   * you. This page's debug line is the only place it appears.
+   */
+  let boggs: Boggs | null = null;
+  for (const g of hereOf((l) => l.boggs)) {
+    if (g.dying) continue;
+    const d = Math.abs(p.x - g.headX) + Math.abs(p.y - g.headY);
+    if (d >= best) continue;
+    best = d;
+    boggs = g;
+  }
+  if (boggs) {
+    stats.shown = { health: Math.max(0, boggs.hp), max: BOGGS.health, nameCel: BOGGS.plate };
+    return;
+  }
   if (!won) return;
   stats.shown = { health: Math.max(0, won.hp), max: won.max, nameCel: FOES[won.kind].panel!.plate };
 }
@@ -5013,20 +5037,39 @@ function strikeMachine(b: Boggs, i: number, damage: number): boolean {
 }
 
 /**
- * The box a machine is drawn in, which is also the box it is struck in.
+ * The box a machine is STRUCK in, which is not the box it is drawn in.
  *
- * The same reasoning as Boggs' own: `drawLevelCel` hangs a cel off its anchor by
- * the record's `posX`/`posY`, so a centred box would miss it twice over.
+ * `0x4303b3` skips a victim whose cel carries a degenerate rect — the same rule
+ * that makes the player untouchable through a knockdown — and of the eight
+ * machinery cels only three carry one at all:
+ *
+ * ```
+ *   5860  body y1..142   x-106..109    the breakable half at x6539
+ *   5870  body y-8..133  x-46..168     the breakable half at x6694
+ *   5960  body y28..56   x1..79        one piece of scenery, and a small box
+ *   5630 5700 5720 5940 5650           no body box: cannot be hit at all
+ * ```
+ *
+ * Reading the DRAWN extent instead made the decoration solid, and the decoration
+ * is big: 5960 is drawn x6538..6767 across the whole right half of the machine
+ * it stands beside, and 5720 is 193x319. A bolt fired at the breakable half was
+ * being stopped by scenery that the disc says has no collision at all, clanging
+ * off `0x41b510`'s "one of these two, or nothing happens" branch and taking
+ * nothing. Fists reached it because a fist is swung from close enough to be
+ * inside the machine's own box already.
+ *
+ * Translated by the anchor, the way `0x40e680` translates every rect — see
+ * {@link strikeOf}.
  */
 function machineBox(b: Boggs, i: number): { left: number; right: number; top: number; bottom: number } | null {
   const art = level?.sbk.cels.find((c) => c.id === machineCel(b, i));
-  if (!art) return null;
+  if (!art?.body) return null;
   const m = b.machines[i];
   return {
-    left: m.x - art.posX,
-    right: m.x - art.posX + art.width,
-    top: m.y - art.posY,
-    bottom: m.y - art.posY + art.height,
+    left: m.x + art.body.x0,
+    right: m.x + art.body.x1,
+    top: m.y + art.body.y0,
+    bottom: m.y + art.body.y1,
   };
 }
 
@@ -5437,53 +5480,101 @@ function stepBolts(): void {
   const pool = i >= 0 ? lvl.spawned[i] : [];
   const span = p.room ? roomSpan(p.room) : null;
   for (const b of bolts) {
+    const was = b.x;
     b.x += b.vx;
-    if (span && (b.x < span.lo || b.x > span.hi)) {
+    /**
+     * The box is SWEPT, and it has to be.
+     *
+     * `BOLT.cel` in a level book is a six-by-six dot — VAT's 4000 is 6x6 against
+     * `PLAYER.SBK`'s 104x143, which is the player's own pose while holding the
+     * thing — and the bolt crosses two hundred pixels of the world every engine
+     * frame. Tested only where it landed, a six-pixel dot samples about five
+     * points on its way across a room and goes through everything in between:
+     * measured, nine rounds fired straight at Boggs' machine took nothing off
+     * it, off the other machine, or off Boggs.
+     *
+     * So this tests the whole span it travelled rather than the end of it. That
+     * is this port's, not the disc's — the engine collides objects where they
+     * are, once a frame, the same way — but a gun whose entire purpose is the
+     * one thing in the game that reads its code has to be able to reach it, and
+     * `BOLT.divisor` is itself unsourced: `0x412a70` builds the bolt through
+     * `0x430d40`, which leaves `obj+0xe` at the zero `0x42f550` wrote, and
+     * nothing in the creator sets it. The step may well be wrong; the sweep
+     * makes the hit test independent of it either way.
+     */
+    const art = lvl.sbk.cels.find((c) => c.id === BOLT.cel);
+    const half = { w: art ? art.width / 2 : 12, h: art ? art.height / 2 : 12 };
+    const box = {
+      left: Math.min(was, b.x) - half.w,
+      right: Math.max(was, b.x) + half.w,
+      top: b.y - half.h,
+      bottom: b.y + half.h,
+    };
+    /**
+     * What it meets first, and FIRST is the word: a swept box crosses Boggs'
+     * body and its machine in the same step — 5988 is drawn x6106..6449 and the
+     * machine at x6539 is x6406..6648 — so testing them in source order would
+     * feed every round to the thing that heals thirty a frame while the machine
+     * that stops the healing stands untouched behind it.
+     *
+     * So collect what the sweep crossed and take the nearest along the way it
+     * was going. Both take the same hundred: `0x41bc71` on the body and
+     * `0x41b510` in the machinery's handler translate the `-1` identically.
+     */
+    const met: { edge: number; take: () => void }[] = [];
+    for (const g of hereOf((l) => l.boggs)) {
+      const cel = lvl.sbk.cels.find((c) => c.id === boggsCel(g));
+      if (cel) {
+        // the rect the thing is actually DRAWN in — `drawLevelCel` hangs a cel
+        // off its anchor by the record's own `posX`/`posY`, and Boggs' 5988 is
+        // 343x270 anchored at (215, 56), so a centred box misses it twice over
+        const gb = {
+          left: g.x - cel.posX,
+          right: g.x - cel.posX + cel.width,
+          top: g.y - cel.posY,
+          bottom: g.y - cel.posY + cel.height,
+        };
+        if (box.right > gb.left && box.left < gb.right && box.bottom > gb.top && box.top < gb.bottom) {
+          met.push({
+            edge: b.vx >= 0 ? Math.max(gb.left, was) : Math.min(gb.right, was),
+            take: () => {
+              // `0x41bc71` -> 100, then `0x42f910` the usual way
+              g.hp = Math.max(0, g.hp - BOGGS.translatesTo);
+              sound?.effect(BOLT.sound, g.x, g.y);
+            },
+          });
+        }
+      }
+      for (let k = 0; k < g.machines.length; k++) {
+        const mb = machineBox(g, k);
+        if (!mb) continue;
+        if (!(box.right > mb.left && box.left < mb.right && box.bottom > mb.top && box.top < mb.bottom)) continue;
+        met.push({
+          // clamped to where the bolt STARTED this step: it materialises 120px
+          // ahead of the muzzle and can be inside several boxes already, and a
+          // leading edge behind it is not the thing it met first
+          edge: b.vx >= 0 ? Math.max(mb.left, was) : Math.min(mb.right, was),
+          take: () => {
+            strikeMachine(g, k, BOGGS.translatesTo);
+            sound?.effect(BOLT.sound, g.machines[k].x, g.machines[k].y);
+          },
+        });
+      }
+    }
+    let hit = false;
+    if (met.length) {
+      met.sort((l, r) => (b.vx >= 0 ? l.edge - r.edge : r.edge - l.edge));
+      met[0].take();
+      hit = true;
+    }
+    if (hit) {
       b.spent = true;
       continue;
     }
-    const art = lvl.sbk.cels.find((c) => c.id === BOLT.cel);
-    const half = { w: art ? art.width / 2 : 12, h: art ? art.height / 2 : 12 };
-    const box = { left: b.x - half.w, right: b.x + half.w, top: b.y - half.h, bottom: b.y + half.h };
-    // BOGGS first, because it is the only thing that does anything with it
-    let hit = false;
-    for (const g of hereOf((l) => l.boggs)) {
-      const cel = lvl.sbk.cels.find((c) => c.id === boggsCel(g));
-      if (!cel) continue;
-      // the rect the thing is actually DRAWN in — `drawLevelCel` hangs a cel
-      // off its anchor by the record's own `posX`/`posY`, and Boggs' 5988 is
-      // 343x270 anchored at (215, 56), so a centred box misses it twice over
-      const gb = {
-        left: g.x - cel.posX,
-        right: g.x - cel.posX + cel.width,
-        top: g.y - cel.posY,
-        bottom: g.y - cel.posY + cel.height,
-      };
-      if (!(box.right > gb.left && box.left < gb.right && box.bottom > gb.top && box.top < gb.bottom)) continue;
-      // `0x41bc71` -> 100, then `0x42f910` the usual way
-      g.hp = Math.max(0, g.hp - BOGGS.translatesTo);
-      sound?.effect(BOLT.sound, g.x, g.y);
-      hit = true;
-      break;
-    }
-    // ...and the MACHINERY, whose handler `0x41b510` translates the -1 exactly
-    // the way the body's does. This is what the gun is really for: six thousand
-    // of machine is what stops the healing.
-    if (!hit) {
-      for (const g of hereOf((l) => l.boggs)) {
-        for (let k = 0; k < g.machines.length; k++) {
-          const mb = machineBox(g, k);
-          if (!mb) continue;
-          if (!(box.right > mb.left && box.left < mb.right && box.bottom > mb.top && box.top < mb.bottom)) continue;
-          strikeMachine(g, k, BOGGS.translatesTo);
-          sound?.effect(BOLT.sound, g.machines[k].x, g.machines[k].y);
-          hit = true;
-          break;
-        }
-        if (hit) break;
-      }
-    }
-    if (hit) {
+    // ...and only now the room's own end, because culling first threw away the
+    // step that crossed the target: the machine at x6694 stands past the end of
+    // chamber2's floor, so every bolt aimed at it died on the frame it arrived
+    if (span && (b.x < span.lo || b.x > span.hi)) {
       b.spent = true;
       continue;
     }
@@ -8330,7 +8421,9 @@ function loop(now: number): void {
     (p.heldBy ? ` · HELD, gravity x${p.gravityScale}` : "");
   const air =
     (held.inv ? " · <b>INV held</b> — holstered, standing" : "") +
-    (bolts.length ? ` · ${bolts.length} bolts, nearest at x ${Math.round(bolts[0].x)}` : "") +
+    (bolts.length
+      ? ` · ${bolts.length} bolts, nearest at x ${Math.round(bolts[0].x)}, y ${Math.round(bolts[0].y)} vx ${Math.round(bolts[0].vx)}`
+      : "") +
     (streams.length
       ? ` · stream ${streams[0].state} cel ${streamCel(streams[0])} at x ${Math.round(streams[0].x)}` +
         `, y ${Math.round(streams[0].y)} blow ${STREAMS[streams[0].weapon]?.blow}`
@@ -8344,6 +8437,12 @@ function loop(now: number): void {
       ` at x ${Math.round(bossHere.x)}, y ${Math.round(bossHere.y)} cel ${celOf(bossHere)}` +
       `${bossHere.asleep ? " asleep" : ""}${bossHere.mode ? ` mode ${bossHere.mode}` : ""}`
     : "";
+  // what the RIGHT-HAND BAR is showing, which is a competition every frame and
+  // not a property of the room — `0x40d1c0`, and Boggs enters it from its own
+  // tick rather than from the census. See {@link claimBar}.
+  const bar = stats.shown
+    ? ` · bar ${stats.shown.health}/${stats.shown.max} plate ${stats.shown.nameCel}`
+    : " · bar empty";
   const nearHand = hereOf((l) => l.hands).sort((a, b) => Math.abs(a.atX - p.x) - Math.abs(b.atX - p.x))[0];
   const hand = nearHand
     ? ` · nearest hand ${nearHand.underfoot ? "underfoot" : "anywhere"} ${nearHand.state}` +
@@ -8362,7 +8461,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 
