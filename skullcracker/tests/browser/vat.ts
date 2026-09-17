@@ -14,8 +14,8 @@
  *
  * ```
  *   41be84  0x40e300(0xfa0)                 ; four thousand health
- *   41be7c  add word ptr [0x4a50e8], 0x1e   ; and thirty a frame back
- *   41bc6a  cmp word ptr [edi+0x1a], -1     ; and only a blow of -1 lands
+ *   41be68  cmp [0x46e080] / [0x46e084]     ; while EITHER flag is set...
+ *   41be7c  add word ptr [0x4a50e8], 0x1e   ; ...thirty a frame back
  * ```
  *
  * Four thousand is three times TOWER's bishop and more than three times the
@@ -68,7 +68,7 @@ const main = async (): Promise<void> => {
   // 3. BOGGS, in the other region, with four thousand health
   await go("&x=6100");
   if (!/room 1 of 2 \(chamber2/.test(await say())) fail(`Boggs stands in the region named chamber2; the HUD says ${/room[^·]*/.exec(await say())?.[0]}`);
-  if (!/boggs cel 59\d\d at x6321, 4000hp and only a -1 blow lands/.test(await say()))
+  if (!/boggs cel 59\d\d at x6321, y2094, 4000\/4000hp, \+30 a frame/.test(await say()))
     fail(`0x41be84 gives it 0x40e300(0xfa0); the HUD says ${/boggs[^·]*/.exec(await say())?.[0]}`);
   const cels = new Set<number>();
   for (let i = 0; i < 24; i++) {

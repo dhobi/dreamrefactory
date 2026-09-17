@@ -131,7 +131,16 @@ export const BLOW_CODES: Readonly<Record<number, CodeReaction>> = {
     anim: { cels: [9550, 9551, 9552, 9553, 9554, 9555, 9556, 9557, 9558, 9558, 9558], hold: 3, from: "0x476830 tag 2" },
     gravity: null,
     stops: false,
-    /** `0x448cf4`: +50 along the facing, -50 against it */
+    /**
+     * `0x448cf4`: +50 when `obj+0x28` is 1, -50 when it is 0.
+     *
+     * `obj+0x28` is a MIRROR FLAG, not a sign: `0x45d0f0` flips a frame's own dx
+     * when it is set, so 1 is the mirrored drawing — which is this port's facing
+     * of **-1**. The blaster settles it independently at `0x412b6e`, where the
+     * muzzle goes 120 to the LEFT when the flag is 1. So +50 at flag 1 is +50
+     * while facing left: a knock BACKWARDS, which is what being bowled over is,
+     * and the sign here is against the port's facing rather than along it.
+     */
     shove: 50,
     /** `0x448d00` — `0x40c900(y, 0x78, 0)` */
     shake: 0x78,

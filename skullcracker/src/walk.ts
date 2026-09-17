@@ -158,7 +158,7 @@ import {
   Boggs,
 } from "./props";
 import { DEATH_FILMS, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
-import { CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, WEAPONS, type Flare, type Gun } from "./guns";
+import { BOLT, CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, WEAPONS, type Bolt, type Flare, type Gun } from "./guns";
 import { BLOW_CODES, HELD, gripOf } from "./codes";
 import {
   CEL,
@@ -1530,6 +1530,7 @@ async function loadLevel(index: number): Promise<void> {
   roaches = [];
   columns = new Map();
   flares = [];
+  bolts = [];
   // the chapter's own entry function: zero every count, name the chapter's
   // weapon, and leave the hands empty (`0x4511f0` and its three siblings). It
   // runs once per CHAPTER, not once per level, and that is the whole reason
@@ -1613,7 +1614,7 @@ async function loadLevel(index: number): Promise<void> {
       ...placed(sbk, r, "initball", [FITTING.ball.cel], (e) => ({ kind: "ball" as const, x: e.pointX, y: e.pointY, clock: 0 })),
       ...placed(sbk, r, "initteeth", [FITTING.teeth.cel], (e) => ({ kind: "teeth" as const, x: e.pointX, y: e.pointY, clock: 0 })),
     ]),
-    boggs: rooms.map((r) => placed(sbk, r, "initboggsbody", BOGGS.idle.cels, (e) => ({ x: e.pointX, y: e.pointY, clock: 0 }))),
+    boggs: rooms.map((r) => placed(sbk, r, "initboggsbody", BOGGS.idle.cels, (e) => ({ x: e.pointX, y: e.pointY, clock: 0, hp: BOGGS.health }))),
     fans: [
       ...rooms.map((r) => [
         ...placed(sbk, r, "inithfan", [FAN.h.stopped], (e) => ({ x: e.pointX, y: e.pointY, horizontal: true, state: "off" as const, clock: 0 })),
@@ -3247,8 +3248,10 @@ function takeCode(code: number, grip?: () => { x: number; y: number } | null, wh
     p.vyRaw = 0;
   }
   if (r.gravity !== null) p.gravityScale = r.gravity;
-  // `0x448cf4`: along the PLAYER's own facing, not the striker's
-  if (r.shove) p.vx += r.shove * p.facing;
+  // `0x448cf4`: the PLAYER's own mirror flag, not the striker's — and against
+  // this port's facing rather than along it, because `obj+0x28 == 1` is the
+  // mirrored drawing. See {@link CodeReaction.shove}.
+  if (r.shove) p.vx -= r.shove * p.facing;
   if (r.sound !== undefined) sound?.own(r.sound, p.x, p.y);
   if (r.holds) {
     // a grab with no grip is still a grab: the engine enters the held state and
@@ -4509,10 +4512,38 @@ function fittingCel(f: Fitting): number {
 }
 
 /**
- * ...and BOGGS, on the idle `0x46e6b0` gives it. Four thousand health, thirty a
- * frame back, and a hit handler that refuses anything whose blow is not the
- * code −1 — see {@link BOGGS} for what of that is here and what is not.
+ * ...and BOGGS, on the idle `0x46e6b0` gives it. Four thousand health and thirty
+ * a frame back while its machine runs, which is what makes it the boss — its hit
+ * handler turns away only its own parts. See {@link BOGGS}.
  */
+/**
+ * Boggs, once an engine frame: the clock, and the thirty a frame back.
+ *
+ * `0x41be68` heals it while EITHER of the flags at `0x46e080` and `0x46e084` is
+ * set, which a first reading here had backwards. And the flags are not a phase
+ * it enters — they are how it starts:
+ *
+ * ```
+ *   0x46e080:  01 00 00 00  01 00 00 00     ; both SHIP as 1, in .data
+ *   41b611     mov word ptr [0x46e080], 0   ; cleared once, by the claw arm
+ *   41b75d     mov word ptr [0x46e084], 0   ; ...and once more, same function
+ * ```
+ *
+ * Those two writes are the ONLY ones in `.text`. Nothing ever sets either flag,
+ * so the healing runs from the moment the level opens until the claw arm's own
+ * sequence (`0x41b250`) has turned it off twice — and only then is the thing
+ * killable. Healing it always is therefore not a simplification: it is the
+ * shipped state, and it is why Boggs cannot be beaten on this page yet. Forty
+ * bolts of a hundred is the four thousand, and the claw arm is what buys you
+ * the time to land them.
+ */
+function stepBoggs(): void {
+  for (const b of hereOf((l) => l.boggs)) {
+    b.clock += 1;
+    b.hp = Math.min(BOGGS.health, b.hp + BOGGS.regen);
+  }
+}
+
 function boggsCel(b: Boggs): number {
   return BOGGS.idle.cels[Math.floor(b.clock / BOGGS.idle.hold) % BOGGS.idle.cels.length];
 }
@@ -4540,6 +4571,8 @@ const inv = {
 
 /** every flare in the air, and they outlive the room they were fired in */
 let flares: Flare[] = [];
+/** the blaster's bolts in the air — see {@link BOLT} */
+let bolts: Bolt[] = [];
 
 /** which chapter's entry function has already run — see {@link CHAPTER_WEAPON} */
 let chapterWeapon: number | null = null;
@@ -4673,6 +4706,7 @@ function takeGun(): void {
  * behaviour and not an omission.
  */
 function fireGun(): void {
+  if (inv.weapon === 6) return fireBolt();
   if (inv.weapon !== 9 || roundsIn(9) <= 0) return;
   inv.rounds[9] = roundsIn(9) - 1;
   sound?.effect(FLARE.sound, p.x, p.y);
@@ -4689,6 +4723,92 @@ function fireGun(): void {
     burn: null,
     spent: false,
   });
+}
+
+/**
+ * The BLASTER — `0x412a70`'s `0x412b5b`, which is the case both of its firing
+ * tags land on. See {@link BOLT}.
+ */
+function fireBolt(): void {
+  if (roundsIn(6) <= 0) return;
+  inv.rounds[6] = roundsIn(6) - 1;
+  sound?.effect(BOLT.sound, p.x, p.y);
+  bolts.push({
+    // `0x412b7f` puts it 120 ahead; `obj+0x28 == 1` is this port's facing -1
+    x: p.x + p.facing * BOLT.aheadPx,
+    // up 20, then a random 0..39 back down — `0x412b87` and `0x412b8f`
+    y: p.y - p.feet - BOLT.risePx + Math.floor(Math.random() * BOLT.scatterPx),
+    vx: (p.facing * BOLT.dx) / BOLT.divisor,
+    facing: p.facing,
+    spent: false,
+  });
+}
+
+/**
+ * The bolts, one engine frame at a time — and the point of them is that they
+ * mostly do nothing.
+ *
+ * Their strength is the code -1 (`0x413bf9`), so an ordinary handler throws
+ * them away: `0x4199b9` compares the strength with 1 and anything below it is
+ * not a blow. The bolt still ENDS on whatever it touched — `obj+0x2a` is set by
+ * the collision whether or not the handler did anything with it — which is why
+ * this expires on contact and takes no health.
+ *
+ * Boggs is the exception and the reason the gun exists: `0x41bc71` rewrites the
+ * -1 as a hundred.
+ */
+function stepBolts(): void {
+  const lvl = level;
+  if (!lvl) return;
+  const i = lvl.rooms.indexOf(p.room!);
+  const pool = i >= 0 ? lvl.spawned[i] : [];
+  const span = p.room ? roomSpan(p.room) : null;
+  for (const b of bolts) {
+    b.x += b.vx;
+    if (span && (b.x < span.lo || b.x > span.hi)) {
+      b.spent = true;
+      continue;
+    }
+    const art = lvl.sbk.cels.find((c) => c.id === BOLT.cel);
+    const half = { w: art ? art.width / 2 : 12, h: art ? art.height / 2 : 12 };
+    const box = { left: b.x - half.w, right: b.x + half.w, top: b.y - half.h, bottom: b.y + half.h };
+    // BOGGS first, because it is the only thing that does anything with it
+    let hit = false;
+    for (const g of hereOf((l) => l.boggs)) {
+      const cel = lvl.sbk.cels.find((c) => c.id === boggsCel(g));
+      if (!cel) continue;
+      // the rect the thing is actually DRAWN in — `drawLevelCel` hangs a cel
+      // off its anchor by the record's own `posX`/`posY`, and Boggs' 5988 is
+      // 343x270 anchored at (215, 56), so a centred box misses it twice over
+      const gb = {
+        left: g.x - cel.posX,
+        right: g.x - cel.posX + cel.width,
+        top: g.y - cel.posY,
+        bottom: g.y - cel.posY + cel.height,
+      };
+      if (!(box.right > gb.left && box.left < gb.right && box.bottom > gb.top && box.top < gb.bottom)) continue;
+      // `0x41bc71` -> 100, then `0x42f910` the usual way
+      g.hp = Math.max(0, g.hp - BOGGS.translatesTo);
+      sound?.effect(BOLT.sound, g.x, g.y);
+      hit = true;
+      break;
+    }
+    if (hit) {
+      b.spent = true;
+      continue;
+    }
+    // ...and everything else stops it and takes nothing
+    for (const e of pool) {
+      if (e.state === "dead" || e.state === "burst") continue;
+      const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
+      if (!c) continue;
+      const hurt = hurtBox(e, c, lvl);
+      if (!(box.right > hurt.left && box.left < hurt.right && box.bottom > hurt.top && box.top < hurt.bottom)) continue;
+      b.spent = true;
+      break;
+    }
+  }
+  bolts = bolts.filter((b) => !b.spent);
 }
 
 /**
@@ -6073,6 +6193,12 @@ function drawFlares(camX: number, camY: number): void {
   }
 }
 
+/** the bolts, one cel each — `0x46c588` tag 2 holds 4000 the whole way out */
+function drawBolts(camX: number, camY: number): void {
+  if (!level) return;
+  for (const b of bolts) drawLevelCel(BOLT.cel, b.x, b.y, camX, camY);
+}
+
 /** the green balls, from the shared player book, centred on their own anchors */
 function drawPops(camX: number, camY: number): void {
   for (const q of pops) {
@@ -6748,9 +6874,10 @@ function loop(now: number): void {
     if (frame) stepClaws();
     // last of the props, because the grip is read off whatever moved just now
     if (frame) stepHeld();
-    if (frame) for (const b of hereOf((l) => l.boggs)) b.clock += 1;
+    if (frame) stepBoggs();
     stepGuns();
     if (frame) stepFlares();
+    if (frame) stepBolts();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -6896,6 +7023,7 @@ function loop(now: number): void {
   drawPickups(camX, camY);
   drawGuns(camX, camY);
   drawFlares(camX, camY);
+  drawBolts(camX, camY);
   drawGobs(camX, camY);
   drawPops(camX, camY);
 
@@ -7198,7 +7326,9 @@ function loop(now: number): void {
     ...hereOf((l) => l.chairs).map((c) => `chair ${c.run} cel ${chairCel(c)} at x${c.x}`),
     ...hereOf((l) => l.claws).map((c) => `claw ${c.state} cel ${clawCel(c)} at x${Math.round(c.x)}`),
     ...hereOf((l) => l.fittings).map((f) => `${f.kind} cel ${fittingCel(f)} at x${f.x}`),
-    ...hereOf((l) => l.boggs).map((b) => `boggs cel ${boggsCel(b)} at x${b.x}, ${BOGGS.health}hp and only a -1 blow lands`),
+    ...hereOf((l) => l.boggs).map(
+      (b) => `boggs cel ${boggsCel(b)} at x${b.x}, y${b.y}, ${Math.round(b.hp)}/${BOGGS.health}hp, +${BOGGS.regen} a frame`,
+    ),
     ...hereOf((l) => l.surges).map((q) => `surge cel ${surgeCel(q)} at x${q.x}`),
     ...hereOf((l) => l.bridges).map((b) => `bridge ${b.state} cel ${bridgeCel(b)} at x${b.x}`),
     ...hereOf((l) => l.hands).map((q) => `hand ${q.state}${q.underfoot ? " underfoot" : ""} cel ${handCel(q)} at x${Math.round(q.atX)}`),
@@ -7248,6 +7378,7 @@ function loop(now: number): void {
     (reacting ? ` · <b>code ${reacting.code}</b> ${reacting.act} frame ${Math.floor(p.actClock)}` : "") +
     (p.act === "held" || p.act === "struggle" ? ` · <b>${p.act}</b> frame ${p.heldClock}` : "") +
     (p.heldBy ? ` · HELD, gravity x${p.gravityScale}` : "");
+  const air = bolts.length ? ` · ${bolts.length} bolts, nearest at x ${Math.round(bolts[0].x)}` : "";
   const nearHand = hereOf((l) => l.hands).sort((a, b) => Math.abs(a.atX - p.x) - Math.abs(b.atX - p.x))[0];
   const hand = nearHand
     ? ` · nearest hand ${nearHand.underfoot ? "underfoot" : "anywhere"} ${nearHand.state}` +
@@ -7264,7 +7395,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${code}${hand}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 

@@ -364,6 +364,76 @@ export const FLARE = {
   from: "0x436d40 / 0x43ab10 / 0x43abf0 / 0x474bf8",
 } as const;
 
+/**
+ * The BLASTER's bolt — chapter four's gun, and the only thing in the game that
+ * can hurt Boggs.
+ *
+ * `0x412a70(player, variant)` is the fire, and the variant comes from the tag
+ * the armed state machine is on: `0x42dbd0`'s tags 2 and 3 fire with **2** and
+ * its tags 6 and 8 with **3**. Both land on the same case, `0x412b5b`:
+ *
+ * ```
+ *   412b66  0x40ef30(bank, 0x23, y)        ; the shot
+ *   412b7f  x += 0x28 == 1 ? -0x78 : +0x78 ; 120 ahead, mirror flag and all
+ *   412b87  y -= 0x14
+ *   412b8f  y += 0x434540(0x28) - 0x14     ; ...and a random 40 of scatter
+ *   412ba7  0x40e4c0(0xe1)
+ *   412bb1  0x45d090(bolt, 0x46c588, 2)    ; cel 4000 at dx 1000
+ * ```
+ *
+ * A thousand a frame through the object's own divisor is the fastest thing on
+ * the page, and the scatter is why it is a blaster rather than a rifle: two
+ * shots from the same spot do not go to the same place.
+ *
+ * ## Its strength is a CODE, and that is the whole point
+ *
+ * The bolt remembers the variant it was fired with (`0x412ad8` writes it to
+ * `user+2`) and its own think reads it back every frame to decide what it hits
+ * with:
+ *
+ * ```
+ *   413bd5  movsx eax, word ptr [eax + 2]      ; the variant
+ *   413be0  mov   cl, byte ptr [eax + 0x413c48] ; 0 -> 0, 1..3 -> 1, 17 -> 2
+ *   413bed  mov word ptr [esi+0x1a], 0x64      ; case 0 and 2: a hundred
+ *   413bf9  mov word ptr [esi+0x1a], 0xffff    ; case 1: MINUS ONE
+ * ```
+ *
+ * The blaster only ever fires variants 2 and 3, so its bolt always carries -1 —
+ * and -1 is a code. Every ordinary handler in the game throws a strength below
+ * 1 away (`0x4199b9`'s `cmp ax, 1; jl`), so the bolt does **nothing at all** to
+ * a punk, a cop or a rat. Boggs' handler is the one that translates it:
+ * `0x41bc71` turns -1 into 100. So the gun in the last room of the game is a
+ * weapon against exactly one thing, and it is useless everywhere else.
+ */
+export const BOLT = {
+  /** `0x46c588` tag 2 — one cel, and it is the whole flight */
+  cel: 4000,
+  /** the tag's own dx, through the object's divisor */
+  dx: 1000,
+  divisor: 5,
+  /** `0x412b7f` — ahead of the muzzle, against this port's facing */
+  aheadPx: 120,
+  /** `0x412b87` and `0x412b8f`: up 20, then a random 0..39 back down */
+  risePx: 20,
+  scatterPx: 40,
+  /** `0x412b66` — `#0350 blaster` in the chapter's own bank */
+  sound: 0x23,
+  /**
+   * `0x413bf9`, through the variant map at `0x413c48`. Not damage: see above.
+   */
+  blow: -1,
+  from: "0x412a70 case 0x412b5b / 0x413af0 / 0x46c588 tag 2",
+} as const;
+
+/** one bolt in the air */
+export interface Bolt {
+  x: number;
+  y: number;
+  vx: number;
+  facing: number;
+  spent: boolean;
+}
+
 /** one placed weapon or refill, as its record stands in the level */
 export interface Gun {
   code: number;

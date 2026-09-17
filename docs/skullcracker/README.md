@@ -1158,29 +1158,58 @@ four's own gun, and BOGGS.
 fourteen `statblasterpack` between them and nothing to put them in; the gun
 itself is 5815 pixels into the last level of the game.
 
-### Boggs is four thousand, and fists do nothing to it
+### Boggs is four thousand and it heals faster than a fist
 
 The last thing in the game is four objects — `initboggsbody`, `initboggshead`,
 `initbgclawarm` and `initbgmachinery`, the last of which stands up eight more
-with eight scripts of its own. Three numbers are the whole of why it is the
-boss:
+with eight scripts of its own.
+
+A first reading of its hit handler here said three things and got two of them
+backwards, so this is the corrected one:
 
 ```
-  41be84  0x40e300(0xfa0)                 ; FOUR THOUSAND health
-  41be7c  add word ptr [0x4a50e8], 0x1e   ; and thirty a frame back, clamped
-  41bc6a  cmp word ptr [edi+0x1a], -1     ; and only a blow of -1 lands
+  41bc57  0x41aad0(striker)               ; a FRIENDLY-FIRE filter, nothing more
+  41bc6a  cmp word ptr [edi+0x1a], -1
+  41bc71  mov word ptr [edi+0x1a], 0x64   ; -1 is TRANSLATED to a full blow
+  41be68  cmp [0x46e080] / [0x46e084]
+  41be7c  add word ptr [0x4a50e8], 0x1e   ; +30 a frame while a flag is SET
+  41be84  0x40e300(0xfa0)                 ; clamped to FOUR THOUSAND
 ```
 
-Four thousand is three times TOWER's bishop and more than three times the
-player, and it regenerates thirty a frame while two flags at `0x46e080` and
-`0x46e084` are clear. Its hit handler refuses anything whose blow strength is
-not the code −1 — so **a punch does nothing to it**, which is the same kind of
-number `inithand`'s grab and the flamethrower's flame carry, and the reason the
-gun is in its room.
+`0x41aad0` turns a blow away only when the striker is one of Boggs' own four
+parts, a member of either of its two object lists (`0x46e0a8`, `0x46e0ac`), or
+showing a cel in 5900..5996 — which is Boggs' own range and the player's
+reaction cels. **A fist is none of those, so a punch lands.** What makes it the
+boss is arithmetic: four thousand health, three times TOWER's bishop, healing
+thirty a frame against a punch worth about fifty.
 
-What is here is the body, on the idle `0x46e6b0` gives it: 5988, 5987, 5986,
-5987 at three frames each. The head, the claw arm, the eight machinery objects
-and the −1 are not.
+And -1 is not a requirement, it is a conversion. What actually carries -1 is the
+BLASTER's bolt — `0x413af0` maps the variant the bolt remembers to its strength,
+and variants 1..3 all give -1 while the blaster fires with 2 and 3. So the bolt
+is worth a full hundred to Boggs and **nothing at all to anything else**: every
+ordinary handler treats a strength below 1 as no damage (`0x4199b9`). That is
+what the gun in its room is for, and it only works because the codes are
+carried at all.
+
+And the healing is not a phase Boggs enters — it is how it starts:
+
+```
+  0x46e080:  01 00 00 00  01 00 00 00     ; both flags SHIP as 1, in .data
+  41b611     mov word ptr [0x46e080], 0   ; cleared once, by the CLAW ARM
+  41b75d     mov word ptr [0x46e084], 0   ; ...and once more, same function
+```
+
+Those two writes are the only ones anywhere in `.text`, and nothing ever sets
+either flag back. So the thirty a frame runs from the moment the level opens,
+and the fight is a sequence rather than a damage race: the claw arm's own
+machine (`0x41b250`) has to turn the healing off twice before four thousand can
+be taken off at all. Forty bolts of a hundred is exactly that four thousand, out
+of the blaster's hundred and sixty rounds.
+
+What is here is the body, its four thousand, its thirty a frame and the bolt
+that lands a hundred on it. The head, the claw arm and the eight machinery
+objects are not — so on this page the healing never stops, which is faithful to
+where the game starts and is why Boggs cannot yet be killed.
 
 ### A record belongs to one room
 

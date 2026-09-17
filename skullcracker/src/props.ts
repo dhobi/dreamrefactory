@@ -2070,23 +2070,35 @@ export interface Fitting {
  * (`0x412130`) and `initbgmachinery` (`0x411da0`), which alone stands up eight
  * more with eight scripts of its own.
  *
- * Two numbers make it the boss:
+ * Two numbers make it the boss, and they are arithmetic rather than a rule:
  *
  * ```
  *   41be84  0x40e300(0xfa0)                 ; FOUR THOUSAND health, and the
  *   41be91  cmp ax, [0x4a50e8]              ; ...cap it is clamped to
- *   41be7c  add word ptr [0x4a50e8], 0x1e   ; THIRTY a frame, back on
- *   41bc6a  cmp word ptr [edi+0x1a], -1     ; and only a blow of -1 lands
+ *   41be68  cmp [0x46e080] / [0x46e084]     ; while EITHER flag is set...
+ *   41be7c  add word ptr [0x4a50e8], 0x1e   ; ...THIRTY a frame, back on
  * ```
  *
- * Four thousand is three times TOWER's bishop and more than three times the
- * player. It regenerates thirty a frame while two flags at `0x46e080` and
- * `0x46e084` are clear. And **fists do nothing to it at all**: its hit handler
- * refuses anything whose blow strength is not the code −1.
+ * A first reading of the hit handler `0x41bc50` had both of its tests wrong and
+ * this is the corrected one. `0x41bc57` calls `0x41aad0`, which is a
+ * FRIENDLY-FIRE filter and nothing more: it turns a blow away only when the
+ * striker is one of Boggs' own four parts, a member of either of its two lists
+ * (`0x46e0a8`, `0x46e0ac`), or showing a cel in 5900..5996 — its own range and
+ * the player's reaction cels. A fist is none of those, so **a punch does land**.
+ * And `0x41bc6a`'s `-1` is not a requirement: `0x41bc71` TRANSLATES it to 100.
+ *
+ * So what makes it the boss is four thousand health — three times TOWER's
+ * bishop — healing thirty a frame against a punch worth about fifty. The flags
+ * gate the healing rather than the damage, and they are set while the machine
+ * is running.
+ *
+ * What carries the -1 is the BLASTER's bolt (`0x413af0`, see `src/codes.ts`),
+ * which is worth a full hundred here and nothing at all to any ordinary
+ * creature. That is what the gun in its room is for.
  *
  * What is here is the body, on the idle `0x46e6b0` gives it — 5988, 5987, 5986,
  * 5987 at three frames each. The head, the claw arm and the eight machinery
- * objects are not, and neither is the −1 that would let you hurt it.
+ * objects are not.
  */
 export const BOGGS = {
   /** `0x41bbd6` — the cel the object is made on */
@@ -2097,8 +2109,15 @@ export const BOGGS = {
   health: 4000,
   /** `0x41be7c` */
   regen: 0x1e,
-  /** `0x41bc6a` — and nothing else touches it */
-  takesBlow: -1,
+  /**
+   * `0x41bc6a`, and it is a TRANSLATION rather than a requirement: `0x41bc71`
+   * rewrites a strength of -1 as 100 and lets everything else through as it is.
+   * The blaster's bolt is what carries -1 (see `guns.ts`'s `BOLT`), so the bolt
+   * is worth a full blow here and nothing at all anywhere else.
+   */
+  translates: -1,
+  /** `0x41bc71` — what -1 becomes */
+  translatesTo: 100,
   /** `0x41bbe0` — the largest divisor in the game */
   divisor: 100,
   /** `0x41bbf0` — and the largest shove weight */
@@ -2110,4 +2129,6 @@ export interface Boggs {
   x: number;
   y: number;
   clock: number;
+  /** what is left of {@link BOGGS.health}, and it climbs back — `0x4a50e8` */
+  hp: number;
 }
