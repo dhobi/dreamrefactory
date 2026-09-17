@@ -2179,6 +2179,34 @@ export interface Fitting {
 export const BOGGS = {
   /** `0x41bbd6` — the cel the object is made on */
   cel: 5980,
+  /**
+   * ...and it LUNGES, which this page had it standing still through.
+   *
+   * `0x41be50` rolls once a frame while its kind is 0 — the idle — and one in
+   * six takes it:
+   *
+   * ```
+   *   41bffc  0x434540(0x2a)               ; forty-two
+   *   41c006  cmp eax, 7 / jge             ; ...and seven of them lunge
+   *   41c010  cmp word ptr [eax+0x18], 0   ; only out of the idle
+   *   41c047  cmp [player+8], [0x4a50e0+8] ; which way -> which tag
+   *   41c055  0x45d090(body, 0x46e6d8, tag)
+   * ```
+   *
+   * `0x46e6d8` carries the stride itself: tag 0 is `5980 5981(-470) 5982(-470)
+   * 5983(-470) 5984..5988` and tag 1 the same the other way. Four hundred and
+   * seventy through its divisor of a hundred is under five pixels a frame, so
+   * the biggest number in the game moves the slowest thing in it.
+   */
+  lunge: {
+    left: { cels: [5980, 5981, 5982, 5983, 5984, 5985, 5986, 5987, 5988], hold: 3, dx: [0, -470, -470, -470, 0, 0, 0, 0, 0], from: "0x46e6d8 tag 0" },
+    right: { cels: [5988, 5987, 5986, 5985, 5984, 5983, 5982, 5981, 5980], hold: 3, dx: [0, 0, 0, 0, 0, 470, 470, 470, 0], from: "0x46e6d8 tag 1" },
+    /** `0x41bffc` and `0x41c006` — seven in forty-two, once a frame */
+    odds: [7, 42] as const,
+    /** `0x41c01d` — `0x434540(2) + 0xe` out of the chapter's own bank */
+    sound: 0xe,
+    from: "0x41be50 / 0x46e6d8",
+  },
   /** `0x46e6b0` tag 0 */
   idle: { cels: [5988, 5987, 5986, 5987], hold: 3, from: "0x46e6b0 tag 0" },
   /** `0x41be84` — `0x40e300(0xfa0)` */
@@ -2207,4 +2235,6 @@ export interface Boggs {
   clock: number;
   /** what is left of {@link BOGGS.health}, and it climbs back — `0x4a50e8` */
   hp: number;
+  /** which way it is lunging, or null while it is on its idle — {@link BOGGS.lunge} */
+  lunge: "left" | "right" | null;
 }

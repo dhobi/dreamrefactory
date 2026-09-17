@@ -1023,7 +1023,11 @@ interface Enemy {
     | "cast"
     | "lunge"
     | "sweep"
-    | "close";
+    | "close"
+    // ...and the bishop's — see stepBishop
+    | "throw"
+    | "recoil"
+    | "settle";
   /** `AI+4` — decisions left before it breaks off and goes home */
   decisions?: number;
   /** has the reach already made its one call — `obj+0x42` passes the frame once */
@@ -1667,7 +1671,7 @@ async function loadLevel(index: number): Promise<void> {
       ...placed(sbk, r, "initball", [FITTING.ball.cel], (e) => ({ kind: "ball" as const, x: e.pointX, y: e.pointY, clock: 0 })),
       ...placed(sbk, r, "initteeth", [FITTING.teeth.cel], (e) => ({ kind: "teeth" as const, x: e.pointX, y: e.pointY, clock: 0 })),
     ]),
-    boggs: rooms.map((r) => placed(sbk, r, "initboggsbody", BOGGS.idle.cels, (e) => ({ x: e.pointX, y: e.pointY, clock: 0, hp: BOGGS.health }))),
+    boggs: rooms.map((r) => placed(sbk, r, "initboggsbody", BOGGS.idle.cels, (e) => ({ x: e.pointX, y: e.pointY, clock: 0, hp: BOGGS.health, lunge: null }))),
     fans: [
       ...rooms.map((r) => [
         ...placed(sbk, r, "inithfan", [FAN.h.stopped], (e) => ({ x: e.pointX, y: e.pointY, horizontal: true, state: "off" as const, clock: 0 })),
@@ -4757,10 +4761,31 @@ function stepBoggs(): void {
   for (const b of hereOf((l) => l.boggs)) {
     b.clock += 1;
     b.hp = Math.min(BOGGS.health, b.hp + BOGGS.regen);
+    const a = b.lunge ? BOGGS.lunge[b.lunge] : null;
+    if (a) {
+      // the stride is the script's own, through the biggest divisor in the game
+      const k = Math.floor(b.clock / a.hold);
+      if (k >= a.cels.length) {
+        b.lunge = null;
+        b.clock = 0;
+        continue;
+      }
+      b.x += (a.dx[k] ?? 0) / BOGGS.divisor;
+      continue;
+    }
+    // `0x41bffc` — seven in forty-two, once a frame, and only out of the idle
+    if (Math.floor(Math.random() * BOGGS.lunge.odds[1]) >= BOGGS.lunge.odds[0]) continue;
+    b.lunge = p.x < b.x ? "left" : "right";
+    b.clock = 0;
+    sound?.effect(BOGGS.lunge.sound + Math.floor(Math.random() * 2), b.x, b.y);
   }
 }
 
 function boggsCel(b: Boggs): number {
+  if (b.lunge) {
+    const a = BOGGS.lunge[b.lunge];
+    return a.cels[Math.min(a.cels.length - 1, Math.floor(b.clock / a.hold))];
+  }
   return BOGGS.idle.cels[Math.floor(b.clock / BOGGS.idle.hold) % BOGGS.idle.cels.length];
 }
 
@@ -6137,6 +6162,67 @@ function stepWraith(e: Enemy, foe: Foe, run: number): boolean {
   return false;
 }
 
+/**
+ * The BISHOP's own machine — `0x425c90`.
+ *
+ * The same tracker the wraith and the claw use, banded against `0x46f4c0`'s
+ * 220, 170 and 100. It is dormant until the player's point enters its rect, then
+ * walks in on its 2500s; at band 1 it commits to an attack on three in ten and
+ * inside 170 it always considers one; and then thirteen in forty-two picks the
+ * sixteen-cel sweep over the throw. The throw's recoil is the animation's own
+ * dx — -30, -20, -10 — rather than anything applied to it.
+ *
+ * See {@link Foe.preaches}.
+ */
+function stepBishop(e: Enemy, foe: Foe, run: number): boolean {
+  const k = foe.preaches;
+  if (!k) return false;
+  // `0x425d34` — dormant until the player's own POINT is inside its rect
+  if (e.asleep) {
+    const ay = p.y - p.feet;
+    if (!(p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom)) return true;
+    e.asleep = false;
+    e.anim = foe.gait;
+    e.mode = "close";
+    e.clock = 0;
+    sound?.effect(k.wakeSound, e.x, e.y);
+    return false;
+  }
+  // an attack owns it until the animation is done
+  if (e.mode && e.mode !== "close" && e.clock < run) return false;
+  if (e.mode === "throw") {
+    e.mode = "recoil";
+    e.anim = k.recoil;
+    e.clock = 0;
+    return false;
+  }
+  if (e.mode === "recoil" || e.mode === "sweep") {
+    e.mode = "settle";
+    e.anim = k.settle;
+    e.clock = 0;
+    return false;
+  }
+  if (e.mode === "settle") {
+    e.mode = "close";
+    e.anim = foe.gait;
+    e.clock = 0;
+    return false;
+  }
+  e.facing = p.x >= e.x ? 1 : -1;
+  const gap = Math.abs(p.x - e.x);
+  const band = k.bands.filter((t) => gap <= t).length;
+  // `0x425e5b` — under band 1 it just keeps coming
+  if (band < 1) return false;
+  // `0x425e70` — and at band 1 it only commits three times in ten
+  if (band === 1 && Math.floor(Math.random() * k.farOdds[1]) >= k.farOdds[0]) return false;
+  // `0x425e8c` — thirteen in forty-two is the sweep, the rest is the throw
+  const sweep = Math.floor(Math.random() * k.sweepOdds[1]) <= k.sweepOdds[0];
+  e.mode = sweep ? "sweep" : "throw";
+  e.anim = sweep ? k.sweep : k.throw_;
+  e.clock = 0;
+  return false;
+}
+
 /** which wraiths have already let their beam go this cast — one each */
 const castBeams = new WeakSet<Enemy>();
 
@@ -6385,6 +6471,7 @@ function stepEnemies(): void {
     // the one class with states of its own gets them first, and takes the frame
     // when it is using it — see {@link stepBoss}
     if (e.state === "gait" && foe.haunts && stepWraith(e, foe, run)) continue;
+    if (e.state === "gait" && foe.preaches && stepBishop(e, foe, run)) continue;
     if (e.state === "gait" && (foe.wake || foe.drives) && stepBoss(e, foe, run)) continue;
     // whatever it is doing, a thing carrying momentum flies, falls, and stops when
     // its OWN cel's box lands. This has to come before the animation states: the
@@ -7889,7 +7976,9 @@ function loop(now: number): void {
     ),
     ...hereOf((l) => l.fittings).map((f) => `${f.kind} cel ${fittingCel(f)} at x${f.x}`),
     ...hereOf((l) => l.boggs).map(
-      (b) => `boggs cel ${boggsCel(b)} at x${b.x}, y${b.y}, ${Math.round(b.hp)}/${BOGGS.health}hp, +${BOGGS.regen} a frame`,
+      (b) =>
+        `boggs ${b.lunge ?? "idle"} cel ${boggsCel(b)} at x${Math.round(b.x)}, y${b.y}, ` +
+        `${Math.round(b.hp)}/${BOGGS.health}hp, +${BOGGS.regen} a frame`,
     ),
     ...hereOf((l) => l.surges).map((q) => `surge cel ${surgeCel(q)} at x${q.x}`),
     ...hereOf((l) => l.bridges).map((b) => `bridge ${b.state} cel ${bridgeCel(b)} at x${b.x}`),
@@ -7963,6 +8052,15 @@ function loop(now: number): void {
       ? ` · stream ${streams[0].state} cel ${streamCel(streams[0])} at x ${Math.round(streams[0].x)}` +
         `, y ${Math.round(streams[0].y)} blow ${STREAMS[streams[0].weapon]?.blow}`
       : "");
+  // ...and a BOSS always, whichever of the three it is: the "nearest" line goes
+  // to whatever is closest in x, and TOWER's bats chase, so one of them is
+  // always nearer than the thing the room is about
+  const bossHere = spawnedHere().find((e) => FOES[e.kind].haunts || FOES[e.kind].preaches || FOES[e.kind].drives);
+  const boss = bossHere
+    ? ` · boss ${bossHere.kind} ${Math.round(bossHere.hp)}/${bossHere.max}hp ${bossHere.state}` +
+      ` at x ${Math.round(bossHere.x)}, y ${Math.round(bossHere.y)} cel ${celOf(bossHere)}` +
+      `${bossHere.asleep ? " asleep" : ""}${bossHere.mode ? ` mode ${bossHere.mode}` : ""}`
+    : "";
   const nearHand = hereOf((l) => l.hands).sort((a, b) => Math.abs(a.atX - p.x) - Math.abs(b.atX - p.x))[0];
   const hand = nearHand
     ? ` · nearest hand ${nearHand.underfoot ? "underfoot" : "anywhere"} ${nearHand.state}` +
@@ -7981,7 +8079,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 

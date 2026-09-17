@@ -1825,6 +1825,45 @@ That is the fourth time in this port that a `mov` read without its exit path
 gave the wrong answer — see Boggs' -1 and its two flags, and the inventory
 screen that was not one.
 
+## The bishop rolls for it, and Boggs lunges
+
+Two more machines this page fought without, both on the same tracker the wraith
+and the claw use.
+
+**The bishop** — `0x425c90`, banded against `0x46f4c0`: `dc 00 aa 00 64 00`, so
+220, 170 and 100. Dormant until the player's point is in its rect, then it walks
+in on its 2500s and rolls:
+
+```
+  425e56  band 1       -> 0x434540(10) < 3, or nothing at all
+  425e64  band 2 or 3  -> always considers
+  425e8c  0x434540(0x2a) <= 13 -> tag 2, the sixteen cels
+                         else  -> tag 0, the throw
+```
+
+Three in ten at the far band, always inside 170, and then thirteen in forty-two
+for the sweep over the throw. The throw's recoil is `0x46f1c0` tag 1 carrying
+dx -30, -20, -10 — authored into the animation rather than applied to it.
+
+**Boggs** — `0x41be50` rolls once a frame while its kind is 0 and seven of the
+forty-two take it, toward whichever side the player is on:
+
+```
+  41bffc  0x434540(0x2a)
+  41c006  cmp eax, 7 / jge              ; seven in forty-two
+  41c010  cmp word ptr [eax+0x18], 0    ; ...and only out of the idle
+  41c047  cmp [player+8], [0x4a50e0+8]  ; which side -> which tag
+```
+
+`0x46e6d8` carries the stride: three records of 470 through the largest divisor
+in the game, which is under five pixels a frame. One in six a frame against a
+twenty-seven frame lunge means it is moving about four fifths of the time, which
+is why its idle had to be sampled four times as often to be seen at all.
+
+Its head, its claw arm and its eight machinery objects are still not here, so
+the healing never stops and it still cannot be killed — see the section above
+for why that is the game's own arithmetic rather than a gap.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are

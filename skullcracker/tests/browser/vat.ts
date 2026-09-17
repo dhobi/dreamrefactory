@@ -68,15 +68,19 @@ const main = async (): Promise<void> => {
   // 3. BOGGS, in the other region, with four thousand health
   await go("&x=6100");
   if (!/room 1 of 2 \(chamber2/.test(await say())) fail(`Boggs stands in the region named chamber2; the HUD says ${/room[^·]*/.exec(await say())?.[0]}`);
-  if (!/boggs cel 59\d\d at x6321, y2094, 4000\/4000hp, \+30 a frame/.test(await say()))
+  if (!/boggs \w+ cel 59\d\d at x6\d+, y2094, 4000\/4000hp, \+30 a frame/.test(await say()))
     fail(`0x41be84 gives it 0x40e300(0xfa0); the HUD says ${/boggs[^·]*/.exec(await say())?.[0]}`);
+  // ...only the frames it shows while IDLE: it lunges now, and the lunge is the
+  // wider 5980..5988 — see the step after the blaster
   const cels = new Set<number>();
-  for (let i = 0; i < 24; i++) {
-    await page.waitForTimeout(80);
-    const m = /boggs cel (\d+)/.exec(await say());
-    if (m) cels.add(Number(m[1]));
+  for (let i = 0; i < 200; i++) {
+    await page.waitForTimeout(40);
+    const m = /boggs (\w+) cel (\d+)/.exec(await say());
+    if (m && m[1] === "idle") cels.add(Number(m[2]));
   }
-  if (cels.size < 3) fail(`0x46e6b0 is 5988, 5987, 5986, 5987 at three frames each; it showed ${cels.size}`);
+  // it is only idle about a fifth of the time now — one in six a frame against a
+  // twenty-seven frame lunge — so this samples four times as often for it
+  if (cels.size < 2) fail(`0x46e6b0 is 5988, 5987, 5986, 5987 at three frames each; it showed ${cels.size}`);
   if ([...cels].some((c) => c < 5986 || c > 5988)) fail(`its idle is 5986..5988; saw ${[...cels].join(" ")}`);
   console.log(`ok    Boggs stands in chamber2 on ${cels.size} of its own 5986..5988, at four thousand health`);
 
@@ -93,6 +97,31 @@ const main = async (): Promise<void> => {
   if (!/holding blaster 41\/160/.test(await say()))
     fail(`0x416440 gives 40 and 0x45eed0 one more, against 0x412a24's 0xa0; the panel says ${/· (holding|no) \w+ \d+\/\d+/.exec(await say())?.[0]}`);
   console.log(`ok    and the game's one statblaster is here, and it arms you with 41 of 160`);
+
+  /**
+   * ...and it LUNGES, which this page had it standing still through.
+   *
+   * `0x41be50` rolls `0x434540(0x2a)` once a frame while its kind is 0 and
+   * seven of the forty-two take it (`0x41c006`), toward whichever side the
+   * player is on (`0x41c047`). The stride is `0x46e6d8`'s own — three records
+   * of 470 — through the largest divisor in the game.
+   */
+  await go("&x=6100");
+  const states = new Set<string>();
+  const xs = new Set<number>();
+  for (let i = 0; i < 80; i++) {
+    const t = await say();
+    const w = /boggs (\w+) cel (\d+) at x(\d+)/.exec(t);
+    if (w) {
+      states.add(w[1]);
+      xs.add(Number(w[3]));
+    }
+    await page.waitForTimeout(140);
+  }
+  if (!states.has("idle")) fail(`it should sit on its idle between lunges; it did ${[...states].join(" ")}`);
+  if (!states.has("left") && !states.has("right")) fail(`0x41c006 takes seven in forty-two; it never lunged`);
+  if (xs.size < 4) fail(`a lunge carries it; it stood at ${[...xs].join(" ")}`);
+  console.log(`ok    and Boggs lunges — ${[...states].sort().join(" ")}, across ${Math.max(...xs) - Math.min(...xs)}px of its own stride`);
 
   /**
    * ...and the END. `0x41293d` is the last scene of chapter four's runner: with

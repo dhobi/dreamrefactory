@@ -135,6 +135,34 @@ const main = async (): Promise<void> => {
   if ([...arcs].some((c) => c < 9060 || c > 9065)) fail(`its cels are 9060..9065; saw ${[...arcs].join(" ")}`);
   console.log(`ok    and its two surges arc through ${arcs.size} of 9060..9065`);
 
+  /**
+   * ...and the bishop has a MACHINE, which this page fought without.
+   *
+   * `0x425c90`, the same tracker again, banded against `0x46f4c0`'s 220, 170 and
+   * 100. At band 1 it commits on three in ten; inside 170 it always considers;
+   * and then `0x434540(0x2a) <= 13` picks the sixteen-cel sweep over the throw.
+   * Its recoil is the animation's own dx — -30, -20, -10.
+   */
+  await go("&x=17620&y=15200");
+  const modes = new Set<string>();
+  const cels = new Set<number>();
+  for (let i = 0; i < 120; i++) {
+    const t = await say();
+    const w = /boss initvpriest [^·]*/.exec(t)?.[0] ?? "";
+    const m = /mode (\w+)/.exec(w)?.[1];
+    if (m) modes.add(m);
+    const c = /cel (\d+)/.exec(w)?.[1];
+    if (c) cels.add(Number(c));
+    await page.waitForTimeout(140);
+  }
+  if (!modes.has("throw") && !modes.has("sweep"))
+    fail(`inside 170 it always considers an attack; it only did ${[...modes].join(" ")}`);
+  if (!modes.has("settle")) fail(`every attack settles on tag 3; it did ${[...modes].join(" ")}`);
+  if (![...cels].some((c) => c >= 2600 && c <= 2614)) {
+    if (![...cels].some((c) => c >= 2650 && c <= 2658)) fail(`it should fight on its 2600s or 2650s; saw ${[...cels].join(" ")}`);
+  }
+  console.log(`ok    and its bishop works its own bands — ${[...modes].sort().join(" ")} — on its 2500s, 2600s and 2650s`);
+
   await browser.close();
   console.log("PASS  TOWER's floors give way, its bishop stands on the goal and its surges arc");
 };

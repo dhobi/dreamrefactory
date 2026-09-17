@@ -278,6 +278,29 @@ export interface Foe {
    * that shape was cut for the booly and the kragg, which charge and swing, and
    * this one hovers, rises, casts and lunges by a band table instead.
    */
+  /**
+   * The BISHOP's own machine — see `initvpriest`. A third shape again: it walks
+   * in, and at range it rolls for whether to attack and then for which attack.
+   */
+  preaches?: {
+    /** `0x46f4c0`, biggest first: 220, 170, 100 */
+    bands: readonly number[];
+    /** `0x46f1c0` tag 0 — the twelve-cel throw, and the commonest */
+    throw_: FoeAnim;
+    /** tag 1 — three records carrying dx -30, -20, -10: the recoil is authored */
+    recoil: FoeAnim;
+    /** tag 2 — the sixteen-cel one, which `0x425e94` reaches on a roll of 13 in 42 */
+    sweep: FoeAnim;
+    /** tag 3 — what it settles on afterwards */
+    settle: FoeAnim;
+    /** `0x425e70` — at band 1 it only commits on 3 in 10 */
+    farOdds: readonly [number, number];
+    /** `0x425e8c` — and then 13 in 42 picks the sweep over the throw */
+    sweepOdds: readonly [number, number];
+    /** `0x425d4a` — `belfry.snd` 0x1d, played the frame it wakes */
+    wakeSound: number;
+    from: string;
+  };
   haunts?: {
     /** `0x46f8f8`, biggest first — the band is how many the gap is still past */
     bands: readonly number[];
@@ -1674,6 +1697,44 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * recoil authored into the animation — and tag 2 sixteen cels of 2650s.
    */
   initvpriest: {
+    /**
+     * Its own machine — `0x425c90`, which this page fought without.
+     *
+     * The same tracker again (`0x45efd0` on `user+0x10`), banded against
+     * `0x46f4c0` — `dc 00 aa 00 64 00 00 00`, so 220, 170 and 100. Kind 0 is
+     * dormant until the player's point is in its rect (`0x434200`), and then:
+     *
+     * ```
+     *   425e56  band 1        -> 0x434540(10) < 3 or nothing at all
+     *   425e64  band 2 or 3   -> always considers
+     *   425e8c  0x434540(0x2a) <= 13 -> tag 2, the sixteen cels
+     *                          else  -> tag 0, the throw
+     * ```
+     *
+     * So it commits on three in ten at the far band and always inside 170, and
+     * then the sweep is thirteen in forty-two against the throw. The throw's
+     * follow-through is kind 2, whose tag 1 carries dx -30, -20, -10 — the
+     * recoil is authored into the animation rather than applied to it.
+     */
+    preaches: {
+      bands: [220, 170, 100],
+      throw_: {
+        cels: [2600, 2601, 2602, 2603, 2604, 2605, 2606, 2607, 2608, 2609, 2610, 2611, 2610, 2611],
+        hold: 1,
+        from: "0x46f1c0 tag 0",
+      },
+      recoil: { cels: [2612, 2613, 2614], hold: 1, dx: [-30, -20, -10], from: "0x46f1c0 tag 1" },
+      sweep: {
+        cels: [2650, 2651, 2652, 2653, 2654, 2655, 2656, 2657, 2658, 2657, 2656, 2655, 2654, 2652, 2652, 2653],
+        hold: 1,
+        from: "0x46f1c0 tag 2",
+      },
+      settle: { cels: [2654, 2653, 2654, 2653], hold: 1, from: "0x46f1c0 tag 3" },
+      farOdds: [3, 10],
+      sweepOdds: [13, 42],
+      wakeSound: 0x1d,
+      from: "0x425c90, bands 0x46f4c0",
+    },
     // `0x46f170` tag 0, kind 1 — nine cels, two frames each, and no stride in
     // any of them: it travels on its velocity
     gait: { cels: [2500, 2501, 2502, 2503, 2504, 2505, 2506, 2507, 2508], hold: 2, from: "0x46f170 tag 0" },
