@@ -12,9 +12,12 @@
  * in the last room of the game does a full blow to exactly one thing and
  * nothing at all to everything else.
  *
- * And it still cannot kill it, for the game's own reason: the two flags at
- * `0x46e080` and `0x46e084` SHIP as 1 and are cleared only by the claw arm,
- * which is not built, so the thirty a frame never stops. See the README.
+ * And a bolt alone still cannot kill it, for the game's own reason: the two
+ * flags at `0x46e080` and `0x46e084` SHIP as 1 and are cleared only by emptying
+ * the two breakable halves of the MACHINERY (`0x41b611`, `0x41b75d`), so until
+ * that is done the thirty a frame puts every hundred straight back. What this
+ * suite measures is that one bolt lands and that the healing undoes it; the
+ * machine, and the kill it buys, are `tests/browser/vat.ts`.
  */
 import { chromium } from "playwright";
 
@@ -57,7 +60,7 @@ const main = async (): Promise<void> => {
   await go(16, 5760);
   if (!/· no blaster 0\/160/.test(await say())) fail(`VAT should open with the blaster named and empty: ${/· (no|holding)[^·]*/.exec(await say())?.[0]}`);
   await arm();
-  const full = await num(/boggs cel \d+ at x\d+, y\d+, (\d+)\/4000hp/);
+  const full = await num(/boggs \w+ cel \d+ at x\d+, y\d+, (\d+)\/4000hp/);
   if (full !== 4000) fail(`Boggs opens on 0x40e300(0xfa0); the HUD says ${full}`);
   const rounds = await num(/holding blaster (\d+)\/160/);
   if (!(rounds > 0)) fail(`taking the statblaster gives 0x28 rounds; the panel says ${/· (no|holding)[^·]*/.exec(await say())?.[0]}`);
@@ -77,7 +80,7 @@ const main = async (): Promise<void> => {
   for (let i = 0; i < 40; i++) {
     await page.keyboard.press("p");
     await page.waitForTimeout(140);
-    const hp = await num(/boggs cel \d+ at x\d+, y\d+, (\d+)\/4000hp/);
+    const hp = await num(/boggs \w+ cel \d+ at x\d+, y\d+, (\d+)\/4000hp/);
     if (Number.isFinite(hp)) lowest = Math.min(lowest, hp);
   }
   if (lowest >= 4000) fail(`the bolt should take 100 off Boggs (0x41bc71); it never dropped below ${lowest}`);
@@ -85,9 +88,9 @@ const main = async (): Promise<void> => {
 
   // 4. ...and the thirty a frame puts it straight back, which is the fight
   await page.waitForTimeout(1200);
-  const healed = await num(/boggs cel \d+ at x\d+, y\d+, (\d+)\/4000hp/);
+  const healed = await num(/boggs \w+ cel \d+ at x\d+, y\d+, (\d+)\/4000hp/);
   if (healed !== 4000) fail(`0x41be7c heals 30 a frame to the 4000 cap; it sat at ${healed}`);
-  console.log(`ok    ...and 0x41be7c puts every point of it back, because both flags ship set`);
+  console.log(`ok    ...and 0x41be7c puts every point of it back, because both flags ship set — the machine is what stops it`);
 
   // 5. the same bolt does NOTHING to an ordinary creature. `[` walks back
   //    through chapter four, which keeps the weapon (`0x4511f0` runs per

@@ -2165,16 +2165,24 @@ export interface Fitting {
  *
  * So what makes it the boss is four thousand health — three times TOWER's
  * bishop — healing thirty a frame against a punch worth about fifty. The flags
- * gate the healing rather than the damage, and they are set while the machine
- * is running.
+ * gate the healing rather than the damage, and they ship SET (`0x46e080` and
+ * `0x46e084` are both `01 00` in `.data`). Nothing in `.text` ever sets either
+ * one; the only two writes are the clears at `0x41b611` and `0x41b75d`, and
+ * both are in the MACHINERY's hit handler. Breaking the machine is the fight.
  *
  * What carries the -1 is the BLASTER's bolt (`0x413af0`, see `src/codes.ts`),
  * which is worth a full hundred here and nothing at all to any ordinary
  * creature. That is what the gun in its room is for.
  *
- * What is here is the body, on the idle `0x46e6b0` gives it — 5988, 5987, 5986,
- * 5987 at three frames each. The head, the claw arm and the eight machinery
- * objects are not.
+ * And the four objects are not decoration. `initboggshead` (its own record in
+ * `VAT.SBK`) carries the 4000-health pool itself — `0x41c547` writes
+ * `0x40e300(0xfa0)` into `0x4a50e8`, which is the same word `0x41bcfe` takes the
+ * damage out of and `0x41be7c` heals. `initbgclawarm` stands up an arm and a set
+ * of jaws whose shared hit handler is `0x41bb10`, which is `xor ax, ax; ret` and
+ * nothing else: they turn EVERY blow away and cannot be hurt.
+ *
+ * And `initbgmachinery` is what the fight is actually about. See
+ * {@link BOGGS.machines}.
  */
 export const BOGGS = {
   /** `0x41bbd6` — the cel the object is made on */
@@ -2226,6 +2234,171 @@ export const BOGGS = {
   divisor: 100,
   /** `0x41bbf0` — and the largest shove weight */
   weight: 0x50,
+
+  /**
+   * The HEAD — `initboggshead` (`0x412310`), its own record in `VAT.SBK`, and
+   * three things live on it that live nowhere else.
+   *
+   * It carries the health. `0x41c547` writes `0x40e300(0xfa0)` into `0x4a50e8`,
+   * and that word is what the BODY's handler decrements (`0x41bcfe`) and what
+   * the body's tick heals and caps. One pool, on the head.
+   *
+   * It carries the census. `0x41c591` is `0x42f870(head, 1)` — the head is the
+   * entry the level's quota counts, and the body is not registered at all.
+   *
+   * And it carries the tracker: `0x41c5bb` is
+   * `0x45ef70(&0x4a5140, head, player, 0x46e990)`, the same primitive the claw,
+   * the wraith and the bishop use, on the bands 250/150/80.
+   *
+   * What it does with all that is LOOK AT YOU. `0x46e7c0` is eighteen tags of a
+   * single cel each, and `0x41c182` installs one of the first nine whenever the
+   * head's own script has ended — which, at three ticks a frame and one frame a
+   * tag, is every third frame:
+   *
+   * ```
+   *   41bfe3  bx = si > 200 ? 0 : si > 0 ? 1 : 2   ; si = body.X - player.X
+   *   41c192  cmp di, 0x64   / jle    ; di = player.Y - body.Y
+   *   41c198  add bx, 6               ; ...you are well below it
+   *   41c1b2  cmp di, 0xff6a / jle    ; -150
+   *   41c1d4  add bx, 3               ; ...you are well above it
+   *   41c1a3  0x45d090(head, 0x46e7c0, bx)
+   * ```
+   *
+   * So the nine tags are a 3x3 grid, column by how far left you are and row by
+   * how far above. 5900..5908.
+   */
+  head: {
+    /** `0x41c52b` */
+    cel: 5900,
+    /** `0x46e7c0` tags 0..8 — the look-at grid, column-major in `bx` */
+    look: [5900, 5901, 5902, 5903, 5904, 5905, 5906, 5907, 5908],
+    /** `0x46e7c0`'s `ticksPerFrame`, which is also how often it re-aims */
+    hold: 3,
+    /** `0x41bfe3` — beyond this far to your left it is the outer column */
+    far: 200,
+    /** `0x41c192` — below this and it looks down */
+    below: 0x64,
+    /** `0x41c1b2` — above this and it looks up */
+    above: -0x96,
+    /** `0x46e990`, through `0x45ef70` — and nothing in the tick reads the band */
+    bands: [250, 150, 80],
+    /** `0x46e908`, sixteen frames, the last eight all 5938 */
+    dies: { cels: [5930, 5931, 5932, 5933, 5934, 5935, 5936, 5937, 5938], hold: 3 },
+    from: "0x41c510 / 0x412310 / 0x46e7c0",
+  },
+
+  /**
+   * The CLAW ARM — `initbgclawarm` (`0x412130`), two objects, and neither of
+   * them can be touched: both take `0x41bb10` as their hit handler, and
+   * `0x41bb10` is `xor ax, ax; ret`.
+   *
+   * Both are installed at tag 3 and neither tag is ever changed, so the arm
+   * stands at 5753 for the whole fight. `0x412180` then hangs the jaws off the
+   * arm at the CENTRE of the arm cel's own box — the same rule `gripOf` reads
+   * for a grab:
+   *
+   * ```
+   *   4121c8  bx = rec[+6]                      ; the box's left
+   *   4121cc  eax = (rec[+0xa] - bx) / 2        ; ...plus half its width
+   *   4121e5  jaws.X = arm.X + eax + bx
+   * ```
+   *
+   * The one thing it does is snap. `0x41c164` is the 5-in-100 branch of the
+   * body's tick and installs `0x46e558` on the jaws at the ARM's current tag —
+   * seven frames of 582x / 579x / 580x.
+   */
+  arm: {
+    /** `0x41ba38` — and `0x412137` sets its region to -1, so it is never culled */
+    cel: 5750,
+    /** `0x46e4e8`, installed at tag 3 and left there */
+    poses: [5750, 5751, 5752, 5753, 5754, 5755],
+    /** `0x41213d` / `0x412164` — the tag both halves are installed at */
+    tag: 3,
+    jaws: {
+      /** `0x41baab` */
+      cel: 5790,
+      /** `0x46e520`, also installed at tag 3 */
+      poses: [5810, 5811, 5812, 5813, 5814, 5815],
+      /** `0x46e558` tag 3 — what `0x41c164` plays, seven frames at two ticks */
+      snap: { cels: [5823, 5823, 5823, 5793, 5793, 5803, 5803], hold: 2 },
+      /** `0x41c072` — five in a hundred, once a frame */
+      snapOdds: [5, 100] as const,
+    },
+    from: "0x41ba20 / 0x412130 / 0x412180 / 0x41bb10",
+  },
+
+  /**
+   * The MACHINERY — `initbgmachinery` (`0x411da0`), eight objects, and the only
+   * reason Boggs can be killed at all.
+   *
+   * `0x411ed0` places all eight at fixed offsets from the body, out of the table
+   * at `0x46e088`, and it is called twice in the whole program — once from the
+   * initialiser and once from VAT's setup — so they are STATIC. They do not
+   * follow the body when it lunges.
+   *
+   * Six of them are scenery. `0x41b510` is the hit handler all eight share, and
+   * after the friendly-fire filter and the same `-1`-becomes-100 translation the
+   * body uses, it checks which object was struck:
+   *
+   * ```
+   *   41b573  cmp [0x4a56e8], esi / je      ; one of these two...
+   *   41b57b  cmp [0x4a516c], esi / jne     ; ...or nothing happens
+   *   41b5fc  sub word ptr [0x4a56ec], di   ; three thousand, and
+   *   41b748  sub word ptr [0x4a5174], di   ; three thousand
+   *   41b611  mov word ptr [0x46e080], 0    ; and THAT is what clears a flag
+   *   41b75d  mov word ptr [0x46e084], 0
+   * ```
+   *
+   * So: six thousand health of machine, in two halves of three thousand, and
+   * each half you break stops one of the two healing flags. Break both and the
+   * thirty a frame stops and the four thousand can be spent.
+   *
+   * Breaking one also re-scripts its neighbours — the pipes buckle and the
+   * gauges die — which is the tag-1 run each entry carries below.
+   *
+   * Two branches in here never run. Both halves test their own wear stage as
+   * `health / 2 < health` (`0x41b6df`) and `health * 2 / 3 < health`
+   * (`0x41b719`), which is true for every positive health there is, so tags 1
+   * and 2 of `0x46e3b8` and `0x46e428` — the dented cels 5861/5862 and
+   * 5871/5872 — are never installed. A machine is intact until it is wrecked.
+   * This is the same shape of dead code as the wraith's `-3`.
+   */
+  machines: [
+    /** `0x4a50ec` — `0x46e4d0`, and `0x4a5168` is zero until `0x41bf2c` moves it */
+    { dy: 0, dx: 0, cels: [5630], hold: 1 },
+    /** `0x4a5170` — `0x46e278`, and tag 1 is what machine A's death installs */
+    { dy: 35, dx: 88, cels: [5700], hold: 3, wreck: [5701, 5702, 5703], wreckedBy: 0 },
+    /** `0x4a50f4` — `0x46e2a0` */
+    { dy: 38, dx: 81, cels: [5720], hold: 3, wreck: [5721, 5722, 5723], wreckedBy: 0 },
+    /** `0x4a50e4` — `0x46e2c8`, ten frames that just run, and nothing stops them */
+    { dy: 53, dx: 255, cels: [5940, 5941, 5942, 5943, 5944, 5945, 5944, 5943, 5942, 5941], hold: 2 },
+    /** `0x4a5164` — `0x46e328`, and machine A sprays thirteen times at its point */
+    { dy: -39, dx: 63, cels: [5650], hold: 3, wreck: [5651, 5652, 5653], wreckedBy: 0 },
+    /** `0x4a50f8` — `0x46e350`, machine B's neighbour */
+    { dy: 46, dx: 230, cels: [5960], hold: 2, wreck: [5950, 5951, 5952, 5953, 5954, 5955], wreckedBy: 1 },
+    /** `0x4a56e8` — `0x46e3b8` tag 3, three thousand, and it clears `0x46e080` */
+    {
+      dy: 55, dx: 218, cels: [5860], hold: 2, health: 3000, clears: 0,
+      wreck: [5880, 5881, 5882, 5883, 5880, 5881, 5882, 5883, 5863],
+      /** `0x41b653` */ sound: 0xc,
+      /** `0x41b6b3` — thirteen of spray `0x14`, at `0x4a5164`'s point */
+      sprays: 0xd, sprayAt: 4,
+    },
+    /** `0x4a516c` — `0x46e428` tag 3, three thousand, and it clears `0x46e084` */
+    {
+      dy: 55, dx: 373, cels: [5870], hold: 2, health: 3000, clears: 1,
+      wreck: [5890, 5891, 5892, 5893, 5880, 5881, 5882, 5883, 5873],
+      /** `0x41b7c6` */ sound: 0xd,
+      /** `0x41b7d5` — thirteen at `0x4a50f8`'s point */
+      sprays: 0xd, sprayAt: 5,
+    },
+  ],
+  /** `0x41b2a5` etc — every machinery object, and both halves of the arm */
+  machineDivisor: 0x32,
+  /** `0x41b628` / `0x41b774` — the cue that plays when the SECOND half goes */
+  bothDownSound: 0x21,
+  /** `0x46e770`, nine frames at three, and `0x41bd99` plays 0x22 over it */
+  dies: { cels: [5740, 5741, 5742, 5743, 5744, 5745, 5746, 5747, 5748], hold: 3, sound: 0x22 },
   from: "0x411285 / 0x412240 / 0x41bb80 / 0x41bc50",
 } as const;
 
@@ -2237,4 +2410,35 @@ export interface Boggs {
   hp: number;
   /** which way it is lunging, or null while it is on its idle — {@link BOGGS.lunge} */
   lunge: "left" | "right" | null;
+  /** the eight of {@link BOGGS.machines}, in the order that table lists them */
+  machines: BoggsMachine[];
+  /**
+   * `0x46e080` and `0x46e084`, which ship set and are only ever cleared. While
+   * either is true Boggs heals {@link BOGGS.regen} a frame.
+   */
+  flags: [boolean, boolean];
+  /** the head's own clock, which re-aims every {@link BOGGS.head.hold} frames */
+  headClock: number;
+  /** which of {@link BOGGS.head.look} it is showing — `0x41c182`'s `bx` */
+  headTag: number;
+  /** `0x46e558` on the jaws, counting down while `0x41c164`'s snap plays */
+  snap: number;
+  /** `0x46bfbc` — set once, by `0x41bdd8`, and the body and head go to their deaths */
+  dying: boolean;
+  /** where `initboggshead`'s own record put the head, and it stays there */
+  headX: number;
+  headY: number;
+}
+
+/** one of {@link BOGGS.machines}, placed once and then standing still */
+export interface BoggsMachine {
+  x: number;
+  y: number;
+  clock: number;
+  /** what is left of its `health`, for the two that have one */
+  hp: number;
+  /** true once its `hp` reached zero and its wreck run was installed */
+  wrecked: boolean;
+  /** frames into the wreck run, or -1 while it is still whole */
+  wreckClock: number;
 }

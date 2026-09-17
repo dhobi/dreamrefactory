@@ -1671,7 +1671,35 @@ async function loadLevel(index: number): Promise<void> {
       ...placed(sbk, r, "initball", [FITTING.ball.cel], (e) => ({ kind: "ball" as const, x: e.pointX, y: e.pointY, clock: 0 })),
       ...placed(sbk, r, "initteeth", [FITTING.teeth.cel], (e) => ({ kind: "teeth" as const, x: e.pointX, y: e.pointY, clock: 0 })),
     ]),
-    boggs: rooms.map((r) => placed(sbk, r, "initboggsbody", BOGGS.idle.cels, (e) => ({ x: e.pointX, y: e.pointY, clock: 0, hp: BOGGS.health, lunge: null }))),
+    boggs: rooms.map((r) =>
+      placed(sbk, r, "initboggsbody", BOGGS.idle.cels, (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        clock: 0,
+        hp: BOGGS.health,
+        lunge: null,
+        // `0x411ed0`, which runs at setup and never again: eight objects at
+        // eight fixed offsets from the body, and they stay there
+        machines: BOGGS.machines.map((m) => ({
+          x: e.pointX + m.dx,
+          y: e.pointY + m.dy,
+          clock: 0,
+          hp: "health" in m ? m.health : 0,
+          wrecked: false,
+          wreckClock: -1,
+        })),
+        // `0x46e080` and `0x46e084`, both `01 00` in `.data`
+        flags: [true, true] as [boolean, boolean],
+        headClock: 0,
+        headTag: 0,
+        snap: 0,
+        dying: false,
+        // the head has a record of its own, and `0x412364` stores the offset it
+        // lands at; `0x41c4c0` then re-places it at body + that offset, which is
+        // the same point again. Both run once, at setup, so it never moves.
+        ...headAndArm(sbk, r, e),
+      })),
+    ),
     fans: [
       ...rooms.map((r) => [
         ...placed(sbk, r, "inithfan", [FAN.h.stopped], (e) => ({ x: e.pointX, y: e.pointY, horizontal: true, state: "off" as const, clock: 0 })),
@@ -1726,7 +1754,13 @@ async function loadLevel(index: number): Promise<void> {
   // take this stage's share off it (see src/mission.ts). The census counts only
   // the things that can claim the panel's bar, which is the same set the engine
   // counts — furniture never calls `0x40d1c0` and is not part of anyone's quota.
-  stats.census = level.spawned.reduce((n, r) => n + r.filter((e) => FOES[e.kind].counts).length, 0);
+  stats.census =
+    level.spawned.reduce((n, r) => n + r.filter((e) => FOES[e.kind].counts).length, 0) +
+    // ...and Boggs, whose HEAD is the census entry: `0x41c591` is
+    // `0x42f870(head, 1)` and the body is not registered at all. VAT spawns no
+    // creatures, so without this its quota is zero of zero and the level can be
+    // walked to its goal without touching the thing the chapter is named for.
+    level.boggs.reduce((n, r) => n + r.length, 0);
   stats.allowance = allowanceFor(mission(), stats.census);
   // `0x448ad8` fills it on the way in, and `0x402760` does the same on a respawn
   stats.health = stats.maxHealth;
@@ -1884,9 +1918,12 @@ function mission(): Mission {
 function aliveNow(): number {
   // a body has already left: its state handler calls `0x42f870(obj, 0)` on the
   // first frame it is dead, fifty frames before the object itself goes
-  return level
-    ? level.spawned.reduce((n, r) => n + r.filter((e) => FOES[e.kind].counts && e.state !== "dead").length, 0)
-    : 0;
+  if (!level) return 0;
+  return (
+    level.spawned.reduce((n, r) => n + r.filter((e) => FOES[e.kind].counts && e.state !== "dead").length, 0) +
+    // and Boggs leaves the census the frame it starts dying, for the same reason
+    level.boggs.reduce((n, r) => n + r.filter((b) => !b.dying).length, 0)
+  );
 }
 
 /**
@@ -3021,6 +3058,33 @@ function landHits(): void {
     struck.add(e);
     strikeFoe(e, mine.damage, mine.blow, p.facing, (mine.top + mine.bottom) / 2, box);
   }
+  // and BOGGS, which is four objects: `0x41aad0` turns a blow away only when the
+  // striker is one of Boggs' own parts, so a fist is none of those and lands on
+  // all of them — except the arm and the jaws, whose handler `0x41bb10` is
+  // `xor ax, ax; ret` and turns everything away.
+  for (const b of level.boggs[i]) {
+    if (b.dying) continue;
+    for (let k = 0; k < b.machines.length; k++) {
+      const mb = machineBox(b, k);
+      if (!mb) continue;
+      if (!(mine.right > mb.left && mine.left < mb.right && mine.bottom > mb.top && mine.top < mb.bottom)) continue;
+      if (struckBoggs.has(String(k))) continue;
+      struckBoggs.add(String(k));
+      strikeMachine(b, k, mine.damage);
+    }
+    const art = level.sbk.cels.find((c) => c.id === boggsCel(b));
+    if (!art) continue;
+    const bb = {
+      left: b.x - art.posX,
+      right: b.x - art.posX + art.width,
+      top: b.y - art.posY,
+      bottom: b.y - art.posY + art.height,
+    };
+    if (!(mine.right > bb.left && mine.left < bb.right && mine.bottom > bb.top && mine.top < bb.bottom)) continue;
+    if (struckBoggs.has("body")) continue;
+    struckBoggs.add("body");
+    b.hp = Math.max(0, b.hp - mine.damage);
+  }
 }
 
 /**
@@ -3975,6 +4039,26 @@ function placed<T>(
   return out;
 }
 
+/**
+ * Where the head and the claw arm stand, which is decided once and never again.
+ *
+ * `initboggshead` has a record of its own in `VAT.SBK` and `0x412310` puts the
+ * head on its point. `initbgclawarm` has no point at all: `0x4121ae` copies the
+ * BODY's `+6` as a dword, so the arm's Y and X are the body's own, and the jaws
+ * then hang at the centre of the arm cel's box (`0x412180`) — which is read per
+ * frame in {@link jawsAt}, because the cel is what says where the centre is.
+ */
+function headAndArm(sbk: SbkFile, room: SbkRoom, body: SbkEntity): { headX: number; headY: number } {
+  const head = sbk.entities.find(
+    (e) =>
+      e.isEntity &&
+      e.name === "initboggshead" &&
+      e.pointY >= room.top && e.pointY <= room.bottom &&
+      e.pointX >= room.left && e.pointX <= room.right,
+  );
+  return { headX: head?.pointX ?? body.pointX, headY: head?.pointY ?? body.pointY };
+}
+
 /** every `initshack` in this room — CITY places eleven and nothing else places any */
 function shacksIn(sbk: SbkFile, room: SbkRoom): Shack[] {
   return placed(sbk, room, "initshack", SHACK.opening.cels, (e) => ({
@@ -4737,30 +4821,57 @@ function fittingCel(f: Fitting): number {
  * handler turns away only its own parts. See {@link BOGGS}.
  */
 /**
- * Boggs, once an engine frame: the clock, and the thirty a frame back.
+ * Boggs, once an engine frame — and it is four objects, not one.
  *
- * `0x41be68` heals it while EITHER of the flags at `0x46e080` and `0x46e084` is
- * set, which a first reading here had backwards. And the flags are not a phase
- * it enters — they are how it starts:
+ * `0x41be68` heals the body while EITHER of the flags at `0x46e080` and
+ * `0x46e084` is set, and the flags are not a phase it enters: both ship as
+ * `01 00` in `.data`, nothing in `.text` ever sets one, and the only two writes
+ * there are are the clears at `0x41b611` and `0x41b75d`. Both of those are in
+ * the MACHINERY's hit handler, one per breakable half.
  *
- * ```
- *   0x46e080:  01 00 00 00  01 00 00 00     ; both SHIP as 1, in .data
- *   41b611     mov word ptr [0x46e080], 0   ; cleared once, by the claw arm
- *   41b75d     mov word ptr [0x46e084], 0   ; ...and once more, same function
- * ```
+ * So the fight is: break three thousand of machine to stop half the healing,
+ * break three thousand more to stop the rest, and only then can the four
+ * thousand on the head be spent. See {@link BOGGS.machines}.
  *
- * Those two writes are the ONLY ones in `.text`. Nothing ever sets either flag,
- * so the healing runs from the moment the level opens until the claw arm's own
- * sequence (`0x41b250`) has turned it off twice — and only then is the thing
- * killable. Healing it always is therefore not a simplification: it is the
- * shipped state, and it is why Boggs cannot be beaten on this page yet. Forty
- * bolts of a hundred is the four thousand, and the claw arm is what buys you
- * the time to land them.
+ * Everything but the body stands still. `0x411ed0` (the eight machines),
+ * `0x412180` (the arm) and `0x41c4c0` (the head) each run once, at setup, and
+ * no per-frame call re-places any of them — so when the body lunges it lunges
+ * out from under its own head.
  */
 function stepBoggs(): void {
   for (const b of hereOf((l) => l.boggs)) {
     b.clock += 1;
-    b.hp = Math.min(BOGGS.health, b.hp + BOGGS.regen);
+    if (b.snap > 0) b.snap -= 1;
+    for (const m of b.machines) {
+      if (m.wrecked) m.wreckClock += 1;
+      else m.clock += 1;
+    }
+    if (b.dying) {
+      b.headClock += 1;
+      continue;
+    }
+    // `0x41bd69` — and `0x41bdd8` is the level's own cleared flag
+    if (b.hp <= 0) {
+      b.dying = true;
+      b.clock = 0;
+      b.headClock = 0;
+      sound?.effect(BOGGS.dies.sound, b.headX, b.headY);
+      continue;
+    }
+    // `0x41c182` — the head re-aims whenever its own script has ended, which at
+    // one frame a tag and three ticks a frame is every third frame
+    b.headClock += 1;
+    if (b.headClock >= BOGGS.head.hold) {
+      b.headClock = 0;
+      b.headTag = boggsAim(b);
+    }
+    // `0x41be68` — thirty a frame, and only while a flag is still up
+    if (b.flags[0] || b.flags[1]) b.hp = Math.min(BOGGS.health, b.hp + BOGGS.regen);
+    // `0x41c164` — the 5-in-100 branch, and the jaws snap through `0x46e558`
+    const jaws = BOGGS.arm.jaws;
+    if (b.snap <= 0 && Math.floor(Math.random() * jaws.snapOdds[1]) < jaws.snapOdds[0]) {
+      b.snap = jaws.snap.cels.length * jaws.snap.hold;
+    }
     const a = b.lunge ? BOGGS.lunge[b.lunge] : null;
     if (a) {
       // the stride is the script's own, through the biggest divisor in the game
@@ -4781,12 +4892,121 @@ function stepBoggs(): void {
   }
 }
 
+/**
+ * Which of the head's nine look-at tags is aimed at you — `0x41bfe3` for the
+ * column, `0x41c192` and `0x41c1b2` for the row.
+ *
+ * Both are measured off the BODY rather than the head, which is what the
+ * disassembly does (`si` and `di` come from `0x4a5138`), and it matters once the
+ * body has lunged out from under the head it is aiming.
+ */
+function boggsAim(b: Boggs): number {
+  const si = b.x - p.x; // positive when you are to its left
+  const di = p.y - b.y; // positive when you are below it
+  const col = si > BOGGS.head.far ? 0 : si > 0 ? 1 : 2;
+  const row = di > BOGGS.head.below ? 6 : di > BOGGS.head.above ? 0 : 3;
+  return row + col;
+}
+
 function boggsCel(b: Boggs): number {
+  if (b.dying) {
+    const d = BOGGS.dies;
+    return d.cels[Math.min(d.cels.length - 1, Math.floor(b.clock / d.hold))];
+  }
   if (b.lunge) {
     const a = BOGGS.lunge[b.lunge];
     return a.cels[Math.min(a.cels.length - 1, Math.floor(b.clock / a.hold))];
   }
   return BOGGS.idle.cels[Math.floor(b.clock / BOGGS.idle.hold) % BOGGS.idle.cels.length];
+}
+
+/** the head: `0x46e908` while it is dying, one of `0x46e7c0`'s nine otherwise */
+function boggsHeadCel(b: Boggs): number {
+  if (b.dying) {
+    const d = BOGGS.head.dies;
+    return d.cels[Math.min(d.cels.length - 1, Math.floor(b.headClock / d.hold))];
+  }
+  return BOGGS.head.look[b.headTag];
+}
+
+/**
+ * Where the jaws hang — `0x412180`, the centre of the ARM cel's own collision
+ * box, off the arm's anchor. Read per frame rather than frozen, for the reason
+ * {@link gripAt} exists.
+ */
+function jawsAt(b: Boggs): { x: number; y: number } {
+  const art = level?.sbk.cels.find((c) => c.id === BOGGS.arm.poses[BOGGS.arm.tag]);
+  const box = art?.body;
+  if (!box) return { x: b.x, y: b.y };
+  return { x: b.x + box.x0 + (box.x1 - box.x0) / 2, y: b.y + box.y0 + (box.y1 - box.y0) / 2 };
+}
+
+/** the jaws: `0x46e558` tag 3 while `0x41c164`'s snap runs, the placed pose otherwise */
+function jawsCel(b: Boggs): number {
+  const jaws = BOGGS.arm.jaws;
+  if (b.snap <= 0) return jaws.poses[BOGGS.arm.tag];
+  const k = Math.floor((jaws.snap.cels.length * jaws.snap.hold - b.snap) / jaws.snap.hold);
+  return jaws.snap.cels[Math.min(jaws.snap.cels.length - 1, k)];
+}
+
+/** one of the eight, on its own script — {@link BOGGS.machines} */
+function machineCel(b: Boggs, i: number): number {
+  const spec = BOGGS.machines[i];
+  const m = b.machines[i];
+  if (m.wrecked && "wreck" in spec) {
+    return spec.wreck[Math.min(spec.wreck.length - 1, Math.floor(m.wreckClock / spec.hold))];
+  }
+  return spec.cels[Math.floor(m.clock / spec.hold) % spec.cels.length];
+}
+
+/**
+ * A blow on one of the eight — `0x41b510`, after the friendly-fire filter and
+ * the same `-1`-becomes-100 translation the body's handler does.
+ *
+ * Six of them only clang. The two that do not are three thousand each, and
+ * emptying one clears one of the two healing flags — which is the whole of why
+ * this boss can be killed.
+ */
+function strikeMachine(b: Boggs, i: number, damage: number): boolean {
+  const spec = BOGGS.machines[i];
+  if (!("health" in spec)) return false;
+  const m = b.machines[i];
+  if (m.wrecked) return false;
+  m.hp = Math.max(0, m.hp - damage);
+  if (m.hp > 0) return true;
+  // `0x41b611` / `0x41b75d` — the only two writes to either flag there are
+  b.flags[spec.clears] = false;
+  m.wrecked = true;
+  m.wreckClock = 0;
+  sound?.effect(spec.sound, m.x, m.y);
+  // ...and the neighbours buckle with it: `0x41b65b` and `0x41b794`
+  for (let k = 0; k < BOGGS.machines.length; k++) {
+    const n = BOGGS.machines[k];
+    if (!("wreckedBy" in n) || n.wreckedBy !== spec.clears || b.machines[k].wrecked) continue;
+    b.machines[k].wrecked = true;
+    b.machines[k].wreckClock = 0;
+  }
+  // `0x41b628` / `0x41b774` — the cue only the SECOND one to go plays
+  if (!b.flags[0] && !b.flags[1]) sound?.effect(BOGGS.bothDownSound, m.x, m.y);
+  return true;
+}
+
+/**
+ * The box a machine is drawn in, which is also the box it is struck in.
+ *
+ * The same reasoning as Boggs' own: `drawLevelCel` hangs a cel off its anchor by
+ * the record's `posX`/`posY`, so a centred box would miss it twice over.
+ */
+function machineBox(b: Boggs, i: number): { left: number; right: number; top: number; bottom: number } | null {
+  const art = level?.sbk.cels.find((c) => c.id === machineCel(b, i));
+  if (!art) return null;
+  const m = b.machines[i];
+  return {
+    left: m.x - art.posX,
+    right: m.x - art.posX + art.width,
+    top: m.y - art.posY,
+    bottom: m.y - art.posY + art.height,
+  };
 }
 
 // ---- the guns ------------------------------------------------------------
@@ -5224,6 +5444,23 @@ function stepBolts(): void {
       sound?.effect(BOLT.sound, g.x, g.y);
       hit = true;
       break;
+    }
+    // ...and the MACHINERY, whose handler `0x41b510` translates the -1 exactly
+    // the way the body's does. This is what the gun is really for: six thousand
+    // of machine is what stops the healing.
+    if (!hit) {
+      for (const g of hereOf((l) => l.boggs)) {
+        for (let k = 0; k < g.machines.length; k++) {
+          const mb = machineBox(g, k);
+          if (!mb) continue;
+          if (!(box.right > mb.left && box.left < mb.right && box.bottom > mb.top && box.top < mb.bottom)) continue;
+          strikeMachine(g, k, BOGGS.translatesTo);
+          sound?.effect(BOLT.sound, g.machines[k].x, g.machines[k].y);
+          hit = true;
+          break;
+        }
+        if (hit) break;
+      }
     }
     if (hit) {
       b.spent = true;
@@ -6878,6 +7115,9 @@ function swing(): void {
 /** the crows this swing has already taken, so one blow is one crow */
 const struckCrows = new Set<Crow>();
 
+/** and the Boggs parts this swing has already landed on — `"body"` or a machine index */
+const struckBoggs = new Set<string>();
+
 /** the player cel drawn on the last frame — reported in the status line */
 let lastCel = 0;
 /** which frame of the gait was showing last, so a footfall fires once per step */
@@ -6953,6 +7193,7 @@ function loop(now: number): void {
         p.fired = false;
         struck.clear();
         struckCrows.clear();
+        struckBoggs.clear();
         swing();
       }
     } else if (!p.onGround && !p.act) {
@@ -6964,6 +7205,7 @@ function loop(now: number): void {
         p.actClock = 0;
         struck.clear();
         struckCrows.clear();
+        struckBoggs.clear();
         swing();
       }
     }
@@ -7643,7 +7885,17 @@ function loop(now: number): void {
   for (const c of hereOf((l) => l.chairs)) drawLevelCel(chairCel(c), c.x, c.y, camX, camY);
   for (const c of hereOf((l) => l.claws)) drawLevelCel(clawCel(c), c.x, c.y, camX, camY);
   for (const f of hereOf((l) => l.fittings)) drawLevelCel(fittingCel(f), f.x, f.y, camX, camY);
-  for (const b of hereOf((l) => l.boggs)) drawLevelCel(boggsCel(b), b.x, b.y, camX, camY);
+  for (const b of hereOf((l) => l.boggs)) {
+    // the machinery behind it, then the body, then the arm it hangs in front of,
+    // then the head. The disassembly settles where each of these STANDS but not
+    // what order they are painted in, and this is the order that reads.
+    for (let i = 0; i < b.machines.length; i++) drawLevelCel(machineCel(b, i), b.machines[i].x, b.machines[i].y, camX, camY);
+    drawLevelCel(boggsCel(b), b.x, b.y, camX, camY);
+    drawLevelCel(BOGGS.arm.poses[BOGGS.arm.tag], b.x, b.y, camX, camY);
+    const j = jawsAt(b);
+    drawLevelCel(jawsCel(b), j.x, j.y, camX, camY);
+    drawLevelCel(boggsHeadCel(b), b.headX, b.headY, camX, camY);
+  }
   for (const q of hereOf((l) => l.fans)) drawLevelCel(fanCel(q), q.x, q.y, camX, camY);
   for (const f of hereOf((l) => l.floors)) drawLevelCel(floorCel(f), f.x, f.y, camX, camY);
   for (const q of hereOf((l) => l.surges)) drawLevelCel(surgeCel(q), q.x, q.y, camX, camY);
@@ -7975,11 +8227,21 @@ function loop(now: number): void {
       (c) => `claw ${c.state} cel ${clawCel(c)} at x${Math.round(c.x)} gap ${Math.round(Math.abs(c.x - p.x))}`,
     ),
     ...hereOf((l) => l.fittings).map((f) => `${f.kind} cel ${fittingCel(f)} at x${f.x}`),
-    ...hereOf((l) => l.boggs).map(
-      (b) =>
-        `boggs ${b.lunge ?? "idle"} cel ${boggsCel(b)} at x${Math.round(b.x)}, y${b.y}, ` +
-        `${Math.round(b.hp)}/${BOGGS.health}hp, +${BOGGS.regen} a frame`,
-    ),
+    ...hereOf((l) => l.boggs).map((b) => {
+      const heals = b.flags[0] || b.flags[1];
+      const halves = BOGGS.machines
+        .map((m, k) =>
+          "health" in m ? `${Math.round(b.machines[k].hp)}/${m.health}@x${Math.round(b.machines[k].x)}` : null,
+        )
+        .filter((t) => t !== null)
+        .join(" ");
+      return (
+        `boggs ${b.dying ? "dying" : (b.lunge ?? "idle")} cel ${boggsCel(b)} at x${Math.round(b.x)}, y${b.y}, ` +
+        `${Math.round(b.hp)}/${BOGGS.health}hp, ${heals ? `+${BOGGS.regen} a frame` : "no longer healing"}` +
+        ` · head ${boggsHeadCel(b)} tag ${b.headTag} · machine ${halves}` +
+        ` flags ${b.flags[0] ? 1 : 0}${b.flags[1] ? 1 : 0}`
+      );
+    }),
     ...hereOf((l) => l.surges).map((q) => `surge cel ${surgeCel(q)} at x${q.x}`),
     ...hereOf((l) => l.bridges).map((b) => `bridge ${b.state} cel ${bridgeCel(b)} at x${b.x}`),
     ...hereOf((l) => l.hands).map((q) => `hand ${q.state}${q.underfoot ? " underfoot" : ""} cel ${handCel(q)} at x${Math.round(q.atX)}`),

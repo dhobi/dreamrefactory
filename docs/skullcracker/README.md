@@ -1195,21 +1195,74 @@ And the healing is not a phase Boggs enters — it is how it starts:
 
 ```
   0x46e080:  01 00 00 00  01 00 00 00     ; both flags SHIP as 1, in .data
-  41b611     mov word ptr [0x46e080], 0   ; cleared once, by the CLAW ARM
-  41b75d     mov word ptr [0x46e084], 0   ; ...and once more, same function
+  41b611     mov word ptr [0x46e080], 0   ; cleared once, by the MACHINERY
+  41b75d     mov word ptr [0x46e084], 0   ; ...and once more, same handler
 ```
 
 Those two writes are the only ones anywhere in `.text`, and nothing ever sets
 either flag back. So the thirty a frame runs from the moment the level opens,
-and the fight is a sequence rather than a damage race: the claw arm's own
-machine (`0x41b250`) has to turn the healing off twice before four thousand can
-be taken off at all. Forty bolts of a hundred is exactly that four thousand, out
-of the blaster's hundred and sixty rounds.
+and the fight is a sequence rather than a damage race.
 
-What is here is the body, its four thousand, its thirty a frame and the bolt
-that lands a hundred on it. The head, the claw arm and the eight machinery
-objects are not — so on this page the healing never stops, which is faithful to
-where the game starts and is why Boggs cannot yet be killed.
+### ...and what turns the healing off is the machinery
+
+`initbgmachinery` (`0x411da0`) stands up eight more objects and `0x411ed0` puts
+them at eight fixed offsets from the body, out of the table at `0x46e088`. That
+placer is called exactly twice in the program — once from the initialiser, once
+from VAT's setup — so the machinery, the head and the arm all stand still for
+the whole fight. Only the body moves.
+
+Six of the eight are scenery. The two that are not are `0x4a56e8` (cel 5860) and
+`0x4a516c` (cel 5870), three thousand health each through `0x40e300(0xbb8)`, and
+they share the handler `0x41b510` with the other six:
+
+```
+  41b573  cmp [0x4a56e8], esi / je      ; one of these two...
+  41b57b  cmp [0x4a516c], esi / jne     ; ...or the blow only clangs
+  41b5fc  sub word ptr [0x4a56ec], di   ; three thousand off one
+  41b748  sub word ptr [0x4a5174], di   ; three thousand off the other
+  41b611  mov word ptr [0x46e080], 0    ; and emptying one clears one flag
+```
+
+Break one half and half the healing stops. Break both and the thirty a frame
+stops entirely — and only then can the four thousand be spent. Breaking a half
+also re-scripts its neighbours: `0x41b65b` buckles three of the scenery pieces,
+`0x41b794` a fourth.
+
+Two branches in there never run. Each half tests its own wear stage as
+`health / 2 < health` (`0x41b6df`) and `health * 2 / 3 < health` (`0x41b719`),
+which is true of every positive health there is, so the dented cels 5861/5862
+and 5871/5872 are never installed. A machine is intact until it is wrecked. It
+is the same shape of dead code as the wraith's `-3`, and it was settled the same
+way — by arithmetic that holds for the whole domain, not by a re-reading.
+
+Measured on this page with fists alone: one half at 110 punches, the other 55
+after it, and Boggs down 144 punches later — 309 in all. With the blaster's bolt
+at a hundred a shot it is sixty into the machine and forty into Boggs.
+
+### The head is the census, and the goal will not open without it
+
+`0x41c591` is `0x42f870(head, 1)`. The body is not registered at all, so VAT's
+whole census is the one head — and `0x416047` refuses to spawn the goal until
+both the allowance is met **and** `0x46bfbc` is set, which `0x41bdd8` does when
+Boggs dies. This page had VAT's census at zero of zero, which meant the sixteenth
+level's ending could be walked to straight past a living Boggs. It cannot now.
+
+The head is also where the health lives (`0x41c547` writes the four thousand
+into `0x4a50e8`, which is the word the body's handler decrements) and where the
+tracker lives (`0x45ef70` on the bands 250/150/80). What it does with the
+tracker is look at you: `0x46e7c0`'s first nine tags are a 3×3 grid of single
+cels, 5900..5908, and `0x41c182` installs one whenever the head's own script has
+ended — column by how far to its left you are, row by how far above.
+
+The claw arm is two objects and neither can be touched: both take `0x41bb10` as
+their hit handler, and `0x41bb10` is `xor ax, ax; ret`. The jaws hang at the
+centre of the arm cel's own collision box (`0x412180`), which is the same rule
+`gripOf` reads for a grab.
+
+What is still not here is Boggs' two attacks — `0x41c330`, the throw it winds up
+beyond three hundred pixels on a cooldown of `0x434540(30) + 30`, and
+`0x41c3c0`, the 7-in-55 spit thrown at `-30 - roll(60)` up and `roll(160) + 30`
+along. Boggs lunges, heals and dies correctly; it does not yet throw anything.
 
 ### A record belongs to one room
 
@@ -1562,12 +1615,13 @@ The hand grabs and lets go, the surge shocks, the knockdown from out of a hand's
 rect lands, and none of it spends a point of health — which is why a code comes
 through with the damage switch off. A code is a message.
 
-It does not make Boggs killable. The only two things in `SC.EXE` that send −1
-are `0x413bf9` and `0x41b022`, both inside the Boggs machinery, and `0x41afd0`
-gates its −1 on the two flags at `0x46e080` and `0x46e084` that the same machine
-sets. The head, the claw arm and the eight machinery objects are still not here,
-so the code that would hurt it has nothing to come from. That is the machine's
-gap, not the codes'.
+It did not, on its own, make Boggs killable — the machinery did, and that is now
+here too. The only two things in `SC.EXE` that send −1 are `0x413bf9` and
+`0x41b022`, both inside the Boggs machinery, and `0x41afd0` gates its −1 on the
+two flags at `0x46e080` and `0x46e084`. What the codes unblock is the blaster's
+bolt, which carries −1 and which `0x41bc71` and `0x41b510` both rewrite as a
+full hundred — against Boggs and against its machine, and against nothing else
+in the game.
 
 BARREL's claw does not grab yet, and the reason is worth writing down because it
 is not the one it looked like. `0x4171e0` is a **seven**-kind machine over six
@@ -1896,9 +1950,9 @@ ask for them.
 
 ### The classes
 
-**64 of the 70 `init*` classes the levels place are built.** The six that are
-not are `initbiggun`, `initlightfx`, and the four-object Boggs machine less its
-body.
+**Every `init*` class the levels place is built except `initbiggun` and
+`initlightfx`.** Boggs' other three — `initboggshead`, `initbgclawarm` and
+`initbgmachinery` — were the last of them, and they are here now.
 
 The executable registers **73**, and four of them exist in the game with no
 level placing one: `initbeltboth`, `initdoor`, `initpainting` and
