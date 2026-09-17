@@ -1787,12 +1787,14 @@ the first six are it breaking the water and the last seven are it closing, and
 the frame it closes is the frame it has you — the same authored grip, a third
 time.
 
-What does not work is the reach. The creator puts it at the record's point plus
-eighty (`0x435bf7`), which on SEWER's three hall bushes is y 17321 against a
-floor at 17513, and its grip tops out 200 pixels above the player's feet. That
-is consistent across all four bushes measured — 190 to 215 — so it is systematic
-rather than one bad record, and it is either the floor under that hall or the
-bush's own y. Left as it reads rather than nudged into working.
+The reach took a second look. The creator puts it at the record's point plus
+eighty (`0x435bf7`), which on SEWER's hall bushes is y 17321 against a floor at
+17513, and it looked for a while as though the bush stood 190 to 215 pixels too
+high to reach anybody — consistent across all eight, so systematic rather than
+one bad record. It was systematic, and it was not the bush: every prop's strike
+box was being lifted by `height - posY`. See "A collision box is a translation"
+below. With the box translated the way `0x40e680` translates it, the bush closes
+on a player walking underneath it, on its own resting y, and holds.
 
 ## Two tests, and an ending
 
@@ -1918,6 +1920,52 @@ Its head, its claw arm and its eight machinery objects are still not here, so
 the healing never stops and it still cannot be killed — see the section above
 for why that is the game's own arithmetic rather than a gap.
 
+## A collision box is a translation, and nothing else
+
+SEWER's bush is the only grabber in the game that comes up out of the floor, and
+on this page it could not reach a player walking under it. The last seven cels of
+its rise carry a strike box and no blow pair — the grip signature the hand and
+the claw have — so closing on you is the whole point of it, and the grab only
+ever landed once the bush had already given up and started sinking. A grab on the
+way down.
+
+The cause was not the bush. `0x40e680` is the engine's fine collision test and
+what it does with a cel's authored rect is this:
+
+```
+  40e688  eax = [edx]        ; the four words of the rect, copied
+  40e6a2  x0' = -x1          ; ...negated about the anchor if the object
+  40e6b3  x1' = -x0          ;    is mirrored, and that is the whole mirror
+  40e6fe  0x434270(rect, obj+6)   ; a rect TRANSLATE by the object's position
+  40e72c  0x434140(a, b)          ; and an intersect
+```
+
+A translate. No width, no height, no anchor arithmetic — the rect is already
+anchor-relative, exactly the way `drawLevelCel` hangs the art. This page was
+translating every prop's box as if the rect were measured from the cel's
+top-left, which lifted it by `height - posY`: sixty-four pixels on the bush's cel
+5030, seventy-six to a hundred and twenty-seven on the claw's.
+
+The player was never wrong, because the player's `y` is the ground it stands on
+rather than an anchor and the conversion it needs is the same expression by
+coincidence. Every prop was.
+
+What it had cost, besides the bush:
+
+- **BARREL's claw** had been moved to its record's rect BOTTOM to make it reach
+  anybody — `bottom - point` is 113, 136, 115 and 177 across its four, against a
+  lift of 76..127. Close enough to work and never the same number, which is what
+  a compensation looks like from the outside. `0x411cfd` writes the record's
+  POINT into `obj+6` and `0x411d02` takes ten off the X, and from there the
+  fourth claw closes 34 pixels into a player standing under it.
+- The other two of BARREL's four hang 450 and 780 pixels above their own floor
+  and reach nobody from either y, which is presumably why one of them is over a
+  pit.
+
+The lesson is the one this page keeps relearning: a number that nearly works is
+worth less than the instruction that produced it. Both of these were settled by
+reading the translate, not by tuning a y until a test went green.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are
@@ -1963,11 +2011,12 @@ a level with no class anywhere.
 
 - **All five weapons fire now**, and the INV button with them — see the section
   above. There was never an inventory screen to build.
-- **The blow codes are carried, and so is the claw.** SEWER's bush has its three
-  phases and its thirteen cels now too, but its grip does not reach: it sits
-  about 190 pixels above where this page stands the player, at all four of the
-  bushes measured. Either the floor under that hall is wrong here or the bush's
-  own y is, and which of those it is has not been settled.
+- **The blow codes are carried, and so are the claw and the bush.** What had
+  looked like a bush hanging 190 pixels too high was every prop's strike box
+  being lifted by `height - posY`; `0x40e680` translates the rect by the object's
+  own position and does nothing else. The bush grabs, and BARREL's claw is back
+  on the record's point that `0x411cfd` gives it rather than the rect bottom it
+  had been nudged to.
 - **Two bosses of five have their own state machine** — PLAYGR's `initwbooly`
   and ARCADE's `initkragg`. RAVECAVE's wraith, TOWER's bishop and VAT's Boggs
   stand, take blows and die on the generic gait/flinch/death every other

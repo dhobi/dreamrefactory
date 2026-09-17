@@ -1282,7 +1282,15 @@ export const BUSH = {
   sinkBelow: 0x50,
   /** `0x43eef1`'s `cmp word ptr [esi], 0x13a6` — the cel that ends the rise */
   holdsAt: 5030,
-  /** `0x435bf7` — the object hangs this far below the record's point */
+  /**
+   * `0x435bf7` — the object hangs this far below the record's point.
+   *
+   * On SEWER's hall bushes that is y 17321 against a floor at 17513, and it read
+   * for a while as though the bush stood ~190px too high to reach anybody. It
+   * did not: every prop's strike box was being lifted by `height - posY`, which
+   * is sixty-four on cel 5030. `0x40e680` translates the rect by `obj+6` and
+   * does nothing else — see `strikeOf` in `walk.ts`.
+   */
   below: 0x50,
   /** `mov word ptr [esi+0xe], 0xa` at `0x43ec10` */
   divisor: 10,
@@ -2033,6 +2041,8 @@ export interface Chair {
 export const CLAW = {
   /** `0x46dc78` tag 0 — the carriage running its rail */
   running: { cels: [2460, 2461, 2462, 2463, 2464, 2465, 2466, 2467, 2468, 2469], hold: 2, from: "0x46dc78 tag 0" },
+  /** `0x411d02` — `sub word ptr [ebx+8], 0xa`, off the record's own point */
+  leftBy: 0xa,
   /** `0x46dd80` tags 1, 2 and 4 — down, worry, up */
   down: { cels: [2420, 2421, 2422, 2423, 2424], hold: 2, from: "0x46dd80 tag 1" },
   shut: { cels: [2424, 2425, 2426, 2425], hold: 2, from: "0x46dd80 tag 2" },

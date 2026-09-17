@@ -175,6 +175,44 @@ const main = async (): Promise<void> => {
   if (top > 16800) fail(`the lift should carry the rider to the head of its shaft, y16786; got y ${top}`);
   console.log(`ok    and carries a rider from the hall floor up to y ${top}`);
 
+  /**
+   * ...and the BUSH, which is SEWER's and nothing else's.
+   *
+   * `0x435bf7` hangs it eighty pixels below its record's point, which in
+   * `hugeroom` is 190 above the floor, and the last seven cels of its rise carry
+   * a strike box and no blow pair at all — the grip signature. So it should
+   * close on a player walking underneath it, on its own resting y, and hold.
+   *
+   * It could not. The strike box was being translated as if the cel's rect were
+   * measured from the art's top-left, which lifted it by `height - posY` —
+   * sixty-four pixels on cel 5030 — and the rise passed straight through you.
+   * `0x40e680` copies the rect, negates the x pair if the object is mirrored and
+   * hands it to `0x434270`, a rect TRANSLATE, with the object's own `obj+6`.
+   * Nothing else. The grab only ever landed once the bush had sunk far enough to
+   * make the error back up, which is a grab on the way DOWN.
+   */
+  await go("x=7470");
+  await page.keyboard.down("ArrowRight");
+  let grabbed: { state: string; cel: number; bushY: number; playerY: number } | null = null;
+  for (let i = 0; i < 90 && !grabbed; i++) {
+    const t = await say();
+    const b = [...t.matchAll(/bush (\w+) cel (\d+) at x(\d+), y(\d+)/g)].find((m) => Math.abs(Number(m[3]) - 7689) < 300);
+    if (/code -3/.test(t) && b) {
+      grabbed = { state: b[1], cel: Number(b[2]), bushY: Number(b[4]), playerY: (await at()).y };
+    }
+    await page.waitForTimeout(80);
+  }
+  await page.keyboard.up("ArrowRight");
+  if (!grabbed) fail(`walking under hugeroom's bush should be grabbed by it — 0x43ee9d's -3; nothing took hold`);
+  const g = grabbed!;
+  if (g.state === "sink")
+    fail(`it should close on you coming UP, not catch you on the way back down; it took hold in ${g.state}`);
+  if (g.bushY !== 17321)
+    fail(`the bush does not move while it grabs — 0x43ef4a only runs once it has let go; it was at y${g.bushY}`);
+  console.log(
+    `ok    and its bush closes on a walking player — code -3 on cel ${g.cel} while it ${g.state}s, at its own y${g.bushY}`,
+  );
+
   // 9. the level, played through: five regions, three levers and a ride.
   //    Every one of those levers is in a different region from its door bar the
   //    first, which is what `0x43c430` walking the LEVEL's list is for.

@@ -1648,22 +1648,27 @@ async function loadLevel(index: number): Promise<void> {
     chairs: rooms.map((r) => placed(sbk, r, "initchair", CHAIR.runs[0].cels, (e) => ({ x: e.pointX, y: e.pointY, run: 0, clock: 0 }))),
     claws: rooms.map((r) =>
       /**
-       * It hangs at the record's BOTTOM, not at its point.
+       * It hangs at the record's POINT, ten pixels to the left of it.
        *
-       * `0x411ca0` files three of the spawner's dwords into its user struct —
-       * `user+0 = arg0`, `user+4 = arg1`, `user+8 = arg3` — and the state
-       * machine reads them as a rect and a point: `0x4173d1` clamps its x
-       * between `user+2` and `user+6`, which can only be left and right, so
-       * `user+0`/`user+4` are top and bottom and `user+8`/`user+0xa` are the
-       * point. `0x4173c9` then writes `user+4` into `obj+6`.
+       * ```
+       *   411cfd  mov dword ptr [eax+6], ecx    ; the point, Y and X together
+       *   411d02  sub word ptr [ebx+8], 0xa     ; ...and ten off the X
+       * ```
        *
-       * On BARREL's fourth claw that is 7221 rather than the point's 7044, and
-       * the difference is the whole of whether it can reach anybody: its jaw
-       * box sits 77..111 below its anchor, so at the point it closes about 40
-       * pixels above the head of a player standing under it.
+       * This page hung it at the record's rect BOTTOM instead, and the reason it
+       * had to was a bug in {@link strikeOf}: every prop's strike box was being
+       * lifted by `height - posY`, so the only way to make a claw reach anybody
+       * was to drop the claw by about as much. `bottom - point` is 113, 136, 115
+       * and 177 across BARREL's four, and the lift is 76..127 — close enough to
+       * work and never the same number, which is what a compensation looks like.
+       *
+       * With the box translated the way `0x40e680` translates it, the point is
+       * enough: BARREL's fourth claw closes 34 pixels into a player standing
+       * under it. Its other two hang 450 and 780 above their own floor and
+       * reach nobody from either y.
        */
       placed(sbk, r, "initclaw", CLAW.running.cels, (e) => ({
-        x: e.pointX, y: e.bottom, left: e.left, right: e.right, state: "idle" as const, clock: 0,
+        x: e.pointX - CLAW.leftBy, y: e.pointY, left: e.left, right: e.right, state: "idle" as const, clock: 0,
       })),
     ),
     fittings: rooms.map((r) => [
@@ -3288,11 +3293,29 @@ function claimBar(): void {
 }
 
 /**
- * Where a hitter's strike box is, in the world — the mirror of {@link strikeBox}.
+ * Where a hitter's strike box is, in the world.
  *
  * `0x430375` reads the CURRENT cel's own strike rect and skips a hitter whose is
  * degenerate, which is what makes a blow two frames of an animation rather than
  * the whole of it.
+ *
+ * And the rect goes into the world by TRANSLATION and nothing else. `0x40e680`
+ * copies the cel's four words, negates the x pair if the object is mirrored, and
+ * hands the result to `0x434270` — a rect translate — with the object's own
+ * packed `obj+6`. So the box hangs off the anchor exactly the way the art does
+ * in {@link drawLevelCel}, and there is no width or height in the arithmetic at
+ * all.
+ *
+ * This read it as measured from the cel's top-left instead, which lifted every
+ * prop's box by `height - posY`. On SEWER's bush that is sixty-four pixels, and
+ * sixty-four pixels is the whole of why it could not reach a standing player:
+ * the rise passed straight through you and the grab only landed once it had sunk
+ * far enough to make the error back up. See {@link BUSH}.
+ *
+ * `y` here is the object's own — the engine's `obj+6`, which is what every
+ * record-placed prop on this page stores. The PLAYER is the one that is not:
+ * `p.y` is the ground it stands on, which is why {@link playerBody} converts and
+ * this does not.
  */
 function strikeOf(
   cel: SbkCel,
@@ -3301,13 +3324,10 @@ function strikeOf(
   facing: number,
 ): { top: number; left: number; bottom: number; right: number } | null {
   if (!cel.strike) return null;
-  const band = x - cel.width / 2;
-  const [cx0, cx1] =
-    facing < 0
-      ? [cel.width - (cel.posX + cel.strike.x1), cel.width - (cel.posX + cel.strike.x0)]
-      : [cel.posX + cel.strike.x0, cel.posX + cel.strike.x1];
-  const ay = y - cel.height + cel.posY;
-  return { left: band + cx0, right: band + cx1, top: ay + cel.strike.y0, bottom: ay + cel.strike.y1 };
+  // `0x40e6a2` — a mirrored rect is negated about the anchor, not flipped in a
+  // box: `x0' = -x1` and `x1' = -x0`
+  const [cx0, cx1] = facing < 0 ? [-cel.strike.x1, -cel.strike.x0] : [cel.strike.x0, cel.strike.x1];
+  return { left: x + cx0, right: x + cx1, top: y + cel.strike.y0, bottom: y + cel.strike.y1 };
 }
 
 /**
@@ -3323,13 +3343,14 @@ function strikeOf(
 function playerBody(): { top: number; left: number; bottom: number; right: number } | null {
   const rec = player?.cels.find((c) => c.id === lastCel);
   if (!rec?.body) return null;
-  const band = p.x - rec.width / 2;
-  const [cx0, cx1] =
-    p.facing < 0
-      ? [rec.width - (rec.posX + rec.body.x1), rec.width - (rec.posX + rec.body.x0)]
-      : [rec.posX + rec.body.x0, rec.posX + rec.body.x1];
+  // ...and the same translation `0x40e680` does, about the anchor — see
+  // {@link strikeOf}. `p.x` IS the anchor's x (the art is drawn at `x - posX`),
+  // so only the y needs converting: `p.y` is the ground the player stands on and
+  // the anchor sits `height - posY` above it, which is where the art's bottom
+  // edge falls.
+  const [cx0, cx1] = p.facing < 0 ? [-rec.body.x1, -rec.body.x0] : [rec.body.x0, rec.body.x1];
   const ay = p.y - rec.height + rec.posY;
-  return { left: band + cx0, right: band + cx1, top: ay + rec.body.y0, bottom: ay + rec.body.y1 };
+  return { left: p.x + cx0, right: p.x + cx1, top: ay + rec.body.y0, bottom: ay + rec.body.y1 };
 }
 
 /** `0x402ac0` — take it off, floor at zero, and start dying if that empties it */
