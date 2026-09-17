@@ -1784,6 +1784,47 @@ front.
 so the film being in the rip was never evidence of an ending on its own. What
 makes it one is `0x41293d`.
 
+## The wraith works its own bands, and its code is dead
+
+`0x424800` is a machine this page fought without. It reads the same TRACKER the
+claw does — `0x45efd0` on `user+0xe` — and bands the gap against `0x46f8f8`:
+
+```
+  bc 02  e6 00  82 00  3c 00  00 00      ; 700, 230, 130, 60
+```
+
+Four thresholds, five bands, and `0x424f1c` sorts them into four behaviours:
+over 230 it closes on you, 130..230 and 60..130 are where it fights, and inside
+sixty it does nothing at all but hang there (`0x424c07` installs the standing
+hover and nothing else). Which move it picks when it fights is `0x434540`'s.
+
+The best of it is `0x424d77`: the wraith's cast calls **`0x41f6b0`**, the
+scepter's own fire function, variant 0 — the one that spends no rounds. The
+thing you take the scepter from in RAVECAVE casts it at you first.
+
+### ...and the -3 is dead code
+
+`0x424c54` is the first instruction of its kinds 2 and 3 and it writes -3 into
+`obj+0x1a`, which reads exactly like the grab the hand and the claw carry. It is
+not. `0x4248a9` is the function's ONLY exit:
+
+```
+  4248a9  xor ax, ax
+  4248ac  pop ebp
+  4248ad  mov word ptr [esi+0x1a], 0x64     ; ...a hundred, every path, every frame
+  4248b3  pop edi / pop esi / pop ebx / ret
+```
+
+Both -3 writes are overwritten before the function returns, so the wraith hits
+like everything else. This was built the wrong way round first, and what caught
+it was a measurement rather than a re-reading: **two hundred and sixty kicks
+took nothing off it**, because a wraith that grabs on contact locks the player
+out of fighting entirely. With the code removed it falls in eighteen.
+
+That is the fourth time in this port that a `mov` read without its exit path
+gave the wrong answer — see Boggs' -1 and its two flags, and the inventory
+screen that was not one.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are

@@ -273,6 +273,24 @@ export interface Foe {
    * distance and nothing else — so the whole of it is honest here even though
    * nothing in this port hits the player back.
    */
+  /**
+   * The WRAITH's own machine — see `initwraith`. It is not {@link Foe.drives}:
+   * that shape was cut for the booly and the kragg, which charge and swing, and
+   * this one hovers, rises, casts and lunges by a band table instead.
+   */
+  haunts?: {
+    /** `0x46f8f8`, biggest first — the band is how many the gap is still past */
+    bands: readonly number[];
+    rouse: FoeAnim;
+    hover: FoeAnim;
+    rise: FoeAnim;
+    held: FoeAnim;
+    sink: FoeAnim;
+    cast: FoeAnim;
+    lunge: FoeAnim;
+    sweep: FoeAnim;
+    from: string;
+  };
   drives?: {
     hover: FoeAnim;
     charge: FoeAnim;
@@ -1587,6 +1605,56 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     vanishes: true,
+    /**
+     * ...and it has a machine of its own, which this page fought without.
+     *
+     * `0x424800` reads the same TRACKER the claw uses (`0x45efd0` on `user+0xe`)
+     * and dispatches kind 1 on the band index against `0x46f8f8`:
+     *
+     * ```
+     *   bc 02  e6 00  82 00  3c 00  00 00      ; 700, 230, 130, 60
+     * ```
+     *
+     * Four thresholds, so five bands, and `0x424f1c` sorts them into four
+     * behaviours: over 230 it closes, 130..230 and 60..130 are where it fights,
+     * and inside 60 it simply hangs there (`0x424c07` installs the standing
+     * hover and nothing else).
+     *
+     * What it does when it fights is picked by `0x434540` out of the moves
+     * below, and the one that matters is the BEAM: `0x424d77` calls
+     * `0x41f6b0(self, 0)` — the scepter's own fire function, variant 0, the one
+     * that spends no rounds. The thing you take the scepter from in this level
+     * casts it at you first.
+     *
+     * It does NOT carry a code, and that took a measurement to settle. `0x424c54`
+     * is the first instruction of its kinds 2 and 3 and it writes -3, which read
+     * like the grab — but `0x4248a9` is the function's ONLY exit and its third
+     * instruction is `mov word ptr [esi+0x1a], 0x64`. Every path writes a
+     * hundred back on the way out, so both of the -3 writes are dead in the
+     * shipped binary and the wraith hits like everything else.
+     *
+     * What caught it was building the grab first: two hundred and sixty kicks
+     * took nothing off it, because a wraith that grabs on contact locks the
+     * player out of fighting entirely.
+     */
+    haunts: {
+      /** `0x46f8f8` — the tracker's own thresholds, biggest first */
+      bands: [700, 230, 130, 60],
+      /** `0x46f698` — what it does on being woken, five cels and then it fights */
+      rouse: { cels: [3260, 3261, 3262, 3263, 3264], hold: 2, from: "0x46f698 tag 0" },
+      /** `0x46f6c8` tag 0 — hanging still, which is all it does inside 60px */
+      hover: { cels: [3250, 3251, 3252, 3253, 3252, 3253, 3252, 3251, 3250], hold: 2, from: "0x46f6c8 tag 0" },
+      /** `0x46f7e0` — up, held, and down again */
+      rise: { cels: [3220, 3221, 3222, 3223, 3224, 3225, 3225], hold: 1, from: "0x46f7e0 tag 0" },
+      held: { cels: [3225], hold: 1, from: "0x46f7e0 tag 1" },
+      sink: { cels: [3225, 3225, 3224, 3223, 3222, 3221, 3220], hold: 1, from: "0x46f7e0 tag 2" },
+      /** `0x46f790` tag 0 — the cast, and `0x424d77` is what comes out of it */
+      cast: { cels: [3210, 3211, 3212, 3213, 3214, 3215], hold: 2, from: "0x46f790 tag 0" },
+      /** `0x46f760` and `0x46f860` — the two it throws in between */
+      lunge: { cels: [3240, 3241, 3242, 3243, 3244], hold: 3, from: "0x46f760 tag 0" },
+      sweep: { cels: [3230, 3231, 3232, 3233, 3234, 3235], hold: 2, from: "0x46f860 tag 0" },
+      from: "0x424800, bands 0x46f8f8, beam 0x41f6b0",
+    },
     from: "0x41ec80 / 0x424730 / 0x424800 / 0x424f80",
   },
   /**

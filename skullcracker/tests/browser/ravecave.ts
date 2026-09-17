@@ -124,6 +124,55 @@ const main = async (): Promise<void> => {
   if (!idle.has(3300)) fail(`the scepter's own idle is 0x470c40 tag 8, cel 3300; saw ${[...idle].join(" ")}`);
   console.log(`ok    and the scepter arms you as weapon 16, on its own moveset`);
 
+  /**
+   * ...and the wraith has a MACHINE, which this page fought without.
+   *
+   * `0x424800` reads the same tracker the claw does and bands it against
+   * `0x46f8f8` — 700, 230, 130, 60. Inside sixty it does nothing but hang there
+   * (`0x424c07`); between sixty and 230 it picks a move; over 230 it closes.
+   */
+  await go(12900);
+  const modes = new Set<string>();
+  const cels = new Set<number>();
+  let beam = false;
+  for (let i = 0; i < 150; i++) {
+    const t = await say();
+    const w = /nearest initwraith [^·]*/.exec(t)?.[0] ?? "";
+    const m = /mode (\w+)/.exec(w)?.[1];
+    if (m) modes.add(m);
+    const c = /cel (\d+)/.exec(w)?.[1];
+    if (c) cels.add(Number(c));
+    if (/· stream \w+ cel 32\d\d/.test(t)) beam = true;
+    await page.waitForTimeout(120);
+  }
+  // which move it picks is `0x434540`'s business and the band decides which
+  // four are on offer, so this asks for the shape rather than for named moves:
+  // several distinct states, the close, and the cast that proves the beam
+  if (modes.size < 3) fail(`it should work through its own states; it only did ${[...modes].join(" ")}`);
+  if (!modes.has("close")) fail(`over 230 it closes; it never did — ${[...modes].join(" ")}`);
+  if (!modes.has("cast")) fail(`it should cast; it only did ${[...modes].join(" ")}`);
+  if (!beam) fail(`0x424d77 calls the scepter's own fire function; no beam ever came out`);
+  console.log(`ok    and it works its own bands — ${[...modes].sort().join(" ")} — and casts the scepter's beam`);
+
+  /**
+   * ...and inside sixty it only HOVERS, and it takes hold of nothing.
+   *
+   * `0x424c54` writes -3 into its strength and that reads like the grab, but
+   * `0x4248a9` is the function's only exit and writes a hundred back before it
+   * returns. Both -3 writes are dead in the shipped binary. Built the other way
+   * round first, and two hundred and sixty kicks took nothing off it.
+   */
+  await go(13000);
+  let hovered = "";
+  for (let i = 0; i < 60; i++) {
+    const t = await say();
+    if (/· HELD|· code -3/.test(t)) fail(`the wraith's -3 is overwritten by 0x4248ad; it should hold nothing`);
+    if (/mode hover/.test(t)) hovered = t;
+    await page.waitForTimeout(120);
+  }
+  if (!hovered) fail(`inside sixty it should hover and nothing else (0x424c07)`);
+  console.log(`ok    ...and inside sixty it only hovers, and takes hold of nothing — 0x4248ad writes 100 back`);
+
   await browser.close();
   console.log("PASS  RAVECAVE's Igors, its one wraith and its scepter are all where the records put them");
 };

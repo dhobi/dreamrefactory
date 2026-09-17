@@ -1007,7 +1007,23 @@ interface Enemy {
   /** still a statue: the player's point has not been inside that rect yet */
   asleep?: boolean;
   /** which of {@link Foe.drives}' states is running, for the one kind that has them */
-  mode?: "hover" | "charge" | "rush" | "combo" | "land" | "melee" | "antiAir";
+  mode?:
+    | "hover"
+    | "charge"
+    | "rush"
+    | "combo"
+    | "land"
+    | "melee"
+    | "antiAir"
+    // ...and the wraith's own, which are a different machine — see stepWraith
+    | "rouse"
+    | "rise"
+    | "held"
+    | "sink"
+    | "cast"
+    | "lunge"
+    | "sweep"
+    | "close";
   /** `AI+4` — decisions left before it breaks off and goes home */
   decisions?: number;
   /** has the reach already made its one call — `obj+0x42` passes the frame once */
@@ -3343,8 +3359,15 @@ function takeHits(): void {
   // already staggering, already down, already dead: no body box, nothing to hit
   if (p.act === "dying") return;
   // ...and with the switch off and nothing in the room that carries a code,
-  // there is nothing this function can do, so it does not look for the body box
-  if (!damageOn && !hereOf((l) => l.claws).length && !hereOf((l) => l.hands).length && !hereOf((l) => l.surges).length)
+  // there is nothing this function can do, so it does not look for the body box.
+  // The wraith counts: it is the one CREATURE whose strength is a code.
+  if (
+    !damageOn &&
+    !hereOf((l) => l.claws).length &&
+    !hereOf((l) => l.hands).length &&
+    !hereOf((l) => l.surges).length &&
+    !hereOf((l) => l.bushes).length
+  )
     return;
   const mine = playerBody();
   if (!mine) return;
@@ -6027,6 +6050,96 @@ function strikeCrow(c: Crow, damage: number): void {
  * lets the ordinary path play and MOVE it, since the charge's eleven pixels a
  * frame are the script's own `dx` and the gait block already applies those.
  */
+/**
+ * The WRAITH's own machine — `0x424800`, which this page fought without.
+ *
+ * The tracker (`0x45efd0`) gives it a band against `0x46f8f8`'s `700, 230, 130,
+ * 60` and `0x424f1c` sorts the five bands into four behaviours. Over 230 it
+ * closes on you; between 60 and 230 it fights, picking with `0x434540` out of
+ * the four moves the installs in that range offer; inside 60 it does nothing but
+ * hang there (`0x424c07`).
+ *
+ * Its blow while it hovers is the code -3 (`0x424c54`), which is why this could
+ * not have been built before the codes were — and the CAST is `0x424d77`, which
+ * calls the scepter's own fire function. See {@link Foe.haunts}.
+ *
+ * Returns true while it has taken the frame, the way {@link stepBoss} does.
+ */
+function stepWraith(e: Enemy, foe: Foe, run: number): boolean {
+  const h = foe.haunts;
+  if (!h) return false;
+  // `0x42487f` — dormant until the player's own POINT is inside its rect
+  if (e.asleep) {
+    const ay = p.y - p.feet;
+    if (!(p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom)) return true;
+    e.asleep = false;
+    e.anim = h.rouse;
+    e.mode = "rouse";
+    e.clock = 0;
+    return false;
+  }
+  if (e.mode === "rouse") {
+    if (e.clock < run) return false;
+    e.mode = "hover";
+    e.anim = h.hover;
+    e.clock = 0;
+    return false;
+  }
+  // a move plays out before anything else is chosen
+  if (e.mode && e.mode !== "hover" && e.clock < run) return false;
+  if (e.mode === "rise") {
+    e.mode = "held";
+    e.anim = h.held;
+    e.clock = 0;
+    return false;
+  }
+  if (e.mode === "held") {
+    e.mode = "sink";
+    e.anim = h.sink;
+    e.clock = 0;
+    return false;
+  }
+  if (e.mode === "cast" && !castBeams.has(e)) {
+    // `0x424d77` — one beam a cast, at the wraith rather than at the player
+    castBeams.add(e);
+    streams.push({ weapon: 16, x: e.x, y: e.y, facing: e.facing, state: "start", clock: 0 });
+  }
+  const gap = Math.abs(p.x - e.x);
+  // `0x45efd0`: the band is how many of the thresholds the gap is still past
+  const band = h.bands.filter((t) => gap <= t).length;
+  e.facing = p.x >= e.x ? 1 : -1;
+  if (band >= 4) {
+    // inside sixty — `0x424c07` and nothing else
+    if (e.mode !== "hover") {
+      e.mode = "hover";
+      e.anim = h.hover;
+      e.clock = 0;
+    }
+    return false;
+  }
+  if (band <= 1) {
+    // over 230: it closes, on the gait the drifting tag gives it
+    if (e.mode !== "close") {
+      e.mode = "close";
+      e.anim = foe.gait;
+      e.clock = 0;
+    }
+    return false;
+  }
+  // 60..230 is where it fights, and `0x434540` picks which
+  const moves = band === 2 ? (["rise", "cast", "lunge", "close"] as const) : (["lunge", "sweep", "cast", "close"] as const);
+  const pick = moves[Math.floor(Math.random() * moves.length)];
+  castBeams.delete(e);
+  e.mode = pick;
+  e.anim =
+    pick === "rise" ? h.rise : pick === "cast" ? h.cast : pick === "lunge" ? h.lunge : pick === "sweep" ? h.sweep : foe.gait;
+  e.clock = 0;
+  return false;
+}
+
+/** which wraiths have already let their beam go this cast — one each */
+const castBeams = new WeakSet<Enemy>();
+
 function stepBoss(e: Enemy, foe: Foe, run: number): boolean {
   // asleep: one cel, no motion, and `0x434200(playerPoint, AI+6)` every frame
   if (e.asleep) {
@@ -6271,6 +6384,7 @@ function stepEnemies(): void {
     }
     // the one class with states of its own gets them first, and takes the frame
     // when it is using it — see {@link stepBoss}
+    if (e.state === "gait" && foe.haunts && stepWraith(e, foe, run)) continue;
     if (e.state === "gait" && (foe.wake || foe.drives) && stepBoss(e, foe, run)) continue;
     // whatever it is doing, a thing carrying momentum flies, falls, and stops when
     // its OWN cel's box lands. This has to come before the animation states: the
