@@ -886,10 +886,13 @@ const ACTIONS: Readonly<Record<string, { cels: readonly number[]; dx: readonly n
    * all four carries `dx 0 dy 0` — the throw is not in the script, it is the
    * velocity exchange `0x430470` does afterwards.
    */
-  hurtFront: { cels: [5901, 5901, 5901], dx: [0, 0, 0], from: "0x4766f0 tag 1" },
-  hurtBack: { cels: [5902, 5902, 5902], dx: [0, 0, 0], from: "0x4766f0 tag 2" },
-  downFront: { cels: [5910, 5911, 5912, 5913, 5914, 5915, 5915, 5915, 5915], dx: [0, 0, 0, 0, 0, 0, 0, 0, 0], from: "0x476890 tag 0" },
-  downBack: { cels: [5940, 5941, 5942, 5943, 5944, 5944, 5944], dx: [0, 0, 0, 0, 0, 0, 0], from: "0x476890 tag 2" },
+  // CHARACTER 0's, out of `0x42ec86` (the stagger) and `0x42ec07` (the
+  // knockdown, past 0x3c). These four were character 1's — `0x4766f0` and
+  // `0x476890` — for the same reason the blow-code table was: see `src/codes.ts`
+  hurtFront: { cels: [921, 921, 921], dx: [0, 0, 0], from: "0x472140 tag 1" },
+  hurtBack: { cels: [922, 922, 922], dx: [0, 0, 0], from: "0x472140 tag 2" },
+  downFront: { cels: [900, 901, 902, 903, 903, 903, 903, 903, 903], dx: [0, 0, 0, 0, 0, 0, 0, 0, 0], from: "0x4722a8 tag 0" },
+  downBack: { cels: [940, 943, 944, 946, 947, 948, 949], dx: [0, 0, 0, 0, 0, 0, 0], from: "0x4722a8 tag 2" },
   /** `0x476758` tag 0, kind 26 — two frames a cel, and the kind that IS being dead */
   dying: { cels: [5910, 5911, 5912, 5913, 5914, 5915], dx: [0, 0, 0, 0, 0, 0], hold: 2, from: "0x476758 tag 0" },
   /** `0x476220` tag 5 — four frames a cel, the roll out of a bad landing */
@@ -2157,9 +2160,19 @@ function solidsIn(sbk: SbkFile, room: SbkRoom): Solids {
  *   `initplayer` count (`0x46b9b4`) and jumps to `0x402760` — it walks the level's
  *   spawn points and teleports the player to each. That is this function.
  * - **action 11** (`0x402d22`) toggles `0x46b1a8`, and that word selects between
- *   two whole player implementations — 0 dispatches to `0x42e360`/`0x428080`,
- *   1 to `0x448870`/`0x448bf0`. It is a CHARACTER switch, and the second one is
- *   the 7700/8300 cel set whose walk is 105 and run 200. Not wired here yet.
+ *   two whole player implementations. The pairing is `0x402950`'s, and the
+ *   addresses this page named before were wrong:
+ *
+ *   ```
+ *     402950  movsx eax, word ptr [0x46b1a8]
+ *     40295c  je 0x40296c  ->  call 0x428080   ; character 0 — the 4xxx cels
+ *     402961  je 0x402975  ->  call 0x442ad0   ; character 1 — the 9xxx cels
+ *   ```
+ *
+ *   `0x402900` and `0x402990` pair the rest the same way (`0x42e560`/`0x448a70`,
+ *   `0x42e580`/`0x448a90`), and each character has its own hit handler and its
+ *   own eight-slot blow-code table — see `src/codes.ts`. Character 1 is not
+ *   wired here; the page plays character 0 throughout.
  *
  * The rest of the debug set needs a modifier held (the event's modifier word
  * against `0x1fa0`), which routes through a second table at `0x403ea4`:
@@ -3358,11 +3371,15 @@ function strikeOf(
  * The player's own body box, from the cel showing now — and the reason a
  * knockdown is safe.
  *
- * `0x4303b3` skips a victim whose current cel has a degenerate body box, and
- * every reaction cel in `PLAYER.SBK` has none: 5900..5902, 5910..5915,
- * 5940..5944, 9550..9558 and 5020/5021 all carry a strike box or nothing at all.
- * So the player cannot be touched for the whole of a stagger, a knockdown or a
- * death — that, and not a timer, is the invulnerability this engine has.
+ * `0x4303b3` skips a victim whose current cel has a degenerate body box, so
+ * being untouchable is a property of the ART and not of a timer.
+ *
+ * The cels listed here before — 5900..5902, 5910..5915, 5940..5944, 9550..9558,
+ * 5020/5021 — are CHARACTER 1's, and character 1 does carry no box through any
+ * reaction. Character 0, which is what this page plays, is not so lucky: of its
+ * 38 reaction cels twelve carry a body box — 922, the held loop 4570..4572, the
+ * struggle 4575..4579 and the jolt 460..462. So a grab does NOT make you
+ * untouchable here; a knockdown does.
  */
 function playerBody(): { top: number; left: number; bottom: number; right: number } | null {
   const rec = player?.cels.find((c) => c.id === lastCel);
@@ -3433,11 +3450,14 @@ function takeCode(code: number, grip?: () => { x: number; y: number } | null, wh
     p.vyRaw = 0;
   }
   if (r.gravity !== null) p.gravityScale = r.gravity;
-  // `0x448cf4`: the PLAYER's own mirror flag, not the striker's — and against
-  // this port's facing rather than along it, because `obj+0x28 == 1` is the
-  // mirrored drawing. See {@link CodeReaction.shove}.
+  // No reaction in CHARACTER 0's table shoves — the ±50 this page used to apply
+  // is `0x448cf4`, in character 1's. Kept because the field is still read.
   if (r.shove) p.vx -= r.shove * p.facing;
   if (r.sound !== undefined) sound?.own(r.sound, p.x, p.y);
+  // ...and `-1` spends twenty: `0x42eb2b` is `0x402ac0(0x14)`, the only reaction
+  // in character 0's eight that costs health. Behind the damage switch, like
+  // every other way the game takes a point off you.
+  if (r.health && damageOn && p.act !== "dying") takeHealth(r.health);
   if (r.holds) {
     // a grab with no grip is still a grab: the engine enters the held state and
     // `0x4285b8` throws it straight back out on the next frame, which restores

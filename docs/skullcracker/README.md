@@ -531,9 +531,20 @@ carries `dx 0 dy 0` — the throw is not in the script, it is the elastic exchan
 
 **The invulnerability is not a timer.** There is no cooldown anywhere in the
 collision path. What protects the player is that `0x4303b3` skips a victim whose
-current cel has a degenerate body box, and every reaction cel in `PLAYER.SBK` has
-none: 5900–5902, 5910–5915, 5940–5944, 9550–9558 and 5020/5021. You are untouchable
-for exactly as long as the reaction plays, and that is the whole mechanism.
+current cel has a degenerate body box — so being untouchable is a property of the
+ART, for exactly as long as a reaction that carries no box plays.
+
+How much that protects you depends on **which character**, and the two are not
+alike. Character 1's reaction cels carry no body box at all — 5900–5902,
+5910–5915, 5940–5944, 9550–9558 and 5020/5021, every one of them — so it is
+untouchable through the whole of any reaction. Character 0, the one this page
+plays, is not: of its 38 reaction cels, **twelve carry a box** — 922, the held
+loop 4570–4572, the struggle 4575–4579, and the jolt 460–462. Held or jolted,
+character 0 can be hit again. Knocked flying or floored, it cannot.
+
+That asymmetry is worth stating plainly because the first version of this page
+had character 1's table while playing character 0, and inherited character 1's
+invulnerability as a claim about a player that does not have it.
 
 Falling is its own path and takes no blow at all. Past 360 of accumulated drop the
 player is cut into the flail (`0x442f3f`); on landing, past 530 it is simply death
@@ -1537,18 +1548,48 @@ arithmetic at all:
 
 So there are exactly eight codes, because the range test says so, and they are a
 dense enumeration the engine jumps through rather than a scattered convention.
-`0x4492b8` is the whole list, index 0 being −8:
+
+### ...and there are two of every one of them, because there are two players
+
+`PLAYER.SBK` holds two characters, and `0x402950` picks between them:
 
 ```
-  -8  0x448c91  knocked flying    9550..9558, +-50 into vX, a 0x78 shake
-  -7  0x448d24  floored           the same knockdown a hard blow gives
-  -6  0x448d72  flattened         and NOTHING in the game sends it
-  -5  0x448dae  slumped           half gravity
-  -4  0x448df4  shocked           9700..9702 out and back, then the knockdown
-  -3  0x448e90  GRABBED           no gravity, no velocity, and held
-  -2  0x448f06  jolted            unless you are crouched or on the board
-  -1  0x448f7c  spun              and it is also the only thing Boggs takes
+  402950  movsx eax, word ptr [0x46b1a8]
+  40295c  je 0x40296c  ->  call 0x428080   ; character 0 — the 4xxx cels
+  402961  je 0x402975  ->  call 0x442ad0   ; character 1 — the 9xxx cels
 ```
+
+Each has a hit handler of its own — `0x42e750` for character 0, installed on the
+player object at `0x42e443`, and `0x448c10` for character 1 — and each handler
+has its own eight-slot table with its own scripts. Character 1's cels are
+character 0's plus five thousand in most rows: 4550 → 9550, 4570 → 9570,
+20 → 5020.
+
+This page plays character 0 and had been reading **character 1's table**. The
+symptom was visible and took a player to find it: a hand takes hold of you in
+GRAVE, the grab installs 9570..9572 and the held loop that follows installs
+4570..4572, and you flicker between two different people every other frame for
+as long as it has you.
+
+Character 0's table is `0x42eda8`, index 0 being −8:
+
+```
+  -8  0x42e781  knocked flying    4550..4558, a 0x78 shake, and NO shove
+  -7  0x42e807  floored           940..949, and only from the ground
+  -6  0x42e86d  flattened         900..903, full gravity — nothing sends it
+  -5  0x42e8b3  slumped           920..922, half gravity
+  -4  0x42e8f9  shocked           952 922 951 921 then 900..903
+  -3  0x42e995  GRABBED           4570..4572, no gravity, no velocity, held
+  -2  0x42ea34  jolted            460..462 five times over
+  -1  0x42eaaa  spun              20/21 — and it TAKES TWENTY HEALTH
+```
+
+Two of those differ from character 1's in more than art. Character 0 does not
+shove on −8: the ±50 against `obj+0x28` is `0x448cf4`, character 1's, and
+`0x42e781` writes no velocity at all — the cels carry the fall. And character
+0's −1 spends twenty health at `0x42eb2b` (`0x402ac0(0x14)`), where character
+1's spends none. "No reaction in the table takes a point off anybody" was true
+of the table this page had read, and not of the one it was playing.
 
 Getting that census right needed the disassembler pointed differently. A sweep
 in overlapping windows can begin mid-instruction, and everything it decodes

@@ -73,9 +73,11 @@ const main = async (): Promise<void> => {
   await page.keyboard.up("ArrowRight");
   if (after >= 1200) fail(`walking under three presses should cost health; still ${after}`);
   if ((1200 - after) % 64 !== 0) fail(`a press costs 64 a time; the player lost ${1200 - after}`);
-  // 5940..5944 is `0x476890` tag 2, the knockdown taken from behind
-  if (![5940, 5941, 5942, 5943, 5944].some((c) => seen.has(c))) {
-    fail(`64 is over 0x3c, so it should knock down, not stagger; saw ${[...seen].filter((c) => c > 5000 && c < 6000).join(" ")}`);
+  // 940..949 is `0x4722a8` tag 2, the knockdown taken from behind — CHARACTER
+  // 0's, which is the player this page runs. It read 5940..5944 before, which is
+  // character 1's `0x476890`; see `src/codes.ts` for the two of them.
+  if (![900, 901, 902, 903, 940, 943, 944, 946, 947, 948, 949].some((c) => seen.has(c))) {
+    fail(`64 is over 0x3c, so it should knock down, not stagger; saw ${[...seen].filter((c) => c < 1000).join(" ")}`);
   }
   console.log(`ok    a press takes ${1200 - after} in 64s and knocks the player down`);
 

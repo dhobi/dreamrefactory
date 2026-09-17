@@ -78,6 +78,29 @@ const main = async (): Promise<void> => {
     fail(`the grip is the centre of the fist's box; the player is at ${held} and the hand at ${handAt}`);
   console.log(`ok    and plants the player at the centre of that box — x ${held} against the hand's ${handAt}`);
 
+  /**
+   * ...and the player held is ONE person.
+   *
+   * There are two players in `PLAYER.SBK` and `0x402950` picks between them on
+   * `0x46b1a8`: character 0 is `0x428080` and the 4xxx cels, character 1 is
+   * `0x442ad0` and the 9xxx. Each has its own eight-slot reaction table —
+   * `0x42eda8` against `0x4492b8` — and this page read character 1's while
+   * playing character 0, so the grab installed 9570..9572 and the hold that
+   * followed installed 4570..4572. You flickered between two different people
+   * every other frame, all the way through a grab in GRAVE.
+   */
+  const worn = new Set<string>();
+  for (let i = 0; i < 24; i++) {
+    const now = await say();
+    const c = /cel (\d+)/.exec(now)?.[1];
+    if (c && /· code -3|· HELD/.test(now)) worn.add(c);
+    await page.waitForTimeout(45);
+  }
+  const wrong = [...worn].filter((c) => Number(c) >= 9000);
+  if (wrong.length) fail(`the hold is character 0's 4570..4572; it also showed character 1's ${wrong.join(" ")}`);
+  if (!worn.size) fail(`saw no player cel at all through the hold`);
+  console.log(`ok    ...as ONE person — ${[...worn].sort().join(" ")}, character 0's own, no 9xxx among them`);
+
   // 3. the fist opens and that, and only that, is what lets go — `0x4285b8`
   const free = await until(/· nearest hand underfoot (sinking|down|up)/, 9000);
   if (!free) fail(`the hand never opened again`);
@@ -103,14 +126,17 @@ const main = async (): Promise<void> => {
   await go(12, 17967, 15100);
   const four = await until(/· code -4 shocked/, 9000);
   if (!four) fail(`TOWER's initsurge carries -4 (0x426a90); the HUD says ${/· code[^·]*/.exec(await say())?.[0] ?? "nothing"}`);
-  console.log(`ok    and the surge's -4 shocks you, out of 0x476758 tag 3`);
+  console.log(`ok    and the surge's -4 shocks you, out of 0x4721a0 tag 3`);
 
   // 6. none of it is damage, and the switch has nothing to do with it
   const t6 = await say();
   if (!/damage off/.test(t6)) fail(`this ran with the damage switch on; the point is that it does not matter`);
   const hp = /(\d+)\/(\d+)hp/.exec(t6);
-  if (hp && hp[1] !== hp[2]) fail(`a code took health: ${hp[0]}`);
-  console.log(`ok    with damage off throughout — a code is a message, and no row of the table spends health`);
+  if (hp && hp[1] !== hp[2]) fail(`a code took health with the switch off: ${hp[0]}`);
+  // ...and "no row spends health" was character 1's table, not this one: `-1` is
+  // `0x42eb2b`, `0x402ac0(0x14)`, twenty off — behind the switch like every
+  // other way the game takes a point, which is why it stays full here
+  console.log(`ok    with damage off throughout — a code is a message, and nothing spent a point`);
 
   // 7. ...and BARREL's claw, which is the same -3 out of a different class.
   //    `0x41734a` sends it diving off the tracker's band table (180, 140, 100),
