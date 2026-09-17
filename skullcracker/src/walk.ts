@@ -6598,7 +6598,9 @@ function loop(now: number): void {
     // race between two key events and one tick.
     const letGo = p.climbing && (held.right !== held.left || held.jump || jumpPressed);
     const ladder = p.act || letGo ? undefined : p.climbing || held.up || held.down ? onLadder() : undefined;
-    const dir = ladder || p.act ? 0 : (held.right ? 1 : 0) - (held.left ? 1 : 0);
+    // ...and INV stands you still: state 15 reads no direction at all, so a
+    // holstered player cannot walk while the button is down
+    const dir = ladder || p.act || held.inv ? 0 : (held.right ? 1 : 0) - (held.left ? 1 : 0);
     p.moving = dir !== 0;
     /**
      * The run — `[0x4ac3fe]`, which is W held, and see {@link KEYS} for why that
@@ -7236,7 +7238,19 @@ function loop(now: number): void {
    * re-implements the idle, the walk, the run, the jump, the fall, the landing
    * and the duck in its weapon's own cels. See {@link Moveset}.
    */
-  const kit = inv.armed ? WEAPONS[inv.weapon]?.moveset ?? null : null;
+  /**
+   * ...unless INV is down, which is the whole of what that button does.
+   *
+   * Every one of the player's states, armed and unarmed, answers `0x4ac386`
+   * with the same two instructions — `mov word ptr [eax+0x18], 0xf` — and state
+   * 15 (`0x428975`) is four lines long: while the button is held it stands you
+   * on `0x471648` tag 0, the plain unarmed idle, and when it comes up it reads
+   * `0x479434` and puts you back into the idle of whatever you are carrying.
+   *
+   * So INV is a HOLSTER. There is no inventory screen in `SC.EXE` — see the
+   * README for the wrong turning that went looking for one at `0x42edd0`.
+   */
+  const kit = inv.armed && !held.inv ? WEAPONS[inv.weapon]?.moveset ?? null : null;
   const seq = acting
     ? acting.cels
     : p.climbing
@@ -7573,6 +7587,7 @@ function loop(now: number): void {
     (p.act === "held" || p.act === "struggle" ? ` · <b>${p.act}</b> frame ${p.heldClock}` : "") +
     (p.heldBy ? ` · HELD, gravity x${p.gravityScale}` : "");
   const air =
+    (held.inv ? " · <b>INV held</b> — holstered, standing" : "") +
     (bolts.length ? ` · ${bolts.length} bolts, nearest at x ${Math.round(bolts[0].x)}` : "") +
     (streams.length
       ? ` · stream ${streams[0].state} cel ${streamCel(streams[0])} at x ${Math.round(streams[0].x)}` +

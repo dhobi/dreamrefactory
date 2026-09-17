@@ -214,6 +214,37 @@ const main = async (): Promise<void> => {
   if (!(spent < 41)) fail(`0x44dae0 spends a round a frame while it pours; the panel says ${await held()}`);
   console.log(`ok    WOODS' flamer holds 41 of 160, has its own cels, and pours 41 down to ${spent}`);
 
+  /**
+   * ...and INV holsters it, which is the whole of that button.
+   *
+   * Every player state answers `0x4ac386` with `mov word ptr [eax+0x18], 0xf`,
+   * and state 15 (`0x428975`) stands you on `0x471648` tag 0 while it is held
+   * and reads `0x479434` to restore your weapon's idle when it comes up. There
+   * is no inventory screen anywhere in `SC.EXE`.
+   */
+  await go(9, 2058);
+  await take();
+  if (!/holding soaker 41\/160/.test(await say())) fail(`GRAVE's statsoaker should arm you: ${await held()}`);
+  const holstered = await showed(900, ["i"]);
+  if (holstered.some((c) => c > 100)) fail(`INV stands you on the unarmed idle, cels 1..8; saw ${holstered.join(" ")}`);
+  console.log(`ok    and INV holsters it — the plain idle's own ${holstered.join(" ")}`);
+
+  // ...and it stands you still: state 15 reads no direction at all
+  await page.keyboard.down("i");
+  await page.waitForTimeout(200);
+  const stood = await at();
+  await page.keyboard.down("ArrowRight");
+  await page.waitForTimeout(800);
+  await page.keyboard.up("ArrowRight");
+  const moved = await at();
+  await page.keyboard.up("i");
+  if (moved !== stood) fail(`state 15 has no walk; the player went ${stood} -> ${moved} with INV down`);
+  await page.waitForTimeout(400);
+  if (!/holding soaker 41\/160/.test(await say())) fail(`releasing INV restores the weapon untouched: ${await held()}`);
+  const back = await showed(500, []);
+  if (!back.includes(3200)) fail(`0x428a73 puts the soaker's own idle back; saw ${back.join(" ")}`);
+  console.log(`ok    ...holds you still while it is down, and gives the gun back on 3200 when it comes up`);
+
   await browser.close();
   console.log("PASS  the guns are placed, reached for, carried between levels and fired");
 };

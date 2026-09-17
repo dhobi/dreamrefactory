@@ -1665,6 +1665,34 @@ scales the striking cel's own `(dy, dx)` by the object's strength, and the
 soaker's 9806 carries `dx 8`. Eight a frame, so a two-hundred-health zombie
 takes about twenty-five frames of water.
 
+### INV is a holster, and there is no inventory screen
+
+This repo carried a gap that said "the inventory screen behind `0x42edd0`'s
+message 1 is not here", and both halves of that were wrong. `0x42edd0` message 1
+is the CROUCH state — it reads the keys, probes 0x23 ahead for a pickup and
+installs `0x4717c8` — and there is no inventory screen anywhere in `SC.EXE`.
+
+What the fourth button on the lower band actually does is two instructions, and
+all 81 of its readers are the same two:
+
+```
+  4298c0  cmp word ptr [0x4ac386], 0
+  4298cf  mov word ptr [eax+0x18], 0xf     ; ...every player state, armed or not
+```
+
+State 15 is `0x428975` and it is four lines long. While the button is held it
+stands you on `0x471648` tag 0 — the plain unarmed idle, the one that breathes —
+and reads no direction at all, so you cannot walk. When the button comes up it
+reads `0x479434` and dispatches through the map at `0x429624` to put you back
+into the idle of whatever you are carrying: `0x471458` for the blaster,
+`0x470a78` for the flare gun, and the unarmed idle for anything that is not one
+of the five.
+
+So it is a holster. You put the gun away to look at yourself, and taking your
+finger off draws it again — nothing is spent, nothing is swapped, and no screen
+is drawn. Finding that out cost less than building the screen would have, which
+is the argument for reading the executable before believing a gap.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are
@@ -1708,8 +1736,8 @@ a level with no class anywhere.
 
 ### The systems
 
-- **All five weapons fire now** — see the section above. The inventory screen
-  behind `0x42edd0`'s message 1 is still not here.
+- **All five weapons fire now**, and the INV button with them — see the section
+  above. There was never an inventory screen to build.
 - **The blow codes are carried now** — see the section above. What is still
   missing behind them is the two classes that would use one: BARREL's claw is
   showing the wrong one of its four kinds to have a grip, and the bush's grab
