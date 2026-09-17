@@ -1600,6 +1600,71 @@ one of them. The remaining work is kind 1's own tag machine at `0x4173bf`, not
 anything about the codes — which is why the claw is listed below rather than
 here.
 
+## Five weapons, and three of them pour
+
+Each weapon owns a state machine and a fire function, and the table at
+`0x4a7f10 + id * 12` is how they meet: `{dword icon, word max, word rounds,
+dword fire}`, with the fire pointer at +8.
+
+```
+   6  blaster   state 0x42dbd0   fire 0x412a70   script 0x471458   cels 4000s
+   9  flaregun  state 0x42cb80   fire 0x436d40   script 0x470a78   cels 2700s
+  10  flamer    state 0x42b860   fire 0x44dae0   script 0x470f98   cels 1200s
+  12  soaker    state 0x42c1e0   fire 0x41f820   script 0x471260   cels 3200s
+  16  scepter   state 0x42d2b0   fire 0x41f6b0   script 0x470c40   cels 3300s
+```
+
+A state machine dispatches on the TAG the player is on (`movsx eax, [eax+0x44]`)
+and calls its weapon's fire function with a small number — the VARIANT — which
+every fire function reads its own way. Tag 2 is the standing shot and tag 6 the
+ducking one across all five, and the flamer and soaker send `-2` from the tags
+either side of those, which is how a stream knows to stop.
+
+### The three that pour
+
+The flamer, the soaker and the scepter do not launch anything. Each adds an
+object to a list the player owns, and `0x421700` plants it fresh every frame:
+
+```
+  42170a  if (player mirrored)  x = player.x - user[+4]
+  42171e  else                   x = player.x + user[+4]
+  42172f  x += player.vx          ; ...and it leads your own motion
+  42173b  y = user[+2] + player.y + player.vy
+```
+
+So a stream is not fired and forgotten, it is redrawn where you are — which is
+why walking while you hold the button sweeps it across a room. Two negative
+variants end it: `-2` walks the list installing the shutting-off tag, and `-1`
+writes the expire kind straight into every member. The player's own hit handler
+sends that `-1` before it has even looked at the blow (`0x448c19`, `0x448c40`),
+so **being hit puts your flamethrower out**.
+
+They cost a round an engine frame (`0x45ef00(1)`), which makes a full hundred
+and sixty about eleven seconds of flame — against the scepter's **forty a
+shot**, four shots and no more. RAVECAVE's `statscepter` files no rounds at all,
+so what you get is the single round `0x45eed0` gives for arming you, one beam,
+and an empty gauge.
+
+### ...and they do not all hit with the same thing
+
+```
+  0x4217ba   soaker    mov word ptr [edi+0x1a], 0x64    ; a hundred, every frame
+  0x424630   scepter   mov word ptr [ecx+0x1a], 0x64    ; a hundred
+  0x453b9b   flamer    mov word ptr [esi+0x1a], 0xfff7  ; MINUS NINE
+```
+
+Two of the three are ordinary damage; the flame is a code. And -9 is the one
+code that is not in the player's own table — it falls below `0x448c84`'s range
+test — so what reads it is five handlers of their own (`0x44f0aa`, `0x4520d8`,
+`0x4547b3`, `0x4550d3`, `0x455763`) which accept nothing else. Like the
+blaster's bolt, the flamethrower is a key rather than a weapon, and a full gauge
+of it kills nothing in any of these sixteen levels.
+
+The damage, where there is any, is small and comes from the art: `0x42f910`
+scales the striking cel's own `(dy, dx)` by the object's strength, and the
+soaker's 9806 carries `dx 8`. Eight a frame, so a two-hundred-health zombie
+takes about twenty-five frames of water.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are
@@ -1643,10 +1708,8 @@ a level with no class anywhere.
 
 ### The systems
 
-- **One weapon of five fires.** The flare gun's `0x436d40` is a shot and does a
-  number. The flamer and the soaker are held STREAMS; the blaster's and the
-  scepter's fire functions have not been read. The inventory screen behind
-  `0x42edd0`'s message 1 is not here either.
+- **All five weapons fire now** — see the section above. The inventory screen
+  behind `0x42edd0`'s message 1 is still not here.
 - **The blow codes are carried now** — see the section above. What is still
   missing behind them is the two classes that would use one: BARREL's claw is
   showing the wrong one of its four kinds to have a grip, and the bush's grab

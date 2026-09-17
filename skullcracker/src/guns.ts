@@ -434,6 +434,139 @@ export interface Bolt {
   spent: boolean;
 }
 
+/**
+ * The three HELD weapons — the flamer, the soaker and the scepter — and they
+ * are one shape with three sets of numbers.
+ *
+ * Each fire function takes the same two arguments as the blaster's and reads
+ * the second one the same way, but instead of launching something it adds an
+ * object to a LIST that hangs off the player:
+ *
+ * ```
+ *   flamer   0x44dae0   list 0x4788c8   script 0x478858   class 0x453b80
+ *   soaker   0x41f820   list 0x470658   script 0x4705e0   class 0x421630
+ *   scepter  0x41f6b0   list 0x46f580   script 0x46f4d0   class 0x424510
+ * ```
+ *
+ * ...and two negative variants stop it. `-1` walks the list and writes 1 into
+ * every member's `obj+0x18`, which is the kind that means "expire"; `-2` walks
+ * it and installs the script's tag 2, which is the animation of shutting off.
+ * The armed state machine sends `-2` as the firing tag ends, and the player's
+ * own hit handler sends `-1` — `0x448c19` and `0x448c40` test the kinds 0x12 and
+ * 0x13 and cancel the stream with it. **Being hit puts your flamethrower out.**
+ *
+ * ## They do not all hit with the same thing
+ *
+ * ```
+ *   0x4217ba   soaker    mov word ptr [edi+0x1a], 0x64    ; a hundred, every frame
+ *   0x424630   scepter   mov word ptr [ecx+0x1a], 0x64    ; a hundred
+ *   0x453b9b   flamer    mov word ptr [esi+0x1a], 0xfff7  ; MINUS NINE
+ * ```
+ *
+ * So two of the three are ordinary damage and the flame is a code — and -9 is
+ * the one code that is not in the player's table at all (it falls below
+ * `0x448c84`'s range test). What reads it is five handlers of their own:
+ * `0x44f0aa`, `0x4520d8`, `0x4547b3`, `0x4550d3` and `0x455763`, which accept
+ * nothing else. Like the blaster, the flamethrower is a key rather than a
+ * weapon.
+ *
+ * And they are not free: `0x45ef00` takes rounds off the current weapon, one a
+ * frame for the flamer and the soaker — a full 160 is about eleven seconds of
+ * flame at fifteen frames a second — against **forty a shot** for the scepter,
+ * which is four shots and no more.
+ */
+export interface StreamKit {
+  /** tag 0 — the spout opening */
+  start: { cels: readonly number[]; hold: number; from: string };
+  /** tag 1 — what it does while it is held */
+  loop: { cels: readonly number[]; hold: number; from: string };
+  /** tag 2 — what `-2` installs */
+  stop: { cels: readonly number[]; hold: number; from: string };
+  /**
+   * Where it hangs off the player, per variant, in the fire function's own
+   * order. `dx` is along the facing and `dy` is up-negative, as everywhere.
+   */
+  at: readonly { dx: number; dy: number }[];
+  /** which of those the STANDING firing tag uses */
+  standing: number;
+  /** `obj+0x1a`: a hundred, or the code -9 */
+  blow: number;
+  /** rounds per engine frame — `0x45ef00`'s argument */
+  perFrame: number;
+  from: string;
+}
+
+export const STREAMS: Readonly<Record<number, StreamKit>> = {
+  10: {
+    start: { cels: [9500, 9501, 9502, 9503, 9504, 9505, 9506, 9507], hold: 1, from: "0x478858 tag 0" },
+    loop: { cels: [9508, 9509, 9510, 9511], hold: 1, from: "0x478858 tag 1" },
+    stop: { cels: [9504], hold: 1, from: "0x478858 tag 2" },
+    // `0x44db90` and the three after it
+    at: [
+      { dx: 0x87, dy: -0x23 },
+      { dx: 0x3f, dy: 0xf },
+      { dx: 0x31, dy: -0x16 },
+      { dx: 0x42, dy: 5 },
+    ],
+    /** `0x42b860`'s tag 2, which is the one `0x470f98` draws cel 1240 on */
+    standing: 0,
+    /** `0x453b9b` — a CODE, and nothing ordinary reads it */
+    blow: -9,
+    perFrame: 1,
+    from: "0x44dae0 / 0x478858 / 0x453b80, list 0x4788c8",
+  },
+  12: {
+    start: { cels: [9800, 9801, 9802, 9803, 9804, 9805, 9806, 9807], hold: 1, from: "0x4705e0 tag 0" },
+    loop: { cels: [9806, 9807], hold: 1, from: "0x4705e0 tag 1" },
+    stop: { cels: [9804, 9803, 9802, 9801], hold: 1, from: "0x4705e0 tag 2" },
+    // `0x41f8d0` and the three after it
+    at: [
+      { dx: 0xaa, dy: -0x1b },
+      { dx: 0x61, dy: 0 },
+      { dx: 0x3c, dy: -0xc },
+      { dx: 0x42, dy: 0xa },
+    ],
+    standing: 0,
+    /** `0x4217ba`, written fresh every frame the stream runs */
+    blow: 100,
+    perFrame: 1,
+    from: "0x41f820 / 0x4705e0 / 0x421630, list 0x470658",
+  },
+  16: {
+    start: { cels: [3270, 3271, 3272, 3273], hold: 1, from: "0x46f4d0 tag 0" },
+    loop: { cels: [3272, 3273], hold: 1, from: "0x46f4d0 tag 0's own tail" },
+    stop: { cels: [3280, 3281, 3282, 3281, 3282], hold: 1, from: "0x46f4d0 tag 2" },
+    /**
+     * `0x41f755` onward, and the scepter's are kept the other way round in the
+     * user struct — `user+2` is the dx and `user+0` the dy.
+     */
+    at: [
+      { dx: 0x46, dy: 0 },
+      { dx: 0x6e, dy: -3 },
+      { dx: 0x67, dy: 0x1b },
+      { dx: 0x30, dy: -130 },
+      { dx: 0x30, dy: -130 },
+    ],
+    /** `0x42d2b0`'s tag 4, which is the cel 3391 `0x470c40` draws */
+    standing: 2,
+    /** `0x424630` */
+    blow: 100,
+    /** `0x41f77f` — FORTY, which is four shots out of a full gauge */
+    perFrame: 0x28,
+    from: "0x41f6b0 / 0x46f4d0 / 0x424510, list 0x46f580",
+  },
+};
+
+/** one live stream, hanging off the player */
+export interface Stream {
+  weapon: number;
+  x: number;
+  y: number;
+  facing: number;
+  state: "start" | "loop" | "stop";
+  clock: number;
+}
+
 /** one placed weapon or refill, as its record stands in the level */
 export interface Gun {
   code: number;

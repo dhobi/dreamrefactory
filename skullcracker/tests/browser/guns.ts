@@ -207,8 +207,12 @@ const main = async (): Promise<void> => {
   if (fidle.join() !== "1215,1216,1217") fail(`the flamer's idle is 0x470f98 tag 0, three cels; saw ${fidle.join(" ")}`);
   const ffire = await showed(900, ["p"]);
   if (!ffire.includes(1240)) fail(`its fire pose is tag 2, cel 1240; saw ${ffire.join(" ")}`);
-  if ((await rounds()) !== 41) fail(`0x44dae0 spends no rounds; the panel says ${await held()}`);
-  console.log(`ok    WOODS' flamer holds 41 of 160, has its own cels, and spends nothing when it fires`);
+  // ...and now it POURS: `0x42bab5` spends a round an engine frame for as long
+  // as the tag runs, which this suite once asserted could not happen because
+  // the flamer had no fire function here at all. See tests/browser/streams.ts.
+  const spent = await rounds();
+  if (!(spent < 41)) fail(`0x44dae0 spends a round a frame while it pours; the panel says ${await held()}`);
+  console.log(`ok    WOODS' flamer holds 41 of 160, has its own cels, and pours 41 down to ${spent}`);
 
   await browser.close();
   console.log("PASS  the guns are placed, reached for, carried between levels and fired");

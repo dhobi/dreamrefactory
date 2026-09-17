@@ -158,7 +158,19 @@ import {
   Boggs,
 } from "./props";
 import { DEATH_FILMS, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
-import { BOLT, CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, WEAPONS, type Bolt, type Flare, type Gun } from "./guns";
+import {
+  BOLT,
+  CHAPTER_WEAPON,
+  FLARE,
+  GRAB,
+  GUN_CODES,
+  STREAMS,
+  WEAPONS,
+  type Bolt,
+  type Flare,
+  type Gun,
+  type Stream,
+} from "./guns";
 import { BLOW_CODES, HELD, gripOf } from "./codes";
 import {
   CEL,
@@ -1531,6 +1543,7 @@ async function loadLevel(index: number): Promise<void> {
   columns = new Map();
   flares = [];
   bolts = [];
+  streams = [];
   // the chapter's own entry function: zero every count, name the chapter's
   // weapon, and leave the hands empty (`0x4511f0` and its three siblings). It
   // runs once per CHAPTER, not once per level, and that is the whole reason
@@ -3234,6 +3247,9 @@ function gripAt(id: number, x: number, y: number): { x: number; y: number } | nu
 function takeCode(code: number, grip?: () => { x: number; y: number } | null, what?: object): boolean {
   const r = BLOW_CODES[code];
   if (!r) return false;
+  // `0x448c19` and `0x448c40`: the FIRST thing the player's handler does, before
+  // it has even looked at the strength, is cancel a running stream with -1
+  killStreams();
   // the same thing, still holding you: `0x43045d` disarms a hitter the frame it
   // connects and the classes re-arm on the next, so without this the reaction
   // restarts every frame and the grab never reaches its own loop
@@ -4573,6 +4589,8 @@ const inv = {
 let flares: Flare[] = [];
 /** the blaster's bolts in the air — see {@link BOLT} */
 let bolts: Bolt[] = [];
+/** the flame, the water and the beam — see {@link STREAMS} */
+let streams: Stream[] = [];
 
 /** which chapter's entry function has already run — see {@link CHAPTER_WEAPON} */
 let chapterWeapon: number | null = null;
@@ -4700,12 +4718,15 @@ function takeGun(): void {
  * Fire — `0x42cd53`, which waits for the wind-up's last frame and then calls
  * the weapon's own function through `0x4a7f10 + id * 12 + 8`.
  *
- * Only the flare gun's is here; {@link FLARE} says why the other four are not.
- * `0x436d43` refuses outright with an empty magazine, so an armed player with
- * no rounds plays the wind-up and nothing comes out — which is the original's
- * behaviour and not an omission.
+ * All five are here now: the flare gun's arc ({@link FLARE}), the blaster's bolt
+ * ({@link BOLT}), and the three held streams ({@link STREAMS}). `0x436d43`
+ * refuses outright with an empty magazine, so an armed player with no rounds
+ * plays the wind-up and nothing comes out — which is the original's behaviour
+ * and not an omission, and is exactly what RAVECAVE's scepter does: taking it
+ * arms you with the one round `0x45eed0` gives and the weapon spends forty.
  */
 function fireGun(): void {
+  if (STREAMS[inv.weapon]) return openStream();
   if (inv.weapon === 6) return fireBolt();
   if (inv.weapon !== 9 || roundsIn(9) <= 0) return;
   inv.rounds[9] = roundsIn(9) - 1;
@@ -4723,6 +4744,129 @@ function fireGun(): void {
     burn: null,
     spent: false,
   });
+}
+
+/**
+ * Open a held stream — the flamer, the soaker or the scepter.
+ *
+ * One at a time: the fire functions add to a list the player already owns, and
+ * the state machine sends `-2` before it sends a fresh variant (`0x42ba49` then
+ * `0x42ba7b`), so a second call replaces rather than doubles.
+ */
+function openStream(): void {
+  const kit = STREAMS[inv.weapon];
+  if (!kit || roundsIn(inv.weapon) <= 0) return;
+  if (streams.some((q) => q.state !== "stop")) return;
+  streams.push({ weapon: inv.weapon, x: p.x, y: p.y, facing: p.facing, state: "start", clock: 0 });
+}
+
+/** `-2`: every live one goes to its tag 2, the animation of shutting off */
+function shutStreams(): void {
+  for (const q of streams) if (q.state !== "stop") { q.state = "stop"; q.clock = 0; }
+}
+
+/** `-1`: `0x448c19`'s cancel — the stream simply stops existing */
+function killStreams(): void {
+  streams = [];
+}
+
+/**
+ * The streams, one engine frame at a time.
+ *
+ * They hang off the player rather than travelling: the fire function files a
+ * `(dx, dy)` for the pose and the object is redrawn there every frame, which is
+ * why walking while you fire sweeps the flame across a room. Rounds come off
+ * once a frame (`0x45ef00`), and the blow is whatever {@link STREAMS} says —
+ * a hundred for two of them and the code -9 for the flame, which nothing in
+ * these levels reads.
+ */
+function stepStreams(): void {
+  const lvl = level;
+  if (!lvl) return;
+  const i = lvl.rooms.indexOf(p.room!);
+  const pool = i >= 0 ? lvl.spawned[i] : [];
+  for (const q of streams) {
+    const kit = STREAMS[q.weapon];
+    if (!kit) continue;
+    q.clock += 1;
+    /**
+     * `0x421700` plants it fresh every frame, and the formula is the whole of
+     * how a stream behaves:
+     *
+     * ```
+     *   42170a  if (player mirrored)  x = player.x - user[+4]
+     *   42171e  else                  x = player.x + user[+4]
+     *   42172f  x += player.vx        ; ...and it leads the player's own motion
+     *   42173b  y = user[+2] + player.y + player.vy
+     * ```
+     *
+     * So it is not fired and forgotten, it is redrawn where you are — which is
+     * why walking while you hold the button sweeps it across a room.
+     */
+    const at = kit.at[kit.standing] ?? kit.at[0];
+    q.facing = p.facing;
+    q.x = p.x + p.facing * at.dx + p.vx;
+    q.y = p.y - p.feet + at.dy + p.vyRaw;
+    if (q.state === "start" && q.clock >= kit.start.cels.length * kit.start.hold) {
+      // `0x4217a5` — the start animation ending is what installs the loop
+      q.state = "loop";
+      q.clock = 0;
+    }
+    if (q.state === "stop") continue;
+    // `0x45ef00(1)` or the scepter's forty, and an empty gauge shuts it off
+    inv.rounds[q.weapon] = Math.max(0, roundsIn(q.weapon) - kit.perFrame);
+    if (roundsIn(q.weapon) <= 0) {
+      q.state = "stop";
+      q.clock = 0;
+      continue;
+    }
+    // ...and what it touches. A strength below 1 is not a blow, so the flame
+    // reaches everything in these sixteen levels and hurts none of it.
+    if (kit.blow < 1) continue;
+    const cel = lvl.sbk.cels.find((c) => c.id === streamCel(q));
+    const box = streamBox(q, cel);
+    if (!cel?.blow || !box) continue;
+    for (const e of pool) {
+      if (e.state === "dead" || e.state === "burst") continue;
+      const c = lvl.sbk.cels.find((z) => z.id === celOf(e));
+      if (!c) continue;
+      const hurt = hurtBox(e, c, lvl);
+      if (!(box.right > hurt.left && box.left < hurt.right && box.bottom > hurt.top && box.top < hurt.bottom)) continue;
+      // `0x42f910`: the cel's OWN pair scaled by the object's strength, and the
+      // magnitude of that is the damage. It is small on purpose — the soaker's
+      // 9806 carries `dx 8`, so a stream is eight a frame rather than a blow,
+      // and a two-hundred-health zombie takes about twenty-five frames of it.
+      const scale = kit.blow / 100;
+      const bx = cel.blow.dx * scale;
+      const by = cel.blow.dy * scale;
+      strikeFoe(e, Math.sqrt(bx * bx + by * by), { dx: bx, dy: by }, q.facing, (box.top + box.bottom) / 2, hurt);
+    }
+  }
+  streams = streams.filter((q) => !(q.state === "stop" && q.clock >= STREAMS[q.weapon]!.stop.cels.length * STREAMS[q.weapon]!.stop.hold));
+}
+
+/**
+ * A stream's reach: its current cel's own STRIKE box, about the ANCHOR.
+ *
+ * The long cels are why this has to be the authored rect rather than the art —
+ * the soaker's 9806 is 243 wide and its box is `x 8..200`, so the spray stops
+ * short of its own pixels at both ends, and the flame's 9508 reaches `x 5..254`
+ * of 255. And it is about the anchor, the way `hurtBox` does it and `0x4026d0`
+ * mirrors: reflecting about the cel's centre instead puts a stream fired west
+ * half a screen from where it is drawn.
+ */
+function streamBox(q: Stream, cel: SbkCel | undefined): { top: number; left: number; bottom: number; right: number } | null {
+  if (!cel?.strike) return null;
+  const b = q.facing < 0 ? { ...cel.strike, x0: -cel.strike.x1, x1: -cel.strike.x0 } : cel.strike;
+  return { left: q.x + b.x0, right: q.x + b.x1, top: q.y + b.y0, bottom: q.y + b.y1 };
+}
+
+/** which cel a stream is showing */
+function streamCel(q: Stream): number {
+  const kit = STREAMS[q.weapon]!;
+  const a = q.state === "start" ? kit.start : q.state === "loop" ? kit.loop : kit.stop;
+  const k = Math.floor(q.clock / a.hold);
+  return q.state === "loop" ? a.cels[k % a.cels.length] : a.cels[Math.min(a.cels.length - 1, k)];
 }
 
 /**
@@ -6193,6 +6337,34 @@ function drawFlares(camX: number, camY: number): void {
   }
 }
 
+/**
+ * The flame, the water and the beam — and they MIRROR, about their anchor.
+ *
+ * `drawLevelCel` never flips, which is right for a grave or a blade and wrong
+ * for anything that comes out of a person: a stream fired west was drawn
+ * pointing east, over the player's own shoulder.
+ */
+function drawStreams(camX: number, camY: number): void {
+  const lvl = level;
+  if (!lvl) return;
+  for (const q of streams) {
+    const id = streamCel(q);
+    const loc = lvl.sbk.byId.get(id);
+    const rec = lvl.sbk.cels.find((c) => c.id === id);
+    if (loc === undefined || !rec) continue;
+    const art = cel(lvl, loc);
+    if (!art) continue;
+    const top = q.y - camY + VIEW.y - rec.posY;
+    if (q.facing < 0) {
+      const left = q.x - camX + W / 2 - (art.width - rec.posX);
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(art, -(left + art.width), top);
+      ctx.restore();
+    } else ctx.drawImage(art, q.x - camX + W / 2 - rec.posX, top);
+  }
+}
+
 /** the bolts, one cel each — `0x46c588` tag 2 holds 4000 the whole way out */
 function drawBolts(camX: number, camY: number): void {
   if (!level) return;
@@ -6367,10 +6539,17 @@ function loop(now: number): void {
         // ...but a HELD state does not end with its script. `0x4286e4` reinstalls
         // `0x4720e8` tag 0 every time the script reports itself finished, and
         // only the grabber letting go gets you out — see {@link stepHeld}.
-        if (p.heldBy) {
+        // a HELD weapon keeps firing while the button is down: its state
+        // machine sits on the firing tag and calls the fire function again
+        // every frame, and `-2` only goes out when the tag is left
+        if (p.act === "fire" && STREAMS[inv.weapon] && held.punch && roundsIn(inv.weapon) > 0) {
+          p.actClock = 0;
+          p.fired = true;
+        } else if (p.heldBy) {
           p.act = "held";
           p.actClock = 0;
         } else {
+          if (p.act === "fire") shutStreams();
           p.act = null;
           // ...and the gravity a reaction took goes back with it. In the engine
           // nothing restores it either — the NEXT state's own `0x42f850` does,
@@ -6383,7 +6562,20 @@ function loop(now: number): void {
         // `0x42cd53` waits for the wind-up tag to END and only then calls the
         // weapon's own fire function; the tag it installs afterwards is the pose
         // held while the thing is in the air
-        if (p.act === "fire" && !p.fired && f >= (WEAPONS[inv.weapon]?.moveset.fire.length ?? 1)) {
+        /**
+         * `0x42cd53` calls the weapon's fire function once the wind-up TAG has
+         * ended (`cmp word ptr [eax+0x46], 0`), and the tag after it is the
+         * pose held while the thing is in the air.
+         *
+         * Three of the five weapons have no such second tag — the flamer, the
+         * soaker and the scepter hold nothing, they pour — so waiting for a
+         * frame past the wind-up means waiting for a frame the act does not
+         * have, and they never fired at all. The end of the wind-up is the
+         * trigger; whether a shot pose follows it is the weapon's business.
+         */
+        const windUp = WEAPONS[inv.weapon]?.moveset.fire.length ?? 1;
+        const after = WEAPONS[inv.weapon]?.moveset.shot.length ?? 0;
+        if (p.act === "fire" && !p.fired && f >= windUp - (after ? 0 : 1)) {
           p.fired = true;
           fireGun();
         }
@@ -6878,6 +7070,7 @@ function loop(now: number): void {
     stepGuns();
     if (frame) stepFlares();
     if (frame) stepBolts();
+    if (frame) stepStreams();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -7024,6 +7217,7 @@ function loop(now: number): void {
   drawGuns(camX, camY);
   drawFlares(camX, camY);
   drawBolts(camX, camY);
+  drawStreams(camX, camY);
   drawGobs(camX, camY);
   drawPops(camX, camY);
 
@@ -7378,7 +7572,12 @@ function loop(now: number): void {
     (reacting ? ` · <b>code ${reacting.code}</b> ${reacting.act} frame ${Math.floor(p.actClock)}` : "") +
     (p.act === "held" || p.act === "struggle" ? ` · <b>${p.act}</b> frame ${p.heldClock}` : "") +
     (p.heldBy ? ` · HELD, gravity x${p.gravityScale}` : "");
-  const air = bolts.length ? ` · ${bolts.length} bolts, nearest at x ${Math.round(bolts[0].x)}` : "";
+  const air =
+    (bolts.length ? ` · ${bolts.length} bolts, nearest at x ${Math.round(bolts[0].x)}` : "") +
+    (streams.length
+      ? ` · stream ${streams[0].state} cel ${streamCel(streams[0])} at x ${Math.round(streams[0].x)}` +
+        `, y ${Math.round(streams[0].y)} blow ${STREAMS[streams[0].weapon]?.blow}`
+      : "");
   const nearHand = hereOf((l) => l.hands).sort((a, b) => Math.abs(a.atX - p.x) - Math.abs(b.atX - p.x))[0];
   const hand = nearHand
     ? ` · nearest hand ${nearHand.underfoot ? "underfoot" : "anywhere"} ${nearHand.state}` +

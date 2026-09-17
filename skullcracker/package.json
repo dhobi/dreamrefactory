@@ -39,6 +39,7 @@
     "test:browser:vat": "tsx tests/browser/vat.ts",
     "test:browser:pickups": "tsx tests/browser/pickups.ts",
     "test:browser:codes": "tsx tests/browser/codes.ts",
-    "test:browser:blaster": "tsx tests/browser/blaster.ts"
+    "test:browser:blaster": "tsx tests/browser/blaster.ts",
+    "test:browser:streams": "tsx tests/browser/streams.ts"
   }
 }
