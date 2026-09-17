@@ -2015,7 +2015,16 @@ export const CLAW = {
   /** `0x41714d` */
   divisor: 0x14,
   blow: 100,
-  /** `0x41745c` — a code, and not one this port carries */
+  /**
+   * `0x41745c` — the GRAB code, which this port now carries (see `src/codes.ts`).
+   *
+   * It belongs to kind 1 (`0x46de08`), not to the kind-4 clamp below. Kind 1 is
+   * installed by `0x41734a` off the BAND index `0x45efd0` returns against the
+   * table at `0x46dfc8` — `180, 140, 100` — so the claw reaches at 140 pixels
+   * and commits at 100, and only there does it show 2456..2459, the only four
+   * of its fifty-two cels that carry a grip. The code is carried; kind 1's own
+   * tag machine at `0x4173bf` is not built, so nothing here reaches for it yet.
+   */
   grab: -3,
   from: "0x411ca0 / 0x417130 / 0x4171e0",
 } as const;

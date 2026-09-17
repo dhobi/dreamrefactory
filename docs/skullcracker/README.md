@@ -1432,6 +1432,145 @@ own name for their punks came out: they are werewolves.
 distance from the middle of the view and nothing 768 pixels past it is played at
 all — and that is the whole of the mixer.
 
+## A negative blow is a message, and the grip is the drawing
+
+`obj+0x1a` is what an object hits with, and every ordinary value is a
+percentage: `0x42f910` scales the striking cel's own `(dy, dx)` by it and the
+victim subtracts the magnitude. A hundred is a full blow and is what almost
+everything carries.
+
+The player's handler reads the SIGN first, and a negative never reaches that
+arithmetic at all:
+
+```
+  448c6e  mov   ax, [esi+0x1a]        ; the striker's own strength
+  448c72  test  ax, ax
+  448c75  jge   0x449035              ; >= 0 -> take the damage
+  448c7b  movsx eax, ax
+  448c7e  add   eax, 8                ; -8..-1 becomes 0..7
+  448c81  cmp   eax, 7
+  448c84  ja    0x449035              ; -9 and below -> take the damage
+  448c8a  jmp   dword ptr [eax*4 + 0x4492b8]
+```
+
+So there are exactly eight codes, because the range test says so, and they are a
+dense enumeration the engine jumps through rather than a scattered convention.
+`0x4492b8` is the whole list, index 0 being −8:
+
+```
+  -8  0x448c91  knocked flying    9550..9558, +-50 into vX, a 0x78 shake
+  -7  0x448d24  floored           the same knockdown a hard blow gives
+  -6  0x448d72  flattened         and NOTHING in the game sends it
+  -5  0x448dae  slumped           half gravity
+  -4  0x448df4  shocked           9700..9702 out and back, then the knockdown
+  -3  0x448e90  GRABBED           no gravity, no velocity, and held
+  -2  0x448f06  jolted            unless you are crouched or on the board
+  -1  0x448f7c  spun              and it is also the only thing Boggs takes
+```
+
+Getting that census right needed the disassembler pointed differently. A sweep
+in overlapping windows can begin mid-instruction, and everything it decodes
+after that is nonsense it prints without complaint: it lost `0x420da6`, the
+hand's own grab, and `0x420e3b`, the other one. Decoding each function from its
+entry to the next cannot desync inside a function, and the honest list is
+
+```
+  -1  0x413bf9  0x41b022                       the Boggs machinery, only
+  -2  0x4201e4  0x43dbda  0x4421cb  0x44236d
+  -3  0x41745c  0x420da6  0x424c21  0x43ee9d   claw, hand, wraith, bush
+  -4  0x426a90                                 the surge
+  -5  0x43eedb  0x43eefa                       the bush, once you are dying
+  -7  0x420e3b  0x420e4e                       the hand, out of its rect
+  -8  0x418dce
+```
+
+**Seven of the eight have a sender and -6 has none.** Its slot is real and its
+reaction is written and no object anywhere reaches it. And −9 is not in this
+alphabet at all: it falls below the range test, lands on the player as ordinary
+damage, and is read instead by five handlers of their own — `0x44f0aa`,
+`0x4520d8`, `0x4547b3`, `0x4550d3`, `0x455763` — which accept nothing else. The
+flare carries it, and conditionally: `0x43abf0` sets its strength to −9 rather
+than 100 when the global at `0x4abdfc` is 5.
+
+### How a grab actually holds you
+
+The neatest thing in the engine. `0x428080`'s kind-10 case reads the GRABBER's
+current cel record at +4 and +8 — which is the cel's **strike box**, the same
+rect that decides whether a blow connects — translates it by the grabber's own
+point with `0x434270` (a plain add, no mirror, no band) and plants the player at
+its centre:
+
+```
+  4285b8  cmp [0x4a693a], ax   ; x0 == x1 -> let go
+  428660  x = x1 + (x0 - x1) / 2
+  428689  y = y0 + (y1 - y0) / 2
+```
+
+So the grip is authored per frame, in the art, and the grab ends when the artist
+drew a frame without one. Nothing else is stored: no timer, no distance, no
+"grabbed" flag on the grabber. The books confirm it exactly. Of the thirteen cels
+the hand's three scripts name, only 1556 and 1562 — the two CLOSED ones — carry
+a strike box, and theirs are `y -27..-1, x -32..31` and `y -34..-4, x -18..20`: the fist itself.
+Of the fifty-two the claw's six scripts name, only 2456..2459 do, `y 77..111,
+x -76..0` and three more like it: the jaw hanging below and behind its anchor.
+
+Which makes the one thing that has to be got right in the port the one thing
+easiest to get wrong: the grip must be **re-read every frame**. Reading it once,
+at the moment of the grab, gives a hold that never ends — the hand sinks back
+into the ground and the player stays pinned in mid-air where it used to be.
+
+Two details that are the original's own. `0x4286cf` lets P restart the struggle
+but only from the loop's tag 0, so mashing it does not stack and nothing in the
+state shortens the hold. And the reaction installs `0x476698` — cels 9570..9572
+— while the held state that follows it loops `0x4720e8`, the same script in
+4570..4572; the disc has two playable characters with a sound bank each, which
+is the likeliest reason, and this page plays what the two functions literally
+say.
+
+### What it unblocks, and what it does not
+
+The hand grabs and lets go, the surge shocks, the knockdown from out of a hand's
+rect lands, and none of it spends a point of health — which is why a code comes
+through with the damage switch off. A code is a message.
+
+It does not make Boggs killable. The only two things in `SC.EXE` that send −1
+are `0x413bf9` and `0x41b022`, both inside the Boggs machinery, and `0x41afd0`
+gates its −1 on the two flags at `0x46e080` and `0x46e084` that the same machine
+sets. The head, the claw arm and the eight machinery objects are still not here,
+so the code that would hurt it has nothing to come from. That is the machine's
+gap, not the codes'.
+
+BARREL's claw does not grab yet, and the reason is worth writing down because it
+is not the one it looked like. `0x4171e0` is a **seven**-kind machine over six
+scripts, and this page has the right ones: the creator starts it on kind 6
+(`0x46dc58`, one cel), the player entering its rect sends it to kind 0
+(`0x46dc78`, the carriage), and inside 300 pixels kind 0 installs `0x46dd80` —
+kind 4, cels 2420..2426 — which is exactly what is ported.
+
+The grabbing kind is reached from somewhere else, and reading the one function
+in the way settles it. The creator registers a TRACKER at `0x411d23` —
+`0x45ef70(&user[0x12], claw, player, 0x46dfc8)` — and `0x45efd0` answers it each
+frame with the gap between the two objects, which way the target is moving, and
+a BAND index. `0x46dfc8` is the band table and it is three numbers:
+
+```
+  b4 00  8c 00  64 00  00 00        180, 140, 100, and a zero to stop
+```
+
+The index is how many of them the gap is still past: over 180 is band 0, 140 to
+180 is band 1, 100 to 140 is band 2, and 100 or nearer is band 3. `0x41734a`
+dispatches kind 0 on exactly that — band 0 slows the carriage down, band 2
+installs `0x46de08` tag 0 and band 3 its tag 1, and those two tags are the only
+route to cels 2456..2459, the only four of the claw's fifty-two that carry a
+grip.
+
+So the claw reaches for you at 140 pixels and commits at 100, and what this page
+ports is the other branch: `0x417291`, which installs the kind-4 clamp whenever
+the RECORD's point is within 300 of the player. Both are real and the port has
+one of them. The remaining work is kind 1's own tag machine at `0x4173bf`, not
+anything about the codes — which is why the claw is listed below rather than
+here.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are
@@ -1479,13 +1618,10 @@ a level with no class anywhere.
   number. The flamer and the soaker are held STREAMS; the blaster's and the
   scepter's fire functions have not been read. The inventory screen behind
   `0x42edd0`'s message 1 is not here either.
-- **No blow CODE is carried.** Eight negative strengths exist — −1 through −9 —
-  and every one is a message to a receiving handler rather than damage: Boggs
-  takes only −1, `inithardcore` swallows −6, Ghengis swallows −4, the hand
-  grabs with −3 and −7, the flamethrower burns with −9. This port passes
-  numbers, so a class that tests for a code never sees one. It is the single
-  biggest thing missing, and it is what stops four guns, the hand, the claw, the
-  bush and the last boss.
+- **The blow codes are carried now** — see the section above. What is still
+  missing behind them is the two classes that would use one: BARREL's claw is
+  showing the wrong one of its four kinds to have a grip, and the bush's grab
+  and swallow (`0x43ec80`'s three phases) are not built, only its idle.
 - **Two bosses of five have their own state machine** — PLAYGR's `initwbooly`
   and ARCADE's `initkragg`. RAVECAVE's wraith, TOWER's bishop and VAT's Boggs
   stand, take blows and die on the generic gait/flinch/death every other

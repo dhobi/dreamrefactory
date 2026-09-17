@@ -159,6 +159,7 @@ import {
 } from "./props";
 import { DEATH_FILMS, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
 import { CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, WEAPONS, type Flare, type Gun } from "./guns";
+import { BLOW_CODES, HELD, gripOf } from "./codes";
 import {
   CEL,
   CLOCK,
@@ -336,7 +337,7 @@ function engineFrame(): void {
    * 45 that a jump landing level never reaches.
    */
   p.fallPx = p.stepPx > 0 ? p.fallPx + p.stepPx : 0;
-  p.vyRaw += PLAYER_GRAVITY;
+  p.vyRaw += PLAYER_GRAVITY * p.gravityScale;
 }
 /**
  * The player's own speed divisor, `mov word ptr [eax+0xe], 0xc` at `0x42e412`.
@@ -1384,6 +1385,32 @@ const p = {
   /** the one-shot action playing, and how far into it, in engine frames */
   act: null as string | null,
   actClock: 0,
+  /**
+   * `obj+0x24`, the float `0x42f850` sets — what the constant gravity is
+   * multiplied by before it is added.
+   *
+   * It is 1 for the whole of ordinary play and the reaction table is the only
+   * thing that moves it: a grab sets it to 0 (`0x448ef4`), the surge and the
+   * unreachable -6 set it to 1, and the bush's -5 sets it to a half. Which is
+   * how being held stops you falling without any state anywhere saying so.
+   */
+  gravityScale: 1,
+  /**
+   * What has hold of the player, as a function returning the world point its
+   * current cel's grip is at — or null the frame that grip goes away, which is
+   * how a grab ends. See {@link gripOf}.
+   */
+  heldBy: null as (() => { x: number; y: number } | null) | null,
+  /**
+   * WHICH thing that is — `0x4ac408`, the engine's own one-slot memory of it.
+   *
+   * It is here for the same reason the engine keeps it: a grabber asks whether
+   * it still has hold of anything (`obj+0x2a`, tested at `0x420dd1`) and that
+   * answer has to come from somewhere.
+   */
+  heldWhat: null as object | null,
+  /** engine frames into the held loop, once the reaction's own script has run */
+  heldClock: 0,
   /** whether the fire act has already let its round go — `0x42cd53` fires once */
   fired: false,
   /**
@@ -2869,6 +2896,11 @@ const stats = {
  */
 function actOf(name: string): { cels: readonly number[]; dx: readonly number[]; hold?: number; from: string } | null {
   if (name === "reach") return { cels: GRAB.cels, dx: GRAB.cels.map(() => 0), from: GRAB.from };
+  // the reaction to a blow CODE, straight off the table at `0x4492b8`
+  const code = Object.values(BLOW_CODES).find((r) => r.act === name);
+  if (code) return { ...code.anim, dx: code.anim.cels.map(() => 0) };
+  if (name === "held") return { ...HELD.loop, dx: HELD.loop.cels.map(() => 0) };
+  if (name === "struggle") return { ...HELD.struggle, dx: HELD.struggle.cels.map(() => 0) };
   if (name === "fire") {
     const w = WEAPONS[inv.weapon];
     if (!w) return null;
@@ -3174,6 +3206,63 @@ function takeHealth(n: number): void {
 }
 
 /**
+ * Where the cel a grabber is showing RIGHT NOW would hold you.
+ *
+ * The frame-by-frame re-read is the whole of it and not an implementation
+ * detail: `0x42857d` fetches the grabber's cel record every frame the held state
+ * runs, which is why the hold ends by itself when the fist opens. Reading it
+ * once, at the moment of the grab, gives a grip that never goes away — the hand
+ * sinks back into the ground with the player still pinned to where it was.
+ */
+function gripAt(id: number, x: number, y: number): { x: number; y: number } | null {
+  const cel = level?.sbk.cels.find((c) => c.id === id);
+  return gripOf(cel, cel ? strikeOf(cel, x, y, 1) : null);
+}
+
+/**
+ * A blow CODE landed: run its row of the table at `0x4492b8`.
+ *
+ * Returns what the original's handler returns — true where it answered 1, which
+ * tells `0x430367`'s loop the blow was consumed. {@link BLOW_CODES} is the whole
+ * of the data; this is only the eight side effects the eight cases share.
+ *
+ * `-9` and anything below it is NOT in the table (`0x448c84`'s range test sends
+ * it to the damage path), so this returns false for them and the caller falls
+ * through to the arithmetic exactly as the original does.
+ */
+function takeCode(code: number, grip?: () => { x: number; y: number } | null, what?: object): boolean {
+  const r = BLOW_CODES[code];
+  if (!r) return false;
+  // the same thing, still holding you: `0x43045d` disarms a hitter the frame it
+  // connects and the classes re-arm on the next, so without this the reaction
+  // restarts every frame and the grab never reaches its own loop
+  if (r.holds && what && p.heldWhat === what) return r.consumes;
+  p.act = r.act;
+  p.actClock = 0;
+  p.heldClock = 0;
+  // `0x448eda`/`0x448fc9` zero `obj+0xa` and `obj+0xc` both
+  if (r.stops) {
+    p.vx = 0;
+    p.vy = 0;
+    p.vyRaw = 0;
+  }
+  if (r.gravity !== null) p.gravityScale = r.gravity;
+  // `0x448cf4`: along the PLAYER's own facing, not the striker's
+  if (r.shove) p.vx += r.shove * p.facing;
+  if (r.sound !== undefined) sound?.own(r.sound, p.x, p.y);
+  if (r.holds) {
+    // a grab with no grip is still a grab: the engine enters the held state and
+    // `0x4285b8` throws it straight back out on the next frame, which restores
+    // the gravity this just took away. Giving it a grip that is already gone is
+    // that, and it is why a grabber whose art carries no strike box is harmless
+    // rather than a player stuck in mid-air.
+    p.heldBy = grip ?? ((): null => null);
+    p.heldWhat = what ?? null;
+  }
+  return r.consumes;
+}
+
+/**
  * Everything that can hit the player, once a frame — `0x430367` onward, which is
  * the same loop that lets the player hit everything else, run the other way.
  *
@@ -3191,15 +3280,42 @@ function takeHealth(n: number): void {
  * invulnerability.
  */
 function takeHits(): void {
-  if (!damageOn || !level || !player) return;
+  if (!level || !player) return;
   // already staggering, already down, already dead: no body box, nothing to hit
   if (p.act === "dying") return;
+  // ...and with the switch off and nothing in the room that carries a code,
+  // there is nothing this function can do, so it does not look for the body box
+  if (!damageOn && !hereOf((l) => l.claws).length && !hereOf((l) => l.hands).length && !hereOf((l) => l.surges).length)
+    return;
   const mine = playerBody();
   if (!mine) return;
-  const hit = (cel: SbkCel, x: number, y: number, facing: number, vx: number, vy: number): boolean => {
+  const hit = (
+    cel: SbkCel,
+    x: number,
+    y: number,
+    facing: number,
+    vx: number,
+    vy: number,
+    /** the hitter's own `obj+0x1a`; negative is a CODE and never damage */
+    code = 100,
+    /** where this hitter would hold you, re-read every frame — see {@link gripOf} */
+    grip?: () => { x: number; y: number } | null,
+    /** the hitter itself, so it can ask later whether it still has you */
+    what?: object,
+  ): boolean => {
     const box = strikeOf(cel, x, y, facing);
-    if (!box || !cel.blow) return false;
+    if (!box) return false;
     if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom)) return false;
+    // `0x448c72` reads the SIGN first: a code is dispatched and the arithmetic
+    // below never runs. A grab cel proves the order matters — 1556 and 2456
+    // carry a strike box and no blow pair at all, so a damage-first reading
+    // would throw the hold away before it got here.
+    // ...and a CODE comes through whatever the damage switch says, because it is
+    // not damage: no reaction in the table takes a point of health off anybody.
+    // The switch is this port's, to keep the page walkable; the grab is the
+    // game's, and turning one off has never had anything to do with the other.
+    if (code < 0) return takeCode(code, grip, what);
+    if (!cel.blow) return false;
     // `0x42f910`: the cel's own pair plus whatever the hitter was doing, rooted
     const bx = cel.blow.dx * (facing < 0 ? -1 : 1) + vx;
     const by = cel.blow.dy + vy;
@@ -3213,6 +3329,47 @@ function takeHits(): void {
     return true;
   };
   const lvl = level;
+  /**
+   * The three that carry a CODE go first, and they are the only three this
+   * function runs at all with the damage switch off.
+   *
+   * Order is not the reason — a code is not damage, so the switch has nothing
+   * to do with it, and the reactions have to land either way. Cost is: with the
+   * switch off this used to do nothing, and letting the whole loop below run
+   * instead added a linear scan of the level's cel table per hitter per frame.
+   * ARCADE is the suite that noticed, because it is the one that judges a boss
+   * fight by the wall clock, and it went from passing to failing two runs in
+   * three. Three short loops always; the long one only when it can do anything.
+   */
+  // `0x417208` — the claw's first blow is a hundred, and its second is the code
+  for (const c of hereOf((l) => l.claws)) {
+    const cel = lvl.sbk.cels.find((q) => q.id === clawCel(c));
+    if (!cel?.strike) continue;
+    const code = c.state === "shut" ? CLAW.grab : CLAW.blow;
+    if (hit(cel, c.x, c.y, 1, 0, 0, code, () => gripAt(clawCel(c), c.x, c.y), c)) return;
+  }
+  /**
+   * ...and the HANDS, whose whole point is the code.
+   *
+   * `0x420da6` sets -3 as the hand under your feet closes and `0x420e3b` sets
+   * -7 for the one that comes up anywhere, and of the thirteen cels its scripts
+   * name only the two closed ones — 1556 and 1562 — carry a strike box at all. So a hand can only
+   * take hold on the frame it is shut, and the box it takes hold BY is the fist
+   * the artist drew.
+   */
+  for (const q of hereOf((l) => l.hands)) {
+    const cel = lvl.sbk.cels.find((c) => c.id === handCel(q));
+    if (!cel?.strike) continue;
+    const kind = q.underfoot ? HAND.underfoot : HAND.anywhere;
+    if (hit(cel, q.atX, q.atY, 1, 0, 0, kind.blow, () => gripAt(handCel(q), q.atX, q.atY), q)) return;
+  }
+  // ...and TOWER's current, which carries -4 on every cel of its arc
+  for (const g of hereOf((l) => l.surges)) {
+    const cel = lvl.sbk.cels.find((c) => c.id === surgeCel(g));
+    if (!cel?.strike) continue;
+    if (hit(cel, g.x, g.y, 1, 0, 0, SURGE.blow)) return;
+  }
+  if (!damageOn) return;
   for (const e of spawnedHere()) {
     if (e.state === "dead" || e.state === "burst") continue;
     const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
@@ -3239,12 +3396,6 @@ function takeHits(): void {
     const cel = lvl.sbk.cels.find((q) => q.id === axeCel(a));
     if (!cel?.strike) continue;
     if (hit(cel, a.x, a.y, 1, 0, 0)) return;
-  }
-  // `0x417208` — the claw's first blow is a hundred, and its second is the code
-  for (const c of hereOf((l) => l.claws)) {
-    const cel = lvl.sbk.cels.find((q) => q.id === clawCel(c));
-    if (!cel?.strike) continue;
-    if (hit(cel, c.x, c.y, 1, 0, 0)) return;
   }
   // ...and the goop, which carries `obj+0x1a = 0x64` and therefore its cel's own
   // pair unscaled — see {@link dripStrike} for why that is one cel of nine
@@ -3934,8 +4085,20 @@ function stepHands(): void {
         q.clock = 0;
       }
     } else if (q.state === "held") {
-      // `0x4704b8`'s thirty frames, or twenty if it had hold of anything —
-      // which, its blow being a code this port does not carry, it never has
+      /**
+       * `0x4704b8`'s thirty frames, and having hold of you does not extend them:
+       *
+       * ```
+       *   420dbf  cmp [esi+0x46], 0    ; the script ended
+       *   420dc4  jne 0x420ddc         ; ...then SINK, whatever else is true
+       *   420dc6  cmp [esi+0x48], 0x14 ; only now the other two tests, and they
+       *   420dd1  cmp [esi+0x2a], 0    ; can only end the hold EARLY
+       * ```
+       *
+       * So the grab is exactly as long as the animation and not a frame more,
+       * and what lets go of you is the fist opening — which is the same thing
+       * {@link gripOf} reads, from the other side.
+       */
       if (q.clock >= HAND.holdFrames) {
         q.state = "sinking";
         q.clock = 0;
@@ -3944,6 +4107,54 @@ function stepHands(): void {
       q.state = "down";
       q.clock = 0;
     }
+  }
+}
+
+/**
+ * While something has hold of you: ride its grip, or be let go.
+ *
+ * `0x428080`'s kind-10 case, once a frame. It re-reads the GRABBER's current cel
+ * every frame rather than remembering anything about the grab, which is what
+ * makes this so short: the hold is wherever the art says it is this frame, and
+ * the frame the art stops saying is the frame you are free.
+ *
+ * ```
+ *   42857d  the grabber's current cel record
+ *   4285b8  cmp [0x4a693a], ax    ; x0 == x1 -> let go
+ *   428660  x = x1 + (x0 - x1) / 2
+ *   428689  y = y0 + (y1 - y0) / 2
+ *   4286bb  P, and only from tag 0 -> the struggle
+ * ```
+ *
+ * Letting go restores gravity (`0x4285ec`) and stands the player back up
+ * (`0x4285db` writes 1 into `obj+0x34`); nothing gives any health back, because
+ * a grab never took any.
+ */
+function stepHeld(): void {
+  if (!p.heldBy) return;
+  const at = p.heldBy();
+  if (!at) {
+    // `0x4285c1` — out through the walk's own script, upright and falling again
+    p.heldBy = null;
+    p.heldWhat = null;
+    p.gravityScale = 1;
+    p.act = null;
+    p.heldClock = 0;
+    return;
+  }
+  p.x = at.x;
+  // the grip is an ANCHOR point and `p.y` is the feet — see {@link poseFeet}
+  p.y = at.y + p.feet;
+  p.vx = 0;
+  p.vy = 0;
+  p.vyRaw = 0;
+  p.onGround = false;
+  p.heldClock += 1;
+  // `0x4286cf`: P restarts the struggle, but only from the loop — mashing it
+  // does not stack, and nothing in the state shortens the hold
+  if (punchPressed && p.act === "held") {
+    p.act = "struggle";
+    p.actClock = 0;
   }
 }
 
@@ -6027,7 +6238,21 @@ function loop(now: number): void {
         // the reach ENDS in the take — `0x4287bd` is the kind-14 state, and it
         // probes the band a second time rather than remembering what it found
         if (p.act === "reach") takeGun();
-        p.act = null;
+        // ...but a HELD state does not end with its script. `0x4286e4` reinstalls
+        // `0x4720e8` tag 0 every time the script reports itself finished, and
+        // only the grabber letting go gets you out — see {@link stepHeld}.
+        if (p.heldBy) {
+          p.act = "held";
+          p.actClock = 0;
+        } else {
+          p.act = null;
+          // ...and the gravity a reaction took goes back with it. In the engine
+          // nothing restores it either — the NEXT state's own `0x42f850` does,
+          // and every ordinary one passes 1. Here the ordinary states do not
+          // touch it at all, so the reaction ending has to hand it back or the
+          // bush's -5 leaves the player at half weight for the rest of the level.
+          p.gravityScale = 1;
+        }
       } else {
         // `0x42cd53` waits for the wind-up tag to END and only then calls the
         // weapon's own fire function; the tag it installs afterwards is the pose
@@ -6521,6 +6746,8 @@ function loop(now: number): void {
     if (frame) stepBelts();
     if (frame) stepChairs();
     if (frame) stepClaws();
+    // last of the props, because the grip is read off whatever moved just now
+    if (frame) stepHeld();
     if (frame) for (const b of hereOf((l) => l.boggs)) b.clock += 1;
     stepGuns();
     if (frame) stepFlares();
@@ -7013,6 +7240,20 @@ function loop(now: number): void {
   // probe: the flying kinds have no health bar to read
   const flew = spawnedHere().find((e) => FOES[e.kind].flies && (e.vx !== 0 || e.dents > 0));
   const slid = flew ? ` · ${flew.kind} at x ${Math.round(flew.x)}` : "";
+  // the blow CODES — the reaction playing, what has hold of you, and the state
+  // of the nearest hand, none of which the panel shows and all of which a probe
+  // needs to see the system at all
+  const reacting = Object.values(BLOW_CODES).find((r) => r.act === p.act);
+  const code =
+    (reacting ? ` · <b>code ${reacting.code}</b> ${reacting.act} frame ${Math.floor(p.actClock)}` : "") +
+    (p.act === "held" || p.act === "struggle" ? ` · <b>${p.act}</b> frame ${p.heldClock}` : "") +
+    (p.heldBy ? ` · HELD, gravity x${p.gravityScale}` : "");
+  const nearHand = hereOf((l) => l.hands).sort((a, b) => Math.abs(a.atX - p.x) - Math.abs(b.atX - p.x))[0];
+  const hand = nearHand
+    ? ` · nearest hand ${nearHand.underfoot ? "underfoot" : "anywhere"} ${nearHand.state}` +
+      ` cel ${handCel(nearHand)} at x ${Math.round(nearHand.atX)}` +
+      ` blow ${(nearHand.underfoot ? HAND.underfoot : HAND.anywhere).blow}`
+    : "";
   const lives = ` · ${stats.lives} ${stats.lives === 1 ? "life" : "lives"} · clock ${Math.round(stats.ticks)}`;
   // the switch, and what it is spending — a probe has no other way to see either
   const hurt = damageOn ? ` · <b>damage ON</b> ${Math.round(stats.health)}/${stats.maxHealth}hp` : " · damage off";
@@ -7023,7 +7264,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${code}${hand}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 

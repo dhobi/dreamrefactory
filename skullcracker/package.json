@@ -37,6 +37,7 @@
     "test:browser:barrel": "tsx tests/browser/barrel.ts",
     "test:browser:lab": "tsx tests/browser/lab.ts",
     "test:browser:vat": "tsx tests/browser/vat.ts",
-    "test:browser:pickups": "tsx tests/browser/pickups.ts"
+    "test:browser:pickups": "tsx tests/browser/pickups.ts",
+    "test:browser:codes": "tsx tests/browser/codes.ts"
   }
 }
