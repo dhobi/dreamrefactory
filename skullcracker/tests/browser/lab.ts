@@ -15,9 +15,7 @@
  *   - **the test tube** (`inittube`), `#0201 test tube` — one in the game, with
  *     twelve hundred health, the player's own number, and no award.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

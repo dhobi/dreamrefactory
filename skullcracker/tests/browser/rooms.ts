@@ -25,9 +25,8 @@
  * standing in it. So the first assertion here is the negative one: walking
  * through a door does nothing at all.
  */
-import { fail, finish, launch } from "./harness";
+import { BASE, fail, finish, launch } from "./harness";
 
-const BASE = process.env.BASE ?? "http://localhost:5178";
 /** short of the street door at x4522 */
 const START = 4300;
 

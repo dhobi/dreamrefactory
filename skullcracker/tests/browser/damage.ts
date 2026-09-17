@@ -23,9 +23,7 @@
  *   - **the life is spent when the dying animation ends**, not when the health
  *     runs out (`0x443dea`).
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

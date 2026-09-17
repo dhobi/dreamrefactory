@@ -19,9 +19,7 @@
  * And the level's own clock, which was in the books all along: a `timer` record,
  * whose `param` is the number. GRAVE's is 2100 against the full dial's 7200.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

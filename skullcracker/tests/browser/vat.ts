@@ -28,9 +28,7 @@
  * allowance is met and `0x46bfbc` is set — which `0x41bdd8` does when Boggs
  * dies. So the ending cannot be walked to past a living Boggs.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

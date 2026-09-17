@@ -57,9 +57,8 @@
  * push a standing player through the floor), and a jump MUST, in the same
  * window, with no other input.
  */
-import { fail, finish, launch } from "./harness";
+import { BASE, fail, finish, launch } from "./harness";
 
-const BASE = process.env.BASE ?? "http://localhost:5178";
 /** the foot of STREETS' one ladder */
 const START = 9700;
 

@@ -26,9 +26,7 @@
  *     into a seven-entry table by its own `param`, and nothing stands there
  *     until the boss does.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

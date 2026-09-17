@@ -17,9 +17,7 @@
  *   - **the scepter** (`statscepter`), the fourth chapter weapon, whose pickup
  *     arms you with `0x45eed0(0x10)` — weapon 16, not 17.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

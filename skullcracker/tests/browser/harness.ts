@@ -28,6 +28,20 @@
  */
 import { type Browser, type LaunchOptions, chromium } from "playwright";
 
+/**
+ * Where the page is being served from.
+ *
+ * `APP_URL` first, because that is what `.github/workflows/browser.yml` hands
+ * every game's suite step — it starts vite on `CI_PORT` (5199, deliberately not
+ * 5173) and passes the URL in. These suites read `BASE` and only `BASE`, so on
+ * the runner all thirty-one of them went to localhost:5178 and found nothing;
+ * the rip being mounted would not have helped.
+ *
+ * `BASE` still works for a local run, and the trailing slash `APP_URL` carries
+ * is stripped because every caller writes `${BASE}/walk.html`.
+ */
+export const BASE = (process.env.APP_URL ?? process.env.BASE ?? "http://localhost:5178").replace(/\/+$/, "");
+
 /** what the pooled browser is launched with, whoever asks for it first */
 export const POOLED_OPTIONS: LaunchOptions = {
   // `sound.ts` cannot hear anything without it, and it costs the others nothing

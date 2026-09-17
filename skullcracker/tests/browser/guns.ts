@@ -22,9 +22,7 @@
  * run once each and name the weapon you are looking for. Which is why SEWER
  * places two `statflare` and no gun — you are meant to still have SERVICE's.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

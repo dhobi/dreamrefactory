@@ -19,9 +19,7 @@
  * suite measures is that one bolt lands and that the healing undoes it; the
  * machine, and the kill it buys, are `tests/browser/vat.ts`.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

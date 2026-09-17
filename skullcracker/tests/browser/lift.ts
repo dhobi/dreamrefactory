@@ -28,9 +28,7 @@
  *     only by the animation stepper and means "my script ended" — so a car
  *     leaves when its eighteen idle frames run out, rider or no rider.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

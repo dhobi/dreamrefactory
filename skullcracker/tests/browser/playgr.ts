@@ -20,9 +20,7 @@
  *     which is more than three times the biggest thing in level three.
  *   - **the goal is shut until it is dead**, which is what a 100% share means.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
 

@@ -30,9 +30,7 @@
  *     is still above it. WOODS' ground has exactly two such steps, at x8746 and
  *     x8890, and clearing them is how the level is crossed.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
 

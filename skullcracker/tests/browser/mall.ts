@@ -23,9 +23,7 @@
  *     climb it. Those two steps are the whole of level five's platforming.
  *   - **the goal is in the third region**, 11000 pixels east of the start.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
 

@@ -36,9 +36,7 @@
  * The probe walks the route rather than teleporting onto it, because `?x=` drops
  * the player at the ground under that column and in CITY that is the void.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

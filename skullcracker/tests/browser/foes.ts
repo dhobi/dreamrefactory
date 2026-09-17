@@ -59,9 +59,8 @@
  * else, and the "before" count is subtracted rather than assumed to be zero:
  * STREETS' street has a little green in its backdrop.
  */
-import { fail, finish, launch } from "./harness";
+import { BASE, fail, finish, launch } from "./harness";
 
-const BASE = process.env.BASE ?? "http://localhost:5178";
 /** STREETS' first `initwerea` patrols x2197..2584; this stands inside its reach */
 const AT_A_PUNK = 2300;
 

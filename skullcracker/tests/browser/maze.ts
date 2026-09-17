@@ -20,9 +20,7 @@
  *   - **the alarms and the fans**, which keep their own counters and answer to
  *     nothing in the level at all.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

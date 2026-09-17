@@ -20,9 +20,7 @@
  *   - **the effects are `0x42827a`'s table**: four hundred health, one life,
  *     the three scores, and eight hundred and fifty back on the clock.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

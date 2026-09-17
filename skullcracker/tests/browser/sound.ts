@@ -24,9 +24,7 @@
  * context on the first key, which is what `wakeAudio` has always done for the
  * films — but without the flag a headless run would test nothing and pass.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 interface Source {
   dur: number;

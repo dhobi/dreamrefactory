@@ -18,9 +18,7 @@
  * drawing order, and it fails the moment a region stops being drawn.
  */
 import { type Page } from "playwright";
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 /** how many pixels in a rectangle pass a channel test, off the live canvas */
 const count = (

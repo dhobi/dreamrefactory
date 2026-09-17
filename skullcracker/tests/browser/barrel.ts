@@ -18,9 +18,7 @@
  * ten `statblasterpack` refills here and nothing to fire them with, because the
  * gun itself is in VAT.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

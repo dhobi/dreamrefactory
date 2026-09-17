@@ -18,9 +18,7 @@
  *     and the only hazard in the game that GIVES you something: `0x426b21` is a
  *     call to `0x45ef30`, the ammunition adder.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

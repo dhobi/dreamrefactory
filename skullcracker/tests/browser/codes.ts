@@ -18,9 +18,7 @@
  * See `src/codes.ts` for the census of who sends what and for the two codes
  * nothing sends.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

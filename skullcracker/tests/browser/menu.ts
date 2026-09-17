@@ -41,9 +41,9 @@
  * film are near-identical animation cels; comparing screenshots would pass on
  * the wrong frame and fail on the right one.
  */
-import { fail, finish, launch } from "./harness";
+import { BASE, fail, finish, launch } from "./harness";
 
-const URL_BASE = process.env.URL ?? "http://localhost:5178/";
+const URL_BASE = `${BASE}/`;
 const HEADED = process.env.HEADED === "1";
 /** where the Begin button is, in the game's own 512x384 screen */
 const BEGIN = { x: 400, y: 93 };

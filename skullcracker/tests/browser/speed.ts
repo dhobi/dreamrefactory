@@ -49,9 +49,7 @@
  * anything this port invents, so it is asserted tightly while the absolute
  * speeds get room for the browser's scheduling.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

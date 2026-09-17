@@ -13,9 +13,7 @@
  * scepter's beam carry a hundred (`0x4217ba`, `0x424630`); the FLAME carries the
  * code -9 (`0x453b9b`), which nothing in these sixteen levels reads.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

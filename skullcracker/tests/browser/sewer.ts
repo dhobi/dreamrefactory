@@ -26,9 +26,7 @@
  *   - **two new classes**: the floating eye, which has no gravity at all, and the
  *     600-health thing that goes round shutting the doors again.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
 

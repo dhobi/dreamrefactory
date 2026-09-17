@@ -22,9 +22,7 @@
  * `?clock=` exists for the last of those: the dial is eight minutes long and a
  * test cannot wait for it.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();

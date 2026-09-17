@@ -184,20 +184,32 @@ against).
 ```yaml
 - uses: actions/checkout@v4
 - run: |                                        # AFTER the checkout
-    ln -sfn "$TAOOT_GAMEFILES" taoot/gamefiles
-    ln -sfn "$DUST_GAMEFILES"  dust/gamefiles
+    ln -sfn "$TAOOT_GAMEFILES"        taoot/gamefiles
+    ln -sfn "$DUST_GAMEFILES"         dust/gamefiles
+    ln -sfn "$SKULLCRACKER_GAMEFILES" skullcracker/gamefiles
 ```
 
-`browser.yml` links only Titanic's, because the play page it drives is Titanic's.
+Titanic's is required; the other two are warnings, because those suites skip a
+missing rip rather than failing on it.
 
-**All four games have a variable; two of them are mounted.** `TIMELAPSE_GAMEFILES`
-and `SKULLCRACKER_GAMEFILES` are declared beside the other two in every runner
-file, but their volumes are commented out and no workflow links them yet —
-neither game has a suite that reads a rip. They are there so that adding one is a
-mount and a `ln -sfn`, not a hunt through three deployment files. Do not
-uncomment a volume before the rip is on the host: a bind mount of a path that
-does not exist does not fail, it makes Docker CREATE it, empty and root-owned,
-and an empty rip is harder to diagnose than a missing one.
+`browser.yml` links ONE rip — the game it was dispatched for. It names no game
+anywhere: `<GAME>_GAMEFILES` follows from the `game` input, so adding a game
+there is a label rather than an edit.
+
+**All four games have a variable. Three are mounted.** `TIMELAPSE_GAMEFILES` is
+declared beside the others but its volume is still commented out and nothing
+links it — Timelapse has no suite that reads a rip yet.
+
+Do not uncomment a volume before the rip is on the host: a bind mount of a path
+that does not exist does not fail, it makes Docker CREATE it, empty and
+root-owned, and an empty rip is harder to diagnose than a missing one. The
+opposite mistake costs just as much and looks worse: with
+`SKULLCRACKER_GAMEFILES` set but the volume left out, the variable named a path
+that existed on the host and not in the container, and `browser.yml` reported
+**"SKULLCRACKER_GAMEFILES (/srv/skullcracker/gamefiles) is not a directory — set
+it in the runner's .env"** — which sends you to the one file that was already
+right. Check `docker inspect <container> --format '{{range .Mounts}}...'`, not
+the `.env`.
 
 ### The runner is called `dreamrefactory-runner`
 

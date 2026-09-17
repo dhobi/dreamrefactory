@@ -2173,8 +2173,8 @@ function cycleSpawn(): void {
   if (!starts.length) return;
   spawnIndex = (spawnIndex + 1) % starts.length;
   const e = starts[spawnIndex];
-  const y = (e.top + e.bottom) / 2;
-  const x = (e.left + e.right) / 2;
+  const y = e.pointY;
+  const x = e.pointX;
   enter(roomAt(x, y), x, y);
 }
 
@@ -2385,25 +2385,25 @@ function crowsIn(sbk: SbkFile, room: SbkRoom): Crow[] {
 }
 
 /**
- * Where to put the player when a level opens.
+ * Where a level opens: the `initplayer` record's own POINT.
  *
- * The file does not say. A level has between one and five `initplayer` records
- * — STREETS three, BARREL five — and only three in the whole game are drawn at
- * player size (STREETS' 102x148, SEWER's 134x195, BARREL's 30x35); the rest are
- * 20x20 markers, the same size as every `stat` pickup. Checkpoints, most likely,
- * but that is a guess and not one worth acting on.
+ * `0x4036dd` reads the record's `+24` as a packed dword and writes it straight
+ * into `obj+6` — the point, both words at once. This read the rect's MIDPOINT
+ * instead, which agrees with the point to within half a pixel in 30 of the 31
+ * shipped records and is 37 pixels lower in the one that does not: SEWER's
+ * entrance, the only level where the record's rect is not centred on its point.
  *
- * So: the first one, which is right for fourteen of the sixteen levels — except
- * that MAZE's first and BARREL's first stand in a room with no floor, where
- * there is nothing to stand on and no way to move. For those two, the first that
- * lands in a room with a floor. This is a choice about where to start and not a
- * claim about the format.
+ * Both land you on the same floor, because you fall about three hundred pixels
+ * either way, so this was never visible in the resting position — but the drop
+ * was 37 pixels shorter than the game's, and guessing at a rect where the
+ * executable reads a field is the kind of thing that is only ever right by
+ * accident.
  */
 function pickStart(sbk: SbkFile, rooms: SbkRoom[]): SbkEntity | undefined {
   const starts = sbk.entities.filter((e) => e.name === "initplayer");
   const onAFloor = starts.find((e) => {
-    const y = (e.top + e.bottom) / 2;
-    const x = (e.left + e.right) / 2;
+    const y = e.pointY;
+    const x = e.pointX;
     const host = rooms.find((r) => y >= r.top && y <= r.bottom && x >= r.left && x <= r.right);
     return host?.ground != null;
   });

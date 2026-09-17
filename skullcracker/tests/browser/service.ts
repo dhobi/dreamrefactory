@@ -26,9 +26,7 @@
  *   - **one cel of nine can touch you.** Only 518, the gob, carries a strike box
  *     and a blow pair, so the rest of the goop is weather.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
 

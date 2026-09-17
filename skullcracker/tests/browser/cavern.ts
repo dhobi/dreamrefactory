@@ -20,9 +20,7 @@
  *     each, a blow of a hundred on every one.
  *   - **the rope bridge** (`0x41e9c0`), which you can cross and cannot stand on.
  */
-import { fail, finish, launch } from "./harness";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();
