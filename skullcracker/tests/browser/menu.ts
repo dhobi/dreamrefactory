@@ -24,10 +24,12 @@
  *   4. escape carries the sequence on — logo, intro, menu — which is what all
  *      three films' ESC-skips header bit meant in 1996, and which also proves
  *      the five-segment intro was reached and started;
- *   5. a click at the middle of the Begin button reaches chapter one's
- *      briefing. This is the one that says "the game started" rather than "a
- *      picture appeared" — it goes through the film's region table, its action
- *      type and its frame index, all read big-endian.
+ *   5. a click at the middle of the Begin button reaches the CHARACTER CHOOSER,
+ *      the chooser answers, and the answer starts the game. This is the one that
+ *      says "the game started" rather than "a picture appeared" — it goes
+ *      through the film's region table, its action type and its frame index, all
+ *      read big-endian, and then through `char.mov` into `walk.html`.
+ *   6. Prefs opens its panel and its three difficulty boxes take a click.
  *
  * ## Two traps this file is deliberately shaped around
  *
@@ -47,6 +49,22 @@ const URL_BASE = `${BASE}/`;
 const HEADED = process.env.HEADED === "1";
 /** where the Begin button is, in the game's own 512x384 screen */
 const BEGIN = { x: 400, y: 93 };
+/** and Prefs, two buttons down — `menu.mov`'s region at y 180..208 */
+const PREFS = { x: 410, y: 194 };
+/**
+ * The chooser's two figures, and its accept button.
+ *
+ * `char.mov`'s regions are on "frame 20" onwards, where it loops: the left pair
+ * chain `ltpan.mov` and the right pair `rtpan.mov` (34,65)-(226,231) against
+ * (287,62)-(477,232). Each pan ends on a frame that WAITS for its one region at
+ * (219,225)-(291,264), which is the only way out of it.
+ */
+const LEFT_FIGURE = { x: 110, y: 150 };
+const RIGHT_FIGURE = { x: 400, y: 150 };
+const ACCEPT = { x: 255, y: 244 };
+/** the prefs panel's three difficulty boxes — `0x4791d8`, `0x4791e0`, `0x4791e8` */
+const EASY = { x: 130, y: 233 };
+const HARD = { x: 226, y: 233 };
 
 const browser = await launch({ headless: !HEADED });
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
@@ -118,22 +136,94 @@ if (!/frame 1\//.test(before)) fail(`not on the menu's first frame: "${before}"`
 // file made it: the click really did reach the region, the menu really did end
 // on "frame 2" as it should, and nothing picked that up — so the page went
 // blank, `#loc` went empty, "after !== before" held, and the test reported PASS
-// on a broken page. What Begin means is that chapter one's briefing plays, so
-// that is what is asserted.
-const box = (await page.locator("#screen").boundingBox())!;
-await page.mouse.click(
-  box.x + (BEGIN.x / 512) * box.width,
-  box.y + (BEGIN.y / 384) * box.height,
+// on a broken page.
+//
+// What Begin MEANS is the correction. It does not begin: `menu.mov`'s "frame 2"
+// is frame index 168, and `0x45df7c` — the 168th slot of the jump table at
+// `0x45e1ac` — sets `[0x46b208] = -1`, which `0x40312c` plays as `char.mov`. The
+// game asks which of its two players you are before it starts.
+const at = async (p: { x: number; y: number }): Promise<void> => {
+  const box = (await page.locator("#screen").boundingBox())!;
+  await page.mouse.click(box.x + (p.x / 512) * box.width, box.y + (p.y / 384) * box.height);
+};
+const loc = async (): Promise<string> => {
+  try {
+    return (await page.locator("#loc").textContent({ timeout: 2000 })) ?? "";
+  } catch {
+    return ""; // the page navigated away, which is itself an answer
+  }
+};
+const until = async (what: RegExp, ms = 40_000): Promise<boolean> => {
+  for (let i = 0; i < ms / 200; i++) {
+    if (what.test(await loc()) || what.test(page.url())) return true;
+    await page.waitForTimeout(200);
+  }
+  return false;
+};
+
+await at(BEGIN);
+if (!(await until(/char\.mov/i))) fail(`Begin should reach the chooser (0x45df7c); #loc says "${await loc()}"`);
+console.log(`after clicking Begin: ${await loc()}`);
+
+// ...and the chooser's regions are only on "frame 20" onward, where it loops
+for (let i = 0; i < 300; i++) {
+  const m = /frame (\d+)\/63/.exec(await loc());
+  if (m && Number(m[1]) >= 21) break;
+  await page.waitForTimeout(200);
+}
+await at(RIGHT_FIGURE);
+if (!(await until(/rtpan\.mov/i))) fail(`the right figure chains rtpan.mov; #loc says "${await loc()}"`);
+console.log(`after clicking the right figure: ${await loc()}`);
+
+// the pan ends on a frame that waits for its one region — the accept button
+if (!(await until(/frame 58\/59/))) fail(`rtpan.mov should end waiting on its accept button`);
+await at(ACCEPT);
+if (!(await until(/walk\.html/, 20_000))) fail(`accepting the chooser should start the game; still at "${await loc()}"`);
+const url = page.url();
+console.log(`after accepting: ${url.replace(/^.*?(?=\/walk)/, "")}`);
+if (!/char=1/.test(url)) {
+  fail(`rtpan.mov names its frame 1 as actionframe TWO, which is character 1 (0x45e374); the url says ${url}`);
+}
+// ...and the page it reached is wearing that player
+const hud = page.locator("#hud");
+await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 90_000 });
+const wearing = (await hud.textContent()) ?? "";
+if (!/· char 1/.test(wearing)) fail(`walk.html should be playing character 1; the panel says ${/· char \d/.exec(wearing)?.[0]}`);
+const cels = /· cel (\d+)/.exec(wearing)?.[1];
+if (!cels || Number(cels) < 5000) fail(`character 1 wears the 5xxx cels; it is standing on ${cels}`);
+console.log(`ok    and walk.html is playing character 1, on cel ${cels}`);
+
+// 6 — Prefs, which is the one button the film answers by itself and the
+//     executable overrides: 0x45e093 plays prefs2.mov, and its panel has no
+//     regions at all — 0x45db40 draws the three boxes and 0x45d700 takes the
+//     clicks. Difficulty is +1 easy, 0 medium, -1 hard (0x448ac2's health).
+await page.goBack();
+await page.waitForTimeout(500);
+await page.goto(URL_BASE, { waitUntil: "domcontentloaded" });
+await page.waitForFunction(
+  () => !(document.getElementById("start") as HTMLButtonElement).disabled,
+  null,
+  { timeout: 180_000 },
 );
-await page.waitForTimeout(6000);
-const after = (await page.textContent("#loc")) ?? "";
-console.log(`after clicking Begin: ${after}`);
-if (!after.trim()) fail("nothing is playing after Begin — the page went blank");
-if (!/chp01/i.test(after)) fail(`Begin did not reach chapter one's briefing: "${after}"`);
+await page.click("#start");
+for (let i = 0; i < 40 && !/menu\.mov/i.test(await loc()); i++) {
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(1200);
+}
+await at(PREFS);
+if (!(await until(/prefs panel/))) fail(`Prefs should open its panel; #loc says "${await loc()}"`);
+if (!/difficulty 0/.test(await loc())) fail(`the panel should open on the middle difficulty: "${await loc()}"`);
+await at(HARD);
+await page.waitForTimeout(300);
+if (!/difficulty -1/.test(await loc())) fail(`0x4791e8's box stores -1 (0x45d7ae); the panel says "${await loc()}"`);
+await at(EASY);
+await page.waitForTimeout(300);
+if (!/difficulty 1/.test(await loc())) fail(`0x4791d8's box stores 1 (0x45d788); the panel says "${await loc()}"`);
+console.log(`ok    the preferences panel is live, and its three boxes are the disc's own rects`);
 
 const err = (await page.textContent("#err")) ?? "";
 if (err.trim()) problems.push(`#err: ${err}`);
 if (problems.length) fail(problems.join(" | "));
 
-console.log("PASS — the sequence runs logo → intro → menu, and Begin is live");
+console.log("PASS — logo → intro → menu, Begin asks which player, and the answer starts the game");
 await finish(browser);

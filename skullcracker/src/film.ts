@@ -38,6 +38,19 @@ export interface FilmHost {
   log(message: string): void;
   /** the film's own data says to chain to another film */
   onChain(movie: string): void;
+  /**
+   * Playback reached the frame the segment header NAMES as its action frame —
+   * `+0x40` for 1 and `+0x50` for 2, {@link MovSegment.actionFrame1}.
+   *
+   * This is how a DreamFactory film answers a question with no script: the
+   * player polls "did we go through the frame called X" and the executable does
+   * the rest. Skull Cracker's character chooser is the whole of it —
+   * `0x449ea9` looks both names up before the film runs, `0x449fbb` compares the
+   * current frame index against each, and `0x45e1e0(1 or 2)` sets `0x46b1a8`.
+   * `ltpan.mov` names its frame 1 as actionframe ONE and `rtpan.mov` names its
+   * frame 1 as actionframe TWO, so which way the camera pans is which player.
+   */
+  onAction?(which: 1 | 2): void;
   /** this film is over, and which frame it ended ON */
   onEnd(lastFrame: string): void;
 }
@@ -132,11 +145,16 @@ export class Film {
     this.enterFrame(0);
   }
 
-  /** a frame is now on screen: fire the sound it names, if it names one */
+  /** a frame is now on screen: fire the sound it names, and report the action */
   private enterFrame(idx: number): void {
-    const name = this.seg.frames[idx]?.sound ?? "";
+    const frame = this.seg.frames[idx];
+    const name = frame?.sound ?? "";
     if (name && name.toLowerCase() !== this.clickSound) this.playEvent(name);
     this.clickSound = "";
+    // ...and the header's own two named frames, which is how the chooser answers
+    const here = (frame?.name ?? "").toLowerCase();
+    if (here && here === this.seg.actionFrame1.toLowerCase()) this.host.onAction?.(1);
+    if (here && here === this.seg.actionFrame2.toLowerCase()) this.host.onAction?.(2);
   }
 
   /**
@@ -204,9 +222,19 @@ export class Film {
     return this.waiting.some((r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1);
   }
 
-  /** a click at a point on the 512x384 screen — does a region own it? */
+  /**
+   * A click at a point on the 512x384 screen — does a region own it?
+   *
+   * The frame's OWN regions, not {@link waiting}: a `playsThroughRegions` frame
+   * (flags bit 2) does not stop for its regions, but it still honours a click
+   * that has already happened — `0x44979f` reads the region count either way and
+   * only the WAIT is skipped. `char.mov` is the whole reason it matters: every
+   * one of its sixty-three frames sets the bit, so the chooser animates while it
+   * waits, and reading `waiting` here meant the two figures could not be clicked
+   * at all.
+   */
   click(x: number, y: number, now: number): boolean {
-    for (const r of this.waiting) {
+    for (const r of this.seg.frames[this.pos]?.regions ?? []) {
       if (x < r.x0 || x > r.x1 || y < r.y0 || y > r.y1) continue;
       if (r.sound) {
         this.playEvent(r.sound);

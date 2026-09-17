@@ -147,7 +147,7 @@ export interface CodeReaction {
  * 4550 -> 9550, 4570 -> 9570, 20 -> 5020 — which is what made the wrong table
  * look plausible for as long as it did.
  */
-export const BLOW_CODES: Readonly<Record<number, CodeReaction>> = {
+const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
   [-8]: {
     code: -8,
     act: "bowled",
@@ -300,13 +300,25 @@ export const BLOW_CODES: Readonly<Record<number, CodeReaction>> = {
  * the state shortens the hold: the grab ends when the GRABBER's cel stops
  * carrying a grip, and struggling is animation.
  */
-export const HELD = {
+const HELD_0 = {
   /** `0x4720e8` tag 0 */
   loop: { cels: [4570, 4571, 4572, 4571], hold: 2, from: "0x4720e8 tag 0" },
   /** `0x4720e8` tag 1 — P, and only from tag 0 */
   struggle: { cels: [4575, 4576, 4577, 4575, 4578, 4579], hold: 2, from: "0x4720e8 tag 1" },
   from: "0x428080's kind-10 case, 0x42857d..0x428704",
 } as const;
+
+/** ...and character 1's, `0x476698`, which is the same ten frames plus 5000 */
+const HELD_1 = {
+  /** `0x476698` tag 0 */
+  loop: { cels: [9570, 9571, 9572, 9571], hold: 2, from: "0x476698 tag 0" },
+  /** `0x476698` tag 1 — P, and only from tag 0 */
+  struggle: { cels: [9575, 9576, 9577, 9575, 9578, 9579], hold: 2, from: "0x476698 tag 1" },
+  from: "0x442ad0's kind-10 case",
+} as const;
+
+/** the held loop of whichever player is on screen */
+export const PLAYER_HELD: readonly [typeof HELD_0, typeof HELD_1] = [HELD_0, HELD_1];
 
 /**
  * Where a grabber is holding you: the centre of its current cel's strike box,
@@ -325,3 +337,167 @@ export function gripOf(
   if (cel.strike.x0 === cel.strike.x1) return null;
   return { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
 }
+
+/**
+ * The other one's eight, out of `0x4492b8`.
+ *
+ * Same eight codes, same dispatch, a different table — `0x448c8a` jumps through
+ * this one where `0x42ec8a` jumps through character 0's. Most rows are the same
+ * reaction in cels five thousand higher, and two are not: character 1 SHOVES
+ * when it is bowled over (`0x448cf4`, +-50 off `obj+0x28`) where character 0
+ * does not, and character 0's `-1` spends twenty health (`0x42eb2b`) where
+ * character 1's spends none.
+ */
+const BLOW_CODES_1: Readonly<Record<number, CodeReaction>> = {
+  [-8]: {
+    code: -8,
+    act: "bowled",
+    // `0x476830` tag 2, kind 26 — three frames a cel, and it holds the last
+    anim: { cels: [9550, 9551, 9552, 9553, 9554, 9555, 9556, 9557, 9558, 9558, 9558], hold: 3, from: "0x476830 tag 2" },
+    gravity: null,
+    stops: false,
+    /**
+     * `0x448cf4`: +50 when `obj+0x28` is 1, -50 when it is 0.
+     *
+     * `obj+0x28` is a MIRROR FLAG, not a sign: `0x45d0f0` flips a frame's own dx
+     * when it is set, so 1 is the mirrored drawing — which is this port's facing
+     * of **-1**. The blaster settles it independently at `0x412b6e`, where the
+     * muzzle goes 120 to the LEFT when the flag is 1. So +50 at flag 1 is +50
+     * while facing left: a knock BACKWARDS, which is what being bowled over is,
+     * and the sign here is against the port's facing rather than along it.
+     */
+    shove: 50,
+    /** `0x448d00` — `0x40c900(y, 0x78, 0)` */
+    shake: 0x78,
+    /** `0x448cc9` */
+    sound: 0x13,
+    consumes: false,
+    sender: "0x418dce, in the Boggs sequence and nowhere a level places",
+    from: "0x448c91",
+  },
+  [-7]: {
+    code: -7,
+    act: "downBack",
+    // `0x476890` tag 2 — the same knockdown a hard blow from behind gives
+    anim: { cels: [5940, 5941, 5942, 5943, 5944, 5944, 5944], hold: 1, from: "0x476890 tag 2" },
+    gravity: null,
+    stops: false,
+    consumes: true,
+    sender: "the HAND, out of its rect rather than under your feet — 0x420e3b",
+    from: "0x448d24",
+  },
+  [-6]: {
+    code: -6,
+    act: "flattened",
+    // `0x476758` tag 0 — which is also the animation of being dead
+    anim: { cels: [5910, 5911, 5912, 5913, 5914, 5915], hold: 2, from: "0x476758 tag 0" },
+    /** `0x448d7d` — `0x42f850(player, 1.0f)` */
+    gravity: 1,
+    stops: false,
+    consumes: false,
+    sender: "NOTHING. No object in SC.EXE writes -6 into its own strength.",
+    from: "0x448d72",
+  },
+  [-5]: {
+    code: -5,
+    act: "slumped",
+    // `0x476758` tag 4
+    anim: { cels: [5900, 5901, 5902, 5902], hold: 2, from: "0x476758 tag 4" },
+    /** `0x448dc3` — half gravity, and `obj+0x34` goes to 0 with it */
+    gravity: 0.5,
+    stops: false,
+    consumes: false,
+    sender: "the BUSH, and only once you are already dying — 0x43eedb",
+    from: "0x448dae",
+  },
+  [-4]: {
+    code: -4,
+    act: "shocked",
+    /**
+     * `0x476758` tag 3 — and it is two animations end to end: three cels of
+     * 9700..9702 played out and back, which is the arc going through you, and
+     * then the six of the knockdown.
+     */
+    anim: {
+      cels: [9700, 9701, 9702, 9701, 9700, 9701, 5910, 5911, 5912, 5913, 5914, 5915],
+      hold: 2,
+      from: "0x476758 tag 3",
+    },
+    gravity: 1,
+    stops: false,
+    consumes: false,
+    sender: "the SURGE, BARREL's arcing current — 0x426a90",
+    from: "0x448df4",
+  },
+  [-3]: {
+    code: -3,
+    act: "grabbed",
+    /**
+     * `0x476698` tag 0, kind 10, and the held loop that follows it is tag 0 of
+     * the SAME script — `0x442ad0`'s kind-10 case against `0x428080`'s. The note
+     * that used to stand here, about the reaction and the loop being in two
+     * different sets of cels, was this page reading one character's table while
+     * wearing the other's skin.
+     */
+    anim: { cels: [9570, 9571, 9572, 9571], hold: 2, from: "0x476698 tag 0" },
+    /** `0x448ef4` — `0x42f850(player, 0)`: no gravity while something has you */
+    gravity: 0,
+    stops: true,
+    consumes: true,
+    holds: true,
+    sender: "the CLAW, the HAND underfoot, the WRAITH and the BUSH",
+    from: "0x448e90",
+  },
+  /**
+   * -2 is the one row with a condition in front of it.
+   *
+   * `0x448f0b` reads the player's CURRENT script and only two of them absorb it
+   * — `0x476428` (kind 7, the crouch) and `0x4765f8` (kind 8, the one whose
+   * records carry dx +-100, which is the board). Either of those consumes the
+   * blow, sets the flag at `0x46b1bc` that `0x42ae50` reads and clears, and
+   * returns 1. Everything else gets the jolt below and returns 0, which is the
+   * branch this row describes.
+   *
+   * The condition is not modelled, because no class a level places sends -2:
+   * all four writers are inside sequences rather than in a class the spawner
+   * ever builds. Written down here rather than left out.
+   */
+  [-2]: {
+    code: -2,
+    act: "jolt",
+    // `0x476578` tag 0, kind 9 — the three cels five times over
+    anim: {
+      cels: [5460, 5461, 5462, 5460, 5461, 5462, 5460, 5461, 5462, 5460, 5461, 5462, 5460, 5461, 5462],
+      hold: 2,
+      from: "0x476578 tag 0",
+    },
+    gravity: null,
+    stops: false,
+    consumes: false,
+    sender: "0x4201e4 and three more, none of them a class a level places",
+    from: "0x448f06",
+  },
+  [-1]: {
+    code: -1,
+    act: "spun",
+    // `0x4766f0` tag 3 — one frame a cel, and the shortest reaction there is
+    anim: { cels: [5020, 5021, 5020, 5021], hold: 1, from: "0x4766f0 tag 3" },
+    gravity: null,
+    stops: true,
+    /** `0x448ff3` — `0x40c900(y, -1, striker)` */
+    shake: -1,
+    consumes: true,
+    sender: "the Boggs machinery — 0x413bf9, 0x41b022 — and it is also what Boggs ALONE takes",
+    from: "0x448f7c",
+  },
+};
+
+
+/**
+ * The two tables, indexed the way `0x46b1a8` indexes the two players.
+ *
+ * See {@link file://./players.ts}: there are two of everything below
+ * `0x402950`, and this is the pair of them that decides what a negative blow
+ * does to you.
+ */
+export const PLAYER_CODES: readonly [typeof BLOW_CODES_0, typeof BLOW_CODES_1] = [BLOW_CODES_0, BLOW_CODES_1];

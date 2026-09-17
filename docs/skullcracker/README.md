@@ -1482,11 +1482,94 @@ film's whole return value is *which frame it stopped on*; the executable read th
 and did the rest. One button is the exception and answers by itself: Prefs is a
 type-3 chain naming `prefs.mov`.
 
-So `skullcracker/src/main.ts` keeps a small table mapping the exit frame to what
-this port can do about it — that table is this port's reading of the buttons (they
-are in the menu's own top-to-bottom screen order), not something recovered from
-the film. Begin leads to a level that is native code, so it plays what the game
-plays on the way there: chapter one's briefing card.
+That is half of it. The other half is not this port's reading of the labels, which
+is what `skullcracker/src/main.ts` used to keep, but the executable's own table —
+and it is reached by FRAME INDEX rather than by frame name:
+
+```
+  45dee7  movsx eax, si          ; si = the film's current frame index
+  45deea  sub   eax, 0xa7        ; 167
+  45deef  cmp   eax, 7
+  45def8  jmp   dword ptr [eax*4 + 0x45e1ac]
+```
+
+`menu.mov`'s stubs are frames 168..173, so the eight slots read straight across:
+
+| frame | index | slot | what it does |
+| --- | --- | --- | --- |
+| `"Name 169"` | 167 | `0x45deff` | the attract branch |
+| `"frame 2"` | 168 | `0x45df7c` | `[0x46b208] = -1` → `char.mov` — **Begin** |
+| `"frame 3"` | 169 | `0x45df8d` | `[0x46b208] = -2` → a slot dialog — Open |
+| `"frame 4"` | 170 | `0x45e082` | `[0x46b208] = 3` → `helpwin.mov` |
+| `"frame 5"` | 171 | `0x45e093` | `[0x46b208] = 2` → `prefs2.mov` |
+| `"frame 6"` | 172 | `0x45e0a4` | `[0x4abdfe] = 11` → `0x40340f` — **Quit** |
+| `"frame 7"` | 173 | `0x45e0be` | `[0x46b208] = 6` → `credits.mov` |
+| `"demo frame"` | 174 | `0x45e0cf` | the attract branch again |
+
+Two of those had been read wrong here, and the second is the interesting one.
+"frame 6" is Quit — state 11 sets `[0x46b200]` and `0x403433` falls out of the
+shell loop into `0x40a4a0` — where this page had it playing a film.
+
+**And Begin does not begin.** It plays `char.mov`, which asks which of the two
+Skull Crackers you are. The game starts after that: the chooser leaves
+`[0x46b208] == 3`, `0x403154` drops out of the menu state, and `[0x4abdfe]` is
+already 3 — `0x4031b2`, the level runner. So the whole front end is
+**menu → chooser → level one**, and this port now follows it into `walk.html`
+with the two words the front end settled in the query string.
+
+Prefs is the one button the film tries to answer by itself, and the executable
+overrules it: the stub is a type-3 chain naming `prefs.mov`, and `0x45e093` plays
+`prefs2.mov` instead.
+
+### The chooser answers with a frame name, and prefs with nothing at all
+
+`char.mov` is 63 frames that loop from 20 to 63 with four regions live the whole
+way — two on the left figure chaining `ltpan.mov`, two on the right chaining
+`rtpan.mov`. Every one of those frames sets flags bit 2, "do not wait for the
+regions", which is a frame that animates and is still clickable. Reading that bit
+as "has no regions" is why the two figures could not be clicked here at all;
+`0x44979f` reads the region count either way and only the wait is skipped.
+
+Which pan means which player is in the pans' own headers, through the one
+mechanism a DreamFactory film has for answering a question it was not asked:
+
+```
+  449ea9  bx = findFrameByName([hdr + 0x40])    ; actionframe 1
+  449ebd  bp = findFrameByName([hdr + 0x50])    ; actionframe 2
+  449fbb  if (current frame == bx)  0x45e1e0(1)
+  449fd6  if (current frame == bp)  0x45e1e0(2)
+  45e369  [0x46b1a8] = 0   ; when the argument was 1
+  45e374  [0x46b1a8] = 1   ; otherwise
+```
+
+`ltpan.mov` names its `"frame 1"` as actionframe **one** and `rtpan.mov` names its
+`"frame 1"` as actionframe **two**. That is the entire character chooser: two
+header fields, one comparison a frame. Each pan then ends on a frame that DOES
+wait, for a single region at (219,225)-(291,264) — the accept button.
+
+`prefs2.mov`, by contrast, is thirty frames of a panel sliding open and a type-1
+exit, with **no regions anywhere in it**. The executable owns the panel from the
+moment the film stops: `0x45db40` draws it and `0x45d700` is a fourteen-way
+dispatch on a control id. Fourteen controls, and their rects are in `.data`:
+
+```
+  0x479188..0x4791c7   eight boxes, two columns of four   -> [0x47917c]
+  0x4791c8             a slider track                     -> volume 0..9, 0x4274e0
+  0x4791d8             {226,123,241,138}                  -> [0x46b20c] =  1
+  0x4791e0             {226,171,241,186}                  -> [0x46b20c] =  0
+  0x4791e8             {226,219,241,234}                  -> [0x46b20c] = -1
+  0x4791f0             one box                            -> [0x46b1fc] ^= 1
+```
+
+Which corrects something this page had written down as a fact: *nothing writes
+`0x46b20c`, so the difficulty is always zero*. Three instructions write it —
+`0x45d788`, `0x45d79b`, `0x45d7ae` — and they are those three boxes. Zero is the
+default, not the only value. Which end is which is settled by what the number
+does rather than by a label: `0x448ac2` gives `trunc(d × 600) + 1200` health and
+`0x40e300(n)` returns `n - (n/2)·d`, so **+1 is easy** — more health, softer
+blows — and `0x40e300` is called from the classes' own constructors (Boggs' four
+thousand at `0x41be84`, his machines' three at `0x41b474`) and from neither
+player's hit handler. The difficulty makes the LEVEL harder, not the blow.
 
 ### The sound was one pointer away
 
@@ -1628,6 +1711,47 @@ shove on −8: the ±50 against `obj+0x28` is `0x448cf4`, character 1's, and
 0's −1 spends twenty health at `0x42eb2b` (`0x402ac0(0x14)`), where character
 1's spends none. "No reaction in the table takes a point off anybody" was true
 of the table this page had read, and not of the one it was playing.
+
+### ...and now both of them are playable
+
+Character 1 is not character 0 in different clothes, which is what "plus five
+thousand" had made it look like. Its state machine is `0x442ad0`, 5552 bytes, and
+every one of the twenty-eight animation kinds is a script of its own —
+`0x475c88` for `0x471648`, `0x475f38` for `0x471920`, and so on down. The two
+machines are install-for-install the same shape (`0x444080` against `0x429690`,
+`0x444da0` against `0x42a400`, `0x444ff0` against `0x42a670`, `0x445320` against
+`0x42a9a0`), and what differs is which tags they reach for and what is in them:
+
+| | character 0 | character 1 |
+| --- | --- | --- |
+| walk | dx 95 | dx 105 |
+| run | dx 180 | dx 200 |
+| jump | dy −420 | dy −500 |
+| running jump | dy −420 | dy −480 |
+| hop | dy −210 | dy −240 |
+| flying kick | dy −310 | dy −370 |
+| crawl | 47 on each of five cels | 315 on the last of five |
+| standing box | 88 below the anchor | 69 |
+| idle fidgets | three (tags 1, 2, 3) | two — there is no tag 3 |
+| duck fidget | `704..707`, rolled 13 in 707 | none: tags 1, 2 and 3 are one cel |
+| big punch | a coin toss between two | one pose, no toss |
+| P + K | the 650s headbutt, out and back | `9800`, which LEAVES THE GROUND |
+
+The frame counts say it from the other side: `0x471648` is 47 frames and
+`0x475c88` is 41, `0x471c90` is 26 and `0x476240` is 23.
+
+Three rows of this page's own tables turned out to be character 1's, left over
+from the same hybrid — the dying animation (`0x476758` tag 0, where character 0's
+is `0x4721a0` tag **1**, installed at `0x429336` a line before the kind goes to
+27), the hard landing (`0x476220` tag 5 against `0x471c68` tag 5), and the duck
+combo, which was wrong in a third way: `0x42ab4a` installs `0x471d68` tag 6,
+`4100(dx 700, dy −80) 4101 4102 4103` — a dive at four times the run. The
+630..632 that stood there is tag 6 of `0x471c90`, a different script with the
+same tag number.
+
+`skullcracker/src/players.ts` is both of them side by side, and the page reads
+`0x46b1a8` to pick: `?char=1`, the `c` key (which is input action 11, `0x402d22`,
+the other designer's key the shipped table leaves unbound), or the chooser.
 
 Getting that census right needed the disassembler pointed differently. A sweep
 in overlapping windows can begin mid-instruction, and everything it decodes
