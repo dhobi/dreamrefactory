@@ -11,7 +11,7 @@
  *
  * and `0x402d22` — input action 11, which the shipped key table leaves unbound —
  * TOGGLES that word. So swapping character mid-level is the original's own
- * feature and not this page's idea; see `walk.ts`'s `c` key.
+ * feature and not this page's idea; see `walk.ts`'s Shift+C.
  *
  * Everything below `0x402950` doubles: `0x402900` and `0x402990` pair
  * `0x42e560`/`0x448a70` and `0x42e580`/`0x448a90`, each character installs its

@@ -7,7 +7,7 @@
  * Everything under test here is `SC.EXE`'s, and none of it runs by default. The
  * reason is the other eight suites: with damage on, walking east through WOODS
  * means three hydraulic presses, and a route test becomes a fight. So it ships
- * ready and dark behind `?damage=1` and the `h` key.
+ * ready and dark behind `?damage=1` and Shift+H.
  *
  * What the file says, and what this checks:
  *
@@ -47,12 +47,14 @@ const main = async (): Promise<void> => {
   if (!/damage off/.test(await say())) fail(`it should still be off after five seconds under a press`);
   console.log(`ok    the switch starts off, and a press cannot touch the player`);
 
-  // 2. `h` turns it on, at the engine's own figure
-  await page.keyboard.press("h");
+  // 2. Shift+H turns it on, at the engine's own figure. The shift is this page's:
+  //    plain `h` is the first letter of `harakari`, and `0x403c1b` feeds every
+  //    lowercase letter to the cheat accumulator before anything else looks at it
+  await page.keyboard.press("Shift+H");
   await page.waitForTimeout(300);
   const max = /damage ON \d+\/(\d+)hp/.exec(await say())?.[1];
   if (max !== "1200") fail(`0x448ac2 gives 1200 at the middle difficulty; the panel says ${max}`);
-  console.log(`ok    the h key turns it on and the player has ${max} health`);
+  console.log(`ok    Shift+H turns it on and the player has ${max} health`);
 
   // 3. ...and so does the query, which is what the other suites would use
   await go(3, 7100, true);

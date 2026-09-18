@@ -509,8 +509,8 @@ closes the distance and nothing else, so running it costs the player nothing.
 ### Things that hit back, behind a switch
 
 The port could hit and nothing could hit it, and that was a hole rather than a
-design. It is now filled and **off by default** — `?damage=1` at load or the `h`
-key at any time — because the other suites walk levels end to end and three
+design. It is now filled and **off by default** — `?damage=1` at load or Shift+H
+at any time — because the other suites walk levels end to end and three
 hydraulic presses turn a route test into a fight.
 
 The numbers are all the engine's. Maximum health is `trunc(difficulty × 600) +
@@ -1633,6 +1633,64 @@ of the same switch: on, `0x40f190(0x4ac370)` starts the level's theme bank; off,
 `0x427960(0, 0, 1, 0)` stops it. No effects bank is ever consulted, so turning it
 off leaves every fist and every door exactly as loud as they were.
 
+### Eight words, one per length, and a two-thirds-of-a-second memory
+
+The cheat words are not a table of strings compared against the last thing you
+typed. `0x403ed0` is called from `0x403c1b` with every **lowercase** letter the
+level's key loop sees, before that letter is uppercased and looked up as an
+action — so a cheat is typed with the same keys that are walking you around —
+and the recogniser is this:
+
+```
+  403ed0  if (now - [0x46b324] >= 0x28)  [0x46b320] = 0   ; 40 ticks and it forgets
+  403f00  [0x4a02c1 + i] = char                           ; a Pascal string
+  403f0b  [0x4a02c0] = i + 1                              ; ...its length byte
+  403f17  if (++i >= 0x13)  i = 0                         ; nineteen and it wraps
+  403f29  eax = i - 3;  if (eax > 7) return               ; only 3…10 are words
+  403f35  jmp [eax*4 + 0x404140]                          ; ONE candidate per length
+```
+
+The jump table is indexed by **how many characters have been typed since the last
+pause**, and each of its eight slots compares the accumulator against exactly one
+string. Which is why the eight words are eight different lengths: type nine
+letters and the only word you can possibly have typed is `marsupial`. `0x4087c0`
+is `ms * 3 / 50`, a sixtieth-of-a-second tick, so the 0x28 is two thirds of a
+second between letters.
+
+```
+   3  zip         0x46b438   [0x4ac38a]++, 0x402760   the next initplayer point
+   4  eshs        0x46b440   0x45ef30(0x78)           120 rounds, if you are armed
+   5  cthia       0x46b460   0x404160, state 2        asks, and goes to that level
+   6  jetson      0x46b430   0x40d350(-850)           850 more on the mission clock
+   7  bewitch     0x46b448   0x40d400(5)              five lives
+   8  harakari    0x46b424   0x402ac0(0x1f4)          500 health gone
+   9  marsupial   0x46b454   0x402b20(0x400)          1024 health back
+  10  myxzltplkt  0x46b418   0x404136 mov ax, 1       nothing at all
+```
+
+Two of those are corrections. **`jetson` is TIME, not score.** `0x40d350`'s
+argument is signed — positive sets `[0x4a4d68]` and negative adds to it — and
+`[0x4a4d68]` is the mission clock, the word every chapter's entry function fills
+from its book's `timer` record — see "The mission clock was a record all along"
+above. The gift is capped at
+`[0x4a3b18]`, the dial's own full scale, and the same −850 is what the clock
+PICKUP hands over (`0x428354`). And **`myxzltplkt` really is the joke it looks
+like**: `0x40411e` makes the comparison and `0x404136` loads 1 into `ax` whether
+it matched or not, so the branch that would have done something was never
+written.
+
+`eshs` is the only one with a guard: `0x402ee0` dispatches on the character and
+both halves (`0x42e6e0`, `0x448bf0`) ask the same thing — is the player's kind
+between 0x12 and 0x16, which is the armed set. Empty-handed the word is nothing.
+
+One consequence for this page. Four of its own keys were bare letters — `h` for
+the damage switch, `n` for the spawn cycler, `c` for the character switch and `m`
+for the mute — and three of those are the first letter of a word. **They are held
+with SHIFT now.** None of the four is the original's key, and the original's own
+designer set is behind a modifier too (`0x403c40` tests the event's modifiers
+against 0x1fa0 before it will read one), so this is the shape the executable
+already has. `[` and `]` stay bare: no cheat word has a bracket in it.
+
 ### The sound was one pointer away
 
 The disc's 24 `.SND` files are DreamFactory 4 audio banks — the format Titanic
@@ -1812,7 +1870,7 @@ combo, which was wrong in a third way: `0x42ab4a` installs `0x471d68` tag 6,
 same tag number.
 
 `skullcracker/src/players.ts` is both of them side by side, and the page reads
-`0x46b1a8` to pick: `?char=1`, the `c` key (which is input action 11, `0x402d22`,
+`0x46b1a8` to pick: `?char=1`, Shift+C (which is input action 11, `0x402d22`,
 the other designer's key the shipped table leaves unbound), or the chooser.
 
 Getting that census right needed the disassembler pointed differently. A sweep

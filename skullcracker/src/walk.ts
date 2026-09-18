@@ -174,6 +174,7 @@ import {
 import { PLAYER_CODES, PLAYER_HELD, gripOf } from "./codes";
 import { PLAYERS } from "./players";
 import { PREFS_ACTIONS, keyName, loadPrefs } from "./prefs";
+import { Cheat, CheatTyper } from "./cheats";
 import {
   CEL,
   CLOCK,
@@ -238,7 +239,7 @@ import {
  * game's own and so is changing it mid-level. See {@link file://./players.ts}
  * for the two of them and for every place they differ.
  *
- * `?char=1` picks one before the level loads; the `c` key is action 11.
+ * `?char=1` picks one before the level loads; Shift+C is action 11.
  */
 let CHARACTER: 0 | 1 = new URL(location.href).searchParams.get("char") === "1" ? 1 : 0;
 let KIT = PLAYERS[CHARACTER];
@@ -1227,7 +1228,7 @@ const HOLD_FRAMES = 2;
  * Everything in this block is the engine's, and none of it runs unless the switch
  * below is thrown. The reason is the levels: with damage on, a probe walking east
  * through WOODS meets three hydraulic presses and every route test in this repo
- * becomes a fight. So it ships ready and dark, and `?damage=1` or the `h` key
+ * becomes a fight. So it ships ready and dark, and `?damage=1` or Shift+H
  * turns it on.
  *
  * The numbers:
@@ -1548,7 +1549,8 @@ async function loadLevel(index: number): Promise<void> {
   // ?clock= starts the mission clock short, which is the only way to reach the
   // last two minutes of an eight-minute dial from a test. It is spent on the
   // first level it is given to, so a timed-out level does not time out again.
-  stats.ticks = startTicks ?? clockFor(sbk);
+  stats.clockFull = clockFor(sbk);
+  stats.ticks = startTicks ?? stats.clockFull;
   startTicks = null;
   stats.shown = null;
   goalOpen = false;
@@ -2484,6 +2486,59 @@ function keyTable(): Record<string, keyof typeof held> {
 }
 
 const KEYS: Readonly<Record<string, keyof typeof held>> = keyTable();
+
+/**
+ * The eight words, and they are typed with the same keys that are walking you.
+ *
+ * `0x403c1b` hands every lowercase letter to `0x403ed0` BEFORE the letter is
+ * uppercased and looked up as an action, so `a` is both "away" and the first
+ * letter of nothing, and `zip` walks you while you type it. The recogniser is
+ * {@link file://./cheats.ts}; this is what each match does here.
+ */
+const cheats = new CheatTyper();
+/** the last word recognised, and when — the HUD says so for a moment */
+let cheatSaid: { cheat: Cheat; at: number } | null = null;
+
+function runCheat(cheat: Cheat): void {
+  switch (cheat.word) {
+    // `0x403f5c` — the same counter and the same jump Shift+N already spends
+    case "zip":
+      cycleSpawn();
+      break;
+    // `0x45ef30(0x78)`, behind `0x402ee0`: the player's kind has to be one of
+    // 0x12…0x16, which is the armed set (`0x42e6e0`)
+    case "eshs":
+      if (inv.armed) loadRounds(inv.weapon, 0x78);
+      break;
+    // `0x404160` puts up "Enter level (1-16):" (`0x46b469`) filled in with the
+    // level you are on, and turns the answer back into a chapter and a scene
+    case "cthia": {
+      const said = prompt("Enter level (1-16):", String(levelIndex + 1));
+      const n = Number(said);
+      if (Number.isInteger(n) && n >= 1 && n <= MISSIONS.length) void loadLevel(n - 1);
+      break;
+    }
+    case "jetson":
+      addClock(850);
+      break;
+    // `0x40d400(5)`, and five is also the most it would take
+    case "bewitch":
+      stats.lives = PICKUP.maxLives;
+      break;
+    case "harakari":
+      takeHealth(0x1f4);
+      break;
+    // `0x402b20(0x400)` — up to `[0x4ac3d8]`, which is your own maximum and so
+    // is the difficulty's
+    case "marsupial":
+      stats.health = Math.min(stats.maxHealth, stats.health + 0x400);
+      break;
+    // `0x40411e` makes the comparison and `0x404136` returns 1 either way
+    default:
+      break;
+  }
+}
+
 addEventListener("keydown", (e) => {
   wakeAudio();
   // the chooser is a real form control: while it has the focus, its own keys are
@@ -2495,6 +2550,15 @@ addEventListener("keydown", (e) => {
     if (e.key === "Escape") film.skip();
     e.preventDefault();
     return;
+  }
+  // every lowercase letter goes to the cheat accumulator first, exactly where
+  // `0x403c1b` puts it: before the action lookup, and so without taking the key
+  if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+    const said = cheats.press(e.key, performance.now());
+    if (said) {
+      cheatSaid = { cheat: said, at: performance.now() };
+      runCheat(said);
+    }
   }
   // the interface toggle goes first, because P is also the punch: Ctrl+P is the
   // original's own chord and it must not land on the fist
@@ -2509,25 +2573,38 @@ addEventListener("keydown", (e) => {
   if (k === "punch" && !held.punch) punchPressed = true;
   if (k === "kick" && !held.kick) kickPressed = true;
   if (k) held[k] = true;
-  // the damage switch — see {@link HURT}. It starts off, and `?damage=1` is the
-  // same switch thrown before the level loads
-  else if (e.key === "h" || e.key === "H") {
+  /*
+   * ...and the rest of this page's own keys are held with SHIFT, which they were
+   * not until the cheat words went in.
+   *
+   * `0x403c1b` feeds every LOWERCASE letter to the accumulator, so `h`, `n`, `c`
+   * and `m` are the first letters of `harakari`, nothing, `cthia` and
+   * `marsupial` — and a page that toggled the damage switch on the `h` of
+   * harakari could never take the word. None of these four is the original's
+   * key: the game's own designer set is behind a modifier too (`0x403c40` tests
+   * the event's modifiers against 0x1fa0 before it will read one), so this is
+   * the shape the executable already has. `[` and `]` stay bare: no cheat word
+   * has a bracket in it.
+   */
+  else if (e.shiftKey && e.key === "H") {
+    // the damage switch — see {@link HURT}. It starts off, and `?damage=1` is the
+    // same switch thrown before the level loads
     damageOn = !damageOn;
     if (!damageOn) stats.health = stats.maxHealth;
   } else if (e.key === "[") void loadLevel((levelIndex + 15) % 16);
   else if (e.key === "]") void loadLevel((levelIndex + 1) % 16);
-  else if (e.key === "n") cycleSpawn();
+  else if (e.shiftKey && e.key === "N") cycleSpawn();
   // ...and action 11, the other unbound designer's key: `0x402d22` toggles
   // `0x46b1a8`, which is WHICH PLAYER — see {@link file://./players.ts}. The
   // level is reloaded under it because the two of them are different sizes and
   // the pose on screen belongs to the one who is leaving
-  else if (e.key === "c" || e.key === "C") {
+  else if (e.shiftKey && e.key === "C") {
     useCharacter(CHARACTER === 0 ? 1 : 0);
     void loadLevel(levelIndex);
   }
-  // M is this page's own, and it is the only key here that is: the original's
-  // table has no mute in it — see {@link Sounds.toggle}
-  else if (e.key === "m" || e.key === "M") sound?.toggle();
+  // Shift+M is this page's own, and it is the only key here that is: the
+  // original's table has no mute in it — see {@link Sounds.toggle}
+  else if (e.shiftKey && e.key === "M") sound?.toggle();
   else return;
   e.preventDefault();
 });
@@ -2798,6 +2875,8 @@ const stats = {
   allowance: 0,
   /** engine frames left, counted down at the engine's rate */
   ticks: CLOCK_FULL,
+  /** `[0x4a3b18]` — the dial's full scale, which is what a gift of time caps at */
+  clockFull: CLOCK_FULL,
   /** whoever holds the right-hand bar — sticky, the way `0x46bd28` makes it */
   shown: null as HudFighter | null,
 };
@@ -3203,6 +3282,24 @@ function playerBody(): { top: number; left: number; bottom: number; right: numbe
   const [cx0, cx1] = p.facing < 0 ? [-rec.body.x1, -rec.body.x0] : [rec.body.x0, rec.body.x1];
   const ay = p.y - rec.height + rec.posY;
   return { left: p.x + cx0, right: p.x + cx1, top: ay + rec.body.y0, bottom: ay + rec.body.y1 };
+}
+
+/**
+ * `0x40d350` — a NEGATIVE argument is a gift of time, and the dial is the cap.
+ *
+ * ```
+ *   40d355  if (n >= 0)  [0x4a4d68] = n;  return      ; positive SETS the clock
+ *   40d361  [0x4a4d68] -= n                           ; ...negative adds
+ *   40d378  if ([0x4a3b18] < [0x4a4d68])  [0x4a4d68] = [0x4a3b18]
+ * ```
+ *
+ * `[0x4a3b18]` is the dial's full scale, which every chapter's entry function
+ * fills from the same `timer` record it fills the clock from — see
+ * {@link clockFor}. So the clock pickup and `jetson` both hand over 850 and
+ * neither can wind a level past the time it was authored with.
+ */
+function addClock(n: number): void {
+  stats.ticks = Math.min(stats.clockFull, stats.ticks + n);
 }
 
 /** `0x402ac0` — take it off, floor at zero, and start dying if that empties it */
@@ -4103,7 +4200,7 @@ function stepPickups(): void {
     sound?.own(kind.sound, q.x, q.y);
     if (q.code === "-1") stats.health = Math.min(stats.maxHealth, stats.health + PICKUP.health);
     else if (q.code === "-2") stats.lives = Math.min(PICKUP.maxLives, stats.lives + 1);
-    else if (q.code === "-8") stats.ticks += PICKUP.clock;
+    else if (q.code === "-8") addClock(PICKUP.clock);
     else stats.score += PICKUP.score[q.code] ?? 0;
   }
   if (!gone.length) return;
@@ -7727,7 +7824,10 @@ function loop(now: number): void {
     if (stats.ticks <= 0 && !film) void ranOut();
     // `0x443dea`: the life is spent when the dying animation ENDS, not when the
     // health runs out, and `0x443ec7` turns the last one into the game-over state
-    if (damageOn && stats.health <= 0 && p.act === null && !film) void died();
+    // ...and not `damageOn &&`: the switch decides whether anything may SPEND
+    // health, not what an empty bar means. `harakari` empties it with the switch
+    // off and the original has no switch at all
+    if (stats.health <= 0 && p.act === null && !film) void died();
     if (fellOut() && !film) void died();
     upPressed = false;
     // J is read by the frame's think, not by the tick, so it waits for one
@@ -8042,8 +8142,11 @@ function loop(now: number): void {
     ? ` · doors to ${room.exits.map((e) => `p${e.to}`).join(", ")}`
     : "";
   const celNow = ` · cel ${lastCel}`;
-  // which of the two players `0x46b1a8` is on — the `c` key is action 11
+  // which of the two players `0x46b1a8` is on — Shift+C is action 11
   const who = ` · char ${CHARACTER}`;
+  // the word for four seconds after it is typed, so a probe can see one land
+  const cheated =
+    cheatSaid && performance.now() - cheatSaid.at < 4000 ? ` · <b>${cheatSaid.cheat.word}</b> — ${cheatSaid.cheat.say}` : "";
   const state = p.act
     ? ` · ${p.act}`
     : p.climbing
@@ -8312,7 +8415,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}${cheated}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 
