@@ -128,9 +128,27 @@ const main = async (): Promise<void> => {
     fail(`inside a hundred it should be opening; the HUD says ${/grave[^·]*/.exec(await say())?.[0]}`);
   console.log(`ok    it is shut at 152 pixels and opening at 72 — 0x42115a's hundred`);
 
-  // 6. ...and then it takes you. The ground beside a grave is already 98 below
-  //    its point and `0x42121b`'s test is 86, so standing there when one opens
-  //    is the whole of it: there is no health in the class at all.
+  // 6. ...but standing NEAR one, on solid ground, is not falling into one.
+  //
+  //    Every test in this class is against the player's POINT — `0x421083` hands
+  //    `[player+6]` to `0x434200` and `0x421211` subtracts the grave's own — and
+  //    that point is the ANCHOR, 88 above this page's `p.y`. Measured against the
+  //    feet instead, `y - point` cleared `0x421211`'s 0x56 while merely walking
+  //    past: of the 112 solid columns inside the x2842 grave's hundred, 91 were
+  //    instant death, and 62 of the x3301 grave's 109. Against the anchor, none
+  //    of the five has a single killing column that is not the pit itself.
+  await go(2900);
+  await page.waitForTimeout(3000);
+  if (!/3 lives/.test(await say())) {
+    fail(`standing on solid ground beside a grave must not take a life (0x421211 reads the ANCHOR): ${(await say()).slice(0, 160)}`);
+  }
+  if (!/grave (opening|open) cel 33\d+ at x2842/.test(await say())) {
+    fail(`x2900 is inside the x2842 grave's hundred and it should be open: ${/grave[^·]*/.exec(await say())?.[0]}`);
+  }
+  console.log(`ok    ...and standing beside an OPEN one on solid ground costs nothing`);
+
+  // 7. ...and then it takes you. Falling in is what does it: there is no health
+  //    in the class at all, and `0x402fa0(5)` is a death rather than a blow.
   await go(1380);
   await page.keyboard.down("ArrowRight");
   let took = false;
@@ -175,6 +193,33 @@ const main = async (): Promise<void> => {
   if (![1550, 1551, 1552, 1553, 1554, 1555, 1556].includes(Number(hand![2])))
     fail(`0x470400 tag 0 is 1550..1556; it is showing ${hand![2]}`);
   console.log(`ok    a hand comes up under the player's own feet, on cel ${hand![2]}`);
+
+  // 10. ...and the zombies do NOT go in after you.
+  //
+  //     GRAVE's rasterised floor really does fall 320 to 370 pixels at each of
+  //     its five graves, and nine of the sixteen zombie patrol rects span one.
+  //     What keeps them out is the grave's own: `0x4212bb` appends a synthetic
+  //     `platform` record to the engine's platform table the frame its opening
+  //     script ends — `top = y+0x4c`, `left = x-0x64`, `bottom = y+0x7e`,
+  //     `right = x+0x64` — so an open grave is a two-hundred-wide ledge across
+  //     its own pit. Without it the level ate its own population and the
+  //     14-of-16 quota could never be met.
+  await go(1620);
+  let deepest = 0;
+  let where = "";
+  for (let i = 0; i < 50; i++) {
+    await page.waitForTimeout(400);
+    const m = /nearest (\w+) -?\d+\/\d+hp \w+ at x (-?\d+), y (-?\d+)/.exec(await say());
+    if (m && Number(m[3]) > deepest) {
+      deepest = Number(m[3]);
+      where = `${m[1]} at x${m[2]}`;
+    }
+  }
+  // the first grave's ledge is at y978 and the bottom of its pit at y1346
+  if (deepest > 1100) {
+    fail(`a zombie fell into the grave — ${where} reached y ${deepest}, and the pit floor is 1346`);
+  }
+  console.log(`ok    ...and the zombies walk its ledge instead of falling in — deepest y ${deepest}`);
 
   await finish(browser);
   console.log("PASS  GRAVE's zombies stand, its graves open and take, and its hands come up");

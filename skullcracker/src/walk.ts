@@ -2581,6 +2581,47 @@ function surfaceCrossed(x0: number, y0: number, x1: number, y1: number): number 
   return null;
 }
 
+/**
+ * The ledge an OPEN grave lays across its own mouth — see {@link HOLE.lid}.
+ *
+ * `0x4212bb` appends a synthetic `platform` record to the engine's own platform
+ * table the frame a grave's opening script ends, spanning two hundred pixels
+ * across the grave's point and topped 0x4c below it. GRAVE's floor really does
+ * fall 320 to 370 pixels at each of its five graves, and nine of its sixteen
+ * zombies patrol over one, so without this the level eats its own population and
+ * its 14-of-16 quota can never be met.
+ *
+ * It is offered to the FOES only. The executable lays it for everything, but the
+ * same class drags the player down through it — `0x4211af` halves their speed
+ * and `0x4211c4` adds a unit of fall every frame, and `0x421211` kills them 0x56
+ * below the point, which is ten pixels UNDER this ledge. Modelling that tug of
+ * war is a bigger change than the bug needs, and giving the player the ledge
+ * without it would simply stop graves working. So the player still falls in and
+ * still dies, which is what `grave.ts` asserts and what the disc does; what is
+ * fixed is the zombies queueing up at the bottom of a pit where nothing can
+ * reach them. This is a DEVIATION and it is here so that it is not a silent one.
+ */
+function graveLidUnder(x: number, fromY: number, toY: number): number | null {
+  let best: number | null = null;
+  for (const h of hereOf((l) => l.holes)) {
+    if (h.state === "shut") continue;
+    if (x < h.x - HOLE.lid.halfWidth || x > h.x + HOLE.lid.halfWidth) continue;
+    const top = h.y + HOLE.lid.top;
+    if (top < fromY || top > toY) continue;
+    if (best === null || top < best) best = top;
+  }
+  return best;
+}
+
+/** {@link surfaceUnder}, plus the ledge an open grave lays — for foes */
+function foeSurfaceUnder(x: number, fromY: number, toY: number): number | null {
+  const floor = surfaceUnder(x, fromY, toY);
+  const lid = graveLidUnder(x, fromY, toY);
+  if (floor === null) return lid;
+  if (lid === null) return floor;
+  return Math.min(floor, lid);
+}
+
 function surfaceUnder(x: number, fromY: number, toY: number): number | null {
   let best: number | null = null;
   const g = groundAt(x);
@@ -4523,11 +4564,19 @@ function stepPickups(): void {
 function stepHoles(): void {
   const here = hereOf((l) => l.holes);
   if (!here.length || !player) return;
+  // Every one of this class's tests is against the player's POINT, which is the
+  // ANCHOR: `0x421083` hands `[player+6]` to `0x434200` and `0x421211` subtracts
+  // the grave's own `[esi+6]` from it. This page's `p.y` is the FEET, 112 below
+  // the anchor when standing, and putting the feet into those comparisons made
+  // level nine unplayable — the ground beside a grave is about 112 below the
+  // grave's point, so `feet - point` already cleared `0x56` while merely walking
+  // past, and every grave killed you on approach. See {@link poseFeet}.
+  const py = p.y - p.feet;
   for (const h of here) {
     // SHUT: a slab you cannot walk through — but only on your feet. `0x4210a7`
     // lets a jump (player kind 3) and anything off the ground straight past,
     // which is what makes level nine a jumping level.
-    if (h.state === "shut" && p.onGround && p.x > h.left && p.x < h.right && p.y >= h.top && p.y <= h.bottom) {
+    if (h.state === "shut" && p.onGround && p.x > h.left && p.x < h.right && py >= h.top && py <= h.bottom) {
       const half = (h.right - h.left) / 2;
       const out = Math.abs(Math.abs(h.x - p.x) - half - 1) * (p.x <= h.x ? -1 : 1);
       p.vx += out / DIVISOR;
@@ -4552,7 +4601,7 @@ function stepHoles(): void {
     // out of the world does, whatever the damage switch says. And the ground
     // beside a grave is already 98 below its point, so standing there when one
     // opens is the whole of it: you have to be in the air over it.
-    if (p.y - h.y >= HOLE.deathPx && !film && !h.taken) {
+    if (py - h.y >= HOLE.deathPx && !film && !h.taken) {
       h.taken = true;
       sound?.effect(FOE_SFX.graveTake, h.x, h.y);
       void died();
@@ -7283,8 +7332,10 @@ function stepEnemies(): void {
       if (!foe.floats) {
         const base = lvl ? baseOf(e, lvl) : e.y;
         // the surfaces the PLAYER stands on — platform tops and then the room's
-        // floor — swept along the fall so a fast one cannot tunnel through a ledge
-        const floor = surfaceUnder(e.x, base - Math.max(e.vy, 0) - CLIMB_PX, base + 1);
+        // floor — swept along the fall so a fast one cannot tunnel through a
+        // ledge, plus the one an open grave lays ({@link graveLidUnder}), so a
+        // foe already in the air over one is caught by it too
+        const floor = foeSurfaceUnder(e.x, base - Math.max(e.vy, 0) - CLIMB_PX, base + 1);
         if (floor !== null && base >= floor) {
           // by the CEL's box, not by where the upright one would have stood
           e.y -= base - floor;
@@ -7416,7 +7467,7 @@ function stepEnemies(): void {
        */
       const baseNow = lvl ? baseOf(e, lvl) : e.y;
       const ground = groundAt(nx);
-      const reach = surfaceUnder(nx, baseNow - CLIMB_PX, baseNow + STICK_PX);
+      const reach = foeSurfaceUnder(nx, baseNow - CLIMB_PX, baseNow + STICK_PX);
       // a floater has no feet to catch on a step
       const blocked = !foe.floats && ground !== null && ground < baseNow - CLIMB_PX && reach === null;
       // a flinch that travels is a knockdown: it goes the way it was hit and is
@@ -7456,7 +7507,7 @@ function stepEnemies(): void {
     // record's point gave it ({@link Foe.floats})
     if (e.vx === 0 && e.vy === 0 && !foe.floats) {
       const base = lvl ? baseOf(e, lvl) : e.y;
-      const s = surfaceUnder(e.x, base - CLIMB_PX, base + STICK_PX);
+      const s = foeSurfaceUnder(e.x, base - CLIMB_PX, base + STICK_PX);
       if (s !== null) e.y += s - base;
       else e.vy = INVENTED.gravityPx;
     }

@@ -1641,6 +1641,29 @@ export const HOLE = {
   pullPerFrame: 1,
   /** `0x4211af` — and half your speed along with it */
   dragHalves: true,
+  /**
+   * The ledge an open grave lays across its own mouth.
+   *
+   * `0x40b3f6`/`0x40b40d` build the engine's platform table at `0x4aa600` out of
+   * the book's `platform` records, forty-eight bytes a row, which is the entity
+   * stride — the table IS a list of entity records. And a grave appends one of
+   * its own: when its opening script ends, `0x4212bb` calls `0x421470`, which
+   * takes the next slot at `0x4aa602` (a row's `top`, two bytes in) and writes
+   *
+   * ```
+   *   4212a0  top    = grave.y + 0x4c
+   *   421285  left   = grave.x - 0x64
+   *   42128a  bottom = grave.y + 0x7e
+   *   42129b  right  = grave.x + 0x64
+   * ```
+   *
+   * So an OPEN grave is a two-hundred-wide ledge over its own pit, and the pit
+   * is real: GRAVE's rasterised floor drops 320 to 370 pixels at each of its
+   * five graves. Without the ledge, anything that walks goes in — and nine of
+   * the sixteen zombies' patrol rects span a grave, so the level's own
+   * population walks into its own holes and the 14-of-16 quota can never be met.
+   */
+  lid: { top: 0x4c, bottom: 0x7e, halfWidth: 0x64, from: "0x421285 / 0x42128a / 0x421298 / 0x4212a0" },
   from: "0x41f0e0 / 0x420f90 / 0x421040",
 } as const;
 
