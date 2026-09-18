@@ -2444,6 +2444,92 @@ The level's event loop does take a mouse event. It is not a click: event 6 in
 shows it again — a repaint. The buttons are an indicator, and the only way to
 punch is the key the band is telling you about.
 
+## The camera was in there all along
+
+This page carried an invented camera for a long time, on a stated belief: that
+`SC.EXE` "scrolls by moving the world rather than the view", so there is no
+camera variable to read. There is one, and everything about it is readable.
+
+### `[0x4a8970]` is the view's corner, and `0x4308a0` is what writes it
+
+`0x4309d0` answers with the two words at `0x4a8970`, and every draw subtracts
+them. What hid it is that nothing assigns them directly: they are written by
+`0x4308a0`, which takes a requested corner and clamps it, and by `0x430bc0`,
+which restores one. `0x40e120` — the Ctrl+P handler — hands the base rect in:
+`{0, 0, 0xe8, 0x200}` with the panel up and `{0, 0, 0x156, 0x200}` without, so
+the view is 512x232 and 512x342 and both are already on this page.
+
+### The clamp is the ROOM's rect, one side at a time
+
+`0x4308a0` copies the room's whole 48-byte entity record — `0x40ba30`, out of
+the level's own table, indexed by the tracked object's `+0x16` — and then:
+
+```
+  430914  test byte [rec+14], 8   ; cap   x at right  - viewWidth
+  43092c  test byte [rec+14], 2   ; floor x at left
+  430950  test byte [rec+14], 4   ; cap   y at bottom - viewHeight
+  430968  test byte [rec+14], 1   ; floor y at top
+```
+
+`rec+14` is the `flags` field the reader already carried and had no use for. For
+an OBJECT its four bits are almost always all set; for a ROOM they are the
+camera's clamp mask, and the shipped values are 15, 13, 12, 7 and 5 — ARCADE
+clamps on all four sides, RAVECAVE's four rooms do not clamp left or top, and
+SEWER's shafts clamp neither side horizontally. The floor is applied after the
+cap, so a room narrower than the view is pinned to its left edge rather than
+centred.
+
+### The follow is an eased chase with a lead
+
+`0x4309f0`, once an engine frame:
+
+```
+  430a1c  target = player point
+  430a30  target.x += 0x78, or -= 0x78 when [player+0x28] says left
+  430a42  target.y -= lift        ; and lift is 0 in every state that sets one
+  430a81  chase = [0x4a6938] translated by the view's own corner
+  430ab2  dx = (target.x - chaseMidX) * 0x32 / 0x118, clamped to +-0x32
+  430af2  dy = (target.y - chaseMidY) * 0x32 / 0x64,  clamped to +-0x32
+  430b46  corner += (dx, dy), then 0x4308a0
+```
+
+`0x4a6938` is `{50, 200, 182, 312}`, written at `0x42aec8` — its middle is
+(256, 116), which is the middle of the 512x232 window. So the player's own point
+is held at the centre of the window, 120 pixels behind whichever way they are
+facing, and the view eases there at up to 50 pixels an engine frame, reaching
+that cap at 280 pixels of horizontal error and 100 of vertical. `0x430c20` is
+what installs the four numbers and different player states install different
+ones — the hurt path raises the horizontal cap to 100.
+
+An arrival does not ease. `0x428ff6` and `0x443a3d` — one per player class —
+put the corner at `(x - 200, y - 100)` the moment the point is moved, and clamp
+that. It is deliberately not the chase point, which would be `(x - 256, y - 116)`.
+
+### What it replaced, and what it fixed
+
+Two inventions go. The old camera centred on the middle of the player's
+collision box, chosen because centring on the FEET cut the top off the sprite;
+the engine's target is the object's own point and the pose does not enter into
+it. And the old clamp used the extent of the FLOOR rather than the room, which
+is narrower in nine of the sixteen levels.
+
+VAT is where that showed. Its chamber's rect runs to x6688 and its floor stops
+at x6653, and machine B — `0x46e088`'s `+373` off Boggs' x6321 — stands at
+x6694. Clamped to the floor the view could never reach it; clamped to the room
+it does, which is the 35 pixels between them.
+
+### ...and the step had to be spread across the frame
+
+One thing here is not the engine's shape. `0x4309f0` runs once an engine frame
+and jumps the corner the whole way, which it can do because everything on that
+disc moves at 15Hz. This page moves the player every TICK, four to the frame, so
+a camera that jumped once a frame scrolled the world in 15Hz steps behind a man
+walking at 60 — and that is exactly what it looked like. The step is decided at
+the frame, on the disc's own arithmetic, and then spent a quarter at a time, the
+same way the frame's fall already is. At every frame boundary the corner is where
+`0x4309f0` would have put it. The corner is rounded only at the blit, or the
+whole backdrop resamples.
+
 ## One browser, not thirty
 
 Every suite in `tests/browser` used to be its own `tsx` process with its own
@@ -2636,6 +2722,9 @@ a level with no class anywhere.
 - **A hard blow disarms you, and the button band is labelled from the key map** —
   see the section above. The band itself is an indicator; nothing in `SC.EXE`
   hit-tests it.
+- **The camera is the engine's**, not this page's: `0x4309f0`'s eased chase with
+  its 120-pixel lead, clamped by `0x4308a0` to the room's own rect one side at a
+  time. What is left invented is spending its step across the frame's four ticks.
 - **Both of the two tests are here now**, and so is the ending — see the two
   sections above.
 - **Damage is off by default**, because with it on a probe walking east through

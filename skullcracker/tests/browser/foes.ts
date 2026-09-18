@@ -239,38 +239,49 @@ const main = async (): Promise<void> => {
   // 10. a kicked mailbox flies. `0x430470` is an elastic collision with `obj+0xe`
   //     as the mass — the player 12, a mailbox 7 — so a kick's 55 leaves it at
   //     69 pixels a frame and it crosses most of a screen before the ground drags
-  //     it down. The mailbox is the only strongly BLUE thing in STREETS' street,
-  //     so where the blue is says where it is.
-  const blue = async (): Promise<{ left: number; right: number }> =>
-    page.evaluate(() => {
-      const c = document.getElementById("screen") as HTMLCanvasElement;
-      const g = c.getContext("2d")!;
-      const out: number[] = [];
-      for (const x of [0, 256]) {
-        const d = g.getImageData(x, 42, 256, 232).data;
+  //     it down.
+  //
+  //     This used to split the window in half and count blue in each, on the
+  //     belief that the mailbox is the only strongly BLUE thing in STREETS'
+  //     street. It is not: the lamp-post is blue too, and it used to stand
+  //     outside the half being counted only because the camera put it there. So
+  //     the band is taken in WORLD coordinates now, off the view corner the
+  //     status line reports, and it is the mailbox's own stretch of street.
+  const MAILBOX = { left: 3470, right: 3580 };
+  const corner = async (): Promise<number> => Number(/· view (-?\d+),/.exec(await say())?.[1] ?? NaN);
+  const blueIn = async (): Promise<number> => {
+    const at = await corner();
+    if (!Number.isFinite(at)) fail(`the status line is not reporting the view corner`);
+    const x0 = Math.max(0, Math.min(511, MAILBOX.left - at));
+    const x1 = Math.max(x0 + 1, Math.min(512, MAILBOX.right - at));
+    return page.evaluate(
+      ([a, b]) => {
+        const c = document.getElementById("screen") as HTMLCanvasElement;
+        const d = c.getContext("2d")!.getImageData(a, 42, b - a, 232).data;
         let n = 0;
         for (let i = 0; i < d.length; i += 4) {
           if (d[i + 2] > 90 && d[i + 2] > d[i] * 1.8 && d[i + 2] > d[i + 1] * 1.8) n++;
         }
-        out.push(n);
-      }
-      return { left: out[0], right: out[1] };
-    });
+        return n;
+      },
+      [x0, x1] as const,
+    );
+  };
   await page.goto(`${BASE}/walk.html?level=1&x=3455`);
   await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
   await page.waitForTimeout(500);
-  const stood = await blue();
-  if (stood.right < 200) fail(`no mailbox in the right half to kick: ${stood.right} blue pixels`);
+  const stood = await blueIn();
+  if (stood < 200) fail(`no mailbox standing at x${MAILBOX.left}..${MAILBOX.right} to kick: ${stood} blue pixels`);
   for (let i = 0; i < 3; i++) {
     await page.keyboard.press("k");
     await page.waitForTimeout(300);
   }
   await page.waitForTimeout(1200);
-  const gone = await blue();
-  if (gone.right > stood.right / 2) {
-    fail(`the kicked mailbox did not travel: ${stood.right} blue pixels beside it, ${gone.right} after`);
+  const gone = await blueIn();
+  if (gone > stood / 4) {
+    fail(`the kicked mailbox did not travel: ${stood} blue pixels where it stood, ${gone} after`);
   }
-  console.log(`ok    a kicked mailbox flies out of frame: ${stood.right} blue pixels beside it, ${gone.right} after`);
+  console.log(`ok    a kicked mailbox leaves its own stretch of street: ${stood} blue pixels there, ${gone} after`);
 
   // 11. and a blow lands the same going left. The player's cel is drawn centred on
   //     `p.x` and flipped WITHIN that band, so the strike box has to be mirrored

@@ -875,58 +875,149 @@ function poseFeet(): void {
 
 
 /**
- * What the camera is centred on: the middle of the player's own collision box.
+ * The camera — `0x4309f0`, and all of it is in `SC.EXE`.
  *
- * Not the feet, which is what this page centred on until now and what cut the top
- * off the player. An object's `y` in this engine is wherever the artist put the
- * cel's anchor and its ground contact is the cel's box — standing cel 1 is 98x145
- * with its anchor 55 rows down and a box running `y -55..88`, so the engine's own y
- * is at the chest and the head is 55 above it. Keeping `p.y` at the FEET is a fine
- * convention for a floor and a bad one for a camera: 232 rows of window centred on
- * the feet leave 116 above them for a sprite 145 tall, so **the top 29 rows of the
- * player were cut off** wherever the room's own clamp was not already holding the
- * view down. At street level it is; up on STREETS' roof it is not, which is where
- * it showed.
+ * This page had an invented one for a long time, on the belief that the engine
+ * "scrolls by moving the world rather than the view" and so has no camera
+ * variable to read. It has one. `0x4309d0` answers with `[0x4a8970]`, the view
+ * rect's own corner in WORLD coordinates, and every draw subtracts it. What
+ * misled the earlier reading is that nothing writes that global directly: it is
+ * written by `0x4308a0`, which takes a requested corner and clamps it.
  *
- * So: the box's own middle, from whichever cel represents what the player is doing
- * — the idle on their feet, the resting climb cel on a ladder, where the anchor is
- * the rung itself and the box is the body hanging off it. Both numbers are the
- * disc's; which cel to take them from is this page's, because there is no camera
- * in `SC.EXE` to read (see {@link viewTop}).
+ * ```
+ *   4309f0  per engine frame, mode 0 (follow the tracked object [0x4a8994])
+ *   430a1c    target   = player point
+ *   430a30    target.x += lead, or -= lead when [player+0x28] says left
+ *   430a42    target.y -= lift
+ *   430a81    chase    = [0x4a6938] translated by the view's own corner
+ *   430ab2    dx = (target.x - chaseMidX) * maxDx / 0x118, clamped to +-maxDx
+ *   430af2    dy = (target.y - chaseMidY) * maxDy / 0x64,  clamped to +-maxDy
+ *   430b46    0x430820(dx, dy) -> corner += (dx, dy) -> 0x4308a0
+ * ```
+ *
+ * `0x4308a0` is the clamp, and it is the ROOM's own rect — `0x40ba30` copies the
+ * room's 48-byte entity record and the four sides are tested one at a time
+ * behind four bits of {@link SbkRoom.flags}. The floor is applied after the cap,
+ * so a room narrower than the view is pinned to its left edge.
+ *
+ * Two things this replaces. The old camera centred on the middle of the player's
+ * collision box; the engine's target is the object's own point, held at the
+ * middle of `0x4a6938` — which for a 512x232 window is its middle too, so the
+ * pose no longer enters into it. And the old clamp used {@link roomSpan}, the
+ * extent of the FLOOR, which is narrower than the room in nine levels: VAT's
+ * chamber loses 35 pixels that way, and machine B — `0x46e088`'s `+373`, at
+ * x6694 — could never be brought on screen.
+ *
+ * What is NOT the engine's: the ease runs once an engine frame here, the way it
+ * does there, but this page's frame is a quarter of a tick rather than a whole
+ * one of the disc's 15Hz. The numbers below are the disc's unchanged.
  */
-function eyeY(): number {
-  const c = player?.cels.find((q) => q.id === (p.climbing ? LADDER.restCel : ANIM.idle[0]));
-  const b = c?.body ?? { y0: -55, x0: 0, y1: STAND_FEET, x1: 0 };
-  const anchor = p.climbing ? p.climbY : p.y - p.feet;
-  return anchor + (b.y0 + b.y1) / 2;
+const CAMERA = {
+  /** `0x4a6938`, written at `0x42aec8` — the rect whose MIDDLE the target chases */
+  chase: { top: 0x32, left: 0xc8, bottom: 0xb6, right: 0x138 },
+  /** `0x42aef3`'s `push 0x78` — pixels AHEAD of the player the target sits */
+  lead: 0x78,
+  /** `0x42aeec`'s `push 0` — and it is zero in every state that installs one */
+  lift: 0,
+  /** `0x42aefd` / `0x42aefb` — the most the corner moves in one engine frame */
+  maxDx: 0x32,
+  maxDy: 0x32,
+  /** `0x430ab4` and `0x430ada` — the error at which each cap is reached */
+  spanX: 0x118,
+  spanY: 0x64,
+  /** `0x428fe8` / `0x428ff1` — where an ARRIVAL puts the corner, before clamping */
+  arriveX: 0xc8,
+  arriveY: 0x64,
+  /** `0x430914` / `0x43092c` / `0x430950` / `0x430968` — which sides clamp */
+  capX: 8,
+  floorX: 2,
+  capY: 4,
+  floorY: 1,
+  from: "0x4309f0 / 0x4308a0 / 0x430c20 / 0x40ba30",
+} as const;
+
+/** the view's own corner in world coordinates — `[0x4a8970]` */
+const view = { x: 0, y: 0 };
+
+/** the middle of {@link CAMERA.chase}, the way `0x430a98` and `0x430ad5` take it */
+const CHASE_X = CAMERA.chase.left + Math.trunc((CAMERA.chase.right - CAMERA.chase.left) / 2);
+const CHASE_Y = CAMERA.chase.top + Math.trunc((CAMERA.chase.bottom - CAMERA.chase.top) / 2);
+
+/**
+ * `0x4308a0` — put the corner where it is asked for, within the room's rect.
+ *
+ * Cap first, floor second, each behind its own bit, exactly as the four tests
+ * run. A room with a bit clear is not clamped on that side at all, which is how
+ * RAVECAVE (12) and SEWER's shafts (5) scroll off their own rects.
+ */
+function placeView(x: number, y: number): void {
+  const r = p.room;
+  if (!r) {
+    view.x = x;
+    view.y = y;
+    return;
+  }
+  const h = viewH();
+  let sx = x;
+  let sy = y;
+  if (r.flags & CAMERA.capX && r.right - VIEW.w < sx) sx = r.right - VIEW.w;
+  if (r.flags & CAMERA.floorX && r.left > sx) sx = r.left;
+  if (r.flags & CAMERA.capY && r.bottom - h < sy) sy = r.bottom - h;
+  if (r.flags & CAMERA.floorY && r.top > sy) sy = r.top;
+  view.x = sx;
+  view.y = sy;
+}
+
+/** where the target is — the player's own point, led by the facing */
+function chaseTarget(): { x: number; y: number } {
+  return {
+    x: p.x + p.facing * CAMERA.lead,
+    y: (p.climbing ? p.climbY : p.y - p.feet) - CAMERA.lift,
+  };
 }
 
 /**
- * The top edge of the view, in world coordinates — this page's camera.
+ * This engine frame's step, in whole pixels — `0x430ac8`'s `di` and `ax`.
  *
- * The engine scrolls by moving the world rather than the view: its view rect is
- * fixed at the window and every drawn thing carries a position already relative
- * to it, so there is no camera variable in `SC.EXE` to read. What there is, is a
- * shape: a room's rect is the world (which is how {@link fellOut} knows the
- * difference between a shaft and the void), and the view is a 232-tall slot in
- * it.
- *
- * So: follow the player, and clamp to the room's own rect — the same rule this
- * page already used horizontally through {@link roomSpan}, applied to y as well.
- * A room shorter than the view is centred. That replaces two invented constants
- * (a `p.y − 120` camera and a 60px lift on every draw) with one rule and puts the
- * player's feet where the original's screenshots put them: near the bottom of the
- * window, with the ground filling the last few rows rather than a third of it.
+ * Kept rather than applied, because the frame is not this page's unit of time.
+ * `0x4309f0` runs once an engine frame and jumps the corner the whole way; here
+ * the player moves every TICK, four to the frame, so a camera that jumped once a
+ * frame would scroll the world in 15Hz steps behind a man walking at 60 — which
+ * is exactly how it looked. {@link driftCamera} spends the step across the
+ * frame's four ticks instead, the same way the frame's fall is spent. At every
+ * frame boundary the corner is where `0x4309f0` would have put it; in between it
+ * is on the way there.
  */
-function viewTop(): number {
-  const h = viewH();
-  const r = p.room;
-  const eye = eyeY();
-  if (!r) return eye - h / 2;
-  const want = eye - h / 2;
-  const lo = r.top;
-  const hi = r.bottom - h;
-  return hi > lo ? Math.min(Math.max(want, lo), hi) : (r.top + r.bottom - h) / 2;
+let camVx = 0;
+let camVy = 0;
+
+/** `0x4309f0` mode 0, once an engine frame — decide the step, do not take it */
+function stepCamera(): void {
+  const t = chaseTarget();
+  const ex = t.x - (view.x + CHASE_X);
+  const ey = t.y - (view.y + CHASE_Y);
+  camVx = Math.max(-CAMERA.maxDx, Math.min(CAMERA.maxDx, Math.trunc((ex * CAMERA.maxDx) / CAMERA.spanX)));
+  camVy = Math.max(-CAMERA.maxDy, Math.min(CAMERA.maxDy, Math.trunc((ey * CAMERA.maxDy) / CAMERA.spanY)));
+}
+
+/** ...and spend a quarter of it each tick, clamping every time as `0x430820` does */
+function driftCamera(): void {
+  if (!camVx && !camVy) return;
+  placeView(view.x + camVx * TICK_SCALE, view.y + camVy * TICK_SCALE);
+}
+
+/**
+ * `0x428ff6` and `0x443a3d` — the arrival scroll, one per player class.
+ *
+ * Both do the same two subtractions the moment the player's point is moved to a
+ * new room: the corner goes to `(x - 200, y - 100)` and `0x4308a0` clamps it. It
+ * is not the chase point, which would be `(x - 256, y - 116)`, and the 56 and 16
+ * of difference are the engine's, not a rounding of this page's.
+ */
+function snapCamera(): void {
+  camVx = 0;
+  camVy = 0;
+  placeView(p.x - CAMERA.arriveX, (p.climbing ? p.climbY : p.y - p.feet) - CAMERA.arriveY);
 }
 
 /**
@@ -2251,6 +2342,8 @@ function enter(room: SbkRoom | undefined, x: number, y: number): void {
   p.onGround = true;
   p.climbing = false;
   p.act = null;
+  // `0x428ff6` — the point moves, and the corner goes with it in one step
+  snapCamera();
 }
 
 /**
@@ -2719,6 +2812,7 @@ function takeDoor(): boolean {
   p.y = groundAt(at.x) ?? at.y;
   p.vy = 0;
   p.onGround = true;
+  snapCamera();
   return true;
 }
 
@@ -7243,6 +7337,10 @@ function loop(now: number): void {
     p.frameAcc += TICK_SCALE;
     const frame = p.frameAcc >= 1 - 1e-9;
     if (frame) p.frameAcc -= 1;
+    // `0x4309f0` is an engine-frame job like everything else in here; the step it
+    // decides is spent across this frame's four ticks
+    if (frame) stepCamera();
+    driftCamera();
     // an attack owns the player until it finishes — and it can start in the
     // air, which is where the flying moves live
     if (p.onGround && !p.act && p.windup === 0 && p.landLeft === 0) {
@@ -7887,17 +7985,14 @@ function loop(now: number): void {
   ctx.rect(VIEW.x, VIEW.y, VIEW.w, viewH());
   ctx.clip();
   const lvl = level;
-  // the camera follows the player but stops at the room's ends, so the view
-  // never runs past the drawn world — without this, walking to the last pixel
-  // of STREETS' floor scrolls 130px of black in from the right
-  const span = p.room ? roomSpan(p.room) : null;
-  const camX =
-    span && span.hi - span.lo > W
-      ? Math.min(Math.max(p.x, span.lo + W / 2), span.hi - W / 2)
-      : span
-        ? (span.lo + span.hi) / 2
-        : p.x;
-  const camY = viewTop();
+  // ...and the camera is `0x4309f0`'s, stepped once an engine frame and clamped
+  // to the room's own rect by its own flag bits. This draws from its corner, so
+  // the centre the transform below wants is half a view to the right of it.
+  // whole pixels at the display's rate: the corner carries the tick's fraction so
+  // the scroll is smooth, and the blit wants an integer or it resamples the
+  // whole backdrop
+  const camX = Math.round(view.x) + VIEW.w / 2;
+  const camY = Math.round(view.y);
   // where the sounds are heard from: `0x40efb0` takes the camera rect and adds
   // (256, 192) to its corner, which is the middle of a 512-wide view
   sound?.listen(camX, camY + REACH.centreY);
@@ -8187,6 +8282,9 @@ function loop(now: number): void {
   const celNow = ` · cel ${lastCel}`;
   // which of the two players `0x46b1a8` is on — Shift+C is action 11
   const who = ` · char ${CHARACTER}`;
+  // the view's own corner — `[0x4a8970]`, which is what a probe has to read to
+  // say anything about what is on screen
+  const cam = ` · view ${Math.round(view.x)},${Math.round(view.y)}`;
   // the word for four seconds after it is typed, so a probe can see one land
   const cheated =
     cheatSaid && performance.now() - cheatSaid.at < 4000 ? ` · <b>${cheatSaid.cheat.word}</b> — ${cheatSaid.cheat.say}` : "";
@@ -8458,7 +8556,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}${cheated}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${cam}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}${cheated}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 

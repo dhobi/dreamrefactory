@@ -713,6 +713,28 @@ export interface SbkRoom {
   right: number;
   /** the container its floor came from, or 0 for a room with none */
   regionLocation: number;
+  /**
+   * The record's `flags` (+14) — for a room, the CAMERA's clamp mask.
+   *
+   * `0x4308a0` is the engine's scroll setter. It copies this record whole
+   * (`0x40ba30`: 48 bytes out of the level's entity table, indexed by the
+   * tracked object's own `+0x16`) and clamps the requested view corner against
+   * the rect at +2..+8 one side at a time, each behind one bit of this field:
+   *
+   * ```
+   *   430914  test byte [flags], 8   ; cap   x at right  - viewWidth
+   *   43092c  test byte [flags], 2   ; floor x at left
+   *   430950  test byte [flags], 4   ; cap   y at bottom - viewHeight
+   *   430968  test byte [flags], 1   ; floor y at top
+   * ```
+   *
+   * The floor is applied second and wins, so a room narrower than the view is
+   * pinned to its left edge rather than centred. The shipped values are 15 (all
+   * four sides), 13 (no left), 12 (no left, no top), 7 (no right) and 5 (neither
+   * side) — which is why RAVECAVE and SEWER may scroll past their own rects and
+   * ARCADE may not.
+   */
+  flags: number;
   /** its floor, or null where the link is 0 or the polyline unusable */
   ground: SbkGround | null;
   /** the `exitroom` records standing inside this room */
@@ -746,6 +768,7 @@ export function readRooms(sbk: SbkFile): SbkRoom[] {
       bottom: e.bottom,
       right: e.right,
       regionLocation: e.regionLocation,
+      flags: e.flags,
       ground: region ? rasteriseGround(region) : null,
       exits: [],
     });
