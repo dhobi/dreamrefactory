@@ -2382,6 +2382,68 @@ Its head, its claw arm and its eight machinery objects are still not here, so
 the healing never stops and it still cannot be killed — see the section above
 for why that is the game's own arithmetic rather than a gap.
 
+## A hard blow costs you the gun, and the band says which key
+
+Two things on the interface turned out to be wired to the key map, and one thing
+that looked unwired turned out never to have been wired at all.
+
+### The knockdown is also the disarm
+
+`0x449115` is the comparison this page already read for the reaction — over
+sixty and you go down, under it you stagger. What was not read is the six
+instructions after it:
+
+```
+  449115  cmp di, 0x3c            ; the same sixty
+  44911b  0x448bf0()              ; is the player one of the armed kinds?
+  449125  ...                     ; player+0x16, player+0x28, player+6, [0x479434]
+  449146  0x45b060(...)           ; and the gun is on the floor
+  44914b  [0x479438] = 0          ; hands empty
+  449157  0x40d4f0()              ; redraw the panel
+```
+
+`0x448bf0` is three comparisons: `player+0x18` between 0x12 and 0x16, which is
+the five armed player kinds and nothing else. `0x45b060` is the spawn this page
+already had — it is what reaching for a second gun runs to throw the first one
+down, gravity 1.0 and bounce 0.3 — so a knockdown and a swap put the weapon on
+the floor by exactly the same route. The other player class carries its own copy
+of all six at `0x42ec07`, so it is both characters.
+
+What does **not** disarm you is a code. `0x448c72` reads the sign of the blow
+first and dispatches a negative one before any of this arithmetic runs, so a
+claw's grab and a wraith's hold leave the gun where it is.
+
+### The letters under the buttons are typeset from the key map
+
+`0x40cf00` builds the whole panel — the two bands, then eight of these:
+
+```
+  40d0fc  ecx = [0x46bd58 + i*4]  ; the point, {y, x}
+  40d10d  0x40e870(i + 1, &buf)   ; name the key bound to action i+1
+  40d11a  0x40a430(&buf)          ; how wide that name is
+  40d125  edi = (15 - width) >> 1 ; centred in a box fifteen wide
+  40d139  0x40a080(x + edi, y)    ; and write it
+```
+
+`0x40e870` is the same namer the preferences panel uses and `i + 1` is the same
+action number, so the W, A, S, D in the pad and the J, K, P, I on the four
+buttons are not in the cel at all: they are read out of `0x46b210` every time
+the panel is built. Rebind punch to Z in the preferences panel and the band says
+Z. That is what makes the eight boxes worth having.
+
+### ...and nothing clicks the band
+
+The buttons look like buttons and they are not. `[0x4a3b48]` — the word
+`0x40da41` walks to decide which eight lights to redraw — has exactly one
+writer, `0x40d470`, and that has exactly two callers, both inside `0x403820`:
+the function that turns an action into a bit. `0x403820`'s own callers are the
+key map and the demo replay. There is no third.
+
+The level's event loop does take a mouse event. It is not a click: event 6 in
+`0x403b90`'s table hides the cursor, calls `0x40cf00` to rebuild the panel, and
+shows it again — a repaint. The buttons are an indicator, and the only way to
+punch is the key the band is telling you about.
+
 ## One browser, not thirty
 
 Every suite in `tests/browser` used to be its own `tsx` process with its own
@@ -2568,10 +2630,12 @@ a level with no class anywhere.
   own position and does nothing else. The bush grabs, and BARREL's claw is back
   on the record's point that `0x411cfd` gives it rather than the rect bottom it
   had been nudged to.
-- **Two bosses of five have their own state machine** — PLAYGR's `initwbooly`
-  and ARCADE's `initkragg`. RAVECAVE's wraith, TOWER's bishop and VAT's Boggs
-  stand, take blows and die on the generic gait/flinch/death every other
-  creature uses.
+- **Every boss has its own state machine** — PLAYGR's `initwbooly`, ARCADE's
+  `initkragg`, RAVECAVE's wraith, TOWER's bishop and VAT's Boggs. Boggs' head,
+  claw arm and machinery objects are the part of him that is still missing.
+- **A hard blow disarms you, and the button band is labelled from the key map** —
+  see the section above. The band itself is an indicator; nothing in `SC.EXE`
+  hit-tests it.
 - **Both of the two tests are here now**, and so is the ending — see the two
   sections above.
 - **Damage is off by default**, because with it on a probe walking east through

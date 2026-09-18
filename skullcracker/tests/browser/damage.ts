@@ -94,6 +94,34 @@ const main = async (): Promise<void> => {
   if (!died) fail(`standing under a press should eventually kill the player`);
   console.log(`ok    and running out of it spends a life and plays its film`);
 
+  // 6. ...and a knockdown takes the gun out of your hands. `0x44911b` asks
+  //    `0x448bf0` whether the player is one of the five armed kinds, and if it
+  //    is, `0x45b060` throws the weapon on the floor — the same spawn reaching
+  //    for a second gun makes — clears `[0x479438]` and redraws the panel. The
+  //    other player class carries its own copy at `0x42ec07`.
+  //
+  //    WOODS is the level that can prove it: its `statflamer` stands at x6980
+  //    and its three hydraulic presses are two hundred pixels east, and a press
+  //    is the 64 that step 4 already measured — over `0x3c` by four.
+  await go(3, 6950, true);
+  await page.keyboard.down("s");
+  await page.waitForTimeout(900);
+  await page.keyboard.up("s");
+  await page.waitForTimeout(400);
+  if (!/· holding flamer /.test(await say())) fail(`the probe should be armed before the press: ${(await say()).slice(0, 200)}`);
+  const guns = Number(/· (\d+) guns/.exec(await say())?.[1] ?? 0);
+  await page.keyboard.down("ArrowRight");
+  let dropped = false;
+  for (let i = 0; i < 100 && !dropped; i++) {
+    await page.waitForTimeout(80);
+    dropped = /· no flamer /.test(await say());
+  }
+  await page.keyboard.up("ArrowRight");
+  if (!dropped) fail(`a press is 64, and 64 knocks down; the flamer stayed in hand: ${(await say()).slice(0, 200)}`);
+  const lying = Number(/· (\d+) guns/.exec(await say())?.[1] ?? 0);
+  if (lying <= guns) fail(`0x45b060 puts the weapon on the FLOOR; the level still holds ${lying} guns against ${guns}`);
+  console.log(`ok    a knockdown disarms: the flamer left the hand and the level went from ${guns} guns to ${lying}`);
+
   await finish(browser);
   console.log("PASS  the damage switch is off by default, and the engine's own numbers when it is not");
 };

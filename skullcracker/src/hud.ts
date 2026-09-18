@@ -107,6 +107,23 @@
  * `11408…11411` read PUNCH, KICK, INV., JUMP in yellow, over the green ones the
  * band already carries. So the order is up, right, down, left, punch, kick, inv,
  * jump, and the pad in the corner is a live indicator rather than decoration.
+ *
+ * ### ...and they are an indicator only — nothing clicks them
+ *
+ * `[0x4a3b48]` has exactly one writer, `0x40d470`, and exactly two callers of
+ * that, both inside `0x403820` — the function that turns an ACTION into a bit.
+ * `0x403820`'s own callers are the key map (`0x403b90`) and the demo replay
+ * (`0x4037b2`), and nothing else. The level's event loop does take a mouse
+ * event, but the one it takes is a repaint: event 6 in `0x403b90`'s table hides
+ * the cursor, calls `0x40cf00` to rebuild the whole panel, and shows it again.
+ * There is no hit test over the band anywhere in `SC.EXE`. The buttons are
+ * output.
+ *
+ * ### The letters under the buttons are typeset, not painted
+ *
+ * See {@link KEY_LABELS}: `0x40cf00` finishes by naming each of the eight
+ * actions out of the key map and writing the name beside its button, so the band
+ * reports the current bindings rather than a fixed WASD.
  */
 import type { ShpFrame } from "@dreamfactory/engine/df/shp";
 
@@ -202,6 +219,38 @@ export const BUTTONS = [
   { name: "jump", y: 298, x: 115 },
 ] as const;
 
+/**
+ * Where the eight key names are written, from the table at `0x46bd58`.
+ *
+ * `0x40cf00` builds the whole panel, and the last thing it does before marking
+ * every region dirty is a loop from 1 to 8: `0x40e870(action, &buf)` names the
+ * key that action is bound to — the same namer the preferences panel uses — and
+ * `0x40a080` writes it at this point, centred in a box fifteen pixels wide
+ * (`mov edi, 0xf`, `sub edi, width`, `sar edi, 1`, and the shift is arithmetic
+ * so a name wider than the box overhangs both sides).
+ *
+ * So the band's letters are not painted into the cel: they are typeset from
+ * `0x46b210`, and rebinding a key in the preferences panel changes what the
+ * panel says. The order is the action order, which is the button order.
+ *
+ * The y is the table's; whether the engine's text object treats it as the top or
+ * the baseline is not readable from `SC.EXE`, and this page takes it as the top
+ * the way it takes the score's.
+ */
+export const KEY_LABELS = [
+  { y: 324, x: 60 },
+  { y: 339, x: 74 },
+  { y: 354, x: 60 },
+  { y: 339, x: 43 },
+  { y: 346, x: 200 },
+  { y: 326, x: 200 },
+  { y: 366, x: 176 },
+  { y: 307, x: 176 },
+] as const;
+
+/** `0x40cf00`'s own numbers: the box a name is centred in, and `0x409a00(0xe1)` */
+export const LABEL = { box: 15, ink: 0xe1, from: "0x40d0f2 / 0x40a080" } as const;
+
 /** the mission clock, all of it from `0x40d250` */
 export const CLOCK = {
   /** `[0x4a4d68] == 32000` is the level with no limit */
@@ -245,6 +294,14 @@ export interface HudState {
   buttons: number;
   /** the special weapon: its icon cel and its magazine, or null for empty hands */
   weapon: { iconCel: number; ammo: number; magazine: number } | null;
+  /**
+   * What the eight buttons are bound to, in {@link BUTTONS} order — the names
+   * `0x40e870` would give them. Leave it out and the band goes unlabelled, which
+   * is what a panel with no key map would do.
+   */
+  keys?: readonly string[];
+  /** what {@link LABEL.ink} is in this book's palette, as a CSS colour */
+  labelInk?: string;
 }
 
 /**
@@ -362,6 +419,25 @@ export function paintHud(ctx: CanvasRenderingContext2D, art: HudArt, s: HudState
     const down = (s.buttons & (1 << i)) !== 0;
     put((down ? CEL.buttonDown : CEL.buttonUp) + i, b.x, b.y);
   });
+
+  // ---- and what each of them is bound to ----------------------------------
+  // `0x40cf00`'s closing loop. The engine typesets these with its own font and
+  // this page has none, so the letters are the canvas's — the same substitution
+  // the score above makes. Everything else is the disc's: the points, the
+  // fifteen-pixel box, the centring, and the ink.
+  if (s.keys) {
+    ctx.save();
+    ctx.fillStyle = s.labelInk ?? "#e0e0c0";
+    ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
+    ctx.textBaseline = "top";
+    KEY_LABELS.forEach((at, i) => {
+      const name = s.keys?.[i];
+      if (!name) return;
+      const w = ctx.measureText(name).width;
+      ctx.fillText(name, at.x + Math.floor((LABEL.box - w) / 2), at.y);
+    });
+    ctx.restore();
+  }
 }
 
 /**

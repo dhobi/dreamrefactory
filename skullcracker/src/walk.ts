@@ -181,6 +181,7 @@ import {
   CLOCK,
   CLOCK_FULL,
   HudFighter,
+  LABEL,
   WINDOW,
   buttonBit,
   paintHud,
@@ -1238,6 +1239,9 @@ const HOLD_FRAMES = 2;
  *   448ac2  max = trunc(difficulty * 600.0) + 0x4b0    ; 1200 at difficulty 0
  *   4490d5  di = 0x42f910(hitter)                      ; sqrt(blowX² + blowY²)
  *   449115  cmp di, 0x3c                               ; 60: stagger or knockdown
+ *   44911b  0x448bf0()                                 ; ...and a knockdown disarms you
+ *   449146  0x45b060(weapon, point, facing, cel)        ; the gun goes on the floor
+ *   44914b  [0x479438] = 0                             ; and your hands are empty
  *   449209  0x402ac0(di)                               ; and the damage IS di
  *   402ad8  health floors at 0, and 0x402fa0(1) starts the dying script
  * ```
@@ -3468,9 +3472,21 @@ function takeHits(): void {
     const damage = Math.sqrt(bx * bx + by * by);
     // `0x44915c` / `0x44919e`: which side it came from decides the take
     const front = (x > p.x) === (p.facing > 0);
-    p.act = damage > HURT.knockdown ? (front ? "downFront" : "downBack") : front ? "hurtFront" : "hurtBack";
+    const knocked = damage > HURT.knockdown;
+    p.act = knocked ? (front ? "downFront" : "downBack") : front ? "hurtFront" : "hurtBack";
     p.actClock = 0;
     sound?.own(OWN.hurt[Math.floor(Math.random() * OWN.hurt.length)], p.x, p.y);
+    // ...and a knockdown takes the gun out of your hands. The same `cmp di, 0x3c`
+    // that chose the animation is the disarm's test too: `0x44911b` asks
+    // `0x448bf0` whether `player+0x18` is one of the five armed kinds (0x12..0x16)
+    // and, if it is, `0x45b060` throws the weapon on the floor exactly the way
+    // reaching for another one does, clears `[0x479438]` and redraws the panel
+    // (`0x40d4f0`). The other player class carries its own copy of the same six
+    // instructions at `0x42ec07`, so it is both of them, not one.
+    //
+    // A CODE never gets here — `0x448c72` dispatched it before the arithmetic —
+    // so a claw's grab and a wraith's hold leave you armed.
+    if (knocked && inv.armed) dropGun();
     takeHealth(damage);
     return true;
   };
@@ -8156,6 +8172,10 @@ function loop(now: number): void {
         ammo: roundsIn(inv.weapon),
         magazine: WEAPONS[inv.weapon]?.max ?? 0,
       },
+      // `0x40cf00`'s closing loop: the eight names are read out of the key map
+      // itself, so the band says whatever the preferences panel last bound.
+      keys: PREFS.keys.map((k) => keyName(k)),
+      labelInk: panelInk(),
     });
   }
 
@@ -8473,6 +8493,17 @@ function buttonMask(): number {
   if (held.inv) m |= buttonBit("inv");
   if (held.jump || !p.onGround) m |= buttonBit("jump");
   return m;
+}
+
+/**
+ * `0x409a00(0xe1)` — the ink the panel typesets its key names in, out of the
+ * book that holds the panel. Nothing is drawn in it until the book is loaded, so
+ * this answers null-ish until then and the band simply goes unlabelled.
+ */
+function panelInk(): string | undefined {
+  if (!playerPal) return undefined;
+  const i = LABEL.ink * 4;
+  return `rgb(${playerPal[i]}, ${playerPal[i + 1]}, ${playerPal[i + 2]})`;
 }
 
 const playerFrameCache = new Map<number, ShpFrame>();
