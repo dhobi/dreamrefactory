@@ -102,6 +102,15 @@ export interface FoeAnim {
    */
   dx?: readonly number[];
   /**
+   * The per-cel LIFT, same units as {@link dx} and the same one entry per cel.
+   *
+   * Only the attacks carry one — the punk's flying kick is `0x477368 tag 0`,
+   * `dy -480` on the frame it leaves the ground — so it is absent everywhere the
+   * old reading looked, which is why this page had no field for it. See
+   * {@link file://./fights.ts}.
+   */
+  dy?: readonly number[];
+  /**
    * When this one ends the thing holds its last cel for good and takes no more
    * hits.
    *
@@ -254,7 +263,14 @@ export interface Foe {
    * The dog has the same mechanism (`0x454c13`) and this page does not give it:
    * WOODS' six are awake from the first frame.
    */
-  wake?: { cel?: number; stir?: FoeAnim; burst?: FoeAnim; sound?: number; stirSound?: number; from: string };
+  wake?: {
+    cel?: number;
+    stir?: FoeAnim;
+    burst?: FoeAnim;
+    sound?: number;
+    stirSound?: number;
+    from: string;
+  };
   /**
    * It comes to YOU rather than walking its rect.
    *
@@ -507,7 +523,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * disc's number for a walking punk even though it is not this script's.
    */
   initwerea: {
-    gait: { cels: [1900, 1901, 1902, 1903, 1904, 1905, 1906, 1907], hold: 2, dx: [75, 75, 75, 75, 75, 75, 75, 75], from: "0x4774b0 tag 0" },
+    gait: {
+      cels: [1900, 1901, 1902, 1903, 1904, 1905, 1906, 1907],
+      hold: 2,
+      dx: [75, 75, 75, 75, 75, 75, 75, 75],
+      from: "0x4774b0 tag 0",
+    },
     divisor: 20,
     // 0x4774f8, three tags of one cel each, held four frames
     flinch: [
@@ -515,13 +536,20 @@ export const FOES: Readonly<Record<string, Foe>> = {
       { cels: [1971], hold: 4, from: "0x4774f8 tag 1" },
       { cels: [1972], hold: 4, from: "0x4774f8 tag 2" },
       // 0x477580 tag 0 — the knockdown a blow over 50 earns, and it travels
-      { cels: [1960, 1961, 1962, 1963], hold: 2, dx: [150, 150, 75, 75], from: "0x477580 tag 0" },
+      {
+        cels: [1960, 1961, 1962, 1963],
+        hold: 2,
+        dx: [150, 150, 75, 75],
+        from: "0x477580 tag 0",
+      },
     ],
     // 0x44f1fd..0x44f280, in the order the handler tests
     pick: ({ damage, dy, facingAway }) =>
       damage > 50 ? 3 : dy > 50 ? 0 : dy >= 30 && !facingAway ? 2 : 1,
     death: {
-      cels: [1960, 1961, 1962, 1963, 1980, 1981, 1982, 1983, 1984, 1985, 1986, 1987],
+      cels: [
+        1960, 1961, 1962, 1963, 1980, 1981, 1982, 1983, 1984, 1985, 1986, 1987,
+      ],
       hold: 3,
       from: "0x477518 tag 0",
     },
@@ -544,7 +572,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * out of its head — which is the same goo the spray throws (see effects.ts).
    */
   initwereb: {
-    gait: { cels: [5000, 5001, 5002, 5003, 5004, 5005], hold: 2, dx: [75, 75, 75, 75, 75, 75], from: "0x477630 tag 0" },
+    gait: {
+      cels: [5000, 5001, 5002, 5003, 5004, 5005],
+      hold: 2,
+      dx: [75, 75, 75, 75, 75, 75],
+      from: "0x477630 tag 0",
+    },
     divisor: 20,
     // 0x477820 — four single-cel flinches held four frames, picked at random
     flinch: [
@@ -556,7 +589,9 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // 0x44f9d3: `push 4; call 0x434540; dec ax` — one of four, uniformly
     pick: () => Math.floor(Math.random() * 4),
     death: {
-      cels: [5060, 5061, 5062, 5063, 5070, 5071, 5072, 5073, 5074, 5075, 5076, 5077],
+      cels: [
+        5060, 5061, 5062, 5063, 5070, 5071, 5072, 5073, 5074, 5075, 5076, 5077,
+      ],
       hold: 3,
       from: "0x477848 tag 0",
     },
@@ -608,7 +643,11 @@ export const FOES: Readonly<Record<string, Foe>> = {
      */
     wake: {
       stir: { cels: [3041, 3040, 3041, 3040], hold: 1, from: "0x4782e0 tag 1" },
-      burst: { cels: [3122, 3123, 3124, 3124, 3123, 3122], hold: 1, from: "0x4782e0 tag 2" },
+      burst: {
+        cels: [3122, 3123, 3124, 3124, 3123, 3122],
+        hold: 1,
+        from: "0x4782e0 tag 2",
+      },
       sound: FOE_SFX.boolyWake,
       stirSound: FOE_SFX.boolyStir,
       from: "0x4559e8 / 0x455a2f / 0x455a67",
@@ -622,12 +661,35 @@ export const FOES: Readonly<Record<string, Foe>> = {
      */
     drives: {
       hover: { cels: [3000], hold: 1, from: "0x4785e8 tag 4" },
-      charge: { cels: [3000, 3001, 3002, 3003, 3004, 3005, 3006], hold: 1, dx: [310, 310, 310, 310, 310, 310, 310], from: "0x4785e8 tag 1" },
-      rush: { cels: [3000, 3001, 3002, 3003, 3004, 3005, 3006], hold: 1, dx: [610, 610, 610, 610, 610, 610, 610], from: "0x4785e8 tag 5" },
-      combo: { cels: [3060, 3061, 3062, 3063, 3064, 3065, 3066, 3067, 3068], hold: 1, dx: [0, 0, 0, 0, 0, 0, 0, 0, 310], from: "0x4785e8 tag 2" },
+      charge: {
+        cels: [3000, 3001, 3002, 3003, 3004, 3005, 3006],
+        hold: 1,
+        dx: [310, 310, 310, 310, 310, 310, 310],
+        from: "0x4785e8 tag 1",
+      },
+      rush: {
+        cels: [3000, 3001, 3002, 3003, 3004, 3005, 3006],
+        hold: 1,
+        dx: [610, 610, 610, 610, 610, 610, 610],
+        from: "0x4785e8 tag 5",
+      },
+      combo: {
+        cels: [3060, 3061, 3062, 3063, 3064, 3065, 3066, 3067, 3068],
+        hold: 1,
+        dx: [0, 0, 0, 0, 0, 0, 0, 0, 310],
+        from: "0x4785e8 tag 2",
+      },
       land: { cels: [3092, 3091, 3090], hold: 1, from: "0x4785e8 tag 3" },
-      melee: { cels: [3052, 3052, 3053, 3054, 3055], hold: 2, from: "0x478448 tag 0" },
-      antiAir: { cels: [3130, 3131, 3132, 3133, 3134], hold: 1, from: "0x4784e8 tag 0" },
+      melee: {
+        cels: [3052, 3052, 3053, 3054, 3055],
+        hold: 2,
+        from: "0x478448 tag 0",
+      },
+      antiAir: {
+        cels: [3130, 3131, 3132, 3133, 3134],
+        hold: 1,
+        from: "0x4784e8 tag 0",
+      },
       // `0x4510dd`: the dword at AI+0xe is a packed point, x4650 y2194
       homeX: 4650,
       // `0x455b42` seeds AI+4 with ten, and `0x455eae` spends one a decision
@@ -657,7 +719,11 @@ export const FOES: Readonly<Record<string, Foe>> = {
       anim: {
         cels: [3070, 3071, 3072, 3073, 3074, 3074],
         hold: 2,
-        then: { cels: [3110, 3100, 3111, 3101, 3112, 3102, 3113], hold: 3, from: "0x478578 tag 0" },
+        then: {
+          cels: [3110, 3100, 3111, 3101, 3112, 3102, 3113],
+          hold: 3,
+          from: "0x478578 tag 0",
+        },
         from: "0x478518 tag 0",
       },
       every: 3,
@@ -671,8 +737,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
      */
     death: {
       cels: [
-        3081, 3080, 3000, 3083, 3083, 3000, 3001, 3000, 3083, 3083, 3000, 3081, 3080, 3070, 3071, 3072, 3073, 3074,
-        3140,
+        3081, 3080, 3000, 3083, 3083, 3000, 3001, 3000, 3083, 3083, 3000, 3081,
+        3080, 3070, 3071, 3072, 3073, 3074, 3140,
       ],
       hold: 2,
       terminal: true,
@@ -715,18 +781,45 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * (`0x474868` latches), and it is not here.
    */
   initmaskboy: {
-    lever: { dir: 0, anim: { cels: [1821, 1821, 1822, 1822, 1823, 1823, 1822, 1822, 1821, 1821, 1820, 1821, 1821, 1820], hold: 1, from: "0x4740c8 tag 1" }, at: 10, reachPx: 37, sound: [5, 6], from: "0x438a55 / 0x438aa9 / 0x438ab9" },
+    lever: {
+      dir: 0,
+      anim: {
+        cels: [
+          1821, 1821, 1822, 1822, 1823, 1823, 1822, 1822, 1821, 1821, 1820,
+          1821, 1821, 1820,
+        ],
+        hold: 1,
+        from: "0x4740c8 tag 1",
+      },
+      at: 10,
+      reachPx: 37,
+      sound: [5, 6],
+      from: "0x438a55 / 0x438aa9 / 0x438ab9",
+    },
     // `0x474230` tag 4 — six cels, and the stride is on four of them
-    gait: { cels: [1800, 1801, 1802, 1803, 1804, 1805], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x474230 tag 4" },
+    gait: {
+      cels: [1800, 1801, 1802, 1803, 1804, 1805],
+      hold: 1,
+      dx: [0, 60, 70, 80, 120, 0],
+      from: "0x474230 tag 4",
+    },
     // `0x4386ab`: seven, against chapter four's twelve and twenty
     divisor: 7,
     // `0x4742d8` tag 0 — ONE cel, and `0x4390df` installs it unconditionally:
     // this chapter's handlers have no Δy test, no facing test and no random roll
     flinch: [{ cels: [1820], hold: 1, from: "0x4742d8 tag 0" }],
-    death: { cels: [1820, 1821, 1822, 1823, 1824], hold: 1, from: "0x4742f8 tag 0" },
+    death: {
+      cels: [1820, 1821, 1822, 1823, 1824],
+      hold: 1,
+      from: "0x4742f8 tag 0",
+    },
     // `0x4388dd`: it stands on cel 1801 doing nothing until the player's point is
     // inside its own record's rect, and then walks
-    wake: { cel: 1801, sound: FOE_SFX.maskboyWake, from: "0x4388dd / 0x4388f4" },
+    wake: {
+      cel: 1801,
+      sound: FOE_SFX.maskboyWake,
+      from: "0x4388dd / 0x4388f4",
+    },
     health: 40,
     hitSound: FOE_SFX.maskboyHit,
     // `0x439033`'s damage branch plays one sound and the death path plays none
@@ -751,11 +844,31 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * and twenty for its sibling. MALL places no goop, so it never happens here.
    */
   initbatboy: {
-    lever: { dir: 0, anim: { cels: [1906, 1906, 1920, 1921, 1920, 1921, 1922, 1921, 1920], hold: 1, from: "0x4743b8 tag 1" }, at: 5, reachPx: 37, sound: [5, 6], from: "0x4396c1 / 0x43970d / 0x43971d" },
-    gait: { cels: [1900, 1901, 1902, 1903, 1904, 1905], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x474438 tag 4" },
+    lever: {
+      dir: 0,
+      anim: {
+        cels: [1906, 1906, 1920, 1921, 1920, 1921, 1922, 1921, 1920],
+        hold: 1,
+        from: "0x4743b8 tag 1",
+      },
+      at: 5,
+      reachPx: 37,
+      sound: [5, 6],
+      from: "0x4396c1 / 0x43970d / 0x43971d",
+    },
+    gait: {
+      cels: [1900, 1901, 1902, 1903, 1904, 1905],
+      hold: 1,
+      dx: [0, 60, 70, 80, 120, 0],
+      from: "0x474438 tag 4",
+    },
     divisor: 7,
     flinch: [{ cels: [1920], hold: 1, from: "0x474508 tag 0" }],
-    death: { cels: [1920, 1921, 1922, 1923, 1924], hold: 1, from: "0x474528 tag 0" },
+    death: {
+      cels: [1920, 1921, 1922, 1923, 1924],
+      hold: 1,
+      from: "0x474528 tag 0",
+    },
     wake: { cel: 1901, sound: FOE_SFX.batboyWake, from: "0x439365 / 0x43937b" },
     health: 25,
     hitSound: FOE_SFX.batboyHit,
@@ -780,12 +893,36 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * straight out of the hit handler rather than carried on the object.
    */
   initknotboy: {
-    lever: { dir: 0, anim: { cels: [1946, 1946, 1961, 1961, 1946, 1946, 1961, 1960, 1961], hold: 1, from: "0x473e50 tag 1" }, at: 6, reachPx: 37, sound: [5, 6], from: "0x437f4b / 0x437fb0 / 0x437fef" },
-    gait: { cels: [1940, 1941, 1942, 1943, 1944, 1945], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x473e50 tag 0" },
+    lever: {
+      dir: 0,
+      anim: {
+        cels: [1946, 1946, 1961, 1961, 1946, 1946, 1961, 1960, 1961],
+        hold: 1,
+        from: "0x473e50 tag 1",
+      },
+      at: 6,
+      reachPx: 37,
+      sound: [5, 6],
+      from: "0x437f4b / 0x437fb0 / 0x437fef",
+    },
+    gait: {
+      cels: [1940, 1941, 1942, 1943, 1944, 1945],
+      hold: 1,
+      dx: [0, 60, 70, 80, 120, 0],
+      from: "0x473e50 tag 0",
+    },
     divisor: 7,
     flinch: [{ cels: [1960], hold: 1, from: "0x474048 tag 0" }],
-    death: { cels: [1960, 1961, 1962, 1963, 1964], hold: 1, from: "0x474068 tag 0" },
-    wake: { cel: 1940, sound: FOE_SFX.knotboyWake, from: "0x437c41 / 0x437c5a" },
+    death: {
+      cels: [1960, 1961, 1962, 1963, 1964],
+      hold: 1,
+      from: "0x474068 tag 0",
+    },
+    wake: {
+      cel: 1940,
+      sound: FOE_SFX.knotboyWake,
+      from: "0x437c41 / 0x437c5a",
+    },
     health: 50,
     hitSound: FOE_SFX.knotboyHit,
     // `0x437b66`: plate 0x332f, which like the other two lives in PLAYER.SBK;
@@ -829,18 +966,38 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * maker the third one uses — and that is not here.
    */
   initknifeboy: {
-    lever: { dir: 0, anim: { cels: [1858, 1857, 1856], hold: 1, from: "0x4746a8 tag 1" }, at: 1, reachPx: 37, sound: [5, 6], from: "0x43a134 / 0x43a188 / 0x43a1c7" },
+    lever: {
+      dir: 0,
+      anim: { cels: [1858, 1857, 1856], hold: 1, from: "0x4746a8 tag 1" },
+      at: 1,
+      reachPx: 37,
+      sound: [5, 6],
+      from: "0x43a134 / 0x43a188 / 0x43a1c7",
+    },
     // `0x474648` tag 4 — the same six-cel walk and the same stride as its three
     // siblings, one book row along
-    gait: { cels: [1840, 1841, 1842, 1843, 1844, 1845], hold: 1, dx: [0, 60, 70, 80, 120, 0], from: "0x474648 tag 4" },
+    gait: {
+      cels: [1840, 1841, 1842, 1843, 1844, 1845],
+      hold: 1,
+      dx: [0, 60, 70, 80, 120, 0],
+      from: "0x474648 tag 4",
+    },
     divisor: 7,
     // `0x474770` has three tags of one cel each and `0x43a744` installs tag 0
     // and only ever tag 0
     flinch: [{ cels: [1860], hold: 1, from: "0x474770 tag 0" }],
-    death: { cels: [1860, 1861, 1862, 1863, 1864], hold: 1, from: "0x474790 tag 0" },
+    death: {
+      cels: [1860, 1861, 1862, 1863, 1864],
+      hold: 1,
+      from: "0x474790 tag 0",
+    },
     // `0x439da3`: it stands on 1841 with its velocity zeroed until the player's
     // point is inside its record's rect, and `0x439dd0` sounds as it starts
-    wake: { cel: 1841, sound: FOE_SFX.knifeboyWake, from: "0x439da3 / 0x439dd0" },
+    wake: {
+      cel: 1841,
+      sound: FOE_SFX.knifeboyWake,
+      from: "0x439da3 / 0x439dd0",
+    },
     health: 25,
     hitSound: FOE_SFX.knifeboyHit,
     // `0x439cd2` claims the bar with 0x3330; `0x43a711` pays 0xf0
@@ -874,15 +1031,34 @@ export const FOES: Readonly<Record<string, Foe>> = {
   inithardcore: {
     // `0x474960` — twelve frames, two cels' worth of walk cycled twice, and every
     // dx is zero
-    gait: { cels: [6050, 6051, 6052, 6053, 6054, 6055], hold: 2, from: "0x474960 tag 0" },
+    gait: {
+      cels: [6050, 6051, 6052, 6053, 6054, 6055],
+      hold: 2,
+      from: "0x474960 tag 0",
+    },
     // `0x43cbcb`: thirteen
     divisor: 13,
     // `0x474b88` — four cels that carry their own knockback, dx -100 on two of them
-    flinch: [{ cels: [6030, 6031, 6032, 6033], hold: 2, dx: [0, -100, 0, -100], from: "0x474b88 tag 0" }],
+    flinch: [
+      {
+        cels: [6030, 6031, 6032, 6033],
+        hold: 2,
+        dx: [0, -100, 0, -100],
+        from: "0x474b88 tag 0",
+      },
+    ],
     // `0x474bb0` — and the first frame throws it, dx -65 dy -180
-    death: { cels: [6000, 6001, 6002, 6003, 6004, 6005], hold: 2, from: "0x474bb0 tag 0" },
+    death: {
+      cels: [6000, 6001, 6002, 6003, 6004, 6005],
+      hold: 2,
+      from: "0x474bb0 tag 0",
+    },
     // `0x43ccda`: the same point-in-rect the gang use, and it holds 6070 until then
-    wake: { cel: 6070, sound: FOE_SFX.hardcoreHit, from: "0x43ccda / 0x43cd1b" },
+    wake: {
+      cel: 6070,
+      sound: FOE_SFX.hardcoreHit,
+      from: "0x43ccda / 0x43cd1b",
+    },
     health: 750,
     hitSound: FOE_SFX.hardcoreHit,
     // `0x43cca1` claims the bar with 0x3331 and 0x2ee; `0x43d2e8` pays 0x15e
@@ -929,7 +1105,9 @@ export const FOES: Readonly<Record<string, Foe>> = {
       { cels: [6008, 6008, 6108, 6207], hold: 3, from: "0x472878 tag 3" },
     ],
     death: {
-      cels: [6009, 6009, 6109, 6109, 6109, 6209, 6209, 6209, 6209, 6209, 6209, 6209],
+      cels: [
+        6009, 6009, 6109, 6109, 6109, 6209, 6209, 6209, 6209, 6209, 6209, 6209,
+      ],
       hold: 1,
       from: "0x4728e0 tag 0",
     },
@@ -967,20 +1145,48 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * takes of `0x473098`, and plays 47, 48 or 49 to match the take it picked.
    */
   initox: {
-    gait: { cels: [5090, 5091, 5092, 5093, 5094, 5095], hold: 1, dx: [85, 85, 85, 85, 85, 85], from: "0x472e88 tag 0" },
+    gait: {
+      cels: [5090, 5091, 5092, 5093, 5094, 5095],
+      hold: 1,
+      dx: [85, 85, 85, 85, 85, 85],
+      from: "0x472e88 tag 0",
+    },
     // `mov word ptr [esi+0xe], 0xd` at `0x43f1fb`
     divisor: 13,
     flinch: [
-      { cels: [5160, 5161, 5162, 5163, 5164], hold: 1, dx: [85, 85, 85, 85, 0], from: "0x473098 tag 0" },
-      { cels: [5170, 5171, 5172, 5173, 5174, 5175], hold: 1, dx: [85, 85, 105, 0, 0, 0], from: "0x473098 tag 1" },
-      { cels: [5120, 5121, 5122, 5123, 5124, 5123, 5122, 5121, 5120], hold: 1, dx: [85, 85, 105, 0, 0, 0, 0, 0, 0], from: "0x473098 tag 2" },
+      {
+        cels: [5160, 5161, 5162, 5163, 5164],
+        hold: 1,
+        dx: [85, 85, 85, 85, 0],
+        from: "0x473098 tag 0",
+      },
+      {
+        cels: [5170, 5171, 5172, 5173, 5174, 5175],
+        hold: 1,
+        dx: [85, 85, 105, 0, 0, 0],
+        from: "0x473098 tag 1",
+      },
+      {
+        cels: [5120, 5121, 5122, 5123, 5124, 5123, 5122, 5121, 5120],
+        hold: 1,
+        dx: [85, 85, 105, 0, 0, 0, 0, 0, 0],
+        from: "0x473098 tag 2",
+      },
     ],
     // `0x43fa8d`: `0x434540(3) - 1`, a flat one of the three
     pick: () => Math.floor(Math.random() * 3),
-    death: { cels: [5190, 5190, 5191, 5192, 5193, 5194, 5194, 5195], hold: 2, from: "0x4732d8 tag 0" },
+    death: {
+      cels: [5190, 5190, 5191, 5192, 5193, 5194, 5194, 5195],
+      hold: 2,
+      from: "0x4732d8 tag 0",
+    },
     lever: {
       dir: 1,
-      anim: { cels: [5170, 5171, 5172, 5173, 5174, 5175], hold: 1, from: "0x472ff0 tag 1" },
+      anim: {
+        cels: [5170, 5171, 5172, 5173, 5174, 5175],
+        hold: 1,
+        from: "0x472ff0 tag 1",
+      },
       // `0x43f723` installs the reach and `0x43f73c` throws on the same frame
       at: 0,
       // `cmp eax, 0x89` at `0x43f706` and again at `0x43f71c`
@@ -1042,7 +1248,11 @@ export const FOES: Readonly<Record<string, Foe>> = {
       { cels: [7061], hold: 3, from: "0x473a28 tag 1" },
       { cels: [7063], hold: 3, from: "0x473a28 tag 2" },
       // `0x473a48` tag 3 — the one a blow of 0x2d or more earns
-      { cels: [7090, 7093, 7091, 7094, 7092, 7095], hold: 2, from: "0x473a48 tag 3" },
+      {
+        cels: [7090, 7093, 7091, 7094, 7092, 7095],
+        hold: 2,
+        from: "0x473a48 tag 3",
+      },
     ],
     // `0x441ea4` / `0x441e67`: the threshold is 0x2d, and under it the three are
     // picked with `0x434540(3) - 1`
@@ -1073,15 +1283,36 @@ export const FOES: Readonly<Record<string, Foe>> = {
       // the idle its creator installs, and what it holds between decisions
       hover: { cels: [7040], hold: 5, from: "0x473840 tag 0" },
       // `0x473850` tag 0 — two cels and a stride on the second
-      charge: { cels: [7041, 7042], hold: 2, dx: [0, 120], from: "0x473850 tag 0" },
+      charge: {
+        cels: [7041, 7042],
+        hold: 2,
+        dx: [0, 120],
+        from: "0x473850 tag 0",
+      },
       // `0x473950` tag 0..3 — the dive, and `dy -25` on sixteen of its frames
-      rush: { cels: [7040, 7041, 7042, 7043, 7044, 7045, 7046, 7047], hold: 2, from: "0x473950" },
+      rush: {
+        cels: [7040, 7041, 7042, 7043, 7044, 7045, 7046, 7047],
+        hold: 2,
+        from: "0x473950",
+      },
       // `0x473900` — what it does at the middle band while it is still strong
-      combo: { cels: [7041, 7042, 7043, 7051, 7052, 7053, 7053, 7054, 7055], hold: 2, from: "0x473900" },
+      combo: {
+        cels: [7041, 7042, 7043, 7051, 7052, 7053, 7053, 7054, 7055],
+        hold: 2,
+        from: "0x473900",
+      },
       land: { cels: [7040], hold: 5, from: "0x473840 tag 0" },
-      melee: { cels: [7041, 7042, 7043, 7051, 7052, 7053, 7053, 7054, 7055], hold: 2, from: "0x473900" },
+      melee: {
+        cels: [7041, 7042, 7043, 7051, 7052, 7053, 7053, 7054, 7055],
+        hold: 2,
+        from: "0x473900",
+      },
       // `0x4738a8` — the long one, ten frames at three
-      antiAir: { cels: [7080, 7081, 7082, 7083, 7084, 7085, 7086, 7085, 7086, 7085], hold: 3, from: "0x4738a8" },
+      antiAir: {
+        cels: [7080, 7081, 7082, 7083, 7084, 7085, 7086, 7085, 7086, 7085],
+        hold: 3,
+        from: "0x4738a8",
+      },
       homeX: 0,
       decisions: 0,
       // `0x473dc8`'s last threshold
@@ -1180,13 +1411,22 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * more than the thrower's 50.
    */
   initdog: {
-    gait: { cels: [4800, 4801, 4802, 4803, 4804, 4805, 4806, 4807, 4808, 4809], hold: 2, dx: [65, 65, 65, 65, 65, 65, 65, 65, 65, 65], from: "0x477fe0 tag 0" },
+    gait: {
+      cels: [4800, 4801, 4802, 4803, 4804, 4805, 4806, 4807, 4808, 4809],
+      hold: 2,
+      dx: [65, 65, 65, 65, 65, 65, 65, 65, 65, 65],
+      from: "0x477fe0 tag 0",
+    },
     // `0x454b20`: the lowest in the chapter after the rat's seven
     divisor: 10,
     // `0x4781f8` — ONE cel held four frames, and no pick behind it: `0x4551c3`
     // tests the health and nothing else
     flinch: [{ cels: [4820], hold: 4, from: "0x4781f8 tag 0" }],
-    death: { cels: [4850, 4851, 4852, 4853, 4854, 4855], hold: 1, from: "0x478208 tag 0" },
+    death: {
+      cels: [4850, 4851, 4852, 4853, 4854, 4855],
+      hold: 1,
+      from: "0x478208 tag 0",
+    },
     health: 10,
     hitSound: FOE_SFX.dogHit,
     deathSound: FOE_SFX.dogDeath,
@@ -1214,7 +1454,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * a heavy blow, because there is no fourth flinch to knock it into.
    */
   initwerec: {
-    gait: { cels: [5090, 5091, 5092, 5093, 5094, 5095], hold: 2, dx: [75, 75, 75, 75, 75, 75], from: "0x4778e0 tag 0" },
+    gait: {
+      cels: [5090, 5091, 5092, 5093, 5094, 5095],
+      hold: 2,
+      dx: [75, 75, 75, 75, 75, 75],
+      from: "0x4778e0 tag 0",
+    },
     divisor: 20,
     // 0x477a48, three tags of one cel each, held four frames — the same shape as
     // the punk's 0x4774f8
@@ -1224,8 +1469,13 @@ export const FOES: Readonly<Record<string, Foe>> = {
       { cels: [6042], hold: 4, from: "0x477a48 tag 2" },
     ],
     // 0x452a87..0x452ae3, and the punk's 0x44f21e is the same four comparisons
-    pick: ({ dy, facingAway }) => (dy > 50 ? 0 : dy >= 30 && !facingAway ? 2 : 1),
-    death: { cels: [6030, 6031, 6032, 6033, 6034, 6035, 6036, 6037], hold: 3, from: "0x477a78 tag 0" },
+    pick: ({ dy, facingAway }) =>
+      dy > 50 ? 0 : dy >= 30 && !facingAway ? 2 : 1,
+    death: {
+      cels: [6030, 6031, 6032, 6033, 6034, 6035, 6036, 6037],
+      hold: 3,
+      from: "0x477a78 tag 0",
+    },
     health: 180,
     // `0x4529ee`: `0x434540(4) + 0x23`, the same four takes the punks use
     hitSound: FOE_SFX.punkHit,
@@ -1258,7 +1508,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * pays no award of its own — the punk it hatches carries the 300.
    */
   initwered: {
-    gait: { cels: [4870, 4871, 4872, 4873], hold: 1, dx: [190, 190, 190, 190], from: "0x477ae0 tag 0" },
+    gait: {
+      cels: [4870, 4871, 4872, 4873],
+      hold: 1,
+      dx: [190, 190, 190, 190],
+      from: "0x477ae0 tag 0",
+    },
     divisor: 20,
     /**
      * 0x477ba0, its four tags run together: it falls (4890, 4891), the punk comes
@@ -1266,7 +1521,10 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * either class), and the husk sinks (4905..4911).
      */
     death: {
-      cels: [4890, 4891, 4900, 4901, 4902, 4903, 4904, 4905, 4906, 4907, 4908, 4909, 4910, 4911],
+      cels: [
+        4890, 4891, 4900, 4901, 4902, 4903, 4904, 4905, 4906, 4907, 4908, 4909,
+        4910, 4911,
+      ],
       hold: 2,
       from: "0x477ba0 tags 0..3",
     },
@@ -1321,9 +1579,18 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * would really go is in the AI nothing has read.
    */
   initrat: {
-    gait: { cels: [3025, 3024, 3023, 3022, 3021, 3020], hold: 1, dx: [85, 85, 85, 85, 85, 85], from: "0x476ff0 tag 0" },
+    gait: {
+      cels: [3025, 3024, 3023, 3022, 3021, 3020],
+      hold: 1,
+      dx: [85, 85, 85, 85, 85, 85],
+      from: "0x476ff0 tag 0",
+    },
     divisor: 7,
-    death: { cels: [3040, 3041, 3042, 3043, 3044, 3045, 3046, 3047, 3048], hold: 1, from: "0x477090 tag 0" },
+    death: {
+      cels: [3040, 3041, 3042, 3043, 3044, 3045, 3046, 3047, 3048],
+      hold: 1,
+      from: "0x477090 tag 0",
+    },
     frail: true,
     health: 200,
     // `0x44e423` — one blow of any size, and this is the sound of it
@@ -1353,7 +1620,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
     divisor: 7,
     flinch: [
       { cels: [2411], hold: 1, from: "0x4787a8 tag 0" },
-      { cels: [2410, 2411, 2412, 2413], hold: 1, terminal: true, from: "0x4787a8 tag 1" },
+      {
+        cels: [2410, 2411, 2412, 2413],
+        hold: 1,
+        terminal: true,
+        from: "0x4787a8 tag 1",
+      },
     ],
     // 0x44fec4: under 10 does nothing at all, under 55 dents, else crumples
     pick: ({ damage }) => (damage >= 55 ? 1 : 0),
@@ -1449,7 +1721,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
    */
   initzomb: {
     // `0x470110` tag 0 — six cels at TWO frames each, dx 65
-    gait: { cels: [1800, 1801, 1802, 1803, 1804, 1805], hold: 2, dx: [65, 65, 65, 65, 65, 65], from: "0x470110 tag 0" },
+    gait: {
+      cels: [1800, 1801, 1802, 1803, 1804, 1805],
+      hold: 2,
+      dx: [65, 65, 65, 65, 65, 65],
+      from: "0x470110 tag 0",
+    },
     // `0x420280` — the slowest divisor in the game outside a boss
     divisor: 10,
     // `0x470248` tags 0, 1 and 2 at FOUR frames a cel, rolled `0x434540(3)`
@@ -1493,7 +1770,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
    */
   initbat: {
     // `0x46f060` tag 0 — four cels, dx 3, through a divisor of one
-    gait: { cels: [2200, 2201, 2202, 2203], hold: 1, dx: [3, 3, 3, 3], from: "0x46f060 tag 0" },
+    gait: {
+      cels: [2200, 2201, 2202, 2203],
+      hold: 1,
+      dx: [3, 3, 3, 3],
+      from: "0x46f060 tag 0",
+    },
     divisor: 1,
     floats: true,
     // `0x422f18` and `0x422f26` — the clamp, both ways, and nothing else
@@ -1522,12 +1804,27 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * ignore test.
    */
   initghengis: {
-    gait: { cels: [400, 401, 402, 403, 404, 405], hold: 2, dx: [85, 85, 85, 85, 85, 85], from: "0x46ee60 tag 0" },
+    gait: {
+      cels: [400, 401, 402, 403, 404, 405],
+      hold: 2,
+      dx: [85, 85, 85, 85, 85, 85],
+      from: "0x46ee60 tag 0",
+    },
     divisor: 13,
     // `0x46eee0` tag 0, kind 4 — nine cels, one frame each
-    flinch: [{ cels: [470, 471, 472, 473, 474, 475, 476, 477, 478], hold: 1, from: "0x46eee0 tag 0" }],
+    flinch: [
+      {
+        cels: [470, 471, 472, 473, 474, 475, 476, 477, 478],
+        hold: 1,
+        from: "0x46eee0 tag 0",
+      },
+    ],
     // `0x46efe0` tag 0, kind 9 — and it changes row half way down
-    death: { cels: [430, 431, 432, 433, 434, 440, 441, 442, 443, 444, 445], hold: 1, from: "0x46efe0 tag 0" },
+    death: {
+      cels: [430, 431, 432, 433, 434, 440, 441, 442, 443, 444, 445],
+      hold: 1,
+      from: "0x46efe0 tag 0",
+    },
     // `0x46ed80` tag 0 — one cel, and the think installs it before anything
     wake: { cel: 420, from: "0x46ed80 tag 0" },
     health: 200,
@@ -1550,12 +1847,27 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * over are authored in the animation rather than applied to it.
    */
   initskel: {
-    gait: { cels: [1200, 1201, 1202, 1203, 1204, 1205], hold: 2, dx: [65, 65, 65, 65, 65, 65], from: "0x46fac0 tag 0" },
+    gait: {
+      cels: [1200, 1201, 1202, 1203, 1204, 1205],
+      hold: 2,
+      dx: [65, 65, 65, 65, 65, 65],
+      from: "0x46fac0 tag 0",
+    },
     divisor: 13,
     // `0x46fcf0` tag 0, kind 6 — and its last record carries the throw
-    flinch: [{ cels: [1260, 1261, 1262, 1263, 1263, 1263, 1264, 1265], hold: 2, from: "0x46fcf0 tag 0" }],
+    flinch: [
+      {
+        cels: [1260, 1261, 1262, 1263, 1263, 1263, 1264, 1265],
+        hold: 2,
+        from: "0x46fcf0 tag 0",
+      },
+    ],
     // `0x46fd90` tag 0, kind 8, three frames a cel
-    death: { cels: [1350, 1351, 1352, 1353, 1354, 1355, 1356, 1357, 1358, 1359], hold: 3, from: "0x46fd90 tag 0" },
+    death: {
+      cels: [1350, 1351, 1352, 1353, 1354, 1355, 1356, 1357, 1358, 1359],
+      hold: 3,
+      from: "0x46fd90 tag 0",
+    },
     // `0x46fab0` tag 0 — the one cel the creator stands it on
     wake: { cel: 1200, from: "0x42340f / 0x46fab0 tag 0" },
     health: 200,
@@ -1579,12 +1891,27 @@ export const FOES: Readonly<Record<string, Foe>> = {
    */
   initigor: {
     // `0x46fe20` tag 0, kind 2 — the first record carries no stride
-    gait: { cels: [3100, 3101, 3102, 3103, 3104], hold: 2, dx: [0, 55, 55, 55, 55], from: "0x46fe20 tag 0" },
+    gait: {
+      cels: [3100, 3101, 3102, 3103, 3104],
+      hold: 2,
+      dx: [0, 55, 55, 55, 55],
+      from: "0x46fe20 tag 0",
+    },
     divisor: 10,
     // `0x46ff30` tag 0, kind 7 — and its second cel is held three frames
-    flinch: [{ cels: [3120, 3121, 3121, 3121, 3122, 3123], hold: 2, from: "0x46ff30 tag 0" }],
+    flinch: [
+      {
+        cels: [3120, 3121, 3121, 3121, 3122, 3123],
+        hold: 2,
+        from: "0x46ff30 tag 0",
+      },
+    ],
     // `0x46ff98` tag 1, kind 5
-    death: { cels: [3140, 3141, 3142, 3143, 3144, 3145], hold: 1, from: "0x46ff98 tag 1" },
+    death: {
+      cels: [3140, 3141, 3142, 3143, 3144, 3145],
+      hold: 1,
+      from: "0x46ff98 tag 1",
+    },
     // `0x46fe10` tag 0 — one cel, which is what the class stands it on
     wake: { cel: 3100, from: "0x4251a7 / 0x46fe10 tag 0" },
     health: 200,
@@ -1612,11 +1939,22 @@ export const FOES: Readonly<Record<string, Foe>> = {
    */
   initwraith: {
     // `0x46f6c8` tag 1 — nine cels, dx 20 falling to 10 half way through
-    gait: { cels: [3250, 3251, 3252, 3253, 3252, 3253, 3252, 3251, 3250], hold: 2, dx: [20, 20, 20, 10, 10, 10, 10, 10, 10], from: "0x46f6c8 tag 1" },
+    gait: {
+      cels: [3250, 3251, 3252, 3253, 3252, 3253, 3252, 3251, 3250],
+      hold: 2,
+      dx: [20, 20, 20, 10, 10, 10, 10, 10, 10],
+      from: "0x46f6c8 tag 1",
+    },
     divisor: 10,
     floats: true,
     // `0x46f8a8` tag 0, kind 8
-    flinch: [{ cels: [3200, 3201, 3202, 3203, 3204, 3205, 3206, 3207, 3208], hold: 2, from: "0x46f8a8 tag 0" }],
+    flinch: [
+      {
+        cels: [3200, 3201, 3202, 3203, 3204, 3205, 3206, 3207, 3208],
+        hold: 2,
+        from: "0x46f8a8 tag 0",
+      },
+    ],
     // `0x46f898` tag 0, kind 7 — one cel at four frames, and that is all of it
     death: { cels: [3243], hold: 4, from: "0x46f898 tag 0" },
     // `0x46f6c8` tag 0 — the hover, which is the walk with its strides removed
@@ -1664,18 +2002,46 @@ export const FOES: Readonly<Record<string, Foe>> = {
       /** `0x46f8f8` — the tracker's own thresholds, biggest first */
       bands: [700, 230, 130, 60],
       /** `0x46f698` — what it does on being woken, five cels and then it fights */
-      rouse: { cels: [3260, 3261, 3262, 3263, 3264], hold: 2, from: "0x46f698 tag 0" },
+      rouse: {
+        cels: [3260, 3261, 3262, 3263, 3264],
+        hold: 2,
+        from: "0x46f698 tag 0",
+      },
       /** `0x46f6c8` tag 0 — hanging still, which is all it does inside 60px */
-      hover: { cels: [3250, 3251, 3252, 3253, 3252, 3253, 3252, 3251, 3250], hold: 2, from: "0x46f6c8 tag 0" },
+      hover: {
+        cels: [3250, 3251, 3252, 3253, 3252, 3253, 3252, 3251, 3250],
+        hold: 2,
+        from: "0x46f6c8 tag 0",
+      },
       /** `0x46f7e0` — up, held, and down again */
-      rise: { cels: [3220, 3221, 3222, 3223, 3224, 3225, 3225], hold: 1, from: "0x46f7e0 tag 0" },
+      rise: {
+        cels: [3220, 3221, 3222, 3223, 3224, 3225, 3225],
+        hold: 1,
+        from: "0x46f7e0 tag 0",
+      },
       held: { cels: [3225], hold: 1, from: "0x46f7e0 tag 1" },
-      sink: { cels: [3225, 3225, 3224, 3223, 3222, 3221, 3220], hold: 1, from: "0x46f7e0 tag 2" },
+      sink: {
+        cels: [3225, 3225, 3224, 3223, 3222, 3221, 3220],
+        hold: 1,
+        from: "0x46f7e0 tag 2",
+      },
       /** `0x46f790` tag 0 — the cast, and `0x424d77` is what comes out of it */
-      cast: { cels: [3210, 3211, 3212, 3213, 3214, 3215], hold: 2, from: "0x46f790 tag 0" },
+      cast: {
+        cels: [3210, 3211, 3212, 3213, 3214, 3215],
+        hold: 2,
+        from: "0x46f790 tag 0",
+      },
       /** `0x46f760` and `0x46f860` — the two it throws in between */
-      lunge: { cels: [3240, 3241, 3242, 3243, 3244], hold: 3, from: "0x46f760 tag 0" },
-      sweep: { cels: [3230, 3231, 3232, 3233, 3234, 3235], hold: 2, from: "0x46f860 tag 0" },
+      lunge: {
+        cels: [3240, 3241, 3242, 3243, 3244],
+        hold: 3,
+        from: "0x46f760 tag 0",
+      },
+      sweep: {
+        cels: [3230, 3231, 3232, 3233, 3234, 3235],
+        hold: 2,
+        from: "0x46f860 tag 0",
+      },
       from: "0x424800, bands 0x46f8f8, beam 0x41f6b0",
     },
     from: "0x41ec80 / 0x424730 / 0x424800 / 0x424f80",
@@ -1719,17 +2085,32 @@ export const FOES: Readonly<Record<string, Foe>> = {
     preaches: {
       bands: [220, 170, 100],
       throw_: {
-        cels: [2600, 2601, 2602, 2603, 2604, 2605, 2606, 2607, 2608, 2609, 2610, 2611, 2610, 2611],
+        cels: [
+          2600, 2601, 2602, 2603, 2604, 2605, 2606, 2607, 2608, 2609, 2610,
+          2611, 2610, 2611,
+        ],
         hold: 1,
         from: "0x46f1c0 tag 0",
       },
-      recoil: { cels: [2612, 2613, 2614], hold: 1, dx: [-30, -20, -10], from: "0x46f1c0 tag 1" },
+      recoil: {
+        cels: [2612, 2613, 2614],
+        hold: 1,
+        dx: [-30, -20, -10],
+        from: "0x46f1c0 tag 1",
+      },
       sweep: {
-        cels: [2650, 2651, 2652, 2653, 2654, 2655, 2656, 2657, 2658, 2657, 2656, 2655, 2654, 2652, 2652, 2653],
+        cels: [
+          2650, 2651, 2652, 2653, 2654, 2655, 2656, 2657, 2658, 2657, 2656,
+          2655, 2654, 2652, 2652, 2653,
+        ],
         hold: 1,
         from: "0x46f1c0 tag 2",
       },
-      settle: { cels: [2654, 2653, 2654, 2653], hold: 1, from: "0x46f1c0 tag 3" },
+      settle: {
+        cels: [2654, 2653, 2654, 2653],
+        hold: 1,
+        from: "0x46f1c0 tag 3",
+      },
       farOdds: [3, 10],
       sweepOdds: [13, 42],
       wakeSound: 0x1d,
@@ -1737,13 +2118,29 @@ export const FOES: Readonly<Record<string, Foe>> = {
     },
     // `0x46f170` tag 0, kind 1 — nine cels, two frames each, and no stride in
     // any of them: it travels on its velocity
-    gait: { cels: [2500, 2501, 2502, 2503, 2504, 2505, 2506, 2507, 2508], hold: 2, from: "0x46f170 tag 0" },
+    gait: {
+      cels: [2500, 2501, 2502, 2503, 2504, 2505, 2506, 2507, 2508],
+      hold: 2,
+      from: "0x46f170 tag 0",
+    },
     divisor: 10,
     floats: true,
     // `0x46f3d8` tag 0 — sixteen frames of 2640/2641 flickering, then the 2670s
-    flinch: [{ cels: [2640, 2640, 2641, 2641, 2640, 2640, 2641, 2641], hold: 1, from: "0x46f3d8 tag 0" }],
+    flinch: [
+      {
+        cels: [2640, 2640, 2641, 2641, 2640, 2640, 2641, 2641],
+        hold: 1,
+        from: "0x46f3d8 tag 0",
+      },
+    ],
     // `0x46f308` tag 0, kind 4
-    death: { cels: [2670, 2671, 2672, 2673, 2674, 2675, 2676, 2677, 2678, 2679, 2680, 2681], hold: 1, from: "0x46f308 tag 0" },
+    death: {
+      cels: [
+        2670, 2671, 2672, 2673, 2674, 2675, 2676, 2677, 2678, 2679, 2680, 2681,
+      ],
+      hold: 1,
+      from: "0x46f308 tag 0",
+    },
     // `0x46f160` tag 0 — the one cel the creator stands it on
     wake: { cel: 2500, from: "0x425be3 / 0x46f160 tag 0" },
     health: 1200,
@@ -1780,13 +2177,29 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * the throw up. Level thirteen's cage doors are opened by its guards, the
      * way level six's showers are turned on by its gang.
      */
-    lever: { dir: 0, anim: { cels: [2170, 2171, 2171, 2171], hold: 2, from: "0x46c888 tag 2" }, at: 3, reachPx: 10, sound: [], from: "0x414644 / 0x414664 / 0x412550" },
-    gait: { cels: [2100, 2101, 2102, 2103, 2104, 2105], hold: 2, dx: [65, 65, 65, 65, 65, 65], from: "0x46c720 tag 0" },
+    lever: {
+      dir: 0,
+      anim: { cels: [2170, 2171, 2171, 2171], hold: 2, from: "0x46c888 tag 2" },
+      at: 3,
+      reachPx: 10,
+      sound: [],
+      from: "0x414644 / 0x414664 / 0x412550",
+    },
+    gait: {
+      cels: [2100, 2101, 2102, 2103, 2104, 2105],
+      hold: 2,
+      dx: [65, 65, 65, 65, 65, 65],
+      from: "0x46c720 tag 0",
+    },
     divisor: 13,
     // `0x46c828` tag 0, kind 8
     flinch: [{ cels: [2250, 2251], hold: 2, from: "0x46c828 tag 0" }],
     // `0x46c9a8` tag 0, kind 11 — the one it gets standing up
-    death: { cels: [2190, 2191, 2192, 2193, 2194], hold: 2, from: "0x46c9a8 tag 0" },
+    death: {
+      cels: [2190, 2191, 2192, 2193, 2194],
+      hold: 2,
+      from: "0x46c9a8 tag 0",
+    },
     // `0x413f40` — the cel the creator stands it on
     wake: { cel: 2100, from: "0x413f40 / 0x46c628 tag 0" },
     // `0x4116b5` — `0x40e300(0xfa)`
@@ -1839,12 +2252,27 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * alternates its stride like that — it lurches.
    */
   initpuke: {
-    gait: { cels: [3000, 3001, 3002, 3003, 3004], hold: 1, dx: [93, 93, 93, 93, 93], from: "0x46ca30 tag 0" },
+    gait: {
+      cels: [3000, 3001, 3002, 3003, 3004],
+      hold: 1,
+      dx: [93, 93, 93, 93, 93],
+      from: "0x46ca30 tag 0",
+    },
     divisor: 13,
     // `0x46cb50` tag 0, kind 5 — seven records, the first held three frames
-    flinch: [{ cels: [3034, 3034, 3034, 3033, 3032, 3031, 3030], hold: 1, from: "0x46cb50 tag 0" }],
+    flinch: [
+      {
+        cels: [3034, 3034, 3034, 3033, 3032, 3031, 3030],
+        hold: 1,
+        from: "0x46cb50 tag 0",
+      },
+    ],
     // `0x46cbe0` tag 0, kind 6
-    death: { cels: [3080, 3081, 3082, 3083, 3084, 3085], hold: 2, from: "0x46cbe0 tag 0" },
+    death: {
+      cels: [3080, 3081, 3082, 3083, 3084, 3085],
+      hold: 2,
+      from: "0x46cbe0 tag 0",
+    },
     // `0x46c9f8` tag 0 — the six it stands on before anything happens
     wake: { cel: 3090, from: "0x417e40 / 0x46c9f8 tag 0" },
     // `0x411753` — `0x40e300(0x190)`
@@ -1872,11 +2300,19 @@ export const FOES: Readonly<Record<string, Foe>> = {
    */
   initarm: {
     // `0x46cf10` tag 0, kind 0 — seven cels, three frames each, out and back
-    gait: { cels: [500, 501, 502, 503, 502, 501, 500], hold: 3, from: "0x46cf10 tag 0" },
+    gait: {
+      cels: [500, 501, 502, 503, 502, 501, 500],
+      hold: 3,
+      from: "0x46cf10 tag 0",
+    },
     divisor: 13,
     flinch: [{ cels: [3360, 3361], hold: 3, from: "0x46cfc8 tag 0" }],
     // `0x46d0b0` tag 0, kind 8 — and the first record throws it 130 up
-    death: { cels: [3390, 3391, 3392, 3393, 3394, 3395], hold: 3, from: "0x46d0b0 tag 0" },
+    death: {
+      cels: [3390, 3391, 3392, 3393, 3394, 3395],
+      hold: 3,
+      from: "0x46d0b0 tag 0",
+    },
     health: 1,
     frail: true,
     hitSound: FOE_SFX.armHit,
@@ -1905,7 +2341,11 @@ export const FOES: Readonly<Record<string, Foe>> = {
     divisor: 13,
     flinch: [{ cels: [5350], hold: 1, from: "0x46da20 tag 0" }],
     // `0x46da30` tag 0, kind 10
-    death: { cels: [5440, 5441, 5442, 5443, 5444, 5445], hold: 3, from: "0x46da30 tag 0" },
+    death: {
+      cels: [5440, 5441, 5442, 5443, 5444, 5445],
+      hold: 3,
+      from: "0x46da30 tag 0",
+    },
     // `0x411be4` — `0x40e300(0x4b0)`
     health: 1200,
     hitSound: FOE_SFX.tube,

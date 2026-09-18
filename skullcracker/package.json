@@ -19,6 +19,7 @@
     "test:browser:speed": "tsx tests/browser/speed.ts",
     "test:browser:hud": "tsx tests/browser/hud.ts",
     "test:browser:mission": "tsx tests/browser/mission.ts",
+    "test:browser:fights": "tsx tests/browser/fights.ts",
     "test:browser:foes": "tsx tests/browser/foes.ts",
     "test:browser:sound": "tsx tests/browser/sound.ts",
     "test:browser:city": "tsx tests/browser/city.ts",

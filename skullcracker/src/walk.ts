@@ -82,6 +82,7 @@ import {
   loopIndex,
   type Foe,
 } from "./foes";
+import { FIGHTS, FoeFight } from "./fights";
 import {
   CRAFT,
   Gob,
@@ -820,6 +821,14 @@ interface Enemy {
     | "settle";
   /** `AI+4` — decisions left before it breaks off and goes home */
   decisions?: number;
+  /**
+   * In the fight — `obj+0x18` state 1, which {@link stepFight} drives. Undefined
+   * is the patrol, state 0, and the player's own point inside this record's rect
+   * is the only thing that turns one into the other.
+   */
+  fighting?: boolean;
+  /** swinging: the attack plays ONCE and hands back, where the walk loops */
+  swing?: boolean;
   /** has the reach already made its one call — `obj+0x42` passes the frame once */
   thrown?: boolean;
   /** `[0x473dd0]` — which way the hover is going, +1 down and -1 up */
@@ -1238,6 +1247,16 @@ interface Level {
    * them, which for two of the three is not the room you climb from.
    */
   ladders: readonly SbkEntity[];
+  /**
+   * The shared AI's table, narrowed to what THIS book can draw.
+   *
+   * A class ships one repertoire and appears in several levels, and a level
+   * carries only the cels it needs: `initwerea` has ten attacks in CITY and
+   * STREETS holds the art for seven of them. An attack whose cels are not in the
+   * book would play as nothing at all, so it is dropped here rather than swung.
+   * See {@link file://./fights.ts}.
+   */
+  fights: Readonly<Record<string, FoeFight>>;
   /** what each room spawns — the `init*` records this page knows how to draw */
   spawned: Enemy[][];
   /** the room's planks, each holding the platform record it owns */
@@ -1566,6 +1585,20 @@ const HURT = {
 let damageOn = new URLSearchParams(location.search).get("damage") === "1";
 
 /**
+ * ...and whether a CREATURE's blow is one of the things it may spend — `?foehit=1`,
+ * and off even when {@link damageOn} is on.
+ *
+ * The enemy strike boxes have been read and wired the whole time (the loop in
+ * {@link takeHits} that walks `spawnedHere()`), but until {@link stepFight} no
+ * creature in the game ever came close enough to use one, so the switch above
+ * only ever let the presses, the girders and the current through. Bringing the
+ * shared AI in makes that loop live, and the brief for it was the behaviour and
+ * NOT the damage — so the creature half gets a switch of its own and it starts
+ * off. Everything else the switch above arms is unchanged.
+ */
+const foesHurt = new URLSearchParams(location.search).get("foehit") === "1";
+
+/**
  * How hard — `0x46b20c`, and the preferences panel is what sets it.
  *
  * It was written down here once that nothing writes this word and that the
@@ -1667,6 +1700,20 @@ async function loadLevel(index: number): Promise<void> {
     rooms,
     solids,
     ladders: sbk.entities.filter((e) => e.isEntity && e.name === "ladder"),
+    fights: Object.fromEntries(
+      Object.entries(FIGHTS).map(([kind, f]) => [
+        kind,
+        {
+          ...f,
+          close: f.close?.cels.every((id) => sbk.byId.has(id))
+            ? f.close
+            : undefined,
+          attacks: f.attacks.filter((a) =>
+            a.cels.every((id) => sbk.byId.has(id)),
+          ),
+        },
+      ]),
+    ),
     spawned: ((claimed: Set<SbkEntity>) =>
       rooms.map((r) => spawnIn(sbk, r, claimed)))(new Set<SbkEntity>()),
     planks,
@@ -3913,9 +3960,7 @@ const stats = {
  * weapon is in your hands — its own script's wind-up tag followed by whatever
  * it holds afterwards, which for the flare gun is `2720 2721 2722` then `2723`.
  */
-function actOf(
-  name: string,
-): {
+function actOf(name: string): {
   cels: readonly number[];
   dx: readonly number[];
   hold?: number;
@@ -4651,7 +4696,7 @@ function takeHits(): void {
     if (hit(cel, g.x, g.y, 1, 0, 0, SURGE.blow)) return;
   }
   if (!damageOn) return;
-  for (const e of spawnedHere()) {
+  for (const e of foesHurt ? spawnedHere() : []) {
     if (e.state === "dead" || e.state === "burst") continue;
     const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
     if (!c?.strike) continue;
@@ -8537,6 +8582,147 @@ function stepBoss(e: Enemy, foe: Foe, run: number): boolean {
   return false;
 }
 
+/**
+ * The fight — `0x45efd0`'s tracker and state 1's band dispatch, for the
+ * twenty-six classes that have one. See {@link file://./fights.ts} for the
+ * mechanism and where each number comes from.
+ *
+ * Returns true when it has taken the frame; false leaves the ordinary gait block
+ * to move it, which is how a closing walk travels by its own `dx`.
+ *
+ * **Nothing here takes a single point of health off the player.** The attacks
+ * choose themselves, travel and land where the scripts say, and the engine's own
+ * damage word `0x4ac3d0` is not reached from any of it.
+ */
+/**
+ * Does this class's own walk carry a stride?
+ *
+ * LAB's `initarm` is why it is asked. Its `0x46cf10` tag 0 is seven cels of an
+ * arm reaching out of a wall and back, with no `dx` on any of them, and the
+ * class's data does hold a script that travels — but the thing the level places
+ * never installs it. Giving it one had ten arms crawling across the floor, and
+ * letting its ATTACK's own `dx 200, dy -200` move it threw each one off the wall
+ * and down the level. So a class the book reads as standing still keeps standing
+ * still, in the fight as much as out of it.
+ */
+function travels(foe: Foe): boolean {
+  return foe.gait.dx?.some((n) => n !== 0) ?? false;
+}
+
+function stepFight(e: Enemy, foe: Foe, run: number): boolean {
+  const f = level?.fights[e.kind];
+  // the four classes with a machine of their own are already driven by it, and
+  // the furniture has no business in a fight
+  if (!f || e.state !== "gait" || e.asleep || foe.rooted) return false;
+  if (foe.haunts || foe.preaches || foe.drives || foe.chases) return false;
+  /**
+   * ...and a class whose own walk carries no stride does not close on anybody.
+   *
+   * LAB's `initarm` is the case and it is the one the regression caught: ten
+   * arms out of a wall, whose `0x46cf10` tag 0 is seven cels of reaching and
+   * nothing else. The class HAS a script with a stride in its data, but the
+   * thing the level places does not use it, and giving it one had ten arms
+   * crawling across the floor. If {@link Foe.gait} does not travel, neither does
+   * this — it stands where it is and swings when you are inside the last band.
+   */
+  const rooted = !travels(foe);
+  /**
+   * ...and a keeper with a lever still in its patch goes for the lever.
+   *
+   * SERVICE is the level built on it — `0x438200` finds the first unlit switch
+   * inside the class's own rect and the walk to it IS the patrol's six cels — and
+   * the shared brain would otherwise take the same class over and march it at the
+   * player instead, which leaves level six permanently dry. With nothing left to
+   * throw, it fights like everything else.
+   */
+  if (foe.lever && leverFor(e, foe.lever.dir)) return false;
+  // `0x402f60` is one test — that the player's own state is under `0x1a` — and
+  // dying is the one this page has that reaches it
+  if (p.act === "dying") {
+    e.fighting = false;
+    e.swing = false;
+    return false;
+  }
+  /**
+   * `0x44e5fb` — state 0, and the ONLY thing that ends the patrol is
+   * `0x434200(player.point, AI+8)`: the player's own point inside the four
+   * words the creator copied out of this `init` record. Not a sight line, not a
+   * radius, and not the room.
+   *
+   * The engine never walks back out of state 1 on this test — it breaks off
+   * through the class's own decision budget instead (`AI+4`, seeded three at
+   * `0x450ad1`) — so leaving the rect putting it back on the patrol is this
+   * page's, and it is what keeps a level walkable: step out of somebody's patch
+   * and they go back to pacing it.
+   */
+  const anchor = p.y - p.feet;
+  const inside =
+    p.x >= e.left && p.x <= e.right && anchor >= e.top && anchor <= e.bottom;
+  if (!inside) {
+    if (!e.fighting) return false;
+    e.fighting = false;
+    e.swing = false;
+    e.anim = foe.gait;
+    e.clock = 0;
+    // and walk home: the fight may have carried it clear of its own territory,
+    // which the patrol's clamp below would otherwise snap it back through
+    if (e.x < e.left) e.facing = 1;
+    else if (e.x > e.right) e.facing = -1;
+    return false;
+  }
+  if (!e.fighting) {
+    e.fighting = true;
+    e.swing = false;
+    e.clock = 0;
+  }
+  // an attack plays to its end before anything else is asked — `0x42afc4`'s own
+  // rule for every state in the game, `obj+0x46`, the animation-ended word
+  if (e.swing) {
+    if (e.clock < run) return false;
+    e.swing = false;
+  }
+  /**
+   * The tracker, and its forward distance is measured through the class's OWN
+   * FACING: `0x45efe4` takes `player.x - self.x` and `0x45eff3` negates it when
+   * `obj+0x28` is set. A negative answer means the player is behind.
+   */
+  const forward = (p.x - e.x) * e.facing;
+  /**
+   * ...and the band, which is an index into the class's own descending table:
+   * `0x45f050` walks it while the entry is still at or past the distance, so 0
+   * is beyond the first threshold and `bands.length` is inside the last.
+   * `0x45f042` answers -1 outright when the player is behind.
+   */
+  let band = -1;
+  if (forward >= 0) {
+    band = 0;
+    while (band < f.bands.length && f.bands[band] >= forward) band += 1;
+  }
+  // `0x44e73c`: turn, and that is the whole of the frame — the band dispatch is
+  // an unsigned `cmp eax, 4; ja`, and -1 falls straight through it
+  if (band < 0) {
+    e.facing = -e.facing;
+    return true;
+  }
+  /**
+   * The innermost band swings and the rest close.
+   *
+   * Which is what `initwerea`, `initdog`, `initwerec`, `initigor` and `initbat`
+   * do at their last band, read one at a time out of their band branches. It is
+   * not universal: `initvpriest` throws from its OUTERMOST band, because the
+   * thing it throws has the distance to cover, and this page does not yet tell a
+   * caster from a puncher. See {@link file://./fights.ts}.
+   */
+  if (band >= f.bands.length && f.attacks.length > 0) {
+    e.anim = f.attacks[Math.floor(Math.random() * f.attacks.length)];
+    e.swing = true;
+    e.clock = 0;
+    return false;
+  }
+  e.anim = (rooted ? undefined : f.close) ?? foe.gait;
+  return false;
+}
+
 function stepEnemies(): void {
   const lvl = level;
   const pool = spawnedHere();
@@ -8603,6 +8789,8 @@ function stepEnemies(): void {
     if (e.state === "gait" && foe.preaches && stepBishop(e, foe, run)) continue;
     if (e.state === "gait" && (foe.wake || foe.drives) && stepBoss(e, foe, run))
       continue;
+    // ...and every other class fights through the one shared brain
+    if (stepFight(e, foe, run)) continue;
     // whatever it is doing, a thing carrying momentum flies, falls, and stops when
     // its OWN cel's box lands. This has to come before the animation states: the
     // mailbox's topple is four frames and its flight is far longer than that.
@@ -8672,6 +8860,8 @@ function stepEnemies(): void {
         e.dents = 0;
       }
       e.state = "gait";
+      // a blow ends whatever it was swinging
+      e.swing = false;
       // `0x456058`: the boss's flinch hands back into the combat loop rather than
       // to standing — it is still in the fight
       e.anim = foe.drives && e.mode ? foe.drives.hover : foe.gait;
@@ -8745,13 +8935,27 @@ function stepEnemies(): void {
       continue;
     }
     const i =
-      e.state === "gait"
+      e.state === "gait" && !e.swing
         ? loopIndex(e.anim, e.clock)
         : Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
     const step = ((e.anim.dx?.[i] ?? 0) / foe.divisor) * TICK_SCALE;
+    /**
+     * The lift the leaping attacks carry is READ and not yet applied.
+     *
+     * `0x477368 tag 0` is `dy -480` on the frame cel 1942 shows, and putting that
+     * straight into `e.y` is not what the engine does with it: the husk in WOODS
+     * went up 96 pixels, missed the floor coming down — `foeSurfaceUnder` reaches
+     * {@link CLIMB_PX} and no further — and fell nine thousand pixels out of the
+     * level, still swinging. The engine's own stepper carries a leap as velocity
+     * through `obj+0xa`, and wiring that here is its own piece of work. The
+     * numbers are in {@link file://./fights.ts} for when it is.
+     */
+    // ...and a class that stands still stands still while it fights: its attack's
+    // own stride would otherwise walk it off the wall it reaches out of
     // a floater's own hover keeps `vy` busy for ever, and its script's stride has
     // to travel anyway
-    if (step > 0 && e.vx === 0 && (e.vy === 0 || foe.floats)) {
+    const still = (e.fighting || e.swing) && !travels(foe);
+    if (step > 0 && !still && e.vx === 0 && (e.vy === 0 || foe.floats)) {
       const nx = e.x + step * e.facing;
       /**
        * ...unless the ground there stands too high to climb, in which case the
@@ -8784,20 +8988,30 @@ function stepEnemies(): void {
        * turning it round at the edges of that pinned it there for ever — while
        * its own state machine was asking it to close from a thousand away.
        */
+      // ...and a class in a FIGHT is not on a patrol either: its territory is
+      // where it noticed you, not where it may walk, and `0x44e580` reads no
+      // rect at all once `obj+0x18` is 1
       if (
         e.state === "gait" &&
         !aim &&
         !foe.drives &&
+        !e.fighting &&
         (nx < e.left || nx > e.right)
       )
         e.facing = -e.facing;
       else if (!blocked) {
         const span = p.room ? roomSpan(p.room) : null;
-        e.x = foe.drives
-          ? span
-            ? Math.max(span.lo, Math.min(span.hi, nx))
-            : nx
-          : Math.max(e.left - 200, Math.min(e.right + 200, nx));
+        e.x =
+          foe.drives || e.fighting
+            ? span
+              ? Math.max(span.lo, Math.min(span.hi, nx))
+              : nx
+            : // ...and never through where it already stands, so a foe walking
+              // home from a fight it followed you out of is not teleported
+              Math.max(
+                Math.min(e.left - 200, e.x),
+                Math.min(Math.max(e.right + 200, e.x), nx),
+              );
       }
     }
     /**
@@ -10378,6 +10592,10 @@ function loop(now: number): void {
     ` (kill ${Math.round(mission().kill * 100)}% of ${stats.census})`;
   const prompt = atDoor && !won ? " · <b>press ↑ for the door</b>" : "";
   const mob = spawnedHere().length ? ` · ${spawnedHere().length} spawned` : "";
+  // how many of them have noticed you — the one number that says the shared AI
+  // is running at all ({@link stepFight})
+  const onto = spawnedHere().filter((e) => e.fighting).length;
+  const fighting = onto ? ` · ${onto} fighting` : "";
   // the nearest thing that can be fought, and what it is doing — without this the
   // only window into a fight is the panel's bar, which is sticky and cannot say
   // whose it is or why a blow is missing
@@ -10388,7 +10606,9 @@ function loop(now: number): void {
     ? ` · nearest ${near.kind} ${Math.round(near.hp)}/${near.max}hp ${near.state}` +
       ` at x ${Math.round(near.x)}, y ${Math.round(near.y)} cel ${celOf(near)}` +
       // the state of the one class that has states, so a probe can see it decide
-      (near.mode ? ` mode ${near.mode}` : "")
+      (near.mode ? ` mode ${near.mode}` : "") +
+      // ...and of the twenty-six that share one — {@link stepFight}
+      (near.fighting ? (near.swing ? " SWINGING" : " closing") : "")
     : "";
   // ...and the nearest thing that can be fought and claims no PLATE, which the
   // line above cannot show. The dog is the case — `0x40d1c0` is never called from
@@ -10679,7 +10899,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${cam}${gunSay}${litSay}${flySay}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${saved}${quotaSay}${prompt}${toGoal}${cheated}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${cam}${gunSay}${litSay}${flySay}${mob}${fighting}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${saved}${quotaSay}${prompt}${toGoal}${cheated}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 

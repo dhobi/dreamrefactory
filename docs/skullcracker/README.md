@@ -3011,6 +3011,111 @@ Shifted by the origin those are y149-175, y183-209 and y214-240 — one label
 each, dead centre. Unshifted they land on the blank plates above Continue and on
 the bezel, which is where every click on this panel went.
 
+## Twenty-six classes, one brain
+
+The complaint was that the enemies wander rather than fight. They do, and the
+reason was that this page had read every class's ANIMATIONS and none of its
+decisions — the note in `src/walk.ts` used to say so outright, that the territory
+numbers were "in the AI struct nothing has read". They have been read now, and
+what is in there is one brain with twenty-six sets of numbers.
+
+### The tracker is the whole of the mechanism
+
+Each creator mallocs its object a 54-byte AI struct (`0x433f20(0x36)` at
+`0x450a50`, for the street punk), copies the `init` record's rect into `AI+8`,
+and ends with `0x45ef70(AI+0x14, self, player, bands)`. That last argument is a
+list of DESCENDING distances terminated by a zero, at most twelve, sitting in the
+class's own data:
+
+```
+  initwerea  0x477600   330 200 150 80          initdog     0x478240   1200 650 410 320 180
+  initwereb  0x4778b0   350 250 200 160         initwbooly  0x478780   1000 750 500 400 160 60
+  initwerec  0x477ac0   550 450 220 80          initwraith  0x46f8f8   700 230 130 60
+  initwered  0x477c28   600 600 160 70          initcop     0x46c9d8   350 180 70
+  initrat    0x4770e0   200 80                  initbat     0x46f158   600 250 50
+```
+
+Then `0x45efd0` runs once a frame and fills sixteen bytes:
+
+```
+  out+0x0a   the FORWARD distance, (player.x - self.x) negated when the class
+             faces west — so a negative number means "behind me"
+  out+0x08   player.y - self.y
+  out+0x00   which side of the PLAYER it is on: 1 in front, 0 behind, 2 when the
+             player is not moving
+  out+0x04   the BAND — 0 while the distance is past the first threshold and one
+             more for each threshold it is inside, -1 when the player is behind
+  out+0x06   1 when the PLAYER's own cel carries a strike box
+```
+
+`obj+0x18` is the state and each class dispatches on it through a table of its
+own, but two entries are the same everywhere. **State 0 is the patrol, and the
+only thing that ends it is `0x434200` finding the player's own point inside the
+AI's rect** — not a sight line, not a radius, not the room. **State 1 is the
+fight**: gated on `0x402f60` (the player's state under `0x1a`), turning to face
+you when the forward distance is negative (`0x44e73c`), swapping sides when more
+than three of its own class are crowding one within two hundred pixels
+(`0x44f020`), and then jumping through a second table indexed by the band, where
+the far entries install a walk and the near ones install an attack.
+
+### Which of a class's scripts is an attack, and the disc says so
+
+Not a judgement. A cel carrying a STRIKE BOX is the engine's own mark for a frame
+that hits, and it is the very flag the tracker reads at `out+6` to tell whether
+the player is swinging. So every tag of every script a class installs whose cels
+carry one is an attack, read out of the book the class actually appears in. The
+punk's are 1923/1924 (the punch), 1931/1932 and 1934/1935 (the two swings) and
+1943 (the flying kick, `0x477368 tag 0`, `dy -480` on the frame it leaves the
+ground), against a walk on 1910…1915 that carries none. That also gave this page
+the `dy` field it had no reason to have before: only the attacks ever leave the
+floor.
+
+`src/fights.ts` is the table — the bands, the walk and the attacks for the
+twenty-six classes that have them — and `stepFight` in `src/walk.ts` is the
+machine.
+
+### And it takes nothing
+
+The brief was the behaviour and not the damage, and the damage is where a
+surprise was waiting: the enemy strike boxes have been wired into `takeHits` the
+whole time, and the only reason nothing was ever hit is that no creature in the
+game came close enough to use one. Bringing the AI in makes that loop live. So
+the creature half of it now has a switch of its own, `?foehit=1`, and it is off
+even when `?damage=1` is on. Everything else `?damage=1` arms — the presses, the
+girders, TOWER's current, the sewage — is unchanged.
+
+### What is read and not yet done
+
+- **The leaping attacks do not leap.** The `dy` is in the table — the punk's
+  flying kick is `-480` on the frame it leaves the ground — and nothing applies
+  it. The engine carries a leap as velocity through `obj+0xa`; putting it
+  straight into `y` here sent WOODS' husk ninety-six pixels up, past the reach of
+  the floor test coming down, and nine thousand pixels out of the level, still
+  swinging. Wiring it as velocity is its own piece of work.
+- **A class that stands still keeps standing still.** If its own gait carries no
+  stride it does not close, and its attack's stride does not move it either.
+  LAB's ten `initarm` are the case — arms reaching out of a wall — and giving
+  them the walk their class data holds had all ten crawling across the floor.
+- **A keeper goes for its lever first.** `0x438200` finds the first unlit switch
+  inside the class's own rect, and that is the whole of level six; the shared
+  brain would otherwise march SERVICE's keepers at the player and leave it dry.
+  With nothing left to throw, they fight like everything else.
+- The band table is read as "the innermost band swings, the rest close", which is
+  what `initwerea`, `initdog`, `initwerec`, `initigor` and `initbat` do at their
+  last band. The casters do not: `initvpriest` throws from its OUTERMOST band,
+  because the thing it throws has the distance to cover. This page does not yet
+  tell a caster from a puncher.
+- `initeyeball` and `initpuke` carry no strike box on any cel of their own, so
+  they close and never swing. Both of them spit, and what hits you is the
+  projectile.
+- The patrol still turns at the record's rect. The engine turns a hundred pixels
+  inside it (`0x44e68e`, `0x44e69f`) and only when the territory is wider than
+  three hundred, and that is left alone here on purpose — it moves every foe in
+  every level and belongs in its own change.
+- The decision budget (`AI+4`, seeded three at `0x450ad1` and spent a manoeuvre
+  at a time) is not spent. What puts a class back on its patrol here is the
+  player leaving its rect, which is state 0's own test read the other way round.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are
