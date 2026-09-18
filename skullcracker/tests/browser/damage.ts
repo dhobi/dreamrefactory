@@ -83,16 +83,25 @@ const main = async (): Promise<void> => {
   }
   console.log(`ok    a press takes ${1200 - after} in 64s and knocks the player down`);
 
-  // 5. run out of it and a life goes. Standing under a press is about twenty
-  //    strokes, and the death film is what says the life was spent.
+  // 5. run out of it and a life goes — and NO film, because the film is the last
+  //    life's. `0x4294a6` reads the count, `0x4294ad` spends one and `0x4294b7`
+  //    takes the ordinary path while the count before the spend was not
+  //    negative, so `0x403340`'s vignette is reached only when there is nothing
+  //    left. Standing under a press is about twenty strokes.
   await go(3, 7171, true);
-  let died = false;
-  for (let i = 0; i < 260 && !died; i++) {
+  const lives = async (): Promise<number> => Number(/(\d+) (?:life|lives)/.exec(await say())?.[1] ?? -1);
+  const began = await lives();
+  let spent = false;
+  let filmed = false;
+  for (let i = 0; i < 260 && !spent; i++) {
     await page.waitForTimeout(250);
-    if (/segment \d+\/\d+|press ESC to skip/.test(await say())) died = true;
+    if (/segment \d+\/\d+|press ESC to skip/.test(await say())) filmed = true;
+    const now = await lives();
+    if (now >= 0 && now < began) spent = true;
   }
-  if (!died) fail(`standing under a press should eventually kill the player`);
-  console.log(`ok    and running out of it spends a life and plays its film`);
+  if (!spent) fail(`standing under a press should eventually cost a life; still ${await lives()} of ${began}`);
+  if (filmed) fail(`the KILL film is the last life's — 0x4294b7 — and this was the first of ${began}`);
+  console.log(`ok    and running out of it spends a life, ${began} down to ${await lives()}, with no film`);
 
   // 6. ...and a knockdown takes the gun out of your hands. `0x44911b` asks
   //    `0x448bf0` whether the player is one of the five armed kinds, and if it

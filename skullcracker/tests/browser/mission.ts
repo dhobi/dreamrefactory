@@ -109,16 +109,17 @@ const main = async (): Promise<void> => {
   if (!/3 lives/.test(two)) fail(`CITY starts with something other than three lives: ${two.slice(0, 160)}`);
   await page.keyboard.down("w");
   await page.keyboard.down("ArrowRight");
-  const death = await until(/segment \d+\/\d+/, 30, 400);
+  // ...and there is no film. `0x4294a6` reads the lives, `0x4294ad` spends one
+  // and `0x4294b7` takes the ordinary path while the count BEFORE the spend was
+  // not negative, so the KILL vignette belongs to the last life alone. What says
+  // the fall was fatal is the count.
+  const back = await until(/2 lives/, 30, 400);
   await page.keyboard.up("ArrowRight");
   await page.keyboard.up("w");
-  if (!/kill[1-7]\.mov/.test(death)) fail(`falling out of CITY played "${death.slice(0, 60)}" — KILL1..7 are the seven`);
-  console.log(`ok    running off CITY's ledge is fatal: ${death.split(" ·")[0]}`);
-  for (let i = 0; i < 12 && /segment/.test(await say()); i++) {
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(300);
+  if (/segment \d+\/\d+/.test(back)) {
+    fail(`the first of three deaths should play no film — 0x4294b7; the page is on "${back.slice(0, 60)}"`);
   }
-  const back = await until(/room \d+ of \d+/);
+  console.log(`ok    running off CITY's ledge is fatal, and costs a life with no film`);
   if (!/level 2 · city/.test(back)) fail(`after the fall the page is at "${back.slice(0, 40)}"`);
   if (!/2 lives/.test(back)) fail(`the fall cost no life: ${back.slice(0, 200)}`);
   if (!/y 3925/.test(back)) fail(`the respawn is not CITY's own spawn point: ${back.slice(0, 200)}`);

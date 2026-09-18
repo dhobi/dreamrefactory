@@ -144,6 +144,9 @@ import {
   Cage,
   ALARM,
   BIGGUN,
+  Flypast,
+  PROBE,
+  Probe,
   BigGun,
   LIGHTFX,
   LightFx,
@@ -946,6 +949,9 @@ const view = { x: 0, y: 0 };
 /** `[0x46f680]` — the level's own frame counter, which only the lightning reads */
 let levelClock = 0;
 
+/** what the level's `probe` records have fired and not yet thrown away */
+let flypasts: Flypast[] = [];
+
 /**
  * `[0x46bdd0]` — a palette index queued for the next paint, or -1 for none.
  *
@@ -1006,6 +1012,82 @@ function chaseTarget(): { x: number; y: number } {
  */
 let camVx = 0;
 let camVy = 0;
+
+/**
+ * The probes — `0x4280d2`, which is a trigger table and not an object.
+ *
+ * Once an engine frame, against the LEVEL's own buffer: the player's point in
+ * the record's rect fires it, `0x410170` stands up one flypast on the record's
+ * `param` as a mode, and `0x402e80` shifts the record out of the table so it can
+ * never fire again. See {@link PROBE}.
+ */
+function stepProbes(): void {
+  const lvl = level;
+  if (!lvl) return;
+  const py = p.y - p.feet;
+  for (const q of lvl.probes) {
+    if (q.fired) continue;
+    if (p.x < q.left || p.x > q.right || py < q.top || py > q.bottom) continue;
+    q.fired = true;
+    // `0x410190` — the mode goes straight into `obj+0x28`, so for the crossing
+    // pair it is the mirror flag as well as the branch
+    const mirror = q.mode === 1;
+    if (q.mode <= 1) {
+      // `0x41025c` — half a screen to one side, and it comes towards you
+      flypasts.push({ x: p.x + (mirror ? PROBE.sideX : -PROBE.sideX), y: py, vx: 0, vy: 0, mirror, tag: 0, clock: 0 });
+    } else {
+      // `0x4102aa` / `0x41030a` — under your feet, or down out of the sky
+      const below = q.mode === 2;
+      flypasts.push({
+        x: p.x,
+        y: py + (below ? PROBE.offsetY : -PROBE.offsetY),
+        vx: 0,
+        vy: below ? -PROBE.startVy : PROBE.startVy,
+        mirror: false,
+        tag: 1,
+        clock: 0,
+      });
+    }
+    sound?.own(PROBE.sound[CHARACTER] ?? PROBE.sound[0], p.x, py);
+  }
+}
+
+/**
+ * ...and what one fired — `0x410480`, which is three comparisons and a clamp.
+ *
+ * The divisor `0x4103e2` writes is ONE, so the script's own `dx` goes into the
+ * velocity undivided and the clamp at `0x410486` is what stops it: 27 a frame
+ * across, 23 up or down. Nothing here carries a strike box, so none of it can
+ * touch the player — it is scenery with a trigger.
+ */
+function stepFlypasts(): void {
+  const py = p.y - p.feet;
+  for (let i = flypasts.length - 1; i >= 0; i--) {
+    const f = flypasts[i];
+    f.clock += 1;
+    if (f.tag === 0) {
+      // `0x45d18c` negates the script's own dx for a mirrored object, and
+      // `0x42f8b0` adds it to the velocity through the divisor — which is 1
+      f.vx += PROBE.cross.dx * (f.mirror ? -1 : 1);
+      f.vx = Math.max(-PROBE.maxVx, Math.min(PROBE.maxVx, f.vx));
+      f.x += f.vx;
+      // `0x4104d5` / `0x4104f2` — gone once it is half a screen past you
+      if (Math.abs(f.x - p.x) > PROBE.goneX && (f.mirror ? f.x < p.x : f.x > p.x)) flypasts.splice(i, 1);
+      continue;
+    }
+    // `0x410531` — it turns to face you, and keeps whichever way it was going
+    f.mirror = p.x > f.x;
+    f.vy = f.vy < 0 ? -PROBE.maxVy : PROBE.maxVy;
+    f.y += f.vy;
+    if (Math.abs(f.y - py) > PROBE.goneY && (f.vy < 0 ? f.y < py : f.y > py)) flypasts.splice(i, 1);
+  }
+}
+
+/** which cel a flypast is showing — `0x46bdf0`'s two tags, and both of them loop */
+function flypastCel(f: Flypast): number {
+  const a = f.tag === 0 ? PROBE.cross : PROBE.hover;
+  return a.cels[Math.floor(f.clock / a.hold) % a.cels.length];
+}
 
 /** `0x4309f0` mode 0, once an engine frame — decide the step, do not take it */
 function stepCamera(): void {
@@ -1128,6 +1210,12 @@ interface Level {
   bigguns: BigGun[][];
   /** TOWER's two halves of one fork of lightning */
   lights: LightFx[][];
+  /**
+   * ...and the level's `probe` records, which are the LEVEL's and not any room's.
+   * `0x40b526` fills one buffer for the whole book and `0x4280d2` walks all of
+   * it, so filing these by room would be filing them by the wrong thing.
+   */
+  probes: Probe[];
   /** level fourteen's forty-two conveyors, its two chairs and its four claws */
   belts: Belt[][];
   chairs: Chair[][];
@@ -1454,6 +1542,7 @@ async function loadLevel(index: number): Promise<void> {
   roaches = [];
   levelClock = 0;
   flashColour = -1;
+  flypasts = [];
   columns = new Map();
   flares = [];
   bolts = [];
@@ -1548,6 +1637,10 @@ async function loadLevel(index: number): Promise<void> {
         hatchClock: 0,
       })),
     ),
+    // `0x40b526` — one buffer for the book, and `0x4280d2` walks the whole of it
+    probes: sbk.entities
+      .filter((e) => e.isEntity && e.name === "probe")
+      .map((e) => ({ top: e.top, left: e.left, bottom: e.bottom, right: e.right, mode: e.param, fired: false })),
     // `0x4268c0` — and these stand up on their own clock, not on anything you do
     lights: rooms.map((r) =>
       placed(sbk, r, "initlightfx", LIGHTFX.bolt.cels, (e) => ({
@@ -1760,16 +1853,28 @@ function fellOut(): boolean {
  * what a finished game writes to, and the title film is where you read it. See
  * {@link file://./scores.ts}.
  *
- * A life short of the last one still costs a life and still restarts the level,
- * which is this page standing in for a state it has not read. The score is kept,
- * since nothing says it should not be.
+ * And the film is the LAST life's, not every life's. `0x429490` is the death
+ * branch and the test is one instruction apart from the spend:
+ *
+ * ```
+ *   4294a6  cx = [0x4ac364]     ; the lives, BEFORE
+ *   4294ad  [0x4ac364]--
+ *   4294b4  test cx, cx
+ *   4294b7  jge 0x429544        ; one left -> the ordinary path, and no film
+ *   4294e7  [0x4abdfe] = 9      ; else state 9, which is 0x403340's vignette
+ * ```
+ *
+ * This page played one on every death for a long while, which made the best
+ * animation in the game the most familiar thing in it. It plays on the last one
+ * now. The score is kept through an ordinary death, since nothing says it should
+ * not be.
  */
 async function died(): Promise<void> {
   if (advancing) return;
   advancing = true;
   stats.lives -= 1;
   const gameOver = stats.lives <= 0;
-  await playFilm(DEATH_FILMS[Math.floor(Math.random() * DEATH_FILMS.length)]);
+  if (gameOver) await playFilm(DEATH_FILMS[Math.floor(Math.random() * DEATH_FILMS.length)]);
   if (gameOver) {
     const boards = loadBoards();
     const rank = offerScore(boards, DIFFICULTY, stats.score, levelIndex + 1, () => prompt(NAME_PROMPT, ""));
@@ -7375,6 +7480,31 @@ function drawLevelCel(id: number, x: number, y: number, camX: number, camY: numb
 }
 
 /**
+ * One cel of the PLAYER's book, placed by its anchor — the same rule
+ * {@link drawLevelCel} follows, against the other of the two books a level has
+ * open. The pickups and the craft already needed it; the flypasts are the third.
+ */
+function drawPlayerCel(id: number, x: number, y: number, camX: number, camY: number, mirror: boolean): void {
+  const loc = player?.byId.get(id);
+  if (loc === undefined) return;
+  const art = playerCel(loc);
+  const f = playerFrame(loc);
+  if (!art || !f) return;
+  const sx = x - camX + W / 2;
+  const left = mirror ? sx - (art.width - f.posXraw) : sx - f.posXraw;
+  const top = y - camY + VIEW.y - f.posYraw;
+  if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) return;
+  if (!mirror) {
+    ctx.drawImage(art, left, top);
+    return;
+  }
+  ctx.save();
+  ctx.scale(-1, 1);
+  ctx.drawImage(art, -(left + art.width), top);
+  ctx.restore();
+}
+
+/**
  * One plank, by its own anchor at the record's point.
  *
  * Its cels are 204 wide with the anchor near the middle and at the bottom (cel
@@ -8202,6 +8332,8 @@ function loop(now: number): void {
     if (frame) stepAlarms();
     if (frame) stepBigGuns();
     if (frame) stepLights();
+    if (frame) stepProbes();
+    if (frame) stepFlypasts();
     if (frame) stepFans();
     if (frame) stepBelts();
     if (frame) stepChairs();
@@ -8350,6 +8482,9 @@ function loop(now: number): void {
     const id = lightCel(q);
     if (id) drawLevelCel(id, q.x, q.y, camX, camY, q.mirror);
   }
+  // ...and whatever a probe fired, on the PLAYER's book rather than the level's,
+  // which is why no level book carries 20200..20211
+  for (const f of flypasts) drawPlayerCel(flypastCel(f), f.x, f.y, camX, camY, f.mirror);
   for (const b of hereOf((l) => l.belts)) drawLevelCel(beltCel(b), b.x, b.y, camX, camY);
   for (const c of hereOf((l) => l.chairs)) drawLevelCel(chairCel(c), c.x, c.y, camX, camY);
   for (const c of hereOf((l) => l.claws)) drawLevelCel(clawCel(c), c.x, c.y, camX, camY);
@@ -8579,6 +8714,9 @@ function loop(now: number): void {
     ? ` · ${guns.map((g) => `biggun ${g.state}/${g.hatch} y${Math.round(g.gunY)} cel ${gunCel(g)}`).join(" ")}`
     : "";
   const lit = level?.lights.flat() ?? [];
+  const flySay = flypasts.length
+    ? ` · ${flypasts.length} flypast ${flypasts.map((f) => `tag${f.tag}@${Math.round(f.x)},${Math.round(f.y)} cel ${flypastCel(f)}`).join(" ")}`
+    : "";
   const litSay = lit.length
     ? ` · lightfx ${levelClock}/${LIGHTFX.period - 1} ${lit.map((q) => lightCel(q)).join(",")}`
     : "";
@@ -8853,7 +8991,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${cam}${gunSay}${litSay}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}${cheated}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${cam}${gunSay}${litSay}${flySay}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}${cheated}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 

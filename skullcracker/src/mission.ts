@@ -156,9 +156,12 @@ export const ENDING_FILM = "credits.mov";
  * ```
  *
  * So a finished game writes to the high-score board and the title screen is
- * where it is read — see {@link file://./scores.ts}. This page plays the
- * vignette on every death rather than on the last one; what the last one does
- * after it is the sequence above.
+ * where it is read — see {@link file://./scores.ts}.
+ *
+ * And the trigger is the LAST life. `0x4294a6` reads the count, `0x4294ad`
+ * spends one, and `0x4294b7` takes the ordinary path while the count BEFORE the
+ * spend was not negative — so state 9 is reached only once there is nothing
+ * left. An ordinary death gets no film at all.
  */
 export const DEATH_FILMS = [
   "kill1.mov",

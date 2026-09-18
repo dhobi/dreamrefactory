@@ -2693,3 +2693,106 @@ export interface BigGun {
   hatch: number;
   hatchClock: number;
 }
+
+/**
+ * A `probe` is a TRIGGER, and what it fires is a flypast.
+ *
+ * `0x40b526` fills a buffer at `0x4a9ce0` with every `probe` record, 48 bytes
+ * apiece, and keeps the count at `0x46b9c0`. `0x4280d2` walks that buffer once a
+ * frame, tests the player's point against each record's rect (`0x434200`), and
+ * on a hit calls `0x410170` with the record's own `param` as a MODE and then
+ * `0x402e80` to shift the rest of the table down over it — so a probe fires once
+ * per level load and never again. The seventeen shipped records carry four
+ * values between them: 0 eight times, 1 four, 2 three and 3 twice.
+ *
+ * `0x410170` is the same spawner the goal's television comes out of, switched on
+ * `mode + 1`, and every mode builds on `PLAYER.SBK` rather than the level's own
+ * book — which is why no level book carries the cels.
+ *
+ * ```
+ *   mode 0/1  0x41023c  script 0x46bdf0 tag 0, cels 20200..20207, dx 15
+ *             x += mode ? +0x200 : -0x200, and the mode IS the mirror flag
+ *   mode 2    0x41029c  tag 1, cels 20210/20211, y += 0x100 below you, vy = -10
+ *   mode 3    0x4102fc  tag 1, y -= 0x100 above you, vy = +10
+ * ```
+ *
+ * ## The divisor was the missing word, and it is one
+ *
+ * This page could not build any of it for a long time, because `0x45d1a3`'s
+ * mover (`0x42f8b0`) does `idiv [obj+0xe]` twice and nothing found wrote that
+ * word: `0x42f550` zeroes it, `0x410170` never touches it and `0x45d090` writes
+ * only the kind. A shipped game does not divide by zero, so something had to.
+ *
+ * It is the class's own constructor message. `0x430cc0(0x4103c0)` builds the
+ * list these objects live on, and `0x4103c0` case 1 — the message every new
+ * object gets — writes **1** into `obj+0xe`, along with the book (`0x4abe10`),
+ * the first cel (20200), no gravity (`0x42f850(obj, 0)`) and no bounce. A
+ * divisor of one is the fastest there is: the script's own `dx` goes into the
+ * velocity undivided.
+ *
+ * ## ...and what it then does is three comparisons
+ *
+ * `0x410480` is the think, and it is short:
+ *
+ * ```
+ *   410486  clamp obj+0xc to +-0x1b        ; 27 a frame across, and no more
+ *   4104ce  tag 0: 512 past the player by x -> gone
+ *   410510         script ended -> tag 0 again
+ *   410531  tag 1: face the player, clamp obj+0xa to +-0x17
+ *   410567         256 past the player by y -> gone
+ * ```
+ *
+ * None of the ten cels carries a strike box, so a flypast cannot touch you. It
+ * is scenery with a trigger: something crossing the sky, or the television
+ * arriving from under your feet or down out of it.
+ */
+export const PROBE = {
+  /** `0x4103e2` — the word that was missing, and a divisor of one divides nothing */
+  divisor: 1,
+  /** `0x46bdf0` tag 0 at three ticks a frame, and every frame of it carries dx 15 */
+  cross: { cels: [20200, 20201, 20202, 20203, 20204, 20205, 20206, 20207], hold: 3, dx: 15, from: "0x46bdf0 tag 0" },
+  /** tag 1 — the television's own hovering pair */
+  hover: { cels: [20210, 20211], hold: 3, from: "0x46bdf0 tag 1" },
+  /** `0x41025c` — half a screen to one side of you, and which side is the mode */
+  sideX: 0x200,
+  /** `0x4102aa` and `0x41030a` — and 256 under or over */
+  offsetY: 0x100,
+  /** `0x4102b0` / `0x410310` — they set ten, and the think below raises it */
+  startVy: 0xa,
+  /** `0x410552` / `0x410575` — the vertical ceiling, both ways */
+  maxVy: 0x17,
+  /** `0x410486` — and the horizontal one */
+  maxVx: 0x1b,
+  /** `0x4104e4` / `0x410501` — how far past you one lives */
+  goneX: 0x200,
+  /** `0x410567` / `0x41058a` */
+  goneY: 0x100,
+  /** `0x410276` and `0x410289` — the player's own bank, one index per character */
+  sound: [0x1e, 0x17],
+  from: "0x40b526 / 0x4280d2 / 0x410170 / 0x4103c0 / 0x410480",
+} as const;
+
+/** one `probe` record, waiting to be walked into — and it fires once, ever */
+export interface Probe {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** the record's own `param`, which is the MODE `0x4101a3` switches on */
+  mode: number;
+  /** `0x402e80` shifts the record out of the table, so this never fires twice */
+  fired: boolean;
+}
+
+/** what a probe fires: one object on `PLAYER.SBK`'s own cels, and it touches nothing */
+export interface Flypast {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** `0x410190` — the mode, and for the crossing pair it is also the mirror */
+  mirror: boolean;
+  /** which tag of `0x46bdf0` is playing: 0 crosses, 1 hovers */
+  tag: 0 | 1;
+  clock: number;
+}
