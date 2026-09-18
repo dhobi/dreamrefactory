@@ -173,6 +173,7 @@ import {
 } from "./guns";
 import { PLAYER_CODES, PLAYER_HELD, gripOf } from "./codes";
 import { PLAYERS } from "./players";
+import { PREFS_ACTIONS, keyName, loadPrefs } from "./prefs";
 import {
   CEL,
   CLOCK,
@@ -2434,25 +2435,55 @@ function onLadder(): SbkEntity | undefined {
  * Which is why this page felt slow: it had W as "up", the run had no key at all,
  * and the game only ever walked. Holding it now does both jobs, as the original
  * does. The other four are the band's own labels: J jumps, K and P are the two
- * attack sets, I is INV. And the character codes 24…27 are aliases for P, K, J
- * and I rather than arrow keys — the arrows here are this port's, kept alongside
- * WASD because a page is not a 1996 game.
+ * attack sets, I is INV.
+ *
+ * And the eight letters are only the DEFAULTS. Every one of them is rebindable
+ * from the preferences panel — `0x46b210` is what the panel writes and this is
+ * what reads it, so see {@link file://./prefs.ts} and `keyTable` below. The four
+ * shipped entries beside the letters are characters 24…27, which `0x40e980`
+ * names `J4`, `J3`, `J2` and `J1`: a joystick's four buttons, bound to the
+ * punch, the kick, the jump and INV. This port had them written down as arrow
+ * keys.
  */
-const KEYS: Readonly<Record<string, keyof typeof held>> = {
-  ArrowLeft: "left",
-  a: "left",
-  ArrowRight: "right",
-  d: "right",
-  ArrowUp: "up",
-  w: "up",
-  ArrowDown: "down",
-  s: "down",
-  j: "jump",
-  " ": "jump",
-  k: "kick",
-  p: "punch",
-  i: "inv",
-};
+
+/**
+ * What the preferences panel settled, read once at load.
+ *
+ * The panel is `main.html`'s and the level is this page's, so the eight
+ * bindings come across in {@link file://./prefs.ts}'s store. Nothing here writes
+ * them back: a level has no preferences panel in it, which is also true of the
+ * original — `0x45d5a0` is only ever entered from the menu.
+ */
+const PREFS = loadPrefs();
+
+/**
+ * The eight bindings, plus the four this page adds.
+ *
+ * `0x46b210` is indexed by the uppercased character, so a binding matches
+ * whatever case the key arrives in. The arrows and the space bar are NOT in that
+ * table — the shipped entries beside the letters are characters 24…27, which
+ * `0x40e980` names `J4`, `J3`, `J2` and `J1`, a joystick's four buttons — so
+ * they are this port's, kept because a page is not a 1996 game. A binding wins
+ * over them: bind the punch to the space bar and the space bar stops jumping.
+ */
+function keyTable(): Record<string, keyof typeof held> {
+  const table: Record<string, keyof typeof held> = {
+    ArrowLeft: "left",
+    ArrowRight: "right",
+    ArrowUp: "up",
+    ArrowDown: "down",
+    " ": "jump",
+  };
+  for (const action of PREFS_ACTIONS) {
+    const bound = PREFS.keys[action.action - 1];
+    if (!keyName(bound)) continue;
+    table[bound.toUpperCase()] = action.held;
+    table[bound.toLowerCase()] = action.held;
+  }
+  return table;
+}
+
+const KEYS: Readonly<Record<string, keyof typeof held>> = keyTable();
 addEventListener("keydown", (e) => {
   wakeAudio();
   // the chooser is a real form control: while it has the focus, its own keys are
@@ -8364,6 +8395,9 @@ function playerCel(loc: number): HTMLCanvasElement | null {
 async function boot(): Promise<void> {
   files = await SkullFiles.open();
   sound = new Sounds(files);
+  // the two the front end settled that have no query string of their own
+  sound.setVolume(PREFS.volume);
+  sound.setMusic(PREFS.music);
   const pb = await files.load("player.sbk");
   if (!pb) {
     hud.textContent = "player.sbk is not in this rip";

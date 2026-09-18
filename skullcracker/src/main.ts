@@ -52,6 +52,20 @@ import { installBugReport } from "@dreamfactory/site/bug-report";
 import { VERSION, installVersion } from "@dreamfactory/site/version";
 import { SkullFiles } from "./files";
 import { Film } from "./film";
+import {
+  PREFS_ACTIONS,
+  PREFS_CONTROLS,
+  PREFS_INK,
+  PrefsControl,
+  PrefsState,
+  VOLUME,
+  bindKey,
+  clampVolume,
+  keyName,
+  loadPrefs,
+  savePrefs,
+  volumeAt,
+} from "./prefs";
 
 /**
  * The game's start sequence, and it is not a guess — it is a string table in the
@@ -164,44 +178,30 @@ const EXIT_ACTIONS: Record<string, { play?: readonly string[]; say: string; begi
 };
 
 /**
- * WHICH Skull Cracker, and how hard — the two things the front end settles
- * before the game starts.
+ * WHICH Skull Cracker, how hard, and the rest of what the front end settles.
  *
  * `0x46b1a8` is the player and `0x46b20c` the difficulty. Both are read all over
  * the executable and neither is in a film, so they travel to `walk.html` in its
- * query string, which is that page's own way of being told anything.
+ * query string, which is that page's own way of being told anything. The three
+ * the panel settles that have no query string — the eight bindings, the volume
+ * and the music switch — travel in {@link file://./prefs.ts}'s store instead.
+ *
+ * The preferences panel, and all fourteen of its controls are live.
+ *
+ * The rects, the roles, the colours and the binding rule are
+ * {@link file://./prefs.ts}, read out of `.data` and out of `0x45d5a0`'s modal
+ * loop rather than measured off the picture. What is left here is the drawing
+ * and the clicking, because those are this page's.
+ *
+ * Which end of the difficulty is which is settled by what the number does rather
+ * than by the label: `0x42e59a` and `0x448ac2` compute `trunc(difficulty * 600)
+ * + 0x4b0`, so +1 is 1800 health and -1 is 600, and `0x40e300(n)` returns
+ * `n - (n/2)*d`, so +1 halves a blow and -1 makes it half again as hard. +1 is
+ * EASY.
  */
-let character: 0 | 1 = 0;
-let difficulty: -1 | 0 | 1 = 0;
-
-/**
- * The preferences panel's three difficulty boxes, `0x4791d8`, `0x4791e0` and
- * `0x4791e8` — rects stored `{top, left, bottom, right}` like every rect in this
- * engine, and read out of `.data` rather than measured off the picture.
- *
- * `0x45dbfe`..`0x45dcd4` draws them: `0x409a00(0xd7)` for the one that matches
- * `[0x46b20c]` and `0x409a00(0)` for the other two, `0x434290(rect, 2, 2)` insets
- * each by two, `0x40a1d0` fills it. The clicks are `0x45d700`'s controls 10, 11
- * and 12 — `0x45d788`, `0x45d79b`, `0x45d7ae` — which store 1, 0 and -1.
- *
- * Which end is which is settled by what the number does rather than by the
- * label: `0x42e59a` and `0x448ac2` compute `trunc(difficulty * 600) + 0x4b0`, so
- * +1 is 1800 health and -1 is 600, and `0x40e300(n)` returns `n - (n/2)*d`, so
- * +1 halves a blow and -1 makes it half again as hard. +1 is EASY.
- *
- * The panel's other eleven controls are read and not wired, which is said here
- * rather than left looking finished: eight boxes at `0x479188`..`0x4791c7` set
- * `[0x47917c]` (`0x45d72f`), the slider at `0x4791c8` sets the volume 0..9
- * through `0x4274e0` (`0x45d743`), and the box at `0x4791f0` flips `[0x46b1fc]`,
- * which gates the `0x40f190` calls — a sound switch.
- */
-const PREFS_BOXES: readonly { top: number; left: number; bottom: number; right: number; value: -1 | 0 | 1; from: string }[] = [
-  { top: 226, left: 123, bottom: 241, right: 138, value: 1, from: "0x4791d8 / 0x45d788" },
-  { top: 226, left: 171, bottom: 241, right: 186, value: 0, from: "0x4791e0 / 0x45d79b" },
-  { top: 226, left: 219, bottom: 241, right: 234, value: -1, from: "0x4791e8 / 0x45d7ae" },
-];
-/** the colour `0x409a00` is given for the chosen box */
-const PREFS_LIT = 0xd7;
+const prefs: PrefsState = loadPrefs();
+/** which of the eight key boxes is selected — `[0x47917c]`, and it starts at 0 */
+let prefsBox = 0;
 /** true once the prefs film has finished opening its panel and the panel is live */
 let prefsOpen = false;
 /** the prefs film is playing and the panel it opens is what follows it */
@@ -292,36 +292,100 @@ function paint(
 }
 
 /**
- * Put the panel back on screen with its three boxes filled the way `0x45db40`
- * fills them: the chosen one in `0xd7`, the other two in 0, each inset by two.
+ * `0x45db40` — put the panel's fourteen controls back over the film's last frame.
  *
  * The film has ended by the time this runs — `prefs2.mov` is thirty frames of a
  * panel sliding open and then a type-1 exit — so the last frame is still in
  * {@link rgba} and this composes over it. That is what the original does too: the
- * film opens the panel and the executable owns it from there.
+ * film opens the panel and the executable owns it from there, which is why the
+ * panel has no regions and why ESC is not what leaves it.
+ *
+ * Three shapes, in the order `0x45db40` draws them:
+ *
+ *   - **the eight key boxes**, filled whole (`0x40a0c0`, no inset) in `0xe1` when
+ *     selected and 0 when not, with the bound key's name drawn at
+ *     `(left + 9, bottom - 5)` — and four pixels left of that when the name is
+ *     two characters wide, which `Sp` and the four joystick buttons are.
+ *   - **the three difficulty boxes and the music box**, each inset by two and
+ *     filled `0xd7` or 0.
+ *   - **the slider's ten segments**, each eight wide and ten apart.
+ *
+ * The one thing here that is not the executable's is the FONT. `0x40a360` draws
+ * through the host's own text routines — there is no glyph data in the rip to
+ * read — so the browser's monospace face stands in, at the size the 19-pixel box
+ * leaves room for.
  */
+function inkOf(pal: Uint8ClampedArray, index: number): string {
+  const c = index * 4;
+  return `rgb(${pal[c]}, ${pal[c + 1]}, ${pal[c + 2]})`;
+}
+
+function fillRect(pal: Uint8ClampedArray, index: number, box: { top: number; left: number; bottom: number; right: number }): void {
+  const c = index * 4;
+  const [r, g, b] = [pal[c], pal[c + 1], pal[c + 2]];
+  for (let y = Math.max(0, box.top); y < Math.min(SCREEN_H, box.bottom); y++) {
+    for (let x = Math.max(0, box.left); x < Math.min(SCREEN_W, box.right); x++) {
+      const at = (y * SCREEN_W + x) * 4;
+      image.data[at] = r;
+      image.data[at + 1] = g;
+      image.data[at + 2] = b;
+      image.data[at + 3] = 255;
+    }
+  }
+}
+
 function drawPrefs(): void {
   const pal = lastPalette;
   if (!pal) return;
   image.data.set(rgba);
-  for (const box of PREFS_BOXES) {
-    const lit = box.value === difficulty;
-    const c = lit ? PREFS_LIT * 4 : 0;
-    const [r, g, b] = [pal[c], pal[c + 1], pal[c + 2]];
-    for (let y = box.top + 2; y < box.bottom - 2; y++) {
-      for (let x = box.left + 2; x < box.right - 2; x++) {
-        const at = (y * SCREEN_W + x) * 4;
-        image.data[at] = r;
-        image.data[at + 1] = g;
-        image.data[at + 2] = b;
-        image.data[at + 3] = 255;
-      }
+  const labels: { text: string; x: number; y: number; ink: string }[] = [];
+  for (const [i, control] of PREFS_CONTROLS.entries()) {
+    const role = control.role;
+    if (role.kind === "key") {
+      const chosen = i === prefsBox;
+      fillRect(pal, chosen ? PREFS_INK.selected : PREFS_INK.unselected, control);
+      const name = keyName(prefs.keys[role.action - 1]);
+      labels.push({
+        text: name,
+        x: control.left + 9 - (name.length === 2 ? 4 : 0),
+        y: control.bottom - 5,
+        ink: inkOf(pal, chosen ? PREFS_INK.labelOnSelected : PREFS_INK.label),
+      });
+      continue;
+    }
+    if (role.kind === "difficulty" || role.kind === "music") {
+      const chosen = role.kind === "music" ? prefs.music : role.value === prefs.difficulty;
+      fillRect(pal, chosen ? PREFS_INK.lit : PREFS_INK.unselected, {
+        top: control.top + 2,
+        left: control.left + 2,
+        bottom: control.bottom - 2,
+        right: control.right - 2,
+      });
+      continue;
+    }
+    if (role.kind !== "volume") continue;
+    for (let seg = 0; seg < VOLUME.steps; seg++) {
+      const ink = seg > prefs.volume ? PREFS_INK.unselected : seg <= VOLUME.loudFrom - 1 ? PREFS_INK.low : PREFS_INK.lit;
+      const left = control.left + seg * VOLUME.stride;
+      fillRect(pal, ink, {
+        top: control.top + VOLUME.inset,
+        left: left + VOLUME.inset,
+        bottom: control.bottom - VOLUME.inset,
+        right: left + VOLUME.width - VOLUME.inset,
+      });
     }
   }
   ctx.imageSmoothingEnabled = false;
   const bitmapCanvas = scratch();
   bitmapCanvas.getContext("2d")!.putImageData(image, 0, 0);
   ctx.drawImage(bitmapCanvas, 0, 0, SCREEN_W * PLATE, SCREEN_H * PLATE);
+  ctx.font = `${11 * PLATE}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+  ctx.textBaseline = "alphabetic";
+  for (const label of labels) {
+    if (!label.text) continue;
+    ctx.fillStyle = label.ink;
+    ctx.fillText(label.text, label.x * PLATE, label.y * PLATE);
+  }
 }
 
 /**
@@ -333,8 +397,9 @@ function drawPrefs(): void {
  * two words the front end settled travel to the page that has one.
  */
 function begin(): void {
-  const to = `walk.html?char=${character}&difficulty=${difficulty}`;
-  log(`begin: character ${character}, difficulty ${difficulty} — ${to}`);
+  savePrefs(prefs);
+  const to = `walk.html?char=${prefs.character}&difficulty=${prefs.difficulty}`;
+  log(`begin: character ${prefs.character}, difficulty ${prefs.difficulty} — ${to}`);
   location.href = to;
 }
 
@@ -407,8 +472,8 @@ async function playMovie(name: string, isHome = false): Promise<void> {
       // `ltpan.mov` names its first frame as actionframe 1 and `rtpan.mov` names
       // its first as actionframe 2; `0x45e1e0` turns that into `0x46b1a8`
       onAction: (which) => {
-        character = which === 1 ? 0 : 1;
-        log(`${name}: actionframe ${which} — character ${character} (0x45e369)`);
+        prefs.character = which === 1 ? 0 : 1;
+        log(`${name}: actionframe ${which} — character ${prefs.character} (0x45e369)`);
       },
       onEnd: (lastFrame) => {
         film = null;
@@ -471,7 +536,12 @@ function screenPoint(e: { clientX: number; clientY: number }): { x: number; y: n
 
 function frameLoop(now: number): void {
   film?.tick(now);
-  nowEl.textContent = film ? film.where : prefsOpen ? `prefs panel · difficulty ${difficulty}` : "";
+  nowEl.textContent = film
+    ? film.where
+    : prefsOpen
+      ? `prefs panel · difficulty ${prefs.difficulty} · volume ${prefs.volume} · music ${prefs.music ? "on" : "off"} · ` +
+        PREFS_ACTIONS.map((a) => `${a.say} ${keyName(prefs.keys[a.action - 1]) || "--"}`).join(" ")
+      : "";
   requestAnimationFrame(frameLoop);
 }
 
@@ -609,22 +679,86 @@ if (BUG_REPORTS) {
   $<HTMLSpanElement>("bugNote").hidden = true;
 }
 
+/** the control under a point, `0x45d640`'s loop over the fourteen rects */
+function prefsHit(x: number, y: number): PrefsControl | undefined {
+  return PREFS_CONTROLS.find((c) => x >= c.left && x <= c.right && y >= c.top && y <= c.bottom);
+}
+
+/** leave the panel the way control 8 does: `0x45d73f` returns 0 and the loop ends */
+function closePrefs(why: string): void {
+  prefsOpen = false;
+  savePrefs(prefs);
+  log(`prefs: ${why}`);
+  void playMovie(home, true);
+}
+
 /** a click on the 512x384 screen, from whichever pointer sent it */
 function clickAt(x: number, y: number): void {
   // the open preferences panel owns the screen: it has no regions of its own
   // because the film has none — `0x45d700` is the executable's own hit test
   if (prefsOpen) {
-    const box = PREFS_BOXES.find((b) => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom);
-    if (box) {
-      difficulty = box.value;
-      log(`prefs: difficulty ${difficulty} (${box.from})`);
-      drawPrefs();
+    const control = prefsHit(x, y);
+    if (!control) {
+      log(`prefs: nothing at ${x},${y} — the button at the bottom right closes the panel`);
       return;
     }
-    log(`prefs: nothing at ${x},${y} — ESC closes the panel`);
+    const role = control.role;
+    if (role.kind === "ok") {
+      closePrefs(`done (${control.from})`);
+      return;
+    }
+    if (role.kind === "key") {
+      prefsBox = PREFS_CONTROLS.indexOf(control);
+      log(`prefs: ${PREFS_ACTIONS[role.action - 1].say} selected — type a letter to bind it (${control.from})`);
+    } else if (role.kind === "difficulty") {
+      prefs.difficulty = role.value;
+      log(`prefs: difficulty ${prefs.difficulty} (${control.from})`);
+    } else if (role.kind === "volume") {
+      prefs.volume = volumeAt(x, control);
+      log(`prefs: volume ${prefs.volume} (${control.from})`);
+    } else {
+      prefs.music = !prefs.music;
+      log(`prefs: music ${prefs.music ? "on" : "off"} (${control.from})`);
+    }
+    savePrefs(prefs);
+    drawPrefs();
     return;
   }
   if (!film?.click(x, y, performance.now())) log(`click at ${x},${y} — no region there`);
+}
+
+/**
+ * A key while the panel is open — `0x45d67d`, the event loop's third case.
+ *
+ * The modifier word decides which of two things a key means (`test ..., 0x1fa0`):
+ * held, `T` toggles the music and a digit sets the volume outright; not held,
+ * the character is uppercased and offered to the selected box. Returns true when
+ * the panel took the key.
+ */
+function prefsKey(e: KeyboardEvent): boolean {
+  if (e.altKey || e.ctrlKey || e.metaKey) {
+    if (e.key === "t" || e.key === "T") {
+      prefs.music = !prefs.music;
+      log(`prefs: music ${prefs.music ? "on" : "off"} (0x45d6a0)`);
+    } else if (/^[0-9]$/.test(e.key)) {
+      prefs.volume = clampVolume(Number(e.key));
+      log(`prefs: volume ${prefs.volume} (0x45d6b8)`);
+    } else return false;
+    savePrefs(prefs);
+    drawPrefs();
+    return true;
+  }
+  if (e.key.length !== 1) return false;
+  const action = (PREFS_CONTROLS[prefsBox].role as { kind: "key"; action: number }).action;
+  const refused = bindKey(prefs, action, e.key);
+  log(
+    refused
+      ? `prefs: ${PREFS_ACTIONS[action - 1].say} keeps ${keyName(prefs.keys[action - 1])} — ${refused}`
+      : `prefs: ${PREFS_ACTIONS[action - 1].say} is now ${keyName(prefs.keys[action - 1])} (0x45d810)`,
+  );
+  savePrefs(prefs);
+  drawPrefs();
+  return true;
 }
 
 /**
@@ -655,18 +789,17 @@ const touch = new TouchGestures({
   // a region takes its press at once, so the menu answers a thumb the moment it
   // lands rather than 220 ms later — and the PICTURE keeps the wait, which is
   // what leaves double-tap-to-skip available exactly where a film is playing
-  ownedByGame: (x, y) =>
-    prefsOpen
-      ? PREFS_BOXES.some((b) => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom)
-      : (film?.owns(x, y) ?? false),
+  ownedByGame: (x, y) => (prefsOpen ? prefsHit(x, y) !== undefined : (film?.owns(x, y) ?? false)),
   press: (x, y) => clickAt(x, y),
   // nothing is held: see the note above
   release: () => {},
   sendKey: (key: GestureKey) => {
     if (key === ESCAPE_KEY) {
       if (prefsOpen) {
-        prefsOpen = false;
-        void playMovie(home, true);
+        // the original has no way out but the button; a page with no keyboard
+        // needs one, and double-tap is the gesture this page already spends on
+        // "get me out of here"
+        closePrefs("closed by a double tap, which is this page's own way out");
         return;
       }
       if (!film?.skip()) log("double-tap: this film does not allow skipping");
@@ -701,12 +834,13 @@ window.addEventListener("keydown", (e) => {
   if (focusOwnsKey(e.target, e.key)) return;
   if (e.key === "Escape" || e.key === ESCAPE_KEY) {
     if (prefsOpen) {
-      prefsOpen = false;
-      void playMovie(home, true);
+      closePrefs("closed by ESC, which is this page's own way out");
       e.preventDefault();
       return;
     }
     if (film?.skip()) e.preventDefault();
+  } else if (prefsOpen) {
+    if (prefsKey(e)) e.preventDefault();
   } else if (e.key === "b") {
     logEl.hidden = !logEl.hidden;
   }

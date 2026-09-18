@@ -29,7 +29,12 @@
  *      says "the game started" rather than "a picture appeared" — it goes
  *      through the film's region table, its action type and its frame index, all
  *      read big-endian, and then through `char.mov` into `walk.html`.
- *   6. Prefs opens its panel and its three difficulty boxes take a click.
+ *   6. Prefs opens its panel and ALL FOURTEEN of its controls answer — the
+ *      eight key boxes, the volume slider, the three difficulty boxes, the music
+ *      switch and the button that is the only way out of it;
+ *   7. ...and a rebound key is still bound in `walk.html`, which is the whole
+ *      point of a preferences panel and the one thing the panel alone cannot
+ *      show.
  *
  * ## Two traps this file is deliberately shaped around
  *
@@ -65,6 +70,18 @@ const ACCEPT = { x: 255, y: 244 };
 /** the prefs panel's three difficulty boxes — `0x4791d8`, `0x4791e0`, `0x4791e8` */
 const EASY = { x: 130, y: 233 };
 const HARD = { x: 226, y: 233 };
+/**
+ * ...and the rest of the fourteen, every rect out of `.data` (see `src/prefs.ts`).
+ *
+ * `TOWARD_BOX` is `0x479190`, the key box for action 2 — the one `0x402be0`
+ * swaps on the player's facing, which this page calls "right". `SLIDER` is a
+ * click 45 pixels into `0x4791d0`, and `0x45d743` divides that by ten: volume 4.
+ */
+const TOWARD_BOX = { x: 254, y: 155 };
+const RUN_BOX = { x: 254, y: 80 };
+const SLIDER = { x: 122 + 45, y: 207 };
+const MUSIC = { x: 130, y: 180 };
+const OK = { x: 412, y: 224 };
 
 const browser = await launch({ headless: !HEADED });
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
@@ -221,9 +238,62 @@ await page.waitForTimeout(300);
 if (!/difficulty 1/.test(await loc())) fail(`0x4791d8's box stores 1 (0x45d788); the panel says "${await loc()}"`);
 console.log(`ok    the preferences panel is live, and its three boxes are the disc's own rects`);
 
+// ...the eight key boxes. `0x45d72f` stores the box index in `[0x47917c]` and
+// `0x45d810` binds the next character typed — unless one of the eight already
+// has it, which is the loop at `0x45d824` refusing before the jump table.
+if (!/toward D/.test(await loc())) fail(`action 2 ships bound to D (0x46b210); the panel says "${await loc()}"`);
+await at(TOWARD_BOX);
+await page.waitForTimeout(200);
+await page.keyboard.press("z");
+await page.waitForTimeout(300);
+if (!/toward Z/.test(await loc())) fail(`0x45d810 should have bound Z to action 2; the panel says "${await loc()}"`);
+await at(RUN_BOX);
+await page.waitForTimeout(200);
+await page.keyboard.press("z");
+await page.waitForTimeout(300);
+if (!/run \/ climb W/.test(await loc())) fail(`Z is spoken for, so 0x45d824 refuses it; the panel says "${await loc()}"`);
+console.log(`ok    a key box binds the next character typed, and refuses one already spoken for`);
+
+// ...the slider and the music switch, which are controls 9 and 13
+await at(SLIDER);
+await page.waitForTimeout(300);
+if (!/volume 4/.test(await loc())) fail(`45px into 0x4791d0 over ten is 4 (0x45d743); the panel says "${await loc()}"`);
+await at(MUSIC);
+await page.waitForTimeout(300);
+if (!/music off/.test(await loc())) fail(`0x4791f0 flips [0x46b1fc] (0x45d7c1); the panel says "${await loc()}"`);
+console.log(`ok    the slider takes the click's own x, and the music box flips [0x46b1fc]`);
+
+// ...and control 8, the one rect whose handler returns zero and so ends
+// `0x45d5a0`'s loop. It is the only way out of the panel the original has.
+await at(OK);
+if (!(await until(/menu\.mov/i, 20_000))) fail(`0x4791c8 is the way out (0x45d73f); #loc says "${await loc()}"`);
+console.log(`ok    and the button at the bottom right is the one way out of it`);
+
+// ...and the menu page's own error line is read HERE, while the menu page is
+// still the one on screen: step 7 navigates to walk.html, which has no `#err`.
 const err = (await page.textContent("#err")) ?? "";
 if (err.trim()) problems.push(`#err: ${err}`);
 if (problems.length) fail(problems.join(" | "));
+
+// 7 — the binding outlives the panel. walk.html reads the same store at load,
+//     so Z walks the player right and D no longer does anything at all.
+await page.goto(`${URL_BASE}walk.html?level=0`, { waitUntil: "domcontentloaded" });
+await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 60_000 });
+await page.waitForTimeout(700);
+const xOf = async (): Promise<number> => Number(/· x (-?\d+),/.exec((await hud.textContent()) ?? "")?.[1] ?? NaN);
+const hold = async (key: string, ms: number): Promise<number> => {
+  const from = await xOf();
+  await page.keyboard.down(key);
+  await page.waitForTimeout(ms);
+  await page.keyboard.up(key);
+  await page.waitForTimeout(200);
+  return (await xOf()) - from;
+};
+const byZ = await hold("z", 1200);
+if (byZ <= 20) fail(`Z was bound to action 2 in the panel; holding it moved the player ${byZ}px`);
+const byD = await hold("d", 1200);
+if (Math.abs(byD) > 8) fail(`D was rebound away from action 2; holding it still moved the player ${byD}px`);
+console.log(`ok    ...and walk.html honours it: Z walks ${byZ}px and D, which used to, moves ${byD}`);
 
 console.log("PASS — logo → intro → menu, Begin asks which player, and the answer starts the game");
 await finish(browser);

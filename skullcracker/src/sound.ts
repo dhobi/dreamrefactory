@@ -354,6 +354,10 @@ export class Sounds {
   /** the bars already handed to the clock, so a level change can take them back */
   private queued: AudioBufferSourceNode[] = [];
   private muted = false;
+  /** the slider's step, `[0x479180]` */
+  private level = 9;
+  /** `[0x46b1fc]` — whether the level's theme plays at all */
+  private music = true;
   /** what this page has been asked for and could not find */
   readonly misses: string[] = [];
 
@@ -389,7 +393,7 @@ export class Sounds {
     if (!Ctor) return null;
     this.ctx = new Ctor();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.7;
+    this.master.gain.value = this.muted ? 0 : (0.7 * (this.level + 1)) / 10;
     this.master.connect(this.ctx.destination);
     return this.ctx;
   }
@@ -404,7 +408,7 @@ export class Sounds {
     await Promise.all([this.bank(want.theme), this.bank(want.sfx), this.bank(PLAYER_BANK)]);
     this.step = 0;
     this.queuedTo = 0;
-    this.playing = true;
+    this.playing = this.music;
   }
 
   stop(): void {
@@ -428,8 +432,55 @@ export class Sounds {
    */
   toggle(): boolean {
     this.muted = !this.muted;
-    if (this.master) this.master.gain.value = this.muted ? 0 : 0.7;
+    this.applyGain();
     return this.muted;
+  }
+
+  /**
+   * The preferences panel's slider, `[0x479180]` — ten steps, and step 0 is not
+   * silence.
+   *
+   * `0x45d743` clamps the click to 0…9 and hands it to `0x4274e0`, which is one
+   * `cmp` and a call into the mixer (`0x45ad40`): what a step is worth in
+   * loudness is that library's and is not in `SC.EXE`, so the curve here is this
+   * page's — the full gain the page already used, scaled by `(v + 1) / 10`, which
+   * leaves step 9 exactly where the page was before there was a slider.
+   */
+  setVolume(step: number): void {
+    this.level = Math.max(0, Math.min(9, Math.trunc(step)));
+    this.applyGain();
+  }
+
+  get volume(): number {
+    return this.level;
+  }
+
+  private applyGain(): void {
+    if (this.master) this.master.gain.value = this.muted ? 0 : (0.7 * (this.level + 1)) / 10;
+  }
+
+  /**
+   * The panel's other switch, `[0x46b1fc]` — and it is the THEME and nothing else.
+   *
+   * `0x403cfb` is the in-game half of the same toggle: on, `0x40f190(0x4ac370)`
+   * starts the level's theme bank; off, `0x427960(0, 0, 1, 0)` stops it. The
+   * effects banks are never consulted, so turning it off leaves every fist and
+   * every door exactly as loud as it was.
+   */
+  setMusic(on: boolean): void {
+    if (on === this.music) return;
+    this.music = on;
+    if (on) {
+      this.step = 0;
+      this.queuedTo = 0;
+      this.playing = Boolean(this.themeName);
+      return;
+    }
+    this.stop();
+  }
+
+  get musicOn(): boolean {
+    return this.music;
   }
 
   get silent(): boolean {

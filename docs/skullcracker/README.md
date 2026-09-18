@@ -1553,13 +1553,19 @@ moment the film stops: `0x45db40` draws it and `0x45d700` is a fourteen-way
 dispatch on a control id. Fourteen controls, and their rects are in `.data`:
 
 ```
-  0x479188..0x4791c7   eight boxes, two columns of four   -> [0x47917c]
-  0x4791c8             a slider track                     -> volume 0..9, 0x4274e0
-  0x4791d8             {226,123,241,138}                  -> [0x46b20c] =  1
-  0x4791e0             {226,171,241,186}                  -> [0x46b20c] =  0
-  0x4791e8             {226,219,241,234}                  -> [0x46b20c] = -1
-  0x4791f0             one box                            -> [0x46b1fc] ^= 1
+  0…7    0x479188..0x4791c0   eight boxes, two columns of four  -> [0x47917c] = i
+  8      0x4791c8  {207,322,241,502}   0x45d73f  xor ax, ax     -> the way OUT
+  9      0x4791d0  {200,122,215,222}   0x45d743  x / 10         -> volume, 0x4274e0
+  10     0x4791d8  {226,123,241,138}   0x45d788                 -> [0x46b20c] =  1
+  11     0x4791e0  {226,171,241,186}   0x45d79b                 -> [0x46b20c] =  0
+  12     0x4791e8  {226,219,241,234}   0x45d7ae                 -> [0x46b20c] = -1
+  13     0x4791f0  {173,123,188,138}   0x45d7c1                 -> [0x46b1fc] ^= 1
 ```
+
+Control 8 is the one whose handler returns zero, and `0x45d6ea` loops while the
+return is not zero — so that wide rect across the bottom right is the only way
+out of the panel, and the slider is the rect after it rather than that one. This
+page had the two the other way round.
 
 Which corrects something this page had written down as a fact: *nothing writes
 `0x46b20c`, so the difficulty is always zero*. Three instructions write it —
@@ -1570,6 +1576,62 @@ does rather than by a label: `0x448ac2` gives `trunc(d × 600) + 1200` health an
 blows — and `0x40e300` is called from the classes' own constructors (Boggs' four
 thousand at `0x41be84`, his machines' three at `0x41b474`) and from neither
 player's hit handler. The difficulty makes the LEVEL harder, not the blow.
+
+### The eight boxes are the keyboard, and `[0x47917c]` is not a setting
+
+The eight numbered boxes looked like a setting with eight values. They are not:
+`[0x47917c]` is which box is SELECTED, and the panel's event loop does the rest.
+`0x45d6d5` uppercases whatever character was typed and calls
+`0x45d810([0x47917c], char)`, which binds it — or refuses, twice over:
+
+```
+  45d824  for action 1..8: if 0x40e7e0(action) == char  ->  return   ; spoken for
+  45d871  [0x46b210 + old] = 0                                       ; unbind
+  45d888  [0x46b210 + char] = action                                 ; bind
+  45d88b  0x40e870(action, &name)
+  45d893  if name is empty  ->  put the old one back                 ; unnameable
+```
+
+So a binding is one byte of the 256-byte table at `0x46b210`, indexed by the
+character, holding the action number 1…8 — the same table `0x403b90` indexes on
+every keypress in the level, and the same eight actions `0x402be0` spends on one
+global apiece. **Every key in the game is rebindable, and the eight letters this
+port had hard-coded are only what `0x46b210` ships with.**
+
+The other half of `0x40e870` settles something this page had guessed. A bound
+character can be named three ways: `A`…`Z` and `0`…`9` are themselves, character
+32 is the string at `0x46bf0c` — `"Sp"`, two characters wide, which is what the
+`cmp byte ptr [esp + 0x18], 2` in the draw loop shifts left by four pixels — and
+characters 24…27 come out of a four-entry table at `0x40e980`:
+
+```
+  24  ->  0x46bf08  "J4"      26  ->  0x46bf00  "J2"
+  25  ->  0x46bf04  "J3"      27  ->  0x46befc  "J1"
+```
+
+They are a **joystick's four buttons**, and the shipped table binds them beside
+the letters: J4 punches, J3 kicks, J2 jumps and J1 is INV. This port had those
+four entries written down as arrow keys. The arrows in this page are its own.
+
+### The slider is ten segments and step 0 is not silence
+
+`0x45dd2e` builds one rect out of the slider's — `{top, left, bottom, left + 8}`
+inset by one — and `0x434270(rect, 10, 0)` walks it across ten times. A segment
+is lit while its index is at or below `[0x479180]`, in `0x11` up to the seventh
+and `0xd7` past it, so **volume 0 still lights the first segment**: the slider
+has no silent end and the mute this page offers is not one of the original's
+controls. The value comes off the click's own x — `(x - left) / 10`, clamped —
+and goes to `0x4274e0`, which is a `cmp` and a call into the mixer. What a step
+is worth in loudness is that library's and is not in `SC.EXE`.
+
+`0x45d5b8` fills the slider from `0x4274b0`, the mixer's current level, rather
+than from a stored word, so the panel opens on whatever the machine is at and
+there is no shipped default to read.
+
+And `[0x46b1fc]` is the **theme** and nothing else. `0x403cfb` is the in-game half
+of the same switch: on, `0x40f190(0x4ac370)` starts the level's theme bank; off,
+`0x427960(0, 0, 1, 0)` stops it. No effects bank is ever consulted, so turning it
+off leaves every fist and every door exactly as loud as they were.
 
 ### The sound was one pointer away
 
