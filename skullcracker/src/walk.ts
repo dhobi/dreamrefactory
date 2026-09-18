@@ -65,13 +65,33 @@ import { decodeShpFrame, ShpFrame } from "@dreamfactory/engine/df/shp";
 import { paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
-import { AudioSink, DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
+import {
+  AudioSink,
+  DeferredAudioSink,
+  WebAudioSink,
+} from "@dreamfactory/engine/runtime/audio";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { SkullFiles } from "./files";
 import { writeSkl } from "./savegame";
 import { Film } from "./film";
-import { CORPSE_LINGER, FOES, FoeAnim, celAt, loopIndex, type Foe } from "./foes";
-import { CRAFT, Gob, Pop, SPRAY, VANISH, dryTime, gobCount, scatter } from "./effects";
+import {
+  CORPSE_LINGER,
+  FOES,
+  FoeAnim,
+  celAt,
+  loopIndex,
+  type Foe,
+} from "./foes";
+import {
+  CRAFT,
+  Gob,
+  Pop,
+  SPRAY,
+  VANISH,
+  dryTime,
+  gobCount,
+  scatter,
+} from "./effects";
 import { FOE_SFX, OWN, REACH, Sounds } from "./sound";
 import {
   CROW,
@@ -165,7 +185,15 @@ import {
   BOGGS,
   Boggs,
 } from "./props";
-import { DEATH_FILMS, ENDING_FILM, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
+import {
+  DEATH_FILMS,
+  ENDING_FILM,
+  MISSIONS,
+  PIT_DEPTH,
+  TIME_OUT_FILMS,
+  allowanceFor,
+  type Mission,
+} from "./mission";
 import {
   BOLT,
   CHAPTER_WEAPON,
@@ -251,7 +279,8 @@ import {
  *
  * `?char=1` picks one before the level loads; Shift+C is action 11.
  */
-let CHARACTER: 0 | 1 = new URL(location.href).searchParams.get("char") === "1" ? 1 : 0;
+let CHARACTER: 0 | 1 =
+  new URL(location.href).searchParams.get("char") === "1" ? 1 : 0;
 let KIT = PLAYERS[CHARACTER];
 let ANIM = KIT.anim;
 let ACTIONS = KIT.actions;
@@ -596,8 +625,6 @@ const CLIMB_PX = 50;
  */
 const STICK_PX = 8;
 
-
-
 /**
  * A ladder is counted in RUNGS, and both of its numbers are the disc's.
  *
@@ -673,7 +700,13 @@ const LADDER = {
   },
   from: "0x42ae50 / 0x471e78 / the ladder records' own param",
 };
-
+/**
+ * `[0x46b1b8]` — set by the leave (`0x42ae98`), cleared by `0x42849c` the frame
+ * the player is grounded again, and while it is set neither the idle state
+ * (`0x429872`) nor the jump state (`0x429f5d`) asks for a ladder at all. Off a
+ * ladder you LAND before you can climb again.
+ */
+let ladderLatch = false;
 
 /**
  * How far the player travels per animation cel: `MEASURED.walk / DIVISOR` = 8px.
@@ -815,7 +848,8 @@ interface Enemy {
   max: number;
 }
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+const $ = <T extends HTMLElement>(id: string): T =>
+  document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>("screen");
 const ctx = canvas.getContext("2d")!;
 const hud = $("hud");
@@ -880,7 +914,6 @@ function poseFeet(): void {
   p.y += want - p.feet;
   p.feet = want;
 }
-
 
 /**
  * The camera — `0x4309f0`, and all of it is in `SC.EXE`.
@@ -963,8 +996,10 @@ let flypasts: Flypast[] = [];
 let flashColour = -1;
 
 /** the middle of {@link CAMERA.chase}, the way `0x430a98` and `0x430ad5` take it */
-const CHASE_X = CAMERA.chase.left + Math.trunc((CAMERA.chase.right - CAMERA.chase.left) / 2);
-const CHASE_Y = CAMERA.chase.top + Math.trunc((CAMERA.chase.bottom - CAMERA.chase.top) / 2);
+const CHASE_X =
+  CAMERA.chase.left + Math.trunc((CAMERA.chase.right - CAMERA.chase.left) / 2);
+const CHASE_Y =
+  CAMERA.chase.top + Math.trunc((CAMERA.chase.bottom - CAMERA.chase.top) / 2);
 
 /**
  * `0x4308a0` — put the corner where it is asked for, within the room's rect.
@@ -1035,7 +1070,15 @@ function stepProbes(): void {
     const mirror = q.mode === 1;
     if (q.mode <= 1) {
       // `0x41025c` — half a screen to one side, and it comes towards you
-      flypasts.push({ x: p.x + (mirror ? PROBE.sideX : -PROBE.sideX), y: py, vx: 0, vy: 0, mirror, tag: 0, clock: 0 });
+      flypasts.push({
+        x: p.x + (mirror ? PROBE.sideX : -PROBE.sideX),
+        y: py,
+        vx: 0,
+        vy: 0,
+        mirror,
+        tag: 0,
+        clock: 0,
+      });
     } else {
       // `0x4102aa` / `0x41030a` — under your feet, or down out of the sky
       const below = q.mode === 2;
@@ -1073,14 +1116,19 @@ function stepFlypasts(): void {
       f.vx = Math.max(-PROBE.maxVx, Math.min(PROBE.maxVx, f.vx));
       f.x += f.vx;
       // `0x4104d5` / `0x4104f2` — gone once it is half a screen past you
-      if (Math.abs(f.x - p.x) > PROBE.goneX && (f.mirror ? f.x < p.x : f.x > p.x)) flypasts.splice(i, 1);
+      if (
+        Math.abs(f.x - p.x) > PROBE.goneX &&
+        (f.mirror ? f.x < p.x : f.x > p.x)
+      )
+        flypasts.splice(i, 1);
       continue;
     }
     // `0x410531` — it turns to face you, and keeps whichever way it was going
     f.mirror = p.x > f.x;
     f.vy = f.vy < 0 ? -PROBE.maxVy : PROBE.maxVy;
     f.y += f.vy;
-    if (Math.abs(f.y - py) > PROBE.goneY && (f.vy < 0 ? f.y < py : f.y > py)) flypasts.splice(i, 1);
+    if (Math.abs(f.y - py) > PROBE.goneY && (f.vy < 0 ? f.y < py : f.y > py))
+      flypasts.splice(i, 1);
   }
 }
 
@@ -1095,8 +1143,14 @@ function stepCamera(): void {
   const t = chaseTarget();
   const ex = t.x - (view.x + CHASE_X);
   const ey = t.y - (view.y + CHASE_Y);
-  camVx = Math.max(-CAMERA.maxDx, Math.min(CAMERA.maxDx, Math.trunc((ex * CAMERA.maxDx) / CAMERA.spanX)));
-  camVy = Math.max(-CAMERA.maxDy, Math.min(CAMERA.maxDy, Math.trunc((ey * CAMERA.maxDy) / CAMERA.spanY)));
+  camVx = Math.max(
+    -CAMERA.maxDx,
+    Math.min(CAMERA.maxDx, Math.trunc((ex * CAMERA.maxDx) / CAMERA.spanX)),
+  );
+  camVy = Math.max(
+    -CAMERA.maxDy,
+    Math.min(CAMERA.maxDy, Math.trunc((ey * CAMERA.maxDy) / CAMERA.spanY)),
+  );
 }
 
 /** ...and spend a quarter of it each tick, clamping every time as `0x430820` does */
@@ -1116,7 +1170,10 @@ function driftCamera(): void {
 function snapCamera(): void {
   camVx = 0;
   camVy = 0;
-  placeView(p.x - CAMERA.arriveX, (p.climbing ? p.climbY : p.y - p.feet) - CAMERA.arriveY);
+  placeView(
+    p.x - CAMERA.arriveX,
+    (p.climbing ? p.climbY : p.y - p.feet) - CAMERA.arriveY,
+  );
 }
 
 /**
@@ -1252,7 +1309,15 @@ interface Level {
   /** the room's crows, asleep until something walks into their rect */
   crows: Crow[][];
   /** placements back-to-front with their cel container and engine rate resolved */
-  draw: { loc: number; cels: number[]; x: number; y: number; rate: number; mirror: boolean; z: number }[];
+  draw: {
+    loc: number;
+    cels: number[];
+    x: number;
+    y: number;
+    rate: number;
+    mirror: boolean;
+    z: number;
+  }[];
   anchorX: number;
   anchorY: number;
   name: string;
@@ -1368,6 +1433,8 @@ const p = {
   rung: 0,
   climbTag: 0,
   climbClock: 0,
+  /** the record you are on — `0x4ac3a0`, copied once by the grab and never re-asked */
+  ladder: undefined as SbkEntity | undefined,
   /** the world y of the anchor the climb cels hang from, while on a ladder */
   climbY: 0,
   /**
@@ -1535,7 +1602,16 @@ const DIFFICULTY = (() => {
 function scaled(n: number): number {
   return n - Math.trunc(n / 2) * DIFFICULTY;
 }
-const held = { left: false, right: false, up: false, down: false, jump: false, punch: false, kick: false, inv: false };
+const held = {
+  left: false,
+  right: false,
+  up: false,
+  down: false,
+  jump: false,
+  punch: false,
+  kick: false,
+  inv: false,
+};
 /**
  * The two edges: a door is entered by PRESSING up, and a jump by pressing jump.
  * Holding neither repeats.
@@ -1591,7 +1667,8 @@ async function loadLevel(index: number): Promise<void> {
     rooms,
     solids,
     ladders: sbk.entities.filter((e) => e.isEntity && e.name === "ladder"),
-    spawned: ((claimed: Set<SbkEntity>) => rooms.map((r) => spawnIn(sbk, r, claimed)))(new Set<SbkEntity>()),
+    spawned: ((claimed: Set<SbkEntity>) =>
+      rooms.map((r) => spawnIn(sbk, r, claimed)))(new Set<SbkEntity>()),
     planks,
     elevators: rooms.map((r, i) => elevatorsIn(sbk, r, solids[i], planks[i])),
     ibeams: rooms.map((r) => ibeamsIn(sbk, r)),
@@ -1602,8 +1679,23 @@ async function loadLevel(index: number): Promise<void> {
     elevs: rooms.map((r, i) => elevsIn(sbk, r, solids[i])),
     shacks: rooms.map((r) => shacksIn(sbk, r)),
     barrels: rooms.map((r, i) => barrelsIn(sbk, r, solids[i])),
-    pipes: rooms.map((r) => placed(sbk, r, "initpipe", PIPE.mouth.cels, (e) => ({ x: e.pointX, y: e.pointY, mirror: e.param < 0, clock: 0 }))),
-    sewage: rooms.map((r) => placed(sbk, r, "initsewage", [], (e) => ({ top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: SEWAGE.gulpEvery }))),
+    pipes: rooms.map((r) =>
+      placed(sbk, r, "initpipe", PIPE.mouth.cels, (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        mirror: e.param < 0,
+        clock: 0,
+      })),
+    ),
+    sewage: rooms.map((r) =>
+      placed(sbk, r, "initsewage", [], (e) => ({
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
+        clock: SEWAGE.gulpEvery,
+      })),
+    ),
     bushes: rooms.map((r) =>
       placed(sbk, r, "initbush", BUSH.idle.cels, (e) => ({
         x: e.pointX,
@@ -1615,59 +1707,131 @@ async function loadLevel(index: number): Promise<void> {
         clock: 0,
       })),
     ),
-    nests2: rooms.map((r) => placed(sbk, r, "initroachmotel", ROACH.run.cels, (e) => ({ x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: -17, made: 0 }))),
-    sprinklers: rooms.map((r) => placed(sbk, r, "initsprinkler", SPRINKLER.rise.cels, (e) => ({ x: e.pointX, y: e.pointY, slot: e.param, top: e.top, left: e.left, bottom: e.bottom, right: e.right }))),
-    pickups: rooms.map((r) => pickupsIn(sbk, r)),
-    guns: rooms.map((r) => gunsIn(sbk, r)),
-    holes: rooms.map((r) =>
-      placed(sbk, r, "initgrave", [HOLE.shut], (e) => ({
-        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
-        state: "shut" as const, clock: 0,
-      })),
-    ),
-    axes: rooms.map((r) => placed(sbk, r, "initswingaxe", [AXE.swing[0]], (e) => ({ x: e.pointX, y: e.pointY, clock: 0 }))),
-    floors: rooms.map((r) =>
-      placed(sbk, r, "initfloor", [FLOOR.whole], (e) => ({
-        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
-        state: "whole" as const, clock: 0,
-      })),
-    ),
-    surges: rooms.map((r) =>
-      placed(sbk, r, "initsurge", SURGE.arc.cels, (e) => ({
-        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: 0,
-      })),
-    ),
-    cages: rooms.map((r) =>
-      placed(sbk, r, "initcagedoor", [CAGE.shut], (e) => ({
-        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
-        // a door's own number is the absolute value; SEWER's five are filed the
-        // same way and MAZE's seven run 1, 2, -2, 3, 4, -4, 4
-        param: Math.abs(e.param), state: e.param < 0 ? ("open" as const) : ("shut" as const), clock: 0,
-      })),
-    ),
-    alarms: rooms.map((r) => placed(sbk, r, "initalarm", [ALARM.quiet], (e) => ({ x: e.pointX, y: e.pointY, param: e.param, clock: 0 }))),
-    // `0x4115b0` — one record, two objects, and the turret starts home ten
-    // pixels above the point the hatch sits on
-    bigguns: rooms.map((r) =>
-      placed(sbk, r, "initbiggun", [BIGGUN.hatch.shut, BIGGUN.unfold.cels[0]], (e) => ({
+    nests2: rooms.map((r) =>
+      placed(sbk, r, "initroachmotel", ROACH.run.cels, (e) => ({
         x: e.pointX,
         y: e.pointY,
         top: e.top,
         left: e.left,
         bottom: e.bottom,
         right: e.right,
-        state: "wait" as const,
-        clock: 0,
-        gunY: e.pointY - BIGGUN.turretUp,
-        shot: 0,
-        hatch: 0,
-        hatchClock: 0,
+        clock: -17,
+        made: 0,
       })),
+    ),
+    sprinklers: rooms.map((r) =>
+      placed(sbk, r, "initsprinkler", SPRINKLER.rise.cels, (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        slot: e.param,
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
+      })),
+    ),
+    pickups: rooms.map((r) => pickupsIn(sbk, r)),
+    guns: rooms.map((r) => gunsIn(sbk, r)),
+    holes: rooms.map((r) =>
+      placed(sbk, r, "initgrave", [HOLE.shut], (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
+        state: "shut" as const,
+        clock: 0,
+      })),
+    ),
+    axes: rooms.map((r) =>
+      placed(sbk, r, "initswingaxe", [AXE.swing[0]], (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        clock: 0,
+      })),
+    ),
+    floors: rooms.map((r) =>
+      placed(sbk, r, "initfloor", [FLOOR.whole], (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
+        state: "whole" as const,
+        clock: 0,
+      })),
+    ),
+    surges: rooms.map((r) =>
+      placed(sbk, r, "initsurge", SURGE.arc.cels, (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
+        clock: 0,
+      })),
+    ),
+    cages: rooms.map((r) =>
+      placed(sbk, r, "initcagedoor", [CAGE.shut], (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
+        // a door's own number is the absolute value; SEWER's five are filed the
+        // same way and MAZE's seven run 1, 2, -2, 3, 4, -4, 4
+        param: Math.abs(e.param),
+        state: e.param < 0 ? ("open" as const) : ("shut" as const),
+        clock: 0,
+      })),
+    ),
+    alarms: rooms.map((r) =>
+      placed(sbk, r, "initalarm", [ALARM.quiet], (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        param: e.param,
+        clock: 0,
+      })),
+    ),
+    // `0x4115b0` — one record, two objects, and the turret starts home ten
+    // pixels above the point the hatch sits on
+    bigguns: rooms.map((r) =>
+      placed(
+        sbk,
+        r,
+        "initbiggun",
+        [BIGGUN.hatch.shut, BIGGUN.unfold.cels[0]],
+        (e) => ({
+          x: e.pointX,
+          y: e.pointY,
+          top: e.top,
+          left: e.left,
+          bottom: e.bottom,
+          right: e.right,
+          state: "wait" as const,
+          clock: 0,
+          gunY: e.pointY - BIGGUN.turretUp,
+          shot: 0,
+          hatch: 0,
+          hatchClock: 0,
+        }),
+      ),
     ),
     // `0x40b526` — one buffer for the book, and `0x4280d2` walks the whole of it
     probes: sbk.entities
       .filter((e) => e.isEntity && e.name === "probe")
-      .map((e) => ({ top: e.top, left: e.left, bottom: e.bottom, right: e.right, mode: e.param, fired: false })),
+      .map((e) => ({
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
+        mode: e.param,
+        fired: false,
+      })),
     // `0x4268c0` — and these stand up on their own clock, not on anything you do
     lights: rooms.map((r) =>
       placed(sbk, r, "initlightfx", LIGHTFX.bolt.cels, (e) => ({
@@ -1679,15 +1843,36 @@ async function loadLevel(index: number): Promise<void> {
     ),
     belts: rooms.map((r) => [
       ...placed(sbk, r, "initbeltleft", BELT.roll.cels, (e) => ({
-        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
-        dir: -1 as const, param: e.param, clock: 0,
+        x: e.pointX,
+        y: e.pointY,
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
+        dir: -1 as const,
+        param: e.param,
+        clock: 0,
       })),
       ...placed(sbk, r, "initbeltright", BELT.roll.cels, (e) => ({
-        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
-        dir: 1 as const, param: e.param, clock: 0,
+        x: e.pointX,
+        y: e.pointY,
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
+        dir: 1 as const,
+        param: e.param,
+        clock: 0,
       })),
     ]),
-    chairs: rooms.map((r) => placed(sbk, r, "initchair", CHAIR.runs[0].cels, (e) => ({ x: e.pointX, y: e.pointY, run: 0, clock: 0 }))),
+    chairs: rooms.map((r) =>
+      placed(sbk, r, "initchair", CHAIR.runs[0].cels, (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        run: 0,
+        clock: 0,
+      })),
+    ),
     claws: rooms.map((r) =>
       /**
        * It hangs at the record's POINT, ten pixels to the left of it.
@@ -1710,13 +1895,33 @@ async function loadLevel(index: number): Promise<void> {
        * reach nobody from either y.
        */
       placed(sbk, r, "initclaw", CLAW.running.cels, (e) => ({
-        x: e.pointX - CLAW.leftBy, y: e.pointY, left: e.left, right: e.right, state: "idle" as const, clock: 0,
+        x: e.pointX - CLAW.leftBy,
+        y: e.pointY,
+        left: e.left,
+        right: e.right,
+        state: "idle" as const,
+        clock: 0,
       })),
     ),
     fittings: rooms.map((r) => [
-      ...placed(sbk, r, "initshower", [FITTING.shower.on], (e) => ({ kind: "shower" as const, x: e.pointX, y: e.pointY + FITTING.shower.below, clock: 0 })),
-      ...placed(sbk, r, "initball", [FITTING.ball.cel], (e) => ({ kind: "ball" as const, x: e.pointX, y: e.pointY, clock: 0 })),
-      ...placed(sbk, r, "initteeth", [FITTING.teeth.cel], (e) => ({ kind: "teeth" as const, x: e.pointX, y: e.pointY, clock: 0 })),
+      ...placed(sbk, r, "initshower", [FITTING.shower.on], (e) => ({
+        kind: "shower" as const,
+        x: e.pointX,
+        y: e.pointY + FITTING.shower.below,
+        clock: 0,
+      })),
+      ...placed(sbk, r, "initball", [FITTING.ball.cel], (e) => ({
+        kind: "ball" as const,
+        x: e.pointX,
+        y: e.pointY,
+        clock: 0,
+      })),
+      ...placed(sbk, r, "initteeth", [FITTING.teeth.cel], (e) => ({
+        kind: "teeth" as const,
+        x: e.pointX,
+        y: e.pointY,
+        clock: 0,
+      })),
     ]),
     boggs: rooms.map((r) =>
       placed(sbk, r, "initboggsbody", BOGGS.idle.cels, (e) => ({
@@ -1749,22 +1954,49 @@ async function loadLevel(index: number): Promise<void> {
     ),
     fans: [
       ...rooms.map((r) => [
-        ...placed(sbk, r, "inithfan", [FAN.h.stopped], (e) => ({ x: e.pointX, y: e.pointY, horizontal: true, state: "off" as const, clock: 0 })),
-        ...placed(sbk, r, "initvfan", [FAN.v.stopped], (e) => ({ x: e.pointX, y: e.pointY, horizontal: false, state: "off" as const, clock: 0 })),
+        ...placed(sbk, r, "inithfan", [FAN.h.stopped], (e) => ({
+          x: e.pointX,
+          y: e.pointY,
+          horizontal: true,
+          state: "off" as const,
+          clock: 0,
+        })),
+        ...placed(sbk, r, "initvfan", [FAN.v.stopped], (e) => ({
+          x: e.pointX,
+          y: e.pointY,
+          horizontal: false,
+          state: "off" as const,
+          clock: 0,
+        })),
       ]),
     ],
     bridges: rooms.map((r) =>
       placed(sbk, r, "initbridge", [BRIDGE.whole], (e) => ({
-        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
-        state: "whole" as const, stood: 0, clock: 0,
+        x: e.pointX,
+        y: e.pointY,
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
+        state: "whole" as const,
+        stood: 0,
+        clock: 0,
       })),
     ),
     hands: rooms.map((r) =>
       placed(sbk, r, "inithand", HAND.underfoot.up.cels, (e) => ({
-        x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
+        x: e.pointX,
+        y: e.pointY,
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
         // `0x420cc4` — the record's own param, not a roll
-        underfoot: e.param === 0, atX: e.pointX, atY: e.pointY,
-        state: "down" as const, clock: 0,
+        underfoot: e.param === 0,
+        atX: e.pointX,
+        atY: e.pointY,
+        state: "down" as const,
+        clock: 0,
       })),
     ),
     crows: rooms.map((r) => crowsIn(sbk, r)),
@@ -1780,7 +2012,9 @@ async function loadLevel(index: number): Promise<void> {
         // the frame cels this placement cycles — [id] for a still one, the glow
         // sequence for the lamp (2360,2361,2362). The frames are the disc's; the
         // rate they cycle at (INVENTED.bgAnimMs) is this port's, untraced.
-        cels: q.frameIds.map((id) => sbk.byId.get(id) ?? -1).filter((l) => l >= 0),
+        cels: q.frameIds
+          .map((id) => sbk.byId.get(id) ?? -1)
+          .filter((l) => l >= 0),
         x: q.x,
         y: q.y,
         rate: placementRate(q),
@@ -1802,7 +2036,10 @@ async function loadLevel(index: number): Promise<void> {
   // the things that can claim the panel's bar, which is the same set the engine
   // counts — furniture never calls `0x40d1c0` and is not part of anyone's quota.
   stats.census =
-    level.spawned.reduce((n, r) => n + r.filter((e) => FOES[e.kind].counts).length, 0) +
+    level.spawned.reduce(
+      (n, r) => n + r.filter((e) => FOES[e.kind].counts).length,
+      0,
+    ) +
     // ...and Boggs, whose HEAD is the census entry: `0x41c591` is
     // `0x42f870(head, 1)` and the body is not registered at all. VAT spawns no
     // creatures, so without this its quota is zero of zero and the level can be
@@ -1901,12 +2138,20 @@ async function died(): Promise<void> {
   advancing = true;
   stats.lives -= 1;
   const gameOver = stats.lives <= 0;
-  if (gameOver) await playFilm(DEATH_FILMS[Math.floor(Math.random() * DEATH_FILMS.length)]);
+  if (gameOver)
+    await playFilm(DEATH_FILMS[Math.floor(Math.random() * DEATH_FILMS.length)]);
   if (gameOver) {
     const boards = loadBoards();
-    const rank = offerScore(boards, DIFFICULTY, stats.score, levelIndex + 1, () => prompt(NAME_PROMPT, ""));
+    const rank = offerScore(
+      boards,
+      DIFFICULTY,
+      stats.score,
+      levelIndex + 1,
+      () => prompt(NAME_PROMPT, ""),
+    );
     saveBoards(boards);
-    hud.textContent = rank < 0 ? "game over" : `game over — row ${rank + 1} of the board`;
+    hud.textContent =
+      rank < 0 ? "game over" : `game over — row ${rank + 1} of the board`;
     location.href = "index.html";
     return;
   }
@@ -1926,7 +2171,8 @@ async function died(): Promise<void> {
 async function ranOut(): Promise<void> {
   if (advancing) return;
   advancing = true;
-  const pick = TIME_OUT_FILMS[Math.floor(Math.random() * TIME_OUT_FILMS.length)];
+  const pick =
+    TIME_OUT_FILMS[Math.floor(Math.random() * TIME_OUT_FILMS.length)];
   stats.ticks = CLOCK_FULL; // so a slow film cannot fire this twice
   await playFilm(pick);
   await loadLevel(levelIndex);
@@ -2014,7 +2260,11 @@ function aliveNow(): number {
   // first frame it is dead, fifty frames before the object itself goes
   if (!level) return 0;
   return (
-    level.spawned.reduce((n, r) => n + r.filter((e) => FOES[e.kind].counts && e.state !== "dead").length, 0) +
+    level.spawned.reduce(
+      (n, r) =>
+        n + r.filter((e) => FOES[e.kind].counts && e.state !== "dead").length,
+      0,
+    ) +
     // and Boggs leaves the census the frame it starts dying, for the same reason
     level.boggs.reduce((n, r) => n + r.filter((b) => !b.dying).length, 0)
   );
@@ -2087,8 +2337,14 @@ function stepCraft(): void {
   craft.bobbed += craft.drift * TICK_SCALE;
   craft.y += craft.drift * TICK_SCALE;
   const box = playerBox();
-  const inRect = box.right > g.left && box.left < g.right && box.bottom > g.top && box.top < g.bottom;
-  const close = Math.abs(p.x - craft.x) <= CRAFT.near.x && Math.abs(p.y - craft.y) <= CRAFT.near.y;
+  const inRect =
+    box.right > g.left &&
+    box.left < g.right &&
+    box.bottom > g.top &&
+    box.top < g.bottom;
+  const close =
+    Math.abs(p.x - craft.x) <= CRAFT.near.x &&
+    Math.abs(p.y - craft.y) <= CRAFT.near.y;
   if (inRect && close && leftGoal) {
     craft.state = "open";
     craft.clock = 0;
@@ -2097,7 +2353,10 @@ function stepCraft(): void {
 
 /** has the screen finished coming down — `[0x46ba10]`, and the stage is over */
 function craftOpened(): boolean {
-  return craft?.state === "open" && craft.clock >= CRAFT.open.cels.length * CRAFT.open.hold;
+  return (
+    craft?.state === "open" &&
+    craft.clock >= CRAFT.open.cels.length * CRAFT.open.hold
+  );
 }
 
 /** the craft, from the shared player book, on the play plane with everything else */
@@ -2120,7 +2379,8 @@ function drawCraft(camX: number, camY: number): void {
   if (!f) return;
   const left = craft.x - camX + W / 2 - f.posXraw;
   const top = craft.y - camY + VIEW.y - f.posYraw;
-  if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) return;
+  if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
+    return;
   if (craft.facing > 0) {
     ctx.save();
     ctx.scale(-1, 1);
@@ -2289,9 +2549,14 @@ async function saveGame(): Promise<void> {
     rounds: inv.rounds[inv.weapon] ?? 0,
   });
   const name = `skullcracker-${LEVEL_ORDER[levelIndex] ?? "save"}.skl`;
-  const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" });
-  const picker = (window as unknown as { showSaveFilePicker?: (o: unknown) => Promise<FileSystemFileHandle> })
-    .showSaveFilePicker;
+  const blob = new Blob([bytes.buffer as ArrayBuffer], {
+    type: "application/octet-stream",
+  });
+  const picker = (
+    window as unknown as {
+      showSaveFilePicker?: (o: unknown) => Promise<FileSystemFileHandle>;
+    }
+  ).showSaveFilePicker;
   /**
    * ...and only while the click that asked for it still counts.
    *
@@ -2302,12 +2567,19 @@ async function saveGame(): Promise<void> {
    * and the download below is the save. With one, an `AbortError` really is a
    * reader saying no, and `0x45e23d` writes nothing.
    */
-  const live = (navigator as unknown as { userActivation?: { isActive: boolean } }).userActivation;
+  const live = (
+    navigator as unknown as { userActivation?: { isActive: boolean } }
+  ).userActivation;
   if (picker && (live?.isActive ?? true)) {
     try {
       const handle = await picker({
         suggestedName: name,
-        types: [{ description: "Saved games (.SKL)", accept: { "application/octet-stream": [".skl"] } }],
+        types: [
+          {
+            description: "Saved games (.SKL)",
+            accept: { "application/octet-stream": [".skl"] },
+          },
+        ],
       });
       const w = await handle.createWritable();
       await w.write(blob);
@@ -2370,9 +2642,20 @@ async function playFilm(
           if (dy < 0 || dy >= H) continue;
           const from = y * width * 4;
           const wide = Math.min(width, W - originX) * 4;
-          screen.data.set(small.subarray(from, from + wide), (dy * W + originX) * 4);
+          screen.data.set(
+            small.subarray(from, from + wide),
+            (dy * W + originX) * 4,
+          );
         }
-        ctx.putImageData(screen, 0, 0, originX, originY, Math.min(width, W - originX), Math.min(height, H - originY));
+        ctx.putImageData(
+          screen,
+          0,
+          0,
+          originX,
+          originY,
+          Math.min(width, W - originX),
+          Math.min(height, H - originY),
+        );
       },
       log: () => {},
       // a film that chains plays the next one in its place, and the promise
@@ -2393,7 +2676,9 @@ function solidsIn(sbk: SbkFile, room: SbkRoom): Solids {
     if (!e.isEntity) return false;
     const y = (e.top + e.bottom) >> 1;
     const x = (e.left + e.right) >> 1;
-    return y >= room.top && y <= room.bottom && x >= room.left && x <= room.right;
+    return (
+      y >= room.top && y <= room.bottom && x >= room.left && x <= room.right
+    );
   });
   return {
     platforms: mine.filter((e) => e.name === "platform").map((e) => ({ ...e })),
@@ -2446,7 +2731,12 @@ function cycleSpawn(): void {
 
 /** every animation a kind can ever show, for the cels-are-present test */
 function everyAnim(foe: Foe): FoeAnim[] {
-  return [foe.gait, ...(foe.flinch ?? []), ...(foe.death ? [foe.death] : []), ...(foe.burst ? [foe.burst.anim] : [])];
+  return [
+    foe.gait,
+    ...(foe.flinch ?? []),
+    ...(foe.death ? [foe.death] : []),
+    ...(foe.burst ? [foe.burst.anim] : []),
+  ];
 }
 
 /**
@@ -2484,13 +2774,20 @@ function spawnIn(sbk: SbkFile, room: SbkRoom, taken?: Set<SbkEntity>): Enemy[] {
     const foe = FOES[e.name];
     if (!e.isEntity || !foe) continue;
     if (taken?.has(e)) continue;
-    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (
+      e.pointY < room.top ||
+      e.pointY > room.bottom ||
+      e.pointX < room.left ||
+      e.pointX > room.right
+    )
+      continue;
     taken?.add(e);
     // every cel it needs has to be in this book, or it is some other level's —
     // and that now includes the flinches and the death, which is the check that
     // would have caught the old cross-chapter mix-up: this chapter's rat has no
     // 3080 to die on and the other chapter's does
-    if (!everyAnim(foe).every((a) => a.cels.every((id) => sbk.byId.has(id)))) continue;
+    if (!everyAnim(foe).every((a) => a.cels.every((id) => sbk.byId.has(id))))
+      continue;
     // this page carries a foe by its FEET and {@link foeAnchor} converts, so the
     // record's anchor is converted the other way here, through the same gait cel
     const g = sbk.cels.find((c) => c.id === foe.gait.cels[0]);
@@ -2512,7 +2809,9 @@ function spawnIn(sbk: SbkFile, room: SbkRoom, taken?: Set<SbkEntity>): Enemy[] {
       state: "gait",
       // a dormant thing holds one cel and goes nowhere — its own, where its class
       // names one (`0x4386f5` installs cel 1801 over the build's 1940)
-      anim: foe.wake ? { ...foe.gait, cels: [foe.wake.cel ?? foe.gait.cels[0]], dx: [0] } : foe.gait,
+      anim: foe.wake
+        ? { ...foe.gait, cels: [foe.wake.cel ?? foe.gait.cels[0]], dx: [0] }
+        : foe.gait,
       linger: 0,
       dents: 0,
       vx: 0,
@@ -2543,7 +2842,12 @@ function spawnIn(sbk: SbkFile, room: SbkRoom, taken?: Set<SbkEntity>): Enemy[] {
  * CITY — all five checked — so the engine is appending one at runtime and so is
  * this. See {@link ELEVATOR} for the state machine and for the one guess in it.
  */
-function elevatorsIn(sbk: SbkFile, room: SbkRoom, solids: Solids, planks: readonly Plank[]): Elevator[] {
+function elevatorsIn(
+  sbk: SbkFile,
+  room: SbkRoom,
+  solids: Solids,
+  planks: readonly Plank[],
+): Elevator[] {
   // a platform has ONE owner: `0x42fb70` refuses a record something already
   // holds, and the planks were claimed first. No CITY landing is also a plank's
   // floor, so this changes nothing today and stops a level that did from handing
@@ -2554,12 +2858,23 @@ function elevatorsIn(sbk: SbkFile, room: SbkRoom, solids: Solids, planks: readon
     if (!e.isEntity || e.name !== "initelevator") continue;
     const cy = (e.top + e.bottom) >> 1;
     const cx = (e.left + e.right) >> 1;
-    if (cy < room.top || cy > room.bottom || cx < room.left || cx > room.right) continue;
+    if (cy < room.top || cy > room.bottom || cx < room.left || cx > room.right)
+      continue;
     // the cels are one book's, exactly as the planks' are: only CITY carries these
-    if (![...ELEVATOR.car.cels, ...ELEVATOR.idle.cels].every((id) => sbk.byId.has(id))) continue;
+    if (
+      ![...ELEVATOR.car.cels, ...ELEVATOR.idle.cels].every((id) =>
+        sbk.byId.has(id),
+      )
+    )
+      continue;
     // `0x42fb70` at the shaft's BOTTOM — the car starts on its landing and owns it
     const floor = solids.platforms.find(
-      (q) => !taken.has(q) && e.pointX >= q.left && e.pointX < q.right && e.bottom >= q.top && e.bottom < q.bottom,
+      (q) =>
+        !taken.has(q) &&
+        e.pointX >= q.left &&
+        e.pointX < q.right &&
+        e.bottom >= q.top &&
+        e.bottom < q.bottom,
     );
     if (!floor) continue;
     taken.add(floor);
@@ -2595,12 +2910,18 @@ function planksIn(sbk: SbkFile, room: SbkRoom, solids: Solids): Plank[] {
     if (!e.isEntity || e.name !== "initplank") continue;
     const cy = (e.top + e.bottom) >> 1;
     const cx = (e.left + e.right) >> 1;
-    if (cy < room.top || cy > room.bottom || cx < room.left || cx > room.right) continue;
+    if (cy < room.top || cy > room.bottom || cx < room.left || cx > room.right)
+      continue;
     // the cels are one book's: only CITY carries 1050..1061
     if (!PLANK.intact.cels.every((id) => sbk.byId.has(id))) continue;
     const floor =
       solids.platforms.find(
-        (q) => !taken.has(q) && e.pointX >= q.left && e.pointX < q.right && e.pointY >= q.top && e.pointY < q.bottom,
+        (q) =>
+          !taken.has(q) &&
+          e.pointX >= q.left &&
+          e.pointX < q.right &&
+          e.pointY >= q.top &&
+          e.pointY < q.bottom,
       ) ?? null;
     if (floor) taken.add(floor);
     out.push({
@@ -2631,7 +2952,8 @@ function crowsIn(sbk: SbkFile, room: SbkRoom): Crow[] {
     if (!e.isEntity || e.name !== "initcrow") continue;
     const cy = (e.top + e.bottom) >> 1;
     const cx = (e.left + e.right) >> 1;
-    if (cy < room.top || cy > room.bottom || cx < room.left || cx > room.right) continue;
+    if (cy < room.top || cy > room.bottom || cx < room.left || cx > room.right)
+      continue;
     if (!CROW.sleep.cels.every((id) => sbk.byId.has(id))) continue;
     out.push({
       x: e.pointX,
@@ -2670,7 +2992,9 @@ function pickStart(sbk: SbkFile, rooms: SbkRoom[]): SbkEntity | undefined {
   const onAFloor = starts.find((e) => {
     const y = e.pointY;
     const x = e.pointX;
-    const host = rooms.find((r) => y >= r.top && y <= r.bottom && x >= r.left && x <= r.right);
+    const host = rooms.find(
+      (r) => y >= r.top && y <= r.bottom && x >= r.left && x <= r.right,
+    );
     return host?.ground != null;
   });
   return onAFloor ?? starts[0];
@@ -2684,10 +3008,17 @@ function pickStart(sbk: SbkFile, rooms: SbkRoom[]): SbkEntity | undefined {
 function roomAt(x: number, y: number): SbkRoom {
   const rooms = level!.rooms;
   const covers = (r: SbkRoom): boolean =>
-    r.ground !== null && x >= r.ground.x0 && x < r.ground.x0 + r.ground.ys.length;
+    r.ground !== null &&
+    x >= r.ground.x0 &&
+    x < r.ground.x0 + r.ground.ys.length;
   return (
-    rooms.find((r) => y >= r.top && y <= r.bottom && x >= r.left && x <= r.right && covers(r)) ??
-    rooms.find((r) => y >= r.top && y <= r.bottom && x >= r.left && x <= r.right) ??
+    rooms.find(
+      (r) =>
+        y >= r.top && y <= r.bottom && x >= r.left && x <= r.right && covers(r),
+    ) ??
+    rooms.find(
+      (r) => y >= r.top && y <= r.bottom && x >= r.left && x <= r.right,
+    ) ??
     rooms.find(covers) ??
     rooms[0]
   );
@@ -2724,7 +3055,9 @@ function roomSpan(room: SbkRoom): { lo: number; hi: number } | null {
   if (!room.ground) return null;
   const lo = Math.max(room.left, room.ground.x0);
   const hi = Math.min(room.right, room.ground.x0 + room.ground.ys.length - 1);
-  return hi > lo ? { lo, hi } : { lo: room.ground.x0, hi: room.ground.x0 + room.ground.ys.length - 1 };
+  return hi > lo
+    ? { lo, hi }
+    : { lo: room.ground.x0, hi: room.ground.x0 + room.ground.ys.length - 1 };
 }
 
 /** the floor under x in the room the player is in, or null past its ends */
@@ -2738,7 +3071,9 @@ function groundAt(x: number): number | null {
 /** what the player is standing in front of right now */
 function solids(): Solids {
   const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
-  return level && i >= 0 ? level.solids[i] : { platforms: [], obstacles: [], goal: undefined };
+  return level && i >= 0
+    ? level.solids[i]
+    : { platforms: [], obstacles: [], goal: undefined };
 }
 
 /**
@@ -2764,12 +3099,24 @@ function solids(): Solids {
  * missed by one tick of tunnelling — so the path is sampled at 2px of travel
  * rather than tested once at the end.
  */
-function surfaceCrossed(x0: number, y0: number, x1: number, y1: number): number | null {
-  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / 2));
+function surfaceCrossed(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): number | null {
+  const steps = Math.max(
+    1,
+    Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / 2),
+  );
   for (let i = 1; i <= steps; i++) {
     const a = (i - 1) / steps;
     const b = i / steps;
-    const hit = surfaceUnder(x0 + (x1 - x0) * b, y0 + (y1 - y0) * a, y0 + (y1 - y0) * b);
+    const hit = surfaceUnder(
+      x0 + (x1 - x0) * b,
+      y0 + (y1 - y0) * a,
+      y0 + (y1 - y0) * b,
+    );
     if (hit !== null) return hit;
   }
   return null;
@@ -2891,7 +3238,8 @@ function ejectFromObstacles(): void {
   const ay = p.y - p.feet;
   for (const e of blockers()) {
     // `0x434200`: x0 <= x < x1 and y0 <= y < y1, and nothing else
-    if (!(p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom)) continue;
+    if (!(p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom))
+      continue;
     const up = ay - e.top;
     const west = p.x - e.left;
     const down = e.bottom - ay;
@@ -2909,30 +3257,80 @@ function ejectFromObstacles(): void {
 }
 
 /**
- * The ladder the player is AT, and it is a point test — which is a hundred
- * pixels narrower than what this page had.
+ * The ladder the player can GRAB, and it is the current cel's bitmap against
+ * the record's rect — not a point, which is what this had.
  *
- * `0x40b940` is the engine's record finder and its kind 2 is "the record whose
- * rect contains this point": it walks the entity table and calls
- * `0x434200(point, rect + 2)`, and `0x434200` is four comparisons against one
- * `(y, x)` — the player's own position — with no box and no sprite in it.
+ * The idle state grabs with `0x42edd0(0, 1)`, which asks the chapter's
+ * classifier `[0x4abe00]`, and every chapter's (`0x4123b0`, kind 0) begins
  *
- * So the trigger is the rect and nothing more. STREETS' is `x9632..9779`, 147px
- * against a painted ladder (cel 1100, placed three times) of 48 at x9673..9721:
- * generous, 41px of slack west and 58 east, and the file's own. Testing the
- * player's whole 98px-wide sprite box against it instead — which is what this did
- * — spread that to x9583..9828 and 245px, and it read as grabbing at nothing.
+ * ```
+ *   0x40b660("ladder", player, 0, 1, 0x4ac3a0)  ->  4
+ * ```
  *
- * The y stays a body overlap, and that part is not settled: the engine's own mount
- * arithmetic (`0x42b307`) explicitly handles a player BELOW the rect, so whatever
- * test admits them there is not this rect either. STREETS' ladder stops 123px
- * above the pavement at its foot, so a point test on y would put it out of reach.
+ * `0x40b660` is the query by NAME; its third argument is the region and it is
+ * 0, so no room is consulted; its fourth is the geometry, and 1 is
+ * `0x434140(box, rect)` — a rectangle INTERSECTION with positive area. The box
+ * is `0x42f9f0`'s: the current cel's whole bitmap about its anchor, `(-posY,
+ * -posX, height - posY, width - posX)`, mirrored with the facing, and set down
+ * at the player's anchor. The standing cel is 98 wide with its anchor 41 in,
+ * so STREETS' rect of x9632..9779 is grabbed from 9575 to 9820, and the file's
+ * pointX then puts you on the rail.
+ *
+ * Whom it answers is the other half, and it is why the port grabbed from too
+ * far away: `0x429872` runs only in the IDLE state (kind 0, `0x429690`), only
+ * with forward NOT held, and only with {@link ladderLatch} clear — W is the run
+ * key, and a runner going past a ladder is in the run state, which never asks.
+ * The jump state asks the same way (`0x429f5d`), so W in the air grabs. S is
+ * `0x42edd0(1, 1)` from the idle, walk, run and jump states alike (`0x4298af`,
+ * `0x429aaa`, `0x429caf`, `0x429e3b`), so a walker can take a ladder DOWN.
+ *
+ * The ladder state itself never re-asks: the record is copied into `0x4ac3a0`
+ * by the grab and read from there until the leave, which is {@link canLetGo}.
  */
-function onLadder(): SbkEntity | undefined {
-  const b = playerBox();
-  // the whole level's, because `0x40b940` scans the whole entity table and a
+function ladderAt(): SbkEntity | undefined {
+  const rec = player?.cels.find((c) => c.id === lastCel);
+  if (!rec || !level) return undefined;
+  // `p.y` is the feet and the bitmap's bottom edge; `p.x` is the anchor's x
+  const [x0, x1] =
+    p.facing < 0
+      ? [rec.posX - rec.width, rec.posX]
+      : [-rec.posX, rec.width - rec.posX];
+  const top = p.y - rec.height;
+  const left = p.x + x0;
+  const right = p.x + x1;
+  // the whole level's, because `0x40b660` scans the whole entity table and a
   // ladder is the one record that exists to carry you OUT of a region
-  return level?.ladders.find((e) => p.x >= e.left && p.x < e.right && b.bottom > e.top && b.top < e.bottom);
+  return level.ladders.find(
+    (e) =>
+      Math.max(top, e.top) < Math.min(p.y, e.bottom) &&
+      Math.max(left, e.left) < Math.min(right, e.right),
+  );
+}
+
+/**
+ * Whether forward, backward or J may take you OFF the ladder this tick.
+ *
+ * `0x42ae50` leaves only when three things hold at once: the rung tag playing
+ * has ENDED (`obj+0x46`), the tag is one of the four rungs (not the mount), and
+ * the chapter's classifier asked with kind 2 (`0x412517`) does NOT answer 4 —
+ * which it does when `0x40b940(2, point)` finds no record holding the player's
+ * anchor. So you let go where a room is, and nowhere else: the mount put
+ * `obj+0x16` to -1, and the leave writes the room back from that same query.
+ *
+ * The first of the three is what made this page's climb fast: a direction held
+ * with W left the ladder the tick it was pressed and W grabbed it again the
+ * next, one rung higher each time. Now the rung finishes, the hop is taken, and
+ * {@link ladderLatch} keeps the ladder out of reach until the ground.
+ */
+function canLetGo(): boolean {
+  if (p.climbClock < LADDER.rungFrames) return false;
+  return !!level?.rooms.some(
+    (r) =>
+      p.x >= r.left &&
+      p.x <= r.right &&
+      p.climbY >= r.top &&
+      p.climbY <= r.bottom,
+  );
 }
 
 // ---- input ---------------------------------------------------------------
@@ -3046,7 +3444,8 @@ function runCheat(cheat: Cheat): void {
     case "cthia": {
       const said = prompt("Enter level (1-16):", String(levelIndex + 1));
       const n = Number(said);
-      if (Number.isInteger(n) && n >= 1 && n <= MISSIONS.length) void loadLevel(n - 1);
+      if (Number.isInteger(n) && n >= 1 && n <= MISSIONS.length)
+        void loadLevel(n - 1);
       break;
     }
     case "jetson":
@@ -3095,7 +3494,10 @@ addEventListener("keydown", (e) => {
   }
   // Ctrl+Q and Ctrl+. are the disc's own (`0x403ea4`, and `0x4057a5` is why
   // they want Ctrl); ESC is this page's, because it is what a reader presses
-  if (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && PAUSE.keys.includes(e.key.toLowerCase()))) {
+  if (
+    e.key === "Escape" ||
+    ((e.ctrlKey || e.metaKey) && PAUSE.keys.includes(e.key.toLowerCase()))
+  ) {
     e.preventDefault();
     void openPause();
     return;
@@ -3214,7 +3616,12 @@ canvas.addEventListener("pointercancel", lift);
  * at y1348 and the pavement under it is at y1362 — so the test has to be an
  * overlap of boxes and not "is the point in the rect".
  */
-function playerBox(): { top: number; left: number; bottom: number; right: number } {
+function playerBox(): {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+} {
   const art = player && playerCel(player.byId.get(ANIM.idle[0]) ?? -1);
   const w = art?.width ?? 100;
   const h = art?.height ?? 148;
@@ -3238,7 +3645,11 @@ function takeDoor(): boolean {
   if (!room || !level) return false;
   const b = playerBox();
   const hit = room.exits.find(
-    (e) => b.right >= e.left && b.left <= e.right && b.bottom >= e.top && b.top <= e.bottom,
+    (e) =>
+      b.right >= e.left &&
+      b.left <= e.right &&
+      b.bottom >= e.top &&
+      b.top <= e.bottom,
   );
   if (!hit) return false;
   const dest = level.rooms.find((r) => r.param === hit.to);
@@ -3288,9 +3699,14 @@ const BLOW_PERCENT = 100;
  * into that. Facing left reflects it about the anchor, which is what the engine's
  * own rect builder does on mirror (`0x4026d0`) — not about the cel's centre.
  */
-function strikeBox():
-  | { top: number; left: number; bottom: number; right: number; damage: number; blow: { dx: number; dy: number } }
-  | null {
+function strikeBox(): {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  damage: number;
+  blow: { dx: number; dy: number };
+} | null {
   if (!player) return null;
   const rec = player.cels.find((c) => c.id === lastCel);
   if (!rec?.strike || !rec.blow) return null;
@@ -3311,7 +3727,9 @@ function strikeBox():
   // damage IS speed: the cel's own pair, scaled by the striker's percentage, plus
   // whatever the striker was already doing — so a running kick hits harder than a
   // standing one, which is `0x42f910` adding `obj+0xa`/`obj+0xc` before the root
-  const dx = (rec.blow.dx * BLOW_PERCENT) / 100 + (p.running ? MEASURED.run : p.moving ? MEASURED.walk : 0) / DIVISOR;
+  const dx =
+    (rec.blow.dx * BLOW_PERCENT) / 100 +
+    (p.running ? MEASURED.run : p.moving ? MEASURED.walk : 0) / DIVISOR;
   const dy = (rec.blow.dy * BLOW_PERCENT) / 100 + p.vy;
   return {
     left: band + cx0,
@@ -3335,10 +3753,15 @@ function strikeBox():
  * a kick's 55 comes out as 55 × 24/19 = 69 pixels a frame — a thousand a second,
  * which is why the original throws a mailbox most of a screen.
  */
-function knockback(foe: Foe, blow: { dx: number; dy: number }, was: { vx: number; vy: number }): { vx: number; vy: number } {
+function knockback(
+  foe: Foe,
+  blow: { dx: number; dy: number },
+  was: { vx: number; vy: number },
+): { vx: number; vy: number } {
   const m1 = DIVISOR;
   const m2 = foe.divisor;
-  const solve = (v1: number, v2: number): number => (v1 * 2 * m1 + v2 * (m2 - m1)) / (m1 + m2);
+  const solve = (v1: number, v2: number): number =>
+    (v1 * 2 * m1 + v2 * (m2 - m1)) / (m1 + m2);
   return {
     vx: solve(blow.dx, was.vx / TICK_SCALE) * TICK_SCALE,
     vy: solve(blow.dy, was.vy / TICK_SCALE) * TICK_SCALE,
@@ -3400,12 +3823,29 @@ function baseOf(e: Enemy, lvl: Level): number {
  * the rat's is why nothing standing can hit one: it tops out at `y -14` where the
  * punch's fist box bottoms out at `y -16`.
  */
-function hurtBox(e: Enemy, c: SbkCel, lvl: Level): { top: number; left: number; bottom: number; right: number } {
+function hurtBox(
+  e: Enemy,
+  c: SbkCel,
+  lvl: Level,
+): { top: number; left: number; bottom: number; right: number } {
   const a = foeAnchor(e, lvl);
-  const b = e.facing > 0 && c.body ? { ...c.body, x0: -c.body.x1, x1: -c.body.x0 } : c.body;
+  const b =
+    e.facing > 0 && c.body
+      ? { ...c.body, x0: -c.body.x1, x1: -c.body.x0 }
+      : c.body;
   return a && b
-    ? { left: a.x + b.x0, right: a.x + b.x1, top: a.y + b.y0, bottom: a.y + b.y1 }
-    : { left: e.x - c.width / 2, right: e.x + c.width / 2, top: e.y - c.height, bottom: e.y };
+    ? {
+        left: a.x + b.x0,
+        right: a.x + b.x1,
+        top: a.y + b.y0,
+        bottom: a.y + b.y1,
+      }
+    : {
+        left: e.x - c.width / 2,
+        right: e.x + c.width / 2,
+        top: e.y - c.height,
+        bottom: e.y,
+      };
 }
 
 /**
@@ -3473,13 +3913,22 @@ const stats = {
  * weapon is in your hands — its own script's wind-up tag followed by whatever
  * it holds afterwards, which for the flare gun is `2720 2721 2722` then `2723`.
  */
-function actOf(name: string): { cels: readonly number[]; dx: readonly number[]; hold?: number; from: string } | null {
-  if (name === "reach") return { cels: GRAB.cels, dx: GRAB.cels.map(() => 0), from: GRAB.from };
+function actOf(
+  name: string,
+): {
+  cels: readonly number[];
+  dx: readonly number[];
+  hold?: number;
+  from: string;
+} | null {
+  if (name === "reach")
+    return { cels: GRAB.cels, dx: GRAB.cels.map(() => 0), from: GRAB.from };
   // the reaction to a blow CODE, straight off the table at `0x4492b8`
   const code = Object.values(BLOW_CODES).find((r) => r.act === name);
   if (code) return { ...code.anim, dx: code.anim.cels.map(() => 0) };
   if (name === "held") return { ...HELD.loop, dx: HELD.loop.cels.map(() => 0) };
-  if (name === "struggle") return { ...HELD.struggle, dx: HELD.struggle.cels.map(() => 0) };
+  if (name === "struggle")
+    return { ...HELD.struggle, dx: HELD.struggle.cels.map(() => 0) };
   if (name === "fire") {
     const w = WEAPONS[inv.weapon];
     if (!w) return null;
@@ -3507,7 +3956,13 @@ function landHits(): void {
       top: c.y - art.posY,
       bottom: c.y - art.posY + art.height,
     };
-    if (!(mine.right > box.left && mine.left < box.right && mine.bottom > box.top && mine.top < box.bottom)) continue;
+    if (!(
+      mine.right > box.left &&
+      mine.left < box.right &&
+      mine.bottom > box.top &&
+      mine.top < box.bottom
+    ))
+      continue;
     struckCrows.add(c);
     strikeCrow(c, mine.damage);
   }
@@ -3522,9 +3977,22 @@ function landHits(): void {
     const c = level.sbk.cels.find((c) => c.id === celOf(e));
     if (!c) continue;
     const box = hurtBox(e, c, level);
-    if (!(mine.right > box.left && mine.left < box.right && mine.bottom > box.top && mine.top < box.bottom)) continue;
+    if (!(
+      mine.right > box.left &&
+      mine.left < box.right &&
+      mine.bottom > box.top &&
+      mine.top < box.bottom
+    ))
+      continue;
     struck.add(e);
-    strikeFoe(e, mine.damage, mine.blow, p.facing, (mine.top + mine.bottom) / 2, box);
+    strikeFoe(
+      e,
+      mine.damage,
+      mine.blow,
+      p.facing,
+      (mine.top + mine.bottom) / 2,
+      box,
+    );
   }
   // and BOGGS, which is four objects: `0x41aad0` turns a blow away only when the
   // striker is one of Boggs' own parts, so a fist is none of those and lands on
@@ -3535,7 +4003,13 @@ function landHits(): void {
     for (let k = 0; k < b.machines.length; k++) {
       const mb = machineBox(b, k);
       if (!mb) continue;
-      if (!(mine.right > mb.left && mine.left < mb.right && mine.bottom > mb.top && mine.top < mb.bottom)) continue;
+      if (!(
+        mine.right > mb.left &&
+        mine.left < mb.right &&
+        mine.bottom > mb.top &&
+        mine.top < mb.bottom
+      ))
+        continue;
       if (struckBoggs.has(String(k))) continue;
       struckBoggs.add(String(k));
       strikeMachine(b, k, mine.damage);
@@ -3548,7 +4022,13 @@ function landHits(): void {
       top: b.y - art.posY,
       bottom: b.y - art.posY + art.height,
     };
-    if (!(mine.right > bb.left && mine.left < bb.right && mine.bottom > bb.top && mine.top < bb.bottom)) continue;
+    if (!(
+      mine.right > bb.left &&
+      mine.left < bb.right &&
+      mine.bottom > bb.top &&
+      mine.top < bb.bottom
+    ))
+      continue;
     if (struckBoggs.has("body")) continue;
     struckBoggs.add("body");
     b.hp = Math.max(0, b.hp - mine.damage);
@@ -3581,7 +4061,13 @@ function strikeFoe(
   // handler plays which index
   if (foe.hitSound !== undefined) {
     const set = foe.hitSound;
-    sound?.effect(typeof set === "number" ? set : set[Math.floor(Math.random() * set.length)], e.x, e.y);
+    sound?.effect(
+      typeof set === "number"
+        ? set
+        : set[Math.floor(Math.random() * set.length)],
+      e.x,
+      e.y,
+    );
   }
   // the fourth kind's handler keeps the damage only for the blood and takes a
   // single point off the health — `0x454821`, and see {@link Foe.oneHitEach}
@@ -3605,7 +4091,7 @@ function strikeFoe(
     e.state = "dead";
     e.anim = foe.death;
     e.clock = 0;
-    e.linger = foe.frail ? 0 : foe.linger ?? CORPSE_LINGER;
+    e.linger = foe.frail ? 0 : (foe.linger ?? CORPSE_LINGER);
     stats.score += foe.award ?? foe.panel?.award ?? 0;
     return;
   }
@@ -3653,7 +4139,11 @@ function strikeFoe(
  * the engine takes it from the hitting object's type record and the punch and
  * the kick are two different objects there.
  */
-function spray(e: Enemy, damage: number, blow: { dx: number; dy: number }): void {
+function spray(
+  e: Enemy,
+  damage: number,
+  blow: { dx: number; dy: number },
+): void {
   const from = { x: e.x, y: e.y - 70 };
   for (let n = 0; n < gobCount(damage); n++) {
     gobs.push({
@@ -3712,7 +4202,9 @@ function stepGobs(): void {
     if (floor === null || g.y < floor) continue;
     // landed. `0x40c810` looks for a puddle already here; if there is one it
     // grows and this gob is spent, which is how twenty gobs make one mess
-    const pool = gobs.find((q) => q !== g && q.stage >= 0 && Math.abs(q.x - g.x) < 40);
+    const pool = gobs.find(
+      (q) => q !== g && q.stage >= 0 && Math.abs(q.x - g.x) < 40,
+    );
     if (pool) {
       pool.stage = Math.min(SPRAY.pool.length - 1, pool.stage + 1);
       pool.holds = dryTime();
@@ -3772,11 +4264,19 @@ function claimBar(): void {
     boggs = g;
   }
   if (boggs) {
-    stats.shown = { health: Math.max(0, boggs.hp), max: scaled(BOGGS.health), nameCel: BOGGS.plate };
+    stats.shown = {
+      health: Math.max(0, boggs.hp),
+      max: scaled(BOGGS.health),
+      nameCel: BOGGS.plate,
+    };
     return;
   }
   if (!won) return;
-  stats.shown = { health: Math.max(0, won.hp), max: won.max, nameCel: FOES[won.kind].panel!.plate };
+  stats.shown = {
+    health: Math.max(0, won.hp),
+    max: won.max,
+    nameCel: FOES[won.kind].panel!.plate,
+  };
 }
 
 /**
@@ -3813,8 +4313,16 @@ function strikeOf(
   if (!cel.strike) return null;
   // `0x40e6a2` — a mirrored rect is negated about the anchor, not flipped in a
   // box: `x0' = -x1` and `x1' = -x0`
-  const [cx0, cx1] = facing < 0 ? [-cel.strike.x1, -cel.strike.x0] : [cel.strike.x0, cel.strike.x1];
-  return { left: x + cx0, right: x + cx1, top: y + cel.strike.y0, bottom: y + cel.strike.y1 };
+  const [cx0, cx1] =
+    facing < 0
+      ? [-cel.strike.x1, -cel.strike.x0]
+      : [cel.strike.x0, cel.strike.x1];
+  return {
+    left: x + cx0,
+    right: x + cx1,
+    top: y + cel.strike.y0,
+    bottom: y + cel.strike.y1,
+  };
 }
 
 /**
@@ -3831,7 +4339,12 @@ function strikeOf(
  * struggle 4575..4579 and the jolt 460..462. So a grab does NOT make you
  * untouchable here; a knockdown does.
  */
-function playerBody(): { top: number; left: number; bottom: number; right: number } | null {
+function playerBody(): {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+} | null {
   const rec = player?.cels.find((c) => c.id === lastCel);
   if (!rec?.body) return null;
   // ...and the same translation `0x40e680` does, about the anchor — see
@@ -3839,9 +4352,15 @@ function playerBody(): { top: number; left: number; bottom: number; right: numbe
   // so only the y needs converting: `p.y` is the ground the player stands on and
   // the anchor sits `height - posY` above it, which is where the art's bottom
   // edge falls.
-  const [cx0, cx1] = p.facing < 0 ? [-rec.body.x1, -rec.body.x0] : [rec.body.x0, rec.body.x1];
+  const [cx0, cx1] =
+    p.facing < 0 ? [-rec.body.x1, -rec.body.x0] : [rec.body.x0, rec.body.x1];
   const ay = p.y - rec.height + rec.posY;
-  return { left: p.x + cx0, right: p.x + cx1, top: ay + rec.body.y0, bottom: ay + rec.body.y1 };
+  return {
+    left: p.x + cx0,
+    right: p.x + cx1,
+    top: ay + rec.body.y0,
+    bottom: ay + rec.body.y1,
+  };
 }
 
 /**
@@ -3882,7 +4401,11 @@ function takeHealth(n: number): void {
  * once, at the moment of the grab, gives a grip that never goes away — the hand
  * sinks back into the ground with the player still pinned to where it was.
  */
-function gripAt(id: number, x: number, y: number): { x: number; y: number } | null {
+function gripAt(
+  id: number,
+  x: number,
+  y: number,
+): { x: number; y: number } | null {
   const cel = level?.sbk.cels.find((c) => c.id === id);
   return gripOf(cel, cel ? strikeOf(cel, x, y, 1) : null);
 }
@@ -3898,7 +4421,11 @@ function gripAt(id: number, x: number, y: number): { x: number; y: number } | nu
  * it to the damage path), so this returns false for them and the caller falls
  * through to the arithmetic exactly as the original does.
  */
-function takeCode(code: number, grip?: () => { x: number; y: number } | null, what?: object): boolean {
+function takeCode(
+  code: number,
+  grip?: () => { x: number; y: number } | null,
+  what?: object,
+): boolean {
   const r = BLOW_CODES[code];
   if (!r) return false;
   // `0x448c19` and `0x448c40`: the FIRST thing the player's handler does, before
@@ -3988,7 +4515,13 @@ function takeHits(): void {
   ): boolean => {
     const box = strikeOf(cel, x, y, facing);
     if (!box) return false;
-    if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom)) return false;
+    if (!(
+      box.right > mine.left &&
+      box.left < mine.right &&
+      box.bottom > mine.top &&
+      box.top < mine.bottom
+    ))
+      return false;
     // `0x448c72` reads the SIGN first: a code is dispatched and the arithmetic
     // below never runs. A grab cel proves the order matters — 1556 and 2456
     // carry a strike box and no blow pair at all, so a damage-first reading
@@ -4004,9 +4537,15 @@ function takeHits(): void {
     const by = cel.blow.dy + vy;
     const damage = Math.sqrt(bx * bx + by * by);
     // `0x44915c` / `0x44919e`: which side it came from decides the take
-    const front = (x > p.x) === (p.facing > 0);
+    const front = x > p.x === p.facing > 0;
     const knocked = damage > HURT.knockdown;
-    p.act = knocked ? (front ? "downFront" : "downBack") : front ? "hurtFront" : "hurtBack";
+    p.act = knocked
+      ? front
+        ? "downFront"
+        : "downBack"
+      : front
+        ? "hurtFront"
+        : "hurtBack";
     p.actClock = 0;
     sound?.own(OWN.hurt[Math.floor(Math.random() * OWN.hurt.length)], p.x, p.y);
     // ...and a knockdown takes the gun out of your hands. The same `cmp di, 0x3c`
@@ -4047,13 +4586,23 @@ function takeHits(): void {
      * contact would never mark one: the dive would touch you and go back up.
      */
     const reach = strikeOf(cel, c.x, c.y, 1);
-    if (c.state === "dive" && reach && reach.right > mine.left && reach.left < mine.right &&
-        reach.bottom > mine.top && reach.top < mine.bottom) c.caught = true;
+    if (
+      c.state === "dive" &&
+      reach &&
+      reach.right > mine.left &&
+      reach.left < mine.right &&
+      reach.bottom > mine.top &&
+      reach.top < mine.bottom
+    )
+      c.caught = true;
     // `0x417208` gives it a hundred at the top of every think and only the
     // CLAMP (`0x417485`) writes the code, so a dive is a real blow and the grab
     // is what the blow leads to — see {@link Claw.caught}
     const code = c.state === "clamp" ? CLAW.grab : CLAW.blow;
-    if (hit(cel, c.x, c.y, 1, 0, 0, code, () => gripAt(clawCel(c), c.x, c.y), c)) return;
+    if (
+      hit(cel, c.x, c.y, 1, 0, 0, code, () => gripAt(clawCel(c), c.x, c.y), c)
+    )
+      return;
   }
   /**
    * ...and the HANDS, whose whole point is the code.
@@ -4068,7 +4617,20 @@ function takeHits(): void {
     const cel = lvl.sbk.cels.find((c) => c.id === handCel(q));
     if (!cel?.strike) continue;
     const kind = q.underfoot ? HAND.underfoot : HAND.anywhere;
-    if (hit(cel, q.atX, q.atY, 1, 0, 0, kind.blow, () => gripAt(handCel(q), q.atX, q.atY), q)) return;
+    if (
+      hit(
+        cel,
+        q.atX,
+        q.atY,
+        1,
+        0,
+        0,
+        kind.blow,
+        () => gripAt(handCel(q), q.atX, q.atY),
+        q,
+      )
+    )
+      return;
   }
   // ...and SEWER's bush, whose last seven cels are a grip and whose blow is -3
   for (const q of hereOf((l) => l.bushes)) {
@@ -4077,7 +4639,10 @@ function takeHits(): void {
     // `0x43ee9d` against `0x43eedb`: the grab while it is still reaching, and the
     // half-gravity slump from the frame it has you — see {@link BUSH.grab}
     const code = q.phase === 0 ? BUSH.grab : BUSH.slump;
-    if (hit(cel, q.x, q.y, 1, 0, 0, code, () => gripAt(bushCel(q), q.x, q.y), q)) return;
+    if (
+      hit(cel, q.x, q.y, 1, 0, 0, code, () => gripAt(bushCel(q), q.x, q.y), q)
+    )
+      return;
   }
   // ...and TOWER's current, which carries -4 on every cel of its arc
   for (const g of hereOf((l) => l.surges)) {
@@ -4090,7 +4655,8 @@ function takeHits(): void {
     if (e.state === "dead" || e.state === "burst") continue;
     const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
     if (!c?.strike) continue;
-    if (hit(c, e.x, e.y, e.facing, e.vx / TICK_SCALE, e.vy / TICK_SCALE)) return;
+    if (hit(c, e.x, e.y, e.facing, e.vx / TICK_SCALE, e.vy / TICK_SCALE))
+      return;
   }
   // `0x454a38` arms a press only while its stroke runs, and only two of its cels
   // carry a box; `0x4537d0` arms a girder on every frame it has
@@ -4172,7 +4738,10 @@ function stepPlanks(): void {
     k.clock += TICK_SCALE;
     if (k.state === "fall") {
       // its own gravity, in its own units: raw 300 over the class's divisor of 10
-      k.vy = Math.min(k.vy + (PLANK.gravity / PLANK.divisor) * TICK_SCALE * TICK_SCALE, INVENTED.maxFallPx);
+      k.vy = Math.min(
+        k.vy + (PLANK.gravity / PLANK.divisor) * TICK_SCALE * TICK_SCALE,
+        INVENTED.maxFallPx,
+      );
       k.y += k.vy;
       if (k.floor) {
         k.floor.top += k.vy;
@@ -4194,7 +4763,12 @@ function stepPlanks(): void {
     // other test in the engine is — their feet are level with the plank when they
     // stand on it, and a feet test never fires
     const ay = p.y - p.feet;
-    const on = p.x > k.left && p.x < k.right && p.onGround && ay < k.y && k.y - ay < PLANK.reach;
+    const on =
+      p.x > k.left &&
+      p.x < k.right &&
+      p.onGround &&
+      ay < k.y &&
+      k.y - ay < PLANK.reach;
     if (!on) continue;
     if (k.crossings <= PLANK.crossings && p.fallPx <= PLANK.hardFallPx) {
       k.state = "wobble";
@@ -4230,7 +4804,12 @@ function elevatorsHere(): Elevator[] {
 
 /** is the player standing on this car right now — their feet on its deck */
 function ridingElevator(e: Elevator): boolean {
-  return p.onGround && p.x >= e.floor.left && p.x < e.floor.right && Math.abs(p.y - e.floor.top) <= 4;
+  return (
+    p.onGround &&
+    p.x >= e.floor.left &&
+    p.x < e.floor.right &&
+    Math.abs(p.y - e.floor.top) <= 4
+  );
 }
 
 /**
@@ -4299,7 +4878,8 @@ function ibeamsIn(sbk: SbkFile, room: SbkRoom): Ibeam[] {
     if (!e.isEntity || e.name !== "initibeam") continue;
     const cy = (e.top + e.bottom) >> 1;
     const cx = (e.left + e.right) >> 1;
-    if (cy < room.top || cy > room.bottom || cx < room.left || cx > room.right) continue;
+    if (cy < room.top || cy > room.bottom || cx < room.left || cx > room.right)
+      continue;
     // the cels are one book's, as the planks' and the lifts' are
     if (!IBEAM.across.cels.every((id) => sbk.byId.has(id))) continue;
     out.push({
@@ -4329,9 +4909,24 @@ function crushesIn(sbk: SbkFile, room: SbkRoom): Crush[] {
   const out: Crush[] = [];
   for (const e of sbk.entities) {
     if (!e.isEntity || e.name !== "initcrush") continue;
-    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (
+      e.pointY < room.top ||
+      e.pointY > room.bottom ||
+      e.pointX < room.left ||
+      e.pointX > room.right
+    )
+      continue;
     if (!CRUSH.slam.cels.every((id) => sbk.byId.has(id))) continue;
-    out.push({ x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, state: "idle", clock: 0 });
+    out.push({
+      x: e.pointX,
+      y: e.pointY,
+      top: e.top,
+      left: e.left,
+      bottom: e.bottom,
+      right: e.right,
+      state: "idle",
+      clock: 0,
+    });
   }
   return out;
 }
@@ -4356,7 +4951,8 @@ function stepCrushes(): void {
       // the anchor is the point the cel hangs from, which is the player's y less
       // the feet — the same conversion {@link poseFeet} keeps
       const ay = p.y - p.feet;
-      const inside = p.x >= c.left && p.x < c.right && ay >= c.top && ay < c.bottom;
+      const inside =
+        p.x >= c.left && p.x < c.right && ay >= c.top && ay < c.bottom;
       if (!inside) continue;
       sound?.effect(CRUSH.sound, c.x, c.y);
       c.state = "slam";
@@ -4384,8 +4980,15 @@ function switchesIn(sbk: SbkFile, room: SbkRoom): Switch[] {
     // SERVICE calls them `switch` and MAZE calls them `initswitch`, and they
     // are the same class: `0x473548` and `0x46c050` have the same four tags on
     // the same four cel runs, one per chapter's book
-    if (!e.isEntity || (e.name !== "switch" && e.name !== "initswitch")) continue;
-    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (!e.isEntity || (e.name !== "switch" && e.name !== "initswitch"))
+      continue;
+    if (
+      e.pointY < room.top ||
+      e.pointY > room.bottom ||
+      e.pointX < room.left ||
+      e.pointX > room.right
+    )
+      continue;
     if (!SWITCH.off.cels.every((id) => sbk.byId.has(id))) continue;
     out.push({
       x: e.pointX,
@@ -4414,9 +5017,22 @@ function nestsIn(sbk: SbkFile, room: SbkRoom): Nest[] {
   const out: Nest[] = [];
   for (const e of sbk.entities) {
     if (!e.isEntity || e.name !== "initgoop") continue;
-    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (
+      e.pointY < room.top ||
+      e.pointY > room.bottom ||
+      e.pointX < room.left ||
+      e.pointX > room.right
+    )
+      continue;
     if (!GOOP.bead.cels.every((id) => sbk.byId.has(id))) continue;
-    out.push({ top: e.top, left: e.left, bottom: e.bottom, right: e.right, param: e.param, on: false });
+    out.push({
+      top: e.top,
+      left: e.left,
+      bottom: e.bottom,
+      right: e.right,
+      param: e.param,
+      on: false,
+    });
   }
   return out;
 }
@@ -4479,7 +5095,8 @@ function stepSwitches(): void {
   if (!here.length) return;
   const ay = p.y - p.feet;
   for (const s of here) {
-    const inside = p.x >= s.left && p.x < s.right && ay >= s.top && ay < s.bottom;
+    const inside =
+      p.x >= s.left && p.x < s.right && ay >= s.top && ay < s.bottom;
     if (inside && p.act === null) {
       // `0x4298ab`: S first, and it is the only one of the two that turns it off
       if (held.down) throwSwitch(s, 1);
@@ -4511,7 +5128,13 @@ function doorsIn(sbk: SbkFile, room: SbkRoom): Door[] {
   const out: Door[] = [];
   for (const e of sbk.entities) {
     if (!e.isEntity || e.name !== "door") continue;
-    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (
+      e.pointY < room.top ||
+      e.pointY > room.bottom ||
+      e.pointX < room.left ||
+      e.pointX > room.right
+    )
+      continue;
     if (!DOOR.shut.cels.every((id) => sbk.byId.has(id))) continue;
     out.push({
       x: e.pointX,
@@ -4541,14 +5164,24 @@ function elevsIn(sbk: SbkFile, room: SbkRoom, solids: Solids): Elev[] {
   const out: Elev[] = [];
   for (const e of sbk.entities) {
     if (!e.isEntity || e.name !== "initelev") continue;
-    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (
+      e.pointY < room.top ||
+      e.pointY > room.bottom ||
+      e.pointX < room.left ||
+      e.pointX > room.right
+    )
+      continue;
     // ...and the cel is the CHAPTER's — see {@link ELEV.cels}. Requiring SEWER's
     // 3202 threw away all four of CAVERN's lifts, which are the only way up out
     // of its second room.
     const cel = ELEV.cels.find((c) => sbk.byId.has(c));
     if (cel === undefined) continue;
     const floor = solids.platforms.find(
-      (q) => e.pointX >= q.left && e.pointX <= q.right && e.pointY >= q.top - 40 && e.pointY <= q.bottom + 40,
+      (q) =>
+        e.pointX >= q.left &&
+        e.pointX <= q.right &&
+        e.pointY >= q.top - 40 &&
+        e.pointY <= q.bottom + 40,
     );
     out.push({
       x: e.pointX,
@@ -4585,7 +5218,13 @@ function placed<T>(
   const out: T[] = [];
   for (const e of sbk.entities) {
     if (!e.isEntity || e.name !== name) continue;
-    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
+    if (
+      e.pointY < room.top ||
+      e.pointY > room.bottom ||
+      e.pointX < room.left ||
+      e.pointX > room.right
+    )
+      continue;
     if (!cels.every((id) => sbk.byId.has(id))) continue;
     out.push(make(e));
   }
@@ -4601,15 +5240,24 @@ function placed<T>(
  * then hang at the centre of the arm cel's box (`0x412180`) — which is read per
  * frame in {@link jawsAt}, because the cel is what says where the centre is.
  */
-function headAndArm(sbk: SbkFile, room: SbkRoom, body: SbkEntity): { headX: number; headY: number } {
+function headAndArm(
+  sbk: SbkFile,
+  room: SbkRoom,
+  body: SbkEntity,
+): { headX: number; headY: number } {
   const head = sbk.entities.find(
     (e) =>
       e.isEntity &&
       e.name === "initboggshead" &&
-      e.pointY >= room.top && e.pointY <= room.bottom &&
-      e.pointX >= room.left && e.pointX <= room.right,
+      e.pointY >= room.top &&
+      e.pointY <= room.bottom &&
+      e.pointX >= room.left &&
+      e.pointX <= room.right,
   );
-  return { headX: head?.pointX ?? body.pointX, headY: head?.pointY ?? body.pointY };
+  return {
+    headX: head?.pointX ?? body.pointX,
+    headY: head?.pointY ?? body.pointY,
+  };
 }
 
 /** every `initshack` in this room — CITY places eleven and nothing else places any */
@@ -4643,7 +5291,11 @@ function barrelsIn(sbk: SbkFile, room: SbkRoom, solids: Solids): Barrel[] {
     homeY: e.pointY,
     clock: 0,
     floor: solids.platforms.find(
-      (q) => e.pointX >= q.left && e.pointX <= q.right && e.pointY >= q.top - 40 && e.pointY <= q.bottom + 40,
+      (q) =>
+        e.pointX >= q.left &&
+        e.pointX <= q.right &&
+        e.pointY >= q.top - 40 &&
+        e.pointY <= q.bottom + 40,
     ),
   }));
 }
@@ -4679,10 +5331,28 @@ function pickupsIn(sbk: SbkFile, room: SbkRoom): Pickup[] {
   for (const e of sbk.entities) {
     if (!e.isEntity) continue;
     // `0x451420`: one name, three codes, picked by the record's own param
-    const code = e.name === "statscoreup" ? String(-6 + Math.min(2, Math.max(0, e.param))) : PICKUP_CODES[e.name];
+    const code =
+      e.name === "statscoreup"
+        ? String(-6 + Math.min(2, Math.max(0, e.param)))
+        : PICKUP_CODES[e.name];
     if (!code || !PICKUP.kinds[code]) continue;
-    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
-    out.push({ code, x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right, clock: 0 });
+    if (
+      e.pointY < room.top ||
+      e.pointY > room.bottom ||
+      e.pointX < room.left ||
+      e.pointX > room.right
+    )
+      continue;
+    out.push({
+      code,
+      x: e.pointX,
+      y: e.pointY,
+      top: e.top,
+      left: e.left,
+      bottom: e.bottom,
+      right: e.right,
+      clock: 0,
+    });
   }
   return out;
 }
@@ -4738,19 +5408,33 @@ function spritesTouch(
   if (x1 <= x0 || y1 <= y0) return false;
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
-      if (opaqueAt(a.f, x - a.left, y - a.top, a.mirror) && opaqueAt(b.f, x - b.left, y - b.top, b.mirror)) return true;
+      if (
+        opaqueAt(a.f, x - a.left, y - a.top, a.mirror) &&
+        opaqueAt(b.f, x - b.left, y - b.top, b.mirror)
+      )
+        return true;
     }
   }
   return false;
 }
 
 /** the player's own frame and where it is drawn, for {@link spritesTouch} */
-function playerSprite(): { f: ShpFrame; left: number; top: number; mirror: boolean } | null {
+function playerSprite(): {
+  f: ShpFrame;
+  left: number;
+  top: number;
+  mirror: boolean;
+} | null {
   const loc = player?.byId.get(lastCel);
   const f = loc === undefined ? null : playerFrame(loc);
   if (!f) return null;
   // the same placement the draw uses: centred on `p.x`, standing on `p.y`
-  return { f, left: Math.round(p.x - f.width / 2), top: Math.round(p.y - f.height), mirror: p.facing < 0 };
+  return {
+    f,
+    left: Math.round(p.x - f.width / 2),
+    top: Math.round(p.y - f.height),
+    mirror: p.facing < 0,
+  };
 }
 
 function stepPickups(): void {
@@ -4765,18 +5449,35 @@ function stepPickups(): void {
     if (!mine) continue;
     // `0x434140` against the pickup's own RECORD rect, which is what the creator
     // filed at `user+4` — the art is only what is drawn
-    if (!(mine.right > q.left && mine.left < q.right && mine.bottom > q.top && mine.top < q.bottom)) continue;
+    if (!(
+      mine.right > q.left &&
+      mine.left < q.right &&
+      mine.bottom > q.top &&
+      mine.top < q.bottom
+    ))
+      continue;
     const kind = PICKUP.kinds[q.code];
     // ...and then `0x40e680`, which is the art. See {@link spritesTouch}.
     const loc = player.byId.get(kind.cels[loopIndex(kind, q.clock)]);
     const pf = loc === undefined ? null : playerFrame(loc);
     const me = playerSprite();
-    if (pf && me && !spritesTouch(me, { f: pf, left: q.x - pf.posXraw, top: q.y - pf.posYraw, mirror: false }))
+    if (
+      pf &&
+      me &&
+      !spritesTouch(me, {
+        f: pf,
+        left: q.x - pf.posXraw,
+        top: q.y - pf.posYraw,
+        mirror: false,
+      })
+    )
       continue;
     gone.push(q);
     sound?.own(kind.sound, q.x, q.y);
-    if (q.code === "-1") stats.health = Math.min(stats.maxHealth, stats.health + PICKUP.health);
-    else if (q.code === "-2") stats.lives = Math.min(PICKUP.maxLives, stats.lives + 1);
+    if (q.code === "-1")
+      stats.health = Math.min(stats.maxHealth, stats.health + PICKUP.health);
+    else if (q.code === "-2")
+      stats.lives = Math.min(PICKUP.maxLives, stats.lives + 1);
     else if (q.code === "-8") addClock(PICKUP.clock);
     else stats.score += PICKUP.score[q.code] ?? 0;
   }
@@ -4813,9 +5514,17 @@ function stepHoles(): void {
     // SHUT: a slab you cannot walk through — but only on your feet. `0x4210a7`
     // lets a jump (player kind 3) and anything off the ground straight past,
     // which is what makes level nine a jumping level.
-    if (h.state === "shut" && p.onGround && p.x > h.left && p.x < h.right && py >= h.top && py <= h.bottom) {
+    if (
+      h.state === "shut" &&
+      p.onGround &&
+      p.x > h.left &&
+      p.x < h.right &&
+      py >= h.top &&
+      py <= h.bottom
+    ) {
       const half = (h.right - h.left) / 2;
-      const out = Math.abs(Math.abs(h.x - p.x) - half - 1) * (p.x <= h.x ? -1 : 1);
+      const out =
+        Math.abs(Math.abs(h.x - p.x) - half - 1) * (p.x <= h.x ? -1 : 1);
       p.vx += out / DIVISOR;
       sound?.effect(FOE_SFX.gravePull, h.x, h.y);
     }
@@ -4828,7 +5537,11 @@ function stepHoles(): void {
       continue;
     }
     h.clock += 1;
-    if (h.state === "opening" && h.clock >= HOLE.opening.cels.length * HOLE.opening.hold) h.state = "open";
+    if (
+      h.state === "opening" &&
+      h.clock >= HOLE.opening.cels.length * HOLE.opening.hold
+    )
+      h.state = "open";
     if (!near) continue;
     // `0x4211af` and `0x4211c4` — half your speed away and one more unit of fall
     p.vx = p.vx / 2;
@@ -4850,7 +5563,12 @@ function stepHoles(): void {
 function holeCel(h: Hole): number {
   if (h.state === "shut") return HOLE.shut;
   if (h.state === "open") return HOLE.open;
-  return HOLE.opening.cels[Math.min(HOLE.opening.cels.length - 1, Math.floor(h.clock / HOLE.opening.hold))];
+  return HOLE.opening.cels[
+    Math.min(
+      HOLE.opening.cels.length - 1,
+      Math.floor(h.clock / HOLE.opening.hold),
+    )
+  ];
 }
 
 /**
@@ -4870,7 +5588,8 @@ function stepHands(): void {
   const ay = p.y - p.feet;
   for (const q of here) {
     const kind = q.underfoot ? HAND.underfoot : HAND.anywhere;
-    const inside = p.x > q.left && p.x < q.right && ay >= q.top && ay <= q.bottom;
+    const inside =
+      p.x > q.left && p.x < q.right && ay >= q.top && ay <= q.bottom;
     q.clock += 1;
     if (q.state === "down") {
       // `0x420ca9` — it only comes up under someone standing on the ground
@@ -4884,7 +5603,8 @@ function stepHands(): void {
         q.atY = p.y - 2;
       } else {
         // `0x420d4b` — anywhere across its own rect, at the record's own height
-        q.atX = q.left + Math.floor(Math.random() * Math.max(1, q.right - q.left));
+        q.atX =
+          q.left + Math.floor(Math.random() * Math.max(1, q.right - q.left));
         q.atY = q.y;
       }
     } else if (q.state === "up") {
@@ -4995,7 +5715,8 @@ function stepAxes(): void {
     a.clock += 1;
     const now = Math.floor(a.clock) % AXE.swing.length;
     // `0x423d9a` — the sound is at the seam where tag 2 hands back to tag 0
-    if (now === AXE.soundAt && was !== AXE.soundAt) sound?.effect(AXE.sound, a.x, a.y);
+    if (now === AXE.soundAt && was !== AXE.soundAt)
+      sound?.effect(AXE.sound, a.x, a.y);
   }
 }
 
@@ -5013,7 +5734,10 @@ function stepBridges(): void {
   const here = hereOf((l) => l.bridges);
   if (!here.length) return;
   for (const b of here) {
-    const on = p.onGround && Math.abs(p.x - b.x) < BRIDGE.reachPx && Math.abs(p.y - b.y) < 60;
+    const on =
+      p.onGround &&
+      Math.abs(p.x - b.x) < BRIDGE.reachPx &&
+      Math.abs(p.y - b.y) < 60;
     if (b.state === "whole") {
       b.stood = on ? b.stood + 1 : 0;
       if (on && (b.stood > BRIDGE.standFrames || p.fallPx > BRIDGE.fallPx)) {
@@ -5024,11 +5748,17 @@ function stepBridges(): void {
       continue;
     }
     b.clock += 1;
-    if (b.state === "rocking" && b.clock >= BRIDGE.rocking.cels.length * BRIDGE.rocking.hold) {
+    if (
+      b.state === "rocking" &&
+      b.clock >= BRIDGE.rocking.cels.length * BRIDGE.rocking.hold
+    ) {
       b.state = "falling";
       b.clock = 0;
       sound?.effect(FOE_SFX.bridgeFall, b.x, b.y);
-    } else if (b.state === "falling" && b.clock >= BRIDGE.falling.cels.length * BRIDGE.falling.hold) {
+    } else if (
+      b.state === "falling" &&
+      b.clock >= BRIDGE.falling.cels.length * BRIDGE.falling.hold
+    ) {
       b.state = "gone";
       // and the platform goes with it. Every `initbridge` record in CAVERN has a
       // `platform` record with the SAME rect laid over it — records 13, 75, 76
@@ -5039,7 +5769,8 @@ function stepBridges(): void {
         const r = lvl2.rooms.indexOf(p.room!);
         if (r >= 0)
           lvl2.solids[r].platforms = lvl2.solids[r].platforms.filter(
-            (q) => !(q.left === b.left && q.right === b.right && q.top === b.top),
+            (q) =>
+              !(q.left === b.left && q.right === b.right && q.top === b.top),
           );
       }
     }
@@ -5065,7 +5796,8 @@ function stepFloors(): void {
   if (!here.length) return;
   const ay = p.y - p.feet;
   for (const f of here) {
-    const inside = p.x > f.left && p.x < f.right && ay >= f.top && ay <= f.bottom;
+    const inside =
+      p.x > f.left && p.x < f.right && ay >= f.top && ay <= f.bottom;
     if (f.state === "whole") {
       if (!inside || !p.onGround) continue;
       f.state = "creaking";
@@ -5074,7 +5806,10 @@ function stepFloors(): void {
       continue;
     }
     f.clock += 1;
-    if (f.state === "creaking" && f.clock >= FLOOR.creaking.cels.length * FLOOR.creaking.hold) {
+    if (
+      f.state === "creaking" &&
+      f.clock >= FLOOR.creaking.cels.length * FLOOR.creaking.hold
+    ) {
       f.state = "caving";
       f.clock = 0;
       sound?.effect(FOE_SFX.floorCave, f.x, f.y);
@@ -5085,10 +5820,18 @@ function stepFloors(): void {
         const r = lvl2.rooms.indexOf(p.room!);
         if (r >= 0)
           lvl2.solids[r].platforms = lvl2.solids[r].platforms.filter(
-            (q) => !(q.left >= f.left - 8 && q.right <= f.right + 8 && Math.abs(q.top - f.top) < 220),
+            (q) =>
+              !(
+                q.left >= f.left - 8 &&
+                q.right <= f.right + 8 &&
+                Math.abs(q.top - f.top) < 220
+              ),
           );
       }
-    } else if (f.state === "caving" && f.clock >= FLOOR.caving.cels.length * FLOOR.caving.hold) {
+    } else if (
+      f.state === "caving" &&
+      f.clock >= FLOOR.caving.cels.length * FLOOR.caving.hold
+    ) {
       f.state = "gone";
       if (inside && !film) {
         sound?.effect(FOE_SFX.graveTake, f.x, f.y);
@@ -5101,7 +5844,8 @@ function stepFloors(): void {
 /** which cel a floor is showing */
 function floorCel(f: Floor): number {
   if (f.state === "whole") return FLOOR.whole;
-  if (f.state === "gone") return FLOOR.caving.cels[FLOOR.caving.cels.length - 1];
+  if (f.state === "gone")
+    return FLOOR.caving.cels[FLOOR.caving.cels.length - 1];
   const a = f.state === "creaking" ? FLOOR.creaking : FLOOR.caving;
   return a.cels[Math.min(a.cels.length - 1, Math.floor(f.clock / a.hold))];
 }
@@ -5119,17 +5863,21 @@ function stepSurges(): void {
   for (const q of here) {
     q.clock += 1;
     if (!inv.armed) continue;
-    if (!(p.x > q.left && p.x < q.right && ay >= q.top && ay <= q.bottom)) continue;
+    if (!(p.x > q.left && p.x < q.right && ay >= q.top && ay <= q.bottom))
+      continue;
     const w = WEAPONS[inv.weapon];
     if (!w || roundsIn(inv.weapon) >= w.max) continue;
     loadRounds(inv.weapon, 1);
-    if (Math.floor(q.clock) % SURGE.arc.cels.length === 0) sound?.effect(SURGE.sound, q.x, q.y);
+    if (Math.floor(q.clock) % SURGE.arc.cels.length === 0)
+      sound?.effect(SURGE.sound, q.x, q.y);
   }
 }
 
 /** which cel a surge is showing */
 function surgeCel(q: Surge): number {
-  return SURGE.arc.cels[Math.floor(q.clock / SURGE.arc.hold) % SURGE.arc.cels.length];
+  return SURGE.arc.cels[
+    Math.floor(q.clock / SURGE.arc.hold) % SURGE.arc.cels.length
+  ];
 }
 
 /**
@@ -5217,7 +5965,11 @@ function lightCel(q: LightFx): number {
  */
 function stepBigGuns(): void {
   for (const g of hereOf((l) => l.bigguns)) {
-    const inside = p.x >= g.left && p.x <= g.right && p.y - p.feet >= g.top && p.y - p.feet <= g.bottom;
+    const inside =
+      p.x >= g.left &&
+      p.x <= g.right &&
+      p.y - p.feet >= g.top &&
+      p.y - p.feet <= g.bottom;
     stepHatch(g, inside);
     g.clock += 1;
     switch (g.state) {
@@ -5264,7 +6016,12 @@ function stepBigGuns(): void {
           g.clock = 0;
           break;
         }
-        const run = g.shot === 0 ? BIGGUN.fire.one : g.shot === 1 ? BIGGUN.fire.two : BIGGUN.fire.done;
+        const run =
+          g.shot === 0
+            ? BIGGUN.fire.one
+            : g.shot === 1
+              ? BIGGUN.fire.two
+              : BIGGUN.fire.done;
         if (g.clock < run.cels.length * run.hold) break;
         if (g.shot < 2) {
           // `0x41373c` / `0x413770` — the sound, then `0x412a70(gun, 0)`, which
@@ -5311,7 +6068,13 @@ function stepBigGuns(): void {
 function stepHatch(g: BigGun, inside: boolean): void {
   g.hatchClock += 1;
   const run =
-    g.hatch === 1 ? BIGGUN.hatch.open : g.hatch === 2 ? BIGGUN.hatch.held : g.hatch === 3 ? BIGGUN.hatch.close : null;
+    g.hatch === 1
+      ? BIGGUN.hatch.open
+      : g.hatch === 2
+        ? BIGGUN.hatch.held
+        : g.hatch === 3
+          ? BIGGUN.hatch.close
+          : null;
   if (!run) {
     if (inside) {
       g.hatch = 1;
@@ -5328,15 +6091,22 @@ function stepHatch(g: BigGun, inside: boolean): void {
 /** which cel the hatch is showing — `0x46c238`'s four tags */
 function hatchCel(g: BigGun): number {
   if (g.hatch === 0) return BIGGUN.hatch.shut;
-  const run = g.hatch === 1 ? BIGGUN.hatch.open : g.hatch === 2 ? BIGGUN.hatch.held : BIGGUN.hatch.close;
+  const run =
+    g.hatch === 1
+      ? BIGGUN.hatch.open
+      : g.hatch === 2
+        ? BIGGUN.hatch.held
+        : BIGGUN.hatch.close;
   const i = Math.min(run.cels.length - 1, Math.floor(g.hatchClock / run.hold));
   return run.cels[i];
 }
 
 /** which cel the turret is showing, or 0 while it is still behind the hatch */
 function gunCel(g: BigGun): number {
-  const step = (a: { cels: readonly number[]; hold: number }, clock: number): number =>
-    a.cels[Math.min(a.cels.length - 1, Math.floor(clock / a.hold))];
+  const step = (
+    a: { cels: readonly number[]; hold: number },
+    clock: number,
+  ): number => a.cels[Math.min(a.cels.length - 1, Math.floor(clock / a.hold))];
   switch (g.state) {
     case "wait":
       return 0;
@@ -5346,9 +6116,18 @@ function gunCel(g: BigGun): number {
     case "unfold":
       return step(BIGGUN.unfold, g.clock);
     case "fire":
-      return step(g.shot === 0 ? BIGGUN.fire.one : g.shot === 1 ? BIGGUN.fire.two : BIGGUN.fire.done, g.clock);
+      return step(
+        g.shot === 0
+          ? BIGGUN.fire.one
+          : g.shot === 1
+            ? BIGGUN.fire.two
+            : BIGGUN.fire.done,
+        g.clock,
+      );
     case "blink":
-      return BIGGUN.blink.cels[Math.floor(g.clock / BIGGUN.blink.hold) % BIGGUN.blink.cels.length];
+      return BIGGUN.blink.cels[
+        Math.floor(g.clock / BIGGUN.blink.hold) % BIGGUN.blink.cels.length
+      ];
     case "fold":
       return step(BIGGUN.fold, g.clock);
     case "rise":
@@ -5358,14 +6137,21 @@ function gunCel(g: BigGun): number {
 
 function stepAlarms(): void {
   for (const a of hereOf((l) => l.alarms)) {
-    const was = Math.floor(a.clock) % (ALARM.flash.cels.length * ALARM.flash.hold);
+    const was =
+      Math.floor(a.clock) % (ALARM.flash.cels.length * ALARM.flash.hold);
     a.clock += 1;
-    if (Math.floor(a.clock) % (ALARM.flash.cels.length * ALARM.flash.hold) < was) sound?.effect(ALARM.sound, a.x, a.y);
+    if (
+      Math.floor(a.clock) % (ALARM.flash.cels.length * ALARM.flash.hold) <
+      was
+    )
+      sound?.effect(ALARM.sound, a.x, a.y);
   }
 }
 
 function alarmCel(a: Alarm): number {
-  const i = Math.floor((a.clock % (ALARM.flash.cels.length * ALARM.flash.hold)) / ALARM.flash.hold);
+  const i = Math.floor(
+    (a.clock % (ALARM.flash.cels.length * ALARM.flash.hold)) / ALARM.flash.hold,
+  );
   return ALARM.flash.cels[Math.min(ALARM.flash.cels.length - 1, i)];
 }
 
@@ -5377,14 +6163,20 @@ function stepFans(): void {
       f.state = "up";
       f.clock = 0;
       sound?.effect(FAN.spinUp, f.x, f.y);
-    } else if (f.state === "up" && f.clock >= kit.spin.cels.length * kit.spin.hold) {
+    } else if (
+      f.state === "up" &&
+      f.clock >= kit.spin.cels.length * kit.spin.hold
+    ) {
       f.state = "on";
       f.clock = 0;
     } else if (f.state === "on" && f.clock >= FAN.onFrames) {
       f.state = "down";
       f.clock = 0;
       sound?.effect(FAN.spinDown, f.x, f.y);
-    } else if (f.state === "down" && f.clock >= kit.spin.cels.length * kit.spin.hold) {
+    } else if (
+      f.state === "down" &&
+      f.clock >= kit.spin.cels.length * kit.spin.hold
+    ) {
       f.state = "off";
       f.clock = 0;
     }
@@ -5396,8 +6188,13 @@ function fanCel(f: Fan): number {
   const kit = f.horizontal ? FAN.h : FAN.v;
   if (f.state === "off") return kit.stopped;
   if (f.state === "on") return kit.held;
-  const i = Math.min(kit.spin.cels.length - 1, Math.floor(f.clock / kit.spin.hold));
-  return f.state === "up" ? kit.spin.cels[i] : kit.spin.cels[kit.spin.cels.length - 1 - i];
+  const i = Math.min(
+    kit.spin.cels.length - 1,
+    Math.floor(f.clock / kit.spin.hold),
+  );
+  return f.state === "up"
+    ? kit.spin.cels[i]
+    : kit.spin.cels[kit.spin.cels.length - 1 - i];
 }
 
 /**
@@ -5435,7 +6232,9 @@ function stepBelts(): void {
 function beltCel(b: Belt): number {
   const hold = b.param >= 8 ? BELT.slowHold : BELT.roll.hold;
   const i = Math.floor(b.clock / hold) % BELT.roll.cels.length;
-  return b.dir < 0 ? BELT.roll.cels[BELT.roll.cels.length - 1 - i] : BELT.roll.cels[i];
+  return b.dir < 0
+    ? BELT.roll.cels[BELT.roll.cels.length - 1 - i]
+    : BELT.roll.cels[i];
 }
 
 /** ...and the chairs, which are four tags handed round and nothing else */
@@ -5453,7 +6252,9 @@ function stepChairs(): void {
 function chairCel(c: Chair): number {
   const run = CHAIR.runs[c.run];
   if (!run) return CHAIR.rest;
-  return run.cels[Math.min(run.cels.length - 1, Math.floor(c.clock / run.hold))];
+  return run.cels[
+    Math.min(run.cels.length - 1, Math.floor(c.clock / run.hold))
+  ];
 }
 
 /**
@@ -5479,7 +6280,12 @@ function stepClaws(): void {
     const gap = Math.abs(p.x - c.x);
     // the DIVE, and it owns the claw until it is back up — `0x4173bf`'s four tags
     if (c.state === "dive" || c.state === "clamp" || c.state === "lift") {
-      const a = c.state === "dive" ? CLAW.dive : c.state === "clamp" ? CLAW.jaws : CLAW.lift;
+      const a =
+        c.state === "dive"
+          ? CLAW.dive
+          : c.state === "clamp"
+            ? CLAW.jaws
+            : CLAW.lift;
       if (c.clock < a.cels.length * a.hold) continue;
       c.clock = 0;
       if (c.state === "dive") {
@@ -5496,10 +6302,16 @@ function stepClaws(): void {
       continue;
     }
     if (c.state === "down" || c.state === "shut" || c.state === "up") {
-      const a = c.state === "down" ? CLAW.down : c.state === "shut" ? CLAW.shut : CLAW.up;
+      const a =
+        c.state === "down"
+          ? CLAW.down
+          : c.state === "shut"
+            ? CLAW.shut
+            : CLAW.up;
       if (c.clock < a.cels.length * a.hold) continue;
       c.clock = 0;
-      c.state = c.state === "down" ? "shut" : c.state === "shut" ? "up" : "running";
+      c.state =
+        c.state === "down" ? "shut" : c.state === "shut" ? "up" : "running";
       if (c.state === "shut") sound?.effect(CLAW.clamp, c.x, c.y);
       continue;
     }
@@ -5624,10 +6436,14 @@ function stepBoggs(): void {
       b.headTag = boggsAim(b);
     }
     // `0x41be68` — thirty a frame, and only while a flag is still up
-    if (b.flags[0] || b.flags[1]) b.hp = Math.min(scaled(BOGGS.health), b.hp + BOGGS.regen);
+    if (b.flags[0] || b.flags[1])
+      b.hp = Math.min(scaled(BOGGS.health), b.hp + BOGGS.regen);
     // `0x41c164` — the 5-in-100 branch, and the jaws snap through `0x46e558`
     const jaws = BOGGS.arm.jaws;
-    if (b.snap <= 0 && Math.floor(Math.random() * jaws.snapOdds[1]) < jaws.snapOdds[0]) {
+    if (
+      b.snap <= 0 &&
+      Math.floor(Math.random() * jaws.snapOdds[1]) < jaws.snapOdds[0]
+    ) {
       b.snap = jaws.snap.cels.length * jaws.snap.hold;
     }
     const a = b.lunge ? BOGGS.lunge[b.lunge] : null;
@@ -5643,7 +6459,8 @@ function stepBoggs(): void {
       continue;
     }
     // `0x41bffc` — seven in forty-two, once a frame, and only out of the idle
-    if (Math.floor(Math.random() * BOGGS.lunge.odds[1]) >= BOGGS.lunge.odds[0]) continue;
+    if (Math.floor(Math.random() * BOGGS.lunge.odds[1]) >= BOGGS.lunge.odds[0])
+      continue;
     b.lunge = p.x < b.x ? "left" : "right";
     b.clock = 0;
     sound?.effect(BOGGS.lunge.sound + Math.floor(Math.random() * 2), b.x, b.y);
@@ -5675,14 +6492,18 @@ function boggsCel(b: Boggs): number {
     const a = BOGGS.lunge[b.lunge];
     return a.cels[Math.min(a.cels.length - 1, Math.floor(b.clock / a.hold))];
   }
-  return BOGGS.idle.cels[Math.floor(b.clock / BOGGS.idle.hold) % BOGGS.idle.cels.length];
+  return BOGGS.idle.cels[
+    Math.floor(b.clock / BOGGS.idle.hold) % BOGGS.idle.cels.length
+  ];
 }
 
 /** the head: `0x46e908` while it is dying, one of `0x46e7c0`'s nine otherwise */
 function boggsHeadCel(b: Boggs): number {
   if (b.dying) {
     const d = BOGGS.head.dies;
-    return d.cels[Math.min(d.cels.length - 1, Math.floor(b.headClock / d.hold))];
+    return d.cels[
+      Math.min(d.cels.length - 1, Math.floor(b.headClock / d.hold))
+    ];
   }
   return BOGGS.head.look[b.headTag];
 }
@@ -5693,17 +6514,24 @@ function boggsHeadCel(b: Boggs): number {
  * {@link gripAt} exists.
  */
 function jawsAt(b: Boggs): { x: number; y: number } {
-  const art = level?.sbk.cels.find((c) => c.id === BOGGS.arm.poses[BOGGS.arm.tag]);
+  const art = level?.sbk.cels.find(
+    (c) => c.id === BOGGS.arm.poses[BOGGS.arm.tag],
+  );
   const box = art?.body;
   if (!box) return { x: b.x, y: b.y };
-  return { x: b.x + box.x0 + (box.x1 - box.x0) / 2, y: b.y + box.y0 + (box.y1 - box.y0) / 2 };
+  return {
+    x: b.x + box.x0 + (box.x1 - box.x0) / 2,
+    y: b.y + box.y0 + (box.y1 - box.y0) / 2,
+  };
 }
 
 /** the jaws: `0x46e558` tag 3 while `0x41c164`'s snap runs, the placed pose otherwise */
 function jawsCel(b: Boggs): number {
   const jaws = BOGGS.arm.jaws;
   if (b.snap <= 0) return jaws.poses[BOGGS.arm.tag];
-  const k = Math.floor((jaws.snap.cels.length * jaws.snap.hold - b.snap) / jaws.snap.hold);
+  const k = Math.floor(
+    (jaws.snap.cels.length * jaws.snap.hold - b.snap) / jaws.snap.hold,
+  );
   return jaws.snap.cels[Math.min(jaws.snap.cels.length - 1, k)];
 }
 
@@ -5712,7 +6540,9 @@ function machineCel(b: Boggs, i: number): number {
   const spec = BOGGS.machines[i];
   const m = b.machines[i];
   if (m.wrecked && "wreck" in spec) {
-    return spec.wreck[Math.min(spec.wreck.length - 1, Math.floor(m.wreckClock / spec.hold))];
+    return spec.wreck[
+      Math.min(spec.wreck.length - 1, Math.floor(m.wreckClock / spec.hold))
+    ];
   }
   return spec.cels[Math.floor(m.clock / spec.hold) % spec.cels.length];
 }
@@ -5740,7 +6570,12 @@ function strikeMachine(b: Boggs, i: number, damage: number): boolean {
   // ...and the neighbours buckle with it: `0x41b65b` and `0x41b794`
   for (let k = 0; k < BOGGS.machines.length; k++) {
     const n = BOGGS.machines[k];
-    if (!("wreckedBy" in n) || n.wreckedBy !== spec.clears || b.machines[k].wrecked) continue;
+    if (
+      !("wreckedBy" in n) ||
+      n.wreckedBy !== spec.clears ||
+      b.machines[k].wrecked
+    )
+      continue;
     b.machines[k].wrecked = true;
     b.machines[k].wreckClock = 0;
   }
@@ -5774,7 +6609,10 @@ function strikeMachine(b: Boggs, i: number, damage: number): boolean {
  * Translated by the anchor, the way `0x40e680` translates every rect — see
  * {@link strikeOf}.
  */
-function machineBox(b: Boggs, i: number): { left: number; right: number; top: number; bottom: number } | null {
+function machineBox(
+  b: Boggs,
+  i: number,
+): { left: number; right: number; top: number; bottom: number } | null {
   const art = level?.sbk.cels.find((c) => c.id === machineCel(b, i));
   if (!art?.body) return null;
   const m = b.machines[i];
@@ -5829,10 +6667,27 @@ function gunsIn(sbk: SbkFile, room: SbkRoom): Gun[] {
   const out: Gun[] = [];
   for (const e of sbk.entities) {
     if (!e.isEntity) continue;
-    const code = Number(Object.keys(GUN_CODES).find((c) => GUN_CODES[Number(c)].name === e.name) ?? NaN);
+    const code = Number(
+      Object.keys(GUN_CODES).find(
+        (c) => GUN_CODES[Number(c)].name === e.name,
+      ) ?? NaN,
+    );
     if (!Number.isFinite(code)) continue;
-    if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
-    out.push({ code, x: e.pointX, y: e.pointY, left: e.pointX - GRAB.bandPx, right: e.pointX + GRAB.bandPx, clock: 0 });
+    if (
+      e.pointY < room.top ||
+      e.pointY > room.bottom ||
+      e.pointX < room.left ||
+      e.pointX > room.right
+    )
+      continue;
+    out.push({
+      code,
+      x: e.pointX,
+      y: e.pointY,
+      left: e.pointX - GRAB.bandPx,
+      right: e.pointX + GRAB.bandPx,
+      clock: 0,
+    });
   }
   return out;
 }
@@ -5961,7 +6816,9 @@ function fireGun(): void {
     vx: (p.facing * FLARE.dx) / FLARE.divisor,
     vy: 0,
     facing: p.facing,
-    wobble: FLARE.wobble.lo + Math.floor(Math.random() * (FLARE.wobble.hi - FLARE.wobble.lo + 1)),
+    wobble:
+      FLARE.wobble.lo +
+      Math.floor(Math.random() * (FLARE.wobble.hi - FLARE.wobble.lo + 1)),
     sign: -1,
     burn: null,
     spent: false,
@@ -5979,12 +6836,23 @@ function openStream(): void {
   const kit = STREAMS[inv.weapon];
   if (!kit || roundsIn(inv.weapon) <= 0) return;
   if (streams.some((q) => q.state !== "stop")) return;
-  streams.push({ weapon: inv.weapon, x: p.x, y: p.y, facing: p.facing, state: "start", clock: 0 });
+  streams.push({
+    weapon: inv.weapon,
+    x: p.x,
+    y: p.y,
+    facing: p.facing,
+    state: "start",
+    clock: 0,
+  });
 }
 
 /** `-2`: every live one goes to its tag 2, the animation of shutting off */
 function shutStreams(): void {
-  for (const q of streams) if (q.state !== "stop") { q.state = "stop"; q.clock = 0; }
+  for (const q of streams)
+    if (q.state !== "stop") {
+      q.state = "stop";
+      q.clock = 0;
+    }
 }
 
 /** `-1`: `0x448c19`'s cancel — the stream simply stops existing */
@@ -6029,7 +6897,10 @@ function stepStreams(): void {
     q.facing = p.facing;
     q.x = p.x + p.facing * at.dx + p.vx;
     q.y = p.y - p.feet + at.dy + p.vyRaw;
-    if (q.state === "start" && q.clock >= kit.start.cels.length * kit.start.hold) {
+    if (
+      q.state === "start" &&
+      q.clock >= kit.start.cels.length * kit.start.hold
+    ) {
       // `0x4217a5` — the start animation ending is what installs the loop
       q.state = "loop";
       q.clock = 0;
@@ -6053,7 +6924,13 @@ function stepStreams(): void {
       const c = lvl.sbk.cels.find((z) => z.id === celOf(e));
       if (!c) continue;
       const hurt = hurtBox(e, c, lvl);
-      if (!(box.right > hurt.left && box.left < hurt.right && box.bottom > hurt.top && box.top < hurt.bottom)) continue;
+      if (!(
+        box.right > hurt.left &&
+        box.left < hurt.right &&
+        box.bottom > hurt.top &&
+        box.top < hurt.bottom
+      ))
+        continue;
       // `0x42f910`: the cel's OWN pair scaled by the object's strength, and the
       // magnitude of that is the damage. It is small on purpose — the soaker's
       // 9806 carries `dx 8`, so a stream is eight a frame rather than a blow,
@@ -6061,10 +6938,24 @@ function stepStreams(): void {
       const scale = kit.blow / 100;
       const bx = cel.blow.dx * scale;
       const by = cel.blow.dy * scale;
-      strikeFoe(e, Math.sqrt(bx * bx + by * by), { dx: bx, dy: by }, q.facing, (box.top + box.bottom) / 2, hurt);
+      strikeFoe(
+        e,
+        Math.sqrt(bx * bx + by * by),
+        { dx: bx, dy: by },
+        q.facing,
+        (box.top + box.bottom) / 2,
+        hurt,
+      );
     }
   }
-  streams = streams.filter((q) => !(q.state === "stop" && q.clock >= STREAMS[q.weapon]!.stop.cels.length * STREAMS[q.weapon]!.stop.hold));
+  streams = streams.filter(
+    (q) =>
+      !(
+        q.state === "stop" &&
+        q.clock >=
+          STREAMS[q.weapon]!.stop.cels.length * STREAMS[q.weapon]!.stop.hold
+      ),
+  );
 }
 
 /**
@@ -6077,10 +6968,21 @@ function stepStreams(): void {
  * mirrors: reflecting about the cel's centre instead puts a stream fired west
  * half a screen from where it is drawn.
  */
-function streamBox(q: Stream, cel: SbkCel | undefined): { top: number; left: number; bottom: number; right: number } | null {
+function streamBox(
+  q: Stream,
+  cel: SbkCel | undefined,
+): { top: number; left: number; bottom: number; right: number } | null {
   if (!cel?.strike) return null;
-  const b = q.facing < 0 ? { ...cel.strike, x0: -cel.strike.x1, x1: -cel.strike.x0 } : cel.strike;
-  return { left: q.x + b.x0, right: q.x + b.x1, top: q.y + b.y0, bottom: q.y + b.y1 };
+  const b =
+    q.facing < 0
+      ? { ...cel.strike, x0: -cel.strike.x1, x1: -cel.strike.x0 }
+      : cel.strike;
+  return {
+    left: q.x + b.x0,
+    right: q.x + b.x1,
+    top: q.y + b.y0,
+    bottom: q.y + b.y1,
+  };
 }
 
 /**
@@ -6102,7 +7004,11 @@ function stepBushes(): void {
   for (const q of hereOf((l) => l.bushes)) {
     q.clock += 1;
     if (q.state === "idle") {
-      if (Math.abs(p.x - q.x) >= BUSH.nearPx || Math.abs(p.y - q.y) >= BUSH.dropPx) continue;
+      if (
+        Math.abs(p.x - q.x) >= BUSH.nearPx ||
+        Math.abs(p.y - q.y) >= BUSH.dropPx
+      )
+        continue;
       q.state = "rise";
       q.phase = 0;
       q.clock = 0;
@@ -6144,20 +7050,28 @@ function stepBushes(): void {
 
 /** which cel a bush is showing */
 function bushCel(q: Bush): number {
-  if (q.state === "idle") return BUSH.idle.cels[Math.floor(q.clock / BUSH.idle.hold) % BUSH.idle.cels.length];
+  if (q.state === "idle")
+    return BUSH.idle.cels[
+      Math.floor(q.clock / BUSH.idle.hold) % BUSH.idle.cels.length
+    ];
   // sinking is the script having ENDED — `0x43ef31` tests `obj+0x46` and moves
   // the object without installing anything, so it keeps showing its last frame,
   // grip and all, the whole way back down
   if (q.state === "sink") return BUSH.rise.cels[BUSH.rise.cels.length - 1];
-  return BUSH.rise.cels[Math.min(BUSH.rise.cels.length - 1, Math.floor(q.clock / BUSH.rise.hold))];
+  return BUSH.rise.cels[
+    Math.min(BUSH.rise.cels.length - 1, Math.floor(q.clock / BUSH.rise.hold))
+  ];
 }
 
 /** which cel a stream is showing */
 function streamCel(q: Stream): number {
   const kit = STREAMS[q.weapon]!;
-  const a = q.state === "start" ? kit.start : q.state === "loop" ? kit.loop : kit.stop;
+  const a =
+    q.state === "start" ? kit.start : q.state === "loop" ? kit.loop : kit.stop;
   const k = Math.floor(q.clock / a.hold);
-  return q.state === "loop" ? a.cels[k % a.cels.length] : a.cels[Math.min(a.cels.length - 1, k)];
+  return q.state === "loop"
+    ? a.cels[k % a.cels.length]
+    : a.cels[Math.min(a.cels.length - 1, k)];
 }
 
 /**
@@ -6266,7 +7180,12 @@ function stepBolts(): void {
           top: g.y - cel.posY,
           bottom: g.y - cel.posY + cel.height,
         };
-        if (box.right > gb.left && box.left < gb.right && box.bottom > gb.top && box.top < gb.bottom) {
+        if (
+          box.right > gb.left &&
+          box.left < gb.right &&
+          box.bottom > gb.top &&
+          box.top < gb.bottom
+        ) {
           met.push({
             edge: b.vx >= 0 ? Math.max(gb.left, was) : Math.min(gb.right, was),
             take: () => {
@@ -6280,7 +7199,13 @@ function stepBolts(): void {
       for (let k = 0; k < g.machines.length; k++) {
         const mb = machineBox(g, k);
         if (!mb) continue;
-        if (!(box.right > mb.left && box.left < mb.right && box.bottom > mb.top && box.top < mb.bottom)) continue;
+        if (!(
+          box.right > mb.left &&
+          box.left < mb.right &&
+          box.bottom > mb.top &&
+          box.top < mb.bottom
+        ))
+          continue;
         met.push({
           // clamped to where the bolt STARTED this step: it materialises 120px
           // ahead of the muzzle and can be inside several boxes already, and a
@@ -6316,7 +7241,13 @@ function stepBolts(): void {
       const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
       if (!c) continue;
       const hurt = hurtBox(e, c, lvl);
-      if (!(box.right > hurt.left && box.left < hurt.right && box.bottom > hurt.top && box.top < hurt.bottom)) continue;
+      if (!(
+        box.right > hurt.left &&
+        box.left < hurt.right &&
+        box.bottom > hurt.top &&
+        box.top < hurt.bottom
+      ))
+        continue;
       b.spent = true;
       break;
     }
@@ -6383,8 +7314,21 @@ function stepFlares(): void {
       const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
       if (!c) continue;
       const hurt = hurtBox(e, c, lvl);
-      if (!(box.right > hurt.left && box.left < hurt.right && box.bottom > hurt.top && box.top < hurt.bottom)) continue;
-      strikeFoe(e, FLARE.blow, { dx: FLARE.dx, dy: 0 }, f.facing, (box.top + box.bottom) / 2, hurt);
+      if (!(
+        box.right > hurt.left &&
+        box.left < hurt.right &&
+        box.bottom > hurt.top &&
+        box.top < hurt.bottom
+      ))
+        continue;
+      strikeFoe(
+        e,
+        FLARE.blow,
+        { dx: FLARE.dx, dy: 0 },
+        f.facing,
+        (box.top + box.bottom) / 2,
+        hurt,
+      );
       f.burn = 0;
       break;
     }
@@ -6471,7 +7415,9 @@ let columns = new Map<number, number>();
 function raiseSprinkler(e: Enemy): void {
   const all = hereOf((l) => l.sprinklers);
   if (!all.length) return;
-  const over = all.find((q) => e.x >= q.left && e.x < q.right && e.y >= q.top && e.y < q.bottom);
+  const over = all.find(
+    (q) => e.x >= q.left && e.x < q.right && e.y >= q.top && e.y < q.bottom,
+  );
   if (!over) return;
   if (!columns.has(over.slot)) {
     columns.set(over.slot, 0);
@@ -6500,7 +7446,11 @@ function stepColumns(): void {
   const gone: number[] = [];
   for (const [slot, clock] of columns) {
     const next = clock + TICK_SCALE;
-    if (next >= SPRINKLER.rise.cels.length * SPRINKLER.rise.hold + SPRINKLER.life) gone.push(slot);
+    if (
+      next >=
+      SPRINKLER.rise.cels.length * SPRINKLER.rise.hold + SPRINKLER.life
+    )
+      gone.push(slot);
     else columns.set(slot, next);
   }
   for (const slot of gone) columns.delete(slot);
@@ -6510,7 +7460,14 @@ function stepColumns(): void {
     if (e.state !== "gait" || !FOES[e.kind].drives?.raises) continue;
     for (const [slot] of columns) {
       const q = all.find((w) => w.slot === slot);
-      if (!q || e.x < q.left || e.x >= q.right || e.y < q.top || e.y >= q.bottom) continue;
+      if (
+        !q ||
+        e.x < q.left ||
+        e.x >= q.right ||
+        e.y < q.top ||
+        e.y >= q.bottom
+      )
+        continue;
       e.hp = Math.max(0, e.hp - 3 * TICK_SCALE);
       if (e.hp <= 0) {
         const foe = FOES[e.kind];
@@ -6527,8 +7484,11 @@ function stepColumns(): void {
 /** which cel a standing column is showing, rise then spray */
 function columnCel(clock: number): number {
   const up = SPRINKLER.rise.cels.length * SPRINKLER.rise.hold;
-  if (clock < up) return SPRINKLER.rise.cels[Math.floor(clock / SPRINKLER.rise.hold)];
-  const i = Math.floor((clock - up) / SPRINKLER.spray.hold) % SPRINKLER.spray.cels.length;
+  if (clock < up)
+    return SPRINKLER.rise.cels[Math.floor(clock / SPRINKLER.rise.hold)];
+  const i =
+    Math.floor((clock - up) / SPRINKLER.spray.hold) %
+    SPRINKLER.spray.cels.length;
   return SPRINKLER.spray.cels[i];
 }
 
@@ -6541,8 +7501,12 @@ function columnCel(clock: number): number {
  */
 function stepScenery(): void {
   const ay = p.y - p.feet;
-  const inRect = (r: { top: number; left: number; bottom: number; right: number }): boolean =>
-    p.x >= r.left && p.x < r.right && ay >= r.top && ay < r.bottom;
+  const inRect = (r: {
+    top: number;
+    left: number;
+    bottom: number;
+    right: number;
+  }): boolean => p.x >= r.left && p.x < r.right && ay >= r.top && ay < r.bottom;
 
   // `0x453a60`: shut until your point is inside, then up; and down again only
   // once the opening has finished AND you have gone
@@ -6579,8 +7543,10 @@ function stepScenery(): void {
     const i = loopIndex(BARREL.bob, b.clock);
     b.x += ((BARREL.bob.dx[i] ?? 0) / BARREL.divisor) * TICK_SCALE;
     b.y += ((BARREL.bob.dy[i] ?? 0) / BARREL.divisor) * TICK_SCALE;
-    if (Math.abs(b.x - b.homeX) > BARREL.drift) b.x += Math.sign(b.homeX - b.x) * BARREL.home * TICK_SCALE;
-    if (Math.abs(b.y - b.homeY) > BARREL.drift) b.y += Math.sign(b.homeY - b.y) * BARREL.home * TICK_SCALE;
+    if (Math.abs(b.x - b.homeX) > BARREL.drift)
+      b.x += Math.sign(b.homeX - b.x) * BARREL.home * TICK_SCALE;
+    if (Math.abs(b.y - b.homeY) > BARREL.drift)
+      b.y += Math.sign(b.homeY - b.y) * BARREL.home * TICK_SCALE;
     if (b.floor) {
       b.floor.left += b.x - wasX;
       b.floor.right += b.x - wasX;
@@ -6599,7 +7565,8 @@ function stepScenery(): void {
       w.clock = SEWAGE.gulpEvery;
       continue;
     }
-    if (p.vy / TICK_SCALE > SEWAGE.splashAbove) sound?.effect(SEWAGE.splash, p.x, p.y);
+    if (p.vy / TICK_SCALE > SEWAGE.splashAbove)
+      sound?.effect(SEWAGE.splash, p.x, p.y);
     w.clock -= TICK_SCALE;
     if (w.clock <= 0) {
       w.clock = SEWAGE.gulpEvery;
@@ -6638,7 +7605,11 @@ function stepScenery(): void {
       // `0x43b17f` waits for the ground before the run starts at all
       r.vy += PLAYER_GRAVITY * ROACH.gravity * TICK_SCALE;
       r.y += r.vy * TICK_SCALE;
-      const floor = surfaceUnder(r.x, r.y - CLIMB_PX, r.y + Math.max(r.vy, 0) + STICK_PX);
+      const floor = surfaceUnder(
+        r.x,
+        r.y - CLIMB_PX,
+        r.y + Math.max(r.vy, 0) + STICK_PX,
+      );
       if (floor !== null && r.y >= floor) {
         r.y = floor;
         r.vy = 0;
@@ -6655,7 +7626,13 @@ function stepScenery(): void {
     if (floor !== null) r.y = floor;
   }
   // `0x43b1e8`: it removes itself the frame its own point leaves the rect
-  roaches = roaches.filter((r) => r.x >= r.left && r.x <= r.right && r.y >= r.top - 200 && r.y <= r.bottom + 200);
+  roaches = roaches.filter(
+    (r) =>
+      r.x >= r.left &&
+      r.x <= r.right &&
+      r.y >= r.top - 200 &&
+      r.y <= r.bottom + 200,
+  );
 }
 
 /** the doors in the room the player is in */
@@ -6678,12 +7655,20 @@ function elevsHere(): Elev[] {
  * same `0x4a89e2` array the level's walls are read into, and `0x440060` takes it
  * out again as the door finishes opening — so this is one list there too.
  */
-function blockers(): { top: number; left: number; bottom: number; right: number }[] {
-  const out: { top: number; left: number; bottom: number; right: number }[] = [...solids().obstacles];
+function blockers(): {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+}[] {
+  const out: { top: number; left: number; bottom: number; right: number }[] = [
+    ...solids().obstacles,
+  ];
   for (const d of doorsHere()) if (d.state !== "open") out.push(d);
   // `0x411460` is what a cage door does as it shuts: it appends its own rect to
   // the level's obstacle table, so it stops being a door and starts being wall
-  for (const c of hereOf((l) => l.cages)) if (c.state === "shut" || c.state === "closing") out.push(c);
+  for (const c of hereOf((l) => l.cages))
+    if (c.state === "shut" || c.state === "closing") out.push(c);
   return out;
 }
 
@@ -6786,7 +7771,8 @@ function leverFor(e: Enemy, dir: 0 | 1): Switch | null {
   const want = dir === 0 ? "off" : "on";
   for (const s of switchesHere()) {
     if (s.state !== want) continue;
-    if (s.x < e.left || s.x > e.right || s.y < e.top || s.y > e.bottom) continue;
+    if (s.x < e.left || s.x > e.right || s.y < e.top || s.y > e.bottom)
+      continue;
     return s;
   }
   return null;
@@ -6869,7 +7855,14 @@ function stepGoop(): void {
     if (!n.on) continue;
     if (Math.random() >= GOOP.chance * TICK_SCALE) continue;
     const kind = roll(2) - 1 === 0 ? "bead" : "strand";
-    drips.push({ kind, x: n.left + roll(n.right - n.left), y: n.top, vx: 0, vy: 0, clock: 0 });
+    drips.push({
+      kind,
+      x: n.left + roll(n.right - n.left),
+      y: n.top,
+      vx: 0,
+      vy: 0,
+      clock: 0,
+    });
   }
   const born: Drip[] = [];
   for (const d of drips) {
@@ -6887,7 +7880,14 @@ function stepGoop(): void {
       // `0x437408`: the gob comes at the strand's EIGHTH cel, not at its end
       if (!d.spent && dripCel(d) === GOOP.gobAtCel) {
         d.spent = true;
-        born.push({ kind: "gob", x: d.x, y: d.y + GOOP.gobBelow, vx: 0, vy: 0, clock: 0 });
+        born.push({
+          kind: "gob",
+          x: d.x,
+          y: d.y + GOOP.gobBelow,
+          vx: 0,
+          vy: 0,
+          clock: 0,
+        });
         sound?.effect(GOOP.gobSound, d.x, d.y + GOOP.gobBelow);
       }
       continue;
@@ -6971,7 +7971,13 @@ function feedTheGang(): void {
       const cel = dripStrike(d);
       if (!cel) return false;
       const b = strikeOf(cel, d.x, d.y, 1);
-      return !!b && b.right > box.left && b.left < box.right && b.bottom > box.top && b.top < box.bottom;
+      return (
+        !!b &&
+        b.right > box.left &&
+        b.left < box.right &&
+        b.bottom > box.top &&
+        b.top < box.bottom
+      );
     });
     if (!fed) continue;
     e.hp = Math.min(foe.health, e.hp + heal);
@@ -7043,7 +8049,10 @@ function stepCrows(): void {
     if (c.state === "tumble") {
       // dead: `0x42f850(obj, 1.0f)` — the player's own gravity, and it is gone
       // once it is out of the room
-      c.vy = Math.min(c.vy + (CROW.deadGravity / 12) * TICK_SCALE * TICK_SCALE, INVENTED.maxFallPx);
+      c.vy = Math.min(
+        c.vy + (CROW.deadGravity / 12) * TICK_SCALE * TICK_SCALE,
+        INVENTED.maxFallPx,
+      );
       c.y += c.vy;
       continue;
     }
@@ -7083,14 +8092,17 @@ function stepCrows(): void {
         c.state = "strike";
         c.clock = 0;
         c.factor = 1 + Math.floor(Math.random() * 2);
-        c.slack = CROW.jitter[0] + Math.floor(Math.random() * (CROW.jitter[1] - CROW.jitter[0] + 1));
+        c.slack =
+          CROW.jitter[0] +
+          Math.floor(Math.random() * (CROW.jitter[1] - CROW.jitter[0] + 1));
         sound?.effect(CROW.sound.strike, c.x, c.y);
       } else if (c.clock >= run) c.clock = 0;
     } else if (c.state === "strike" && c.clock >= run) {
       // `0x451eb9`: four times in ten it gives the attack up
       c.state = "fly";
       c.clock = 0;
-      if (Math.floor(Math.random() * 10) >= CROW.giveUp) sound?.effect(CROW.sound.flap, c.x, c.y);
+      if (Math.floor(Math.random() * 10) >= CROW.giveUp)
+        sound?.effect(CROW.sound.flap, c.x, c.y);
     }
   }
   // and the feathers: they fall at the player's own gravity and go on landing
@@ -7101,13 +8113,18 @@ function stepCrows(): void {
   }
   feathers = feathers.filter((f) => {
     const g = groundAt(f.x);
-    return f.age < CROW.feathers.cels.length * CROW.feathers.hold && (g === null || f.y < g);
+    return (
+      f.age < CROW.feathers.cels.length * CROW.feathers.hold &&
+      (g === null || f.y < g)
+    );
   });
   // a tumbling crow is done with once it has left the room
   const room = p.room;
   const i = lvl && room ? lvl.rooms.indexOf(room) : -1;
   if (lvl && room && i >= 0) {
-    lvl.crows[i] = lvl.crows[i].filter((c) => c.state !== "tumble" || c.y < room.bottom + 400);
+    lvl.crows[i] = lvl.crows[i].filter(
+      (c) => c.state !== "tumble" || c.y < room.bottom + 400,
+    );
   }
 }
 
@@ -7120,7 +8137,12 @@ function stepCrows(): void {
 function strikeCrow(c: Crow, damage: number): void {
   const puffs = damage > CROW.hardBlow ? 3 : 1;
   for (let i = 0; i < puffs; i++) {
-    feathers.push({ x: c.x + (Math.random() - 0.5) * 30, y: c.y + (Math.random() - 0.5) * 30, vy: 0, age: 0 });
+    feathers.push({
+      x: c.x + (Math.random() - 0.5) * 30,
+      y: c.y + (Math.random() - 0.5) * 30,
+      vy: 0,
+      age: 0,
+    });
   }
   sound?.effect(CROW.sound.hit, c.x, c.y);
   c.state = "tumble";
@@ -7177,7 +8199,8 @@ function stepWraith(e: Enemy, foe: Foe, run: number): boolean {
   // `0x42487f` — dormant until the player's own POINT is inside its rect
   if (e.asleep) {
     const ay = p.y - p.feet;
-    if (!(p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom)) return true;
+    if (!(p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom))
+      return true;
     e.asleep = false;
     e.anim = h.rouse;
     e.mode = "rouse";
@@ -7208,7 +8231,14 @@ function stepWraith(e: Enemy, foe: Foe, run: number): boolean {
   if (e.mode === "cast" && !castBeams.has(e)) {
     // `0x424d77` — one beam a cast, at the wraith rather than at the player
     castBeams.add(e);
-    streams.push({ weapon: 16, x: e.x, y: e.y, facing: e.facing, state: "start", clock: 0 });
+    streams.push({
+      weapon: 16,
+      x: e.x,
+      y: e.y,
+      facing: e.facing,
+      state: "start",
+      clock: 0,
+    });
   }
   const gap = Math.abs(p.x - e.x);
   // `0x45efd0`: the band is how many of the thresholds the gap is still past
@@ -7233,12 +8263,23 @@ function stepWraith(e: Enemy, foe: Foe, run: number): boolean {
     return false;
   }
   // 60..230 is where it fights, and `0x434540` picks which
-  const moves = band === 2 ? (["rise", "cast", "lunge", "close"] as const) : (["lunge", "sweep", "cast", "close"] as const);
+  const moves =
+    band === 2
+      ? (["rise", "cast", "lunge", "close"] as const)
+      : (["lunge", "sweep", "cast", "close"] as const);
   const pick = moves[Math.floor(Math.random() * moves.length)];
   castBeams.delete(e);
   e.mode = pick;
   e.anim =
-    pick === "rise" ? h.rise : pick === "cast" ? h.cast : pick === "lunge" ? h.lunge : pick === "sweep" ? h.sweep : foe.gait;
+    pick === "rise"
+      ? h.rise
+      : pick === "cast"
+        ? h.cast
+        : pick === "lunge"
+          ? h.lunge
+          : pick === "sweep"
+            ? h.sweep
+            : foe.gait;
   e.clock = 0;
   return false;
 }
@@ -7261,7 +8302,8 @@ function stepBishop(e: Enemy, foe: Foe, run: number): boolean {
   // `0x425d34` — dormant until the player's own POINT is inside its rect
   if (e.asleep) {
     const ay = p.y - p.feet;
-    if (!(p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom)) return true;
+    if (!(p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom))
+      return true;
     e.asleep = false;
     e.anim = foe.gait;
     e.mode = "close";
@@ -7295,7 +8337,8 @@ function stepBishop(e: Enemy, foe: Foe, run: number): boolean {
   // `0x425e5b` — under band 1 it just keeps coming
   if (band < 1) return false;
   // `0x425e70` — and at band 1 it only commits three times in ten
-  if (band === 1 && Math.floor(Math.random() * k.farOdds[1]) >= k.farOdds[0]) return false;
+  if (band === 1 && Math.floor(Math.random() * k.farOdds[1]) >= k.farOdds[0])
+    return false;
   // `0x425e8c` — thirteen in forty-two is the sweep, the rest is the throw
   const sweep = Math.floor(Math.random() * k.sweepOdds[1]) <= k.sweepOdds[0];
   e.mode = sweep ? "sweep" : "throw";
@@ -7312,7 +8355,8 @@ function stepBoss(e: Enemy, foe: Foe, run: number): boolean {
   if (e.asleep) {
     if (!foe.wake) return false;
     const ay = p.y - p.feet;
-    const inside = p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom;
+    const inside =
+      p.x >= e.left && p.x < e.right && ay >= e.top && ay < e.bottom;
     if (!inside) return true;
     e.asleep = false;
     e.mode = undefined;
@@ -7327,7 +8371,8 @@ function stepBoss(e: Enemy, foe: Foe, run: number): boolean {
     // `0x455a67`: the climb out of the ground, with a loop playing under it
     e.anim = foe.wake.burst ?? foe.gait;
     e.clock = 0;
-    if (foe.wake.stirSound !== undefined) sound?.effect(foe.wake.stirSound, e.x, e.y);
+    if (foe.wake.stirSound !== undefined)
+      sound?.effect(foe.wake.stirSound, e.x, e.y);
     return false;
   }
   const d = foe.drives;
@@ -7375,7 +8420,10 @@ function stepBoss(e: Enemy, foe: Foe, run: number): boolean {
     // {@link foeAnchor} converts back to
     const mine = level ? foeAnchor(e, level) : null;
     const dy = p.y - p.feet - (mine ? mine.y : e.y);
-    const [lo, hi] = dy < want - d.bob.slack || dy > want + d.bob.slack ? d.bob.far : d.bob.near;
+    const [lo, hi] =
+      dy < want - d.bob.slack || dy > want + d.bob.slack
+        ? d.bob.far
+        : d.bob.near;
     if (!e.hover) e.hover = 1;
     let v = e.vy / TICK_SCALE + e.hover;
     if (v < lo || v > hi) {
@@ -7553,14 +8601,16 @@ function stepEnemies(): void {
     // when it is using it — see {@link stepBoss}
     if (e.state === "gait" && foe.haunts && stepWraith(e, foe, run)) continue;
     if (e.state === "gait" && foe.preaches && stepBishop(e, foe, run)) continue;
-    if (e.state === "gait" && (foe.wake || foe.drives) && stepBoss(e, foe, run)) continue;
+    if (e.state === "gait" && (foe.wake || foe.drives) && stepBoss(e, foe, run))
+      continue;
     // whatever it is doing, a thing carrying momentum flies, falls, and stops when
     // its OWN cel's box lands. This has to come before the animation states: the
     // mailbox's topple is four frames and its flight is far longer than that.
     if (e.vx !== 0 || e.vy !== 0) {
       // ...and a thing with no gravity keeps whatever velocity it was given:
       // the hover below is what moves level eight's boss up and down
-      if (!foe.floats) e.vy = Math.min(e.vy + INVENTED.gravityPx, INVENTED.maxFallPx);
+      if (!foe.floats)
+        e.vy = Math.min(e.vy + INVENTED.gravityPx, INVENTED.maxFallPx);
       e.x += e.vx;
       e.y += e.vy;
       const span = p.room ? roomSpan(p.room) : null;
@@ -7572,14 +8622,19 @@ function stepEnemies(): void {
         // floor — swept along the fall so a fast one cannot tunnel through a
         // ledge, plus the one an open grave lays ({@link graveLidUnder}), so a
         // foe already in the air over one is caught by it too
-        const floor = foeSurfaceUnder(e.x, base - Math.max(e.vy, 0) - CLIMB_PX, base + 1);
+        const floor = foeSurfaceUnder(
+          e.x,
+          base - Math.max(e.vy, 0) - CLIMB_PX,
+          base + 1,
+        );
         if (floor !== null && base >= floor) {
           // by the CEL's box, not by where the upright one would have stood
           e.y -= base - floor;
           e.vy = 0;
           // and on the ground the allocator's drag takes 70% a frame off it
           // ({@link dragged}) — once a frame, on the frame's whole pixels
-          if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE)) e.vx = dragged(Math.round(e.vx / TICK_SCALE)) * TICK_SCALE;
+          if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE))
+            e.vx = dragged(Math.round(e.vx / TICK_SCALE)) * TICK_SCALE;
         }
       }
     }
@@ -7602,7 +8657,8 @@ function stepEnemies(): void {
       // straight back on tag 0, whole, to be turned open all over again
       if (foe.burst && foe.flinch && e.dents >= foe.flinch.length) {
         // `0x44fb94`, on the frame the water is created
-        if (foe.burst.sound !== undefined) sound?.effect(foe.burst.sound, e.x, e.y);
+        if (foe.burst.sound !== undefined)
+          sound?.effect(foe.burst.sound, e.x, e.y);
         pool.push({
           ...e,
           state: "burst",
@@ -7636,7 +8692,10 @@ function stepEnemies(): void {
      * somebody's territory, which is why a level that starts dry does not stay
      * dry, and why turning them off is a job rather than a one-off.
      */
-    const aim = foe.lever && (e.state === "gait" || e.state === "lever") && !e.asleep ? leverFor(e, foe.lever.dir) : null;
+    const aim =
+      foe.lever && (e.state === "gait" || e.state === "lever") && !e.asleep
+        ? leverFor(e, foe.lever.dir)
+        : null;
     if (e.state === "lever") {
       const L = foe.lever!;
       if (!aim) {
@@ -7647,7 +8706,8 @@ function stepEnemies(): void {
         if (!e.thrown && e.clock >= L.at * L.anim.hold) {
           e.thrown = true;
           // `0x43a191`: one roll in three, and then one of two takes
-          if (L.sound.length && roll(3) === 1) sound?.effect(L.sound[roll(L.sound.length) - 1], e.x, e.y);
+          if (L.sound.length && roll(3) === 1)
+            sound?.effect(L.sound[roll(L.sound.length) - 1], e.x, e.y);
           throwSwitch(aim, foe.lever!.dir);
         }
         if (e.clock >= run) {
@@ -7684,7 +8744,10 @@ function stepEnemies(): void {
       if (foe.floats) e.y += Math.max(-px, Math.min(px, dy)) * TICK_SCALE;
       continue;
     }
-    const i = e.state === "gait" ? loopIndex(e.anim, e.clock) : Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
+    const i =
+      e.state === "gait"
+        ? loopIndex(e.anim, e.clock)
+        : Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
     const step = ((e.anim.dx?.[i] ?? 0) / foe.divisor) * TICK_SCALE;
     // a floater's own hover keeps `vy` busy for ever, and its script's stride has
     // to travel anyway
@@ -7706,7 +8769,11 @@ function stepEnemies(): void {
       const ground = groundAt(nx);
       const reach = foeSurfaceUnder(nx, baseNow - CLIMB_PX, baseNow + STICK_PX);
       // a floater has no feet to catch on a step
-      const blocked = !foe.floats && ground !== null && ground < baseNow - CLIMB_PX && reach === null;
+      const blocked =
+        !foe.floats &&
+        ground !== null &&
+        ground < baseNow - CLIMB_PX &&
+        reach === null;
       // a flinch that travels is a knockdown: it goes the way it was hit and is
       // not turned round by its own rect
       /**
@@ -7717,7 +8784,13 @@ function stepEnemies(): void {
        * turning it round at the edges of that pinned it there for ever — while
        * its own state machine was asking it to close from a thousand away.
        */
-      if (e.state === "gait" && !aim && !foe.drives && (nx < e.left || nx > e.right)) e.facing = -e.facing;
+      if (
+        e.state === "gait" &&
+        !aim &&
+        !foe.drives &&
+        (nx < e.left || nx > e.right)
+      )
+        e.facing = -e.facing;
       else if (!blocked) {
         const span = p.room ? roomSpan(p.room) : null;
         e.x = foe.drives
@@ -7755,7 +8828,14 @@ function stepEnemies(): void {
  * One cel of the level's own book, placed by its anchor — which is what
  * `0x4026d0` does for everything the engine draws.
  */
-function drawLevelCel(id: number, x: number, y: number, camX: number, camY: number, mirror = false): void {
+function drawLevelCel(
+  id: number,
+  x: number,
+  y: number,
+  camX: number,
+  camY: number,
+  mirror = false,
+): void {
   const lvl = level;
   if (!lvl) return;
   const loc = lvl.sbk.byId.get(id);
@@ -7768,7 +8848,8 @@ function drawLevelCel(id: number, x: number, y: number, camX: number, camY: numb
   const sx = x - camX + W / 2;
   const left = mirror ? sx - (art.width - rec.posX) : sx - rec.posX;
   const top = y - camY + VIEW.y - rec.posY;
-  if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) return;
+  if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
+    return;
   if (!mirror) {
     ctx.drawImage(art, left, top);
     return;
@@ -7784,7 +8865,14 @@ function drawLevelCel(id: number, x: number, y: number, camX: number, camY: numb
  * {@link drawLevelCel} follows, against the other of the two books a level has
  * open. The pickups and the craft already needed it; the flypasts are the third.
  */
-function drawPlayerCel(id: number, x: number, y: number, camX: number, camY: number, mirror: boolean): void {
+function drawPlayerCel(
+  id: number,
+  x: number,
+  y: number,
+  camX: number,
+  camY: number,
+  mirror: boolean,
+): void {
   const loc = player?.byId.get(id);
   if (loc === undefined) return;
   const art = playerCel(loc);
@@ -7793,7 +8881,8 @@ function drawPlayerCel(id: number, x: number, y: number, camX: number, camY: num
   const sx = x - camX + W / 2;
   const left = mirror ? sx - (art.width - f.posXraw) : sx - f.posXraw;
   const top = y - camY + VIEW.y - f.posYraw;
-  if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) return;
+  if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
+    return;
   if (!mirror) {
     ctx.drawImage(art, left, top);
     return;
@@ -7830,9 +8919,13 @@ function drawEnemy(e: Enemy, camX: number, camY: number): void {
   // by this cel's own anchor about the kind's fixed point — see foeAnchor. On
   // mirror the cel reflects about the anchor and not about its own centre, which
   // is what `0x4026d0` does and what keeps a mirrored looming rat in place.
-  const left = e.facing > 0 ? a.x - camX + W / 2 - (art.width - c.posX) : a.x - camX + W / 2 - c.posX;
+  const left =
+    e.facing > 0
+      ? a.x - camX + W / 2 - (art.width - c.posX)
+      : a.x - camX + W / 2 - c.posX;
   const top = a.y - camY + VIEW.y - c.posY;
-  if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) return;
+  if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
+    return;
   if (e.facing > 0) {
     ctx.save();
     ctx.scale(-1, 1);
@@ -7852,7 +8945,8 @@ function drawPickups(camX: number, camY: number): void {
     if (!art || !f) continue;
     const left = q.x - camX + W / 2 - f.posXraw;
     const top = q.y - camY + VIEW.y - f.posYraw;
-    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) continue;
+    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
+      continue;
     ctx.drawImage(art, left, top);
   }
 }
@@ -7871,7 +8965,8 @@ function drawGuns(camX: number, camY: number): void {
     if (!art || !f) continue;
     const left = g.x - camX + W / 2 - f.posXraw;
     const top = g.y - camY + VIEW.y - f.posYraw;
-    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) continue;
+    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
+      continue;
     ctx.drawImage(art, left, top);
   }
 }
@@ -7888,7 +8983,9 @@ function drawFlares(camX: number, camY: number): void {
   for (const f of flares) {
     const id =
       f.burn !== null
-        ? FLARE.burn[Math.min(FLARE.burn.length - 1, Math.floor(f.burn / FLARE.burnHold))]
+        ? FLARE.burn[
+            Math.min(FLARE.burn.length - 1, Math.floor(f.burn / FLARE.burnHold))
+          ]
         : f.wobble >= FLARE.wobble.hi - FLARE.wobble.step
           ? FLARE.muzzle
           : FLARE.flight;
@@ -7933,7 +9030,10 @@ function drawBolts(camX: number, camY: number): void {
 /** the green balls, from the shared player book, centred on their own anchors */
 function drawPops(camX: number, camY: number): void {
   for (const q of pops) {
-    const id = VANISH.cels[Math.min(VANISH.cels.length - 1, Math.floor(q.age / VANISH.hold))];
+    const id =
+      VANISH.cels[
+        Math.min(VANISH.cels.length - 1, Math.floor(q.age / VANISH.hold))
+      ];
     const loc = player?.byId.get(id);
     if (loc === undefined) continue;
     const art = playerCel(loc);
@@ -7941,7 +9041,8 @@ function drawPops(camX: number, camY: number): void {
     if (!art || !f) continue;
     const left = q.x - camX + W / 2 - f.posXraw;
     const top = q.y - camY + VIEW.y - f.posYraw;
-    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) continue;
+    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
+      continue;
     ctx.drawImage(art, left, top);
   }
 }
@@ -7961,8 +9062,18 @@ function drawGobs(camX: number, camY: number): void {
       g.stage >= 0
         ? SPRAY.pool[g.stage]
         : g.vy > 0
-          ? SPRAY.fall.cels[Math.min(SPRAY.fall.cels.length - 1, Math.floor(g.age / SPRAY.fall.hold))]
-          : SPRAY.rise.cels[Math.min(SPRAY.rise.cels.length - 1, Math.floor(g.age / SPRAY.rise.hold))];
+          ? SPRAY.fall.cels[
+              Math.min(
+                SPRAY.fall.cels.length - 1,
+                Math.floor(g.age / SPRAY.fall.hold),
+              )
+            ]
+          : SPRAY.rise.cels[
+              Math.min(
+                SPRAY.rise.cels.length - 1,
+                Math.floor(g.age / SPRAY.rise.hold),
+              )
+            ];
     const loc = player?.byId.get(id);
     if (loc === undefined) continue;
     const art = playerCel(loc);
@@ -7971,7 +9082,8 @@ function drawGobs(camX: number, camY: number): void {
     if (!f) continue;
     const left = g.x - camX + W / 2 - f.posXraw;
     const top = g.y - camY + VIEW.y - f.posYraw;
-    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) continue;
+    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
+      continue;
     if (g.mirror) {
       ctx.save();
       ctx.scale(-1, 1);
@@ -8043,7 +9155,9 @@ function loop(now: number): void {
       // the base tag, so repeated presses alternate between two animations. The
       // kick does not — `0x42a670` picks its tag from the keys alone. BOTH
       // together are their own move: the 650s headbutt (`0x429706`).
-      const both = (punchPressed && (kickPressed || held.kick)) || (kickPressed && held.punch);
+      const both =
+        (punchPressed && (kickPressed || held.kick)) ||
+        (kickPressed && held.punch);
       // S is the pickup button and the duck button, and which one it is depends
       // entirely on what is 35 pixels in front of you: `0x4298a1` calls the reach
       // handler every frame S is held, and `0x42f081` ducks only when the probe
@@ -8053,14 +9167,23 @@ function loop(now: number): void {
         // `0x42f0dc` — a gun that is not the one you are holding makes you throw
         // the one you are holding down, and it does it BEFORE the reach plays
         const want = GUN_CODES[gunAhead()!.code]?.weapon;
-        if (inv.armed && want !== undefined && want !== null && want !== inv.weapon) dropGun();
+        if (
+          inv.armed &&
+          want !== undefined &&
+          want !== null &&
+          want !== inv.weapon
+        )
+          dropGun();
       }
       // ...and with a gun in your hands P is not a fist any more. The five armed
       // state machines read P (`[0x4ac394]`) and install their own wind-up tag;
       // none of them has a kick at all.
       else if (inv.armed && punchPressed && !held.down) p.act = "fire";
       else if (both) p.act = held.down ? "duckCombo" : "headbutt";
-      else if (punchPressed) p.act = held.down ? "duckPunch" : `punch${big}${Math.random() < 0.5 ? "" : "2"}`;
+      else if (punchPressed)
+        p.act = held.down
+          ? "duckPunch"
+          : `punch${big}${Math.random() < 0.5 ? "" : "2"}`;
       else if (kickPressed && p.running) {
         // the RUN handler's own kick (`0x429db9`) is the FLYING KICK — tag 4 of
         // `0x471d68`, whose first record carries its own leap: dx 190, dy -310
@@ -8097,7 +9220,12 @@ function loop(now: number): void {
       }
     }
     // an air act ends with the flight: landing hands the player back
-    if (p.act && (p.act === "airKick" || p.act === "airPunch" || p.act === "flyingKick") && p.onGround && p.actClock > 0)
+    if (
+      p.act &&
+      (p.act === "airKick" || p.act === "airPunch" || p.act === "flyingKick") &&
+      p.onGround &&
+      p.actClock > 0
+    )
       p.act = null;
     if (p.act) {
       const a = actOf(p.act);
@@ -8112,7 +9240,12 @@ function loop(now: number): void {
         // a HELD weapon keeps firing while the button is down: its state
         // machine sits on the firing tag and calls the fire function again
         // every frame, and `-2` only goes out when the tag is left
-        if (p.act === "fire" && STREAMS[inv.weapon] && held.punch && roundsIn(inv.weapon) > 0) {
+        if (
+          p.act === "fire" &&
+          STREAMS[inv.weapon] &&
+          held.punch &&
+          roundsIn(inv.weapon) > 0
+        ) {
           p.actClock = 0;
           p.fired = true;
         } else if (p.heldBy) {
@@ -8154,7 +9287,11 @@ function loop(now: number): void {
         const nx = p.x + step;
         const span = p.room ? roomSpan(p.room) : null;
         const half = (playerBox().right - playerBox().left) / 2;
-        if (step !== 0 && (!span || (nx - half >= span.lo && nx + half <= span.hi))) p.x = nx;
+        if (
+          step !== 0 &&
+          (!span || (nx - half >= span.lo && nx + half <= span.hi))
+        )
+          p.x = nx;
         p.actClock += TICK_SCALE;
       }
     }
@@ -8166,11 +9303,25 @@ function loop(now: number): void {
     // a release — which this did — dropped the player straight down the rail the
     // moment the key came up, and whether the step west registered first was a
     // race between two key events and one tick.
-    const letGo = p.climbing && (held.right !== held.left || held.jump || jumpPressed);
-    const ladder = p.act || letGo ? undefined : p.climbing || held.up || held.down ? onLadder() : undefined;
+    if (p.onGround) ladderLatch = false;
+    const letGo =
+      p.climbing &&
+      (held.right !== held.left || held.jump || jumpPressed) &&
+      canLetGo();
+    let ladder: SbkEntity | undefined;
+    if (p.climbing) ladder = p.act || letGo ? undefined : p.ladder;
+    else if (
+      !p.act &&
+      !ladderLatch &&
+      (held.down || (held.up && held.right === held.left))
+    )
+      ladder = ladderAt();
     // ...and INV stands you still: state 15 reads no direction at all, so a
     // holstered player cannot walk while the button is down
-    const dir = ladder || p.act || held.inv ? 0 : (held.right ? 1 : 0) - (held.left ? 1 : 0);
+    const dir =
+      ladder || p.act || held.inv
+        ? 0
+        : (held.right ? 1 : 0) - (held.left ? 1 : 0);
     p.moving = dir !== 0;
     /**
      * The run — `[0x4ac3fe]`, which is W held, and see {@link KEYS} for why that
@@ -8237,7 +9388,11 @@ function loop(now: number): void {
           sound?.own(OWN.jump, p.x, p.y);
           p.leap = p.running;
           p.windup = p.leap ? 1 : ANIM.launch.length;
-          p.launchDx = p.running ? MEASURED.runJumpDx : p.moving ? MEASURED.launchDx : 0;
+          p.launchDx = p.running
+            ? MEASURED.runJumpDx
+            : p.moving
+              ? MEASURED.launchDx
+              : 0;
         }
       }
       // ---- animate: the current record's dx/dy through the mover, `0x45d196`
@@ -8247,7 +9402,9 @@ function loop(now: number): void {
           if (p.windup === 0) {
             // the launch record: dy -420 and tag 3's dx 100 or tag 4's dx 180,
             // each divided once, away from zero, into the velocity — -35, 9, 15
-            p.vyRaw += roundAway(-(p.leap ? MEASURED.runJumpDy : MEASURED.jump) / DIVISOR);
+            p.vyRaw += roundAway(
+              -(p.leap ? MEASURED.runJumpDy : MEASURED.jump) / DIVISOR,
+            );
             p.vx += p.facing * roundAway(p.launchDx / DIVISOR);
             p.onGround = false;
             p.launched = true;
@@ -8257,7 +9414,11 @@ function loop(now: number): void {
         } else if (dir) {
           // the gait's own dx: the walk's 95, the run's 180, and ducked it is the
           // CRAWL — 0x4717c8 tag 4's 47, which cannot run
-          const dx = held.down ? MEASURED.crawl : p.running ? MEASURED.run : MEASURED.walk;
+          const dx = held.down
+            ? MEASURED.crawl
+            : p.running
+              ? MEASURED.run
+              : MEASURED.walk;
           p.vx += p.facing * roundAway(dx / DIVISOR);
         }
       }
@@ -8329,7 +9490,13 @@ function loop(now: number): void {
         const next = level.rooms.find((r) => {
           if (r === p.room) return false;
           const sp = roomSpan(r);
-          return sp !== null && nx >= sp.lo && nx <= sp.hi && p.y >= r.top && p.y <= r.bottom;
+          return (
+            sp !== null &&
+            nx >= sp.lo &&
+            nx <= sp.hi &&
+            p.y >= r.top &&
+            p.y <= r.bottom
+          );
         });
         /**
          * ...and failing that, the engine's own answer: `0x40b940(2, point)` is
@@ -8348,7 +9515,12 @@ function loop(now: number): void {
         const rect =
           next ??
           level.rooms.find(
-            (r) => r !== p.room && nx >= r.left && nx <= r.right && p.y >= r.top && p.y <= r.bottom,
+            (r) =>
+              r !== p.room &&
+              nx >= r.left &&
+              nx <= r.right &&
+              p.y >= r.top &&
+              p.y <= r.bottom,
           );
         if (rect) {
           p.room = rect;
@@ -8397,7 +9569,8 @@ function loop(now: number): void {
     // ...and only from a STANDSTILL, now that the same key is the run. Otherwise
     // every sprint past a doorway ends in the next room, which is the trap this
     // door already had once, arrived at from the other direction.
-    if (upPressed && p.onGround && dir === 0 && takeDoor()) upPressed = jumpPressed = false;
+    if (upPressed && p.onGround && dir === 0 && takeDoor())
+      upPressed = jumpPressed = false;
     const wasClimbing = p.climbing;
     p.climbing = ladder !== undefined;
     if (ladder) {
@@ -8407,7 +9580,7 @@ function loop(now: number): void {
        * Where the record says and facing the way it says: `0x42b2b2` writes the
        * record's own `pointX` straight into the player's x and `0x42b279` turns
        * them by the sign of the spacing, so neither is a snap of this page's
-       * invention any more. {@link onLadder} has the trigger the engine tests.
+       * invention any more. {@link ladderAt} has the trigger the engine tests.
        */
       const spacing = Math.abs(ladder.param) || 35;
       const last = Math.floor((ladder.bottom - ladder.top) / spacing);
@@ -8416,6 +9589,7 @@ function loop(now: number): void {
       const rest = player?.cels.find((c) => c.id === LADDER.restCel);
       const feet = rest?.body ? rest.body.y1 : 96;
       if (!wasClimbing) {
+        p.ladder = ladder;
         p.x = ladder.pointX;
         // `0x42b279`: a positive spacing wants `obj+0x28` SET and a negative one
         // wants it clear — which, for the player's book, is facing left and facing
@@ -8424,9 +9598,14 @@ function loop(now: number): void {
         // facing back into them
         p.facing = ladder.param < 0 ? 1 : -1;
         // `0x42b300`: the rung you arrive on is the one above where you stood, and
-        // the y it measures is the ANCHOR, not the feet
-        const anchor = p.y - feet;
-        p.rung = anchor > ladder.top ? Math.max(0, Math.floor((anchor - ladder.top) / spacing) - 1) : 0;
+        // the y it measures is the ANCHOR — `obj+6` as the pose you grabbed from
+        // left it, which is the standing cel's 88 above the feet, not the climb
+        // cel's 96
+        const anchor = p.y - p.feet;
+        p.rung =
+          anchor > ladder.top
+            ? Math.max(0, Math.floor((anchor - ladder.top) / spacing) - 1)
+            : 0;
         p.climbTag = held.down ? 3 : 0;
         p.climbClock = 0;
       } else {
@@ -8437,22 +9616,31 @@ function loop(now: number): void {
         if (p.climbClock >= LADDER.rungFrames) {
           const t = p.climbTag;
           const was = p.rung;
-          let moved = true;
+          // ...and a tag is INSTALLED only when there is a rung to take or a
+          // direction to turn to. At rung 0 with W held — `cmp [0x4ac406], 0;
+          // jle` in `0x42afc4` and `0x42b054` — or at the last with S
+          // (`0x42b134`, `0x42b1cd`), the case is skipped whole: no tag, no
+          // sound, and the cel HOLDS. This page installed the other tag of the
+          // same direction instead, four frames each way, and the player
+          // flickered at the top of every ladder in the game.
+          let installed = true;
           if (held.down) {
             if (t === 2 || t === 3) {
-              if (p.rung < last) p.rung += 1;
-              else moved = false;
-              p.climbTag = t === 2 ? 3 : 2;
+              if (p.rung < last) {
+                p.rung += 1;
+                p.climbTag = t === 2 ? 3 : 2;
+              } else installed = false;
             } else p.climbTag = t === 0 ? 3 : 2;
           } else if (held.up) {
             if (t === 0 || t === 1) {
-              if (p.rung > 0) p.rung -= 1;
-              else moved = false;
-              p.climbTag = t === 0 ? 1 : 0;
+              if (p.rung > 0) {
+                p.rung -= 1;
+                p.climbTag = t === 0 ? 1 : 0;
+              } else installed = false;
             } else p.climbTag = t === 2 ? 1 : 0;
-          }
-          // nothing to install: the animation stays ended and the cel holds
-          p.climbClock = moved ? 0 : LADDER.rungFrames;
+          } else installed = false;
+          // nothing installed: the animation stays ended and the cel holds
+          p.climbClock = installed ? 0 : LADDER.rungFrames;
           // one hand then the other: the ladder state plays skulz 3 as it
           // installs the odd tags and skulz 2 as it installs the even ones
           if (p.rung !== was) sound?.own(OWN.rung[p.climbTag % 2], p.x, p.y);
@@ -8478,15 +9666,24 @@ function loop(now: number): void {
        * none of the platforms the ladder was put there to reach.
        */
       const here =
-        !!p.room && p.x >= p.room.left && p.x <= p.room.right && p.y >= p.room.top && p.y <= p.room.bottom;
+        !!p.room &&
+        p.x >= p.room.left &&
+        p.x <= p.room.right &&
+        p.y >= p.room.top &&
+        p.y <= p.room.bottom;
       if (!here) {
         const into = level?.rooms.find(
-          (r) => p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom,
+          (r) =>
+            p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom,
         );
         if (into) p.room = into;
       }
       p.onGround = false;
     } else {
+      if (wasClimbing) {
+        ladderLatch = true;
+        p.ladder = undefined;
+      }
       if (wasClimbing && !p.onGround && (dir || held.jump || jumpPressed)) {
         /**
          * Off the ladder sideways. `0x42ae50` leaves the ladder state on
@@ -8502,7 +9699,9 @@ function loop(now: number): void {
         if (dir) p.facing = dir;
         const leap = held.jump || jumpPressed;
         p.vyRaw = roundAway(-(leap ? MEASURED.jump : MEASURED.hopDy) / DIVISOR);
-        p.vx = p.facing * roundAway((leap ? MEASURED.runJumpDx : MEASURED.hopDx) / DIVISOR);
+        p.vx =
+          p.facing *
+          roundAway((leap ? MEASURED.runJumpDx : MEASURED.hopDx) / DIVISOR);
         p.stepPx = 0;
         p.launched = true;
         p.leap = true;
@@ -8754,25 +9953,50 @@ function loop(now: number): void {
     drawLevelCel(elevatorCel(e), e.x, e.winchY, camX, camY);
   }
   for (const b of ibeamsHere()) drawLevelCel(ibeamCel(b), b.x, b.y, camX, camY);
-  for (const c of crushesHere()) drawLevelCel(crushCel(c), c.x, c.y, camX, camY);
+  for (const c of crushesHere())
+    drawLevelCel(crushCel(c), c.x, c.y, camX, camY);
   // the lever is on the wall behind whatever is standing at it, and the goop is
   // in front: its class is collected with the actors, the switch's is not
-  for (const w of switchesHere()) drawLevelCel(switchCel(w), w.x, w.y, camX, camY);
+  for (const w of switchesHere())
+    drawLevelCel(switchCel(w), w.x, w.y, camX, camY);
   // an open door shows cel 0, which is nothing; a lift is one cel for ever
-  for (const d of doorsHere()) if (d.state !== "open") drawLevelCel(doorCel(d), d.x, d.y, camX, camY);
+  for (const d of doorsHere())
+    if (d.state !== "open") drawLevelCel(doorCel(d), d.x, d.y, camX, camY);
   for (const e of elevsHere()) drawLevelCel(e.cel, e.x, e.y, camX, camY);
   // the scenery that does something, each on its own class's cels
-  for (const k of hereOf((l) => l.shacks)) drawLevelCel(shackCel(k), k.x, k.y, camX, camY);
+  for (const k of hereOf((l) => l.shacks))
+    drawLevelCel(shackCel(k), k.x, k.y, camX, camY);
   for (const b of hereOf((l) => l.barrels)) {
-    drawLevelCel(BARREL.bob.cels[loopIndex(BARREL.bob, b.clock)], b.x, b.y, camX, camY);
+    drawLevelCel(
+      BARREL.bob.cels[loopIndex(BARREL.bob, b.clock)],
+      b.x,
+      b.y,
+      camX,
+      camY,
+    );
   }
   for (const q of hereOf((l) => l.pipes)) {
     drawLevelCel(PIPE.mouth.cels[0], q.x, q.y, camX, camY);
-    drawLevelCel(PIPE.flow.cels[loopIndex(PIPE.flow, q.clock)], q.x, q.y, camX, camY);
+    drawLevelCel(
+      PIPE.flow.cels[loopIndex(PIPE.flow, q.clock)],
+      q.x,
+      q.y,
+      camX,
+      camY,
+    );
   }
-  for (const q of hereOf((l) => l.bushes)) drawLevelCel(bushCel(q), q.x, q.y, camX, camY);
+  for (const q of hereOf((l) => l.bushes))
+    drawLevelCel(bushCel(q), q.x, q.y, camX, camY);
   for (const r of roaches) {
-    drawLevelCel(r.onGround ? ROACH.run.cels[loopIndex(ROACH.run, r.clock)] : ROACH.drop.cels[0], r.x, r.y, camX, camY);
+    drawLevelCel(
+      r.onGround
+        ? ROACH.run.cels[loopIndex(ROACH.run, r.clock)]
+        : ROACH.drop.cels[0],
+      r.x,
+      r.y,
+      camX,
+      camY,
+    );
   }
   for (const [slot, clock] of columns) {
     const q = hereOf((l) => l.sprinklers).find((w) => w.slot === slot);
@@ -8781,7 +10005,13 @@ function loop(now: number): void {
   for (const d of drips) drawLevelCel(dripCel(d), d.x, d.y, camX, camY);
   for (const c of crowsHere()) drawLevelCel(crowCel(c), c.x, c.y, camX, camY);
   for (const f of feathers) {
-    const id = CROW.feathers.cels[Math.min(CROW.feathers.cels.length - 1, Math.floor(f.age / CROW.feathers.hold))];
+    const id =
+      CROW.feathers.cels[
+        Math.min(
+          CROW.feathers.cels.length - 1,
+          Math.floor(f.age / CROW.feathers.hold),
+        )
+      ];
     drawLevelCel(id, f.x, f.y, camX, camY);
   }
   for (const e of spawnedHere()) drawEnemy(e, camX, camY);
@@ -8792,7 +10022,8 @@ function loop(now: number): void {
     const id = cageCel(c);
     if (id) drawLevelCel(id, c.x, c.y, camX, camY);
   }
-  for (const a of hereOf((l) => l.alarms)) drawLevelCel(alarmCel(a), a.x, a.y, camX, camY);
+  for (const a of hereOf((l) => l.alarms))
+    drawLevelCel(alarmCel(a), a.x, a.y, camX, camY);
   // the big guns: the turret first, then the hatch over it, because the hatch is
   // what the turret comes out THROUGH
   for (const g of hereOf((l) => l.bigguns)) {
@@ -8807,28 +10038,46 @@ function loop(now: number): void {
   }
   // ...and whatever a probe fired, on the PLAYER's book rather than the level's,
   // which is why no level book carries 20200..20211
-  for (const f of flypasts) drawPlayerCel(flypastCel(f), f.x, f.y, camX, camY, f.mirror);
-  for (const b of hereOf((l) => l.belts)) drawLevelCel(beltCel(b), b.x, b.y, camX, camY);
-  for (const c of hereOf((l) => l.chairs)) drawLevelCel(chairCel(c), c.x, c.y, camX, camY);
-  for (const c of hereOf((l) => l.claws)) drawLevelCel(clawCel(c), c.x, c.y, camX, camY);
-  for (const f of hereOf((l) => l.fittings)) drawLevelCel(fittingCel(f), f.x, f.y, camX, camY);
+  for (const f of flypasts)
+    drawPlayerCel(flypastCel(f), f.x, f.y, camX, camY, f.mirror);
+  for (const b of hereOf((l) => l.belts))
+    drawLevelCel(beltCel(b), b.x, b.y, camX, camY);
+  for (const c of hereOf((l) => l.chairs))
+    drawLevelCel(chairCel(c), c.x, c.y, camX, camY);
+  for (const c of hereOf((l) => l.claws))
+    drawLevelCel(clawCel(c), c.x, c.y, camX, camY);
+  for (const f of hereOf((l) => l.fittings))
+    drawLevelCel(fittingCel(f), f.x, f.y, camX, camY);
   for (const b of hereOf((l) => l.boggs)) {
     // the machinery behind it, then the body, then the arm it hangs in front of,
     // then the head. The disassembly settles where each of these STANDS but not
     // what order they are painted in, and this is the order that reads.
-    for (let i = 0; i < b.machines.length; i++) drawLevelCel(machineCel(b, i), b.machines[i].x, b.machines[i].y, camX, camY);
+    for (let i = 0; i < b.machines.length; i++)
+      drawLevelCel(
+        machineCel(b, i),
+        b.machines[i].x,
+        b.machines[i].y,
+        camX,
+        camY,
+      );
     drawLevelCel(boggsCel(b), b.x, b.y, camX, camY);
     drawLevelCel(BOGGS.arm.poses[BOGGS.arm.tag], b.x, b.y, camX, camY);
     const j = jawsAt(b);
     drawLevelCel(jawsCel(b), j.x, j.y, camX, camY);
     drawLevelCel(boggsHeadCel(b), b.headX, b.headY, camX, camY);
   }
-  for (const q of hereOf((l) => l.fans)) drawLevelCel(fanCel(q), q.x, q.y, camX, camY);
-  for (const f of hereOf((l) => l.floors)) drawLevelCel(floorCel(f), f.x, f.y, camX, camY);
-  for (const q of hereOf((l) => l.surges)) drawLevelCel(surgeCel(q), q.x, q.y, camX, camY);
-  for (const b of hereOf((l) => l.bridges)) drawLevelCel(bridgeCel(b), b.x, b.y, camX, camY);
-  for (const a of hereOf((l) => l.axes)) drawLevelCel(axeCel(a), a.x, a.y, camX, camY);
-  for (const h of hereOf((l) => l.holes)) drawLevelCel(holeCel(h), h.x, h.y, camX, camY);
+  for (const q of hereOf((l) => l.fans))
+    drawLevelCel(fanCel(q), q.x, q.y, camX, camY);
+  for (const f of hereOf((l) => l.floors))
+    drawLevelCel(floorCel(f), f.x, f.y, camX, camY);
+  for (const q of hereOf((l) => l.surges))
+    drawLevelCel(surgeCel(q), q.x, q.y, camX, camY);
+  for (const b of hereOf((l) => l.bridges))
+    drawLevelCel(bridgeCel(b), b.x, b.y, camX, camY);
+  for (const a of hereOf((l) => l.axes))
+    drawLevelCel(axeCel(a), a.x, a.y, camX, camY);
+  for (const h of hereOf((l) => l.holes))
+    drawLevelCel(holeCel(h), h.x, h.y, camX, camY);
   for (const q of hereOf((l) => l.hands)) {
     const id = handCel(q);
     if (id) drawLevelCel(id, q.atX, q.atY, camX, camY);
@@ -8868,24 +10117,25 @@ function loop(now: number): void {
    * So INV is a HOLSTER. There is no inventory screen in `SC.EXE` — see the
    * README for the wrong turning that went looking for one at `0x42edd0`.
    */
-  const kit = inv.armed && !held.inv ? WEAPONS[inv.weapon]?.moveset ?? null : null;
+  const kit =
+    inv.armed && !held.inv ? (WEAPONS[inv.weapon]?.moveset ?? null) : null;
   const seq = acting
     ? acting.cels
     : p.climbing
-      ? ANIM.climb[p.climbTag] ?? ANIM.hang
+      ? (ANIM.climb[p.climbTag] ?? ANIM.hang)
       : p.landLeft > 0
         ? p.hardLand
-          ? kit?.fall ?? ANIM.air
-          : kit?.land ?? ANIM.land
+          ? (kit?.fall ?? ANIM.air)
+          : (kit?.land ?? ANIM.land)
         : !p.onGround || p.windup > 0
-          ? kit?.jump ?? ANIM.air
+          ? (kit?.jump ?? ANIM.air)
           : p.crouching
-          ? kit?.duck ?? ANIM.crouch
-          : p.running
-            ? kit?.run ?? ANIM.run
-            : p.moving
-              ? kit?.walk ?? ANIM.walk
-              : kit?.idle ?? ANIM.idle;
+            ? (kit?.duck ?? ANIM.crouch)
+            : p.running
+              ? (kit?.run ?? ANIM.run)
+              : p.moving
+                ? (kit?.walk ?? ANIM.walk)
+                : (kit?.idle ?? ANIM.idle);
   // Three clocks, because the engine has three. An action and the idle run on
   // engine frames at their script's own ticksPerFrame; anything that covers
   // ground is clocked by the GROUND it covers, one cel per stride, so the feet
@@ -8893,17 +10143,26 @@ function loop(now: number): void {
   const running = seq === (kit?.run ?? ANIM.run);
   const stride = running ? runStridePx() : stridePx();
   let id: number;
-  if (acting) id = seq[Math.min(seq.length - 1, Math.floor(p.actClock / (acting.hold ?? 1)))];
+  if (acting)
+    id =
+      seq[
+        Math.min(seq.length - 1, Math.floor(p.actClock / (acting.hold ?? 1)))
+      ];
   // a rung is four cels at one engine frame each, and the last of them is what a
   // ladder holds you on when you stop asking to move
-  else if (p.climbing) id = seq[Math.min(seq.length - 1, Math.floor(p.climbClock))];
+  else if (p.climbing)
+    id = seq[Math.min(seq.length - 1, Math.floor(p.climbClock))];
   else if (seq === (kit?.idle ?? ANIM.idle))
     // the fidgets are the fists' own two tags and no weapon script has any
-    id = p.fidget && !kit
-      ? p.fidget[Math.min(p.fidget.length - 1, Math.floor(p.fidgetClock / IDLE_HOLD))]
-      : seq[Math.floor(p.idleClock / IDLE_HOLD) % seq.length];
+    id =
+      p.fidget && !kit
+        ? p.fidget[
+            Math.min(p.fidget.length - 1, Math.floor(p.fidgetClock / IDLE_HOLD))
+          ]
+        : seq[Math.floor(p.idleClock / IDLE_HOLD) % seq.length];
   else if (kit && seq === kit.duck) id = seq[0];
-  else if (kit && (seq === kit.land || seq === kit.fall)) id = seq[Math.min(seq.length - 1, Math.floor(p.actClock))];
+  else if (kit && (seq === kit.land || seq === kit.fall))
+    id = seq[Math.min(seq.length - 1, Math.floor(p.actClock))];
   else if (kit && seq === kit.jump)
     // two records, the second carrying the dy: the wind-up cel, then the tuck
     id = seq[p.windup > 0 || p.airFrames === 0 ? 0 : seq.length - 1];
@@ -8911,11 +10170,17 @@ function loop(now: number): void {
     // moving while ducked is the crawl, clocked by ground covered like every
     // gait; still is the held duck, with its rare settle fidget over it
     id = p.moving
-      ? ANIM.crawl[Math.floor(p.travelled / crawlStridePx()) % ANIM.crawl.length]
+      ? ANIM.crawl[
+          Math.floor(p.travelled / crawlStridePx()) % ANIM.crawl.length
+        ]
       : p.fidget === ANIM.crouchFidget
-        ? ANIM.crouchFidget[Math.min(ANIM.crouchFidget.length - 1, Math.floor(p.fidgetClock))]
+        ? ANIM.crouchFidget[
+            Math.min(ANIM.crouchFidget.length - 1, Math.floor(p.fidgetClock))
+          ]
         : ANIM.crouch[0];
-  else if (seq === ANIM.land) id = ANIM.land[Math.min(ANIM.land.length - 1, ANIM.land.length - p.landLeft)];
+  else if (seq === ANIM.land)
+    id =
+      ANIM.land[Math.min(ANIM.land.length - 1, ANIM.land.length - p.landLeft)];
   else if (seq === ANIM.air && p.landLeft > 0) {
     // the hard landing, four frames a cel on the ground
     const f = Math.floor((ANIM.air.length * AIR_HOLD - p.landLeft) / AIR_HOLD);
@@ -8925,7 +10190,9 @@ function loop(now: number): void {
     // for the launch frame, then the TUCK: 200 on the frame tag 0 is installed
     // and 220 held after. A run's leap is tag 4's single 200, then the same.
     if (p.windup > 0) id = ANIM.launch[ANIM.launch.length - 1 - p.windup];
-    else if (p.leap) id = ANIM.tuck[Math.min(ANIM.tuck.length - 1, Math.max(0, p.airFrames - 1))];
+    else if (p.leap)
+      id =
+        ANIM.tuck[Math.min(ANIM.tuck.length - 1, Math.max(0, p.airFrames - 1))];
     else if (p.airFrames === 0) id = ANIM.launch[ANIM.launch.length - 1];
     else id = ANIM.tuck[Math.min(ANIM.tuck.length - 1, p.airFrames - 1)];
   } else {
@@ -8934,7 +10201,10 @@ function loop(now: number): void {
     // rather than off a timer or a distance: `0x429b3d` plays skulz 0 on frame 1
     // and `0x429b5c` plays skulz 1 on frame 6, in the walk state and again in the
     // run's own branch. Twelve cels, two steps, whatever the speed.
-    if (f !== lastGaitFrame && (seq === ANIM.walk || seq === ANIM.run || seq === ANIM.crawl)) {
+    if (
+      f !== lastGaitFrame &&
+      (seq === ANIM.walk || seq === ANIM.run || seq === ANIM.crawl)
+    ) {
       const which = OWN.stepFrames.indexOf(f as 1 | 6);
       if (which >= 0 && p.onGround) sound?.own(OWN.step[which], p.x, p.y);
       lastGaitFrame = f;
@@ -8963,8 +10233,10 @@ function loop(now: number): void {
         ? p.facing < 0
           ? sx - (art.width - rec.posX)
           : sx - rec.posX
-        : (p.x - camX) + W / 2 - art.width / 2;
-      const top = rec ? p.climbY - camY + VIEW.y - rec.posY : p.y - camY + VIEW.y - art.height;
+        : p.x - camX + W / 2 - art.width / 2;
+      const top = rec
+        ? p.climbY - camY + VIEW.y - rec.posY
+        : p.y - camY + VIEW.y - art.height;
       if (p.facing < 0) {
         ctx.save();
         ctx.scale(-1, 1);
@@ -8985,7 +10257,9 @@ function loop(now: number): void {
     const pal = level?.pal;
     const i = flashColour * 4;
     ctx.save();
-    ctx.fillStyle = pal ? `rgb(${pal[i]}, ${pal[i + 1]}, ${pal[i + 2]})` : "#fff";
+    ctx.fillStyle = pal
+      ? `rgb(${pal[i]}, ${pal[i + 1]}, ${pal[i + 2]})`
+      : "#fff";
     ctx.fillRect(VIEW.x, VIEW.y, VIEW.w, viewH());
     ctx.restore();
     flashColour = -1;
@@ -8995,7 +10269,11 @@ function loop(now: number): void {
     paintHud(ctx, HUD_ART, {
       // nothing here can hurt the player, so the left-hand bar reads full: 1024
       // is the engine's own default max (`0x40d3a0`'s `mov dx, 0x400`)
-      player: { health: stats.health, max: stats.maxHealth, nameCel: CEL.skullcracker },
+      player: {
+        health: stats.health,
+        max: stats.maxHealth,
+        nameCel: CEL.skullcracker,
+      },
       enemy: stats.shown,
       score: stats.score,
       lives: stats.lives,
@@ -9009,7 +10287,7 @@ function loop(now: number): void {
       // `max` and `rounds`. So an empty hand still shows the rounds you are
       // carrying for the gun you are looking for.
       weapon: {
-        iconCel: inv.armed ? WEAPONS[inv.weapon]?.icon ?? 0 : 0,
+        iconCel: inv.armed ? (WEAPONS[inv.weapon]?.icon ?? 0) : 0,
         ammo: roundsIn(inv.weapon),
         magazine: WEAPONS[inv.weapon]?.max ?? 0,
       },
@@ -9045,11 +10323,13 @@ function loop(now: number): void {
     : "";
   // the word for four seconds after it is typed, so a probe can see one land
   const cheated =
-    cheatSaid && performance.now() - cheatSaid.at < 4000 ? ` · <b>${cheatSaid.cheat.word}</b> — ${cheatSaid.cheat.say}` : "";
+    cheatSaid && performance.now() - cheatSaid.at < 4000
+      ? ` · <b>${cheatSaid.cheat.word}</b> — ${cheatSaid.cheat.say}`
+      : "";
   const state = p.act
     ? ` · ${p.act}`
     : p.climbing
-      ? " · climbing"
+      ? ` · climbing rung ${p.rung} tag ${p.climbTag}`
       : !p.onGround
         ? " · in the air"
         : p.crouching
@@ -9060,8 +10340,12 @@ function loop(now: number): void {
   const here = solids();
   const box = playerBox();
   const inside = (e: SbkEntity): boolean =>
-    box.right > e.left && box.left < e.right && box.bottom > e.top && box.top < e.bottom;
-  const atDoor = room?.exits.some((e) => inside(e as unknown as SbkEntity)) ?? false;
+    box.right > e.left &&
+    box.left < e.right &&
+    box.bottom > e.top &&
+    box.top < e.bottom;
+  const atDoor =
+    room?.exits.some((e) => inside(e as unknown as SbkEntity)) ?? false;
   const alive = aliveNow();
   const ready = goalReady();
   const inGoal = here.goal !== undefined && inside(here.goal);
@@ -9071,7 +10355,7 @@ function loop(now: number): void {
   // the level is thousands of pixels wide and its end is one rect in it, so say
   // where that rect is rather than leaving it to be found by walking
   const g = here.goal;
-  const away = g ? ((g.left + g.right) / 2 - p.x) : 0;
+  const away = g ? (g.left + g.right) / 2 - p.x : 0;
   const toGoal = won
     ? ` · <b>THE GOAL — level ${levelIndex + 1} complete</b>`
     : !g
@@ -9089,7 +10373,8 @@ function loop(now: number): void {
               : ` · goal ${Math.abs(Math.round(away))}px ${away < 0 ? "west" : "east"}, y ${g.top} — ` +
                 `<b>${Math.max(0, alive - stats.allowance)} still to kill</b>`;
   // the quota the same way the panel says it: alive minus what may remain
-  const quotaSay = ` · quota ${Math.max(0, alive - stats.allowance)} of ${Math.max(0, stats.census - stats.allowance)}` +
+  const quotaSay =
+    ` · quota ${Math.max(0, alive - stats.allowance)} of ${Math.max(0, stats.census - stats.allowance)}` +
     ` (kill ${Math.round(mission().kill * 100)}% of ${stats.census})`;
   const prompt = atDoor && !won ? " · <b>press ↑ for the door</b>" : "";
   const mob = spawnedHere().length ? ` · ${spawnedHere().length} spawned` : "";
@@ -9110,7 +10395,9 @@ function loop(now: number): void {
   // any of its functions, so it has no bar and no name on the panel — and so is
   // the rat. Without this a probe cannot see either of them at all.
   const plain = spawnedHere()
-    .filter((e) => !FOES[e.kind].panel && (FOES[e.kind].death || FOES[e.kind].flinch))
+    .filter(
+      (e) => !FOES[e.kind].panel && (FOES[e.kind].death || FOES[e.kind].flinch),
+    )
     .sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
   const unplated = plain
     ? ` · unplated ${plain.kind} ${Math.round(plain.hp)}/${plain.max}hp ${plain.state}` +
@@ -9124,17 +10411,24 @@ function loop(now: number): void {
   // knowing, and a probe can read either
   const shown = [
     ...birds.filter((c) => c.state !== "sleep"),
-    ...[...birds].sort((a, c) => Math.abs(a.x - p.x) - Math.abs(c.x - p.x)).slice(0, 1),
+    ...[...birds]
+      .sort((a, c) => Math.abs(a.x - p.x) - Math.abs(c.x - p.x))
+      .slice(0, 1),
   ].filter((c, i, all) => all.indexOf(c) === i);
   const bird = birds.length
     ? ` · ${birds.length} crow${birds.length === 1 ? "" : "s"}: ` +
       shown
         .slice(0, 3)
-        .map((c) => `${c.state} cel ${crowCel(c)} at ${Math.round(c.x)},${Math.round(c.y)}`)
+        .map(
+          (c) =>
+            `${c.state} cel ${crowCel(c)} at ${Math.round(c.x)},${Math.round(c.y)}`,
+        )
         .join(" · ")
     : "";
   // the planks: a probe cannot otherwise tell a sound board from one about to go
-  const boards = planksHere().filter((k) => k.state !== "intact" || k.crossings > 0);
+  const boards = planksHere().filter(
+    (k) => k.state !== "intact" || k.crossings > 0,
+  );
   const board = boards.length
     ? ` · ${boards.map((k) => `plank ${k.state} cel ${plankCel(k)} x${Math.round(k.x)} crossed ${k.crossings}`).join(" · ")}`
     : "";
@@ -9153,13 +10447,19 @@ function loop(now: number): void {
   // the girders, so a probe can see a swing happen at all: nothing else moves them
   const swung = ibeamsHere().filter((b) => b.delay <= 0);
   const beam = swung.length
-    ? ` · ${swung.slice(0, 3).map((b) => `beam ${b.state} cel ${ibeamCel(b)} at ${b.x},${b.y}`).join(" · ")}`
+    ? ` · ${swung
+        .slice(0, 3)
+        .map((b) => `beam ${b.state} cel ${ibeamCel(b)} at ${b.x},${b.y}`)
+        .join(" · ")}`
     : "";
   // the presses: a probe cannot otherwise tell one that is up and watching from
   // one that is coming down, and the two cels that hurt are named in CRUSH
   const presses = crushesHere().filter((c) => c.state !== "idle");
   const press = presses.length
-    ? ` · ${presses.slice(0, 3).map((c) => `press ${c.state} cel ${crushCel(c)} at ${c.x},${c.y}`).join(" · ")}`
+    ? ` · ${presses
+        .slice(0, 3)
+        .map((c) => `press ${c.state} cel ${crushCel(c)} at ${c.x},${c.y}`)
+        .join(" · ")}`
     : "";
   // level six's levers and what they are pouring, so a probe can see both
   const levers = switchesHere();
@@ -9178,25 +10478,47 @@ function loop(now: number): void {
     : "";
   // the scenery, so a probe can see the two of it that move on their own
   const props = [
-    ...hereOf((l) => l.shacks).filter((k) => k.state !== "shut").map((k) => `shack ${k.state} cel ${shackCel(k)}`),
-    ...hereOf((l) => l.barrels).map((b) => `barrel at ${Math.round(b.x)},${Math.round(b.y)}`),
-    ...hereOf((l) => l.pipes).map((q) => `pipe at x${q.x}`),
-    ...hereOf((l) => l.holes).map((h) => `grave ${h.state} cel ${holeCel(h)} at x${h.x}`),
-    ...hereOf((l) => l.axes).map((a) => `axe cel ${axeCel(a)} at x${a.x}`),
-    ...hereOf((l) => l.floors).map((f) => `floor ${f.state} cel ${floorCel(f)} at x${f.x}`),
-    ...hereOf((l) => l.cages).map((c) => `cage ${c.param} ${c.state} cel ${cageCel(c)} at x${c.x}`),
-    ...hereOf((l) => l.fans).map((q) => `fan ${q.horizontal ? "h" : "v"} ${q.state} cel ${fanCel(q)} at x${q.x}`),
-    hereOf((l) => l.belts).length ? `${hereOf((l) => l.belts).length} belts` : "",
-    ...hereOf((l) => l.chairs).map((c) => `chair ${c.run} cel ${chairCel(c)} at x${c.x}`),
-    ...hereOf((l) => l.claws).map(
-      (c) => `claw ${c.state} cel ${clawCel(c)} at x${Math.round(c.x)} gap ${Math.round(Math.abs(c.x - p.x))}`,
+    ...hereOf((l) => l.shacks)
+      .filter((k) => k.state !== "shut")
+      .map((k) => `shack ${k.state} cel ${shackCel(k)}`),
+    ...hereOf((l) => l.barrels).map(
+      (b) => `barrel at ${Math.round(b.x)},${Math.round(b.y)}`,
     ),
-    ...hereOf((l) => l.fittings).map((f) => `${f.kind} cel ${fittingCel(f)} at x${f.x}`),
+    ...hereOf((l) => l.pipes).map((q) => `pipe at x${q.x}`),
+    ...hereOf((l) => l.holes).map(
+      (h) => `grave ${h.state} cel ${holeCel(h)} at x${h.x}`,
+    ),
+    ...hereOf((l) => l.axes).map((a) => `axe cel ${axeCel(a)} at x${a.x}`),
+    ...hereOf((l) => l.floors).map(
+      (f) => `floor ${f.state} cel ${floorCel(f)} at x${f.x}`,
+    ),
+    ...hereOf((l) => l.cages).map(
+      (c) => `cage ${c.param} ${c.state} cel ${cageCel(c)} at x${c.x}`,
+    ),
+    ...hereOf((l) => l.fans).map(
+      (q) =>
+        `fan ${q.horizontal ? "h" : "v"} ${q.state} cel ${fanCel(q)} at x${q.x}`,
+    ),
+    hereOf((l) => l.belts).length
+      ? `${hereOf((l) => l.belts).length} belts`
+      : "",
+    ...hereOf((l) => l.chairs).map(
+      (c) => `chair ${c.run} cel ${chairCel(c)} at x${c.x}`,
+    ),
+    ...hereOf((l) => l.claws).map(
+      (c) =>
+        `claw ${c.state} cel ${clawCel(c)} at x${Math.round(c.x)} gap ${Math.round(Math.abs(c.x - p.x))}`,
+    ),
+    ...hereOf((l) => l.fittings).map(
+      (f) => `${f.kind} cel ${fittingCel(f)} at x${f.x}`,
+    ),
     ...hereOf((l) => l.boggs).map((b) => {
       const heals = b.flags[0] || b.flags[1];
       const halves = BOGGS.machines
         .map((m, k) =>
-          "health" in m ? `${Math.round(b.machines[k].hp)}/${scaled(m.health)}@x${Math.round(b.machines[k].x)}` : null,
+          "health" in m
+            ? `${Math.round(b.machines[k].hp)}/${scaled(m.health)}@x${Math.round(b.machines[k].x)}`
+            : null,
         )
         .filter((t) => t !== null)
         .join(" ");
@@ -9207,10 +10529,20 @@ function loop(now: number): void {
         ` flags ${b.flags[0] ? 1 : 0}${b.flags[1] ? 1 : 0}`
       );
     }),
-    ...hereOf((l) => l.surges).map((q) => `surge cel ${surgeCel(q)} at x${q.x}`),
-    ...hereOf((l) => l.bridges).map((b) => `bridge ${b.state} cel ${bridgeCel(b)} at x${b.x}`),
-    ...hereOf((l) => l.hands).map((q) => `hand ${q.state}${q.underfoot ? " underfoot" : ""} cel ${handCel(q)} at x${Math.round(q.atX)}`),
-    ...hereOf((l) => l.bushes).map((q) => `bush ${q.state} cel ${bushCel(q)} at x${Math.round(q.x)}, y${Math.round(q.y)}`),
+    ...hereOf((l) => l.surges).map(
+      (q) => `surge cel ${surgeCel(q)} at x${q.x}`,
+    ),
+    ...hereOf((l) => l.bridges).map(
+      (b) => `bridge ${b.state} cel ${bridgeCel(b)} at x${b.x}`,
+    ),
+    ...hereOf((l) => l.hands).map(
+      (q) =>
+        `hand ${q.state}${q.underfoot ? " underfoot" : ""} cel ${handCel(q)} at x${Math.round(q.atX)}`,
+    ),
+    ...hereOf((l) => l.bushes).map(
+      (q) =>
+        `bush ${q.state} cel ${bushCel(q)} at x${Math.round(q.x)}, y${Math.round(q.y)}`,
+    ),
     roaches.length ? `${roaches.length} roaches` : "",
     hereOf((l) => l.sprinklers).length
       ? `${hereOf((l) => l.sprinklers).length} sprinklers, ${columns.size} up${columns.size ? ` cel ${columnCel([...columns.values()][0])}` : ""}`
@@ -9219,31 +10551,47 @@ function loop(now: number): void {
   const prop = props.length ? ` · ${props.join(" · ")}` : "";
   // what the two tests say about the nearest pickup, which is the only way to
   // see the second one doing anything — see {@link spritesTouch}
-  const nearPick = hereOf((l) => l.pickups).sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
+  const nearPick = hereOf((l) => l.pickups).sort(
+    (a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x),
+  )[0];
   const touch = (() => {
     if (!nearPick || !player) return "";
     const box = playerBox();
     const rect =
-      box.right > nearPick.left && box.left < nearPick.right && box.bottom > nearPick.top && box.top < nearPick.bottom;
+      box.right > nearPick.left &&
+      box.left < nearPick.right &&
+      box.bottom > nearPick.top &&
+      box.top < nearPick.bottom;
     const kind = PICKUP.kinds[nearPick.code];
     const loc = player.byId.get(kind.cels[loopIndex(kind, nearPick.clock)]);
     const pf = loc === undefined ? null : playerFrame(loc);
     const me = playerSprite();
     const px =
-      pf && me ? spritesTouch(me, { f: pf, left: nearPick.x - pf.posXraw, top: nearPick.y - pf.posYraw, mirror: false }) : false;
+      pf && me
+        ? spritesTouch(me, {
+            f: pf,
+            left: nearPick.x - pf.posXraw,
+            top: nearPick.y - pf.posYraw,
+            mirror: false,
+          })
+        : false;
     return ` · pickup rect ${rect ? "yes" : "no"} pixels ${px ? "yes" : "no"}`;
   })();
   const got = hereOf((l) => l.pickups);
   const gots = got.length
     ? (() => {
-        const q = got.reduce((a, b) => (Math.abs(b.x - p.x) < Math.abs(a.x - p.x) ? b : a));
+        const q = got.reduce((a, b) =>
+          Math.abs(b.x - p.x) < Math.abs(a.x - p.x) ? b : a,
+        );
         return ` · ${got.length} pickups · nearest ${PICKUP.kinds[q.code].name} ${q.code} at x ${q.x}, y ${q.y}`;
       })()
     : "";
   const arms = hereOf((l) => l.guns);
   const gun = WEAPONS[inv.weapon];
   const far = (g: Gun): number => Math.hypot(g.x - p.x, g.y - p.y);
-  const lying = arms.length ? arms.reduce((a, b) => (far(b) < far(a) ? b : a)) : null;
+  const lying = arms.length
+    ? arms.reduce((a, b) => (far(b) < far(a) ? b : a))
+    : null;
   const armed =
     ` · ${inv.armed ? "holding" : "no"} ${gun ? gun.name : inv.weapon} ${roundsIn(inv.weapon)}/${gun ? gun.max : 0}` +
     (arms.length
@@ -9258,19 +10606,28 @@ function loop(now: number): void {
     : "";
   const valves = spawnedHere()
     .filter((e) => FOES[e.kind].burst)
-    .map((e) => `${e.state === "burst" ? "water" : e.kind} cel ${celOf(e)} at x ${Math.round(e.x)}`);
+    .map(
+      (e) =>
+        `${e.state === "burst" ? "water" : e.kind} cel ${celOf(e)} at x ${Math.round(e.x)}`,
+    );
   const valve = valves.length ? ` · ${valves.join(" · ")}` : "";
   // where a struck thing ends up, which is the only way to see a slide from a
   // probe: the flying kinds have no health bar to read
-  const flew = spawnedHere().find((e) => FOES[e.kind].flies && (e.vx !== 0 || e.dents > 0));
+  const flew = spawnedHere().find(
+    (e) => FOES[e.kind].flies && (e.vx !== 0 || e.dents > 0),
+  );
   const slid = flew ? ` · ${flew.kind} at x ${Math.round(flew.x)}` : "";
   // the blow CODES — the reaction playing, what has hold of you, and the state
   // of the nearest hand, none of which the panel shows and all of which a probe
   // needs to see the system at all
   const reacting = Object.values(BLOW_CODES).find((r) => r.act === p.act);
   const code =
-    (reacting ? ` · <b>code ${reacting.code}</b> ${reacting.act} frame ${Math.floor(p.actClock)}` : "") +
-    (p.act === "held" || p.act === "struggle" ? ` · <b>${p.act}</b> frame ${p.heldClock}` : "") +
+    (reacting
+      ? ` · <b>code ${reacting.code}</b> ${reacting.act} frame ${Math.floor(p.actClock)}`
+      : "") +
+    (p.act === "held" || p.act === "struggle"
+      ? ` · <b>${p.act}</b> frame ${p.heldClock}`
+      : "") +
     (p.heldBy ? ` · HELD, gravity x${p.gravityScale}` : "");
   const air =
     (held.inv ? " · <b>INV held</b> — holstered, standing" : "") +
@@ -9284,7 +10641,9 @@ function loop(now: number): void {
   // ...and a BOSS always, whichever of the three it is: the "nearest" line goes
   // to whatever is closest in x, and TOWER's bats chase, so one of them is
   // always nearer than the thing the room is about
-  const bossHere = spawnedHere().find((e) => FOES[e.kind].haunts || FOES[e.kind].preaches || FOES[e.kind].drives);
+  const bossHere = spawnedHere().find(
+    (e) => FOES[e.kind].haunts || FOES[e.kind].preaches || FOES[e.kind].drives,
+  );
   const boss = bossHere
     ? ` · boss ${bossHere.kind} ${Math.round(bossHere.hp)}/${bossHere.max}hp ${bossHere.state}` +
       ` at x ${Math.round(bossHere.x)}, y ${Math.round(bossHere.y)} cel ${celOf(bossHere)}` +
@@ -9296,7 +10655,9 @@ function loop(now: number): void {
   const bar = stats.shown
     ? ` · bar ${stats.shown.health}/${stats.shown.max} plate ${stats.shown.nameCel}`
     : " · bar empty";
-  const nearHand = hereOf((l) => l.hands).sort((a, b) => Math.abs(a.atX - p.x) - Math.abs(b.atX - p.x))[0];
+  const nearHand = hereOf((l) => l.hands).sort(
+    (a, b) => Math.abs(a.atX - p.x) - Math.abs(b.atX - p.x),
+  )[0];
   const hand = nearHand
     ? ` · nearest hand ${nearHand.underfoot ? "underfoot" : "anywhere"} ${nearHand.state}` +
       ` cel ${handCel(nearHand)} at x ${Math.round(nearHand.atX)}` +
@@ -9306,7 +10667,9 @@ function loop(now: number): void {
     (ended ? " · <b>THE END</b> — credits.mov, and then the front again" : "") +
     ` · ${stats.lives} ${stats.lives === 1 ? "life" : "lives"} · clock ${Math.round(stats.ticks)}`;
   // the switch, and what it is spending — a probe has no other way to see either
-  const hurt = damageOn ? ` · <b>damage ON</b> ${Math.round(stats.health)}/${stats.maxHealth}hp` : " · damage off";
+  const hurt = damageOn
+    ? ` · <b>damage ON</b> ${Math.round(stats.health)}/${stats.maxHealth}hp`
+    : " · damage off";
   // the panel already shows it in the disc's own digits; this is for the probes,
   // which can read a number out of text and can only count pixels off a canvas
   const points = ` · ${stats.score} points`;
@@ -9423,7 +10786,8 @@ async function boot(): Promise<void> {
   fillPicker();
   const params = new URLSearchParams(location.search);
   const clock = params.get("clock");
-  if (clock !== null && Number.isFinite(Number(clock))) startTicks = Math.max(0, Number(clock));
+  if (clock !== null && Number.isFinite(Number(clock)))
+    startTicks = Math.max(0, Number(clock));
   const want = Number(params.get("level") ?? "1");
   await loadLevel(Math.min(16, Math.max(1, want)) - 1);
   /**
@@ -9440,16 +10804,22 @@ async function boot(): Promise<void> {
    * in the player's hands. See {@link file://./savegame.ts}.
    */
   const carriedScore = params.get("score");
-  if (carriedScore !== null) stats.score = Math.max(0, Number(carriedScore) || 0);
+  if (carriedScore !== null)
+    stats.score = Math.max(0, Number(carriedScore) || 0);
   const carriedLives = params.get("lives");
   if (carriedLives !== null) {
-    stats.lives = Math.min(PICKUP.maxLives, Math.max(1, Number(carriedLives) || 1));
+    stats.lives = Math.min(
+      PICKUP.maxLives,
+      Math.max(1, Number(carriedLives) || 1),
+    );
   }
   const carriedWeapon = params.get("weapon");
   if (carriedWeapon !== null) {
     inv.weapon = Number(carriedWeapon) || 0;
     inv.armed = false;
-    inv.rounds = { [inv.weapon]: Math.max(0, Number(params.get("rounds") ?? 0) || 0) };
+    inv.rounds = {
+      [inv.weapon]: Math.max(0, Number(params.get("rounds") ?? 0) || 0),
+    };
   }
   // ?x= drops the player at a world x, for looking at a specific spot — and ?y=
   // with it, because in CITY the column under an x is usually the void: its

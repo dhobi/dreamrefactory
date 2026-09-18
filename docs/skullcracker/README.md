@@ -2859,9 +2859,35 @@ not the room you climb from: all three lifted the player zero pixels.
 The engine files nothing. `0x40b940` is its only entity query and it is a linear
 scan of the whole table — `[0x46b9a8]+0x1c`, stride 48, `[+0x18]` records —
 with three kinds: 0 compares the name (`0x4343b0`), 1 compares the param, and 2
-asks whether the rect holds a point (`0x434200`). The ladder lookup is kind 2,
-and there is no region anywhere in it. So the ladders are kept whole on the
-level and the room is not consulted.
+asks whether the rect holds a point (`0x434200`). The ladder grab is the scan
+by name, `0x40b660("ladder", player, 0, 1)`, whose third argument is the region
+and is 0, and whose fourth is the geometry: 1 is `0x434140`, the player's
+current cel — its whole bitmap about the anchor, `0x42f9f0` — intersected with
+the record's rect. No region anywhere in it. So the ladders are kept whole on
+the level and the room is not consulted.
+
+### Three things a ladder will not do
+
+Reported after the fix above: the port speed-climbed with a direction held, the
+figure flickered at the top, and it grabbed from too far off. All three are one
+state, `0x42ae50`, and the two that ask for it, read exactly.
+
+- **W grabs only from standing still.** `0x429872` is in the idle state and
+  runs with forward not held; the walk and run states never ask. W is the run
+  key, so a runner passing a ladder passes it. S asks from the idle, walk, run
+  and jump states, so a ladder can be taken downward on the move. The rect is
+  met by the standing cel's bitmap, 98 wide with the anchor 41 in — so the
+  grab reaches 57px past one edge and 41 past the other, and that is the
+  file's reach, not a snap of the port's.
+- **Letting go waits for the rung, and for a room.** The leave needs the rung
+  tag ENDED and the classifier `0x412517` to find a record under the anchor
+  (`0x40b940(2, point)`), which the mount had set to -1. Then `[0x46b1b8]` is
+  set and stays set until `0x42849c` sees the ground, and neither the idle nor
+  the jump state will grab while it is. The port let go the tick a direction
+  came down and grabbed again the next, one rung higher each time.
+- **The ends hold.** At rung 0 with W, or the last with S, `cmp [0x4ac406], 0;
+  jle` skips the case whole — no tag, no sound. The port installed the other
+  tag of the same direction, four frames each way, which is the flicker.
 
 ### ...and the region you are in is whichever one contains your point
 
