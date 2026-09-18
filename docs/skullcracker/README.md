@@ -2784,6 +2784,54 @@ The lesson is the one this page keeps relearning: a number that nearly works is
 worth less than the instruction that produced it. Both of these were settled by
 reading the translate, not by tuning a y until a test went green.
 
+## A grabber holds you by taking your step away
+
+SEWER's hall of lifts is the one stretch of the game that cannot be walked, and
+an attempt at it found three real defects, fixed all three, made the hall
+crossable end to end — and turned the bushes from things that DUMP you into
+things that PIN you, which broke two earlier stretches of the same level that
+were built on being dumped. The whole of it went back. This is what the next
+attempt starts from, because the cause turned out to be underneath all three.
+
+The bush handler is `0x43ec80..0x43f174`: one function, a switch on `obj+0x18`
+with five kinds through the table at `0x43f150`. Two of the things that were
+unread are now read, and neither is the problem. `0x43045d` is a spend rather
+than a rate limit — the frame a hitter connects, `[obj+0x1a] = 0` and the scan
+stops, unless the strength is `0x65` — and the bush re-arms every frame anyway.
+The re-trigger cooldown does exist and it is `user+0xa`: `0x434540(0x28) + 0xa`,
+a random 10 to 49 frames, reset after every trigger of the PAIRED bush, and
+gated on the player being neither held nor already slumped.
+
+The problem is a global this page had never looked at.
+
+```
+  cmp  word ptr [0x46b1b4], 0
+  je   skip
+  call 0x402980            ; -> 0x42fbd0(player), the player's own step
+```
+
+That shape appears thirteen times, once in each level's main loop, and
+twenty-four classes write the word. **`[0x46b1b4]` is the player-step gate.** A
+grabber in this engine does not hold you with a flag on YOU. It holds you by
+zeroing that word, every frame, so your controls do not run at all — the bush
+does it at `0x43ef0a`, in phase 2, and only once `0x402f60` says you are no
+longer hittable, which means the -5's kind-26 reaction is up. Its own
+ten-a-frame sink then carries you down, and `0x43ef28`/`0x43ef57` hand the gate
+back when the script ends.
+
+So the dump is not the grip letting go at a height. It is a sequence: the -5
+lands, the reaction takes the player's kind to 26, the bush stops arming and
+takes the player's step away, the bush sinks with them, and the gate comes back
+wherever it left them. This page models a hold as `p.heldBy` — a latch on the
+player, released when the cel loses its strike box — and that is exactly why
+fixing the three defects produced a pin. Nothing ever took the player's step
+away, so a grab could only ever be a hold.
+
+The next attempt is a port of the gate rather than another patch. What it cannot
+settle by reading is the last question: the hall wants the player left on the
+walkway and door-7 wants them dumped off it, and both come out of this one
+machine, so the difference has to be geometry and has to be measured.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are
