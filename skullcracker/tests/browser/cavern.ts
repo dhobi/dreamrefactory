@@ -147,8 +147,34 @@ const main = async (): Promise<void> => {
   if (lowest < 1300) fail(`and the platform should go with it — the player never fell, reaching only y ${lowest}`);
   console.log(`ok    standing on a bridge runs it through ${[...states].join(" -> ")}, and the floor goes with it`);
 
+  // ...and its four LIFTS carry you, which is the only way up out of its second
+  // room. Two chapters spawn `initelev` and each installs its own script,
+  // identical but for the cel it names: `0x472578` is 3202 (chapter two, SEWER's
+  // six) and `0x4703a8` is 5210 (chapter three, CAVERN's four). Neither creator
+  // writes `[obj+0]`, so the script is the whole of it. This page knew only
+  // SEWER's number and required it to be in the book, so CAVERN had no lifts at
+  // all and its shafts looked like a jump nobody could make.
+  // ...and `at()` above is the X; the shaft is measured in Y
+  const atY = async (): Promise<number> => Number(/· x -?\d+, y (-?\d+)/.exec(await say())?.[1] ?? NaN);
+  // the level's own second `initplayer`, which stands beside the x4944 shaft
+  await page.goto(`${BASE}/walk.html?level=10&x=4828&y=1988`);
+  await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(600);
+  const started = await atY();
+  let top = started;
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(250);
+    const y = await atY();
+    if (!Number.isNaN(y)) top = Math.min(top, y);
+  }
+  // the x4944 shaft's record is y1170..2132; a rider that is carried clears most of it
+  if (started - top < 500) {
+    fail(`the x4944 lift should carry the player up its shaft; started at y ${started} and the highest was y ${top}`);
+  }
+  console.log(`ok    ...and its lifts carry a rider — y ${started} up to y ${top}, on chapter three's own cel 5210`);
+
   await finish(browser);
-  console.log("PASS  CAVERN's four creatures stand, its blades swing and its bridges give way");
+  console.log("PASS  CAVERN's four creatures stand, its blades swing, its bridges give way and its lifts carry");
 };
 
 await main();

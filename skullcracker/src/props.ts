@@ -1009,7 +1009,29 @@ export function doorFrames(d: Door): number {
  * six, which is what the rider actually stands on.
  */
 export const ELEV = {
-  /** every tag is this one cel; the script is a clock, not an animation */
+  /**
+   * Every tag is one cel and the script is a clock rather than an animation —
+   * but WHICH cel is the chapter's, not the class's.
+   *
+   * Two chapters spawn `initelev` and each has its own creator installing its
+   * own script, identical but for the cel they name: seven records at three
+   * ticks, kind 0.
+   *
+   * ```
+   *   0x4353a6 -> 0x435a19 -> 0x472578   cel 3202   chapter two, SEWER's six
+   *   0x41e48f -> 0x41f020 -> 0x4703a8   cel 5210   chapter three, CAVERN's four
+   * ```
+   *
+   * Neither creator writes `[obj+0]`, so the script is the whole of it. This page
+   * knew only SEWER's number and required it to be in the book, which threw away
+   * all four of CAVERN's lifts — and CAVERN's shafts are the only way up out of
+   * its second room, so the level could not be finished on foot.
+   *
+   * Those two books are the only ones with an `initelev` record between them, and
+   * each carries exactly the cel its own chapter names.
+   */
+  cels: [3202, 5210],
+  /** what {@link ELEV.cels} was before chapter three's was found */
   cel: 3202,
   /** `0x472578` tag 0 — three records at three frames each */
   waitFrames: 9,
@@ -1042,6 +1064,8 @@ export interface Elev {
   clock: number;
   /** pixels a frame, positive down — `obj+0xa`, and it persists */
   vy: number;
+  /** whichever of {@link ELEV.cels} this book carries */
+  cel: number;
   /**
    * The `platform` record it claimed — `0x42fb70` from its own creator, and the
    * level lays one over each of the six. A live record in the room's

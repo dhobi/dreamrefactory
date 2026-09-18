@@ -194,32 +194,47 @@ const main = async (): Promise<void> => {
     fail(`0x470400 tag 0 is 1550..1556; it is showing ${hand![2]}`);
   console.log(`ok    a hand comes up under the player's own feet, on cel ${hand![2]}`);
 
-  // 10. ...and the zombies do NOT go in after you.
+  // 10. ...and the zombies do NOT go in after you, at any of the five.
   //
   //     GRAVE's rasterised floor really does fall 320 to 370 pixels at each of
   //     its five graves, and nine of the sixteen zombie patrol rects span one.
-  //     What keeps them out is the grave's own: `0x4212bb` appends a synthetic
-  //     `platform` record to the engine's platform table the frame its opening
-  //     script ends — `top = y+0x4c`, `left = x-0x64`, `bottom = y+0x7e`,
-  //     `right = x+0x64` — so an open grave is a two-hundred-wide ledge across
-  //     its own pit. Without it the level ate its own population and the
-  //     14-of-16 quota could never be met.
-  await go(1620);
+  //     What keeps them out is the grave's own ledge: `0x4212bb` appends a
+  //     synthetic `platform` record to the engine's platform table — `top =
+  //     y+0x4c`, `left = x-0x64`, `bottom = y+0x7e`, `right = x+0x64`. The page
+  //     gives foes that ledge in EVERY state rather than only the open one (see
+  //     `graveLidUnder`), because a grave more than a hundred from the player is
+  //     shut and its pit is still a pit. Without it the level ate its own
+  //     population and the 14-of-16 quota could never be met.
+  //
+  //     Walked end to end rather than measured at one grave, because it was
+  //     passing at an open grave while zombies went into the shut ones behind.
+  await go();
   let deepest = 0;
   let where = "";
-  for (let i = 0; i < 50; i++) {
-    await page.waitForTimeout(400);
-    const m = /nearest (\w+) -?\d+\/\d+hp \w+ at x (-?\d+), y (-?\d+)/.exec(await say());
+  await page.keyboard.down("ArrowRight");
+  for (let i = 0; i < 70; i++) {
+    const t = await say();
+    const px = Number(/x (-?\d+), y (-?\d+)/.exec(t)?.[1] ?? 0);
+    const m = /nearest (\w+) -?\d+\/\d+hp \w+ at x (-?\d+), y (-?\d+)/.exec(t);
     if (m && Number(m[3]) > deepest) {
       deepest = Number(m[3]);
       where = `${m[1]} at x${m[2]}`;
     }
+    // ...and jump the mouths, which is what level nine asks of the player
+    for (const gx of [1532, 2446, 2842, 3301, 5522]) {
+      if (px > gx - 190 && px < gx - 90) {
+        await page.keyboard.press("j");
+        break;
+      }
+    }
+    await page.waitForTimeout(400);
   }
-  // the first grave's ledge is at y978 and the bottom of its pit at y1346
+  await page.keyboard.up("ArrowRight");
+  // the five pit floors are y1232..1346; the ledges sit at y978..990
   if (deepest > 1100) {
-    fail(`a zombie fell into the grave — ${where} reached y ${deepest}, and the pit floor is 1346`);
+    fail(`a zombie fell into a grave — ${where} reached y ${deepest}, and the pit floors are y1232..1346`);
   }
-  console.log(`ok    ...and the zombies walk its ledge instead of falling in — deepest y ${deepest}`);
+  console.log(`ok    ...and no zombie goes into any of the five — deepest y ${deepest}`);
 
   await finish(browser);
   console.log("PASS  GRAVE's zombies stand, its graves open and take, and its hands come up");

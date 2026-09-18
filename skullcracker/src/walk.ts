@@ -2604,7 +2604,15 @@ function surfaceCrossed(x0: number, y0: number, x1: number, y1: number): number 
 function graveLidUnder(x: number, fromY: number, toY: number): number | null {
   let best: number | null = null;
   for (const h of hereOf((l) => l.holes)) {
-    if (h.state === "shut") continue;
+    // ...in EVERY state, not only the open one, and that is the deviation.
+    // `0x4212bb` lays the ledge when the opening script ends, so the executable
+    // has one only while the grave is open; a shut grave is kept clear of the
+    // player by `0x4210bd` shoving them out of its rect instead, and nothing in
+    // the class does anything for a foe. But the pit in the floor is there in
+    // both states, so a zombie crossing a grave that is still shut — which is
+    // any grave the player is more than a hundred away from — went in exactly as
+    // before. A shut grave is a closed slab in its own art, so the foes get to
+    // walk on it.
     if (x < h.x - HOLE.lid.halfWidth || x > h.x + HOLE.lid.halfWidth) continue;
     const top = h.y + HOLE.lid.top;
     if (top < fromY || top > toY) continue;
@@ -4310,7 +4318,11 @@ function elevsIn(sbk: SbkFile, room: SbkRoom, solids: Solids): Elev[] {
   for (const e of sbk.entities) {
     if (!e.isEntity || e.name !== "initelev") continue;
     if (e.pointY < room.top || e.pointY > room.bottom || e.pointX < room.left || e.pointX > room.right) continue;
-    if (!sbk.byId.has(ELEV.cel)) continue;
+    // ...and the cel is the CHAPTER's — see {@link ELEV.cels}. Requiring SEWER's
+    // 3202 threw away all four of CAVERN's lifts, which are the only way up out
+    // of its second room.
+    const cel = ELEV.cels.find((c) => sbk.byId.has(c));
+    if (cel === undefined) continue;
     const floor = solids.platforms.find(
       (q) => e.pointX >= q.left && e.pointX <= q.right && e.pointY >= q.top - 40 && e.pointY <= q.bottom + 40,
     );
@@ -4323,6 +4335,7 @@ function elevsIn(sbk: SbkFile, room: SbkRoom, solids: Solids): Elev[] {
       state: "atBottom",
       clock: 0,
       vy: 0,
+      cel,
       floor,
     });
   }
@@ -8500,7 +8513,7 @@ function loop(now: number): void {
   for (const w of switchesHere()) drawLevelCel(switchCel(w), w.x, w.y, camX, camY);
   // an open door shows cel 0, which is nothing; a lift is one cel for ever
   for (const d of doorsHere()) if (d.state !== "open") drawLevelCel(doorCel(d), d.x, d.y, camX, camY);
-  for (const e of elevsHere()) drawLevelCel(ELEV.cel, e.x, e.y, camX, camY);
+  for (const e of elevsHere()) drawLevelCel(e.cel, e.x, e.y, camX, camY);
   // the scenery that does something, each on its own class's cels
   for (const k of hereOf((l) => l.shacks)) drawLevelCel(shackCel(k), k.x, k.y, camX, camY);
   for (const b of hereOf((l) => l.barrels)) {
