@@ -147,6 +147,33 @@ console.log(`after esc: ${before}`);
 if (!before) fail("escape out of the intro did not reach the menu");
 if (!/frame 1\//.test(before)) fail(`not on the menu's first frame: "${before}"`);
 
+// ...and the high-score board is ON it, in PIXELS.
+//
+// `0x45de89` draws the board over `menu.mov` for every frame index 0..0xa7, at
+// `0x45de90`'s point {y 0x6b, x 0x2c}, and the menu's own art leaves it an empty
+// green panel to go in. It was absent for a different reason than it looked:
+// `paint` is handed to `new Film(...)` and fires while the module's `film` is
+// still the previous one, so the board declined to draw — and `menu.mov`'s frame
+// 1 is a type-2 frame targeting ITSELF, so no second blit ever came to draw it
+// on. `#loc` reported the board the whole time, which is why this reads the
+// canvas instead of the status line.
+const boardInk = (): Promise<number> =>
+  page.evaluate(() => {
+    const c = document.getElementById("screen") as HTMLCanvasElement;
+    const s = c.width / 512;
+    const d = c.getContext("2d")!.getImageData(40 * s, 80 * s, 215 * s, 165 * s).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 1] > 140 && d[i] < 130 && d[i + 2] < 130) n++;
+    return n;
+  });
+let onMenu = 0;
+for (let i = 0; i < 20 && onMenu < 400; i++) {
+  onMenu = await boardInk();
+  if (onMenu < 400) await page.waitForTimeout(200);
+}
+if (onMenu < 400) fail(`the board belongs on the attract screen (0x45de89); ${onMenu} green pixels in its panel`);
+console.log(`ok    and the high-score board is on the menu — ${onMenu} green pixels of it`);
+
 // 5 — the click that starts the game.
 //
 // "different from before" is NOT the assertion, and the first version of this

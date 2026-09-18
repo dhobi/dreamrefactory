@@ -1930,8 +1930,20 @@ async function nextLevel(): Promise<void> {
   }
   const next = levelIndex + 1;
   const brief = MISSIONS[next];
-  await playFilm(brief.film);
+  // BOGGS FIRST, and then the chapter card. Each stage's case queues its films
+  // one after another through `0x40e330` (clear) and `0x40e990` (play and wait),
+  // and the order is the order of the pushes:
+  //
+  // ```
+  //   44d7b9  push 0x478a38   ; Boggs01.Mov      44d7de  push 0x478a2c  ; Chp01.Mov
+  //   436a8b  push 0x475020   ; Boggs06.Mov      436ab0  push 0x475014  ; Chp06.Mov
+  // ```
+  //
+  // — the same way round in a mid-chapter stage as in a chapter's first, so it
+  // is the sequence and not an opening special case. Boggs says his piece on the
+  // flying screen and the skull that names where you are going comes after him.
   await playFilm(brief.boggs);
+  await playFilm(brief.film);
   await loadLevel(next);
   advancing = false;
 }

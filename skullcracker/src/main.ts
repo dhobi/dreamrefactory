@@ -340,6 +340,34 @@ function paint(
   }
   lastPalette = palette;
   image.data.set(rgba);
+  compose(palette);
+}
+
+/**
+ * Which film and frame the overlays were last drawn for.
+ *
+ * The board and the dossier are drawn AFTER the film's blit, so they only exist
+ * on a frame something blitted. Two things break that, and the menu is where
+ * both show:
+ *
+ *   - `paint` is handed to `new Film(...)`, so the first frame of a film is
+ *     blitted while the module's own `film` is still the previous one or null —
+ *     and {@link drawBoard} asks `film.name`, so it declines to draw;
+ *   - `menu.mov`'s frame 1 is a type-2 frame whose target is ITSELF. The menu is
+ *     a still. The film is right to blit once and stop, and there is no second
+ *     blit to draw the board on.
+ *
+ * Together those left the high-score board off the menu entirely — the one place
+ * `0x45de89` draws it — and flashing up for a frame in the transitions, which is
+ * where it was being seen instead. So the overlays are no longer the blit's
+ * passengers: {@link frameLoop} re-composes whenever they are stale for the
+ * frame that is actually up.
+ */
+let composedName = "";
+let composedAt = -1;
+
+/** the film's last frame, and then whatever the executable draws on top of it */
+function compose(palette: Uint8ClampedArray): void {
   // draw at 1:1 into an offscreen-sized region, then let the 2x canvas scale it.
   // `imageSmoothingEnabled` off is what keeps 1996 art from being blurred by the
   // doubling itself; the browser's own scale down to the window is where any
@@ -350,6 +378,8 @@ function paint(
   ctx.drawImage(bitmapCanvas, 0, 0, SCREEN_W * PLATE, SCREEN_H * PLATE);
   drawBoard(palette);
   drawDossier(palette);
+  composedName = film?.name ?? "";
+  composedAt = film?.frameIndex ?? -1;
 }
 
 /**
@@ -697,6 +727,12 @@ function boardSay(): string {
 
 function frameLoop(now: number): void {
   film?.tick(now);
+  // ...and if the overlays are stale for the frame that is up, draw them. See
+  // {@link composedAt}: a still film never asks for a second blit, and the
+  // board belongs on the stillest screen in the game.
+  if (film && lastPalette && (film.name !== composedName || film.frameIndex !== composedAt)) {
+    compose(lastPalette);
+  }
   nowEl.textContent = film
     ? film.where + boardSay()
     : prefsOpen

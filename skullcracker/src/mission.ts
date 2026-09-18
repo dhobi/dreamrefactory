@@ -45,9 +45,13 @@
  *
  * Each stage's case in its chapter's sequencer names its own `chp{NN}.mov` — and
  * a `boggs{NN}.mov` beside it, and for the first stage of each chapter one more
- * (`Bomb.Mov`, `Mall.Mov`, `Belfry.Mov`, `Cycle.Mov`). The pair is queued through
- * `0x40e330` / `0x40e990`; the chapter film is the mission briefing and the
- * `boggs` one is Boggs, who is the reason for all this.
+ * (`Bomb.Mov`, `Mall.Mov`, `Belfry.Mov`, `Cycle.Mov`). They are queued one after
+ * another through `0x40e330` (clear) and `0x40e990` (play and wait), and the
+ * order of the pushes is the order they are seen in: the chapter's opener if it
+ * has one, then `boggs{NN}`, then `chp{NN}`. So Boggs says his piece on the
+ * flying screen FIRST and the skull that names the next level follows him —
+ * `0x44d794`/`0x44d7b9`/`0x44d7de` for the first stage, `0x436a8b`/`0x436ab0`
+ * for a mid-chapter one.
  *
  * When the clock runs out instead, `0x40e9d0` picks one of `TIME1.MOV`…`TIME4.MOV`
  * with `0x434540(4)` — the same random helper the punch tosses for a variant with
@@ -61,9 +65,25 @@ export interface Mission {
   book: string;
   /** 1..16 — the number in its films' names as much as its place in the order */
   number: number;
-  /** the mission briefing, played before the level */
+  /**
+   * The chapter card — the skull that names where you are going.
+   *
+   * It is the SECOND of the two: `0x44d7de` pushes `Chp01.Mov` after `0x44d7b9`
+   * has pushed `Boggs01.Mov`, and `0x436ab0`/`0x436a8b` are the same way round
+   * for a mid-chapter stage. See {@link Mission.boggs}.
+   */
   film: string;
-  /** Boggs' half of the briefing, played after it */
+  /**
+   * Boggs' half of the briefing, and it plays FIRST.
+   *
+   * Each stage's case queues its films one after another through `0x40e330`
+   * (clear) and `0x40e990` (play and wait), so the order of the pushes is the
+   * order they are seen in: Boggs on the flying screen, then the card.
+   *
+   * The first stage of each chapter queues one more BEFORE both — `0x44d794`
+   * pushes `Bomb.Mov` ahead of Boggs — and those four openers (`Bomb.Mov`,
+   * `Mall.Mov`, `Belfry.Mov`, `Cycle.Mov`) are read here but not yet played.
+   */
   boggs: string;
   /**
    * The share of the level's population the quota wants dead.
