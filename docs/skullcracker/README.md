@@ -2530,6 +2530,71 @@ same way the frame's fall already is. At every frame boundary the corner is wher
 `0x4309f0` would have put it. The corner is rounded only at the blit, or the
 whole backdrop resamples.
 
+## A hatch in the ceiling and a fork of lightning
+
+The last two unbuilt classes, and they could not be less alike.
+
+### `initbiggun` is two objects, seven scripts and eight states
+
+`0x4115b0` makes TWO objects of one record: the turret ten pixels above the
+point (`sub word ptr [edi-4], 0xa`, and the low word of a point is its y) on
+script `0x46c1e8`, and the hatch on the point itself on `0x46c238`. Both keep
+the record's rect in their own user block. One handler serves them, `0x4135b0`,
+dispatching on the script's KIND through the table at `0x413930`:
+
+```
+  kind 7  0x41387c  the HATCH: shut -> opening -> held -> shutting -> shut
+  kind 0  0x4135f7  the turret, waiting; in the rect -> tag 1, sixteen frames
+  kind 1  0x41365f  descend 8 a frame until 0x6e below where it started
+  kind 2  0x413692  unfold 10080..10086
+  kind 3  0x4136e3  FIRE: tags 0 and 1 each sound maze's 3 and call 0x412a70
+  kind 4  0x4137b4  blink 10100/10101 -> fire again, or fold
+  kind 5  0x413830  fold back 10086..10080
+  kind 6  0x413851  rise 8 a frame until it is home -> kind 0
+```
+
+Every kind that can be interrupted tests the player's point against the rect
+first and installs `0x46c428` — the fold — the moment the answer is no, so
+backing out from under it stops the gun wherever it had got to rather than
+letting it finish. `0x4135bc`'s preamble zeroes both velocities and pins x back
+to the record every frame, which is why nothing can push one.
+
+What it fires is not a shot of its own. `0x412a70` is the BLASTER's, the same
+function the armed player's state machine calls, so the gun's bolt has the
+blaster's speed, the blaster's scatter and the blaster's code. It is called with
+variant 0, and `0x412aaa` INVERTS the shooter's mirror flag for that variant —
+the gun's own flag is which side of it you are standing on (`0x4135cc`), so the
+bolt always leaves going towards you.
+
+### `initlightfx` is placed by nothing and triggered by nothing
+
+`0x41e450` collects TOWER's records at setup and keeps only the COUNT, at
+`0x46f644`; the records sit in a buffer at `0x4a5888` and nothing stands them
+up. What stands them up is the level's own per-frame function:
+
+```
+  426800  dx = [0x46f680]          ; the counter, before the increment
+  42680e  [0x46f680]++
+  426815  if (dx > 0xc8) [0x46f680] = 0      ; a period of 202 engine frames
+  426837  if ([0x46f680] != 0xc3) return     ; and the strike is on 195
+  426842  0x426870()               ; one object per record, out of the buffer
+  426857  0x40f090(0x4a5870, 0x37, player.y)
+  426861  0x40e4c0(0)
+```
+
+`0x4268c0` is what a record becomes: an object at its own point, mirrored when
+the param is NEGATIVE (`0x4268fa` takes the sign straight into `obj+0x28`),
+playing tag `|param| - 1` of `0x46f588`. TOWER's two records carry 1 and -1, so
+both play tag 0 and one is flipped — two halves of a single fork, 435 pixels
+apart. The other two tags of that script have no record anywhere in the sixteen
+books.
+
+`0x40e4c0` is the flash, and it is a queue rather than a draw: it stores a
+palette index at `0x46bdd0` and `0x40dfd0` floods the whole view rect with it on
+the next frame and sets it back to -1. Two things in the game use it — the
+blaster's muzzle, with 0xe1, and this, with 0. Colour 0 in TOWER's own palette
+is pure blue.
+
 ## One browser, not thirty
 
 Every suite in `tests/browser` used to be its own `tsx` process with its own
@@ -2634,24 +2699,23 @@ a little more wrong.
 ### The records
 
 ```
-  1141 of 1167 entity records placed - 97.8%. 52 region records, all handled.
+  1145 of 1167 entity records placed - 98.1%. 52 region records, all handled.
 
   probe             17   arcade city mall service streets woods
-  initbiggun         2   maze
-  initlightfx        2   tower
   where              1   lab
   inithealth         1   lab
   noskateboards      1   service
   monkeybar          1   vat
   wormbounds         1   vat
 
-  no gap at all: BARREL CAVERN GRAVE PLAYGR RAVECAVE SEWER
+  no gap at all: BARREL CAVERN GRAVE MAZE PLAYGR RAVECAVE SEWER TOWER
 ```
 
-Four of those are not art at all — `probe`, `monkeybar`, `wormbounds` and
-`noskateboards` are TABLES. And two are dead data: **`where` and `inithealth` do
-not appear in `SC.EXE` anywhere** — LAB places one of each and nothing in the
-game will ever ask for them.
+**Nothing that is a drawn thing is missing any more.** Four of what is left is
+not art at all — `probe`, `monkeybar`, `wormbounds` and `noskateboards` are
+TABLES. And two are dead data: **`where` and `inithealth` do not appear in
+`SC.EXE` anywhere** — LAB places one of each and nothing in the game will ever
+ask for them.
 
 ### What a probe is, and the one thing about it still unread
 
@@ -2697,9 +2761,9 @@ inventing motion, which is the one thing this page does not do.
 
 ### The classes
 
-**Every `init*` class the levels place is built except `initbiggun` and
-`initlightfx`.** Boggs' other three — `initboggshead`, `initbgclawarm` and
-`initbgmachinery` — were the last of them, and they are here now.
+**Every `init*` class the levels place is built.** `initbiggun` and
+`initlightfx` were the last two — see the section above — and before them Boggs'
+`initboggshead`, `initbgclawarm` and `initbgmachinery`.
 
 The executable registers **73**, and four of them exist in the game with no
 level placing one: `initbeltboth`, `initdoor`, `initpainting` and

@@ -147,8 +147,48 @@ const main = async (): Promise<void> => {
   if ([...fanCels].some((c) => c < 10020 || c > 10024)) fail(`0x46d478 is 10020..10024; saw ${[...fanCels].join(" ")}`);
   console.log(`ok    a fan turns itself on and off through ${[...fans].join(", ")} on its own counter`);
 
+  // 7. the big guns — `0x4115b0` makes two objects of one record and `0x4135b0`
+  //    runs them through eight script kinds. Standing inside the rect takes it
+  //    the whole way round; the bolt it fires is the BLASTER's, out of the same
+  //    `0x412a70` the armed player calls, and it goes towards you.
+  await go("&x=1850&y=7100");
+  const states: string[] = [];
+  const gunCels = new Set<number>();
+  let bolt = "";
+  for (let i = 0; i < 170; i++) {
+    await page.waitForTimeout(60);
+    const t = await say();
+    const m = /biggun (\w+)\/(\d) y(-?\d+) cel (\d+)/.exec(t);
+    if (m) {
+      if (states[states.length - 1] !== m[1]) states.push(m[1]);
+      if (Number(m[4])) gunCels.add(Number(m[4]));
+    }
+    if (!bolt) bolt = /· \d+ bolts?, nearest at x -?\d+, y -?\d+ vx (-?\d+)/.exec(t)?.[1] ?? "";
+  }
+  for (const want of ["arm", "drop", "unfold", "fire", "blink"]) {
+    if (!states.includes(want)) fail(`0x413930's kinds should run in order; it did ${states.join(" -> ")}`);
+  }
+  if ([...gunCels].some((c) => c < 10080 || c > 10101)) {
+    fail(`the turret's cels are 0x46c350..0x46c3e0's 10080..10101; saw ${[...gunCels].sort().join(" ")}`);
+  }
+  if (!bolt) fail(`0x41374c fires 0x412a70; no bolt appeared in ten seconds under the gun`);
+  if (Number(bolt) >= 0) fail(`the gun stands at x2167 and the probe at x1850, so its bolt goes LEFT; vx ${bolt}`);
+  console.log(`ok    a big gun drops, unfolds and fires the blaster's own bolt at you: ${states.slice(0, 6).join(" -> ")}, vx ${bolt}`);
+
+  // ...and walking out of the rect folds it away wherever it had got to —
+  //    every interruptible kind tests the rect first (`0x413692`, `0x4136e3`,
+  //    `0x4137b4`) and installs `0x46c428` the moment the answer is no
+  await go("&x=1600&y=7100");
+  let home = "";
+  for (let i = 0; i < 90 && home !== "wait"; i++) {
+    await page.waitForTimeout(60);
+    home = /biggun (\w+)\//.exec(await say())?.[1] ?? "";
+  }
+  if (home !== "wait") fail(`x1600 is outside the rect 1775..2610; the gun stayed on ${home}`);
+  console.log(`ok    ...and it folds back up and waits when you are not under it`);
+
   await finish(browser);
-  console.log("PASS  MAZE's cops work its levers, its cages are wall, and its fans keep their own time");
+  console.log("PASS  MAZE's cops work its levers, its cages are wall, its fans keep their own time and its big guns fire");
 };
 
 await main();

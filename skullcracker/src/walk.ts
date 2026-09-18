@@ -143,6 +143,10 @@ import {
   CAGE,
   Cage,
   ALARM,
+  BIGGUN,
+  BigGun,
+  LIGHTFX,
+  LightFx,
   Alarm,
   FAN,
   Fan,
@@ -939,6 +943,18 @@ const CAMERA = {
 /** the view's own corner in world coordinates — `[0x4a8970]` */
 const view = { x: 0, y: 0 };
 
+/** `[0x46f680]` — the level's own frame counter, which only the lightning reads */
+let levelClock = 0;
+
+/**
+ * `[0x46bdd0]` — a palette index queued for the next paint, or -1 for none.
+ *
+ * `0x40e4c0` writes it and `0x40dfd0` spends it: the whole view rect is flooded
+ * with that colour for one frame and the global is set back to -1. Two things
+ * use it, the blaster's muzzle (0xe1) and TOWER's lightning (0).
+ */
+let flashColour = -1;
+
 /** the middle of {@link CAMERA.chase}, the way `0x430a98` and `0x430ad5` take it */
 const CHASE_X = CAMERA.chase.left + Math.trunc((CAMERA.chase.right - CAMERA.chase.left) / 2);
 const CHASE_Y = CAMERA.chase.top + Math.trunc((CAMERA.chase.bottom - CAMERA.chase.top) / 2);
@@ -1108,6 +1124,10 @@ interface Level {
   /** its six alarms and its eight fans */
   alarms: Alarm[][];
   fans: Fan[][];
+  /** ...and its two big guns, hatch and turret in one record */
+  bigguns: BigGun[][];
+  /** TOWER's two halves of one fork of lightning */
+  lights: LightFx[][];
   /** level fourteen's forty-two conveyors, its two chairs and its four claws */
   belts: Belt[][];
   chairs: Chair[][];
@@ -1432,6 +1452,8 @@ async function loadLevel(index: number): Promise<void> {
   const planks = rooms.map((r, i) => planksIn(sbk, r, solids[i]));
   drips = [];
   roaches = [];
+  levelClock = 0;
+  flashColour = -1;
   columns = new Map();
   flares = [];
   bolts = [];
@@ -1508,6 +1530,33 @@ async function loadLevel(index: number): Promise<void> {
       })),
     ),
     alarms: rooms.map((r) => placed(sbk, r, "initalarm", [ALARM.quiet], (e) => ({ x: e.pointX, y: e.pointY, param: e.param, clock: 0 }))),
+    // `0x4115b0` — one record, two objects, and the turret starts home ten
+    // pixels above the point the hatch sits on
+    bigguns: rooms.map((r) =>
+      placed(sbk, r, "initbiggun", [BIGGUN.hatch.shut, BIGGUN.unfold.cels[0]], (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        top: e.top,
+        left: e.left,
+        bottom: e.bottom,
+        right: e.right,
+        state: "wait" as const,
+        clock: 0,
+        gunY: e.pointY - BIGGUN.turretUp,
+        shot: 0,
+        hatch: 0,
+        hatchClock: 0,
+      })),
+    ),
+    // `0x4268c0` — and these stand up on their own clock, not on anything you do
+    lights: rooms.map((r) =>
+      placed(sbk, r, "initlightfx", LIGHTFX.bolt.cels, (e) => ({
+        x: e.pointX,
+        y: e.pointY,
+        mirror: e.param < 0,
+        clock: -1,
+      })),
+    ),
     belts: rooms.map((r) => [
       ...placed(sbk, r, "initbeltleft", BELT.roll.cels, (e) => ({
         x: e.pointX, y: e.pointY, top: e.top, left: e.left, bottom: e.bottom, right: e.right,
@@ -4716,6 +4765,194 @@ function cageCel(c: Cage): number {
  * fifteen frames of stillness into `user+0xc` and `0x4155ef` writes sixty of
  * turning, and nothing in the level starts or stops one.
  */
+/**
+ * TOWER's lightning — `0x426800`, which is a metronome and nothing else.
+ *
+ * The counter belongs to the LEVEL rather than to any object, runs 0…201 and
+ * strikes on 195, so the period is 202 engine frames and the bolt is standing
+ * up for the last seven of them before the counter wraps. Nothing you do starts
+ * it and nothing you do stops it.
+ *
+ * The flash is `0x40e4c0(0)`: a colour handed to the painter, flooded over the
+ * whole view rect on the next frame and cleared again. In TOWER's own palette
+ * colour 0 is blue.
+ */
+function stepLights(): void {
+  // ...and it is the LEVEL's, not the room's: `0x426800` is TOWER's own
+  // per-frame function and `0x426870` walks the whole buffer, so the thunder and
+  // the flash reach you in every room and only the bolts themselves are
+  // somewhere in particular
+  const all = level?.lights.flat() ?? [];
+  if (!all.length) return;
+  for (const q of all) if (q.clock >= 0) q.clock += 1;
+  levelClock += 1;
+  if (levelClock > LIGHTFX.period - 2) levelClock = 0;
+  if (levelClock !== LIGHTFX.strikeAt) return;
+  for (const q of all) q.clock = 0;
+  // `0x426857` — at the PLAYER's own y, not the bolt's, so it is overhead
+  // wherever you are standing
+  sound?.effect(LIGHTFX.sound, p.x, p.y);
+  flashColour = LIGHTFX.flash;
+}
+
+/** which cel a bolt is showing, or 0 while there is none */
+function lightCel(q: LightFx): number {
+  if (q.clock < 0) return 0;
+  const i = Math.floor(q.clock / LIGHTFX.bolt.hold);
+  return i < LIGHTFX.bolt.cels.length ? LIGHTFX.bolt.cels[i] : 0;
+}
+
+/**
+ * MAZE's big guns — `0x4135b0`, one handler and eight script kinds.
+ *
+ * The hatch and the turret are two objects in `SC.EXE` and one record here,
+ * because they never disagree: both start on the same rect test and the hatch's
+ * four tags simply shadow whatever the turret is doing. What is faithful is the
+ * ORDER — every state that can be interrupted tests the rect first and folds
+ * away the moment the player is outside it, so backing out of the rect stops
+ * the gun wherever it had got to rather than letting it finish.
+ */
+function stepBigGuns(): void {
+  for (const g of hereOf((l) => l.bigguns)) {
+    const inside = p.x >= g.left && p.x <= g.right && p.y - p.feet >= g.top && p.y - p.feet <= g.bottom;
+    stepHatch(g, inside);
+    g.clock += 1;
+    switch (g.state) {
+      // `0x41360a` — waiting, and the rect is the only way out of it
+      case "wait":
+        if (inside) {
+          g.state = "arm";
+          g.clock = 0;
+        }
+        break;
+      // `0x41363e` — 0x46c1e8 tag 1, eight frames at two, then it drops
+      case "arm":
+        if (g.clock >= BIGGUN.wait.frames * BIGGUN.wait.hold) {
+          g.state = "drop";
+          g.clock = 0;
+        }
+        break;
+      // `0x41365f` — eight a frame until it is 0x6e below its HOME, and home is
+      // the point already lifted by ten: `0x4115ec` decrements the user block's
+      // own copy before `0x4115fb` reads it back out for the object's position,
+      // so `0x41366b` measures from there and the drop is 100 below the record
+      case "drop":
+        g.gunY += BIGGUN.step;
+        if (g.gunY >= g.y - BIGGUN.turretUp + BIGGUN.drop) {
+          g.state = "unfold";
+          g.clock = 0;
+        }
+        break;
+      // `0x413692` — and from here on, leaving the rect folds it away
+      case "unfold":
+        if (!inside) {
+          g.state = "fold";
+          g.clock = 0;
+        } else if (g.clock >= BIGGUN.unfold.cels.length * BIGGUN.unfold.hold) {
+          g.state = "fire";
+          g.shot = 0;
+          g.clock = 0;
+        }
+        break;
+      // `0x4136e3` — tags 0 and 1 each fire one bolt, tag 2 is the recovery
+      case "fire": {
+        if (!inside) {
+          g.state = "fold";
+          g.clock = 0;
+          break;
+        }
+        const run = g.shot === 0 ? BIGGUN.fire.one : g.shot === 1 ? BIGGUN.fire.two : BIGGUN.fire.done;
+        if (g.clock < run.cels.length * run.hold) break;
+        if (g.shot < 2) {
+          // `0x41373c` / `0x413770` — the sound, then `0x412a70(gun, 0)`, which
+          // inverts the shooter's own mirror flag: the gun faces you and the
+          // bolt goes the other way round, which is the same way
+          sound?.effect(BIGGUN.sound, g.x, g.gunY);
+          spawnBolt(g.x, g.gunY, p.x > g.x ? 1 : -1);
+          g.shot += 1;
+          g.clock = 0;
+        } else {
+          g.state = "blink";
+          g.clock = 0;
+        }
+        break;
+      }
+      // `0x4137b4` — and it asks again at the END of the blink, not during it
+      case "blink":
+        if (g.clock < BIGGUN.blink.cels.length * BIGGUN.blink.hold) break;
+        g.state = inside ? "fire" : "fold";
+        g.shot = 0;
+        g.clock = 0;
+        break;
+      // `0x413830` — folding does not check anything; it finishes
+      case "fold":
+        if (g.clock >= BIGGUN.fold.cels.length * BIGGUN.fold.hold) {
+          g.state = "rise";
+          g.clock = 0;
+        }
+        break;
+      // `0x413851` — eight a frame back up, and home is the record's own point
+      case "rise":
+        g.gunY -= BIGGUN.step;
+        if (g.gunY <= g.y - BIGGUN.turretUp) {
+          g.gunY = g.y - BIGGUN.turretUp;
+          g.state = "wait";
+          g.clock = 0;
+        }
+        break;
+    }
+  }
+}
+
+/** `0x41387c` — the hatch, which has its own four tags and its own clock */
+function stepHatch(g: BigGun, inside: boolean): void {
+  g.hatchClock += 1;
+  const run =
+    g.hatch === 1 ? BIGGUN.hatch.open : g.hatch === 2 ? BIGGUN.hatch.held : g.hatch === 3 ? BIGGUN.hatch.close : null;
+  if (!run) {
+    if (inside) {
+      g.hatch = 1;
+      g.hatchClock = 0;
+    }
+    return;
+  }
+  if (g.hatchClock < run.cels.length * run.hold) return;
+  // tag 1 always goes to 2; tag 2 asks the rect again; tag 3 goes home
+  g.hatch = g.hatch === 1 ? 2 : g.hatch === 2 ? (inside ? 2 : 3) : 0;
+  g.hatchClock = 0;
+}
+
+/** which cel the hatch is showing — `0x46c238`'s four tags */
+function hatchCel(g: BigGun): number {
+  if (g.hatch === 0) return BIGGUN.hatch.shut;
+  const run = g.hatch === 1 ? BIGGUN.hatch.open : g.hatch === 2 ? BIGGUN.hatch.held : BIGGUN.hatch.close;
+  const i = Math.min(run.cels.length - 1, Math.floor(g.hatchClock / run.hold));
+  return run.cels[i];
+}
+
+/** which cel the turret is showing, or 0 while it is still behind the hatch */
+function gunCel(g: BigGun): number {
+  const step = (a: { cels: readonly number[]; hold: number }, clock: number): number =>
+    a.cels[Math.min(a.cels.length - 1, Math.floor(clock / a.hold))];
+  switch (g.state) {
+    case "wait":
+      return 0;
+    case "arm":
+    case "drop":
+      return BIGGUN.unfold.cels[0];
+    case "unfold":
+      return step(BIGGUN.unfold, g.clock);
+    case "fire":
+      return step(g.shot === 0 ? BIGGUN.fire.one : g.shot === 1 ? BIGGUN.fire.two : BIGGUN.fire.done, g.clock);
+    case "blink":
+      return BIGGUN.blink.cels[Math.floor(g.clock / BIGGUN.blink.hold) % BIGGUN.blink.cels.length];
+    case "fold":
+      return step(BIGGUN.fold, g.clock);
+    case "rise":
+      return BIGGUN.fold.cels[BIGGUN.fold.cels.length - 1];
+  }
+}
+
 function stepAlarms(): void {
   for (const a of hereOf((l) => l.alarms)) {
     const was = Math.floor(a.clock) % (ALARM.flash.cels.length * ALARM.flash.hold);
@@ -5528,13 +5765,26 @@ function fireBolt(): void {
   if (roundsIn(6) <= 0) return;
   inv.rounds[6] = roundsIn(6) - 1;
   sound?.effect(BOLT.sound, p.x, p.y);
+  spawnBolt(p.x, p.y - p.feet, p.facing);
+}
+
+/**
+ * `0x412a70` itself — a bolt from whoever fired it.
+ *
+ * The player is not the only caller: MAZE's big gun reaches the same function
+ * (`0x41374c`), which is why its shot has the blaster's speed, the blaster's
+ * scatter and the blaster's code rather than one of its own. What the gun does
+ * NOT do is spend a round, because the rounds are `0x412a83`'s caller's
+ * business and the gun has none.
+ */
+function spawnBolt(x: number, y: number, facing: number): void {
   bolts.push({
     // `0x412b7f` puts it 120 ahead; `obj+0x28 == 1` is this port's facing -1
-    x: p.x + p.facing * BOLT.aheadPx,
+    x: x + facing * BOLT.aheadPx,
     // up 20, then a random 0..39 back down — `0x412b87` and `0x412b8f`
-    y: p.y - p.feet - BOLT.risePx + Math.floor(Math.random() * BOLT.scatterPx),
-    vx: (p.facing * BOLT.dx) / BOLT.divisor,
-    facing: p.facing,
+    y: y - BOLT.risePx + Math.floor(Math.random() * BOLT.scatterPx),
+    vx: (facing * BOLT.dx) / BOLT.divisor,
+    facing,
     spent: false,
   });
 }
@@ -7100,7 +7350,7 @@ function stepEnemies(): void {
  * One cel of the level's own book, placed by its anchor — which is what
  * `0x4026d0` does for everything the engine draws.
  */
-function drawLevelCel(id: number, x: number, y: number, camX: number, camY: number): void {
+function drawLevelCel(id: number, x: number, y: number, camX: number, camY: number, mirror = false): void {
   const lvl = level;
   if (!lvl) return;
   const loc = lvl.sbk.byId.get(id);
@@ -7108,10 +7358,20 @@ function drawLevelCel(id: number, x: number, y: number, camX: number, camY: numb
   const art = cel(lvl, loc);
   const rec = lvl.sbk.cels.find((q) => q.id === id);
   if (!art || !rec) return;
-  const left = x - camX + W / 2 - rec.posX;
+  // `0x45d0f0` reflects a mirrored cel about its own ANCHOR, not its centre —
+  // the same rule the backdrop's placements follow
+  const sx = x - camX + W / 2;
+  const left = mirror ? sx - (art.width - rec.posX) : sx - rec.posX;
   const top = y - camY + VIEW.y - rec.posY;
   if (left + art.width < 0 || top + art.height < 0 || left > W || top > H) return;
-  ctx.drawImage(art, left, top);
+  if (!mirror) {
+    ctx.drawImage(art, left, top);
+    return;
+  }
+  ctx.save();
+  ctx.scale(-1, 1);
+  ctx.drawImage(art, -(left + art.width), top);
+  ctx.restore();
 }
 
 /**
@@ -7940,6 +8200,8 @@ function loop(now: number): void {
     if (frame) stepSurges();
     if (frame) stepCages();
     if (frame) stepAlarms();
+    if (frame) stepBigGuns();
+    if (frame) stepLights();
     if (frame) stepFans();
     if (frame) stepBelts();
     if (frame) stepChairs();
@@ -8076,6 +8338,18 @@ function loop(now: number): void {
     if (id) drawLevelCel(id, c.x, c.y, camX, camY);
   }
   for (const a of hereOf((l) => l.alarms)) drawLevelCel(alarmCel(a), a.x, a.y, camX, camY);
+  // the big guns: the turret first, then the hatch over it, because the hatch is
+  // what the turret comes out THROUGH
+  for (const g of hereOf((l) => l.bigguns)) {
+    const barrel = gunCel(g);
+    // `0x4135cc` — the gun's own mirror flag is which side of it you are on
+    if (barrel) drawLevelCel(barrel, g.x, g.gunY, camX, camY, p.x > g.x);
+    drawLevelCel(hatchCel(g), g.x, g.y, camX, camY);
+  }
+  for (const q of hereOf((l) => l.lights)) {
+    const id = lightCel(q);
+    if (id) drawLevelCel(id, q.x, q.y, camX, camY, q.mirror);
+  }
   for (const b of hereOf((l) => l.belts)) drawLevelCel(beltCel(b), b.x, b.y, camX, camY);
   for (const c of hereOf((l) => l.chairs)) drawLevelCel(chairCel(c), c.x, c.y, camX, camY);
   for (const c of hereOf((l) => l.claws)) drawLevelCel(clawCel(c), c.x, c.y, camX, camY);
@@ -8245,6 +8519,20 @@ function loop(now: number): void {
   for (const q of lvl.draw) if (q.z > PLAY_PLANE_Z) drawOne(q);
 
   ctx.restore();
+
+  // `0x40dfd0` — whatever queued a colour gets one frame of the whole view rect
+  // in it, and then the queue is empty again. It is drawn over the level and
+  // under the panel, because `0x40e0b0` fills the view rect and nothing else.
+  if (flashColour >= 0) {
+    const pal = level?.pal;
+    const i = flashColour * 4;
+    ctx.save();
+    ctx.fillStyle = pal ? `rgb(${pal[i]}, ${pal[i + 1]}, ${pal[i + 2]})` : "#fff";
+    ctx.fillRect(VIEW.x, VIEW.y, VIEW.w, viewH());
+    ctx.restore();
+    flashColour = -1;
+  }
+
   if (iface) {
     paintHud(ctx, HUD_ART, {
       // nothing here can hurt the player, so the left-hand bar reads full: 1024
@@ -8285,6 +8573,15 @@ function loop(now: number): void {
   // the view's own corner — `[0x4a8970]`, which is what a probe has to read to
   // say anything about what is on screen
   const cam = ` · view ${Math.round(view.x)},${Math.round(view.y)}`;
+  // MAZE's big guns and TOWER's lightning, so a probe can watch either run
+  const guns = hereOf((l) => l.bigguns);
+  const gunSay = guns.length
+    ? ` · ${guns.map((g) => `biggun ${g.state}/${g.hatch} y${Math.round(g.gunY)} cel ${gunCel(g)}`).join(" ")}`
+    : "";
+  const lit = level?.lights.flat() ?? [];
+  const litSay = lit.length
+    ? ` · lightfx ${levelClock}/${LIGHTFX.period - 1} ${lit.map((q) => lightCel(q)).join(",")}`
+    : "";
   // the word for four seconds after it is typed, so a probe can see one land
   const cheated =
     cheatSaid && performance.now() - cheatSaid.at < 4000 ? ` · <b>${cheatSaid.cheat.word}</b> — ${cheatSaid.cheat.say}` : "";
@@ -8556,7 +8853,7 @@ function loop(now: number): void {
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${cam}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}${cheated}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${cam}${gunSay}${litSay}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}${cheated}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 

@@ -156,8 +156,35 @@ const main = async (): Promise<void> => {
   }
   console.log(`ok    and its bishop works its own bands — ${[...modes].sort().join(" ")} — on its 2500s, 2600s and 2650s`);
 
+  // the LIGHTNING — `initlightfx`, the one class in the game that nothing places
+  // and nothing triggers. `0x426800` is a metronome on the level's own counter:
+  // 202 engine frames a period, the strike on 195, and the two records carry
+  // params 1 and -1 so both play tag 0 of `0x46f588` and one of them is flipped.
+  await page.goto(`${BASE}/walk.html?level=12&x=17600&y=14700`);
+  await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(400);
+  const bolts = new Map<number, string>();
+  let period = 0;
+  for (let i = 0; i < 300; i++) {
+    await page.waitForTimeout(60);
+    const m = /· lightfx (\d+)\/(\d+) ([\d,]+)/.exec(await say());
+    if (!m) continue;
+    period = Number(m[2]);
+    if (m[3] !== "0,0") bolts.set(Number(m[1]), m[3]);
+  }
+  if (period !== 201) fail(`0x426815's counter runs 0..201; the page says 0..${period}`);
+  if (!bolts.size) fail(`nothing struck in eighteen seconds — 0x426800 strikes every 202 frames`);
+  if (!bolts.has(195)) fail(`0x426837 strikes on 0xc3; it struck on ${[...bolts.keys()].join(" ")}`);
+  const drawn = new Set([...bolts.values()].flatMap((v) => v.split(",").map(Number)));
+  const stray = [...drawn].filter((c) => c !== 0 && (c < 9081 || c > 9086));
+  if (stray.length) fail(`0x46f588 tag 0 is 9081..9086; saw ${stray.join(" ")}`);
+  if ([...bolts.values()].some((v) => v.split(",")[0] !== v.split(",")[1])) {
+    fail(`both records play the same tag, one flipped — they should never disagree on the cel`);
+  }
+  console.log(`ok    and its lightning strikes on its own clock, ${bolts.size} frames of 9081..9086 at ${[...bolts.keys()][0]}`);
+
   await finish(browser);
-  console.log("PASS  TOWER's floors give way, its bishop stands on the goal and its surges arc");
+  console.log("PASS  TOWER's floors give way, its bishop stands on the goal, its surges arc and its lightning strikes");
 };
 
 await main();

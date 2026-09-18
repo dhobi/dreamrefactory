@@ -2524,3 +2524,172 @@ export interface BoggsMachine {
   /** frames into the wreck run, or -1 while it is still whole */
   wreckClock: number;
 }
+
+/**
+ * TOWER's LIGHTNING — `initlightfx`, and it is the one class in the game that
+ * nothing places and nothing triggers. It happens to you.
+ *
+ * `0x41e450` collects the records at setup and keeps only the COUNT, at
+ * `0x46f644`, with the records themselves left in the buffer at `0x4a5888`.
+ * Nothing spawns them there. What spawns them is the level's own per-frame
+ * function, `0x426800`, which is a metronome:
+ *
+ * ```
+ *   426800  dx = [0x46f680]          ; the counter, before the increment
+ *   42680e  [0x46f680]++
+ *   426815  if (dx > 0xc8) {
+ *   42681c     [0x46f680] = 0        ; ...so the period is 202 engine frames
+ *   426829     every object in [0x46ecc8] gets user[0] = 1
+ *           }
+ *   426837  if ([0x46f680] != 0xc3) return
+ *   426842  0x426870()               ; stand up one object per record
+ *   426857  0x40f090(0x4a5870, 0x37, player.y)
+ *   426861  0x40e4c0(0)              ; and flood the window with palette 0
+ * ```
+ *
+ * `0x4268c0` is what each record becomes: an object at the record's own point,
+ * mirrored when the param is NEGATIVE (`0x4268fa` takes the sign into
+ * `obj+0x28`), playing tag `|param| - 1` of `0x46f588`. TOWER's two records
+ * carry 1 and -1, so both play tag 0 and one of them is flipped — the two
+ * halves of a single fork of lightning, 460 pixels apart.
+ *
+ * The flash is `0x40e4c0(0)`, which queues a colour for `0x40dfd0` to flood the
+ * whole view rect with on the next paint and then clears itself (`0x40e0b0`
+ * fills 232 rows with the panel up and 342 without). Colour 0 in TOWER's own
+ * palette is pure blue.
+ *
+ * The other two tags of `0x46f588` — cels 620..622 and 5630..5635 — have no
+ * record anywhere in the sixteen books, so nothing in the shipped game plays
+ * them.
+ */
+export const LIGHTFX = {
+  /** `0x426815`'s `cmp dx, 0xc8` — engine frames from one strike to the next */
+  period: 0xc8 + 2,
+  /** `0x426837`'s `cmp [0x46f680], 0xc3` — where in the period it strikes */
+  strikeAt: 0xc3,
+  /** `0x46f588` tag 0 — eleven cels at two frames each, out and back again */
+  bolt: {
+    cels: [9081, 9082, 9083, 9084, 9085, 9086, 9085, 9084, 9083, 9082, 9081],
+    hold: 2,
+    from: "0x46f588 tag 0",
+  },
+  /** `0x426850` — `tower.snd`'s own thunder, played at the PLAYER's y */
+  sound: 0x37,
+  /** `0x426861` — the colour `0x40e4c0` floods the window with for one frame */
+  flash: 0,
+  from: "0x41e450 / 0x426800 / 0x426870 / 0x4268c0",
+} as const;
+
+/** one `initlightfx` record, standing up every {@link LIGHTFX.period} frames */
+export interface LightFx {
+  x: number;
+  y: number;
+  /** `0x4268fa` — the param's SIGN, not a facing the record states */
+  mirror: boolean;
+  /** frames into {@link LIGHTFX.bolt}, or -1 while there is no bolt */
+  clock: number;
+}
+
+/**
+ * MAZE's BIG GUN — `initbiggun`, a hatch in the ceiling with a turret behind it.
+ *
+ * `0x410d54` collects the records and `0x4115b0` turns each one into TWO
+ * objects at the same point: the turret ten pixels above it (`sub word ptr
+ * [edi-4], 0xa` on the copy of the point, and the LOW word of a point is its y)
+ * on script `0x46c1e8`, and the hatch on the point itself on `0x46c238`. Both
+ * carry the record's rect in their own user block, and `0x413570`'s preamble
+ * pins x back to it every frame.
+ *
+ * One handler serves both, `0x4135b0`, dispatching on the script's KIND through
+ * the table at `0x413930` — which is how two objects and seven scripts make one
+ * machine:
+ *
+ * ```
+ *   kind 7  0x41387c  the HATCH, and its four tags are its whole life
+ *             tag 0   shut; player's point inside the rect -> tag 1
+ *             tag 1   opening, 10070..10074 -> tag 2 when it ends
+ *             tag 2   held open -> tag 2 again while you stay, else tag 3
+ *             tag 3   shutting -> tag 0
+ *   kind 0  0x4135f7  the turret, waiting: in the rect -> tag 1 (16 frames)
+ *                     ...and when THAT ends, script 0x46c350 -> kind 1
+ *   kind 1  0x41365f  descend 8 a frame until 0x6e below the record's point
+ *   kind 2  0x413692  unfold, 10080..10086 -> kind 3, or kind 5 if you left
+ *   kind 3  0x4136e3  FIRE: tags 0 and 1 each play tower's own 3 and call
+ *                     0x412a70 — the blaster's bolt — then tag 2 -> kind 4
+ *   kind 4  0x4137b4  blink 10100/10101; still in the rect -> kind 3, else 5
+ *   kind 5  0x413830  fold back, 10086..10080 -> kind 6
+ *   kind 6  0x413851  rise 8 a frame until it is home again -> kind 0
+ * ```
+ *
+ * Every one of the five that tests the rect tests it the same way and bails to
+ * kind 5 the moment the player is outside it, so walking back out of the rect
+ * stops the gun wherever it had got to. The two records' rects are 835 pixels
+ * wide and the gun is in the middle of each.
+ *
+ * What it fires is the BLASTER's bolt and not a shot of its own: `0x412a70` is
+ * the same function the armed player's state machine calls, so the bolt's speed,
+ * its scatter and its own code all come from {@link BLASTER}.
+ */
+export const BIGGUN = {
+  /** `0x4115ec` — the turret sits ten pixels above the record's point */
+  turretUp: 0xa,
+  /** `0x46c238`, the hatch: tag 0 shut, tag 1 opening, tag 2 held, tag 3 shutting */
+  hatch: {
+    shut: 10070,
+    open: { cels: [10070, 10071, 10070, 10071, 10072, 10073, 10074], hold: 1, from: "0x46c238 tag 1" },
+    held: { cels: [10074, 10074, 10074, 10074, 10074, 10074], hold: 1, from: "0x46c238 tag 2" },
+    close: {
+      cels: [
+        10074, 10074, 10074, 10074, 10074, 10074, 10074, 10074, 10074, 10074, 10074, 10074, 10074, 10074,
+        10073, 10072, 10071, 10070, 10071, 10070,
+      ],
+      hold: 1,
+      from: "0x46c238 tag 3",
+    },
+  },
+  /** `0x46c1e8` tag 1 — eight frames at two, which is the wait before it drops */
+  wait: { cels: [10080], hold: 2, frames: 8, from: "0x46c1e8 tag 1" },
+  /** `0x413663` and `0x413855` — pixels a frame, down and back up */
+  step: 8,
+  /** `0x413671`'s `add ecx, 0x6e` — how far below the point it stops */
+  drop: 0x6e,
+  /** `0x46c360` tag 0 — unfolding */
+  unfold: { cels: [10080, 10081, 10082, 10083, 10084, 10085, 10086], hold: 1, from: "0x46c360 tag 0" },
+  /** `0x46c428` tag 0 — and the same run backwards */
+  fold: { cels: [10086, 10085, 10084, 10083, 10082, 10081, 10080], hold: 1, from: "0x46c428 tag 0" },
+  /** `0x46c3a0` — tag 0 fires, tag 1 fires, tag 2 is the recovery */
+  fire: {
+    one: { cels: [10090, 10091], hold: 1, from: "0x46c3a0 tag 0" },
+    two: { cels: [10092, 10093, 10094], hold: 1, from: "0x46c3a0 tag 1" },
+    done: { cels: [10095, 10096], hold: 1, from: "0x46c3a0 tag 2" },
+  },
+  /** `0x46c3e0` tag 0 — eight frames of blinking between shots */
+  blink: { cels: [10100, 10101, 10100, 10101, 10100, 10101, 10100, 10101], hold: 1, from: "0x46c3e0 tag 0" },
+  /** `0x41373c` / `0x413770` — `maze.snd`'s own, once a shot */
+  sound: 3,
+  from: "0x410d54 / 0x4115b0 / 0x4135b0",
+} as const;
+
+/** which of {@link BIGGUN}'s eight states a gun is in — the script KINDS, named */
+export type BigGunState = "wait" | "arm" | "drop" | "unfold" | "fire" | "blink" | "fold" | "rise";
+
+/** one `initbiggun` record: a hatch and the turret behind it, as one thing */
+export interface BigGun {
+  x: number;
+  /** the record's own point — where the turret is home and the hatch lives */
+  y: number;
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  state: BigGunState;
+  /** frames into whichever run {@link BigGun.state} names */
+  clock: number;
+  /** the turret's own y, which only {@link BigGun.state} `drop` and `rise` move */
+  gunY: number;
+  /** which of `0x46c3a0`'s three tags the fire is on */
+  shot: number;
+  /** `0x46c238`'s tag, which the hatch keeps whatever the turret is doing */
+  hatch: number;
+  hatchClock: number;
+}
