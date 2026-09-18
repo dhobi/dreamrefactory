@@ -183,8 +183,59 @@ const main = async (): Promise<void> => {
   }
   console.log(`ok    and its lightning strikes on its own clock, ${bolts.size} frames of 9081..9086 at ${[...bolts.keys()][0]}`);
 
+  /**
+   * ...and its three LADDERS carry you between its regions, both ways.
+   *
+   * All three of TOWER's span more than one region — two, three and four of them
+   * — and this page filed a record into the region its CENTRE fell in, so each
+   * answered only from the one room that happened to own its middle, which for
+   * two of the three is not the room you climb from. None of them lifted the
+   * player a single pixel.
+   *
+   * The engine files nothing: `0x40b940` is its only entity query and it is a
+   * linear scan of the whole table, kind 2 asking whether a rect holds a point
+   * (`0x434200`), with no reference to a region anywhere in it. So the ladders
+   * are kept whole on the level.
+   *
+   * Each row is the record's own `pointX`, a y at the ladder's HEAD, and the
+   * two legs the rect is worth — where the head can be stood on. Two of the
+   * three cannot: the second's is a floor that gives way under a player who
+   * waits on it, and the third's is inside an `initsurge` arc, and a shocked
+   * player is in `p.act` and can take hold of nothing. Those two start at the
+   * foot instead and their descent is worth nothing.
+   */
+  for (const [x, head, down, up] of [
+    [16242, 15850, 340, 480],
+    // the last two start AT the foot and their descent is worth nothing: the
+    // head of the second stands on a floor that gives way under a player who
+    // waits on it, and the head of the third stands in an `initsurge` arc
+    [17222, 15690, -20, 780],
+    [17974, 15900, -20, 660],
+  ] as const) {
+    await go(`&x=${x}&y=${head}`);
+    // where it actually put us: `go` drops the player onto the room's own floor,
+    // which is not the y asked for
+    const from = Number(/· x -?\d+, y (-?\d+)/.exec(await say())?.[1] ?? NaN);
+    await page.keyboard.down("s");
+    await page.waitForTimeout(11_000);
+    await page.keyboard.up("s");
+    await page.waitForTimeout(300);
+    const foot = Number(/· x -?\d+, y (-?\d+)/.exec(await say())?.[1] ?? NaN);
+    const low = /room (\d+) of/.exec(await say())?.[1] ?? "";
+    await page.keyboard.down("w");
+    await page.waitForTimeout(13_000);
+    await page.keyboard.up("w");
+    await page.waitForTimeout(300);
+    const top = Number(/· x -?\d+, y (-?\d+)/.exec(await say())?.[1] ?? NaN);
+    const high = /room (\d+) of/.exec(await say())?.[1] ?? "";
+    if (foot - from < down) fail(`the ladder at x${x} should take you ${down}px down; it went ${from} to ${foot}`);
+    if (foot - top < up) fail(`the ladder at x${x} should lift you ${up}px; it went ${foot} to ${top}`);
+    if (low === high) fail(`the ladder at x${x} reaches out of room ${low}; the page never left it`);
+    console.log(`ok    the ladder at x${x} runs ${foot - top}px, room ${low} to room ${high}`);
+  }
+
   await finish(browser);
-  console.log("PASS  TOWER's floors give way, its bishop stands on the goal, its surges arc and its lightning strikes");
+  console.log("PASS  TOWER's floors give way, its bishop stands on the goal, its surges arc, its lightning strikes and its ladders climb");
 };
 
 await main();

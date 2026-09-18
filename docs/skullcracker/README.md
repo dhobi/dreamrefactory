@@ -2832,6 +2832,53 @@ settle by reading is the last question: the hall wants the player left on the
 walkway and door-7 wants them dumped off it, and both come out of this one
 machine, so the difference has to be geometry and has to be measured.
 
+## A ladder is not a room's to hold
+
+Two levels were reported unclimbable — TOWER and MAZE, "ladders are not usable"
+— and the fault was one line of this page's own filing.
+
+`solidsIn` gathers the records standing in a region by asking where each one's
+CENTRE falls. For a `platform` or an `obstacle` that is fine: they lie inside a
+room by construction. A ladder is the one record in the game whose whole purpose
+is to leave one, and nine of them ship:
+
+```
+  STREETS   1 ladder    inside room 0                    worked
+  RAVECAVE  1 ladder    inside room 1                    worked
+  SEWER     3 ladders   two of them reach across 2 rooms
+  TOWER     3 ladders   reach across 2, 3 and 4 rooms
+  MAZE      4 ladders   centre in NO room at all
+```
+
+MAZE's four sit in the gaps between its seven regions — the first misses room
+0's bottom edge by ONE pixel — so every one of them was filed nowhere and the
+level had no ladders whatever. TOWER's three each answered from exactly one
+room, the one that happened to own their middle, which for two of the three is
+not the room you climb from: all three lifted the player zero pixels.
+
+The engine files nothing. `0x40b940` is its only entity query and it is a linear
+scan of the whole table — `[0x46b9a8]+0x1c`, stride 48, `[+0x18]` records —
+with three kinds: 0 compares the name (`0x4343b0`), 1 compares the param, and 2
+asks whether the rect holds a point (`0x434200`). The ladder lookup is kind 2,
+and there is no region anywhere in it. So the ladders are kept whole on the
+level and the room is not consulted.
+
+### ...and the region you are in is whichever one contains your point
+
+The other half was the same rule applied on the other axis. This page already
+re-asks `0x40b940(2, point)` every time the player moves SIDEWAYS — that is what
+made MALL crossable — but nothing re-asked it when the player moved UP, because
+until now nothing moved the player far enough for it to matter. A ladder does:
+MAZE's first runs 1426px from one region down into another, and TOWER's third
+crosses four. Without the re-ask the climb tops out still standing in the room
+below, which has no floor up there and none of the platforms the ladder was put
+there to reach.
+
+MAZE also answered a question that was not asked. Its `newroom1` has no
+rasterised ground at all, and the foot of two of its ladders is in that region:
+a player put down there falls out of the world. Those two are climbed DOWN into,
+not up out of, which is why the tests for them start at the head.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are

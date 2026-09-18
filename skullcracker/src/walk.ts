@@ -1144,7 +1144,6 @@ interface Solids {
    */
   platforms: SbkEntity[];
   obstacles: readonly SbkEntity[];
-  ladders: readonly SbkEntity[];
   goal: SbkEntity | undefined;
 }
 
@@ -1155,6 +1154,32 @@ interface Level {
   rooms: SbkRoom[];
   /** what stands in each room, by its index in `rooms` */
   solids: Solids[];
+  /**
+   * The level's ladders, ALL of them, and deliberately not filed by room.
+   *
+   * `0x40b940` is the engine's only entity query and it is a linear scan of the
+   * whole table — `[0x46b9a8]+0x1c`, stride 48, `[+0x18]` records — with no
+   * reference to a region anywhere in it. The ladder lookup is that scan with
+   * kind 2, the rect-contains-point test at `0x434200`.
+   *
+   * Filing a ladder into the room its CENTRE falls in, which is what this page
+   * did, is wrong for the thing a ladder IS. Nine ladders ship and only two of
+   * them stand inside one room:
+   *
+   * ```
+   *   STREETS   1 ladder    room 0                     works
+   *   RAVECAVE  1 ladder    room 1                     works
+   *   SEWER     3 ladders   two of them span 2 rooms
+   *   TOWER     3 ladders   span 2, 3 and 4 rooms
+   *   MAZE      4 ladders   ALL FOUR centre in NO room at all
+   * ```
+   *
+   * MAZE's four sit in the gaps between its seven regions, so `solidsIn` filed
+   * them nowhere and the level had no ladders whatever; TOWER's answered only
+   * while you were already in the one room that happened to own the middle of
+   * them, which for two of the three is not the room you climb from.
+   */
+  ladders: readonly SbkEntity[];
   /** what each room spawns — the `init*` records this page knows how to draw */
   spawned: Enemy[][];
   /** the room's planks, each holding the platform record it owns */
@@ -1564,6 +1589,7 @@ async function loadLevel(index: number): Promise<void> {
     pal,
     rooms,
     solids,
+    ladders: sbk.entities.filter((e) => e.isEntity && e.name === "ladder"),
     spawned: ((claimed: Set<SbkEntity>) => rooms.map((r) => spawnIn(sbk, r, claimed)))(new Set<SbkEntity>()),
     planks,
     elevators: rooms.map((r, i) => elevatorsIn(sbk, r, solids[i], planks[i])),
@@ -2203,7 +2229,6 @@ function solidsIn(sbk: SbkFile, room: SbkRoom): Solids {
   return {
     platforms: mine.filter((e) => e.name === "platform").map((e) => ({ ...e })),
     obstacles: mine.filter((e) => e.name === "obstacle"),
-    ladders: mine.filter((e) => e.name === "ladder"),
     goal: mine.find((e) => e.name === "goal"),
   };
 }
@@ -2544,7 +2569,7 @@ function groundAt(x: number): number | null {
 /** what the player is standing in front of right now */
 function solids(): Solids {
   const i = level && p.room ? level.rooms.indexOf(p.room) : -1;
-  return level && i >= 0 ? level.solids[i] : { platforms: [], obstacles: [], ladders: [], goal: undefined };
+  return level && i >= 0 ? level.solids[i] : { platforms: [], obstacles: [], goal: undefined };
 }
 
 /**
@@ -2736,7 +2761,9 @@ function ejectFromObstacles(): void {
  */
 function onLadder(): SbkEntity | undefined {
   const b = playerBox();
-  return solids().ladders.find((e) => p.x >= e.left && p.x < e.right && b.bottom > e.top && b.top < e.bottom);
+  // the whole level's, because `0x40b940` scans the whole entity table and a
+  // ladder is the one record that exists to carry you OUT of a region
+  return level?.ladders.find((e) => p.x >= e.left && p.x < e.right && b.bottom > e.top && b.top < e.bottom);
 }
 
 // ---- input ---------------------------------------------------------------
@@ -8238,6 +8265,27 @@ function loop(now: number): void {
       const was = p.y;
       p.y = p.climbY + feet;
       p.travelled += Math.abs(p.y - was);
+      /**
+       * ...and the region you are in is whichever one contains your point — on
+       * THIS axis as much as on the other.
+       *
+       * The walk already re-asks `0x40b940(2, point)` every time it moves the
+       * player sideways. Nothing re-asked it when the player moved UP, because
+       * until now nothing moved the player far enough for it to matter. A
+       * ladder does: seven of the nine reach out of the region they start in,
+       * TOWER's second spans three and its third spans four, and MAZE's first
+       * runs 1426px from room 1 down into room 5. Without this the climb tops
+       * out still standing in the room below — which has no floor up there and
+       * none of the platforms the ladder was put there to reach.
+       */
+      const here =
+        !!p.room && p.x >= p.room.left && p.x <= p.room.right && p.y >= p.room.top && p.y <= p.room.bottom;
+      if (!here) {
+        const into = level?.rooms.find(
+          (r) => p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom,
+        );
+        if (into) p.room = into;
+      }
       p.onGround = false;
     } else {
       if (wasClimbing && !p.onGround && (dir || held.jump || jumpPressed)) {

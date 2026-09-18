@@ -187,8 +187,55 @@ const main = async (): Promise<void> => {
   if (home !== "wait") fail(`x1600 is outside the rect 1775..2610; the gun stayed on ${home}`);
   console.log(`ok    ...and it folds back up and waits when you are not under it`);
 
+  /**
+   * ...and its four LADDERS carry you between its regions, both ways.
+   *
+   * MAZE is the level that proved a ladder is not a region's to hold. This page
+   * filed every record into the region its CENTRE falls in, and all four of
+   * MAZE's ladders centre in NO region at all — the first misses room 0's bottom
+   * edge by one pixel — so the level had no ladders whatever.
+   *
+   * The engine files nothing: `0x40b940` is its only entity query and it is a
+   * linear scan of the whole table, kind 2 asking whether a rect holds a point
+   * (`0x434200`), with no reference to a region anywhere in it. So the ladders
+   * are kept whole on the level.
+   *
+   * Each row is the record's own `pointX`, a y at the ladder's HEAD, and the
+   * two legs the rect is worth. The head rather than the foot because two of
+   * the four END in `newroom1`, which has no rasterised ground at all: a player
+   * put down there falls out of the world, so those two are climbed down into
+   * rather than up out of.
+   */
+  for (const [x, head, down, up] of [
+    [1615, 7126, 1200, 1200],
+    [2401, 8021, 400, 420],
+    [3678, 7114, 800, 800],
+    [5295, 7354, 600, 600],
+  ] as const) {
+    await go(`&x=${x}&y=${head}`);
+    // where it actually put us: `go` drops the player onto the room's own floor,
+    // which is not the y asked for
+    const from = Number(/· x -?\d+, y (-?\d+)/.exec(await say())?.[1] ?? NaN);
+    await page.keyboard.down("s");
+    await page.waitForTimeout(11_000);
+    await page.keyboard.up("s");
+    await page.waitForTimeout(300);
+    const foot = Number(/· x -?\d+, y (-?\d+)/.exec(await say())?.[1] ?? NaN);
+    const low = /room (\d+) of/.exec(await say())?.[1] ?? "";
+    await page.keyboard.down("w");
+    await page.waitForTimeout(13_000);
+    await page.keyboard.up("w");
+    await page.waitForTimeout(300);
+    const top = Number(/· x -?\d+, y (-?\d+)/.exec(await say())?.[1] ?? NaN);
+    const high = /room (\d+) of/.exec(await say())?.[1] ?? "";
+    if (foot - from < down) fail(`the ladder at x${x} should take you ${down}px down; it went ${from} to ${foot}`);
+    if (foot - top < up) fail(`the ladder at x${x} should lift you ${up}px; it went ${foot} to ${top}`);
+    if (low === high) fail(`the ladder at x${x} reaches out of room ${low}; the page never left it`);
+    console.log(`ok    the ladder at x${x} runs ${foot - top}px, room ${low} to room ${high}`);
+  }
+
   await finish(browser);
-  console.log("PASS  MAZE's cops work its levers, its cages are wall, its fans keep their own time and its big guns fire");
+  console.log("PASS  MAZE's cops work its levers, its cages are wall, its fans keep their own time, its big guns fire and its ladders climb");
 };
 
 await main();
