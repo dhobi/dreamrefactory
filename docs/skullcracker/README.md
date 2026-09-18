@@ -2692,6 +2692,44 @@ that its top level now awaits its own work — importing a suite IS running it �
 and that `fail()` throws rather than exiting, because one `process.exit` would
 take the other twenty-nine with it.
 
+### A failure is not taken at its word
+
+What the pooled runner did not remove was the re-run. About one run in three, one
+or two suites of the thirty-three failed — `codes`, `lift`, `mall`, `vat`,
+`woods`, `grave`, `service`, `ravecave`, `mission`, `foes`, never the same pair
+twice — and every one of them passed standalone on the first ask. So a red run
+said nothing. It meant "go and run that suite again by hand", and until that was
+done a real regression and a flake looked identical.
+
+The runner now does that re-run itself, and undoes first the two things that make
+a pooled failure different from a standalone one.
+
+The first is a leak, and it is the interesting one. `fail()` throws, so a suite
+that FAILS never reaches its own `finish()` — and `finish()` is what closes its
+context. The page, its canvas, its audio graph and its copy of the rip stayed
+open on the shared browser for every suite that ran after it. That is the
+mechanism behind the thing the section above describes as an afternoon's four
+symptoms: on a machine with a gigabyte free, one failure leaves a corpse and the
+next suites run beside it. `harness.sweep()` now closes whatever is left after
+every suite, pass or fail, and prints the count when there is one.
+
+The second is the browser. A retry closes the shared Chromium and launches a
+fresh one, because that is the whole of what "standalone" means here.
+
+Passing the second time prints `FLAKE` and does not fail the run; failing twice
+is a `FAIL` and does. The last line names both sets, so what the run is worth is
+readable without running anything again.
+
+The re-import needs a cache-buster — `import()` twice in one process hands back
+the first import's result, so the retry asks for `suite.ts?attempt=1`. The
+suite's own `import "./harness"` carries no query and so still resolves to the
+one harness module, which is what keeps the browser shared and leaves `sweep()`
+able to see the contexts.
+
+Both paths were tested against a suite written to fail on demand rather than
+waiting for a real flake: fail-then-pass reports `FLAKE` and exits 0, fail-twice
+reports `FAIL` and exits 1.
+
 Two suites turned out not to be failing at all. `menu` had no
 `test:browser:menu` script — its script is the bare `test:browser` — so every
 attempt to run it by name had been running nothing and reporting a failure.

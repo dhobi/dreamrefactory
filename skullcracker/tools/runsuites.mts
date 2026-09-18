@@ -18,6 +18,24 @@
  * A suite is a module whose top level awaits its own work, so importing it IS
  * running it, and a `fail()` inside one throws rather than exiting. That is the
  * only thing the suites had to change.
+ *
+ * A failure is not taken at its word. Ten of these suites fail pooled about one
+ * run in three and pass standalone every time — `codes`, `lift`, `mall`, `vat`,
+ * `woods`, `grave`, `service`, `ravecave`, `mission`, `foes` — which made a red
+ * run say nothing at all: every failure cost a standalone re-run by hand to tell
+ * a flake from a regression. So the runner does that re-run itself, and the two
+ * things that make a pooled failure different from a standalone one are undone
+ * before it:
+ *
+ *   - the contexts the failed suite left open are swept, because `fail()` throws
+ *     past `finish()` and its page would otherwise sit there for the rest of the
+ *     run;
+ *   - the shared Chromium is closed, so the retry gets a fresh one, which is the
+ *     whole of what "standalone" means here.
+ *
+ * Passing the second time is reported as FLAKE and does not fail the run. Failing
+ * twice is a FAIL and does. What the set is worth is then readable off the last
+ * line without running anything again.
  */
 import { readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -44,39 +62,76 @@ if (unknown.length) {
 }
 const suites = wanted.length ? wanted : all;
 
-const results: { name: string; ok: boolean; why: string; ms: number }[] = [];
+const harness = await import(pathToFileURL(join(DIR, "harness.ts")).href);
+
+/**
+ * Run one suite once, and return why it failed or "" if it did not.
+ *
+ * `attempt` is a cache-buster as much as a number: importing a module twice in
+ * one process gives you the first import's result, so a retry has to ask for a
+ * different URL. The suite's own `import "./harness"` carries no query and so
+ * still resolves to the one harness module, which is what keeps the browser
+ * shared and `sweep()` able to see the contexts.
+ */
+async function runOnce(name: string, attempt: number): Promise<string> {
+  const url = pathToFileURL(join(DIR, `${name}.ts`)).href + (attempt ? `?attempt=${attempt}` : "");
+  try {
+    await Promise.race([
+      import(url),
+      new Promise((_, no) => setTimeout(() => no(new Error(`timed out after ${LIMIT}ms`)), LIMIT)),
+    ]);
+    return "";
+  } catch (e) {
+    // `fail()` has already printed the reason; anything else has not
+    const why = e instanceof Error ? e.message : String(e);
+    if (!(e instanceof Error) || e.name !== "SuiteFailure") console.error(`FAIL  ${why}`);
+    return why;
+  }
+}
+
+const results: { name: string; ok: boolean; flake: boolean; why: string; ms: number }[] = [];
 const started = Date.now();
 
 for (const name of suites) {
   const at = Date.now();
   console.log(`\n=== ${name} ${"=".repeat(Math.max(0, 60 - name.length))}`);
-  let why = "";
-  try {
-    await Promise.race([
-      import(pathToFileURL(join(DIR, `${name}.ts`)).href),
-      new Promise((_, no) => setTimeout(() => no(new Error(`timed out after ${LIMIT}ms`)), LIMIT)),
-    ]);
-  } catch (e) {
-    // `fail()` has already printed the reason; anything else has not
-    why = e instanceof Error ? e.message : String(e);
-    if (!(e instanceof Error) || e.name !== "SuiteFailure") console.error(`FAIL  ${why}`);
+  let why = await runOnce(name, 0);
+  let flake = false;
+
+  // whatever it left open is swept whether it passed or not — a pass reaching
+  // `finish()` leaves nothing, and this says so by printing zero
+  const left = await harness.sweep();
+  if (left) console.log(`      swept ${left} context${left === 1 ? "" : "s"} it left open`);
+
+  if (why) {
+    console.log(`\n--- ${name} again, in a browser of its own ${"-".repeat(Math.max(0, 28 - name.length))}`);
+    await harness.shutdown();
+    const second = await runOnce(name, 1);
+    await harness.sweep();
+    if (second) why = second;
+    else {
+      flake = true;
+      console.log(`FLAKE ${name} passed the second time — pooled only: ${why}`);
+      why = "";
+    }
   }
-  results.push({ name, ok: !why, why, ms: Date.now() - at });
+  results.push({ name, ok: !why, flake, why, ms: Date.now() - at });
 }
 
-const { shutdown } = await import(pathToFileURL(join(DIR, "harness.ts")).href);
-await shutdown();
+await harness.shutdown();
 
 console.log(`\n=== results ${"=".repeat(50)}`);
 for (const r of results) {
   console.log(
-    `${r.ok ? "PASS" : "FAIL"}  ${r.name.padEnd(10)} ${(r.ms / 1000).toFixed(1).padStart(6)}s` +
-      (r.ok ? "" : `  ${r.why}`),
+    `${r.ok ? (r.flake ? "FLAKE" : "PASS ") : "FAIL "} ${r.name.padEnd(10)} ${(r.ms / 1000).toFixed(1).padStart(6)}s` +
+      (r.ok ? (r.flake ? "  passed on the retry" : "") : `  ${r.why}`),
   );
 }
 const bad = results.filter((r) => !r.ok);
+const flaky = results.filter((r) => r.flake);
 console.log(
   `\n${results.length - bad.length} of ${results.length} in ${((Date.now() - started) / 1000).toFixed(1)}s` +
-    (bad.length ? ` - ${bad.map((r) => r.name).join(" ")} failed` : ""),
+    (bad.length ? ` - ${bad.map((r) => r.name).join(" ")} failed` : "") +
+    (flaky.length ? ` - ${flaky.map((r) => r.name).join(" ")} flaked` : ""),
 );
 process.exit(bad.length ? 1 : 0);

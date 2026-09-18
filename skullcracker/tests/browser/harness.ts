@@ -73,7 +73,22 @@ export async function finish(browser: Browser): Promise<void> {
   for (const c of browser.contexts()) await c.close();
 }
 
-/** the runner's own, once every suite has had its turn */
+/**
+ * Close anything a suite left open, and say how much there was.
+ *
+ * {@link finish} is the last line of a suite that passed. A suite that FAILED
+ * never reaches it: `fail()` throws, the runner catches, and the context — its
+ * page, its canvas, its audio graph, its rip — stays open on the shared browser
+ * for every suite that follows. That is how one failure becomes three: the next
+ * suites run beside a corpse on a machine with about a gigabyte free.
+ */
+export async function sweep(): Promise<number> {
+  const open = shared?.contexts() ?? [];
+  for (const c of open) await c.close();
+  return open.length;
+}
+
+/** the runner's own, once every suite has had its turn — or before a retry */
 export async function shutdown(): Promise<void> {
   await shared?.close();
   shared = null;
