@@ -43,6 +43,7 @@
  * which would be inventing game data), this file is what should go.
  */
 import { readMovFile } from "@dreamfactory/engine/df/mov";
+import { LEVEL_ORDER } from "@dreamfactory/engine/df/sbk";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { AudioSink, DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { SCREEN_H, SCREEN_W } from "@dreamfactory/engine/web/screen";
@@ -51,6 +52,7 @@ import { GestureKey, PointerEventLike, TouchGestures } from "@dreamfactory/engin
 import { installBugReport } from "@dreamfactory/site/bug-report";
 import { VERSION, installVersion } from "@dreamfactory/site/version";
 import { SkullFiles } from "./files";
+import { SkullSave, readSkl, SKL } from "./savegame";
 import { Film } from "./film";
 import {
   DOSSIER,
@@ -128,7 +130,7 @@ const BOOT_MOVIE = BOOT_SEQUENCE[BOOT_SEQUENCE.length - 1];
  * ```
  *   167  "Name 169"    the attract branch
  *   168  "frame 2"     0x45df7c  [0x46b208] = -1  ->  char.mov      BEGIN
- *   169  "frame 3"     0x45df8d  [0x46b208] = -2  ->  a DEMO slot    OPEN
+ *   169  "frame 3"     0x45df8d  [0x46b208] = -1  ->  a .SKL file    OPEN
  *   170  "frame 4"     0x45e082  [0x46b208] =  3  ->  helpwin.mov   HELP
  *   171  "frame 5"     0x45e093  [0x46b208] =  2  ->  prefs2.mov    PREFS
  *   172  "frame 6"     0x45e0a4  [0x4abdfe] = 11  ->  0x40340f      QUIT
@@ -149,27 +151,34 @@ const BOOT_MOVIE = BOOT_SEQUENCE[BOOT_SEQUENCE.length - 1];
  * `[0x46b200]` and `0x403433` falls out of the loop into `0x40a4a0`. A browser
  * tab cannot quit itself, so it goes back to the menu and says so.
  */
-const EXIT_ACTIONS: Record<string, { play?: readonly string[]; say: string; begin?: boolean; prefs?: boolean }> = {
+const EXIT_ACTIONS: Record<
+  string,
+  { play?: readonly string[]; say: string; begin?: boolean; prefs?: boolean; open?: boolean }
+> = {
   "frame 2": { play: ["char.mov"], begin: true, say: "Begin — which of the two Skull Crackers (0x45df7c)" },
   /**
-   * Open, and it is not a save game — there is no save game in this program.
+   * Open, and it IS a save game. This page said otherwise for a long time.
    *
-   * `0x4034a0` asks "Load from which slot?" (`0x46b3e9`), opens `skuldemo.dmo`
-   * as a `DEMO` container and copies slot N into a 0x1c2c buffer whose shape is
-   * `{word chapter, word scene, …, dword count, word actions[]}`. `0x4037b2`
-   * then walks that array one entry an engine frame and hands each to
-   * `0x403820` — the same function the keyboard reaches through `0x46b210` —
-   * positive for a press and negative for a release. A slot is an INPUT
-   * RECORDING and the button plays it back.
+   * `0x45df8d` builds a `GetOpenFileNameA` filter out of the resource string
+   * `Saved games (.SKL)|*.skl||` — UTF-16, at `0x4b62f8`, which is why an ASCII
+   * search of the executable for "SKL" turns up nothing and why this entry used
+   * to name the demo instead. It reads twenty-two bytes (`0x45dfec`), hands them
+   * to `0x40d430` and `0x40d400` — the score and the lives — restores
+   * `[0x4abdfe]`, `[0x4abdfc]`, the weapon and its rounds, and sets `[0x47913c]`
+   * so the chapter's entry function does not zero the inventory it just filled.
+   * {@link file://./savegame.ts} lays the record out.
    *
-   * The other half is dead: `0x403900`, the "Save in which slot?" recorder, has
-   * no callers anywhere in the executable. Nothing in the shipped game writes a
-   * slot.
+   * The last thing it does is `[0x46b208] = -1`, which is the value BEGIN sets:
+   * a loaded game goes through the character chooser like a new one, because the
+   * file carries no character.
    *
-   * Not built. A 1996 input stream replayed against a re-implementation
-   * desyncs, and the desync is the only thing it would demonstrate.
+   * The demo is elsewhere and is two other hotspots — `0x45deff` at frame 167
+   * and `0x45e0cf` at 174, the board's own panel — and both play a slot of
+   * `skuldemo.dmo` through `0x4034a0`. That is an INPUT RECORDING, and replaying
+   * a 1996 input stream against a re-implementation only demonstrates the
+   * desync; it is still not built.
    */
-  "frame 3": { say: "Open — 0x4034a0 plays a recorded demo out of skuldemo.dmo, and there is no save game" },
+  "frame 3": { play: ["char.mov"], begin: true, open: true, say: "Open — 0x45df8d loads a .SKL saved game" },
   /**
    * Help, and it is the one entry where the two releases disagree.
    *
@@ -566,9 +575,71 @@ function drawPrefs(): void {
  */
 function begin(): void {
   savePrefs(prefs);
-  const to = `walk.html?char=${prefs.character}&difficulty=${prefs.difficulty}`;
+  let to = `walk.html?char=${prefs.character}&difficulty=${prefs.difficulty}`;
+  // ...and a loaded game brings four more numbers with it and nothing else. The
+  // file has no character and no difficulty in it, which is exactly why
+  // `0x45e071` sets `[0x46b208]` to the same -1 Begin does: the chooser runs
+  // either way and the front end's own answers stand.
+  if (loaded) {
+    to +=
+      `&level=${loaded.level + 1}&score=${loaded.score}&lives=${loaded.lives}` +
+      `&weapon=${loaded.weapon}&rounds=${loaded.rounds}`;
+    log(`begin: loaded ${LEVEL_ORDER[loaded.level]} — ${loaded.score} points, ${loaded.lives} lives`);
+  }
   log(`begin: character ${prefs.character}, difficulty ${prefs.difficulty} — ${to}`);
   location.href = to;
+}
+
+/** the `.SKL` the Open button read, carried to {@link begin} */
+let loaded: SkullSave | null = null;
+
+/**
+ * Ask for a saved game — `GetOpenFileNameA`, as near as a page gets to one.
+ *
+ * The input is made here rather than put in the markup because it is the only
+ * thing on this page that is not the film. Resolves to false when the reader
+ * chose nothing or chose something that is not twenty-two bytes, and the caller
+ * then goes back to the menu — which is what `0x45dfc7` does when the dialog
+ * comes back empty.
+ */
+function askForSave(): Promise<boolean> {
+  return new Promise((done) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".skl,application/octet-stream";
+    input.style.display = "none";
+    document.body.appendChild(input);
+    let answered = false;
+    const finish = (ok: boolean): void => {
+      if (answered) return;
+      answered = true;
+      input.remove();
+      done(ok);
+    };
+    input.addEventListener("cancel", () => finish(false));
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return finish(false);
+      void file.arrayBuffer().then((buf) => {
+        const save = readSkl(new Uint8Array(buf));
+        if (!save) {
+          log(`open: ${file.name} is ${buf.byteLength} bytes; a saved game is ${SKL.bytes}`);
+          return finish(false);
+        }
+        if (save.level < 0) {
+          log(`open: ${file.name} names scene ${save.scene} stage ${save.stage}, which is not one of the sixteen`);
+          return finish(false);
+        }
+        loaded = save;
+        log(
+          `open: ${file.name} — ${LEVEL_ORDER[save.level]} (scene ${save.scene}, stage ${save.stage}), ` +
+            `${save.score} points, ${save.lives} lives, weapon ${save.weapon} with ${save.rounds}`,
+        );
+        finish(true);
+      });
+    });
+    input.click();
+  });
 }
 
 let scratchCanvas: HTMLCanvasElement | null = null;
@@ -682,6 +753,19 @@ async function playMovie(name: string, isHome = false): Promise<void> {
           if (target && chose.prefs) {
             prefsPending = true;
             suppressChain = true;
+          }
+          // Open asks for the file BEFORE the chooser, exactly as `0x45df8d`
+          // does: the dialog comes first and `0x45dfc7` goes back to the menu
+          // when it comes back empty. The click that ended the film is still the
+          // gesture the picker needs.
+          // ...and any other way out of the menu forgets a file that was read
+          // and then walked away from: the chooser can be abandoned back to the
+          // menu, and the next Begin is a NEW game
+          if (!chose.open) loaded = null;
+          if (chose.open) {
+            loaded = null;
+            void askForSave().then((got) => void playMovie(got && target ? target : home, !(got && target)));
+            return;
           }
           void playMovie(target ?? home, !target);
           return;

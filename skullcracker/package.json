@@ -44,6 +44,7 @@
     "test:browser:blaster": "tsx tests/browser/blaster.ts",
     "test:browser:streams": "tsx tests/browser/streams.ts",
     "test:browser:cheats": "tsx tests/browser/cheats.ts",
-    "test:browser:scores": "tsx tests/browser/scores.ts"
+    "test:browser:scores": "tsx tests/browser/scores.ts",
+    "test:browser:pause": "tsx tests/browser/pause.ts"
   }
 }

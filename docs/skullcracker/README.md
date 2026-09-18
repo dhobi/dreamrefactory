@@ -2879,6 +2879,112 @@ rasterised ground at all, and the foot of two of its ladders is in that region:
 a player put down there falls out of the world. Those two are climbed DOWN into,
 not up out of, which is why the tests for them start at the head.
 
+## There is a save game, and it is twenty-two bytes
+
+This page said for a long time that `SC.EXE` has no save game. It has one, and
+the reason it was missed is worth recording: the only text that names the format
+lives in the resource string table as **UTF-16**, at `0x4b62f8` —
+
+```
+  0c "SkullCracker"
+  1a "Saved games (.SKL)|*.skl||"
+```
+
+— so an ASCII search of the whole executable for "SKL" returns nothing at all.
+What it does return is `skuldemo.dmo`, "Save in which slot?" and "Load from which
+slot?", and those belong to the demo recorder, which really is dead: `0x4038d0`
+runs only while `[0x46b310]` is set and nothing in the shipped build ever sets
+it. Two save-shaped things in one program, one of them dead, and the live one
+invisible to `strings`.
+
+`GetSaveFileNameA` and `GetOpenFileNameA` are both imported and each is called
+exactly once — `0x40a869` and `0x40af33`. The writer is `0x45e1e0`, the reader
+`0x45df8d`.
+
+```
+  +0x00  u32  0x00010000    written by 0x45e246, read by nobody
+  +0x04  u16  [0x4abdfe]    the shell scene  -> the chapter
+  +0x06  u16  [0x4abdfc]    the stage within it -> the level
+  +0x08  u32  [0x4a4f00]    the score
+  +0x0c  u16  [0x4a4d64]    lives
+  +0x0e  u16  [0x479434]    the weapon, or 1 for none
+  +0x10  u16  [0x4a7f16 + weapon*12]   its rounds
+  +0x12  u32  0             written by 0x45e2bd, read by nobody
+```
+
+No header, no magic, no checksum, no padding: `0x41daf0` writes one call of 0x16
+bytes and the file IS the record. The Macintosh type and creator the create call
+carries — `'SSAV'` and `'SKLC'` — are arguments to the portability layer and
+reach the disc only on a Mac; on Windows `0x41dc60` hands `CreateFileA` the path
+and nothing else. Nothing in the program will reject a file for anything but its
+length, and the loader reads all twenty-two bytes and then starts at offset FOUR,
+so the stamp at the front is not a version.
+
+**The level is not in the file.** The scene is the outer state machine's own —
+`0x403059` dispatches on it through `0x403448`, where 1 is the title, 3..6 are
+the four chapters and 11 is quit — and the stage is the chapter runner's own
+counter. All four runners dispatch it through a table of their own (`0x44da38`,
+`0x436c9c`, `0x41f5fc`, `0x4129c8`) and in all four, stages two through five are
+that chapter's four levels in order.
+
+**And neither is anything else.** No character, no difficulty, no position, no
+health, no clock, no kill count. A load re-enters the chapter runner at the saved
+stage and the level starts from its own record's point. The gun is the single
+exception, and deliberately: `0x44da80` and its three siblings zero all
+twenty-one rounds counts on entering a chapter, but only while `[0x47913c]` is 0,
+and `0x45e069` sets it to 1 on a load. `0x479438`, the ARMED flag, is not in the
+file, so a loaded game has the weapon in the inventory and not in its hands.
+
+The last thing `0x45df8d` does is `[0x46b208] = -1`, which is the value BEGIN
+sets. A loaded game runs the character chooser like a new one, because the file
+has no character in it to run instead.
+
+### The panel it is written from, and the two keys that open it
+
+`0x403c7b` is the only caller of `0x404280`, and the key dispatcher reaches it
+from two characters. `0x403c40` splits on the event record's modifier word:
+zero goes to the ordinary game binding through `0x46b210`, nonzero to a second
+table at `0x403ea4` where only five characters are bound at all — `'.'` and
+`'Q'` to the panel, `'P'`, `'T'` and the digits elsewhere. And the modifier word
+is not the Macintosh one it looks like: `0x405787` asks
+`GetKeyState(VK_CONTROL)` and `0x4057a5` sets it to `0x1fa0` entire when the
+answer is down, zero otherwise. **So the panel opens on Ctrl+Q or Ctrl+.** —
+not ESC, which is below the first table's range and does nothing in a level.
+This port binds ESC as well, because it is what a reader will press.
+
+`0x4042af` picks the film by chapter and all four are one shape: the logic
+frames loop (the last is a type-2 jump back to "X 3") with three regions live
+throughout, and the last three frames of the file are the answers. Which answer
+is which is in the segment header rather than the picture — `actionFrame1` names
+the MIDDLE button, `actionFrame2` the BOTTOM one, and the top is named by
+neither:
+
+```
+  top     no actionframe   the film just ends    ->  Continue
+  middle  actionframe 1    0x45e1e0(1)           ->  Save
+  bottom  actionframe 2    0x45e1e0(2)           ->  Exit
+```
+
+`0x404303` closes it: state 5 leaves the level, anything else redraws
+(`0x40cf00`) and plays on. There is no Load in the panel — Load is the title
+screen's own button.
+
+### ...and forty-two pixels, which is why the buttons did nothing
+
+A region is in its SEGMENT's coordinates, like every other number in one, and
+this player compared them against the screen. It had never mattered, because
+every film in this game that has regions is full-screen at origin (0,0):
+`menu.mov`, `char.mov`, the two pans, the prefs panels. The four pause films are
+the only exception — 512x232 at origin (0, 42), inside the interface's own
+window — and they are also the only films whose regions have words written on
+them, so they are the only place being 42 pixels out is visible.
+
+The picture settles it. `pauseA` draws Continue, Save and Exit centred on screen
+y160, y193 and y225; its three regions are y107-133, y141-167 and y172-198.
+Shifted by the origin those are y149-175, y183-209 and y214-240 — one label
+each, dead centre. Unshifted they land on the blank plates above Continue and on
+the bezel, which is where every click on this panel went.
+
 ## What is not here
 
 All sixteen levels stand, and this is what is missing from them. The numbers are

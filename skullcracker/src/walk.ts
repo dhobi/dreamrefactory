@@ -68,6 +68,7 @@ import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { AudioSink, DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { SkullFiles } from "./files";
+import { writeSkl } from "./savegame";
 import { Film } from "./film";
 import { CORPSE_LINGER, FOES, FoeAnim, celAt, loopIndex, type Foe } from "./foes";
 import { CRAFT, Gob, Pop, SPRAY, VANISH, dryTime, gobCount, scatter } from "./effects";
@@ -2174,13 +2175,180 @@ function wakeAudio(): void {
 let filmRGBA: ImageData | null = null;
 
 /**
+ * The PAUSE PANEL — one film a chapter, three buttons, and the game's own save.
+ *
+ * `0x403c7b` is the only caller of `0x404280`, and two keys reach it. The key
+ * dispatcher uppercases a letter and then splits on the event record's modifier
+ * word (`0x403c40`, `test ..., 0x1fa0`): zero goes to the ordinary game binding
+ * through `0x46b210`, and nonzero goes to a second table at `0x403ea4`, where
+ * only five characters are bound at all —
+ *
+ * ```
+ *   '.'  0x2e  -> 0x403c7b   the panel        'P'  0x50 -> 0x403ce8
+ *   'Q'  0x51  -> 0x403c7b   the panel        'T'  0x54 -> 0x403cfb
+ *   '0'..'9'   -> 0x403cd2
+ * ```
+ *
+ * — and on the PC the modifier word is not the Macintosh one it looks like.
+ * `0x405787` asks `GetKeyState(VK_CONTROL)` and `0x4057a5` sets the word to
+ * `0x1fa0` entire when the answer is down, leaving it zero otherwise. So the
+ * mask is one bit of information and the panel's keys are **Ctrl+Q** and
+ * **Ctrl+.** — not ESC, which is below the first table's range and does nothing
+ * in a level. ESC is bound here as well because it is what a browser reader will
+ * press, and because nothing else in this page wants it.
+ *
+ * ## Which film, and what is in it
+ *
+ * `0x4042af` picks by chapter, `[0x4abdfe] - 3`, and all four are one shape:
+ * frames "X 3".."X 59" loop (the last is a type-2 frame targeting "X 3") with
+ * three regions live the whole way, and the last three frames of the file are
+ * the answers. Which answer is which is in the segment header, not in the
+ * picture: `actionFrame1` names the MIDDLE button and `actionFrame2` the BOTTOM
+ * one, and the top button is named by neither.
+ *
+ * ```
+ *   pauseA   loop 3..59    actionframes "pauseA 61" "pauseA 62"
+ *   pauseB   loop 3..120   actionframes "PauseB 122" "PauseB 123"
+ *   pauseC   loop 3..59    actionframes "PauseC 61" "PauseC 62"
+ *   pauseD   loop 3..89    actionframes "PauseD 91" "PauseD 92"
+ * ```
+ *
+ * `0x449fbb` compares the playing frame against each name and calls
+ * `0x45e1e0(1)` or `(2)`; that handler, while the shell state is 4 — which
+ * `0x404280` sets on the way in — takes argument 2 to `[0x46b208] = 5` and
+ * anything else to `GetSaveFileNameA`. So:
+ *
+ * ```
+ *   top     no actionframe   the film just ends    ->  RESUME
+ *   middle  actionframe 1    0x45e1e0(1)           ->  SAVE
+ *   bottom  actionframe 2    0x45e1e0(2)           ->  QUIT the level
+ * ```
+ *
+ * and `0x404303` closes it: state 5 leaves the level, anything else redraws
+ * (`0x40cf00`) and plays on. There is no Load here — Load is the TITLE screen's
+ * own button, `0x45df8d`.
+ */
+const PAUSE = {
+  /** `0x4042af`'s jump table, in chapter order */
+  films: ["pauseA.mov", "pauseB.mov", "pauseC.mov", "pauseD.mov"],
+  /** the second key table at `0x403ea4`, and both of these want Ctrl */
+  keys: ["q", "."] as readonly string[],
+  from: "0x403c7b -> 0x404280, films by [0x4abdfe] - 3",
+} as const;
+
+/**
+ * Which button the panel was closed by — `0x45e1e0`'s own argument.
+ *
+ * 0 is the top one, which reaches no handler at all in the original because it
+ * is named by neither actionframe: the film simply ends and `0x404303` finds
+ * the state unchanged.
+ */
+let pauseAnswer = 0;
+/** true while a film is the panel rather than something to sit through */
+let filmIsPanel = false;
+
+/**
+ * Open it. The world is already suspended by there being a film at all.
+ */
+async function openPause(): Promise<void> {
+  if (film || !level) return;
+  pauseAnswer = 0;
+  const name = PAUSE.films[Math.floor(levelIndex / 4)] ?? PAUSE.films[0];
+  filmIsPanel = true;
+  await playFilm(name, {
+    modal: true,
+    onAction: (which) => {
+      pauseAnswer = which;
+    },
+  });
+  filmIsPanel = false;
+  if (pauseAnswer === 1) await saveGame();
+  // `0x404303`: state 5 is the only answer that leaves, and `0x403c89` puts the
+  // shell back at its own front door. This page's front door is the menu page.
+  else if (pauseAnswer === 2) location.href = "index.html";
+  else lastTick = 0;
+}
+
+/**
+ * Write the twenty-two bytes — and ask where, as `GetSaveFileNameA` does.
+ *
+ * `showSaveFilePicker` IS that dialog and is what the original asks for, so it
+ * is tried first; a browser without it gets an ordinary download, which is the
+ * nearest a page can come to choosing a path. The bytes are the same either way
+ * and {@link file://./savegame.ts} is where they are laid out.
+ *
+ * The filename is this page's own and nothing else in it is: the disc's default
+ * comes from the Windows dialog, which a browser has no equivalent of.
+ */
+async function saveGame(): Promise<void> {
+  const bytes = writeSkl({
+    level: levelIndex,
+    score: stats.score,
+    lives: stats.lives,
+    weapon: inv.weapon,
+    rounds: inv.rounds[inv.weapon] ?? 0,
+  });
+  const name = `skullcracker-${LEVEL_ORDER[levelIndex] ?? "save"}.skl`;
+  const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" });
+  const picker = (window as unknown as { showSaveFilePicker?: (o: unknown) => Promise<FileSystemFileHandle> })
+    .showSaveFilePicker;
+  /**
+   * ...and only while the click that asked for it still counts.
+   *
+   * A file picker needs transient activation, and without one Chromium rejects
+   * with `AbortError` — the SAME error it reports when a reader closes the
+   * dialog. The two are indistinguishable from the rejection, so the answer has
+   * to be asked for beforehand: no activation means no dialog was ever possible,
+   * and the download below is the save. With one, an `AbortError` really is a
+   * reader saying no, and `0x45e23d` writes nothing.
+   */
+  const live = (navigator as unknown as { userActivation?: { isActive: boolean } }).userActivation;
+  if (picker && (live?.isActive ?? true)) {
+    try {
+      const handle = await picker({
+        suggestedName: name,
+        types: [{ description: "Saved games (.SKL)", accept: { "application/octet-stream": [".skl"] } }],
+      });
+      const w = await handle.createWritable();
+      await w.write(blob);
+      await w.close();
+      saidSave = handle.name;
+      return;
+    } catch (e) {
+      // The reader cancelled, and that is the original's own answer to a dialog
+      // that comes back empty: `0x45e23d` tests the return before it opens
+      // anything, and writes nothing.
+      if (e instanceof DOMException && e.name === "AbortError") {
+        saidSave = "";
+        return;
+      }
+      // ...anything else is the API not being usable here rather than a choice —
+      // no user activation left, no permission, a browser with only the read
+      // half — and the download below is still a save.
+    }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  saidSave = name;
+}
+
+/** the last file a save was written to, for the status line and for a probe */
+let saidSave = "";
+
+/**
  * Play one film and resolve when it ends — or when it is skipped, which is the
  * same thing to the caller.
  *
  * Every film named here sets its own ESC-skips header bit, so `Film.skip()` is
  * the film's own permission and not this page overriding it.
  */
-async function playFilm(name: string): Promise<void> {
+async function playFilm(
+  name: string,
+  opts: { modal?: boolean; onAction?: (which: 1 | 2) => void } = {},
+): Promise<void> {
   const bytes = files.has(name) ? files.provide(name) : await files.load(name);
   if (!bytes) return; // a rip without this film simply goes straight on
   let mov;
@@ -2210,6 +2378,7 @@ async function playFilm(name: string): Promise<void> {
       // a film that chains plays the next one in its place, and the promise
       // waits for the end of the chain
       onChain: (next) => void playFilm(next).then(done),
+      onAction: opts.onAction,
       onEnd: () => {
         film = null;
         done();
@@ -2909,8 +3078,26 @@ addEventListener("keydown", (e) => {
   // a film owns the keyboard while it runs, and ESC is what the films' own
   // header bit permits — see Film.skip
   if (film) {
+    // ...except the pause panel, which is not something to sit through: its
+    // frames loop for ever and ESC is the top button, the one `0x45e1e0` never
+    // hears about. `Film.finish` is what the film's own type-1 answer frames do
+    if (filmIsPanel) {
+      if (e.key === "Escape") {
+        pauseAnswer = 0;
+        film.finish();
+      }
+      e.preventDefault();
+      return;
+    }
     if (e.key === "Escape") film.skip();
     e.preventDefault();
+    return;
+  }
+  // Ctrl+Q and Ctrl+. are the disc's own (`0x403ea4`, and `0x4057a5` is why
+  // they want Ctrl); ESC is this page's, because it is what a reader presses
+  if (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && PAUSE.keys.includes(e.key.toLowerCase()))) {
+    e.preventDefault();
+    void openPause();
     return;
   }
   // every lowercase letter goes to the cheat accumulator first, exactly where
@@ -2977,8 +3164,18 @@ addEventListener("keyup", (e) => {
 // touch: hold a screen half to walk that way, the top third to jump or climb
 canvas.addEventListener("pointerdown", (e) => {
   wakeAudio();
-  // a tap skips a film, the way it does on the films page
+  // a tap skips a film, the way it does on the films page — but the panel is
+  // three buttons and a tap on one of them is the answer
   if (film) {
+    if (filmIsPanel) {
+      const r = canvas.getBoundingClientRect();
+      film.click(
+        Math.round(((e.clientX - r.left) / r.width) * W),
+        Math.round(((e.clientY - r.top) / r.height) * H),
+        performance.now(),
+      );
+      return;
+    }
     film.skip();
     return;
   }
@@ -7814,7 +8011,9 @@ function loop(now: number): void {
     // `film` from under this frame
     const reel = film;
     reel.tick(now);
-    hud.textContent = `${reel.where} — press ESC to skip`;
+    hud.textContent = filmIsPanel
+      ? `${reel.where} — resume · save · quit (0x404280), ESC resumes`
+      : `${reel.where} — press ESC to skip`;
     lastTick = 0; // the world resumes from now, not from before the film
     return;
   }
@@ -9111,11 +9310,13 @@ function loop(now: number): void {
   // the panel already shows it in the disc's own digits; this is for the probes,
   // which can read a number out of text and can only count pixels off a canvas
   const points = ` · ${stats.score} points`;
+  // what the panel's middle button wrote, so a probe can see the save happen
+  const saved = saidSave ? ` · saved ${saidSave}` : "";
   hud.innerHTML =
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
     `${room && !room.ground ? " · <b>no floor in this room</b>" : ""}` +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${cam}${gunSay}${litSay}${flySay}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${quotaSay}${prompt}${toGoal}${cheated}` +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${cam}${gunSay}${litSay}${flySay}${mob}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${saved}${quotaSay}${prompt}${toGoal}${cheated}` +
     ` · every pixel is the disc's, both facings included; the speed and cadence are this port's — see INVENTED in src/walk.ts`;
 }
 
@@ -9225,6 +9426,31 @@ async function boot(): Promise<void> {
   if (clock !== null && Number.isFinite(Number(clock))) startTicks = Math.max(0, Number(clock));
   const want = Number(params.get("level") ?? "1");
   await loadLevel(Math.min(16, Math.max(1, want)) - 1);
+  /**
+   * ...and what a LOADED game brings with it — four numbers and nothing else.
+   *
+   * After `loadLevel`, not before, and that ordering is the file's own. A
+   * chapter's entry function (`0x44da80` and its three siblings) zeroes all
+   * twenty-one rounds counts and names its own weapon the moment the chapter
+   * opens — but only while `[0x47913c]` is 0, and `0x45e069` sets it to 1 on a
+   * load. Applying these after the level has stood up is the same exemption:
+   * whatever the chapter did to the inventory, the file wins.
+   *
+   * `0x479438` is NOT in the file, so the weapon lands in the inventory and not
+   * in the player's hands. See {@link file://./savegame.ts}.
+   */
+  const carriedScore = params.get("score");
+  if (carriedScore !== null) stats.score = Math.max(0, Number(carriedScore) || 0);
+  const carriedLives = params.get("lives");
+  if (carriedLives !== null) {
+    stats.lives = Math.min(PICKUP.maxLives, Math.max(1, Number(carriedLives) || 1));
+  }
+  const carriedWeapon = params.get("weapon");
+  if (carriedWeapon !== null) {
+    inv.weapon = Number(carriedWeapon) || 0;
+    inv.armed = false;
+    inv.rounds = { [inv.weapon]: Math.max(0, Number(params.get("rounds") ?? 0) || 0) };
+  }
   // ?x= drops the player at a world x, for looking at a specific spot — and ?y=
   // with it, because in CITY the column under an x is usually the void: its
   // ground is a ledge and then y7250, so `?x=` alone is a death on arrival for

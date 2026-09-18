@@ -231,7 +231,30 @@ export class Film {
    * a region presses at once and the bare picture waits (see the hooks below).
    */
   owns(x: number, y: number): boolean {
-    return this.waiting.some((r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1);
+    const [lx, ly] = this.local(x, y);
+    return this.waiting.some((r) => lx >= r.x0 && lx <= r.x1 && ly >= r.y0 && ly <= r.y1);
+  }
+
+  /**
+   * A screen point in the SEGMENT's own coordinates, which is what a region is in.
+   *
+   * Every other number in a segment — the frame rects, the delta boxes — is
+   * measured from the segment's origin, and the regions are no exception. It has
+   * never mattered because every film in this game that has regions is a
+   * full-screen one at origin (0,0): `menu.mov`, `char.mov`, the two pans, the
+   * prefs panels. The four pause films are the exception and the only one — 512
+   * by 232 at origin (0, 42), the interface's own window — and they are also the
+   * only films whose regions are BUTTONS with words written on them, so they are
+   * the only ones where being 42 pixels out is visible.
+   *
+   * The picture settles it. `pauseA` draws Continue, Save and Exit centred on
+   * screen y160, y193 and y225; its three regions are y107-133, y141-167 and
+   * y172-198. Shifted by the origin those are y149-175, y183-209 and y214-240 —
+   * one label each, dead centre. Unshifted they land on the blank plates above
+   * Continue and on the bezel, which is where every click on this panel went.
+   */
+  private local(x: number, y: number): [number, number] {
+    return [x - this.seg.originX, y - this.seg.originY];
   }
 
   /**
@@ -246,8 +269,9 @@ export class Film {
    * at all.
    */
   click(x: number, y: number, now: number): boolean {
+    const [lx, ly] = this.local(x, y);
     for (const r of this.seg.frames[this.pos]?.regions ?? []) {
-      if (x < r.x0 || x > r.x1 || y < r.y0 || y > r.y1) continue;
+      if (lx < r.x0 || lx > r.x1 || ly < r.y0 || ly > r.y1) continue;
       if (r.sound) {
         this.playEvent(r.sound);
         this.clickSound = r.sound.toLowerCase();
