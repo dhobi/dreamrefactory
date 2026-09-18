@@ -175,6 +175,7 @@ import { PLAYER_CODES, PLAYER_HELD, gripOf } from "./codes";
 import { PLAYERS } from "./players";
 import { PREFS_ACTIONS, keyName, loadPrefs } from "./prefs";
 import { Cheat, CheatTyper } from "./cheats";
+import { NAME_PROMPT, loadBoards, offerScore, saveBoards } from "./scores";
 import {
   CEL,
   CLOCK,
@@ -1597,20 +1598,42 @@ function fellOut(): boolean {
 }
 
 /**
- * Fell out: one of the seven KILL films, a life, and the level again.
+ * Fell out: one of the seven KILL films, a life, and — when it was the last one
+ * — the high-score board and the front door.
  *
- * A life is spent because the panel has five of them and nothing else on this
- * page can spend one; when the last goes, they come back and the level starts
- * over, which is this page standing in for a game over it has not read. The
- * score is kept, since nothing says it should not be.
+ * `0x403340` is the state the seven vignettes belong to, and what it does after
+ * the film is the whole of the game's ending:
+ *
+ * ```
+ *   4033ca  0x40e990(KILLn.MOV)      ; one of seven, 0x434540(7)
+ *   4033d9  ax = [0x46b20c]          ; the difficulty
+ *   4033e3  0x40d4d0(ax)             ; ...and the score, [0x4a4f00]
+ *   4033e9  0x40f650(score, ax)      ; offer it to that difficulty's ten rows
+ *   4033ee  cx = 1                   ; and the shell goes back to the menu
+ * ```
+ *
+ * So the board is not a menu button and it is not on the death screen: it is
+ * what a finished game writes to, and the title film is where you read it. See
+ * {@link file://./scores.ts}.
+ *
+ * A life short of the last one still costs a life and still restarts the level,
+ * which is this page standing in for a state it has not read. The score is kept,
+ * since nothing says it should not be.
  */
 async function died(): Promise<void> {
   if (advancing) return;
   advancing = true;
   stats.lives -= 1;
   const gameOver = stats.lives <= 0;
-  if (gameOver) stats.lives = 3;
   await playFilm(DEATH_FILMS[Math.floor(Math.random() * DEATH_FILMS.length)]);
+  if (gameOver) {
+    const boards = loadBoards();
+    const rank = offerScore(boards, DIFFICULTY, stats.score, levelIndex + 1, () => prompt(NAME_PROMPT, ""));
+    saveBoards(boards);
+    hud.textContent = rank < 0 ? "game over" : `game over — row ${rank + 1} of the board`;
+    location.href = "index.html";
+    return;
+  }
   await loadLevel(levelIndex);
   advancing = false;
 }

@@ -66,6 +66,7 @@ import {
   savePrefs,
   volumeAt,
 } from "./prefs";
+import { BOARD, ScoreBoards, boardKey, loadBoards } from "./scores";
 
 /**
  * The game's start sequence, and it is not a guess — it is a string table in the
@@ -125,7 +126,7 @@ const BOOT_MOVIE = BOOT_SEQUENCE[BOOT_SEQUENCE.length - 1];
  * ```
  *   167  "Name 169"    the attract branch
  *   168  "frame 2"     0x45df7c  [0x46b208] = -1  ->  char.mov      BEGIN
- *   169  "frame 3"     0x45df8d  [0x46b208] = -2  ->  a save dialog OPEN
+ *   169  "frame 3"     0x45df8d  [0x46b208] = -2  ->  a DEMO slot    OPEN
  *   170  "frame 4"     0x45e082  [0x46b208] =  3  ->  helpwin.mov   HELP
  *   171  "frame 5"     0x45e093  [0x46b208] =  2  ->  prefs2.mov    PREFS
  *   172  "frame 6"     0x45e0a4  [0x4abdfe] = 11  ->  0x40340f      QUIT
@@ -148,7 +149,25 @@ const BOOT_MOVIE = BOOT_SEQUENCE[BOOT_SEQUENCE.length - 1];
  */
 const EXIT_ACTIONS: Record<string, { play?: readonly string[]; say: string; begin?: boolean; prefs?: boolean }> = {
   "frame 2": { play: ["char.mov"], begin: true, say: "Begin — which of the two Skull Crackers (0x45df7c)" },
-  "frame 3": { say: "Open — 0x45df8d's dialog is the executable's, not the film's" },
+  /**
+   * Open, and it is not a save game — there is no save game in this program.
+   *
+   * `0x4034a0` asks "Load from which slot?" (`0x46b3e9`), opens `skuldemo.dmo`
+   * as a `DEMO` container and copies slot N into a 0x1c2c buffer whose shape is
+   * `{word chapter, word scene, …, dword count, word actions[]}`. `0x4037b2`
+   * then walks that array one entry an engine frame and hands each to
+   * `0x403820` — the same function the keyboard reaches through `0x46b210` —
+   * positive for a press and negative for a release. A slot is an INPUT
+   * RECORDING and the button plays it back.
+   *
+   * The other half is dead: `0x403900`, the "Save in which slot?" recorder, has
+   * no callers anywhere in the executable. Nothing in the shipped game writes a
+   * slot.
+   *
+   * Not built. A 1996 input stream replayed against a re-implementation
+   * desyncs, and the desync is the only thing it would demonstrate.
+   */
+  "frame 3": { say: "Open — 0x4034a0 plays a recorded demo out of skuldemo.dmo, and there is no save game" },
   /**
    * Help, and it is the one entry where the two releases disagree.
    *
@@ -172,9 +191,9 @@ const EXIT_ACTIONS: Record<string, { play?: readonly string[]; say: string; begi
   "frame 7": { play: ["Credits.Mov"], say: "Credits — 0x45e0be" },
   // The demo is real and is NOT a film: `skuldemo.dmo` is a `DEMO`/`SKLC`
   // container whose version tag is not 4, so `readMovFile` refuses it and is
-  // right to. Whatever a `.dmo` is — an attract-mode recording, most likely —
-  // it is a format of this game's own and nothing here reads it.
-  "demo frame": { say: "the demo — a .dmo, which is not a film and not a format this port knows" },
+  // right to. What it holds is settled now — see "frame 3" above: one signed
+  // action word per engine frame, which is a recording of somebody playing.
+  "demo frame": { say: "the demo — skuldemo.dmo's recorded input, which this port does not replay" },
 };
 
 /**
@@ -202,6 +221,18 @@ const EXIT_ACTIONS: Record<string, { play?: readonly string[]; say: string; begi
 const prefs: PrefsState = loadPrefs();
 /** which of the eight key boxes is selected — `[0x47917c]`, and it starts at 0 */
 let prefsBox = 0;
+
+/**
+ * The high-score board, and `0x45de89` is what says where it belongs.
+ *
+ * `0x45ddd0` is the menu's per-frame handler. While `[0x46b208]` is 1 — the menu
+ * — and the film's frame index is 0…0xa7, it draws the board over whatever the
+ * film is showing. 0xa7 is 167 and `"frame 2"` is index 168, so that range is
+ * exactly `menu.mov`'s attract loop and stops where the button stubs begin.
+ *
+ * The rows are {@link file://./scores.ts}; this is the drawing.
+ */
+const boards: ScoreBoards = loadBoards();
 /** true once the prefs film has finished opening its panel and the panel is live */
 let prefsOpen = false;
 /** the prefs film is playing and the panel it opens is what follows it */
@@ -289,6 +320,50 @@ function paint(
   const bitmapCanvas = scratch();
   bitmapCanvas.getContext("2d")!.putImageData(image, 0, 0);
   ctx.drawImage(bitmapCanvas, 0, 0, SCREEN_W * PLATE, SCREEN_H * PLATE);
+  drawBoard(palette);
+}
+
+/**
+ * The board over the menu's attract loop — `0x40f990`, twice.
+ *
+ * Two passes with the same point: the first offset by (2, 1) in `0xe8`, the
+ * second square in `0xe1`. The only thing they do differently is the difficulty
+ * heading — the shadow draws all three of `Easy`, `Med` and `Hard` and the
+ * second draws only the one `[0x46b20c]` is on, which is how the board says
+ * which of its three tables you are looking at.
+ *
+ * The font is the browser's, for the same reason the preferences panel's is:
+ * `0x40a360` draws through the host's text routines and there is no glyph data
+ * in the rip to read.
+ */
+function drawBoard(pal: Uint8ClampedArray): void {
+  const at = film?.frameIndex ?? -1;
+  if (!film || film.name.toLowerCase() !== BOOT_MOVIE.toLowerCase()) return;
+  if (at < 0 || at > BOARD.attractUntilFrame) return;
+  const rows = boards[boardKey(prefs.difficulty)];
+  ctx.font = `${11 * PLATE}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+  ctx.textBaseline = "alphabetic";
+  for (const pass of [BOARD.shadow, { dx: 0, dy: 0, ink: BOARD.ink }]) {
+    const shadow = pass.ink === BOARD.shadow.ink;
+    const x = BOARD.x + pass.dx;
+    const y = BOARD.y + pass.dy;
+    const c = pass.ink * 4;
+    ctx.fillStyle = `rgb(${pal[c]}, ${pal[c + 1]}, ${pal[c + 2]})`;
+    const write = (text: string, atX: number, atY: number): void =>
+      ctx.fillText(text, atX * PLATE, atY * PLATE);
+    for (const h of BOARD.headings) write(h.text, x + h.dx, y);
+    for (const label of BOARD.labels) {
+      if (!shadow && label.key !== boardKey(prefs.difficulty)) continue;
+      write(label.text, x + label.dx, y + BOARD.labelDy);
+    }
+    rows.forEach((row, i) => {
+      const rowY = y + BOARD.firstRowDy + i * BOARD.rowHeight;
+      write(row.name || BOARD.emptyName, x + BOARD.nameDx, rowY);
+      // `0x40fc94` nudges a filled cell ten pixels left; an empty one keeps the column
+      write(row.score ? String(row.score) : BOARD.emptyCell, x + BOARD.scoreDx - (row.score ? BOARD.filledNudge : 0), rowY);
+      write(row.level ? String(row.level) : BOARD.emptyCell, x + BOARD.levelDx, rowY);
+    });
+  }
 }
 
 /**
@@ -534,10 +609,25 @@ function screenPoint(e: { clientX: number; clientY: number }): { x: number; y: n
   };
 }
 
+/** what the board is showing, for the status line and for a probe */
+function boardSay(): string {
+  const at = film?.frameIndex ?? -1;
+  if (!film || film.name.toLowerCase() !== BOOT_MOVIE.toLowerCase()) return "";
+  if (at < 0 || at > BOARD.attractUntilFrame) return "";
+  const key = boardKey(prefs.difficulty);
+  const rows = boards[key];
+  const label = BOARD.labels.find((l) => l.key === key)?.text ?? "";
+  const three = rows
+    .slice(0, 3)
+    .map((r, i) => `${i + 1} ${r.name || BOARD.emptyName} ${r.score || BOARD.emptyCell} ${r.level || BOARD.emptyCell}`)
+    .join(" · ");
+  return ` · board ${label} · ${three}`;
+}
+
 function frameLoop(now: number): void {
   film?.tick(now);
   nowEl.textContent = film
-    ? film.where
+    ? film.where + boardSay()
     : prefsOpen
       ? `prefs panel · difficulty ${prefs.difficulty} · volume ${prefs.volume} · music ${prefs.music ? "on" : "off"} · ` +
         PREFS_ACTIONS.map((a) => `${a.say} ${keyName(prefs.keys[a.action - 1]) || "--"}`).join(" ")

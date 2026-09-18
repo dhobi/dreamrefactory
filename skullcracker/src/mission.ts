@@ -142,9 +142,23 @@ export const ENDING_FILM = "credits.mov";
  * with the panel around them — which is what says they belong to a level in
  * progress rather than to the shell's own screens.
  *
- * What triggers that state has not been read; seven death vignettes beside four
- * time-out ones, both random, both window-sized, is the reading this page acts
- * on when the player falls out of the world.
+ * What triggers it has been read now, and so has what follows it. `0x4294e7`
+ * sets the state only after `0x40d490` finds the lives below zero, so these are
+ * the GAME OVER films and not the per-death ones; and the state does not end on
+ * the film:
+ *
+ * ```
+ *   4033ca  0x40e990(KILLn.MOV)
+ *   4033d9  ax = [0x46b20c]          ; the difficulty
+ *   4033e3  0x40d4d0(ax)             ; the score, [0x4a4f00]
+ *   4033e9  0x40f650(score, ax)      ; offer it to that difficulty's ten rows
+ *   4033ee  cx = 1                   ; and the shell goes back to the title
+ * ```
+ *
+ * So a finished game writes to the high-score board and the title screen is
+ * where it is read — see {@link file://./scores.ts}. This page plays the
+ * vignette on every death rather than on the last one; what the last one does
+ * after it is the sequence above.
  */
 export const DEATH_FILMS = [
   "kill1.mov",

@@ -97,6 +97,18 @@ export class Film {
     return f.regions;
   }
 
+  /**
+   * Which frame is on screen, counted from zero — `0x45ddd0`'s `si`.
+   *
+   * The menu's own per-frame handler is handed exactly this and does two things
+   * with it: under 0xa8 it draws the high-score board over the film, and at
+   * 0xa7 + n it jumps through the button table. So a caller that wants either
+   * needs the index, not the name.
+   */
+  get frameIndex(): number {
+    return this.pos;
+  }
+
   get where(): string {
     const f = this.seg.frames[this.pos];
     return `${this.name} · segment ${this.segIdx + 1}/${this.mov.segments.length} · frame ${this.pos + 1}/${this.seg.frames.length}${f ? ` "${f.name}"` : ""}`;

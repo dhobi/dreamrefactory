@@ -101,14 +101,34 @@ const main = async (): Promise<void> => {
   if (ten !== 10000) fail(`param 2 is -4, and 0x4283e8 pays 0x2710; the score reads ${ten}`);
   console.log(`ok    its three scoreups pay ${two}, ${five} and ${ten}, by their records' own params`);
 
-  // 6. `stattimer`: eight hundred and fifty engine frames back
-  await stand(1, 1900, 1223);
-  const before = Number(/clock (\d+)/.exec(await say())?.[1] ?? -1);
-  await stand(1, 7187, 931);
-  const after = Number(/clock (\d+)/.exec(await say())?.[1] ?? -1);
+  // 6. `stattimer`: eight hundred and fifty engine frames back, and `0x40d378`
+  //    takes back whatever is over the dial's own full scale.
+  //
+  //    `0x42834f` hands `0x40d350` a NEGATIVE 850, which is that function's way
+  //    of saying "add" — and it then clamps the clock to `[0x4a3b18]`, the scale
+  //    every chapter's entry function fills from the book's `timer` record. So
+  //    the gift is only visible on a clock that is not already full, which is
+  //    what `?clock=` is for. STREETS' dial is 4000.
+  const clockNow = async (): Promise<number> => Number(/clock (\d+)/.exec(await say())?.[1] ?? -1);
+  const short = async (x: number, y: number): Promise<void> => {
+    await page.goto(`${BASE}/walk.html?level=1&x=${x}&y=${y}&clock=1000`);
+    await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+    await page.waitForTimeout(600);
+  };
+  await short(1900, 1223);
+  const before = await clockNow();
+  await short(7187, 931);
+  const after = await clockNow();
   if (before < 0 || after < 0) fail(`the HUD should carry the clock: ${(await say()).slice(0, 160)}`);
   if (after - before < 800) fail(`0x42834f gives back 850 frames; the clock went ${before} -> ${after}`);
   console.log(`ok    a stattimer puts ${after - before} frames back on the clock`);
+
+  // ...and on a full dial it puts back nothing, because there is nowhere to put it
+  await stand(1, 7187, 931);
+  const capped = await clockNow();
+  if (capped > 4000) fail(`STREETS' timer record is 4000 and 0x40d378 is the clamp; the clock reads ${capped}`);
+  if (capped < 3900) fail(`a full clock should stay full, not fall; the clock reads ${capped}`);
+  console.log(`ok    ...and nothing at all on a full one — ${capped} against the dial's own 4000`);
 
   // 7. and they are in every level, not only the first
   for (const [level, want] of [[3, 10], [5, 2], [6, 5]] as const) {

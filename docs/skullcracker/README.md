@@ -1633,6 +1633,95 @@ of the same switch: on, `0x40f190(0x4ac370)` starts the level's theme bank; off,
 `0x427960(0, 0, 1, 0)` stops it. No effects bank is ever consulted, so turning it
 off leaves every fist and every door exactly as loud as they were.
 
+### The second menu button is a DEMO PLAYER, and the save game does not exist
+
+`0x45df8d` sets `[0x46b208] = -2`, which this page had written down as "a save
+dialog". It is not one, and there is no save game in Skull Cracker at all.
+
+**The recorder is dead code.** `0x403900` is the routine behind "Save in which
+slot?" (`0x46b401`) and it has **zero callers** anywhere in the executable. Only
+the reader is reachable, from `0x45df3c` and `0x45e10c`.
+
+**And the slots are not saves.** `0x4034a0` asks "Load from which slot?"
+(`0x46b3e9`), opens `skuldemo.dmo` — `0x46b3d9`, as a `DEMO` container — pulls
+container N out of it and copies it into a 0x1c2c buffer at `[0x4a02b8]`. What
+that buffer holds is:
+
+```
+  +0    word    chapter          -> [0x4a02b0]
+  +2    word    scene            -> [0x4a02b4]
+  +8    dword   how many entries
+  +0xc  word[]  one per engine frame
+```
+
+and `0x4037b2` walks it with the cursor at `[0x46b31c]`:
+
+```
+  4037b2  si = [buf + cursor*2 + 0xc]
+  4037c8  if (si < 0)  0x403820(-si, 0)     ; a RELEASE
+  4037dd  if (si > 0)  0x403820(si, 1)      ; ...and a press
+```
+
+`0x403820` is the same function the keyboard reaches through `0x46b210`. So a
+slot is an **input recording** — one signed action a frame, of the same eight
+actions the preferences panel binds keys to — and the button plays it back.
+That is also what `skuldemo.dmo` is, which answers the other open question about
+that file.
+
+It is not built. A 1996 input stream replayed against a re-implementation
+desyncs, and the desync is the only thing it would demonstrate.
+
+### The writing that was missing is on the TITLE screen
+
+The kill vignette shows nothing written on it because there is nothing written on
+it. The high-score board is drawn over `menu.mov`, and `0x45de89` is the line
+that says so: while `[0x46b208]` is 1 — the menu — and the film's frame index is
+**0…0xa7**, `0x45ddd0` draws the board over whatever the film is showing. 0xa7 is
+167 and `"frame 2"` is index 168, so that range is exactly the attract loop and
+it stops where the six button stubs begin.
+
+What gets a score onto it is `0x403340`, the state the seven vignettes belong to:
+
+```
+  4033ca  0x40e990(KILLn.MOV)      ; one of seven, 0x434540(7)
+  4033d9  ax = [0x46b20c]          ; the difficulty
+  4033e3  0x40d4d0(ax)             ; the score, which is [0x4a4f00]
+  4033e9  0x40f650(score, ax)      ; offer it to that difficulty's ten rows
+  4033ee  cx = 1                   ; and the shell goes back to the title
+```
+
+Which also settles what the kill films ARE: `0x4294e7` only sets that state once
+`0x40d490` has found the lives below zero, so they are the GAME OVER films, not
+the per-death ones.
+
+There are **three boards of ten**, one per difficulty, each row nineteen bytes —
+`{ Pascal name[13], dword score, word level }`, which is the `lea edx, [eax +
+eax*8]` / `[eax + edx*2]` all three arms index with:
+
+```
+   1  EASY     0x4a4f10   0x40f889
+   0  MEDIUM   0x4a4d80   0x40f790
+  -1  HARD     0x4a4e40   0x40f69b
+```
+
+The insert is one loop: `0x40f6b6` finds the first row whose score is under
+yours, `0x40f6d6` shifts the rest down, `0x40f722` writes the score and the level
+and only THEN does `0x40f742` put up the dialog `0x46bf4d` names — so a cancelled
+dialog leaves a nameless row on the board rather than no row at all. A name over
+twelve characters is cut (`0x40f74f`), and because an empty row's score is zero
+and the test is `>=`, a score of zero never gets on.
+
+`0x40f990` draws it twice from the same point (`{y 107, x 44}`, one dword at
+`0x45de90`): once offset by (2, 1) in `0xe8` and once square in `0xe1`. The only
+thing the two passes do differently is the difficulty heading — the shadow draws
+all three of `Easy`, `Med` and `Hard` and the second draws only the one
+`[0x46b20c]` is on. That is how the board says which of its three tables you are
+looking at. An empty row shows `-----` for the name (`0x46bf71`) and `-` for the
+other two (`0x46bf6d`).
+
+The one thing a browser cannot have is `Skull.sco`, the file `0x40f210` reads the
+thirty rows back from. They live beside the preferences instead.
+
 ### Eight words, one per length, and a two-thirds-of-a-second memory
 
 The cheat words are not a table of strings compared against the last thing you
@@ -2487,6 +2576,11 @@ a level with no class anywhere.
   sections above.
 - **Damage is off by default**, because with it on a probe walking east through
   WOODS meets three hydraulic presses and every route test here becomes a fight.
+- **The shell is finished except for the demo player.** All fourteen preferences
+  controls answer, all eight cheat words work, and the high-score board takes a
+  finished game and shows it over the title film. The one thing left is the
+  second menu button, which plays a recorded input stream out of `skuldemo.dmo`
+  — see the section above for why replaying it here would only measure drift.
 
 ## Where the pieces are
 
