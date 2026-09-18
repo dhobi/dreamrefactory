@@ -297,3 +297,84 @@ export function bindKey(state: PrefsState, action: number, ch: string): string |
   state.keys[action - 1] = want;
   return null;
 }
+
+/**
+ * The two dossiers the CHOOSER's pan films leave a hole for.
+ *
+ * `ltpan.mov` and `rtpan.mov` slide one character's picture to one side and a
+ * blank panel in on the other. What fills the blank is not in the film: it is
+ * typeset by `0x45e390` for character 0 and `0x45e520` for character 1, both
+ * called from `0x45ddd0`'s per-frame hook on ONE frame —
+ * `cmp word ptr [esp+0x250], 0x2a`, which is frame 42 of 59 — and both reading
+ * `[0x46b1a8]` first so only the chosen one is written.
+ *
+ * Each is seven lines from a point, sixteen pixels apart, in ink 0xe1:
+ *
+ * ```
+ *   45e3e2  0x40a080(x, y)           ; the point the caller handed in
+ *   45e3ea  y += 0x10                ; ...and a line is sixteen
+ *   45e3fc  0x40a360(text)
+ * ```
+ *
+ * and then an eighth somewhere else entirely: `0x45e4d5` adds `(0x32, 0x9d)` to
+ * the running point for character 0 and `0x45e64b` adds `(0xa, 0x9d)` for
+ * character 1, which puts a name plate in the strip under the panel.
+ *
+ * The points are the callers': `0x45e162` writes `{0x57, 0x128}` and `0x45e189`
+ * writes `{0x57, 0x28}` — same y, and an x on whichever side the pan left empty.
+ *
+ * Both lists are the executable's own strings and both are in its order, which
+ * is not the same order twice: character 0 gives its weight before its birthplace
+ * and character 1 the other way round.
+ */
+export interface Dossier {
+  /** `0x45e169` / `0x45e190` — where the first of the seven lines sits */
+  x: number;
+  y: number;
+  /** the seven, in the order the two functions push them */
+  lines: readonly string[];
+  /** the eighth, offset from the running point by `0x45e4d5` / `0x45e64b` */
+  plate: { dx: number; dy: number; text: string };
+}
+
+export const DOSSIERS: readonly [Dossier, Dossier] = [
+  {
+    x: 0x128,
+    y: 0x57,
+    lines: [
+      "Name: Mortis Rigor",
+      'aka "Skullcracker"',
+      "WT: 240 lbs. HT: 6'4\"",
+      "POB: Kingsport, Tenn.",
+      "Strengths: brute force,",
+      "raw power",
+      "Hobbies: Chevys",
+    ],
+    plate: { dx: 0x32, dy: 0x9d, text: "The SkullCracker" },
+  },
+  {
+    x: 0x28,
+    y: 0x57,
+    lines: [
+      "Name: Penelope Jones",
+      'aka "Bonebreaker"',
+      "POB: Glasgow, Scotland",
+      "WT: 110 lbs. HT: 5'10\"",
+      "Strengths: Speed, grace,",
+      "and finesse",
+      "Hobbies: Astronomy",
+    ],
+    plate: { dx: 0xa, dy: 0x9d, text: "Bonebreaker Jones" },
+  },
+];
+
+/** how the dossier is laid out and when it appears */
+export const DOSSIER = {
+  /** `0x45e3ea`'s `add si, 0x10` */
+  lineStep: 0x10,
+  /** `0x45e39d` — the same bright green the panel's key names use */
+  ink: 0xe1,
+  /** `0x45e14c`'s `cmp word ptr [esp+0x250], 0x2a` — the one frame it is written on */
+  onFrame: 0x2a,
+  from: "0x45e14c / 0x45e390 / 0x45e520",
+} as const;

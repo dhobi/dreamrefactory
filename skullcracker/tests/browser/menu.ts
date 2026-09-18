@@ -192,7 +192,33 @@ await at(RIGHT_FIGURE);
 if (!(await until(/rtpan\.mov/i))) fail(`the right figure chains rtpan.mov; #loc says "${await loc()}"`);
 console.log(`after clicking the right figure: ${await loc()}`);
 
-// the pan ends on a frame that waits for its one region — the accept button
+// ...and the panel it slides in is EMPTY in the film. What fills it is the
+// executable's: `0x45e14c` waits for frame 0x2a and calls `0x45e520` for
+// character 1 (`0x45e390` for character 0), seven lines sixteen apart from the
+// point its caller hands in, plus a name plate offset from where they ended.
+// The green in that half of the screen is the whole of the assertion — see
+// DOSSIERS in `src/prefs.ts`.
+if (!(await until(/frame 4[2-9]\/59/))) fail(`rtpan.mov should reach its own frame 42`);
+// ...and the canvas is one frame behind what `#loc` reports, so this polls for
+// the ink rather than reading once
+const inPanel = async (): Promise<number> =>
+  page.evaluate(() => {
+    const c = document.getElementById("screen") as HTMLCanvasElement;
+    // character 1's seven lines start at x40,y87 in the game's own 512x384
+    const s = c.width / 512;
+    const d = c.getContext("2d")!.getImageData(30 * s, 75 * s, 240 * s, 120 * s).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 1] > 140 && d[i] < 130 && d[i + 2] < 130) n++;
+    return n;
+  });
+let dossier = 0;
+for (let i = 0; i < 25 && dossier < 200; i++) {
+  dossier = await inPanel();
+  if (dossier < 200) await page.waitForTimeout(200);
+}
+if (dossier < 200) fail(`the pan's panel should carry the dossier 0x45e520 writes; ${dossier} green pixels in it`);
+console.log(`ok    and the panel it slides in carries the dossier — ${dossier} green pixels of it`);
+
 if (!(await until(/frame 58\/59/))) fail(`rtpan.mov should end waiting on its accept button`);
 await at(ACCEPT);
 if (!(await until(/walk\.html/, 20_000))) fail(`accepting the chooser should start the game; still at "${await loc()}"`);
@@ -210,10 +236,15 @@ const cels = /· cel (\d+)/.exec(wearing)?.[1];
 if (!cels || Number(cels) < 5000) fail(`character 1 wears the 5xxx cels; it is standing on ${cels}`);
 console.log(`ok    and walk.html is playing character 1, on cel ${cels}`);
 
-// 6 — Prefs, which is the one button the film answers by itself and the
-//     executable overrides: 0x45e093 plays prefs2.mov, and its panel has no
-//     regions at all — 0x45db40 draws the three boxes and 0x45d700 takes the
-//     clicks. Difficulty is +1 easy, 0 medium, -1 hard (0x448ac2's health).
+// 6 — Prefs. Its panel has no regions at all: 0x45db40 draws the fourteen
+//     controls and 0x45d700 takes the clicks. Difficulty is +1 easy, 0 medium,
+//     -1 hard (0x448ac2's health).
+//
+//     The film that opens it is `prefs.mov` — frames 1..30 of one sixty-frame
+//     move, with `prefs2.mov` as 31..60. `0x4030ac` calls the modal and only
+//     `0x4030b1` plays prefs2, so a film after the modal can only be the panel
+//     leaving. This page had the two the wrong way round and opened the panel
+//     by playing it shut.
 await page.goBack();
 await page.waitForTimeout(500);
 await page.goto(URL_BASE, { waitUntil: "domcontentloaded" });

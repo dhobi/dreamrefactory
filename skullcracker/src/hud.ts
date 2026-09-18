@@ -233,9 +233,12 @@ export const BUTTONS = [
  * `0x46b210`, and rebinding a key in the preferences panel changes what the
  * panel says. The order is the action order, which is the button order.
  *
- * The y is the table's; whether the engine's text object treats it as the top or
- * the baseline is not readable from `SC.EXE`, and this page takes it as the top
- * the way it takes the score's.
+ * The y is the table's, and it is the glyph's BASELINE rather than its top. That
+ * is not readable from `SC.EXE` — `0x40a080` just stores the point and hands it
+ * to the text object — but it is readable from the disc: `helpwin.mov`'s own
+ * INTERFACE page bakes a picture of this panel with all eight letters on it, and
+ * measured off that page every glyph's centre sits five to eight pixels ABOVE
+ * its table entry. A baseline is the only convention that puts it there.
  */
 export const KEY_LABELS = [
   { y: 324, x: 60 },
@@ -429,7 +432,9 @@ export function paintHud(ctx: CanvasRenderingContext2D, art: HudArt, s: HudState
     ctx.save();
     ctx.fillStyle = s.labelInk ?? "#e0e0c0";
     ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
-    ctx.textBaseline = "top";
+    // the point is the baseline — see {@link KEY_LABELS}, measured off the
+    // help film's own picture of this panel
+    ctx.textBaseline = "alphabetic";
     KEY_LABELS.forEach((at, i) => {
       const name = s.keys?.[i];
       if (!name) return;

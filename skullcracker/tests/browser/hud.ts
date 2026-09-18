@@ -138,15 +138,20 @@ const main = async (): Promise<void> => {
   //    The ink is `0x409a00`'s 0xe1, which is the same bright green the band's
   //    own JUMP/KICK/PUNCH/INV. are, so the count is taken in a box tight around
   //    one label and the empty reading below is what proves it is the label.
+//
+  //    Each window is the table's point with the box's fifteen pixels around it
+  //    in x, and in y it straddles the point rather than hanging below it: the
+  //    point is the glyph's BASELINE, so the letter stands in the thirteen rows
+  //    ABOVE its table entry.
   const LABELS: Record<string, [number, number, number, number]> = {
-    up: [56, 322, 76, 338],
-    right: [70, 337, 90, 353],
-    down: [56, 352, 76, 368],
-    left: [39, 337, 59, 353],
-    punch: [196, 344, 216, 360],
-    kick: [196, 324, 216, 340],
-    inv: [172, 364, 192, 380],
-    jump: [172, 305, 192, 321],
+    up: [56, 311, 76, 327],
+    right: [70, 326, 90, 342],
+    down: [56, 341, 76, 357],
+    left: [39, 326, 59, 342],
+    punch: [196, 333, 216, 349],
+    kick: [196, 313, 216, 329],
+    inv: [172, 353, 192, 369],
+    jump: [172, 294, 192, 310],
   };
   const labelInk = async (): Promise<Record<string, number>> => {
     const out: Record<string, number> = {};
@@ -174,13 +179,18 @@ const main = async (): Promise<void> => {
   console.log(`ok    the eight buttons are labelled: ${Object.entries(shipped).map(([k, v]) => `${k} ${v}`).join(", ")}`);
 
   // ...and with nothing bound there is nothing to say. `0x40e870` names no
-  // character it cannot name, and six of the eight boxes hold no band green at
-  // all, so those six have to read exactly zero.
+  // character it cannot name, so every one of the eight boxes has to lose ink.
+  // It cannot be asked to read zero: the four arrow windows sit on the arrow
+  // cluster's own bright green, and that art is the band's, not the label's.
   await bind(["", "", "", "", "", "", "", ""]);
   const bare = await labelInk();
-  const speaking = Object.entries(bare).filter(([, n]) => n > 0).map(([k]) => k);
-  if (speaking.length > 2) fail(`an unbound panel should say nothing; ${speaking.join(", ")} still have ink`);
-  console.log(`ok    ...and an unbound panel says nothing: ${Object.values(bare).join(" ")}`);
+  const speaking = Object.keys(LABELS).filter((k) => bare[k] >= shipped[k]);
+  if (speaking.length > 0) {
+    fail(`an unbound panel should say nothing; ${speaking.map((k) => `${k} ${shipped[k]}\u2192${bare[k]}`).join(", ")}`);
+  }
+  console.log(
+    `ok    ...and an unbound panel says nothing: ${Object.keys(LABELS).map((k) => `${k} ${shipped[k]}\u2192${bare[k]}`).join(", ")}`,
+  );
 
   // ...and a rebinding changes what it says, which is the whole point of it
   await bind(["M", "N", "O", "Q", "R", "T", "U", "V"]);

@@ -1517,9 +1517,58 @@ already 3 — `0x4031b2`, the level runner. So the whole front end is
 **menu → chooser → level one**, and this port now follows it into `walk.html`
 with the two words the front end settled in the query string.
 
-Prefs is the one button the film tries to answer by itself, and the executable
-overrules it: the stub is a type-3 chain naming `prefs.mov`, and `0x45e093` plays
-`prefs2.mov` instead.
+Prefs needs BOTH of its films, and this page had them the wrong way round. The
+menu's stub is a type-3 chain naming `prefs.mov`; `0x45e093` sets
+`[0x46b208] = 2`, which is what the shell loop reads when the menu ends:
+
+```
+  403085  0x4498c0(Menu.Mov)      ; play the menu and wait
+  40309d  ax = [0x46b208]         ; what its exit frame set
+  4030a6  cmp ax, 2               ; ...2 is this button
+  4030ac  call 0x45d5a0           ; the MODAL, on a panel that is already up
+  4030b1  0x4498c0(prefs2.mov)    ; and only then the second film
+  4030cc  jmp 0x40307c            ; back to the menu
+```
+
+A film played after the modal has returned can only be the panel going away, so
+the chain is not overruled at all: `prefs.mov` is the panel arriving and
+`prefs2.mov` is it leaving. The frame names say the same thing from the other
+side — the two are one sixty-frame move cut in half, named `picsout 1`…`30` and
+`picsout 31`…`60`. Opening the panel with the second half played the animation
+backwards: it slid off the screen and then took clicks.
+
+### The panel the pan slides in is empty, and the executable fills it
+
+`ltpan.mov` and `rtpan.mov` slide one character's picture aside and a blank panel
+in on the other side. The blank is deliberate: it is where the chosen character's
+dossier goes, and the dossier is not in the film.
+
+`0x45e14c` waits for one frame — `cmp word ptr [esp+0x250], 0x2a`, frame 42 of 59
+— reads `[0x46b1a8]` and calls `0x45e390` for character 0 or `0x45e520` for
+character 1, handing each a point:
+
+```
+  45e162  {0x57, 0x128}   ; character 0, y87 x296 — the right-hand panel
+  45e189  {0x57, 0x28}    ; character 1, y87 x40  — the left-hand one
+```
+
+Same y, and an x on whichever side the pan emptied. Each writes seven lines
+sixteen apart in ink 0xe1, then an eighth somewhere else: `0x45e4d5` adds
+`(0x32, 0x9d)` to the running point and `0x45e64b` adds `(0xa, 0x9d)`, which is
+the name plate in the strip under the panel.
+
+```
+  45e3e2  0x40a080(x, y)
+  45e3ea  y += 0x10
+  45e3fc  0x40a360(text)
+```
+
+The text is all in `.data` between `0x4792b5` and `0x4793f5`: **Mortis Rigor**,
+240 lbs, 6'4", Kingsport, Tenn., strengths brute force and raw power, hobbies
+Chevys, plated as *The SkullCracker*; and **Penelope Jones**, 110 lbs, 5'10",
+Glasgow, Scotland, strengths speed, grace and finesse, hobbies Astronomy, plated
+as *Bonebreaker Jones*. The two lists are not even in the same order — character
+0 gives its weight before its birthplace and character 1 the other way round.
 
 ### The chooser answers with a frame name, and prefs with nothing at all
 
@@ -1547,8 +1596,10 @@ mechanism a DreamFactory film has for answering a question it was not asked:
 header fields, one comparison a frame. Each pan then ends on a frame that DOES
 wait, for a single region at (219,225)-(291,264) — the accept button.
 
-`prefs2.mov`, by contrast, is thirty frames of a panel sliding open and a type-1
-exit, with **no regions anywhere in it**. The executable owns the panel from the
+Each pan also leaves a HOLE, and the film never fills it — see the section
+below.
+
+Neither prefs film has **any regions anywhere in it**. The executable owns the panel from the
 moment the film stops: `0x45db40` draws it and `0x45d700` is a fourteen-way
 dispatch on a control id. Fourteen controls, and their rects are in `.data`:
 
@@ -2431,6 +2482,13 @@ buttons are not in the cel at all: they are read out of `0x46b210` every time
 the panel is built. Rebind punch to Z in the preferences panel and the band says
 Z. That is what makes the eight boxes worth having.
 
+And the point is the glyph's BASELINE. `0x40a080` only stores it and hands it to
+the text object, so the binary does not say — but the DISC does: `helpwin.mov`'s
+own INTERFACE page bakes a picture of this panel with all eight letters on it,
+and measured off that page every glyph's centre sits five to eight pixels above
+its entry in `0x46bd58`. Taking the point as the top drew them all a line low,
+which is what it looked like.
+
 ### ...and nothing clicks the band
 
 The buttons look like buttons and they are not. `[0x4a3b48]` — the word
@@ -2699,25 +2757,24 @@ a little more wrong.
 ### The records
 
 ```
-  1145 of 1167 entity records placed - 98.1%. 52 region records, all handled.
+  1162 of 1167 entity records placed - 99.6%. 52 region records, all handled.
 
-  probe             17   arcade city mall service streets woods
   where              1   lab
   inithealth         1   lab
   noskateboards      1   service
   monkeybar          1   vat
   wormbounds         1   vat
 
-  no gap at all: BARREL CAVERN GRAVE MAZE PLAYGR RAVECAVE SEWER TOWER
+  no gap at all: ARCADE BARREL CAVERN CITY GRAVE MALL MAZE PLAYGR RAVECAVE
+                 SEWER STREETS TOWER WOODS
 ```
 
-**Nothing that is a drawn thing is missing any more.** Four of what is left is
-not art at all — `probe`, `monkeybar`, `wormbounds` and `noskateboards` are
-TABLES. And two are dead data: **`where` and `inithealth` do not appear in
-`SC.EXE` anywhere** — LAB places one of each and nothing in the game will ever
-ask for them.
+**Five records are left and not one of them is a drawn thing.** Three are
+TABLES — `monkeybar`, `wormbounds` and `noskateboards`. And two are dead data:
+**`where` and `inithealth` do not appear in `SC.EXE` anywhere** — LAB places one
+of each and nothing in the game will ever ask for them.
 
-### What a probe is, and the one thing about it still unread
+### What a probe is, and the word that was hiding in the constructor
 
 `0x40b526` fills a buffer at `0x4a9ce0` with every `probe` record, 48 bytes
 apiece — the entity record's own stride — and keeps the count at `0x46b9c0`.
@@ -2731,13 +2788,12 @@ apiece — the entity record's own stride — and keeps the count at `0x46b9c0`.
 ```
 
 `0x402e80` shifts the rest of the table down over it, so a probe fires **once per
-level load** and never again. The mode is the record's `param`, and the seventeen
-shipped ones carry four values between them — 0 eight times, 1 four, 2 three and
-3 twice.
+level load** and never again. The seventeen shipped ones carry four values
+between them — 0 eight times, 1 four, 2 three and 3 twice.
 
 `0x410170` is the same spawner the goal's television comes out of, switched on
-`mode + 1`, and all four probe modes build on book `0x4a3b38` — `PLAYER.SBK`,
-which is why no level book carries the cels:
+`mode + 1`, and all four probe modes build on `PLAYER.SBK` rather than the
+level's own book — which is why no level book carries the cels:
 
 ```
   mode 0/1  0x41023c  script 0x46bdf0 tag 0 - cels 20200..20207, dx 15
@@ -2751,13 +2807,20 @@ which is why no level book carries the cels:
 arriving from under your feet or down out of the sky, and 20200..20207 is
 something else crossing.
 
-What is **not** settled is what then moves any of it, and that is why none of
-this is built. `0x42f550` leaves the object's divisor at zero, `0x410170` never
-writes it, `0x45d090` writes only the kind — and `0x45d1a3`, the script stepper's
-own call to the mover, does an `idiv` by exactly that word. A shipped game does
-not divide by zero, so something writes `obj+0xe` on this object and this reading
-has not found it. Building a flypast on the dx and the vY without it would be
-inventing motion, which is the one thing this page does not do.
+**What held this up was one word, and it is in the class's constructor.**
+`0x45d1a3`'s mover, `0x42f8b0`, does `idiv [obj+0xe]` twice; `0x42f550` zeroes
+that word, `0x410170` never writes it and `0x45d090` writes only the kind. A
+shipped game does not divide by zero, so something had to — and it is the
+message every new object on this list gets. `0x430cc0(0x4103c0)` builds the list
+and `0x4103c0`'s case 1 writes **1** into `obj+0xe`, along with the book
+(`0x4abe10`), the first cel, no gravity and no bounce. A divisor of one divides
+nothing: the script's own `dx` goes into the velocity whole.
+
+The rest is `0x410480`, which is three comparisons and a clamp — 27 pixels a
+frame across, 23 up or down, and gone once it is half a screen past you
+horizontally or a quarter of one vertically. None of the ten cels carries a
+strike box, so a flypast cannot touch you: it is scenery with a trigger, and
+CITY's own step in `tests/browser/city.ts` watches one cross and one rise.
 
 ### The classes
 
@@ -2793,6 +2856,11 @@ a level with no class anywhere.
   sections above.
 - **Damage is off by default**, because with it on a probe walking east through
   WOODS meets three hydraulic presses and every route test here becomes a fight.
+- **The KILL vignette is the last life's**, which is what `0x4294b7` says: the
+  death branch reads the count, spends one, and takes the ordinary path while
+  the count before the spend was not negative. This page used to play one on
+  every death, which made the best animation in the game the most familiar
+  thing in it.
 - **The shell is finished except for the demo player.** All fourteen preferences
   controls answer, all eight cheat words work, and the high-score board takes a
   finished game and shows it over the title film. The one thing left is the

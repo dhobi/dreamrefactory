@@ -53,6 +53,8 @@ import { VERSION, installVersion } from "@dreamfactory/site/version";
 import { SkullFiles } from "./files";
 import { Film } from "./film";
 import {
+  DOSSIER,
+  DOSSIERS,
   PREFS_ACTIONS,
   PREFS_CONTROLS,
   PREFS_INK,
@@ -180,13 +182,26 @@ const EXIT_ACTIONS: Record<string, { play?: readonly string[]; say: string; begi
    */
   "frame 4": { play: ["HelpWin.Mov", "HelpMac.Mov"], say: "Help — 0x45e082" },
   /**
-   * Prefs, and it is the one button the film tries to answer by itself: its stub
-   * is a type-3 chain naming `prefs.mov`. The executable does not let it —
-   * `0x45e093` sets `[0x46b208] = 2` and `0x4030b1` plays **`prefs2.mov`**, the
-   * other of the two thirty-frame panels. So the chain is suppressed and the
-   * executable's choice played instead.
+   * Prefs, and there are TWO thirty-frame panels because the panel has to arrive
+   * and leave. Which is which is settled by the ORDER in `0x40307c`'s loop:
+   *
+   * ```
+   *   403085  0x4498c0(Menu.Mov)      ; play the menu and wait for it to end
+   *   40309d  ax = [0x46b208]         ; what its own exit frame set
+   *   4030a6  cmp ax, 2               ; ...2 is this button
+   *   4030ac  call 0x45d5a0           ; the MODAL, on a panel that is ALREADY up
+   *   4030b1  0x4498c0(prefs2.mov)    ; and only then this film
+   *   4030cc  jmp 0x40307c            ; back to the menu
+   * ```
+   *
+   * A film played after the modal has finished can only be the panel going away.
+   * So `prefs.mov` — the chain the menu's own frame 5 names — is the panel
+   * sliding IN, and `prefs2.mov` is it sliding out. This page had them the wrong
+   * way round and suppressed the chain, which played the closing animation to
+   * open it: the panel slid off the screen and then answered clicks.
    */
-  "frame 5": { play: ["Prefs2.Mov", "Prefs.Mov"], prefs: true, say: "Prefs — 0x45e093 plays prefs2.mov, not the stub's prefs.mov" },
+  "frame 5": { play: ["Prefs.Mov", "Prefs2.Mov"], prefs: true, say: "Prefs — the chain to prefs.mov opens it; 0x4030b1's prefs2.mov closes it" },
+  // (the pair is PREFS_FILMS; this list is its `open` half)
   "frame 6": { say: "Quit — state 11, and a tab cannot quit itself" },
   "frame 7": { play: ["Credits.Mov"], say: "Credits — 0x45e0be" },
   // The demo is real and is NOT a film: `skuldemo.dmo` is a `DEMO`/`SKLC`
@@ -239,6 +254,19 @@ let prefsOpen = false;
 let prefsPending = false;
 /** the film that is ending names a chain the executable overrides */
 let suppressChain = false;
+/** the closing panel is playing, and the menu is what follows it — `0x4030cc` */
+let prefsClosing = false;
+
+/**
+ * The two panels, and which way round they go — see EXIT_ACTIONS' "frame 5".
+ *
+ * Each is a list because a rip may carry either spelling, and the first one the
+ * store actually serves is the one played.
+ */
+const PREFS_FILMS = {
+  open: ["Prefs.Mov", "Prefs2.Mov"],
+  close: ["Prefs2.Mov", "Prefs.Mov"],
+} as const;
 
 /**
  * The canvas is the game's screen DOUBLED.
@@ -321,6 +349,41 @@ function paint(
   bitmapCanvas.getContext("2d")!.putImageData(image, 0, 0);
   ctx.drawImage(bitmapCanvas, 0, 0, SCREEN_W * PLATE, SCREEN_H * PLATE);
   drawBoard(palette);
+  drawDossier(palette);
+}
+
+/**
+ * The chosen character's dossier, into the hole the pan film leaves.
+ *
+ * `ltpan.mov` and `rtpan.mov` slide one picture aside and a BLANK panel in, and
+ * the blank is the executable's to fill: `0x45e14c` waits for frame 0x2a and
+ * calls `0x45e390` or `0x45e520` by `[0x46b1a8]`. This page played the films and
+ * left the panel empty, which is what the hole is for.
+ *
+ * The engine writes it once, into the surface, and the frames after it only
+ * touch what changed; this page composes every frame from scratch, so it writes
+ * it on frame 42 and on every frame after — which is the same picture.
+ *
+ * See {@link DOSSIERS}. The font is the browser's, for the reason the board's
+ * and the panel's are: `0x40a360` draws through the host and there is no glyph
+ * data in the rip.
+ */
+function drawDossier(pal: Uint8ClampedArray): void {
+  const at = film?.frameIndex ?? -1;
+  if (!film || !/^(ltpan|rtpan)\.mov$/i.test(film.name)) return;
+  if (at < DOSSIER.onFrame) return;
+  const who = DOSSIERS[prefs.character === 1 ? 1 : 0];
+  const c = DOSSIER.ink * 4;
+  ctx.font = `${11 * PLATE}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = `rgb(${pal[c]}, ${pal[c + 1]}, ${pal[c + 2]})`;
+  let y = who.y;
+  for (const line of who.lines) {
+    ctx.fillText(line, who.x * PLATE, y * PLATE);
+    y += DOSSIER.lineStep;
+  }
+  // `0x45e4d5` / `0x45e64b` — the plate is offset from where the seven ended
+  ctx.fillText(who.plate.text, (who.x + who.plate.dx) * PLATE, (who.y + who.plate.dy) * PLATE);
 }
 
 /**
@@ -564,6 +627,14 @@ async function playMovie(name: string, isHome = false): Promise<void> {
           begin();
           return;
         }
+        // ...the panel LEAVING ends at the menu, which is `0x4030cc`'s jump back
+        // to the top of the loop
+        if (prefsClosing) {
+          prefsClosing = false;
+          log(`${name}: the panel is away — back to the menu`);
+          void playMovie(home, true);
+          return;
+        }
         // ...and the panel films stop on an open panel, which is the panel
         if (prefsPending) {
           prefsPending = false;
@@ -779,7 +850,15 @@ function closePrefs(why: string): void {
   prefsOpen = false;
   savePrefs(prefs);
   log(`prefs: ${why}`);
-  void playMovie(home, true);
+  // `0x4030b1` — the modal has returned, so this is the panel leaving. The menu
+  // comes back after it, which is `0x4030cc`'s jump.
+  const out = PREFS_FILMS.close.find((n) => files?.serves(n));
+  if (!out) {
+    void playMovie(home, true);
+    return;
+  }
+  prefsClosing = true;
+  void playMovie(out, false);
 }
 
 /** a click on the 512x384 screen, from whichever pointer sent it */
