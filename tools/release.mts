@@ -77,23 +77,33 @@ for (const a of asked) {
 
 // ---- the tree has to be one a tag can mean something on ---------------------
 
+/**
+ * A refusal, which a real run exits on and a dry run only reports.
+ *
+ * `--dry-run` is asked "what would you do", and "refuse, and here is why" is a
+ * useful answer to that — more useful than the first guard's message and
+ * nothing else, which is what an early exit gives. Every guard still stops a
+ * real release dead.
+ */
+const refusals: string[] = [];
+const refuse = (why: string): void => {
+  if (!dryRun) {
+    console.error(why);
+    process.exit(1);
+  }
+  refusals.push(why);
+};
+
 const branch = run("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
-if (branch !== "master") {
-  console.error(`on ${branch}, not master — a release tag names a commit on master`);
-  process.exit(1);
-}
-if (run("git", ["status", "--porcelain"])) {
-  console.error("the working tree is dirty — commit or stash before tagging");
-  process.exit(1);
-}
+if (branch !== "master") refuse(`on ${branch}, not master — a release tag names a commit on master`);
+if (run("git", ["status", "--porcelain"])) refuse("the working tree is dirty — commit or stash before tagging");
 // `git fetch` here can go out anonymous and be rate-limited even when gh is
 // logged in, because a global credential.helper answers first with nothing
 run("git", ["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential", "fetch", "origin", "master", "--tags"]);
 const head = run("git", ["rev-parse", "HEAD"]);
 const remote = run("git", ["rev-parse", "FETCH_HEAD"]);
 if (head !== remote) {
-  console.error(`HEAD (${head.slice(0, 7)}) is not origin/master (${remote.slice(0, 7)}) — pull or push first`);
-  process.exit(1);
+  refuse(`HEAD (${head.slice(0, 7)}) is not origin/master (${remote.slice(0, 7)}) — pull or push first`);
 }
 
 /** the tags already on the remote, so an existing release is never re-cut */
@@ -113,10 +123,13 @@ const wanted = (asked.length ? asked : [...TARGETS])
   });
 
 for (const { tag } of wanted) {
-  if (existing.has(tag)) {
-    console.error(`${tag} is already on the remote — bump the version first`);
-    process.exit(1);
-  }
+  if (existing.has(tag)) refuse(`${tag} is already on the remote — bump the version first`);
+}
+if (dryRun) {
+  console.log("(dry run: nothing will be tagged, pushed or dispatched)");
+  // before the early exit below, not after it: "nothing to release" is not the
+  // whole answer when the reason a real run would stop is something else
+  for (const why of refusals) console.log(`would refuse: ${why}`);
 }
 if (!wanted.length) {
   console.log("every package's version is already tagged; nothing to release");
@@ -124,7 +137,6 @@ if (!wanted.length) {
 }
 
 console.log(`releasing ${wanted.length} at ${head.slice(0, 7)}: ${wanted.map((w) => w.tag).join(", ")}`);
-if (dryRun) console.log("(dry run: nothing will be tagged, pushed or dispatched)");
 
 // ---- one tag, one push, one proof, then the next ---------------------------
 
