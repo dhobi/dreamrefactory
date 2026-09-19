@@ -24,7 +24,8 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "dump": "tsx tools/dumpset.ts",
-    "mkappicons": "tsx tools/mkappicons.ts"
+    "mkappicons": "tsx tools/mkappicons.ts",
+    "release": "tsx tools/release.mts"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

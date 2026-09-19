@@ -23,14 +23,33 @@ its own:
 ```bash
 # in the package that is releasing:
 npm version 0.9.1 --no-git-tag-version -w @dreamfactory/taoot
-# commit, merge, then tag the merged commit:
-git tag taoot-v0.9.1 && git push --tags
+# commit and merge, then from master:
+npm run release -- taoot            # or several: taoot dust timelapse skullcracker
+npm run release                     # everything whose version has no tag yet
+npm run release -- --dry-run        # what it would do, and nothing else
 ```
 
 **Do not let `npm version` cut the tag.** It writes a bare `v0.9.1`, which no
 pattern here listens for — the tag would push and deploy nothing at all,
 silently. `--no-git-tag-version` keeps it to the files and leaves the tag to the
 hand that knows which of the five it is.
+
+**Do not `git push --tags` a multi-game release.** GitHub creates **no workflow
+run at all** when more than three tags arrive in a single push — not merely the
+excess ones. Nothing warns you: the push succeeds, every tag is on the remote,
+and the Actions tab is empty. A four-game release hits it exactly, and did —
+Titanic 0.9.75, Dust 0.3.20, Timelapse 0.1.4 and Skull Cracker 0.1.2 went out as
+tags together and none of them deployed; they were recovered with four
+`workflow_dispatch` runs.
+
+That is why there is a release tool. `npm run release`
+([`tools/release.mts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/release.mts))
+pushes **one tag per push**, and after each one waits for the deploy to appear
+in the Actions tab — dispatching it by hand and saying so if it does not, which
+is the half a tool that only pushed would still get wrong. It refuses to tag
+anything but a clean master that matches its remote, and it spells each tag from
+the package's own version, which is the pairing `deploy.yml` re-checks before it
+uploads.
 
 Every namespace carries its target's name, and a tag naming none of them **fails
 the run** rather than defaulting to one. The old default-to-TAOOT is exactly what
