@@ -6,17 +6,38 @@ name: Browser suite
 # is not on `pull_request` by default: it runs nightly, on demand, or when a PR
 # is given a `full-run-<game>` label.
 #
-# NOTHING HERE NAMES A GAME. The game is a variable, and everything that differs
-# between them is derived from it: the rip's environment variable, the Vite
-# config, the package the suite is a script of. Titanic is only the DEFAULT — for
-# the nightly run and for a dispatch that does not say otherwise — because it is
-# the game with the long route. Adding Dust's or Skull Cracker's is a label, not
-# an edit to this file.
+# NOTHING HERE NAMES A GAME in the parts that DO the work. The game is a
+# variable, and everything that differs between them is derived from it: the
+# rip's environment variable, the Vite config, the package the suite is a script
+# of. Two tables in the step below are the exception, and they are the exception
+# on purpose:
+#
+#   * WHAT A GAME'S FULL RUN IS, which is not the same script in any two of them.
+#     Titanic's `test:browser` is the route; Dust's is three short suites and its
+#     real depth is `speedrun:legs`, the fifty-five legs off the run sheet; Skull
+#     Cracker's `test:browser` is the menu alone and its thirty-six suites are
+#     `test:browser:all`. A single default of `test:browser` therefore ran the
+#     MENU for a `full-run-skullcracker` label and reported green, and never ran
+#     Dust's legs at all under any trigger but a hand-typed dispatch.
+#   * WHICH CRON MEANS WHICH, because a scheduled run carries no inputs. The only
+#     thing GitHub hands a schedule is the cron expression that fired it.
+#
+# `site/tests/nightly-suites.ts` holds both tables to the package scripts they
+# name and to the `schedule:` list, so neither can rot into a 4 a.m. failure that
+# says only "no such script".
 
 on:
   schedule:
-    # 02:00 UTC. Cron on GitHub is best-effort and can be delayed under load.
-    - cron: "0 2 * * *"
+    # An hour apart, and each one is a different game's suite — see the table in
+    # "Which game, and which of its suites", which is the only thing that can
+    # tell them apart. An hour is far more than any of them needs (the longest is
+    # Titanic's ~39 min) because cron on GitHub is best-effort and can be delayed
+    # under load; when two do collide they queue rather than clash, the runner
+    # taking one job at a time and the concurrency groups below being distinct.
+    - cron: "0 2 * * *" # Titanic, the route
+    - cron: "0 3 * * *" # Dust, the three short suites
+    - cron: "0 4 * * *" # Dust, the legs
+    - cron: "0 5 * * *" # Skull Cracker, all thirty-six
   workflow_dispatch:
     inputs:
       game:
@@ -29,9 +50,9 @@ on:
           - dust
           - skullcracker
       suite:
-        description: "which browser suite — a script in THAT package (test:browser, test:browser:endgame, test:browser:climb, …)"
+        description: "which browser suite — a script in THAT package (blank = that game's own full run; test:browser:endgame, test:browser:climb, …)"
         required: false
-        default: test:browser
+        default: ""
       segments:
         description: "SEGMENTS to run (blank = the gated set)"
         required: false
@@ -42,8 +63,20 @@ on:
 # Per game as well as per ref: two games labelled on the same pull request are
 # two different runs and must not cancel each other, which one group keyed only
 # on the ref would have done.
+#
+# And per SCHEDULE, for the same reason one step further: the four nightly runs
+# share a ref and carry no inputs, so every one of them resolved to the same
+# `-nightly` group — and with `cancel-in-progress` that is three suites cancelled
+# by the next cron rather than three suites run. The cron expression is the only
+# thing that distinguishes them here, which is why it is spelled out rather than
+# derived; the step below reads the same table, and a test holds the two together.
 concurrency:
-  group: browser-${{ github.ref }}-${{ inputs.game || github.event.label.name || 'nightly' }}
+  group: >-
+    browser-${{ github.ref }}-${{ inputs.game || github.event.label.name
+    || (github.event.schedule == '0 3 * * *' && 'dust-browser')
+    || (github.event.schedule == '0 4 * * *' && 'dust-legs')
+    || (github.event.schedule == '0 5 * * *' && 'skullcracker-all')
+    || 'taoot-nightly' }}
   cancel-in-progress: true
 
 permissions:
@@ -51,7 +84,15 @@ permissions:
 
 jobs:
   browser:
-    name: browser suite — ${{ inputs.game || github.event.label.name || 'taoot (nightly)' }}
+    # The third and last place the cron table appears, and the only one a reader
+    # sees: without it every nightly was headed "taoot (nightly)" whichever game
+    # it was actually running. site/tests/nightly-suites.ts holds all three.
+    name: >-
+      browser suite — ${{ inputs.game || github.event.label.name
+      || (github.event.schedule == '0 3 * * *' && 'dust (nightly)')
+      || (github.event.schedule == '0 4 * * *' && 'dust legs (nightly)')
+      || (github.event.schedule == '0 5 * * *' && 'skullcracker (nightly)')
+      || 'taoot (nightly)' }}
     # On `labeled`, only a `full-run-<game>` label starts a run — every other
     # label edit on every PR would otherwise boot a 39-minute job. Forks are
     # excluded for the same reason as in tests.yml: this runner holds the rips.
@@ -79,13 +120,55 @@ jobs:
         id: what
         env:
           LABEL: ${{ github.event.label.name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          WANT_GAME: ${{ inputs.game }}
+          WANT_SUITE: ${{ inputs.suite }}
         run: |
-          if [ "${{ github.event_name }}" = pull_request ]; then
-            game="${LABEL#full-run-}"          # full-run-dust -> dust
-          else
-            game="${{ inputs.game || 'taoot' }}"   # dispatch, or the nightly default
-          fi
-          suite="${{ inputs.suite || 'test:browser' }}"
+          # WHAT A GAME'S FULL RUN IS — the first of the two tables the header
+          # names. `test:browser` is the right answer for exactly one of the three:
+          # Dust's runs three short suites while its depth is the run sheet's legs,
+          # and Skull Cracker's opens the menu and stops. So a `full-run-<game>`
+          # label used to ask for the fullest run a game has and get its shallowest.
+          full_run() {
+            case "$1" in
+              dust)         echo "speedrun:legs" ;;
+              skullcracker) echo "test:browser:all" ;;
+              *)            echo "test:browser" ;;
+            esac
+          }
+
+          case "${{ github.event_name }}" in
+            pull_request)
+              game="${LABEL#full-run-}"            # full-run-dust -> dust
+              suite=""                             # ...and its own full run
+              ;;
+            schedule)
+              # WHICH CRON MEANS WHICH, the second table. A scheduled run carries
+              # no inputs at all — the cron expression that fired is the only
+              # thing GitHub hands it, so the mapping has to live somewhere, and
+              # an unmapped cron is an error rather than a silent fall back to
+              # Titanic. The `schedule:` list above and this case are the pair
+              # site/tests/nightly-suites.ts holds together.
+              case "$SCHEDULE" in
+                "0 2 * * *") game=taoot;        suite=test:browser ;;
+                "0 3 * * *") game=dust;         suite=test:browser ;;
+                "0 4 * * *") game=dust;         suite=speedrun:legs ;;
+                "0 5 * * *") game=skullcracker; suite=test:browser:all ;;
+                *)
+                  echo "::error::no game is mapped to the cron '$SCHEDULE' — see the table in browser.yml"
+                  exit 1
+                  ;;
+              esac
+              ;;
+            *)
+              game="${WANT_GAME:-taoot}"           # a dispatch, which may say neither
+              suite="$WANT_SUITE"
+              ;;
+          esac
+
+          # Blank means "whatever this game's full run is", which is what a label
+          # wants and what a dispatch that named only the game wants.
+          [ -n "$suite" ] || suite="$(full_run "$game")"
 
           # A package directory rather than a hardcoded list, so a new game is
           # nothing to this file. Both checks fail loudly here rather than as an

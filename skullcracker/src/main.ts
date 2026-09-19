@@ -46,6 +46,7 @@ import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { LEVEL_ORDER } from "@dreamfactory/engine/df/sbk";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { AudioSink, DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
+import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { SCREEN_H, SCREEN_W } from "@dreamfactory/engine/web/screen";
 import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures } from "@dreamfactory/engine/web/touch";
@@ -971,11 +972,13 @@ $<HTMLButtonElement>("logBtn").addEventListener("click", () => {
   logEl.hidden = !logEl.hidden;
 });
 
-$<HTMLButtonElement>("fsBtn").addEventListener("click", () => {
-  const stage = $<HTMLDivElement>("frame");
-  if (document.fullscreenElement) void document.exitFullscreen();
-  else void stage.requestFullscreen().catch((e) => fail(e));
-});
+// The STAGE, not the frame — this page was the odd one out. #frame is the
+// picture plus two mouldings, so handing THAT to the UA stretched the moulding
+// to the height of a monitor; the other three ports all fill with #stage and
+// take the moulding off in `#stage.fs`. A class and not the `:fullscreen`
+// pseudo because an iPhone has no element fullscreen to match, and the page
+// fills itself there instead — engine/src/web/fullscreen.ts.
+installFullscreen($<HTMLButtonElement>("fsBtn"), $<HTMLDivElement>("stage"), { report: log });
 
 /**
  * Whether this page offers to file a bug, and it does not yet.

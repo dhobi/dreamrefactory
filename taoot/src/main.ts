@@ -29,6 +29,7 @@ import {
   isPictureMode,
   MOVE_SPEED_MS,
 } from "@dreamfactory/engine/runtime/session";
+import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
 import { TI_CURSORS } from "./cursor-art";
@@ -189,21 +190,14 @@ const mapCtx = minimap.getContext("2d")!;
 // Fullscreen the STAGE, not the canvas: the UA sizes a fullscreened element
 // itself, so fullscreening #screen would hand away control of the letterbox and
 // leave the minimap overlay behind. The 4:3 fit lives in index.html's
-// `#stage:fullscreen` rules — the framebuffer is a fixed 512×384 either way
+// `#stage.fs` rules — the framebuffer is a fixed 512×384 either way
 // (engine/src/web/screen.ts), so nothing in the renderer cares.
-fsBtn?.addEventListener("click", () => {
-  if (document.fullscreenElement) void document.exitFullscreen();
-  else
-    void stage
-      .requestFullscreen()
-      .catch((e) => log(`fullscreen: ${e.message}`));
-});
-document.addEventListener("fullscreenchange", () => {
-  if (fsBtn)
-    fsBtn.textContent = document.fullscreenElement
-      ? "⛶ Exit fullscreen"
-      : "⛶ Fullscreen";
-});
+//
+// A class rather than the `:fullscreen` pseudo because an iPhone has no element
+// fullscreen to match: there the page pins the stage over the viewport itself,
+// which is the whole of what engine/src/web/fullscreen.ts is for. The twelve
+// lines that used to be here were a fourth copy of the same broken detection.
+installFullscreen(fsBtn, stage, { report: log });
 
 /** every game file the page has seen, plus the dev-server manifest */
 const files = new FileStore();
@@ -458,7 +452,7 @@ const host = new GameHost(files, audioSink, {
   hud: (text) => (hud.textContent = text),
   showStage: () => {
     booting.style.display = "none";
-    stage.style.display = "block";
+    stage.style.display = ""; // "" and not "block": index.html owns this box
     // The pane is reset by the BOOT, not by arriving somewhere. showStage runs on
     // every set activation (GameHost.activateSet), so clearing here threw the log
     // away and shut the pane the player had opened at every changeset — 28 rooms
@@ -655,7 +649,7 @@ async function runLangChooser(available: string[]): Promise<string | null> {
   }
   // the chooser owns the screen: show the canvas, take the boot text down
   booting.style.display = "none";
-  stage.style.display = "block";
+  stage.style.display = ""; // "" and not "block": index.html owns this box
 
   let drawing = true;
   const draw = (): void => {
@@ -806,7 +800,7 @@ async function runNightdiveIntro(): Promise<Ownership> {
   if (!(await intro.open(files))) return "unanswered";
   liveIntro = intro;
   booting.style.display = "none";
-  stage.style.display = "block";
+  stage.style.display = ""; // "" and not "block": index.html owns this box
 
   const onPointer = (e: PointerEvent): void => {
     ensureAudio(); // the first click is also the audio-unlock gesture

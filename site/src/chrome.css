@@ -563,6 +563,74 @@ input.edited {
   padding: 0.7rem 0.8rem;
 }
 
+/* ---- fullscreen ------------------------------------------------------- *
+
+   The half of the Fullscreen button that is the same on every page. The
+   letterbox itself is not here — each game's stage has its own geometry and
+   keeps it (`#stage.fs` in that game's sheet); what is shared is the state the
+   PAGE has to hold when the browser will not hold it for us.
+
+   That state exists because an iPhone has no `Element.requestFullscreen` at
+   all, so the button there pins the stage over the viewport itself instead
+   (engine/src/web/fullscreen.ts explains the detection and why a promise
+   `.catch` could never have found this out). Two things follow, and both of
+   them are about the page BEHIND the picture rather than the picture.
+   ------------------------------------------------------------------------- */
+
+/* The document under the overlay must not move. `overflow: hidden` on the body
+   propagates to the viewport, so the scrollbar goes with it and `100dvw` cannot
+   overshoot; `overscroll-behavior` is the other half — without it a drag that
+   begins on the letterbox and not on the canvas still pulls the page down to
+   refresh it, on the one platform this whole path exists for. */
+body.fs-faux {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* The way out.
+
+   Real fullscreen has Escape and the UA volunteers it. This state has neither,
+   and it is the PHONE state — there is no Escape key to press, and the button
+   that turned it on is under a picture that now covers it. So the module hangs
+   this in the corner of the stage and nothing else on the page can be reached
+   until it is used.
+
+   Hidden by default and not by a `hidden` attribute: the chip lives in the
+   stage on every page from the moment the button is wired, and `display: none`
+   is what keeps it out of the way the rest of the time. `position: fixed` is
+   load-bearing too — the play page letterboxes with a one-cell grid, and an
+   in-flow child there would be auto-placed into a row of its own under the
+   picture. */
+.fsexit {
+  display: none;
+}
+body.fs-faux .fsexit {
+  display: block;
+  position: fixed;
+  /* clear of the notch and of the rounded corner: this is a landscape phone by
+     the time anyone sees it, and `env()` is 0 everywhere that has neither */
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  right: calc(10px + env(safe-area-inset-right, 0px));
+  z-index: 10;
+  /* a thumb's worth, which is more than the chrome's own buttons ask for: this
+     one is pressed on glass, in the dark, by someone who wants out */
+  min-width: 2.2rem;
+  min-height: 2.2rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  /* over the letterbox, so it carries its own ground rather than borrowing the
+     page's — the field behind it is the game's black, not `--bg` */
+  background: var(--panel);
+  color: var(--text-dim);
+  opacity: 0.72;
+}
+body.fs-faux .fsexit:hover,
+body.fs-faux .fsexit:focus-visible {
+  opacity: 1;
+  color: var(--text-bright);
+}
+
 /* ---- utilities -------------------------------------------------------- */
 
 .spacer,

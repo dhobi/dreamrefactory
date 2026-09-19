@@ -15,6 +15,20 @@
     <!-- the horned skull off the title card, redrawn as SVG so it keeps its
          eyes in a tab (public/skullcracker-mark.svg says what survived) -->
     <link rel="icon" type="image/svg+xml" href="/skullcracker-mark.svg" />
+    <!-- Installed to a home screen, this page opens with no address bar — the
+         only way to be rid of one on an iPhone, which has no element fullscreen
+         at all. Android reads the manifest, where `display: fullscreen` takes
+         the status bar too; iOS ignores the manifest's display and reads the
+         `apple-` tags, where standalone is the best on offer and the status bar
+         stays a black strip. In an ordinary tab none of this changes anything.
+         site/tests/app-icons.ts holds every value below to its source. -->
+    <link rel="manifest" href="/app.webmanifest" />
+    <link rel="apple-touch-icon" href="/skullcracker-apple-touch-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Skull Cracker" />
+    <meta name="theme-color" content="#080202" />
     <!-- the chrome every page in the project shares. Where the two describe the
          same element, this page's look has to win — but NOT by being linked
          first: the build resolves this <link> into a bundle and re-inserts it at
@@ -813,6 +827,82 @@
         border-radius: 50%;
         background: var(--accent);
         opacity: 0.8;
+      }
+
+      /* ------------------------------------------------------------------
+         Fullscreen: the picture letterboxed in a black field.
+
+         The STAGE is what fills the screen, not the frame. It used to be the
+         frame — this page was the odd one out — which handed the UA an element
+         whose size is the picture PLUS two mouldings and let it stretch the
+         moulding to the height of a monitor. The other three ports all take the
+         stage for the same reason, and say the same thing about it: the moulding
+         comes off at fullscreen, because a frame drawn around a picture that IS
+         the screen is a frame around a frame.
+
+         A CLASS and not `:fullscreen`, because an iPhone has no element
+         fullscreen for a pseudo to match: engine/src/web/fullscreen.ts puts `.fs`
+         on by whichever route the browser has, and pins the stage over the
+         viewport itself where there is no real one. Hence `position: fixed`,
+         which is what the UA's own `:fullscreen` rule already does — free on the
+         real route, and the whole of the other one. Both in one selector list is
+         the thing NOT to do: an engine that cannot parse one member of a list
+         drops the whole list, so the pseudo would take the class down with it on
+         exactly the browsers this is for.
+
+         `dvh`, not `vh`: on an iPhone `100vh` is the LARGE viewport — the one
+         that assumes the toolbars are gone — and faux fullscreen cannot make them
+         go, so a `vh`-tall overlay hangs the bottom of the picture behind
+         Safari's bar.
+         ------------------------------------------------------------------ */
+      #stage.fs {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 200;
+        display: grid;
+        place-items: center;
+        width: 100dvw;
+        height: 100dvh;
+        /* the stage is a column with a gap and two pads while it is a page; as a
+           screen it is one cell and nothing else */
+        gap: 0;
+        padding: 0;
+        /* the UA's `:fullscreen` sheet zeroes the min/max box constraints and the
+           real route lived off that. Nothing resets them when a class is doing
+           the work, and this stage claims the window's height while booting. */
+        min-height: 0;
+        background: #000;
+      }
+      #stage.fs #curtain,
+      #stage.fs #brand {
+        display: none;
+      }
+      #stage.fs #frame {
+        position: static;
+        margin: 0;
+        padding: 0;
+        width: auto;
+        height: auto;
+        background: none;
+        box-shadow: none;
+        /* the arrival is a one-time thing that already happened; re-running it
+           on the way into fullscreen would fade the picture up again */
+        animation: none;
+      }
+      #stage.fs #frame::before {
+        display: none;
+      }
+      /* THREE ids, and it has to be: `body.playing #frame > #screen` above pins
+         `height: auto` at (2,1,1), which a plain `#stage.fs #screen` loses to —
+         the picture would then take its width from here and its height from the
+         aspect ratio, and overflow a landscape screen by whatever the difference
+         came to. */
+      #stage.fs #frame > #screen {
+        width: min(100dvw, calc(100dvh * 4 / 3));
+        height: min(100dvh, calc(100dvw * 3 / 4));
+        max-width: none;
+        max-height: none;
       }
 
       #log {

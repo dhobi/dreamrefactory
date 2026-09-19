@@ -69,6 +69,7 @@ import {
   readStgRegions,
   type StgRegion,
 } from "@dreamfactory/engine/df/stg";
+import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import {
@@ -264,20 +265,11 @@ const stageEl = document.getElementById("stage") as HTMLElement;
 let currentRoom = "";
 
 // The STAGE, not the canvas: fullscreening the canvas hands the letterbox to the
-// UA, and the picture is a fixed 512x384 either way — see #stage:fullscreen.
-fsBtn?.addEventListener("click", () => {
-  if (document.fullscreenElement) void document.exitFullscreen();
-  else
-    void stageEl
-      .requestFullscreen()
-      .catch((e: Error) => say(`fullscreen: ${e.message}`));
-});
-document.addEventListener("fullscreenchange", () => {
-  if (fsBtn)
-    fsBtn.textContent = document.fullscreenElement
-      ? "⛶ Exit fullscreen"
-      : "⛶ Fullscreen";
-});
+// UA, and the picture is a fixed 512x384 either way — see #stage.fs in game.css.
+// A class and not the `:fullscreen` pseudo because an iPhone has no element
+// fullscreen to match, and the page fills itself there instead — the detection
+// and the way back out are engine/src/web/fullscreen.ts.
+installFullscreen(fsBtn, stageEl, { report: say });
 
 /** how long the screenshot's fate stays on screen before it is taken down */
 const BUG_NOTE_MS = 6000;

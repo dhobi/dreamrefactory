@@ -7,6 +7,20 @@
     <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
     <meta name="site-root" content="../" />
     <link rel="icon" type="image/png" href="/taoot-mark.png" />
+    <!-- Installed to a home screen, this page opens with no address bar — the
+         only way to be rid of one on an iPhone, which has no element fullscreen
+         at all. Android reads the manifest, where `display: fullscreen` takes
+         the status bar too; iOS ignores the manifest's display and reads the
+         `apple-` tags, where standalone is the best on offer and the status bar
+         stays a black strip. In an ordinary tab none of this changes anything.
+         site/tests/app-icons.ts holds every value below to its source. -->
+    <link rel="manifest" href="/app.webmanifest" />
+    <link rel="apple-touch-icon" href="/taoot-apple-touch-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Titanic" />
+    <meta name="theme-color" content="#00060f" />
     <link rel="stylesheet" href="/src/theme.css" />
     <!-- The saved-games dialog, which is the engine's
          (engine/src/web/save-browser.css) because the module that drives it is,
@@ -33,6 +47,14 @@
 
       /* ---- the porthole: the framebuffer and its rim ---- */
 
+      /* The box the canvas sits in. It starts hidden — the markup carries
+         `style="display: none"`, because there is nothing to show until the
+         first frame — and the script gives that inline value back as `""`
+         rather than as `"block"` when the picture arrives. That matters more
+         than it looks: an inline declaration outranks a stylesheet, so a stage
+         revealed as inline-`block` could never be turned into the grid that
+         `#stage.fs` letterboxes with, and fullscreen laid the picture out as a
+         plain block in the top-left of a black field instead. */
       #stage {
         position: relative;
         margin-top: 0.9rem;
@@ -73,20 +95,41 @@
          (not the canvas) is fullscreened so the minimap overlay comes along and
          the bar colour stays ours. The rim and its glow come off here — at
          fullscreen the game IS the porthole and does not need a frame drawn
-         around it. */
-      #stage:fullscreen {
+         around it.
+
+         A CLASS and not `:fullscreen`, because an iPhone has no element
+         fullscreen for a pseudo to match: engine/src/web/fullscreen.ts puts
+         `.fs` on by whichever route the browser has, and pins the stage over
+         the viewport itself where there is no real one. Hence `position:
+         fixed`, which is what the UA's own `:fullscreen` rule already does —
+         free on the real route, and the whole of the other one.
+
+         Both selectors in one list (`#stage:fullscreen, #stage.fs`) is the
+         thing NOT to do: an engine that cannot parse one member of a selector
+         list drops the entire list, so the pseudo would have taken the class
+         down with it on exactly the browsers this is for.
+
+         `dvh`, not `vh`: on an iPhone `100vh` is the LARGE viewport — the one
+         that assumes the toolbars are gone — and faux fullscreen cannot make
+         them go, so a `vh`-tall overlay hangs the bottom of the picture behind
+         Safari's own bar. */
+      #stage.fs {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 200;
         display: grid;
         grid-template-areas: "screen";
         place-items: center;
-        width: 100vw;
-        height: 100vh;
+        width: 100dvw;
+        height: 100dvh;
         margin: 0;
         background: #000;
       }
-      #stage:fullscreen #screen {
+      #stage.fs #screen {
         grid-area: screen;
-        width: min(100vw, calc(100vh * 4 / 3));
-        height: min(100vh, calc(100vw * 3 / 4));
+        width: min(100dvw, calc(100dvh * 4 / 3));
+        height: min(100dvh, calc(100dvw * 3 / 4));
         max-width: none;
         border: none;
         border-radius: 0;
@@ -94,7 +137,7 @@
       }
       /* keep the map overlay pinned to the SCREEN's corner, not the viewport's,
          by sharing the screen's grid cell instead of #stage's padding box */
-      #stage:fullscreen #minimap {
+      #stage.fs #minimap {
         grid-area: screen;
         position: static;
         justify-self: end;
@@ -161,7 +204,7 @@
         }
       }
       /* same corner trick as the minimap's, so it tracks the SCREEN fullscreen */
-      #stage:fullscreen #netbusy {
+      #stage.fs #netbusy {
         grid-area: screen;
         position: static;
         justify-self: end;

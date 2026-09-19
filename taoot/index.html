@@ -7,6 +7,20 @@
     <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
     <meta name="site-root" content="./" />
     <link rel="icon" type="image/png" href="/taoot-mark.png" />
+    <!-- Installed to a home screen, this page opens with no address bar — the
+         only way to be rid of one on an iPhone, which has no element fullscreen
+         at all. Android reads the manifest, where `display: fullscreen` takes
+         the status bar too; iOS ignores the manifest's display and reads the
+         `apple-` tags, where standalone is the best on offer and the status bar
+         stays a black strip. In an ordinary tab none of this changes anything.
+         site/tests/app-icons.ts holds every value below to its source. -->
+    <link rel="manifest" href="/app.webmanifest" />
+    <link rel="apple-touch-icon" href="/taoot-apple-touch-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Titanic" />
+    <meta name="theme-color" content="#00060f" />
     <link rel="stylesheet" href="/src/theme.css" />
     <style>
       /*
