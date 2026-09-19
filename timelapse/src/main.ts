@@ -28,6 +28,7 @@
 import { RAMP_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
+import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { ESCAPE_KEY, SPACE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures, bindSwipeInvert } from "@dreamfactory/engine/web/touch";
@@ -137,15 +138,11 @@ function ensureAudio(): void {
  * picture, and a bug report that arrives with the screen attached.
  */
 const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
-fsBtn?.addEventListener("click", () => {
-  // the STAGE, not the canvas: fullscreening the canvas hands the letterbox to
-  // the UA, and the picture is a fixed 4:3 either way — see #stage:fullscreen
-  if (document.fullscreenElement) void document.exitFullscreen();
-  else void stageEl.requestFullscreen().catch((e: Error) => say(`fullscreen: ${e.message}`, "warn"));
-});
-document.addEventListener("fullscreenchange", () => {
-  if (fsBtn) fsBtn.textContent = document.fullscreenElement ? "⛶ Exit fullscreen" : "⛶ Fullscreen";
-});
+// the STAGE, not the canvas: fullscreening the canvas hands the letterbox to the
+// UA, and the picture is a fixed 4:3 either way — see #stage.fs. A class and not
+// the `:fullscreen` pseudo because an iPhone has no element fullscreen to match,
+// and the page fills itself there instead — engine/src/web/fullscreen.ts.
+installFullscreen(fsBtn, stageEl, { report: say });
 
 /** where the player is, for a bug report: the readout's own line, kept as it changes */
 let currentWhere = "";

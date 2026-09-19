@@ -1046,20 +1046,45 @@
          over sizing the letterbox. The moulding comes off with everything else: at
          fullscreen the picture is the whole screen and a frame drawn around it
          would be a frame around a frame.
+
+         A CLASS and not `:fullscreen`, because an iPhone has no element fullscreen
+         for a pseudo to match: engine/src/web/fullscreen.ts puts `.fs` on by
+         whichever route the browser has, and pins the stage over the viewport
+         itself where there is no real one. Hence `position: fixed`, which is what
+         the UA's own `:fullscreen` rule already does — free on the real route, and
+         the whole of the other one. Both in one selector list is the thing NOT to
+         do: an engine that cannot parse one member of a list drops the whole list,
+         so the pseudo would take the class down with it on exactly the browsers
+         this is for.
+
+         `dvh`, not `vh`: on an iPhone `100vh` is the LARGE viewport — the one that
+         assumes the toolbars are gone — and faux fullscreen cannot make them go, so
+         a `vh`-tall overlay hangs the bottom of the picture behind Safari's bar.
          ------------------------------------------------------------------ */
-      #stage:fullscreen {
+      #stage.fs {
+        /* The UA's own `:fullscreen` sheet zeroes an element's min/max box
+           constraints, and the real route was quietly living off that: this stage
+           carries a `min-height` tall enough to hold its frame (see #stage above),
+           which no browser resets when the class is doing the work instead. Without
+           this the faux overlay came out taller than the screen and pushed the
+           picture off the bottom of it. */
+        min-height: 0;
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 200;
         display: grid;
         place-items: center;
-        width: 100vw;
-        height: 100vh;
+        width: 100dvw;
+        height: 100dvh;
         padding: 0;
         background: #000;
       }
-      #stage:fullscreen #curtain,
-      #stage:fullscreen #brand {
+      #stage.fs #curtain,
+      #stage.fs #brand {
         display: none;
       }
-      #stage:fullscreen #frame {
+      #stage.fs #frame {
         position: static;
         margin: 0;
         padding: 0;
@@ -1068,9 +1093,9 @@
         background: none;
         box-shadow: none;
       }
-      #stage:fullscreen #screen {
-        width: min(100vw, calc(100vh * 4 / 3));
-        height: min(100vh, calc(100vw * 3 / 4));
+      #stage.fs #screen {
+        width: min(100dvw, calc(100dvh * 4 / 3));
+        height: min(100dvh, calc(100dvw * 3 / 4));
         max-width: none;
         max-height: none;
       }

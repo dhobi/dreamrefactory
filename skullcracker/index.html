@@ -815,6 +815,82 @@
         opacity: 0.8;
       }
 
+      /* ------------------------------------------------------------------
+         Fullscreen: the picture letterboxed in a black field.
+
+         The STAGE is what fills the screen, not the frame. It used to be the
+         frame — this page was the odd one out — which handed the UA an element
+         whose size is the picture PLUS two mouldings and let it stretch the
+         moulding to the height of a monitor. The other three ports all take the
+         stage for the same reason, and say the same thing about it: the moulding
+         comes off at fullscreen, because a frame drawn around a picture that IS
+         the screen is a frame around a frame.
+
+         A CLASS and not `:fullscreen`, because an iPhone has no element
+         fullscreen for a pseudo to match: engine/src/web/fullscreen.ts puts `.fs`
+         on by whichever route the browser has, and pins the stage over the
+         viewport itself where there is no real one. Hence `position: fixed`,
+         which is what the UA's own `:fullscreen` rule already does — free on the
+         real route, and the whole of the other one. Both in one selector list is
+         the thing NOT to do: an engine that cannot parse one member of a list
+         drops the whole list, so the pseudo would take the class down with it on
+         exactly the browsers this is for.
+
+         `dvh`, not `vh`: on an iPhone `100vh` is the LARGE viewport — the one
+         that assumes the toolbars are gone — and faux fullscreen cannot make them
+         go, so a `vh`-tall overlay hangs the bottom of the picture behind
+         Safari's bar.
+         ------------------------------------------------------------------ */
+      #stage.fs {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 200;
+        display: grid;
+        place-items: center;
+        width: 100dvw;
+        height: 100dvh;
+        /* the stage is a column with a gap and two pads while it is a page; as a
+           screen it is one cell and nothing else */
+        gap: 0;
+        padding: 0;
+        /* the UA's `:fullscreen` sheet zeroes the min/max box constraints and the
+           real route lived off that. Nothing resets them when a class is doing
+           the work, and this stage claims the window's height while booting. */
+        min-height: 0;
+        background: #000;
+      }
+      #stage.fs #curtain,
+      #stage.fs #brand {
+        display: none;
+      }
+      #stage.fs #frame {
+        position: static;
+        margin: 0;
+        padding: 0;
+        width: auto;
+        height: auto;
+        background: none;
+        box-shadow: none;
+        /* the arrival is a one-time thing that already happened; re-running it
+           on the way into fullscreen would fade the picture up again */
+        animation: none;
+      }
+      #stage.fs #frame::before {
+        display: none;
+      }
+      /* THREE ids, and it has to be: `body.playing #frame > #screen` above pins
+         `height: auto` at (2,1,1), which a plain `#stage.fs #screen` loses to —
+         the picture would then take its width from here and its height from the
+         aspect ratio, and overflow a landscape screen by whatever the difference
+         came to. */
+      #stage.fs #frame > #screen {
+        width: min(100dvw, calc(100dvh * 4 / 3));
+        height: min(100dvh, calc(100dvw * 3 / 4));
+        max-width: none;
+        max-height: none;
+      }
+
       #log {
         width: min(60rem, calc(100vw - 2 * var(--pad)));
         max-height: 18rem;
