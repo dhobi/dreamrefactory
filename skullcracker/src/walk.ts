@@ -83,6 +83,7 @@ import {
   type Foe,
 } from "./foes";
 import {
+  TICK_SCALE,
   install,
   type BrainCtx,
   type Brain,
@@ -763,7 +764,6 @@ const FLAIL_FALL_PX = 360;
  * thing that converts one. It sets the animation rate, the walk, the enemies'
  * strides and the jump, so none of them is a separate guess.
  */
-const TICK_SCALE = (ENGINE_HZ * INVENTED.tickMs) / 1000;
 
 /**
  * What state a spawned thing is in, which is the same division `SC.EXE` makes:
@@ -2770,6 +2770,8 @@ function spawnIn(sbk: SbkFile, room: SbkRoom, taken?: Set<SbkEntity>): Enemy[] {
       bottom: e.bottom,
       // `AI+0x10` — the record's own point, which a class can be sent back to
       home: e.pointX + g.width / 2 - g.posX,
+      // ...and the record's own param, which for `initcop` picks the creature
+      param: e.param,
       asleep: foe.wake ? true : undefined,
       decisions: foe.drives?.decisions,
       clock: 0,
@@ -8583,10 +8585,17 @@ function travels(foe: Foe): boolean {
 
 function stepFight(e: Enemy, foe: Foe, run: number): boolean {
   const f = level?.fights[e.kind];
-  // the four classes with a machine of their own are already driven by it, and
-  // the furniture has no business in a fight
-  if (!f || e.state !== "gait" || e.asleep || foe.rooted) return false;
-  if (foe.haunts || foe.preaches || foe.drives || foe.chases) return false;
+  const brain = BRAINS[e.kind];
+  /**
+   * A band table is what the SHARED reading needs; a class with a machine of
+   * its own carries its own bands inside it. `initkragg` is the case that
+   * matters — it has no `fights.ts` entry at all, because its creator hands the
+   * tracker a list of its own from a global rather than per record.
+   */
+  if (!f && !brain) return false;
+  if (e.state !== "gait" || e.asleep || foe.rooted) return false;
+  if (!brain && (foe.haunts || foe.preaches || foe.drives || foe.chases))
+    return false;
   /**
    * ...and a class whose own walk carries no stride does not close on anybody.
    *
@@ -8608,7 +8617,6 @@ function stepFight(e: Enemy, foe: Foe, run: number): boolean {
    * throw, it fights like everything else.
    */
   if (foe.lever && leverFor(e, foe.lever.dir)) return false;
-  const brain = BRAINS[e.kind];
   // `0x402f60` is one test — that the player's own state is under `0x1a` — and
   // dying is the one this page has that reaches it. A class with a machine of
   // its own answers it in a state instead — the punk's kind 6
@@ -8648,6 +8656,8 @@ function stepFight(e: Enemy, foe: Foe, run: number): boolean {
     }
     return brain(e, foe, run, BRAIN_CTX);
   }
+  // ...and past here is the shared reading, which is band table or nothing
+  if (!f) return false;
   if (!inside) {
     if (!e.fighting) return false;
     e.fighting = false;
@@ -8816,6 +8826,9 @@ const BRAIN_CTX: BrainCtx = {
     get down() {
       return p.act === "dying";
     },
+    get facing() {
+      return p.facing;
+    },
   },
   track,
   atBound,
@@ -8890,12 +8903,36 @@ function stepEnemies(): void {
       if (e.clock >= run) pool.splice(pool.indexOf(e), 1);
       continue;
     }
-    // the one class with states of its own gets them first, and takes the frame
-    // when it is using it — see {@link stepBoss}
-    if (e.state === "gait" && foe.haunts && stepWraith(e, foe, run)) continue;
-    if (e.state === "gait" && foe.preaches && stepBishop(e, foe, run)) continue;
-    if (e.state === "gait" && (foe.wake || foe.drives) && stepBoss(e, foe, run))
-      continue;
+    /**
+     * The hand-rolled machines, and what is left of them.
+     *
+     * Four classes were driven by a reading written here rather than out of the
+     * executable — `stepWraith`, `stepBishop`, `stepBoss` and {@link Foe.chases}
+     * — and all four now have their own think function ported in
+     * {@link file://./brains/index.ts}. Where a brain exists it takes the class
+     * whole, because the old readings were not merely coarser: the wraith's
+     * "rise" is a teleport behind you, the bishop's "death" is a vanish it comes
+     * back from, the bat never looks at the player's x at all, and the boss has
+     * a ranged half the page never ran. What is left below is the dormant-form
+     * sleep, which every brain's own state 0 agrees with.
+     */
+    const brain = BRAINS[e.kind];
+    if (!brain) {
+      if (e.state === "gait" && foe.haunts && stepWraith(e, foe, run)) continue;
+      if (e.state === "gait" && foe.preaches && stepBishop(e, foe, run))
+        continue;
+      if (
+        e.state === "gait" &&
+        (foe.wake || foe.drives) &&
+        stepBoss(e, foe, run)
+      )
+        continue;
+    } else if (e.state === "gait" && foe.wake && e.asleep) {
+      // ...but the wake is still the page's: a dormant thing holds its one cel
+      // until the player's point is inside the rect, and the brain's state 0 is
+      // what it lands in the moment it is not
+      if (stepBoss(e, foe, run)) continue;
+    }
     // ...and every other class fights through the one shared brain, until its
     // own has been read — see {@link BRAINS}
     if (stepFight(e, foe, run)) continue;
@@ -9069,7 +9106,15 @@ function stepEnemies(): void {
      */
     const onFrame = Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE);
     const lift = e.anim.dy?.[i] ?? 0;
-    if (lift !== 0 && onFrame && e.vy === 0 && travels(foe) && !foe.floats) {
+    // ...and a class with a machine of its own does not need {@link travels}
+    // to vouch for it: it installed the script that carries the lift
+    if (
+      lift !== 0 &&
+      onFrame &&
+      e.vy === 0 &&
+      (brain || travels(foe)) &&
+      !foe.floats
+    ) {
       e.vy = (lift / foe.divisor) * TICK_SCALE;
       e.vx = (step || 0) * e.facing;
     }
@@ -9077,8 +9122,20 @@ function stepEnemies(): void {
     // own stride would otherwise walk it off the wall it reaches out of
     // a floater's own hover keeps `vy` busy for ever, and its script's stride has
     // to travel anyway
-    const still = (e.fighting || e.swing) && !travels(foe);
-    if (step > 0 && !still && e.vx === 0 && (e.vy === 0 || foe.floats)) {
+    /**
+     * ...and a class with a machine of its own is never pinned.
+     *
+     * {@link travels} reads {@link Foe.gait}, and `gait` was picked per class by
+     * eye: for `initwerea`, `inittube`, `inithardcore`, `initarm`, `initslurp`
+     * and `initknotboy` it landed on a standing, gesturing or lever script that
+     * carries no stride, so those classes read as rooted and had every `dx`
+     * thrown away. A brain installs the script the executable installs, by kind,
+     * so it does not need the guess — and the guess is wrong for six of them.
+     */
+    const still = !brain && (e.fighting || e.swing) && !travels(foe);
+    // and a NEGATIVE stride is a stride: `0x4771a0 tag 0` is the punk walking
+    // backwards at -225, and every class that gives ground has one
+    if (step !== 0 && !still && e.vx === 0 && (e.vy === 0 || foe.floats)) {
       const nx = e.x + step * e.facing;
       /**
        * ...unless the ground there stands too high to climb, in which case the
@@ -10990,7 +11047,7 @@ function loop(now: number): void {
   const boss = bossHere
     ? ` · boss ${bossHere.kind} ${Math.round(bossHere.hp)}/${bossHere.max}hp ${bossHere.state}` +
       ` at x ${Math.round(bossHere.x)}, y ${Math.round(bossHere.y)} cel ${celOf(bossHere)}` +
-      `${bossHere.asleep ? " asleep" : ""}${bossHere.mode ? ` mode ${bossHere.mode}` : ""}`
+      `${bossHere.asleep ? " asleep" : ""}${bossHere.mode ? ` mode ${bossHere.mode}` : ""}${bossHere.script !== undefined ? ` kind ${bossHere.script} tag ${bossHere.tag ?? 0}` : ""}`
     : "";
   // what the RIGHT-HAND BAR is showing, which is a competition every frame and
   // not a property of the room — `0x40d1c0`, and Boggs enters it from its own

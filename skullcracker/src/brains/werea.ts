@@ -35,7 +35,13 @@
  * and the three behaviours they carry that the page does NOT have are named at
  * {@link NOT_HERE}.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import {
+  install,
+  type Brain,
+  type BrainCtx,
+  type Enemy,
+  TICK_SCALE,
+} from "./kit";
 
 /**
  * The hit-reaction states, 8 to 12, and what they do that the page's own flinch
@@ -359,7 +365,7 @@ export const werea: Brain = (e, foe, run, k) => {
 };
 
 /** the leap's steering is ten pixels an ENGINE frame, and a tick is half of one */
-const TICKS = 0.5;
+const TICKS = TICK_SCALE;
 
 /**
  * State 1, `0x44e6e7` — the whole of the fight, decided fresh every frame.
@@ -373,9 +379,19 @@ function decide(
   t: ReturnType<BrainCtx["track"]>,
   done: boolean,
 ): boolean {
-  // `0x44e6f7` — with the fight off it walks, and nothing more
+  /**
+   * `0x44e6f7` — with the fight off it walks, and it walks AWAY.
+   *
+   * `0x44e710` compares the player's x with its own and writes `obj+0x28` **1
+   * when the player is east**, and `0x45eff3` settles that 1 is facing west. So
+   * a punk standing west of a floored man turns his back on him and wanders
+   * off. This page had it the other way round — punks standing over you — and
+   * four separate readings of `initwraith`, `initvpriest`, `inithardcore` and
+   * `initknotboy` all found the identical four instructions in their own class
+   * and read them this way.
+   */
   if (k.player.down) {
-    e.facing = k.player.x > e.x ? 1 : -1;
+    e.facing = k.player.x > e.x ? -1 : 1;
     return install(e, WEREA.mill);
   }
   // `0x44e736` — and this one does NOT return: it turns and carries on deciding

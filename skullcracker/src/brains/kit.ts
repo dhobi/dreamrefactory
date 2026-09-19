@@ -126,6 +126,15 @@ export interface Enemy {
   /** `obj+0x44` — the TAG now playing, which several classes sub-dispatch on */
   tag?: number;
   /**
+   * The record's own `param`, as the level laid it down.
+   *
+   * Several creators read it and it changes what the thing IS, not just how it
+   * faces: `0x4116e2` puts it in `initcop`'s `AI+0x32`, and a cop with param 1
+   * is the gunner — a different set of states from the slug-gun cop param 0
+   * gives you. BARREL places both; MAZE places only param 0.
+   */
+  param?: number;
+  /**
    * `AI+0x10` — the record's own point, kept because a class can be sent back
    * to it. `0x44ec26` is the case: the frame the player is upright again, the
    * punk is put back where the level put it and starts patrolling.
@@ -154,6 +163,22 @@ export interface Enemy {
   /** what it stood up with, for the bar's fraction */
   max: number;
 }
+
+/**
+ * Engine frames per tick — `walk.ts`'s own `TICK_SCALE`, and the number every
+ * class module must convert with.
+ *
+ * The engine thinks at 15Hz and this page ticks at 60Hz, so **one tick is a
+ * QUARTER of an engine frame**. A script's `dx` or `dy` is per engine frame, so
+ * a brain that writes a velocity multiplies by this; one that reads `e.vx` back
+ * in the executable's own units divides by it.
+ *
+ * It is here rather than in each module because it was got wrong once and then
+ * copied: `werea.ts` had it as a half with the comment "a tick is half of one",
+ * and eight of the classes written against that file inherited the mistake,
+ * steering and bobbing at twice the disc's rate.
+ */
+export const TICK_SCALE = (15 * (1000 / 60)) / 1000;
 
 /**
  * What `0x45efd0` fills in — sixteen bytes about where the player is, and the
@@ -196,6 +221,17 @@ export interface BrainCtx {
     swinging: boolean;
     /** is he down — `0x402f60`, the gate every fight state opens with */
     down: boolean;
+    /**
+     * His `obj+0x28` as a port facing, +1 east and −1 west.
+     *
+     * Three classes want it and the tracker cannot give it to them: `0x45f014`
+     * folds the two mirror flags into `out+0` and then throws the answer away
+     * whenever the player carries no `vx` at all, which answers 2. So the dog's
+     * back-lunge (`0x454cea`), the zombie's whole route into its melee
+     * (`0x4204c3`) and anything else that asks "is his back turned" reads it
+     * from here instead of guessing it out of the side.
+     */
+    facing: number;
   };
   /** `0x45efd0` against this class's own band list */
   track(e: Enemy, bands: readonly number[]): Track;

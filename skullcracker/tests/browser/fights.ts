@@ -194,16 +194,16 @@ const main = async (): Promise<void> => {
   await go(8, 1500);
   await page.waitForTimeout(1500);
   const boss = await say();
-  if (!/mode \w+/.test(boss))
+  if (!/(mode \w+|kind \d+ tag \d+)/.test(boss))
     fail(
-      `the level-eight boss should still report its own mode: ${boss.slice(0, 220)}`,
+      `the level-eight boss should still report the state its own machine is in: ${boss.slice(0, 220)}`,
     );
   if (/nearest initwbooly .* (closing|SWINGING)/.test(boss))
     fail(
       `the boss must not be driven by the shared brain: ${boss.slice(0, 220)}`,
     );
   console.log(
-    `ok    and the boss keeps its own machine — ${/mode (\w+)/.exec(boss)?.[1]}`,
+    `ok    and the boss keeps its own machine — ${/(mode \w+|kind \d+ tag \d+)/.exec(boss)?.[0]}`,
   );
 
   await finish(browser);
