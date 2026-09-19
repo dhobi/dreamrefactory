@@ -207,7 +207,16 @@ export default withMermaid(
         {
           text: "Skull Cracker",
           collapsed: false,
-          items: [{ text: "Overview", link: "/skullcracker/" }],
+          items: [
+            { text: "Overview", link: "/skullcracker/" },
+            { text: "The sixteen levels", link: "/skullcracker/levels" },
+            { text: "Fighting & the classes", link: "/skullcracker/combat" },
+            { text: "Weapons & pickups", link: "/skullcracker/weapons" },
+            { text: "The menu & the shell", link: "/skullcracker/menu" },
+            { text: "What the executable runs", link: "/skullcracker/systems" },
+            // the same name Titanic's carries, for the same reason
+            { text: "How it is checked", link: "/skullcracker/verification" },
+          ],
         },
         {
           text: "Editors — the browser tools",
