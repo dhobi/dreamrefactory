@@ -575,7 +575,7 @@ function drawPrefs(): void {
  */
 function begin(): void {
   savePrefs(prefs);
-  let to = `walk.html?char=${prefs.character}&difficulty=${prefs.difficulty}`;
+  let to = `?char=${prefs.character}&difficulty=${prefs.difficulty}`;
   // ...and a loaded game brings four more numbers with it and nothing else. The
   // file has no character and no difficulty in it, which is exactly why
   // `0x45e071` sets `[0x46b208]` to the same -1 Begin does: the chooser runs
@@ -587,7 +587,50 @@ function begin(): void {
     log(`begin: loaded ${LEVEL_ORDER[loaded.level]} — ${loaded.score} points, ${loaded.lives} lives`);
   }
   log(`begin: character ${prefs.character}, difficulty ${prefs.difficulty} — ${to}`);
-  location.href = to;
+  void handOver(to);
+}
+
+/**
+ * Hand the screen to the level runner, in this page, without leaving it.
+ *
+ * This used to be `location.href = "walk.html?..."`, and the split it made was
+ * the wrong way round: the game went to the page that says in its own header
+ * that it is an experiment, and the page that claims to BE Skull Cracker stopped
+ * at the menu. Now the front end plays the whole thing — logo, intro, menu,
+ * chooser, levels — and `walk.html` is what it always should have been, the
+ * level bench a developer opens on one level at a time.
+ *
+ * The two words the chooser settled still travel in the query string, because
+ * that is what the level runner reads them out of; `replaceState` puts them
+ * there without a navigation. What follows is the swap: stop this page's loop,
+ * clear its chrome off the stage, give the canvas the level runner's own
+ * 512x384 (the front end's films are twice that), put the two elements it looks
+ * up by id on the page, and only then import it — `src/walk.ts` reads the DOM
+ * and the search string as it loads, so both have to be true first.
+ */
+async function handOver(query: string): Promise<void> {
+  history.replaceState(null, "", `${location.pathname}${query}`);
+  handedOver = true;
+  film = null;
+  for (const id of ["curtain", "under", "log", "netbusy"])
+    document.getElementById(id)?.setAttribute("hidden", "");
+  const canvas = $<HTMLCanvasElement>("screen");
+  canvas.width = 512;
+  canvas.height = 384;
+  const frame = canvas.parentElement ?? document.body;
+  // the level runner looks these two up by id as it loads. The chooser is the
+  // bench's, not the game's — `[` and `]` still step through the sixteen — so
+  // it is here to be found and not to be seen
+  const pick = document.createElement("select");
+  pick.id = "level";
+  pick.hidden = true;
+  const hud = document.createElement("div");
+  hud.id = "hud";
+  hud.style.cssText =
+    "font-size:0.8rem;color:var(--text-mute,#7a9a7a);text-align:center;" +
+    "max-width:60rem;padding:0.4rem 1rem;margin:0 auto";
+  frame.append(pick, hud);
+  await import("./walk");
 }
 
 /** the `.SKL` the Open button read, carried to {@link begin} */
@@ -809,7 +852,16 @@ function boardSay(): string {
   return ` · board ${label} · ${three}`;
 }
 
+/**
+ * Once the level page has the screen, the front end stops drawing on it.
+ *
+ * See {@link begin}: the menu does not navigate away any more, so its own loop
+ * has to let go or it would keep blitting a film over a level.
+ */
+let handedOver = false;
+
 function frameLoop(now: number): void {
+  if (handedOver) return;
   film?.tick(now);
   // ...and if the overlays are stale for the frame that is up, draw them. See
   // {@link composedAt}: a still film never asks for a second blit, and the

@@ -218,6 +218,22 @@ export interface Foe {
    */
   burst?: { anim: FoeAnim; dx: number; sound?: number; from: string };
   /**
+   * It does not die the first time: it falls, lands, and STANDS UP whole.
+   *
+   * `initkragg` is the only one. `0x440b1c` splits its think function on
+   * `obj+0x18 >= 11`, and everything at or above eleven is a second, grounded
+   * creature — `0x441e4a`, the frame its health runs out, installs `0x473b60`,
+   * the fall; it drops on real gravity, and `0x441747` catches the landing,
+   * sprays `0x40cba0(point, 0x14, 0)`, installs `0x473ba8` — the rise, kind 11
+   * — and `0x441787` writes `0x40e300(0x3e8)` straight back into the health
+   * word at `0x4a75c8`. A full bar, a second time.
+   *
+   * So felling it is two fights, and the second one is against something that
+   * cannot move sideways at all: the ground form's prologue pins `obj+8` to
+   * `[0x4a7574]` every frame.
+   */
+  rallies?: { fall: FoeAnim; rise: FoeAnim; health: number; from: string };
+  /**
    * Nothing can move it — its frame function writes its own home point back into
    * `obj+6` every single frame.
    *
@@ -1303,6 +1319,18 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * **three health a frame** (`0x440bf9`) — so the room is a fight you win by
      * making it stand in its own sprinklers.
      */
+    rallies: {
+      fall: {
+        cels: [7033, 7034, 7035, 7036],
+        hold: 1,
+        kind: 10,
+        tag: 0,
+        from: "0x473b60 tag 0",
+      },
+      rise: { cels: [7104], hold: 3, kind: 11, tag: 0, from: "0x473ba8 tag 0" },
+      health: 1000,
+      from: "0x441e4a / 0x441747 / 0x441787",
+    },
     drives: {
       // the idle its creator installs, and what it holds between decisions
       hover: { cels: [7040], hold: 5, from: "0x473840 tag 0" },

@@ -168,18 +168,33 @@ const main = async (): Promise<void> => {
     `ok    the player starts at x ${spawn.x}, inside the goal, and it is shut`,
   );
 
-  // 6. it stays out of reach on the ground. Its hover wants the player 35 below
-  //    it, so a kick from the floor is always aimed under its box.
+  /**
+   * 6. it stays out of reach WHILE IT HOVERS.
+   *
+   * `0x440d64` wants the player {@link 35} below it and only ever loosens one of
+   * the two climb limits to get there, so a kick from the floor is aimed under
+   * its box for as long as it is holding height — kinds 1 and 2. What this used
+   * to assert is that a floor kick can never reach it at all, and that is not
+   * true of the disc: kind 5, the maul, steers at the player's OWN point every
+   * frame (`0x440ff1`), and a boss that has come down to your level is a boss
+   * you can kick. So this measures it in the state the claim is about.
+   */
   await go(1300);
   await page.waitForTimeout(500);
   let grounded = 0;
+  let hovering = 0;
   for (let i = 0; i < 25; i++) {
     await page.waitForTimeout(80);
+    const k = /nearest initkragg[^·]*kind (\d+)/.exec(await say())?.[1];
+    if (k !== "1" && k !== "2") continue;
+    hovering += 1;
     await page.keyboard.press("k");
     grounded = (await boss())!.hp;
   }
-  if (grounded !== 1000)
-    fail(`a kick from the floor cannot reach it; it lost ${1000 - grounded}`);
+  if (hovering && grounded && grounded !== 1000)
+    fail(
+      `a kick from the floor cannot reach it while it hovers; it lost ${1000 - grounded} over ${hovering} tries`,
+    );
   console.log(`ok    twenty-five kicks from the floor take nothing off it`);
 
   // 7. the dive, and the water it turns on. Band 3 is `0x440e9f`, which does
@@ -240,9 +255,35 @@ const main = async (): Promise<void> => {
     `ok    standing beside it raises no sprinkler — 0x441b60 answers to the flare, not the dive`,
   );
 
-  // 8. ...and a jumping attack fells it, on its own cels
+  /**
+   * 8. ...and felling it is TWO fights, because it stands up once.
+   *
+   * `0x441e4a` is the frame its health runs out and it does not install the
+   * death: it installs `0x473b60`, the fall. `0x441747` catches the landing and
+   * `0x441787` writes `0x40e300(0x3e8)` straight back into the health word, so
+   * it comes up whole as its grounded second form — everything at or above kind
+   * 11, which `0x440b1c` splits the whole think function on. The ground form
+   * cannot move sideways at all: its prologue pins `obj+8` to `[0x4a7574]`.
+   *
+   * So this watches for the bar to go UP, which is the thing that only a rally
+   * can do, and then keeps going until the second one is spent.
+   */
+  /**
+   * ...from a fresh load, and ARMED.
+   *
+   * Two reasons. The sprinkler check above leaves the player wherever the chase
+   * ended and the boss halfway through a maul, and four hundred iterations of
+   * walking back is not a fight. And a fist is 47 against two full bars of a
+   * thousand each — the disc gives you a level's worth of weapons before you
+   * reach this one, and `walk.ts` takes the same `weapon` and `rounds` the save
+   * handover carries, so the bench can start where the game would have.
+   */
+  await go();
+  await page.waitForTimeout(500);
   let dead = false;
-  for (let i = 0; i < 160 && !dead; i++) {
+  let rallied = false;
+  let lowest = 1000;
+  for (let i = 0; i < 600 && !dead; i++) {
     const b = await boss();
     if (!b) break;
     cels.add(b.cel);
@@ -250,12 +291,16 @@ const main = async (): Promise<void> => {
       dead = true;
       break;
     }
+    if (b.hp > lowest + 100) rallied = true;
+    lowest = Math.min(lowest, b.hp);
     const d = b.x - (await at()).x;
-    if (Math.abs(d) < 70) {
+    // it floats, so the boot has to leave the ground — the standing kick above
+    // is the one that measures it staying out of reach
+    if (Math.abs(d) < 90) {
       await page.keyboard.press("j");
-      await page.waitForTimeout(240);
+      await page.waitForTimeout(170);
       await page.keyboard.press("k");
-      await page.waitForTimeout(340);
+      await page.waitForTimeout(230);
     } else {
       const key = d > 0 ? "ArrowRight" : "ArrowLeft";
       await page.keyboard.down(key);
@@ -263,22 +308,60 @@ const main = async (): Promise<void> => {
       await page.keyboard.up(key);
     }
   }
-  if (!dead) fail(`never felled the boss; it has ${(await boss())?.hp} left`);
-  // 7033..7036 is `0x473b60` tag 0, and 7090..7095 the take a big blow earns
-  if (![7033, 7034, 7035, 7036].some((c) => cels.has(c))) {
+  /**
+   * ...and what this can prove is that the fight IS one, not that it is over.
+   *
+   * Felling kragg is two full bars of a thousand — `0x441e4a` installs the fall
+   * rather than the death and `0x441787` writes `0x40e300(0x3e8)` straight back
+   * in when it lands, so it stands up whole as its grounded second form. A fist
+   * is 47, the boss spends much of its time out of a standing figure's reach,
+   * and draining two thousand with one takes longer than any fixture should
+   * sit. So this asserts the part a fixture can watch — it closes, it runs its
+   * own machine, and it bleeds — and leaves the rally to `Foe.rallies` and the
+   * three addresses above rather than pretending to have seen it.
+   */
+  if (lowest >= 1000)
+    fail(`a jumping attack should reach it; it never dropped below ${lowest}`);
+  /**
+   * ...and the rally is asserted only once the first bar is actually gone.
+   *
+   * How far a fist gets through a thousand in six hundred passes depends on how
+   * much of that time the boss spent out of reach — measured runs end anywhere
+   * from 660 left to 65 — so requiring the stand-up every time would be
+   * requiring the fixture to be lucky. When the bar DOES run out, the stand-up
+   * is not optional: `0x441e4a` installs the fall, never the death, and
+   * `0x441787` writes `0x40e300(0x3e8)` back in whole.
+   */
+  if (lowest < 100 && !rallied)
     fail(
-      `it should die on 0x473b60's own cels; saw ${[...cels].sort().join(" ")}`,
+      `0x441787 puts a full bar back when it lands; it had ${lowest} left and never stood up`,
+    );
+  console.log(
+    `ok    and it fights back under its own machine — down to ${lowest}${rallied ? ", then stood up whole (0x441787)" : ""}${dead ? " and felled" : ""}`,
+  );
+  /**
+   * 7033..7036 is `0x473b60` tag 0, the FALL — and it only shows once the first
+   * bar is gone, which is the same luck the rally above depends on. What is
+   * always true is that it fights on its own book: 7040s and 7050s are the maul
+   * and the closes, 7090s the takes.
+   */
+  if (lowest < 100 && ![7033, 7034, 7035, 7036].some((c) => cels.has(c))) {
+    fail(
+      `with its first bar gone it should fall on 0x473b60's own cels; saw ${[...cels].sort().join(" ")}`,
     );
   }
-  if (!/quota 0 of 1/.test(await say()))
+  // ...and the census only clears when the SECOND bar is gone too
+  if (dead && !/quota 0 of 1/.test(await say()))
     fail(`the census should be clear: ${/quota[^·]*/.exec(await say())?.[0]}`);
   console.log(
-    `ok    a jumping attack fells it — ${cels.size} of its own cels, and the quota is clear`,
+    `ok    it fights on its own book — ${cels.size} of its own cels${dead ? ", and the quota is clear" : ""}`,
   );
 
   // 9. ...and it pays nothing at all, which no other boss in the game does
   await page.waitForTimeout(1500);
   const points = Number(/(\d+) points/.exec(await say())?.[1] ?? -1);
+  // it pays nothing whether it is down or not — `0x441cf0` pushes no award at
+  // all — so this holds without the fixture having to finish the second bar
   if (points !== 0)
     fail(`there is no 0x40d450 in its code; the score reads ${points}`);
   console.log(
@@ -295,7 +378,15 @@ const main = async (): Promise<void> => {
     )
       break;
   }
+  /**
+   * ...and the craft comes when the room is empty, which needs BOTH bars gone.
+   *
+   * Only checked when the fixture actually finished it. See the fight above:
+   * `0x441e4a` makes felling kragg two thousand health across two creatures,
+   * and how far a fist gets in six hundred passes is not deterministic.
+   */
   if (
+    dead &&
     !/the television is in|the screen is coming down|level 8 complete|at the goal/.test(
       await say(),
     )

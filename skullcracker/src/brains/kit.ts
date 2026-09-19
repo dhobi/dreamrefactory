@@ -138,6 +138,8 @@ export interface Enemy {
    * thing stops being in a state of its own, so a felled one falls.
    */
   weightless?: boolean;
+  /** has it already spent its first health bar — see {@link Foe.rallies} */
+  rallied?: boolean;
   /**
    * The record's own `param`, as the level laid it down.
    *

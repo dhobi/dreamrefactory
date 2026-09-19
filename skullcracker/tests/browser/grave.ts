@@ -23,7 +23,9 @@ import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const page = await browser.newPage({
+    viewport: { width: 1280, height: 900 },
+  });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
 
@@ -34,8 +36,12 @@ const main = async (): Promise<void> => {
     return { x: Number(m![1]), y: Number(m![2]) };
   };
   const go = async (x?: number): Promise<void> => {
-    await page.goto(`${BASE}/walk.html?level=9${x === undefined ? "" : `&x=${x}`}`);
-    await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+    await page.goto(
+      `${BASE}/walk.html?level=9${x === undefined ? "" : `&x=${x}`}`,
+    );
+    await hud
+      .filter({ hasText: /room \d+ of \d+/ })
+      .waitFor({ timeout: 30_000 });
     // ...and then wait for the player to stop falling. A flat pause is not
     // enough on a cold load, and a probe that reads the position mid-fall reads
     // a y that no rect in the file contains.
@@ -51,17 +57,27 @@ const main = async (): Promise<void> => {
 
   // 1. it opens at its own initplayer, one region, and sixteen of one creature
   await go();
-  if (!/room 1 of 1/.test(await say())) fail(`GRAVE is one region; the HUD says ${/room[^·]*/.exec(await say())?.[0]}`);
+  if (!/room 1 of 1/.test(await say()))
+    fail(
+      `GRAVE is one region; the HUD says ${/room[^·]*/.exec(await say())?.[0]}`,
+    );
   const census = /kill 90% of (\d+)/.exec(await say());
-  if (!census || Number(census[1]) !== 16) fail(`GRAVE places sixteen zombies; the census is ${census?.[1]}`);
-  if (!/quota 14 of 14/.test(await say())) fail(`90% of 16 is 14: ${/quota[^·]*/.exec(await say())?.[0]}`);
-  console.log(`ok    GRAVE is one region of sixteen zombies, and chapter three wants 90% of them`);
+  if (!census || Number(census[1]) !== 16)
+    fail(`GRAVE places sixteen zombies; the census is ${census?.[1]}`);
+  if (!/quota 14 of 14/.test(await say()))
+    fail(`90% of 16 is 14: ${/quota[^·]*/.exec(await say())?.[0]}`);
+  console.log(
+    `ok    GRAVE is one region of sixteen zombies, and chapter three wants 90% of them`,
+  );
 
   // 2. the level's OWN clock. `0x421e94` hands `0x40d340` the timer record's
   //    param and nothing else; GRAVE's is 2100, not the full dial's 7200.
   const clock = Number(/clock (\d+)/.exec(await say())?.[1] ?? 0);
-  if (clock < 2000 || clock > 2100) fail(`GRAVE's timer record carries 2100; the panel says ${clock}`);
-  console.log(`ok    and its own timer record gives it ${clock} frames, not the full dial`);
+  if (clock < 2000 || clock > 2100)
+    fail(`GRAVE's timer record carries 2100; the panel says ${clock}`);
+  console.log(
+    `ok    and its own timer record gives it ${clock} frames, not the full dial`,
+  );
 
   // 3. a zombie stands on the creator's one cel until the player's point is in
   //    its rect (`0x4203b3`), and it is a hundred health
@@ -73,8 +89,14 @@ const main = async (): Promise<void> => {
     const m = /nearest initzomb [^·]*? cel (\d+)/.exec(await say());
     if (m) still.add(Number(m[1]));
   }
-  if (still.size !== 1 || !still.has(1800)) fail(`a dormant zombie holds 1800 and nothing else; saw ${[...still].join(" ")}`);
-  if (!/initzomb 200\/200hp/.test(await say())) fail(`0x41ef34 gives it 0x40e300(0xc8); the bar reads ${/initzomb [^ ]*/.exec(await say())?.[0]}`);
+  if (still.size !== 1 || !still.has(1800))
+    fail(
+      `a dormant zombie holds 1800 and nothing else; saw ${[...still].join(" ")}`,
+    );
+  if (!/initzomb 200\/200hp/.test(await say()))
+    fail(
+      `0x41ef34 gives it 0x40e300(0xc8); the bar reads ${/initzomb [^ ]*/.exec(await say())?.[0]}`,
+    );
   console.log(`ok    they stand dormant on cel 1800, two hundred health each`);
 
   // 4. ...and one felled, for what `0x420abf` pays
@@ -85,7 +107,9 @@ const main = async (): Promise<void> => {
   let missed = 0;
   for (let i = 0; i < 300 && !dead; i++) {
     await page.waitForTimeout(40);
-    const m = /nearest initzomb (-?\d+)\/(\d+)hp (\w+) at x (-?\d+)/.exec(await say());
+    const m = /nearest initzomb (-?\d+)\/(\d+)hp (\w+) at x (-?\d+)/.exec(
+      await say(),
+    );
     // the HUD names whichever thing is nearest in x, and sixteen zombies patrol
     // past each other: a frame in which another is nearer is not the fight ending
     if (!m) {
@@ -112,21 +136,35 @@ const main = async (): Promise<void> => {
   if (!dead) fail(`never felled a zombie`);
   await page.waitForTimeout(700);
   const points = Number(/(\d+) points/.exec(await say())?.[1] ?? 0);
-  if (points !== 310) fail(`0x420abf pays 0x136 for one; the score reads ${points}`);
+  /**
+   * ...and it pays 0x136 PER zombie, which is the assertion that survives.
+   *
+   * This used to want exactly one kill. A zombie has its own machine now
+   * (`0x420330`) and the ones nearby close on you while you are finishing the
+   * first, so a fixture that swings until something dies can easily leave two
+   * on the ground. What `0x420abf` says is the rate, not the count.
+   */
+  if (points === 0 || points % 310 !== 0)
+    fail(`0x420abf pays 0x136 a zombie; the score reads ${points}`);
   console.log(`ok    one falls for ${points} points`);
 
   // 5. a grave is SHUT until the player's x comes within a hundred of its own,
   //    and `0x42115a` is the whole of that test
   await go(1380);
-  if (!/grave shut cel 3310 at x1532/.test(await say())) fail(`the grave at x1532 opens shut on 3310`);
+  if (!/grave shut cel 3310 at x1532/.test(await say()))
+    fail(`the grave at x1532 opens shut on 3310`);
   if (Math.abs((await at()).x - 1532) >= 100) {
     // ...and 1380 is 152 away, so it is still shut. Step to 1460 and it is not.
   } else fail(`x1380 is 152 from the grave; the test is a hundred`);
   await go(1460);
   await page.waitForTimeout(400);
   if (!/grave (opening|open) cel 33\d+ at x1532/.test(await say()))
-    fail(`inside a hundred it should be opening; the HUD says ${/grave[^·]*/.exec(await say())?.[0]}`);
-  console.log(`ok    it is shut at 152 pixels and opening at 72 — 0x42115a's hundred`);
+    fail(
+      `inside a hundred it should be opening; the HUD says ${/grave[^·]*/.exec(await say())?.[0]}`,
+    );
+  console.log(
+    `ok    it is shut at 152 pixels and opening at 72 — 0x42115a's hundred`,
+  );
 
   // 6. ...but standing NEAR one, on solid ground, is not falling into one.
   //
@@ -140,12 +178,18 @@ const main = async (): Promise<void> => {
   await go(2900);
   await page.waitForTimeout(3000);
   if (!/3 lives/.test(await say())) {
-    fail(`standing on solid ground beside a grave must not take a life (0x421211 reads the ANCHOR): ${(await say()).slice(0, 160)}`);
+    fail(
+      `standing on solid ground beside a grave must not take a life (0x421211 reads the ANCHOR): ${(await say()).slice(0, 160)}`,
+    );
   }
   if (!/grave (opening|open) cel 33\d+ at x2842/.test(await say())) {
-    fail(`x2900 is inside the x2842 grave's hundred and it should be open: ${/grave[^·]*/.exec(await say())?.[0]}`);
+    fail(
+      `x2900 is inside the x2842 grave's hundred and it should be open: ${/grave[^·]*/.exec(await say())?.[0]}`,
+    );
   }
-  console.log(`ok    ...and standing beside an OPEN one on solid ground costs nothing`);
+  console.log(
+    `ok    ...and standing beside an OPEN one on solid ground costs nothing`,
+  );
 
   // 7. ...and then it takes you. Falling in is what does it: there is no health
   //    in the class at all, and `0x402fa0(5)` is a death rather than a blow.
@@ -160,8 +204,13 @@ const main = async (): Promise<void> => {
     }
   }
   await page.keyboard.up("ArrowRight");
-  if (!took) fail(`walking into a grave should cost a life; the panel still says ${/\d lives/.exec(await say())?.[0]}`);
-  console.log(`ok    and walking at one costs a life, with no blow anywhere in it`);
+  if (!took)
+    fail(
+      `walking into a grave should cost a life; the panel still says ${/\d lives/.exec(await say())?.[0]}`,
+    );
+  console.log(
+    `ok    and walking at one costs a life, with no blow anywhere in it`,
+  );
 
   // 7. the jump is the answer, and `0x4210a7` is why: off the ground, the shove
   //    does not apply
@@ -178,21 +227,32 @@ const main = async (): Promise<void> => {
   await page.keyboard.up("w");
   await page.waitForTimeout(400);
   const over = await at();
-  if (!/3 lives/.test(await say())) fail(`a jump should clear a grave; it still took a life`);
-  if (over.x < 1650) fail(`a jump should clear the grave at x1532; stopped at x ${over.x}`);
-  if (!/grave open cel 3319 at x1532/.test(await say())) fail(`and it should be standing open behind you`);
+  if (!/3 lives/.test(await say()))
+    fail(`a jump should clear a grave; it still took a life`);
+  if (over.x < 1650)
+    fail(`a jump should clear the grave at x1532; stopped at x ${over.x}`);
+  if (!/grave open cel 3319 at x1532/.test(await say()))
+    fail(`and it should be standing open behind you`);
   console.log(`ok    a jump clears it, and leaves it open at x ${over.x}`);
 
   // 8. the hands. The one at x794 is a param 0 — it comes up under your own
   //    feet, wherever those are, and holds for `0x4704b8`'s thirty frames.
   await go(760);
   await page.waitForTimeout(600);
-  const hand = /hand (up|held|sinking) underfoot cel (\d+) at x(\d+)/.exec(await say());
-  if (!hand) fail(`the hand at x794 should be up; the HUD says ${/hand[^·]*/.exec(await say())?.[0]}`);
-  if (Number(hand![3]) < 740 || Number(hand![3]) > 790) fail(`a param-0 hand takes the player's own x; it came up at x${hand![3]}`);
+  const hand = /hand (up|held|sinking) underfoot cel (\d+) at x(\d+)/.exec(
+    await say(),
+  );
+  if (!hand)
+    fail(
+      `the hand at x794 should be up; the HUD says ${/hand[^·]*/.exec(await say())?.[0]}`,
+    );
+  if (Number(hand![3]) < 740 || Number(hand![3]) > 790)
+    fail(`a param-0 hand takes the player's own x; it came up at x${hand![3]}`);
   if (![1550, 1551, 1552, 1553, 1554, 1555, 1556].includes(Number(hand![2])))
     fail(`0x470400 tag 0 is 1550..1556; it is showing ${hand![2]}`);
-  console.log(`ok    a hand comes up under the player's own feet, on cel ${hand![2]}`);
+  console.log(
+    `ok    a hand comes up under the player's own feet, on cel ${hand![2]}`,
+  );
 
   // 10. ...and the zombies do NOT go in after you, at any of the five.
   //
@@ -232,12 +292,18 @@ const main = async (): Promise<void> => {
   await page.keyboard.up("ArrowRight");
   // the five pit floors are y1232..1346; the ledges sit at y978..990
   if (deepest > 1100) {
-    fail(`a zombie fell into a grave — ${where} reached y ${deepest}, and the pit floors are y1232..1346`);
+    fail(
+      `a zombie fell into a grave — ${where} reached y ${deepest}, and the pit floors are y1232..1346`,
+    );
   }
-  console.log(`ok    ...and no zombie goes into any of the five — deepest y ${deepest}`);
+  console.log(
+    `ok    ...and no zombie goes into any of the five — deepest y ${deepest}`,
+  );
 
   await finish(browser);
-  console.log("PASS  GRAVE's zombies stand, its graves open and take, and its hands come up");
+  console.log(
+    "PASS  GRAVE's zombies stand, its graves open and take, and its hands come up",
+  );
 };
 
 await main();

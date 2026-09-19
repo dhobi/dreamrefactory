@@ -3847,7 +3847,7 @@ function hurtBox(
 ): { top: number; left: number; bottom: number; right: number } {
   const a = foeAnchor(e, lvl);
   const b =
-    e.facing > 0 && c.body
+    e.facing < 0 && c.body
       ? { ...c.body, x0: -c.body.x1, x1: -c.body.x0 }
       : c.body;
   return a && b
@@ -4112,6 +4112,28 @@ function strikeFoe(
   }
   // a frail kind's handler never looks at health: one blow, whatever the blow.
   // The rat is the case, and no corpse lingers — the launch IS the exit.
+  /**
+   * ...and one class stands up instead — see {@link Foe.rallies}.
+   *
+   * `0x441e4a` is the frame kragg's health runs out and it does not install the
+   * death: it installs `0x473b60`, the fall. What the page does with it is the
+   * same thing the executable does, in three steps rather than a state machine
+   * of its own — drop it, and on the frame the fall ends put the health back
+   * and hand it to kind 11, where its own brain picks the ground form up.
+   */
+  if (foe.rallies && !e.rallied && e.hp <= 0) {
+    e.rallied = true;
+    e.hp = 0;
+    e.state = "gait";
+    e.anim = foe.rallies.fall;
+    e.script = foe.rallies.fall.kind;
+    e.tag = foe.rallies.fall.tag;
+    e.clock = 0;
+    // it comes down under its own weight: `0x441615` is the only state of the
+    // flying form that falls, and the bob is not holding it up any more
+    e.weightless = false;
+    return;
+  }
   if ((foe.frail || e.hp <= 0) && foe.death) {
     // the death sound goes through `0x40f090` rather than `0x40ef30`, which is
     // the same call with a different tail; the port does not tell them apart
@@ -8712,6 +8734,22 @@ function stepFight(e: Enemy, foe: Foe, run: number): boolean {
       e.swing = false;
       e.script = 0;
     }
+    /**
+     * ...and it thinks once an ENGINE FRAME, not once a tick.
+     *
+     * A class's think function is called from the frame dispatcher, fifteen
+     * times a second; this page ticks at sixty. Every state that ACCUMULATES is
+     * wrong by a factor of four otherwise, and kragg is what showed it: kind 5
+     * steers by adding `away(dy)` to its velocity every call (`0x440ff1`), so
+     * four calls a frame put four times the correction in and the boss dived
+     * through the floor and kept going. The same factor was quietly spending
+     * `AI+2` beats and `AI+4` decision budgets four times too fast in every
+     * other class.
+     *
+     * Between frames the thing still plays and still moves — that is the page's
+     * job below, not the machine's.
+     */
+    if (Math.floor(e.clock) === Math.floor(e.clock - TICK_SCALE)) return false;
     const took = brain(e, foe, run, BRAIN_CTX);
     castFor(e);
     return took;
@@ -8912,6 +8950,22 @@ function stepEnemies(): void {
     // again: `0x441615` is kragg shot out of the sky, and it falls
     if (e.state !== "gait") e.weightless = false;
     e.clock += TICK_SCALE;
+    /**
+     * ...and the landing that gives one of them its second bar.
+     *
+     * `0x441747` — the fall ends, `0x40cba0(point, 0x14, 0)` sprays, `0x473ba8`
+     * goes on, and `0x441787` writes `0x40e300(0x3e8)` back into the health word
+     * whole. See {@link Foe.rallies}.
+     */
+    if (foe.rallies && e.rallied && e.hp <= 0 && e.vy === 0) {
+      e.hp = scaled(foe.rallies.health);
+      e.max = e.hp;
+      e.anim = foe.rallies.rise;
+      e.script = foe.rallies.rise.kind;
+      e.tag = foe.rallies.rise.tag;
+      e.clock = 0;
+      pops.push({ x: e.x, y: e.y - 20, age: 0 });
+    }
     const run = e.anim.cels.length * e.anim.hold;
     if (e.state === "dead") {
       /**
@@ -9362,7 +9416,20 @@ function drawPlank(k: Plank, camX: number, camY: number): void {
   drawLevelCel(plankCel(k), k.x, k.y, camX, camY);
 }
 
-/** one spawned thing, feet on the ground, flipped by its facing */
+/**
+ * One spawned thing, feet on the ground, flipped by its facing.
+ *
+ * ...and the flip is the correction. A creature's art is drawn facing EAST and
+ * mirrored to face west, which is the same way round as the player
+ * (`mirror: p.facing < 0`, where the player is composed); this drew a foe
+ * mirrored when it faced east instead, so every one of them was turned the
+ * wrong way. Nothing showed it up while the classes only patrolled, because a
+ * thing pacing its own territory looks equally plausible either way. Give them
+ * their own machines and they close on you with their backs turned.
+ *
+ * {@link hurtBox} mirrors on the same test, because a box that does not follow
+ * the art is a box in the wrong place.
+ */
 function drawEnemy(e: Enemy, camX: number, camY: number): void {
   const lvl = level;
   if (!lvl) return;
@@ -9377,13 +9444,13 @@ function drawEnemy(e: Enemy, camX: number, camY: number): void {
   // mirror the cel reflects about the anchor and not about its own centre, which
   // is what `0x4026d0` does and what keeps a mirrored looming rat in place.
   const left =
-    e.facing > 0
+    e.facing < 0
       ? a.x - camX + W / 2 - (art.width - c.posX)
       : a.x - camX + W / 2 - c.posX;
   const top = a.y - camY + VIEW.y - c.posY;
   if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
     return;
-  if (e.facing > 0) {
+  if (e.facing < 0) {
     ctx.save();
     ctx.scale(-1, 1);
     ctx.drawImage(art, -(left + art.width), top);
@@ -10848,6 +10915,7 @@ function loop(now: number): void {
   const foe = near
     ? ` · nearest ${near.kind} ${Math.round(near.hp)}/${near.max}hp ${near.state}` +
       ` at x ${Math.round(near.x)}, y ${Math.round(near.y)} cel ${celOf(near)}` +
+      ` facing ${near.facing > 0 ? "east" : "west"}` +
       // the state of the one class that has states, so a probe can see it decide
       (near.mode ? ` mode ${near.mode}` : "") +
       // ...and, for every class with a machine of its own, the state IS the kind

@@ -386,7 +386,20 @@ let hoverHi = 5;
  * 11 steers.
  */
 function steer(e: Enemy, dy: number, dx: number): void {
-  e.vy = (e.vy / TICKS + away(dy)) * TICKS;
+  /**
+   * ...and the vertical is held to the same forty the horizontal is.
+   *
+   * `0x440af2` clamps `obj+0xc` to ±0x28 every frame and writes nothing about
+   * `obj+0xa`, because in the shipped game it does not need to: the maul lasts
+   * the handful of frames it takes to reach band 3, and a sign-integrator over
+   * that many frames goes nowhere. Here the boss can stay in it much longer —
+   * a player who keeps his distance never lets it reach band 3 — and an
+   * unbounded one climbs out of the level. **This clamp is the port's**, and it
+   * is the only number in this file that is not the executable's.
+   */
+  const CAP_VY = 40;
+  const vy = e.vy / TICKS + away(dy);
+  e.vy = Math.max(-CAP_VY, Math.min(CAP_VY, vy)) * TICKS;
   e.vx = (e.vx / TICKS + away(dx)) * TICKS;
 }
 
@@ -427,9 +440,6 @@ function engineVx(e: Enemy): number {
  */
 function bob(e: Enemy, dy: number): void {
   e.hover ??= 1;
-  // `0x441c1f` gives the flying form no gravity at all — the bob below IS its
-  // height, and the page must not pull it down between frames
-  e.weightless = true;
   // `0x440ce6` — the direction goes straight into the velocity, and stays
   const v = e.vy / TICKS + e.hover;
   e.vy = v * TICKS;
@@ -492,12 +502,26 @@ function bob(e: Enemy, dy: number): void {
  *   water that is already up. The page owns that in `stepColumns`, which is
  *   right; what the page has wrong is which state raises the water.
  */
+/** `0x440b1c` — at eleven and above it is the grounded second form */
+const GROUND = 11;
+
 export const kragg: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
   const t = k.track(e, KRAGG.bands);
   // `0x440af2` — whatever put speed into it, it may not carry more than forty
   const capped = Math.max(-CAP_VX, Math.min(CAP_VX, engineVx(e)));
   e.vx = capped * TICKS;
+  /**
+   * `0x441c1f` — the FLYING form has no gravity, in every one of its states.
+   *
+   * `0x440b1c` splits the class at eleven, and everything below that is the
+   * thing in the air: its height is whatever its own states put in `obj+0xa`,
+   * the hover's ±1 and the maul's steer, and nothing pulls on it in between.
+   * Weight is the grounded form's, and it gets it the moment it stands up.
+   * Setting this in the hover alone was not enough — the maul is where it
+   * spends a fight, and a boss with weight in the maul sinks out of the level.
+   */
+  e.weightless = (e.script ?? 1) < GROUND;
   switch (e.script ?? 1) {
     /**
      * ---- 1, `0x440cc4`: the hover, and the only air state that thinks.
