@@ -208,8 +208,13 @@ opposite mistake costs just as much and looks worse: with
 that existed on the host and not in the container, and `browser.yml` reported
 **"SKULLCRACKER_GAMEFILES (/srv/skullcracker/gamefiles) is not a directory — set
 it in the runner's .env"** — which sends you to the one file that was already
-right. Check `docker inspect <container> --format '{{range .Mounts}}...'`, not
-the `.env`.
+right. Check <span v-pre>`docker inspect <container> --format '{{range .Mounts}}...'`</span>,
+not the `.env`.
+
+<!-- v-pre, because VitePress compiles the rendered HTML as a Vue template and
+     `{{ ... }}` is an interpolation even inside a code span: this line threw
+     "Cannot read properties of undefined (reading 'Mounts')" during the build
+     and the sentence rendered without the command it was about. -->
 
 ### The runner is called `dreamrefactory-runner`
 
