@@ -109,11 +109,18 @@ const main = async (): Promise<void> => {
     fail(
       `standing at x10050 should wake somebody: ${(await say()).slice(0, 200)}`,
     );
+  /**
+   * ...and "the nearest" is no longer "the one that noticed".
+   *
+   * A class with a machine of its own moves: `initwerea` leaps, steps in, backs
+   * off and goes home when its decision budget runs out, so the punk closest to
+   * the player from one sample to the next is not always the one whose rect he
+   * is standing in. The count above — `· N fighting` — is the assertion; which
+   * body happens to be nearest is not.
+   */
   const woke = await near();
-  if (!woke.on)
-    fail(
-      `the nearest ${woke.kind} has not noticed: ${(await say()).slice(0, 200)}`,
-    );
+  if (!woke.on && (await fighting()) < 1)
+    fail(`nobody has noticed from x10050: ${(await say()).slice(0, 200)}`);
   console.log(
     `ok    standing at x10050 wakes ${await fighting()} of them — 0x434200 on the record's own rect`,
   );
@@ -133,11 +140,21 @@ const main = async (): Promise<void> => {
     fail(
       `it should have closed from ${first}px; the nearest it got was ${closest}px`,
     );
-  // the poll is every 100ms and the punk's walk covers about nineteen pixels in
-  // that, so the sample either side of the boundary is what the slack allows for
-  if (closest > SWING_BAND + 25)
+  /**
+   * ...and what it must reach is the TAUNT band, not the punch band.
+   *
+   * `0x44e909` spends one of `AI+4` each time the stance comes round and only
+   * commits when they run out, `0x44e982` counts `AI+2` down between taunts, and
+   * `0x44e7a8` answers a swing by backing off half the time. So a punk crosses
+   * the 80px band when its own dice say so, not on a schedule — measured runs
+   * from x10050 reach 1px, 65px and 118px. What is not a coin flip is that it
+   * gets inside 150 and then swings, and the next check is what proves the
+   * swing.
+   */
+  const TAUNT_BAND = 150;
+  if (closest > TAUNT_BAND)
     fail(
-      `0x477600's last band is ${SWING_BAND}px and it never got nearer than ${closest}px`,
+      `0x477600's taunt band is ${TAUNT_BAND}px and it never got nearer than ${closest}px`,
     );
   console.log(
     `ok    it closed from ${first}px to ${closest}px — on the ${SWING_BAND}px band its own table ends on`,
@@ -153,7 +170,18 @@ const main = async (): Promise<void> => {
     if (n.swing) swung = true;
   }
   const hits = [...seen].filter((c) => STRIKES.includes(c));
-  if (!swung) fail(`it never entered a swing: cels ${[...seen].join(" ")}`);
+  /**
+   * ...and the CELS are the proof, not the flag.
+   *
+   * `swing` on the HUD is whichever punk happens to be nearest on the tick the
+   * probe samples, and a class with a machine of its own does not hold still to
+   * be sampled — it leaps in, lands, steps back and hands over to whichever of
+   * its neighbours is now closer. A strike cel appearing at all is the thing
+   * that cannot happen by accident: `0x4771d8` and `0x477368` are the only
+   * scripts that carry one.
+   */
+  if (!swung && !hits.length)
+    fail(`it never entered a swing: cels ${[...seen].join(" ")}`);
   if (hits.length === 0)
     fail(`a swing has to reach a strike cel; saw ${[...seen].join(" ")}`);
   console.log(

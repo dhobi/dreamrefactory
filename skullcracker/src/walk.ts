@@ -3987,6 +3987,19 @@ function landHits(): void {
     // with `if (obj+0x18 != 2)`; the water is not a thing at all — its cels carry
     // no collision box, which is how the format says so
     if (struck.has(e) || e.state === "dead" || e.state === "burst") continue;
+    /**
+     * ...and neither is a creature whose CURRENT cel carries no box.
+     *
+     * The same rule as the water, one line up, and `initrat` is what showed it
+     * applies to creatures too. Its creator installs `0x476f48` tag 0 — the rat
+     * still down its hole — and cels 3010 and 3011 carry no body rect at all,
+     * where 3000, 3003 and 3004, the ones it comes out on, all do. Falling back
+     * to the drawn extent makes a hole-bound rat 54 by 102 and a standing punch
+     * kills it through the pavement. The fallback stays everywhere else, because
+     * plenty of art has no rect and still has to stand on a floor; it is landing
+     * a BLOW that needs the authored one.
+     */
+    if (!celRec(level.sbk, celOf(e))?.body) continue;
     if (e.state === "flinch" && e.anim.terminal) continue;
     const foe = FOES[e.kind];
     const c = celRec(level.sbk, celOf(e));
@@ -7348,6 +7361,17 @@ function stepFlares(): void {
         (box.top + box.bottom) / 2,
         hurt,
       );
+      /**
+       * ...and a FLARE is what sends a sprinkler up, not a dive.
+       *
+       * `0x441b60` has exactly one caller: `0x4415bd`, inside kragg's state 9 —
+       * the reaction to a blow of strength **−9**, which is the flare's. It
+       * drags the boss towards the nearest `initsprinkler` 120px below its own
+       * point and lights one on each of four tags. This page had it on the dive
+       * (`Foe.drives.raises`), which is the wrong state entirely, and reading
+       * `0x440ab0` out properly is what found it.
+       */
+      if (FOES[e.kind].drives?.raises) raiseSprinkler(e);
       f.burn = 0;
       break;
     }
@@ -8369,6 +8393,39 @@ function stepBishop(e: Enemy, foe: Foe, run: number): boolean {
 /** which wraiths have already let their beam go this cast — one each */
 const castBeams = new WeakSet<Enemy>();
 
+/**
+ * What a class's own machine throws, which the machine itself cannot.
+ *
+ * A {@link Brain} is handed one enemy and returns a boolean; it has no creator
+ * and no way to put a second object in the level, so every projectile in the
+ * game is read in its module and spawned here. The wraith's is the one with a
+ * beam already built: `0x424d77` ends kind 5 tag 0 by calling `0x41f6b0`, which
+ * is the scepter's own fire function, so the thing it throws at you is the
+ * weapon you are carrying.
+ *
+ * The others are read and not yet done, each written up in its own module —
+ * `initpuke` and `initeyeball` spit, `initvpriest` casts and summons bats,
+ * `initknifeboy` throws, `inithardcore` and `initigor` lob, `initzomb` gobs,
+ * `initcop` fires a slug, `initkragg` and `initwbooly` volley.
+ */
+function castFor(e: Enemy): void {
+  if (e.kind !== "initwraith") return;
+  if (e.script !== 5 || (e.tag ?? 0) !== 0) {
+    castBeams.delete(e);
+    return;
+  }
+  if (castBeams.has(e)) return;
+  castBeams.add(e);
+  streams.push({
+    weapon: 16,
+    x: e.x,
+    y: e.y,
+    facing: e.facing,
+    state: "start",
+    clock: 0,
+  });
+}
+
 function stepBoss(e: Enemy, foe: Foe, run: number): boolean {
   // asleep: one cel, no motion, and `0x434200(playerPoint, AI+6)` every frame
   if (e.asleep) {
@@ -8471,6 +8528,7 @@ function stepBoss(e: Enemy, foe: Foe, run: number): boolean {
     if (e.mode !== "hover" && e.mode !== "charge") {
       // `0x4415a9`: the dive ends over a sprinkler, and that sprinkler goes up
       if (d.raises && e.mode === d.raises) raiseSprinkler(e);
+      /* eslint-disable-line -- the old path; a brain-driven class never reaches it */
       e.mode = "hover";
       e.anim = d.hover;
       return false;
@@ -8654,7 +8712,9 @@ function stepFight(e: Enemy, foe: Foe, run: number): boolean {
       e.swing = false;
       e.script = 0;
     }
-    return brain(e, foe, run, BRAIN_CTX);
+    const took = brain(e, foe, run, BRAIN_CTX);
+    castFor(e);
+    return took;
   }
   // ...and past here is the shared reading, which is band table or nothing
   if (!f) return false;
@@ -8848,6 +8908,9 @@ function stepEnemies(): void {
   playerSwinging = strikeBox() !== null;
   for (const e of [...pool]) {
     const foe = FOES[e.kind];
+    // ...and a thing that is no longer running a state of its own has weight
+    // again: `0x441615` is kragg shot out of the sky, and it falls
+    if (e.state !== "gait") e.weightless = false;
     e.clock += TICK_SCALE;
     const run = e.anim.cels.length * e.anim.hold;
     if (e.state === "dead") {
@@ -8942,7 +9005,7 @@ function stepEnemies(): void {
     if (e.vx !== 0 || e.vy !== 0) {
       // ...and a thing with no gravity keeps whatever velocity it was given:
       // the hover below is what moves level eight's boss up and down
-      if (!foe.floats)
+      if (!foe.floats && !e.weightless)
         e.vy = Math.min(e.vy + INVENTED.gravityPx, INVENTED.maxFallPx);
       e.x += e.vx;
       e.y += e.vy;
@@ -10787,6 +10850,14 @@ function loop(now: number): void {
       ` at x ${Math.round(near.x)}, y ${Math.round(near.y)} cel ${celOf(near)}` +
       // the state of the one class that has states, so a probe can see it decide
       (near.mode ? ` mode ${near.mode}` : "") +
+      // ...and, for every class with a machine of its own, the state IS the kind
+      // of the script it is playing — `obj+0x18` and `obj+0x44`, straight out of
+      // {@link file://./brains/kit.ts}. A probe that used to read `mode` reads
+      // this instead, and it is the disc's own numbering rather than a name
+      // this page invented
+      (near.script !== undefined
+        ? ` kind ${near.script} tag ${near.tag ?? 0}`
+        : "") +
       // ...and of the twenty-six that share one — {@link stepFight}
       (near.fighting ? (near.swing ? " SWINGING" : " closing") : "")
     : "";
@@ -10801,7 +10872,10 @@ function loop(now: number): void {
     .sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
   const unplated = plain
     ? ` · unplated ${plain.kind} ${Math.round(plain.hp)}/${plain.max}hp ${plain.state}` +
-      ` at x ${Math.round(plain.x)}, y ${Math.round(plain.y)} cel ${celOf(plain)}`
+      ` at x ${Math.round(plain.x)}, y ${Math.round(plain.y)} cel ${celOf(plain)}` +
+      (plain.script !== undefined
+        ? ` kind ${plain.script} tag ${plain.tag ?? 0}`
+        : "")
     : "";
   // the hydrant and its water: neither has a health bar, and the whole point of
   // the burst is that one object turns into two and back into one

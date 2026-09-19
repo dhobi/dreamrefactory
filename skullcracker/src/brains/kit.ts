@@ -126,6 +126,19 @@ export interface Enemy {
   /** `obj+0x44` — the TAG now playing, which several classes sub-dispatch on */
   tag?: number;
   /**
+   * `obj+0x24` — this one's own gravity, and a brain may turn it off.
+   *
+   * {@link Foe.floats} is per CLASS and `initkragg` is why that is not enough:
+   * its flying form holds its height on a ±1 bob written straight into the
+   * velocity (`0x440ce6`), and its grounded second form — the one it stands up
+   * as after being shot down, kinds 11 to 16 — falls like everything else.
+   * `0x44e878` is the other reader, the punk solving a leap arc against it.
+   *
+   * A state that wants no weight sets this; the page clears it the moment the
+   * thing stops being in a state of its own, so a felled one falls.
+   */
+  weightless?: boolean;
+  /**
    * The record's own `param`, as the level laid it down.
    *
    * Several creators read it and it changes what the thing IS, not just how it

@@ -28,11 +28,14 @@
  */
 import { BASE, fail, finish, launch } from "./harness";
 
-const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
+const near = (a: number, b: number, slack = 3): boolean =>
+  Math.abs(a - b) <= slack;
 
 const main = async (): Promise<void> => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const page = await browser.newPage({
+    viewport: { width: 1280, height: 900 },
+  });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
 
@@ -51,15 +54,21 @@ const main = async (): Promise<void> => {
     // the one thing that takes the position away is a FILM, and on this page
     // that means the player died or the clock ran out — say which, because "no
     // position" on its own sent one reading of this suite looking at the HUD
-    if (!m) fail(`no position in the HUD during "${leg}" — the page is showing "${(await say()).slice(0, 110)}"`);
+    if (!m)
+      fail(
+        `no position in the HUD during "${leg}" — the page is showing "${(await say()).slice(0, 110)}"`,
+      );
     return { x: Number(m![1]), y: Number(m![2]) };
   };
-  const room = async (): Promise<string> => /\((\w+)\/p\d\)/.exec(await say())?.[1] ?? "?";
+  const room = async (): Promise<string> =>
+    /\((\w+)\/p\d\)/.exec(await say())?.[1] ?? "?";
   const door = async (n: number): Promise<string> =>
     new RegExp(`door ${n} (\\w+)`).exec(await say())?.[1] ?? "-";
   const go = async (q = ""): Promise<void> => {
     await page.goto(`${BASE}/walk.html?level=7${q ? `&${q}` : ""}`);
-    await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+    await hud
+      .filter({ hasText: /room \d+ of \d+/ })
+      .waitFor({ timeout: 30_000 });
     await page.waitForTimeout(700);
   };
   /** hold some keys for a while, jumping whenever the walk has stalled */
@@ -96,49 +105,96 @@ const main = async (): Promise<void> => {
   // 1. it opens where its own initplayer stands, in the entrance of thirteen
   await go();
   const spawn = await at();
-  if (!near(spawn.x, 1548, 30)) fail(`SEWER should open at its own initplayer, x1548; got x ${spawn.x}`);
-  if ((await room()) !== "entrance") fail(`it should open in the entrance; the HUD says ${await room()}`);
-  if (!/room \d+ of 12/.test(await say())) fail(`SEWER has twelve drawn regions: ${/room[^·]*/.exec(await say())?.[0]}`);
-  console.log(`ok    SEWER opens at x ${spawn.x}, y ${spawn.y}, in its entrance`);
+  if (!near(spawn.x, 1548, 30))
+    fail(`SEWER should open at its own initplayer, x1548; got x ${spawn.x}`);
+  if ((await room()) !== "entrance")
+    fail(`it should open in the entrance; the HUD says ${await room()}`);
+  if (!/room \d+ of 12/.test(await say()))
+    fail(
+      `SEWER has twelve drawn regions: ${/room[^·]*/.exec(await say())?.[0]}`,
+    );
+  console.log(
+    `ok    SEWER opens at x ${spawn.x}, y ${spawn.y}, in its entrance`,
+  );
 
   // 2. eleven in the census — nine eyes and two of the big ones, and nothing
   //    else in the level counts
   const census = /kill 75% of (\d+)/.exec(await say());
   if (!census || Number(census[1]) !== 11) {
-    fail(`nine eyes and two big ones call 0x42f870; the census is ${census?.[1]}`);
+    fail(
+      `nine eyes and two big ones call 0x42f870; the census is ${census?.[1]}`,
+    );
   }
-  if (!/quota 8 of 8/.test(await say())) fail(`75% of 11 is 8: ${/quota[^·]*/.exec(await say())?.[0]}`);
-  console.log(`ok    its ${census![1]} enemies are the census, and the quota is 8`);
+  if (!/quota 8 of 8/.test(await say()))
+    fail(`75% of 11 is 8: ${/quota[^·]*/.exec(await say())?.[0]}`);
+  console.log(
+    `ok    its ${census![1]} enemies are the census, and the quota is 8`,
+  );
 
   // 3. the floating eye: fifty health, and it does not fall. `0x42f850(obj, 0)`
   //    is the whole of that — nothing else in the game is given no gravity.
-  const eye = /nearest initeyeball (\d+)\/(\d+)hp \w+ at x (-?\d+), y (-?\d+)/.exec(await say());
+  const eye =
+    /nearest initeyeball (\d+)\/(\d+)hp \w+ at x (-?\d+), y (-?\d+)/.exec(
+      await say(),
+    );
   if (!eye) fail(`an eye should be the nearest plated thing in the entrance`);
-  if (Number(eye![2]) !== 50) fail(`0x435a88 gives it 0x32 health; the bar reads ${eye![2]}`);
+  if (Number(eye![2]) !== 50)
+    fail(`0x435a88 gives it 0x32 health; the bar reads ${eye![2]}`);
   const wasY = Number(eye![4]);
   await page.waitForTimeout(4000);
-  const now = /nearest initeyeball \d+\/\d+hp \w+ at x (-?\d+), y (-?\d+)/.exec(await say());
+  const now = /nearest initeyeball \d+\/\d+hp \w+ at x (-?\d+), y (-?\d+)/.exec(
+    await say(),
+  );
   if (!now) fail(`the eye went away`);
-  if (Math.abs(Number(now![2]) - wasY) > 4) fail(`it has no gravity and should hold its height; y ${wasY} -> ${now![2]}`);
-  if (Number(now![1]) === Number(eye![3])) fail(`...but it does cruise: it has not moved from x ${eye![3]}`);
-  console.log(`ok    an eye holds y ${now![2]} with 50 health and cruises along it`);
+  if (Math.abs(Number(now![2]) - wasY) > 4)
+    fail(
+      `it has no gravity and should hold its height; y ${wasY} -> ${now![2]}`,
+    );
+  /**
+   * ...and it holds STATION, which is the correction here.
+   *
+   * This used to assert the opposite — that an eyeball cruises on its own — and
+   * that was the port's invention. `0x43dde0` state 0 is `0x472788`, twelve cels
+   * of hovering with no stride on any of them, and the only way out of it is
+   * `0x434200(player.point, AI+6)` with the player upright. The drift that does
+   * travel is kind 1, `0x472aa0`, one cel at `dx 20`, and nothing installs it
+   * until you are inside the record's own rect. An eye you have not walked up to
+   * hangs where the level hung it.
+   */
+  if (Math.abs(Number(now![1]) - Number(eye![3])) > 4)
+    fail(
+      `an unnoticed eye should hang where it was put; x ${eye![3]} -> ${now![1]}`,
+    );
+  console.log(
+    `ok    an eye holds y ${now![2]} with 50 health and cruises along it`,
+  );
 
   // 4. five doors, all shut, and five levers, all off
   const gates = (await say()).match(/door \d+ \w+/g) ?? [];
-  if (gates.length !== 5) fail(`SEWER places five doors; the HUD lists ${gates.length}`);
-  if (!gates.every((g) => g.endsWith("shut"))) fail(`a door is created on tag 1, which is shut: ${gates.join(", ")}`);
+  if (gates.length !== 5)
+    fail(`SEWER places five doors; the HUD lists ${gates.length}`);
+  if (!gates.every((g) => g.endsWith("shut")))
+    fail(`a door is created on tag 1, which is shut: ${gates.join(", ")}`);
   console.log(`ok    all five of its doors start shut — ${gates.join(", ")}`);
 
   // 5. ...and a shut one is a wall. The door's rect goes into the same obstacle
   //    table the level's walls are read from, so the walk stops at its edge.
   await move(["ArrowRight", "w"], 6000, { jump: true });
   const stopped = await at();
-  if (stopped.x > 2560) fail(`a shut door should stop the walk at its own x2549; walked on to x ${stopped.x}`);
-  if ((await door(1)) !== "shut") fail(`and running past a lever must not throw it — a direction held asks nothing`);
+  if (stopped.x > 2560)
+    fail(
+      `a shut door should stop the walk at its own x2549; walked on to x ${stopped.x}`,
+    );
+  if ((await door(1)) !== "shut")
+    fail(
+      `and running past a lever must not throw it — a direction held asks nothing`,
+    );
   // ...and where it stops is NOT the door most runs: the entrance's bush is at
   // x1983 and a walk into it ends on the floor below, so this asserts the door
   // is never passed rather than pretending to know which pixel stopped the run
-  console.log(`ok    and nothing gets past a shut door: the run ended at x ${stopped.x}, short of its x2549`);
+  console.log(
+    `ok    and nothing gets past a shut door: the run ended at x ${stopped.x}, short of its x2549`,
+  );
 
   // 6. standing at the lever with no direction held is what asks — `0x42987c`
   await go("x=2270&y=16112");
@@ -147,7 +203,8 @@ const main = async (): Promise<void> => {
     await page.waitForTimeout(80);
     open = (await door(1)) === "open";
   }
-  if (!open) fail(`standing at lever 1 should open door 1; it is ${await door(1)}`);
+  if (!open)
+    fail(`standing at lever 1 should open door 1; it is ${await door(1)}`);
   console.log(`ok    standing at its lever opens it`);
 
   // 7. the lift cycles on its own and carries whoever is on it. x9276's rect
@@ -167,7 +224,10 @@ const main = async (): Promise<void> => {
   }
   const lo = Math.min(...heights);
   const hi = Math.max(...heights);
-  if (hi - lo < 300) fail(`it should run its whole shaft, y16786..17283; it covered ${lo}..${hi}`);
+  if (hi - lo < 300)
+    fail(
+      `it should run its whole shaft, y16786..17283; it covered ${lo}..${hi}`,
+    );
   console.log(`ok    a lift cycles its own shaft, y ${lo} to ${hi}`);
 
   // 8. ...and takes a rider with it. Jump on while it is low enough to reach.
@@ -188,7 +248,10 @@ const main = async (): Promise<void> => {
     if (top < 16800) break;
   }
   await page.keyboard.up("w");
-  if (top > 16800) fail(`the lift should carry the rider to the head of its shaft, y16786; got y ${top}`);
+  if (top > 16800)
+    fail(
+      `the lift should carry the rider to the head of its shaft, y16786; got y ${top}`,
+    );
   console.log(`ok    and carries a rider from the hall floor up to y ${top}`);
 
   /**
@@ -244,20 +307,35 @@ const main = async (): Promise<void> => {
     await page.waitForTimeout(40);
   }
   await page.keyboard.up("ArrowRight");
-  if (!codes.includes("-3")) fail(`walking under hugeroom's bush should be grabbed — 0x43ee9d's -3; it sent ${codes.join(" ") || "nothing"}`);
-  if (!heldEver) fail(`-3 is a hold, and 0x4720e8's kind 10 is what it puts the player in; the HUD never said HELD`);
+  if (!codes.includes("-3"))
+    fail(
+      `walking under hugeroom's bush should be grabbed — 0x43ee9d's -3; it sent ${codes.join(" ") || "nothing"}`,
+    );
+  if (!heldEver)
+    fail(
+      `-3 is a hold, and 0x4720e8's kind 10 is what it puts the player in; the HUD never said HELD`,
+    );
   if (!codes.includes("-5")) {
-    fail(`0x43eec9 latches the frame after the grab takes and 0x43eedb turns it into -5; it only ever sent ${codes.join(" ")}`);
+    fail(
+      `0x43eec9 latches the frame after the grab takes and 0x43eedb turns it into -5; it only ever sent ${codes.join(" ")}`,
+    );
   }
-  if (codes.indexOf("-3") > codes.indexOf("-5")) fail(`the grab comes first: it sent ${codes.join(" ")}`);
+  if (codes.indexOf("-3") > codes.indexOf("-5"))
+    fail(`the grab comes first: it sent ${codes.join(" ")}`);
   // -5 is 0x42e8b3's slump — half gravity and no grip — so the hold it started
   // with is over almost as soon as it began. A bush that holds you until it has
   // sunk is this page's own invention, and SEWER's entrance one held the player
   // at x1964 for the rest of the run because of it.
-  if (heldAtEnd) fail(`-5 holds nothing; the player should be down and free, not still HELD`);
+  if (heldAtEnd)
+    fail(
+      `-5 holds nothing; the player should be down and free, not still HELD`,
+    );
   // 0x43ef6f lifts it forty a frame while its thirteen cels play, from its
   // resting y17321 to the top of its travel eighty above
-  if (topWhileUp > 17321 - 40) fail(`it comes UP to grab — 0x43ef65's arm; the highest it got was y${topWhileUp}`);
+  if (topWhileUp > 17321 - 40)
+    fail(
+      `it comes UP to grab — 0x43ef65's arm; the highest it got was y${topWhileUp}`,
+    );
   console.log(
     `ok    its bush comes up to y${topWhileUp}, grabs with ${codes.join(" then ")}, and the slump drops you again`,
   );
@@ -289,14 +367,23 @@ const main = async (): Promise<void> => {
    * run takes afterwards is not the same twice. So each leg asks for a STATE and
    * keeps walking until it has it, which is what a person does.
    */
-  const push = async (keys: string[], what: RegExp, seconds: number, hop = false): Promise<boolean> => {
+  const push = async (
+    keys: string[],
+    what: RegExp,
+    seconds: number,
+    hop = false,
+  ): Promise<boolean> => {
     for (let i = 0; i < seconds; i++) {
       await move(keys, 1000, { jump: true, hop, until: what });
       if (what.test(await say())) return true;
     }
     return false;
   };
-  const standAtLever = async (n: number, lo: number, hi: number): Promise<void> => {
+  const standAtLever = async (
+    n: number,
+    lo: number,
+    hi: number,
+  ): Promise<void> => {
     for (let i = 0; i < 8; i++) {
       const here = (await at()).x;
       if (here < lo) await move(["ArrowRight"], 900, { jump: true });
@@ -319,9 +406,15 @@ const main = async (): Promise<void> => {
    * Three runs of it land at x2200..2320 every time.
    */
   leg = "east to lever 1";
-  await move(["ArrowRight", "w"], 14000, { hop: true, until: /· x 2[23][0-9][0-9], y 161/ });
+  await move(["ArrowRight", "w"], 14000, {
+    hop: true,
+    until: /· x 2[23][0-9][0-9], y 161/,
+  });
   await standAtLever(1, 2230, 2330);
-  if ((await door(1)) !== "open") fail(`lever 1 did not open door 1 — it is ${await door(1)} and the player is at x${(await at()).x}`);
+  if ((await door(1)) !== "open")
+    fail(
+      `lever 1 did not open door 1 — it is ${await door(1)} and the player is at x${(await at()).x}`,
+    );
   // east over the walkway that bridges the seam, as far as the shaft's ladder —
   // and no further, because the walkway's far end is door 2, which is shut and
   // whose lever is up in the tube room
@@ -335,16 +428,25 @@ const main = async (): Promise<void> => {
   // ladder to door 2's own edge at x3038 before anything is checked.
   leg = "east to the first shaft's ladder";
   if (!(await push(["ArrowRight"], /· x 29[0-9][0-9],/, 30))) {
-    fail(`through door 1 is the first shaft's ladder; the player is at x${(await at()).x} in ${await room()}`);
+    fail(
+      `through door 1 is the first shaft's ladder; the player is at x${(await at()).x} in ${await room()}`,
+    );
   }
-  if ((await room()) !== "shaftone") fail(`through door 1 is the first shaft; the HUD says ${await room()}`);
+  if ((await room()) !== "shaftone")
+    fail(`through door 1 is the first shaft; the HUD says ${await room()}`);
   leg = "down the first shaft";
   await move(["ArrowDown"], 9000);
   await move([], 2000);
   leg = "east to lever 7";
-  await move(["ArrowRight"], 9000, { jump: true, until: /· x 31[5-9][0-9], y 166/ });
+  await move(["ArrowRight"], 9000, {
+    jump: true,
+    until: /· x 31[5-9][0-9], y 166/,
+  });
   await standAtLever(7, 3150, 3260);
-  if ((await door(7)) !== "open") fail(`lever 7 did not open door 7 — ${await room()} ${JSON.stringify(await at())} ${/switch 7[^·]*/.exec(await say())?.[0]}`);
+  if ((await door(7)) !== "open")
+    fail(
+      `lever 7 did not open door 7 — ${await room()} ${JSON.stringify(await at())} ${/switch 7[^·]*/.exec(await say())?.[0]}`,
+    );
   // ...and east of lever 7 the walkway has a bush of its own on it, at x3327.
   // It does not stop the player — it slumps them off the walkway onto the floor
   // eight rooms' worth of pixels below, where door 7's lower lip is a wall and
@@ -352,7 +454,9 @@ const main = async (): Promise<void> => {
   // walked, which is what the walkway is for.
   leg = "the walkway east to door 7";
   if (!(await push(["ArrowRight", "w"], /\(shafttwo\/p\d\)/, 20, true))) {
-    fail(`through door 7 is the second shaft; the player is at x${(await at()).x} in ${await room()}`);
+    fail(
+      `through door 7 is the second shaft; the player is at x${(await at()).x} in ${await room()}`,
+    );
   }
   leg = "up the second shaft";
   await move(["w"], 9000);
@@ -362,21 +466,32 @@ const main = async (): Promise<void> => {
   // shaft starts at x6609 and its ladder is at x6830..6983, and an ArrowDown
   // pressed anywhere else on that floor climbs nothing
   if (!(await push(["ArrowRight", "w"], /· x 69[0-9][0-9],/, 20))) {
-    fail(`east of the second shaft is the big one's ladder; the player is at x${(await at()).x} in ${await room()}`);
+    fail(
+      `east of the second shaft is the big one's ladder; the player is at x${(await at()).x} in ${await room()}`,
+    );
   }
-  if ((await room()) !== "bigshaft") fail(`east of the second shaft is the big one; the HUD says ${await room()}`);
+  if ((await room()) !== "bigshaft")
+    fail(
+      `east of the second shaft is the big one; the HUD says ${await room()}`,
+    );
   leg = "down the big shaft";
   await move(["ArrowDown"], 12000, { until: /· x \d+, y 170[0-5][0-9]/ });
   leg = "west to lever 4";
   await move(["ArrowLeft"], 8000, { until: /· x 64[5-9][0-9], y 170/ });
   await standAtLever(4, 6450, 6560);
   if ((await door(4)) !== "open") {
-    fail(`lever 4, one region west of its door, did not open it — the player is at x${(await at()).x} in ${await room()}`);
+    fail(
+      `lever 4, one region west of its door, did not open it — the player is at x${(await at()).x} in ${await room()}`,
+    );
   }
-  console.log(`ok    three levers thrown, and the last of them opened a door in the next region`);
+  console.log(
+    `ok    three levers thrown, and the last of them opened a door in the next region`,
+  );
 
   if (!(await push(["ArrowRight"], /\(hugeroom\/p\d\)/, 16))) {
-    fail(`through door 4 is the hall of lifts; the player is at x${(await at()).x} in ${await room()}`);
+    fail(
+      `through door 4 is the hall of lifts; the player is at x${(await at()).x} in ${await room()}`,
+    );
   }
   /**
    * ...and this is as far as the level can be WALKED, which is worth writing
@@ -400,7 +515,9 @@ const main = async (): Promise<void> => {
   );
 
   await finish(browser);
-  console.log("PASS  SEWER's doors are locks, its levers are keys, and three of them can be walked to");
+  console.log(
+    "PASS  SEWER's doors are locks, its levers are keys, and three of them can be walked to",
+  );
 };
 
 await main();

@@ -427,6 +427,9 @@ function engineVx(e: Enemy): number {
  */
 function bob(e: Enemy, dy: number): void {
   e.hover ??= 1;
+  // `0x441c1f` gives the flying form no gravity at all — the bob below IS its
+  // height, and the page must not pull it down between frames
+  e.weightless = true;
   // `0x440ce6` — the direction goes straight into the velocity, and stays
   const v = e.vy / TICKS + e.hover;
   e.vy = v * TICKS;

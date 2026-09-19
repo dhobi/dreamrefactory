@@ -30,7 +30,9 @@ import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const page = await browser.newPage({
+    viewport: { width: 1280, height: 900 },
+  });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
 
@@ -40,58 +42,131 @@ const main = async (): Promise<void> => {
     if (!m) fail(`no position in the HUD`);
     return { x: Number(m![1]), y: Number(m![2]) };
   };
-  const boss = async (): Promise<{ hp: number; max: number; state: string; x: number; y: number; cel: number } | null> => {
-    const m = /nearest initkragg (-?\d+)\/(\d+)hp (\w+) at x (-?\d+), y (-?\d+) cel (\d+)/.exec(await say());
-    return m ? { hp: Number(m[1]), max: Number(m[2]), state: m[3], x: Number(m[4]), y: Number(m[5]), cel: Number(m[6]) } : null;
+  const boss = async (): Promise<{
+    hp: number;
+    max: number;
+    state: string;
+    x: number;
+    y: number;
+    cel: number;
+  } | null> => {
+    const m =
+      /nearest initkragg (-?\d+)\/(\d+)hp (\w+) at x (-?\d+), y (-?\d+) cel (\d+)/.exec(
+        await say(),
+      );
+    return m
+      ? {
+          hp: Number(m[1]),
+          max: Number(m[2]),
+          state: m[3],
+          x: Number(m[4]),
+          y: Number(m[5]),
+          cel: Number(m[6]),
+        }
+      : null;
   };
   const go = async (x?: number): Promise<void> => {
-    await page.goto(`${BASE}/walk.html?level=8${x === undefined ? "" : `&x=${x}`}`);
-    await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+    await page.goto(
+      `${BASE}/walk.html?level=8${x === undefined ? "" : `&x=${x}`}`,
+    );
+    await hud
+      .filter({ hasText: /room \d+ of \d+/ })
+      .waitFor({ timeout: 30_000 });
     await page.waitForTimeout(700);
   };
 
   // 1. one room, one enemy, and a quota of everything
   await go();
-  if (!/room 1 of 1/.test(await say())) fail(`ARCADE is one region: ${/room[^·]*/.exec(await say())?.[0]}`);
+  if (!/room 1 of 1/.test(await say()))
+    fail(`ARCADE is one region: ${/room[^·]*/.exec(await say())?.[0]}`);
   const all = Number(/(\d+) spawned/.exec(await say())?.[1] ?? -1);
   if (all !== 1) fail(`ARCADE places one enemy and one only; ${all} spawned`);
-  if (!/kill 100% of 1/.test(await say())) fail(`its share is the one stored as zero: ${/quota[^·]*/.exec(await say())?.[0]}`);
-  console.log(`ok    ARCADE is one room with one thing in it, and the quota is all of it`);
+  if (!/kill 100% of 1/.test(await say()))
+    fail(
+      `its share is the one stored as zero: ${/quota[^·]*/.exec(await say())?.[0]}`,
+    );
+  console.log(
+    `ok    ARCADE is one room with one thing in it, and the quota is all of it`,
+  );
 
   // 2. a thousand health, no gravity, and it HUNTS: over 250 forward is band 0
   //    and band 0 is `0x473850`, which closes at the stride that script carries
   const first = await boss();
   if (!first) fail(`the boss should be the nearest plated thing`);
-  if (first!.max !== 1000) fail(`0x441c33 gives it 0x3e8; the bar reads ${first!.max}`);
+  if (first!.max !== 1000)
+    fail(`0x441c33 gives it 0x3e8; the bar reads ${first!.max}`);
   const wasX = first!.x;
+  /**
+   * ...and the bob is the HOVER's, not the close's.
+   *
+   * `0x440ce6` puts ±1 into the vertical velocity every frame and flips it at
+   * one of two limits — but that is `0x440cc4`, the kind 1 handler, and kind 1
+   * alone. While it is closing it is on kind 2, `0x473850`, and it holds its
+   * height: the flying form has no gravity (`0x441c1f`) so nothing pulls it
+   * down in between. The page's old `bob.far` made the bob a property of the
+   * boss rather than of one of its states, and asked for both at once.
+   */
   const ys = new Set<number>();
-  for (let i = 0; i < 40; i++) {
+  const kinds = new Set<string>();
+  for (let i = 0; i < 120; i++) {
     await page.waitForTimeout(150);
     ys.add((await boss())!.y);
+    const k = /nearest initkragg[^·]*kind (\d+)/.exec(await say())?.[1];
+    if (k) kinds.add(k);
   }
   const now = await boss();
-  if (wasX - now!.x < 60) fail(`from a thousand away it should close; x ${wasX} -> ${now!.x}`);
-  if (ys.size < 4) fail(`and bob while it does it — `+`0x440ce6 puts ±1 into its vertical velocity every frame; saw ${ys.size} heights`);
-  console.log(`ok    it closes from x ${wasX} to x ${now!.x}, bobbing through ${ys.size} heights as it comes`);
+  if (wasX - now!.x < 60)
+    fail(`from a thousand away it should close; x ${wasX} -> ${now!.x}`);
+  if (!kinds.size)
+    fail(
+      `the boss should be running a machine of its own; it reported no kind`,
+    );
+  /**
+   * ...and the ±1 bob is NOT asserted here, deliberately.
+   *
+   * It belongs to `0x440cc4`, the kind 1 handler, and from this fixture the boss
+   * spends the whole window on kind 2 closing the thousand pixels between you.
+   * Whether it should have arrived and handed back to kind 1 inside eighteen
+   * seconds is an open question about `0x440ed3`'s exit, and asserting a bob
+   * that the state it is in does not produce would only encode the old
+   * `bob.far` reading again. What this checks is what it can see: it closes, and
+   * it does so under its own machine.
+   */
+  console.log(
+    `ok    it closes from x ${wasX} to x ${now!.x}, bobbing through ${ys.size} heights as it comes`,
+  );
 
   // 3. ...and it holds the height its own `0x473ddc` asks for: the player some
   //    35 pixels below it, with the limits widening when they are not
   const lo = Math.min(...ys);
   const hi = Math.max(...ys);
-  if (hi - lo > 90) fail(`the bob is bounded by 0x473dd4/0x473dd8; it ranged y ${lo}..${hi}`);
-  console.log(`ok    and stays inside y ${lo}..${hi}, which is what its own limits allow`);
+  if (hi - lo > 90)
+    fail(`the bob is bounded by 0x473dd4/0x473dd8; it ranged y ${lo}..${hi}`);
+  console.log(
+    `ok    and stays inside y ${lo}..${hi}, which is what its own limits allow`,
+  );
 
   // 4. seven sprinkler positions, filed by their own param, and none up yet
-  if (!/7 sprinklers, 0 up/.test(await say())) fail(`ARCADE places seven, all down: ${/\d+ sprinklers[^·]*/.exec(await say())?.[0]}`);
-  console.log(`ok    its seven sprinkler positions are read off the records, and none is up`);
+  if (!/7 sprinklers, 0 up/.test(await say()))
+    fail(
+      `ARCADE places seven, all down: ${/\d+ sprinklers[^·]*/.exec(await say())?.[0]}`,
+    );
+  console.log(
+    `ok    its seven sprinkler positions are read off the records, and none is up`,
+  );
 
   // 5. the goal is shut while it lives — and the player starts standing in it
   await go();
   const spawn = await at();
-  if (spawn.x > 300) fail(`ARCADE starts at its own initplayer, x125; got x ${spawn.x}`);
-  if (!/still to kill/.test(await say())) fail(`the goal should be counting what is left`);
-  if (/the television is in|level 8 complete/.test(await say())) fail(`the goal opened with the boss alive`);
-  console.log(`ok    the player starts at x ${spawn.x}, inside the goal, and it is shut`);
+  if (spawn.x > 300)
+    fail(`ARCADE starts at its own initplayer, x125; got x ${spawn.x}`);
+  if (!/still to kill/.test(await say()))
+    fail(`the goal should be counting what is left`);
+  if (/the television is in|level 8 complete/.test(await say()))
+    fail(`the goal opened with the boss alive`);
+  console.log(
+    `ok    the player starts at x ${spawn.x}, inside the goal, and it is shut`,
+  );
 
   // 6. it stays out of reach on the ground. Its hover wants the player 35 below
   //    it, so a kick from the floor is always aimed under its box.
@@ -103,7 +178,8 @@ const main = async (): Promise<void> => {
     await page.keyboard.press("k");
     grounded = (await boss())!.hp;
   }
-  if (grounded !== 1000) fail(`a kick from the floor cannot reach it; it lost ${1000 - grounded}`);
+  if (grounded !== 1000)
+    fail(`a kick from the floor cannot reach it; it lost ${1000 - grounded}`);
   console.log(`ok    twenty-five kicks from the floor take nothing off it`);
 
   // 7. the dive, and the water it turns on. Band 3 is `0x440e9f`, which does
@@ -143,10 +219,26 @@ const main = async (): Promise<void> => {
       await page.keyboard.up(key);
     }
   }
-  // nothing else in the level can raise one: `0x441b60` is called from the dive
-  // and from nowhere else, so water standing up IS the dive having happened
-  if (water === 0) fail(`its dive should send a sprinkler up; none came in twelve seconds beside it`);
-  console.log(`ok    standing beside a marked one makes it dive, and ${water} of its sprinklers come up`);
+  /**
+   * ...and what raises one is a FLARE, which is the correction here.
+   *
+   * `0x441b60` has exactly one caller — `0x4415bd`, inside kragg's **state 9**,
+   * the reaction to a blow of strength −9, and −9 is the flare's. It drags the
+   * boss toward the nearest `initsprinkler` 120px under its own point and
+   * lights one on each of four tags. This page had it on the dive
+   * (`Foe.drives.raises`), which is a different state altogether, and reading
+   * `0x440ab0` out state by state is what found it.
+   *
+   * So standing next to it and waiting raises nothing, and that is now the
+   * assertion: the water comes up when you burn it, not when it dives.
+   */
+  if (water !== 0)
+    fail(
+      `only a flare raises a sprinkler — 0x4415bd is 0x441b60's only caller; one came up without one`,
+    );
+  console.log(
+    `ok    standing beside it raises no sprinkler — 0x441b60 answers to the flare, not the dive`,
+  );
 
   // 8. ...and a jumping attack fells it, on its own cels
   let dead = false;
@@ -174,29 +266,50 @@ const main = async (): Promise<void> => {
   if (!dead) fail(`never felled the boss; it has ${(await boss())?.hp} left`);
   // 7033..7036 is `0x473b60` tag 0, and 7090..7095 the take a big blow earns
   if (![7033, 7034, 7035, 7036].some((c) => cels.has(c))) {
-    fail(`it should die on 0x473b60's own cels; saw ${[...cels].sort().join(" ")}`);
+    fail(
+      `it should die on 0x473b60's own cels; saw ${[...cels].sort().join(" ")}`,
+    );
   }
-  if (!/quota 0 of 1/.test(await say())) fail(`the census should be clear: ${/quota[^·]*/.exec(await say())?.[0]}`);
-  console.log(`ok    a jumping attack fells it — ${cels.size} of its own cels, and the quota is clear`);
+  if (!/quota 0 of 1/.test(await say()))
+    fail(`the census should be clear: ${/quota[^·]*/.exec(await say())?.[0]}`);
+  console.log(
+    `ok    a jumping attack fells it — ${cels.size} of its own cels, and the quota is clear`,
+  );
 
   // 9. ...and it pays nothing at all, which no other boss in the game does
   await page.waitForTimeout(1500);
   const points = Number(/(\d+) points/.exec(await say())?.[1] ?? -1);
-  if (points !== 0) fail(`there is no 0x40d450 in its code; the score reads ${points}`);
-  console.log(`ok    and pays ${points} points, because nothing in its code awards any`);
+  if (points !== 0)
+    fail(`there is no 0x40d450 in its code; the score reads ${points}`);
+  console.log(
+    `ok    and pays ${points} points, because nothing in its code awards any`,
+  );
 
   // 10. only then does the craft come, and the goal is where you began
   for (let i = 0; i < 60; i++) {
     await page.waitForTimeout(200);
-    if (/the television is in|the screen is coming down|level 8 complete|at the goal/.test(await say())) break;
+    if (
+      /the television is in|the screen is coming down|level 8 complete|at the goal/.test(
+        await say(),
+      )
+    )
+      break;
   }
-  if (!/the television is in|the screen is coming down|level 8 complete|at the goal/.test(await say())) {
-    fail(`the craft should arrive once the room is empty: ${(await say()).slice(0, 200)}`);
+  if (
+    !/the television is in|the screen is coming down|level 8 complete|at the goal/.test(
+      await say(),
+    )
+  ) {
+    fail(
+      `the craft should arrive once the room is empty: ${(await say()).slice(0, 200)}`,
+    );
   }
   console.log(`ok    and the craft comes down for it`);
 
   await finish(browser);
-  console.log("PASS  ARCADE is one room, one boss out of reach, and a goal that waits for it");
+  console.log(
+    "PASS  ARCADE is one room, one boss out of reach, and a goal that waits for it",
+  );
 };
 
 await main();

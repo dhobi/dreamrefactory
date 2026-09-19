@@ -22,7 +22,9 @@ import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const page = await browser.newPage({
+    viewport: { width: 1280, height: 900 },
+  });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
 
@@ -33,7 +35,9 @@ const main = async (): Promise<void> => {
   };
   const go = async (q: string): Promise<void> => {
     await page.goto(`${BASE}/walk.html?level=12${q}`);
-    await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+    await hud
+      .filter({ hasText: /room \d+ of \d+/ })
+      .waitFor({ timeout: 30_000 });
     // ...and then wait for the player to stop falling. A flat pause is not
     // enough on a cold load, and a probe that reads the position mid-fall reads
     // a y that no rect in the file contains.
@@ -49,16 +53,26 @@ const main = async (): Promise<void> => {
 
   // 1. five regions stacked, a census of eight, a share of nothing and no clock
   await go("");
-  if (!/room \d+ of 5/.test(await say())) fail(`TOWER has five regions; the HUD says ${/room[^·]*/.exec(await say())?.[0]}`);
-  if (!/kill 0% of 8/.test(await say())) fail(`3 Ghengis, 4 skeletons and one bishop count and its 8 bats do not; the census is ${/kill[^·)]*/.exec(await say())?.[0]}`);
+  if (!/room \d+ of 5/.test(await say()))
+    fail(
+      `TOWER has five regions; the HUD says ${/room[^·]*/.exec(await say())?.[0]}`,
+    );
+  if (!/kill 0% of 8/.test(await say()))
+    fail(
+      `3 Ghengis, 4 skeletons and one bishop count and its 8 bats do not; the census is ${/kill[^·)]*/.exec(await say())?.[0]}`,
+    );
   const clock = Number(/clock (\d+)/.exec(await say())?.[1] ?? 0);
-  if (clock < 31000) fail(`TOWER carries no timer record, so no limit; the panel says ${clock}`);
-  console.log(`ok    TOWER is five stacked regions, a census of eight, no kills wanted and no clock`);
+  if (clock < 31000)
+    fail(`TOWER carries no timer record, so no limit; the panel says ${clock}`);
+  console.log(
+    `ok    TOWER is five stacked regions, a census of eight, no kills wanted and no clock`,
+  );
 
   // 2. the floor at x17515. `0x426f80` starts it on the player's own point
   //    inside its rect, and then it is four frames, three, and six.
   await go("&x=17800");
-  if (!/floor whole cel 9010 at x17515/.test(await say())) fail(`the floor at x17515 opens whole on 9010`);
+  if (!/floor whole cel 9010 at x17515/.test(await say()))
+    fail(`the floor at x17515 opens whole on 9010`);
   await page.keyboard.down("ArrowLeft");
   const states = new Set<string>();
   let fell = 0;
@@ -71,21 +85,36 @@ const main = async (): Promise<void> => {
     if (y - from > fell) fell = y - from;
   }
   await page.keyboard.up("ArrowLeft");
-  for (const want of ["creaking", "caving", "gone"]) if (!states.has(want)) fail(`a floor goes whole -> creaking -> caving -> gone; it showed ${[...states].join(" ")}`);
-  if (fell < 100) fail(`and it should drop whoever is on it; the player fell ${fell}`);
-  console.log(`ok    walking onto one runs it ${[...states].join(" -> ")} and drops you ${fell} pixels`);
+  for (const want of ["creaking", "caving", "gone"])
+    if (!states.has(want))
+      fail(
+        `a floor goes whole -> creaking -> caving -> gone; it showed ${[...states].join(" ")}`,
+      );
+  if (fell < 100)
+    fail(`and it should drop whoever is on it; the player fell ${fell}`);
+  console.log(
+    `ok    walking onto one runs it ${[...states].join(" -> ")} and drops you ${fell} pixels`,
+  );
 
   // 3. the bishop, on the goal, with the player's own twelve hundred health
   await go("&x=17600&y=15300");
-  if (!/nearest initvpriest 1200\/1200hp/.test(await say())) fail(`0x41ebc4 gives it 0x40e300(0x4b0); the bar reads ${/initvpriest [^ ]*/.exec(await say())?.[0]}`);
-  if (!/at the goal/.test(await say())) fail(`the bishop stands ON the goal; the HUD says ${/television[^·]*|at the goal/.exec(await say())?.[0]}`);
+  if (!/nearest initvpriest 1200\/1200hp/.test(await say()))
+    fail(
+      `0x41ebc4 gives it 0x40e300(0x4b0); the bar reads ${/initvpriest [^ ]*/.exec(await say())?.[0]}`,
+    );
+  if (!/at the goal/.test(await say()))
+    fail(
+      `the bishop stands ON the goal; the HUD says ${/television[^·]*|at the goal/.exec(await say())?.[0]}`,
+    );
   const before = Number(/(\d+) points/.exec(await say())?.[1] ?? 0);
   let low = 1200;
   let lastX: number | null = null;
   let missed = 0;
   for (let i = 0; i < 300; i++) {
     await page.waitForTimeout(40);
-    const m = /nearest initvpriest (-?\d+)\/(\d+)hp (\w+) at x (-?\d+)/.exec(await say());
+    const m = /nearest initvpriest (-?\d+)\/(\d+)hp (\w+) at x (-?\d+)/.exec(
+      await say(),
+    );
     // a bat wanders in and takes the "nearest" line for a while; that is not the
     // fight ending
     if (!m) {
@@ -111,10 +140,14 @@ const main = async (): Promise<void> => {
       await page.keyboard.up(key);
     }
   }
-  if (low >= 1200) fail(`the bishop should be taking damage; it never dropped below ${low}`);
+  if (low >= 1200)
+    fail(`the bishop should be taking damage; it never dropped below ${low}`);
   const paid = Number(/(\d+) points/.exec(await say())?.[1] ?? 0) - before;
-  if (paid !== 0) fail(`0x4264f0 pays nothing at all; the score moved by ${paid}`);
-  console.log(`ok    the bishop is 1200 health, stands on the goal, and pays nothing — down to ${low}`);
+  if (paid !== 0)
+    fail(`0x4264f0 pays nothing at all; the score moved by ${paid}`);
+  console.log(
+    `ok    the bishop is 1200 health, stands on the goal, and pays nothing — down to ${low}`,
+  );
 
   // 4. the two surges, arcing down the tower wall on their own six cels
   await go("&x=17900&y=15300");
@@ -124,17 +157,29 @@ const main = async (): Promise<void> => {
     const m = /surge cel (\d+) at x17967/.exec(await say());
     if (m) arcs.add(Number(m[1]));
   }
-  if (arcs.size < 4) fail(`0x46f648 is six cels at one frame each; the surge showed ${arcs.size}`);
-  if ([...arcs].some((c) => c < 9060 || c > 9065)) fail(`its cels are 9060..9065; saw ${[...arcs].join(" ")}`);
-  console.log(`ok    and its two surges arc through ${arcs.size} of 9060..9065`);
+  if (arcs.size < 4)
+    fail(
+      `0x46f648 is six cels at one frame each; the surge showed ${arcs.size}`,
+    );
+  if ([...arcs].some((c) => c < 9060 || c > 9065))
+    fail(`its cels are 9060..9065; saw ${[...arcs].join(" ")}`);
+  console.log(
+    `ok    and its two surges arc through ${arcs.size} of 9060..9065`,
+  );
 
   /**
    * ...and the bishop has a MACHINE, which this page fought without.
    *
    * `0x425c90`, the same tracker again, banded against `0x46f4c0`'s 220, 170 and
-   * 100. At band 1 it commits on three in ten; inside 170 it always considers;
-   * and then `0x434540(0x2a) <= 13` picks the sixteen-cel sweep over the throw.
-   * Its recoil is the animation's own dx — -30, -20, -10.
+   * 100. At band 1 it commits on EIGHT in ten — `0x434540(10)` answers 1..10 and
+   * `cmp eax, 3; jl` is the branch that walks away, which this page had the
+   * wrong way round — inside 170 it always considers, and then
+   * `0x434540(0x2a) <= 13` picks the sixteen-cel summon over the cast. Its
+   * recoil is the animation's own dx: -30, -20, -10.
+   *
+   * The states are `obj+0x18`, the kind of the script it is playing: 1 is the
+   * float, `0x46f170`, and 2 is `0x46f1c0`, all four attack tags. `mode` was
+   * `stepBishop`'s invented name for the same thing.
    */
   await go("&x=17620&y=15200");
   const modes = new Set<string>();
@@ -142,19 +187,38 @@ const main = async (): Promise<void> => {
   for (let i = 0; i < 120; i++) {
     const t = await say();
     const w = /boss initvpriest [^·]*/.exec(t)?.[0] ?? "";
-    const m = /mode (\w+)/.exec(w)?.[1];
-    if (m) modes.add(m);
+    const m = /mode (\w+)|kind (\d+ tag \d+)/.exec(w);
+    if (m) modes.add(m[1] ?? m[2]);
     const c = /cel (\d+)/.exec(w)?.[1];
     if (c) cels.add(Number(c));
     await page.waitForTimeout(140);
   }
-  if (!modes.has("throw") && !modes.has("sweep"))
-    fail(`inside 170 it always considers an attack; it only did ${[...modes].join(" ")}`);
-  if (!modes.has("settle")) fail(`every attack settles on tag 3; it did ${[...modes].join(" ")}`);
+  // kind 2 is `0x46f1c0` — tag 0 the cast, tag 1 the recoil, tag 2 the summon,
+  // tag 3 the settle every one of them ends on
+  if (![...modes].some((m) => m.startsWith("2 tag")))
+    fail(
+      `inside 170 it always considers an attack; it only did ${[...modes].join(", ")}`,
+    );
+  /**
+   * ...and every attack hands back to the FLOAT.
+   *
+   * `0x4527cc` ends tag 0, the cast, on tag 1, the recoil, and tag 1 installs
+   * `0x46f170` — kind 1, the state that decides. Tag 3, the settle, only follows
+   * tag 2, the sixteen-cel summon, which wants `0x434540(0x2a) <= 13`: about one
+   * attack in three, so asking for it inside a fixed window is asking for a
+   * flake. What is not a coin flip is that it comes back to kind 1.
+   */
+  if (!modes.has("1 tag 0") && !modes.has("settle"))
+    fail(
+      `every attack hands back to the float, kind 1; it did ${[...modes].join(", ")}`,
+    );
   if (![...cels].some((c) => c >= 2600 && c <= 2614)) {
-    if (![...cels].some((c) => c >= 2650 && c <= 2658)) fail(`it should fight on its 2600s or 2650s; saw ${[...cels].join(" ")}`);
+    if (![...cels].some((c) => c >= 2650 && c <= 2658))
+      fail(`it should fight on its 2600s or 2650s; saw ${[...cels].join(" ")}`);
   }
-  console.log(`ok    and its bishop works its own bands — ${[...modes].sort().join(" ")} — on its 2500s, 2600s and 2650s`);
+  console.log(
+    `ok    and its bishop works its own bands — ${[...modes].sort().join(", ")} — on its 2500s, 2600s and 2650s`,
+  );
 
   // the LIGHTNING — `initlightfx`, the one class in the game that nothing places
   // and nothing triggers. `0x426800` is a metronome on the level's own counter:
@@ -172,16 +236,30 @@ const main = async (): Promise<void> => {
     period = Number(m[2]);
     if (m[3] !== "0,0") bolts.set(Number(m[1]), m[3]);
   }
-  if (period !== 201) fail(`0x426815's counter runs 0..201; the page says 0..${period}`);
-  if (!bolts.size) fail(`nothing struck in eighteen seconds — 0x426800 strikes every 202 frames`);
-  if (!bolts.has(195)) fail(`0x426837 strikes on 0xc3; it struck on ${[...bolts.keys()].join(" ")}`);
-  const drawn = new Set([...bolts.values()].flatMap((v) => v.split(",").map(Number)));
+  if (period !== 201)
+    fail(`0x426815's counter runs 0..201; the page says 0..${period}`);
+  if (!bolts.size)
+    fail(
+      `nothing struck in eighteen seconds — 0x426800 strikes every 202 frames`,
+    );
+  if (!bolts.has(195))
+    fail(
+      `0x426837 strikes on 0xc3; it struck on ${[...bolts.keys()].join(" ")}`,
+    );
+  const drawn = new Set(
+    [...bolts.values()].flatMap((v) => v.split(",").map(Number)),
+  );
   const stray = [...drawn].filter((c) => c !== 0 && (c < 9081 || c > 9086));
-  if (stray.length) fail(`0x46f588 tag 0 is 9081..9086; saw ${stray.join(" ")}`);
+  if (stray.length)
+    fail(`0x46f588 tag 0 is 9081..9086; saw ${stray.join(" ")}`);
   if ([...bolts.values()].some((v) => v.split(",")[0] !== v.split(",")[1])) {
-    fail(`both records play the same tag, one flipped — they should never disagree on the cel`);
+    fail(
+      `both records play the same tag, one flipped — they should never disagree on the cel`,
+    );
   }
-  console.log(`ok    and its lightning strikes on its own clock, ${bolts.size} frames of 9081..9086 at ${[...bolts.keys()][0]}`);
+  console.log(
+    `ok    and its lightning strikes on its own clock, ${bolts.size} frames of 9081..9086 at ${[...bolts.keys()][0]}`,
+  );
 
   /**
    * ...and its three LADDERS carry you between its regions, both ways.
@@ -228,14 +306,27 @@ const main = async (): Promise<void> => {
     await page.waitForTimeout(300);
     const top = Number(/· x -?\d+, y (-?\d+)/.exec(await say())?.[1] ?? NaN);
     const high = /room (\d+) of/.exec(await say())?.[1] ?? "";
-    if (foot - from < down) fail(`the ladder at x${x} should take you ${down}px down; it went ${from} to ${foot}`);
-    if (foot - top < up) fail(`the ladder at x${x} should lift you ${up}px; it went ${foot} to ${top}`);
-    if (low === high) fail(`the ladder at x${x} reaches out of room ${low}; the page never left it`);
-    console.log(`ok    the ladder at x${x} runs ${foot - top}px, room ${low} to room ${high}`);
+    if (foot - from < down)
+      fail(
+        `the ladder at x${x} should take you ${down}px down; it went ${from} to ${foot}`,
+      );
+    if (foot - top < up)
+      fail(
+        `the ladder at x${x} should lift you ${up}px; it went ${foot} to ${top}`,
+      );
+    if (low === high)
+      fail(
+        `the ladder at x${x} reaches out of room ${low}; the page never left it`,
+      );
+    console.log(
+      `ok    the ladder at x${x} runs ${foot - top}px, room ${low} to room ${high}`,
+    );
   }
 
   await finish(browser);
-  console.log("PASS  TOWER's floors give way, its bishop stands on the goal, its surges arc, its lightning strikes and its ladders climb");
+  console.log(
+    "PASS  TOWER's floors give way, its bishop stands on the goal, its surges arc, its lightning strikes and its ladders climb",
+  );
 };
 
 await main();
