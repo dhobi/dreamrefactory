@@ -34,6 +34,20 @@ name: Deploy
 # nothing here listens for. Pass `--no-git-tag-version` and tag by hand, which is
 # the hand that knows which of the five it is.
 #
+# And the trap NOTHING here can catch: **GitHub creates no workflow run at all
+# when more than three tags arrive in one push.** Not the excess ones — none of
+# them. The push succeeds, `git ls-remote` shows every tag, this file is never
+# reached, and the release sits there looking released. A four-game release hits
+# it exactly, and has: Titanic 0.9.75, Dust 0.3.20, Timelapse 0.1.4 and Skull
+# Cracker 0.1.2 all tagged in one push and not one of them deployed.
+#
+# That is the second failure at this seam. The first — three tags together
+# deploying one game and cancelling two — was a concurrency lane and was fixed
+# above. This one is upstream of the workflow entirely, so it is fixed in the
+# hand that pushes: `npm run release` (tools/release.mts) pushes ONE tag per
+# push and then checks that each actually started a run, dispatching it if not.
+# Use it rather than `git push --tags`, which is the shape that fails.
+#
 # Secrets: the `dreamrefactory` environment holds FTP_USER, FTP_PASSWORD and
 # FTP_PATH (the account lands in the site directory, so FTP_PATH is "."), and
 # FTP_HOST falls through to the repository secret. Optional: FTP_PORT,

@@ -80,3 +80,61 @@ test("each lane has the build script it runs", () => {
     expect(pkg.scripts?.build, `${target}/package.json has no build script`).toBeTruthy();
   }
 });
+
+/**
+ * The release tool, and the limit that made one necessary.
+ *
+ * GitHub creates NO workflow run when more than three tags arrive in one push —
+ * not merely the excess ones — and nothing anywhere reports it: the push
+ * succeeds, every tag is on the remote, and the Actions tab is empty. A
+ * four-game release hits it exactly, and did. `deploy.yml` cannot defend
+ * against it, because the events never reach the workflow; the defence is
+ * `tools/release.mts`, which pushes one tag per push and then checks that each
+ * started a run.
+ *
+ * So what is checked here is that the defence stays reachable and stays honest:
+ * the tool is wired to a script, it still pushes singly, it knows the same five
+ * targets the workflow releases, and neither the workflow nor the docs still
+ * recommend the shape that fails.
+ */
+const release = readFileSync(`${ROOT}/tools/release.mts`, "utf8");
+const docs = readFileSync(`${ROOT}/docs/reference/deploy.md`, "utf8");
+
+test("the release tool pushes one tag per push", () => {
+  // three is GitHub's limit; anything above one is a margin not worth having
+  // for a failure whose only symptom is silence
+  const per = /const TAGS_PER_PUSH = (\d+);/.exec(release);
+  expect(per, "tools/release.mts declares TAGS_PER_PUSH").not.toBeNull();
+  expect(Number(per![1])).toBeLessThanOrEqual(3);
+  expect(Number(per![1])).toBe(1);
+});
+
+test("the release tool releases exactly what the workflow can release", () => {
+  const listed = [...(/const TARGETS = \[([^\]]*)\]/.exec(release)?.[1] ?? "").matchAll(/"([a-z]+)"/g)].map(
+    (m) => m[1],
+  );
+  expect(new Set(listed)).toEqual(new Set(["site", ...GAMES.map((g) => g.dir)]));
+});
+
+test("a pushed tag is not taken on trust — the run has to appear", () => {
+  // the half a tool that only pushed would still get wrong: four tags, no
+  // deploys, and nothing to say so until somebody looks at the site
+  expect(release).toContain("workflow run");
+  expect(release).toMatch(/gh", \["run", "list"/);
+});
+
+test("nothing still recommends the push that GitHub drops", () => {
+  expect(workflow).not.toMatch(/^[^#\n]*git push --tags/m);
+  // the docs may NAME it, but only to say not to
+  for (const line of docs.split("\n").filter((l) => l.includes("git push --tags"))) {
+    expect(line, `deploy.md line still advises it: ${line}`).toMatch(/Do not/);
+  }
+  expect(docs).toContain("npm run release");
+});
+
+test("the release script is wired up, or the tool is only a file", () => {
+  const root = JSON.parse(readFileSync(`${ROOT}/package.json`, "utf8")) as {
+    scripts?: Record<string, string>;
+  };
+  expect(root.scripts?.release, "the root package.json has a release script").toContain("release.mts");
+});
