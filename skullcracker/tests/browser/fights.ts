@@ -121,7 +121,11 @@ const main = async (): Promise<void> => {
   // 3. it closes, and it keeps closing past the point a patrol would turn
   const first = Math.abs((await near()).x - (await me()));
   let closest = first;
-  for (let i = 0; i < 60; i++) {
+  // ...and it takes its time about it. A class with its own machine does not
+  // march: `initwerea` leaps in, lands, walks, holds the stance while it spends
+  // `AI+4`, taunts on `AI+2`'s beat and only then commits, which is about twelve
+  // seconds from four hundred pixels out. The shared brain did it in five
+  for (let i = 0; i < 200; i++) {
     await page.waitForTimeout(100);
     closest = Math.min(closest, Math.abs((await near()).x - (await me())));
   }

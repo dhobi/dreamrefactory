@@ -82,6 +82,15 @@ import {
   loopIndex,
   type Foe,
 } from "./foes";
+import {
+  install,
+  type BrainCtx,
+  type Brain,
+  type Enemy,
+  type FoeState,
+  type Track,
+} from "./brains/kit";
+import { BRAINS } from "./brains";
 import { FIGHTS, FoeFight } from "./fights";
 import {
   CRAFT,
@@ -765,97 +774,6 @@ const TICK_SCALE = (ENGINE_HZ * INVENTED.tickMs) / 1000;
  * `gait` loops; the other three play once. `dead` is followed by
  * {@link CORPSE_LINGER} frames of lying there, then the thing is gone.
  */
-/**
- * `gait`, `flinch` and `dead` are the kind's own animations; `burst` is the one
- * state an object is SPAWNED in — the hydrant's water, which sprays once and is
- * removed ({@link Foe.burst}).
- */
-type FoeState = "gait" | "lever" | "flinch" | "dead" | "burst";
-
-/** one spawned thing: where it is, which way it faces, and how far it may roam */
-interface Enemy {
-  kind: string;
-  x: number;
-  y: number;
-  facing: number;
-  /** the record's own rect — its territory */
-  left: number;
-  right: number;
-  /** engine frames elapsed in the current animation, fractional */
-  clock: number;
-  /** which animation is running, and which of the kind's it is */
-  state: FoeState;
-  anim: FoeAnim;
-  /** engine frames a corpse has left before it is removed — `[0x46b204]` */
-  linger: number;
-  /** how many blows it has taken, for the kinds whose flinches advance in order */
-  dents: number;
-  /** has the husk already let out what was inside it — see {@link Foe.hatches} */
-  hatched?: boolean;
-  /** the record's rect, top and bottom — what a sleeper watches ({@link Foe.wake}) */
-  top: number;
-  bottom: number;
-  /** still a statue: the player's point has not been inside that rect yet */
-  asleep?: boolean;
-  /** which of {@link Foe.drives}' states is running, for the one kind that has them */
-  mode?:
-    | "hover"
-    | "charge"
-    | "rush"
-    | "combo"
-    | "land"
-    | "melee"
-    | "antiAir"
-    // ...and the wraith's own, which are a different machine — see stepWraith
-    | "rouse"
-    | "rise"
-    | "held"
-    | "sink"
-    | "cast"
-    | "lunge"
-    | "sweep"
-    | "close"
-    // ...and the bishop's — see stepBishop
-    | "throw"
-    | "recoil"
-    | "settle";
-  /** `AI+4` — decisions left before it breaks off and goes home */
-  decisions?: number;
-  /**
-   * In the fight — `obj+0x18` state 1, which {@link stepFight} drives. Undefined
-   * is the patrol, state 0, and the player's own point inside this record's rect
-   * is the only thing that turns one into the other.
-   */
-  fighting?: boolean;
-  /** swinging: the attack plays ONCE and hands back, where the walk loops */
-  swing?: boolean;
-  /** has the reach already made its one call — `obj+0x42` passes the frame once */
-  thrown?: boolean;
-  /** `[0x473dd0]` — which way the hover is going, +1 down and -1 up */
-  hover?: number;
-  /**
-   * Pixels per TICK, and it persists — `obj+0xa`/`obj+0xc`, which the collision
-   * solver `0x430470` writes and which only the kinds that cancel it stop
-   * carrying. Zero for everything but a struck {@link Foe.flies} kind.
-   */
-  vx: number;
-  vy: number;
-  /**
-   * Health left, in the disc's own units — {@link Foe.panel}'s figure, so a
-   * `LINK` really does stand up with 200 of it, and what a blow takes off is the
-   * striking cel's own speed ({@link strikeBox}). The furniture gets `Infinity`
-   * and cannot be killed. **Nothing hits the player back yet** — no enemy's
-   * blow, no hydraulic press, no swinging girder, no fall takes health off — so
-   * the classes below carry their attacks as read, the addresses and the cels
-   * and the blow each one would land, with none of it wired to a victim. The
-   * engine's own health word is `0x4ac3d0` and `0x402ac0` is what spends it;
-   * when this page does take damage it will be behind a switch that starts off,
-   * so a level under test stays walkable.
-   */
-  hp: number;
-  /** what it stood up with, for the bar's fraction */
-  max: number;
-}
 
 const $ = <T extends HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
@@ -2850,6 +2768,8 @@ function spawnIn(sbk: SbkFile, room: SbkRoom, taken?: Set<SbkEntity>): Enemy[] {
       right: e.right,
       top: e.top,
       bottom: e.bottom,
+      // `AI+0x10` — the record's own point, which a class can be sent back to
+      home: e.pointX + g.width / 2 - g.posX,
       asleep: foe.wake ? true : undefined,
       decisions: foe.drives?.decisions,
       clock: 0,
@@ -7930,7 +7850,7 @@ function broadcast(param: number): void {
 /** every drip of goop in the air, whichever string it belongs to */
 let drips: Drip[] = [];
 
-/** `0x434540(n)` returns 1…n, and these are the three places level six rolls it */
+/** `0x434540(n)` returns 1…n — level six's levers, and every class's own brain */
 function roll(n: number): number {
   return Math.floor(Math.random() * n) + 1;
 }
@@ -8688,9 +8608,11 @@ function stepFight(e: Enemy, foe: Foe, run: number): boolean {
    * throw, it fights like everything else.
    */
   if (foe.lever && leverFor(e, foe.lever.dir)) return false;
+  const brain = BRAINS[e.kind];
   // `0x402f60` is one test — that the player's own state is under `0x1a` — and
-  // dying is the one this page has that reaches it
-  if (p.act === "dying") {
+  // dying is the one this page has that reaches it. A class with a machine of
+  // its own answers it in a state instead — the punk's kind 6
+  if (!brain && p.act === "dying") {
     e.fighting = false;
     e.swing = false;
     return false;
@@ -8710,6 +8632,22 @@ function stepFight(e: Enemy, foe: Foe, run: number): boolean {
   const anchor = p.y - p.feet;
   const inside =
     p.x >= e.left && p.x <= e.right && anchor >= e.top && anchor <= e.bottom;
+  /**
+   * ...and from here a class with a machine of its own runs the whole of it,
+   * the patrol included: state 0 is what a thing outside the rect is in, and
+   * the boundary is the one thing that moves it in and out of state 1.
+   */
+  if (brain) {
+    if (inside && !e.fighting) {
+      e.fighting = true;
+      e.swing = false;
+    } else if (!inside && e.fighting) {
+      e.fighting = false;
+      e.swing = false;
+      e.script = 0;
+    }
+    return brain(e, foe, run, BRAIN_CTX);
+  }
   if (!inside) {
     if (!e.fighting) return false;
     e.fighting = false;
@@ -8727,6 +8665,8 @@ function stepFight(e: Enemy, foe: Foe, run: number): boolean {
     e.swing = false;
     e.clock = 0;
   }
+  // The block below is the shared reading — notice, face, close, swing — and it
+  // stands for every class whose own state machine has not been read yet
   // an attack plays to its end before anything else is asked — `0x42afc4`'s own
   // rule for every state in the game, `obj+0x46`, the animation-ended word
   if (e.swing) {
@@ -8799,6 +8739,96 @@ function stepFight(e: Enemy, foe: Foe, run: number): boolean {
  */
 let playerSwinging = false;
 
+function track(e: Enemy, bands: readonly number[]): Track {
+  const forward = (p.x - e.x) * e.facing;
+  let band = -1;
+  if (forward >= 0) {
+    band = 0;
+    while (band < bands.length && bands[band] >= forward) band += 1;
+  }
+  // `0x45f014`: which side of the PLAYER it stands on — 1 in front, 0 behind, and
+  // 2 when the player carries no velocity at all
+  const still = p.vx === 0;
+  const infront = p.x >= e.x === p.facing < 0;
+  return {
+    forward,
+    dy: p.y - p.feet - e.y,
+    band,
+    side: still ? 2 : infront ? 1 : 0,
+  };
+}
+
+/**
+ * `0x456550` and `0x456590` — is it within sixty pixels of the bound it is
+ * walking towards?
+ *
+ * The engine keeps two of them in `obj+0x38` and `obj+0x3a` and picks by the
+ * facing, and the classes ask before installing a walk: a punk that has run out
+ * of territory does not take another step into the wall.
+ */
+function atBound(e: Enemy): boolean {
+  return Math.abs(e.x - (e.facing > 0 ? e.right : e.left)) <= 60;
+}
+
+/**
+ * `0x44f020` — is this one's side of the player crowded?
+ *
+ * The class walks its own list, counts every member within two hundred pixels of
+ * the PLAYER, adds one for each that wants the far side and subtracts one for
+ * each that wants the near, and answers yes when its own side is more than three
+ * ahead. `0x44e75b` then flips this one over.
+ */
+function crowded(e: Enemy): boolean {
+  let n = 0;
+  for (const other of spawnedHere()) {
+    if (other.kind !== e.kind || other.state === "dead") continue;
+    if (Math.abs(other.x - p.x) >= 200) continue;
+    n += (other.side ?? 1) > 0 ? 1 : -1;
+  }
+  return (e.side ?? 1) > 0 ? n > 3 : n < -3;
+}
+
+/**
+ * Everything a class's own machine is allowed to see, handed in rather than
+ * reached for — see {@link file://./brains/kit.ts}.
+ *
+ * The player's fields are read fresh on every access, so one object can be
+ * shared by every brain for the whole run of the page.
+ */
+const BRAIN_CTX: BrainCtx = {
+  player: {
+    get x() {
+      return p.x;
+    },
+    get y() {
+      return p.y;
+    },
+    /** his own standing cel's height above his feet */
+    get top() {
+      return p.y - p.feet;
+    },
+    get vy() {
+      return p.vy / TICK_SCALE;
+    },
+    get swinging() {
+      return playerSwinging;
+    },
+    get down() {
+      return p.act === "dying";
+    },
+  },
+  track,
+  atBound,
+  crowded,
+  roll,
+  scaled,
+  // `0x434630` — and it really is the integer one: the arcs it solves are whole
+  // pixels in the engine and a fractional root would drift them
+  root: (n) => Math.floor(Math.sqrt(Math.max(0, n))),
+  say: (e, id) => sound?.effect(id, e.x, e.y),
+  gravity: INVENTED.gravityPx,
+};
+
 function stepEnemies(): void {
   const lvl = level;
   const pool = spawnedHere();
@@ -8866,7 +8896,8 @@ function stepEnemies(): void {
     if (e.state === "gait" && foe.preaches && stepBishop(e, foe, run)) continue;
     if (e.state === "gait" && (foe.wake || foe.drives) && stepBoss(e, foe, run))
       continue;
-    // ...and every other class fights through the one shared brain
+    // ...and every other class fights through the one shared brain, until its
+    // own has been read — see {@link BRAINS}
     if (stepFight(e, foe, run)) continue;
     // whatever it is doing, a thing carrying momentum flies, falls, and stops when
     // its OWN cel's box lands. This has to come before the animation states: the

@@ -130,6 +130,18 @@ export interface FoeAnim {
    * a third too fast.
    */
   then?: FoeAnim;
+  /**
+   * The script's own KIND — word 4 of its header, what `0x45d090` copies into
+   * `obj+0x18`.
+   *
+   * This is the STATE a class's think function dispatches on, so a class whose
+   * machine has been read needs it on every script it installs. `scdis anims
+   * <addr>:full` prints it. Absent on the scripts nobody's machine installs by
+   * name. See {@link file://./brains/kit.ts}.
+   */
+  kind?: number;
+  /** which tag of that script this one is — `obj+0x44`, sub-dispatched on */
+  tag?: number;
   /** the script and tag it was read from */
   from: string;
 }
@@ -523,11 +535,23 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * disc's number for a walking punk even though it is not this script's.
    */
   initwerea: {
+    /**
+     * `0x4770f0` tag 0, kind 0 — the patrol, and the correction here is that it
+     * is not `0x4774b0`.
+     *
+     * `0x4774b0` is kind 1, the fighting stance: eight cels of shifting weight
+     * with **`dx` 0 on every one of them**. This page had it as the walk and
+     * gave it a stride of 75 that no frame of it carries, so the punk paced its
+     * territory on the standing cels. The thing state 0 actually installs is
+     * `0x4770f0` — six cels, 1910 to 1915, each carrying 75 of its own.
+     */
     gait: {
-      cels: [1900, 1901, 1902, 1903, 1904, 1905, 1906, 1907],
+      cels: [1910, 1911, 1912, 1913, 1914, 1915],
       hold: 2,
-      dx: [75, 75, 75, 75, 75, 75, 75, 75],
-      from: "0x4774b0 tag 0",
+      dx: [75, 75, 75, 75, 75, 75],
+      kind: 0,
+      tag: 0,
+      from: "0x4770f0 tag 0",
     },
     divisor: 20,
     // 0x4774f8, three tags of one cel each, held four frames
