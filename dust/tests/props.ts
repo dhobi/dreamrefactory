@@ -26,6 +26,11 @@
  *      (`propinstance ("dung1", "dung2")`). Nothing fired it, and nothing in the
  *      corpus calls it, so `dung2` did not exist for `initprops` to set up.
  *
+ * ...and a fourth thing, from #393: **a world prop is clickable only where it is
+ * drawn**. Dust draws the room in the top 264 rows of a 512x384 screen and the
+ * interface band below it belongs to the stage flat `mainpanel`, so a big prop
+ * you stand in front of must not answer `hittest` over the band.
+ *
  * Skipped, not failed, without the disc (the bargain dust/tests/saves.ts makes).
  */
 import { test, expect } from "vitest";
@@ -33,6 +38,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { readSetFileV1 } from "@dreamfactory/engine/df/set-v1";
+import { readSetFileAsV4 } from "@dreamfactory/engine/df/set-v1-to-v4";
+import { RIGHTTURNS } from "@dreamfactory/engine/df/set";
+import { readStgFile, readStgRegions } from "@dreamfactory/engine/df/stg";
+import type { WorldCamera } from "@dreamfactory/engine/runtime/props";
 import { sniffScript } from "@dreamfactory/engine/df/script";
 import { parseScript } from "@dreamfactory/engine/runtime/parser";
 import { ScriptInstance } from "@dreamfactory/engine/runtime/interp";
@@ -210,4 +219,119 @@ test("a star name that is not a set reference never waits", async () => {
   expect(R.get("dung1")!.starPending, "a qualified miss waits").toBe(true);
   call("propxyz", ["dung1", 100, 200, 0]);
   expect(R.get("dung1")!.starPending, "...until the script says where itself").toBe(false);
+});
+
+// --- 4. a world prop is clickable only where it is drawn (#393) ------------
+
+/**
+ * The camera `SetViewer` stands at a standpoint with, rebuilt from the set
+ * alone — the one modelled part of this test, so it is quoted rather than
+ * paraphrased. `worldCamera()` takes the pose from the view's stand frame:
+ *
+ *     const fi = this.standFrameInfo();          // the ring frame with motionInfo > 0
+ *     return this.cameraFrom({ x: fi.posX16, y: fi.posZ16, z: fi.posY16, deg: v.rotation8 });
+ *
+ * and `cameraFrom` pulls a v1 camera BACK along the view bearing by the set's
+ * own setback (64 on every Dust set), takes f from the set (310 on v1), and
+ * clips to the viewport — which is the field this test is about:
+ *
+ *     f: this.set.focalLength ?? Math.max(w, h) / 2,
+ *     cx: w / 2, cy: h / 2, clipW: w, clipH: h,
+ */
+function standpointCamera(set: ReturnType<typeof readSetFileAsV4>, sceneName: string, viewName: string): WorldCamera {
+  const sc = set.scenes.find((s) => s.sceneName.toLowerCase() === sceneName)!;
+  const viewIdx = sc.views.findIndex((v) => v.viewName.toLowerCase() === viewName);
+  const fi = sc.turns[RIGHTTURNS].frames.find((f) => f.viewID === viewIdx && f.motionInfo > 0)!;
+  const w = set.viewPortWidth;
+  const h = set.viewPortHeight;
+  const deg = sc.views[viewIdx].rotation8;
+  const th = (2 * Math.PI * (deg & 0xff)) / 256;
+  const sb = set.cameraSetback ?? 0;
+  return {
+    x: fi.posX16 - Math.round(sb * Math.cos(th)),
+    y: fi.posZ16 - Math.round(sb * Math.sin(th)),
+    z: fi.posY16,
+    deg,
+    f: set.focalLength ?? Math.max(w, h) / 2,
+    cx: w / 2,
+    cy: h / 2,
+    clipW: w,
+    clipH: h,
+  };
+}
+
+test("a world prop is not clickable over the interface band", async () => {
+  if (!have("HOUSE.PRP", "SALLOWER.SET", "NEW.FLT")) {
+    console.warn(`no ${DATA}/SALLOWER.SET — skipping (needs the Dust rip)`);
+    return;
+  }
+  const session = newSession();
+  session.dfVersion = 1;
+  expect(await session.openShop("house.prp"), "house.prp opens").toBe(true);
+  const R = session.propRuntime;
+
+  /*
+   * The reporter's standpoint: the saloon's lower room, scene b4, facing south,
+   * right in front of the blackjack table. The table is a WORLD PROP, and a big
+   * one — HOUSE.PRP's `blackjack` places itself with
+   *
+   *     propset (me, "sallower")   propstar (me, "blackjack")
+   *     propvisible (me, true)     propscale (me, 3300)   propdeg (me, 250)
+   *
+   * and takes a click with `if realdist (me) < 500 → sendtoscene ("scene b4",
+   * runblackjack ())`, which is what opens JAN.PUP and deals a hand.
+   */
+  const set = readSetFileAsV4(new Uint8Array(readFileSync(`${DATA}/SALLOWER.SET`)));
+  expect([set.viewPortWidth, set.viewPortHeight], "Dust's room is the top 264 rows").toEqual([512, 264]);
+  // what SetViewer.bind does on every set open, so a star is findable by name
+  // (viewer.ts: `for (const a of set.actors) session.starRegistry.set(...)`)
+  for (const a of set.actors) session.starRegistry.set(a.identifier.toLowerCase(), a);
+  R.currentSet = "sallower";
+  const script = session.propScripts.get("blackjack")!;
+  expect(script?.script.codes.has("setupprop"), "the table has a setupprop").toBe(true);
+  await session.interp.runHandler(script, "setupprop", ["bar"], { me: "blackjack", target: "" });
+  const table = R.get("blackjack")!;
+  expect(table.worldSpace, "the table is scenery").toBe(true);
+  expect(table.scale, "...at the scale its own script asks for").toBe(3300);
+
+  const cam = standpointCamera(set, "scene b4", "south");
+
+  /** sampled points of a rect where `propAt` answers the table */
+  const hits = (rect: { left: number; right: number; top: number; bottom: number }, c: WorldCamera): number => {
+    let n = 0;
+    for (let y = rect.top; y <= rect.bottom; y += 2) {
+      for (let x = rect.left; x <= rect.right; x += 2) if (R.propAt(x, y, c, false, null) === table) n++;
+    }
+    return n;
+  };
+
+  // the SKULL — `mainpanel`'s `horn` region, whose mousedown is `gotoflat (4)`,
+  // the `score` flat that carries save/open/quit. Read from the stage rather
+  // than written down, so the rect is the game's own.
+  const stg = readStgFile(new Uint8Array(readFileSync(`${DATA}/NEW.FLT`)));
+  const panel = stg.flats.find((f) => f.name === "mainpanel")!;
+  const horn = readStgRegions(stg.file.containers[panel.locationClickLogic].data, stg.version).find(
+    (r) => r.name === "horn",
+  )!;
+  expect(horn.top, "the skull button is below the room image").toBeGreaterThanOrEqual(set.viewPortHeight);
+
+  // The bug, and the proof this test can see it: WITHOUT the viewport clip the
+  // table covers a third of the skull button, so `hittest` said "prop" over it
+  // and Dust's BOOTFILE mousedown sent the click to the table with sendtoprop.
+  const unclipped: WorldCamera = { ...cam, clipW: 1e9, clipH: 1e9 };
+  expect(hits(horn, unclipped), "unclipped, the table reaches the skull").toBeGreaterThan(100);
+
+  // ...and with it, the band belongs to the stage again
+  expect(hits(horn, cam), "the table takes no point of the skull button").toBe(0);
+  expect(
+    hits({ left: 0, right: 511, top: set.viewPortHeight, bottom: 383 }, cam),
+    "...nor any other point of the band",
+  ).toBe(0);
+
+  // while the table is still perfectly clickable in the room it is drawn in —
+  // the clip must not be a way of making a prop unreachable
+  expect(
+    hits({ left: 0, right: 511, top: 0, bottom: set.viewPortHeight - 1 }, cam),
+    "the table is clickable where it is drawn",
+  ).toBeGreaterThan(100);
 });

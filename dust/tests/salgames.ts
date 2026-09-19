@@ -59,6 +59,8 @@ const HOUSE_PRP = fileURLToPath(new URL("../gamefiles/dustcd/DATA/HOUSE.PRP", im
 const file = (path: string): Uint8Array | null =>
   existsSync(path) ? new Uint8Array(readFileSync(path)) : null;
 
+const JAN_PUP = fileURLToPath(new URL("../gamefiles/dustcd/SALGAMES/JAN.PUP", import.meta.url));
+
 /** a session that serves the saloon's shop and the boot UI's, by name */
 function newSession(): GameSession {
   const shops = new Map<string, Uint8Array | null>([
@@ -348,4 +350,82 @@ test("blackjack's CASH and WAGER hold one value each", async () => {
   await session.interp.runHandler(util, "drawcash", [25, -1], ctx);
   expect(field(314), "CASH alone, rewritten").toEqual(["$25@73"]);
   expect(field(354), "WAGER survives its neighbour's redraw").toEqual(["$-1@73"]);
+});
+
+// --- 5. what ESC means at Jan's first question ----------------------------
+
+/**
+ * Reported with #393: "trying to ESC through Jan's first conversation takes the
+ * player to the Blackjack game, rather than exiting out. Not sure if this is a
+ * bug or a data issue."
+ *
+ * It is the data, and this test is here to keep anyone from "fixing" it. Three
+ * facts, and the outcome follows from them:
+ *
+ *   1. ESC answers a plaque with **-1**. DF.EXE's key filter (0x438020) takes a
+ *      keydown carrying the 0x1fa0 marker, indexes `char - 0x2e` — so `.` is
+ *      arm 0 — and answers 1 = abort; the digits after it are the volume keys,
+ *      which answer 0 and do not interrupt. That sets the abort flag at
+ *      0x45f138, and the plaque pump tests it after every service step and
+ *      returns 0xffffffff (0x437a67 -> 0x437b63). Same shape as TI.EXE, and the
+ *      port's PuppetController.key.
+ *   2. An EMPTY case arm runs the NEXT arm's body. DF.EXE's switch, on a match,
+ *      calls 0x404250, which skips line breaks, and while the next token is
+ *      `case` (0xfab) walks over that whole label and looks again — so stacked
+ *      labels share one body. That is the rule Interpreter's "switch" already
+ *      implements.
+ *   3. JAN.PUP's `bootblackjack` stacks them:
+ *
+ *          arg = puppetevent (-1)
+ *          switch arg
+ *          case -1
+ *          case 101
+ *            playcards = true
+ *            ...
+ *
+ * So ESC at "Care to play?" IS "Sure." — in the original as here. The way out
+ * that the conversation offers is the second bevel, "No thanks.", which sets
+ * `playcards = false` and sends SALGAMES.FLT's `playcardsblackjack` down its
+ * `closecards ("bj")` arm.
+ */
+test("ESC at Jan's first question is the Sure. bevel, as the original has it", async () => {
+  if (!existsSync(JAN_PUP)) {
+    console.warn(`no ${JAN_PUP} — skipping (needs the Dust rip)`);
+    return;
+  }
+  const session = new GameSession(
+    (name) => (name.toLowerCase() === "jan.pup" ? file(JAN_PUP) : null),
+    new NullAudioSink(),
+  );
+  session.onLog = () => {};
+  session.dfVersion = 1;
+  expect(await session.puppetCtrl.openPuppetFile("jan.pup"), "jan.pup opens").toBe(true);
+  // what the saloon has counted by the time you sit down; `playcards` is the
+  // global the conversation exists to set
+  for (const n of ["fourcount", "threecount", "fivecount", "playercash"]) {
+    session.interp.globals.set(n, 1);
+  }
+  session.interp.globals.set("playcards", 0);
+
+  const boot = session.puppet!.scripts.get("boot script")!;
+  expect(boot?.script.codes.has("bootblackjack"), "the boot script greets you").toBe(true);
+  void session.interp.runHandler(boot, "bootblackjack", [], { me: "jan.pup", target: "" });
+
+  // ESC through the greeting, exactly as the reporter did — the same call the
+  // director makes on an escape keydown — until the two bevels are up
+  for (let i = 0; i < 200 && !session.puppet?.eventWaiter; i++) {
+    await new Promise((r) => setTimeout(r, 2));
+    if (session.puppet?.speakSkip) session.puppetCtrl.key(".", true);
+  }
+  expect(
+    session.puppet!.bevels.map((b) => b.text),
+    "the question is on screen",
+  ).toEqual(["Sure.", "No thanks."]);
+
+  expect(session.puppetCtrl.key(".", true), "ESC answers the plaque").toBe(true);
+  for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 2));
+  expect(
+    session.interp.globals.get("playcards"),
+    "the empty `case -1` arm runs `case 101`, so ESC deals the hand",
+  ).toBeTruthy();
 });

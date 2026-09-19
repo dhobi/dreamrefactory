@@ -682,6 +682,29 @@ export class PropRuntime {
       if (f.opaque[ly * f.width + lx]) return p;
     }
     if (cam) {
+      /*
+       * A world prop is clickable only inside the SET's own view, because that
+       * is the only place one is DRAWN: compositeWorldOne clips every blit to
+       * `cam.clipW/clipH`, and a hit test that does not clip answers for pixels
+       * the player can't see.
+       *
+       * Dust is where that costs a click (#393). Its view is 512x264 of a
+       * 512x384 screen and the interface band below belongs to the stage flat
+       * `mainpanel` — so the saloon's `blackjack` prop, a 207x193 sprite at
+       * `propscale 3300` that you stand right in front of, reached rows
+       * 264..384 in the hit test alone. `hittest` answered "prop" over the
+       * band, Dust's BOOTFILE `mousedown` sent the click on with
+       * `sendtoprop`, and clicking the SKULL dealt a hand of blackjack
+       * instead of opening the save menu (its `setcursor` put the touch
+       * cursor over the band for the same reason).
+       *
+       * Titanic never showed it because its band IS screen props, and those
+       * are the loop above — asked first, and unclipped on purpose, since a
+       * screen prop is placed in screen space and the band is where it lives.
+       * Actors were bounded for this same reason already: RoomLayer.roomHitTest
+       * and clickActor gate on the room image before asking ActorRuntime.
+       */
+      if (x >= cam.clipW || y >= cam.clipH) return null;
       const world = this.worldDrawList(cam);
       for (let i = world.length - 1; i >= 0; i--) {
         const { p, proj } = world[i];
