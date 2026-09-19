@@ -2837,7 +2837,7 @@ function spawnIn(sbk: SbkFile, room: SbkRoom, taken?: Set<SbkEntity>): Enemy[] {
       continue;
     // this page carries a foe by its FEET and {@link foeAnchor} converts, so the
     // record's anchor is converted the other way here, through the same gait cel
-    const g = sbk.cels.find((c) => c.id === foe.gait.cels[0]);
+    const g = celRec(sbk, foe.gait.cels[0]);
     if (!g) continue;
     out.push({
       kind: e.name,
@@ -3335,7 +3335,7 @@ function ejectFromObstacles(): void {
  * by the grab and read from there until the leave, which is {@link canLetGo}.
  */
 function ladderAt(): SbkEntity | undefined {
-  const rec = player?.cels.find((c) => c.id === lastCel);
+  const rec = celRec(player, lastCel);
   if (!rec || !level) return undefined;
   // `p.y` is the feet and the bitmap's bottom edge; `p.x` is the anchor's x
   const [x0, x1] =
@@ -3755,7 +3755,7 @@ function strikeBox(): {
   blow: { dx: number; dy: number };
 } | null {
   if (!player) return null;
-  const rec = player.cels.find((c) => c.id === lastCel);
+  const rec = celRec(player, lastCel);
   if (!rec?.strike || !rec.blow) return null;
   const s = rec.strike;
   // in the cel's own pixels, measured from its LEFT edge — because that is where
@@ -3835,7 +3835,7 @@ function knockback(
  * kind then hangs off the same point the artist kept fixed.
  */
 function foeAnchor(e: Enemy, lvl: Level): { x: number; y: number } | null {
-  const g = lvl.sbk.cels.find((c) => c.id === FOES[e.kind].gait.cels[0]);
+  const g = celRec(lvl.sbk, FOES[e.kind].gait.cels[0]);
   if (!g) return null;
   return { x: e.x - g.width / 2 + g.posX, y: e.y - g.height + g.posY };
 }
@@ -3853,11 +3853,59 @@ function foeAnchor(e: Enemy, lvl: Level): { x: number; y: number } | null {
  * For a gait cel the box bottom and the cel's own extent agree to within a pixel,
  * which is why the standing placement never needed this.
  */
-function baseOf(e: Enemy, lvl: Level): number {
+/**
+ * One book's cels by id, remembered.
+ *
+ * `SbkFile.byId` maps an id to a LOCATION — the container the art lives in — and
+ * everything that wants the record itself was scanning the array for it. That is
+ * a linear walk of 1229 entries in the player's book and a few hundred in a
+ * level's, and the fight put it on the hot path: `strikeBox` alone was doing one
+ * per enemy per tick, twenty enemies at sixty ticks a second. MAZE went from 160
+ * seconds to 216 and four suites starved of frames.
+ */
+const celMemo = new WeakMap<SbkFile, Map<number, SbkCel | undefined>>();
+function celRec(
+  book: SbkFile | null | undefined,
+  id: number,
+): SbkCel | undefined {
+  if (!book) return undefined;
+  let m = celMemo.get(book);
+  if (!m) celMemo.set(book, (m = new Map()));
+  if (!m.has(id))
+    m.set(
+      id,
+      book.cels.find((c) => c.id === id),
+    );
+  return m.get(id);
+}
+
+function baseOf(e: Enemy, lvl: Level, cel = celOf(e)): number {
   const a = foeAnchor(e, lvl);
-  const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
+  const c = celRec(lvl.sbk, cel);
   if (!a || !c) return e.y;
   return a.y + (c.body ? c.body.y1 : c.height - c.posY);
+}
+
+/**
+ * ...and a thing standing in a FIGHT is footed by its GAIT cel, not by whichever
+ * pose it is striking in.
+ *
+ * WOODS' husk is why. Its walk, cel 4870, carries a body box reaching `y1 -1` —
+ * the feet are at the anchor. Its swing, cel 4905, carries NO box at all, so
+ * {@link baseOf} falls back to the art's own extent, `height - posY` = 44, and
+ * the thing this page thinks it is standing on moves forty-five pixels down the
+ * moment the swing starts. Cel 4884 puts it thirty-four UP again. That is more
+ * than {@link CLIMB_PX} of swing either way, so the pin below lost the floor
+ * mid-attack, found nothing under the new base, and dropped a husk five thousand
+ * pixels through WOODS while it was still swinging.
+ *
+ * The current cel is still right for the two things it was written for — a
+ * toppled mailbox lies on its own fallen box, and anything in flight lands on the
+ * pose it lands in — so this is only the standing case, and only for a class in
+ * the fight, where the pose changes under a thing that has not moved.
+ */
+function footOf(e: Enemy, lvl: Level, foe: Foe): number {
+  return baseOf(e, lvl, e.fighting || e.swing ? foe.gait.cels[0] : celOf(e));
 }
 
 /**
@@ -3993,7 +4041,7 @@ function landHits(): void {
   // health test at all, so any blow that reaches one takes it
   for (const c of level.crows[i]) {
     if (c.state === "tumble" || struckCrows.has(c)) continue;
-    const art = level.sbk.cels.find((q) => q.id === crowCel(c));
+    const art = celRec(level.sbk, crowCel(c));
     if (!art) continue;
     const box = {
       left: c.x - art.posX,
@@ -4019,7 +4067,7 @@ function landHits(): void {
     if (struck.has(e) || e.state === "dead" || e.state === "burst") continue;
     if (e.state === "flinch" && e.anim.terminal) continue;
     const foe = FOES[e.kind];
-    const c = level.sbk.cels.find((c) => c.id === celOf(e));
+    const c = celRec(level.sbk, celOf(e));
     if (!c) continue;
     const box = hurtBox(e, c, level);
     if (!(
@@ -4059,7 +4107,7 @@ function landHits(): void {
       struckBoggs.add(String(k));
       strikeMachine(b, k, mine.damage);
     }
-    const art = level.sbk.cels.find((c) => c.id === boggsCel(b));
+    const art = celRec(level.sbk, boggsCel(b));
     if (!art) continue;
     const bb = {
       left: b.x - art.posX,
@@ -4390,7 +4438,7 @@ function playerBody(): {
   bottom: number;
   right: number;
 } | null {
-  const rec = player?.cels.find((c) => c.id === lastCel);
+  const rec = celRec(player, lastCel);
   if (!rec?.body) return null;
   // ...and the same translation `0x40e680` does, about the anchor — see
   // {@link strikeOf}. `p.x` IS the anchor's x (the art is drawn at `x - posX`),
@@ -4451,7 +4499,7 @@ function gripAt(
   x: number,
   y: number,
 ): { x: number; y: number } | null {
-  const cel = level?.sbk.cels.find((c) => c.id === id);
+  const cel = celRec(level?.sbk, id);
   return gripOf(cel, cel ? strikeOf(cel, x, y, 1) : null);
 }
 
@@ -4622,7 +4670,7 @@ function takeHits(): void {
    */
   // `0x417208` — the claw's first blow is a hundred, and its second is the code
   for (const c of hereOf((l) => l.claws)) {
-    const cel = lvl.sbk.cels.find((q) => q.id === clawCel(c));
+    const cel = celRec(lvl.sbk, clawCel(c));
     if (!cel?.strike) continue;
     /**
      * `obj+0x2a` is set by the COLLISION, not by the damage — `0x43045d` marks a
@@ -4659,7 +4707,7 @@ function takeHits(): void {
    * the artist drew.
    */
   for (const q of hereOf((l) => l.hands)) {
-    const cel = lvl.sbk.cels.find((c) => c.id === handCel(q));
+    const cel = celRec(lvl.sbk, handCel(q));
     if (!cel?.strike) continue;
     const kind = q.underfoot ? HAND.underfoot : HAND.anywhere;
     if (
@@ -4679,7 +4727,7 @@ function takeHits(): void {
   }
   // ...and SEWER's bush, whose last seven cels are a grip and whose blow is -3
   for (const q of hereOf((l) => l.bushes)) {
-    const cel = lvl.sbk.cels.find((c) => c.id === bushCel(q));
+    const cel = celRec(lvl.sbk, bushCel(q));
     if (!cel?.strike) continue;
     // `0x43ee9d` against `0x43eedb`: the grab while it is still reaching, and the
     // half-gravity slump from the frame it has you — see {@link BUSH.grab}
@@ -4691,14 +4739,14 @@ function takeHits(): void {
   }
   // ...and TOWER's current, which carries -4 on every cel of its arc
   for (const g of hereOf((l) => l.surges)) {
-    const cel = lvl.sbk.cels.find((c) => c.id === surgeCel(g));
+    const cel = celRec(lvl.sbk, surgeCel(g));
     if (!cel?.strike) continue;
     if (hit(cel, g.x, g.y, 1, 0, 0, SURGE.blow)) return;
   }
   if (!damageOn) return;
   for (const e of foesHurt ? spawnedHere() : []) {
     if (e.state === "dead" || e.state === "burst") continue;
-    const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
+    const c = celRec(lvl.sbk, celOf(e));
     if (!c?.strike) continue;
     if (hit(c, e.x, e.y, e.facing, e.vx / TICK_SCALE, e.vy / TICK_SCALE))
       return;
@@ -4707,20 +4755,20 @@ function takeHits(): void {
   // carry a box; `0x4537d0` arms a girder on every frame it has
   for (const c of crushesHere()) {
     if (c.state !== "slam") continue;
-    const cel = lvl.sbk.cels.find((q) => q.id === crushCel(c));
+    const cel = celRec(lvl.sbk, crushCel(c));
     if (!cel?.strike) continue;
     if (hit(cel, c.x, c.y, 1, 0, 0)) return;
   }
   for (const b of ibeamsHere()) {
     if (b.delay > 0) continue;
-    const cel = lvl.sbk.cels.find((q) => q.id === ibeamCel(b));
+    const cel = celRec(lvl.sbk, ibeamCel(b));
     if (!cel?.strike) continue;
     if (hit(cel, b.x, b.y, 1, 0, 0)) return;
   }
   // `0x423d29` and the four writes after it — the blade carries a blow of a
   // hundred at every tag it has, and it has nothing else
   for (const a of hereOf((l) => l.axes)) {
-    const cel = lvl.sbk.cels.find((q) => q.id === axeCel(a));
+    const cel = celRec(lvl.sbk, axeCel(a));
     if (!cel?.strike) continue;
     if (hit(cel, a.x, a.y, 1, 0, 0)) return;
   }
@@ -4735,7 +4783,7 @@ function takeHits(): void {
   for (const [slot, clock] of columns) {
     const q = hereOf((l) => l.sprinklers).find((w) => w.slot === slot);
     if (!q) continue;
-    const cel = lvl.sbk.cels.find((c) => c.id === columnCel(clock));
+    const cel = celRec(lvl.sbk, columnCel(clock));
     if (!cel?.strike) continue;
     if (hit(cel, q.x, q.y, 1, 0, 0)) return;
   }
@@ -6559,9 +6607,7 @@ function boggsHeadCel(b: Boggs): number {
  * {@link gripAt} exists.
  */
 function jawsAt(b: Boggs): { x: number; y: number } {
-  const art = level?.sbk.cels.find(
-    (c) => c.id === BOGGS.arm.poses[BOGGS.arm.tag],
-  );
+  const art = celRec(level?.sbk, BOGGS.arm.poses[BOGGS.arm.tag]);
   const box = art?.body;
   if (!box) return { x: b.x, y: b.y };
   return {
@@ -6658,7 +6704,7 @@ function machineBox(
   b: Boggs,
   i: number,
 ): { left: number; right: number; top: number; bottom: number } | null {
-  const art = level?.sbk.cels.find((c) => c.id === machineCel(b, i));
+  const art = celRec(level?.sbk, machineCel(b, i));
   if (!art?.body) return null;
   const m = b.machines[i];
   return {
@@ -6961,12 +7007,12 @@ function stepStreams(): void {
     // ...and what it touches. A strength below 1 is not a blow, so the flame
     // reaches everything in these sixteen levels and hurts none of it.
     if (kit.blow < 1) continue;
-    const cel = lvl.sbk.cels.find((c) => c.id === streamCel(q));
+    const cel = celRec(lvl.sbk, streamCel(q));
     const box = streamBox(q, cel);
     if (!cel?.blow || !box) continue;
     for (const e of pool) {
       if (e.state === "dead" || e.state === "burst") continue;
-      const c = lvl.sbk.cels.find((z) => z.id === celOf(e));
+      const c = celRec(lvl.sbk, celOf(e));
       if (!c) continue;
       const hurt = hurtBox(e, c, lvl);
       if (!(
@@ -7148,6 +7194,7 @@ function spawnBolt(x: number, y: number, facing: number): void {
     vx: (facing * BOLT.dx) / BOLT.divisor,
     facing,
     spent: false,
+    born: true,
   });
 }
 
@@ -7171,6 +7218,11 @@ function stepBolts(): void {
   const pool = i >= 0 ? lvl.spawned[i] : [];
   const span = p.room ? roomSpan(p.room) : null;
   for (const b of bolts) {
+    // ...but not on the tick it was made — see {@link Bolt.born}
+    if (b.born) {
+      b.born = false;
+      continue;
+    }
     const was = b.x;
     b.x += b.vx;
     /**
@@ -7193,7 +7245,7 @@ function stepBolts(): void {
      * nothing in the creator sets it. The step may well be wrong; the sweep
      * makes the hit test independent of it either way.
      */
-    const art = lvl.sbk.cels.find((c) => c.id === BOLT.cel);
+    const art = celRec(lvl.sbk, BOLT.cel);
     const half = { w: art ? art.width / 2 : 12, h: art ? art.height / 2 : 12 };
     const box = {
       left: Math.min(was, b.x) - half.w,
@@ -7214,7 +7266,7 @@ function stepBolts(): void {
      */
     const met: { edge: number; take: () => void }[] = [];
     for (const g of hereOf((l) => l.boggs)) {
-      const cel = lvl.sbk.cels.find((c) => c.id === boggsCel(g));
+      const cel = celRec(lvl.sbk, boggsCel(g));
       if (cel) {
         // the rect the thing is actually DRAWN in — `drawLevelCel` hangs a cel
         // off its anchor by the record's own `posX`/`posY`, and Boggs' 5988 is
@@ -7283,7 +7335,7 @@ function stepBolts(): void {
     // ...and everything else stops it and takes nothing
     for (const e of pool) {
       if (e.state === "dead" || e.state === "burst") continue;
-      const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
+      const c = celRec(lvl.sbk, celOf(e));
       if (!c) continue;
       const hurt = hurtBox(e, c, lvl);
       if (!(
@@ -7347,7 +7399,7 @@ function stepFlares(): void {
       continue;
     }
     // ...and so does anything it reaches, at 100 a time
-    const art = player?.cels.find((c) => c.id === FLARE.flight);
+    const art = celRec(player, FLARE.flight);
     const box = {
       left: f.x - (art ? art.width / 2 : 12),
       right: f.x + (art ? art.width / 2 : 12),
@@ -7356,7 +7408,7 @@ function stepFlares(): void {
     };
     for (const e of pool) {
       if (e.state === "dead" || e.state === "burst") continue;
-      const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
+      const c = celRec(lvl.sbk, celOf(e));
       if (!c) continue;
       const hurt = hurtBox(e, c, lvl);
       if (!(
@@ -7984,7 +8036,7 @@ function stepGoop(): void {
  * threshold of 60 for about the first three frames of its drop and over it after.
  */
 function dripStrike(d: Drip): SbkCel | null {
-  const c = level?.sbk.cels.find((q) => q.id === dripCel(d));
+  const c = celRec(level?.sbk, dripCel(d));
   return c?.strike && c.blow ? c : null;
 }
 
@@ -8009,7 +8061,7 @@ function feedTheGang(): void {
     if (heal === undefined) continue;
     const foe = FOES[e.kind];
     if (e.hp <= 0 || e.hp >= foe.health) continue;
-    const c = lvl.sbk.cels.find((q) => q.id === celOf(e));
+    const c = celRec(lvl.sbk, celOf(e));
     if (!c) continue;
     const box = hurtBox(e, c, lvl);
     const fed = drips.find((d) => {
@@ -8713,7 +8765,22 @@ function stepFight(e: Enemy, foe: Foe, run: number): boolean {
    * thing it throws has the distance to cover, and this page does not yet tell a
    * caster from a puncher. See {@link file://./fights.ts}.
    */
-  if (band >= f.bands.length && f.attacks.length > 0) {
+  /**
+   * ...and nothing starts a swing while the PLAYER is swinging.
+   *
+   * `out+6` of the tracker is that question — `0x45f077` looks up the player's
+   * current cel and answers 1 when its strike box is not degenerate — and the
+   * classes read it in two ways. The dog will not commit while it is set
+   * (`0x454e45`: `rand(30) < 3` AND `out+6` clear, or no bite), and the punk
+   * turns it into a decision of its own at `0x44e7a8` — a coin flip between
+   * backing off on `0x4771a0 tag 0` and stepping in on tag 1, which wants that
+   * class's own two scripts and so waits for its own brain.
+   *
+   * The half that is the same everywhere is here: while you are mid-blow it does
+   * not start one. An enemy that swung into every punch read as having no idea
+   * you were there.
+   */
+  if (band >= f.bands.length && f.attacks.length > 0 && !playerSwinging) {
     e.anim = f.attacks[Math.floor(Math.random() * f.attacks.length)];
     e.swing = true;
     e.clock = 0;
@@ -8723,9 +8790,19 @@ function stepFight(e: Enemy, foe: Foe, run: number): boolean {
   return false;
 }
 
+/**
+ * Is the player's own cel an attacking frame this tick?
+ *
+ * `out+6` of the tracker, and read ONCE a tick rather than once per enemy —
+ * {@link strikeBox} looks the player's cel up by id and twenty enemies asking
+ * separately was the single hottest thing the fight added. See {@link celRec}.
+ */
+let playerSwinging = false;
+
 function stepEnemies(): void {
   const lvl = level;
   const pool = spawnedHere();
+  playerSwinging = strikeBox() !== null;
   for (const e of [...pool]) {
     const foe = FOES[e.kind];
     e.clock += TICK_SCALE;
@@ -8741,7 +8818,7 @@ function stepEnemies(): void {
       if (born && !e.hatched && e.clock >= born.afterCels * e.anim.hold) {
         e.hatched = true;
         const kid = FOES[born.kind];
-        const g = lvl?.sbk.cels.find((c) => c.id === kid.gait.cels[0]);
+        const g = celRec(lvl?.sbk, kid.gait.cels[0]);
         if (kid && g) {
           sound?.effect(FOE_SFX.weredHatch, e.x, e.y);
           pool.push({
@@ -8940,16 +9017,31 @@ function stepEnemies(): void {
         : Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
     const step = ((e.anim.dx?.[i] ?? 0) / foe.divisor) * TICK_SCALE;
     /**
-     * The lift the leaping attacks carry is READ and not yet applied.
+     * A leap is an IMPULSE, not an offset — which is the whole of the fix.
      *
-     * `0x477368 tag 0` is `dy -480` on the frame cel 1942 shows, and putting that
-     * straight into `e.y` is not what the engine does with it: the husk in WOODS
-     * went up 96 pixels, missed the floor coming down — `foeSurfaceUnder` reaches
-     * {@link CLIMB_PX} and no further — and fell nine thousand pixels out of the
-     * level, still swinging. The engine's own stepper carries a leap as velocity
-     * through `obj+0xa`, and wiring that here is its own piece of work. The
-     * numbers are in {@link file://./fights.ts} for when it is.
+     * `0x477368 tag 0` carries `dy -480` on the frame cel 1942 shows, and the
+     * engine spends a number like that the way it spends the player's own jump:
+     * `0x42f8b0` rounds `dy / divisor` away from zero and writes it into
+     * `obj+0xa`, ONCE, on the frame it appears. Gravity takes it from there.
+     *
+     * Adding it straight to `e.y` instead — which this did — moved the thing
+     * ninety-six pixels in four frames with no velocity to show for it, so the
+     * landing test never saw a fall: `foeSurfaceUnder` reaches {@link CLIMB_PX}
+     * below the feet and no further, found nothing, and WOODS' husk went nine
+     * thousand pixels out of the level still swinging. As velocity it uses the
+     * flight path every knocked-back thing already uses, sweeping the surfaces
+     * along the way down, and it lands.
+     *
+     * The frame's own `dx` goes with it — a leap that rises and does not travel
+     * is not what tag 0 says — and the stride block below then leaves it alone,
+     * because that only runs on a thing with no velocity.
      */
+    const onFrame = Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE);
+    const lift = e.anim.dy?.[i] ?? 0;
+    if (lift !== 0 && onFrame && e.vy === 0 && travels(foe) && !foe.floats) {
+      e.vy = (lift / foe.divisor) * TICK_SCALE;
+      e.vx = (step || 0) * e.facing;
+    }
     // ...and a class that stands still stands still while it fights: its attack's
     // own stride would otherwise walk it off the wall it reaches out of
     // a floater's own hover keeps `vy` busy for ever, and its script's stride has
@@ -8969,7 +9061,7 @@ function stepEnemies(): void {
        * column at x10230, and the werewolf patrolling east of it fell through the
        * world every time it walked west into that step.
        */
-      const baseNow = lvl ? baseOf(e, lvl) : e.y;
+      const baseNow = lvl ? footOf(e, lvl, foe) : e.y;
       const ground = groundAt(nx);
       const reach = foeSurfaceUnder(nx, baseNow - CLIMB_PX, baseNow + STICK_PX);
       // a floater has no feet to catch on a step
@@ -9030,7 +9122,7 @@ function stepEnemies(): void {
     // ...and a thing with no gravity stands on nothing: it keeps the height its
     // record's point gave it ({@link Foe.floats})
     if (e.vx === 0 && e.vy === 0 && !foe.floats) {
-      const base = lvl ? baseOf(e, lvl) : e.y;
+      const base = lvl ? footOf(e, lvl, foe) : e.y;
       const s = foeSurfaceUnder(e.x, base - CLIMB_PX, base + STICK_PX);
       if (s !== null) e.y += s - base;
       else e.vy = INVENTED.gravityPx;
@@ -9055,7 +9147,7 @@ function drawLevelCel(
   const loc = lvl.sbk.byId.get(id);
   if (loc === undefined) return;
   const art = cel(lvl, loc);
-  const rec = lvl.sbk.cels.find((q) => q.id === id);
+  const rec = celRec(lvl.sbk, id);
   if (!art || !rec) return;
   // `0x45d0f0` reflects a mirrored cel about its own ANCHOR, not its centre —
   // the same rule the backdrop's placements follow
@@ -9127,7 +9219,7 @@ function drawEnemy(e: Enemy, camX: number, camY: number): void {
   const loc = lvl.sbk.byId.get(id);
   if (loc === undefined) return;
   const art = cel(lvl, loc);
-  const c = lvl.sbk.cels.find((q) => q.id === id);
+  const c = celRec(lvl.sbk, id);
   const a = foeAnchor(e, lvl);
   if (!art || !c || !a) return;
   // by this cel's own anchor about the kind's fixed point — see foeAnchor. On
@@ -9220,7 +9312,7 @@ function drawStreams(camX: number, camY: number): void {
   for (const q of streams) {
     const id = streamCel(q);
     const loc = lvl.sbk.byId.get(id);
-    const rec = lvl.sbk.cels.find((c) => c.id === id);
+    const rec = celRec(lvl.sbk, id);
     if (loc === undefined || !rec) continue;
     const art = cel(lvl, loc);
     if (!art) continue;
@@ -9800,7 +9892,7 @@ function loop(now: number): void {
       const last = Math.floor((ladder.bottom - ladder.top) / spacing);
       // the resting cel's own box is how far the feet hang below the anchor, and
       // the anchor is what a rung IS
-      const rest = player?.cels.find((c) => c.id === LADDER.restCel);
+      const rest = celRec(player, LADDER.restCel);
       const feet = rest?.body ? rest.body.y1 : 96;
       if (!wasClimbing) {
         p.ladder = ladder;
@@ -10441,7 +10533,7 @@ function loop(now: number): void {
       // that anchor. So while climbing the cel goes where `0x4026d0` would put it
       // — anchor on the rung, reflected about the anchor on mirror — which is the
       // only placement that puts the grip on the rungs.
-      const rec = p.climbing ? player.cels.find((c) => c.id === id) : undefined;
+      const rec = p.climbing ? celRec(player, id) : undefined;
       const sx = p.x - camX + W / 2;
       const left = rec
         ? p.facing < 0

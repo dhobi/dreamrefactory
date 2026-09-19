@@ -118,8 +118,12 @@ export const WEAPONS: Readonly<Record<number, Weapon>> = {
     from: "0x412a10, fire 0x412a70, script 0x471458 kind 22, state 0x42dbd0",
     moveset: {
       idle: [4000],
-      walk: [4000, 4001, 4002, 4003, 4004, 4005, 4006, 4007, 4008, 4009, 4010, 4011],
-      run: [4025, 4026, 4027, 4028, 4029, 4030, 4031, 4032, 4033, 4034, 4035, 4036],
+      walk: [
+        4000, 4001, 4002, 4003, 4004, 4005, 4006, 4007, 4008, 4009, 4010, 4011,
+      ],
+      run: [
+        4025, 4026, 4027, 4028, 4029, 4030, 4031, 4032, 4033, 4034, 4035, 4036,
+      ],
       jump: [4050, 4051],
       fall: [4052],
       land: [4053],
@@ -137,8 +141,12 @@ export const WEAPONS: Readonly<Record<number, Weapon>> = {
     from: "0x436ce0, fire 0x436d40, script 0x470a78 kind 20, state 0x42cb80",
     moveset: {
       idle: [2721],
-      walk: [2700, 2701, 2702, 2703, 2704, 2705, 2706, 2707, 2708, 2709, 2710, 2711],
-      run: [2760, 2761, 2762, 2763, 2764, 2765, 2766, 2767, 2768, 2769, 2770, 2771],
+      walk: [
+        2700, 2701, 2702, 2703, 2704, 2705, 2706, 2707, 2708, 2709, 2710, 2711,
+      ],
+      run: [
+        2760, 2761, 2762, 2763, 2764, 2765, 2766, 2767, 2768, 2769, 2770, 2771,
+      ],
       jump: [2740, 2741],
       fall: [2742],
       land: [2743],
@@ -156,8 +164,12 @@ export const WEAPONS: Readonly<Record<number, Weapon>> = {
     from: "0x44da80, fire 0x44dae0, script 0x470f98 kind 18, state 0x42b860",
     moveset: {
       idle: [1215, 1216, 1217],
-      walk: [1200, 1201, 1202, 1203, 1204, 1205, 1206, 1207, 1208, 1209, 1210, 1211],
-      run: [1280, 1281, 1282, 1283, 1284, 1285, 1286, 1287, 1288, 1289, 1290, 1291],
+      walk: [
+        1200, 1201, 1202, 1203, 1204, 1205, 1206, 1207, 1208, 1209, 1210, 1211,
+      ],
+      run: [
+        1280, 1281, 1282, 1283, 1284, 1285, 1286, 1287, 1288, 1289, 1290, 1291,
+      ],
       jump: [1260, 1261],
       fall: [1262],
       // the flamer's script has no landing tag of its own; 0x42bdc4 installs
@@ -178,8 +190,12 @@ export const WEAPONS: Readonly<Record<number, Weapon>> = {
     from: "0x41f65b, fire 0x41f820, script 0x471260 kind 19, state 0x42c1e0",
     moveset: {
       idle: [3200],
-      walk: [3200, 3201, 3202, 3203, 3204, 3205, 3206, 3207, 3208, 3209, 3210, 3211],
-      run: [3280, 3281, 3282, 3283, 3284, 3285, 3286, 3287, 3288, 3289, 3290, 3291],
+      walk: [
+        3200, 3201, 3202, 3203, 3204, 3205, 3206, 3207, 3208, 3209, 3210, 3211,
+      ],
+      run: [
+        3280, 3281, 3282, 3283, 3284, 3285, 3286, 3287, 3288, 3289, 3290, 3291,
+      ],
       jump: [3270, 3271],
       fall: [3272],
       land: [3273],
@@ -199,8 +215,12 @@ export const WEAPONS: Readonly<Record<number, Weapon>> = {
     from: "0x41f640, fire 0x41f6b0, script 0x470c40 kind 21, state 0x42d2b0",
     moveset: {
       idle: [3300],
-      walk: [3300, 3301, 3302, 3303, 3304, 3305, 3306, 3307, 3308, 3309, 3310, 3311],
-      run: [3400, 3401, 3402, 3403, 3404, 3405, 3406, 3407, 3408, 3409, 3410, 3411],
+      walk: [
+        3300, 3301, 3302, 3303, 3304, 3305, 3306, 3307, 3308, 3309, 3310, 3311,
+      ],
+      run: [
+        3400, 3401, 3402, 3403, 3404, 3405, 3406, 3407, 3408, 3409, 3410, 3411,
+      ],
       jump: [3350, 3351],
       fall: [3352],
       land: [3353],
@@ -242,22 +262,134 @@ export const GUN_CODES: Readonly<Record<number, GunCode>> = {
   // `0x43af00` — not a record but a DROP: the class at 0x43af00 spawns one at
   // its own point as it dies, and `0x428868` pays 150 health for it. It has a
   // case in every table and no name in any level.
-  2: { name: null, cel: 14000, weapon: null, rounds: 0, arms: false, from: "0x43af00 / 0x428868" },
-  3: { name: null, cel: 14000, weapon: null, rounds: 0, arms: false, from: "0x45afa3 default" },
-  4: { name: null, cel: 14000, weapon: null, rounds: 0, arms: false, from: "0x45afa3 default" },
-  5: { name: null, cel: 14000, weapon: null, rounds: 0, arms: false, from: "0x45afa3 default" },
-  6: { name: "statblaster", cel: 14006, weapon: 6, rounds: 40, arms: true, from: "0x416440" },
-  7: { name: "statblasterpack", cel: 14007, weapon: 6, rounds: 40, arms: false, from: "0x416460" },
-  8: { name: "statflare", cel: 14003, weapon: 9, rounds: 4, arms: false, from: "0x43be30" },
-  9: { name: "statflaregun", cel: 14002, weapon: 9, rounds: 0, arms: true, from: "0x43bb48, no callback" },
-  10: { name: "statflamer", cel: 14000, weapon: 10, rounds: 40, arms: true, from: "0x451520" },
-  11: { name: "statflamertank", cel: 14001, weapon: 10, rounds: 40, arms: false, from: "0x451540" },
-  12: { name: "statsoaker", cel: 14004, weapon: 12, rounds: 40, arms: true, from: "0x421e20" },
-  13: { name: "statsoakertank", cel: 14005, weapon: 12, rounds: 40, arms: false, from: "0x421e40" },
-  14: { name: null, cel: 14000, weapon: null, rounds: 0, arms: false, from: "0x45afa3 default" },
-  15: { name: null, cel: 14000, weapon: null, rounds: 0, arms: false, from: "0x45afa3 default" },
-  16: { name: null, cel: 14011, weapon: 16, rounds: 0, arms: true, from: "0x428950" },
-  17: { name: "statscepter", cel: 14010, weapon: 16, rounds: 0, arms: true, from: "0x421b88, no callback" },
+  2: {
+    name: null,
+    cel: 14000,
+    weapon: null,
+    rounds: 0,
+    arms: false,
+    from: "0x43af00 / 0x428868",
+  },
+  3: {
+    name: null,
+    cel: 14000,
+    weapon: null,
+    rounds: 0,
+    arms: false,
+    from: "0x45afa3 default",
+  },
+  4: {
+    name: null,
+    cel: 14000,
+    weapon: null,
+    rounds: 0,
+    arms: false,
+    from: "0x45afa3 default",
+  },
+  5: {
+    name: null,
+    cel: 14000,
+    weapon: null,
+    rounds: 0,
+    arms: false,
+    from: "0x45afa3 default",
+  },
+  6: {
+    name: "statblaster",
+    cel: 14006,
+    weapon: 6,
+    rounds: 40,
+    arms: true,
+    from: "0x416440",
+  },
+  7: {
+    name: "statblasterpack",
+    cel: 14007,
+    weapon: 6,
+    rounds: 40,
+    arms: false,
+    from: "0x416460",
+  },
+  8: {
+    name: "statflare",
+    cel: 14003,
+    weapon: 9,
+    rounds: 4,
+    arms: false,
+    from: "0x43be30",
+  },
+  9: {
+    name: "statflaregun",
+    cel: 14002,
+    weapon: 9,
+    rounds: 0,
+    arms: true,
+    from: "0x43bb48, no callback",
+  },
+  10: {
+    name: "statflamer",
+    cel: 14000,
+    weapon: 10,
+    rounds: 40,
+    arms: true,
+    from: "0x451520",
+  },
+  11: {
+    name: "statflamertank",
+    cel: 14001,
+    weapon: 10,
+    rounds: 40,
+    arms: false,
+    from: "0x451540",
+  },
+  12: {
+    name: "statsoaker",
+    cel: 14004,
+    weapon: 12,
+    rounds: 40,
+    arms: true,
+    from: "0x421e20",
+  },
+  13: {
+    name: "statsoakertank",
+    cel: 14005,
+    weapon: 12,
+    rounds: 40,
+    arms: false,
+    from: "0x421e40",
+  },
+  14: {
+    name: null,
+    cel: 14000,
+    weapon: null,
+    rounds: 0,
+    arms: false,
+    from: "0x45afa3 default",
+  },
+  15: {
+    name: null,
+    cel: 14000,
+    weapon: null,
+    rounds: 0,
+    arms: false,
+    from: "0x45afa3 default",
+  },
+  16: {
+    name: null,
+    cel: 14011,
+    weapon: 16,
+    rounds: 0,
+    arms: true,
+    from: "0x428950",
+  },
+  17: {
+    name: "statscepter",
+    cel: 14010,
+    weapon: 16,
+    rounds: 0,
+    arms: true,
+    from: "0x421b88, no callback",
+  },
 };
 
 /**
@@ -432,6 +564,21 @@ export interface Bolt {
   vx: number;
   facing: number;
   spent: boolean;
+  /**
+   * True on the tick it was created, and it collides with nothing while it is.
+   *
+   * `0x412a70` builds the bolt through `0x430d40` and the object is collided on
+   * the passes AFTER the one that made it; here the gun and the bolts step in
+   * the same tick, so a bolt born into something was spent before it had ever
+   * been drawn. MAZE is where that showed: the turret at x1850 puts its bolt a
+   * hundred and twenty pixels ahead, and now that the level's `initcop` walks up
+   * to the player it stands exactly there and ate every one of them on frame
+   * zero — the gun fired, and nothing was ever on the screen.
+   *
+   * A body stopping a bolt is right ({@link stepBolts}: everything stops it and
+   * takes nothing). A bolt nobody can see is not.
+   */
+  born: boolean;
 }
 
 /**
@@ -498,7 +645,11 @@ export interface StreamKit {
 
 export const STREAMS: Readonly<Record<number, StreamKit>> = {
   10: {
-    start: { cels: [9500, 9501, 9502, 9503, 9504, 9505, 9506, 9507], hold: 1, from: "0x478858 tag 0" },
+    start: {
+      cels: [9500, 9501, 9502, 9503, 9504, 9505, 9506, 9507],
+      hold: 1,
+      from: "0x478858 tag 0",
+    },
     loop: { cels: [9508, 9509, 9510, 9511], hold: 1, from: "0x478858 tag 1" },
     stop: { cels: [9504], hold: 1, from: "0x478858 tag 2" },
     // `0x44db90` and the three after it
@@ -516,7 +667,11 @@ export const STREAMS: Readonly<Record<number, StreamKit>> = {
     from: "0x44dae0 / 0x478858 / 0x453b80, list 0x4788c8",
   },
   12: {
-    start: { cels: [9800, 9801, 9802, 9803, 9804, 9805, 9806, 9807], hold: 1, from: "0x4705e0 tag 0" },
+    start: {
+      cels: [9800, 9801, 9802, 9803, 9804, 9805, 9806, 9807],
+      hold: 1,
+      from: "0x4705e0 tag 0",
+    },
     loop: { cels: [9806, 9807], hold: 1, from: "0x4705e0 tag 1" },
     stop: { cels: [9804, 9803, 9802, 9801], hold: 1, from: "0x4705e0 tag 2" },
     // `0x41f8d0` and the three after it
@@ -535,7 +690,11 @@ export const STREAMS: Readonly<Record<number, StreamKit>> = {
   16: {
     start: { cels: [3270, 3271, 3272, 3273], hold: 1, from: "0x46f4d0 tag 0" },
     loop: { cels: [3272, 3273], hold: 1, from: "0x46f4d0 tag 0's own tail" },
-    stop: { cels: [3280, 3281, 3282, 3281, 3282], hold: 1, from: "0x46f4d0 tag 2" },
+    stop: {
+      cels: [3280, 3281, 3282, 3281, 3282],
+      hold: 1,
+      from: "0x46f4d0 tag 2",
+    },
     /**
      * `0x41f755` onward, and the scepter's are kept the other way round in the
      * user struct — `user+2` is the dx and `user+0` the dy.
