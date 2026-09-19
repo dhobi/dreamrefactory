@@ -22,17 +22,10 @@
  * `?clock=` exists for the last of those: the dial is eight minutes long and a
  * test cannot wait for it.
  */
-import { chromium } from "playwright";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
-
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
   const hud = page.locator("#hud");
@@ -84,28 +77,17 @@ const main = async (): Promise<void> => {
   //    the touch — and it must be out and back, since standing where the goal
   //    will be is not touching a thing that is not there yet.
   await load("level=8");
-  // its spawn point falls inside its own goal rect, so the craft arrives over the
-  // player's head and waits for them to walk out and back
-  const eight = await until(/at the goal — the television is overhead/, 20, 300);
-  console.log(`ok    ARCADE has nothing this page can kill, so its television flies in at once`);
-  if (/screen is coming down/.test(eight)) fail(`ARCADE's goal opened without the player walking to it`);
+  const eight = await say();
+  if (!/quota 1 of 1/.test(eight)) fail(`ARCADE's share is its one boss; the HUD says ${/quota[^·]*/.exec(eight)?.[0]}`);
+  if (/television/.test(eight)) fail(`a television must not fly in with the quota unmet: ${/· [^·]*television[^·]*/.exec(eight)?.[0]}`);
+  console.log(`ok    ARCADE's share is its one initkragg, and no television comes while it lives`);
 
-  await page.keyboard.down("ArrowLeft");
-  await page.waitForTimeout(2600);
-  await page.keyboard.up("ArrowLeft");
-  await page.keyboard.down("ArrowRight");
-  const film = await until(/segment \d+\/\d+/);
-  await page.keyboard.up("ArrowRight");
-  if (!/chp09\.mov/.test(film)) fail(`the goal played "${film.slice(0, 60)}" — the next mission's film is chp09.mov`);
-  console.log(`ok    touching it plays the next briefing: ${film.split(" ·")[0]}`);
-
-  for (let i = 0; i < 12 && /segment/.test(await say()); i++) {
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(300);
-  }
-  const nine = await until(/room \d+ of \d+/);
-  if (!/level 9 · grave/.test(nine)) fail(`after ARCADE the page is at "${nine.slice(0, 40)}" — level 9 is grave`);
-  console.log(`ok    and the level after it is the ninth, grave`);
+  // ...and standing in the goal rect is not enough either. ARCADE's spawn point
+  // falls inside its own goal, which is exactly the case `leftGoal` exists for.
+  await page.waitForTimeout(2000);
+  if (/screen is coming down|level 9/.test(await say()))
+    fail(`ARCADE's goal opened with its boss alive: ${(await say()).slice(0, 120)}`);
+  console.log(`ok    ...and standing in the goal rect from the first frame opens nothing`);
 
   // 4. the clock: 40 frames of an 8-minute dial, then one of the four films
   await load("level=1&clock=40");
@@ -127,23 +109,24 @@ const main = async (): Promise<void> => {
   if (!/3 lives/.test(two)) fail(`CITY starts with something other than three lives: ${two.slice(0, 160)}`);
   await page.keyboard.down("w");
   await page.keyboard.down("ArrowRight");
-  const death = await until(/segment \d+\/\d+/, 30, 400);
+  // ...and there is no film. `0x4294a6` reads the lives, `0x4294ad` spends one
+  // and `0x4294b7` takes the ordinary path while the count BEFORE the spend was
+  // not negative, so the KILL vignette belongs to the last life alone. What says
+  // the fall was fatal is the count.
+  const back = await until(/2 lives/, 30, 400);
   await page.keyboard.up("ArrowRight");
   await page.keyboard.up("w");
-  if (!/kill[1-7]\.mov/.test(death)) fail(`falling out of CITY played "${death.slice(0, 60)}" — KILL1..7 are the seven`);
-  console.log(`ok    running off CITY's ledge is fatal: ${death.split(" ·")[0]}`);
-  for (let i = 0; i < 12 && /segment/.test(await say()); i++) {
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(300);
+  if (/segment \d+\/\d+/.test(back)) {
+    fail(`the first of three deaths should play no film — 0x4294b7; the page is on "${back.slice(0, 60)}"`);
   }
-  const back = await until(/room \d+ of \d+/);
+  console.log(`ok    running off CITY's ledge is fatal, and costs a life with no film`);
   if (!/level 2 · city/.test(back)) fail(`after the fall the page is at "${back.slice(0, 40)}"`);
   if (!/2 lives/.test(back)) fail(`the fall cost no life: ${back.slice(0, 200)}`);
   if (!/y 3925/.test(back)) fail(`the respawn is not CITY's own spawn point: ${back.slice(0, 200)}`);
   console.log(`ok    and it costs a life and puts them back where the level starts`);
 
-  await browser.close();
+  await finish(browser);
   console.log(`PASS  the quota gates the goal, the goal ends the level, the clock and the void end it too`);
 };
 
-void main();
+await main();

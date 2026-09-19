@@ -17,14 +17,8 @@
  * a deliberate one: it survives a repaint, a repalette and a rewrite of the
  * drawing order, and it fails the moment a region stops being drawn.
  */
-import { chromium, type Page } from "playwright";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
-
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
+import { type Page } from "playwright";
+import { BASE, fail, finish, launch } from "./harness";
 
 /** how many pixels in a rectangle pass a channel test, off the live canvas */
 const count = (
@@ -49,7 +43,7 @@ const count = (
   );
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
 
@@ -135,8 +129,81 @@ const main = async (): Promise<void> => {
   }
   console.log(`ok    and a kill pays: the score plate went from ${scoreBefore} to ${scoreAfter} green pixels`);
 
-  await browser.close();
+  // 5. the letters beside the eight buttons are TYPESET out of the key map, not
+  //    painted into the band. `0x40cf00` finishes by calling `0x40e870(action)`
+  //    for actions 1..8 and writing each name at its own point in `0x46bd58`,
+  //    centred in a box fifteen wide — so what the band says is whatever the
+  //    preferences panel last bound, and a panel with nothing bound says nothing.
+  //
+  //    The ink is `0x409a00`'s 0xe1, which is the same bright green the band's
+  //    own JUMP/KICK/PUNCH/INV. are, so the count is taken in a box tight around
+  //    one label and the empty reading below is what proves it is the label.
+//
+  //    Each window is the table's point with the box's fifteen pixels around it
+  //    in x, and in y it straddles the point rather than hanging below it: the
+  //    point is the glyph's BASELINE, so the letter stands in the thirteen rows
+  //    ABOVE its table entry.
+  const LABELS: Record<string, [number, number, number, number]> = {
+    up: [56, 311, 76, 327],
+    right: [70, 326, 90, 342],
+    down: [56, 341, 76, 357],
+    left: [39, 326, 59, 342],
+    punch: [196, 333, 216, 349],
+    kick: [196, 313, 216, 329],
+    inv: [172, 353, 192, 369],
+    jump: [172, 294, 192, 310],
+  };
+  const labelInk = async (): Promise<Record<string, number>> => {
+    const out: Record<string, number> = {};
+    for (const [name, box] of Object.entries(LABELS)) out[name] = await count(page, box, "green");
+    return out;
+  };
+  const reload = async (): Promise<void> => {
+    await page.goto(`${BASE}/walk.html?level=1`);
+    await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+    await page.waitForTimeout(600);
+  };
+  const bind = async (keys: string[]): Promise<void> => {
+    await page.evaluate((k) => {
+      const raw = JSON.parse(localStorage.getItem("skullcracker.prefs") ?? "{}");
+      raw.keys = k;
+      localStorage.setItem("skullcracker.prefs", JSON.stringify(raw));
+    }, keys);
+    await reload();
+  };
+  await reload();
+  const shipped = await labelInk();
+  for (const [name, n] of Object.entries(shipped)) {
+    if (n < 10) fail(`the ${name} button should carry its key's name; ${n} green pixels at 0x46bd58's point`);
+  }
+  console.log(`ok    the eight buttons are labelled: ${Object.entries(shipped).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+
+  // ...and with nothing bound there is nothing to say. `0x40e870` names no
+  // character it cannot name, so every one of the eight boxes has to lose ink.
+  // It cannot be asked to read zero: the four arrow windows sit on the arrow
+  // cluster's own bright green, and that art is the band's, not the label's.
+  await bind(["", "", "", "", "", "", "", ""]);
+  const bare = await labelInk();
+  const speaking = Object.keys(LABELS).filter((k) => bare[k] >= shipped[k]);
+  if (speaking.length > 0) {
+    fail(`an unbound panel should say nothing; ${speaking.map((k) => `${k} ${shipped[k]}\u2192${bare[k]}`).join(", ")}`);
+  }
+  console.log(
+    `ok    ...and an unbound panel says nothing: ${Object.keys(LABELS).map((k) => `${k} ${shipped[k]}\u2192${bare[k]}`).join(", ")}`,
+  );
+
+  // ...and a rebinding changes what it says, which is the whole point of it
+  await bind(["M", "N", "O", "Q", "R", "T", "U", "V"]);
+  const rebound = await labelInk();
+  if (Object.keys(LABELS).every((k) => rebound[k] === shipped[k])) {
+    fail(`rebinding all eight changed no label — the band is painted, not typeset`);
+  }
+  console.log(`ok    and rebinding changes it: ${Object.values(rebound).join(" ")}`);
+  // ...and put the shipped table back, so nothing downstream inherits this
+  await page.evaluate(() => localStorage.removeItem("skullcracker.prefs"));
+
+  await finish(browser);
   console.log(`PASS  the panel is the disc's art, wired to the page's own state`);
 };
 
-void main();
+await main();

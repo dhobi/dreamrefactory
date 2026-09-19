@@ -134,6 +134,15 @@ export const OWN = {
   swing: [6, 7, 8, 9] as const,
   /** `0x429a76` and `0x429e07`: pressing J plays one sound, always this one */
   jump: 7,
+  /**
+   * Taking one — `0x4490f0` plays `12 + 0x434540(2)`, so 13 or 14, out of the
+   * player's own bank as the blow lands.
+   */
+  hurt: [13, 14] as const,
+  /** `0x42a172`: the landing tag goes in with this one... */
+  land: 4,
+  /** ...and `0x42a126`, a fall past 360, with this one and ten health off */
+  landHard: 5,
   from: "0x429990 / 0x429b80 / 0x42ae50",
 } as const;
 
@@ -161,6 +170,152 @@ export const FOE_SFX = {
   wereaDeath: 0x21,
   /** `0x44f965` — the chain-carrying one drops its chain instead */
   werebDeath: 0x1b,
+  /** `0x454828` — the big one takes ONE sound, with no `0x434540` behind it */
+  weredHit: 0x27,
+  /** `0x45485b` — and dies on this one, through `0x40f090` like the others */
+  weredDeath: 0x1f,
+  /** `0x454669` and `0x4546c4` — the two beats of the hatch, as it splits open */
+  weredHatch: 0x20,
+  /**
+   * The dog's five, and `woods.snd`'s own names are the check on every one of
+   * them: 20 is "0400 wolfy running", 21 "0410 wolfy look", 22 "0415 wolfy hit",
+   * 23 "0420 wolfy bark" and 24 "0440 wolfy death". The class calls 20 when it
+   * breaks into a trot (`0x454caf`), 21 as it sniffs (`0x454dd6`), 23 as it barks
+   * or leaps (`0x454cfb` and three more), 22 on a blow (`0x4551b7`) and 24 on the
+   * one that finishes it (`0x4551d4`).
+   */
+  dogHit: 0x16,
+  dogDeath: 0x18,
+  /**
+   * Level five's, and these come out of a DIFFERENT bank — `mall.snd`, which
+   * chapter two shares the way chapter four shares `woods.snd`. `0x43906d` plays
+   * 4 on a blow that lands on the masked one and `0x439ad1` plays 12 on the one
+   * with the bat; neither has a death sound of its own, and neither randomises.
+   */
+  maskboyHit: 4,
+  batboyHit: 12,
+  knotboyHit: 9,
+  /**
+   * ...and the three of them waking. Every enemy in level five stands dormant
+   * until the player's point crosses its own record's rect, and each plays one
+   * sound as it starts walking: `0x4388f4` the masked one, `0x43937b` the one
+   * with the bat, `0x437c5a` the third.
+   */
+  maskboyWake: 3,
+  batboyWake: 11,
+  knotboyWake: 8,
+  /**
+   * Level six's two, out of the same chapter bank.
+   *
+   * The one with the knife takes the gang's shape exactly — `0x439dd0` wakes it
+   * with 14 and `0x43a6d1` plays 15 on a blow — and adds one its siblings share
+   * but MALL never reaches: `0x43a695` plays 11 when the thing that hit it was
+   * GOOP, which heals rather than hurts.
+   *
+   * The one at the end of the level is not of the gang and sounds nothing like
+   * it: one index, `0x43d31b`'s 0x45, on every blow that does not kill it.
+   */
+  knifeboyWake: 14,
+  knifeboyHit: 15,
+  knifeboyFed: 11,
+  hardcoreHit: 0x45,
+  /**
+   * Level seven's two, out of the same chapter bank again.
+   *
+   * The floating eye takes one sound on every blow (`0x43e8fc`) and has a whole
+   * ceremony for dying: `0x43e942` stops a LOOP it has been running at 0x38 and
+   * `0x43e964` plays 0x3a over the burst. The thing in the pipe is plainer —
+   * 0x33 on a blow, 0x34 as it goes down — but its flinch picks a sound with the
+   * tag: `0x43fa9e` adds the roll to 0x2f, so 47, 48 or 49 with the take.
+   */
+  eyeballHit: 0x39,
+  eyeballLoop: 0x38,
+  eyeballDeath: 0x3a,
+  oxHit: 0x33,
+  oxDeath: 0x34,
+  oxFlinch: [47, 48, 49] as const,
+  /**
+   * The thing at the end of chapter two. `0x441dc9` takes `0x434540(2) + 0x17`
+   * on every blow — 23 or 24 — and the same pair answers a flare; `0x441d72`
+   * plays 0x13 on top of the flare's own reaction, and `0x441e26` stops the
+   * loop it has been running at 0x17 as it goes down.
+   */
+  kraggHit: [23, 24] as const,
+  kraggFlare: 0x13,
+  kraggLoop: 0x17,
+  /**
+   * Chapter THREE's, out of `belfry.snd`, and its names are again the check:
+   * 12..18 are `0040 zombie die`, `0041 zombie a4`, `0042 zombie tak`,
+   * `0043 zombie get`, `0045 zombie bre` and `0046 zombie bre`, 3 is
+   * `0020 hands brea[k]`, 58 is `0136 grave pull` and 49 `0100 skull muff[led]`
+   * — the one the player makes going into a hole.
+   */
+  zombHit: 0xf,
+  zombDeath: 0xc,
+  /** `0x421135` — what a closed grave plays as it throws you off it */
+  gravePull: 0x3a,
+  /** `0x421256` — and what you make on the way down */
+  graveTake: 0x31,
+  /** `0x4211e4` and `0x420c8b` — the hand, coming up and going down */
+  hand: 3,
+  /** `0x42332c` — `0012 bat hit`, and a bat dies to any blow at all */
+  batDeath: 2,
+  /** `0x422bcb` and `0x422cd7` — `0096 GHENGIS ST` and `0090 GHENGIS SN` */
+  ghengisHit: 0x2a,
+  ghengisDeath: 0x2f,
+  /** `0x423ac4` — `0053 skeleton z` */
+  skelHit: 0x16,
+  /** `0x4224xx` — `0124 bridge cru` as one gives way, `0125 bridge cav` after */
+  bridgeCrack: 0x34,
+  bridgeFall: 0x35,
+  /** `0x423d9d` — `0070 swiningbla[de]` */
+  axe: 0x20,
+  /** `0x425058` and `0x4250c8` — the wraith, hit and gone */
+  wraithHit: 0x21,
+  wraithDeath: 0x29,
+  /** `0x42704a` and `0x427075` — `0120 floor crea[ks]` then `0121 floor cave[s]` */
+  floorCreak: 0x32,
+  floorCave: 0x33,
+  /** `0x426aa8` — `0134 surge` */
+  surge: 0x38,
+  /** `0x426582` and `0x4265dd` — and belfry.snd calls it the BISHOP */
+  priestHit: 2,
+  priestDeath: 0x1e,
+  /**
+   * Chapter FOUR's, out of `lab.snd`, and its names are the check again — they
+   * are also what the classes are actually CALLED. `initcop` is the TCop:
+   * 14..17 are `#0085 TCop eats` and three `TCop punc[h]`es, 13 is
+   * `#0084 TCop Dies`. 19 and 20 are `#0100 claw wizz` and `#0101 clawclamp`.
+   */
+  copHit: [14, 15, 16, 17] as const,
+  copDeath: 13,
+  /** `0x417a7c` and `0x417ab8` — the claw, travelling and closing */
+  clawMove: 19,
+  clawShut: 20,
+  /**
+   * LAB's three, and the names are the classes' own: 5 and 6 are
+   * `#0061 Pukeboy d[ies]` and `#0062 Pukeboy p[unched]` — `0x418362` rolls
+   * `0x434540(2) + 5` between them — 0x25 is `#2013 arm hit` and 0x19 is
+   * `#0201 test tube`.
+   */
+  pukeHit: [5, 6] as const,
+  pukeDeath: 5,
+  armHit: 0x25,
+  tube: 0x19,
+  /** `0x43b6a3` — `mall.snd` names index 32 "#0120 coke mach[ine]" */
+  cokeHit: 32,
+  /**
+   * The boss of level four, out of the same `woods.snd` its chapter shares.
+   *
+   * `0x455a14` wakes it with 0x2c, `0x455a55` runs 0x2b under the stirring as a
+   * LOOP, `0x456459` takes `0x434540(3) + 0x2c` on a blow — one of 45, 46, 47 —
+   * `0x4564c6` plays 48 as it goes down, and `0x456418` loops 51 over the death.
+   */
+  boolyWake: 0x2c,
+  boolyStir: 0x2b,
+  boolyHit: [45, 46, 47] as const,
+  boolyKnock: 48,
+  boolyDeath: 51,
   from: "0x44f0a0 / 0x44f8b0 / 0x44e3f0 / 0x44fe80 / 0x44fb20",
 } as const;
 
@@ -199,6 +354,10 @@ export class Sounds {
   /** the bars already handed to the clock, so a level change can take them back */
   private queued: AudioBufferSourceNode[] = [];
   private muted = false;
+  /** the slider's step, `[0x479180]` */
+  private level = 9;
+  /** `[0x46b1fc]` — whether the level's theme plays at all */
+  private music = true;
   /** what this page has been asked for and could not find */
   readonly misses: string[] = [];
 
@@ -234,7 +393,7 @@ export class Sounds {
     if (!Ctor) return null;
     this.ctx = new Ctor();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.7;
+    this.master.gain.value = this.muted ? 0 : (0.7 * (this.level + 1)) / 10;
     this.master.connect(this.ctx.destination);
     return this.ctx;
   }
@@ -249,7 +408,7 @@ export class Sounds {
     await Promise.all([this.bank(want.theme), this.bank(want.sfx), this.bank(PLAYER_BANK)]);
     this.step = 0;
     this.queuedTo = 0;
-    this.playing = true;
+    this.playing = this.music;
   }
 
   stop(): void {
@@ -273,8 +432,55 @@ export class Sounds {
    */
   toggle(): boolean {
     this.muted = !this.muted;
-    if (this.master) this.master.gain.value = this.muted ? 0 : 0.7;
+    this.applyGain();
     return this.muted;
+  }
+
+  /**
+   * The preferences panel's slider, `[0x479180]` — ten steps, and step 0 is not
+   * silence.
+   *
+   * `0x45d743` clamps the click to 0…9 and hands it to `0x4274e0`, which is one
+   * `cmp` and a call into the mixer (`0x45ad40`): what a step is worth in
+   * loudness is that library's and is not in `SC.EXE`, so the curve here is this
+   * page's — the full gain the page already used, scaled by `(v + 1) / 10`, which
+   * leaves step 9 exactly where the page was before there was a slider.
+   */
+  setVolume(step: number): void {
+    this.level = Math.max(0, Math.min(9, Math.trunc(step)));
+    this.applyGain();
+  }
+
+  get volume(): number {
+    return this.level;
+  }
+
+  private applyGain(): void {
+    if (this.master) this.master.gain.value = this.muted ? 0 : (0.7 * (this.level + 1)) / 10;
+  }
+
+  /**
+   * The panel's other switch, `[0x46b1fc]` — and it is the THEME and nothing else.
+   *
+   * `0x403cfb` is the in-game half of the same toggle: on, `0x40f190(0x4ac370)`
+   * starts the level's theme bank; off, `0x427960(0, 0, 1, 0)` stops it. The
+   * effects banks are never consulted, so turning it off leaves every fist and
+   * every door exactly as loud as it was.
+   */
+  setMusic(on: boolean): void {
+    if (on === this.music) return;
+    this.music = on;
+    if (on) {
+      this.step = 0;
+      this.queuedTo = 0;
+      this.playing = Boolean(this.themeName);
+      return;
+    }
+    this.stop();
+  }
+
+  get musicOn(): boolean {
+    return this.music;
   }
 
   get silent(): boolean {

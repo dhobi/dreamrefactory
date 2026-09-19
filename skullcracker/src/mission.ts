@@ -45,9 +45,13 @@
  *
  * Each stage's case in its chapter's sequencer names its own `chp{NN}.mov` — and
  * a `boggs{NN}.mov` beside it, and for the first stage of each chapter one more
- * (`Bomb.Mov`, `Mall.Mov`, `Belfry.Mov`, `Cycle.Mov`). The pair is queued through
- * `0x40e330` / `0x40e990`; the chapter film is the mission briefing and the
- * `boggs` one is Boggs, who is the reason for all this.
+ * (`Bomb.Mov`, `Mall.Mov`, `Belfry.Mov`, `Cycle.Mov`). They are queued one after
+ * another through `0x40e330` (clear) and `0x40e990` (play and wait), and the
+ * order of the pushes is the order they are seen in: the chapter's opener if it
+ * has one, then `boggs{NN}`, then `chp{NN}`. So Boggs says his piece on the
+ * flying screen FIRST and the skull that names the next level follows him —
+ * `0x44d794`/`0x44d7b9`/`0x44d7de` for the first stage, `0x436a8b`/`0x436ab0`
+ * for a mid-chapter one.
  *
  * When the clock runs out instead, `0x40e9d0` picks one of `TIME1.MOV`…`TIME4.MOV`
  * with `0x434540(4)` — the same random helper the punch tosses for a variant with
@@ -61,9 +65,25 @@ export interface Mission {
   book: string;
   /** 1..16 — the number in its films' names as much as its place in the order */
   number: number;
-  /** the mission briefing, played before the level */
+  /**
+   * The chapter card — the skull that names where you are going.
+   *
+   * It is the SECOND of the two: `0x44d7de` pushes `Chp01.Mov` after `0x44d7b9`
+   * has pushed `Boggs01.Mov`, and `0x436ab0`/`0x436a8b` are the same way round
+   * for a mid-chapter stage. See {@link Mission.boggs}.
+   */
   film: string;
-  /** Boggs' half of the briefing, played after it */
+  /**
+   * Boggs' half of the briefing, and it plays FIRST.
+   *
+   * Each stage's case queues its films one after another through `0x40e330`
+   * (clear) and `0x40e990` (play and wait), so the order of the pushes is the
+   * order they are seen in: Boggs on the flying screen, then the card.
+   *
+   * The first stage of each chapter queues one more BEFORE both — `0x44d794`
+   * pushes `Bomb.Mov` ahead of Boggs — and those four openers (`Bomb.Mov`,
+   * `Mall.Mov`, `Belfry.Mov`, `Cycle.Mov`) are read here but not yet played.
+   */
   boggs: string;
   /**
    * The share of the level's population the quota wants dead.
@@ -105,6 +125,33 @@ export const MISSIONS: readonly Mission[] = LEVEL_ORDER.map((book, i) => {
 export const TIME_OUT_FILMS = ["time1.mov", "time2.mov", "time3.mov", "time4.mov"] as const;
 
 /**
+ * The ENDING, and it is one line of the game's own shell.
+ *
+ * `0x402fe0` is the outer loop: eleven states through the table at `0x403448`,
+ * of which 1 is the menu, 3..6 are the four chapters, 9 is the death vignette,
+ * 10 goes back to the menu and 11 quits. Chapter four is state 6 and its runner
+ * is `0x412670`, which walks its own scenes in `[0x4abdfc]` — and the last of
+ * them, once the outer state is still 6, is this:
+ *
+ * ```
+ *   41293d  cmp word ptr [0x4abdfe], 6   ; nothing else has taken the game away
+ *   41294c  push 0x46b388                ; "credits.mov"
+ *   41295a  call 0x40e990                ; ...play it
+ *   412962  mov si, 1                    ; and that is the chapter loop over
+ * ```
+ *
+ * `si` ending the loop returns to `0x4032a2`, which finds `[0x4abdfe]` is not
+ * one of the five states that would claim the game, so it sets the scene to 0
+ * and goes to state 1: **the title menu**. So finishing the sixteenth level
+ * plays the credits and puts you back at the front.
+ *
+ * It is worth saying that `credits.mov` is also a menu item — `0x4030f7` plays
+ * the same file for option 6 — so the file being in the rip was never evidence
+ * of an ending on its own. What makes it one is `0x41293d`.
+ */
+export const ENDING_FILM = "credits.mov";
+
+/**
  * The seven films for the other way a level ends.
  *
  * `0x403340` is the same shape as the time-out handler, one state along in the
@@ -115,9 +162,26 @@ export const TIME_OUT_FILMS = ["time1.mov", "time2.mov", "time3.mov", "time4.mov
  * with the panel around them — which is what says they belong to a level in
  * progress rather than to the shell's own screens.
  *
- * What triggers that state has not been read; seven death vignettes beside four
- * time-out ones, both random, both window-sized, is the reading this page acts
- * on when the player falls out of the world.
+ * What triggers it has been read now, and so has what follows it. `0x4294e7`
+ * sets the state only after `0x40d490` finds the lives below zero, so these are
+ * the GAME OVER films and not the per-death ones; and the state does not end on
+ * the film:
+ *
+ * ```
+ *   4033ca  0x40e990(KILLn.MOV)
+ *   4033d9  ax = [0x46b20c]          ; the difficulty
+ *   4033e3  0x40d4d0(ax)             ; the score, [0x4a4f00]
+ *   4033e9  0x40f650(score, ax)      ; offer it to that difficulty's ten rows
+ *   4033ee  cx = 1                   ; and the shell goes back to the title
+ * ```
+ *
+ * So a finished game writes to the high-score board and the title screen is
+ * where it is read — see {@link file://./scores.ts}.
+ *
+ * And the trigger is the LAST life. `0x4294a6` reads the count, `0x4294ad`
+ * spends one, and `0x4294b7` takes the ordinary path while the count BEFORE the
+ * spend was not negative — so state 9 is reached only once there is nothing
+ * left. An ordinary death gets no film at all.
  */
 export const DEATH_FILMS = [
   "kill1.mov",

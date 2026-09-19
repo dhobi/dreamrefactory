@@ -19,7 +19,7 @@
  *   2. a single tap on a playing film does NOT skip it. The double-tap is only
  *      meaningful if one tap is not enough — without this, a recogniser that
  *      fired ESCAPE on every tap would pass step 1;
- *   3. a tap on the menu's Begin button reaches chapter one's briefing, the same
+ *   3. a tap on the menu's Begin button reaches the character chooser, the same
  *      outcome `menu.ts` clicks for. This is the tap-as-click path, and on a
  *      region it is taken at `pointerdown` (`ownedByGame`), which is a different
  *      branch of the recogniser from the taps in step 1.
@@ -42,21 +42,17 @@
  * failure here reads as "the double-tap did nothing" and is worth suspecting
  * before the page is.
  */
-import { chromium, devices } from "playwright";
+import { devices } from "playwright";
+import { BASE, fail, finish, launch } from "./harness";
 
-const URL_BASE = process.env.URL ?? "http://localhost:5178/";
+const URL_BASE = `${BASE}/`;
 const HEADED = process.env.HEADED === "1";
 /** where the Begin button is, in the game's own 512x384 screen */
 const BEGIN = { x: 400, y: 93 };
 /** somewhere with no click region on it — the middle of the picture */
 const NOWHERE = { x: 256, y: 300 };
 
-const fail = (why: string): never => {
-  console.error(`FAIL: ${why}`);
-  process.exit(1);
-};
-
-const browser = await chromium.launch({ headless: !HEADED });
+const browser = await launch({ headless: !HEADED });
 // a real phone profile, so `hasTouch` and a coarse pointer both hold — the page
 // picks its hint line off `(pointer: coarse)` and the recogniser off pointerType
 const page = await browser.newPage({ ...devices["Pixel 5"] });
@@ -199,11 +195,14 @@ await page.waitForTimeout(6000);
 const after = (await page.textContent("#loc")) ?? "";
 console.log(`after tapping Begin: ${after}`);
 if (!after.trim()) fail("nothing is playing after Begin — the page went blank");
-if (!/chp01/i.test(after)) fail(`tapping Begin did not reach chapter one's briefing: "${after}"`);
+// Begin does not begin: `menu.mov`'s "frame 2" is frame index 168, and
+// `0x45df7c` sets `[0x46b208] = -1`, which `0x40312c` plays as `char.mov` — the
+// chooser between the two Skull Crackers. See `src/main.ts`'s EXIT_ACTIONS.
+if (!/char\.mov/i.test(after)) fail(`tapping Begin did not reach the chooser (0x45df7c): "${after}"`);
 
 const err = (await page.textContent("#err")) ?? "";
 if (err.trim()) problems.push(`#err: ${err}`);
 if (problems.length) fail(problems.join(" | "));
 
 console.log("PASS — a finger skips films and works the menu");
-await browser.close();
+await finish(browser);

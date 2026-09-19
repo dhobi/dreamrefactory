@@ -57,20 +57,16 @@
  * push a standing player through the floor), and a jump MUST, in the same
  * window, with no other input.
  */
-import { chromium } from "playwright";
+import { BASE, fail, finish, launch } from "./harness";
 
-const BASE = process.env.BASE ?? "http://localhost:5178";
 /** the foot of STREETS' one ladder */
 const START = 9700;
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const browser = await launch();
+  const page = await browser.newPage({
+    viewport: { width: 1280, height: 900 },
+  });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
 
   await page.goto(`${BASE}/walk.html?level=1&x=${START}`);
@@ -80,7 +76,9 @@ const main = async (): Promise<void> => {
   const coord = async (which: "x" | "y"): Promise<number> => {
     const t = (await hud.textContent()) ?? "";
     const m = new RegExp(`${which} (-?\\d+)`).exec(t);
-    return m ? Number(m[1]) : fail(`no ${which} in the HUD: ${t.slice(0, 120)}`);
+    return m
+      ? Number(m[1])
+      : fail(`no ${which} in the HUD: ${t.slice(0, 120)}`);
   };
   /**
    * Wait out a jump: first for the player to LEAVE the ground, then to land.
@@ -105,32 +103,44 @@ const main = async (): Promise<void> => {
     await page.waitForTimeout(ms);
     for (const k of keys) await page.keyboard.up(k);
   };
-  const near = (got: number, want: number, slack = 4): boolean => Math.abs(got - want) <= slack;
+  const near = (got: number, want: number, slack = 4): boolean =>
+    Math.abs(got - want) <= slack;
 
   // the level's own cast: 21 of STREETS' init* records in the street room are
   // kinds this page has cels for, and they come out of the book, not a list here
   const spawned = /· (\d+) spawned/.exec((await hud.textContent()) ?? "");
-  const mob = spawned ? Number(spawned[1]) : fail(`the HUD reports nothing spawned in STREETS`);
+  const mob = spawned
+    ? Number(spawned[1])
+    : fail(`the HUD reports nothing spawned in STREETS`);
   if (mob !== 21) fail(`STREETS' street should spawn 21, got ${mob}`);
   console.log(`ok    the street spawns ${mob} of the level's own things`);
 
   const floor = await coord("y");
-  if (!near(floor, 1346)) fail(`the street under x${START} should be y1346, got ${floor}`);
+  if (!near(floor, 1346))
+    fail(`the street under x${START} should be y1346, got ${floor}`);
   console.log(`ok    standing on the street at y ${floor}`);
 
   // 1. gravity does not push a standing player anywhere
   await page.waitForTimeout(1200);
-  if ((await coord("y")) !== floor) fail(`standing still moved the player to y ${await coord("y")}`);
+  if ((await coord("y")) !== floor)
+    fail(`standing still moved the player to y ${await coord("y")}`);
   console.log(`ok    and stays there with no input`);
 
-  // 2. the same window, jumping — must leave the ground and come back to it
+  // 2. the same window, jumping — must leave the ground and come back to it.
+  // A standing jump is tag 2: three frames of crouch (250 251 252) BEFORE 253
+  // launches, so the first 200ms after J are spent on the floor — sample the
+  // whole flight for its highest point rather than one instant of it
   await page.keyboard.down("j");
-  await page.waitForTimeout(150);
-  const apex = await coord("y");
+  let apex = floor;
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(20);
+    apex = Math.min(apex, await coord("y"));
+  }
   await page.keyboard.up("j");
   if (apex >= floor) fail(`a jump did not leave the floor: y ${apex}`);
   await settle();
-  if (!near(await coord("y"), floor)) fail(`after a jump, landed at y ${await coord("y")} not ${floor}`);
+  if (!near(await coord("y"), floor))
+    fail(`after a jump, landed at y ${await coord("y")} not ${floor}`);
   console.log(`ok    a jump reaches y ${apex} and falls back to the street`);
 
   // 3. the ladder lifts the player off the street to its own top rung, and puts
@@ -138,21 +148,117 @@ const main = async (): Promise<void> => {
   // trigger rect
   await hold(["ArrowUp"], 9000);
   const top = await coord("y");
-  if (!near(top, 828)) fail(`the ladder's top rung leaves the feet at y828; the climb reached ${top}`);
+  if (!near(top, 828))
+    fail(
+      `the ladder's top rung leaves the feet at y828; the climb reached ${top}`,
+    );
   const railX = await coord("x");
-  if (!near(railX, 9714)) fail(`a ladder puts the player at its own pointX 9714; got x ${railX}`);
-  console.log(`ok    climbed the ladder to its top rung, y ${top} at x ${railX}`);
+  if (!near(railX, 9714))
+    fail(`a ladder puts the player at its own pointX 9714; got x ${railX}`);
+  console.log(
+    `ok    climbed the ladder to its top rung, y ${top} at x ${railX}`,
+  );
+
+  // 3b. at the top rung W installs NOTHING — `0x42afc4` skips its case whole
+  // when `[0x4ac406]` is 0 — so the cel holds and the tag does not flick
+  // between 0 and 1. The HUD says which tag is playing.
+  await page.keyboard.down("ArrowUp");
+  const tags = new Set<string>();
+  for (let i = 0; i < 10; i++) {
+    await page.waitForTimeout(80);
+    const m = /climbing rung (\d+) tag (\d+)/.exec(
+      (await hud.textContent()) ?? "",
+    );
+    if (!m)
+      fail(
+        `not climbing at the top: ${((await hud.textContent()) ?? "").slice(0, 120)}`,
+      );
+    tags.add(m[2]);
+  }
+  await page.keyboard.up("ArrowUp");
+  if (tags.size !== 1)
+    fail(
+      `the top rung should hold one tag with W down; saw ${[...tags].join(",")}`,
+    );
+  if (!near(await coord("y"), 828))
+    fail(`W at the top rung moved the player to y ${await coord("y")}`);
+  console.log(`ok    W at the top rung holds tag ${[...tags][0]} — no flicker`);
+
+  // 3c. a direction takes you OFF, and off you stay until you land: `0x42ae98`
+  // sets `[0x46b1b8]` on the leave and `0x42849c` clears it on the ground, so
+  // W + D on a ladder is a hop east and a fall to the street, not a faster climb
+  await hold(["ArrowDown"], 1200);
+  const partWay = await coord("y");
+  if (partWay <= 828 + 60)
+    fail(`S should have taken rungs down from 828; y ${partWay}`);
+  await hold(["ArrowUp", "ArrowRight"], 2500);
+  await settle();
+  if (/climbing/.test((await hud.textContent()) ?? ""))
+    fail(`W + D on the ladder should leave it, not climb it`);
+  const street = await coord("y");
+  if (!near(street, floor))
+    fail(
+      `after hopping off, should be back on the street y${floor}; y ${street}`,
+    );
+  console.log(
+    `ok    W + D hops off and falls to the street, y ${street} at x ${await coord("x")}`,
+  );
+
+  // 3d. the run does not grab: `0x429872` asks for a ladder from the IDLE state
+  // only, and W is the run — so run west straight through x9632..9779
+  await page.keyboard.down("ArrowUp");
+  await page.keyboard.down("ArrowLeft");
+  for (let i = 0; i < 100 && (await coord("x")) > 9540; i++) {
+    if (/climbing/.test((await hud.textContent()) ?? ""))
+      fail(`running past the ladder grabbed it at x ${await coord("x")}`);
+    await page.waitForTimeout(60);
+  }
+  await page.keyboard.up("ArrowLeft");
+  await page.keyboard.up("ArrowUp");
+  await page.waitForTimeout(400);
+  const past = await coord("x");
+  if (past > 9540) fail(`never ran past the ladder; x ${past}`);
+  console.log(
+    `ok    running through the ladder's rect with W held does not grab it, x ${past}`,
+  );
+
+  // 3e. standing still outside the standing cel's reach — its bitmap ends 57px
+  // east of the anchor and the rect starts at 9632 — W grabs nothing; from the
+  // foot, it does
+  const shy = await coord("x");
+  if (shy >= 9575) fail(`meant to stand short of the ladder's reach; x ${shy}`);
+  await hold(["ArrowUp"], 1000);
+  if (/climbing/.test((await hud.textContent()) ?? ""))
+    fail(`W at x ${shy} grabbed a ladder 57px out of reach`);
+  console.log(
+    `ok    W at x ${shy} grabs nothing — the standing cel does not reach the rect`,
+  );
+  await page.keyboard.down("ArrowRight");
+  for (let i = 0; i < 100 && (await coord("x")) < START; i++)
+    await page.waitForTimeout(60);
+  await page.keyboard.up("ArrowRight");
+  await page.waitForTimeout(400);
+  await hold(["ArrowUp"], 9000);
+  if (!near(await coord("y"), 828))
+    fail(`the second climb should top out at y828; got ${await coord("y")}`);
+  console.log(
+    `ok    and from the foot the same key climbs it again, y ${await coord("y")}`,
+  );
 
   // 4. stepping off west lands on the roof the file puts there
   await hold(["ArrowLeft"], 1600);
   await page.waitForTimeout(600);
   const roof = await coord("y");
-  if (!near(roof, 854)) fail(`stepping off should land on the y854 roof; got y ${roof}`);
-  console.log(`ok    stepped off onto the roof at y ${roof}, x ${await coord("x")}`);
+  if (!near(roof, 854))
+    fail(`stepping off should land on the y854 roof; got y ${roof}`);
+  console.log(
+    `ok    stepped off onto the roof at y ${roof}, x ${await coord("x")}`,
+  );
 
   // 5. and on west to the next platform, one the file puts 126px lower
   await page.keyboard.down("ArrowLeft");
-  for (let i = 0; i < 200 && (await coord("x")) > 9100; i++) await page.waitForTimeout(60);
+  for (let i = 0; i < 200 && (await coord("x")) > 9100; i++)
+    await page.waitForTimeout(60);
   await page.keyboard.up("ArrowLeft");
   await page.waitForTimeout(600);
   const next = await coord("y");
@@ -178,12 +284,20 @@ const main = async (): Promise<void> => {
   // into 98px and the apex arrives too late — and a poll every 60ms sees 7px of
   // walking but 13px of running, which is how this leg first came out flaky:
   // one slow poll and the run had already carried the player off the roof.
+  // And J is read by the engine FRAME, not the tick: a press within the last
+  // three ticks before the edge is read after the feet have left it, and the
+  // engine's run state does nothing with J in the air — so stop 30px short.
+  // The flight is long enough: a held jump with the lift covers ~300px and the
+  // y895 roof runs from x8690 west past 8300.
   await page.keyboard.down("ArrowLeft");
-  for (let i = 0; i < 300 && (await coord("x")) > 8775; i++) await page.waitForTimeout(60);
+  for (let i = 0; i < 300 && (await coord("x")) > 8800; i++)
+    await page.waitForTimeout(60);
   const edge = await coord("x");
-  if (edge > 8800) fail(`never reached the roof's west edge; stopped at x ${edge}`);
+  if (edge > 8830)
+    fail(`never reached the roof's west edge; stopped at x ${edge}`);
   const still = await coord("y");
-  if (!near(still, 980, 8)) fail(`walked off the roof before jumping: x ${edge}, y ${still}`);
+  if (!near(still, 980, 8))
+    fail(`walked off the roof before jumping: x ${edge}, y ${still}`);
   await page.keyboard.down("w");
   await page.keyboard.down("j");
   await page.waitForTimeout(90);
@@ -195,7 +309,10 @@ const main = async (): Promise<void> => {
   // run it is 18 ticks and an 81px drop, and the roof is where it should be.
   // The run is the speed this level is laid out for.
   const across = await coord("y");
-  if (!near(across, 895, 6)) fail(`the jump across the gap should land on y895; got y ${across}, x ${await coord("x")} (took off from x ${edge}, y ${still})`);
+  if (!near(across, 895, 6))
+    fail(
+      `the jump across the gap should land on y895; got y ${across}, x ${await coord("x")} (took off from x ${edge}, y ${still})`,
+    );
   console.log(`ok    jumped the gap from x ${edge} onto y ${across}`);
 
   // 7. and on west, down the last roofs, into the goal rect.
@@ -214,13 +331,21 @@ const main = async (): Promise<void> => {
     }
   }
   await page.keyboard.up("ArrowLeft");
-  if (!arrived) fail(`never reached the goal; stopped at x ${await coord("x")}, y ${await coord("y")}`);
+  if (!arrived)
+    fail(
+      `never reached the goal; stopped at x ${await coord("x")}, y ${await coord("y")}`,
+    );
   const gy = await coord("y");
-  if (!near(gy, 1033, 4)) fail(`the goal is entered from the y1033 roof; standing at y ${gy}`);
-  console.log(`ok    reached the goal at x ${await coord("x")}, y ${gy} — the route through STREETS holds`);
+  if (!near(gy, 1033, 4))
+    fail(`the goal is entered from the y1033 roof; standing at y ${gy}`);
+  console.log(
+    `ok    reached the goal at x ${await coord("x")}, y ${gy} — the route through STREETS holds`,
+  );
 
-  await browser.close();
-  console.log("PASS  STREETS' goal can be walked to, and the way through is the level's own");
+  await finish(browser);
+  console.log(
+    "PASS  STREETS' goal can be walked to, and the way through is the level's own",
+  );
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

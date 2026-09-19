@@ -19,19 +19,15 @@
  * alternate because the engine fires them off the walk cycle's frame number
  * (`0x429b3d` plays sound 0 on frame 1, `0x429b5c` sound 1 on frame 6).
  *
+ * The last of it is the FILMS, whose sounds are not the level's at all: they live
+ * in the film's own chunk table and are named by the frame that starts a segment.
+ *
  * Chromium is started with `--autoplay-policy=no-user-gesture-required` because a
  * probe has no user to gesture. The page does not depend on that — it resumes its
  * context on the first key, which is what `wakeAudio` has always done for the
  * films — but without the flag a headless run would test nothing and pass.
  */
-import { chromium } from "playwright";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
-
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
+import { BASE, fail, finish, launch } from "./harness";
 
 interface Source {
   dur: number;
@@ -39,7 +35,7 @@ interface Source {
 }
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
+  const browser = await launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
 
@@ -132,8 +128,63 @@ const main = async (): Promise<void> => {
   if (!hit.includes(1.07)) fail(`the burst should play woods.snd's 1.07s "0040 hydrant"; got ${hit.join(" ")}`);
   console.log(`ok    the hydrant bursts on its own sound: ${hit.join(" ")}`);
 
-  await browser.close();
-  console.log("PASS  the level's theme is its own arrangement, and the handlers' one-shots are the disc's");
+  /**
+   * 6. the FILMS' own one-shots, which are where nearly all of this game's
+   *    speech and most of its atmosphere live.
+   *
+   *    Only `menu.mov` and the sixteen chapter briefings carry a loop-table bed.
+   *    Everything else — Boggs' spoken orders, the seven kill vignettes, the four
+   *    time-out ones — is a one-shot NAMED BY A FRAME, and the page's player used
+   *    to fire a one-shot only from a clicked region. All of it ran silent.
+   *
+   *    Every one of those films is the same four-part shape: a console powering
+   *    down (`soundout 2` 2.97s, `soundout 3` 0.74s), the little monitor coming on
+   *    (`sound 1` 0.98s), the vignette itself, and the monitor snapping off
+   *    (`Mon. OFF` 0.46s). Four fixed durations, whichever of the seven is rolled.
+   *
+   *    The vignette segment is also where the film's PACE is checked, because the
+   *    two facts are the same fact: its frames are authored at the film's own
+   *    3 ticks (50ms) and the sound over it is exactly as long as the picture —
+   *    `kill1.mov`'s 186 frames against 9.29s, `boggs01.mov`'s four speech
+   *    segments to within 0.03s each. Paced at `mov-pace.ts`'s 66ms native floor
+   *    instead, the picture runs a third longer than the line spoken over it.
+   */
+  await page.goto(`${BASE}/walk.html?level=2&x=650`);
+  await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+  await page.keyboard.press("Shift");
+  await page.waitForTimeout(400);
+  mark = await count();
+  // CITY has no floor east of its ledge; walking off it is the one death this
+  // page can stage without turning the damage switch on
+  await page.keyboard.down("ArrowRight");
+  let frames = 0;
+  let began = 0;
+  let stopped = 0;
+  for (let i = 0; i < 1200; i++) {
+    const m = /kill\d\.mov · segment 3\/4 · frame \d+\/(\d+)/.exec((await hud.textContent()) ?? "");
+    if (m) {
+      if (!began) began = Date.now();
+      frames = Number(m[1]);
+      stopped = Date.now();
+    } else if (began) break;
+    await page.waitForTimeout(30);
+  }
+  await page.keyboard.up("ArrowRight");
+  if (!began) fail(`walking off CITY's ledge should play a kill film; the HUD never showed one`);
+  const film = round(await since(mark));
+  for (const [dur, what] of [[2.97, "soundout 2"], [0.74, "soundout 3"], [0.98, "sound 1"], [0.46, "Mon. OFF"]] as const) {
+    if (!film.includes(dur)) fail(`the kill film should play its own "${what}" (${dur}s); heard ${film.join(" ") || "silence"}`);
+  }
+  console.log(`ok    the kill film plays its four frame-entry one-shots: ${film.join(" ")}`);
+  const ran = (stopped - began) / 1000;
+  const authored = frames * 0.05;
+  if (ran > authored * 1.2) {
+    fail(`the vignette is ${frames} frames at the film's own 50ms — ${authored.toFixed(2)}s; it took ${ran.toFixed(2)}s`);
+  }
+  console.log(`ok    ...and its ${frames} frames run in ${ran.toFixed(2)}s, the ${authored.toFixed(2)}s its author gave them`);
+
+  await finish(browser);
+  console.log("PASS  the level's theme is its own arrangement, and the handlers' and films' one-shots are the disc's");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

@@ -17,7 +17,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { ShpFrame, decodeShpFrame } from "@dreamfactory/engine/df/shp";
-import { SbkFile, isSbkFile, nearestLayer, readSbkFile } from "@dreamfactory/engine/df/sbk";
+import { SbkFile, isSbkFile, nearestLayer, placementZ, readSbkFile } from "@dreamfactory/engine/df/sbk";
 import { paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { encodePNG } from "./png";
 
@@ -99,9 +99,27 @@ const cel = (loc: number): ShpFrame => {
 // ---- the level, unrolled ----------------------------------------------------
 
 /**
- * Render placements far-to-near onto one canvas, with the entity rects on top.
- * Positions are used as stored: the layers only line up under the executable's
- * camera, so this is the level unrolled, not any one screen of it.
+ * Render placements onto one canvas in the engine's own paint order, with the
+ * entity rects on top.
+ *
+ * Three things here are `SC.EXE`'s and not this tool's, because all three were
+ * once wrong and each of them moves art far enough to hide a level's shape:
+ *
+ * - **the anchor is subtracted, not added.** A placement stores where its cel's
+ *   ANCHOR goes, so the top-left is `p - anchor` — `0x4026d0`, and what
+ *   `skullcracker/src/walk.ts` and the books editor have always done. This tool
+ *   added it, which is 2x the anchor out: invisible on a cel anchored near its
+ *   own corner and 748px out on CITY's sky tiles (anchor 374,265). It is why a
+ *   whole rooftop run looked as though nothing were drawn under its platforms.
+ * - **the paint order is the plane's, not the stored depth's.** The engine
+ *   builds five lists and paints p3, p0, p4, p1, p2 ({@link placementZ}); the
+ *   stored 16.16 factor is a number the runtime never reads.
+ * - **a mirrored placement reflects about its anchor**, not its own centre.
+ *
+ * What stays this tool's approximation is the x rate: there is no camera in an
+ * unrolled level, so every placement is drawn at its stored x. Most art is on
+ * rate-1 planes and lines up exactly; planes 2 and 3 are stored where they meet
+ * the player, which is where the camera centre puts them in play.
  *
  * The canvas is trimmed to the 1st..99th percentile of placement positions
  * (LAB parks a far layer 30000 pixels off the play space); anything outside is
@@ -110,7 +128,9 @@ const cel = (loc: number): ShpFrame => {
 function renderLevel(): void {
   const placed = placements
     .filter((p) => byId.has(p.id))
-    .sort((a, b) => b.parallax - a.parallax);
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => placementZ(a.p) - placementZ(b.p) || a.i - b.i)
+    .map(({ p }) => p);
   if (!placed.length) {
     console.log("no placements — not a level (the player's book, most likely)");
     return;
@@ -127,16 +147,17 @@ function renderLevel(): void {
   let x1 = -1e9;
   let y1 = -1e9;
   let skipped = 0;
-  const inRange: { f: ShpFrame; x: number; y: number }[] = [];
+  const inRange: { f: ShpFrame; x: number; y: number; mirror: boolean }[] = [];
   for (const p of placed) {
     const f = cel(byId.get(p.id)!);
-    const x = p.x + f.posXraw;
-    const y = p.y + f.posYraw;
+    // the anchor lands at the stored position, and a mirror reflects about it
+    const x = p.x - (p.mirror ? f.width - f.posXraw : f.posXraw);
+    const y = p.y - f.posYraw;
     if (x < lo.x || y < lo.y || x + f.width > hi.x || y + f.height > hi.y) {
       skipped++;
       continue;
     }
-    inRange.push({ f, x, y });
+    inRange.push({ f, x, y, mirror: p.mirror });
     x0 = Math.min(x0, x);
     y0 = Math.min(y0, y);
     x1 = Math.max(x1, x + f.width);
@@ -151,12 +172,12 @@ function renderLevel(): void {
   const W = x1 - x0;
   const H = y1 - y0;
   const img = new Uint8ClampedArray(W * H * 4);
-  for (const { f, x, y } of inRange) {
+  for (const { f, x, y, mirror } of inRange) {
     const ox = x - x0;
     const oy = y - y0;
     for (let ry = 0; ry < f.height; ry++) {
       for (let rx = 0; rx < f.width; rx++) {
-        const s = ry * f.width + rx;
+        const s = ry * f.width + (mirror ? f.width - 1 - rx : rx);
         if (!f.opaque[s]) continue;
         const t = ((oy + ry) * W + ox + rx) * 4;
         const p = f.indexed[s] * 4;

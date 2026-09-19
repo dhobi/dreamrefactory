@@ -248,11 +248,12 @@ punk 20, a hydrant 10, a mailbox 7 — so a kick's 55 against a mailbox comes ou
 69 pixels a frame and throws it most of a screen. Which also settles what
 `obj+0xa`/`obj+0xc` are: a persistent velocity, not a per-frame stride. Anything
 that should not drift cancels them itself, and the hydrant's frame function does it
-on its first two instructions. Nothing found so far slows a slide, so the drag is
-the port's one invented number here, calibrated against the only observable — a
-kicked mailbox crosses about a screen, and measured on the page rather than solved,
-because a kick has no vertical component and the box spends its first fifty frames
-falling the 37 pixels between its upright shape and its fallen one. Where it comes to rest is not invented: each
+on its first two instructions. What slows a slide is the allocator: `0x42f550`
+gives every object `obj+0x1e = 5734` and `obj+0x20 = 2048` at birth, and the body
+stepper takes `v.x × 5734 / 8192` — 70%, truncated, never less than a pixel — off
+the horizontal velocity on every frame that ends on the ground (`0x4302c0`). The
+port had invented a drag of 0.7 a tick here and calibrated it against a kicked
+mailbox crossing about a screen; the calibration had found the field. Where it comes to rest is not invented: each
 cel carries its own collision box, the upright mailbox's reaching 93 pixels below
 the anchor and the fallen one's 56, so a thing that changes shape has to land on the
 box it is currently showing or it floats.
@@ -260,7 +261,7 @@ box it is currently showing or it floats.
 ### CITY's own machinery
 
 Chapter four registers eleven classes and five of them fight; the rest are the
-level. Two are in now, and both are CITY's:
+level. Three are in now, and all three are CITY's:
 
 A **plank** is a board with a platform record laid under it, and it OWNS that
 record — `0x42fb70` claims the platform whose rect contains the object's point,
@@ -269,6 +270,51 @@ has moved, which is how an elevator carries a floor and how a plank takes one
 away. Its frame function gives you six crossings (it sags through cels 1050..1053
 and counts each time that animation ends) unless you land on it hard, and then it
 goes at three times the player's gravity with woods.snd's "0030 woodplankh".
+
+"Hard" is `cmp word ptr [eax+0x32], 0x64`, and what that field counts is worth
+being exact about, because the port had it twelve times too strict and broke a
+plank under any jump at all. `obj+0x32` is a running sum of the DOWNWARD VELOCITY,
+in the whole pixels a frame that `obj+0xa` holds: `0x42fdbc` adds the velocity at
+the top of the body step, before the move and well before a landing clips that
+move short, and `0x42fdc2` stores zero over it on any frame that begins on the
+ground or that is still rising. So the number is not the distance fallen — the
+frame a fall ends on contributes its whole velocity however little of it was used.
+The port had been reading the 100 as a raw value wanting the player's divisor of
+12, which made 8.3 pixels of falling enough.
+
+Read correctly, the limit still says that a plank is for walking across. A jump
+landing back at the height it left counts 125: the rise is 35+25+15+5 and the fall
+5+15+25+35, but the tuck the player holds in flight draws its feet 19 pixels higher
+than the standing cel does (88 against 69, each cel's own box), so the anchor has
+to come down 19 further before the feet reach the floor, and that takes a fifth
+frame worth 45. A jump with the lift counts 168. Stepping down onto one, or
+walking across it, counts nothing at all. Six crossings and then it goes, and
+anything you jump onto it from breaks it where you land.
+
+An **elevator** is the other half of that same sentence, and it is what makes
+level two finishable. Its constructor is a list of denials — divisor 10 where the
+player's is 12, `0x42f850(obj, 0)` for gravity, `obj+0x30 = 0` for never on the
+ground — so it is a rect moved by its own state machine and by nothing else. The
+five states are the five tags of script `0x477db0`: idle on cel 1160, a beat of
+wind-up, and then travel at `0x28` over that divisor of ten, which is **four
+pixels an engine frame, sixty a second**. It owns its landing the way a plank
+owns its floor, and the level authored one landing per lift: applying `0x42fb70`
+at the SHAFT'S BOTTOM — not at the record's stored point, which is the shaft's
+middle and is inside nothing — claims #53, #54, #55, #79 and #103, and those five
+are the only platforms in CITY between 120 and 135 pixels wide.
+
+Why it matters more than it looks: CITY has no `ladder` record, its goal is at
+y1802, and the walk east tops out around y3590. Without the cars **45 of its 73
+platforms are reachable and the goal is not one of them**; with them, all 73 are.
+Every claim about level two being impassable in this repository's history was a
+hole in the port, not a hole in the disc.
+
+One thing in it is not read. `obj+0x46` gates every state and nothing this port
+has disassembled writes it, so what calls a car is a guess — but a guess the code
+constrains: tags 2 and 4 end by installing tag 0, and tag 0 departs again the
+instant the gate is set, so a car held by a standing rider would yo-yo for ever.
+The gate is an EDGE. The page models it as boarding, latched, and says so in
+`ELEVATOR.trigger`.
 
 A **crow** is the first flying thing here, and its constructor says so: divisor 1,
 `obj+0x2e = 0`, gravity 0. It sleeps on cels 1854..1859 with its own sleep sound
@@ -326,7 +372,8 @@ Doors are opened with the up key. See
 That reading also settles a level that cannot be walked at all. CITY's floor is a
 ledge from x271 to x691 and then y = 7250 for the rest of the level, ~2900px
 below anything CITY draws. CITY is not walked; it is played across its 73
-platforms and 20 planks, the most of any level.
+platforms, 20 planks and 5 elevators, the most of any level — and the planks and
+the elevators are CITY's alone, the only book that places either.
 
 Which is why the next thing the walk page grew was the ability to leave the
 floor. `platform` is the commonest object in the game — 263 of them — and
@@ -341,8 +388,12 @@ per-object divisor. A jump is one frame with `dy = −420`; a walk is `dx = 95`;
 run is `dx = 180`. The scale is read too, now: the player's
 divisor is 12 (`0x42e412`) and the game runs at **15 frames a second** —
 `0x4087c0` returns 1/60s units and `0x40e4f0`, reached from all sixteen level
-frame functions, spins until four of them have passed. So the walk is 120px a
-second, the run 225, and every animation plays at 15fps.
+frame functions, spins until four of them have passed. Every animation plays at
+15fps — and the walk is not 8 × 15. The record's dx is an impulse into a velocity
+the ground drags by 70% a frame, so 8 a frame settles at 12 and the run's 15 at 22:
+**180 and 330 pixels a second**. The same velocity is what a jump steers — the
+tag-0 handler drives it to 30 a frame while forward is held, and in the air nothing
+drags it — and what a landing slides on for three frames.
 
 The run took finding, because it hides behind a key nobody would guess. The
 binding table at `0x46b210` maps **W** to action 1, and that action's handler sets
@@ -352,9 +403,915 @@ rung, in the air it adds lift. One key, three jobs. The ladder's rung is literal
 `0x42ae50` keeps a rung index and ends every frame with
 `y = rung * spacing + top`, so a climb is 35px a tag of four cels and nothing in
 between exists. A port that reads `W` as "up"
-therefore has no run at all, and a correctly-measured 120px/s walk feels slow
-because the game's travelling speed is nearly twice it. STREETS is laid out for
+therefore has no run at all, and a walk on its own feels slow because the game's
+travelling speed is nearly twice it. STREETS is laid out for
 the run: two legs of its own route to its goal are not passable at a walk.
+
+### WOODS is a population and two steps
+
+Level three needed none of CITY's machinery — no plank, no lift, no girder, no
+ladder — and could still not be played, for two reasons that turned out to be the
+same reason twice: the port was reading records at the wrong field.
+
+**A creator places its object at the record's POINT.** The level's spawner
+`0x4503a0` pulls three things out of each 48-byte record and hands them to the
+class's creator: the point as one dword, then the rect's two corners. Every
+creator's first move on the first of those is `mov dword [obj+6], eax`
+(`0x450f90` the dog, `0x450a7b` the punk, `0x450cdc` the husk), and `0x4026d0`
+draws a cel with its anchor at `obj+6`. So the point is where the thing stands and
+the rect is only the territory its AI struct keeps (`0x450fc3` stores both corners
+into it). This port had been standing every enemy on the rect's bottom edge. In
+STREETS and CITY the two are close enough that nothing showed; WOODS' rects are
+wide territories whose bottom edge is well under the ground, so all twenty of its
+enemies spawned inside the terrain and fell through the world.
+
+**A rise of more than fifty pixels is a wall.** `0x42fedc` adds `0x32` to the floor
+found under the body's new position and compares it with that position; if the
+floor is still higher, and no platform was found under the point, `0x42fef3`
+throws the entire move away — the packed position is restored from `obj+6`, the
+horizontal velocity is subtracted back out of the x, the vertical is zeroed and
+what is left bounces off `obj+0x20`. That is the only wall the terrain has, and it
+is why the designers used `obstacle` records where they wanted a hard stop: CITY's
+five include the 60x308 one at x1873. The companion number is 8, from the landing
+test at `0x42ff56` — a floor more than eight pixels below the feet is not
+underfoot, and you are briefly in the air. This port had one invented figure of 26
+doing both jobs. WOODS' ground steps up 68 to 74 pixels in twelve columns at
+x8746 and again at x8890, and those two steps are the whole of the level's
+platforming: everything else is a run east.
+
+Its population is five classes and only four of them count. The dog — `woods.snd`
+calls it a **wolfy** — never calls `0x42f870`, the census, and never calls
+`0x40d1c0`, the health bar; it is worth 200 and nothing to the quota, and six of
+them stand in a level whose kill share is 55% of the other fourteen. It is also
+the only enemy in the chapter with a real repertoire, choosing a trot, a walk, a
+leap that leaves the ground (`dx 160, dy -80` twice) or a flat-out charge from its
+own five distance bands at `0x478240`.
+
+The strangest of them is the husk. Its creator never calls the difficulty scaler
+at all: it writes the literal 3 into its state (`0x450d1c`), and its hit handler
+fetches the blow's damage only to hand to the blood before doing `dec word ptr
+[eax]` (`0x454821`). Three blows of any size. Then the first tag of its death
+calls `0x450a50` — the punk's own creator — at its own position (`0x454690`), so
+what falls over leaves a fresh 250-health punk standing where it was. It pays no
+award, because the thing that climbs out of it carries the 300.
+
+The three `initcrush` records across the path are hydraulic presses, and
+`woods.snd` index 19 is named "0230 hydraulic ". A press has no timer and no
+stagger — its whole trigger is the player's own point inside the record's own rect
+(`0x4549df`), re-tested on every frame it is up, so it works for as long as you
+stand under it. It never moves: every record of its script carries `dx 0, dy 0`
+and `0x4549c3` rewrites it onto its record's point each frame anyway. What travels
+is the drawn ram, 175 pixels in three frames, and only two of its cels — 4382 and
+4383 — carry a strike box. The blow they carry comes out of `0x42f910` as 64,
+which is over the player's own knockdown threshold of `0x3c` at `0x449115`: a
+press does not stagger you.
+
+### PLAYGR is one fight
+
+Level four is seventeen records. One room, one small platform under a pickup, two
+`obstacle` walls holding the ends, three pickups, seven dogs and **one**
+`initwbooly`. The ground is flat from end to end, so there is nothing to jump and
+nothing to climb: the level is the thing standing in front of the goal.
+
+Its kill share is the one that stores zero — everything — and the only thing in
+the census is the boss, because the dog's creator never calls `0x42f870`. So the
+seven dogs are worth 200 apiece and nothing at all to the quota, and the goal
+stays shut until one enemy out of eight is dead. The engine is stricter than that
+even: the completion poll at `0x4502d0` wants the census clear **and** a flag at
+`0x476a94` that only the boss's death path writes (`0x456431`). The two become
+true together, because the boss takes itself out of the census as it starts to
+burn.
+
+**It begins as a statue.** Cel 3040, one frame, doing nothing, until the player's
+own point crosses into the record's rect (`0x4559e8`, the same point-in-rect test
+a ladder and a door use); then it stirs, climbs out of the ground through
+3122..3124, and comes for you. Eight hundred health at `0x4510b8`, four times the
+chained punk and the largest number in the chapter, and 2500 points for it at
+`0x456420`, which is ten times a werewolf. Its divisor is 30 — the heaviest thing
+in the game.
+
+What it does while it lives is a real loop: hover a frame, measure the distance
+forward against its own six bands at `0x478780`, and either close or swing. Inside
+160 pixels it swings a nine-cel combo; outside it charges at eleven pixels a frame,
+or twenty-one when it has had enough and is going home to the point its creator
+gave it. Every third consecutive blow puts it over instead of making it flinch
+(`0x456496`), and getting up is its own script at its own rate — which is why a
+`then` field had to exist, since the knockdown runs two frames a cel and the get-up
+three. Dead, it comes apart over eighteen frames and burns as cel 3140 for ever;
+the object is never destroyed.
+
+The one thing deliberately left out is its fireball. `0x456240` builds a second
+object of its own class with a restitution of 0.8 so the low shot bounces, and
+every frame of it carries a strike box — it is the one attack of the six that
+exists to hit you. The charge, by contrast, carries no strike box on any frame: it
+closes the distance and nothing else, so running it costs the player nothing.
+
+### Things that hit back, behind a switch
+
+The port could hit and nothing could hit it, and that was a hole rather than a
+design. It is now filled and **off by default** — `?damage=1` at load or Shift+H
+at any time — because the other suites walk levels end to end and three
+hydraulic presses turn a route test into a fight.
+
+The numbers are all the engine's. Maximum health is `trunc(difficulty × 600) +
+1200` at `0x448ac2`, so 1800 easy, 1200 middle, 600 hard; note the sign, since the
+same difficulty word halves enemy health through `0x40e300` in the other
+direction. The damage a blow does is the blow itself: `0x4490d5` takes
+`0x42f910` of the hitter — the root of the sum of its current cel's own `(dy, dx)`
+pair, scaled by the hitter's strength percentage and with the hitter's own velocity
+added — and `0x449209` spends exactly that. So a hydraulic press, whose cels 4382
+and 4383 carry `(dx 64, dy 5)`, costs 64 a stroke, and a dog's bite costs whatever
+the dog was running at, because its strike cels carry `(0, 0)` and nothing else.
+
+There is one threshold, `cmp di, 0x3c` at `0x449115`: sixty or less is a stagger
+out of `0x4766f0` and more is a knockdown out of `0x476890`, each with a front take
+and a back one chosen by which side the hitter is on. Every record of all four
+carries `dx 0 dy 0` — the throw is not in the script, it is the elastic exchange
+`0x430470` does afterwards with the two objects' divisors as masses.
+
+**The invulnerability is not a timer.** There is no cooldown anywhere in the
+collision path. What protects the player is that `0x4303b3` skips a victim whose
+current cel has a degenerate body box — so being untouchable is a property of the
+ART, for exactly as long as a reaction that carries no box plays.
+
+How much that protects you depends on **which character**, and the two are not
+alike. Character 1's reaction cels carry no body box at all — 5900–5902,
+5910–5915, 5940–5944, 9550–9558 and 5020/5021, every one of them — so it is
+untouchable through the whole of any reaction. Character 0, the one this page
+plays, is not: of its 38 reaction cels, **twelve carry a box** — 922, the held
+loop 4570–4572, the struggle 4575–4579, and the jolt 460–462. Held or jolted,
+character 0 can be hit again. Knocked flying or floored, it cannot.
+
+That asymmetry is worth stating plainly because the first version of this page
+had character 1's table while playing character 0, and inherited character 1's
+invulnerability as a claim about a player that does not have it.
+
+Falling is its own path and takes no blow at all. Past 360 of accumulated drop the
+player is cut into the flail (`0x442f3f`); on landing, past 530 it is simply death
+with no health call (`0x443c8a`), and under it a flat ten and a roll. And the life
+is spent when the dying animation ENDS rather than when the health runs out
+(`0x443dea`), with the fourth death — the count goes 3, 2, 1, 0, −1 — turning into
+the game-over state.
+
+What can actually land a blow here is narrower than what could in the original,
+and for a reason worth stating: this port's enemies walk their territory and do not
+run their attack states, so a dog never bites and a punk never swings. The things
+that connect are the machinery — presses and swinging girders — and the level-four
+boss's melee combo, which is the one enemy state this port does drive.
+
+### MALL is a new chapter, and a new shape of level
+
+Level five opens the second chapter, and none of the classes this port had built
+up over four levels appear in it. It is also laid out unlike anything before it:
+**three regions side by side**, overlapping by six pixels, with no `exitroom`
+between them, and not one `platform` record in the whole level. You walk out of one
+region and into the next, which is what `0x40b940(2, point)` does for every object
+on every frame — the region you are in is whichever one contains your point. What
+had to change here was this port's idea of a room: it had them as places you are
+PUT into, by a door or by the level loading, and never as places you leave on foot.
+
+Its three enemies are built to a pattern of their own, and the differences from
+chapter four are the interesting part. A divisor of seven where the punks have
+twenty, so they are quick and light. A blow pinned at 100 and re-stamped by the
+think's own epilogue on every single frame, so there is no window in which one is
+disarmed. One flinch cel installed unconditionally — no height test, no facing
+test, no random roll anywhere in any of the three handlers, where chapter four's
+punk has four takes and picks between them. An award paid straight out of the hit
+handler rather than carried on the object. And six classes named in an ignore list
+so that they cannot hurt each other.
+
+**They are all statues until you come to them.** Each stands dormant on one cel
+until the player's own point crosses into its record's rect, and then walks. The
+dog has the same mechanism and the level-four boss makes a performance of it; these
+three simply start moving.
+
+Two of their state machines reach for things that are not in this level at all.
+Both the masked one and the one with the bat have a sub-state for walking to a
+`switch` record and throwing it, and MALL places no `switch` — the cels its script
+wants are not even in the book. The next level places six of them, and that
+sub-state turns out to be the whole of how it works. The masked one also has a one-in-thirty roll that
+drops a roller behind the player, with a latch so that only one can ever exist.
+
+The Coke machine is furniture worth describing because of how it ends. It holds
+exactly four cans: a blow under 30 rocks it and nothing more, 30 to 75 rocks it
+harder and counts, every third counted blow pops a can, and a blow over 75 bursts
+it and throws every can it has left at once. Weak hits still count toward the next
+one. **What stops it is its art, not a number** — it has no health word at all, and
+the emptied cel 8505 carries no body box, so the collision pass stops offering it
+as a victim the moment it shows. That is the same trick as the player's own
+invulnerability while staggering.
+
+### SERVICE is the first level that is a system
+
+Level six is one room nine thousand pixels long with three steps in it, and if
+that were all it were it would be the thinnest level in the game. What it
+actually is is the payoff for two things chapter two had been carrying unused:
+the `switch` the gang all know how to throw, and the `initgoop` nobody had placed.
+
+**Six levers, twenty-two nests, and a `param` joining them.** The levers carry
+501 to 506 and so does every nest, and a lever's only job is to broadcast on its
+own number. `0x436020` makes one on tag 3 of `0x473548` — four tags: 3 is the
+idle it rests in when it is off, 0 the throw up, 1 the loop it rests in when it
+is on, 2 the throw back. At the END of each of the two throws, `0x43c3d0` walks
+the goop class's list and flips the tag of every goop that shares the lever's
+`param`, with a sound at each of them. Both directions broadcast, so the two
+states are symmetrical.
+
+`0x436820(pos, dir)` is the only way either state changes, and it answers only
+the throw that suits: direction **0** moves an off lever to on, direction **1**
+moves an on lever to off, and a lever already mid-throw is ignored. The player
+reaches it through `0x436690`, the chapter's own "what am I standing at" query —
+the same one that answers for `ladder`, `exitroom` and `exitfarm`, which is what
+says a lever is operated the way a door is. The standing state asks it twice a
+frame: once with kind 0 when no direction is held, and once with kind 1 when S
+is. So **stopping on a lever turns it on and S is how you turn it off.**
+
+**What comes out of a running nest is a particle system four objects deep.** One
+name, `initgoop`, covers five different objects and the creator's first argument
+picks between them; the level file only ever asks for the negative one, which is
+the nest — an invisible volume that keeps the record's rect and does nothing at
+all until its tag is 1. Then, once an engine frame, 42 chances in 512, it drips
+from a random point along the top edge of its own rect and tosses for which of
+two strings it gets:
+
+```
+bead   500 501 502 503   still      its script ends -> a DROP where it hung
+drop   504               gravity 1  lands -> gone
+strand 510 … 517         still      at cel 517 -> a GOB 70px below it
+gob    518               gravity 1  lands -> three SPLASHES, and gone
+splash 505 506 504       gravity ½  one random shove, then lands -> gone
+```
+
+Every one of them carries a blow of exactly 100 and its own hit handler is `xor
+ax,ax; ret`, so goop hits and cannot be hit. But **only one cel of the nine can
+touch anything**: 518, the gob, is the only one with a strike box and a blow pair
+(`dy 25, dx -1`). The rest is weather.
+
+**And it is the enemies who turn it on, because goop feeds them.** All four of
+the gang's hit handlers ask which class hit them before anything else, and goop
+is the one answer that is good news: health goes up rather than down, clamped to
+what they started with, with a sound and no spray — sixty for the one with the
+bat and twenty for the other three. So the level's design is legible in the
+records alone. `0x438200` hands a gang member the first unlit lever standing
+inside its own patrol rect; it walks over, and one frame of the reach calls
+`0x436820(lever, 0)`. Direction zero, always: nothing in the game ever asks an
+enemy to turn a lever off. SERVICE places its six levers so that **every one of
+them is inside somebody's territory**, which means running east across the level
+wakes each keeper in turn and leaves the whole service tunnel pouring behind you.
+
+Its two new classes are the fourth of the gang and the thing at the end. The one
+with the knife is the chapter's pattern one more time, sitting exactly where you
+would expect between its siblings: 25 health, 240 points, plate 13104 after their
+13101, 13102 and 13103. The one at the end is built like the boss of level four
+instead — 750 health, a divisor of 13 against the gang's 7, a shove weight
+nothing else in the chapter sets, and a walk whose cels carry no stride at all,
+so it travels on its velocity. Its hit handler is the only one in the chapter
+with **no ignore list**, which means goop, knives and its own allies all land on
+it. The level does not wait for it, though: SERVICE's share is chapter two's
+ordinary 0.75, so the goal opens on the count and this is simply the biggest
+thing standing in front of it.
+
+### SEWER is a map, and its doors are locks
+
+Level seven is where this game stops being a side-scroller. **Thirteen regions**
+— an entrance, two vertical shafts, a tube room over the top of one of them, a
+sewer under its floor, two halls and a hall of lifts — and you do not walk from
+one end to the other. You go down, back west, up, east, down again.
+
+**Five `door` records hold it together, and every one starts shut.** A door is a
+wall that can be taken away: `0x435ff0`, called from its own creator, appends the
+record's rect to the engine's obstacle table — the same `0x4a89e2` array the
+level's walls are read into — and `0x440060` takes it back out at the end of the
+opening animation. So a shut door is solid in exactly the way an `obstacle` is,
+and an open one is not there at all. Its script is four tags: shut, opening,
+open, closing, with the two resting tags waiting for a lever and the two moving
+ones doing the table work at the end.
+
+**`0x43c430` is the other half of the switch broadcast.** Level six's levers all
+carry a `param` of 500 or more and go to `0x43c3d0`, which flips goop; level
+seven's all carry one under 500 and go here, which flips doors. A door is matched
+on `abs(param)`, and the sign is only its mirror flag — two of SEWER's five are
+simply hung the other way round. And the list it walks is the **stage's**, not
+the room's: four of the five levers stand in a different region from the door
+they open, and the last of them is a shaft and two rooms away.
+
+Getting that wrong is invisible until it is not. This port stepped its doors
+only while the player was in the room with them, so throwing the lever on the
+ledge and walking east found the door still on the second frame of its opening
+animation, and still solid.
+
+**Three things about the port's idea of a room had to go.**
+
+- *Which region you are in is the rect, not the floor.* `0x40b940(2, point)` has
+  no reference to a floor anywhere in it. This page had always asked the narrower
+  question — is the point over this room's own ground — because that is what
+  keeps a walk from carrying on into nothing. For five levels the two agreed.
+  Level seven's regions meet where one floor has ended and the next has not begun,
+  and what bridges them is a `platform` laid across the seam.
+- *The platforms are the level's, not the room's.* The engine rebuilds one table
+  of them every frame — `0x4a69d0`, twelve bytes a row — and searches the whole
+  of it. A region owns a floor; it does not own the ledges. The plank across the
+  bottom of level seven's last two rooms runs from x6147 to x9471, and filing it
+  by its middle left the room next door with nothing under it: the player walked
+  west off the foot of its own shaft and out of the world.
+- *The edge reservation is tested against the end you are walking at.* Testing
+  both ends rejects a move that would improve matters, and a rejected move leaves
+  you where you were — a pin, not a wall. At the foot of the first shaft the floor
+  begins at x2822 and the west wall is right there, so a player standing at x2860
+  could not take a step in either direction.
+
+**The lift never stops.** `initelev` is chapter two's, and not the `initelevator`
+of CITY: no cage, no winch, no waiting to be ridden. `0x43d810` is a five-tag
+cycle between its record's own top and bottom, and the interesting number is in
+`0x43d95d`, which switches on the record's `param` and allows **10, 20 or 40**
+pixels a frame going up against a flat six coming down. SEWER's six carry 0, 2,
+1, 2, 2 and 0, so they rise at 150, 300 and 600 pixels a second and all sink at
+ninety. Like every carrier in this engine each one owns a `platform` record, and
+that is what the rider actually stands on.
+
+Its two new classes are a pair of opposites. The floating eye is the first thing
+in this port with **no gravity at all** — `0x42f850(obj, 0)`, plus a standing rise
+of five pixels a frame written straight into `obj+0xa` — and the flinch it takes
+is chosen by the cel it was caught on, so the eye shuts the way it was open. The
+other has 600 health, the most of anything here, and **goes round shutting the
+doors again**: `0x43f736` passes direction 1 to the same `0x436820` the gang of
+level six pass 0 to, after closing to within `0x89` pixels in both axes — the only
+reach test in the game that measures the height as well as the distance.
+
+### The six that were placed and not drawn
+
+Across levels one to seven the books place six `init*` names this port had no
+class for, and none of them is a fighter: not one enters a census and every one
+of their hit handlers is `xor ax,ax; ret`. They are what makes a room a place.
+
+**`initshack`** — eleven of them down CITY, and the smallest state machine in the
+game. A shutter that rolls up as your point crosses its record's rect and rolls
+down again once you have gone (`0x453a60`). The tag is carried across every
+install rather than reset, so the shack's own number survives the cycle, and its
+region is `0xffff` — none — so it draws where it stands rather than belonging to
+a room.
+
+**`initbarrel`** — five in level seven, and they are **stepping stones**. The
+creator calls `0x42fb70` whenever the record's `param` is not negative, which is
+the plank's own "claim the platform record my point is inside", and the level
+lays one over each of them. So they float in the sewage and you cross on them.
+Their wallow is in the script (`dx 22, dy 20` down and `-10, -20` back) and the
+think keeps them honest: the horizontal velocity is clamped to ±7 and the barrel
+is walked three pixels a frame back towards the x its record gave it.
+
+**`initsewage`** — three, and it is **the only thing in the game that hurts you
+for being somewhere**. No art, no hit handler, no health: a rect, a splash when
+you land in it fast, a gulp every ninth frame, and `0x402ac0(0xa)` on every frame
+your point is inside. Ten a frame is a hundred and fifty a second, which is eight
+seconds of wading at the middle difficulty. Behind the damage switch.
+
+**`initpipe`** — four, and one record makes two objects: a mouth on 3400 from the
+class, and the thing pouring out of it built by hand at `0x4360dc` and given cel
+3530 and the five tags of `0x473608`.
+
+**`initbush`** — eight, and the name is the file's rather than a description. A
+58-byte instance struct, a brain table and five animations, hanging **eighty
+pixels below** its record's point with a coin-flip facing. What is drawn here is
+the state it is in when nothing has happened to it. What it does when you come
+near is not, and the reason to be precise about that is two constants:
+`0x43ee9d` and `0x43eedb` write **−3** and **−5** into `obj+0x1a`, and a negative
+blow strength is not damage, it is a code — the one other negative in the game is
+the −6 that level seven's big one swallows at `0x43d25c`. They are grabs.
+
+**`initroachmotel`** — two in MALL, and the level's spawner settles what they are:
+`0x43578f` pushes **−1** rather than the record's `param`, so every one of them is
+a NEST and never a roach. A nest is invisible and only busy while your point is
+inside its rect — a counter climbs, and past −2 it lets a roach out at its own
+position, four of them one to eight frames apart, and then thirty-five frames of
+nothing before the next rush. A roach falls on cel 3300, waits for the ground
+before it does anything at all, runs the four cels of `0x474db0` with `dx 65` on
+each, and **removes itself the frame its own point leaves the rect it was born
+in** — which is what keeps them in the room.
+
+### ARCADE is fourteen records and one fight
+
+Level eight is the smallest level in the game and the end of chapter two: one
+room 1845 pixels wide with a flat floor, one boss, seven sprinkler positions, two
+pickups, a `probe` and a `goal` — and the goal is **thirty pixels from where you
+start**. Nothing about it is a route. Chapter two's fourth share is the one
+stored as zero, so the craft does not come until the room is empty, and the room
+is one thing with a thousand health.
+
+**`initkragg` is a global, not a class.** Every other creature in the game is a
+class descriptor, a creator and an instance struct; this one is made once at
+`0x441bd0` and kept in a pointer at `0x4a6ff8`, with its health in a second
+global at `0x4a75c8`. What the level's spawner calls `initkragg`'s creator,
+`0x436180`, does not create: it moves the thing that already exists onto the
+record's point and installs its idle. Which is why that call is made **once**
+rather than once per record.
+
+A divisor of fifty — the slowest thing here — and `0x42f850(obj, 0)`, no gravity
+at all, so it hangs where its record put it with the bottom of its body box 115
+pixels over the floor. A kick from the ground cannot touch it. And it **pays
+nothing**: there is no `0x40d450` anywhere in its code, which no other boss can
+say.
+
+Its takes are sorted by one number, `0x2d`: under 45 a random one of the three
+single cels of `0x473a28`, 45 or over the six-cel `0x473a48`. And there is a
+third kind of blow it tests for before either — a strength of exactly **−9**,
+which gets twenty-six frames of `0x473a88` and an extra sound. Minus nine is the
+flare, and level eight is the level that places a `statflaregun` and a
+`statflare` to throw at it.
+
+**A sprinkler record is not an object.** `0x440800` creates nothing: it walks the
+seven records and files each one's point into a seven-entry table at `0x4a7000`
+indexed by the record's own `param`, which is why ARCADE's seven carry 0 to 6 and
+no two share a number. What comes up is made later, by the boss, with a four-byte
+context and a slot marked taken.
+
+**And the trigger is the whole of how the level is won.** `0x441b20` asks which
+sprinkler's rect contains the **boss's own point** and `0x441b60` raises that one,
+or rolls `0x434540(7)` for a free one if it is already up. The call is inside the
+dive and nowhere else. And standing in water that is already up costs the boss
+**three health a frame** (`0x440bf9`) — so the room is a fight you win by keeping
+it diving into its own sprinklers.
+
+## The boss decides by four distances and its own health
+
+`0x440ab0` is three thousand bytes and the shape of it is four numbers.
+
+Its prologue does two jobs every frame. It **hovers**: a direction of ±1 goes
+into the vertical velocity and is reversed at limits that depend on where the
+player is — it wants them about 35 pixels below it (`0x473ddc`), allows ±5 while
+they are within ten of that and ±9 while they are not. And it **turns**, because
+`0x440db6` tests the brain's own forward distance for a negative.
+
+Then `0x45efd0` counts how many of `0x473dc8`'s thresholds — **250, 150, 80** —
+are at or above the distance to the player, and `0x441adc` dispatches on the
+count:
+
+```
+band 0   over 250     0x473850, and it closes at that script's own stride
+band 1   150 … 250    0x4738a8, and ONLY when the brain's side is 2, which
+                      0x45f00c sets when the player's own velocity is zero:
+                      it lunges at someone standing still and hangs back
+                      from someone moving
+band 2   80 … 150     over two thirds health  -> 0x473900
+                      under                   -> 0x473950, the dive
+band 3   80 or under  hurt at all             -> 0x473950
+                      untouched               -> nothing
+```
+
+Which makes the fight legible: it will not come inside 150 of you on its own, it
+only dives once you have marked it, and the dive is what turns the water on. Two
+things in it are still not driven — the `dy` impulses its scripts carry, and the
+`-9` the flare would hit it with — but the machine that decides is here.
+
+### The pickups are one table and one test
+
+A hundred and forty `stat*` records across the sixteen levels, and until now not
+one of them was drawn. They are the one system the whole game shares: **one
+creator**, `0x45b160`, and **one collector**, `0x45b270`, called from the
+player's own think every frame.
+
+Each chapter's init reads its own list of names and hands the creator a NEGATIVE
+code — `0x45b19a` dispatches on `code + 9`, so the nine are −9 to −1 — and the
+cel and script it picks are all in `PLAYER.SBK` rather than in the level's book,
+which is what lets one table cover every level. Two of the nine are in no book at
+all (18000 and 18062), and those two are exactly the two no level places:
+`statpunch` and `statshield`.
+
+`statscoreup` is **one name and three pickups**. `0x451420` switches on the
+record's own `param` and hands −6, −5 or −4 — worth 2000, 5000 and 10000 — which
+is why the eleven levels that place one place it with a param.
+
+Collecting is two tests and no button: `0x434140` for a rect overlap and then
+`0x40e680`, which compares the two sprites **pixel by pixel**. No facing, no
+range band, no action key — you walk into it. And the reach is the record's own
+rect, filed at `user+4` by the creator; the art is only what is drawn. This page
+does the first test and not the second.
+
+`0x42827a`'s table is what each one does, and every sound comes out of the
+CHARACTER's bank (`skulz.snd`) rather than the level's:
+
+```
+  -1  stathealth    0x402b20(0x190)      four hundred health, clamped
+  -2  statlife      0x40d400(lives + 1)  one life, and 0x40d400 caps five
+  -4  statscoreup   0x40d450(0x2710)     ten thousand
+  -5  statscoreup   0x40d450(0x1388)     five thousand
+  -6  statscoreup   0x40d450(0x7d0)      two thousand
+  -8  stattimer     0x40d350(-850)       eight hundred and fifty back on the clock
+  -9  (unnamed)     walks the level's `initplayer` records for the one whose
+                    rect holds it and stores that index — a CHECKPOINT
+```
+
+One thing the records themselves say, once they are on the screen: **STREETS'
+first four are on the roofs.** They sit at y914…994 where the street is 1223 and
+the top of a jump is 1099, so twenty jumps from the pavement reach none of them.
+The level's ladder is not a shortcut, it is the way to the pickups.
+
+The other creator is the guns, and it is below.
+
+### The guns are the other creator, and taking one makes you a different player
+
+`0x45af60` takes the POSITIVE codes, and nothing about it is the pickups' shape.
+
+**It has a button.** `0x4298a1` is the gate — the idle state calls the reach
+handler `0x42edd0` only while S is held — and `0x42f081` ducks instead when the
+probe comes back empty. One key, two jobs, and which one you get depends
+entirely on what is in front of you.
+
+**It has a facing, and a band rather than a rect.** `0x42f017` shifts the
+player's own point 35 pixels the way they are looking, and `0x45ae90` asks three
+things of it: that it falls inside `x ± 55` — a band the creator writes at
+`user+6` and `user+0xa`, unrelated to the record's rect — that the two are
+within 150 pixels vertically, and that `obj+0x30` is set, which a weapon still
+bouncing after a swap is not.
+
+**And taking one changes the player.** `0x45eed0` sets `0x479438` and the pickup
+case installs the weapon's own script; that script's `kind` becomes
+`player+0x18`, and `0x4284ed`'s table sends the entire state machine somewhere
+else. Five weapons, five kinds, five handlers of about 2,400 bytes each, and
+every one of them re-implements the idle, the walk, the run, the jump, the fall,
+the landing and the duck in its own cels:
+
+```
+  6   blaster    0x471458 kind 22  0x42dbd0   4000s   icon 10304  max 160
+  9   flaregun   0x470a78 kind 20  0x42cb80   2700s   icon 10306  max  16
+  10  flamer     0x470f98 kind 18  0x42b860   1200s   icon 10307  max 160
+  12  soaker     0x471260 kind 19  0x42c1e0   3200s   icon 10311  max 160
+  16  scepter    0x470c40 kind 21  0x42d2b0   3300s   icon 10308  max 160
+```
+
+The whole table lives at `0x4a7f10 + id * 12` as `{ icon, max, rounds, fire }`,
+and it is written by the chapter's own entry function rather than by anything in
+the pickup code. `0x40d681` draws the icon and `0x40d6a2` makes the panel's bar
+out of `rounds * 64 / max`, so the bar is that table read twice.
+
+**The CHAPTER is the unit, not the level.** The four entry functions —
+`0x4511f0` flamer, `0x43bb00` flare gun, `0x421aa0` soaker, `0x416110` blaster —
+each zero all 21 rounds counts and name their own weapon, leaving the hands
+empty. That is why SEWER places two `statflare` and no gun to fire them with:
+you are expected to still be holding SERVICE's. It is also why every `statflamer`
+in the rip is in WOODS or CITY and every `statflare` is in MALL, SERVICE, SEWER
+or ARCADE — the placement scan and the four init functions agree exactly.
+
+Every callback is three instructions and all seven are the same three: the
+weapon, the rounds, the panel. What separates a gun from a refill is one line —
+`statblaster` and `statblasterpack` both give 40 rounds, and only the base
+weapon's pickup case goes on to call `0x45eed0`. Which is why picking up a tank
+with nothing in your hands leaves you with nothing in your hands.
+
+Swapping throws the old one away: `0x42f0dc` calls `0x45b060` the moment you
+press S at a gun that is not the one you are holding, spawning your weapon as a
+falling object with the player's own gravity, before the reach has even played.
+You can only ever carry one. No single level places two kinds, so this only
+happens across a chapter.
+
+**The flare is the gun that is built here.** Its fire function `0x436d40` is a
+shot and does a number:
+
+```
+  436d43  cmp [0x4a7f82], 0        ; rounds left, or nothing happens at all
+  436d5e  0x40ef30(mall.snd, 0x49) ; "#0700 flare gun"
+  436d6d  0x45ef00(1)              ; one round
+  436df0  x = player.x -+ 0x3c     ; sixty pixels ahead, by facing
+  436db0  0x430d40(0x474cb8, …)    ; and there it is, at 0x1a = 100
+```
+
+The corkscrew is the whole character of it. The spawner files a random 13…29 at
+`user+2` and `0x43ac3b` reads it down two at a time, each frame adding that
+value to the flare's vertical velocity and flipping its sign — written outright
+above 7 and added below it. So a flare leaves the barrel thrashing and
+straightens out over about seven frames. It is not aimed and it is not flat.
+A masked one is 40 and a knotted one is 50, so one flare is one kill either way.
+
+The other four fire functions are not here, and the reason is not the same in
+each case. The **flamer**'s `0x44dae0` is a held stream rather than a shot — its
+modes −1 and −2 reach into every live flame to stop it — and the flame's blow
+strength is `0xfff7`, **−9**. That is a code and not a number: it is the same −9
+the kragg tests for, and what it means is each class handler's own business. The
+**soaker**'s `0x41f820` is the same shape, but its droplet does carry a real
+number — `0x4217ba` writes the same hundred the flare has — so what stops that
+one is the stream rather than the damage. The **blaster** and the **scepter**
+belong to chapters this port has not reached.
+
+One fact that fell out of reading all five: **the blaster and the flamer spend
+no ammunition at all.** `0x45ef00` appears once in the flare gun's fire function
+and twice each in the soaker's and the scepter's, and not once in either of the
+other two.
+
+The panel had the other half of this waiting: the special-weapon window at
+290,305–380,450 was already painting its plate and its four gauge rows against
+an empty hand, because the reading of `0x40d691` came before there was anything
+to read. It is wired now — the icon appears while `0x479438` is set, and the
+gauge is the weapon record's own `rounds * 64 / max`.
+
+### Chapter three is four levels and eleven classes
+
+GRAVE, CAVERN, RAVECAVE and TOWER share one book pointer (`0x4a6220`), one sound
+bank (`belfry.snd`) and one placer — `0x41e450`, which stands up sixteen kinds
+of thing by name. Eleven of them were new here.
+
+**The zombie** (`0x41eee0`) is the biggest ordinary creature the game has:
+two hundred health against chapter two's 25 and 40, a divisor of 10 against
+their 7, and 310 points. Its own blow is a hundred, which is what a flare does.
+
+**The bat** (`0x41ead0`) has a divisor of **1** — the only creature in the game
+that divides its script's dx by nothing — and it is frail in the engine's own
+sense: `0x4232f0` has no subtraction anywhere in it, so one blow of any size
+fells one. It does not count towards a census either, which is why CAVERN's ten
+leave its at 19 and RAVECAVE's twenty-seven leave its at 4.
+
+And it comes to you. `0x422f12` reads the brain's forward distance, clamps it to
+±27 and writes it straight into `obj+0xc` — the velocity, not the territory. A
+rect on a bat's record is an alarm and not a patrol. This port had no model for
+that; every foe until now walked its own rect and turned at the edges, and
+without it CAVERN's bats hang 180 to 340 pixels over the floor where no jump in
+the game reaches one.
+
+**Ghengis** is 200 and 400 points; the **skeleton** is 200 and **450**, the most
+any ordinary creature is worth; **Igor** is 200 and 350, and it has a script no
+other class has — `0x46fea0`, whose `ticksPerFrame` is zero and whose five
+records all carry a negative dx: the walk run backwards and travelling backwards.
+
+**Two bosses, and neither pays anything.** The wraith (`0x41ec80`, seven
+hundred health, one in the game) and the bishop (`initvpriest`, twelve hundred —
+the same number the player has) both have hit handlers with no `0x40d450` in
+them anywhere. Nothing else in the game can say that, and the reason is the
+levels: chapter three's last two stages ask for no kills at all (`0x4218ca` and
+`0x4218d9` store the whole census as the allowance), so what beating one opens
+is the way out rather than a number.
+
+### Two of them kill you without a blow
+
+`initgrave` and `initfloor` have no health, no blow and no hit handler, and both
+end with `0x402fa0` — the call that ends the player.
+
+A grave is shut and solid: `0x4210bd` measures how far into its rect you are and
+throws you back out by that much. But only on your feet — `0x4210a7` lets a jump
+straight through, and that is the whole of level nine's platforming. Come within
+a hundred pixels of its point and it opens, and from that frame it **pulls**:
+half your speed away and one more unit of fall every frame. Eighty-six pixels
+below its point it takes you, and the ground beside a grave is already 98 below,
+so standing there when one opens is the whole of it.
+
+A floor is the same thing told upwards: four frames whole, three of
+`0120 floor crea[ks]`, six of `0121 floor cave[s in]`, and then it is not there.
+`0x42703e` writes 5 into the floor offset and `0x427100` gives what is left
+gravity 3.0, three times the player's own.
+
+The **hand** (`0x41f090`) is two hands, and the record's `param` says which:
+0 takes the player's own x and comes up under their feet, 1 picks a random x
+inside its rect. Each holds on one cel of `0x4704b8`, whose `ticksPerFrame` is
+thirty — two seconds a frame, and that pause is the hazard. Its blows are −3 and
+−7, codes rather than damage, so it cannot yet take hold of anything.
+
+The **blade** (`0x41ef90`) is a pendulum that does not move: its whole think is
+three tags handed round in a ring, twenty-seven cels at one engine frame each, a
+blow of a hundred on every one, and its velocity written to zero every frame.
+
+The **bridge** (`0x41e9c0`) you can cross and cannot stand on — `0x4223f5` gives
+you five engine frames, or one landing from more than a hundred pixels up — and
+the `platform` record laid over it, which CAVERN files rect for rect against
+each of its four, goes down with it.
+
+The **surge** (`0x41ec20`) is the only hazard in the game that gives you
+something: `0x426b21` is a call to `0x45ef30`, the ammunition adder, followed by
+the panel redraw. Its blow is the code −4.
+
+Not built: `initlightfx`, which is the one class in the chapter with no
+per-record loop at all — `0x41e473` stores its COUNT in `0x46f644` and never
+walks the records, so whatever it is, it is not placed the way everything else
+in the level is.
+
+### Chapter four is a factory, and its doors are opened by its guards
+
+MAZE and BARREL share one book pointer (`0x4a5178`), one sound bank (`lab.snd`)
+and one placer — `0x410b40`, which stands up twenty-two kinds of thing. Thirteen
+of them were new here and eleven are built.
+
+**The TCop** (`initcop`) is what `lab.snd` calls it outright: `#0084 TCop Dies`,
+`#0085 TCop eats`, three `#0087..#0089 TCop punc[h]`es. Nineteen of them, seven
+in MAZE and twelve in BARREL, at **250 health and 550 points** — the most any
+creature outside a boss is worth. It has eleven scripts and two of them are the
+same walk in reverse: `0x46c720` tag 0 is 2100…2105 at dx 65 and tag 1 is
+2105…2100 at −195, −130, −65, −65, −65, −65. It backs away faster than it comes
+on. And it dies two ways: `0x4148ed` tests `obj+0x32`, the accumulated fall, so
+one killed off the ground gets a different script.
+
+**The slurp** (`initslurp`) is twenty of MAZE's twenty-seven and worth nothing —
+`0x415100` has no `0x40d450` in it. Sixty health, no gravity, and `0x414a36`
+gives it a standing vertical velocity of −5, so it drifts upward from the frame
+it is made. Its three scripts are three different kinds and **every record in all
+three is cel 2550**: whatever state a slurp is in, it looks the same.
+
+**And the cage doors are opened by the cops.** `initswitch` and `initcagedoor`
+are SERVICE's lever and SEWER's door told again — `0x46c050` has the same four
+tags on the same four cel runs `0x473548` does — but nothing the player can do
+throws one. `0x414664` is inside the COP's own think: it walks to a switch and,
+within ten pixels, calls `0x412550`, which hands that switch's tag 3 to tag 0.
+Level thirteen's guards let themselves out.
+
+What makes a shut cage solid is worth saying, because it is not a special case:
+`0x411460` increments `[0x46b9b0]` and appends the door's own rect at
+`0x4a89e2 + n * 48` — **the same obstacle table the level's own `obstacle`
+records fill**. A closed door stops being a door and starts being wall.
+
+**The alarms and the fans answer to nothing.** An alarm is one sweep and one
+sound handed round for ever (`0x412fc0`); a fan keeps its own counter, fifteen
+frames still and sixty turning, written into its own user struct by `0x41541d`
+and `0x4155ef`. The horizontal one's blades carry a strike box and the vertical
+one's do not.
+
+### BARREL is forty-two conveyors and one number
+
+`initbeltleft` (twenty-six) and `initbeltright` (sixteen) share a creator and a
+class. Each record is a 278x36 strip, and `0x416840` is one test and one number:
+is the player's drawn box inside the strip's band and are they on the ground,
+and if so write **0x14 — twenty** into `user+4`.
+
+That it is the BOX and not the point matters. BARREL lays its belts end to end
+with a **seven-pixel gap** between one record's right edge and the next one's
+left; on a point test you fall down the seam and the ride stops dead. The same
+five cels serve both directions, run forwards or backwards, at one engine frame
+each out of `0x46c0d8` or three out of `0x46c188` — and the record's own `param`,
+4, 6, 8 or 10 across the forty-two, is what picks.
+
+Ten `statblasterpack` stand in the level and there is no `statblaster` anywhere
+in it: chapter four names the blaster on the way in and the gun itself is in VAT,
+two levels later.
+
+**The claw** (`initclaw`, four of them) is a carriage on a rail that follows
+you: `0x417344` and `0x417376` clamp its velocity to ±26 and `0x417316` clamps
+its position to its own record's bounds, so it tracks the player along a 582-to-
+1410 pixel track and cannot leave it. `0x417289` then measures the gap — inside
+300 it reaches down, past 600 it waits, and between the two it runs, playing
+`#0100 claw wizz` as it travels and `#0101 clawclamp` as it shuts. Its first
+blow is a hundred and its second is the code −3, so a claw here can hit you and
+cannot take hold of you.
+
+Not built, and said so: **`initbiggun`** (two, a plasma turret — `lab.snd` 3 is
+`#0050 Plasmagun`), and chapter four's own **`initbarrel`**, which is not an
+object at all: `0x411c50` writes eight bytes per record into a table at
+`0x4a89b0` and a count into `0x46dc50`, so those three records are data for
+something else rather than things in the level.
+
+### LAB and VAT, and all sixteen levels stand
+
+LAB is three new classes and `lab.snd` names all three. **Puke Boy**
+(`initpuke`) is four hundred health and 440 points, and its run is the only
+alternating stride in the game: `0x46cac0` tag 0's eight records carry 186, 93,
+186, 93, 279, 93, 279, 93. **The arm** (`initarm`, ten of them) has no health at
+all — `0x418b40` sprays, sounds, pays 113 and subtracts nothing, so one blow of
+any size fells one, and it does not count. **The test tube** (`inittube`, one in
+the game) carries twelve hundred, the player's own number, and pays nothing.
+
+VAT is seven showers, two balls, a set of teeth — all one cel apiece — chapter
+four's own gun, and BOGGS.
+
+**The `statblaster` is in VAT and in no other level.** MAZE, BARREL and LAB place
+fourteen `statblasterpack` between them and nothing to put them in; the gun
+itself is 5815 pixels into the last level of the game.
+
+### Boggs is four thousand and it heals faster than a fist
+
+The last thing in the game is four objects — `initboggsbody`, `initboggshead`,
+`initbgclawarm` and `initbgmachinery`, the last of which stands up eight more
+with eight scripts of its own.
+
+A first reading of its hit handler here said three things and got two of them
+backwards, so this is the corrected one:
+
+```
+  41bc57  0x41aad0(striker)               ; a FRIENDLY-FIRE filter, nothing more
+  41bc6a  cmp word ptr [edi+0x1a], -1
+  41bc71  mov word ptr [edi+0x1a], 0x64   ; -1 is TRANSLATED to a full blow
+  41be68  cmp [0x46e080] / [0x46e084]
+  41be7c  add word ptr [0x4a50e8], 0x1e   ; +30 a frame while a flag is SET
+  41be84  0x40e300(0xfa0)                 ; clamped to FOUR THOUSAND
+```
+
+`0x41aad0` turns a blow away only when the striker is one of Boggs' own four
+parts, a member of either of its two object lists (`0x46e0a8`, `0x46e0ac`), or
+showing a cel in 5900..5996 — which is Boggs' own range and the player's
+reaction cels. **A fist is none of those, so a punch lands.** What makes it the
+boss is arithmetic: four thousand health, three times TOWER's bishop, healing
+thirty a frame against a punch worth about fifty.
+
+And -1 is not a requirement, it is a conversion. What actually carries -1 is the
+BLASTER's bolt — `0x413af0` maps the variant the bolt remembers to its strength,
+and variants 1..3 all give -1 while the blaster fires with 2 and 3. So the bolt
+is worth a full hundred to Boggs and **nothing at all to anything else**: every
+ordinary handler treats a strength below 1 as no damage (`0x4199b9`). That is
+what the gun in its room is for, and it only works because the codes are
+carried at all.
+
+And the healing is not a phase Boggs enters — it is how it starts:
+
+```
+  0x46e080:  01 00 00 00  01 00 00 00     ; both flags SHIP as 1, in .data
+  41b611     mov word ptr [0x46e080], 0   ; cleared once, by the MACHINERY
+  41b75d     mov word ptr [0x46e084], 0   ; ...and once more, same handler
+```
+
+Those two writes are the only ones anywhere in `.text`, and nothing ever sets
+either flag back. So the thirty a frame runs from the moment the level opens,
+and the fight is a sequence rather than a damage race.
+
+### ...and what turns the healing off is the machinery
+
+`initbgmachinery` (`0x411da0`) stands up eight more objects and `0x411ed0` puts
+them at eight fixed offsets from the body, out of the table at `0x46e088`. That
+placer is called exactly twice in the program — once from the initialiser, once
+from VAT's setup — so the machinery, the head and the arm all stand still for
+the whole fight. Only the body moves.
+
+Six of the eight are scenery. The two that are not are `0x4a56e8` (cel 5860) and
+`0x4a516c` (cel 5870), three thousand health each through `0x40e300(0xbb8)`, and
+they share the handler `0x41b510` with the other six:
+
+```
+  41b573  cmp [0x4a56e8], esi / je      ; one of these two...
+  41b57b  cmp [0x4a516c], esi / jne     ; ...or the blow only clangs
+  41b5fc  sub word ptr [0x4a56ec], di   ; three thousand off one
+  41b748  sub word ptr [0x4a5174], di   ; three thousand off the other
+  41b611  mov word ptr [0x46e080], 0    ; and emptying one clears one flag
+```
+
+Break one half and half the healing stops. Break both and the thirty a frame
+stops entirely — and only then can the four thousand be spent. Breaking a half
+also re-scripts its neighbours: `0x41b65b` buckles three of the scenery pieces,
+`0x41b794` a fourth.
+
+Two branches in there never run. Each half tests its own wear stage as
+`health / 2 < health` (`0x41b6df`) and `health * 2 / 3 < health` (`0x41b719`),
+which is true of every positive health there is, so the dented cels 5861/5862
+and 5871/5872 are never installed. A machine is intact until it is wrecked. It
+is the same shape of dead code as the wraith's `-3`, and it was settled the same
+way — by arithmetic that holds for the whole domain, not by a re-reading.
+
+Measured on this page with fists alone: one half at 110 punches, the other 55
+after it, and Boggs down 144 punches later — 309 in all. With the blaster's bolt
+at a hundred a shot it is sixty into the machine and forty into Boggs.
+
+### The head is the census, and the goal will not open without it
+
+`0x41c591` is `0x42f870(head, 1)`. The body is not registered at all, so VAT's
+whole census is the one head — and `0x416047` refuses to spawn the goal until
+both the allowance is met **and** `0x46bfbc` is set, which `0x41bdd8` does when
+Boggs dies. This page had VAT's census at zero of zero, which meant the sixteenth
+level's ending could be walked to straight past a living Boggs. It cannot now.
+
+The head is also where the health lives (`0x41c547` writes the four thousand
+into `0x4a50e8`, which is the word the body's handler decrements) and where the
+tracker lives (`0x45ef70` on the bands 250/150/80). What it does with the
+tracker is look at you: `0x46e7c0`'s first nine tags are a 3×3 grid of single
+cels, 5900..5908, and `0x41c182` installs one whenever the head's own script has
+ended — column by how far to its left you are, row by how far above.
+
+The claw arm is two objects and neither can be touched: both take `0x41bb10` as
+their hit handler, and `0x41bb10` is `xor ax, ax; ret`. The jaws hang at the
+centre of the arm cel's own collision box (`0x412180`), which is the same rule
+`gripOf` reads for a grab.
+
+What is still not here is Boggs' two attacks — `0x41c330`, the throw it winds up
+beyond three hundred pixels on a cooldown of `0x434540(30) + 30`, and
+`0x41c3c0`, the 7-in-55 spit thrown at `-30 - roll(60)` up and `roll(160) + 30`
+along. Boggs lunges, heals and dies correctly; it does not yet throw anything.
+
+### A record belongs to one room
+
+`0x40b940`'s kind 2 walks the region table and answers with the FIRST region
+whose rect contains the point. Rooms overlap — that is how you walk out of one
+and into the next — and a creature standing in a seam was being spawned once per
+room it fell in. BARREL's two regions overlap x7464…7691 and its cop at x7521
+stands in that seam, so a level of twelve had a census of thirteen and a kill
+quota that could never be met. Each record is claimed once now, first room wins.
+
+### The mission clock was a record all along
+
+Every chapter's entry function ends with the same block. `0x421e60` is chapter
+three's, and `0x4164a2`, `0x43be72` and `0x451582` are its three siblings:
+
+```
+  421e8f  mov  eax, [esp]        ; the first `timer` record, and +0 is its PARAM
+  421e94  call 0x40d340          ; -> [0x4a3b18], the dial's full scale
+  421e99  mov  eax, [esp+4]      ; esp moved under the push: the SAME dword
+  421ea1  call 0x40d350          ; -> [0x4a4d68], the clock itself
+  421ead  push 0x7d00            ; no record at all: both get 32000
+```
+
+One number does both, and it is the record's own `param`. Eleven books carry a
+`timer` and five do not, and the five that do not have **no time limit** —
+`0x40d250` reads 32000 as "no dial":
+
+```
+  streets 4000   city 8200   woods 7200   playgr    —
+  mall    5220   service 5300  sewer 7200  arcade   —
+  grave   2100   cavern   —   ravecave 2500  tower  —
+  maze    3200   barrel 8200  lab 2500    vat      —
+```
+
+This page had been giving all sixteen the full dial, which is 7200 and so right
+for WOODS and SEWER by accident. The five without a record are exactly the five
+you would expect: the two whose bosses the level waits for, and chapter three's
+and four's last stages.
 
 ### Gravity was in there all along
 
@@ -365,13 +1322,15 @@ and looking in the wrong place: the fall is not in a script, it is a FIELD.
 
 ```
 0x402784  0x42f850(player, 1.0f)      where the player is placed
-0x42f850  obj+0x24 = f * 100.0        so the player's is 100
+0x42f850  obj+0x24 = trunc(f * 10.0)  0x46a110 is 10.0 — so the player's is 10
 0x430327  if (!landed) obj+0xa = obj+0x24 + <this frame's vy>
 ```
 
 `obj+0xa` is a velocity in the raw units every script uses, divided by the class's
 own `obj+0xe` when the mover applies it — the player's is 12 — so the player
-accelerates downward by **100/12 = 8.33 pixels a frame²**. The whole engine's
+accelerates downward by **10 pixels a frame²** — `obj+0xa` is a velocity in whole
+pixels that the stepper `0x42fd80` adds to the position undivided; the 8.33 this
+page once gave came from reading `0x46a110` as 100.0 and dividing. The whole engine's
 gravity is one float per object: a plank that has given way gets `3.0f`, three
 times the player's, and anything that must not fall gets 0.
 
@@ -385,22 +1344,38 @@ apex of **73px at 483ms** and `g = 8.75²/(2×73) = 0.524` a tick², against
 a third of a percent.
 
 The code says one thing the capture could not. The engine steps gravity once a
-FRAME, so the rise is a sum of five terms rather than an integral —
-`35 + 26.7 + 18.3 + 10 + 1.7 = 91.7px`, and 112.5 with the lift's two frames on
-top — and the capture's 73 is that same jump seen through a camera that cannot
-show the first frame's full 35 pixels. Which is what makes CITY's opening
-passable: its first wall wants 101 pixels of lift and the original has 112.
+FRAME and in whole pixels, so the rise is a sum of four terms rather than an
+integral — `35 + 25 + 15 + 5 = 80px` — and the capture's 73 is that same jump seen
+through a camera that cannot show the first frame's full 35 pixels. The lift is
+worth more than it looks: `0x4723f0` allows two frames of `-125`, which is −11 on
+the velocity each, and because the tag-0 handler that spends them is first run two
+frames after the launch (the launch frame ends the launch tag; the next installs
+tag 0; the one after reads a key) they land on the velocity at −15 and −16 rather
+than at the top, and the apex comes out at **137**. Which is what makes CITY's
+opening passable: its first wall wants 101 pixels and a held jump has 137.
+
+The same two-frame delay is the shape of the jump sideways. Steering — 30 pixels
+a frame while forward is held, nothing slowing it in the air — begins on that same
+third airborne frame, so a standing jump with the direction held travels 180 and
+lands at about 220, a held one 330, and a run's leap, which leaves the ground at
+the run's 22 plus its own 15, 360. A jump pressed from a standstill or a walk
+crouches for three frames first (`250 251 252`, dx 0, the walk's velocity draining
+under the drag) and only 253 launches; the run's tag 4 is one record and launches
+at once. Every jump lands in tag 1, four frames of `251 252 251 250` in which the
+handler reads no key and the slide is the drag's — and a fall of more than 360
+since the apex lands in `0x471c68` instead, sixteen frames of the same cels at
+four a cel, with ten health off. There is no mid-air flail: the tuck holds all the
+way down, and this port used to play the hard landing's loop in the air.
 
 STREETS corroborates it from the other side: its hardest jump is an 85px roof gap,
 which sits between the plain jump and the jump-with-lift, and that is what gives
 `0x4723f0` a purpose at all.
 
-This port jumps higher than the original on purpose — `JUMP_SCALE`, 1.2 — because
-half a character height plays low. It scales the launch and leaves gravity where
-the file puts it, which keeps the two separable: `apex = v²/2g` and
-`T = 2v/g`, so buying height by weakening gravity costs hang time quadratically.
-Doubling the apex that way was tried and cost 2.2 SECONDS of airtime, four times
-the original's, which is what "almost feels like I'm flying" means.
+There was a `JUMP_SCALE` here for a while — 1.2, "because half a character height
+plays low" — and it turned out to be compensating for two misreadings at once:
+gravity taken as 100/12 when the float is 10.0, and the airborne horizontal taken
+as the run when the state machine drives it to 30. At the disc's own numbers the
+disc's own gaps close, and the dial is gone.
 
 `PLAYER.SBK` turned out to hold the interface too, and the whole of it: `12000`
 is the upper band and `12001` the lower, both 512 wide, and between them sit the
@@ -507,11 +1482,354 @@ film's whole return value is *which frame it stopped on*; the executable read th
 and did the rest. One button is the exception and answers by itself: Prefs is a
 type-3 chain naming `prefs.mov`.
 
-So `skullcracker/src/main.ts` keeps a small table mapping the exit frame to what
-this port can do about it — that table is this port's reading of the buttons (they
-are in the menu's own top-to-bottom screen order), not something recovered from
-the film. Begin leads to a level that is native code, so it plays what the game
-plays on the way there: chapter one's briefing card.
+That is half of it. The other half is not this port's reading of the labels, which
+is what `skullcracker/src/main.ts` used to keep, but the executable's own table —
+and it is reached by FRAME INDEX rather than by frame name:
+
+```
+  45dee7  movsx eax, si          ; si = the film's current frame index
+  45deea  sub   eax, 0xa7        ; 167
+  45deef  cmp   eax, 7
+  45def8  jmp   dword ptr [eax*4 + 0x45e1ac]
+```
+
+`menu.mov`'s stubs are frames 168..173, so the eight slots read straight across:
+
+| frame | index | slot | what it does |
+| --- | --- | --- | --- |
+| `"Name 169"` | 167 | `0x45deff` | the attract branch |
+| `"frame 2"` | 168 | `0x45df7c` | `[0x46b208] = -1` → `char.mov` — **Begin** |
+| `"frame 3"` | 169 | `0x45df8d` | `[0x46b208] = -2` → a slot dialog — Open |
+| `"frame 4"` | 170 | `0x45e082` | `[0x46b208] = 3` → `helpwin.mov` |
+| `"frame 5"` | 171 | `0x45e093` | `[0x46b208] = 2` → `prefs2.mov` |
+| `"frame 6"` | 172 | `0x45e0a4` | `[0x4abdfe] = 11` → `0x40340f` — **Quit** |
+| `"frame 7"` | 173 | `0x45e0be` | `[0x46b208] = 6` → `credits.mov` |
+| `"demo frame"` | 174 | `0x45e0cf` | the attract branch again |
+
+Two of those had been read wrong here, and the second is the interesting one.
+"frame 6" is Quit — state 11 sets `[0x46b200]` and `0x403433` falls out of the
+shell loop into `0x40a4a0` — where this page had it playing a film.
+
+**And Begin does not begin.** It plays `char.mov`, which asks which of the two
+Skull Crackers you are. The game starts after that: the chooser leaves
+`[0x46b208] == 3`, `0x403154` drops out of the menu state, and `[0x4abdfe]` is
+already 3 — `0x4031b2`, the level runner. So the whole front end is
+**menu → chooser → level one**, and this port now follows it into `walk.html`
+with the two words the front end settled in the query string.
+
+Prefs needs BOTH of its films, and this page had them the wrong way round. The
+menu's stub is a type-3 chain naming `prefs.mov`; `0x45e093` sets
+`[0x46b208] = 2`, which is what the shell loop reads when the menu ends:
+
+```
+  403085  0x4498c0(Menu.Mov)      ; play the menu and wait
+  40309d  ax = [0x46b208]         ; what its exit frame set
+  4030a6  cmp ax, 2               ; ...2 is this button
+  4030ac  call 0x45d5a0           ; the MODAL, on a panel that is already up
+  4030b1  0x4498c0(prefs2.mov)    ; and only then the second film
+  4030cc  jmp 0x40307c            ; back to the menu
+```
+
+A film played after the modal has returned can only be the panel going away, so
+the chain is not overruled at all: `prefs.mov` is the panel arriving and
+`prefs2.mov` is it leaving. The frame names say the same thing from the other
+side — the two are one sixty-frame move cut in half, named `picsout 1`…`30` and
+`picsout 31`…`60`. Opening the panel with the second half played the animation
+backwards: it slid off the screen and then took clicks.
+
+### The panel the pan slides in is empty, and the executable fills it
+
+`ltpan.mov` and `rtpan.mov` slide one character's picture aside and a blank panel
+in on the other side. The blank is deliberate: it is where the chosen character's
+dossier goes, and the dossier is not in the film.
+
+`0x45e14c` waits for one frame — `cmp word ptr [esp+0x250], 0x2a`, frame 42 of 59
+— reads `[0x46b1a8]` and calls `0x45e390` for character 0 or `0x45e520` for
+character 1, handing each a point:
+
+```
+  45e162  {0x57, 0x128}   ; character 0, y87 x296 — the right-hand panel
+  45e189  {0x57, 0x28}    ; character 1, y87 x40  — the left-hand one
+```
+
+Same y, and an x on whichever side the pan emptied. Each writes seven lines
+sixteen apart in ink 0xe1, then an eighth somewhere else: `0x45e4d5` adds
+`(0x32, 0x9d)` to the running point and `0x45e64b` adds `(0xa, 0x9d)`, which is
+the name plate in the strip under the panel.
+
+```
+  45e3e2  0x40a080(x, y)
+  45e3ea  y += 0x10
+  45e3fc  0x40a360(text)
+```
+
+The text is all in `.data` between `0x4792b5` and `0x4793f5`: **Mortis Rigor**,
+240 lbs, 6'4", Kingsport, Tenn., strengths brute force and raw power, hobbies
+Chevys, plated as *The SkullCracker*; and **Penelope Jones**, 110 lbs, 5'10",
+Glasgow, Scotland, strengths speed, grace and finesse, hobbies Astronomy, plated
+as *Bonebreaker Jones*. The two lists are not even in the same order — character
+0 gives its weight before its birthplace and character 1 the other way round.
+
+### The chooser answers with a frame name, and prefs with nothing at all
+
+`char.mov` is 63 frames that loop from 20 to 63 with four regions live the whole
+way — two on the left figure chaining `ltpan.mov`, two on the right chaining
+`rtpan.mov`. Every one of those frames sets flags bit 2, "do not wait for the
+regions", which is a frame that animates and is still clickable. Reading that bit
+as "has no regions" is why the two figures could not be clicked here at all;
+`0x44979f` reads the region count either way and only the wait is skipped.
+
+Which pan means which player is in the pans' own headers, through the one
+mechanism a DreamFactory film has for answering a question it was not asked:
+
+```
+  449ea9  bx = findFrameByName([hdr + 0x40])    ; actionframe 1
+  449ebd  bp = findFrameByName([hdr + 0x50])    ; actionframe 2
+  449fbb  if (current frame == bx)  0x45e1e0(1)
+  449fd6  if (current frame == bp)  0x45e1e0(2)
+  45e369  [0x46b1a8] = 0   ; when the argument was 1
+  45e374  [0x46b1a8] = 1   ; otherwise
+```
+
+`ltpan.mov` names its `"frame 1"` as actionframe **one** and `rtpan.mov` names its
+`"frame 1"` as actionframe **two**. That is the entire character chooser: two
+header fields, one comparison a frame. Each pan then ends on a frame that DOES
+wait, for a single region at (219,225)-(291,264) — the accept button.
+
+Each pan also leaves a HOLE, and the film never fills it — see the section
+below.
+
+Neither prefs film has **any regions anywhere in it**. The executable owns the panel from the
+moment the film stops: `0x45db40` draws it and `0x45d700` is a fourteen-way
+dispatch on a control id. Fourteen controls, and their rects are in `.data`:
+
+```
+  0…7    0x479188..0x4791c0   eight boxes, two columns of four  -> [0x47917c] = i
+  8      0x4791c8  {207,322,241,502}   0x45d73f  xor ax, ax     -> the way OUT
+  9      0x4791d0  {200,122,215,222}   0x45d743  x / 10         -> volume, 0x4274e0
+  10     0x4791d8  {226,123,241,138}   0x45d788                 -> [0x46b20c] =  1
+  11     0x4791e0  {226,171,241,186}   0x45d79b                 -> [0x46b20c] =  0
+  12     0x4791e8  {226,219,241,234}   0x45d7ae                 -> [0x46b20c] = -1
+  13     0x4791f0  {173,123,188,138}   0x45d7c1                 -> [0x46b1fc] ^= 1
+```
+
+Control 8 is the one whose handler returns zero, and `0x45d6ea` loops while the
+return is not zero — so that wide rect across the bottom right is the only way
+out of the panel, and the slider is the rect after it rather than that one. This
+page had the two the other way round.
+
+Which corrects something this page had written down as a fact: *nothing writes
+`0x46b20c`, so the difficulty is always zero*. Three instructions write it —
+`0x45d788`, `0x45d79b`, `0x45d7ae` — and they are those three boxes. Zero is the
+default, not the only value. Which end is which is settled by what the number
+does rather than by a label: `0x448ac2` gives `trunc(d × 600) + 1200` health and
+`0x40e300(n)` returns `n - (n/2)·d`, so **+1 is easy** — more health, softer
+blows — and `0x40e300` is called from the classes' own constructors (Boggs' four
+thousand at `0x41be84`, his machines' three at `0x41b474`) and from neither
+player's hit handler. The difficulty makes the LEVEL harder, not the blow.
+
+### The eight boxes are the keyboard, and `[0x47917c]` is not a setting
+
+The eight numbered boxes looked like a setting with eight values. They are not:
+`[0x47917c]` is which box is SELECTED, and the panel's event loop does the rest.
+`0x45d6d5` uppercases whatever character was typed and calls
+`0x45d810([0x47917c], char)`, which binds it — or refuses, twice over:
+
+```
+  45d824  for action 1..8: if 0x40e7e0(action) == char  ->  return   ; spoken for
+  45d871  [0x46b210 + old] = 0                                       ; unbind
+  45d888  [0x46b210 + char] = action                                 ; bind
+  45d88b  0x40e870(action, &name)
+  45d893  if name is empty  ->  put the old one back                 ; unnameable
+```
+
+So a binding is one byte of the 256-byte table at `0x46b210`, indexed by the
+character, holding the action number 1…8 — the same table `0x403b90` indexes on
+every keypress in the level, and the same eight actions `0x402be0` spends on one
+global apiece. **Every key in the game is rebindable, and the eight letters this
+port had hard-coded are only what `0x46b210` ships with.**
+
+The other half of `0x40e870` settles something this page had guessed. A bound
+character can be named three ways: `A`…`Z` and `0`…`9` are themselves, character
+32 is the string at `0x46bf0c` — `"Sp"`, two characters wide, which is what the
+`cmp byte ptr [esp + 0x18], 2` in the draw loop shifts left by four pixels — and
+characters 24…27 come out of a four-entry table at `0x40e980`:
+
+```
+  24  ->  0x46bf08  "J4"      26  ->  0x46bf00  "J2"
+  25  ->  0x46bf04  "J3"      27  ->  0x46befc  "J1"
+```
+
+They are a **joystick's four buttons**, and the shipped table binds them beside
+the letters: J4 punches, J3 kicks, J2 jumps and J1 is INV. This port had those
+four entries written down as arrow keys. The arrows in this page are its own.
+
+### The slider is ten segments and step 0 is not silence
+
+`0x45dd2e` builds one rect out of the slider's — `{top, left, bottom, left + 8}`
+inset by one — and `0x434270(rect, 10, 0)` walks it across ten times. A segment
+is lit while its index is at or below `[0x479180]`, in `0x11` up to the seventh
+and `0xd7` past it, so **volume 0 still lights the first segment**: the slider
+has no silent end and the mute this page offers is not one of the original's
+controls. The value comes off the click's own x — `(x - left) / 10`, clamped —
+and goes to `0x4274e0`, which is a `cmp` and a call into the mixer. What a step
+is worth in loudness is that library's and is not in `SC.EXE`.
+
+`0x45d5b8` fills the slider from `0x4274b0`, the mixer's current level, rather
+than from a stored word, so the panel opens on whatever the machine is at and
+there is no shipped default to read.
+
+And `[0x46b1fc]` is the **theme** and nothing else. `0x403cfb` is the in-game half
+of the same switch: on, `0x40f190(0x4ac370)` starts the level's theme bank; off,
+`0x427960(0, 0, 1, 0)` stops it. No effects bank is ever consulted, so turning it
+off leaves every fist and every door exactly as loud as they were.
+
+### The second menu button is a DEMO PLAYER, and the save game does not exist
+
+`0x45df8d` sets `[0x46b208] = -2`, which this page had written down as "a save
+dialog". It is not one, and there is no save game in Skull Cracker at all.
+
+**The recorder is dead code.** `0x403900` is the routine behind "Save in which
+slot?" (`0x46b401`) and it has **zero callers** anywhere in the executable. Only
+the reader is reachable, from `0x45df3c` and `0x45e10c`.
+
+**And the slots are not saves.** `0x4034a0` asks "Load from which slot?"
+(`0x46b3e9`), opens `skuldemo.dmo` — `0x46b3d9`, as a `DEMO` container — pulls
+container N out of it and copies it into a 0x1c2c buffer at `[0x4a02b8]`. What
+that buffer holds is:
+
+```
+  +0    word    chapter          -> [0x4a02b0]
+  +2    word    scene            -> [0x4a02b4]
+  +8    dword   how many entries
+  +0xc  word[]  one per engine frame
+```
+
+and `0x4037b2` walks it with the cursor at `[0x46b31c]`:
+
+```
+  4037b2  si = [buf + cursor*2 + 0xc]
+  4037c8  if (si < 0)  0x403820(-si, 0)     ; a RELEASE
+  4037dd  if (si > 0)  0x403820(si, 1)      ; ...and a press
+```
+
+`0x403820` is the same function the keyboard reaches through `0x46b210`. So a
+slot is an **input recording** — one signed action a frame, of the same eight
+actions the preferences panel binds keys to — and the button plays it back.
+That is also what `skuldemo.dmo` is, which answers the other open question about
+that file.
+
+It is not built. A 1996 input stream replayed against a re-implementation
+desyncs, and the desync is the only thing it would demonstrate.
+
+### The writing that was missing is on the TITLE screen
+
+The kill vignette shows nothing written on it because there is nothing written on
+it. The high-score board is drawn over `menu.mov`, and `0x45de89` is the line
+that says so: while `[0x46b208]` is 1 — the menu — and the film's frame index is
+**0…0xa7**, `0x45ddd0` draws the board over whatever the film is showing. 0xa7 is
+167 and `"frame 2"` is index 168, so that range is exactly the attract loop and
+it stops where the six button stubs begin.
+
+What gets a score onto it is `0x403340`, the state the seven vignettes belong to:
+
+```
+  4033ca  0x40e990(KILLn.MOV)      ; one of seven, 0x434540(7)
+  4033d9  ax = [0x46b20c]          ; the difficulty
+  4033e3  0x40d4d0(ax)             ; the score, which is [0x4a4f00]
+  4033e9  0x40f650(score, ax)      ; offer it to that difficulty's ten rows
+  4033ee  cx = 1                   ; and the shell goes back to the title
+```
+
+Which also settles what the kill films ARE: `0x4294e7` only sets that state once
+`0x40d490` has found the lives below zero, so they are the GAME OVER films, not
+the per-death ones.
+
+There are **three boards of ten**, one per difficulty, each row nineteen bytes —
+`{ Pascal name[13], dword score, word level }`, which is the `lea edx, [eax +
+eax*8]` / `[eax + edx*2]` all three arms index with:
+
+```
+   1  EASY     0x4a4f10   0x40f889
+   0  MEDIUM   0x4a4d80   0x40f790
+  -1  HARD     0x4a4e40   0x40f69b
+```
+
+The insert is one loop: `0x40f6b6` finds the first row whose score is under
+yours, `0x40f6d6` shifts the rest down, `0x40f722` writes the score and the level
+and only THEN does `0x40f742` put up the dialog `0x46bf4d` names — so a cancelled
+dialog leaves a nameless row on the board rather than no row at all. A name over
+twelve characters is cut (`0x40f74f`), and because an empty row's score is zero
+and the test is `>=`, a score of zero never gets on.
+
+`0x40f990` draws it twice from the same point (`{y 107, x 44}`, one dword at
+`0x45de90`): once offset by (2, 1) in `0xe8` and once square in `0xe1`. The only
+thing the two passes do differently is the difficulty heading — the shadow draws
+all three of `Easy`, `Med` and `Hard` and the second draws only the one
+`[0x46b20c]` is on. That is how the board says which of its three tables you are
+looking at. An empty row shows `-----` for the name (`0x46bf71`) and `-` for the
+other two (`0x46bf6d`).
+
+The one thing a browser cannot have is `Skull.sco`, the file `0x40f210` reads the
+thirty rows back from. They live beside the preferences instead.
+
+### Eight words, one per length, and a two-thirds-of-a-second memory
+
+The cheat words are not a table of strings compared against the last thing you
+typed. `0x403ed0` is called from `0x403c1b` with every **lowercase** letter the
+level's key loop sees, before that letter is uppercased and looked up as an
+action — so a cheat is typed with the same keys that are walking you around —
+and the recogniser is this:
+
+```
+  403ed0  if (now - [0x46b324] >= 0x28)  [0x46b320] = 0   ; 40 ticks and it forgets
+  403f00  [0x4a02c1 + i] = char                           ; a Pascal string
+  403f0b  [0x4a02c0] = i + 1                              ; ...its length byte
+  403f17  if (++i >= 0x13)  i = 0                         ; nineteen and it wraps
+  403f29  eax = i - 3;  if (eax > 7) return               ; only 3…10 are words
+  403f35  jmp [eax*4 + 0x404140]                          ; ONE candidate per length
+```
+
+The jump table is indexed by **how many characters have been typed since the last
+pause**, and each of its eight slots compares the accumulator against exactly one
+string. Which is why the eight words are eight different lengths: type nine
+letters and the only word you can possibly have typed is `marsupial`. `0x4087c0`
+is `ms * 3 / 50`, a sixtieth-of-a-second tick, so the 0x28 is two thirds of a
+second between letters.
+
+```
+   3  zip         0x46b438   [0x4ac38a]++, 0x402760   the next initplayer point
+   4  eshs        0x46b440   0x45ef30(0x78)           120 rounds, if you are armed
+   5  cthia       0x46b460   0x404160, state 2        asks, and goes to that level
+   6  jetson      0x46b430   0x40d350(-850)           850 more on the mission clock
+   7  bewitch     0x46b448   0x40d400(5)              five lives
+   8  harakari    0x46b424   0x402ac0(0x1f4)          500 health gone
+   9  marsupial   0x46b454   0x402b20(0x400)          1024 health back
+  10  myxzltplkt  0x46b418   0x404136 mov ax, 1       nothing at all
+```
+
+Two of those are corrections. **`jetson` is TIME, not score.** `0x40d350`'s
+argument is signed — positive sets `[0x4a4d68]` and negative adds to it — and
+`[0x4a4d68]` is the mission clock, the word every chapter's entry function fills
+from its book's `timer` record — see "The mission clock was a record all along"
+above. The gift is capped at
+`[0x4a3b18]`, the dial's own full scale, and the same −850 is what the clock
+PICKUP hands over (`0x428354`). And **`myxzltplkt` really is the joke it looks
+like**: `0x40411e` makes the comparison and `0x404136` loads 1 into `ax` whether
+it matched or not, so the branch that would have done something was never
+written.
+
+`eshs` is the only one with a guard: `0x402ee0` dispatches on the character and
+both halves (`0x42e6e0`, `0x448bf0`) ask the same thing — is the player's kind
+between 0x12 and 0x16, which is the armed set. Empty-handed the word is nothing.
+
+One consequence for this page. Four of its own keys were bare letters — `h` for
+the damage switch, `n` for the spawn cycler, `c` for the character switch and `m`
+for the mute — and three of those are the first letter of a word. **They are held
+with SHIFT now.** None of the four is the original's key, and the original's own
+designer set is behind a modifier too (`0x403c40` tests the event's modifiers
+against 0x1fa0 before it will read one), so this is the shape the executable
+already has. `[` and `]` stay bare: no cheat word has a bracket in it.
 
 ### The sound was one pointer away
 
@@ -550,15 +1868,1409 @@ own name for their punks came out: they are werewolves.
 distance from the middle of the view and nothing 768 pixels past it is played at
 all — and that is the whole of the mixer.
 
+### ...and the films keep their sound somewhere else entirely
+
+None of that mixer reaches a film. A film's audio is in the film, and there are
+two kinds of it: the loop-table **bed** a segment starts by itself, and one-shots
+named by a frame. `menu.mov` and the sixteen chapter briefings have a bed. Nothing
+else does — and "nothing else" is Boggs' spoken orders, the seven kill vignettes
+and the four time-out ones, all of which this page played in silence, because its
+player fired a one-shot only from a CLICKED region and a frame's own sound was
+read and thrown away.
+
+The films are all one shape, and the shape is a television set: a console powers
+down (`soundout 2`, `soundout 3`), a little 160x111 monitor comes on inside it
+(`sound 1`), the piece plays on the monitor, and the monitor snaps off
+(`Mon. OFF`). `boggs01.mov` is that with four segments of speech in the middle —
+`1a`, `1b`, `1c`, `1d` — and `kill1.mov` is the same with one.
+
+Which is also where the pacing was wrong, because the two facts are the same fact.
+Those inset segments are authored at the film's own three ticks, 50ms, and the
+sound over one is exactly as long as its picture:
+
+| segment | frames | picture | its sound |
+| --- | --- | --- | --- |
+| `kill1.mov` seg 2 | 186 | 9.30s | `kill 8` 9.29s |
+| `boggs01.mov` seg 2 | 106 | 5.30s | `1a` 5.25s |
+| `boggs01.mov` seg 3 | 152 | 7.60s | `1b` 7.57s |
+| `boggs01.mov` seg 4 | 127 | 6.35s | `1c` 6.32s |
+| `boggs01.mov` seg 5 | 177 | 8.85s | `1d` 8.82s |
+
+`mov-pace.ts`'s 66ms native floor — a rule for the films that carry no timing at
+all, the publisher logos — was raising every one of them by a third, so the
+picture outran the line spoken over it. A segment with a bed is paced against the
+bed; a segment without one is paced by its own authored holds and by nothing else.
+
+Both ends of every one of these films then hold on a frame whose flags bit 0 says
+**wait for the voice**: `kill1.mov` holds its console still until `soundout 3` is
+done, and holds again before the black frame until `Mon. OFF` is. With no sound
+playing that waits on nothing, which is exactly what it did while there was none.
+
+## A negative blow is a message, and the grip is the drawing
+
+`obj+0x1a` is what an object hits with, and every ordinary value is a
+percentage: `0x42f910` scales the striking cel's own `(dy, dx)` by it and the
+victim subtracts the magnitude. A hundred is a full blow and is what almost
+everything carries.
+
+The player's handler reads the SIGN first, and a negative never reaches that
+arithmetic at all:
+
+```
+  448c6e  mov   ax, [esi+0x1a]        ; the striker's own strength
+  448c72  test  ax, ax
+  448c75  jge   0x449035              ; >= 0 -> take the damage
+  448c7b  movsx eax, ax
+  448c7e  add   eax, 8                ; -8..-1 becomes 0..7
+  448c81  cmp   eax, 7
+  448c84  ja    0x449035              ; -9 and below -> take the damage
+  448c8a  jmp   dword ptr [eax*4 + 0x4492b8]
+```
+
+So there are exactly eight codes, because the range test says so, and they are a
+dense enumeration the engine jumps through rather than a scattered convention.
+
+### ...and there are two of every one of them, because there are two players
+
+`PLAYER.SBK` holds two characters, and `0x402950` picks between them:
+
+```
+  402950  movsx eax, word ptr [0x46b1a8]
+  40295c  je 0x40296c  ->  call 0x428080   ; character 0 — the 4xxx cels
+  402961  je 0x402975  ->  call 0x442ad0   ; character 1 — the 9xxx cels
+```
+
+Each has a hit handler of its own — `0x42e750` for character 0, installed on the
+player object at `0x42e443`, and `0x448c10` for character 1 — and each handler
+has its own eight-slot table with its own scripts. Character 1's cels are
+character 0's plus five thousand in most rows: 4550 → 9550, 4570 → 9570,
+20 → 5020.
+
+This page plays character 0 and had been reading **character 1's table**. The
+symptom was visible and took a player to find it: a hand takes hold of you in
+GRAVE, the grab installs 9570..9572 and the held loop that follows installs
+4570..4572, and you flicker between two different people every other frame for
+as long as it has you.
+
+Character 0's table is `0x42eda8`, index 0 being −8:
+
+```
+  -8  0x42e781  knocked flying    4550..4558, a 0x78 shake, and NO shove
+  -7  0x42e807  floored           940..949, and only from the ground
+  -6  0x42e86d  flattened         900..903, full gravity — nothing sends it
+  -5  0x42e8b3  slumped           920..922, half gravity
+  -4  0x42e8f9  shocked           952 922 951 921 then 900..903
+  -3  0x42e995  GRABBED           4570..4572, no gravity, no velocity, held
+  -2  0x42ea34  jolted            460..462 five times over
+  -1  0x42eaaa  spun              20/21 — and it TAKES TWENTY HEALTH
+```
+
+Two of those differ from character 1's in more than art. Character 0 does not
+shove on −8: the ±50 against `obj+0x28` is `0x448cf4`, character 1's, and
+`0x42e781` writes no velocity at all — the cels carry the fall. And character
+0's −1 spends twenty health at `0x42eb2b` (`0x402ac0(0x14)`), where character
+1's spends none. "No reaction in the table takes a point off anybody" was true
+of the table this page had read, and not of the one it was playing.
+
+### ...and now both of them are playable
+
+Character 1 is not character 0 in different clothes, which is what "plus five
+thousand" had made it look like. Its state machine is `0x442ad0`, 5552 bytes, and
+every one of the twenty-eight animation kinds is a script of its own —
+`0x475c88` for `0x471648`, `0x475f38` for `0x471920`, and so on down. The two
+machines are install-for-install the same shape (`0x444080` against `0x429690`,
+`0x444da0` against `0x42a400`, `0x444ff0` against `0x42a670`, `0x445320` against
+`0x42a9a0`), and what differs is which tags they reach for and what is in them:
+
+| | character 0 | character 1 |
+| --- | --- | --- |
+| walk | dx 95 | dx 105 |
+| run | dx 180 | dx 200 |
+| jump | dy −420 | dy −500 |
+| running jump | dy −420 | dy −480 |
+| hop | dy −210 | dy −240 |
+| flying kick | dy −310 | dy −370 |
+| crawl | 47 on each of five cels | 315 on the last of five |
+| standing box | 88 below the anchor | 69 |
+| idle fidgets | three (tags 1, 2, 3) | two — there is no tag 3 |
+| duck fidget | `704..707`, rolled 13 in 707 | none: tags 1, 2 and 3 are one cel |
+| big punch | a coin toss between two | one pose, no toss |
+| P + K | the 650s headbutt, out and back | `9800`, which LEAVES THE GROUND |
+
+The frame counts say it from the other side: `0x471648` is 47 frames and
+`0x475c88` is 41, `0x471c90` is 26 and `0x476240` is 23.
+
+Three rows of this page's own tables turned out to be character 1's, left over
+from the same hybrid — the dying animation (`0x476758` tag 0, where character 0's
+is `0x4721a0` tag **1**, installed at `0x429336` a line before the kind goes to
+27), the hard landing (`0x476220` tag 5 against `0x471c68` tag 5), and the duck
+combo, which was wrong in a third way: `0x42ab4a` installs `0x471d68` tag 6,
+`4100(dx 700, dy −80) 4101 4102 4103` — a dive at four times the run. The
+630..632 that stood there is tag 6 of `0x471c90`, a different script with the
+same tag number.
+
+`skullcracker/src/players.ts` is both of them side by side, and the page reads
+`0x46b1a8` to pick: `?char=1`, Shift+C (which is input action 11, `0x402d22`,
+the other designer's key the shipped table leaves unbound), or the chooser.
+
+Getting that census right needed the disassembler pointed differently. A sweep
+in overlapping windows can begin mid-instruction, and everything it decodes
+after that is nonsense it prints without complaint: it lost `0x420da6`, the
+hand's own grab, and `0x420e3b`, the other one. Decoding each function from its
+entry to the next cannot desync inside a function, and the honest list is
+
+```
+  -1  0x413bf9  0x41b022                       the Boggs machinery, only
+  -2  0x4201e4  0x43dbda  0x4421cb  0x44236d
+  -3  0x41745c  0x420da6  0x424c21  0x43ee9d   claw, hand, wraith, bush
+  -4  0x426a90                                 the surge
+  -5  0x43eedb  0x43eefa                       the bush, once you are dying
+  -7  0x420e3b  0x420e4e                       the hand, out of its rect
+  -8  0x418dce
+```
+
+**Seven of the eight have a sender and -6 has none.** Its slot is real and its
+reaction is written and no object anywhere reaches it. And −9 is not in this
+alphabet at all: it falls below the range test, lands on the player as ordinary
+damage, and is read instead by five handlers of their own — `0x44f0aa`,
+`0x4520d8`, `0x4547b3`, `0x4550d3`, `0x455763` — which accept nothing else. The
+flare carries it, and conditionally: `0x43abf0` sets its strength to −9 rather
+than 100 when the global at `0x4abdfc` is 5.
+
+### How a grab actually holds you
+
+The neatest thing in the engine. `0x428080`'s kind-10 case reads the GRABBER's
+current cel record at +4 and +8 — which is the cel's **strike box**, the same
+rect that decides whether a blow connects — translates it by the grabber's own
+point with `0x434270` (a plain add, no mirror, no band) and plants the player at
+its centre:
+
+```
+  4285b8  cmp [0x4a693a], ax   ; x0 == x1 -> let go
+  428660  x = x1 + (x0 - x1) / 2
+  428689  y = y0 + (y1 - y0) / 2
+```
+
+So the grip is authored per frame, in the art, and the grab ends when the artist
+drew a frame without one. Nothing else is stored: no timer, no distance, no
+"grabbed" flag on the grabber. The books confirm it exactly. Of the thirteen cels
+the hand's three scripts name, only 1556 and 1562 — the two CLOSED ones — carry
+a strike box, and theirs are `y -27..-1, x -32..31` and `y -34..-4, x -18..20`: the fist itself.
+Of the fifty-two the claw's six scripts name, only 2456..2459 do, `y 77..111,
+x -76..0` and three more like it: the jaw hanging below and behind its anchor.
+
+Which makes the one thing that has to be got right in the port the one thing
+easiest to get wrong: the grip must be **re-read every frame**. Reading it once,
+at the moment of the grab, gives a hold that never ends — the hand sinks back
+into the ground and the player stays pinned in mid-air where it used to be.
+
+Two details that are the original's own. `0x4286cf` lets P restart the struggle
+but only from the loop's tag 0, so mashing it does not stack and nothing in the
+state shortens the hold. And the reaction installs `0x476698` — cels 9570..9572
+— while the held state that follows it loops `0x4720e8`, the same script in
+4570..4572; the disc has two playable characters with a sound bank each, which
+is the likeliest reason, and this page plays what the two functions literally
+say.
+
+### What it unblocks, and what it does not
+
+The hand grabs and lets go, the surge shocks, the knockdown from out of a hand's
+rect lands, and none of it spends a point of health — which is why a code comes
+through with the damage switch off. A code is a message.
+
+It did not, on its own, make Boggs killable — the machinery did, and that is now
+here too. The only two things in `SC.EXE` that send −1 are `0x413bf9` and
+`0x41b022`, both inside the Boggs machinery, and `0x41afd0` gates its −1 on the
+two flags at `0x46e080` and `0x46e084`. What the codes unblock is the blaster's
+bolt, which carries −1 and which `0x41bc71` and `0x41b510` both rewrite as a
+full hundred — against Boggs and against its machine, and against nothing else
+in the game.
+
+BARREL's claw does not grab yet, and the reason is worth writing down because it
+is not the one it looked like. `0x4171e0` is a **seven**-kind machine over six
+scripts, and this page has the right ones: the creator starts it on kind 6
+(`0x46dc58`, one cel), the player entering its rect sends it to kind 0
+(`0x46dc78`, the carriage), and inside 300 pixels kind 0 installs `0x46dd80` —
+kind 4, cels 2420..2426 — which is exactly what is ported.
+
+**The claw grabs now.** What follows is the reading that got it there, and one
+position bug it turned up.
+
+The grabbing kind is reached from somewhere else, and reading the one function
+in the way settles it. The creator registers a TRACKER at `0x411d23` —
+`0x45ef70(&user[0x12], claw, player, 0x46dfc8)` — and `0x45efd0` answers it each
+frame with the gap between the two objects, which way the target is moving, and
+a BAND index. `0x46dfc8` is the band table and it is three numbers:
+
+```
+  b4 00  8c 00  64 00  00 00        180, 140, 100, and a zero to stop
+```
+
+The index is how many of them the gap is still past: over 180 is band 0, 140 to
+180 is band 1, 100 to 140 is band 2, and 100 or nearer is band 3. `0x41734a`
+dispatches kind 0 on exactly that — band 0 slows the carriage down, band 2
+installs `0x46de08` tag 0 and band 3 its tag 1, and those two tags are the only
+route to cels 2456..2459, the only four of the claw's fifty-two that carry a
+grip.
+
+So the claw reaches for you at 140 pixels and commits at 100. Kind 1's own tag
+machine is four tags and `0x41743d` is the whole trick:
+
+```
+  41743d  tag 1 ends: obj+0x2a set -> tag 2 and blow -3
+                      else        -> tag 3, straight back up
+  417485  tag 2: blow -3 every frame; ends -> blow 0, tag 3
+  4174c7  tag 3 ends -> kind 0, the carriage again
+```
+
+The DIVE is an ordinary hundred — `0x417208` writes it at the top of every think
+and only the clamp overwrites it. So the jaw hits you for a real blow, that is
+what sets `obj+0x2a`, and the grab is what follows from it. Which also means the
+contact has to be read off the COLLISION and not off the damage: the jaw cels
+carry a strike box and no blow pair at all, so a port that asks "did this hurt
+anything" would watch the claw touch you and go back up.
+
+And it could not have reached anybody anyway, because this page had it hanging
+in the wrong place. `0x411ca0` files three of the spawner's dwords into its user
+struct and `0x4173d1` clamps its x between `user+2` and `user+6` — which can
+only be left and right, so `user+0`/`user+4` are top and bottom. `0x4173c9`
+writes `user+4` into `obj+6`: **it hangs at the record's bottom, not its point.**
+On BARREL's fourth claw that is 7221 against the point's 7044, and since the jaw
+box sits 77..111 below the anchor, the difference is the whole of whether it
+closes on your chest or 40 pixels above your head.
+
+### The thing in the water lets go by SINKING, and that is why SEWER stopped
+
+`initbush` — the thing that comes up out of level seven's water — held the
+player at x1964 for the rest of the run, which is why this branch's SEWER suite
+had a standing failure and why the level could not be played through.
+
+Two things each waiting for the other. This page had the bush waiting for the
+player to be released before it would sink, and the player waiting for the bush's
+cel to stop gripping before being released. `0x43ef31` says otherwise, and it is
+one test with two arms:
+
+```
+  43ef31  cmp [obj+0x46], 0        ; has its thirteen-cel script ended?
+  43ef65  (no)  y -= 0x28          ; forty a frame UP, to the top of its travel
+  43ef4a  (yes) y += 0xa           ; and ten a frame back down again
+  43f007  at the bottom: install 0x472b70, whose six cels carry no strike box
+```
+
+Neither arm asks whether it still has hold of anybody.
+
+And it sends **two** codes rather than one, latched at `user+0xe`:
+
+```
+  43ee9d  (0)  [obj+0x1a] = -3           ; the grab
+  43eea3  (0)  [obj+8] = player.x        ; and it slides under you
+  43eeb0  (0)  0x402f00 != 0 -> stay     ; ...while the player is still FREE
+  43eec9  (0)  user+0xe = 1              ; ...and moves on once it has you
+  43eedb  (1)  0x402f60 != 0 -> [obj+0x1a] = -5
+```
+
+`0x402f00` returns 0 when the player's kind is 10, 9, 0x18 or 0xd — held,
+knocked down, or freshly spawned — so the latch turns over on the frame AFTER the
+grab takes. `0x402f60` returns 1 while the player's kind is under 0x1a, which is
+**alive**: this page had that one backwards and had written −5 down as "what it
+gives a player who is already dying". It is the opposite. The bush grabs you for
+about a frame and then slumps you — `0x42e8b3`, half gravity, holding nothing.
+
+The held cels 4570..4572 carry a body box, unlike every knockdown cel in the
+book, which is what lets the second blow land on a player the first is still
+holding.
+
+One more thing fell out of the same fix. `0x4285c1` leaves the held state and
+`0x4285db` writes 1 into `obj+0x34` on the way out — the player is SETTLED again,
+not dropped from wherever the grip had them. This page's comment said so and its
+code did not, and in SEWER's hall of lifts that meant a grab that ended a pixel
+above the walkway dropped the player straight through it into the sewage
+underneath. Standing them up is not a free pass: the gait's own `surfaceUnder`
+runs on the next frame and puts them back in the air when there is nothing within
+eight pixels of their feet, which is what a grab over a pit wants.
+
+## Five weapons, and three of them pour
+
+Each weapon owns a state machine and a fire function, and the table at
+`0x4a7f10 + id * 12` is how they meet: `{dword icon, word max, word rounds,
+dword fire}`, with the fire pointer at +8.
+
+```
+   6  blaster   state 0x42dbd0   fire 0x412a70   script 0x471458   cels 4000s
+   9  flaregun  state 0x42cb80   fire 0x436d40   script 0x470a78   cels 2700s
+  10  flamer    state 0x42b860   fire 0x44dae0   script 0x470f98   cels 1200s
+  12  soaker    state 0x42c1e0   fire 0x41f820   script 0x471260   cels 3200s
+  16  scepter   state 0x42d2b0   fire 0x41f6b0   script 0x470c40   cels 3300s
+```
+
+A state machine dispatches on the TAG the player is on (`movsx eax, [eax+0x44]`)
+and calls its weapon's fire function with a small number — the VARIANT — which
+every fire function reads its own way. Tag 2 is the standing shot and tag 6 the
+ducking one across all five, and the flamer and soaker send `-2` from the tags
+either side of those, which is how a stream knows to stop.
+
+### The three that pour
+
+The flamer, the soaker and the scepter do not launch anything. Each adds an
+object to a list the player owns, and `0x421700` plants it fresh every frame:
+
+```
+  42170a  if (player mirrored)  x = player.x - user[+4]
+  42171e  else                   x = player.x + user[+4]
+  42172f  x += player.vx          ; ...and it leads your own motion
+  42173b  y = user[+2] + player.y + player.vy
+```
+
+So a stream is not fired and forgotten, it is redrawn where you are — which is
+why walking while you hold the button sweeps it across a room. Two negative
+variants end it: `-2` walks the list installing the shutting-off tag, and `-1`
+writes the expire kind straight into every member. The player's own hit handler
+sends that `-1` before it has even looked at the blow (`0x448c19`, `0x448c40`),
+so **being hit puts your flamethrower out**.
+
+They cost a round an engine frame (`0x45ef00(1)`), which makes a full hundred
+and sixty about eleven seconds of flame — against the scepter's **forty a
+shot**, four shots and no more. RAVECAVE's `statscepter` files no rounds at all,
+so what you get is the single round `0x45eed0` gives for arming you, one beam,
+and an empty gauge.
+
+### ...and they do not all hit with the same thing
+
+```
+  0x4217ba   soaker    mov word ptr [edi+0x1a], 0x64    ; a hundred, every frame
+  0x424630   scepter   mov word ptr [ecx+0x1a], 0x64    ; a hundred
+  0x453b9b   flamer    mov word ptr [esi+0x1a], 0xfff7  ; MINUS NINE
+```
+
+Two of the three are ordinary damage; the flame is a code. And -9 is the one
+code that is not in the player's own table — it falls below `0x448c84`'s range
+test — so what reads it is five handlers of their own (`0x44f0aa`, `0x4520d8`,
+`0x4547b3`, `0x4550d3`, `0x455763`) which accept nothing else. Like the
+blaster's bolt, the flamethrower is a key rather than a weapon, and a full gauge
+of it kills nothing in any of these sixteen levels.
+
+The damage, where there is any, is small and comes from the art: `0x42f910`
+scales the striking cel's own `(dy, dx)` by the object's strength, and the
+soaker's 9806 carries `dx 8`. Eight a frame, so a two-hundred-health zombie
+takes about twenty-five frames of water.
+
+### INV is a holster, and there is no inventory screen
+
+This repo carried a gap that said "the inventory screen behind `0x42edd0`'s
+message 1 is not here", and both halves of that were wrong. `0x42edd0` message 1
+is the CROUCH state — it reads the keys, probes 0x23 ahead for a pickup and
+installs `0x4717c8` — and there is no inventory screen anywhere in `SC.EXE`.
+
+What the fourth button on the lower band actually does is two instructions, and
+all 81 of its readers are the same two:
+
+```
+  4298c0  cmp word ptr [0x4ac386], 0
+  4298cf  mov word ptr [eax+0x18], 0xf     ; ...every player state, armed or not
+```
+
+State 15 is `0x428975` and it is four lines long. While the button is held it
+stands you on `0x471648` tag 0 — the plain unarmed idle, the one that breathes —
+and reads no direction at all, so you cannot walk. When the button comes up it
+reads `0x479434` and dispatches through the map at `0x429624` to put you back
+into the idle of whatever you are carrying: `0x471458` for the blaster,
+`0x470a78` for the flare gun, and the unarmed idle for anything that is not one
+of the five.
+
+So it is a holster. You put the gun away to look at yourself, and taking your
+finger off draws it again — nothing is spent, nothing is swapped, and no screen
+is drawn. Finding that out cost less than building the screen would have, which
+is the argument for reading the executable before believing a gap.
+
+### The thing in the water comes up, and cannot reach
+
+`0x43ec80` is three phases and a rect, and all of it is built now:
+
+```
+  43ecf3  |player.x - bush.x| <  0x46    ; seventy across
+  43ed0c  |player.y - bush.y| < 0x12c    ; three hundred down
+  43ed28  0x45d090(bush, 0x472c20, 0)    ; ...and up it comes
+  43eea3  [esi+8] = player.x             ; sliding under you as it rises
+  43ef4a  y += 0xa                       ; ten a frame back down afterwards
+```
+
+Its thirteen cels split exactly the way the hand's and the claw's do: 5020..5025
+carry no strike box, and 5026..5032 each carry a big one with no blow pair. So
+the first six are it breaking the water and the last seven are it closing, and
+the frame it closes is the frame it has you — the same authored grip, a third
+time.
+
+The reach took a second look. The creator puts it at the record's point plus
+eighty (`0x435bf7`), which on SEWER's hall bushes is y 17321 against a floor at
+17513, and it looked for a while as though the bush stood 190 to 215 pixels too
+high to reach anybody — consistent across all eight, so systematic rather than
+one bad record. It was systematic, and it was not the bush: every prop's strike
+box was being lifted by `height - posY`. See "A collision box is a translation"
+below. With the box translated the way `0x40e680` translates it, the bush closes
+on a player walking underneath it, on its own resting y, and holds.
+
+## Two tests, and an ending
+
+### A pickup is taken on the ART, not the box
+
+`0x45b270` intersects the two rects with `0x434140` and only then calls
+`0x40e680`, which is the second test and the real one. That walks the
+intersection looking for a row where BOTH cels have an opaque span — and it is
+spans rather than pixels because that is how the SHP stores a row, which is why
+`0x4320c0` compares span lists and never touches a pixel value.
+
+The difference is not academic. The player's cel is a tall rectangle with a
+great deal of nothing in it: STREETS' `statlife` runs 3629..3729, and standing
+at 3600 or 3760 overlaps that rect by a pixel or two while touching none of the
+art. The rect alone hands you the life; the art does not, and the suite asserts
+exactly that pair of positions.
+
+One detail worth keeping: the point `0x40e680` hands back is the centre of the
+RECT intersection (`0x40e782` reads back what `0x434140` wrote), not the centre
+of the pixels it found. So the pixel walk only ever answers yes or no, and can
+stop at the first row that touches.
+
+### ...and the sixteenth level is the end
+
+`0x402fe0` is the game's outer loop: eleven states through `0x403448`, of which
+1 is the title menu, 3..6 are the four chapters, 9 is the death vignette, 10
+goes back to the menu and 11 quits. Chapter four is state 6, its runner is
+`0x412670`, and the last of the scenes it walks is four instructions:
+
+```
+  41293d  cmp word ptr [0x4abdfe], 6   ; nothing else has taken the game away
+  41294c  push 0x46b388                ; "credits.mov"
+  41295a  call 0x40e990                ; ...play it
+  412962  mov si, 1                    ; and that is the chapter loop over
+```
+
+`si` ending the loop returns to `0x4032a2`, which finds the outer state is not
+one of the five that would claim the game, sets the scene to 0 and goes to state
+1. So finishing the sixteenth level plays the credits and puts you back at the
+front.
+
+`credits.mov` is also the menu's own option 6 (`0x4030f7` plays the same file),
+so the film being in the rip was never evidence of an ending on its own. What
+makes it one is `0x41293d`.
+
+## The wraith works its own bands, and its code is dead
+
+`0x424800` is a machine this page fought without. It reads the same TRACKER the
+claw does — `0x45efd0` on `user+0xe` — and bands the gap against `0x46f8f8`:
+
+```
+  bc 02  e6 00  82 00  3c 00  00 00      ; 700, 230, 130, 60
+```
+
+Four thresholds, five bands, and `0x424f1c` sorts them into four behaviours:
+over 230 it closes on you, 130..230 and 60..130 are where it fights, and inside
+sixty it does nothing at all but hang there (`0x424c07` installs the standing
+hover and nothing else). Which move it picks when it fights is `0x434540`'s.
+
+The best of it is `0x424d77`: the wraith's cast calls **`0x41f6b0`**, the
+scepter's own fire function, variant 0 — the one that spends no rounds. The
+thing you take the scepter from in RAVECAVE casts it at you first.
+
+### ...and the -3 is dead code
+
+`0x424c54` is the first instruction of its kinds 2 and 3 and it writes -3 into
+`obj+0x1a`, which reads exactly like the grab the hand and the claw carry. It is
+not. `0x4248a9` is the function's ONLY exit:
+
+```
+  4248a9  xor ax, ax
+  4248ac  pop ebp
+  4248ad  mov word ptr [esi+0x1a], 0x64     ; ...a hundred, every path, every frame
+  4248b3  pop edi / pop esi / pop ebx / ret
+```
+
+Both -3 writes are overwritten before the function returns, so the wraith hits
+like everything else. This was built the wrong way round first, and what caught
+it was a measurement rather than a re-reading: **two hundred and sixty kicks
+took nothing off it**, because a wraith that grabs on contact locks the player
+out of fighting entirely. With the code removed it falls in eighteen.
+
+That is the fourth time in this port that a `mov` read without its exit path
+gave the wrong answer — see Boggs' -1 and its two flags, and the inventory
+screen that was not one.
+
+## The bishop rolls for it, and Boggs lunges
+
+Two more machines this page fought without, both on the same tracker the wraith
+and the claw use.
+
+**The bishop** — `0x425c90`, banded against `0x46f4c0`: `dc 00 aa 00 64 00`, so
+220, 170 and 100. Dormant until the player's point is in its rect, then it walks
+in on its 2500s and rolls:
+
+```
+  425e56  band 1       -> 0x434540(10) < 3, or nothing at all
+  425e64  band 2 or 3  -> always considers
+  425e8c  0x434540(0x2a) <= 13 -> tag 2, the sixteen cels
+                         else  -> tag 0, the throw
+```
+
+Three in ten at the far band, always inside 170, and then thirteen in forty-two
+for the sweep over the throw. The throw's recoil is `0x46f1c0` tag 1 carrying
+dx -30, -20, -10 — authored into the animation rather than applied to it.
+
+**Boggs** — `0x41be50` rolls once a frame while its kind is 0 and seven of the
+forty-two take it, toward whichever side the player is on:
+
+```
+  41bffc  0x434540(0x2a)
+  41c006  cmp eax, 7 / jge              ; seven in forty-two
+  41c010  cmp word ptr [eax+0x18], 0    ; ...and only out of the idle
+  41c047  cmp [player+8], [0x4a50e0+8]  ; which side -> which tag
+```
+
+`0x46e6d8` carries the stride: three records of 470 through the largest divisor
+in the game, which is under five pixels a frame. One in six a frame against a
+twenty-seven frame lunge means it is moving about four fifths of the time, which
+is why its idle had to be sampled four times as often to be seen at all.
+
+Its head, its claw arm and its eight machinery objects are still not here, so
+the healing never stops and it still cannot be killed — see the section above
+for why that is the game's own arithmetic rather than a gap.
+
+## A hard blow costs you the gun, and the band says which key
+
+Two things on the interface turned out to be wired to the key map, and one thing
+that looked unwired turned out never to have been wired at all.
+
+### The knockdown is also the disarm
+
+`0x449115` is the comparison this page already read for the reaction — over
+sixty and you go down, under it you stagger. What was not read is the six
+instructions after it:
+
+```
+  449115  cmp di, 0x3c            ; the same sixty
+  44911b  0x448bf0()              ; is the player one of the armed kinds?
+  449125  ...                     ; player+0x16, player+0x28, player+6, [0x479434]
+  449146  0x45b060(...)           ; and the gun is on the floor
+  44914b  [0x479438] = 0          ; hands empty
+  449157  0x40d4f0()              ; redraw the panel
+```
+
+`0x448bf0` is three comparisons: `player+0x18` between 0x12 and 0x16, which is
+the five armed player kinds and nothing else. `0x45b060` is the spawn this page
+already had — it is what reaching for a second gun runs to throw the first one
+down, gravity 1.0 and bounce 0.3 — so a knockdown and a swap put the weapon on
+the floor by exactly the same route. The other player class carries its own copy
+of all six at `0x42ec07`, so it is both characters.
+
+What does **not** disarm you is a code. `0x448c72` reads the sign of the blow
+first and dispatches a negative one before any of this arithmetic runs, so a
+claw's grab and a wraith's hold leave the gun where it is.
+
+### The letters under the buttons are typeset from the key map
+
+`0x40cf00` builds the whole panel — the two bands, then eight of these:
+
+```
+  40d0fc  ecx = [0x46bd58 + i*4]  ; the point, {y, x}
+  40d10d  0x40e870(i + 1, &buf)   ; name the key bound to action i+1
+  40d11a  0x40a430(&buf)          ; how wide that name is
+  40d125  edi = (15 - width) >> 1 ; centred in a box fifteen wide
+  40d139  0x40a080(x + edi, y)    ; and write it
+```
+
+`0x40e870` is the same namer the preferences panel uses and `i + 1` is the same
+action number, so the W, A, S, D in the pad and the J, K, P, I on the four
+buttons are not in the cel at all: they are read out of `0x46b210` every time
+the panel is built. Rebind punch to Z in the preferences panel and the band says
+Z. That is what makes the eight boxes worth having.
+
+And the point is the glyph's BASELINE. `0x40a080` only stores it and hands it to
+the text object, so the binary does not say — but the DISC does: `helpwin.mov`'s
+own INTERFACE page bakes a picture of this panel with all eight letters on it,
+and measured off that page every glyph's centre sits five to eight pixels above
+its entry in `0x46bd58`. Taking the point as the top drew them all a line low,
+which is what it looked like.
+
+### ...and nothing clicks the band
+
+The buttons look like buttons and they are not. `[0x4a3b48]` — the word
+`0x40da41` walks to decide which eight lights to redraw — has exactly one
+writer, `0x40d470`, and that has exactly two callers, both inside `0x403820`:
+the function that turns an action into a bit. `0x403820`'s own callers are the
+key map and the demo replay. There is no third.
+
+The level's event loop does take a mouse event. It is not a click: event 6 in
+`0x403b90`'s table hides the cursor, calls `0x40cf00` to rebuild the panel, and
+shows it again — a repaint. The buttons are an indicator, and the only way to
+punch is the key the band is telling you about.
+
+## The camera was in there all along
+
+This page carried an invented camera for a long time, on a stated belief: that
+`SC.EXE` "scrolls by moving the world rather than the view", so there is no
+camera variable to read. There is one, and everything about it is readable.
+
+### `[0x4a8970]` is the view's corner, and `0x4308a0` is what writes it
+
+`0x4309d0` answers with the two words at `0x4a8970`, and every draw subtracts
+them. What hid it is that nothing assigns them directly: they are written by
+`0x4308a0`, which takes a requested corner and clamps it, and by `0x430bc0`,
+which restores one. `0x40e120` — the Ctrl+P handler — hands the base rect in:
+`{0, 0, 0xe8, 0x200}` with the panel up and `{0, 0, 0x156, 0x200}` without, so
+the view is 512x232 and 512x342 and both are already on this page.
+
+### The clamp is the ROOM's rect, one side at a time
+
+`0x4308a0` copies the room's whole 48-byte entity record — `0x40ba30`, out of
+the level's own table, indexed by the tracked object's `+0x16` — and then:
+
+```
+  430914  test byte [rec+14], 8   ; cap   x at right  - viewWidth
+  43092c  test byte [rec+14], 2   ; floor x at left
+  430950  test byte [rec+14], 4   ; cap   y at bottom - viewHeight
+  430968  test byte [rec+14], 1   ; floor y at top
+```
+
+`rec+14` is the `flags` field the reader already carried and had no use for. For
+an OBJECT its four bits are almost always all set; for a ROOM they are the
+camera's clamp mask, and the shipped values are 15, 13, 12, 7 and 5 — ARCADE
+clamps on all four sides, RAVECAVE's four rooms do not clamp left or top, and
+SEWER's shafts clamp neither side horizontally. The floor is applied after the
+cap, so a room narrower than the view is pinned to its left edge rather than
+centred.
+
+### The follow is an eased chase with a lead
+
+`0x4309f0`, once an engine frame:
+
+```
+  430a1c  target = player point
+  430a30  target.x += 0x78, or -= 0x78 when [player+0x28] says left
+  430a42  target.y -= lift        ; and lift is 0 in every state that sets one
+  430a81  chase = [0x4a6938] translated by the view's own corner
+  430ab2  dx = (target.x - chaseMidX) * 0x32 / 0x118, clamped to +-0x32
+  430af2  dy = (target.y - chaseMidY) * 0x32 / 0x64,  clamped to +-0x32
+  430b46  corner += (dx, dy), then 0x4308a0
+```
+
+`0x4a6938` is `{50, 200, 182, 312}`, written at `0x42aec8` — its middle is
+(256, 116), which is the middle of the 512x232 window. So the player's own point
+is held at the centre of the window, 120 pixels behind whichever way they are
+facing, and the view eases there at up to 50 pixels an engine frame, reaching
+that cap at 280 pixels of horizontal error and 100 of vertical. `0x430c20` is
+what installs the four numbers and different player states install different
+ones — the hurt path raises the horizontal cap to 100.
+
+An arrival does not ease. `0x428ff6` and `0x443a3d` — one per player class —
+put the corner at `(x - 200, y - 100)` the moment the point is moved, and clamp
+that. It is deliberately not the chase point, which would be `(x - 256, y - 116)`.
+
+### What it replaced, and what it fixed
+
+Two inventions go. The old camera centred on the middle of the player's
+collision box, chosen because centring on the FEET cut the top off the sprite;
+the engine's target is the object's own point and the pose does not enter into
+it. And the old clamp used the extent of the FLOOR rather than the room, which
+is narrower in nine of the sixteen levels.
+
+VAT is where that showed. Its chamber's rect runs to x6688 and its floor stops
+at x6653, and machine B — `0x46e088`'s `+373` off Boggs' x6321 — stands at
+x6694. Clamped to the floor the view could never reach it; clamped to the room
+it does, which is the 35 pixels between them.
+
+### ...and the step had to be spread across the frame
+
+One thing here is not the engine's shape. `0x4309f0` runs once an engine frame
+and jumps the corner the whole way, which it can do because everything on that
+disc moves at 15Hz. This page moves the player every TICK, four to the frame, so
+a camera that jumped once a frame scrolled the world in 15Hz steps behind a man
+walking at 60 — and that is exactly what it looked like. The step is decided at
+the frame, on the disc's own arithmetic, and then spent a quarter at a time, the
+same way the frame's fall already is. At every frame boundary the corner is where
+`0x4309f0` would have put it. The corner is rounded only at the blit, or the
+whole backdrop resamples.
+
+## A hatch in the ceiling and a fork of lightning
+
+The last two unbuilt classes, and they could not be less alike.
+
+### `initbiggun` is two objects, seven scripts and eight states
+
+`0x4115b0` makes TWO objects of one record: the turret ten pixels above the
+point (`sub word ptr [edi-4], 0xa`, and the low word of a point is its y) on
+script `0x46c1e8`, and the hatch on the point itself on `0x46c238`. Both keep
+the record's rect in their own user block. One handler serves them, `0x4135b0`,
+dispatching on the script's KIND through the table at `0x413930`:
+
+```
+  kind 7  0x41387c  the HATCH: shut -> opening -> held -> shutting -> shut
+  kind 0  0x4135f7  the turret, waiting; in the rect -> tag 1, sixteen frames
+  kind 1  0x41365f  descend 8 a frame until 0x6e below where it started
+  kind 2  0x413692  unfold 10080..10086
+  kind 3  0x4136e3  FIRE: tags 0 and 1 each sound maze's 3 and call 0x412a70
+  kind 4  0x4137b4  blink 10100/10101 -> fire again, or fold
+  kind 5  0x413830  fold back 10086..10080
+  kind 6  0x413851  rise 8 a frame until it is home -> kind 0
+```
+
+Every kind that can be interrupted tests the player's point against the rect
+first and installs `0x46c428` — the fold — the moment the answer is no, so
+backing out from under it stops the gun wherever it had got to rather than
+letting it finish. `0x4135bc`'s preamble zeroes both velocities and pins x back
+to the record every frame, which is why nothing can push one.
+
+What it fires is not a shot of its own. `0x412a70` is the BLASTER's, the same
+function the armed player's state machine calls, so the gun's bolt has the
+blaster's speed, the blaster's scatter and the blaster's code. It is called with
+variant 0, and `0x412aaa` INVERTS the shooter's mirror flag for that variant —
+the gun's own flag is which side of it you are standing on (`0x4135cc`), so the
+bolt always leaves going towards you.
+
+### `initlightfx` is placed by nothing and triggered by nothing
+
+`0x41e450` collects TOWER's records at setup and keeps only the COUNT, at
+`0x46f644`; the records sit in a buffer at `0x4a5888` and nothing stands them
+up. What stands them up is the level's own per-frame function:
+
+```
+  426800  dx = [0x46f680]          ; the counter, before the increment
+  42680e  [0x46f680]++
+  426815  if (dx > 0xc8) [0x46f680] = 0      ; a period of 202 engine frames
+  426837  if ([0x46f680] != 0xc3) return     ; and the strike is on 195
+  426842  0x426870()               ; one object per record, out of the buffer
+  426857  0x40f090(0x4a5870, 0x37, player.y)
+  426861  0x40e4c0(0)
+```
+
+`0x4268c0` is what a record becomes: an object at its own point, mirrored when
+the param is NEGATIVE (`0x4268fa` takes the sign straight into `obj+0x28`),
+playing tag `|param| - 1` of `0x46f588`. TOWER's two records carry 1 and -1, so
+both play tag 0 and one is flipped — two halves of a single fork, 435 pixels
+apart. The other two tags of that script have no record anywhere in the sixteen
+books.
+
+`0x40e4c0` is the flash, and it is a queue rather than a draw: it stores a
+palette index at `0x46bdd0` and `0x40dfd0` floods the whole view rect with it on
+the next frame and sets it back to -1. Two things in the game use it — the
+blaster's muzzle, with 0xe1, and this, with 0. Colour 0 in TOWER's own palette
+is pure blue.
+
+## One browser, not thirty
+
+Every suite in `tests/browser` used to be its own `tsx` process with its own
+`chromium.launch()`, and that cost twice.
+
+The visible cost was time: each process imports Playwright from scratch, about a
+second apiece, thirty seconds across the set before a single assertion runs.
+
+The cost that mattered was correctness. This machine has around a gigabyte free,
+with several gigabytes held by things that are not this repo, and a Chromium per
+suite is more than that will take. Suites run back to back failed in ways they
+never failed alone, and in one afternoon they did it four different ways:
+
+```
+  woods      a dog pays 0x40d450(0xc8); the score reads 0
+  service    no position in the HUD
+  arcade     TypeError: Cannot read properties of null (reading 'y')
+  guns       0x451520 gives 40 and 0x45eed0 one more: · no flamer 0/160
+```
+
+Every one of those passed on a re-run and every one cost a re-run to tell apart
+from a real regression — which is the actual expense, because the whole point of
+the suites is to say whether a change broke something.
+
+The full set now runs in **993 seconds, one process, one Chromium** — 630MB
+across its helper processes, flat from the first suite to the thirty-first,
+against a machine with about a gigabyte free. It is not a cure for flakiness:
+that first full run still had `codes` and `service` fail and pass again on their
+own, and some of these suites drive the game with fixed waits and will do that
+whatever the browser does. What it removes is the class of failure that came
+from the machine rather than the page.
+
+So a suite no longer owns a browser. It asks `harness.ts` for one, and gets the
+shared Chromium under the runner or a fresh one on its own, and gives back its
+contexts rather than closing anything. The only other change a suite needed is
+that its top level now awaits its own work — importing a suite IS running it —
+and that `fail()` throws rather than exiting, because one `process.exit` would
+take the other twenty-nine with it.
+
+### A failure is not taken at its word
+
+What the pooled runner did not remove was the re-run. About one run in three, one
+or two suites of the thirty-three failed — `codes`, `lift`, `mall`, `vat`,
+`woods`, `grave`, `service`, `ravecave`, `mission`, `foes`, never the same pair
+twice — and every one of them passed standalone on the first ask. So a red run
+said nothing. It meant "go and run that suite again by hand", and until that was
+done a real regression and a flake looked identical.
+
+The runner now does that re-run itself, and undoes first the two things that make
+a pooled failure different from a standalone one.
+
+The first is a leak, and it is the interesting one. `fail()` throws, so a suite
+that FAILS never reaches its own `finish()` — and `finish()` is what closes its
+context. The page, its canvas, its audio graph and its copy of the rip stayed
+open on the shared browser for every suite that ran after it. That is the
+mechanism behind the thing the section above describes as an afternoon's four
+symptoms: on a machine with a gigabyte free, one failure leaves a corpse and the
+next suites run beside it. `harness.sweep()` now closes whatever is left after
+every suite, pass or fail, and prints the count when there is one.
+
+The second is the browser. A retry closes the shared Chromium and launches a
+fresh one, because that is the whole of what "standalone" means here.
+
+Passing the second time prints `FLAKE` and does not fail the run; failing twice
+is a `FAIL` and does. The last line names both sets, so what the run is worth is
+readable without running anything again.
+
+The re-import needs a cache-buster — `import()` twice in one process hands back
+the first import's result, so the retry asks for `suite.ts?attempt=1`. The
+suite's own `import "./harness"` carries no query and so still resolves to the
+one harness module, which is what keeps the browser shared and leaves `sweep()`
+able to see the contexts.
+
+Both paths were tested against a suite written to fail on demand rather than
+waiting for a real flake: fail-then-pass reports `FLAKE` and exits 0, fail-twice
+reports `FAIL` and exits 1.
+
+Two suites turned out not to be failing at all. `menu` had no
+`test:browser:menu` script — its script is the bare `test:browser` — so every
+attempt to run it by name had been running nothing and reporting a failure.
+And `speed` asserted the strides, 120px/s and 225, when the drag it documents
+elsewhere settles the walk at 12 a frame and the run at 22: 180 and 330. Both
+were reported red for weeks by a list that could not tell a missing script from
+a broken one.
+
+## A collision box is a translation, and nothing else
+
+SEWER's bush is the only grabber in the game that comes up out of the floor, and
+on this page it could not reach a player walking under it. The last seven cels of
+its rise carry a strike box and no blow pair — the grip signature the hand and
+the claw have — so closing on you is the whole point of it, and the grab only
+ever landed once the bush had already given up and started sinking. A grab on the
+way down.
+
+The cause was not the bush. `0x40e680` is the engine's fine collision test and
+what it does with a cel's authored rect is this:
+
+```
+  40e688  eax = [edx]        ; the four words of the rect, copied
+  40e6a2  x0' = -x1          ; ...negated about the anchor if the object
+  40e6b3  x1' = -x0          ;    is mirrored, and that is the whole mirror
+  40e6fe  0x434270(rect, obj+6)   ; a rect TRANSLATE by the object's position
+  40e72c  0x434140(a, b)          ; and an intersect
+```
+
+A translate. No width, no height, no anchor arithmetic — the rect is already
+anchor-relative, exactly the way `drawLevelCel` hangs the art. This page was
+translating every prop's box as if the rect were measured from the cel's
+top-left, which lifted it by `height - posY`: sixty-four pixels on the bush's cel
+5030, seventy-six to a hundred and twenty-seven on the claw's.
+
+The player was never wrong, because the player's `y` is the ground it stands on
+rather than an anchor and the conversion it needs is the same expression by
+coincidence. Every prop was.
+
+What it had cost, besides the bush:
+
+- **BARREL's claw** had been moved to its record's rect BOTTOM to make it reach
+  anybody — `bottom - point` is 113, 136, 115 and 177 across its four, against a
+  lift of 76..127. Close enough to work and never the same number, which is what
+  a compensation looks like from the outside. `0x411cfd` writes the record's
+  POINT into `obj+6` and `0x411d02` takes ten off the X, and from there the
+  fourth claw closes 34 pixels into a player standing under it.
+- The other two of BARREL's four hang 450 and 780 pixels above their own floor
+  and reach nobody from either y, which is presumably why one of them is over a
+  pit.
+
+The lesson is the one this page keeps relearning: a number that nearly works is
+worth less than the instruction that produced it. Both of these were settled by
+reading the translate, not by tuning a y until a test went green.
+
+## A grabber holds you by taking your step away
+
+SEWER's hall of lifts is the one stretch of the game that cannot be walked, and
+an attempt at it found three real defects, fixed all three, made the hall
+crossable end to end — and turned the bushes from things that DUMP you into
+things that PIN you, which broke two earlier stretches of the same level that
+were built on being dumped. The whole of it went back. This is what the next
+attempt starts from, because the cause turned out to be underneath all three.
+
+The bush handler is `0x43ec80..0x43f174`: one function, a switch on `obj+0x18`
+with five kinds through the table at `0x43f150`. Two of the things that were
+unread are now read, and neither is the problem. `0x43045d` is a spend rather
+than a rate limit — the frame a hitter connects, `[obj+0x1a] = 0` and the scan
+stops, unless the strength is `0x65` — and the bush re-arms every frame anyway.
+The re-trigger cooldown does exist and it is `user+0xa`: `0x434540(0x28) + 0xa`,
+a random 10 to 49 frames, reset after every trigger of the PAIRED bush, and
+gated on the player being neither held nor already slumped.
+
+The problem is a global this page had never looked at.
+
+```
+  cmp  word ptr [0x46b1b4], 0
+  je   skip
+  call 0x402980            ; -> 0x42fbd0(player), the player's own step
+```
+
+That shape appears thirteen times, once in each level's main loop, and
+twenty-four classes write the word. **`[0x46b1b4]` is the player-step gate.** A
+grabber in this engine does not hold you with a flag on YOU. It holds you by
+zeroing that word, every frame, so your controls do not run at all — the bush
+does it at `0x43ef0a`, in phase 2, and only once `0x402f60` says you are no
+longer hittable, which means the -5's kind-26 reaction is up. Its own
+ten-a-frame sink then carries you down, and `0x43ef28`/`0x43ef57` hand the gate
+back when the script ends.
+
+So the dump is not the grip letting go at a height. It is a sequence: the -5
+lands, the reaction takes the player's kind to 26, the bush stops arming and
+takes the player's step away, the bush sinks with them, and the gate comes back
+wherever it left them. This page models a hold as `p.heldBy` — a latch on the
+player, released when the cel loses its strike box — and that is exactly why
+fixing the three defects produced a pin. Nothing ever took the player's step
+away, so a grab could only ever be a hold.
+
+The next attempt is a port of the gate rather than another patch. What it cannot
+settle by reading is the last question: the hall wants the player left on the
+walkway and door-7 wants them dumped off it, and both come out of this one
+machine, so the difference has to be geometry and has to be measured.
+
+## A ladder is not a room's to hold
+
+Two levels were reported unclimbable — TOWER and MAZE, "ladders are not usable"
+— and the fault was one line of this page's own filing.
+
+`solidsIn` gathers the records standing in a region by asking where each one's
+CENTRE falls. For a `platform` or an `obstacle` that is fine: they lie inside a
+room by construction. A ladder is the one record in the game whose whole purpose
+is to leave one, and nine of them ship:
+
+```
+  STREETS   1 ladder    inside room 0                    worked
+  RAVECAVE  1 ladder    inside room 1                    worked
+  SEWER     3 ladders   two of them reach across 2 rooms
+  TOWER     3 ladders   reach across 2, 3 and 4 rooms
+  MAZE      4 ladders   centre in NO room at all
+```
+
+MAZE's four sit in the gaps between its seven regions — the first misses room
+0's bottom edge by ONE pixel — so every one of them was filed nowhere and the
+level had no ladders whatever. TOWER's three each answered from exactly one
+room, the one that happened to own their middle, which for two of the three is
+not the room you climb from: all three lifted the player zero pixels.
+
+The engine files nothing. `0x40b940` is its only entity query and it is a linear
+scan of the whole table — `[0x46b9a8]+0x1c`, stride 48, `[+0x18]` records —
+with three kinds: 0 compares the name (`0x4343b0`), 1 compares the param, and 2
+asks whether the rect holds a point (`0x434200`). The ladder grab is the scan
+by name, `0x40b660("ladder", player, 0, 1)`, whose third argument is the region
+and is 0, and whose fourth is the geometry: 1 is `0x434140`, the player's
+current cel — its whole bitmap about the anchor, `0x42f9f0` — intersected with
+the record's rect. No region anywhere in it. So the ladders are kept whole on
+the level and the room is not consulted.
+
+### Three things a ladder will not do
+
+Reported after the fix above: the port speed-climbed with a direction held, the
+figure flickered at the top, and it grabbed from too far off. All three are one
+state, `0x42ae50`, and the two that ask for it, read exactly.
+
+- **W grabs only from standing still.** `0x429872` is in the idle state and
+  runs with forward not held; the walk and run states never ask. W is the run
+  key, so a runner passing a ladder passes it. S asks from the idle, walk, run
+  and jump states, so a ladder can be taken downward on the move. The rect is
+  met by the standing cel's bitmap, 98 wide with the anchor 41 in — so the
+  grab reaches 57px past one edge and 41 past the other, and that is the
+  file's reach, not a snap of the port's.
+- **Letting go waits for the rung, and for a room.** The leave needs the rung
+  tag ENDED and the classifier `0x412517` to find a record under the anchor
+  (`0x40b940(2, point)`), which the mount had set to -1. Then `[0x46b1b8]` is
+  set and stays set until `0x42849c` sees the ground, and neither the idle nor
+  the jump state will grab while it is. The port let go the tick a direction
+  came down and grabbed again the next, one rung higher each time.
+- **The ends hold.** At rung 0 with W, or the last with S, `cmp [0x4ac406], 0;
+  jle` skips the case whole — no tag, no sound. The port installed the other
+  tag of the same direction, four frames each way, which is the flicker.
+
+### ...and the region you are in is whichever one contains your point
+
+The other half was the same rule applied on the other axis. This page already
+re-asks `0x40b940(2, point)` every time the player moves SIDEWAYS — that is what
+made MALL crossable — but nothing re-asked it when the player moved UP, because
+until now nothing moved the player far enough for it to matter. A ladder does:
+MAZE's first runs 1426px from one region down into another, and TOWER's third
+crosses four. Without the re-ask the climb tops out still standing in the room
+below, which has no floor up there and none of the platforms the ladder was put
+there to reach.
+
+MAZE also answered a question that was not asked. Its `newroom1` has no
+rasterised ground at all, and the foot of two of its ladders is in that region:
+a player put down there falls out of the world. Those two are climbed DOWN into,
+not up out of, which is why the tests for them start at the head.
+
+## There is a save game, and it is twenty-two bytes
+
+This page said for a long time that `SC.EXE` has no save game. It has one, and
+the reason it was missed is worth recording: the only text that names the format
+lives in the resource string table as **UTF-16**, at `0x4b62f8` —
+
+```
+  0c "SkullCracker"
+  1a "Saved games (.SKL)|*.skl||"
+```
+
+— so an ASCII search of the whole executable for "SKL" returns nothing at all.
+What it does return is `skuldemo.dmo`, "Save in which slot?" and "Load from which
+slot?", and those belong to the demo recorder, which really is dead: `0x4038d0`
+runs only while `[0x46b310]` is set and nothing in the shipped build ever sets
+it. Two save-shaped things in one program, one of them dead, and the live one
+invisible to `strings`.
+
+`GetSaveFileNameA` and `GetOpenFileNameA` are both imported and each is called
+exactly once — `0x40a869` and `0x40af33`. The writer is `0x45e1e0`, the reader
+`0x45df8d`.
+
+```
+  +0x00  u32  0x00010000    written by 0x45e246, read by nobody
+  +0x04  u16  [0x4abdfe]    the shell scene  -> the chapter
+  +0x06  u16  [0x4abdfc]    the stage within it -> the level
+  +0x08  u32  [0x4a4f00]    the score
+  +0x0c  u16  [0x4a4d64]    lives
+  +0x0e  u16  [0x479434]    the weapon, or 1 for none
+  +0x10  u16  [0x4a7f16 + weapon*12]   its rounds
+  +0x12  u32  0             written by 0x45e2bd, read by nobody
+```
+
+No header, no magic, no checksum, no padding: `0x41daf0` writes one call of 0x16
+bytes and the file IS the record. The Macintosh type and creator the create call
+carries — `'SSAV'` and `'SKLC'` — are arguments to the portability layer and
+reach the disc only on a Mac; on Windows `0x41dc60` hands `CreateFileA` the path
+and nothing else. Nothing in the program will reject a file for anything but its
+length, and the loader reads all twenty-two bytes and then starts at offset FOUR,
+so the stamp at the front is not a version.
+
+**The level is not in the file.** The scene is the outer state machine's own —
+`0x403059` dispatches on it through `0x403448`, where 1 is the title, 3..6 are
+the four chapters and 11 is quit — and the stage is the chapter runner's own
+counter. All four runners dispatch it through a table of their own (`0x44da38`,
+`0x436c9c`, `0x41f5fc`, `0x4129c8`) and in all four, stages two through five are
+that chapter's four levels in order.
+
+**And neither is anything else.** No character, no difficulty, no position, no
+health, no clock, no kill count. A load re-enters the chapter runner at the saved
+stage and the level starts from its own record's point. The gun is the single
+exception, and deliberately: `0x44da80` and its three siblings zero all
+twenty-one rounds counts on entering a chapter, but only while `[0x47913c]` is 0,
+and `0x45e069` sets it to 1 on a load. `0x479438`, the ARMED flag, is not in the
+file, so a loaded game has the weapon in the inventory and not in its hands.
+
+The last thing `0x45df8d` does is `[0x46b208] = -1`, which is the value BEGIN
+sets. A loaded game runs the character chooser like a new one, because the file
+has no character in it to run instead.
+
+### The panel it is written from, and the two keys that open it
+
+`0x403c7b` is the only caller of `0x404280`, and the key dispatcher reaches it
+from two characters. `0x403c40` splits on the event record's modifier word:
+zero goes to the ordinary game binding through `0x46b210`, nonzero to a second
+table at `0x403ea4` where only five characters are bound at all — `'.'` and
+`'Q'` to the panel, `'P'`, `'T'` and the digits elsewhere. And the modifier word
+is not the Macintosh one it looks like: `0x405787` asks
+`GetKeyState(VK_CONTROL)` and `0x4057a5` sets it to `0x1fa0` entire when the
+answer is down, zero otherwise. **So the panel opens on Ctrl+Q or Ctrl+.** —
+not ESC, which is below the first table's range and does nothing in a level.
+This port binds ESC as well, because it is what a reader will press.
+
+`0x4042af` picks the film by chapter and all four are one shape: the logic
+frames loop (the last is a type-2 jump back to "X 3") with three regions live
+throughout, and the last three frames of the file are the answers. Which answer
+is which is in the segment header rather than the picture — `actionFrame1` names
+the MIDDLE button, `actionFrame2` the BOTTOM one, and the top is named by
+neither:
+
+```
+  top     no actionframe   the film just ends    ->  Continue
+  middle  actionframe 1    0x45e1e0(1)           ->  Save
+  bottom  actionframe 2    0x45e1e0(2)           ->  Exit
+```
+
+`0x404303` closes it: state 5 leaves the level, anything else redraws
+(`0x40cf00`) and plays on. There is no Load in the panel — Load is the title
+screen's own button.
+
+### ...and forty-two pixels, which is why the buttons did nothing
+
+A region is in its SEGMENT's coordinates, like every other number in one, and
+this player compared them against the screen. It had never mattered, because
+every film in this game that has regions is full-screen at origin (0,0):
+`menu.mov`, `char.mov`, the two pans, the prefs panels. The four pause films are
+the only exception — 512x232 at origin (0, 42), inside the interface's own
+window — and they are also the only films whose regions have words written on
+them, so they are the only place being 42 pixels out is visible.
+
+The picture settles it. `pauseA` draws Continue, Save and Exit centred on screen
+y160, y193 and y225; its three regions are y107-133, y141-167 and y172-198.
+Shifted by the origin those are y149-175, y183-209 and y214-240 — one label
+each, dead centre. Unshifted they land on the blank plates above Continue and on
+the bezel, which is where every click on this panel went.
+
+## Twenty-six classes, one brain
+
+The complaint was that the enemies wander rather than fight. They do, and the
+reason was that this page had read every class's ANIMATIONS and none of its
+decisions — the note in `src/walk.ts` used to say so outright, that the territory
+numbers were "in the AI struct nothing has read". They have been read now, and
+what is in there is one brain with twenty-six sets of numbers.
+
+### The tracker is the whole of the mechanism
+
+Each creator mallocs its object a 54-byte AI struct (`0x433f20(0x36)` at
+`0x450a50`, for the street punk), copies the `init` record's rect into `AI+8`,
+and ends with `0x45ef70(AI+0x14, self, player, bands)`. That last argument is a
+list of DESCENDING distances terminated by a zero, at most twelve, sitting in the
+class's own data:
+
+```
+  initwerea  0x477600   330 200 150 80          initdog     0x478240   1200 650 410 320 180
+  initwereb  0x4778b0   350 250 200 160         initwbooly  0x478780   1000 750 500 400 160 60
+  initwerec  0x477ac0   550 450 220 80          initwraith  0x46f8f8   700 230 130 60
+  initwered  0x477c28   600 600 160 70          initcop     0x46c9d8   350 180 70
+  initrat    0x4770e0   200 80                  initbat     0x46f158   600 250 50
+```
+
+Then `0x45efd0` runs once a frame and fills sixteen bytes:
+
+```
+  out+0x0a   the FORWARD distance, (player.x - self.x) negated when the class
+             faces west — so a negative number means "behind me"
+  out+0x08   player.y - self.y
+  out+0x00   which side of the PLAYER it is on: 1 in front, 0 behind, 2 when the
+             player is not moving
+  out+0x04   the BAND — 0 while the distance is past the first threshold and one
+             more for each threshold it is inside, -1 when the player is behind
+  out+0x06   1 when the PLAYER's own cel carries a strike box
+```
+
+`obj+0x18` is the state and each class dispatches on it through a table of its
+own, but two entries are the same everywhere. **State 0 is the patrol, and the
+only thing that ends it is `0x434200` finding the player's own point inside the
+AI's rect** — not a sight line, not a radius, not the room. **State 1 is the
+fight**: gated on `0x402f60` (the player's state under `0x1a`), turning to face
+you when the forward distance is negative (`0x44e73c`), swapping sides when more
+than three of its own class are crowding one within two hundred pixels
+(`0x44f020`), and then jumping through a second table indexed by the band, where
+the far entries install a walk and the near ones install an attack.
+
+### Which of a class's scripts is an attack, and the disc says so
+
+Not a judgement. A cel carrying a STRIKE BOX is the engine's own mark for a frame
+that hits, and it is the very flag the tracker reads at `out+6` to tell whether
+the player is swinging. So every tag of every script a class installs whose cels
+carry one is an attack, read out of the book the class actually appears in. The
+punk's are 1923/1924 (the punch), 1931/1932 and 1934/1935 (the two swings) and
+1943 (the flying kick, `0x477368 tag 0`, `dy -480` on the frame it leaves the
+ground), against a walk on 1910…1915 that carries none. That also gave this page
+the `dy` field it had no reason to have before: only the attacks ever leave the
+floor.
+
+`src/fights.ts` is the table — the bands, the walk and the attacks for the
+twenty-six classes that have them — and `stepFight` in `src/walk.ts` is the
+machine.
+
+### And it takes nothing
+
+The brief was the behaviour and not the damage, and the damage is where a
+surprise was waiting: the enemy strike boxes have been wired into `takeHits` the
+whole time, and the only reason nothing was ever hit is that no creature in the
+game came close enough to use one. Bringing the AI in makes that loop live. So
+the creature half of it now has a switch of its own, `?foehit=1`, and it is off
+even when `?damage=1` is on. Everything else `?damage=1` arms — the presses, the
+girders, TOWER's current, the sewage — is unchanged.
+
+### What is read and not yet done
+
+- **The leaping attacks do not leap.** The `dy` is in the table — the punk's
+  flying kick is `-480` on the frame it leaves the ground — and nothing applies
+  it. The engine carries a leap as velocity through `obj+0xa`; putting it
+  straight into `y` here sent WOODS' husk ninety-six pixels up, past the reach of
+  the floor test coming down, and nine thousand pixels out of the level, still
+  swinging. Wiring it as velocity is its own piece of work.
+- **A class that stands still keeps standing still.** If its own gait carries no
+  stride it does not close, and its attack's stride does not move it either.
+  LAB's ten `initarm` are the case — arms reaching out of a wall — and giving
+  them the walk their class data holds had all ten crawling across the floor.
+- **A keeper goes for its lever first.** `0x438200` finds the first unlit switch
+  inside the class's own rect, and that is the whole of level six; the shared
+  brain would otherwise march SERVICE's keepers at the player and leave it dry.
+  With nothing left to throw, they fight like everything else.
+- The band table is read as "the innermost band swings, the rest close", which is
+  what `initwerea`, `initdog`, `initwerec`, `initigor` and `initbat` do at their
+  last band. The casters do not: `initvpriest` throws from its OUTERMOST band,
+  because the thing it throws has the distance to cover. This page does not yet
+  tell a caster from a puncher.
+- `initeyeball` and `initpuke` carry no strike box on any cel of their own, so
+  they close and never swing. Both of them spit, and what hits you is the
+  projectile.
+- The patrol still turns at the record's rect. The engine turns a hundred pixels
+  inside it (`0x44e68e`, `0x44e69f`) and only when the territory is wider than
+  three hundred, and that is left alone here on purpose — it moves every foe in
+  every level and belongs in its own change.
+- The decision budget (`AI+4`, seeded three at `0x450ad1` and spent a manoeuvre
+  at a time) is not spent. What puts a class back on its patrol here is the
+  player leaving its rect, which is state 0's own test read the other way round.
+
+## What is not here
+
+All sixteen levels stand, and this is what is missing from them. The numbers are
+MEASURED — `npx tsx skullcracker/tools/records.mts` reads every book and checks
+each record's name against what the page actually looks for — because the figure
+that used to be here was counted once by hand and every level built since made it
+a little more wrong.
+
+### The records
+
+```
+  1162 of 1167 entity records placed - 99.6%. 52 region records, all handled.
+
+  where              1   lab
+  inithealth         1   lab
+  noskateboards      1   service
+  monkeybar          1   vat
+  wormbounds         1   vat
+
+  no gap at all: ARCADE BARREL CAVERN CITY GRAVE MALL MAZE PLAYGR RAVECAVE
+                 SEWER STREETS TOWER WOODS
+```
+
+**Five records are left and not one of them is a drawn thing.** Three are
+TABLES — `monkeybar`, `wormbounds` and `noskateboards`. And two are dead data:
+**`where` and `inithealth` do not appear in `SC.EXE` anywhere** — LAB places one
+of each and nothing in the game will ever ask for them.
+
+### What a probe is, and the word that was hiding in the constructor
+
+`0x40b526` fills a buffer at `0x4a9ce0` with every `probe` record, 48 bytes
+apiece — the entity record's own stride — and keeps the count at `0x46b9c0`.
+`0x4280d2` then walks that buffer once a frame:
+
+```
+  4280f8  0x434200(player.pos, rec+2)   ; the record's RECT, point-in-rect
+  42811d  ax = word at rec+0            ; ...and its param is a MODE
+  428128  0x410170(player.pos, mode, mode, &0x4a6938)
+  428138  0x402e80(i)                   ; and the record is consumed
+```
+
+`0x402e80` shifts the rest of the table down over it, so a probe fires **once per
+level load** and never again. The seventeen shipped ones carry four values
+between them — 0 eight times, 1 four, 2 three and 3 twice.
+
+`0x410170` is the same spawner the goal's television comes out of, switched on
+`mode + 1`, and all four probe modes build on `PLAYER.SBK` rather than the
+level's own book — which is why no level book carries the cels:
+
+```
+  mode 0/1  0x41023c  script 0x46bdf0 tag 0 - cels 20200..20207, dx 15
+            X += mirror ? +512 : -512, and the mirror IS the mode
+  mode 2    0x41029c  script 0x46bdf0 tag 1 - cels 20210, 20211
+            Y += 0x100 below you, vY = -10
+  mode 3    0x4102fc  same tag, Y -= 0x100 above you, vY = +10
+```
+
+20210 and 20211 are the television's own hovering cels, so modes 2 and 3 are it
+arriving from under your feet or down out of the sky, and 20200..20207 is
+something else crossing.
+
+**What held this up was one word, and it is in the class's constructor.**
+`0x45d1a3`'s mover, `0x42f8b0`, does `idiv [obj+0xe]` twice; `0x42f550` zeroes
+that word, `0x410170` never writes it and `0x45d090` writes only the kind. A
+shipped game does not divide by zero, so something had to — and it is the
+message every new object on this list gets. `0x430cc0(0x4103c0)` builds the list
+and `0x4103c0`'s case 1 writes **1** into `obj+0xe`, along with the book
+(`0x4abe10`), the first cel, no gravity and no bounce. A divisor of one divides
+nothing: the script's own `dx` goes into the velocity whole.
+
+The rest is `0x410480`, which is three comparisons and a clamp — 27 pixels a
+frame across, 23 up or down, and gone once it is half a screen past you
+horizontally or a quarter of one vertically. None of the ten cels carries a
+strike box, so a flypast cannot touch you: it is scenery with a trigger, and
+CITY's own step in `tests/browser/city.ts` watches one cross and one rise.
+
+### The classes
+
+**Every `init*` class the levels place is built.** `initbiggun` and
+`initlightfx` were the last two — see the section above — and before them Boggs'
+`initboggshead`, `initbgclawarm` and `initbgmachinery`.
+
+The executable registers **73**, and four of them exist in the game with no
+level placing one: `initbeltboth`, `initdoor`, `initpainting` and
+`inittirepile`. `inithealth` is the same thing the other way round — a name in
+a level with no class anywhere.
+
+### The systems
+
+- **All five weapons fire now**, and the INV button with them — see the section
+  above. There was never an inventory screen to build.
+- **The blow codes are carried, and so are the claw and the bush.** What had
+  looked like a bush hanging 190 pixels too high was every prop's strike box
+  being lifted by `height - posY`; `0x40e680` translates the rect by the object's
+  own position and does nothing else. The bush grabs, and BARREL's claw is back
+  on the record's point that `0x411cfd` gives it rather than the rect bottom it
+  had been nudged to.
+- **Every boss has its own state machine** — PLAYGR's `initwbooly`, ARCADE's
+  `initkragg`, RAVECAVE's wraith, TOWER's bishop and VAT's Boggs. Boggs' head,
+  claw arm and machinery objects are the part of him that is still missing.
+- **A hard blow disarms you, and the button band is labelled from the key map** —
+  see the section above. The band itself is an indicator; nothing in `SC.EXE`
+  hit-tests it.
+- **The camera is the engine's**, not this page's: `0x4309f0`'s eased chase with
+  its 120-pixel lead, clamped by `0x4308a0` to the room's own rect one side at a
+  time. What is left invented is spending its step across the frame's four ticks.
+- **Both of the two tests are here now**, and so is the ending — see the two
+  sections above.
+- **Damage is off by default**, because with it on a probe walking east through
+  WOODS meets three hydraulic presses and every route test here becomes a fight.
+- **The KILL vignette is the last life's**, which is what `0x4294b7` says: the
+  death branch reads the count, spends one, and takes the ordinary path while
+  the count before the spend was not negative. This page used to play one on
+  every death, which made the best animation in the game the most familiar
+  thing in it.
+- **The shell is finished except for the demo player.** All fourteen preferences
+  controls answer, all eight cheat words work, and the high-score board takes a
+  finished game and shows it over the title film. The one thing left is the
+  second menu button, which plays a recorded input stream out of `skuldemo.dmo`
+  — see the section above for why replaying it here would only measure drift.
+
 ## Where the pieces are
 
 - `skullcracker/` — the page, its file store and its film loop
 - `engine/src/df/byte-order.ts` — which way round a file is, and how it is asked
 - `engine/tests/byte-order.ts` — detection (needs no rip) and the menu (needs one)
+- `skullcracker/tools/records.mts` — how much of the sixteen books is on the
+  page, counted rather than remembered
+- `skullcracker/tools/runsuites.mts` — **every browser suite, one process, one
+  Chromium**: `npm run test:browser:all -w skullcracker`, or name the ones you
+  want after a `--`
+- `skullcracker/tests/browser/harness.ts` — where a suite gets its browser from
 - `skullcracker/tests/browser/menu.ts` — the menu in a real browser
 - `engine/src/df/sbk.ts` — the sprite book reader, and `engine/tests/sbk.ts`
-- `skullcracker/src/props.ts` — the level's machinery: the plank and the crow
+- `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow, the press, the lever, the goop, the door and the scenery that moves
+- `skullcracker/src/foes.ts` — what each `init*` name is, and the numbers behind it
 - `skullcracker/tests/browser/city.ts` — CITY's opening, in a browser
+- `skullcracker/tests/browser/lift.ts` — CITY's five lifts, and the ride to its goal
+- `skullcracker/tests/browser/woods.ts` — WOODS' population, its two steps and its goal
+- `skullcracker/tests/browser/playgr.ts` — PLAYGR's statue, the fight and the television
+- `skullcracker/tests/browser/damage.ts` — the switch that lets things hit back
+- `skullcracker/tests/browser/mall.ts` — MALL's three regions, its population and its machines
+- `skullcracker/tests/browser/service.ts` — SERVICE's two new classes, its six levers and what they pour
+- `skullcracker/tests/browser/sewer.ts` — SEWER's five locks, its lifts and the way through its thirteen regions
+- `skullcracker/tests/browser/arcade.ts` — ARCADE's one boss, out of reach until you jump at it
+- `skullcracker/tests/browser/pickups.ts` — the `stat*` records, and what each one gives
+- `skullcracker/tests/browser/guns.ts` — the weapons, the reach that takes one, and what a flare does
+- `skullcracker/tests/browser/grave.ts` — GRAVE's zombies, its graves and the hands between them
+- `skullcracker/tests/browser/cavern.ts` — CAVERN's four creatures, its blades and its bridges
+- `skullcracker/tests/browser/ravecave.ts` — RAVECAVE's Igors, its one wraith and its scepter
+- `skullcracker/tests/browser/tower.ts` — TOWER's floors, its bishop and its surges
+- `skullcracker/tests/browser/maze.ts` — MAZE's cops, its cage doors and the switches they throw
+- `skullcracker/tests/browser/barrel.ts` — BARREL's forty-two conveyors and what rides them
+- `skullcracker/tests/browser/lab.ts` — LAB's Puke Boys, its ten arms and its one test tube
+- `skullcracker/tests/browser/vat.ts` — VAT's furniture, its one blaster and Boggs
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
 - `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser

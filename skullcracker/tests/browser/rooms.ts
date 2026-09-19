@@ -25,19 +25,13 @@
  * standing in it. So the first assertion here is the negative one: walking
  * through a door does nothing at all.
  */
-import { chromium } from "playwright";
+import { BASE, fail, finish, launch } from "./harness";
 
-const BASE = process.env.BASE ?? "http://localhost:5178";
 /** short of the street door at x4522 */
 const START = 4300;
 
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
-
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
 
@@ -63,6 +57,9 @@ const main = async (): Promise<void> => {
       await page.waitForTimeout(60);
     }
     await page.keyboard.up(key);
+    // and let the slide finish: a walk is a velocity the ground drags down over
+    // three frames (12, 4, 1), and a door taken mid-slide arrives mid-slide
+    await page.waitForTimeout(250);
   };
   const tapUp = async (): Promise<void> => {
     await page.keyboard.down("ArrowUp");
@@ -114,8 +111,8 @@ const main = async (): Promise<void> => {
   if (upY !== 1363) fail(`came back at y ${upY}, not standing on the pavement at 1363`);
   console.log(`ok    and back into the street at x ${await coord("x")}, y ${upY}`);
 
-  await browser.close();
+  await finish(browser);
   console.log("PASS  STREETS' two rooms, and a door you have to mean");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();

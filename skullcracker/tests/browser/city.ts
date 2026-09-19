@@ -36,17 +36,10 @@
  * The probe walks the route rather than teleporting onto it, because `?x=` drops
  * the player at the ground under that column and in CITY that is the void.
  */
-import { chromium } from "playwright";
-
-const BASE = process.env.BASE ?? "http://localhost:5178";
-
-const fail = (why: string): never => {
-  console.error(`FAIL  ${why}`);
-  process.exit(1);
-};
+import { BASE, fail, finish, launch } from "./harness";
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => fail(`page threw: ${e.message}`));
 
@@ -69,15 +62,48 @@ const main = async (): Promise<void> => {
     for (let i = 0; i < 400 && (await at()).x < want; i++) await page.waitForTimeout(50);
     await page.keyboard.up("ArrowRight");
   };
-  /** a running jump east with the lift held, which is how the game is played */
+  /**
+   * A running jump east with the lift held, braked by LETTING GO.
+   *
+   * The engine's air control (`0x429fc1`..`0x42a036`) first runs two frames after
+   * the launch, and while forward is held it drives `v.x` to 30 pixels a frame —
+   * twice the run. Released, the flight coasts on the launch impulse alone, which
+   * is 15, and that is the difference between clearing the walkway this route
+   * lands on and stopping on it.
+   *
+   * It used to tap BACKWARD instead, which is the third branch: `0x429fd5` turns
+   * the player round and zeroes the velocity outright. That worked when it landed
+   * in the air and threw the jump away when it landed a frame after the feet were
+   * down, which is why this suite failed about one run in three. Letting go is
+   * the same brake with no edge to fall off: six runs of it land on the same
+   * pixel.
+   */
   const jump = async (): Promise<void> => {
     await page.keyboard.down("ArrowRight");
     await page.keyboard.down("w");
-    await page.keyboard.press("j");
-    await page.waitForTimeout(400);
-    await page.keyboard.up("w");
-    await page.waitForTimeout(500);
+    // a press is read by the engine FRAME, and one sent in the same millisecond
+    // as the key-downs before it can be spent on a frame that has not seen the
+    // run yet; when that happens nothing moves at all, so make sure it flew
+    let airborne = false;
+    for (let tries = 0; tries < 3 && !airborne; tries++) {
+      await page.keyboard.press("j");
+      for (let i = 0; i < 16; i++) {
+        await page.waitForTimeout(25);
+        if (/in the air/.test((await hud.textContent()) ?? "")) {
+          airborne = true;
+          break;
+        }
+      }
+    }
+    if (!airborne) fail(`pressing jump never left the ground`);
     await page.keyboard.up("ArrowRight");
+    // and stay in the air until the feet are down again, however long that is
+    for (let i = 0; i < 70; i++) {
+      await page.waitForTimeout(25);
+      if (!/in the air/.test((await hud.textContent()) ?? "")) break;
+    }
+    await page.keyboard.up("w");
+    await page.waitForTimeout(400);
   };
 
   const say = async (): Promise<string> => (await hud.textContent()) ?? "";
@@ -177,8 +203,58 @@ const main = async (): Promise<void> => {
   if (roof.x < 1940) fail(`landed short of the wall's east edge: x ${roof.x}`);
   console.log(`ok    over the wall onto the tank roof at x ${roof.x}, y ${roof.y}`);
 
-  await browser.close();
-  console.log("PASS  CITY's planks give way, its crows wake, and its first step is passable");
+  // 7. the PROBES, which are triggers rather than objects — CITY carries six of
+  //    the seventeen in the game and three of the four modes between them.
+  //
+  //    `0x4280d2` walks the level's own buffer once a frame, tests the player's
+  //    point against each record's rect, fires `0x410170` with the record's
+  //    `param` as a mode and then `0x402e80` shifts the record out of the table,
+  //    so one fires ONCE per level load. What it fires is scenery on
+  //    `PLAYER.SBK`'s own cels with no strike box anywhere in it.
+  //
+  //    The word that held this up for a long time is `obj+0xe`, the divisor
+  //    `0x42f8b0` does two `idiv`s by: `0x42f550` zeroes it and nothing in the
+  //    spawner writes it. It is the class's own constructor message — `0x4103e2`
+  //    writes 1 — so the script's dx goes into the velocity undivided.
+  const inTheAir = async (): Promise<string[]> => {
+    const t = await say();
+    const m = /· \d+ flypast ([^·]*)/.exec(t);
+    return m ? m[1].trim().split(" tag").map((v, i) => (i ? `tag${v}` : v)) : [];
+  };
+  const fire = async (x: number, y: number): Promise<string[]> => {
+    await page.goto(`${BASE}/walk.html?level=2&x=${x}&y=${y}`);
+    await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+    const seen: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      await page.waitForTimeout(50);
+      for (const v of await inTheAir()) if (!seen.includes(v)) seen.push(v);
+    }
+    return seen;
+  };
+  // mode 0 — rect 2240,7930,2600,8000: it comes in from 512 to the WEST
+  const west = await fire(7960, 2400);
+  if (!west.length) fail(`the mode-0 probe at x7930..8000 fired nothing`);
+  const crossCels = west.map((v) => Number(/cel (\d+)/.exec(v)?.[1] ?? 0));
+  if (crossCels.some((c) => c < 20200 || c > 20207)) {
+    fail(`0x46bdf0 tag 0 is 20200..20207; a crossing showed ${[...new Set(crossCels)].join(" ")}`);
+  }
+  const xs = west.map((v) => Number(/@(-?\d+),/.exec(v)?.[1] ?? NaN));
+  if (!(xs[xs.length - 1] > xs[0])) fail(`mode 0 spawns 512 WEST and crosses east; it went ${xs[0]} -> ${xs[xs.length - 1]}`);
+  console.log(`ok    a mode-0 probe fires once and crosses west to east, x${xs[0]} to x${xs[xs.length - 1]} on its 20200s`);
+
+  // mode 2 — rect 2322,8486,2582,8736: the television, up from under your feet
+  const under = await fire(8600, 2500);
+  if (!under.length) fail(`the mode-2 probe at x8486..8736 fired nothing`);
+  const upCels = under.map((v) => Number(/cel (\d+)/.exec(v)?.[1] ?? 0));
+  if (upCels.some((c) => c !== 20210 && c !== 20211)) {
+    fail(`0x46bdf0 tag 1 is 20210 and 20211; it showed ${[...new Set(upCels)].join(" ")}`);
+  }
+  const ys = under.map((v) => Number(/,(-?\d+) cel/.exec(v)?.[1] ?? NaN));
+  if (!(ys[ys.length - 1] < ys[0])) fail(`mode 2 starts 256 BELOW and rises; it went ${ys[0]} -> ${ys[ys.length - 1]}`);
+  console.log(`ok    ...and a mode-2 probe sends the television up past you, y${ys[0]} to y${ys[ys.length - 1]}`);
+
+  await finish(browser);
+  console.log("PASS  CITY's planks give way, its crows wake, its probes fire and its first step is passable");
 };
 
-void main().catch((e) => fail(String(e)));
+await main();
