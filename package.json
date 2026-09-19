@@ -23,7 +23,8 @@
     "docs:dev": "vitepress dev docs --port 5174",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "dump": "tsx tools/dumpset.ts"
+    "dump": "tsx tools/dumpset.ts",
+    "mkappicons": "tsx tools/mkappicons.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

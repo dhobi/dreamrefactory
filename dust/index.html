@@ -15,6 +15,20 @@
     <!-- the longhorn skull from the game's own interface band, redrawn as SVG so
          it keeps its edges in a tab (dust/public/dust-mark.svg says why) -->
     <link rel="icon" type="image/svg+xml" href="/dust-mark.svg" />
+    <!-- Installed to a home screen, this page opens with no address bar — the
+         only way to be rid of one on an iPhone, which has no element fullscreen
+         at all. Android reads the manifest, where `display: fullscreen` takes
+         the status bar too; iOS ignores the manifest's display and reads the
+         `apple-` tags, where standalone is the best on offer and the status bar
+         stays a black strip. In an ordinary tab none of this changes anything.
+         site/tests/app-icons.ts holds every value below to its source. -->
+    <link rel="manifest" href="/app.webmanifest" />
+    <link rel="apple-touch-icon" href="/dust-apple-touch-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Dust" />
+    <meta name="theme-color" content="#0a0705" />
     <!-- the chrome every page in the project shares, in this game's own colours.
          Where the two describe the same element, Dust's own look has to win — but
          NOT by being linked first. The build resolves this <link> into a bundle
