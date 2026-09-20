@@ -8,10 +8,18 @@ of `IMAIN.MOV`'s fourth segment: **SKULL / CRACKER**, on two lines, over the sku
 So the title is two words here and the directory stays one, the way the filesystem
 had it.
 
-*Skull Cracker* (1996) is CyberFlix's own, and the fourth game in this repository —
-the first whose files this port can read completely and whose game it cannot play
-at all. Both halves of that are worth stating plainly, because the interesting
-result here is not a game running.
+*Skull Cracker* (1996) is CyberFlix's own, and the fourth game in this repository
+— the one whose logic is compiled into an executable rather than authored in the
+data, so every behaviour on this page was read out of `SC.EXE` with a
+disassembler instead of interpreted.
+
+That sentence used to end "and whose game it cannot play at all", which was true
+when the page was a film player over a menu and stopped being true one change at
+a time. It plays: the logo, the intro, the menu, the chooser, sixteen levels with
+their own populations, the weapons, the bosses, the score board and the credits,
+all of it in one document. What is interesting here is still not that a game
+runs — it is WHERE each number in it came from, which is what the rest of this
+file is.
 
 Both releases have now been read. The Macintosh disc is what the port was built
 against; the Windows one came later and is the reason several findings in these
@@ -28,7 +36,7 @@ a single frame.
   the completely DreamFactory half of this disc
 - [What the executable runs while you play](systems.md) — the camera, gravity,
   ladders, the clock, the save game and the collision test under all of it
-- [How it is checked](verification.md) — thirty-six browser suites, and why they
+- [How it is checked](verification.md) — the browser suites, and why they
   run in one process
 
 ## What was found
@@ -369,8 +377,10 @@ a level with no class anywhere.
   on the record's point that `0x411cfd` gives it rather than the rect bottom it
   had been nudged to.
 - **Every boss has its own state machine** — PLAYGR's `initwbooly`, ARCADE's
-  `initkragg`, RAVECAVE's wraith, TOWER's bishop and VAT's Boggs. Boggs' head,
-  claw arm and machinery objects are the part of him that is still missing.
+  `initkragg`, RAVECAVE's wraith, TOWER's bishop and VAT's Boggs, and Boggs'
+  head, claw arm and machinery objects with him (`src/props.ts`). What is
+  missing of him is his two ATTACKS — `0x41c330`'s throw and `0x41c3c0`'s spit;
+  he lunges, heals and dies correctly and throws nothing.
 - **A hard blow disarms you, and the button band is labelled from the key map** —
   the disarm is in [Fighting](combat.md#a-hard-blow-costs-you-the-gun-and-the-band-says-which-key),
   the band in [What the executable runs](systems.md#the-letters-under-the-buttons-are-typeset-from-the-key-map).

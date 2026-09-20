@@ -1,7 +1,7 @@
 # How it is checked
 
-Thirty-six browser suites over sixteen levels, and the reason they run in one
-process. Titanic keeps the same page under the same name
+Every suite in `skullcracker/tests/browser` over sixteen levels, and the reason
+they run in one process. Titanic keeps the same page under the same name
 ([How we know it's right](../taoot/verification.md)) and for the same reason:
 "how was this checked?" is a headline question for a project like this, not
 lookup material.
@@ -48,7 +48,7 @@ take the other twenty-nine with it.
 ### A failure is not taken at its word
 
 What the pooled runner did not remove was the re-run. About one run in three, one
-or two suites of the thirty-three failed — `codes`, `lift`, `mall`, `vat`,
+or two suites failed — `codes`, `lift`, `mall`, `vat`,
 `woods`, `grave`, `service`, `ravecave`, `mission`, `foes`, never the same pair
 twice — and every one of them passed standalone on the first ask. So a red run
 said nothing. It meant "go and run that suite again by hand", and until that was

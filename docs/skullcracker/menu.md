@@ -87,8 +87,12 @@ shell loop into `0x40a4a0` — where this page had it playing a film.
 Skull Crackers you are. The game starts after that: the chooser leaves
 `[0x46b208] == 3`, `0x403154` drops out of the menu state, and `[0x4abdfe]` is
 already 3 — `0x4031b2`, the level runner. So the whole front end is
-**menu → chooser → level one**, and this port now follows it into `walk.html`
-with the two words the front end settled in the query string.
+**menu → chooser → level one**, and this port follows it without leaving the
+page: `begin()` puts the two words the front end settled into the query string
+with `replaceState`, stops the film loop, hands the canvas over and imports the
+level runner (`handOver` in `src/main.ts`). It used to navigate to `walk.html`,
+which put the game on the page whose own header calls itself an experiment and
+left the page that claims to BE Skull Cracker stopping at the menu.
 
 Prefs needs BOTH of its films, and this page had them the wrong way round. The
 menu's stub is a type-3 chain naming `prefs.mov`; `0x45e093` sets

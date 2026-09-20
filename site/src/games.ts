@@ -225,20 +225,25 @@ export const TIMELAPSE: GameEditions = {
 };
 
 /**
- * *Skull Cracker* — the one entry here that is not an adventure, and the one whose
- * page is not a game.
+ * *Skull Cracker* — the one entry here that is not an adventure.
  *
  * CyberFlix's own beat-'em-up, on their own engine, and it uses DreamFactory's
  * FILE formats without its interpreter: the logic is compiled into `SC.EXE`
  * rather than scripted in the data, so there is no BOOTFILE and nothing for a
- * `GameHost` to boot. What `skullcracker/` therefore is, is a film player over
- * the game's own menu — and what the editors can open is its sprite books, which
- * hold every cel and every level plan the game has (`engine/src/df/sbk.ts`).
+ * `GameHost` to boot. Everything `skullcracker/` does it does by having been
+ * read out of that executable with a disassembler — and it does play, from the
+ * logo through the menu and the chooser into sixteen levels and the credits.
+ * This comment used to say the page was "a film player over the game's own
+ * menu", which it was until the chooser started handing the canvas to the level
+ * runner.
+ *
+ * What the editors can open is its sprite books, which hold every cel and every
+ * level plan the game has (`engine/src/df/sbk.ts`).
  *
  * It is in this registry because the registry answers "which rips are there", and
  * a rip is what it has. The editors' source picker reads exactly that, and
- * without an entry here its 111 files would be the one corpus the tooling could
- * not see.
+ * without an entry here its files would be the one corpus the tooling could not
+ * see.
  */
 export const SKULLCRACKER: GameEditions = {
   title: "Skull Cracker",
