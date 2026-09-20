@@ -309,9 +309,24 @@ export class Film {
    * `engine/src/df/mov.ts`'s module comment, minus the call/return pair.
    *
    * 4 and 5 (push this film and chain out, then pop back) are not implemented
-   * and say so rather than misbehaving: no film in this rip uses either, and a
-   * return stack that has never been exercised against real data would be
-   * fiction. Everything the menu and the chapter films actually do is here.
+   * and say so rather than misbehaving: a return stack that has never been
+   * exercised against real data would be fiction.
+   *
+   * That used to rest on "no film in this rip uses either", which was a reading
+   * of the films that had been opened rather than of the films. It has now been
+   * counted, over every `.mov` in the rip — **65 films, 18,573 frame actions and
+   * 2,175 region actions** — and what is carried is:
+   *
+   * ```
+   *   frames   1 × 257     2 × 9      3 × 4      6 × 18303
+   *   regions  2 × 1999    3 × 176
+   * ```
+   *
+   * So the disc uses four of the seven codes. 4 and 5 are absent from both
+   * columns, and 7 — step back one, which IS implemented here — is absent too.
+   * Writing the stack would mean writing the test data for it as well, and a
+   * player that invented its own semantics for a code the game never emits is
+   * worse than one that logs and advances.
    */
   private act(type: number, from: { event?: string; target?: string } | undefined, now: number): void {
     const advance = (to: number): void => {

@@ -2182,8 +2182,9 @@ async function nextLevel(): Promise<void> {
   // — the same way round in a mid-chapter stage as in a chapter's first, so it
   // is the sequence and not an opening special case. Boggs says his piece on the
   // flying screen and the skull that names where you are going comes after him.
-  await playFilm(brief.boggs);
-  await playFilm(brief.film);
+  // the stage's own queue, in its own order — which is not the same order in
+  // every chapter, and includes the opener on the four stages that have one
+  for (const reel of brief.films) await playFilm(reel);
   await loadLevel(next);
   advancing = false;
 }
@@ -3591,10 +3592,11 @@ canvas.addEventListener("pointerdown", (e) => {
  * combined "attack"), and the interface band's own eight button lights, which
  * the engine draws from those same flags (`buttonMask`).
  *
- * INV is the one action of the eight with no key here. It is a HOLD that
- * holsters the gun so the fists can work, and it means something only on the
- * levels that hand out a weapon; the three the pad carries are the three every
- * level needs.
+ * All eight actions are here, INV included. INV is the odd one — a HOLD rather
+ * than a blow, and it only means anything on the levels that hand out a weapon,
+ * where holding it holsters the gun so the fists can work. It went in because
+ * without it a phone could pick a weapon up and never put it away: the keyboard
+ * has `I` and the glass had nothing.
  *
  * ## Built here rather than written into a page
  *
@@ -3644,6 +3646,7 @@ const pad = ((): HTMLDivElement => {
       ["down", "\u25bc", "down — crouch"],
     ]),
     group("padActs", "act", [
+      ["inv", "INV", "inv — hold to holster the gun"],
       ["jump", "JUMP", "jump"],
       ["punch", "PUNCH", "punch"],
       ["kick", "KICK", "kick"],
