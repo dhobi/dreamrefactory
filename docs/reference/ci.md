@@ -93,6 +93,14 @@ instead.
 Self-hosted runners are **free on every plan**, private repositories included,
 and they consume none of the 2,000 GitHub-hosted Actions minutes.
 
+**The runner version has a floor.** Every `actions/*` step in these workflows is
+on the majors that run under Node 24 — `checkout@v7`, `setup-node@v7`,
+`upload-artifact@v7` — because GitHub is retiring the Node 20 runtime, and a
+node24 action needs a runner of **2.327.1 or newer**. GitHub's own machines
+update themselves; this one does not, so `tools/runner/runner.env` must never be
+pinned below that. It is on 2.337.0. A runner under the floor does not warn — it
+fails at the first `actions/checkout` of the job.
+
 ### On a machine of its own
 
 The usual case — the runner belongs on a box that is always on, not on a
