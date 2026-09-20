@@ -240,6 +240,37 @@ if (bile.seen.some((s) => s.blow !== -2)) fail(`0x4201e4 holds it at -2; saw ${[
 // spread them across the room.
 console.log(`ok    the zombie hawks one up — ${bile.seen.length} samples, cels ${bileCels.join(",")}, all worth -2`);
 
+// ---- 5 — Igor's throw, and the first one with WEIGHT ----------------------
+//
+// The fifth shape and the one that needed new machinery. Everything before it
+// flies flat or not at all, because every one of their creators calls
+// `0x42f850(obj, 0)`. `0x41fc7b` pushes **0.8f**, so `obj+0x24` is 8 and
+// `0x430327` adds those eight to the vertical velocity every frame; `0x42fda7`
+// spends the velocity into the point undivided. It leaves 26 up and 35 along
+// (`0x425544`…`0x425582`) and comes down on its own.
+//
+// RAVECAVE's second igor, because it patrols alone: the other two share their
+// rooms with bats, which take the "nearest" line and leave the probe steering
+// against something that never throws. Its throw is band 1, 300..350.
+await go(11, 9120, 9939);
+if (!/nearest initigor/.test(await say())) fail(`RAVECAVE x9120 should stand by an igor: ${(await say()).slice(0, 180)}`);
+const hurled = await sweep(220, "initigor", { min: 300, max: 340 }, true);
+if (!hurled.seen.length) fail(`an igor threw nothing in 220 samples (it was in the line ${hurled.met} times)`);
+const hurledCels = [...new Set(hurled.seen.map((s) => s.cel))].sort((a, b) => a - b);
+if (hurledCels.some((c) => c < 3160 || c > 3163)) fail(`it throws cels 3160..3163; saw ${hurledCels.join(",")}`);
+if (hurled.seen.some((s) => s.blow !== 0x64)) fail(`0x41fd0d holds it at 100; saw ${[...new Set(hurled.seen.map((s) => s.blow))].join(",")}`);
+/**
+ * ...and it ARCS, which is the whole of what this leg adds.
+ *
+ * Every other cast in this file reads one constant y for its whole flight —
+ * they are weightless and the page has nothing to pull them down. A spread here
+ * is the pull, and it is the only thing in the suite that could not have passed
+ * before `CastKit.pull` existed.
+ */
+const spread = Math.max(...hurled.seen.map((s) => s.y)) - Math.min(...hurled.seen.map((s) => s.y));
+if (spread < 20) fail(`a thrown thing with weight 0.8 should rise and fall; its y moved ${spread}px`);
+console.log(`ok    the igor throws, and it arcs — ${hurled.seen.length} samples, cels ${hurledCels.join(",")}, ${spread}px of rise and fall`);
+
 if (problems.length) fail(`the page threw: ${problems.join(" · ")}`);
-console.log(`PASS  four classes throw what their own machines throw`);
+console.log(`PASS  five classes throw what their own machines throw`);
 await finish(browser);

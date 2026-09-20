@@ -297,30 +297,18 @@ export interface BrainCtx {
  * BrainCtx.cast} where the executable calls the spawner. The wiring in
  * `walk.ts` owns the flight, the hit and the drawing; this is the data.
  *
- * Why no kit here carries a RISE, and what has to be settled before one can.
+ * ## The three numbers an ARC needs, and where they come from
  *
- * Four classes throw as of this writing and all four fly flat or not at all —
- * the gob, the slug, the glob and the zombie's cloud. The next three do not:
- * `initigor` throws with `vy = -26` and `vx = ±35` (`0x425544`…`0x425582`),
- * `initknifeboy`'s second maker sends one straight up at `dy -30` and drops it
- * back through its own cels, and `inithardcore` lobs. Each of those needs a
- * vertical velocity and a pull, and the pull is where this stops.
+ * `0x42fd9e`…`0x42fdab` is the mover, and it settles the unit: the velocity
+ * words are added to the point **whole**, with nothing divided. `0x42f8b0`
+ * divides a SCRIPT's stride by `obj+0xe` on its way into the velocity and is
+ * the only thing that divides anything. So a velocity is pixels an engine
+ * frame, and so is a `speed` or a `rise` a spawner writes outright.
  *
- * `0x430327` is the pull: `obj+0xa = obj+0x24 + <this frame's vy>`, where
- * `obj+0x24` is `trunc(weight * 10)` — 10 for the player, and 8 for the class
- * Igor throws (`0x41fc7b` pushes 0.8f). What is NOT settled is the unit
- * `obj+0xa` is then spent in. `walk.ts`'s own gravity note reads it as raw
- * units divided by `obj+0xe` when the object moves, which for the player is
- * 10/12 = 0.83 pixels a frame squared; the page actually falls at
- * `INVENTED.gravityPx`, 0.524 a TICK — 2.1 a frame — which is a number this
- * port chose and calibrated, and the file says so.
- *
- * Both cannot be right, and an arc built on the wrong one is wrong in a way
- * nobody can tell apart from the disc's by looking at it. It is also the same
- * question the leaping attacks are waiting on — `combat.md` calls wiring a leap
- * as velocity "its own piece of work" — so it is one reading that unblocks four
- * classes and the leaps together, and it belongs in its own change rather than
- * smuggled into a projectile.
+ * The pull is `0x430327`: `obj+0xa += obj+0x24` every frame it is not landed,
+ * and `0x42f850` sets `obj+0x24` to `trunc(weight * 10)` — 10 for the player,
+ * 8 for the thing Igor throws (`0x41fc7b` pushes 0.8f), 0 for everything that
+ * flies flat. That is the whole of gravity in this engine: one float per class.
  */
 export interface CastKit {
   /** the flight cels, in order. The last one holds when the script runs out */
@@ -395,6 +383,30 @@ export interface CastKit {
     /** what it shows once it is armed */
     cel: number;
   };
+  /**
+   * The upward half of the velocity a spawner writes, up-positive.
+   *
+   * Igor's is 26 (`0x425544`'s `0xffe6`), and a kit with a rise almost always
+   * has a {@link CastKit.pull} to bring it down again.
+   */
+  rise?: number;
+  /**
+   * Pixels a frame² it accelerates downward — `trunc(weight * 10)`.
+   *
+   * Absent is weightless, which is what `0x42f850(obj, 0)` gives the gob, the
+   * slug, the glob and the zombie's cloud: those four fly flat because their
+   * own creators say they have no weight.
+   */
+  pull?: number;
+  /**
+   * What it plays where it lands, if its class has one.
+   *
+   * `0x41fd7b` is the case: a collision word set, and the thing installs
+   * `0x46f9e0` at `tag + 1` instead of looping its flight — which for Igor's is
+   * the same four cels it flew as, played backwards. It is gone when that runs
+   * out.
+   */
+  impact?: { cels: readonly number[]; hold: number };
   /** the spawner and the script it installs */
   from: string;
 }

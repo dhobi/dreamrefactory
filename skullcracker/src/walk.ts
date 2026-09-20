@@ -4927,6 +4927,7 @@ function takeHits(): void {
    * — gets the whole of it.
    */
   for (const c of foesHurt ? casts : []) {
+    if (c.landed !== undefined) continue; // already met something
     if (castBlow(c) === 0) continue; // still flying harmless — `0x413e43`
     const cel = celRec(lvl.sbk, castCel(c));
     if (!cel?.strike) continue;
@@ -8663,6 +8664,10 @@ interface Cast {
   facing: number;
   /** engine frames since it launched — the flight cels are read off it */
   clock: number;
+  /** ...and the pull's half of the velocity, for the ones that arc */
+  vy: number;
+  /** frames into its own impact, once it has landed — see {@link CastKit.impact} */
+  landed?: number;
   /** where it started, for the kits whose end is a range rather than a reach */
   bornX: number;
   /** has it come close enough to arm — see {@link CastKit.arm}. One-way */
@@ -8693,6 +8698,8 @@ function spawnCast(e: Enemy, kit: CastKit): void {
     // the anchor, which is what `obj+6` is — a gob leaves the mouth, not the feet
     y: at.y - kit.lift,
     vx: e.facing * kit.speed,
+    // up-positive in the kit, and this page's y grows downward
+    vy: -(kit.rise ?? 0),
     facing: e.facing,
     clock: 0,
     bornX: e.x + e.facing * kit.ahead,
@@ -8704,6 +8711,12 @@ function spawnCast(e: Enemy, kit: CastKit): void {
 
 /** the cel a cast is showing — the last one holds, as a finished script does */
 function castCel(c: Cast): number {
+  // ...and one that has landed is playing its own impact and nothing else
+  const smash = c.kit.impact;
+  if (smash && c.landed !== undefined) {
+    const i = Math.min(smash.cels.length - 1, Math.floor(c.landed / Math.max(1, smash.hold)));
+    return smash.cels[i];
+  }
   // an armed one is its own cel and nothing else: the arming IS a script
   // install, so there is no flight cycle left to be part way through
   if (c.kit.arm && c.armed) return c.kit.arm.cel;
@@ -8742,10 +8755,23 @@ function stepCasts(): void {
   const lvl = level;
   if (!lvl) return;
   for (const c of casts) {
+    // ...a landed one is only playing itself out
+    if (c.landed !== undefined) {
+      c.landed += 1;
+      const smash = c.kit.impact;
+      if (!smash || c.landed >= smash.cels.length * Math.max(1, smash.hold)) c.spent = true;
+      continue;
+    }
     c.clock += 1;
     // whole, not scaled: this runs on the ENGINE frame, like the bolts, and the
     // speed is what one call of `0x42f8b0` adds — see {@link CastKit.speed}
     c.x += c.vx;
+    if (c.kit.pull !== undefined) {
+      // `0x430327` — the pull goes into the velocity, and the velocity into the
+      // point, neither of them divided by anything
+      c.vy += c.kit.pull;
+      c.y += c.vy;
+    }
     const dx = Math.abs(c.x - p.x);
     // the class's own end, whichever of the two it keeps
     if (c.kit.reach !== undefined && dx > c.kit.reach) c.spent = true;
@@ -8754,9 +8780,27 @@ function stepCasts(): void {
     // ...and its own arming, which never goes back
     if (c.kit.arm && !c.armed && dx < c.kit.arm.within) c.armed = true;
     const floor = surfaceUnder(c.x, c.y - 1, c.y + 1);
-    if (floor !== null && c.y >= floor) c.spent = true;
+    if (floor !== null && c.y >= floor) landCast(c, floor);
   }
   casts = casts.filter((c) => !c.spent);
+}
+
+/**
+ * It has met something — the ground here, or the player in {@link takeHits}.
+ *
+ * `0x41fd7b` is the shape: a collision word set, and the class installs its
+ * impact script at `tag + 1` rather than looping its flight. A class with none
+ * of that is simply gone, which is what the four flat ones do.
+ */
+function landCast(c: Cast, floor?: number): void {
+  if (!c.kit.impact) {
+    c.spent = true;
+    return;
+  }
+  if (floor !== undefined) c.y = floor;
+  c.landed = 0;
+  c.vx = 0;
+  c.vy = 0;
 }
 
 /** each one cel of the level's own book, mirrored the way it flies */

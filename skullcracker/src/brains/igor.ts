@@ -93,7 +93,7 @@
  * hundred kills an igor outright. The kit hands a brain `e.vy` but not the fall
  * sum, so this is read and not done.
  */
-import { install, type Brain, type Enemy } from "./kit";
+import { install, type Brain, type CastKit, type Enemy } from "./kit";
 
 /**
  * The three states a brain is never in, and what they do that the page's own
@@ -250,10 +250,48 @@ export const IGOR = {
  * `0x425544`…`0x425582` build the two points out of `obj+0x28`: it is born
  * **70 pixels in front** (`0x8c - 0x46`, so +70 facing east and −70 facing
  * west) and **20 above** (`obj+6 - 0x14`), with velocity `vy = -26` (`0xffe6`)
- * and `vx = ±35` (`0x46 - 0x23`). Nothing in this port hits the player back, so
- * it is carried as read.
+ * and `vx = ±35` (`0x46 - 0x23`) — written into `obj+0xa` whole, so both are
+ * already pixels an engine frame.
+ *
+ * ## What it does on the way, and where it stops
+ *
+ * The class's own create is `0x41fc47`: divisor 5, the chapter's bank, a
+ * restitution of 0.4, hit handler `0x41fe40`, and **`0x41fc7b` pushes 0.8f** to
+ * `0x42f850` — so `obj+0x24` is 8 and this is the first cast in the game with
+ * any weight at all. `0x430327` adds those 8 to the vertical velocity every
+ * frame; `0x42fda7` spends the velocity into the point undivided. That is the
+ * arc.
+ *
+ * `0x41fd0d` writes `obj+0x1a = 0x64` every frame, so it is worth a hundred —
+ * a blow and not one of the codes the eye and the zombie throw. `0x41fd46` is
+ * the end: with none of the three collision words set and its own script
+ * finished, it reinstalls `0x46f978` at the same tag and keeps going; with one
+ * set, `0x41fd7b` installs `0x46f9e0` at **tag + 1** instead, which for tag 2
+ * is tag 3 — the same four cels it flew as, played backwards, two engine frames
+ * apiece. Then it is gone.
  */
 const THROWN = "0x4255a6 / 0x421310 index 1 / 0x46f978 tag 2" as const;
+
+/** what {@link THROWN} describes, as the page throws it */
+export const IGOR_THROW: CastKit = {
+  /** `0x46f978` tag 2, one engine frame a cel, and it loops while it flies */
+  cels: [3160, 3161, 3162, 3163],
+  hold: 1,
+  /** `0x425582` — ±35 along the facing */
+  speed: 35,
+  /** `0x425544` — and 26 up, which the pull spends */
+  rise: 26,
+  /** `0x41fc7b`'s 0.8f through `0x42f850`: `trunc(0.8 * 10)` */
+  pull: 8,
+  /** `0x42556c`/`0x425579` — seventy in front, twenty above the point */
+  ahead: 70,
+  lift: 0x14,
+  /** `0x41fd0d`, every frame */
+  blow: 0x64,
+  /** `0x46f9e0` tag 3 — its own four cels backwards, two frames each */
+  impact: { cels: [3163, 3162, 3161, 3160], hold: 2 },
+  from: THROWN,
+};
 
 /**
  * `initigor`'s own machine, states 0, 1, 2, 3, 4, 6 and 7.
@@ -410,6 +448,8 @@ export const igor: Brain = (e, foe, run, k) => {
       if (!done) return false;
       if ((e.tag ?? 0) === 0) {
         k.say(e, IGOR.cry);
+        // `0x4255a6` — the thing leaves on the same frame the cry does
+        k.cast(e, IGOR_THROW);
         return install(e, IGOR.recover);
       }
       return install(e, IGOR.stance);
