@@ -112,7 +112,7 @@ jobs:
       CI_PORT: "5199"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The one place the trigger's shape is turned into a game, so every step
       # after this is the same three lines whichever game it is.
@@ -283,7 +283,7 @@ jobs:
       # says only that a wait went unanswered.
       - name: Upload screenshots and the server log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-${{ steps.what.outputs.game }}-${{ github.run_id }}
           path: |

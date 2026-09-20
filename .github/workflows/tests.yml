@@ -38,9 +38,9 @@ jobs:
     name: suites that need no game files
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -76,7 +76,7 @@ jobs:
     steps:
       # Full history, because the step that picks the playthroughs diffs against
       # the base commit and the default depth of 1 does not contain it.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
