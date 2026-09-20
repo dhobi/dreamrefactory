@@ -981,11 +981,19 @@
       #err {
         color: var(--alarm);
       }
+      /* the film line, under the log and in the same hand — both of them are
+         the page talking to whoever opened them with `b` */
       #loc {
+        width: min(60rem, calc(100vw - 2 * var(--pad)));
         margin: 0;
+        padding: var(--gap);
+        background: var(--inset);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
         color: var(--text-mute);
         font-family: var(--font-mono);
         font-size: 0.8em;
+        white-space: pre-wrap;
       }
       .keyhint,
       .touchhint {
@@ -1212,9 +1220,15 @@
         <canvas id="screen" width="1024" height="768"></canvas>
         <div id="netbusy" hidden aria-hidden="true"><span></span></div>
       </div>
-      <!-- the page's own account of itself, in full; `b` opens it, and an error
-           opens it by itself -->
+      <!-- The page's own account of itself: the log in full, and under it the
+           film that is playing, frame by frame. `b` opens the pair and an error
+           opens the log by itself. Both are HIDDEN rather than gone, because
+           both are read — the bug reporter sends the log's last lines with an
+           issue, and the browser suites read `#loc` to find out which film the
+           page thinks it is on. What they are not is something to read while
+           the game plays, which is why neither is on the page any more. -->
       <pre id="log" hidden></pre>
+      <pre id="loc" hidden></pre>
     </div>
     <div id="under">
       <div class="bar">
@@ -1232,14 +1246,13 @@
           🪲 Report a bug
         </button>
         <span id="bugNote" class="note"></span>
-        <button id="logBtn" type="button" title="The page log, in full (b)">
-          ▤ Log
-        </button>
-        <span
-          class="keyhint"
-          title="click the menu · esc skips a film · b opens the log"
-          >click the menu <span class="k">esc</span> skip
-          <span class="k">b</span> for the log</span
+        <!-- The hint names the two things a PLAYER does. The page's own account
+             of itself is still a keystroke away (`b`, in src/main.ts) and still
+             opens by itself when something goes wrong; it is simply not a
+             control on the page any more, because neither it nor the film
+             position under the picture was ever addressed to a reader. -->
+        <span class="keyhint" title="click the menu · esc skips a film"
+          >click the menu <span class="k">esc</span> skip</span
         >
         <!-- the touch line names the DOUBLE-TAP and not esc: a phone has no esc,
              and skipping a film was keyboard-only until it did -->
@@ -1255,9 +1268,6 @@
            an empty #err — which is almost always. -->
       <div class="bar">
         <span id="err"></span>
-      </div>
-      <div class="bar">
-        <pre id="loc"></pre>
       </div>
     </div>
     <!-- The ask, in its own element BELOW the controls strip — see the note in

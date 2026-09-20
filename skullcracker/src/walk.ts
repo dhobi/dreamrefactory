@@ -71,6 +71,8 @@ import {
   WebAudioSink,
 } from "@dreamfactory/engine/runtime/audio";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
+// the touch pad this module builds; see the note over `pad` below
+import "./pad.css";
 import { SkullFiles } from "./files";
 import { writeSkl } from "./savegame";
 import { Film } from "./film";
@@ -3532,48 +3534,227 @@ addEventListener("keyup", (e) => {
   const k = KEYS[e.key];
   if (k) held[k] = false;
 });
-// touch: hold a screen half to walk that way, the top third to jump or climb
+/**
+ * A tap on the picture belongs to the film, and to nothing else.
+ *
+ * It used to be the walk as well: the left half of the canvas held LEFT, the
+ * right half RIGHT, the top third UP — which was also the jump — and the bottom
+ * third DOWN. Three things were wrong with it, and none of them is fixable
+ * without leaving it behind:
+ *
+ *   - the regions are INVISIBLE. The only way to find out where the game thought
+ *     your thumb was is to press and watch what the man does, and a press that
+ *     means "walk right" in a fight is a press that does not punch.
+ *   - the top third held UP and JUMP TOGETHER, because one finger had to reach
+ *     eight actions. They are two of the original's own actions (1 is
+ *     run/climb/open a door, 8 is the jump) and a ladder cannot be climbed by
+ *     something that also jumps at it.
+ *   - three of the eight were simply unreachable. PUNCH, KICK and INV have no
+ *     region, so a touchscreen could walk the whole game and never hit anything —
+ *     which is the one thing this game is.
+ *
+ * So the walk moved to the pad below, which is drawn where it can be seen, and
+ * this keeps what a tap on the picture was always good at: skipping a film, and
+ * answering the pause panel's three buttons.
+ */
 canvas.addEventListener("pointerdown", (e) => {
   wakeAudio();
-  // a tap skips a film, the way it does on the films page — but the panel is
-  // three buttons and a tap on one of them is the answer
-  if (film) {
-    if (filmIsPanel) {
-      const r = canvas.getBoundingClientRect();
-      film.click(
-        Math.round(((e.clientX - r.left) / r.width) * W),
-        Math.round(((e.clientY - r.top) / r.height) * H),
-        performance.now(),
-      );
-      return;
-    }
-    film.skip();
+  if (!film) return;
+  // the panel is three buttons and a tap on one of them is the answer
+  if (filmIsPanel) {
+    const r = canvas.getBoundingClientRect();
+    film.click(
+      Math.round(((e.clientX - r.left) / r.width) * W),
+      Math.round(((e.clientY - r.top) / r.height) * H),
+      performance.now(),
+    );
     return;
   }
-  const r = canvas.getBoundingClientRect();
-  const leftHalf = e.clientX - r.left < r.width / 2;
-  const high = e.clientY - r.top < r.height / 3;
-  const low = e.clientY - r.top > (r.height * 2) / 3;
-  held.left = leftHalf && !high && !low;
-  held.right = !leftHalf && !high && !low;
-  // one finger, two jobs: the top third means "up", and up that finds no door
-  // and no ladder becomes a jump, which is the only way to give a touchscreen
-  // both without a second control
-  if (high && !held.up) {
-    upPressed = true;
-    jumpPressed = true;
-  }
-  held.up = high;
-  held.jump = high;
-  held.down = low;
-  canvas.setPointerCapture(e.pointerId);
+  film.skip();
 });
-const lift = (): void => {
-  held.left = held.right = held.up = held.down = held.jump = false;
-  held.punch = held.kick = false;
-};
-canvas.addEventListener("pointerup", lift);
-canvas.addEventListener("pointercancel", lift);
+
+// ---- the pad --------------------------------------------------------------
+
+/**
+ * The on-screen controls: the four directions at the left of the picture, the
+ * three strikes at the right.
+ *
+ * Seven `<button>`s over the canvas rather than seven rectangles painted into
+ * the 512x384 screen. That screen is the disc's picture and nothing this port
+ * invents belongs inside it; a DOM button is a thumb's size at every window
+ * width, where a framebuffer pixel is a thumb's size at exactly one.
+ *
+ * All the wiring does is set the same `held` flags the keyboard sets, so
+ * everything downstream of a key is downstream of a thumb for free: the run,
+ * the climb, the door, the crouch-crawl, the duck-kick, the headbutt (PUNCH and
+ * KICK together, which is why they are two keys a finger apart and not one
+ * combined "attack"), and the interface band's own eight button lights, which
+ * the engine draws from those same flags (`buttonMask`).
+ *
+ * INV is the one action of the eight with no key here. It is a HOLD that
+ * holsters the gun so the fists can work, and it means something only on the
+ * levels that hand out a weapon; the three the pad carries are the three every
+ * level needs.
+ *
+ * ## Built here rather than written into a page
+ *
+ * Because the runner has two pages. `walk.html` is the bench, and the front
+ * door hands this module its canvas when the chooser starts the game
+ * (`main.ts`'s `handOver`, which is why a level plays on `index.html` at all).
+ * Markup in the bench's page would leave the front door's players — the ones
+ * who came to the game rather than to the bench — with no controls at all, and
+ * the same seven buttons in both files is the copy that eventually disagrees
+ * with itself. So the runner builds its own pad, into whatever element holds
+ * the canvas, and `pad.css` insets it by that page's moulding.
+ *
+ * `tabindex="-1"` on every key, and it is not an oversight. A focused
+ * `<button>` OWNS the space bar (`focusOwnsKey`, and the space bar is the
+ * jump), so a pad in the tab order would take the jump away from the keyboard
+ * that already has it, along with the seven bound in the game's own preferences
+ * panel. The pad is for the machines with no keyboard; it is not a second,
+ * worse way to press a key that works.
+ */
+const pad = ((): HTMLDivElement => {
+  const el = document.createElement("div");
+  el.id = "pad";
+  el.hidden = true;
+  const group = (id: string, kind: "act" | "dir", keys: [keyof typeof held, string, string][]): HTMLDivElement => {
+    const box = document.createElement("div");
+    box.id = id;
+    box.className = "keys";
+    for (const [act, label, says] of keys) {
+      const key = document.createElement("button");
+      key.type = "button";
+      key.tabIndex = -1;
+      key.className = `${kind} ${act}`;
+      key.dataset.act = act;
+      key.textContent = label;
+      key.setAttribute("aria-label", says);
+      box.append(key);
+    }
+    return box;
+  };
+  // directions first and so at the LEFT, the strikes at the right: the order
+  // they are appended in is the order the row lays them out
+  el.append(
+    group("padDirs", "dir", [
+      ["up", "\u25b2", "up — run, climb, open a door"],
+      ["left", "\u25c0", "left"],
+      ["right", "\u25b6", "right"],
+      ["down", "\u25bc", "down — crouch"],
+    ]),
+    group("padActs", "act", [
+      ["jump", "JUMP", "jump"],
+      ["punch", "PUNCH", "punch"],
+      ["kick", "KICK", "kick"],
+    ]),
+  );
+  // the element the canvas sits in — `#stage` on the bench, the front door's
+  // bevelled `#frame` on the game. Both are positioned; `pad.css` insets the
+  // pad by the moulding so it lands on the PICTURE either way.
+  (canvas.parentElement ?? document.body).append(el);
+  return el;
+})();
+
+/**
+ * Whether this machine gets the pad at all.
+ *
+ * `?pad=1` forces it on and `?pad=0` off — this page is told everything else
+ * through its query string (`?level=`, `?damage=`, `?clock=`), a desktop needs
+ * some way to look at the thing, and a phone that would rather use a paired
+ * keyboard needs some way to be rid of it.
+ *
+ * `maxTouchPoints` AS WELL as the media query, for the reason
+ * `engine/web/touch.ts` gives: a laptop with a touchscreen reports a FINE
+ * pointer and still delivers fingers.
+ */
+const PAD_ON = ((): boolean => {
+  const want = new URLSearchParams(location.search).get("pad");
+  if (want === "1") return true;
+  if (want === "0") return false;
+  return navigator.maxTouchPoints > 0 || matchMedia("(pointer: coarse)").matches;
+})();
+
+/** the key each finger is holding down, so one lifting releases only its own */
+const padFingers = new Map<number, HTMLButtonElement>();
+
+const padAct = (el: HTMLButtonElement): keyof typeof held =>
+  el.dataset.act as keyof typeof held;
+
+function padPress(el: HTMLButtonElement, id: number): void {
+  const act = padAct(el);
+  padFingers.set(id, el);
+  el.classList.add("on");
+  // the same four edges `keydown` takes: a door and a jump fire on the PRESS,
+  // and a held fist must not machine-gun
+  if (act === "up" && !held.up) upPressed = true;
+  if (act === "jump" && !held.jump) jumpPressed = true;
+  if (act === "punch" && !held.punch) punchPressed = true;
+  if (act === "kick" && !held.kick) kickPressed = true;
+  held[act] = true;
+}
+
+function padLift(id: number): void {
+  const el = padFingers.get(id);
+  if (!el) return;
+  padFingers.delete(id);
+  el.classList.remove("on");
+  const act = padAct(el);
+  // a key is let go when the LAST finger on it lifts, not the first: a thumb
+  // rolling from left to right puts two pointers on the pad for a moment
+  for (const still of padFingers.values()) if (padAct(still) === act) return;
+  held[act] = false;
+}
+
+/** every key at once — a film starting, or the page losing the fingers */
+function padLiftAll(): void {
+  for (const id of [...padFingers.keys()]) padLift(id);
+}
+
+if (PAD_ON) {
+  for (const el of pad.querySelectorAll<HTMLButtonElement>("button[data-act]")) {
+    el.addEventListener("pointerdown", (e) => {
+      wakeAudio();
+      // none of the browser's own answers to a press is wanted on a key: no
+      // scroll, no selection, no synthesised mouse click, no focus left behind
+      // for the next keystroke to land in
+      e.preventDefault();
+      // captured, so a thumb that slides off the key still ENDS on it — without
+      // this a finger that drifts during a long hold never sends its `pointerup`
+      // here and the direction stays held for ever. It throws when the pointer
+      // is not a live one, which is what a synthesised event is: a probe that
+      // dispatches its own `pointerdown` should press the key, not break here.
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* uncaptured: the key still presses, and `pointerup` still arrives */
+      }
+      padPress(el, e.pointerId);
+    });
+    const lift = (e: PointerEvent): void => padLift(e.pointerId);
+    el.addEventListener("pointerup", lift);
+    el.addEventListener("pointercancel", lift);
+    // a long press IS a long press here, and both platforms would rather it
+    // were a context menu — which arrives mid-fight, over the key
+    el.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+  // the window losing the fingers altogether: a call, a notification, a tab
+  addEventListener("blur", padLiftAll);
+}
+
+/**
+ * Show the pad, or take it away for a film.
+ *
+ * A film is played over the whole canvas and the pause panel's three buttons are
+ * underneath the pad's bottom corners, so the pad cannot stay: a tap meant for
+ * "quit" would land on PUNCH. Called every frame, and does nothing on the frames
+ * where nothing changed.
+ */
+function padShown(on: boolean): void {
+  if (!PAD_ON || pad.hidden === !on) return;
+  pad.hidden = !on;
+  if (!on) padLiftAll();
+}
 
 /**
  * The player's collision box: the drawn cel's own size, standing on the ground.
@@ -9642,6 +9823,8 @@ let lastGaitFrame = -1;
 let lastTick = 0;
 function loop(now: number): void {
   requestAnimationFrame(loop);
+  // the pad is the only control a phone has, so it is up whenever the level is
+  padShown(film === null);
   if (film) {
     // hold it in a local: `tick` is what ends a film, and the ending clears
     // `film` from under this frame

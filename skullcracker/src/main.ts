@@ -613,7 +613,7 @@ async function handOver(query: string): Promise<void> {
   history.replaceState(null, "", `${location.pathname}${query}`);
   handedOver = true;
   film = null;
-  for (const id of ["curtain", "under", "log", "netbusy"])
+  for (const id of ["curtain", "under", "log", "loc", "netbusy"])
     document.getElementById(id)?.setAttribute("hidden", "");
   const canvas = $<HTMLCanvasElement>("screen");
   canvas.width = 512;
@@ -627,6 +627,13 @@ async function handOver(query: string): Promise<void> {
   pick.hidden = true;
   const hud = document.createElement("div");
   hud.id = "hud";
+  // Present and WRITTEN, but not shown. It is the level bench's status line —
+  // the player's x and y, the cel on screen, the room, the camera, every prop
+  // in reach — and `walk.html` is where a bench belongs. On THIS page it was a
+  // paragraph of numbers under the picture of a game somebody is playing.
+  // `walk.ts` fills it either way, so the suites that read `#hud` read it off
+  // walk.html exactly as they did.
+  hud.hidden = true;
   hud.style.cssText =
     "font-size:0.8rem;color:var(--text-mute,#7a9a7a);text-align:center;" +
     "max-width:60rem;padding:0.4rem 1rem;margin:0 auto";
@@ -968,10 +975,6 @@ async function boot(): Promise<void> {
 
 // ---- the controls, which are the ones every page in the project has ----------
 
-$<HTMLButtonElement>("logBtn").addEventListener("click", () => {
-  logEl.hidden = !logEl.hidden;
-});
-
 // The STAGE, not the frame — this page was the odd one out. #frame is the
 // picture plus two mouldings, so handing THAT to the UA stretched the moulding
 // to the height of a monitor; the other three ports all fill with #stage and
@@ -1186,7 +1189,14 @@ window.addEventListener("keydown", (e) => {
   } else if (prefsOpen) {
     if (prefsKey(e)) e.preventDefault();
   } else if (e.key === "b") {
-    logEl.hidden = !logEl.hidden;
+    // the page's own account of itself — the log and the film line together.
+    // There is no button for it any more: neither was ever addressed to a
+    // reader, and a film position under the picture is the page talking to
+    // itself. `b` is what a developer presses; the bug reporter is what a
+    // player presses, and it sends the log without showing it.
+    const show = logEl.hidden;
+    logEl.hidden = !show;
+    nowEl.hidden = !show;
   }
 });
 

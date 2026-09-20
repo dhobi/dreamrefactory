@@ -1,0 +1,123 @@
+/*
+ * THE PAD — the on-screen controls, over the bottom of the picture.
+ *
+ * A stylesheet rather than a `<style>` in a page, because the level runner has
+ * TWO pages: `walk.html`, the bench, and `index.html`, which hands its canvas
+ * over to `src/walk.ts` when the chooser starts the game (`handOver`). The pad
+ * is built by the runner and so are its styles, and neither page has to know
+ * about it. `src/walk.ts` imports this file; Vite does the rest.
+ *
+ * ## Where it sits
+ *
+ * Two clusters and a gap: the four directions at the left, the three strikes at
+ * the right — the hands a gamepad puts them in — so two thumbs have a side each
+ * and neither reaches across. Both sit in the bottom corners, because that is
+ * where a thumb already is when a phone is held, which is worth more than the
+ * pixels of the game's own interface band they cover; and they are translucent,
+ * so the band reads through them.
+ *
+ * `inset` is the moulding, and that is what makes one sheet serve both pages.
+ * The pad is absolutely positioned inside whatever element holds the canvas:
+ * on the bench that is a bare `#stage` and the inset is nothing, while the
+ * front door's `#frame` is the picture plus `--frame-w` of bevelled moulding on
+ * every side. Insetting by that variable lands the pad on the PICTURE in both,
+ * and the fallback is what the bench gets for not declaring one.
+ *
+ * Every key is sized from the VIEWPORT rather than from the picture: on the
+ * machines that get a pad at all the two are within a rem of each other, and a
+ * share of the picture would need a container query to say the same thing.
+ */
+#pad {
+  position: absolute;
+  inset: var(--frame-w, 0px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 2.2%;
+  box-sizing: border-box;
+  --key: clamp(40px, 8.5vw, 64px);
+  /* the taps belong to the KEYS: everything between them is the picture's, so a
+     film is still skipped by a tap through the gap */
+  pointer-events: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#pad[hidden] {
+  display: none;
+}
+#pad .keys {
+  display: grid;
+  gap: 5px;
+  line-height: 1;
+}
+#padDirs {
+  grid-template: repeat(3, var(--key)) / repeat(3, var(--key));
+}
+#padActs {
+  grid-template: repeat(2, var(--key)) / repeat(2, var(--key));
+}
+#pad .up {
+  grid-area: 1 / 2;
+}
+#pad .left {
+  grid-area: 2 / 1;
+}
+#pad .right {
+  grid-area: 2 / 3;
+}
+#pad .down {
+  grid-area: 3 / 2;
+}
+#pad .jump {
+  grid-area: 1 / 2;
+}
+#pad .punch {
+  grid-area: 2 / 1;
+}
+#pad .kick {
+  grid-area: 2 / 2;
+}
+#pad button {
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: clamp(9px, 1.7vw, 12px);
+  letter-spacing: 0.06em;
+  /* A key lands on the game's own interface band as often as on the picture,
+     and that band is bright, busy, and painted with a d-pad of its own. So the
+     key has to hold its own shape against anything underneath it: a dark fill
+     that is still see-through, a pale rule on the outside of it, and a dark one
+     outside THAT, so the edge reads against a light band and a dark street
+     alike. The glyph is white and shadowed for the same reason. */
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  background: rgba(6, 3, 3, 0.62);
+  border: 1px solid rgba(242, 236, 226, 0.75);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 2px 10px -4px #000;
+  -webkit-backdrop-filter: blur(1px);
+  backdrop-filter: blur(1px);
+}
+#pad .dir {
+  border-radius: var(--radius, 3px);
+  font-size: clamp(14px, 3vw, 22px);
+}
+#pad .act {
+  border-radius: 50%;
+}
+/* held — and the game's own interface band lights the same eight lamps
+   underneath, from the same flags (hud.ts's BUTTONS) */
+#pad button.on {
+  background: rgba(209, 17, 9, 0.62);
+  border-color: var(--rule-bright, #f2ece2);
+  color: #fff;
+}
