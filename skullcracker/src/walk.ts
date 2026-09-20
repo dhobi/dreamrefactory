@@ -4730,7 +4730,9 @@ function takeHits(): void {
     !hereOf((l) => l.claws).length &&
     !hereOf((l) => l.hands).length &&
     !hereOf((l) => l.surges).length &&
-    !hereOf((l) => l.bushes).length
+    !hereOf((l) => l.bushes).length &&
+    // ...and nothing a creature has thrown that carries one either
+    !casts.some((c) => c.kit.blow < 0)
   )
     return;
   const mine = playerBody();
@@ -4903,8 +4905,11 @@ function takeHits(): void {
    * and touching the player is what sets it. A gob that has hit you is gone
    * even if you were already on your back.
    */
-  for (const c of foesHurt ? casts : []) {
-    if (castBlow(c) <= 0) continue; // still flying harmless — `0x413e43`
+  for (const c of casts) {
+    // a blow is a creature's and waits for the creature switch; a CODE is not
+    // damage at all and comes through regardless, exactly as the claw's does
+    if (c.kit.blow > 0 && !foesHurt) continue;
+    if (castBlow(c) === 0) continue; // still flying harmless — `0x413e43`
     const cel = celRec(lvl.sbk, castCel(c));
     if (!cel?.strike) continue;
     const box = strikeOf(cel, c.x, c.y, c.facing);
@@ -8640,6 +8645,8 @@ interface Cast {
   facing: number;
   /** engine frames since it launched — the flight cels are read off it */
   clock: number;
+  /** where it started, for the kits whose end is a range rather than a reach */
+  bornX: number;
   /** has it come close enough to arm — see {@link CastKit.arm}. One-way */
   armed: boolean;
   spent: boolean;
@@ -8670,6 +8677,7 @@ function spawnCast(e: Enemy, kit: CastKit): void {
     vx: e.facing * kit.speed,
     facing: e.facing,
     clock: 0,
+    bornX: e.x + e.facing * kit.ahead,
     // a kit with no arming rule is dangerous from the frame it leaves
     armed: kit.arm === undefined,
     spent: false,
@@ -8681,11 +8689,15 @@ function castCel(c: Cast): number {
   // an armed one is its own cel and nothing else: the arming IS a script
   // install, so there is no flight cycle left to be part way through
   if (c.kit.arm && c.armed) return c.kit.arm.cel;
-  const i = Math.min(
-    c.kit.cels.length - 1,
-    Math.floor(c.clock / Math.max(1, c.kit.hold)),
-  );
-  return c.kit.cels[i];
+  const hold = Math.max(1, c.kit.hold);
+  const i = Math.floor(c.clock / hold);
+  if (i < c.kit.cels.length) return c.kit.cels[i];
+  // the launch has run out: either the flight takes over and loops, or the last
+  // cel holds, which is what a finished script does with nobody to reinstall it
+  const then = c.kit.then;
+  if (!then) return c.kit.cels[c.kit.cels.length - 1];
+  const since = c.clock - c.kit.cels.length * hold;
+  return then.cels[Math.floor(since / Math.max(1, then.hold)) % then.cels.length];
 }
 
 /** what it would hit for — zero until it arms, which is the slug's whole design */
@@ -8720,6 +8732,7 @@ function stepCasts(): void {
     // the class's own end, whichever of the two it keeps
     if (c.kit.reach !== undefined && dx > c.kit.reach) c.spent = true;
     if (c.kit.life !== undefined && c.clock > c.kit.life) c.spent = true;
+    if (c.kit.range !== undefined && Math.abs(c.x - c.bornX) > c.kit.range) c.spent = true;
     // ...and its own arming, which never goes back
     if (c.kit.arm && !c.armed && dx < c.kit.arm.within) c.armed = true;
     const floor = surfaceUnder(c.x, c.y - 1, c.y + 1);

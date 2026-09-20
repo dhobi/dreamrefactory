@@ -339,6 +339,23 @@ export interface CastKit {
    */
   life?: number;
   /**
+   * ...or gone once it is this far from where it STARTED.
+   *
+   * The glob's, and the third of the three rules: `0x43e862` stores the spawn
+   * point in the thing's own four-byte AI and `0x43dc28` removes it at 600 from
+   * there. A range is not a reach — it does not care where the player went.
+   */
+  range?: number;
+  /**
+   * What the launch cels give way to, and it LOOPS.
+   *
+   * The glob again: every even tag of `0x4725c0` is a launch and `0x43dbf7`
+   * installs `tag + 1` when it ends, which is the flight — six cels that play
+   * for as long as the thing is in the air. A kit without this holds its last
+   * cel instead, which is what a finished script does when nothing reinstalls.
+   */
+  then?: { cels: readonly number[]; hold: number };
+  /**
    * Some of them fly HARMLESS until they are close, and this is that rule.
    *
    * The slug again, and it is the whole of its design: `0x413e43` holds

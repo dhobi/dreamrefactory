@@ -248,9 +248,14 @@ const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
    * returns 1. Everything else gets the jolt below and returns 0, which is the
    * branch this row describes.
    *
-   * The condition is not modelled, because no class a level places sends -2:
-   * all four writers are inside sequences rather than in a class the spawner
-   * ever builds. Written down here rather than left out.
+   * The condition is **not modelled**, and it is now reachable, which is a
+   * change worth stating plainly: this note used to say that no class a level
+   * places sends -2, and that was true for as long as no class could throw.
+   * `0x43dbda` is one of the four writers and it belongs to the EYEBALL's glob
+   * — SEWER places nine eyes, they spit, and `tests/browser/casts.ts` watches
+   * the jolt land. So the row below is what a glob does to a player who is
+   * neither crouching nor on the board, and a player who IS one of those two
+   * should be absorbing it and is not. That is the next piece of this.
    */
   [-2]: {
     code: -2,
@@ -458,9 +463,14 @@ const BLOW_CODES_1: Readonly<Record<number, CodeReaction>> = {
    * returns 1. Everything else gets the jolt below and returns 0, which is the
    * branch this row describes.
    *
-   * The condition is not modelled, because no class a level places sends -2:
-   * all four writers are inside sequences rather than in a class the spawner
-   * ever builds. Written down here rather than left out.
+   * The condition is **not modelled**, and it is now reachable, which is a
+   * change worth stating plainly: this note used to say that no class a level
+   * places sends -2, and that was true for as long as no class could throw.
+   * `0x43dbda` is one of the four writers and it belongs to the EYEBALL's glob
+   * — SEWER places nine eyes, they spit, and `tests/browser/casts.ts` watches
+   * the jolt land. So the row below is what a glob does to a player who is
+   * neither crouching nor on the board, and a player who IS one of those two
+   * should be absorbing it and is not. That is the next piece of this.
    */
   [-2]: {
     code: -2,

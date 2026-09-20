@@ -79,9 +79,12 @@ const sweep = async (
   samples: number,
   who: string,
   hold: { min: number; max: number },
-): Promise<{ seen: Seen[]; health: number[]; met: number }> => {
+  /** face it on the frames the gap is right — `0x43e0a0` throws at nobody else */
+  face = false,
+): Promise<{ seen: Seen[]; health: number[]; met: number; reactions: Set<string> }> => {
   const seen: Seen[] = [];
   const health: number[] = [];
+  const reactions = new Set<string>();
   let met = 0;
   for (let i = 0; i < samples; i++) {
     const t0 = await say();
@@ -97,16 +100,25 @@ const sweep = async (
       await page.keyboard.down(key);
       await page.waitForTimeout(110);
       await page.keyboard.up(key);
+    } else if (face && Number.isFinite(him)) {
+      // a tap towards it: enough to turn, not enough to close the gap
+      const toward = him > me ? "d" : "a";
+      await page.keyboard.down(toward);
+      await page.waitForTimeout(25);
+      await page.keyboard.up(toward);
+      await page.waitForTimeout(85);
     } else {
       await page.waitForTimeout(110);
     }
     const t = await say();
     const c = await castNow(t);
     if (c) seen.push(c);
+    const r = /code (-?\d+) (\w+)/.exec(t);
+    if (r) reactions.add(r[0]);
     const h = await healthNow(t);
     if (h >= 0 && health[health.length - 1] !== h) health.push(h);
   }
-  return { seen, health, met };
+  return { seen, health, met, reactions };
 };
 
 // ---- 1 — the spitter's gob -------------------------------------------------
@@ -167,6 +179,31 @@ if (!slugs.seen.some((s) => s.cel === 2241)) {
 }
 console.log(`ok    ...and ${slugs.seen.filter((s) => s.cel === 2241).length} of them armed on the way in`);
 
+// ---- 3 — the eyeball's glob, which is a CODE and not a blow ---------------
+//
+// The third shape, and the one that changes what the player does rather than
+// what he has left: `0x43dbda` writes −2 into the glob's strength every frame,
+// and −2 is `0x42ea34`'s jolt. Until this class could throw, nothing a level
+// places sent one — `codes.ts` says so, and said it in the present tense.
+//
+// The eye also wants its own footwork: it spits in its 180..260 band
+// (`0x43e08d`) and only at a player who is FACING it (`0x43e0a0` sends the ones
+// who are not into the drift instead), so the probe faces it while it holds.
+await go(7, 7105, 15998);
+if (!/nearest initeyeball/.test(await say())) fail(`SEWER x7105 should stand under an eye: ${(await say()).slice(0, 180)}`);
+const globs = await sweep(200, "initeyeball", { min: 190, max: 250 }, true);
+if (!globs.seen.length) fail(`an eye threw nothing in 200 samples (it was in the line ${globs.met} times)`);
+const globCels = [...new Set(globs.seen.map((s) => s.cel))].sort((a, b) => a - b);
+// `0x4725c0`'s five launches and five flights, 8500 through 8590
+if (globCels.some((c) => c < 8500 || c > 8590)) fail(`a glob is cels 8500..8590; saw ${globCels.join(",")}`);
+if (globs.seen.some((s) => s.blow !== -2)) fail(`0x43dbda holds a glob at -2; saw ${[...new Set(globs.seen.map((s) => s.blow))].join(",")}`);
+console.log(`ok    the eye spits — ${globs.seen.length} samples, cels ${globCels.join(",")}, every one worth -2`);
+
+if (!globs.reactions.has("code -2 jolt")) {
+  fail(`a glob that lands is 0x42ea34's jolt; the reactions seen were ${[...globs.reactions].join(", ") || "none"}`);
+}
+console.log(`ok    ...and one that lands JOLTS him — the first -2 a placed class has ever sent`);
+
 if (problems.length) fail(`the page threw: ${problems.join(" · ")}`);
-console.log(`PASS  two classes throw what their own machines throw`);
+console.log(`PASS  three classes throw what their own machines throw`);
 await finish(browser);
