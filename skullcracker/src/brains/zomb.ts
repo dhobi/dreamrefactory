@@ -59,7 +59,7 @@
  * samples `AI+0x32` drew at the creator. The kit has one sound primitive,
  * {@link BrainCtx.say}, and no global arbiter, so this is read and not done.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import { install, type Brain, type BrainCtx, type CastKit, type Enemy } from "./kit";
 
 /**
  * The hit reactions, kinds 6 and 7, and the handler that installs them. Read,
@@ -94,6 +94,42 @@ const NOT_HERE = "0x4207e7, 0x42080b, 0x4209f0" as const;
  * other script in the class is `dx 0, dy 0`, so this thing never leaves the
  * ground and never lunges. Its whole approach is the walk.
  */
+/**
+ * What the zombie hawks up — `0x420990`, class `0x420140`, script `0x470028`.
+ *
+ * It is the strangest of the casts so far, and every part of that is in the
+ * code rather than in a guess: **it does not move.** The spawner writes the
+ * point, the facing and the room and nothing else; the class's create
+ * (`0x42015a`) gives it a divisor of 1, the chapter's bank at `0x4a6220`, no
+ * weight (`0x42f850(obj, 0)`) and — worth saying — `obj+0x12 = 0`, no hit
+ * handler at all; and `0x470028` is eight cels at one engine frame each with a
+ * `dx` of zero on every one of them. There is nowhere for a speed to come from.
+ *
+ * So it hangs where it left: a cloud in front of the mouth, forty pixels up and
+ * sixty-five in front, for the eight frames its script lasts. `0x4201e0` is the
+ * whole think — write `obj+0x1a = 0xfffe` and answer 1 once `obj+0x46` says the
+ * script has finished, which is what takes it away.
+ *
+ * `0xfffe` is **−2**, the same jolt the eyeball's glob carries, and this is the
+ * second class a level places that sends one. CAVERN puts up eight of these and
+ * GRAVE sixteen.
+ */
+export const ZOMB_GOB: CastKit = {
+  cels: [1890, 1891, 1892, 1893, 1894, 1895, 1896, 1897],
+  hold: 1,
+  /** nothing writes one: not the spawner, not the creator, not the script */
+  speed: 0,
+  /** `0x420723` — sixty-five in front, whichever way it faces */
+  ahead: 0x41,
+  /** `0x42072c` — and forty above the point */
+  lift: 0x28,
+  /** `0x4201e4`, every frame it exists */
+  blow: -2,
+  /** `0x4201ea` — gone the frame its own eight-cel script reports finished */
+  life: 8,
+  from: "0x420990, script 0x470028, class 0x420140",
+};
+
 export const ZOMB = {
   /** kind 0 — one cel, one engine frame, going nowhere: the statue */
   wait: { cels: [1800], hold: 1, kind: 0, tag: 0, from: "0x470078 tag 0" },
@@ -294,14 +330,9 @@ export const zomb: Brain = (e, foe, run, k) => {
      * ---- 4, `0x4206f0`: the spit, and the only thing this class throws.
      *
      * Tag 0 waits out the five cels of hawking and then, at `0x420711`, builds a
-     * point forty pixels above its own and sixty-five in front — `+0x41` with
-     * the mirror flag clear, `-0x41` with it set, which is the arithmetic
-     * `0x420723`'s `and 0x82 / sub 0x41` does without a branch — and hands it to
-     * `0x420990`. That makes one object of the class at `[0x470070]`, copies
-     * this one's facing into its `obj+0x28`, and installs `0x470028`: eight cels,
-     * 1890 to 1897, one engine frame each. **The port cannot spawn it.** A brain
-     * is handed no creator, so the gob is not made here; the animation, the
-     * sound and the timing are.
+     * point forty pixels above its own and sixty-five in front — `0x42072c`'s
+     * `sub 0x28` on the Y and `0x420723`'s branchless `and 0x82 / sub 0x41` on
+     * the X — and hands it to `0x420990`. See {@link ZOMB_GOB}.
      *
      * Tag 1 is the mouth left open afterwards, and it is held by a COUNT and not
      * by its script — one cel would otherwise be gone in two frames.
@@ -311,6 +342,9 @@ export const zomb: Brain = (e, foe, run, k) => {
     case 4: {
       if ((e.tag ?? 0) === 0) {
         if (!done) return false;
+        // `0x420711` — the point is built and handed over here, on the frame
+        // the hawking script ends
+        k.cast(e, ZOMB_GOB);
         // `0x420741` — the gape's own clock, set before the script that uses it
         e.beat = 8;
         k.say(e, ZOMB.gob);

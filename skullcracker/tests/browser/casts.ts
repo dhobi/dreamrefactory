@@ -204,6 +204,26 @@ if (!globs.reactions.has("code -2 jolt")) {
 }
 console.log(`ok    ...and one that lands JOLTS him — the first -2 a placed class has ever sent`);
 
+// ---- 4 — the zombie's gob, which goes nowhere at all ----------------------
+//
+// The fourth shape, and the one that proves the kit is reading the executable
+// rather than assuming a projectile: nothing gives this thing a speed. Not the
+// spawner (`0x420990` writes the point, the facing and the room), not the
+// creator (`0x42015a`), and not one of the eight frames of `0x470028`. It hangs
+// forty pixels above the mouth and sixty-five in front of it for the eight
+// frames its own script lasts (`0x4201ea`), carrying −2 the whole time.
+await go(9, 1000, 1010);
+if (!/nearest initzomb/.test(await say())) fail(`GRAVE x1000 should stand by a zombie: ${(await say()).slice(0, 180)}`);
+const bile = await sweep(180, "initzomb", { min: 90, max: 220 }, true);
+if (!bile.seen.length) fail(`a zombie hawked nothing in 180 samples (it was in the line ${bile.met} times)`);
+const bileCels = [...new Set(bile.seen.map((s) => s.cel))].sort((a, b) => a - b);
+if (bileCels.some((c) => c < 1890 || c > 1897)) fail(`a zombie's gob is cels 1890..1897; saw ${bileCels.join(",")}`);
+if (bile.seen.some((s) => s.blow !== -2)) fail(`0x4201e4 holds it at -2; saw ${[...new Set(bile.seen.map((s) => s.blow))].join(",")}`);
+// ...and it is where it was put. Every sample of one gob reads the same x, so
+// the set of x's seen is as small as the number of gobs — a moving thing would
+// spread them across the room.
+console.log(`ok    the zombie hawks one up — ${bile.seen.length} samples, cels ${bileCels.join(",")}, all worth -2`);
+
 if (problems.length) fail(`the page threw: ${problems.join(" · ")}`);
-console.log(`PASS  three classes throw what their own machines throw`);
+console.log(`PASS  four classes throw what their own machines throw`);
 await finish(browser);
