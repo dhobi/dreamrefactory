@@ -31,9 +31,36 @@
  *     x8890, and clearing them is how the level is crossed.
  */
 import { BASE, fail, finish, launch } from "./harness";
+import { WERED } from "../../src/brains/wered";
 
 const near = (a: number, b: number, slack = 3): boolean =>
   Math.abs(a - b) <= slack;
+
+/**
+ * How close the husk has to be before a punch at it is worth throwing.
+ *
+ * **The husk's own maul band**, `0x477c28`'s third entry, and taking it from
+ * there rather than writing a number down is the point: it is the distance at
+ * which the thing commits to its one attack, so it is the distance at which a
+ * fight exists at all.
+ *
+ * This was 70 — that list's LAST entry, the innermost band — and 70 is a
+ * distance the husk has no reason to ever reach. `0x454410` does not home in on
+ * anybody: it walks the way it is facing, mauls anything inside 160 in front of
+ * it (`0x45456c` takes bands 3 and 4 alike), and turns round only when the
+ * player is six hundred pixels BEHIND it (`0x45454a`) or when it bounces off a
+ * wall. So a husk strides past a standing player and keeps going, swinging as it
+ * comes and as it leaves, and the seventy-pixel window it crosses on the way is
+ * open for a fraction of a second twice a lap. The suite spent four hundred
+ * polls landing two of the three blows it needed and then said the fight had
+ * never happened.
+ *
+ * At the husk's own 160 it dies in nine punches and seventeen polls of the four
+ * hundred, which is the margin a suite wants — and the assertion is unchanged,
+ * because what is being tested is `0x454690`, the punk that climbs out of the
+ * body, and not the reach of a fist.
+ */
+const REACH = WERED.bands[2];
 
 const main = async (): Promise<void> => {
   const browser = await launch();
@@ -129,7 +156,7 @@ const main = async (): Promise<void> => {
       killed = true;
       break;
     }
-    if (Math.abs(f.x - (await at()).x) < 70) {
+    if (Math.abs(f.x - (await at()).x) < REACH) {
       await page.keyboard.press("p");
       await page.waitForTimeout(220);
     }

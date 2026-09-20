@@ -21,6 +21,29 @@ import { type Page } from "playwright";
 import { BASE, fail, finish, launch } from "./harness";
 
 /** how many pixels in a rectangle pass a channel test, off the live canvas */
+/**
+ * How much ink a label has to be worth before it counts as spoken.
+ *
+ * A DIFFERENCE, and it has to be: these counts are antialiased glyph pixels and
+ * an absolute floor cannot survive a change of renderer. This file asked for ten
+ * green pixels per label and passed everywhere it had ever been run — until the
+ * first nightly on a GitHub runner, where `jump` counted **6** and the suite
+ * reported a band that was not carrying its key's name. It was: an unbound panel
+ * counts 0 there, and the J was drawn. `src/hud.ts` typesets the eight names
+ * with `ctx.fillText` at 11px in whatever the machine calls `ui-monospace`, and
+ * `J` is the thinnest of the eight letters the shipped table binds — 12 pixels
+ * here against 15..26 for the rest — so it is the one with no room under an
+ * absolute gate.
+ *
+ * Four is chosen against the two numbers that bound it: the arrow windows read
+ * 2..8 with nothing bound at all, because they sit on the arrow cluster's own
+ * bright green, and the thinnest real label measured anywhere so far is that 6.
+ * What makes the reading mean "a label" rather than "some green" is not this
+ * margin on its own — it is this plus the rebinding below, which changes the
+ * count without touching the art.
+ */
+const SPEAKS = 4;
+
 const count = (
   page: Page,
   box: [number, number, number, number],
@@ -173,20 +196,23 @@ const main = async (): Promise<void> => {
   };
   await reload();
   const shipped = await labelInk();
-  for (const [name, n] of Object.entries(shipped)) {
-    if (n < 10) fail(`the ${name} button should carry its key's name; ${n} green pixels at 0x46bd58's point`);
-  }
   console.log(`ok    the eight buttons are labelled: ${Object.entries(shipped).map(([k, v]) => `${k} ${v}`).join(", ")}`);
 
   // ...and with nothing bound there is nothing to say. `0x40e870` names no
   // character it cannot name, so every one of the eight boxes has to lose ink.
   // It cannot be asked to read zero: the four arrow windows sit on the arrow
   // cluster's own bright green, and that art is the band's, not the label's.
+  //
+  // And the empty reading is what the bound one is measured AGAINST, which is
+  // the whole of this block's arithmetic — see {@link SPEAKS}.
   await bind(["", "", "", "", "", "", "", ""]);
   const bare = await labelInk();
-  const speaking = Object.keys(LABELS).filter((k) => bare[k] >= shipped[k]);
-  if (speaking.length > 0) {
-    fail(`an unbound panel should say nothing; ${speaking.map((k) => `${k} ${shipped[k]}\u2192${bare[k]}`).join(", ")}`);
+  const silent = Object.keys(LABELS).filter((k) => shipped[k] < bare[k] + SPEAKS);
+  if (silent.length > 0) {
+    fail(
+      `the ${silent.join(", ")} button(s) should carry a key's name at 0x46bd58's point; ` +
+        `${silent.map((k) => `${k} ${bare[k]}\u2192${shipped[k]}`).join(", ")} (bound must beat unbound by ${SPEAKS})`,
+    );
   }
   console.log(
     `ok    ...and an unbound panel says nothing: ${Object.keys(LABELS).map((k) => `${k} ${shipped[k]}\u2192${bare[k]}`).join(", ")}`,
