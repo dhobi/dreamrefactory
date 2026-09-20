@@ -47,6 +47,7 @@
     "test:browser:cheats": "tsx tests/browser/cheats.ts",
     "test:browser:scores": "tsx tests/browser/scores.ts",
     "test:browser:pause": "tsx tests/browser/pause.ts",
-    "test:browser:pad": "tsx tests/browser/pad.ts"
+    "test:browser:pad": "tsx tests/browser/pad.ts",
+    "test:browser:casts": "tsx tests/browser/casts.ts"
   }
 }

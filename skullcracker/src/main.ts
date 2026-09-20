@@ -576,7 +576,24 @@ function drawPrefs(): void {
  */
 function begin(): void {
   savePrefs(prefs);
-  let to = `?char=${prefs.character}&difficulty=${prefs.difficulty}`;
+  /**
+   * ...and the game is PLAYED, which the bench is not.
+   *
+   * `damage` and `foehit` are the level runner's two switches and both start
+   * off there, for a reason that is about testing and not about the game: the
+   * thirty-six browser suites walk routes through sixteen levels, and with the
+   * presses, the girders, TOWER's current and every fist live, a route test
+   * becomes a fight and stops measuring what it was written to measure. That is
+   * a fact about `walk.html?level=N`, which is the bench.
+   *
+   * It was never a fact about the GAME. A player who came through the front
+   * door — logo, intro, menu, the chooser — is playing Skull Cracker, and Skull
+   * Cracker can kill you: the health, the knockdown, the seven KILL films and
+   * the lives are all here and were all unreachable from this door. So the two
+   * switches are thrown HERE, where the game begins, and nowhere else. The
+   * bench keeps its defaults and every suite is untouched.
+   */
+  let to = `?char=${prefs.character}&difficulty=${prefs.difficulty}&damage=1&foehit=1`;
   // ...and a loaded game brings four more numbers with it and nothing else. The
   // file has no character and no difficulty in it, which is exactly why
   // `0x45e071` sets `[0x46b208]` to the same -1 Begin does: the chooser runs
@@ -984,22 +1001,33 @@ async function boot(): Promise<void> {
 installFullscreen($<HTMLButtonElement>("fsBtn"), $<HTMLDivElement>("stage"), { report: log });
 
 /**
- * Whether this page offers to file a bug, and it does not yet.
+ * Whether this page offers to file a bug. It does now.
  *
- * The other three pages are ports of adventures the engine actually runs, so "the
- * port gets this wrong" is a reportable thing there. This one is a film player and
- * a walkable experiment over a game whose logic is a PowerPC binary, and most of
- * what it gets wrong is what it has not read yet — so the button is off until the
- * port is worth reporting against. One flag: turn it true and everything below
- * wakes up, markup included.
+ * It did not, and the reason it did not has expired. This used to be a film
+ * player over a menu, with the walking kept on another page that says in its own
+ * header that it is an experiment — and "the port gets this wrong" is not a
+ * useful thing to say about a page whose gaps are all "not read yet". What this
+ * page is now is the game: logo, intro, menu, the chooser, sixteen levels and
+ * the credits, all of it in this document. A player who meets a wall they cannot
+ * pass or a foe that will not die has something worth reporting, and until this
+ * flag turned over they had nowhere to report it from.
  */
-const BUG_REPORTS = false;
+const BUG_REPORTS = true;
 
 const bugBtn = $<HTMLButtonElement>("bugBtn");
 if (BUG_REPORTS) {
   installBugReport(bugBtn, {
     canvas,
-    where: () => film?.where ?? "",
+    // ...and WHERE is not always a film any more. Once the chooser has handed
+    // the canvas to the level runner this page stops drawing, `film` is null for
+    // good, and the level's own status line is what knows where the player is —
+    // its first fields are the level, the room and the position, which is
+    // exactly what a bug report means by "where".
+    where: () => {
+      if (film) return film.where;
+      const line = document.getElementById("hud")?.textContent ?? "";
+      return line.split(" · ").slice(0, 4).join(" · ");
+    },
     edition: () => "Skull Cracker (gamefiles/SKULL/)",
     log: (n) => lines.slice(-n),
     shotName: "skullcracker.png",

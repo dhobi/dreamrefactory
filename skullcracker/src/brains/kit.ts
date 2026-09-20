@@ -85,7 +85,25 @@ export interface Enemy {
     | "throw"
     | "recoil"
     | "settle";
-  /** `AI+4` — decisions left before it breaks off and goes home */
+  /**
+   * `AI+4` — decisions left before it breaks off and goes home.
+   *
+   * ## ...and the classes that have no such word
+   *
+   * This was left open as "wire a budget for the machines whose class never had
+   * one", and the audit answers it with a null: there are none to wire. Eight
+   * of the thirty classes carry a budget in `AI+4` and spend it here — the dog,
+   * the rat, the hardcore, the wraith, the eyeball, the cop, `initwerea` and
+   * `initwbooly`. Every one of the rest has its own page saying, with the
+   * struct's own offsets, that the slot is not a budget in that class: the arm
+   * (`arm.ts`), the batboy (`batboy.ts`), the hydrant (`hydrant.ts`), the
+   * mailbox (`mailbox.ts`), the spitter (`puke.ts`), Igor (`igor.ts`),
+   * `initwereb` (`wereb.ts`) and `initwered` (`wered.ts`).
+   *
+   * An AI struct is per class and the word at +4 means whatever that class's
+   * creator seeds and its think spends. Giving a budget to a class that never
+   * had one would be inventing behaviour, not porting it.
+   */
   decisions?: number;
   /**
    * In the fight — `obj+0x18` state 1, which {@link stepFight} drives. Undefined
@@ -262,6 +280,15 @@ export interface BrainCtx {
   root(n: number): number;
   /** `0x40ef30(0x4a7910, id, y)` — a creature sound where this one is */
   say(e: Enemy, id: number): void;
+  /**
+   * Put one of this class's projectiles in the air, where its machine does.
+   *
+   * The seam exists because a brain is handed one enemy and can only change
+   * that enemy: the spawners build an object of a different class on a
+   * different list, which is the page's business. Call it at the instruction
+   * the class calls its own spawner at, and quote that address there.
+   */
+  cast(e: Enemy, kit: CastKit): void;
   /** what a leap is pulled down by, per tick */
   gravity: number;
 }
@@ -278,6 +305,244 @@ export interface BrainCtx {
  * chosen and the page should now play it and spend its stride — which is what
  * {@link install} leaves behind, and what all but the turn-and-stop states do.
  */
+/**
+ * A thing a class throws, as much of it as the page has to know to fly one.
+ *
+ * Every projectile in this game is an object of ANOTHER class: the thrower's
+ * machine calls its spawner, and what comes out runs its own tiny script. A
+ * {@link Brain} has no creator and cannot make one, so each module reads its
+ * class's spawner and its script into one of these and calls {@link
+ * BrainCtx.cast} where the executable calls the spawner. The wiring in
+ * `walk.ts` owns the flight, the hit and the drawing; this is the data.
+ *
+ * ## The three numbers an ARC needs, and where they come from
+ *
+ * `0x42fd9e`…`0x42fdab` is the mover, and it settles the unit: the velocity
+ * words are added to the point **whole**, with nothing divided. `0x42f8b0`
+ * divides a SCRIPT's stride by `obj+0xe` on its way into the velocity and is
+ * the only thing that divides anything. So a velocity is pixels an engine
+ * frame, and so is a `speed` or a `rise` a spawner writes outright.
+ *
+ * The pull is `0x430327`: `obj+0xa += obj+0x24` every frame it is not landed,
+ * and `0x42f850` sets `obj+0x24` to `trunc(weight * 10)` — 10 for the player,
+ * 8 for the thing Igor throws (`0x41fc7b` pushes 0.8f), 0 for everything that
+ * flies flat. That is the whole of gravity in this engine: one float per class.
+ */
+export interface CastKit {
+  /** the flight cels, in order. The last one holds when the script runs out */
+  cels: readonly number[];
+  /** engine frames each cel is held */
+  hold: number;
+  /**
+   * Pixels an ENGINE FRAME along the facing, which is the unit the executable
+   * keeps it in.
+   *
+   * Every one of these comes out the same way: the launch frame of the thing's
+   * own script carries a `dx`, and `0x42f8b0` adds `dx / obj+0xe` to the
+   * velocity once — so the speed is that quotient, rounded away from zero, and
+   * it persists because no later frame of the script carries a stride. The
+   * mover then spends it once a frame, which is why the flight is stepped on
+   * the frame rather than on the tick and nothing multiplies by
+   * {@link TICK_SCALE}.
+   */
+  speed: number;
+  /** where it starts: this far along the facing from the thrower's point... */
+  ahead: number;
+  /** ...and this far ABOVE it, up-positive, as the spawner's own subtraction */
+  lift: number;
+  /**
+   * ...and this far along x REGARDLESS of the facing, where a spawner's step is
+   * unconditional rather than mirrored.
+   *
+   * `0x455cc7` and `0x455d05` are the case: both of the boss's muzzles are
+   * `sub ax, 0x1e` with no `sbb` in front of them, so the fireball leaves
+   * thirty to the left of it whichever way it is turned. Every other spawner
+   * here picks its sign off `obj+0x28` and belongs in {@link CastKit.ahead}.
+   */
+  offX?: number;
+  /** `obj+0x1a` — its strength, or a negative CODE the reaction table reads */
+  blow: number;
+  /**
+   * Gone once it is this far from the player in x — the gob's `0x418621`.
+   *
+   * One of two rules, and which one a class uses is its own business: the other
+   * is {@link CastKit.life}. Neither is a default; a kit carries whichever its
+   * think function actually tests.
+   */
+  reach?: number;
+  /**
+   * ...or gone after this many ENGINE FRAMES, counted down in its own AI.
+   *
+   * The slug is the case: `0x414768` writes 100 into `AI+2` and `0x413e21`
+   * spends one a frame, removing it at −1. A thing with a life and no reach
+   * leaves the screen and keeps going until the count runs out, which is what
+   * the executable does.
+   */
+  life?: number;
+  /**
+   * ...or gone once it is this far from where it STARTED.
+   *
+   * The glob's, and the third of the three rules: `0x43e862` stores the spawn
+   * point in the thing's own four-byte AI and `0x43dc28` removes it at 600 from
+   * there. A range is not a reach — it does not care where the player went.
+   */
+  range?: number;
+  /**
+   * A stride per cel, in the SCRIPT's own units, spent through
+   * {@link CastKit.divisor}.
+   *
+   * The knife is the one that needs it: `0x473670` tag 1 carries
+   * `dx 0 50 0 50 0 0 0` across its seven cels, so the thing accelerates as it
+   * goes — `0x42f8b0` adds each one to the velocity as its frame comes round,
+   * and the velocity persists. Every other kit so far has a single speed for
+   * its whole flight because its script carries no stride at all.
+   */
+  strides?: readonly number[];
+  /**
+   * `obj+0xe` — what a script's stride is divided by on its way into the
+   * velocity. Only wanted where {@link CastKit.strides} is.
+   */
+  divisor?: number;
+  /**
+   * What the launch cels give way to, and it LOOPS.
+   *
+   * The glob again: every even tag of `0x4725c0` is a launch and `0x43dbf7`
+   * installs `tag + 1` when it ends, which is the flight — six cels that play
+   * for as long as the thing is in the air. A kit without this holds its last
+   * cel instead, which is what a finished script does when nothing reinstalls.
+   */
+  then?: { cels: readonly number[]; hold: number; strides?: readonly number[] };
+  /**
+   * Some of them fly HARMLESS until they are close, and this is that rule.
+   *
+   * The slug again, and it is the whole of its design: `0x413e43` holds
+   * `obj+0x1a` at ZERO and measures `|player.x − self.x|` every frame; inside
+   * `0x82` = 130 it installs its own tag 1, which is `0x413e79`'s
+   * `obj+0x1a = 0x64` and a second cel. So a slug crossing a room cannot hurt
+   * anything, and one that reaches you can. Arming is one-way: the tag stays.
+   */
+  arm?: {
+    /** pixels in x between it and the player — `0x413e5d`'s `cmp eax, 0x82` */
+    within: number;
+    /** what it shows once it is armed */
+    cel: number;
+  };
+  /**
+   * The upward half of the velocity a spawner writes, up-positive.
+   *
+   * Igor's is 26 (`0x425544`'s `0xffe6`), and a kit with a rise almost always
+   * has a {@link CastKit.pull} to bring it down again.
+   */
+  rise?: number;
+  /**
+   * Pixels a frame² it accelerates downward — `trunc(weight * 10)`.
+   *
+   * Absent is weightless, which is what `0x42f850(obj, 0)` gives the gob, the
+   * slug, the glob and the zombie's cloud: those four fly flat because their
+   * own creators say they have no weight.
+   */
+  pull?: number;
+  /**
+   * What it plays where it lands, if its class has one.
+   *
+   * `0x41fd7b` is the case: a collision word set, and the thing installs
+   * `0x46f9e0` at `tag + 1` instead of looping its flight — which for Igor's is
+   * the same four cels it flew as, played backwards. It is gone when that runs
+   * out.
+   */
+  impact?: { cels: readonly number[]; hold: number };
+  /**
+   * It STEERS, which is a flight rule and not a script one.
+   *
+   * Kragg's shot is the only one: `0x4422b2` builds a velocity DELTA every
+   * frame and hands it to `0x42f8b0`, so what it adds is divided by the class's
+   * own divisor and what it adds stays added.
+   *
+   * ```
+   *   4422c7  imul ax, ax, 0x14          ; +-20 along the facing...
+   *   4422d4  eax = player.y - self.y
+   *   4422db  sub eax, 0x2d / idiv 10    ; ...and a tenth of the gap to 45
+   *   4422ec  0x42f8b0(obj, packed)      ; ...both over obj+0xe = 5
+   * ```
+   *
+   * So it leaves at a standstill, leans into the facing four pixels a frame
+   * harder every frame, and climbs or sinks toward a point forty-five above
+   * your own. `along` is the twenty, `lead` the forty-five and `drop` the ten.
+   */
+  home?: { along: number; lead: number; drop: number; divisor: number };
+  /**
+   * ...and it is gone the frame it is PAST you, whichever way it was going.
+   *
+   * `0x442302`/`0x442316` — a shot travelling left that is already left of the
+   * player, or one travelling right that is right of it, sets the think's own
+   * die flag. A homing thing needs this because it has no reach: it would
+   * otherwise turn round and come back.
+   */
+  past?: boolean;
+  /**
+   * ...or what it plays each time it BOUNCES, after which the flight resumes.
+   *
+   * The fireball is the one, and it is why the burst and the impact are two
+   * different things: `0x45566e` installs `0x478290` the frame a surface is
+   * under it, and `0x4556a0` — that script's own kind — installs the flight
+   * again the frame it ends. So the four cels are a bounce and not a death,
+   * and what finally removes the thing is {@link CastKit.rest}.
+   */
+  burst?: { cels: readonly number[]; hold: number };
+  /**
+   * `obj+0x20` — what it keeps of the velocity it meets a surface with, and the
+   * sign FLIPS. One class in the game sets one: the boss's fireball.
+   *
+   * The engine keeps it as a word rather than a float, and the setter's scale
+   * is NEGATIVE, which is where the flip lives:
+   *
+   * ```
+   *   42f825  fmul dword ptr [0x46a10c]   ; and that float is -8192.0
+   *   42f830  mov word ptr [ecx+0x20], ax ; so 0.8f is stored as -6553
+   *   42ff83  movsx eax, word ptr [esi+0x20]
+   *   42ff8a  imul eax, ecx               ; ...times the velocity
+   *   42ff9b  sar  eax, 0xd               ; ...over 8192, toward zero
+   * ```
+   *
+   * So a restitution of 0.8 turns a fall of 60 into a rise of 47, and the
+   * default every other object is born with — `0x42f5c0` writes `0x800` — is
+   * `+2048`, a quarter kept the SAME way, which is a stop and not a bounce.
+   * Only a class that calls `0x42f7f0` bounces, and this is that number.
+   *
+   * `0x42ff6f` is the floor underneath it: a vertical velocity inside ±2 is
+   * zeroed outright, so a bounce dies rather than ringing forever.
+   */
+  bounce?: number;
+  /**
+   * `obj+0x1e` — what a frame spent ON a surface keeps of the horizontal
+   * velocity. `0x4302c0`, the same `imul`/`sar 13` over 8192, and the scale
+   * here is positive so it only ever slows.
+   *
+   * Every object is born with `0x1666` (`0x42f5ba`), which is 0.7. The
+   * fireball's creator writes 0.25 (`0x42f7a0` on `0x3e800000`), so it stops in
+   * a couple of frames once it is down.
+   */
+  friction?: number;
+  /**
+   * It is only worth its {@link CastKit.blow} while it is MOVING this fast, in
+   * either axis, and worth nothing at all once it is not.
+   *
+   * `0x4556d3` — `|vx| >= 15 or |vy| >= 15`, with no wall against it — is what
+   * decides between `obj+0x1a = 0x64` and `obj+0x1a = 0`. A fireball rolling to
+   * a halt at your feet cannot hurt you.
+   */
+  fastBlow?: number;
+  /**
+   * ...and gone once it is asleep: on the ground, no horizontal velocity, and
+   * a vertical one no bigger than this.
+   *
+   * `0x4555e9` — `obj+0x2e` set, `obj+0xc == 0` and `|obj+0xa| <= 10` returns 1
+   * from the think, which is how an object asks to be removed.
+   */
+  rest?: number;
+  /** the spawner and the script it installs */
+  from: string;
+}
 export type Brain = (e: Enemy, foe: Foe, run: number, k: BrainCtx) => boolean;
 
 /**

@@ -115,7 +115,7 @@
  * {@link Foe.flinch}/{@link Foe.death} path. All four are named at
  * {@link NOT_HERE}.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import { install, type Brain, type BrainCtx, type CastKit, type Enemy } from "./kit";
 
 /**
  * The four states that are deliberately elsewhere, and what they carry.
@@ -233,6 +233,74 @@ const THROW = {
  * script in this class ends, raises `obj+0x46`, holds its last cel, and waits
  * for the machine to install the next one.
  */
+/**
+ * The knife — `0x43a450`, class `0x43c520`, script `0x473670`.
+ *
+ * The class first, since both makers share it: `0x43c53d` gives it a divisor of
+ * **2**, the knifeboy's own bank, `obj+0x1a = 0x64` at birth and again every
+ * frame (`0x43c606`), and `0x43c567` pushes **0.23f** to `0x42f850` — so
+ * `obj+0x24` is 2 and a knife DROOPS as it crosses the room. The spawner stands
+ * it thirty in front (`0x43a48f`'s branchless `and 0x3c / sub 0x1e`) and twenty
+ * up (`0x43a499`).
+ *
+ * Neither maker writes a velocity: **the script is the velocity**, and this is
+ * the only cast in the game whose speed changes in flight.
+ *
+ * ```
+ *   tag 0  1 cel   1870          dx 100            100/2 = 50 a frame
+ *   tag 1  7 cels  1871..1877    dx 0 50 0 50 0 0 0  +25 on two of the seven
+ * ```
+ *
+ * `0x43c621` hands tag 0 on to tag 1 when it ends, and `0x43c643` is what takes
+ * it away: `obj+0x2e` or `obj+0x2a` — landed, or hit something.
+ */
+export const KNIFEBOY_KNIFE: CastKit = {
+  cels: [1870],
+  hold: 1,
+  /** `0x473670` tag 0's `dx 100` over the class's own 2 */
+  speed: 50,
+  /** `0x43c567`'s 0.23f through `0x42f850`: `trunc(0.23 * 10)` */
+  pull: 2,
+  /** `0x43a48f` / `0x43a499` */
+  ahead: 30,
+  lift: 0x14,
+  blow: 0x64,
+  divisor: 2,
+  /** tag 1, and its strides are why a knife speeds up on its way to you */
+  then: {
+    cels: [1871, 1872, 1873, 1874, 1875, 1876, 1877],
+    hold: 1,
+    strides: [0, 50, 0, 50, 0, 0, 0],
+  },
+  from: "0x43a450, script 0x473670, class 0x43c520",
+};
+
+/**
+ * ...and the other half of the same roll — `0x43a500`, script `0x4736f8`.
+ *
+ * Same class, same thirty-and-twenty, and a script that goes UP instead: kind 1
+ * tag 0 is one cel with `dy -30`, which over the divisor of 2 is fifteen a
+ * frame, and `0x43c6a9` hands it to tag 1 — four cels counting back down
+ * through 1876…1873 with no stride at all, so the pull is the whole of the
+ * descent. `0x43c6cf` removes it when THAT script ends, and unlike the knife it
+ * has no collision test of its own.
+ */
+export const KNIFEBOY_LOB: CastKit = {
+  cels: [1877],
+  hold: 1,
+  speed: 0,
+  rise: 15,
+  pull: 2,
+  ahead: 30,
+  lift: 0x14,
+  blow: 0x64,
+  divisor: 2,
+  then: { cels: [1876, 1875, 1874, 1873], hold: 1 },
+  /** `0x43c6cf` — one launch frame and four of falling, and then it is gone */
+  life: 5,
+  from: "0x43a500, script 0x4736f8, class 0x43c520",
+};
+
 export const KNIFEBOY = {
   /** kind 1 — one cel, going nowhere: what `0x439c2f` puts a fresh one down in */
   statue: { cels: [1841], hold: 1, kind: 1, tag: 0, from: "0x474560 tag 0" },
@@ -650,7 +718,11 @@ export const knifeboy: Brain = (e, foe, run, k) => {
         case 4: {
           if (!done) return false;
           const out = install(e, KNIFEBOY.recover, true);
-          k.say(e, k.roll(4) < 3 ? THROW.knife.sound : THROW.lob.sound);
+          // the roll is spent ONCE and decides both halves, as `0x43a26c` does:
+          // 1 and 2 are `0x43a450` and its sound, 3 and 4 are `0x43a500` and its
+          const knife = k.roll(4) < 3;
+          k.say(e, knife ? THROW.knife.sound : THROW.lob.sound);
+          k.cast(e, knife ? KNIFEBOY_KNIFE : KNIFEBOY_LOB);
           return out;
         }
         // `0x43a2d1` — and the recovery brakes, same as the follow-through

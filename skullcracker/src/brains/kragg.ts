@@ -104,6 +104,7 @@ import {
   install,
   type Brain,
   type BrainCtx,
+  type CastKit,
   type Enemy,
   TICK_SCALE,
 } from "./kit";
@@ -350,6 +351,61 @@ export const KRAGG = {
   grab: 0x16,
   from: "0x440ab0",
 } as const;
+
+/**
+ * What a volley actually throws — `0x4420c0`, class `[0x472568]`.
+ *
+ * Both volleys throw the same thing and differ only in where it leaves from:
+ * `0x4420ff` is the flying form's muzzle and `0x442131` the grounded one's, and
+ * the argument that picks between them is the `0` and the `1` at the call
+ * sites. `0x4421c7` is the create — divisor 5, no weight, cel 10000 out of
+ * `[0x4a7020]` — and `0x474cc0` is three cels held two frames each, with no
+ * stride on any of them. **A shot does not leave with a speed at all.**
+ *
+ * What moves it is its think, `0x442290`, which steers: twenty along the facing
+ * and a tenth of the gap to a point forty-five above the player's own, both
+ * added to the velocity every frame through the divisor. So it drifts out of
+ * the muzzle, accelerates, and curves onto your height — and `0x442306` takes
+ * it away the frame it is past you rather than at any reach.
+ *
+ * `0x44236d` is its strength: **−2**, a reaction CODE rather than a blow, which
+ * is the jolt the eyeball's globs carry. `0x44235e` zeroes it against a wall.
+ */
+const SHOT = {
+  /** `0x474cc0` — three cels, `ticksPerFrame` 2, and it loops */
+  cels: [1000, 1001, 1002],
+  hold: 2,
+  /** `0x4421df` — `obj+0xe`, what both deltas are divided by */
+  divisor: 5,
+  /** `0x4422c7` — twenty along the facing, every frame */
+  along: 0x14,
+  /** `0x4422db` — it wants to be forty-five above your point... */
+  lead: 0x2d,
+  /** ...and closes a tenth of what is left of that a frame */
+  drop: 10,
+  /** `0x4421cb` — `obj+0x1a` at birth and `0x44236d` every frame after */
+  strength: -2,
+  from: "0x4420c0 / 0x474cc0, class 0x4421b0",
+} as const;
+
+function shot(ahead: number, lift: number, from: string): CastKit {
+  return {
+    cels: SHOT.cels,
+    hold: SHOT.hold,
+    speed: 0,
+    ahead,
+    lift,
+    blow: SHOT.strength,
+    home: { along: SHOT.along, lead: SHOT.lead, drop: SHOT.drop, divisor: SHOT.divisor },
+    past: true,
+    from,
+  };
+}
+
+/** `0x4420ff` — the flying form's muzzle: eighty out and thirty-five up */
+export const KRAGG_SHOT_AIR: CastKit = shot(0x50, 0x23, "0x4420c0(obj, 0)");
+/** `0x442131` — the grounded form's: seventy out and eighty up */
+export const KRAGG_SHOT_GROUND: CastKit = shot(0x46, 0x50, "0x4420c0(obj, 1)");
 
 /** `[0x473ddc]` — how far below itself it wants the player */
 const WANT_BELOW = 35;
@@ -634,10 +690,11 @@ export const kragg: Brain = (e, foe, run, k) => {
      *
      * Three shots — tags 0, 1 and 2 each end with `0x4420c0(obj, 0)`, which
      * makes a new object out of `[0x472568]` and puts it at `obj.x ± 80`,
-     * `obj.y - 35`, facing the way kragg faces. **Not spawned here**: nothing
-     * hits the player back in this port, so the volley is three animations and a
-     * cry. (`0x441cff` is the other half of it — a hit from something already in
-     * `[0x472568]` is kragg's own shot and is ignored outright.)
+     * `obj.y - 35`, facing the way kragg faces. Tags 1 and 2 share a handler,
+     * which is why `0x441aec` has four entries and only two call sites.
+     * (`0x441cff` is the other half of it — a hit from something already in
+     * `[0x472568]` is kragg's own shot and is ignored outright.) See
+     * {@link KRAGG_SHOT_AIR}.
      */
     case 6: {
       const tag = e.tag ?? 0;
@@ -647,6 +704,7 @@ export const kragg: Brain = (e, foe, run, k) => {
       if (!done) return false;
       if (tag <= 2) {
         k.say(e, KRAGG.cry);
+        k.cast(e, KRAGG_SHOT_AIR); // `0x441128` / `0x441178`
         return install(e, KRAGG.spit[tag + 1], true);
       }
       /**
@@ -768,8 +826,8 @@ export const kragg: Brain = (e, foe, run, k) => {
      *
      * Three shots through `0x4420c0(obj, 1)`, which puts each one at
      * `obj.x ± 70`, `obj.y - 80` — higher and closer in than the flying form's.
-     * Not spawned, for the same reason. Tag 3 hands to the full swing rather
-     * than deciding anything.
+     * Tag 3 hands to the full swing rather than deciding anything. See
+     * {@link KRAGG_SHOT_GROUND}.
      */
     case 14: {
       const tag = e.tag ?? 0;
@@ -779,6 +837,7 @@ export const kragg: Brain = (e, foe, run, k) => {
       if (!done) return false;
       if (tag <= 2) {
         k.say(e, KRAGG.cry);
+        k.cast(e, KRAGG_SHOT_GROUND); // `0x441957` / `0x4419a7`
         return install(e, KRAGG.lob[tag + 1], true);
       }
       // `0x4419c4` — and the volley always ends in kind 15 tag 1

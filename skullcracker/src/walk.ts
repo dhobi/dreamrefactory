@@ -89,6 +89,7 @@ import {
   install,
   type BrainCtx,
   type Brain,
+  type CastKit,
   type Enemy,
   type FoeState,
   type Track,
@@ -197,6 +198,9 @@ import {
   Fitting,
   BOGGS,
   Boggs,
+  BoggsWorm,
+  SKATEBOARD,
+  Board,
 } from "./props";
 import {
   DEATH_FILMS,
@@ -1602,6 +1606,8 @@ async function loadLevel(index: number): Promise<void> {
   flares = [];
   bolts = [];
   streams = [];
+  casts = [];
+  skates = [];
   // the chapter's own entry function: zero every count, name the chapter's
   // weapon, and leave the hands empty (`0x4511f0` and its three siblings). It
   // runs once per CHAPTER, not once per level, and that is the whole reason
@@ -1913,6 +1919,14 @@ async function loadLevel(index: number): Promise<void> {
         headTag: 0,
         snap: 0,
         dying: false,
+        // `[0x46e0b0]` is a `.data` word and `.data` words start at zero, so
+        // the first eligible frame throws and the roll only spaces the rest
+        throwWait: 0,
+        throwDrop: 0,
+        worms: [],
+        warned: false,
+        // `0x41ac7f` — one record, read once, and every worm is kept inside it
+        bounds: wormBounds(sbk, r),
         // the head has a record of its own, and `0x412364` stores the offset it
         // lands at; `0x41c4c0` then re-places it at body + that offset, which is
         // the same point again. Both run once, at setup, so it never moves.
@@ -2182,8 +2196,9 @@ async function nextLevel(): Promise<void> {
   // — the same way round in a mid-chapter stage as in a chapter's first, so it
   // is the sequence and not an opening special case. Boggs says his piece on the
   // flying screen and the skull that names where you are going comes after him.
-  await playFilm(brief.boggs);
-  await playFilm(brief.film);
+  // the stage's own queue, in its own order — which is not the same order in
+  // every chapter, and includes the opener on the four stages that have one
+  for (const reel of brief.films) await playFilm(reel);
   await loadLevel(next);
   advancing = false;
 }
@@ -3591,10 +3606,11 @@ canvas.addEventListener("pointerdown", (e) => {
  * combined "attack"), and the interface band's own eight button lights, which
  * the engine draws from those same flags (`buttonMask`).
  *
- * INV is the one action of the eight with no key here. It is a HOLD that
- * holsters the gun so the fists can work, and it means something only on the
- * levels that hand out a weapon; the three the pad carries are the three every
- * level needs.
+ * All eight actions are here, INV included. INV is the odd one — a HOLD rather
+ * than a blow, and it only means anything on the levels that hand out a weapon,
+ * where holding it holsters the gun so the fists can work. It went in because
+ * without it a phone could pick a weapon up and never put it away: the keyboard
+ * has `I` and the glass had nothing.
  *
  * ## Built here rather than written into a page
  *
@@ -3644,6 +3660,7 @@ const pad = ((): HTMLDivElement => {
       ["down", "\u25bc", "down — crouch"],
     ]),
     group("padActs", "act", [
+      ["inv", "INV", "inv — hold to holster the gun"],
       ["jump", "JUMP", "jump"],
       ["punch", "PUNCH", "punch"],
       ["kick", "KICK", "kick"],
@@ -4323,6 +4340,8 @@ function strikeFoe(
     e.anim = foe.death;
     e.clock = 0;
     e.linger = foe.frail ? 0 : (foe.linger ?? CORPSE_LINGER);
+    // `0x4383d9` and `0x43a6f9` — both out of the hit handler, on this frame
+    if (foe.drops === "skateboard") dropBoard(e);
     stats.score += foe.award ?? foe.panel?.award ?? 0;
     return;
   }
@@ -4888,6 +4907,70 @@ function takeHits(): void {
     if (!c?.strike) continue;
     if (hit(c, e.x, e.y, e.facing, e.vx / TICK_SCALE, e.vy / TICK_SCALE))
       return;
+  }
+  /**
+   * ...and what the creatures have THROWN, which is a creature's blow at a
+   * distance and so sits under the same switch as its fists.
+   *
+   * Spent on contact, and spent whether or not it landed a reaction: the
+   * executable's own test is `obj+0x2a` — the collision word — going non-zero,
+   * and touching the player is what sets it. A gob that has hit you is gone
+   * even if you were already on your back.
+   */
+  /**
+   * ...and what the creatures have THROWN, all of it under the creature switch.
+   *
+   * Codes included, and that is a decision rather than an oversight. This
+   * function lets a CODE through whatever the switches say — the claw, the hand
+   * underfoot, the bush and the wraith all reach the player with `?damage` off
+   * — on the reasoning that a code is not damage and turning damage off was
+   * never meant to turn the grab off.
+   *
+   * A thrown one is different, and SEWER is where it showed. Two of the four
+   * casts built so far carry −2, the jolt; nine eyes spit it; and with the
+   * jolts arriving whatever the switch said, `tests/browser/sewer.ts` could no
+   * longer walk its own big shaft — the player was knocked off it and out of
+   * the level, twice in two runs. The claw and the bush are LEVEL FURNITURE,
+   * fixed things you walk into, and a route that meets one meets it by standing
+   * there. A glob is a creature's attack, which is exactly what `foehit` was
+   * added to hold back while the shared AI was being wired, and the sign of the
+   * number it carries does not change what it is.
+   *
+   * So: a cast waits for the creature switch, code or blow. The suites keep
+   * measuring routes, and `?foehit=1` — which is what the front door plays with
+   * — gets the whole of it.
+   */
+  for (const c of foesHurt ? casts : []) {
+    if (c.landed !== undefined) continue; // already met something
+    if (castBlow(c) === 0) continue; // still flying harmless — `0x413e43`
+    const cel = celRec(lvl.sbk, castCel(c));
+    if (!cel?.strike) continue;
+    const box = strikeOf(cel, c.x, c.y, c.facing);
+    if (!box) continue;
+    if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
+      continue;
+    c.spent = true;
+    // `0x42f910` adds what the HITTER was doing to the cel's own pair, and a
+    // cast's velocity is already in the executable's units — a frame's worth
+    if (hit(cel, c.x, c.y, c.facing, c.vx, 0, castBlow(c))) return;
+  }
+  /**
+   * ...and Boggs' WORMS, which are the same argument as a cast.
+   *
+   * One is dropped by a creature's own machine and carries `0x41adf9`'s hundred
+   * from the frame it lands, so it waits for `?foehit` exactly as a thrown thing
+   * does. It does not move, so there is no velocity to hand the reaction.
+   */
+  for (const b of foesHurt ? hereOf((l) => l.boggs) : []) {
+    for (const m of b.worms) {
+      const cel = celRec(lvl.sbk, boggsWormCel(m));
+      if (!cel?.strike) continue;
+      const box = strikeOf(cel, m.x, m.y, 1);
+      if (!box) continue;
+      if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
+        continue;
+      if (hit(cel, m.x, m.y, 1, 0, 0, BOGGS.worms.strength)) return;
+    }
   }
   // `0x454a38` arms a press only while its stroke runs, and only two of its cels
   // carry a box; `0x4537d0` arms a girder on every frame it has
@@ -5489,6 +5572,29 @@ function headAndArm(
     headX: head?.pointX ?? body.pointX,
     headY: head?.pointY ?? body.pointY,
   };
+}
+
+/**
+ * The `wormbounds` record — one per room, and every worm is clamped inside it.
+ *
+ * `0x41ac70` reads it once, at the class's own setup, and stores the rect at
+ * `[0x4a50c8]`; `0x41ac09`…`0x41ac26` then holds each worm's point inside it
+ * every frame. The record carries no point of its own that anything reads — it
+ * is a box and nothing else, which is why `levels.md` had nowhere to file it.
+ */
+function wormBounds(
+  sbk: SbkFile,
+  room: SbkRoom,
+): { left: number; right: number; top: number; bottom: number } | null {
+  const r = sbk.entities.find(
+    (e) =>
+      e.name === BOGGS.worms.bounds &&
+      e.top >= room.top &&
+      e.top <= room.bottom &&
+      e.left >= room.left &&
+      e.left <= room.right,
+  );
+  return r ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
 }
 
 /** every `initshack` in this room — CITY places eleven and nothing else places any */
@@ -6643,6 +6749,8 @@ function stepBoggs(): void {
   for (const b of hereOf((l) => l.boggs)) {
     b.clock += 1;
     if (b.snap > 0) b.snap -= 1;
+    // the worms are a class of their own and run whatever the body is doing
+    stepBoggsWorms(b);
     for (const m of b.machines) {
       if (m.wrecked) m.wreckClock += 1;
       else m.clock += 1;
@@ -6690,12 +6798,138 @@ function stepBoggs(): void {
       continue;
     }
     // `0x41bffc` — seven in forty-two, once a frame, and only out of the idle
-    if (Math.floor(Math.random() * BOGGS.lunge.odds[1]) >= BOGGS.lunge.odds[0])
+    if (Math.floor(Math.random() * BOGGS.lunge.odds[1]) >= BOGGS.lunge.odds[0]) {
+      // ...and `0x41c068` is what the other thirty-five frames do
+      boggsReach(b);
       continue;
+    }
     b.lunge = p.x < b.x ? "left" : "right";
     b.clock = 0;
     sound?.effect(BOGGS.lunge.sound + Math.floor(Math.random() * 2), b.x, b.y);
   }
+}
+
+/**
+ * `0x41c068` — the half of the idle that is not the lunge.
+ *
+ * Five in a hundred spends the frame, anything inside a hundred in front of it
+ * spends the frame, and the rest is the range: past three hundred it throws
+ * out of its second machine, and at or under it a worm goes down. See
+ * {@link BOGGS.reach}.
+ */
+function boggsReach(b: Boggs): void {
+  const r = BOGGS.reach;
+  // `0x41c068` — `0x434540(0x64)` under five, and it only snaps
+  if (Math.floor(Math.random() * r.idle[1]) < r.idle[0]) return;
+  // `0x41c07b` — `si` is the same signed gap the head aims on
+  const si = b.x - p.x;
+  if (si > 0 && si < r.close) return;
+  // `0x41c09d` — and only while the flag the second machine's wreck clears is up
+  if (si > r.far && b.flags[0]) {
+    boggsThrow(b);
+    return;
+  }
+  // `0x41c0fd` — seven in fifty-five, and one goes down where it stands
+  const w = BOGGS.worms;
+  if (Math.floor(Math.random() * w.odds[1]) >= w.odds[0]) return;
+  // `0x41c3c8` — nineteen, counted off the class's own list
+  if (b.worms.length >= w.cap) return;
+  const at = {
+    x: b.x + w.offX[0] - Math.floor(Math.random() * w.offX[1]),
+    y: b.y + w.offY[0] + Math.floor(Math.random() * w.offY[1]),
+    kind: 0 as const,
+    clock: 0,
+  };
+  // `0x41ac09`…`0x41ac26` — and the record is what keeps it on the floor
+  if (b.bounds) {
+    at.x = Math.min(Math.max(at.x, b.bounds.left), b.bounds.right);
+    at.y = Math.min(Math.max(at.y, b.bounds.top), b.bounds.bottom);
+  }
+  b.worms.push(at);
+}
+
+/**
+ * `0x41c0a7` — and the counter is spent whether or not anything is thrown.
+ *
+ * `ax` is read BEFORE the decrement and tested against zero, so the frame the
+ * word goes negative is the frame it fires; `0x41c0e4` then reseeds it with
+ * `0x434540(0x1e) + 0x1e`. The throw itself leaves the second machine, eighty
+ * along its facing, alternating between two heights — `0x41c38b` toggles
+ * `[0x46e138]` on every call.
+ */
+function boggsThrow(b: Boggs): void {
+  const t = BOGGS.throwing;
+  const was = b.throwWait;
+  b.throwWait -= 1;
+  if (was >= 0) return;
+  b.throwWait = t.wait[0] + Math.floor(Math.random() * t.wait[1]);
+  const m = b.machines[t.machine];
+  // `0x41c330` reads the machine's own `obj+0x28`, and the branch it is reached
+  // through only runs with the player to its left
+  const facing = -1;
+  sound?.effect(t.sound, m.x, m.y);
+  // `0x41c37e` ADDS its 140 and `0x41c386` its 40, and the engine's y grows
+  // downward, so both of them are below the machine and not above it
+  castAt(m.x, m.y + t.drop[b.throwDrop], facing, BOGGS_THROW);
+  b.throwDrop = b.throwDrop === 0 ? 1 : 0;
+}
+
+/**
+ * The worms, one engine frame each — `0x41adf0`, whose four kinds are one life.
+ *
+ * A dropped one waits on a single cel until the player is within
+ * {@link BOGGS.worms.wake} in x, rises, strikes, sinks and is gone. It carries
+ * a hundred the whole time (`0x41adf9`), and it never moves from where it was
+ * put.
+ */
+function stepBoggsWorms(b: Boggs): void {
+  const w = BOGGS.worms;
+  for (const m of b.worms) {
+    m.clock += 1;
+    if (m.kind === 0) {
+      // `0x41ae18` — the only thing that wakes one
+      if (Math.abs(p.x - m.x) >= w.wake) continue;
+      m.kind = 1;
+      m.clock = 0;
+      continue;
+    }
+    const run =
+      m.kind === 1 ? w.rise : m.kind === 2 ? w.strike : w.sink;
+    if (m.clock < run.cels.length * run.hold) continue;
+    if (m.kind === 1) {
+      // `0x41ae5f` — the warning is played ONCE a level, and only for one that
+      // rises to your left and within two hundred of your own height
+      if (!b.warned && m.x < p.x && Math.abs(p.y - m.y) < w.warnBelow) {
+        b.warned = true;
+        sound?.effect(w.warn, m.x, m.y);
+      } else sound?.effect(w.hiss, m.x, m.y);
+      m.kind = 2;
+      m.clock = 0;
+    } else if (m.kind === 2) {
+      sound?.effect(w.strikes, m.x, m.y); // `0x41aeeb`
+      m.kind = 4;
+      m.clock = 0;
+    } else {
+      m.clock = -1; // `0x41af3d` — gone, and the sweep below takes it
+    }
+  }
+  b.worms = b.worms.filter((m) => m.clock >= 0);
+}
+
+/** every worm in the room the player is in — the debug line's own reader */
+function wormsHere(): BoggsWorm[] {
+  const out: BoggsWorm[] = [];
+  for (const b of hereOf((l) => l.boggs)) out.push(...b.worms);
+  return out;
+}
+
+/** the cel a worm is showing, off its own kind and its own clock */
+function boggsWormCel(m: BoggsWorm): number {
+  const w = BOGGS.worms;
+  const run =
+    m.kind === 0 ? w.sleep : m.kind === 1 ? w.rise : m.kind === 2 ? w.strike : w.sink;
+  const i = Math.floor(m.clock / run.hold);
+  return run.cels[Math.min(run.cels.length - 1, i)];
 }
 
 /**
@@ -8597,6 +8831,392 @@ function stepBishop(e: Enemy, foe: Foe, run: number): boolean {
 const castBeams = new WeakSet<Enemy>();
 
 /**
+ * One projectile in the air, thrown by a class rather than by the player.
+ *
+ * The gun's {@link Bolt} is the same idea and not the same thing: a bolt is the
+ * player's and expires on the first thing it meets, while these belong to a
+ * creature, carry that creature's own strength, and are drawn out of the
+ * LEVEL's book rather than the shared player book.
+ */
+interface Cast {
+  kit: CastKit;
+  x: number;
+  y: number;
+  /** pixels an engine frame, along the facing it left with */
+  vx: number;
+  facing: number;
+  /** engine frames since it launched — the flight cels are read off it */
+  clock: number;
+  /** ...and the pull's half of the velocity, for the ones that arc */
+  vy: number;
+  /** frames into its own impact, once it has landed — see {@link CastKit.impact} */
+  landed?: number;
+  /** where it started, for the kits whose end is a range rather than a reach */
+  bornX: number;
+  /** ...and the height it started at, which only the fall guard below reads */
+  bornY: number;
+  /** frames into the burst a BOUNCE plays, while the flight carries on under it */
+  bounced?: number;
+  /** has it come close enough to arm — see {@link CastKit.arm}. One-way */
+  armed: boolean;
+  spent: boolean;
+}
+
+/**
+ * ...and the one kit that belongs to no class module, because the thing that
+ * throws it is a MACHINE rather than a creature — see {@link BOGGS.throwing}.
+ */
+const BOGGS_THROW: CastKit = {
+  cels: BOGGS.throwing.cels,
+  hold: 1,
+  // no frame of tag 0 carries a speed of its own: every pixel of it is stride
+  speed: 0,
+  ahead: BOGGS.throwing.ahead,
+  lift: 0,
+  blow: BOGGS.throwing.strength,
+  reach: BOGGS.throwing.reach,
+  strides: BOGGS.throwing.strides,
+  divisor: BOGGS.throwing.divisor,
+  impact: { cels: BOGGS.throwing.splat, hold: 1 },
+  from: BOGGS.throwing.from,
+};
+
+/** everything a creature has thrown and the world has not taken back yet */
+let casts: Cast[] = [];
+
+/** every board two of level five's gang have dropped — {@link SKATEBOARD} */
+let skates: Board[] = [];
+
+/**
+ * One goes down where a knotboy or a knifeboy did — `0x438450`.
+ *
+ * It is put ten above the surface under the thing that dropped it, keeps its
+ * facing, and leaves on the hop its own script's first frame carries: `dx 15`
+ * and `dy -50` through the class's divisor of five, so three across and ten up.
+ * `0x4385af` then reads `noskateboards` at the board's own point and that is
+ * the whole of how long it lies there.
+ */
+function dropBoard(e: Enemy): void {
+  const lvl = level;
+  if (!lvl) return;
+  const b = SKATEBOARD;
+  if (!lvl.sbk.byId.has(b.hop.cel) || !lvl.sbk.byId.has(b.rest)) return;
+  const floor = surfaceUnder(e.x, e.y - 1, e.y + 40);
+  const y = (floor ?? e.y) - b.lift;
+  // `0x4385bd` — one point-in-record test, once, at the moment it is dropped
+  const swept = lvl.sbk.entities.some(
+    (r) =>
+      r.name === b.sweptBy &&
+      e.x >= r.left &&
+      e.x <= r.right &&
+      y >= r.top &&
+      y <= r.bottom,
+  );
+  skates.push({
+    x: e.x,
+    y,
+    bornY: y,
+    vx: roundAway((e.facing * b.hop.dx) / b.divisor),
+    vy: roundAway(b.hop.dy / b.divisor),
+    down: false,
+    life: b.lasts[swept ? 1 : 0],
+  });
+}
+
+/**
+ * The boards, one engine frame each.
+ *
+ * The same mover every object in the game runs through: the weight into the
+ * velocity, the velocity into the point, and a surface underneath turning the
+ * vertical half round through `obj+0x20` and taking the horizontal half down
+ * through `obj+0x1e`. `0x4377c4` is the cel change — the frame a surface is
+ * first under it — and `0x437809` is the countdown that follows.
+ */
+function stepBoards(): void {
+  const b = SKATEBOARD;
+  for (const d of skates) {
+    const wasY = d.y;
+    d.vy += b.pull;
+    d.x += d.vx;
+    d.y += d.vy;
+    // swept, for the same reason the casts' is — see {@link stepCasts}
+    const floor = surfaceUnder(d.x, Math.min(wasY, d.y) - 1, d.y + 1);
+    if (floor !== null && d.y >= floor) {
+      d.y = floor;
+      d.down = true; // `0x4377c4`
+      d.vy = Math.abs(d.vy) <= 2 ? 0 : castScale(d.vy, b.bounce, -8192);
+      d.vx = castScale(d.vx, b.friction, 8192);
+    }
+    // `0x437809` — and only once it is down, which is what `0x4377ea` waits for
+    if (d.down) d.life -= 1;
+    // the page's own guard, the casts' one exactly: a board is removed by its
+    // countdown, and its countdown does not start until a surface is under it
+    if (d.y - d.bornY > FALLS_FOREVER) d.life = -1;
+  }
+  skates = skates.filter((d) => d.life >= 0);
+}
+
+/**
+ * How far below its own launch a cast may fall before this page takes it.
+ *
+ * Not the disc's: `0x4555e9` removes a fireball when it has come to REST, and
+ * the obstacle solver this page does not run is what guarantees it ever does.
+ * A screen and a half is past anything a room can be.
+ */
+const FALLS_FOREVER = 1200;
+
+/**
+ * Put one in the air — {@link BrainCtx.cast}, called where a class calls its own
+ * spawner.
+ *
+ * The three numbers the spawners share are the three every one of them writes
+ * by hand: the thrower's POINT (not its feet), a step along the facing, and a
+ * lift. `0x418433`/`0x418440`/`0x41843b` are the spitter's, and the others are
+ * the same three instructions with their own constants.
+ */
+function spawnCast(e: Enemy, kit: CastKit): void {
+  const lvl = level;
+  if (!lvl) return;
+  const at = foeAnchor(e, lvl);
+  if (!at) return;
+  // the anchor, which is what `obj+6` is — a gob leaves the mouth, not the feet
+  castAt(e.x, at.y, e.facing, kit);
+}
+
+/**
+ * ...and the same from a point rather than from a creature.
+ *
+ * Not every spawner is called by a class with a {@link Brain}: `0x41c330` is
+ * called on one of Boggs' MACHINES, which is an object this page keeps as a
+ * fixture rather than as an enemy. The three numbers are the same three.
+ */
+function castAt(x: number, y: number, facing: number, kit: CastKit): void {
+  if (!level) return;
+  const bornX = x + facing * kit.ahead + (kit.offX ?? 0);
+  const bornY = y - kit.lift;
+  casts.push({
+    kit,
+    x: bornX,
+    y: bornY,
+    vx: facing * kit.speed,
+    // up-positive in the kit, and this page's y grows downward
+    vy: -(kit.rise ?? 0),
+    facing,
+    clock: 0,
+    bornX,
+    bornY,
+    // a kit with no arming rule is dangerous from the frame it leaves
+    armed: kit.arm === undefined,
+    spent: false,
+  });
+}
+
+/** the cel a cast is showing — the last one holds, as a finished script does */
+function castCel(c: Cast): number {
+  // ...and one that has landed is playing its own impact and nothing else
+  const smash = c.kit.impact;
+  if (smash && c.landed !== undefined) {
+    const i = Math.min(smash.cels.length - 1, Math.floor(c.landed / Math.max(1, smash.hold)));
+    return smash.cels[i];
+  }
+  // ...and a bounce is a script install too: `0x45566e` puts the burst on and
+  // `0x4556a0` puts the flight back, so it plays OVER a thing still in motion
+  const burst = c.kit.burst;
+  if (burst && c.bounced !== undefined) {
+    const i = Math.min(burst.cels.length - 1, Math.floor(c.bounced / Math.max(1, burst.hold)));
+    return burst.cels[i];
+  }
+  // an armed one is its own cel and nothing else: the arming IS a script
+  // install, so there is no flight cycle left to be part way through
+  if (c.kit.arm && c.armed) return c.kit.arm.cel;
+  const hold = Math.max(1, c.kit.hold);
+  const i = Math.floor(c.clock / hold);
+  if (i < c.kit.cels.length) return c.kit.cels[i];
+  // the launch has run out: either the flight takes over and loops, or the last
+  // cel holds, which is what a finished script does with nobody to reinstall it
+  const then = c.kit.then;
+  if (!then) return c.kit.cels[c.kit.cels.length - 1];
+  const since = c.clock - c.kit.cels.length * hold;
+  return then.cels[Math.floor(since / Math.max(1, then.hold)) % then.cels.length];
+}
+
+/**
+ * The stride the cel showing THIS frame carries, already divided.
+ *
+ * Only the frame a cel first comes up spends it: `0x45d1a3` walks the script one
+ * frame at a time and hands each frame's `dx` to `0x42f8b0` once. A cel held for
+ * two frames would otherwise be spent twice.
+ */
+function castStride(c: Cast): number {
+  const hold = Math.max(1, c.kit.hold);
+  const div = c.kit.divisor ?? 1;
+  const i = Math.floor(c.clock / hold);
+  const fresh = c.clock % hold === 0;
+  if (!fresh) return 0;
+  if (i < c.kit.cels.length) {
+    const dx = c.kit.strides?.[i] ?? 0;
+    return dx ? roundAway(dx / div) : 0;
+  }
+  const then = c.kit.then;
+  if (!then?.strides) return 0;
+  const hold2 = Math.max(1, then.hold);
+  const since = c.clock - c.kit.cels.length * hold;
+  if (since % hold2 !== 0) return 0;
+  const j = Math.floor(since / hold2) % then.cels.length;
+  const dx = then.strides[j] ?? 0;
+  return dx ? roundAway(dx / div) : 0;
+}
+
+/** what it would hit for — zero until it arms, which is the slug's whole design */
+function castBlow(c: Cast): number {
+  if (!c.armed) return 0;
+  // ...and the ones that bounce are worth nothing once they have slowed down —
+  // `0x4556d3`, which picks between `obj+0x1a = 0x64` and `obj+0x1a = 0`
+  const fast = c.kit.fastBlow;
+  if (fast !== undefined && Math.abs(c.vx) < fast && Math.abs(c.vy) < fast) return 0;
+  return c.kit.blow;
+}
+
+/**
+ * The engine's own `imul` / `sar 13` — a velocity through one of the two
+ * sixteenth-of-a-unit words, rounded toward zero.
+ *
+ * `0x42ff83` and `0x4302c0` are the same four instructions over the same 8192,
+ * and both store their float through a scale rather than keeping it: the
+ * restitution's is `-8192.0` and the friction's `+8192.0`, which is why a
+ * bounce flips and a friction does not. Keeping the two truncations is not
+ * pedantry — a fireball's fourth bounce is two pixels off without them.
+ */
+function castScale(v: number, f: number, scale: number): number {
+  return Math.trunc((v * Math.trunc(f * scale)) / 8192);
+}
+
+/**
+ * The casts, one engine frame at a time.
+ *
+ * What ends one is the class's own test and it is the same test in each: the
+ * collision words going non-zero, or the thing getting further from the PLAYER
+ * than its reach (`0x418621` — `|self.x − player.x| > 0x3e8` for the gob). The
+ * first half is the obstacle solver this page does not run foes through, so
+ * what is kept is the distance, plus the two collisions this page CAN see — the
+ * player, which {@link takeHits} spends it on, and the ground.
+ *
+ * The ground is not in the executable's test and is in this one, because
+ * without the solver a gob that misses would sail across the level at the
+ * height of a mouth for a thousand pixels and then vanish in mid-air. `0x42f8b0`
+ * would have stopped it at the first wall it met.
+ */
+function stepCasts(): void {
+  const lvl = level;
+  if (!lvl) return;
+  for (const c of casts) {
+    // ...a landed one is only playing itself out
+    if (c.landed !== undefined) {
+      c.landed += 1;
+      const smash = c.kit.impact;
+      if (!smash || c.landed >= smash.cels.length * Math.max(1, smash.hold)) c.spent = true;
+      continue;
+    }
+    // ...a bounce's burst runs on its own clock and hands the flight back
+    if (c.bounced !== undefined) {
+      c.bounced += 1;
+      const burst = c.kit.burst;
+      if (!burst || c.bounced >= burst.cels.length * Math.max(1, burst.hold)) c.bounced = undefined;
+    }
+    // ...the stride this frame's cel carries, if its script carries any.
+    // `0x42f8b0` adds `dx / obj+0xe` to the velocity as each frame comes round,
+    // rounded away from zero, and what it adds stays added
+    const stride = castStride(c);
+    if (stride) c.vx += c.facing * stride;
+    c.clock += 1;
+    // whole, not scaled: this runs on the ENGINE frame, like the bolts, and the
+    // speed is what one call of `0x42f8b0` adds — see {@link CastKit.speed}
+    c.x += c.vx;
+    // ...and the one that steers: `0x4422b2` leans into the facing and reaches
+    // for a point above the player, both deltas through the class's divisor
+    const wasY = c.y;
+    const home = c.kit.home;
+    if (home) {
+      c.vx += roundAway((c.facing * home.along) / home.divisor);
+      c.vy += roundAway(Math.trunc((p.y - c.y - home.lead) / home.drop) / home.divisor);
+    }
+    if (c.kit.pull !== undefined) {
+      // `0x430327` — the pull goes into the velocity, and the velocity into the
+      // point, neither of them divided by anything
+      c.vy += c.kit.pull;
+    }
+    if (home || c.kit.pull !== undefined) c.y += c.vy;
+    const dx = Math.abs(c.x - p.x);
+    // the class's own end, whichever of the two it keeps
+    if (c.kit.reach !== undefined && dx > c.kit.reach) c.spent = true;
+    if (c.kit.life !== undefined && c.clock > c.kit.life) c.spent = true;
+    if (c.kit.range !== undefined && Math.abs(c.x - c.bornX) > c.kit.range) c.spent = true;
+    // ...or it has gone by: `0x442306`/`0x44231a`, the homing shot's own end
+    if (c.kit.past && ((c.vx < 0 && c.x < p.x) || (c.vx > 0 && c.x > p.x))) c.spent = true;
+    // ...and its own arming, which never goes back
+    if (c.kit.arm && !c.armed && dx < c.kit.arm.within) c.armed = true;
+    // ...and the page's own guard, for the same reason the ground test below is
+    // the page's: a bouncer is removed by coming to REST and by nothing else,
+    // so one that finds no surface at all would fall for the rest of the level
+    if (c.y - c.bornY > FALLS_FOREVER) c.spent = true;
+    // the window is SWEPT, because the fireball leaves at sixty pixels a frame
+    // and climbs to a hundred and sixty: a two-pixel test walks straight
+    // through the floor it was thrown at. `0x42fd80` solves the whole step, so
+    // for anything that cannot tunnel this is the same one-pixel window it was
+    const floor = surfaceUnder(c.x, Math.min(wasY, c.y) - 1, c.y + 1);
+    if (floor !== null && c.y >= floor) {
+      if (c.kit.bounce !== undefined) bounceCast(c, floor);
+      else landCast(c, floor);
+    }
+  }
+  casts = casts.filter((c) => !c.spent);
+}
+
+/**
+ * It met the ground and it is one of the ones that comes back up.
+ *
+ * `0x42ff4c`…`0x42ffa3` in the mover: the point is put back on the surface, a
+ * vertical velocity inside ±2 is zeroed outright, and anything bigger goes
+ * through `obj+0x20`, which for this one class is negative and therefore
+ * flips. `0x4302c0` then takes the horizontal half through `obj+0x1e` for the
+ * frame it is in contact, and `0x4555e9` removes it once both have run out.
+ */
+function bounceCast(c: Cast, floor: number): void {
+  c.y = floor;
+  c.bounced = 0;
+  // `0x42ff6f` — under two pixels a frame is not a bounce, it is a rest
+  c.vy = Math.abs(c.vy) <= 2 ? 0 : castScale(c.vy, c.kit.bounce ?? 0, -8192);
+  if (c.kit.friction !== undefined) c.vx = castScale(c.vx, c.kit.friction, 8192);
+  const rest = c.kit.rest;
+  if (rest !== undefined && c.vx === 0 && Math.abs(c.vy) <= rest) landCast(c, floor);
+}
+
+/**
+ * It has met something — the ground here, or the player in {@link takeHits}.
+ *
+ * `0x41fd7b` is the shape: a collision word set, and the class installs its
+ * impact script at `tag + 1` rather than looping its flight. A class with none
+ * of that is simply gone, which is what the four flat ones do.
+ */
+function landCast(c: Cast, floor?: number): void {
+  if (!c.kit.impact) {
+    c.spent = true;
+    return;
+  }
+  if (floor !== undefined) c.y = floor;
+  c.landed = 0;
+  c.vx = 0;
+  c.vy = 0;
+}
+
+/** each one cel of the level's own book, mirrored the way it flies */
+function drawCasts(camX: number, camY: number): void {
+  const lvl = level;
+  if (!lvl) return;
+  for (const c of casts) drawLevelCel(castCel(c), c.x, c.y, camX, camY, c.facing < 0);
+}
+
+/**
  * What a class's own machine throws, which the machine itself cannot.
  *
  * A {@link Brain} is handed one enemy and returns a boolean; it has no creator
@@ -9118,6 +9738,7 @@ const BRAIN_CTX: BrainCtx = {
   // pixels in the engine and a fractional root would drift them
   root: (n) => Math.floor(Math.sqrt(Math.max(0, n))),
   say: (e, id) => sound?.effect(id, e.x, e.y),
+  cast: (e, kit) => spawnCast(e, kit),
   gravity: INVENTED.gravityPx,
 };
 
@@ -10574,6 +11195,8 @@ function loop(now: number): void {
     if (frame) stepFlares();
     if (frame) stepBolts();
     if (frame) stepStreams();
+    if (frame) stepCasts();
+    if (frame) stepBoards();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -10767,6 +11390,7 @@ function loop(now: number): void {
         camX,
         camY,
       );
+    for (const m of b.worms) drawLevelCel(boggsWormCel(m), m.x, m.y, camX, camY);
     drawLevelCel(boggsCel(b), b.x, b.y, camX, camY);
     drawLevelCel(BOGGS.arm.poses[BOGGS.arm.tag], b.x, b.y, camX, camY);
     const j = jawsAt(b);
@@ -10793,6 +11417,10 @@ function loop(now: number): void {
   drawGuns(camX, camY);
   drawFlares(camX, camY);
   drawBolts(camX, camY);
+  // a dropped board lies under everything that is still standing up
+  for (const d of skates)
+    drawLevelCel(d.down ? SKATEBOARD.rest : SKATEBOARD.hop.cel, d.x, d.y, camX, camY, d.vx < 0);
+  drawCasts(camX, camY);
   drawStreams(camX, camY);
   drawGobs(camX, camY);
   drawPops(camX, camY);
@@ -11362,6 +11990,23 @@ function loop(now: number): void {
     (streams.length
       ? ` · stream ${streams[0].state} cel ${streamCel(streams[0])} at x ${Math.round(streams[0].x)}` +
         `, y ${Math.round(streams[0].y)} blow ${STREAMS[streams[0].weapon]?.blow}`
+      : "") +
+    // what a CREATURE has thrown: the one thing in a fight that is neither the
+    // player's nor standing in front of him, so a probe has no other way to see it
+    (casts.length
+      ? ` · ${casts.length} cast, nearest cel ${castCel(casts[0])} at x ${Math.round(casts[0].x)}` +
+        `, y ${Math.round(casts[0].y)} blow ${castBlow(casts[0])}` +
+        ` vx ${Math.round(casts[0].vx)} vy ${Math.round(casts[0].vy)}`
+      : "") +
+    // ...and the two things this page makes that belong to nobody's hand
+    (skates.length
+      ? ` · ${skates.length} board, first cel ${skates[0].down ? SKATEBOARD.rest : SKATEBOARD.hop.cel}` +
+        ` at x ${Math.round(skates[0].x)}, y ${Math.round(skates[0].y)} life ${skates[0].life}`
+      : "") +
+    (wormsHere().length
+      ? ` · ${wormsHere().length} worm, first kind ${wormsHere()[0].kind}` +
+        ` cel ${boggsWormCel(wormsHere()[0])} at x ${Math.round(wormsHere()[0].x)}` +
+        `, y ${Math.round(wormsHere()[0].y)}`
       : "");
   // ...and a BOSS always, whichever of the three it is: the "nearest" line goes
   // to whatever is closest in x, and TOWER's bats chase, so one of them is

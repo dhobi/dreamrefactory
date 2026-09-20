@@ -8,10 +8,18 @@ of `IMAIN.MOV`'s fourth segment: **SKULL / CRACKER**, on two lines, over the sku
 So the title is two words here and the directory stays one, the way the filesystem
 had it.
 
-*Skull Cracker* (1996) is CyberFlix's own, and the fourth game in this repository —
-the first whose files this port can read completely and whose game it cannot play
-at all. Both halves of that are worth stating plainly, because the interesting
-result here is not a game running.
+*Skull Cracker* (1996) is CyberFlix's own, and the fourth game in this repository
+— the one whose logic is compiled into an executable rather than authored in the
+data, so every behaviour on this page was read out of `SC.EXE` with a
+disassembler instead of interpreted.
+
+That sentence used to end "and whose game it cannot play at all", which was true
+when the page was a film player over a menu and stopped being true one change at
+a time. It plays: the logo, the intro, the menu, the chooser, sixteen levels with
+their own populations, the weapons, the bosses, the score board and the credits,
+all of it in one document. What is interesting here is still not that a game
+runs — it is WHERE each number in it came from, which is what the rest of this
+file is.
 
 Both releases have now been read. The Macintosh disc is what the port was built
 against; the Windows one came later and is the reason several findings in these
@@ -28,7 +36,7 @@ a single frame.
   the completely DreamFactory half of this disc
 - [What the executable runs while you play](systems.md) — the camera, gravity,
   ladders, the clock, the save game and the collision test under all of it
-- [How it is checked](verification.md) — thirty-six browser suites, and why they
+- [How it is checked](verification.md) — the browser suites, and why they
   run in one process
 
 ## What was found
@@ -294,10 +302,26 @@ a little more wrong.
                  SEWER STREETS TOWER WOODS
 ```
 
-**Five records are left and not one of them is a drawn thing.** Three are
-TABLES — `monkeybar`, `wormbounds` and `noskateboards`. And two are dead data:
-**`where` and `inithealth` do not appear in `SC.EXE` anywhere** — LAB places one
-of each and nothing in the game will ever ask for them.
+**Five records are left and not one of them is a drawn thing.** Two are dead
+data: **`where` and `inithealth` do not appear in `SC.EXE` anywhere** — LAB
+places one of each and nothing in the game will ever ask for them. The other
+three are not tables at all, which is what an earlier reading of this page had
+them as. Each is a REGION some object's own code asks a question of, and two of
+the three are now answered in the port:
+
+- **`wormbounds`** is the box Boggs' worms are kept inside. `0x41ac7f` reads it
+  once, at the class's own setup, into `[0x4a50c8]`, and `0x41ac09`…`0x41ac26`
+  holds every worm's point inside it. See `BOGGS.worms`.
+- **`noskateboards`** is how long a dropped skateboard lies there. `0x4385af`
+  asks it once, at the moment the board is made, and seeds the board's own
+  countdown with **ten** frames inside the region and **a hundred and eighty**
+  outside it. See `SKATEBOARD`.
+- **`monkeybar`** is one of five regions a per-level callback classifies the
+  player's point against. `0x412390` is that callback — `0x419bc3` installs it
+  through `0x4029d0`, and three other chapters install the same one — and it
+  answers `1` for `exitfarm`, `2` for `exitroom`, **`3` for `monkeybar`**, `4`
+  for `ladder` and `5` for `initswitch`. It is the only one of the five with
+  nothing on this page's side yet.
 
 ### What a probe is, and the word that was hiding in the constructor
 
@@ -369,8 +393,10 @@ a level with no class anywhere.
   on the record's point that `0x411cfd` gives it rather than the rect bottom it
   had been nudged to.
 - **Every boss has its own state machine** — PLAYGR's `initwbooly`, ARCADE's
-  `initkragg`, RAVECAVE's wraith, TOWER's bishop and VAT's Boggs. Boggs' head,
-  claw arm and machinery objects are the part of him that is still missing.
+  `initkragg`, RAVECAVE's wraith, TOWER's bishop and VAT's Boggs, and Boggs'
+  head, claw arm and machinery objects with him (`src/props.ts`). What is
+  missing of him is his two ATTACKS — `0x41c330`'s throw and `0x41c3c0`'s spit;
+  he lunges, heals and dies correctly and throws nothing.
 - **A hard blow disarms you, and the button band is labelled from the key map** —
   the disarm is in [Fighting](combat.md#a-hard-blow-costs-you-the-gun-and-the-band-says-which-key),
   the band in [What the executable runs](systems.md#the-letters-under-the-buttons-are-typeset-from-the-key-map).
@@ -381,8 +407,14 @@ a level with no class anywhere.
 - **Both of the two tests are here now**, and so is the ending — the tests in
   [Weapons and pickups](weapons.md#a-pickup-is-taken-on-the-art-not-the-box),
   the ending in [The sixteen levels](levels.md#the-sixteenth-level-is-the-end).
-- **Damage is off by default**, because with it on a probe walking east through
-  WOODS meets three hydraulic presses and every route test here becomes a fight.
+- **Damage is off on the BENCH and on in the game.** `walk.html?level=N` starts
+  with `damage` and `foehit` clear, because with them on a probe walking east
+  through WOODS meets three hydraulic presses and every route test becomes a
+  fight. That was never a fact about the game, though, and for a while it meant
+  a player who came through the front door could not be killed by anything but a
+  fall. `begin()` throws both switches now, so the health, the knockdown, the
+  seven KILL films and the lives — all built, all previously unreachable from
+  that door — are what a player meets.
 - **The KILL vignette is the last life's**, which is what `0x4294b7` says: the
   death branch reads the count, spends one, and takes the ordinary path while
   the count before the spend was not negative. This page used to play one on

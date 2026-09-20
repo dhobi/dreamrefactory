@@ -9,10 +9,11 @@
  * bottom third DOWN — and three of the original's eight actions (PUNCH, KICK,
  * INV) could not be reached at all. A touchscreen could walk the whole game and
  * never hit anything, which is the one thing this game is. The pad replaces it:
- * four directions at the left of the picture, PUNCH, KICK and JUMP at the right.
+ * four directions at the left of the picture, and INV, JUMP, PUNCH and KICK at
+ * the right — all eight of the original's own actions.
  *
  * What this suite is for is that the pad is the ONLY control on a machine with
- * no keyboard, so every one of its seven keys has to be provable, and the old
+ * no keyboard, so every one of its eight keys has to be provable, and the old
  * behaviour has to be provably gone rather than merely unmentioned.
  *
  * ## How it presses
@@ -69,11 +70,11 @@ const xNow = async (): Promise<number> => {
 if (await page.locator("#pad").isHidden()) {
   fail(`a phone profile got no pad — maxTouchPoints ${await page.evaluate(() => navigator.maxTouchPoints)}`);
 }
-const KEYS = ["up", "down", "left", "right", "jump", "punch", "kick"] as const;
+const KEYS = ["up", "down", "left", "right", "inv", "jump", "punch", "kick"] as const;
 for (const act of KEYS) {
   if ((await page.locator(`#pad button[data-act="${act}"]`).count()) !== 1) fail(`the pad has no ${act} key`);
 }
-console.log(`ok    the pad shows itself on a phone, with all seven keys`);
+console.log(`ok    the pad shows itself on a phone, with all ${KEYS.length} keys`);
 
 // ---- 2 — and each key is really the topmost thing at its own middle ---------
 //

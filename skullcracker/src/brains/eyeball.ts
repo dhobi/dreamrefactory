@@ -97,6 +97,7 @@ import {
   install,
   type Brain,
   type BrainCtx,
+  type CastKit,
   type Enemy,
   TICK_SCALE,
 } from "./kit";
@@ -165,6 +166,52 @@ const NOT_HERE = "0x43dfc4, 0x43e716, 0x43e8b0" as const;
  *   eyeball's own states all write +100 (`0x43df91`). Carried as read.
  */
 const GLOB = "0x43e800 -> [0x472780], script 0x4725c0" as const;
+
+/**
+ * The five globs, which are one glob with five sets of cels.
+ *
+ * `0x43e871` installs `0x4725c0` tag `2 * AI+4` and `AI+4` runs 0…4 and wraps,
+ * so the launches are the EVEN tags and each one's odd neighbour is the flight
+ * `0x43dbf7` hands it when the launch ends. Every number below is {@link GLOB}'s
+ * and the cels are the script table's own, tag 2's odd fifth entry included:
+ * it really does end on 8504, the first set's last cel.
+ *
+ * Nothing here carries a strike box in the level's book, and it does not need
+ * one: the glob's blow is `obj+0x1a` = **−2**, a CODE, and `0x448f0b` is what
+ * reads it. That makes this the first class a level places to send one — see
+ * `codes.ts`, which was written when nothing could.
+ */
+const LAUNCH: readonly (readonly number[])[] = [
+  [8500, 8501, 8502, 8503, 8504],
+  [8520, 8521, 8522, 8523, 8504],
+  [8540, 8541, 8542, 8543, 8544],
+  [8560, 8561, 8562, 8563, 8564],
+  [8580, 8581, 8582, 8583, 8584],
+];
+const FLIGHT: readonly (readonly number[])[] = [
+  [8505, 8506, 8507, 8508, 8509, 8510],
+  [8525, 8526, 8527, 8528, 8529, 8530],
+  [8545, 8546, 8547, 8548, 8549, 8550],
+  [8565, 8566, 8567, 8568, 8569, 8570],
+  [8585, 8586, 8587, 8588, 8589, 8590],
+];
+
+export const EYEBALL_GLOBS: readonly CastKit[] = LAUNCH.map((cels, i) => ({
+  cels,
+  // `0x4725c0` is ticksPerFrame 3, and that is engine frames a cel
+  hold: 3,
+  then: { cels: FLIGHT[i], hold: 3 },
+  /** `0x43e84d` — `obj+0xc` written outright, and `0x43e851` leaves `obj+0xa` at 0 */
+  speed: 13,
+  /** `0x43e83c` — twenty-five in front, and `0x43e825` copies the point unlifted */
+  ahead: 25,
+  lift: 0,
+  /** `0x43dbda`, every frame it lives: a code, not a hundred */
+  blow: -2,
+  /** `0x43dc28` — six hundred from where `0x43e862` remembered it leaving */
+  range: 600,
+  from: `${GLOB} tag ${i * 2}`,
+}));
 
 /**
  * Its repertoire, by kind and tag, straight out of `0x472788`…`0x472b38`.
@@ -512,9 +559,13 @@ export const eyeball: Brain = (e, foe, run, k) => {
         /**
          * `0x43e800(obj, AI+4)` — a glob of class `[0x472780]` on script
          * `0x4725c0` tag `2 * AI+4`, twenty-five pixels in front of this one and
-         * thirteen a frame further. See {@link GLOB}; the page has no spawner to
-         * give it to, so all that happens here is the counter.
+         * thirteen a frame further. See {@link EYEBALL_GLOBS}.
+         *
+         * With the counter's CURRENT value and then advanced, which is the
+         * order `0x43e6e2` and `0x43e6f6` are in: the first glob of a spit is
+         * the set the last spit left pointing at.
          */
+        k.cast(e, EYEBALL_GLOBS[e.decisions ?? 0]);
         e.decisions = ((e.decisions ?? 0) + 1) % 5;
       }
       return done ? install(e, EYEBALL.hover) : false;

@@ -22,7 +22,7 @@ Four of its games are here. Three are adventures the interpreter runs:
 
 | | | |
 |---|---|---|
-| **[Skull Cracker](skullcracker/)** | 1996 | DreamFactory 4 with **no BOOTFILE and no script**: a beat-'em-up whose logic is compiled into the executable rather than authored in the data. Its 66 films and its own menu play, and a level is **walkable** — the levels, the moves, the fights, the sounds and the mission read out of `SC.EXE` with a disassembler rather than scripted in the data |
+| **[Skull Cracker](skullcracker/)** | 1996 | DreamFactory 4 with **no BOOTFILE and no script**: a beat-'em-up whose logic is compiled into the executable rather than authored in the data. It **plays** — films, menu, chooser, sixteen levels, the weapons, the bosses, the board and the credits — with the levels, the moves, the fights, the sounds and the mission read out of `SC.EXE` with a disassembler rather than scripted in the data |
 
 **RE is for reverse-engineered.** This is a best-effort re-implementation and not
 a re-release: it needs a copy of a game's own data files, which it does not
@@ -48,7 +48,7 @@ game to be ported takes 5179 and nothing has to move:
 | `npm run dev -w taoot` | 5175 | Titanic |
 | `npm run dev -w dust` | 5176 | Dust |
 | `npm run dev -w timelapse` | 5177 | Timelapse |
-| `npm run dev -w skullcracker` | 5178 | Skull Cracker (experimental) |
+| `npm run dev -w skullcracker` | 5178 | Skull Cracker |
 
 Each package owns its own commands. `-w <package>` runs one of them — `npm run
 speedrun -w taoot`, `npm run test:browser -w skullcracker` — and the root has only
@@ -83,9 +83,11 @@ Eight directories, and each of them a thing rather than a kind of file.
 - **`timelapse/`** — Timelapse: one page, four discs, and its own palette. The
   engine's screen with no room on it (`engine/src/web/screen-director.ts`) is what
   made it possible at all
-- **`skullcracker/`** — Skull Cracker: two pages — the films and its own menu, and
-  a walkable level beside them — and its own disassembler under `tools/`,
-  because this game's logic is in `SC.EXE` and not in the data
+- **`skullcracker/`** — Skull Cracker: the game on one page (the films, the menu,
+  the chooser and the levels, which the chooser hands the canvas to) with
+  `walk.html` beside it as the bench a level is opened on one at a time — and
+  its own disassembler under `tools/`, because this game's logic is in `SC.EXE`
+  and not in the data
 - **`site/`** — the project's own web presence: the front door, the eight format
   editors, the chrome every page shares, and the UI-language axis
 - **`tools/`** — tools that work on any DreamFactory rip because they take one as

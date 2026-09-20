@@ -48,7 +48,13 @@
  * path does not, because state 9 in particular hands back into the MELEE loop
  * rather than to standing and that is a behaviour, not an animation.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import {
+  install,
+  type Brain,
+  type BrainCtx,
+  type CastKit,
+  type Enemy,
+} from "./kit";
 
 /**
  * The hit-reaction states, and what the executable does in them that the page's
@@ -109,15 +115,38 @@ const NOT_HERE = "0x455fde, 0x456033, 0x456058, 0x4560ed, 0x456310" as const;
 const NOT_BEHAVIOUR = "0x45595b, 0x430c90, 0x4307c0" as const;
 
 /**
- * The fireball, `0x456240`, and both muzzles — read, not spawned.
+ * The fireball, `0x456240`, and both muzzles.
  *
  * It builds a second object of a class of its own (`[0x4782d8]`, script
  * `0x478250`, cels 7010..7015 in flight and 7016..7019 bursting), gives it a
  * restitution of 0.8 and a friction of 0.25 (`0x42f7f0` / `0x42f7a0` with the
  * floats `0x3f4ccccd` and `0x3e800000`), sets its velocity and then steps it
- * once by that velocity before installing its script. Every frame of it carries
- * a strike box; **nothing in this port hits the player back**, and this page has
- * no spawner for a second class, so the numbers are carried and spend nothing.
+ * once by that velocity before installing its script.
+ *
+ * ## It is the only thing in the game that BOUNCES
+ *
+ * `0x455536`, the class's create, sets a divisor of 6 and a hit handler and
+ * nothing else — no `0x42f850`, so it keeps the weight every object is born
+ * with (`0x42f5ca` writes `0x24 = 0xa`), which is the same ten pixels a frame²
+ * the player falls at. What makes it different is the two words the SPAWNER
+ * writes over the birth defaults, and what the mover does with them:
+ *
+ * ```
+ *   456264  0x42f7f0(obj, 0.8f)   ; obj+0x20, through a scale of -8192
+ *   456272  0x42f7a0(obj, 0.25f)  ; obj+0x1e, through a scale of +8192
+ *   42ff83  eax = obj+0x20 * vy / 8192   ; the flip, on every surface it meets
+ *   4302c0  vx  = obj+0x1e * vx / 8192   ; ...and the drag while it is down
+ * ```
+ *
+ * The burst is not a death: `0x45566e` installs `0x478290` when a surface is
+ * under it and `0x4556a0` puts the flight straight back when those four cels
+ * end, so it bounces along the floor until `0x4555e9` finds it at rest — no
+ * horizontal velocity and a vertical one inside ten — and removes it.
+ *
+ * And it is only dangerous while it is moving. `0x4556d3` wants fifteen pixels
+ * a frame in one axis or the other before it writes `obj+0x1a = 0x64`, and
+ * writes a zero otherwise, so one that has rolled to a stop at your feet is
+ * furniture until it goes out.
  *
  * `0x455cc3` and `0x455d01` are where the two are set up, through the globals
  * `[0x4a7908]`/`[0x4a790a]` (the muzzle, packed y then x) and
@@ -130,8 +159,67 @@ const THROW = {
   high: { dx: -30, dy: -20, vx: 250, vy: 366 },
   /** `0x455d01` — kind 2 tag 1: low and flat, and half again as fast */
   low: { dx: -30, dy: 30, vx: 300, vy: 0 },
+  /** `0x455536` — no `0x42f850`, so `0x42f5ca`'s birth weight of ten stands */
+  pull: 0xa,
+  /** `0x455549`/`0x455542` — cel 7010 out of `[0x4a8400]`, divisor 6 */
+  divisor: 6,
+  /** `0x456264` — `0x42f7f0(0.8f)`, and the scale behind it flips the sign */
+  bounce: 0.8,
+  /** `0x456272` — `0x42f7a0(0.25f)`, the frames it spends on a surface */
+  friction: 0.25,
+  /** `0x4556d3` — slower than this in BOTH axes and it is worth nothing */
+  fastBlow: 0xf,
+  /** `0x4555e9` — at rest, and `0x455603` answers the removal */
+  rest: 0xa,
+  /** `0x455700` — a hundred, the same as the bishop's bolt */
+  strength: 0x64,
+  /** `0x478250` tag 0 is the one launch frame, tag 1 the flight it loops */
+  flight: [7010, 7011, 7012, 7013, 7014, 7015],
+  /** `0x478290` tag 0 — the bounce, after which `0x4556a0` flies again */
+  burst: [7016, 7017, 7018, 7019],
   from: "0x455cc3 / 0x455d01 / 0x456240",
 } as const;
+
+/**
+ * ...and the two of them as the page flies them.
+ *
+ * `speed` and `rise` are the spawner's own words through the class's divisor of
+ * six, rounded away from zero the way `0x42f8b0` rounds: 250 and 366 become 42
+ * and 61, 300 becomes 50. The rise is NEGATIVE on the high one because the
+ * engine's y grows downward and `0x455ce4` writes a positive 366 — the lob is
+ * hurled at the floor and what carries it to you is the bounce.
+ *
+ * `offX` rather than `ahead` because both muzzles are `sub ax, 0x1e` with no
+ * `sbb` in front: thirty to the left whichever way it is turned. The one thing
+ * not carried is `0x4562c7`'s single step at birth, which leaves the disc's own
+ * fireball exactly one frame further along than this one.
+ */
+function ball(t: { dx: number; dy: number; vx: number; vy: number }): CastKit {
+  const over = (n: number) => Math.trunc((Math.abs(n) + THROW.divisor - 1) / THROW.divisor) * Math.sign(n);
+  return {
+    cels: [THROW.flight[0]],
+    hold: 1,
+    speed: over(t.vx),
+    ahead: 0,
+    offX: t.dx,
+    lift: -t.dy,
+    blow: THROW.strength,
+    rise: -over(t.vy),
+    pull: THROW.pull,
+    bounce: THROW.bounce,
+    friction: THROW.friction,
+    fastBlow: THROW.fastBlow,
+    rest: THROW.rest,
+    then: { cels: THROW.flight, hold: 1 },
+    burst: { cels: THROW.burst, hold: 1 },
+    from: "0x456240 / 0x478250, class 0x455520",
+  };
+}
+
+/** `0x455cc3` — kind 2 tag 0, out of the chest and down at the floor */
+export const WBOOLY_HIGH: CastKit = ball(THROW.high);
+/** `0x455d01` — kind 2 tag 1, low and flat and half again as fast */
+export const WBOOLY_LOW: CastKit = ball(THROW.low);
 
 /**
  * Its repertoire, by kind and tag, straight out of `0x4782e0`…`0x478370`.
@@ -536,13 +624,16 @@ export const wbooly: Brain = (e, foe, run, k) => {
       if (!done) return false;
       /**
        * `0x455cc3` / `0x455d01` / `0x455d3d` — the muzzle and the velocity go
-       * into four globals and `0x456240` builds the fireball out of them. See
-       * {@link THROW}: read, not spawned, because it is a class of its own and
-       * nothing in this port hits the player back.
+       * into four globals and `0x456240` builds the fireball out of them. Which
+       * of the two it is comes off `0x455cba`'s own dispatch on the TAG: tag 0
+       * is the high one and tag 1 the low, and `0x455cc1` — any other tag —
+       * falls past both and throws nothing.
        *
        * Then `0x455d4f` adds one to `AI+4`, which is the seven-throw counter,
        * and it goes back to standing.
        */
+      if ((e.tag ?? 0) === 0) k.cast(e, WBOOLY_HIGH);
+      else if (e.tag === 1) k.cast(e, WBOOLY_LOW);
       e.decisions = (e.decisions ?? 0) + 1;
       return install(e, WBOOLY.stance);
     }

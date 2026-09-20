@@ -3,17 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Skull Cracker RE — walk a level (experimental)</title>
+    <title>Skull Cracker RE — the level bench</title>
     <!--
-      The walkable-level experiment, deliberately its own page: skullcracker/
-      index.html plays the game's films and claims nothing more, and that claim
-      stays clean by this living elsewhere. What this page shows is the disc's
-      own data — the backdrop, the parallax depths, the rasterised ground, the
-      rooms and the doors between them, the platforms and ladders, the player's
-      cels — driven by a handful of numbers the disc does NOT contain (walk
-      speed, gravity, the jump, animation cadence), each one named in
-      src/walk.ts's INVENTED table. This is a reconstruction you
-      can walk through, not the game.
+      The BENCH: one level at a time, opened straight, with the chooser, the
+      status line and the debug keys the game itself has no room for.
+
+      It was once the only place a level ran, and its own note here said so —
+      "skullcracker/index.html plays the game's films and claims nothing more".
+      That is no longer the split. The front door plays the whole game and hands
+      this same runner its canvas when the chooser is answered (`handOver` in
+      src/main.ts), so what lives here is not a lesser version of the game but
+      the workbench for it: `?level=`, `?x=`, `?damage=`, `[` and `]`, and a
+      status line naming every number the page is working from. Thirty-odd
+      browser suites drive this page for exactly that reason.
+
+      What it shows is the disc's own data — the backdrop, the parallax depths,
+      the rasterised ground, the rooms and the doors between them, the platforms
+      and ladders, the player's cels — driven by a handful of numbers the disc
+      does NOT contain, each one named in src/walk.ts's INVENTED table. That
+      table is shorter than it was: the walk, the run, the jump's lift and the
+      fall have all since been found in SC.EXE and taken out of it.
     -->
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="/src/theme.css" />
@@ -102,7 +111,7 @@
     <div id="hud">loading…</div>
     <div id="hud2" class="">
       <span id="say" style="font-size: 0.8rem; color: var(--text-mute, #7a9a7a)"
-        >A/D or ← → walk 120px/s · <b>hold W/↑ to RUN 225px/s</b> — on a ladder
+        >A/D or ← → walk 180px/s · <b>hold W/↑ to RUN 330px/s</b> — on a ladder
         the same key climbs, one RUNG at a time: 35px a four-frame tag, which is
         the ladder record's own param, and the sign of that param is the ladder
         art's mirror flag and so which side of the pole you hang on — and standing
@@ -110,7 +119,7 @@
         K KICK · P PUNCH — the original's own keys and its own labels, from the
         table at 0x46b210 joined to the action handlers at 0x402d54 in SC.EXE ·
         on a touchscreen the same eight actions are a PAD over the picture — the
-        four directions at the left, PUNCH, KICK and JUMP at the right, one
+        four directions at the left, INV, JUMP, PUNCH and KICK at the right, one
         thumb each and two keys at once for the headbutt; `?pad=1` shows it on a
         desktop and `?pad=0` hides it on a phone · Ctrl+P INTERFACE / full screen (SC.EXE's own toggle) · the chooser above, or [ ]
         switch level · N next spawn point (SC.EXE's own unbound action 10) · P is 47 and K is 55 — the striking cel's own speed, which is what damage IS in this engine (0x42f910), so a punk with 250 takes six punches, a mailbox dents at 10 and springs back, and topples on its side for good at 55 — a hydrant is not smashed but OPENED, three quarter-turns of the valve on its cap and it lets go of a jet of water that is its own object beside it, while the hydrant itself shuts and can be turned again — and flies most of a screen doing it, because 0x430470 is a real elastic collision with obj+0xe as the mass (you 12, a mailbox 7), and every blow sprays one gob of goo per six points of it, which arcs, lands and spreads into one puddle · things on the FLOOR are below the fist: a rat's box tops out two pixels above where the punch's bottoms out, so it takes S+K, the duck-kick, whose boot box is on the ground — and one blow of any size launches a rat nine cels through the air · a punk's body lies there for fifty frames and then leaves a green ball (0x40cba0's -13 branch); a rat leaves none, and furniture does not bleed at all · CITY is a staircase of rooftops with no floor: its PLANKS give you six crossings and then drop you (six sags of cel 1050..1053 and it is gone, at three times your gravity), its CROWS sleep on a rooftop until you walk into their own rect and then hold a height a hundred pixels over you — they keep the x the level gave them, because no frame of any crow script carries a dx, and one blow of any size kills one · a level ends the way the game ends one: kill the mission's share of what stands and a flying television comes down to the goal; walk to it and the next mission's briefing film plays · ?clock=N starts the eight-minute mission clock short · fall out of the world (CITY has no floor: its ground is 2900px below anything it draws) and it costs a life, one of the seven KILL films plays, and the level starts again

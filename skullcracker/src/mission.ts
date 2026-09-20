@@ -46,12 +46,13 @@
  * Each stage's case in its chapter's sequencer names its own `chp{NN}.mov` — and
  * a `boggs{NN}.mov` beside it, and for the first stage of each chapter one more
  * (`Bomb.Mov`, `Mall.Mov`, `Belfry.Mov`, `Cycle.Mov`). They are queued one after
- * another through `0x40e330` (clear) and `0x40e990` (play and wait), and the
- * order of the pushes is the order they are seen in: the chapter's opener if it
- * has one, then `boggs{NN}`, then `chp{NN}`. So Boggs says his piece on the
- * flying screen FIRST and the skull that names the next level follows him —
- * `0x44d794`/`0x44d7b9`/`0x44d7de` for the first stage, `0x436a8b`/`0x436ab0`
- * for a mid-chapter one.
+ * another through `0x40e330` (clear) and `0x40e990` (play and wait), so the
+ * order of the pushes is the order they are seen in: Boggs says his piece on the
+ * flying screen and the skull that names the next level follows him —
+ * `0x44d7b9`/`0x44d7de` for the first stage, `0x436a8b`/`0x436ab0` for a
+ * mid-chapter one. The opener goes between those two in three chapters out of
+ * four and ahead of both in the first; {@link Mission.opener} has all twelve
+ * pushes, and {@link Mission.films} is the order itself.
  *
  * When the clock runs out instead, `0x40e9d0` picks one of `TIME1.MOV`…`TIME4.MOV`
  * with `0x434540(4)` — the same random helper the punch tosses for a variant with
@@ -80,11 +81,34 @@ export interface Mission {
    * (clear) and `0x40e990` (play and wait), so the order of the pushes is the
    * order they are seen in: Boggs on the flying screen, then the card.
    *
-   * The first stage of each chapter queues one more BEFORE both — `0x44d794`
-   * pushes `Bomb.Mov` ahead of Boggs — and those four openers (`Bomb.Mov`,
-   * `Mall.Mov`, `Belfry.Mov`, `Cycle.Mov`) are read here but not yet played.
+   * The first stage of each chapter queues one more — see {@link Mission.opener}.
    */
   boggs: string;
+  /**
+   * The chapter's own opener, on the first stage of each chapter and nowhere
+   * else: `Bomb.Mov`, `Mall.Mov`, `Belfry.Mov`, `Cycle.Mov`.
+   *
+   * WHERE it sits was read wrong here for as long as it went unplayed. This
+   * file said the opener is queued "BEFORE both", on the strength of chapter
+   * one — and chapter one is the exception. The four cases, each decoded at its
+   * own push:
+   *
+   * ```
+   *   44d794 Bomb.Mov    44d7b9 Boggs01.Mov  44d7de Chp01.Mov
+   *   4369f4 Boggs05.Mov 436a19 Mall.Mov     436a3e Chp05.Mov
+   *   41f354 Boggs09.Mov 41f379 Belfry.Mov   41f39e Chp09.Mov
+   *   4126e4 Boggs13.Mov 412709 Cycle.Mov    41272e Chp13.Mov
+   * ```
+   *
+   * Every one of the twelve is the same four instructions — `0x40e330(0)` to
+   * clear the queue, `0x404440` to resolve the name, `0x40e990` to play it and
+   * wait — so the order of the cases IS the order they are seen in, and only
+   * chapter one leads with its opener. {@link Mission.films} is that order,
+   * which is what a caller should walk rather than assembling one of its own.
+   */
+  opener?: string;
+  /** the briefing's films, in the order the stage's own case queues them */
+  films: readonly string[];
   /**
    * The share of the level's population the quota wants dead.
    *
@@ -109,13 +133,34 @@ const SHARES: readonly (readonly [number, string])[] = [
 ];
 
 /** the sixteen missions, in the order they are played */
+/**
+ * The opener each chapter's first stage carries, by the level it opens on.
+ *
+ * Level 1 is chapter one and leads with it; 5, 9 and 13 open their chapters
+ * with Boggs and play theirs second. See {@link Mission.opener}.
+ */
+const OPENERS: Readonly<Record<number, string>> = {
+  1: "bomb.mov",
+  5: "mall.mov",
+  9: "belfry.mov",
+  13: "cycle.mov",
+};
+
 export const MISSIONS: readonly Mission[] = LEVEL_ORDER.map((book, i) => {
   const nn = String(i + 1).padStart(2, "0");
+  const number = i + 1;
+  const film = `chp${nn}.mov`;
+  const boggs = `boggs${nn}.mov`;
+  const opener = OPENERS[number];
   return {
     book,
-    number: i + 1,
-    film: `chp${nn}.mov`,
-    boggs: `boggs${nn}.mov`,
+    number,
+    film,
+    boggs,
+    opener,
+    // chapter one leads with its opener and the other three do not — the four
+    // cases are quoted in `Mission.opener`
+    films: opener === undefined ? [boggs, film] : number === 1 ? [opener, boggs, film] : [boggs, opener, film],
     kill: SHARES[i][0],
     from: SHARES[i][1],
   };

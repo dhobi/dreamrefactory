@@ -516,6 +516,14 @@ export interface Foe {
    * {@link file://./effects.ts} for the eleven cels.
    */
   vanishes?: boolean;
+  /**
+   * ...and it leaves its BOARD behind — `0x438450`, see `SKATEBOARD`.
+   *
+   * Two of the gang carry one: `0x4383d9` drops it out of `initknotboy`'s hit
+   * handler and `0x43a6f9` out of `initknifeboy`'s, both on the frame the thing
+   * dies and neither anywhere else.
+   */
+  drops?: "skateboard";
   /** the four functions above, for whoever checks this */
   from: string;
 }
@@ -924,8 +932,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    *
    * Fifty health, the most of the three, and worth the least — eighty, against
    * the masked one's 220 and the bat's 250. It drops its board when it dies
-   * (`0x438450` builds cels 2300 and 2302..2311 on their own script), which this
-   * page does not yet pick up.
+   * (`0x438450` builds cels 2300 and 2302..2311 on their own script). See
+   * `SKATEBOARD` for what that board then does.
    *
    * The three of them share a handler shape that says a good deal about the
    * chapter: six classes are named in an ignore list so they cannot hurt each
@@ -971,6 +979,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     vanishes: true,
+    drops: "skateboard", // `0x4383d9`
     from: "0x4361e0 / 0x437a50 / 0x437c00 / 0x438260",
   },
   /**
@@ -1003,7 +1012,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * switch the wrong way feeds the level.
    *
    * It drops a skateboard when it dies — `0x43a6f9` calls `0x438450`, the same
-   * maker the third one uses — and that is not here.
+   * maker the third one uses. See `SKATEBOARD`.
    */
   initknifeboy: {
     lever: {
@@ -1045,6 +1054,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     vanishes: true,
+    drops: "skateboard", // `0x43a6f9`
     from: "0x4363c0 / 0x439bd0 / 0x439ca0 / 0x43a580",
   },
   /**

@@ -44,6 +44,7 @@ import {
   install,
   type Brain,
   type BrainCtx,
+  type CastKit,
   type Enemy,
   TICK_SCALE,
 } from "./kit";
@@ -170,13 +171,48 @@ export const VPRIEST = {
    *   **100 along its facing** (`+100` east, `−100` west), carrying the bishop's
    *   `obj+0x28` as its own.
    */
+  /**
+   * ...and its strength, which an earlier reading of this page had as never
+   * written and which is in fact written on **every path of the think**.
+   *
+   * `0x426d60` dispatches on the kind, and all four arms of that dispatch —
+   * the two returns and both falls — land on the same two instructions:
+   *
+   * ```
+   *   426e1e  mov word ptr [esi+0x1a], 0x64   ; a hundred, every frame
+   *   426e24  mov ax, di                      ; ...and di is the die flag
+   * ```
+   *
+   * It is the class's tail rather than a branch of it, which is why looking for
+   * it inside the arms found nothing. The same shape as the bishop ITSELF —
+   * `0x425d69` is `mov word ptr [esi+0x1a], 0x64` beside an `xor ax, ax` — and
+   * the same hundred. So the bolt is the hardest thing thrown in the game, on a
+   * level with the boss's fireball, and the earlier "harmless, or read
+   * somewhere this reading has not found" is resolved: it was the tail.
+   *
+   * The rest was already read. `0x426bc0` stands it a hundred in front and
+   * thirty-five up, copies the facing, and installs `0x46f908` tag 0 — `dx 600`
+   * over the class's own divisor of 13, so 46 pixels an engine frame;
+   * `0x426c97` gives the class no weight, so it flies flat; `0x426db3` takes it
+   * away on any collision word or at a thousand pixels from the player, the
+   * same reach the spitter's gob keeps; and its hit handler `0x426e30` is
+   * `mov ax, 1` — anything destroys it.
+   */
   bolt: {
     cel: 2700,
     divisor: 13,
     dx: 600,
     up: 0x23,
     ahead: 0x64,
-    from: "0x426bc0 / 0x46f908 tag 0",
+    /** 46 a frame: `dx 600` over `obj+0xe = 0xd` (`0x426c9d`) */
+    speed: 46,
+    /** `0x426ddd` — `|self.x − player.x| > 0x3e8`, the gob's own rule */
+    reach: 0x3e8,
+    /** `0x46f908` tag 1, which `0x426d9a` installs when the launch ends */
+    flight: [2700, 2701, 2702, 2703, 2704],
+    /** `0x426e1e` — the think's own tail, on every path of it */
+    strength: 0x64,
+    from: "0x426bc0 / 0x46f908 tag 0, class 0x426c80",
   },
   /**
    * ...and what the summon lets go: **three bats**, the very class `initbat`
@@ -205,6 +241,27 @@ export const VPRIEST = {
   },
   from: "0x425c90",
 } as const;
+
+/**
+ * The bolt in the air — {@link VPRIEST.bolt} as the page flies one.
+ *
+ * Two cels' worth of script and no arc: tag 0 is the single launch frame whose
+ * `dx 600` becomes the whole of its speed, and tag 1 — which `0x426d9a`
+ * installs the frame that launch ends — is the five it spends the rest of its
+ * flight on. No `then` strides, because no frame of either tag carries one
+ * after the first.
+ */
+export const VPRIEST_BOLT: CastKit = {
+  cels: [VPRIEST.bolt.cel],
+  hold: 1,
+  speed: VPRIEST.bolt.speed,
+  ahead: VPRIEST.bolt.ahead,
+  lift: VPRIEST.bolt.up,
+  blow: VPRIEST.bolt.strength,
+  reach: VPRIEST.bolt.reach,
+  then: { cels: VPRIEST.bolt.flight, hold: 1 },
+  from: "0x426bc0 / 0x46f908, class 0x426c80",
+};
 
 /**
  * `0x425bdd` — `obj+0xe` is ten, and `0x42f8b0` divides every velocity delta by
@@ -461,13 +518,13 @@ function attack(
      *
      * Fourteen cels with both velocities halved under every one of them, so it
      * hangs still while it casts. `0x425fb2` hands to the recoil, calls out on
-     * `0x1b`, and `0x425fd6` is `0x426bc0` — the bolt. See {@link VPRIEST.bolt}:
-     * a brain has no creator, so the bolt is documented and not made here.
+     * `0x1b`, and `0x425fd6` is `0x426bc0` — the bolt. See {@link VPRIEST.bolt}.
      */
     case 0:
       halve(e);
       if (!done) return false;
       k.say(e, VPRIEST.hurl);
+      k.cast(e, VPRIEST_BOLT); // `0x425fd6`
       return install(e, VPRIEST.recoil, true);
     // ---- tag 1, `0x425fe3`: the recoil shuffles back on its own dx and is done
     case 1:

@@ -69,6 +69,11 @@
 #pad .down {
   grid-area: 3 / 2;
 }
+/* the strikes' 2x2: INV over PUNCH and JUMP over KICK, so the two blows are the
+   pair under the thumb and the two holds are the row above them */
+#pad .inv {
+  grid-area: 1 / 1;
+}
 #pad .jump {
   grid-area: 1 / 2;
 }

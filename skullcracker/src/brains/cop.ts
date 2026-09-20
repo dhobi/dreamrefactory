@@ -119,7 +119,7 @@
  * this brain returns `false`.** Returning `true` would freeze the thing
  * mid-swing with its stride unspent.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import { install, type Brain, type BrainCtx, type CastKit, type Enemy } from "./kit";
 import type { FoeAnim } from "../foes";
 
 /**
@@ -163,6 +163,56 @@ const NOT_HERE = "0x41440e, 0x4145b0, 0x414696" as const;
  * disc's own mark for a frame that hits — see {@link FIGHTS}`.initcop`, which
  * reads the same four travelling ones off the same script.
  */
+/**
+ * The slug — `0x414740`, and the class it belongs to is `0x413ce0`.
+ *
+ * ## What the creator writes
+ *
+ * ```
+ *   414751  class [0x46c620], 4 bytes of AI          the object
+ *   414768  AI+2 = 0x64                              a hundred frames to live
+ *   414771  obj+6 = cop's point                      the cop's own Y, unlifted
+ *   41478e  obj+8 += mirror ? -100 : +100            a hundred pixels in front
+ *   4147a0  obj+0xc = mirror ? -35 : +35             and that is its speed
+ *   4147c2  0x45d090(obj, 0x46c608, 0)               its script, tag 0
+ * ```
+ *
+ * `0x413cf8` — the create — gives it `obj+0xe = 5`, the chapter's own bank at
+ * `0x4a5178`, a restitution of 0.4 and no weight at all, so it flies flat.
+ * Nothing divides the 35: `0x42f8b0` divides a SCRIPT's stride by `obj+0xe`,
+ * and the creator writes the velocity itself.
+ *
+ * ## The two tags, which are the whole of it
+ *
+ * `0x46c608` is one cel per tag and no stride either side — 2240 and 2241 —
+ * and the think function `0x413dd0` swaps them:
+ *
+ * - **tag 0** holds `obj+0x1a` at **zero** (`0x413e43`) and measures
+ *   `|player.x − self.x|` every frame. A slug crossing the room hurts nothing.
+ * - inside `0x82` = **130 pixels** it installs tag 1, and `0x413e79` writes
+ *   `obj+0x1a = 0x64`. Now it is a hundred points of blow with a second cel on
+ *   it, and the install is one-way.
+ *
+ * ## And what takes it away
+ *
+ * Any of the four collision words (`0x413dd5`..`0x413df6`), a velocity that
+ * disagrees with the mirror flag — which is what the restitution does to one
+ * that bounces (`0x413e01`..`0x413e1b`) — or the hundred frames running out
+ * (`0x413e21`). There is no distance test: a slug that misses leaves the level
+ * and keeps going until its count does.
+ */
+export const COP_SLUG: CastKit = {
+  cels: [2240],
+  hold: 1,
+  speed: 35,
+  ahead: 100,
+  lift: 0,
+  blow: 0x64,
+  life: 100,
+  arm: { within: 0x82, cel: 2241 },
+  from: "0x414740, script 0x46c608, class 0x413ce0",
+};
+
 export const COP = {
   /** kind 0 — one cel, no stride: the whole patrol, and state 0 */
   stand: { cels: [2100], hold: 1, kind: 0, tag: 0, from: "0x46c628 tag 0" },
@@ -402,10 +452,8 @@ export const cop: Brain = (e, foe, run, k) => {
      * ---- 2, `0x41424f`: the slug gun, which is three scripts in a row.
      *
      * Up, the one frame that fires, down, and back to the stance. `0x4142ac`
-     * calls `0x414740`, which allocates from class `[0x46c620]`, stands it a
-     * hundred pixels ahead of the cop on cels 2240/2241 and gives it
-     * `obj+0xc = ±35` — the slug. **Nothing in this port hits the player**, so
-     * the shot is read and the sound is played and no projectile is made.
+     * calls `0x414740` — the slug, and {@link COP_SLUG} is what that function
+     * and the class behind it say.
      */
     case 2:
       switch (e.tag ?? 0) {
@@ -415,6 +463,8 @@ export const cop: Brain = (e, foe, run, k) => {
           if (!done) return false;
           install(e, COP.lower, true);
           k.say(e, COP.slug);
+          // `0x4142ac` — the shot itself, at the instruction that fires it
+          k.cast(e, COP_SLUG);
           return false;
         case 2:
           return done ? install(e, COP.stance) : false;
