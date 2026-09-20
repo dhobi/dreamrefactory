@@ -598,21 +598,46 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   ): boolean => {
     const set = session.currentBinding?.set;
     const named = fromName !== "resume";
-    const rec = set?.starPaths.find((p) => {
-      const pa = p.a.toLowerCase();
-      const pb = p.b.toLowerCase();
-      return named
+    const matches = (pa: string, pb: string): boolean =>
+      named
         ? (pa === fromName && pb === toName) || (pb === fromName && pa === toName)
         : pa === toName || pb === toName;
-    });
-    if (rec && set) {
+    const rec = set?.starPaths.find((p) => matches(p.a.toLowerCase(), p.b.toLowerCase()));
+    /**
+     * The open set first, because its record is the live one — and then every
+     * set that has been visited, because the script that starts a walk need not
+     * be running in the room the walk happens in.
+     *
+     * That second half is #394, and it is the same argument
+     * {@link GameSession.starRegistry} already makes for the DESTINATION: Dust
+     * starts the Mayor's Wife's street patrol from inside the saloon
+     * (`SALLOWER.SET`'s door `keydown`, which runs `setupactor ("street")` and
+     * only then `gototown`), so the star was found and the route was not, and
+     * she walked her first leg straight through the buildings. Nothing else
+     * would have re-started that patrol either: her `mwifeidle` has arms for the
+     * `jones` stars alone, so the mwife1<->mwife2 ping-pong lives entirely in
+     * `endwalk`, which only fires if this first walk happens.
+     *
+     * Only on a DreamFactory 1 set, and that is the point of the guard rather
+     * than caution: Dust's star names are QUALIFIED (`town.mwife1`), so a name
+     * means one place in the whole game, while Titanic's are bare (`jones1`) and
+     * a room's route table is the only thing that disambiguates them.
+     */
+    const route = rec
+      ? { a: rec.a.toLowerCase(), b: rec.b.toLowerCase(),
+          points: readStarPath(set!.file.containers, rec.container, set!.version) }
+      : set?.version === 1
+        ? [...session.starPathRegistry.values()].find((p) => matches(p.a, p.b)) ?? null
+        : null;
+    if (route) {
       // a star's (X, Z, Y) into the world triple a walk record uses: worldY is the
-      // ground plane's second axis and worldZ the height, as walktostar builds it
-      let points = readStarPath(set.file.containers, rec.container, set.version)
-        .map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev }));
+      // ground plane's second axis and worldZ the height, as walktostar builds it.
+      // Copied rather than read in place: the registry's points outlive this walk
+      // and the reversal below rewrites them.
+      let points = route.points.map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev }));
       // the polyline is stored a->b; walk it backwards when the destination is
       // the `a` end (TI.EXE's second match arm in both lookups)
-      if (rec.a.toLowerCase() === toName) {
+      if (route.a === toName) {
         points.reverse();
         // A point's `fromPrev` is the length of the leg BEHIND it, so reversing
         // the polyline has to carry each length one point along — the leg that

@@ -1,6 +1,6 @@
 import { readContainerFile } from "../df/container";
 import { RawSaveFile } from "../df/savegame";
-import { Actor, SetFile, readSetFile } from "../df/set";
+import { Actor, SetFile, StarPathPoint, readSetFile, readStarPath } from "../df/set";
 import { detectVersion } from "../df/version";
 import { readSetFileAsV4 } from "../df/set-v1-to-v4";
 import { readShpFile } from "../df/shp";
@@ -125,6 +125,17 @@ export const isMoveSpeed = (s: unknown): s is MoveSpeed =>
  * engine primitives `opensetfile(name, scene, view)` / `closesetfile()`, which
  * are builtins registered by the host (SetScripts wires them to onSetChange).
  */
+/**
+ * One authored route between two stars, resolved — see
+ * {@link GameSession.starPathRegistry}. Names are lowercased; the points are in
+ * the record's own `a` -> `b` order, as the SET stores them.
+ */
+export interface StarRoute {
+  a: string;
+  b: string;
+  points: StarPathPoint[];
+}
+
 export class GameSession {
   readonly interp = new Interpreter();
   readonly audioLib = new AudioLibrary();
@@ -156,6 +167,30 @@ export class GameSession {
    * town is always visited before anybody walks about in it.
    */
   readonly starRegistry = new Map<string, Actor>();
+  /**
+   * The AUTHORED ROUTES of every set that has been bound, resolved to their
+   * points — the route half of {@link starRegistry}, and it exists for the same
+   * reason: the script that starts a walk is frequently not running in the room
+   * the walk happens in.
+   *
+   * Dust's Mayor's Wife is the case that found it (#394). Her street patrol is
+   * started from INSIDE THE SALOON — `SALLOWER.SET`'s `keydown` on the door runs
+   * `sendtoactor ("mwife", setupactor ("street"))`, whose body ends in
+   * `moveactor ("town.mwife2")`, and only afterwards does `gototown` change the
+   * set. The star resolved (that is what {@link starRegistry} is for) but the
+   * ROUTE lookup asked the open set, which is the saloon, so she set off in a
+   * straight line and walked through the buildings. The disc's own saves say
+   * that is not what DF.EXE did: `D1E_005` and `D1E_006` are taken during this
+   * very patrol and both carry `hasPath` with the star sentinel `walkonpath`.
+   *
+   * Points rather than the SET: a Dust set is tens of megabytes of scenery and
+   * holding one per room visited to keep twelve polylines would be a memory leak
+   * with a route table in it.
+   *
+   * Keyed `a|b` in the record's own order; a lookup tries both ends, exactly as
+   * the open set's table is searched.
+   */
+  readonly starPathRegistry = new Map<string, StarRoute>();
   /**
    * What the native plugin bus is holding — Timelapse's `plugin`/`pluginfx`
    * (engine/src/runtime/plugins.ts). Empty for Titanic and Dust, which name no
@@ -2492,6 +2527,31 @@ export class GameSession {
     } catch (e) {
       this.onLog(`${fileName}: ${(e as Error).message}`);
       return null;
+    }
+  }
+
+  /**
+   * Remember a set's authored routes, now that the set is in hand — the route
+   * half of the `starRegistry` line in the viewer's bind, and called from
+   * {@link SetScripts}'s constructor, which is the one place both the page and a
+   * headless binding pass through.
+   *
+   * Cheap: the corpus's biggest table is twelve routes of a few points each, and
+   * a set is bound once per visit. A route already known is replaced rather than
+   * doubled — Dust's `town.set` and `nite.set` are the same streets by day and by
+   * night and carry the same twelve pairs, so the one last walked in is the one
+   * kept, which is also the one whose geometry is on screen.
+   */
+  rememberStarPaths(set: SetFile): void {
+    for (const p of set.starPaths) {
+      const a = p.a.toLowerCase();
+      const b = p.b.toLowerCase();
+      // an unpaired star is not a route, and neither engine's lookup treats one
+      // as a match (see startPathWalk)
+      if (!a || !b || !p.container) continue;
+      const points = readStarPath(set.file.containers, p.container, set.version);
+      if (points.length < 2) continue;
+      this.starPathRegistry.set(`${a}|${b}`, { a, b, points });
     }
   }
 
