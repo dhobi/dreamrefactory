@@ -160,6 +160,7 @@ import {
   install,
   type Brain,
   type BrainCtx,
+  type CastKit,
   type Enemy,
   TICK_SCALE,
 } from "./kit";
@@ -198,6 +199,52 @@ const NOT_HERE = "0x43d062, 0x43d0c5, 0x43d250" as const;
  * pixels an engine frame. Nothing in the class carries a `dy`: this thing never
  * leaves the ground, and what travels instead is the object its throw spawns.
  */
+/**
+ * What it throws — `0x43d190`, class `0x43c770`, script `0x474870`.
+ *
+ * ```
+ *   43d1d0  obj+8 += mirror ? -60 : +60          sixty in front
+ *   43d1ea  obj+6 -= 0x46   (tag 0)              ...and seventy UP
+ *   43d1f7  obj+6 += 0x19   (tag 1)              ...or twenty-five DOWN
+ *   43d220  0x45d090(obj, 0x474870, 0)           its script, tag 0
+ * ```
+ *
+ * So the two tags of the thrower's own state are a high throw and a low one,
+ * and each is a different thing to duck or jump. The class (`0x43c787`) gives
+ * it a divisor of **1**, the knifeboy's bank, `obj+0x1a = 0x64`, and
+ * `0x43c7c3` pushes 0.23f — `obj+0x24` = 2, so it droops like the knife does.
+ * Tag 0 is one cel at `dx 80`, undivided: eighty pixels a frame.
+ *
+ * `0x43c860` is its think and it does one thing this page keeps: `obj+0x2a`
+ * set — it has hit something — and the strength goes to **zero** the same
+ * frame, so a thing that has already struck cannot strike twice. Landing
+ * (`obj+0x2e`) installs `0x474910`, four cels of it coming apart.
+ *
+ * **Not modelled:** `0x43c917`'s fork. When the launch frame ends it rolls
+ * `0x434540(0x64)` and under 30 takes tag 4 (cels 2114, 2115) rather than the
+ * ordinary tag 2, which is the same object tumbling a different way. The page
+ * flies the common one. Written down rather than left out.
+ */
+export const HARDCORE_THROW: CastKit = {
+  /** `0x474870` tag 0 — the launch, one cel */
+  cels: [2100],
+  hold: 1,
+  /** `dx 80` over the class's own divisor of 1 */
+  speed: 80,
+  /** `0x43c7c3`'s 0.23f through `0x42f850` */
+  pull: 2,
+  /** `0x43d1d0` */
+  ahead: 60,
+  /** `0x43d1ea` — the HIGH throw, which is the tag this page throws */
+  lift: 0x46,
+  blow: 0x64,
+  /** `0x474870` tag 2, the ordinary flight */
+  then: { cels: [2101, 2102, 2103], hold: 1 },
+  /** `0x474910` tag 0 — it coming apart where it lands */
+  impact: { cels: [2104, 2105, 2106, 2107], hold: 1 },
+  from: "0x43d190, script 0x474870, class 0x43c770",
+};
+
 export const HARDCORE = {
   /**
    * kind 0 — one cel at one frame, and the only script the class is ever born
@@ -437,8 +484,8 @@ export const hardcore: Brain = (e, foe, run, k) => {
         return install(e, HARDCORE.swipe, true);
       }
       if (!done) return false;
-      // `0x43d190(obj, obj+0x44)` — the thrown object. Read, not spawned: it is
-      // class `[0x474938]`, and nothing in this port hits the player.
+      // `0x43cf97` — the thing leaves here, on the frame the wind-up ends
+      k.cast(e, HARDCORE_THROW);
       e.decisions = (e.decisions ?? 0) + 1; // `0x43cf9c`
       return install(e, HARDCORE.stance);
     }

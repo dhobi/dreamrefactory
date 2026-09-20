@@ -1727,9 +1727,15 @@ export interface Hole {
  *
  * Its blow strengths are `0xfffd` and `0xfff9` — **−3 and −7**. Those are codes
  * and not damage, the same kind of number `initbush`'s grab carries and the same
- * kind the flamethrower's flame carries; what they mean is the receiving
- * handler's business, and this port does not carry them. So a hand rises, holds
- * and sinks, and cannot yet take hold of anything.
+ * kind the flamethrower's flame carries, and this port does carry them:
+ * `takeHits` hands each hand's own code to `takeCode` along with a grip read
+ * from the cel it is holding (`gripAt`), so a hand that comes up under you
+ * takes hold and the two-second pause `0x4704b8` gives it is a hazard rather
+ * than a picture of one. `tests/browser/grave.ts` watches one come up on cel
+ * 1556 under the player's own feet.
+ *
+ * This note used to end "cannot yet take hold of anything", which was true when
+ * nothing in the port read a code at all.
  */
 export const HAND = {
   /** param 0 — `0x470400` tags 0 and 2, `0x4704b8` tag 1. 66px across */

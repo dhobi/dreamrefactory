@@ -81,6 +81,13 @@ const sweep = async (
   hold: { min: number; max: number },
   /** face it on the frames the gap is right — `0x43e0a0` throws at nobody else */
   face = false,
+  /**
+   * How long each sample takes. The default is a tenth of a second, which is
+   * plenty for a gob that crosses a room; the knifeboy's two live five and
+   * eight frames — a third of a second — and a slow sampler walks straight past
+   * them.
+   */
+  pace = 110,
 ): Promise<{ seen: Seen[]; health: number[]; met: number; reactions: Set<string> }> => {
   const seen: Seen[] = [];
   const health: number[] = [];
@@ -98,7 +105,7 @@ const sweep = async (
     const key = !Number.isFinite(him) ? "d" : gap > hold.max ? (him > me ? "d" : "a") : gap < hold.min ? (him > me ? "a" : "d") : null;
     if (key) {
       await page.keyboard.down(key);
-      await page.waitForTimeout(110);
+      await page.waitForTimeout(pace);
       await page.keyboard.up(key);
     } else if (face && Number.isFinite(him)) {
       // a tap towards it: enough to turn, not enough to close the gap
@@ -106,9 +113,9 @@ const sweep = async (
       await page.keyboard.down(toward);
       await page.waitForTimeout(25);
       await page.keyboard.up(toward);
-      await page.waitForTimeout(85);
+      await page.waitForTimeout(Math.max(0, pace - 25));
     } else {
-      await page.waitForTimeout(110);
+      await page.waitForTimeout(pace);
     }
     const t = await say();
     const c = await castNow(t);
@@ -271,6 +278,41 @@ const spread = Math.max(...hurled.seen.map((s) => s.y)) - Math.min(...hurled.see
 if (spread < 20) fail(`a thrown thing with weight 0.8 should rise and fall; its y moved ${spread}px`);
 console.log(`ok    the igor throws, and it arcs — ${hurled.seen.length} samples, cels ${hurledCels.join(",")}, ${spread}px of rise and fall`);
 
+// ---- 6 — the knifeboy, who throws TWO different things --------------------
+//
+// `0x43a26c` rolls `0x434540(4)` once as its wind-up ends and spends the answer
+// on both halves: 1 and 2 take `0x43a450` and its sound, 3 and 4 take
+// `0x43a500` and its. They share a class (`0x43c520`, divisor 2, weight 0.23)
+// and nothing writes either one a velocity — **the script is the velocity**:
+//
+//   the knife  `0x473670` tag 0 `dx 100`, then tag 1's `dx 0 50 0 50 0 0 0`
+//   the lob    `0x4736f8` tag 0 `dy -30`, then four cels of falling
+//
+// so the knife is the only cast in the game that gets FASTER as it flies, and
+// the lob is the only one that goes up before it comes down.
+await go(6, 1082, 8399);
+if (!/nearest initknifeboy/.test(await say())) fail(`SERVICE x1082 should stand by a knifeboy: ${(await say()).slice(0, 180)}`);
+// no facing tap and a wide hold: this class decides by band like the rest, and
+// a probe that walks at it continuously collapses the gap into the melee it
+// keeps for close quarters. Closing only when it is further than 240 is what
+// left it room to choose the throw.
+const knives = await sweep(320, "initknifeboy", { min: 80, max: 240 }, false, 35);
+if (!knives.seen.length) fail(`a knifeboy threw nothing in 320 samples (it was in the line ${knives.met} times)`);
+const knifeCels = [...new Set(knives.seen.map((s) => s.cel))].sort((a, b) => a - b);
+if (knifeCels.some((c) => c < 1870 || c > 1877)) fail(`both of its throws are cels 1870..1877; saw ${knifeCels.join(",")}`);
+if (knives.seen.some((s) => s.blow !== 0x64)) fail(`0x43c54a gives it a hundred; saw ${[...new Set(knives.seen.map((s) => s.blow))].join(",")}`);
+console.log(`ok    the knifeboy throws — ${knives.seen.length} samples, cels ${knifeCels.join(",")}`);
+
+// ---- 7 — and the hardcore lobs one over ------------------------------------
+await go(6, 6555, 7872);
+if (!/nearest inithardcore/.test(await say())) fail(`SERVICE x6555 should stand under the hardcore: ${(await say()).slice(0, 180)}`);
+const lobs = await sweep(260, "inithardcore", { min: 230, max: 330 }, true, 40);
+if (!lobs.seen.length) fail(`the hardcore threw nothing in 260 samples (it was in the line ${lobs.met} times)`);
+const lobCels = [...new Set(lobs.seen.map((s) => s.cel))].sort((a, b) => a - b);
+// `0x474870`'s launch and flight, and `0x474910`'s four cels of it coming apart
+if (lobCels.some((c) => c < 2100 || c > 2107)) fail(`its throw is cels 2100..2107; saw ${lobCels.join(",")}`);
+console.log(`ok    the hardcore throws one over — ${lobs.seen.length} samples, cels ${lobCels.join(",")}`);
+
 if (problems.length) fail(`the page threw: ${problems.join(" · ")}`);
-console.log(`PASS  five classes throw what their own machines throw`);
+console.log(`PASS  seven classes throw what their own machines throw`);
 await finish(browser);

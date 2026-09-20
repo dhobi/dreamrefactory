@@ -851,33 +851,22 @@ flight.
 
 ### What is read and not yet done
 
-- **The leaping attacks do not leap.** The `dy` is in the table — the punk's
-  flying kick is `-480` on the frame it leaves the ground — and nothing applies
-  it. Putting it straight into `y` sent WOODS' husk ninety-six pixels up, past
-  the reach of the floor test coming down, and nine thousand pixels out of the
-  level, still swinging. What it wants is the arc the casts now use: `0x42fd9e`
-  puts a velocity into the point whole and `0x430327` adds `trunc(weight * 10)`
-  to it every frame. The reading is settled; applying it to the player's own
-  states is the work that is left.
-- **A class that stands still keeps standing still.** If its own gait carries no
-  stride it does not close, and its attack's stride does not move it either.
-  LAB's ten `initarm` are the case — arms reaching out of a wall — and giving
-  them the walk their class data holds had all ten crawling across the floor.
-- **A keeper goes for its lever first.** `0x438200` finds the first unlit switch
-  inside the class's own rect, and that is the whole of level six; the shared
-  brain would otherwise march SERVICE's keepers at the player and leave it dry.
-  With nothing left to throw, they fight like everything else.
-- The band table is read as "the innermost band swings, the rest close", which is
-  what `initwerea`, `initdog`, `initwerec`, `initigor` and `initbat` do at their
-  last band. The casters do not: `initvpriest` throws from its OUTERMOST band,
-  because the thing it throws has the distance to cover. This page does not yet
-  tell a caster from a puncher.
-- The casters' band rule is still unread here — see the bullet above; what has
-  changed is only that the thing they would throw now exists.
-- The patrol still turns at the record's rect. The engine turns a hundred pixels
+This list was longer than it should have been, and most of what it named had
+quietly been built. Two checks settle it: **all thirty classes in `FOES` have a
+machine of their own in `src/brains/`**, so the shared "innermost band swings"
+reading no longer governs a single enemy in the game, and the leap the first
+bullet used to describe is applied — `walk.ts` spends an animation's `dy` as an
+IMPULSE into the thing's velocity on the frame it appears, which is what
+`0x42f8b0` does with it, and `tests/browser/fights.ts` watches `initwerea` leap.
+
+What is left:
+
+- The patrol turns at the record's rect. The engine turns a hundred pixels
   inside it (`0x44e68e`, `0x44e69f`) and only when the territory is wider than
-  three hundred, and that is left alone here on purpose — it moves every foe in
-  every level and belongs in its own change.
-- The decision budget (`AI+4`, seeded three at `0x450ad1` and spent a manoeuvre
-  at a time) is not spent. What puts a class back on its patrol here is the
-  player leaving its rect, which is state 0's own test read the other way round.
+  three hundred. Still deliberately alone: it moves every foe in every level and
+  belongs in its own change with its own regression.
+- The decision budget (`AI+4`) is spent by the classes whose own machines spend
+  it — the dog, the cop, the eye, the zombie, the hardcore, the boss of level
+  four and a dozen more read and write `e.decisions` — and is not a thing the
+  page applies over the top of them. What was once true of every class is now
+  true only of the ones whose machine never had one.

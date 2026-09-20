@@ -360,6 +360,22 @@ export interface CastKit {
    */
   range?: number;
   /**
+   * A stride per cel, in the SCRIPT's own units, spent through
+   * {@link CastKit.divisor}.
+   *
+   * The knife is the one that needs it: `0x473670` tag 1 carries
+   * `dx 0 50 0 50 0 0 0` across its seven cels, so the thing accelerates as it
+   * goes — `0x42f8b0` adds each one to the velocity as its frame comes round,
+   * and the velocity persists. Every other kit so far has a single speed for
+   * its whole flight because its script carries no stride at all.
+   */
+  strides?: readonly number[];
+  /**
+   * `obj+0xe` — what a script's stride is divided by on its way into the
+   * velocity. Only wanted where {@link CastKit.strides} is.
+   */
+  divisor?: number;
+  /**
    * What the launch cels give way to, and it LOOPS.
    *
    * The glob again: every even tag of `0x4725c0` is a launch and `0x43dbf7`
@@ -367,7 +383,7 @@ export interface CastKit {
    * for as long as the thing is in the air. A kit without this holds its last
    * cel instead, which is what a finished script does when nothing reinstalls.
    */
-  then?: { cels: readonly number[]; hold: number };
+  then?: { cels: readonly number[]; hold: number; strides?: readonly number[] };
   /**
    * Some of them fly HARMLESS until they are close, and this is that rule.
    *

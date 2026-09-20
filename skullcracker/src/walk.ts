@@ -8731,6 +8731,33 @@ function castCel(c: Cast): number {
   return then.cels[Math.floor(since / Math.max(1, then.hold)) % then.cels.length];
 }
 
+/**
+ * The stride the cel showing THIS frame carries, already divided.
+ *
+ * Only the frame a cel first comes up spends it: `0x45d1a3` walks the script one
+ * frame at a time and hands each frame's `dx` to `0x42f8b0` once. A cel held for
+ * two frames would otherwise be spent twice.
+ */
+function castStride(c: Cast): number {
+  const hold = Math.max(1, c.kit.hold);
+  const div = c.kit.divisor ?? 1;
+  const i = Math.floor(c.clock / hold);
+  const fresh = c.clock % hold === 0;
+  if (!fresh) return 0;
+  if (i < c.kit.cels.length) {
+    const dx = c.kit.strides?.[i] ?? 0;
+    return dx ? roundAway(dx / div) : 0;
+  }
+  const then = c.kit.then;
+  if (!then?.strides) return 0;
+  const hold2 = Math.max(1, then.hold);
+  const since = c.clock - c.kit.cels.length * hold;
+  if (since % hold2 !== 0) return 0;
+  const j = Math.floor(since / hold2) % then.cels.length;
+  const dx = then.strides[j] ?? 0;
+  return dx ? roundAway(dx / div) : 0;
+}
+
 /** what it would hit for — zero until it arms, which is the slug's whole design */
 function castBlow(c: Cast): number {
   return c.armed ? c.kit.blow : 0;
@@ -8762,6 +8789,11 @@ function stepCasts(): void {
       if (!smash || c.landed >= smash.cels.length * Math.max(1, smash.hold)) c.spent = true;
       continue;
     }
+    // ...the stride this frame's cel carries, if its script carries any.
+    // `0x42f8b0` adds `dx / obj+0xe` to the velocity as each frame comes round,
+    // rounded away from zero, and what it adds stays added
+    const stride = castStride(c);
+    if (stride) c.vx += c.facing * stride;
     c.clock += 1;
     // whole, not scaled: this runs on the ENGINE frame, like the bolts, and the
     // speed is what one call of `0x42f8b0` adds — see {@link CastKit.speed}
