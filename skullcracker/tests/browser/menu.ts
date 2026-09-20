@@ -314,9 +314,15 @@ if (!/char=1/.test(url)) {
     `rtpan.mov names its frame 1 as actionframe TWO, which is character 1 (0x45e374); the url says ${url}`,
   );
 }
-// ...and the page it reached is wearing that player
+// ...and the page it reached is wearing that player.
+//
+// Read, not WAITED FOR: the level's status line is the bench's, and on this page
+// it is created hidden (`handOver` in src/main.ts — a paragraph of coordinates
+// under the picture of a game somebody is playing is the bench leaking onto the
+// front door). `waitFor` wants it visible and would sit out its ninety seconds;
+// `textContent` reads an element that is merely attached, which is all this has
+// ever needed — and the loop above has already established that the level ran.
 const hud = page.locator("#hud");
-await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 90_000 });
 const wearing = (await hud.textContent()) ?? "";
 if (!/· char 1/.test(wearing))
   fail(
