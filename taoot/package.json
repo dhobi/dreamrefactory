@@ -17,6 +17,7 @@
     "test:browser:playthrough": "tsx tests/browser/playthrough.ts",
     "test:browser:lang": "tsx tests/browser/lang-chooser.ts",
     "test:browser:workbench": "tsx tests/browser/workbench.ts",
+    "test:browser:vr": "tsx tests/browser/bedsit-vr.ts",
     "test:browser:transitions": "tsx tests/browser/transition-hold.ts",
     "test:browser:seg": "tsx tests/browser/playthrough.ts",
     "test:browser:m0": "SEGMENTS=1 tsx tests/browser/playthrough.ts",

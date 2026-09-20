@@ -23,6 +23,8 @@ import {
   DESK, DESK_LAMP, furnish, MATERIALS, standardLampHead, STANDARD_LAMP,
 } from "./bedsit-furniture";
 import { CHIMNEYS, WIND } from "./bedsit-chimneys";
+import { lookAlong, perspective, view } from "./bedsit-optics";
+import { enterXR, inXR, type Room, xrSupported } from "./bedsit-xr";
 
 /**
  * The tonemap: the last thing that happens to every LIT pixel, and the reason
@@ -502,59 +504,12 @@ function compile(gl: WebGLRenderingContext, type: number, src: string): WebGLSha
   return sh;
 }
 
-function perspective(fovY: number, aspect: number, near: number, far: number): Float32Array {
-  const f = 1 / Math.tan(fovY / 2);
-  const m = new Float32Array(16);
-  m[0] = f / aspect; m[5] = f;
-  m[10] = (far + near) / (near - far); m[11] = -1;
-  m[14] = (2 * far * near) / (near - far);
-  return m;
-}
-
-/**
- * The world→camera matrix for an eye looking along `fwd` with `up` overhead.
- *
- * `view` below cannot do this job: it names a direction by yaw and pitch, and
- * two of a cube's six faces are straight up and straight down, where yaw stops
- * meaning anything and the up vector it derives collapses to zero.
- */
-function lookAlong(eye: readonly number[], fwd: readonly number[], up: readonly number[]): Float32Array {
-  const cross = (a: readonly number[], b: readonly number[]): number[] =>
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-  const dot = (a: readonly number[], b: readonly number[]): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const r = cross(fwd, up), rl = Math.hypot(r[0], r[1], r[2]) || 1;
-  const x = [r[0] / rl, r[1] / rl, r[2] / rl];
-  const y = cross(x, fwd);
-  const m = new Float32Array(16);
-  m[0] = x[0]; m[4] = x[1]; m[8] = x[2]; m[12] = -dot(x, eye);
-  m[1] = y[0]; m[5] = y[1]; m[9] = y[2]; m[13] = -dot(y, eye);
-  m[2] = -fwd[0]; m[6] = -fwd[1]; m[10] = -fwd[2]; m[14] = dot(fwd, eye);
-  m[15] = 1;
-  return m;
-}
-
-/** the world→camera matrix for an eye in GL space looking along `yaw`/`pitch`.
- *  Bearing is the game's: 0 is +x, and +y is on the right. */
-function view(eye: [number, number, number], yaw: number, pitch: number): Float32Array {
-  const cp = Math.cos(pitch);
-  const f: [number, number, number] = [Math.cos(yaw) * cp, Math.sin(pitch), Math.sin(yaw) * cp];
-  const r: [number, number, number] = [-Math.sin(yaw), 0, Math.cos(yaw)];
-  const u: [number, number, number] = [
-    r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0],
-  ];
-  const dot = (a: number[], b: number[]): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const m = new Float32Array(16);
-  m[0] = r[0]; m[4] = r[1]; m[8] = r[2]; m[12] = -dot(r, eye);
-  m[1] = u[0]; m[5] = u[1]; m[9] = u[2]; m[13] = -dot(u, eye);
-  m[2] = -f[0]; m[6] = -f[1]; m[10] = -f[2]; m[14] = dot(f, eye);
-  m[15] = 1;
-  return m;
-}
-
 // ---------------------------------------------------------------------------
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
 const hud = document.getElementById("hud") as HTMLElement;
+/** the one dim line along the bottom that says which keys there are */
+const keys = document.getElementById("keys") as HTMLElement;
 const splash = document.getElementById("splash") as HTMLElement;
 const loadButton = document.getElementById("load") as HTMLButtonElement;
 const note = document.getElementById("note") as HTMLElement;
@@ -581,7 +536,18 @@ function remembered(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }
 }
 const wantAA = remembered(AA_KEY) !== "0";
-const context = canvas.getContext("webgl", { antialias: wantAA, alpha: false });
+/**
+ * `xrCompatible` asks for the context on whichever GPU drives a headset.
+ *
+ * It costs nothing on a machine with one GPU and nothing on a machine with no
+ * headset, and it is asked for HERE rather than when the VR button is pressed
+ * because the other way of asking — `makeXRCompatible()` on a context that
+ * already exists — is allowed to answer by losing the context and making a new
+ * one. That is survivable at load and is not survivable twenty-five seconds
+ * into a room somebody is standing in. The button asks again anyway, and on a
+ * context that was born compatible the second ask is a formality.
+ */
+const context = canvas.getContext("webgl", { antialias: wantAA, alpha: false, xrCompatible: true });
 if (!context) throw new Error("this browser has no WebGL");
 const gl: WebGLRenderingContext = context;
 
@@ -791,6 +757,25 @@ const FACES = [
   [gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, [0, 0, -1], [0, -1, 0]],
 ] as const;
 
+/**
+ * What "the screen" is, which is not always the canvas.
+ *
+ * `null` is the default framebuffer, and for the whole of this page's life that
+ * was the canvas and there was nothing to think about. In a WebXR session it is
+ * not: the session draws into a framebuffer of its own, and `null` is a canvas
+ * nobody is looking at. The bake below borrows the binding — the furniture
+ * checkboxes re-run it, so it does that mid-session — and it has to give back
+ * what it took rather than what it assumed was there.
+ *
+ * Today the session's own loop would paper over a wrong restore, because it
+ * binds its framebuffer again at the top of every frame and nothing draws
+ * between the bake and the next one. That is luck, not a design: it holds only
+ * while no other drawing happens outside the frame loop, and the place to spend
+ * one line making it true is here, not in a comment explaining why it does not
+ * matter yet.
+ */
+let xrTarget: WebGLFramebuffer | null = null;
+
 function bakeShadow(lamp: Lamp, far: number): WebGLTexture {
   const { at: from, size } = lamp;
   const cube = gl.createTexture()!;
@@ -861,7 +846,7 @@ function bakeShadow(lamp: Lamp, far: number): WebGLTexture {
     }
   }
 
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, xrTarget);
   gl.deleteFramebuffer(fb);
   gl.deleteRenderbuffer(depth);
   gl.useProgram(prog);
@@ -1072,6 +1057,15 @@ const CLEARANCE = 380;
 const me = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
 let gravity = true;
 let fovY = 2 * Math.atan(132 / 256); // the SET's own optics: 54.7° up and down
+/**
+ * Where the room is clipped, in game units: 2.6 cm and 38.7 m.
+ *
+ * Named because a headset has to be told the same two planes and will only take
+ * them in metres — see `clip` in {@link file://./bedsit-xr.ts}. The far one is
+ * not slack: the street is a backdrop 8000 units behind the glass and the
+ * chimneys stand behind that, and they are the furthest thing this page draws.
+ */
+const CLIP = [40, 60000] as const;
 let standpoint = 0;
 /**
  * How the surfaces are painted: dressed, or bare.
@@ -1156,6 +1150,7 @@ addEventListener("keydown", (e) => {
    * reading. Hiding it with CSS alone would leave all of that going on behind
    * the blank. So the frame loop checks the same class and skips the work.
    */
+  if (k === "v") toHeadset();
   if (k === "x") hud.classList.toggle("hidden");
   if (k === "l") lightsPanel.classList.toggle("hidden");
   if (k === "f") furniturePanel.classList.toggle("hidden");
@@ -1419,6 +1414,115 @@ shadows.addEventListener("change", () => {
   if (taps > 0) gl.uniform1f(uShadowTaps, taps);
 });
 
+// ---------------------------------------------------------------------------
+// the headset
+// ---------------------------------------------------------------------------
+
+/**
+ * One button, and it is only ON the page where it can work.
+ *
+ * Two things have to be true before it is offered. The browser has to say an
+ * immersive session is possible at all — which is false in every browser with
+ * no headset behind it, and false again over plain http, headset or not. And
+ * the room has to have been handed over: the intro is a title card, a line of
+ * script and a piece of music, none of which exist inside a headset, so there
+ * is nothing to be gained by going in before the cut and a black screen to be
+ * gained by trying.
+ *
+ * Everything else about the page stays where it is. The lights, the furniture
+ * and the detail are DOM panels over a canvas, and a canvas is not what a
+ * headset shows — so whatever they were set to when the button was pressed is
+ * what the session is lit and dressed with. That is a real limit and not an
+ * oversight: an in-world panel is a second interface, and this is the first.
+ */
+const vrButton = document.getElementById("vr") as HTMLButtonElement;
+let headsetThere = false;
+void xrSupported().then((yes) => { headsetThere = yes; offerVR(); });
+
+/**
+ * The button appears when both halves are true, whichever lands last — and it
+ * brings a KEY with it, which is the half of this that is not decoration.
+ *
+ * This page takes pointer lock at the Start press and keeps it, because it is a
+ * page you look around by moving the mouse. A locked pointer does not have a
+ * position: every mouse event goes to the element that holds the lock, which is
+ * the canvas, and a button drawn over that canvas cannot be clicked at all. The
+ * cursor is not even drawn. So for most of this page's life the button is a
+ * sign rather than a control, and `Esc` — which the key list already offers —
+ * is what turns it back into one.
+ *
+ * `V` has no such problem: a keystroke reaches the document whether the pointer
+ * is locked or free. The button stays because it is the thing a visitor looks
+ * for and because it is the only way in on a screen that has no keyboard and no
+ * pointer lock either — a phone, and the flat browser inside a headset, which
+ * is exactly where somebody is standing when they want this.
+ *
+ * The key is announced only when there is a headset to use it on: a key list
+ * naming a key that does nothing is worse than a shorter key list.
+ */
+function offerVR(): void {
+  const offer = headsetThere && walking;
+  vrButton.hidden = !offer;
+  if (offer && !keys.querySelector("#vr-key")) {
+    keys.insertAdjacentHTML("beforeend", ' · <span id="vr-key"><kbd>V</kbd> headset</span>');
+  }
+}
+
+/** the taps the flat page was using, to be put back when the session ends */
+let tapsWas = 5;
+
+const headset: Room = {
+  gl,
+  me,
+  antialias: wantAA,
+  clip: CLIP,
+  program: prog,
+  locs,
+  draw: drawRoom,
+  inside,
+  enter(target) {
+    xrTarget = target;
+    vrButton.disabled = true;
+    vrButton.textContent = "in the headset";
+    document.exitPointerLock();
+    /**
+     * The shadows go to one tap for the session, and come back after.
+     *
+     * It is the only thing entering VR changes about how the room looks, and it
+     * is changed because the arithmetic leaves no choice: the five taps are the
+     * most expensive thing this shader does per pixel, and a session asks for
+     * every pixel twice at a frame rate that cannot be missed. One tap is the
+     * same shadow with a stair-stepped edge, which is a far smaller loss than a
+     * judder somebody is wearing on their face. Shadows turned OFF stay off —
+     * that is a choice, not a budget.
+     */
+    tapsWas = +shadows.value || 5;
+    if (tapsWas > 0) gl.uniform1f(uShadowTaps, 1);
+  },
+  leave() {
+    xrTarget = null;
+    vrButton.disabled = false;
+    vrButton.textContent = "VR";
+    if (tapsWas > 0) gl.uniform1f(uShadowTaps, tapsWas);
+    // `last` is reset because the flat loop measures `dt` from it, and the gap
+    // it would otherwise measure is the whole length of the session
+    last = performance.now();
+    requestAnimationFrame(frame);
+  },
+};
+
+function toHeadset(): void {
+  if (inXR() || vrButton.hidden) return;
+  vrButton.disabled = true;
+  void enterXR(headset).catch(() => {
+    // refused, or nothing answered. Nothing was taken, so there is nothing to
+    // put back — the button simply becomes pressable again.
+    vrButton.disabled = false;
+    vrButton.textContent = "VR";
+  });
+}
+vrButton.addEventListener("click", toHeadset);
+
 /**
  * The lights, on a phone.
  *
@@ -1463,10 +1567,24 @@ for (const [id, key] of [["pad-up", " "], ["pad-down", "c"]] as const) {
   for (const ev of ["pointerup", "pointercancel", "pointerleave"]) b.addEventListener(ev, () => held.delete(key));
 }
 
+/**
+ * The floor plan, as a clamp.
+ *
+ * Its own function because a session clamps something else with it: the flat
+ * page holds its CAMERA inside the room, and a headset has to hold the
+ * visitor's HEAD there instead — they can walk, and the play space they walk
+ * out of does not move with them.
+ */
+function inside(x: number, y: number): [number, number] {
+  return [
+    Math.max(ROOM.x0 + CLEARANCE, Math.min(ROOM.x1 - CLEARANCE, x)),
+    Math.max(ROOM.y0 + CLEARANCE, Math.min(ROOM.y1 - CLEARANCE, y)),
+  ];
+}
+
 /** the room is a box with a pitched lid: stay inside it, and duck under the slope */
 function confine(): void {
-  me.x = Math.max(ROOM.x0 + CLEARANCE, Math.min(ROOM.x1 - CLEARANCE, me.x));
-  me.y = Math.max(ROOM.y0 + CLEARANCE, Math.min(ROOM.y1 - CLEARANCE, me.y));
+  [me.x, me.y] = inside(me.x, me.y);
   const lid = ceilingAt(me.x, me.y) - 240;
   if (gravity) me.z = Math.min(EYE_HEIGHT, lid);
   else me.z = Math.max(ROOM.floor + 300, Math.min(lid, me.z));
@@ -1485,63 +1603,22 @@ let last = performance.now();
  * that way a single long frame counts for as much as it lasted rather than as
  * one sample among many, and the number settles instead of flickering.
  */
-let fps = 60;
-function frame(now: number): void {
-  const raw = Math.max(1, now - last);
-  fps += (1000 / raw - fps) * Math.min(1, raw / 500);
-  const dt = Math.min(0.05, (now - last) / 1000);
-  last = now;
-
-  // Nothing walks while the intro runs — see `walking`. The room is still
-  // DRAWN: it is what the splash fades off, and it has to be the composed
-  // opening view when it is uncovered, not wherever a held key took it.
-  if (walking) {
-    const speed = (held.has("shift") ? 4200 : 1700) * dt;
-    const fx = Math.cos(me.yaw), fy = Math.sin(me.yaw);
-    const step = (ax: number, ay: number): void => { me.x += ax * speed; me.y += ay * speed; };
-    if (held.has("w") || held.has("arrowup")) step(fx, fy);
-    if (held.has("s") || held.has("arrowdown")) step(-fx, -fy);
-    if (held.has("d") || held.has("arrowright")) step(-fy, fx);
-    if (held.has("a") || held.has("arrowleft")) step(fy, -fx);
-    // the finger on the stick: forward by its lift, sideways by its lean
-    if (stick.x || stick.y) step(fx * stick.y - fy * stick.x, fy * stick.y + fx * stick.x);
-    if (!gravity && held.has(" ")) me.z += speed;
-    if (!gravity && held.has("c")) me.z -= speed;
-    confine();
-  }
-
-  /**
-   * How many pixels to actually draw, which is the biggest lever this page has.
-   *
-   * Everything expensive here is PER PIXEL: five lamps, two analytic window
-   * sashes, and the shadow lookups. None of it is per triangle — 88,000
-   * triangles in 32 draw calls is nothing, and a slow machine draws them as
-   * fast as a quick one. So the honest fix for a machine that cannot keep up is
-   * to give it fewer pixels, and the cost falls with the SQUARE: three quarters
-   * is a little over half the work, a half is a quarter of it.
-   *
-   * The canvas keeps its size on the page; only the buffer behind it shrinks,
-   * and the browser scales it up — which is what every game's resolution slider
-   * does, and it costs nothing to change between frames.
-   *
-   * The scale is LINEAR and the saving is its square, which is why the low end
-   * runs so far down: a quarter is a sixteenth of the pixels and a tenth is a
-   * hundredth. A tenth is not meant to be looked at — it is meant to answer
-   * whether a machine is held back by pixels at all. If the frame rate does not
-   * move at a tenth, nothing that is drawn per pixel is the problem, and the
-   * cost is somewhere else entirely.
-   */
-  const dpr = Math.min(2, devicePixelRatio || 1) * renderScale;
-  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
-  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-  gl.viewport(0, 0, w, h);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-  const eye: [number, number, number] = [me.x, me.z, me.y]; // world (x,y,z) → GL (x,z,y)
-  const proj = perspective(fovY, w / h, 40, 60000), look = view(eye, me.yaw, me.pitch);
+/**
+ * The room, drawn once, from one eye.
+ *
+ * It used to be the second half of the frame loop, and it is a function of its
+ * own because a headset asks for it TWICE — once per eye, with a projection and
+ * a view apiece — and because the two callers own different things. What is
+ * NOT in here is the clear and the viewport: in stereo neither is the same for
+ * both eyes, and a clear per eye would wipe out the eye drawn before it.
+ *
+ * `at` is where the eye is in the room's own GL frame, which is not derivable
+ * from the view matrix cheaply and is two different points in a session.
+ */
+function drawRoom(proj: Float32Array, look: Float32Array, at: [number, number, number], seconds: number): void {
   gl.uniformMatrix4fv(uProj, false, proj);
   gl.uniformMatrix4fv(uView, false, look);
-  gl.uniform3fv(uEye, new Float32Array(eye));
+  gl.uniform3fv(uEye, new Float32Array(at));
   /**
    * TWO PASSES, and the second one is the only blended geometry in this room
    * apart from the smoke.
@@ -1607,7 +1684,67 @@ function frame(now: number): void {
   gl.uniform1f(uAlpha, 1);
   gl.depthMask(true);
   gl.disable(gl.BLEND);
-  drawSmoke(proj, look, now / 1000);
+  drawSmoke(proj, look, seconds);
+}
+
+let fps = 60;
+function frame(now: number): void {
+  // The headset has the room, and it drives its own loop at its own rate. A
+  // second loop drawing the same room into a canvas nobody is looking at would
+  // be competing for the GPU with the one that has somebody's eyes behind it.
+  if (inXR()) return;
+  const raw = Math.max(1, now - last);
+  fps += (1000 / raw - fps) * Math.min(1, raw / 500);
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+
+  // Nothing walks while the intro runs — see `walking`. The room is still
+  // DRAWN: it is what the splash fades off, and it has to be the composed
+  // opening view when it is uncovered, not wherever a held key took it.
+  if (walking) {
+    const speed = (held.has("shift") ? 4200 : 1700) * dt;
+    const fx = Math.cos(me.yaw), fy = Math.sin(me.yaw);
+    const step = (ax: number, ay: number): void => { me.x += ax * speed; me.y += ay * speed; };
+    if (held.has("w") || held.has("arrowup")) step(fx, fy);
+    if (held.has("s") || held.has("arrowdown")) step(-fx, -fy);
+    if (held.has("d") || held.has("arrowright")) step(-fy, fx);
+    if (held.has("a") || held.has("arrowleft")) step(fy, -fx);
+    // the finger on the stick: forward by its lift, sideways by its lean
+    if (stick.x || stick.y) step(fx * stick.y - fy * stick.x, fy * stick.y + fx * stick.x);
+    if (!gravity && held.has(" ")) me.z += speed;
+    if (!gravity && held.has("c")) me.z -= speed;
+    confine();
+  }
+
+  /**
+   * How many pixels to actually draw, which is the biggest lever this page has.
+   *
+   * Everything expensive here is PER PIXEL: five lamps, two analytic window
+   * sashes, and the shadow lookups. None of it is per triangle — 88,000
+   * triangles in 32 draw calls is nothing, and a slow machine draws them as
+   * fast as a quick one. So the honest fix for a machine that cannot keep up is
+   * to give it fewer pixels, and the cost falls with the SQUARE: three quarters
+   * is a little over half the work, a half is a quarter of it.
+   *
+   * The canvas keeps its size on the page; only the buffer behind it shrinks,
+   * and the browser scales it up — which is what every game's resolution slider
+   * does, and it costs nothing to change between frames.
+   *
+   * The scale is LINEAR and the saving is its square, which is why the low end
+   * runs so far down: a quarter is a sixteenth of the pixels and a tenth is a
+   * hundredth. A tenth is not meant to be looked at — it is meant to answer
+   * whether a machine is held back by pixels at all. If the frame rate does not
+   * move at a tenth, nothing that is drawn per pixel is the problem, and the
+   * cost is somewhere else entirely.
+   */
+  const dpr = Math.min(2, devicePixelRatio || 1) * renderScale;
+  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  gl.viewport(0, 0, w, h);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  const eye: [number, number, number] = [me.x, me.z, me.y]; // world (x,y,z) → GL (x,z,y)
+  drawRoom(perspective(fovY, w / h, CLIP[0], CLIP[1]), view(eye, me.yaw, me.pitch), eye, now / 1000);
 
   // the readout is a desk instrument: on a phone it is hidden, and X hides it
   // anywhere. Either way there is no sense writing a string nobody will read.
@@ -2530,6 +2667,7 @@ function writeLine(text: string): void {
 function reveal(): void {
   held.clear();                         // nothing pressed during the intro walks
   walking = true;
+  offerVR();                            // the second half of the button's two
   splash.classList.add("out");
   splash.addEventListener("transitionend", () => splash.classList.add("gone"), { once: true });
 }
