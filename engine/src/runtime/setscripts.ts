@@ -27,6 +27,9 @@ export class SetScripts {
     readonly session: GameSession,
   ) {
     session.currentBinding = this;
+    // ...and its authored routes are known from here on, wherever the script
+    // that starts a walk along one happens to be running (#394)
+    session.rememberStarPaths(set);
     /**
      * The set's OWN name, falling back to the opened file's basename.
      *

@@ -24,6 +24,7 @@ import {
   excuseUs, hold, offerInTalk, offerTo, openDoor, question, room, set, takeInHand,
   talkOut, walkTo, type Segment,
 } from "./route";
+import { sceneAt } from "./nav";
 
 export type { Segment } from "./route";
 import { rung as d2a006 } from "./rungs/d2a006";
@@ -1671,11 +1672,76 @@ export const segment13: Segment = {
     }
     if (!talking()) throw new Error("the Mayor never came over");
     await p.pump(() => !!p.session.puppet, "the Mayor to come over", 20_000);
-    // he accosts us where HE is now, which need not be outside the saloon, so
-    // the conversation is finished before the walk back rather than answered
-    // one reply at a time by `walkTo`'s own interruption handling
-    await talkOut(p, LEAVING, "the Mayor", 3);
-    await walkTo(p, town, { x: 6, z: 7, view: "south" }, undefined, 8);
+    /*
+     * ...and then LEAVING is half of ending it, because standing where he
+     * paces is standing inside `hasattention (6)`.
+     *
+     * His `shop ()` is a `while true` around its plaques whose only exit is
+     * **555**, which is also `mayorphase = 1` — a state this rung has no right
+     * to — so the way out is ESC (`talkOut`'s own, and `puppetevent` answers
+     * -1). That ends the conversation and nothing else: six seconds later
+     * `mayoridle` accosts again, and it will keep accosting for as long as we
+     * are next to him. So "a whole window with nothing on screen" is not
+     * something that can happen here at all while we wait for it — which is
+     * what it used to wait for, and what made this rung a draw from the seeded
+     * stream: it passed while he happened to accost from a cell far enough from
+     * where we then stood, and #394's route fix moved the stream enough to
+     * land him beside us instead.
+     *
+     * So: one closure is enough here, then walk out of his reach and let
+     * `walkTo` answer him if he catches us on the way (the Mayor is exactly the
+     * sort of interruption its `replies` exist for), and only then ask for
+     * quiet — from a cell where he can actually give it.
+     */
+    await talkOut(p, LEAVING, "the Mayor", 1);
+    /*
+     * ...and now stand where the save stands, which is the same cell he paces
+     * (`town.marie1` is Scene G8), so the walk and the conversation have to be
+     * taken in turns rather than one after the other.
+     *
+     * `talkOut` asks for QUIET — a whole window with nothing on screen — and
+     * beside him there is no such thing: his `shop ()` is a `while true` around
+     * its plaques whose only exit is **555**, which is also `mayorphase = 1` and
+     * a state this rung has no right to, so the way out is ESC, and six seconds
+     * later `mayoridle` accosts again. Waiting for quiet where he can reach us
+     * is waiting for something that cannot happen; it only ever passed because
+     * the seeded stream happened to put him a few cells further off, and #394's
+     * route fix moved the stream enough to park him beside us instead.
+     *
+     * So: leave each conversation as it opens, walk what we can between them,
+     * and stop when the standpoint is ours. `stopWhen` is how a walk hands the
+     * conversation back rather than answering it one reply at a time — his
+     * plaques are all in `LEAVING`, so a walk left to answer them cycles them
+     * forever. Ending inside a conversation is no bar: the save at the other end
+     * was taken in the middle of one, and what is compared is the standpoint.
+     */
+    const goal = { x: 6, z: 7, view: "south" };
+    const atGoal = (): boolean =>
+      p.session.currentSceneName()?.toLowerCase() === sceneAt(town, goal.x, goal.z).toLowerCase() &&
+      p.session.currentViewName()?.toLowerCase() === goal.view;
+    /**
+     * Get out of whatever he is saying — and only that, with no window of quiet
+     * asked for afterwards.
+     *
+     * ESC is the exit: `puppetevent` answers **-1** when a conversation is
+     * dismissed, and every plaque loop in the corpus has a `case -1` arm for it
+     * (`PuppetController.key`).
+     */
+    const leaveHim = async (): Promise<void> => {
+      for (let step = 0; step < 400 && p.session.puppet; step++) {
+        if ((p.session.puppet?.bevels ?? []).length) {
+          void p.session.track(p.v().keyDown(".", true));
+        }
+        await p.tick(20);
+      }
+    };
+    for (let round = 0; round < 12 && !atGoal(); round++) {
+      await leaveHim();
+      await walkTo(p, town, goal, () => !!p.session.puppet, 4, LEAVING).catch(() => {
+        /* he stepped in front of us again; the next round re-plans from here */
+      });
+    }
+    if (!atGoal()) throw new Error(`the Mayor would not let us stand at Scene G8: ${room(p)}`);
   },
 };
 
