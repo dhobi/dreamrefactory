@@ -170,13 +170,44 @@ export const VPRIEST = {
    *   **100 along its facing** (`+100` east, `−100` west), carrying the bishop's
    *   `obj+0x28` as its own.
    */
+  /**
+   * ...and it is the one cast in the game that is NOT wired, for a reason worth
+   * writing down rather than leaving as a silence.
+   *
+   * Everything else about it is read. `0x426bc0` stands it a hundred in front
+   * and thirty-five up, copies the facing, and installs `0x46f908` tag 0 —
+   * `dx 600` over the class's own divisor of 13, so 46 pixels an engine frame;
+   * `0x426c97` gives the class no weight, so it flies flat; `0x426db3` takes it
+   * away on any collision word or at a thousand pixels from the player, the
+   * same reach the spitter's gob keeps; and its hit handler `0x426e30` is
+   * `mov ax, 1` — anything destroys it.
+   *
+   * What nothing does is write **`obj+0x1a`**. Not the spawner, not the class's
+   * create, not its think — which is unlike every other projectile here, where
+   * the strength is written at birth (the slug, the knife) or rewritten every
+   * frame (the gob, the glob, the zombie's cloud, Igor's). A strength the
+   * object never sets is whatever `0x42f550` left, and that is zero: a bolt
+   * that cannot take a point off anybody. That may be right — this class also
+   * has the fireball at `0x456240`, which levels.md calls "the one attack of
+   * the six that exists to hit you" — or it may mean the strength arrives from
+   * somewhere this reading has not found. Wiring a harmless bolt on a guess is
+   * the wrong way to resolve it.
+   */
   bolt: {
     cel: 2700,
     divisor: 13,
     dx: 600,
     up: 0x23,
     ahead: 0x64,
-    from: "0x426bc0 / 0x46f908 tag 0",
+    /** 46 a frame: `dx 600` over `obj+0xe = 0xd` (`0x426c9d`) */
+    speed: 46,
+    /** `0x426ddd` — `|self.x − player.x| > 0x3e8`, the gob's own rule */
+    reach: 0x3e8,
+    /** `0x46f908` tag 1, which `0x426d9a` installs when the launch ends */
+    flight: [2700, 2701, 2702, 2703, 2704],
+    /** and nothing anywhere writes one — see above */
+    strength: "never written",
+    from: "0x426bc0 / 0x46f908 tag 0, class 0x426c80",
   },
   /**
    * ...and what the summon lets go: **three bats**, the very class `initbat`
