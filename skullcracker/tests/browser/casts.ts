@@ -47,16 +47,22 @@ interface Seen {
   x: number;
   y: number;
   blow: number;
+  /** pixels an engine frame, which the last three legs are entirely about */
+  vx: number;
+  vy: number;
 }
 const castNow = async (t?: string): Promise<Seen | null> => {
-  const m = /· \d+ cast, nearest cel (\d+) at x (-?\d+), y (-?\d+) blow (-?\d+)/.exec(t ?? (await say()));
-  return m ? { cel: Number(m[1]), x: Number(m[2]), y: Number(m[3]), blow: Number(m[4]) } : null;
+  const m = /· \d+ cast, nearest cel (\d+) at x (-?\d+), y (-?\d+) blow (-?\d+) vx (-?\d+) vy (-?\d+)/.exec(t ?? (await say()));
+  return m
+    ? { cel: Number(m[1]), x: Number(m[2]), y: Number(m[3]), blow: Number(m[4]), vx: Number(m[5]), vy: Number(m[6]) }
+    : null;
 };
 const healthNow = async (t?: string): Promise<number> =>
   Number(/damage ON (\d+)\/\d+hp/.exec(t ?? (await say()))?.[1] ?? -1);
 
-const go = async (level: number, x: number, y: number, arm = true): Promise<void> => {
-  await page.goto(`${BASE}/walk.html?level=${level}&x=${x}&y=${y}${arm ? "&damage=1&foehit=1" : ""}`);
+const go = async (level: number, x: number, y?: number, arm = true): Promise<void> => {
+  const at = `&x=${x}${y === undefined ? "" : `&y=${y}`}`;
+  await page.goto(`${BASE}/walk.html?level=${level}${at}${arm ? "&damage=1&foehit=1" : ""}`);
   await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
   await page.waitForTimeout(800);
 };
@@ -303,6 +309,98 @@ if (knifeCels.some((c) => c < 1870 || c > 1877)) fail(`both of its throws are ce
 if (knives.seen.some((s) => s.blow !== 0x64)) fail(`0x43c54a gives it a hundred; saw ${[...new Set(knives.seen.map((s) => s.blow))].join(",")}`);
 console.log(`ok    the knifeboy throws — ${knives.seen.length} samples, cels ${knifeCels.join(",")}`);
 
+// ---- 7 — the bishop's bolt, and the strength that was hiding in a tail ----
+//
+// `VPRIEST.bolt` sat unwired on this page's own reading that nothing writes
+// `obj+0x1a` for it. `0x426e1e` does: it is the THINK's common tail, past the
+// dispatch, so every one of the four arms lands on it and a bolt is worth a
+// hundred from the frame it leaves. Cel 2700 crosses the room at `dx 600` over
+// a divisor of thirteen — forty-six pixels an engine frame, the fastest thing
+// anybody throws — and tag 1, 2700..2704, is what it plays when it stops.
+await go(12, 17600, 15300);
+if (!/nearest initvpriest/.test(await say())) fail(`TOWER x17600 should stand by the bishop: ${(await say()).slice(0, 180)}`);
+const bolts = await sweep(260, "initvpriest", { min: 170, max: 260 }, true);
+if (!bolts.seen.length) fail(`the bishop threw nothing in 260 samples (it was in the line ${bolts.met} times) — 0x426bc0 is not being called`);
+const boltCels = [...new Set(bolts.seen.map((s) => s.cel))].sort((a, b) => a - b);
+if (boltCels.some((c) => c < 2700 || c > 2704)) fail(`a bolt is cels 2700..2704; saw ${boltCels.join(",")}`);
+if (bolts.seen.some((s) => s.blow !== 0x64)) fail(`0x426e1e writes 0x64 on every path; saw ${[...new Set(bolts.seen.map((s) => s.blow))].join(",")}`);
+// and it flies FLAT: 0x426cbc gives the class no weight at all
+if (bolts.seen.some((s) => s.vy !== 0)) fail(`0x42f850(obj, 0) — a bolt has no weight; saw vy ${[...new Set(bolts.seen.map((s) => s.vy))].join(",")}`);
+if (!bolts.seen.some((s) => Math.abs(s.vx) === 46)) fail(`dx 600 over 13 is 46 a frame; saw ${[...new Set(bolts.seen.map((s) => s.vx))].join(",")}`);
+console.log(`ok    the bishop's bolt flies — ${bolts.seen.length} samples, cels ${boltCels.join(",")}, 46 a frame and worth a hundred`);
+
+// ---- 8 — the boss's fireball, which is the one thing that BOUNCES ---------
+//
+// `0x456264`/`0x456272` are the only calls to `0x42f7f0` and `0x42f7a0` that
+// matter: a restitution of 0.8 through a scale of -8192 and a friction of 0.25
+// through +8192. Everything else in this file is weightless or lands once.
+await go(4, 4200);
+for (let i = 0; i < 60 && !/nearest initwbooly/.test(await say()); i++) {
+  await page.keyboard.down("d");
+  await page.waitForTimeout(80);
+  await page.keyboard.up("d");
+}
+if (!/nearest initwbooly/.test(await say())) fail(`PLAYGR x4200 should wake the boss: ${(await say()).slice(0, 180)}`);
+const balls = await sweep(320, "initwbooly", { min: 200, max: 330 }, true, 40);
+if (!balls.seen.length) fail(`the boss threw nothing in 320 samples (it was in the line ${balls.met} times) — 0x456240 is not being called`);
+const ballCels = [...new Set(balls.seen.map((s) => s.cel))].sort((a, b) => a - b);
+if (ballCels.some((c) => c < 7010 || c > 7019)) fail(`a fireball is cels 7010..7019; saw ${ballCels.join(",")}`);
+/**
+ * ...and the bounce itself, which is the one assertion in this file that could
+ * not have passed before `CastKit.bounce` existed.
+ *
+ * `0x42ff83` turns the vertical velocity round through `obj+0x20`, and the
+ * scale that word is stored through is NEGATIVE — so a fireball that has been
+ * falling is seen rising, on a thing whose weight is pulling it down every
+ * frame. Nothing else here ever reads a negative vy after a positive one.
+ */
+const fell = balls.seen.findIndex((s) => s.vy > 5);
+const rose = fell < 0 ? -1 : balls.seen.slice(fell).findIndex((s) => s.vy < 0);
+if (rose < 0) fail(`a fireball bounces: after falling it must come back up. vy went ${balls.seen.map((s) => s.vy).join(" ")}`);
+if (ballCels.every((c) => c < 7016)) fail(`0x45566e puts the burst on where it lands; saw only ${ballCels.join(",")}`);
+console.log(`ok    the boss's fireball BOUNCES — ${balls.seen.length} samples, cels ${ballCels.join(",")}, and vy turned round`);
+// ...and a slow one is worth nothing: `0x4556d3` wants fifteen in one axis
+for (const s of balls.seen) {
+  const fast = Math.abs(s.vx) >= 15 || Math.abs(s.vy) >= 15;
+  if (fast && s.blow !== 0x64) fail(`a moving fireball is a hundred; saw ${s.blow} at vx ${s.vx} vy ${s.vy}`);
+  if (!fast && s.blow !== 0) fail(`0x45570c zeroes a slow one; saw ${s.blow} at vx ${s.vx} vy ${s.vy}`);
+}
+console.log(`ok    ...and every one of them followed 0x4556d3 — a hundred while it moves, nothing when it does not`);
+
+// ---- 9 — kragg's volley, which STEERS ------------------------------------
+//
+// `0x442290` is the only think in the game that builds a velocity delta every
+// frame: twenty along the facing and a tenth of the gap to a point forty-five
+// above the player, both through the class's divisor of five. So a shot leaves
+// at a standstill — `0x474cc0` carries no stride on any of its three cels —
+// and is doing twenty a frame five seconds later.
+await go(8, 2400);
+for (let i = 0; i < 80 && !/nearest initkragg/.test(await say()); i++) {
+  await page.keyboard.down("d");
+  await page.waitForTimeout(80);
+  await page.keyboard.up("d");
+}
+if (!/nearest initkragg/.test(await say())) fail(`ARCADE should stand up its one kragg: ${(await say()).slice(0, 180)}`);
+/**
+ * It spits at a man STANDING STILL and at nobody else.
+ *
+ * `0x440e0b` — band 1, 150…250 — wants `out+0` to be exactly 2, which
+ * `0x45f00c` writes only when the target is carrying no horizontal velocity at
+ * all. A probe that taps towards it every sample to hold its facing is moving
+ * on every frame the class looks, and the first run of this leg watched it sit
+ * in the band three hundred and twenty times and throw nothing. So: no facing
+ * tap, and a long enough pace that the still frames outnumber the walking ones.
+ */
+const shots = await sweep(320, "initkragg", { min: 160, max: 240 }, false, 120);
+if (!shots.seen.length) fail(`kragg threw nothing in 320 samples (it was in the line ${shots.met} times) — 0x4420c0 is not being called`);
+const shotCels = [...new Set(shots.seen.map((s) => s.cel))].sort((a, b) => a - b);
+if (shotCels.some((c) => c < 1000 || c > 1002)) fail(`its shot is cels 1000..1002; saw ${shotCels.join(",")}`);
+if (shots.seen.some((s) => s.blow !== -2)) fail(`0x44236d is -2, a code and not a blow; saw ${[...new Set(shots.seen.map((s) => s.blow))].join(",")}`);
+// and it accelerates: something must have been seen doing more than the four a
+// frame one call of 0x42f8b0 adds
+if (!shots.seen.some((s) => Math.abs(s.vx) > 4)) fail(`a shot leans in four a frame and keeps leaning; the fastest seen was ${Math.max(...shots.seen.map((s) => Math.abs(s.vx)))}`);
+console.log(`ok    kragg's volley steers — ${shots.seen.length} samples, cels ${shotCels.join(",")}, worth -2, up to ${Math.max(...shots.seen.map((s) => Math.abs(s.vx)))} a frame`);
+
 /**
  * ...and the hardcore's lob is WIRED but not watched here.
  *
@@ -316,5 +414,5 @@ console.log(`ok    the knifeboy throws — ${knives.seen.length} samples, cels $
  */
 
 if (problems.length) fail(`the page threw: ${problems.join(" · ")}`);
-console.log(`PASS  six classes' throws watched, and a seventh wired`);
+console.log(`PASS  nine classes' throws watched, the bounce and the steer among them`);
 await finish(browser);

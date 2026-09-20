@@ -2528,6 +2528,138 @@ export const BOGGS = {
       sprays: 0xd, sprayAt: 5,
     },
   ],
+  /**
+   * ...and what the idle does when it does NOT lunge, which this page had as
+   * nothing at all.
+   *
+   * `0x41bffc`'s seven-in-forty-two is only the first roll of the frame. What
+   * the other thirty-five take is `0x41c068`, and it is a range test on the
+   * body's own gap to the player:
+   *
+   * ```
+   *   41c068  0x434540(0x64) / cmp eax, 5 / jl   ; five in a hundred: nothing
+   *   41c07b  cmp si, 0x64                        ; inside a hundred: nothing
+   *   41c096  cmp si, 0x12c / jle 0x41c0fd        ; at or under 300: a WORM
+   *   41c09d  cmp word ptr [0x46e080], 0          ; ...and beyond it, if the
+   *   41c0dc  0x41c330([0x4a5170])                ; first machine still stands,
+   * ```                                           ; it THROWS
+   *
+   * `si` is the same `body.x − player.x` the head aims on, signed: a player to
+   * the RIGHT of it is never more than 300 by this measure and is thrown at
+   * only from the left. That asymmetry is the executable's.
+   */
+  reach: {
+    /** `0x41c068` — five in a hundred and the frame is spent */
+    idle: [5, 0x64] as const,
+    /** `0x41c07b` — and this close in front of it, the same */
+    close: 0x64,
+    /** `0x41c096` — beyond this it throws; at or under it, a worm goes down */
+    far: 0x12c,
+  },
+  /**
+   * What it THROWS — `0x41c330`, class `[0x46e0ac]`, script `0x46e0b8`.
+   *
+   * It does not come out of Boggs. `[0x4a5170]` is the second of
+   * {@link BOGGS.machines}, so the throw leaves the machine and stops when that
+   * machine does: `0x41c09d` gates the whole branch on `0x46e080`, the flag
+   * that same machine's wreck clears.
+   *
+   * `0x41a92b` builds it on a divisor of seven with `0x42f850(obj, 0)` — no
+   * weight, so it flies dead level — and the six frames of tag 0 carry
+   * `dx 0 25 25 25 25 50`, which through the seven is three pixels a frame and
+   * then seven. `0x41aa30` writes `obj+0x1a = 0x14` every frame it is in the
+   * air and `0x41aa60` takes it away at a thousand pixels from the player.
+   *
+   * And where it lands it is worth FIVE TIMES what it was worth flying:
+   * `0x41aa7c` — tag 1, the splat — writes `obj+0x1a = 0x65`, zeroes both
+   * velocities and waits for its own script to end. This page flies the throw
+   * and draws the splat; a landed cast strikes nothing here, so the 101 is
+   * carried and spends nothing.
+   */
+  throwing: {
+    /** `[0x4a5170]` — the second machine, and the flag its wreck clears */
+    machine: 1,
+    /** `0x41c36d` — eighty along the facing */
+    ahead: 0x50,
+    /** `0x41c37e`/`0x41c386` — and it alternates between these two heights */
+    drop: [0x8c, 0x28] as const,
+    /** `0x41c0e4` — `0x434540(0x1e) + 0x1e`, spent whether or not it fires */
+    wait: [0x1e, 0x1e] as const,
+    /** `0x41c0c6` */
+    sound: 0x1f,
+    /** `0x46e0b8` tag 0, and `0x41a92b`'s `obj+0xe` */
+    cels: [5610, 5611, 5612, 5613, 5614, 5615],
+    strides: [0, 25, 25, 25, 25, 50],
+    divisor: 7,
+    /** `0x41aa30` */
+    strength: 0x14,
+    /** `0x41aa60` — a thousand from the player, the spitter's gob's own rule */
+    reach: 0x3e8,
+    /** `0x46e0b8` tag 1, which `0x41aa69` installs where it lands */
+    splat: [5530, 5530, 5531, 5532, 5533, 5534, 5535, 5536, 5537],
+    /** `0x41aa7c` — and the splat is worth five times the flight */
+    splatStrength: 0x65,
+    from: "0x41c330 / 0x46e0b8, class 0x41a910",
+  },
+  /**
+   * The WORMS — `0x41c3c0`, class `[0x46e0a8]`, and the third of the three
+   * records `levels.md` had nowhere to put.
+   *
+   * They are not a projectile. `0x41c3c0` drops one at the body's own point
+   * plus a random offset, on a single cel, and there it WAITS; what wakes it is
+   * you walking past. `0x41ac70` — the class's own setup — is where the record
+   * comes in:
+   *
+   * ```
+   *   41ac7f  push 0x46ec98           ; the string is "wormbounds"
+   *   41ac8d  0x40b850(rec, 0, 0, buf); ...one record, read into a rect
+   *   41aca2  [0x4a50c8] = rect       ; and 0x41ac16/0x41ac26 clamp every worm
+   *   41ad02  0x430cc0(0x41ad20)      ; ...then the class is registered
+   * ```
+   *
+   * So `wormbounds` is the box they are confined to, `0x41c3c8`'s
+   * `cmp word ptr [eax+4], 0x13` caps them at nineteen alive, and the four
+   * kinds of `0x41adf0` are one life: wait, rise, strike, sink.
+   *
+   * `0x41adf9` writes `obj+0x1a = 0x64` before the dispatch, so a worm is worth
+   * a hundred from the frame it is dropped — the same as the bishop's bolt and
+   * the boss's fireball, and the hardest thing in the game that never moves.
+   */
+  worms: {
+    /** `0x41c0fd` — seven in fifty-five, once a frame */
+    odds: [7, 0x37] as const,
+    /** `0x41c3c8` — and never a twentieth */
+    cap: 0x13,
+    /** `0x41c10c` — `−30 − 0x434540(0x3c)` from the body in x... */
+    offX: [-0x1e, 0x3c] as const,
+    /** ...and `0x434540(0xa0) + 30` below it in y */
+    offY: [0x1e, 0xa0] as const,
+    /** `0x41ac7f` — the record every one of them is kept inside */
+    bounds: "wormbounds",
+    /** `0x41ad3e` — and `0x41ad6e` gives it no weight, which it never uses */
+    divisor: 5,
+    /** `0x41adf9` — written every frame, before the dispatch */
+    strength: 0x64,
+    /** `0x46e140` — one cel at twelve ticks, and it sits on it */
+    sleep: { cels: [5670], hold: 12 },
+    /** `0x41ae2c` — until you are this close in x */
+    wake: 0xdc,
+    /** `0x46e150` — the rise */
+    rise: { cels: [5671, 5672, 5673, 5674, 5675, 5676, 5677, 5678], hold: 2 },
+    /** `0x46e198` — the strike */
+    strike: { cels: [5660, 5661, 5662, 5663, 5664, 5665, 5666, 5667], hold: 1 },
+    /** `0x46e228` — and the sink, which is the rise backwards */
+    sink: { cels: [5678, 5677, 5676, 5675, 5674, 5673, 5672, 5671], hold: 1 },
+    /** `0x41ae97` — played ONCE a level, the first time one rises to your left */
+    warn: 0x25,
+    /** `0x41ae87` — and the warning wants you this close in y as well */
+    warnBelow: 0xc8,
+    /** `0x41aeb8` — every other rise */
+    hiss: 0x16,
+    /** `0x41aeeb` — over the strike ending */
+    strikes: 0x17,
+    from: "0x41c3c0 / 0x41ad20 / 0x41ac70",
+  },
   /** `0x41b2a5` etc — every machinery object, and both halves of the arm */
   machineDivisor: 0x32,
   /** `0x41b628` / `0x41b774` — the cue that plays when the SECOND half goes */
@@ -2536,6 +2668,76 @@ export const BOGGS = {
   dies: { cels: [5740, 5741, 5742, 5743, 5744, 5745, 5746, 5747, 5748], hold: 3, sound: 0x22 },
   from: "0x411285 / 0x412240 / 0x41bb80 / 0x41bc50",
 } as const;
+
+/**
+ * The SKATEBOARD — `0x438450`, class `0x437610`, script `0x473de8`.
+ *
+ * Two of the gang carry one and both drop it as they die: `0x4383d9` out of
+ * `initknotboy`'s hit handler and `0x43a6f9` out of `initknifeboy`'s. It is the
+ * one object in the game whose whole life is physics — it hops, it falls, it
+ * bounces, it slides to a stop and then it is swept up.
+ *
+ * ```
+ *   43762d  obj+0xe = 5                 ; divisor
+ *   437653  0x42f7a0(obj, 0.05f)        ; obj+0x1e — it barely slows at all
+ *   437661  0x42f7f0(obj, 0.3f)         ; obj+0x20 — and it bounces low
+ *   437627  ...and no 0x42f850, so the birth weight of ten stands
+ *   473de8  tag 0: cel 2311, dx 15 dy -50 ; the hop, over the five
+ *   4377c4  tag 0 -> tag 1 the frame a surface is under it (cel 2310)
+ *   4377ea  ...and when THAT ends, obj+0x18 = 1: the countdown
+ * ```
+ *
+ * ## Which is what `noskateboards` is for
+ *
+ * `0x437809` spends one frame of `AI+0xa` per frame and removes the board when
+ * it goes negative, and `0x4385af` is where that word is seeded:
+ *
+ * ```
+ *   4385af  push 0x475080              ; the string is "noskateboards"
+ *   4385bd  0x40b660(rec, board, 1, 0) ; is the board's own point inside one?
+ *   4385c2  mov word ptr [esi+0xa], 0xa    ; ...then it lasts TEN frames
+ *   4385d0  mov word ptr [esi+0xa], 0xb4   ; ...and a hundred and eighty if not
+ * ```
+ *
+ * So the record is not a lift and not a spawn table: it is a region where a
+ * dropped board is swept away almost at once, and SERVICE places one. An
+ * earlier reading of this page had the 10 and the 180 as a lift.
+ */
+export const SKATEBOARD = {
+  /** `0x43762d` — `obj+0xe`, what the hop's own stride is divided by */
+  divisor: 5,
+  /** `0x473de8` tag 0 — the hop out, in the script's own pre-divisor units */
+  hop: { cel: 2311, dx: 15, dy: -50 },
+  /** `0x473de8` tag 1 — where it lies once a surface is under it */
+  rest: 2310,
+  /** `0x437653` — `0x42f7a0(0.05f)`, so it keeps almost none of its slide */
+  friction: 0.05,
+  /** `0x437661` — `0x42f7f0(0.3f)`, and the scale behind it flips the sign */
+  bounce: 0.3,
+  /** `0x437627` — no weight setter, so `0x42f5ca`'s ten is what it falls at */
+  pull: 0xa,
+  /** `0x4384c3` — it is put ten above the surface under the one that dropped it */
+  lift: 0xa,
+  /** `0x4385d0` / `0x4385c2` — frames it lies there, and the record picks */
+  lasts: [0xb4, 0xa] as const,
+  /** `0x4385af` — inside one of these it is the ten */
+  sweptBy: "noskateboards",
+  from: "0x438450 / 0x473de8, class 0x437610",
+} as const;
+
+/** one dropped board — {@link SKATEBOARD}, and nothing else makes one */
+export interface Board {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** where it started, which only this page's own fall guard reads */
+  bornY: number;
+  /** true once a surface has been under it — `0x4377c4`, the cel changes */
+  down: boolean;
+  /** `AI+0xa` — frames left once it is down, and it is gone at −1 */
+  life: number;
+}
 
 export interface Boggs {
   x: number;
@@ -2563,6 +2765,32 @@ export interface Boggs {
   /** where `initboggshead`'s own record put the head, and it stays there */
   headX: number;
   headY: number;
+  /** `[0x46e0b0]` — frames to the next throw, spent whether or not it fires */
+  throwWait: number;
+  /** `[0x46e138]` — which of {@link BOGGS.throwing.drop} the next one leaves at */
+  throwDrop: number;
+  /** `[0x46e0a8]`'s own list — {@link BOGGS.worms}, capped at nineteen */
+  worms: BoggsWorm[];
+  /** `[0x46e270]` — the one-time warning, spent the first time one rises */
+  warned: boolean;
+  /** the `wormbounds` record, which `0x41ac16` keeps every worm inside */
+  bounds: { left: number; right: number; top: number; bottom: number } | null;
+}
+
+/**
+ * One of {@link BOGGS.worms} — dropped, and then it waits for you.
+ *
+ * `kind` is the script's own, which is the whole of its state machine:
+ * `0` waiting on `0x46e140`, `1` rising on `0x46e150`, `2` striking on
+ * `0x46e198` and `4` sinking on `0x46e228`. Kind 3 has a handler at `0x41aeff`
+ * and nothing anywhere installs it — the same shape of dead arm as the
+ * machines' dented cels.
+ */
+export interface BoggsWorm {
+  x: number;
+  y: number;
+  kind: 0 | 1 | 2 | 4;
+  clock: number;
 }
 
 /** one of {@link BOGGS.machines}, placed once and then standing still */

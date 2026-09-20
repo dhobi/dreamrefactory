@@ -835,6 +835,12 @@ calls the spawner at — and **five of the ten are wired**:
 | `initeyeball` | SEWER | a glob, five cel sets cycling on `AI+4`, launch into a looping flight, gone 600 from where it STARTED, and worth **−2** — a code, not damage |
 | `initzomb` | CAVERN, GRAVE | a cloud that does not move at all: 40 up, 65 in front, eight frames, **−2** (`0x420990`) |
 | `initigor` | RAVECAVE | 26 up and 35 along with a weight of 0.8, so it ARCS, and it unwinds its own four cels where it lands (`0x421310` index 1) |
+| `initknifeboy` | SERVICE | two things off one roll: a knife whose own script carries a stride per cel (`dx 0 50 0 50 0 0 0`, so it gets FASTER), and a lob that goes up first |
+| `inithardcore` | SERVICE | a lob at 80 a frame with a weight of 0.2 |
+| `initvpriest` | TOWER | a bolt: 100 ahead, 35 up, `dx 600 / 13` = **46px a frame**, the fastest thing anybody throws, and worth a hundred |
+| `initkragg` | ARCADE | three shots a volley that leave at a STANDSTILL and steer — twenty along the facing and a tenth of the gap to a point 45 above you, every frame — worth **−2** |
+| `initwbooly` | PLAYGR | a fireball that BOUNCES: restitution 0.8, friction 0.25, a hundred while it is moving and nothing once it is not |
+| `initboggsbody` | VAT | a throw out of its second MACHINE, six cels at `dx 0 25 25 25 25 50 / 7`, worth twenty in the air and 101 where it splats |
 
 Two of the five carry codes rather than damage, which makes them the first
 classes a level places that can send one — see `codes.ts`, whose note about that
@@ -842,12 +848,28 @@ had to be corrected. And `initeyeball` and `initpuke` are the two classes with
 no strike box on any cel of their own: until this, they closed on the player and
 stood there, because the projectile IS the attack.
 
-**Still throwing nothing:** `initknifeboy` (which throws two different things, a
-flat knife and a lob), `inithardcore`, `initvpriest` (which also summons bats),
-and the two boss volleys, `initkragg` and `initwbooly`. The knife needs one
-piece of machinery none of the five did: its stick sequence carries a stride per
-cel (`dx 0 50 0 50 0 0 0`), where every kit so far has one speed for its whole
-flight.
+**Nothing is left throwing nothing.** Getting the last four in took three
+pieces of machinery the first five did not need, and each is one class's:
+
+- **a stride per cel.** The knife accelerates because its own script says so —
+  `CastKit.strides` over the class's divisor.
+- **a bounce.** `0x42f7f0` writes `obj+0x20` through a scale of **−8192**, so a
+  restitution of 0.8 is stored as −6553 and `0x42ff83`'s `imul`/`sar 13` flips
+  the sign as it scales. Every object is BORN with `+2048` — a quarter kept the
+  same way, which is a stop — so only a class that calls the setter bounces, and
+  `initwbooly`'s fireball is the one that does. `0x4302c0` takes the horizontal
+  half down through `obj+0x1e` while it is in contact, and `0x4555e9` removes it
+  once both have run out. The floor test had to become SWEPT to see it at all:
+  the thing leaves at sixty pixels a frame and reaches a hundred and sixty.
+- **steering.** `0x442290` is the only think that builds a velocity delta every
+  frame rather than once — `CastKit.home` — and `0x442306` takes the shot away
+  the frame it is past you, because a homing thing has no reach to expire at.
+
+And two of the four carry the strength somewhere the first five did not.
+`initvpriest`'s bolt writes `obj+0x1a` in the think's common TAIL (`0x426e1e`),
+past the dispatch, which is why looking inside the arms found nothing and this
+page once recorded it as harmless. `initwbooly`'s fireball writes a hundred or a
+zero depending on how fast it is going (`0x4556d3`).
 
 ### What is read and not yet done
 
@@ -861,12 +883,16 @@ IMPULSE into the thing's velocity on the frame it appears, which is what
 
 What is left:
 
-- The patrol turns at the record's rect. The engine turns a hundred pixels
-  inside it (`0x44e68e`, `0x44e69f`) and only when the territory is wider than
-  three hundred. Still deliberately alone: it moves every foe in every level and
-  belongs in its own change with its own regression.
-- The decision budget (`AI+4`) is spent by the classes whose own machines spend
-  it — the dog, the cop, the eye, the zombie, the hardcore, the boss of level
-  four and a dozen more read and write `e.decisions` — and is not a thing the
-  page applies over the top of them. What was once true of every class is now
-  true only of the ones whose machine never had one.
+Both of the two that were here are now done, and one of them was not what this
+page said it was.
+
+- **The patrol's margin is a wall, not a line.** The hundred was already being
+  turned at. What `0x44e699` and `0x44e6aa` also do is write the margin straight
+  into `obj+0x8`, so a patrol that overshot is PUT BACK on it rather than left
+  outside for as many frames as the overshoot is wide.
+- **The decision budget needs nothing.** Eight classes carry one in `AI+4` and
+  spend it — the dog, the rat, the hardcore, the wraith, the eye, the cop,
+  `initwerea` and `initwbooly`. Every one of the other twenty-two has its own
+  page saying, with the struct's own offsets, that the word at `AI+4` is not a
+  budget in that class. An AI struct is per class; giving a budget to one that
+  never had one would be inventing behaviour rather than porting it.

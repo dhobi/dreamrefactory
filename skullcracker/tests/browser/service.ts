@@ -199,6 +199,46 @@ const main = async (): Promise<void> => {
   if (points < 240) fail(`0x43a711 pays 0xf0 for it; the score reads ${points}`);
   console.log(`ok    one with the knife falls for ${points} points`);
 
+  /**
+   * ...and it leaves its BOARD, which is the last of the three records this
+   * game places and nothing on this page ever read.
+   *
+   * `0x43a6f9` calls `0x438450` out of the hit handler on the frame it dies,
+   * and what comes out is the one object in the game whose whole life is
+   * physics: it hops out on `dx 15 dy -50` over a divisor of five, falls at the
+   * birth weight of ten, bounces through a restitution of 0.3 and slides to a
+   * stop on a friction of 0.05. `0x4385af` then reads `noskateboards` at its
+   * own point and seeds `AI+0xa` with ten frames or a hundred and eighty.
+   *
+   * SERVICE is the one level that places a `noskateboards` record, so both
+   * answers are live here; this only asks that a board was left and that it
+   * settled onto its resting cel and then went.
+   */
+  const boardCels = new Set<number>();
+  let lives = 0;
+  let sawBoard = false;
+  for (let i = 0; i < 60; i++) {
+    const m = /· (\d+) board, first cel (\d+) at x (-?\d+), y (-?\d+) life (-?\d+)/.exec(await say());
+    if (m) {
+      sawBoard = true;
+      boardCels.add(Number(m[2]));
+      lives = Math.max(lives, Number(m[5]));
+    }
+    await page.waitForTimeout(60);
+  }
+  if (!sawBoard) fail(`0x43a6f9 drops a board where one of these dies; none was ever in the line`);
+  // 2311 is `0x473de8` tag 0, the hop, and 2310 tag 1 — where it lies once a
+  // surface is under it (`0x4377c4`)
+  if (![...boardCels].every((c) => c === 2310 || c === 2311))
+    fail(`a board is cel 2311 in the air and 2310 down; saw ${[...boardCels].join(",")}`);
+  if (!boardCels.has(2310)) fail(`0x4377c4 puts tag 1 on the frame a surface is under it; it never came down`);
+  if (lives > 0xb4) fail(`0x4385d0 seeds it 180 at most; the line read ${lives}`);
+  console.log(`ok    ...and leaves its board — cels ${[...boardCels].sort().join(",")}, lying there ${lives} frames`);
+  // and it is swept up: `0x437809` spends one a frame and removes it at -1
+  for (let i = 0; i < 90 && /\d+ board,/.test(await say()); i++) await page.waitForTimeout(100);
+  if (/\d+ board,/.test(await say())) fail(`0x437809 removes it when AI+0xa goes negative; it is still there`);
+  console.log(`ok    ...and 0x437809 sweeps it up again`);
+
   // 10. the goop hits back, once the switch that lets anything hit back is on.
   //     Only cel 518 carries a strike box, so this is the gob and nothing else.
   await go(400, true);

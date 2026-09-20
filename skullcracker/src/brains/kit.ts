@@ -85,7 +85,25 @@ export interface Enemy {
     | "throw"
     | "recoil"
     | "settle";
-  /** `AI+4` — decisions left before it breaks off and goes home */
+  /**
+   * `AI+4` — decisions left before it breaks off and goes home.
+   *
+   * ## ...and the classes that have no such word
+   *
+   * This was left open as "wire a budget for the machines whose class never had
+   * one", and the audit answers it with a null: there are none to wire. Eight
+   * of the thirty classes carry a budget in `AI+4` and spend it here — the dog,
+   * the rat, the hardcore, the wraith, the eyeball, the cop, `initwerea` and
+   * `initwbooly`. Every one of the rest has its own page saying, with the
+   * struct's own offsets, that the slot is not a budget in that class: the arm
+   * (`arm.ts`), the batboy (`batboy.ts`), the hydrant (`hydrant.ts`), the
+   * mailbox (`mailbox.ts`), the spitter (`puke.ts`), Igor (`igor.ts`),
+   * `initwereb` (`wereb.ts`) and `initwered` (`wered.ts`).
+   *
+   * An AI struct is per class and the word at +4 means whatever that class's
+   * creator seeds and its think spends. Giving a budget to a class that never
+   * had one would be inventing behaviour, not porting it.
+   */
   decisions?: number;
   /**
    * In the fight — `obj+0x18` state 1, which {@link stepFight} drives. Undefined
@@ -332,6 +350,16 @@ export interface CastKit {
   ahead: number;
   /** ...and this far ABOVE it, up-positive, as the spawner's own subtraction */
   lift: number;
+  /**
+   * ...and this far along x REGARDLESS of the facing, where a spawner's step is
+   * unconditional rather than mirrored.
+   *
+   * `0x455cc7` and `0x455d05` are the case: both of the boss's muzzles are
+   * `sub ax, 0x1e` with no `sbb` in front of them, so the fireball leaves
+   * thirty to the left of it whichever way it is turned. Every other spawner
+   * here picks its sign off `obj+0x28` and belongs in {@link CastKit.ahead}.
+   */
+  offX?: number;
   /** `obj+0x1a` — its strength, or a negative CODE the reaction table reads */
   blow: number;
   /**
@@ -423,6 +451,95 @@ export interface CastKit {
    * out.
    */
   impact?: { cels: readonly number[]; hold: number };
+  /**
+   * It STEERS, which is a flight rule and not a script one.
+   *
+   * Kragg's shot is the only one: `0x4422b2` builds a velocity DELTA every
+   * frame and hands it to `0x42f8b0`, so what it adds is divided by the class's
+   * own divisor and what it adds stays added.
+   *
+   * ```
+   *   4422c7  imul ax, ax, 0x14          ; +-20 along the facing...
+   *   4422d4  eax = player.y - self.y
+   *   4422db  sub eax, 0x2d / idiv 10    ; ...and a tenth of the gap to 45
+   *   4422ec  0x42f8b0(obj, packed)      ; ...both over obj+0xe = 5
+   * ```
+   *
+   * So it leaves at a standstill, leans into the facing four pixels a frame
+   * harder every frame, and climbs or sinks toward a point forty-five above
+   * your own. `along` is the twenty, `lead` the forty-five and `drop` the ten.
+   */
+  home?: { along: number; lead: number; drop: number; divisor: number };
+  /**
+   * ...and it is gone the frame it is PAST you, whichever way it was going.
+   *
+   * `0x442302`/`0x442316` — a shot travelling left that is already left of the
+   * player, or one travelling right that is right of it, sets the think's own
+   * die flag. A homing thing needs this because it has no reach: it would
+   * otherwise turn round and come back.
+   */
+  past?: boolean;
+  /**
+   * ...or what it plays each time it BOUNCES, after which the flight resumes.
+   *
+   * The fireball is the one, and it is why the burst and the impact are two
+   * different things: `0x45566e` installs `0x478290` the frame a surface is
+   * under it, and `0x4556a0` — that script's own kind — installs the flight
+   * again the frame it ends. So the four cels are a bounce and not a death,
+   * and what finally removes the thing is {@link CastKit.rest}.
+   */
+  burst?: { cels: readonly number[]; hold: number };
+  /**
+   * `obj+0x20` — what it keeps of the velocity it meets a surface with, and the
+   * sign FLIPS. One class in the game sets one: the boss's fireball.
+   *
+   * The engine keeps it as a word rather than a float, and the setter's scale
+   * is NEGATIVE, which is where the flip lives:
+   *
+   * ```
+   *   42f825  fmul dword ptr [0x46a10c]   ; and that float is -8192.0
+   *   42f830  mov word ptr [ecx+0x20], ax ; so 0.8f is stored as -6553
+   *   42ff83  movsx eax, word ptr [esi+0x20]
+   *   42ff8a  imul eax, ecx               ; ...times the velocity
+   *   42ff9b  sar  eax, 0xd               ; ...over 8192, toward zero
+   * ```
+   *
+   * So a restitution of 0.8 turns a fall of 60 into a rise of 47, and the
+   * default every other object is born with — `0x42f5c0` writes `0x800` — is
+   * `+2048`, a quarter kept the SAME way, which is a stop and not a bounce.
+   * Only a class that calls `0x42f7f0` bounces, and this is that number.
+   *
+   * `0x42ff6f` is the floor underneath it: a vertical velocity inside ±2 is
+   * zeroed outright, so a bounce dies rather than ringing forever.
+   */
+  bounce?: number;
+  /**
+   * `obj+0x1e` — what a frame spent ON a surface keeps of the horizontal
+   * velocity. `0x4302c0`, the same `imul`/`sar 13` over 8192, and the scale
+   * here is positive so it only ever slows.
+   *
+   * Every object is born with `0x1666` (`0x42f5ba`), which is 0.7. The
+   * fireball's creator writes 0.25 (`0x42f7a0` on `0x3e800000`), so it stops in
+   * a couple of frames once it is down.
+   */
+  friction?: number;
+  /**
+   * It is only worth its {@link CastKit.blow} while it is MOVING this fast, in
+   * either axis, and worth nothing at all once it is not.
+   *
+   * `0x4556d3` — `|vx| >= 15 or |vy| >= 15`, with no wall against it — is what
+   * decides between `obj+0x1a = 0x64` and `obj+0x1a = 0`. A fireball rolling to
+   * a halt at your feet cannot hurt you.
+   */
+  fastBlow?: number;
+  /**
+   * ...and gone once it is asleep: on the ground, no horizontal velocity, and
+   * a vertical one no bigger than this.
+   *
+   * `0x4555e9` — `obj+0x2e` set, `obj+0xc == 0` and `|obj+0xa| <= 10` returns 1
+   * from the think, which is how an object asks to be removed.
+   */
+  rest?: number;
   /** the spawner and the script it installs */
   from: string;
 }

@@ -302,10 +302,26 @@ a little more wrong.
                  SEWER STREETS TOWER WOODS
 ```
 
-**Five records are left and not one of them is a drawn thing.** Three are
-TABLES — `monkeybar`, `wormbounds` and `noskateboards`. And two are dead data:
-**`where` and `inithealth` do not appear in `SC.EXE` anywhere** — LAB places one
-of each and nothing in the game will ever ask for them.
+**Five records are left and not one of them is a drawn thing.** Two are dead
+data: **`where` and `inithealth` do not appear in `SC.EXE` anywhere** — LAB
+places one of each and nothing in the game will ever ask for them. The other
+three are not tables at all, which is what an earlier reading of this page had
+them as. Each is a REGION some object's own code asks a question of, and two of
+the three are now answered in the port:
+
+- **`wormbounds`** is the box Boggs' worms are kept inside. `0x41ac7f` reads it
+  once, at the class's own setup, into `[0x4a50c8]`, and `0x41ac09`…`0x41ac26`
+  holds every worm's point inside it. See `BOGGS.worms`.
+- **`noskateboards`** is how long a dropped skateboard lies there. `0x4385af`
+  asks it once, at the moment the board is made, and seeds the board's own
+  countdown with **ten** frames inside the region and **a hundred and eighty**
+  outside it. See `SKATEBOARD`.
+- **`monkeybar`** is one of five regions a per-level callback classifies the
+  player's point against. `0x412390` is that callback — `0x419bc3` installs it
+  through `0x4029d0`, and three other chapters install the same one — and it
+  answers `1` for `exitfarm`, `2` for `exitroom`, **`3` for `monkeybar`**, `4`
+  for `ladder` and `5` for `initswitch`. It is the only one of the five with
+  nothing on this page's side yet.
 
 ### What a probe is, and the word that was hiding in the constructor
 

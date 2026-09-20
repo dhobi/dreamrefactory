@@ -238,6 +238,27 @@ export const WEREA = {
 
 /** `0x44e68e`/`0x44e69f` — a territory this wide is patrolled 100px inside its ends */
 const WIDE = 300;
+/**
+ * `0x44e68e` / `0x44e69f` — and the hundred is a WALL, not a line it turns on.
+ *
+ * The two arms of that test do not only flip the facing: each writes the margin
+ * itself straight into `obj+0x8` before it turns, so a patrol that has drifted
+ * past its own margin is PUT BACK on it.
+ *
+ * ```
+ *   44e68e  sub edx, 0x64          ; right - 100, against my own x
+ *   44e695  sub bx, 0x64
+ *   44e699  mov word ptr [esi+8], bx    ; ...and I am standing on it now
+ *   44e69f  add ecx, 0x64          ; left + 100, the same the other way
+ *   44e6aa  mov word ptr [esi+8], di
+ * ```
+ *
+ * A turn alone leaves a thing that overshot its margin outside it for as many
+ * frames as the overshoot is wide, and its walk cel is what decides how big
+ * that is. `0x4770f0` is three pixels a frame, so it is small — and it is the
+ * difference between a patrol that keeps its hundred and one that wanders.
+ */
+const MARGIN = 100;
 
 /**
  * `initwerea`'s own machine, states 0 to 7.
@@ -285,10 +306,17 @@ export const werea: Brain = (e, foe, run, k) => {
         if (t.forward < 0) e.facing = -e.facing;
         return install(e, WEREA.stand);
       }
-      // `0x44e68a`: and a wide one is walked a hundred pixels inside its ends
-      const lo = e.left + 100;
-      const hi = e.right - 100;
-      if (e.x < lo || e.x > hi || k.atBound(e)) e.facing = -e.facing;
+      // `0x44e68a`: and a wide one is walked a hundred pixels inside its ends,
+      // which it is put back onto rather than merely turned at
+      const lo = e.left + MARGIN;
+      const hi = e.right - MARGIN;
+      if (e.x > hi) {
+        e.x = hi; // `0x44e699`
+        e.facing = -e.facing;
+      } else if (e.x < lo) {
+        e.x = lo; // `0x44e6aa`
+        e.facing = -e.facing;
+      } else if (k.atBound(e)) e.facing = -e.facing;
       return done ? install(e, WEREA.patrol) : false;
     }
     // ---- 1, `0x44e6e7`: the stance, and the only state that thinks every frame

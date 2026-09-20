@@ -124,6 +124,72 @@ const main = async (): Promise<void> => {
   console.log(`ok    and Boggs lunges — ${[...states].sort().join(" ")}, across ${Math.max(...xs) - Math.min(...xs)}px of its own stride`);
 
   /**
+   * ...and what the OTHER thirty-five frames of the idle do, which this suite
+   * and the page both had as nothing at all.
+   *
+   * `0x41bffc`'s seven-in-forty-two is only the first roll of the frame.
+   * `0x41c068` is the rest of it, and it is a range test on the same signed gap
+   * the head aims on: at or under three hundred a WORM goes down, and beyond it
+   * the second machine THROWS.
+   *
+   * Boggs' body stands at x6321, so a player at x6100 is 221 inside the line
+   * and gets worms.
+   */
+  await go("&x=6100");
+  const worms = new Map<number, Set<number>>();
+  let mostWorms = 0;
+  for (let i = 0; i < 90; i++) {
+    const m = /· (\d+) worm, first kind (\d+) cel (\d+) at x (-?\d+), y (-?\d+)/.exec(await say());
+    if (m) {
+      mostWorms = Math.max(mostWorms, Number(m[1]));
+      const kind = Number(m[2]);
+      if (!worms.has(kind)) worms.set(kind, new Set());
+      worms.get(kind)!.add(Number(m[3]));
+    }
+    await page.waitForTimeout(120);
+  }
+  if (!mostWorms) fail(`0x41c0fd drops one seven frames in fifty-five; in 90 samples none was ever down`);
+  // `0x41c3c8` — `cmp word ptr [eax+4], 0x13`, and the class's own count is what
+  // it tests, so nineteen is a hard ceiling rather than a tendency
+  if (mostWorms > 0x13) fail(`0x41c3c8 caps them at nineteen; ${mostWorms} were down at once`);
+  const wormCels = [...worms.values()].flatMap((v) => [...v]);
+  if (wormCels.some((c) => c !== 5670 && (c < 5660 || c > 5678)))
+    fail(`a worm is 5670 asleep and 5660..5678 awake; saw ${wormCels.sort((a, b) => a - b).join(",")}`);
+  console.log(`ok    and Boggs seeds WORMS — up to ${mostWorms} of its nineteen, kinds ${[...worms.keys()].sort().join(",")}, cels ${[...new Set(wormCels)].sort((a, b) => a - b).join(",")}`);
+
+  /**
+   * ...and past three hundred it throws instead, out of `[0x4a5170]` — which is
+   * the SECOND machine and not Boggs. `0x41c09d` gates the whole branch on
+   * `0x46e080`, the flag that machine's own wreck clears, so the throw stops
+   * when the machine does.
+   */
+  await go("&x=6100");
+  // walked rather than spawned: x6100 is the one place in chamber2 this suite
+  // knows stands Boggs up, and the gap is opened on foot from there
+  const me = async (): Promise<number> => Number(/· x (-?\d+),/.exec(await say())?.[1] ?? 0);
+  const him = async (): Promise<number> => Number(/boggs \w+ cel \d+ at x(\d+)/.exec(await say())?.[1] ?? NaN);
+  await page.keyboard.down("ArrowLeft");
+  for (let i = 0; i < 60 && (await him()) - (await me()) < 380; i++) await page.waitForTimeout(100);
+  await page.keyboard.up("ArrowLeft");
+  const gap = (await him()) - (await me());
+  if (!(gap > 300)) fail(`the throw wants the player more than 300 to its left; the gap is ${gap} — ${/boggs[^·]*/.exec(await say())?.[0]}`);
+  const hurl = new Set<number>();
+  const blows = new Set<number>();
+  for (let i = 0; i < 120; i++) {
+    const m = /· \d+ cast, nearest cel (\d+) at x (-?\d+), y (-?\d+) blow (-?\d+)/.exec(await say());
+    if (m) {
+      hurl.add(Number(m[1]));
+      blows.add(Number(m[4]));
+    }
+    await page.waitForTimeout(110);
+  }
+  if (!hurl.size) fail(`0x41c0dc throws on a countdown of 0x434540(0x1e) + 0x1e; in 120 samples nothing flew — ${/boggs[^·]*/.exec(await say())?.[0]}`);
+  if ([...hurl].some((c) => (c < 5610 || c > 5615) && (c < 5530 || c > 5537)))
+    fail(`its throw is 5610..5615 in the air and 5530..5537 where it lands; saw ${[...hurl].sort((a, b) => a - b).join(",")}`);
+  if (!blows.has(0x14)) fail(`0x41aa30 writes twenty every frame it flies; saw blows ${[...blows].join(",")}`);
+  console.log(`ok    ...and beyond three hundred it THROWS — cels ${[...hurl].sort((a, b) => a - b).join(",")}, worth ${[...blows].sort((a, b) => a - b).join("/")}`);
+
+  /**
    * ...and the MACHINERY, which is what the fight is actually about.
    *
    * `0x411ed0` stands eight objects at eight fixed offsets from the body, out of
