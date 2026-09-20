@@ -1476,6 +1476,8 @@ const headset: Room = {
   me,
   antialias: wantAA,
   clip: CLIP,
+  program: prog,
+  locs,
   draw: drawRoom,
   inside,
   enter(target) {

@@ -24,6 +24,13 @@
  *  3. **The framebuffer is not the canvas.** In a session `null` is not the
  *     screen, and anything that binds it — the shadow bake does — draws into
  *     nowhere.
+ *
+ * And one thing this file draws itself, which is the exception to it knowing
+ * nothing about pixels: the COMFORT VIGNETTE, a black ring that closes in from
+ * the edge of vision while the visitor is gliding. It is here and not with the
+ * room because it is not part of the room — it is part of being moved through
+ * one without moving, which is a fact about the session and about the inner
+ * ear, and it has no meaning at all on the flat page.
  */
 import { view } from "./bedsit-optics";
 import { EYE_HEIGHT, ROOM, STANDPOINTS, UNITS_PER_METRE } from "./bedsit-room";
@@ -46,6 +53,18 @@ export interface Room {
   /** the box the walker may stand in. Here it is applied to the HEAD, not to
    *  the play space, because a person can walk out of the room without it. */
   inside(x: number, y: number): [number, number];
+  /**
+   * The room's own program and attribute slots, so the vignette can put them
+   * back after drawing over it.
+   *
+   * Both are state of the CONTEXT rather than of a program, so a second program
+   * that draws a single quad has to leave them exactly as it found them or the
+   * room's next draw reads its vertices out of a six-float buffer. The page
+   * lends them rather than the session guessing, because the page is where the
+   * set of them is decided and where it would change.
+   */
+  program: WebGLProgram;
+  locs: readonly number[];
   /** the headset has taken the room: here is the framebuffer everything must be
    *  drawn into now, and stop the flat page's own loop. */
   enter(target: WebGLFramebuffer): void;
@@ -90,6 +109,173 @@ const SNAP = [0.7, 0.4] as const;
  * hide, and it is the first dial to reach for if this ever needs to be cheaper.
  */
 const SCALE = 0.8;
+
+/**
+ * The vignette: what it is for, and why it is measured in tangents.
+ *
+ * Gliding is the thing that makes people ill. The eye is carried across a room
+ * and every other sense says the body did not move, and the disagreement is
+ * worst at the EDGE of vision, which is the part of the eye that reads motion
+ * and is not being looked at with. So the edge is taken away while the gliding
+ * lasts: a black ring closes in, the picture narrows to a cone straight ahead,
+ * and the periphery has nothing in it to disagree about. It opens again the
+ * moment the stick is let go.
+ *
+ * The three numbers are TANGENTS of the angle off the eye's own axis, not
+ * fractions of the screen, and that is what makes them mean the same thing on
+ * every headset. A fraction of the screen is a different angle on every pair of
+ * lenses, so a ring that sits gently outside the useful field on one would be
+ * across somebody's reading vision on another. A tangent is an angle.
+ *
+ * `OPEN` is past the corner of any headset made — 61°, where a wide pair
+ * reaches about 56° into the corner — so a vignette at rest is not merely
+ * faint, it is off the glass entirely and costs nothing to look through.
+ * `SHUT` leaves a 62° cone, which is a generous tunnel rather than a keyhole:
+ * this room is six metres across at a slow walk, and the dose should match the
+ * provocation.
+ */
+const APERTURE = { open: 1.8, shut: 0.6, feather: 0.2 } as const;
+/**
+ * How fast it closes and opens, in seconds.
+ *
+ * It closes faster than it opens, and that way round on purpose. Closing late
+ * means the first moment of a glide — the moment that provokes — happens at the
+ * full width of vision, which is the whole of what this is meant to prevent.
+ * Opening late costs nothing but a moment of narrowed view after the stick is
+ * centred, and it is what keeps a feathered stick from strobing the ring in and
+ * out of somebody's sight.
+ */
+const VIGNETTE = { close: 0.12, open: 0.3 } as const;
+
+/**
+ * The blink, and why the jump waits for it.
+ *
+ * Standing somewhere else between one frame and the next is a cut, and a cut is
+ * the cheapest thing in VR to do badly: the room is simply elsewhere, and for a
+ * moment the visitor is looking for what moved. Every headset's own menus
+ * answer this the same way, and so does this — go black, move while nobody can
+ * see it, come back. What arrives is a room being looked at afresh rather than
+ * a room that jumped.
+ *
+ * Out is quicker than in: the darkness has to get there before the eye can
+ * follow the movement, and the way back can afford to be gentle. The jump
+ * itself happens at the bottom, which is what `jump` below is waiting for.
+ */
+const BLINK = { out: 0.07, in: 0.13 } as const;
+
+/** a tick in the hand for the two things that happen without warning: strength
+ *  0..1 and milliseconds. Not every controller has a motor, and none of them
+ *  owes us one. */
+const BUZZ = { turn: [0.35, 25], stand: [0.5, 40] } as const;
+
+/**
+ * The vignette's own program: one quad over the eye, and nothing else.
+ *
+ * It is drawn in NDC and needs no matrices — but it does need to know where the
+ * eye's axis IS, and on a headset that is not the middle of the picture. Every
+ * headset's frusta are asymmetric (the two eyes see further out than in), so
+ * NDC (0,0) is off to one side of where the visitor is actually looking, in
+ * opposite directions in the two eyes. A ring centred there is a ring that
+ * drifts as it closes, differently per eye, which is precisely the kind of
+ * thing the vignette was put in to stop.
+ *
+ * Both corrections come out of the projection matrix itself. The axis, in NDC,
+ * is where (0, 0, -1) lands, which for any perspective matrix is `-m[8]`,
+ * `-m[9]`. And dividing the offset from it by `m[0]` and `m[5]` turns NDC back
+ * into the tangent the apertures are written in — so the ring is circular in
+ * ANGLE rather than circular on a screen that is not square.
+ */
+const VIGNETTE_VERT = `
+attribute vec2 aQuad;
+varying vec2 vNDC;
+void main() {
+  vNDC = aQuad;
+  gl_Position = vec4(aQuad, 0.0, 1.0);
+}`;
+
+const VIGNETTE_FRAG = `
+precision mediump float;
+varying vec2 vNDC;
+uniform vec2 uAxis;      // where the eye actually points, in NDC
+uniform vec2 uTangent;   // NDC per unit tangent, which is 1/m[0] and 1/m[5]
+uniform float uAperture; // how wide the hole is, as a tangent
+uniform float uFeather;
+uniform float uBlink;    // and the whole view black, for a jump
+void main() {
+  vec2 off = (vNDC - uAxis) * uTangent;
+  float ring = smoothstep(uAperture, uAperture + uFeather, length(off));
+  // the darkest of the two rather than the sum: a blink during a glide is
+  // already black, and adding the ring to it would be blacker than black and
+  // leave a seam where the two meet
+  gl_FragColor = vec4(0.0, 0.0, 0.0, max(ring, uBlink));
+}`;
+
+interface Vignette {
+  draw(projection: Float32Array, aperture: number, blink: number): void;
+}
+
+/**
+ * Build it, against the page's own context.
+ *
+ * The attribute dance is the one in `drawSmoke`: the room's arrays are put away
+ * before a foreign program draws and enabled again afterwards, because array
+ * state belongs to the CONTEXT and not to the program that set it. Leaving one
+ * of the room's enabled over this two-triangle buffer would have its next draw
+ * read thousands of vertices out of six.
+ */
+function makeVignette(gl: WebGLRenderingContext, room: Room): Vignette {
+  const build = (type: number, src: string): WebGLShader => {
+    const sh = gl.createShader(type)!;
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) ?? "vignette");
+    return sh;
+  };
+  const prog = gl.createProgram()!;
+  gl.attachShader(prog, build(gl.VERTEX_SHADER, VIGNETTE_VERT));
+  gl.attachShader(prog, build(gl.FRAGMENT_SHADER, VIGNETTE_FRAG));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) ?? "vignette link");
+
+  const quad = gl.createBuffer()!;
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  // THREE vertices, not six: one triangle big enough to cover the square is the
+  // same picture as two that tile it, with no diagonal down the middle for the
+  // rasteriser to seam along
+  const loc = gl.getAttribLocation(prog, "aQuad");
+  const u = {
+    axis: gl.getUniformLocation(prog, "uAxis"),
+    tangent: gl.getUniformLocation(prog, "uTangent"),
+    aperture: gl.getUniformLocation(prog, "uAperture"),
+    feather: gl.getUniformLocation(prog, "uFeather"),
+    blink: gl.getUniformLocation(prog, "uBlink"),
+  };
+
+  return {
+    draw(projection, aperture, blink) {
+      gl.useProgram(prog);
+      gl.uniform2f(u.axis, -projection[8], -projection[9]);
+      gl.uniform2f(u.tangent, 1 / projection[0], 1 / projection[5]);
+      gl.uniform1f(u.aperture, aperture);
+      gl.uniform1f(u.feather, APERTURE.feather);
+      gl.uniform1f(u.blink, blink);
+      for (const l of room.locs) if (l >= 0) gl.disableVertexAttribArray(l);
+      gl.enableVertexAttribArray(loc);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      gl.disable(gl.DEPTH_TEST);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.disable(gl.BLEND);
+      gl.enable(gl.DEPTH_TEST);
+      gl.disableVertexAttribArray(loc);
+      for (const l of room.locs) if (l >= 0) gl.enableVertexAttribArray(l);
+      gl.useProgram(room.program);
+    },
+  };
+}
 
 let session: XRSession | null = null;
 
@@ -188,6 +374,14 @@ export async function enterXR(room: Room): Promise<void> {
   let standpoint = 0;
   /** the last bearing worth having: see the look straight up, below */
   let bearing = me.yaw;
+  /** how hard the stick is being pushed, 0..1, and how far the ring has closed
+   *  in answer — the second chases the first rather than tracking it, which is
+   *  what `VIGNETTE` times */
+  let pushing = 0;
+  let closed = 0;
+  /** how black the view is, and the standpoint waiting for it to be black */
+  let blink = 0;
+  let jump: number | null = null;
   const pressed = new WeakMap<XRInputSource, boolean>();
 
   s.addEventListener("end", () => {
@@ -298,6 +492,30 @@ export async function enterXR(room: Room): Promise<void> {
     put(spot.x, spot.y);
   };
 
+  /**
+   * A tick in the hand, for the two things that happen without being asked for
+   * gradually: a turn that snaps and a jump that arrives out of the dark.
+   *
+   * Both are comfort rather than decoration. The eye is told the room moved by
+   * seeing it move; here it cannot, because the whole point of a snap is that
+   * there is nothing to watch and the whole point of a blink is that it happens
+   * where nobody is looking. A tap on the hand at the same instant is the other
+   * sense agreeing that something was done deliberately — which is exactly what
+   * the inner ear is missing and complaining about.
+   *
+   * Every part of this is optional in the specification and absent on plenty of
+   * real controllers, so it is reached for defensively and its failure is not
+   * worth a word: a session with no motors is a session, and a throw from a
+   * haptic pulse must never take the frame down with it.
+   */
+  const buzz = ([strength, ms]: readonly [number, number]): void => {
+    for (const src of s.inputSources) {
+      try {
+        void src.gamepad?.hapticActuators?.[0]?.pulse?.(strength, ms);
+      } catch { /* no motor, or one that would rather not */ }
+    }
+  };
+
   const stick = (pad: Gamepad): [number, number] =>
     // `axes[2]` and `axes[3]` are the thumbstick under the standard mapping;
     // `axes[0]` and `axes[1]` are a touchpad, and a controller with only those
@@ -325,11 +543,16 @@ export async function enterXR(room: Room): Promise<void> {
     move ??= look;
     look ??= move;
 
+    pushing = 0;
     if (move) {
       const [ax, ay] = stick(move);
       // a stick reads -1 pushed away from the hand, and away is forward
       const fwd = -past(ay), side = past(ax);
       if (fwd || side) {
+        // what the vignette answers: how hard, not how far — `dt` is nothing to
+        // do with how provoking a glide is, and a slow frame must not open the
+        // ring back up in the middle of one
+        pushing = Math.min(1, Math.hypot(fwd, side));
         const step = GLIDE * UNITS_PER_METRE * dt;
         const fx = Math.cos(bearing), fy = Math.sin(bearing);
         // forward is where the visitor is LOOKING, not where the play space
@@ -341,7 +564,11 @@ export async function enterXR(room: Room): Promise<void> {
     }
     if (look) {
       const [ax] = stick(look);
-      if (!turning && Math.abs(ax) > SNAP[0]) { turn(Math.sign(ax) * -TURN); turning = true; }
+      if (!turning && Math.abs(ax) > SNAP[0]) {
+        turn(Math.sign(ax) * -TURN);
+        buzz(BUZZ.turn);
+        turning = true;
+      }
       if (turning && Math.abs(ax) < SNAP[1]) turning = false;
     }
     for (const src of s.inputSources) {
@@ -351,7 +578,9 @@ export async function enterXR(room: Room): Promise<void> {
       // have them: the only button this page binds, so there is nothing for it
       // to be confused with
       const down = !!(pad.buttons[4] ?? pad.buttons[0])?.pressed;
-      if (down && !pressed.get(src)) stand(standpoint + 1);
+      // the press only ASKS. Where it lands is decided when the view is black,
+      // below — a press during a blink already in flight is the same press
+      if (down && !pressed.get(src) && jump === null && blink === 0) jump = standpoint + 1;
       pressed.set(src, down);
     }
   };
@@ -379,6 +608,10 @@ export async function enterXR(room: Room): Promise<void> {
     for (let i = 0; i < 16; i++) if (i % 4 !== 3) m[i] *= k;
     return m;
   };
+
+  /** built on the first frame that needs it, and never on a page that has no
+   *  headset in front of it */
+  let ring: Vignette | null = null;
 
   const onFrame = (time: number, frame: XRFrame): void => {
     if (session !== s) return;
@@ -445,6 +678,28 @@ export async function enterXR(room: Room): Promise<void> {
     const [cx, cy] = room.inside(head[0], head[1]);
     if (cx !== head[0] || cy !== head[1]) put(cx, cy);
 
+    /**
+     * The blink, and the jump that happens inside it.
+     *
+     * Down, then the move, then up — and the move is here rather than in
+     * `drive` because "when the view is black" is a fact about this ramp and
+     * nothing to do with which button was pressed. `stand` is the same call the
+     * press used to make directly; all that has changed is that nobody sees it.
+     */
+    if (jump !== null) {
+      blink = Math.min(1, blink + dt / BLINK.out);
+      if (blink >= 1) { stand(jump); jump = null; buzz(BUZZ.stand); head = where(); }
+    } else if (blink > 0) {
+      blink = Math.max(0, blink - dt / BLINK.in);
+    }
+
+    // the ring chases the stick: quickly shut, slowly open — see `VIGNETTE`.
+    // `min(1, …)` is what keeps a long frame landing ON the target rather than
+    // past it and swinging back.
+    const rate = pushing > closed ? VIGNETTE.close : VIGNETTE.open;
+    closed += (pushing - closed) * Math.min(1, dt / rate);
+    const aperture = APERTURE.open + (APERTURE.shut - APERTURE.open) * closed;
+
     const world = play();
     for (const view of pose.views) {
       const vp = base.getViewport(view);
@@ -462,6 +717,14 @@ export async function enterXR(room: Room): Promise<void> {
         [where[0], where[2], where[1]],
         time / 1000,
       );
+      // and the comfort over the top of it, in this eye's own viewport and
+      // with this eye's own axis. Skipped outright when there is nothing to
+      // draw: a fully open ring over a still room is a screen of transparent
+      // black, paid for at every pixel of both eyes.
+      if (blink > 0 || closed > 0.001) {
+        ring ??= makeVignette(gl, room);
+        ring.draw(view.projectionMatrix, aperture, blink);
+      }
     }
   };
 

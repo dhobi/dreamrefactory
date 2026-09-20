@@ -138,14 +138,34 @@ const FAKE_HEADSET = `(() => {
   // tested rather than testing the refusal
   WebGLRenderingContext.prototype.makeXRCompatible = () => Promise.resolve();
 
-  /** one headset frame, head level and 1.6 m up, eyes 64 mm apart */
+  // One controller, installed the first time the suite asks for it. Left, so
+  // it is the one that GLIDES — and the y axis only, because x on the stick
+  // that turns would snap the room round mid-measurement.
+  const pad = {
+    axes: [0, 0, 0, 0],
+    buttons: [0, 1, 2, 3, 4].map(() => ({ pressed: false, touched: false, value: 0 })),
+  };
+  const hand = { handedness: "left", targetRayMode: "tracked-pointer", gamepad: pad };
+  const inHand = () => { if (!session.inputSources.length) session.inputSources.push(hand); };
+  bag.stick = (y) => { inHand(); pad.axes[3] = y; };
+  bag.press = (on) => { inHand(); pad.buttons[4].pressed = on; };
+
+  /**
+   * One headset frame, head level and 1.6 m up, eyes 64 mm apart.
+   *
+   * The field is 1.6 radians — 92° — and not something narrower, because the
+   * vignette is measured in the ANGLE off the eye's axis and a narrow fake
+   * would sit entirely inside the ring's widest setting and never see it. A
+   * Quest 3 shows about 90° vertically per eye, so this is the shape of the
+   * thing the numbers were chosen for.
+   */
   bag.frame = () => {
     const pose = ID(); pose[13] = 1.6;
     const views = ["left", "right"].map((eye) => {
       const m = new Float32Array(pose);
       m[12] += eye === "left" ? -0.032 : 0.032;
       const p = new Float32Array(16);
-      const f = 1 / Math.tan(0.5), n = 0.03, fa = 40;
+      const f = 1 / Math.tan(0.8), n = 0.03, fa = 40;
       p[0] = f; p[5] = f; p[10] = (fa + n) / (n - fa); p[11] = -1; p[14] = (2 * fa * n) / (n - fa);
       return { eye, projectionMatrix: p, transform: tf(m) };
     });
@@ -168,6 +188,32 @@ const FAKE_HEADSET = `(() => {
       sum += px[i] * (i % 997);            // position-sensitive, so two eyes differ
     }
     return { lit: lit / (EYE * EYE), sum };
+  };
+
+  /**
+   * The middle of an eye against its rim, which is what a vignette IS.
+   *
+   * A ring that closes takes the periphery and leaves the middle alone, so one
+   * number cannot show it: a picture that went dark all over is a lamp being
+   * turned off, and a picture whose rim went dark while its middle did not is
+   * the ring. The disc and the annulus are in fractions of the half-height, so
+   * they mean the same thing whatever the eye's pixels are.
+   */
+  bag.zones = (half) => {
+    const gl = bag.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bag.layer.framebuffer);
+    const px = new Uint8Array(EYE * EYE * 4);
+    gl.readPixels(half * EYE, 0, EYE, EYE, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const R = EYE / 2;
+    let cs = 0, cn = 0, es = 0, en = 0;
+    for (let y = 0; y < EYE; y++) for (let x = 0; x < EYE; x++) {
+      const i = (y * EYE + x) * 4;
+      const l = px[i] + px[i + 1] + px[i + 2];
+      const d = Math.sqrt((x - R) * (x - R) + (y - R) * (y - R)) / R;
+      if (d < 0.35) { cs += l; cn++; }
+      else if (d > 0.82 && d < 1.0) { es += l; en++; }
+    }
+    return { centre: cs / cn, edge: es / en };
   };
 })();`;
 
@@ -264,6 +310,84 @@ const main = async (): Promise<void> => {
   // two eyes of one room, not one eye drawn twice: alike, and not identical
   check(Math.abs(l.lit - r.lit) < 0.05, "both eyes are looking at the same room");
   check(l.sum !== r.sum, "and they are looking at it from different places");
+
+  /**
+   * The vignette, in pixels.
+   *
+   * The session's own suite has the numbers on their way to the shader — how
+   * far the ring has closed, how black the blink is — and cannot have anything
+   * else, because it hands the module a context that does not draw. What is
+   * only true against a real driver is HERE: that a second program drawing a
+   * blended quad over the room leaves the room's attribute arrays and its
+   * program exactly as it found them. Get that wrong and the ring is perfect
+   * and the next frame of the room is not.
+   *
+   * So: the rim against the middle, before, during and after.
+   */
+  const zones = async (): Promise<{ centre: number; edge: number }> =>
+    page.evaluate(() => (window as unknown as {
+      __xr: { zones(h: number): { centre: number; edge: number } };
+    }).__xr.zones(0));
+  const stick = async (y: number): Promise<void> => {
+    await page.evaluate((v) => (window as unknown as { __xr: { stick(y: number): void } }).__xr.stick(v), y);
+  };
+
+  const still = await zones();
+  await stick(-1);                              // pushed away from the hand is forward
+  await drive(30);                              // a few time constants of gliding
+  const gliding = await zones();
+  check(gliding.edge < still.edge * 0.5,
+    `the rim goes dark while gliding (${still.edge.toFixed(1)} → ${gliding.edge.toFixed(1)})`);
+  check(gliding.centre > still.centre * 0.8,
+    `and the middle is left alone (${still.centre.toFixed(1)} → ${gliding.centre.toFixed(1)})`);
+
+  /**
+   * The restore, and how to ask about it without asking the wrong question.
+   *
+   * The obvious check — the room before the glide against the room after it —
+   * is not a check at all: the visitor has GLIDED, which is to say they are
+   * two thirds of a metre further into the room and looking at something else.
+   * It fails on a working restore and would have to be loosened until it could
+   * not fail on a broken one either.
+   *
+   * Two questions do hold still. The ring is drawn BETWEEN the eyes — room,
+   * ring, room, ring — so a program or an attribute array left wrong by the
+   * first ring is read by the second eye, and the two eyes stop agreeing. And
+   * from a standing start two consecutive frames are one picture, so a leak
+   * that accumulates shows as drift where there should be none. Neither asks
+   * where the visitor is.
+   */
+  const [gl0, gl1] = await eyes();
+  check(Math.abs(gl0.lit - gl1.lit) < 0.05,
+    `the second eye is still right with a ring drawn before it (${(gl0.lit * 100).toFixed(0)}% / ${(gl1.lit * 100).toFixed(0)}%)`);
+
+  await stick(0);
+  await drive(40);
+  const opened = await zones();
+  check(opened.edge > still.edge * 0.8,
+    `the rim comes back when the stick is let go (${opened.edge.toFixed(1)})`);
+
+  const settle = (await eyes())[0].lit;
+  await drive(1);
+  const again = (await eyes())[0].lit;
+  check(Math.abs(settle - again) < 0.01,
+    `and the room holds still when the visitor does (${(settle * 100).toFixed(1)}% → ${(again * 100).toFixed(1)}%)`);
+
+  /**
+   * The blink: at the bottom of it the view is black, in both eyes, and the
+   * standpoint has changed under it.
+   */
+  await page.evaluate(() => (window as unknown as { __xr: { press(on: boolean): void } }).__xr.press(true));
+  const dark: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    await page.evaluate(() => (window as unknown as { __xr: { frame(): number } }).__xr.frame());
+    await page.waitForTimeout(60);
+    dark.push((await zones()).centre);
+  }
+  await page.evaluate(() => (window as unknown as { __xr: { press(on: boolean): void } }).__xr.press(false));
+  check(Math.min(...dark) < 1, `the view goes fully black for the jump (darkest ${Math.min(...dark).toFixed(2)})`);
+  await drive(20);
+  check((await zones()).centre > 1, "and comes back out of it");
 
   /**
    * The furniture, out, mid-session.

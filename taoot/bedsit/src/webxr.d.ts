@@ -96,6 +96,19 @@ interface XRInputSource {
   readonly gamepad: Gamepad | null;
 }
 
+interface GamepadHapticActuator {
+  /** the WebXR gamepads' own way of asking for a tick. Optional on the type as
+   *  well as at runtime: it is not in every browser's `GamepadHapticActuator`,
+   *  and the standard `playEffect` is not in every headset's. */
+  pulse?(value: number, duration: number): Promise<boolean>;
+}
+
+interface Gamepad {
+  /** absent on plenty of real controllers, which is why it is optional here
+   *  rather than merely empty */
+  readonly hapticActuators?: readonly GamepadHapticActuator[];
+}
+
 interface Navigator {
   /** absent in every browser without a headset behind it, and on plain http */
   readonly xr?: XRSystem;

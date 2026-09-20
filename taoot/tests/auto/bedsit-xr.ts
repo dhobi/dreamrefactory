@@ -169,14 +169,51 @@ function fakeHeadset(drawn: Drawn[], opts: { floor?: boolean } = {}): { install(
   } as ReturnType<typeof fakeHeadset>;
 }
 
-/** the context, as six recorded calls */
-function fakeGL(bound: unknown[]): WebGLRenderingContext {
+/** what the vignette asked for, once per time it was drawn */
+interface Ring { aperture: number; blink: number }
+
+/**
+ * The context, recorded rather than performed.
+ *
+ * Most of it is the six calls the session makes to move pixels about. The rest
+ * is enough of a shader toolchain for the vignette to BUILD — it compiles a
+ * program and a buffer on the first frame that needs one — and enough
+ * bookkeeping to read back what it asked for: `getUniformLocation` hands back
+ * the uniform's own name, so the recorded values arrive labelled, and a
+ * `drawArrays` files the current set away as one ring drawn.
+ *
+ * That last part is the only way this suite can see comfort at all. The ring is
+ * pixels, and pixels are the one thing a headless test cannot look at — but
+ * "how far has it closed" and "how black is it" are numbers on their way to the
+ * shader, and they are the actual behaviour.
+ */
+function fakeGL(bound: unknown[], rings: Ring[]): WebGLRenderingContext {
+  const u: Record<string, number> = {};
   return {
     COLOR_BUFFER_BIT: 1, DEPTH_BUFFER_BIT: 2, FRAMEBUFFER: 3,
+    VERTEX_SHADER: 4, FRAGMENT_SHADER: 5, COMPILE_STATUS: 6, LINK_STATUS: 7,
+    ARRAY_BUFFER: 8, STATIC_DRAW: 9, FLOAT: 10, TRIANGLES: 11,
+    DEPTH_TEST: 12, BLEND: 13, SRC_ALPHA: 14, ONE_MINUS_SRC_ALPHA: 15,
     makeXRCompatible: () => Promise.resolve(),
     bindFramebuffer: (_t: number, fb: unknown) => { bound.push(fb); },
-    viewport() { /* recorded by the viewport count below if ever needed */ },
+    viewport() { /* the per-eye halves are the layer's business */ },
     clear() { /* nothing to clear */ },
+    createShader: () => ({}), shaderSource() { /* not read */ }, compileShader() { /* not run */ },
+    getShaderParameter: () => true, getShaderInfoLog: () => "",
+    createProgram: () => ({}), attachShader() { /* linked below */ }, linkProgram() { /* fine */ },
+    getProgramParameter: () => true, getProgramInfoLog: () => "",
+    createBuffer: () => ({}), bindBuffer() { /* one quad */ }, bufferData() { /* one triangle */ },
+    getAttribLocation: () => 0,
+    // the name IS the location, so what comes back below is labelled
+    getUniformLocation: (_p: unknown, name: string) => name,
+    useProgram() { /* swapped back by the vignette itself */ },
+    uniform1f: (name: string, v: number) => { u[name] = v; },
+    uniform2f() { /* the eye's axis and scale: geometry, tested elsewhere */ },
+    enableVertexAttribArray() { /* the dance is checked by the browser suite */ },
+    disableVertexAttribArray() { /* …where a real driver would object */ },
+    vertexAttribPointer() { /* ditto */ },
+    enable() { /* blending */ }, disable() { /* and depth */ }, blendFunc() { /* over */ },
+    drawArrays: () => { rings.push({ aperture: u.uAperture, blink: u.uBlink }); },
   } as unknown as WebGLRenderingContext;
 }
 
@@ -195,12 +232,14 @@ function headOf(drawn: Drawn[]): [number, number, number] {
   return [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2];
 }
 
-function makeRoom(drawn: Drawn[], entered: WebGLFramebuffer[], bound: unknown[], left: { n: number }): Room {
+function makeRoom(drawn: Drawn[], entered: WebGLFramebuffer[], bound: unknown[], left: { n: number }, rings: Ring[]): Room {
   return {
-    gl: fakeGL(bound),
+    gl: fakeGL(bound, rings),
     me: { x: 7000, y: 7000, z: EYE_HEIGHT, yaw: 0, pitch: 0.4 },
     antialias: true,
     clip: CLIP,
+    program: {} as WebGLProgram,
+    locs: [0, 1, 2, 3, 4],
     draw: (proj, look, at) => { drawn.push({ proj, look, at: [...at] }); },
     inside: (x, y) => [
       Math.max(ROOM.x0 + 380, Math.min(ROOM.x1 - 380, x)),
@@ -238,12 +277,13 @@ describe("the bedsit in a headset", () => {
   let entered: WebGLFramebuffer[];
   let bound: unknown[];
   let left: { n: number };
+  let rings: Ring[];
 
   async function enter(opts: { floor?: boolean } = {}): Promise<void> {
-    drawn = []; entered = []; bound = []; left = { n: 0 };
+    drawn = []; entered = []; bound = []; left = { n: 0 }; rings = [];
     rig = fakeHeadset(drawn, opts);
     rig.install();
-    room = makeRoom(drawn, entered, bound, left);
+    room = makeRoom(drawn, entered, bound, left, rings);
     fake = rig.fake();
     await enterXR(room);
   }
@@ -444,15 +484,111 @@ describe("the bedsit in a headset", () => {
     expect(head[0]).toBeLessThanOrEqual(ROOM.x1);
   });
 
-  it("stands where the game stands, on the button", async () => {
+  /**
+   * The jump happens where nobody can see it.
+   *
+   * A press does not move anybody: it asks, the view goes black over 70 ms, the
+   * room is changed at the bottom, and it comes back over 130 ms. So the
+   * assertion that matters is the NEGATIVE one first — that the frame after the
+   * press has the visitor exactly where they were — because a jump that
+   * happened immediately would pass every check about where they ended up and
+   * still be the cut this was written to remove.
+   */
+  it("stands where the game stands, on the button — in the dark", async () => {
     await enter();
-    fake.frame(poseAt(0.3, 1.6, 0.2), 0);
+    const pose = poseAt(0.3, 1.6, 0.2);
+    const before = headOf(fake.frame(pose, 0));
     fake.sticks.push(source({ handedness: "right", axes: [0, 0], a: true }));
-    const head = headOf(fake.frame(poseAt(0.3, 1.6, 0.2), 16));
+
+    const during = headOf(fake.frame(pose, 16));
+    expect(during[0]).toBeCloseTo(before[0], 0);   // asked, not moved
+    expect(during[2]).toBeCloseTo(before[2], 0);
+    expect(rings.at(-1)!.blink).toBeGreaterThan(0);
+    expect(rings.at(-1)!.blink).toBeLessThan(1);
+
+    // to the bottom of the fade: 70 ms of frames
+    let t = 16;
+    for (let i = 0; i < 6; i++) fake.frame(pose, (t += 16));
     const spot = STANDPOINTS[1];            // `stand(standpoint + 1)` from the first
+    const head = headOf(fake.frame(pose, (t += 16)));
     expect(head[0]).toBeCloseTo(spot.x, 0);
     expect(head[2]).toBeCloseTo(spot.y, 0);
     expect(room.me.yaw).toBeCloseTo((2 * Math.PI * spot.deg) / 256, 6);
+
+    /**
+     * And back into the light — which is the ring no longer being DRAWN.
+     *
+     * Not "the last ring recorded has a blink of zero": it cannot have. The
+     * last one recorded is by definition the final frame on which there was
+     * still something to draw, so it holds the last sliver of the fade. What
+     * says the fade is over is that nothing is drawn after it.
+     */
+    for (let i = 0; i < 12; i++) fake.frame(pose, (t += 16));
+    const settled = rings.length;
+    for (let i = 0; i < 5; i++) fake.frame(pose, (t += 16));
+    expect(rings.length).toBe(settled);
+  });
+
+  /**
+   * The vignette: shut under the stick, open at rest, and absent when open.
+   *
+   * The third of those is not a nicety. The ring is a screen of blended pixels
+   * over both eyes, and a fully open one is a screen of TRANSPARENT black —
+   * invisible, and paid for at every pixel of every frame of a session that is
+   * mostly somebody standing still looking at a room. It has to not be drawn,
+   * and nothing about the picture would ever say whether it was.
+   */
+  it("closes the vignette under the stick and opens it again after", async () => {
+    await enter();
+    let t = 0;
+    const still = (): void => { fake.frame(poseAt(0, 1.6, 0), (t += 16)); };
+    still(); still();
+    expect(rings).toHaveLength(0);          // nothing drawn over a still room
+
+    const pad = source({ handedness: "left", axes: [0, -1] });
+    fake.sticks.push(pad);
+    for (let i = 0; i < 40; i++) still();   // ~0.6 s of gliding, five time constants
+    const shut = rings.at(-1)!.aperture;
+    expect(shut).toBeLessThan(0.75);        // closed to near the 0.6 it aims at
+    expect(shut).toBeGreaterThan(0.55);     // and never past it
+
+    (pad.gamepad as unknown as { axes: number[] }).axes[3] = 0;
+    for (let i = 0; i < 40; i++) still();
+    expect(rings.at(-1)!.aperture).toBeGreaterThan(1.5);   // wide open again
+    const n = rings.length;
+    for (let i = 0; i < 200; i++) still();  // and eventually not drawn at all
+    expect(rings.length).toBeLessThan(n + 200);
+  });
+
+  /**
+   * A tick in the hand for the two things that happen without being watched.
+   *
+   * Both are comfort: a snap and a blink are deliberately things the eye cannot
+   * follow, and a tap at the same instant is the other sense saying it was
+   * meant. Optional everywhere in the specification, so what is pinned is that
+   * it is ASKED for — and that a controller without a motor is not a crash.
+   */
+  it("ticks the hand on a snap and on arriving, and survives a hand with no motor", async () => {
+    await enter();
+    const buzzes: [number, number][] = [];
+    const pad = source({ handedness: "right", axes: [0, 0] });
+    (pad.gamepad as unknown as { hapticActuators: unknown[] }).hapticActuators = [{
+      pulse: (v: number, ms: number) => { buzzes.push([v, ms]); return Promise.resolve(true); },
+    }];
+    const mute = source({ handedness: "left", axes: [0, 0] });
+    fake.sticks.push(pad, mute);            // one with a motor, one without
+
+    let t = 0;
+    fake.frame(poseAt(0, 1.6, 0), (t += 16));
+    (pad.gamepad as unknown as { axes: number[] }).axes[2] = 1;
+    fake.frame(poseAt(0, 1.6, 0), (t += 16));
+    expect(buzzes).toHaveLength(1);         // the snap
+
+    (pad.gamepad as unknown as { axes: number[] }).axes[2] = 0;
+    (pad.gamepad as unknown as { buttons: { pressed: boolean }[] }).buttons[4].pressed = true;
+    for (let i = 0; i < 10; i++) fake.frame(poseAt(0, 1.6, 0), (t += 16));
+    expect(buzzes).toHaveLength(2);         // and the arrival, once, at the bottom
+    expect(buzzes[1][0]).toBeGreaterThan(buzzes[0][0]);
   });
 
   it("draws into the session's framebuffer and not into the canvas", async () => {
