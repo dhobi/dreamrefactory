@@ -819,14 +819,46 @@ the creature half of it now has a switch of its own, `?foehit=1`, and it is off
 even when `?damage=1` is on. Everything else `?damage=1` arms — the presses, the
 girders, TOWER's current, the sewage — is unchanged.
 
+### What the classes throw, and what still throws nothing
+
+Ten classes in this game fight at a distance. For a long time not one of them
+could reach the player: a `Brain` is handed one enemy and has no creator, and
+every projectile in the game is an object of ANOTHER class that the thrower's
+machine spawns. `BrainCtx.cast` is that seam now — a module reads its class's
+spawner into a `CastKit` and calls `cast` at the instruction the executable
+calls the spawner at — and **five of the ten are wired**:
+
+| class | where | what leaves it |
+|---|---|---|
+| `initpuke` | LAB | a gob: 100 ahead, 65 up, `dx 400 / 13` = 31px a frame, gone at 1000 from the player (`0x418400`) |
+| `initcop` | MAZE, BARREL | a slug that writes its own ±35, lives a hundred FRAMES, and flies **harmless** until it is inside 130 of the player, where `0x413e79` arms it at a hundred |
+| `initeyeball` | SEWER | a glob, five cel sets cycling on `AI+4`, launch into a looping flight, gone 600 from where it STARTED, and worth **−2** — a code, not damage |
+| `initzomb` | CAVERN, GRAVE | a cloud that does not move at all: 40 up, 65 in front, eight frames, **−2** (`0x420990`) |
+| `initigor` | RAVECAVE | 26 up and 35 along with a weight of 0.8, so it ARCS, and it unwinds its own four cels where it lands (`0x421310` index 1) |
+
+Two of the five carry codes rather than damage, which makes them the first
+classes a level places that can send one — see `codes.ts`, whose note about that
+had to be corrected. And `initeyeball` and `initpuke` are the two classes with
+no strike box on any cel of their own: until this, they closed on the player and
+stood there, because the projectile IS the attack.
+
+**Still throwing nothing:** `initknifeboy` (which throws two different things, a
+flat knife and a lob), `inithardcore`, `initvpriest` (which also summons bats),
+and the two boss volleys, `initkragg` and `initwbooly`. The knife needs one
+piece of machinery none of the five did: its stick sequence carries a stride per
+cel (`dx 0 50 0 50 0 0 0`), where every kit so far has one speed for its whole
+flight.
+
 ### What is read and not yet done
 
 - **The leaping attacks do not leap.** The `dy` is in the table — the punk's
   flying kick is `-480` on the frame it leaves the ground — and nothing applies
-  it. The engine carries a leap as velocity through `obj+0xa`; putting it
-  straight into `y` here sent WOODS' husk ninety-six pixels up, past the reach of
-  the floor test coming down, and nine thousand pixels out of the level, still
-  swinging. Wiring it as velocity is its own piece of work.
+  it. Putting it straight into `y` sent WOODS' husk ninety-six pixels up, past
+  the reach of the floor test coming down, and nine thousand pixels out of the
+  level, still swinging. What it wants is the arc the casts now use: `0x42fd9e`
+  puts a velocity into the point whole and `0x430327` adds `trunc(weight * 10)`
+  to it every frame. The reading is settled; applying it to the player's own
+  states is the work that is left.
 - **A class that stands still keeps standing still.** If its own gait carries no
   stride it does not close, and its attack's stride does not move it either.
   LAB's ten `initarm` are the case — arms reaching out of a wall — and giving
@@ -840,9 +872,8 @@ girders, TOWER's current, the sewage — is unchanged.
   last band. The casters do not: `initvpriest` throws from its OUTERMOST band,
   because the thing it throws has the distance to cover. This page does not yet
   tell a caster from a puncher.
-- `initeyeball` and `initpuke` carry no strike box on any cel of their own, so
-  they close and never swing. Both of them spit, and what hits you is the
-  projectile.
+- The casters' band rule is still unread here — see the bullet above; what has
+  changed is only that the thing they would throw now exists.
 - The patrol still turns at the record's rect. The engine turns a hundred pixels
   inside it (`0x44e68e`, `0x44e69f`) and only when the territory is wider than
   three hundred, and that is left alone here on purpose — it moves every foe in

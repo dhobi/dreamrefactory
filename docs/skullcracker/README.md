@@ -381,8 +381,14 @@ a level with no class anywhere.
 - **Both of the two tests are here now**, and so is the ending — the tests in
   [Weapons and pickups](weapons.md#a-pickup-is-taken-on-the-art-not-the-box),
   the ending in [The sixteen levels](levels.md#the-sixteenth-level-is-the-end).
-- **Damage is off by default**, because with it on a probe walking east through
-  WOODS meets three hydraulic presses and every route test here becomes a fight.
+- **Damage is off on the BENCH and on in the game.** `walk.html?level=N` starts
+  with `damage` and `foehit` clear, because with them on a probe walking east
+  through WOODS meets three hydraulic presses and every route test becomes a
+  fight. That was never a fact about the game, though, and for a while it meant
+  a player who came through the front door could not be killed by anything but a
+  fall. `begin()` throws both switches now, so the health, the knockdown, the
+  seven KILL films and the lives — all built, all previously unreachable from
+  that door — are what a player meets.
 - **The KILL vignette is the last life's**, which is what `0x4294b7` says: the
   death branch reads the count, spends one, and takes the ordinary path while
   the count before the spend was not negative. This page used to play one on
