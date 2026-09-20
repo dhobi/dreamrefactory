@@ -4730,9 +4730,7 @@ function takeHits(): void {
     !hereOf((l) => l.claws).length &&
     !hereOf((l) => l.hands).length &&
     !hereOf((l) => l.surges).length &&
-    !hereOf((l) => l.bushes).length &&
-    // ...and nothing a creature has thrown that carries one either
-    !casts.some((c) => c.kit.blow < 0)
+    !hereOf((l) => l.bushes).length
   )
     return;
   const mine = playerBody();
@@ -4905,10 +4903,30 @@ function takeHits(): void {
    * and touching the player is what sets it. A gob that has hit you is gone
    * even if you were already on your back.
    */
-  for (const c of casts) {
-    // a blow is a creature's and waits for the creature switch; a CODE is not
-    // damage at all and comes through regardless, exactly as the claw's does
-    if (c.kit.blow > 0 && !foesHurt) continue;
+  /**
+   * ...and what the creatures have THROWN, all of it under the creature switch.
+   *
+   * Codes included, and that is a decision rather than an oversight. This
+   * function lets a CODE through whatever the switches say — the claw, the hand
+   * underfoot, the bush and the wraith all reach the player with `?damage` off
+   * — on the reasoning that a code is not damage and turning damage off was
+   * never meant to turn the grab off.
+   *
+   * A thrown one is different, and SEWER is where it showed. Two of the four
+   * casts built so far carry −2, the jolt; nine eyes spit it; and with the
+   * jolts arriving whatever the switch said, `tests/browser/sewer.ts` could no
+   * longer walk its own big shaft — the player was knocked off it and out of
+   * the level, twice in two runs. The claw and the bush are LEVEL FURNITURE,
+   * fixed things you walk into, and a route that meets one meets it by standing
+   * there. A glob is a creature's attack, which is exactly what `foehit` was
+   * added to hold back while the shared AI was being wired, and the sign of the
+   * number it carries does not change what it is.
+   *
+   * So: a cast waits for the creature switch, code or blow. The suites keep
+   * measuring routes, and `?foehit=1` — which is what the front door plays with
+   * — gets the whole of it.
+   */
+  for (const c of foesHurt ? casts : []) {
     if (castBlow(c) === 0) continue; // still flying harmless — `0x413e43`
     const cel = celRec(lvl.sbk, castCel(c));
     if (!cel?.strike) continue;

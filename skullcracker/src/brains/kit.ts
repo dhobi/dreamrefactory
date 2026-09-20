@@ -296,6 +296,31 @@ export interface BrainCtx {
  * class's spawner and its script into one of these and calls {@link
  * BrainCtx.cast} where the executable calls the spawner. The wiring in
  * `walk.ts` owns the flight, the hit and the drawing; this is the data.
+ *
+ * Why no kit here carries a RISE, and what has to be settled before one can.
+ *
+ * Four classes throw as of this writing and all four fly flat or not at all —
+ * the gob, the slug, the glob and the zombie's cloud. The next three do not:
+ * `initigor` throws with `vy = -26` and `vx = ±35` (`0x425544`…`0x425582`),
+ * `initknifeboy`'s second maker sends one straight up at `dy -30` and drops it
+ * back through its own cels, and `inithardcore` lobs. Each of those needs a
+ * vertical velocity and a pull, and the pull is where this stops.
+ *
+ * `0x430327` is the pull: `obj+0xa = obj+0x24 + <this frame's vy>`, where
+ * `obj+0x24` is `trunc(weight * 10)` — 10 for the player, and 8 for the class
+ * Igor throws (`0x41fc7b` pushes 0.8f). What is NOT settled is the unit
+ * `obj+0xa` is then spent in. `walk.ts`'s own gravity note reads it as raw
+ * units divided by `obj+0xe` when the object moves, which for the player is
+ * 10/12 = 0.83 pixels a frame squared; the page actually falls at
+ * `INVENTED.gravityPx`, 0.524 a TICK — 2.1 a frame — which is a number this
+ * port chose and calibrated, and the file says so.
+ *
+ * Both cannot be right, and an arc built on the wrong one is wrong in a way
+ * nobody can tell apart from the disc's by looking at it. It is also the same
+ * question the leaping attacks are waiting on — `combat.md` calls wiring a leap
+ * as velocity "its own piece of work" — so it is one reading that unblocks four
+ * classes and the leaps together, and it belongs in its own change rather than
+ * smuggled into a projectile.
  */
 export interface CastKit {
   /** the flight cels, in order. The last one holds when the script runs out */
@@ -373,7 +398,6 @@ export interface CastKit {
   /** the spawner and the script it installs */
   from: string;
 }
-
 export type Brain = (e: Enemy, foe: Foe, run: number, k: BrainCtx) => boolean;
 
 /**

@@ -125,7 +125,16 @@ const sweep = async (
 
 await go(15, 700, 8521);
 if (!/nearest initpuke/.test(await say())) fail(`LAB x700 should stand by a spitter: ${(await say()).slice(0, 180)}`);
-const gobs = await sweep(260, "initpuke", { min: 130, max: 200 });
+/**
+ * 110..180 is the band `0x41809b` spits from on a plain coin toss, and
+ * `puke.ts` calls it "the band the class is built for". The band above it
+ * (180..280) spits too, but only after `0x41804c`'s `cmp roll, 0x28` — nine
+ * frames in ten at that distance it chooses nothing at all, and a probe that
+ * straddles the two bands spends most of its samples in the quiet one. It did:
+ * one run in several came back with the spitter in position 243 times out of
+ * 260 and not one gob thrown.
+ */
+const gobs = await sweep(260, "initpuke", { min: 120, max: 170 });
 if (!gobs.seen.length) fail(`a spitter threw nothing in 260 samples (it was in the line ${gobs.met} times) — 0x418400 is not being called`);
 const gobCels = [...new Set(gobs.seen.map((s) => s.cel))].sort((a, b) => a - b);
 // `0x46cc28` tag 1 is 3064, 3063, 3062, 3061, 3060 and the gob is drawn out of them
@@ -214,7 +223,14 @@ console.log(`ok    ...and one that lands JOLTS him — the first -2 a placed cla
 // frames its own script lasts (`0x4201ea`), carrying −2 the whole time.
 await go(9, 1000, 1010);
 if (!/nearest initzomb/.test(await say())) fail(`GRAVE x1000 should stand by a zombie: ${(await say()).slice(0, 180)}`);
-const bile = await sweep(180, "initzomb", { min: 90, max: 220 }, true);
+/**
+ * Inside a HUNDRED, which is `0x4204fd`'s own gate: the bands are
+ * [300, 200, 100] and the spit wants the innermost. It also wants the player
+ * facing it — `0x4204c3` sends a zombie whose back you are to into the melee
+ * instead — which is what `face` is for. Held at 90..220 this leg spent most of
+ * its samples in the sway and caught one gob in a run.
+ */
+const bile = await sweep(180, "initzomb", { min: 40, max: 90 }, true);
 if (!bile.seen.length) fail(`a zombie hawked nothing in 180 samples (it was in the line ${bile.met} times)`);
 const bileCels = [...new Set(bile.seen.map((s) => s.cel))].sort((a, b) => a - b);
 if (bileCels.some((c) => c < 1890 || c > 1897)) fail(`a zombie's gob is cels 1890..1897; saw ${bileCels.join(",")}`);
