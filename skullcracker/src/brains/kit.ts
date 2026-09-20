@@ -262,6 +262,15 @@ export interface BrainCtx {
   root(n: number): number;
   /** `0x40ef30(0x4a7910, id, y)` — a creature sound where this one is */
   say(e: Enemy, id: number): void;
+  /**
+   * Put one of this class's projectiles in the air, where its machine does.
+   *
+   * The seam exists because a brain is handed one enemy and can only change
+   * that enemy: the spawners build an object of a different class on a
+   * different list, which is the page's business. Call it at the instruction
+   * the class calls its own spawner at, and quote that address there.
+   */
+  cast(e: Enemy, kit: CastKit): void;
   /** what a leap is pulled down by, per tick */
   gravity: number;
 }
@@ -278,6 +287,76 @@ export interface BrainCtx {
  * chosen and the page should now play it and spend its stride — which is what
  * {@link install} leaves behind, and what all but the turn-and-stop states do.
  */
+/**
+ * A thing a class throws, as much of it as the page has to know to fly one.
+ *
+ * Every projectile in this game is an object of ANOTHER class: the thrower's
+ * machine calls its spawner, and what comes out runs its own tiny script. A
+ * {@link Brain} has no creator and cannot make one, so each module reads its
+ * class's spawner and its script into one of these and calls {@link
+ * BrainCtx.cast} where the executable calls the spawner. The wiring in
+ * `walk.ts` owns the flight, the hit and the drawing; this is the data.
+ */
+export interface CastKit {
+  /** the flight cels, in order. The last one holds when the script runs out */
+  cels: readonly number[];
+  /** engine frames each cel is held */
+  hold: number;
+  /**
+   * Pixels an ENGINE FRAME along the facing, which is the unit the executable
+   * keeps it in.
+   *
+   * Every one of these comes out the same way: the launch frame of the thing's
+   * own script carries a `dx`, and `0x42f8b0` adds `dx / obj+0xe` to the
+   * velocity once — so the speed is that quotient, rounded away from zero, and
+   * it persists because no later frame of the script carries a stride. The
+   * mover then spends it once a frame, which is why the flight is stepped on
+   * the frame rather than on the tick and nothing multiplies by
+   * {@link TICK_SCALE}.
+   */
+  speed: number;
+  /** where it starts: this far along the facing from the thrower's point... */
+  ahead: number;
+  /** ...and this far ABOVE it, up-positive, as the spawner's own subtraction */
+  lift: number;
+  /** `obj+0x1a` — its strength, or a negative CODE the reaction table reads */
+  blow: number;
+  /**
+   * Gone once it is this far from the player in x — the gob's `0x418621`.
+   *
+   * One of two rules, and which one a class uses is its own business: the other
+   * is {@link CastKit.life}. Neither is a default; a kit carries whichever its
+   * think function actually tests.
+   */
+  reach?: number;
+  /**
+   * ...or gone after this many ENGINE FRAMES, counted down in its own AI.
+   *
+   * The slug is the case: `0x414768` writes 100 into `AI+2` and `0x413e21`
+   * spends one a frame, removing it at −1. A thing with a life and no reach
+   * leaves the screen and keeps going until the count runs out, which is what
+   * the executable does.
+   */
+  life?: number;
+  /**
+   * Some of them fly HARMLESS until they are close, and this is that rule.
+   *
+   * The slug again, and it is the whole of its design: `0x413e43` holds
+   * `obj+0x1a` at ZERO and measures `|player.x − self.x|` every frame; inside
+   * `0x82` = 130 it installs its own tag 1, which is `0x413e79`'s
+   * `obj+0x1a = 0x64` and a second cel. So a slug crossing a room cannot hurt
+   * anything, and one that reaches you can. Arming is one-way: the tag stays.
+   */
+  arm?: {
+    /** pixels in x between it and the player — `0x413e5d`'s `cmp eax, 0x82` */
+    within: number;
+    /** what it shows once it is armed */
+    cel: number;
+  };
+  /** the spawner and the script it installs */
+  from: string;
+}
+
 export type Brain = (e: Enemy, foe: Foe, run: number, k: BrainCtx) => boolean;
 
 /**

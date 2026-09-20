@@ -89,6 +89,7 @@ import {
   install,
   type BrainCtx,
   type Brain,
+  type CastKit,
   type Enemy,
   type FoeState,
   type Track,
@@ -1602,6 +1603,7 @@ async function loadLevel(index: number): Promise<void> {
   flares = [];
   bolts = [];
   streams = [];
+  casts = [];
   // the chapter's own entry function: zero every count, name the chapter's
   // weapon, and leave the hands empty (`0x4511f0` and its three siblings). It
   // runs once per CHAPTER, not once per level, and that is the whole reason
@@ -4891,6 +4893,28 @@ function takeHits(): void {
     if (!c?.strike) continue;
     if (hit(c, e.x, e.y, e.facing, e.vx / TICK_SCALE, e.vy / TICK_SCALE))
       return;
+  }
+  /**
+   * ...and what the creatures have THROWN, which is a creature's blow at a
+   * distance and so sits under the same switch as its fists.
+   *
+   * Spent on contact, and spent whether or not it landed a reaction: the
+   * executable's own test is `obj+0x2a` — the collision word — going non-zero,
+   * and touching the player is what sets it. A gob that has hit you is gone
+   * even if you were already on your back.
+   */
+  for (const c of foesHurt ? casts : []) {
+    if (castBlow(c) <= 0) continue; // still flying harmless — `0x413e43`
+    const cel = celRec(lvl.sbk, castCel(c));
+    if (!cel?.strike) continue;
+    const box = strikeOf(cel, c.x, c.y, c.facing);
+    if (!box) continue;
+    if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
+      continue;
+    c.spent = true;
+    // `0x42f910` adds what the HITTER was doing to the cel's own pair, and a
+    // cast's velocity is already in the executable's units — a frame's worth
+    if (hit(cel, c.x, c.y, c.facing, c.vx, 0, castBlow(c))) return;
   }
   // `0x454a38` arms a press only while its stroke runs, and only two of its cels
   // carry a box; `0x4537d0` arms a girder on every frame it has
@@ -8600,6 +8624,118 @@ function stepBishop(e: Enemy, foe: Foe, run: number): boolean {
 const castBeams = new WeakSet<Enemy>();
 
 /**
+ * One projectile in the air, thrown by a class rather than by the player.
+ *
+ * The gun's {@link Bolt} is the same idea and not the same thing: a bolt is the
+ * player's and expires on the first thing it meets, while these belong to a
+ * creature, carry that creature's own strength, and are drawn out of the
+ * LEVEL's book rather than the shared player book.
+ */
+interface Cast {
+  kit: CastKit;
+  x: number;
+  y: number;
+  /** pixels an engine frame, along the facing it left with */
+  vx: number;
+  facing: number;
+  /** engine frames since it launched — the flight cels are read off it */
+  clock: number;
+  /** has it come close enough to arm — see {@link CastKit.arm}. One-way */
+  armed: boolean;
+  spent: boolean;
+}
+
+/** everything a creature has thrown and the world has not taken back yet */
+let casts: Cast[] = [];
+
+/**
+ * Put one in the air — {@link BrainCtx.cast}, called where a class calls its own
+ * spawner.
+ *
+ * The three numbers the spawners share are the three every one of them writes
+ * by hand: the thrower's POINT (not its feet), a step along the facing, and a
+ * lift. `0x418433`/`0x418440`/`0x41843b` are the spitter's, and the others are
+ * the same three instructions with their own constants.
+ */
+function spawnCast(e: Enemy, kit: CastKit): void {
+  const lvl = level;
+  if (!lvl) return;
+  const at = foeAnchor(e, lvl);
+  if (!at) return;
+  casts.push({
+    kit,
+    x: e.x + e.facing * kit.ahead,
+    // the anchor, which is what `obj+6` is — a gob leaves the mouth, not the feet
+    y: at.y - kit.lift,
+    vx: e.facing * kit.speed,
+    facing: e.facing,
+    clock: 0,
+    // a kit with no arming rule is dangerous from the frame it leaves
+    armed: kit.arm === undefined,
+    spent: false,
+  });
+}
+
+/** the cel a cast is showing — the last one holds, as a finished script does */
+function castCel(c: Cast): number {
+  // an armed one is its own cel and nothing else: the arming IS a script
+  // install, so there is no flight cycle left to be part way through
+  if (c.kit.arm && c.armed) return c.kit.arm.cel;
+  const i = Math.min(
+    c.kit.cels.length - 1,
+    Math.floor(c.clock / Math.max(1, c.kit.hold)),
+  );
+  return c.kit.cels[i];
+}
+
+/** what it would hit for — zero until it arms, which is the slug's whole design */
+function castBlow(c: Cast): number {
+  return c.armed ? c.kit.blow : 0;
+}
+
+/**
+ * The casts, one engine frame at a time.
+ *
+ * What ends one is the class's own test and it is the same test in each: the
+ * collision words going non-zero, or the thing getting further from the PLAYER
+ * than its reach (`0x418621` — `|self.x − player.x| > 0x3e8` for the gob). The
+ * first half is the obstacle solver this page does not run foes through, so
+ * what is kept is the distance, plus the two collisions this page CAN see — the
+ * player, which {@link takeHits} spends it on, and the ground.
+ *
+ * The ground is not in the executable's test and is in this one, because
+ * without the solver a gob that misses would sail across the level at the
+ * height of a mouth for a thousand pixels and then vanish in mid-air. `0x42f8b0`
+ * would have stopped it at the first wall it met.
+ */
+function stepCasts(): void {
+  const lvl = level;
+  if (!lvl) return;
+  for (const c of casts) {
+    c.clock += 1;
+    // whole, not scaled: this runs on the ENGINE frame, like the bolts, and the
+    // speed is what one call of `0x42f8b0` adds — see {@link CastKit.speed}
+    c.x += c.vx;
+    const dx = Math.abs(c.x - p.x);
+    // the class's own end, whichever of the two it keeps
+    if (c.kit.reach !== undefined && dx > c.kit.reach) c.spent = true;
+    if (c.kit.life !== undefined && c.clock > c.kit.life) c.spent = true;
+    // ...and its own arming, which never goes back
+    if (c.kit.arm && !c.armed && dx < c.kit.arm.within) c.armed = true;
+    const floor = surfaceUnder(c.x, c.y - 1, c.y + 1);
+    if (floor !== null && c.y >= floor) c.spent = true;
+  }
+  casts = casts.filter((c) => !c.spent);
+}
+
+/** each one cel of the level's own book, mirrored the way it flies */
+function drawCasts(camX: number, camY: number): void {
+  const lvl = level;
+  if (!lvl) return;
+  for (const c of casts) drawLevelCel(castCel(c), c.x, c.y, camX, camY, c.facing < 0);
+}
+
+/**
  * What a class's own machine throws, which the machine itself cannot.
  *
  * A {@link Brain} is handed one enemy and returns a boolean; it has no creator
@@ -9121,6 +9257,7 @@ const BRAIN_CTX: BrainCtx = {
   // pixels in the engine and a fractional root would drift them
   root: (n) => Math.floor(Math.sqrt(Math.max(0, n))),
   say: (e, id) => sound?.effect(id, e.x, e.y),
+  cast: (e, kit) => spawnCast(e, kit),
   gravity: INVENTED.gravityPx,
 };
 
@@ -10577,6 +10714,7 @@ function loop(now: number): void {
     if (frame) stepFlares();
     if (frame) stepBolts();
     if (frame) stepStreams();
+    if (frame) stepCasts();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -10796,6 +10934,7 @@ function loop(now: number): void {
   drawGuns(camX, camY);
   drawFlares(camX, camY);
   drawBolts(camX, camY);
+  drawCasts(camX, camY);
   drawStreams(camX, camY);
   drawGobs(camX, camY);
   drawPops(camX, camY);
@@ -11365,6 +11504,12 @@ function loop(now: number): void {
     (streams.length
       ? ` · stream ${streams[0].state} cel ${streamCel(streams[0])} at x ${Math.round(streams[0].x)}` +
         `, y ${Math.round(streams[0].y)} blow ${STREAMS[streams[0].weapon]?.blow}`
+      : "") +
+    // what a CREATURE has thrown: the one thing in a fight that is neither the
+    // player's nor standing in front of him, so a probe has no other way to see it
+    (casts.length
+      ? ` · ${casts.length} cast, nearest cel ${castCel(casts[0])} at x ${Math.round(casts[0].x)}` +
+        `, y ${Math.round(casts[0].y)} blow ${castBlow(casts[0])}`
       : "");
   // ...and a BOSS always, whichever of the three it is: the "nearest" line goes
   // to whatever is closest in x, and TOWER's bats chase, so one of them is

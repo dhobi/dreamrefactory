@@ -95,7 +95,7 @@
  * terminated by the zero at `0x46cc1e`. So band 0 is beyond 280, band 1 is
  * 180..280, band 2 is 110..180, band 3 is inside 110, and −1 is behind.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import { install, type Brain, type BrainCtx, type CastKit, type Enemy } from "./kit";
 
 /**
  * The five things `0x417ed0` and its hit handler do that this port has nowhere
@@ -307,8 +307,28 @@ export const PUKE_SPIT = {
   speed: 31,
   /** `0x418621` — and it is gone once it is this far from the player in X */
   reach: 0x3e8,
+  /** `0x41862c` — its `obj+0x1a`, rewritten every frame it is in the air */
+  strength: 0x64,
   from: "0x418400",
 } as const;
+
+/**
+ * The gob as the page throws it — every number is {@link PUKE_SPIT}'s, by name
+ * rather than by copy.
+ *
+ * The lift is the HIGH spit's, and it is the only one that is ever used: see
+ * case 4 below for why the executable cannot reach its own low-spit spawn.
+ */
+export const PUKE_GOB: CastKit = {
+  cels: PUKE_SPIT.flight.cels,
+  hold: PUKE_SPIT.flight.hold,
+  speed: PUKE_SPIT.speed,
+  ahead: PUKE_SPIT.ahead,
+  lift: PUKE_SPIT.liftHigh,
+  blow: PUKE_SPIT.strength,
+  reach: PUKE_SPIT.reach,
+  from: "0x418400, script 0x46cc28",
+};
 
 /**
  * `initpuke`'s own machine, states 0 to 4.
@@ -398,9 +418,9 @@ export const puke: Brain = (e, foe, run, k) => {
       if (!done) return false;
       install(e, PUKE.stance);
       k.say(e, PUKE.voice.spit);
-      // `0x4181be` — `0x418400(self, 0)`, the gob. Nothing hits the player
-      // back in this port and a brain has no creator, so the spawn is left to
-      // the wiring: everything it needs is at {@link PUKE_SPIT}.
+      // `0x4181be` — `0x418400(self, 0)`, the gob, and this is the instruction
+      // it happens at: the stance is already on and the sound already said.
+      k.cast(e, PUKE_GOB);
       return false;
     }
     default:
