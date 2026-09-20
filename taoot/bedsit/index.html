@@ -223,6 +223,39 @@
         -webkit-tap-highlight-color: transparent;
       }
       #pad button:active, #pad button.on { background: #d9a94c33; border-color: var(--brass); }
+      /*
+       * The way into a headset: brass on the ground, top centre, and absent
+       * from the page entirely until there is somewhere for it to go.
+       *
+       * TOP centre and not bottom because the bottom of this page is spoken
+       * for twice over — the key list on a desk, the pad under a thumb — and
+       * the top middle is the one piece of frame that is empty in both layouts,
+       * with the readout to its left and the lights to its right.
+       *
+       * It is `hidden` in the markup and stays that way unless the page finds
+       * both a browser that can open an immersive session and a room that has
+       * finished its intro. A button that answers "no headset" when pressed is
+       * worse than no button, because it has already made a promise by then.
+       */
+      #vr {
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        font: 600 13px/1 inherit;
+        letter-spacing: 0.16em;
+        text-indent: 0.16em;
+        color: var(--brass);
+        background: #05080ad9;
+        border: 1px solid #d9a94c66;
+        border-radius: 3px;
+        padding: 11px 24px;
+        cursor: pointer;
+        backdrop-filter: blur(6px);
+      }
+      #vr[hidden] { display: none; }
+      #vr:hover, #vr:focus-visible { background: #d9a94c1f; border-color: var(--brass); outline: none; }
+      #vr:disabled { color: var(--dim); border-color: #ffffff26; cursor: default; }
       body.touch #keys, body.touch #hud { display: none; }
       body:not(.touch) #pad, body:not(.touch) #stick { display: none; }
       #keys kbd {
@@ -461,6 +494,7 @@
       <button id="pad-up" hidden>▲</button>
       <button id="pad-down" hidden>▼</button>
     </div>
+    <button id="vr" type="button" hidden>VR</button>
     <div id="splash">
       <div id="card">
         <h1><img src="the-day-before.jpg" width="685" height="238" alt="The Day Before" /></h1>
