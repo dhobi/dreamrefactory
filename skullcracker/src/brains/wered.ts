@@ -180,7 +180,7 @@ const STEP_OFF = 100;
  */
 const SPEED_CAP = 30;
 
-/** thirty pixels an ENGINE frame, and a tick is half of one — as {@link werea} */
+/** thirty pixels an ENGINE frame, and a tick is a QUARTER of one — {@link TICK_SCALE} */
 const TICKS = TICK_SCALE;
 
 /**

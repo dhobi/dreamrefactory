@@ -106,6 +106,7 @@ import {
   type BrainCtx,
   type CastKit,
   type Enemy,
+  type Reaction,
   TICK_SCALE,
 } from "./kit";
 
@@ -415,7 +416,7 @@ const SLACK = 10;
 const CAP_VX = 40;
 /** `mov word ptr [ecx+0xe], 0x32` at `0x441c1a` — what `0x42f8b0` divides by */
 const DIVISOR = 50;
-/** the port's tick is half an engine frame, the same as {@link file://./werea.ts} */
+/** the port's tick is a QUARTER of an engine frame — {@link TICK_SCALE} is the authority */
 const TICKS = TICK_SCALE;
 
 /**
@@ -857,3 +858,60 @@ export const kragg: Brain = (e, foe, run, k) => {
 };
 
 export { NOT_HERE as KRAGG_NOT_HERE };
+
+/**
+ * State 9, `0x441509` — what a −9 does to it, and the whole tactic of the
+ * level.
+ *
+ * `0x441d30` is the only way in: a blow of −9 (a flare, on stage 5 — and
+ * ARCADE is stage 5) costs kragg nothing and installs `0x473a88`. Two things
+ * then happen for the twenty-six frames it lasts.
+ *
+ * **It is DRAGGED.** Before the tag dispatch, every frame:
+ *
+ * ```
+ *   441519  0x40b660("initsprinkler", self, 1, -1, out)   the NEAREST record
+ *   44153a  dx = out.pointX - self.x
+ *   44154c  dy = out.pointY - self.y + 0x78               ...120 BELOW it
+ *   44155b  0x42f8b0(self, packed)                        into the velocity
+ * ```
+ *
+ * A hundred and twenty below the point, not the point: the record's own
+ * `pointY` is where the water comes out of the floor, and the boss is being
+ * pulled down onto it.
+ *
+ * **And it RAISES.** `0x4415a9` runs on every frame of tags 1 to 4 — not once
+ * a tag — asking `0x441b20` which rect holds its own point and handing the
+ * answer to `0x441b60`. Tag 0 is the ten frames before any of that, which is
+ * the boss thrashing its way there.
+ *
+ * What ends it is tag 4 running out, and `0x441608` puts the hover back on:
+ * this page's `gait`, which is where a flinch that finishes goes anyway.
+ */
+export const kraggReacts: Reaction = (e, foe, _run, k) => {
+  if (e.anim !== foe.burns?.anim) return;
+  const to = k.sprinkler(e);
+  if (to) {
+    // `0x42f8b0` divides each half by `obj+0xe` and ADDS it, so the pull
+    // compounds every frame it is applied — which is what drags rather than
+    // steers. `0x44154c`'s 0x78 is the drop below the record's own point.
+    const dx = to.x - e.x;
+    const dy = to.y - e.y + SPRINKLER_DROP;
+    e.vx += roundAway(dx / DIVISOR);
+    e.vy += roundAway(dy / DIVISOR);
+  }
+  // `0x441584`: tag 0 is the first five cels, and nothing is raised during it
+  const lead = 5 * (foe.burns.anim?.hold ?? 2);
+  if (e.clock >= lead) k.raise(e);
+};
+
+/** `0x44154c` — the boss is pulled to a point this far BELOW the record's own */
+const SPRINKLER_DROP = 0x78;
+
+/**
+ * Away from zero, as `0x42f8b0`'s own division is — the same rounding every
+ * other stride on this page goes through.
+ */
+function roundAway(n: number): number {
+  return n < 0 ? -Math.round(-n) : Math.round(n);
+}

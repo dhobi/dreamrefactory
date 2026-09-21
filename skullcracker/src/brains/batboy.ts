@@ -313,7 +313,7 @@ export const BATBOY = {
 
 /**
  * The engine's `obj+0xc` is pixels per ENGINE frame; {@link Enemy.vx} is pixels
- * per tick and a tick is half of one, so a threshold out of the executable is
+ * per tick and a tick is a QUARTER of one, so a threshold out of the executable is
  * weighed against `e.vx / TICKS`.
  */
 const TICKS = TICK_SCALE;

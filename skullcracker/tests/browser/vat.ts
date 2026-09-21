@@ -84,7 +84,96 @@ const main = async (): Promise<void> => {
   if ([...cels].some((c) => c < 5986 || c > 5988)) fail(`its idle is 5986..5988; saw ${[...cels].join(" ")}`);
   console.log(`ok    Boggs stands in chamber2 on ${cels.size} of its own 5986..5988, at four thousand health`);
 
-  // 4. and chapter four's gun, which is in this level and in no other. Every
+  /**
+   * 4. the MONKEYBAR, which is in this level and in no other either.
+   *
+   * One `monkeybar` record ships in the whole game — `param 65, top 1779, left
+   * 5908, right 6617` — and until now it was the last live entity record with
+   * nothing on this page's side. See `MONKEYBAR` in `src/walk.ts`.
+   *
+   * It is not reachable from VAT's floor at y2301: the rect is in ANCHOR space
+   * and a jump lifts the anchor 137, so the only way up is the platform at
+   * `top 2002, left 6557, right 6659`, which is the one place in the level
+   * where the bar is over your head and not out of it.
+   */
+  await go("&x=6600&y=2002");
+  await page.keyboard.down("w");
+  await page.keyboard.press("j");
+  for (let i = 0; i < 25 && !/hanging/.test(await say()); i++) await page.waitForTimeout(40);
+  await page.keyboard.up("w");
+  await page.waitForTimeout(250);
+  const grabbed = /hanging hold (\d+) tag (\d+) at x (-?\d+), y (-?\d+)/.exec(await say());
+  if (!grabbed) fail(`W in the air over the bar should grab it — 0x42ef11; the HUD says ${/· (in the air|standing|hanging)[^·]*/.exec(await say())?.[0]}`);
+  // the anchor goes to the record's own top, 1779, and the feet follow it down
+  if (Number(grabbed[4]) !== 1931)
+    fail(`0x42ef11 puts the ANCHOR on the record's top of 1779, so the feet land at 1931; they are at ${grabbed[4]}`);
+  console.log(`ok    and its one monkeybar is grabbed in the air, hanging at hold ${grabbed[1]}`);
+
+  /**
+   * Hand over hand, and a hold is a NUMBER — `x = left + n * 65` and nothing in
+   * between, the same shape the ladder's rungs have. What proves it is that the
+   * holds only ever count DOWN: the snap's `+1` belongs to travelling east
+   * (`0x42b621` and `0x42b77b`, and not the other two arms), so reading it off
+   * the facing instead sends a westward swing fifteen pixels back the way it
+   * came every time a tag completes.
+   */
+  await page.keyboard.down("a");
+  const holds: number[] = [];
+  for (let i = 0; i < 40; i++) {
+    const h = /hanging hold (\d+) tag (\d+)/.exec(await say());
+    if (h) holds.push(Number(h[1]));
+    await page.waitForTimeout(120);
+  }
+  await page.keyboard.up("a");
+  await page.waitForTimeout(600);
+  if (holds.some((h, i) => i > 0 && h > holds[i - 1]))
+    fail(`swinging west, a hold may never go back up — 0x42b77b; they ran ${holds.join(" ")}`);
+  if (holds[holds.length - 1] >= holds[0] - 4)
+    fail(`forty samples of A should cross most of an eleven-hold bar; they ran ${holds[0]} to ${holds[holds.length - 1]}`);
+  /**
+   * ...and a hold is `left + n * param`, within the one tick of travel the
+   * ENDS of the bar are always trading.
+   *
+   * `0x42b410`'s preamble clamps x into `left..right` every frame and the
+   * swing adds its ten pixels an engine frame straight back, so a player
+   * pressed against either end oscillates by a tick's worth — two and a half
+   * pixels — for as long as the key is held. That is the executable's own
+   * behaviour, not this page's, and sampling the HUD mid-tick catches it: a
+   * run measured 5906 against a left edge of 5908.
+   */
+  const west = /hanging hold (\d+) tag (\d+) at x (-?\d+)/.exec(await say());
+  if (west && Math.abs(Number(west[3]) - (5908 + Number(west[1]) * 65)) > 3)
+    fail(`a hold is left + n * param — 0x42b677; hold ${west[1]} sits at x ${west[3]} and not ${5908 + Number(west[1]) * 65}`);
+  console.log(`ok    ...and swung hand over hand west, ${holds[0]} holds down to ${holds[holds.length - 1]}, landing on the grid`);
+
+  /**
+   * W is the chin-up and it is a flourish: `0x42b7ff` holds tag 3's last cel
+   * while the key is down, `0x42b827` comes back down tag 4, and neither of
+   * them touches x, y or the hold. S lets go, and only out of tag 0 —
+   * `0x42b522` is in the hang's arm and no other arm tests for it.
+   */
+  const before = /hanging hold (\d+)/.exec(await say())?.[1];
+  await page.keyboard.down("w");
+  await page.waitForTimeout(700);
+  if (!/hanging hold \d+ tag 3/.test(await say()))
+    fail(`W on the bar is the chin-up, 0x472048 tag 3; the HUD says ${/· hanging[^·]*/.exec(await say())?.[0]}`);
+  await page.keyboard.up("w");
+  await page.waitForTimeout(900);
+  if (!/hanging hold \d+ tag 0/.test(await say()))
+    fail(`letting W go lowers you back down tag 4 into the hang — 0x42b827; the HUD says ${/· hanging[^·]*/.exec(await say())?.[0]}`);
+  if (/hanging hold (\d+)/.exec(await say())?.[1] !== before)
+    fail(`the chin-up moves nothing; the hold went ${before} -> ${/hanging hold (\d+)/.exec(await say())?.[1]}`);
+  await page.keyboard.down("s");
+  await page.waitForTimeout(700);
+  await page.keyboard.up("s");
+  await page.waitForTimeout(700);
+  if (/hanging/.test(await say()))
+    fail(`S out of the hang lets go — 0x42b522; the HUD still says ${/· hanging[^·]*/.exec(await say())?.[0]}`);
+  if (!/, y 2301/.test(await say()))
+    fail(`and the leave is the plain fall, 0x471b28 tag 0, straight to VAT's floor; the HUD says ${/· x (-?\d+), y (-?\d+)/.exec(await say())?.[0]}`);
+  console.log(`ok    ...and W chins you up and moves nothing, and S drops you straight to the floor`);
+
+  // 5. and chapter four's gun, which is in this level and in no other. Every
   //    other level of the chapter places `statblasterpack` and nothing to put
   //    them in; `0x416440` is what arms you, and it is here.
   await go("&x=5760");

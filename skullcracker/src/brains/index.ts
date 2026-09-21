@@ -12,7 +12,7 @@
  * spend a level in: the furniture really does just stand there, and the file
  * says so with the addresses to prove it rather than leaving a gap.
  */
-import type { Brain } from "./kit";
+import type { Brain, Reaction } from "./kit";
 import { arm } from "./arm";
 import { bat } from "./bat";
 import { batboy } from "./batboy";
@@ -26,7 +26,7 @@ import { hydrant } from "./hydrant";
 import { igor } from "./igor";
 import { knifeboy } from "./knifeboy";
 import { knotboy } from "./knotboy";
-import { kragg } from "./kragg";
+import { kragg, kraggReacts } from "./kragg";
 import { mailbox } from "./mailbox";
 import { maskboy } from "./maskboy";
 import { ox } from "./ox";
@@ -35,11 +35,11 @@ import { rat } from "./rat";
 import { skel } from "./skel";
 import { slurp } from "./slurp";
 import { tube } from "./tube";
-import { vpriest } from "./vpriest";
+import { vpriest, vpriestReacts } from "./vpriest";
 import { wbooly } from "./wbooly";
 import { werea } from "./werea";
 import { wereb } from "./wereb";
-import { werec } from "./werec";
+import { werec, werecReacts } from "./werec";
 import { wered } from "./wered";
 import { wraith } from "./wraith";
 import { zomb } from "./zomb";
@@ -75,4 +75,14 @@ export const BRAINS: Readonly<Record<string, Brain | undefined>> = {
   initwered: wered,
   initwraith: wraith,
   initzomb: zomb,
+};
+
+/**
+ * The classes that do something while the page is playing their reaction —
+ * see {@link Reaction}. Everything else reacts by animation alone.
+ */
+export const REACTIONS: Readonly<Record<string, Reaction>> = {
+  initkragg: kraggReacts,
+  initvpriest: vpriestReacts,
+  initwerec: werecReacts,
 };

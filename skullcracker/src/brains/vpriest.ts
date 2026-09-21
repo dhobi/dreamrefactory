@@ -47,6 +47,7 @@ import {
   type CastKit,
   type Enemy,
   TICK_SCALE,
+  type Reaction,
 } from "./kit";
 
 /**
@@ -569,3 +570,98 @@ function attack(
 }
 
 export { NOT_HERE as VPRIEST_NOT_HERE };
+
+/**
+ * The two states a brain is never called during, and the only two in this
+ * class that were out of reach — see {@link Reaction}.
+ *
+ * ## 4, the vanish — `0x42615c`
+ *
+ * `0x4264f0` sends the bishop here for one blow bigger than half of `AI+6`
+ * ({@link Foe.pick} keeps that bar). Then:
+ *
+ * ```
+ *   42615c  once the script has run, throw TWELVE bats through 0x426340
+ *   426190  AI+4 = how many of them are alive
+ *   4261f8  ...and HOLD, motionless, until that has fallen to half
+ *   426450  then take the surviving bat nearest the player — or a point
+ *           fifty west of him if none is within five hundred — and put the
+ *           bishop there, play 0x1c, and hand to kind 5
+ * ```
+ *
+ * `AI+2` is the one-shot that stops it throwing the twelve twice, and it is
+ * `e.hatched` here for the same reason.
+ *
+ * The hold is the part a page like this has to be careful with: a flinch ends
+ * when its animation does, and this one must not. Pinning the clock is how,
+ * and it is honest — the engine's script has run out too; it is the STATE that
+ * is waiting, not the animation.
+ *
+ * ## 6, the death — `0x426258`
+ *
+ * Twelve more bats as the script ends, and then `0x4263e0` takes every bat on
+ * the level with it. Which is the answer to "what happens to the twelve you
+ * did not kill": the bishop dying kills them.
+ */
+export const vpriestReacts: Reaction = (e, foe, run, k) => {
+  const bats = VPRIEST.bat;
+  const twelve = (): void => {
+    for (let i = 0; i < VANISH_BATS; i += 1)
+      k.hatch(e, "initbat", {
+        x: e.x + e.facing * (bats.ahead + k.roll(bats.aheadSpread)),
+        y: e.y - bats.up + (k.roll(bats.upSpread) - bats.up),
+        facing: e.facing,
+        vx: e.facing * bats.vx * TICKS,
+      });
+  };
+
+  // ---- 6, `0x426258`: the death, and it takes the swarm with it
+  if (e.state === "dead") {
+    if (e.hatched || e.clock < run) return;
+    e.hatched = true;
+    twelve();
+    // `0x4263e0` — every bat on the level, each with its own lift and award
+    k.slayAll("initbat");
+    return;
+  }
+
+  // ---- 4, `0x42615c`: the vanish, which is the only flinch that is a state
+  if (e.anim !== foe.flinch?.[2]) return;
+  if (e.clock < run) return;
+  if (!e.hatched) {
+    // `0x426190` — and the count it holds against is taken AFTER the throw
+    e.hatched = true;
+    twelve();
+    e.side = k.count("initbat");
+    k.say(e, VANISH_SOUND);
+  }
+  // `0x4261f8` — still more than half of them up, so it stays gone
+  if (k.count("initbat") > Math.floor((e.side ?? 0) / 2)) {
+    e.clock = run - 1;
+    return;
+  }
+  /**
+   * `0x426450` — where it comes back.
+   *
+   * The nearest surviving bat to the PLAYER, not to the bishop; and with none
+   * of them inside five hundred of him, a point fifty pixels west of him
+   * instead. So a swarm that has scattered still drags the fight back to you.
+   */
+  const at = k.nearest("initbat", REFORM_REACH) ?? {
+    x: k.player.x - REFORM_WEST,
+    y: k.player.y,
+  };
+  e.x = at.x;
+  e.y = at.y;
+  e.hatched = false;
+  e.nerve = undefined;
+};
+
+/** `0x426211` — `belfry.snd` 0x1f, which is the only sound the vanish plays */
+const VANISH_SOUND = 0x1f;
+/** `0x42616e` — twelve, against the summon's three */
+const VANISH_BATS = 12;
+/** `0x426472` — inside this of the PLAYER and a bat is somewhere to re-form */
+const REFORM_REACH = 500;
+/** ...and `0x426495`, the fallback: fifty pixels west of him */
+const REFORM_WEST = 50;

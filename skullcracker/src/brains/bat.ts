@@ -256,7 +256,7 @@ export const BAT = {
   from: "0x422ef0",
 } as const;
 
-/** thirty pixels an ENGINE frame, and a tick is half of one — as {@link werea} */
+/** thirty pixels an ENGINE frame, and a tick is a QUARTER of one — {@link TICK_SCALE} */
 const TICKS = TICK_SCALE;
 
 /**

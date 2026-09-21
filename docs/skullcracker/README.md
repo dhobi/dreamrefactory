@@ -290,24 +290,22 @@ a little more wrong.
 ### The records
 
 ```
-  1162 of 1167 entity records placed - 99.6%. 52 region records, all handled.
+  1165 of 1167 entity records placed - 99.8%. 52 region records, all handled.
 
   where              1   lab
   inithealth         1   lab
-  noskateboards      1   service
-  monkeybar          1   vat
-  wormbounds         1   vat
 
   no gap at all: ARCADE BARREL CAVERN CITY GRAVE MALL MAZE PLAYGR RAVECAVE
-                 SEWER STREETS TOWER WOODS
+                 SERVICE SEWER STREETS TOWER VAT WOODS
 ```
 
-**Five records are left and not one of them is a drawn thing.** Two are dead
-data: **`where` and `inithealth` do not appear in `SC.EXE` anywhere** — LAB
-places one of each and nothing in the game will ever ask for them. The other
-three are not tables at all, which is what an earlier reading of this page had
-them as. Each is a REGION some object's own code asks a question of, and two of
-the three are now answered in the port:
+**Two records are left and both of them are dead data.** **`where` and
+`inithealth` do not appear in `SC.EXE` anywhere** — LAB places one of each and
+nothing in the game will ever ask for them.
+
+The three that used to sit beside them were not tables at all, which is what an
+earlier reading of this page had them as. Each is a REGION some object's own
+code asks a question of, and all three are now answered:
 
 - **`wormbounds`** is the box Boggs' worms are kept inside. `0x41ac7f` reads it
   once, at the class's own setup, into `[0x4a50c8]`, and `0x41ac09`…`0x41ac26`
@@ -320,8 +318,9 @@ the three are now answered in the port:
   player's point against. `0x412390` is that callback — `0x419bc3` installs it
   through `0x4029d0`, and three other chapters install the same one — and it
   answers `1` for `exitfarm`, `2` for `exitroom`, **`3` for `monkeybar`**, `4`
-  for `ladder` and `5` for `initswitch`. It is the only one of the five with
-  nothing on this page's side yet.
+  for `ladder` and `5` for `initswitch`. Answering 3 installs `0x472048`, whose
+  KIND is the state: hanging is state 8 and `0x42b410` is its handler. One
+  record ships, VAT's, and `MONKEYBAR` in `src/walk.ts` has the rest.
 
 ### What a probe is, and the word that was hiding in the constructor
 

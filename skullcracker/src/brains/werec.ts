@@ -31,23 +31,40 @@
  * deliberately elsewhere, and what they carry that the page does not is named at
  * {@link NOT_HERE}.
  *
- * ## The thing it throws, which is not here either
+ * ## The thing it throws
  *
  * `0x452b20` is a projectile creator of its own: it allocates out of `0x477ca0`,
  * copies the thrower's mirror flag, starts the shot seventeen above and twenty
  * either side of the thrower (`0x452b54`, `0x452b6a`), and solves the arc from
  * the horizontal gap to the target through `0x434630`, the integer square root
- * (`0x452b85`). Its third argument picks the shape: zero is the aimed shot the
- * single throw makes, and anything else is one of the flat ones the fan makes,
- * with the lift zeroed at `0x452bc0`. The throw's own animation, its beat and
- * its two tags ARE here, because those are what the thing on screen is doing
- * between shots.
+ * (`0x452b85`). Its third argument picks the shape, and the two shapes are not
+ * variations on each other:
  *
- * What kept the shot itself out was "nothing in this port hits the player back",
- * and that stopped being true: {@link BrainCtx.cast} flies ten other classes'
- * projectiles and they hurt. So this one is a gap rather than a decision now,
- * and everything it needs is above — the muzzle, the arc through
- * {@link BrainCtx.root}, and `e.side` already carrying `AI+6`, the fan index.
+ * ```
+ *   452b85  v = isqrt(|self.x - target.x| * obj+0x24) >> 1
+ *   452ba6  mode 0   vx = +-v by the SHOT's facing, vy = -v      an arc
+ *   452bc0  mode n   vy = 0, obj+0x34 = 0, vx = +-13n by the THROWER's
+ * ```
+ *
+ * `obj+0x24` is 10, the engine's default weight, because `0x452c67` never calls
+ * `0x42f850` — so the arc's range works out at exactly **half the gap it was
+ * aimed across**, and the aimed throw is a lob that lands short on purpose.
+ * The fan is the attack that reaches, and `obj+0x34` going to zero is why: it
+ * is the flag `0x42fe4a` tests before scanning the object list at `0x4a69d0`,
+ * and `0x452d9d` sets it back the frame the player is within two hundred in y.
+ * A fan shot is a ghost until it is on your row.
+ *
+ * ## ...and the thing it throws cannot hurt you, which is the point
+ *
+ * `0x452c67` never writes `obj+0x1a` either, so the shot flies at strength
+ * ZERO, and its three flight cels — 6004, 6005, 6006 — carry a strike box with
+ * **no blow pair at all**. `0x452ec0` writes `0x65` the frame the burst script
+ * `0x477c60` becomes its state, and the burst's first three cels (7000, 7001,
+ * 7002) are the ones that carry `dx 43`. So the dud is the delivery and the
+ * flash is the weapon, and {@link CastKit.onImpact} is that rule.
+ *
+ * What kept all of it out was "nothing in this port hits the player back", and
+ * that stopped being true. It is here now.
  *
  * ## Two fields that are NOT what the punk's are
  *
@@ -72,7 +89,15 @@
  * {@link Foe.panel} and a brain has no hook into it, so it is read here and not
  * done.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import {
+  install,
+  type Brain,
+  type BrainCtx,
+  type CastKit,
+  type Enemy,
+
+  type Reaction,
+} from "./kit";
 
 /**
  * The three states this module leaves alone, and what they do that the page's
@@ -85,8 +110,12 @@ import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
  *   and forty either side (`0x45269b`, `0x4526a8`), fires a shot from there,
  *   flips its own mirror flag and puts the point back; then when the script ends
  *   it squeals `0x21`, clears the bar, installs the death and pays **0x104** to
- *   the score (`0x452737`). The page has no notion of a blow strength of −9 and
- *   no spawner, so none of it is reachable here.
+ *   the score (`0x452737`). The spawner is here now and the shot it fires is
+ *   {@link WEREC_SHOT} — `0x4526db` passes SELF as the target, so the gap is
+ *   zero and every one of them comes out flat. What is still out of reach is
+ *   the state: the page has no notion of a blow strength of −9, and a brain is
+ *   never called during {@link Foe.death}, which is where these five frames
+ *   live. It would want the death path to run a think, not another seam.
  * - **7**, `0x452898`: the flinch, and it ends in the stance rather than in
  *   anything of its own — one branch shorter than the punk's, which is what
  *   {@link Foe.pick} already says.
@@ -175,6 +204,79 @@ export const WEREC = {
   squeal: 0x1c,
   from: "0x4523d0",
 } as const;
+
+/**
+ * What `0x452b20` builds — one shot, whichever of the two shapes it is.
+ *
+ * `0x452c67` is the whole of its constructor and it sets five things: the
+ * divisor 6, the cel bank, the think, cel 6004, and the script `0x477c38`. It
+ * calls neither `0x42f850` nor anything that writes `obj+0x1a`, so the weight
+ * is the engine's default 1.0 and the strength is the engine's default zero.
+ *
+ * The three flight cels and the seven burst cels come out of the books the
+ * same way everything else here does, and what settles which half of it is the
+ * attack is that **only 7000, 7001 and 7002 carry a blow pair** (`dx 43`);
+ * 6004, 6005 and 6006 carry a strike box and nothing to put through it.
+ */
+const WEREC_SHOT: CastKit = {
+  // `0x477c38` kind 0: tag 0 is two records of 6004, tag 1 is 6005 and tag 2
+  // is 6006, one engine frame each. `0x452dbf` leaves tag 0 the frame the
+  // thing starts to FALL, so the launch pair is only ever what it looks like
+  // on the way up.
+  cels: [6004, 6004],
+  hold: 1,
+  /** ...and then the flight cel, which holds — `0x452dea` installs tag 1 */
+  then: { cels: [6005], hold: 1 },
+  /** unused: every shot's velocity is worked out at the throw. See {@link Aim} */
+  speed: 0,
+  /** `0x452b6a` — twenty along the facing... */
+  ahead: 0x14,
+  /** ...and `0x452b54`, seventeen above the anchor */
+  lift: 0x11,
+  /** `obj+0x24`, which nothing writes, so it is `0x42f5ca`'s own ten */
+  pull: 10,
+  /** `0x452d4d` — the think pins `obj+0xa` inside forty either way */
+  capFall: 0x28,
+  /** `0x452ec0` — and {@link CastKit.onImpact} is why it is not spent in flight */
+  blow: 0x65,
+  onImpact: true,
+  /**
+   * `0x477c60` — seven cels at one frame each, and `0x452ed1` removes the
+   * object when the script ends. The first three are the flash that hurts.
+   */
+  impact: { cels: [7000, 7000, 7001, 7002, 7003, 7004, 7005], hold: 1 },
+  /**
+   * The page's own, and it has to be: `0x452d40` ends a shot on the collision
+   * words and this page runs no obstacle solver for casts, so a fan shot that
+   * meets nothing would otherwise cross the level. A thousand is the same
+   * figure `0x418621` keeps the gob to.
+   */
+  reach: 0x3e8,
+  from: "0x452b20 / 0x452c50, script 0x477c38 and burst 0x477c60",
+};
+
+/**
+ * The arc, solved the way `0x452b85` solves it.
+ *
+ * `v = isqrt(|gap| * 10) >> 1`, and both halves of the velocity are that same
+ * number — `0x452ba6` writes it into `obj+0xc` and `0x452ba9` writes its
+ * negation into `obj+0xa`. Which makes the range `2v²/g`, which is `|gap|/2`:
+ * the lob is meant to fall short.
+ */
+function arc(e: Enemy, k: BrainCtx): { vx: number; rise: number } {
+  const v = k.root(Math.abs(e.x - k.player.x) * (WEREC_SHOT.pull ?? 10)) >> 1;
+  return { vx: e.facing * v, rise: v };
+}
+
+/**
+ * ...and the fan's, which solves nothing — `0x452bc0`.
+ *
+ * Flat, and thirteen pixels a frame per step of the counter. `0x452bcd`'s
+ * `and eax, 0x1a; sub eax, 0xd` is +13 facing east and −13 facing west, times
+ * `AI+6`, so the six shots of a fan go out at 13, 26, 39, 52, 65 and 78 — and
+ * the one thrown on a counter of zero does not move at all.
+ */
+const FAN_STEP = 0xd;
 
 /** `0x4524cc` — the player this far below is on another row, and it fans instead */
 const ROW = 0x28;
@@ -265,7 +367,10 @@ export const werec: Brain = (e, foe, run, k) => {
       if (!done) return false;
       const tag = e.tag ?? 0;
       // `0x4527fd` — the aimed shot, then the follow-through
-      if (tag === 0) return install(e, WEREC.release, true);
+      if (tag === 0) {
+        k.cast(e, WEREC_SHOT, arc(e, k));
+        return install(e, WEREC.release, true);
+      }
       // `0x452820` — and the follow-through hands back to the stance
       if (tag === 1) return install(e, WEREC.stance);
       if (tag === 2) {
@@ -276,6 +381,11 @@ export const werec: Brain = (e, foe, run, k) => {
          */
         const was = e.side ?? 0;
         e.side = was > 5 ? 0 : was + 1;
+        // `0x452875` — and the counter it throws on is the one AFTER the step
+        k.cast(e, WEREC_SHOT, {
+          vx: e.facing * FAN_STEP * e.side,
+          rise: 0,
+        });
         return install(e, WEREC.release, true);
       }
       // `0x4527de` — a fourth tag would fall straight out, and there isn't one
@@ -410,3 +520,61 @@ function atBackBound(e: Enemy, k: BrainCtx): boolean {
 }
 
 export { NOT_HERE as WEREC_NOT_HERE };
+
+/**
+ * State 3, `0x45269b` — the death throw, and the one thing in this class that
+ * is not reachable from a {@link Brain}.
+ *
+ * A blow of −9 — the flamer's flame, or a flare on stage 5 — is the first
+ * thing `0x452960` tests (`0x45296e`). It costs no health at all: the arm
+ * lights the thing with `0x44ff20` and installs `0x477a68`, one cel at five
+ * engine frames a cel, and answers 1 before any arithmetic runs. Which makes
+ * state 3 a five-frame window, and this is what it does with it:
+ *
+ * ```
+ *   45269b  bx = 0x434540(0x28)             ; 1..40
+ *   4526a8  bp = 0x434540(0x50) - 0x28      ; -39..+40
+ *   4526b2  self.y -= bx ; self.x -= bp     ; ...move, fire, move back
+ *   4526bd  AI+6 = AI+6 > 5 ? 0 : AI+6 + 1
+ *   4526db  0x452b20(self, SELF, AI+6)      ; the target is ITSELF
+ *   4526e0  self.facing ^= 1
+ *   4526e4  self.y += bx ; self.x += bp
+ * ```
+ *
+ * The target being **itself** is what makes these different from the throws:
+ * the gap is zero, so `isqrt(0) >> 1` is zero and the arc collapses — every
+ * one of them comes out as the fan's flat shot at `13 * AI+6`, and the facing
+ * flips between each, so a corpse throws them alternately left and right.
+ *
+ * And the jitter is not decoration. The shot is built at the thrower's point,
+ * so moving the point, firing, and moving back is how five shots leave five
+ * different places without the body appearing to move at all.
+ *
+ * `0x4526ef` is the end of it: when the script runs out it squeals `0x21`,
+ * clears the bar and installs the death. The page's own path owns that last
+ * part — which is why this returns nothing and installs nothing.
+ */
+export const werecReacts: Reaction = (e, foe, run, k) => {
+  // the page only ever puts it here through {@link Foe.burns}, and only this
+  // class's burn animation is the throw — a flinch from an ordinary blow is
+  // still an ordinary flinch
+  if (e.anim !== foe.burns?.anim) return;
+  const up = k.roll(0x28);
+  const along = k.roll(0x50) - 0x28;
+  const wasX = e.x;
+  const wasY = e.y;
+  e.y -= up;
+  e.x -= along;
+  // `0x4526bd` — the same seven-step wrap the fan uses, and the shot goes out
+  // on the counter AFTER the step
+  const was = e.side ?? 0;
+  e.side = was > 5 ? 0 : was + 1;
+  k.cast(e, WEREC_SHOT, { vx: e.facing * FAN_STEP * e.side, rise: 0 });
+  // `0x4526e0` — and it turns between every one of them
+  e.facing = e.facing > 0 ? -1 : 1;
+  e.x = wasX;
+  e.y = wasY;
+  // `0x4526fa`: the squeal belongs to the frame the script runs out, and the
+  // death the page installs after it is {@link Foe.death}
+  if (e.clock >= run - 1) k.say(e, WEREC.squeal);
+};

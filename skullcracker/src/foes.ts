@@ -166,6 +166,19 @@ export interface Blow {
   facingAway: boolean;
 }
 
+/**
+ * The two words of a creature's own state that {@link Foe.pick} may touch.
+ *
+ * Structural on purpose: `foes.ts` describes classes and must not depend on
+ * the runtime `Enemy` the level runner keeps them in.
+ */
+export interface FoeState {
+  /** `AI+6` on the bishop — the size of the last blow that moved it */
+  nerve?: number;
+  /** its scaled health, which is what that word is seeded from */
+  max: number;
+}
+
 export interface Foe {
   /** how it moves about its own rect */
   gait: FoeAnim;
@@ -192,7 +205,15 @@ export interface Foe {
   /** the flinches its hit handler picks between, indexed by tag */
   flinch?: readonly FoeAnim[];
   /** which flinch, the way the class's own handler decides */
-  pick?: (blow: Blow) => number;
+  /**
+   * ...and the ONE class that remembers a blow gets the enemy too.
+   *
+   * `0x426620` weighs a blow against **half of `AI+6`** and `0x426633`
+   * overwrites `AI+6` with any blow that clears it, so the bishop's bar rises
+   * every time it is beaten hard enough. That is per-creature state, which a
+   * pure function of the blow cannot hold.
+   */
+  pick?: (blow: Blow, e: FoeState) => number;
   /** what it does instead when it dies; without one it cannot be killed */
   death?: FoeAnim;
   /**
@@ -217,6 +238,70 @@ export interface Foe {
    * sprays once and goes.
    */
   burst?: { anim: FoeAnim; dx: number; sound?: number; from: string };
+  /**
+   * What a blow of **−9** does to it — see `FLAME` in {@link file://./props.ts}.
+   *
+   * −9 is not damage and not one of the player's codes: eight classes read it
+   * with a handler of their own that accepts nothing else, and every one of
+   * them starts by calling `0x44ff20` to stick a flame on itself. What differs
+   * after that is the two arguments it passes and the script it then installs.
+   *
+   * A class without this entry cannot be set on fire, which is the executable's
+   * own answer for everything that has no such handler.
+   */
+  burns?: {
+    /**
+     * `0x44ff20`'s second argument — nonzero installs `0x478978` tag 2 outright
+     * instead of `0x4788d0` tag 0, so the flame starts at the stage it goes
+     * out on rather than taking hold first. The fireball's non-death arm
+     * (`0x455791`) passes 1.
+     */
+    late?: boolean;
+    /**
+     * ...and its third. `0x453f6f` reinstalls tag 2 at the end of tag 2 while
+     * this is set, so the flame never goes out. One caller passes it, and it
+     * is the one for a thing that is already dead.
+     */
+    forever?: boolean;
+    /** what the class plays out of its own book while it burns */
+    anim?: FoeAnim;
+    /** ...and whether that is the end of it */
+    fatal?: boolean;
+    /** a sound of its own as it catches — the dog's `0x4550eb` plays 0x18 */
+    sound?: number;
+    /**
+     * Whether the blow ALSO lands as damage. Seven of the eight answer 1 and
+     * are done; `0x4547b3` is the one that falls through into the ordinary
+     * arithmetic after lighting itself, so a burning husk takes the hit too.
+     */
+    andHurts?: boolean;
+    from: string;
+  };
+  /**
+   * What it throws OUT when it is hit, and on what count.
+   *
+   * One class does it and it is the Coke machine. `0x43b6ab` sorts the blow
+   * into three bands and keeps two counters in its own AI: `AI+2` steps on
+   * every blow of thirty or more and lets a can go each time it passes two —
+   * so every THIRD counted blow — while `AI+0` counts the cans and stops the
+   * machine at four (`0x43b71a`). A blow of seventy-five or more skips both
+   * counters: `0x43b755` loops `4 - AI+0` times and throws everything that is
+   * left at once.
+   *
+   * What comes out is not this class at all — see `CAN` in
+   * {@link file://./props.ts}.
+   */
+  shakes?: {
+    /** `0x43b6ab` — a blow under this does not count towards the next one */
+    counts: number;
+    /** `0x43b6f5` — and it takes this many counted blows to shake one loose */
+    every: number;
+    /** `0x43b71a` — how many the thing holds */
+    holds: number;
+    /** `0x43b6d3` — a blow of this much throws every one that is left */
+    bursts: number;
+    from: string;
+  };
   /**
    * It does not die the first time: it falls, lands, and STANDS UP whole.
    *
@@ -609,6 +694,21 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     vanishes: true,
+    /**
+     * `0x44f0aa` — `0x44ff20(self, 0, 0)` and then `0x477408` tag 0, fifteen
+     * frames of `1940 1941 1942 1942 1942` three times over. Every third cel
+     * of it carries `dy -240`, so a burning werewolf LEAPS, three times,
+     * and none of the three cels carries a strike box: it is thrashing, not
+     * attacking.
+     */
+    burns: {
+      anim: {
+        cels: [1940, 1941, 1942, 1942, 1942, 1940, 1941, 1942, 1942, 1942, 1940, 1941, 1942, 1942, 1942],
+        hold: 1,
+        from: "0x477408 tag 0",
+      },
+      from: "0x44f0aa",
+    },
     from: "0x450a50 / 0x44e4b0 / 0x44e580 / 0x44f0a0",
   },
   /**
@@ -651,6 +751,21 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     vanishes: true,
+    /**
+     * `0x44f8bd` — and what a burning chained punk does is RUN. `0x477700` is
+     * kind 4, twelve frames of its own walk cels 5000..5005 twice over, and
+     * every one of them carries the walk's own `dx 75`. So it bolts, on the
+     * same art it patrols with, for twelve frames.
+     */
+    burns: {
+      anim: {
+        cels: [5000, 5001, 5002, 5003, 5004, 5005, 5000, 5001, 5002, 5003, 5004, 5005],
+        hold: 1,
+        dx: [75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75],
+        from: "0x477700 tag 0",
+      },
+      from: "0x44f8bd",
+    },
     from: "0x450b40 / 0x44f300 / 0x44f3d0 / 0x44f8b0",
   },
   /**
@@ -799,6 +914,13 @@ export const FOES: Readonly<Record<string, Foe>> = {
     panel: { health: 800, plate: 13009, award: 2500 },
     counts: true,
     bleeds: true,
+    /**
+     * `0x45631e` — the shortest of the eight, and the only one that installs
+     * NOTHING. It lights itself with `0x44ff20(self, 0, 0)` and returns 0 at
+     * `0x456332`, before the handler's own arithmetic: so the boss catches
+     * fire, goes on doing whatever it was doing, and takes not a point for it.
+     */
+    burns: { from: "0x45631e" },
     from: "0x451050 / 0x455880 / 0x455940 / 0x456310",
   },
   /**
@@ -1400,6 +1522,34 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     vanishes: true,
+    /**
+     * `0x441d30` — the FIRST thing its handler asks, and the arm costs it no
+     * health: it plays `0x13`, throws a spark, installs `0x473a88` and returns
+     * at `0x441d94` before any damage is computed. `0x473a88` is state 9, and
+     * state 9 is the whole tactic of level eight — see `kraggReacts` in
+     * {@link file://./brains/kragg.ts}.
+     *
+     * The twenty-six frames below are the script's five tags run end to end,
+     * because that is what `0x441584` and `0x4415df` do with them: tag 0 hands
+     * to tag 1 and each of 1..3 hands to the next, and only tag 4's ending
+     * puts the boss back on `0x473840` — the hover, which is this page's
+     * `gait`. So a flinch that runs out and hands back IS the executable's own
+     * path, and nothing here needs to install anything.
+     */
+    burns: {
+      anim: {
+        cels: [
+          7060, 7061, 7062, 7063, 7064,
+          7065, 7066, 7067, 7068,
+          7030, 7030, 7030, 7065, 7066, 7067, 7068,
+          7031, 7031, 7031, 7065, 7066, 7067, 7068,
+          7032, 7032, 7032,
+        ],
+        hold: 2,
+        from: "0x473a88 tags 0..4",
+      },
+      from: "0x441d30",
+    },
     from: "0x436180 / 0x441bd0 / 0x440ab0 / 0x441cf0",
   },
   /**
@@ -1418,9 +1568,10 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * `0x4303b6` stops offering it as a victim the moment it shows that cel. The
    * same trick is the player's own invulnerability while staggering.
    *
-   * The cans are not here. Each is an object of its own (cels 8600..8614) that
-   * arcs out, lands, and turns itself into a type-2 pickup through `0x45af60` —
-   * so they belong with the pickups rather than with the machine.
+   * The cans are their own object (cels 8600..8614): each arcs out, lands, and
+   * makes a type-2 pickup through `0x45af60` — worth a hundred and fifty
+   * health at `0x428868`. `CAN` in {@link file://./props.ts} has the rest, and
+   * {@link Foe.shakes} is what shakes them loose.
    */
   initcoke: {
     gait: { cels: [8500], hold: 1, dx: [0], from: "0x474e10 tag 0" },
@@ -1432,6 +1583,14 @@ export const FOES: Readonly<Record<string, Foe>> = {
       // 8505 is the emptied machine, and it carries no body box: once it is
       // showing, nothing can hit it again
       { cels: [8505], hold: 1, terminal: true, from: "0x474e10 tag 1" },
+      // ...and `0x43b6d3`, the one blow big enough to open it in a single go:
+      // nine cels of it coming apart, and every can it has left at once
+      {
+        cels: [8550, 8551, 8552, 8553, 8554, 8555, 8556, 8557, 8558],
+        hold: 1,
+        terminal: true,
+        from: "0x474e10 tag 2",
+      },
     ],
     /**
      * `0x43b6ab`'s three bands, with the fourth can as the end of it. Twelve is
@@ -1439,7 +1598,10 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * blows each — because the engine keeps the can count and the blow count in
      * its own context and this page keeps only the blows.
      */
-    pick: ({ damage, hits }) => (hits >= 12 ? 2 : damage < 30 ? 0 : 1),
+    pick: ({ damage, hits }) =>
+      damage >= 75 ? 3 : hits >= 12 ? 2 : damage < 30 ? 0 : 1,
+    /** `0x43b6f5` / `0x43b71a` / `0x43b6d3` — every third counted blow, four of them */
+    shakes: { counts: 30, every: 3, holds: 4, bursts: 75, from: "0x43b6ab" },
     rooted: true,
     health: Infinity,
     hitSound: FOE_SFX.cokeHit,
@@ -1497,6 +1659,17 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: false,
     bleeds: true,
     vanishes: true,
+    /**
+     * `0x4550d3` — the only one of the eight that plays a sound of its own as
+     * it catches: `0x4550eb` is `0x40ef30(0x4a7910, 0x18, point)`, out of the
+     * PLAYER's bank rather than the chapter's. Then `0x478208` tag 0, six
+     * cels, and none of them carries a strike box either.
+     */
+    burns: {
+      anim: { cels: [4850, 4851, 4852, 4853, 4854, 4855], hold: 1, from: "0x478208 tag 0" },
+      sound: 0x18,
+      from: "0x4550d3",
+    },
     from: "0x450f60 / 0x454b00 / 0x454be0 / 0x4550b0",
   },
   /**
@@ -1548,6 +1721,18 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     vanishes: true,
+    /**
+     * `0x45296e` — the first thing its handler tests, and the arm costs it no
+     * health at all: it lights itself with `0x44ff20` and installs `0x477a68`,
+     * ONE cel at five engine frames a cel, then answers 1 before any of the
+     * arithmetic runs. Those five frames are the death throw, and what happens
+     * in them is `werecReacts` in {@link file://./brains/werec.ts}.
+     */
+    burns: {
+      anim: { cels: [6040], hold: 5, from: "0x477a68 tag 0" },
+      fatal: true,
+      from: "0x45296e",
+    },
     from: "0x450bf0 / 0x452310 / 0x4523d0 / 0x452960",
   },
   /**
@@ -1601,6 +1786,14 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     vanishes: true,
+    /**
+     * `0x4547b3` — the odd one out of the eight. It lights itself, writes 1
+     * into `AI+0x14` and zeroes the caller's own word, and then **falls
+     * through into the ordinary damage arithmetic** instead of answering 1.
+     * So a husk is the one thing that both catches fire and takes the hit, and
+     * it installs no script of its own while it burns.
+     */
+    burns: { andHurts: true, from: "0x4547b3" },
     from: "0x450cb0 / 0x454330 / 0x454410 / 0x454790",
   },
   /**
@@ -2187,21 +2380,53 @@ export const FOES: Readonly<Record<string, Foe>> = {
     },
     divisor: 10,
     floats: true,
-    // `0x46f3d8` tag 0 — sixteen frames of 2640/2641 flickering, then the 2670s
+    /**
+     * `0x46f2f0` kind 3 — one cel at THREE frames, and which of the two is
+     * `0x434540(2) - 1`. Index 2 is not a flinch at all: it is the VANISH,
+     * `0x46f308` kind 4, which `0x4264f0` sends it to for a blow big enough.
+     *
+     * Both of those were wrong here. The page had the death script's own
+     * first eight frames as the flinch and the VANISH as the death — see the
+     * kind table in {@link file://./brains/vpriest.ts}, which had it right all
+     * along: `0x46f308` is the state the bishop comes BACK from, and the one
+     * path in the whole function that answers 1 is kind 6.
+     */
     flinch: [
+      { cels: [2640], hold: 3, from: "0x46f2f0 tag 0" },
+      { cels: [2641], hold: 3, from: "0x46f2f0 tag 1" },
       {
-        cels: [2640, 2640, 2641, 2641, 2640, 2640, 2641, 2641],
+        cels: [
+          2670, 2671, 2672, 2673, 2674, 2675, 2676, 2677, 2678, 2679, 2680,
+          2681,
+        ],
         hold: 1,
-        from: "0x46f3d8 tag 0",
+        from: "0x46f308 tag 0",
       },
     ],
-    // `0x46f308` tag 0, kind 4
+    /**
+     * `0x426620` / `0x426633` — half of what it last took, and the bar rises
+     * with every blow that clears it. Under that, one of the two single cels.
+     */
+    pick: ({ damage }, e) => {
+      const bar = e.nerve ?? e.max;
+      if (damage >= bar / 2) {
+        e.nerve = damage;
+        return 2;
+      }
+      return Math.floor(Math.random() * 2);
+    },
+    /**
+     * `0x46f3d8` kind 6 — sixteen frames of 2640/2641 guttering and then the
+     * twelve of the dissolve. The one path that answers 1.
+     */
     death: {
       cels: [
-        2670, 2671, 2672, 2673, 2674, 2675, 2676, 2677, 2678, 2679, 2680, 2681,
+        2640, 2640, 2641, 2641, 2640, 2640, 2641, 2641, 2640, 2640, 2641, 2641,
+        2640, 2640, 2641, 2641, 2670, 2671, 2672, 2673, 2674, 2675, 2676, 2677,
+        2678, 2679, 2680, 2681,
       ],
       hold: 1,
-      from: "0x46f308 tag 0",
+      from: "0x46f3d8 tag 0",
     },
     // `0x46f160` tag 0 — the one cel the creator stands it on
     wake: { cel: 2500, from: "0x425be3 / 0x46f160 tag 0" },

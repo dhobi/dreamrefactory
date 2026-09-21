@@ -56,6 +56,14 @@ export interface Enemy {
   linger: number;
   /** how many blows it has taken, for the kinds whose flinches advance in order */
   dents: number;
+  /**
+   * How many of its own {@link Foe.shakes} it has already let go of.
+   *
+   * `AI+0` on the Coke machine (`0x43b6fc`), and the only class with one. It
+   * never goes back down: a machine that has given up four cans is empty for
+   * the rest of the level whatever else is done to it.
+   */
+  shaken?: number;
   /** has the husk already let out what was inside it — see {@link Foe.hatches} */
   hatched?: boolean;
   /** the record's rect, top and bottom — what a sleeper watches ({@link Foe.wake}) */
@@ -290,12 +298,47 @@ export interface BrainCtx {
   crowded(e: Enemy): boolean;
   /** `0x434540(n)` — 1..n */
   roll(n: number): number;
+  /**
+   * How many of a class are alive in this room — `0x430ee0`'s own walk of a
+   * class list, which is how `0x4261f8` knows half its bats are gone.
+   */
+  count(kind: string): number;
+  /**
+   * The nearest live one of a class to the PLAYER, inside `within` — the
+   * search `0x426450` does to decide where the bishop re-forms.
+   */
+  nearest(kind: string, within: number): { x: number; y: number } | null;
+  /**
+   * Kill every one of a class where it stands — `0x4263e0`.
+   *
+   * The bishop's death calls it once: every bat on the level takes a lift of
+   * −40, pays `0x40d450(0x46)` and plays its own two-cel death `0x46f140`.
+   * Nothing else in the game clears a class this way.
+   */
+  slayAll(kind: string): void;
   /** `0x40e300(n)` — `n - (n/2)*difficulty` */
   scaled(n: number): number;
   /** `0x434630` — the integer square root the ballistic leaps solve their arc with */
   root(n: number): number;
   /** `0x40ef30(0x4a7910, id, y)` — a creature sound where this one is */
   say(e: Enemy, id: number): void;
+  /**
+   * The nearest `initsprinkler` record's own point — `0x40b660` geometry −1.
+   *
+   * Level eight's only, and it is asked with the boss's point rather than the
+   * player's: `0x441519` passes `1, -1`, which is "the record of this name
+   * whose `pointX`/`pointY` is closest in Manhattan distance". What the caller
+   * then steers for is **120 BELOW** it (`0x44154c`), not the point itself.
+   */
+  sprinkler(e: Enemy): { x: number; y: number } | null;
+  /**
+   * ...and send one up — `0x441b20` then `0x441b60`.
+   *
+   * Which record's RECT holds the boss's own point, and that slot goes up; if
+   * it is already up, `0x441b7a` rolls `0x434540(7)` for a free one and tries
+   * seven times. Nothing else in the executable raises one.
+   */
+  raise(e: Enemy): void;
   /**
    * Put one of this class's projectiles in the air, where its machine does.
    *
@@ -304,7 +347,7 @@ export interface BrainCtx {
    * different list, which is the page's business. Call it at the instruction
    * the class calls its own spawner at, and quote that address there.
    */
-  cast(e: Enemy, kit: CastKit): void;
+  cast(e: Enemy, kit: CastKit, aim?: Aim): void;
   /**
    * Put one of ANOTHER class's creatures in the level, where its machine does.
    *
@@ -369,6 +412,22 @@ export interface BrainCtx {
  * 8 for the thing Igor throws (`0x41fc7b` pushes 0.8f), 0 for everything that
  * flies flat. That is the whole of gravity in this engine: one float per class.
  */
+/**
+ * A velocity worked out at the moment of the throw, for the one class whose
+ * spawner solves an arc instead of reading a constant.
+ *
+ * `0x452b20` is that spawner. Every other one in the game writes a number the
+ * class was born with, which is {@link CastKit.speed} and {@link CastKit.rise};
+ * werec's measures the gap to the player and takes a square root of it, so the
+ * shot leaves at a different speed every time and no kit can hold it.
+ */
+export interface Aim {
+  /** pixels an ENGINE FRAME along x, signed in WORLD terms and not by a facing */
+  vx: number;
+  /** ...and the upward half, up-positive like {@link CastKit.rise} */
+  rise: number;
+}
+
 export interface CastKit {
   /** the flight cels, in order. The last one holds when the script runs out */
   cels: readonly number[];
@@ -581,10 +640,146 @@ export interface CastKit {
    * from the think, which is how an object asks to be removed.
    */
   rest?: number;
+  /**
+   * `obj+0xa` is pinned inside ±this at the top of the class's own think.
+   *
+   * `0x452d4d` and `0x452d5b` — werec's shot is the one class that does it,
+   * and forty is the figure. It matters because CITY throws down: without the
+   * clamp a shot lobbed off one of its walkways arrives carrying whatever a
+   * hundred rows of fall is worth, and it is the only thing between the arc
+   * and the ground that the executable bothers to bound.
+   */
+  capFall?: number;
+  /**
+   * It is worth NOTHING in the air, and the BURST is the whole attack.
+   *
+   * `0x452c67` never writes `obj+0x1a`, so werec's shot flies at the engine's
+   * default strength of zero (`0x42f5af`), and its three flight cels carry a
+   * strike box with **no blow pair at all** — so even a direct hit resolves to
+   * nothing. `0x452ec0` writes `0x65` the frame the thing's state becomes the
+   * burst script's own kind, and `0x452ed1` removes it when that script ends.
+   *
+   * So the thing in the air is a dud and the flash it makes is the weapon. On
+   * this page that means two things: the flight cannot hurt you, and meeting
+   * you is what STARTS the burst rather than what ends the cast — which is the
+   * engine's own behaviour by a different road, because `0x452e00` bursts on
+   * the collision words and this page has no solver to set them.
+   */
+  onImpact?: boolean;
+  /**
+   * ...and what a CODE landing on it does — `obj+0x12`, a hit handler of its
+   * own. See {@link CastCode}, and one class in the game has one.
+   *
+   * `0x45554f` is the install and `0x455730` the handler: the fireball's class
+   * writes it into the object as it is created, which is the same word every
+   * creature's class writes its own into. Nothing else a creature throws has
+   * one, so a code that lands on any other cast is read by nobody.
+   */
+  onCode?: CastCode;
   /** the spawner and the script it installs */
   from: string;
 }
 export type Brain = (e: Enemy, foe: Foe, run: number, k: BrainCtx) => boolean;
+
+/**
+ * What a class does DURING a reaction — the states the PAGE owns.
+ *
+ * A {@link Brain} is never called while an enemy is flinching or dying, and
+ * for good reason: the animation belongs to the page's own hit path and giving
+ * it two owners is how a flinch ends up playing twice. But three classes do
+ * something in one of those states that no animation can express —
+ * `initwerec`'s death throw fires a shot a frame, `initvpriest`'s vanish lets
+ * twelve bats go, and `initkragg`'s state 9 drags itself towards a sprinkler —
+ * and all three were unreachable for exactly that reason.
+ *
+ * So a reaction gets a think of its own. It is deliberately NOT a brain: it
+ * returns nothing, it may not install a state, and the page goes on owning the
+ * animation and the frame count. It runs once an ENGINE FRAME, like a brain,
+ * and `run` is how many frames the reaction's own animation lasts, so a class
+ * can tell the last frame of it from the first.
+ */
+export type Reaction = (
+  e: Enemy,
+  foe: Foe,
+  run: number,
+  k: BrainCtx,
+) => void;
+
+/**
+ * A CAST as its own hit handler sees it — the object's own words, and nothing
+ * the page keeps beside them.
+ *
+ * The point and the two velocities are `obj+6`…`obj+0xc`, and the order is the
+ * executable's: `0x4562c7` adds `obj+0xc` to `obj+8` and `obj+0xa` to `obj+6`,
+ * so the point is packed y then x and the vertical velocity comes FIRST.
+ * {@link alight} is the one thing here that is not a word of the object — it is
+ * word 0 of the six bytes `0x456240` allocates beside it.
+ *
+ * {@link bounced} and {@link landed} are this page's `obj+0x18`, which is the
+ * word a handler's second test reads, and {@link spent} is the removal a
+ * class's think asks for by answering 1.
+ */
+export interface CastSelf {
+  x: number;
+  y: number;
+  /** `obj+0xc` — pixels an engine frame along x, signed in world terms */
+  vx: number;
+  /** `obj+0xa` — ...and downward, which is the axis a pull spends */
+  vy: number;
+  facing: number;
+  /** frames into the burst a BOUNCE plays, and undefined while it flies */
+  bounced?: number;
+  /** ...and frames into its impact, once something has stopped it */
+  landed?: number;
+  /**
+   * Word 0 of the class's own per-object record — it is on FIRE.
+   *
+   * `0x455751` reads it back through `0x430eb0` before anything else the
+   * handler does and answers 0 if it is set, so a burning cast is deaf to
+   * every blow that follows, the player's included. `0x4557a1` is the only
+   * write on this path; `0x4562e7` is the other, and that one is at birth.
+   */
+  alight?: boolean;
+  spent: boolean;
+}
+
+/**
+ * ...and the one thing such a handler may ask the page for.
+ *
+ * Bound to the cast it was built for, which is the difference between this and
+ * {@link BrainCtx}: a brain is handed one shared context and names the enemy in
+ * every call, and a hit handler is called once, about one thing.
+ */
+export interface CastCtx {
+  /**
+   * `0x44ff20` — stick a FLAME on it, the half of a −9 every handler shares.
+   *
+   * `late` is its second argument and `forever` its third, exactly as
+   * {@link Foe.burns} carries them: the first starts the fire at the stage it
+   * goes out on, the second means it never does.
+   */
+  burn(how?: { late?: boolean; forever?: boolean }): void;
+}
+
+/**
+ * What a CODE does to a cast — the cast half of {@link Reaction}.
+ *
+ * `0x455763` is the only −9 handler in the game on a thing that is not a
+ * creature. A {@link Foe} carries its own as DATA because all eight creature
+ * handlers do the same three things with different arguments; this one is a
+ * function because the fireball's is not one of the three — it reads its own
+ * state, stops itself dead and latches a word of its own.
+ *
+ * `code` is the hitter's `obj+0x1a` and is always negative: a positive strength
+ * is damage and never comes here. Returning **true** is the handler's `ax = 1`,
+ * which spends the blow on this cast; false is its `ax = 0` — read, and
+ * declined.
+ */
+export type CastCode = (
+  self: CastSelf,
+  code: number,
+  k: CastCtx,
+) => boolean;
 
 /**
  * `0x45d090` — put a script on, and with it the state.

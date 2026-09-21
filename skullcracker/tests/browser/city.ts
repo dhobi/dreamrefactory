@@ -253,8 +253,92 @@ const main = async (): Promise<void> => {
   if (!(ys[ys.length - 1] < ys[0])) fail(`mode 2 starts 256 BELOW and rises; it went ${ys[0]} -> ${ys[ys.length - 1]}`);
   console.log(`ok    ...and a mode-2 probe sends the television up past you, y${ys[0]} to y${ys[ys.length - 1]}`);
 
+  /**
+   * ...and `initwerec` THROWS, which is the last thing on this page that read
+   * the executable and did nothing with it.
+   *
+   * `0x452b20` is its own projectile creator and the shot it builds is a DUD:
+   * `0x452c67` writes no strength, and cels 6004, 6005 and 6006 carry a strike
+   * box with no blow pair. `0x452ec0` writes `0x65` as the burst script
+   * `0x477c60` becomes the object's state, and only 7000, 7001 and 7002 carry
+   * the `dx 43` that turns it into damage. So what this watches for is both
+   * halves: a harmless flight, and a flash worth a hundred and one.
+   */
+  await page.goto(`${BASE}/walk.html?level=2&x=7150&y=4010&foehit=1`);
+  await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(800);
+  const shots = new Set<string>();
+  for (let i = 0; i < 320; i++) {
+    const c = /· \d+ cast, nearest cel (\d+) at x (-?\d+), y (-?\d+) blow (-?\d+) vx (-?\d+) vy (-?\d+)/.exec(await say());
+    if (c) shots.add(`${c[1]}/${c[4]}`);
+    await page.waitForTimeout(60);
+  }
+  const flight = [...shots].filter((s) => Number(s.split("/")[0]) < 7000);
+  const burst = [...shots].filter((s) => Number(s.split("/")[0]) >= 7000);
+  if (!flight.length) fail(`initwerec should throw on its own row — 0x4527fd; nothing flew`);
+  if (flight.some((s) => s.split("/")[1] !== "0"))
+    fail(`0x452c67 writes no strength, so the flight is a dud; it showed ${flight.join(" ")}`);
+  if (flight.some((s) => !["6004", "6005", "6006"].includes(s.split("/")[0])))
+    fail(`0x477c38 is 6004, 6005 and 6006; the flight showed ${flight.join(" ")}`);
+  if (!burst.length) fail(`and it should BURST where it lands — 0x452e00 installs 0x477c60; it never did`);
+  if (burst.some((s) => s.split("/")[1] !== "101"))
+    fail(`0x452ec0 writes 0x65 as the burst comes up; it showed ${burst.join(" ")}`);
+  console.log(`ok    and initwerec throws: ${flight.length} flight cels worth nothing, bursting into ${burst.length} worth 101`);
+
+  /**
+   * ...and a crow BURNS, which is the eighth reader of the −9 and the last of
+   * them to be given a name.
+   *
+   * `0x4519d8` writes `0x4520d0` into the `+0x12` of a class with no `init*`
+   * string at all — CITY's own `0x451990` registers it — so the owner had to be
+   * read off the descriptor. It is `initcrow`, and the chapter agrees: the
+   * flamer is CITY's weapon and CITY is the level that perches twelve of these.
+   *
+   * The spot is the file's. A `statflamer` sits at x8899 on the platform that
+   * runs x8791..8998, and the crow whose point is x9086 owns the rect
+   * x8901..9271 — so standing on the pickup is inside it, and the crow holds a
+   * height about fifty pixels above the player's own point while it is up.
+   *
+   * What the arm does is a flame, `0x476e58` and nothing else: no damage, no
+   * feathers. `0x451e5a` then ends those eight frames with gravity 1.0, the
+   * tumble and the same eighty a punch pays.
+   */
+  await page.goto(`${BASE}/walk.html?level=2&x=8905&y=3600&weapon=10&rounds=120`);
+  await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(700);
+  await page.keyboard.down("ArrowDown");
+  await page.waitForTimeout(800);
+  await page.keyboard.up("ArrowDown");
+  await page.waitForTimeout(300);
+  if (!/holding flamer/.test(await say()))
+    fail(`CITY's statflamer at x8899 should arm you: ${/· (no|holding)[^·]*/.exec(await say())?.[0]}`);
+  // up first, so the flame meets something that is flying rather than perched
+  let up = "";
+  for (let i = 0; i < 80 && !up; i++) {
+    await page.waitForTimeout(120);
+    if (/(fly|strike) cel 1[78]\d\d/.test(await crows())) up = await crows();
+  }
+  if (!up) fail(`the crow at x9086 should wake and fly with the player inside its rect; got ${await crows()}`);
+  await page.keyboard.down("p");
+  let lit = "";
+  for (let i = 0; i < 90 && !lit; i++) {
+    await page.waitForTimeout(80);
+    if (/fall cel 188\d/.test(await crows())) lit = await crows();
+  }
+  await page.keyboard.up("p");
+  if (!lit) fail(`-9 puts a crow on 0x476e58 — "fall", cels 1884..1887; got ${await crows()}`);
+  if (!/alight/.test(await say())) fail(`0x44ff20(self, 3, 0) should hang a flame on it: ${await say()}`);
+  console.log(`ok    the flamer sets a crow alight: ${lit}`);
+  let down = "";
+  for (let i = 0; i < 60 && !down; i++) {
+    await page.waitForTimeout(100);
+    if (/tumble cel 183\d/.test(await crows())) down = await crows();
+  }
+  if (!down) fail(`0x451e5a ends the fall in the tumble, 1830..1834; got ${await crows()}`);
+  console.log(`ok    ...and the fall ends in the tumble: ${down}`);
+
   await finish(browser);
-  console.log("PASS  CITY's planks give way, its crows wake, its probes fire and its first step is passable");
+  console.log("PASS  CITY's planks give way, its crows wake and burn, its probes fire, its werecs throw and its first step is passable");
 };
 
 await main();

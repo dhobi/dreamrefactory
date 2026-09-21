@@ -93,6 +93,13 @@ export interface PlayerAnim {
   land: readonly number[];
   climb: readonly (readonly number[])[];
   hang: readonly number[];
+  /**
+   * The monkeybar — `0x472048` kind 8, five tags, and the only script in the
+   * player's book that had nothing on this page's side. See `MONKEYBAR` in
+   * {@link file://./walk.ts}: tag 0 hangs, 1 and 2 swing a hand each way, and
+   * 3 and 4 are the chin-up and its way back down.
+   */
+  bar: readonly (readonly number[])[];
 }
 
 /** one thing the player does on a key, as the script's cels and their own dx */
@@ -120,6 +127,8 @@ export interface PlayerMeasured {
   flyKickDy: number;
   hopDx: number;
   hopDy: number;
+  /** `0x472048` tag 1's own `dx` — what one swing along a monkeybar carries */
+  barSwing: number;
 }
 
 /** one whole player: which cels, which moves, which numbers */
@@ -148,7 +157,7 @@ export interface PlayerKit {
 // launchDx is the WALKING launch (0x471b28 tag 3); a RUNNING jump is tag 4's
 // single record `200(dx 180, dy -420)` and keeps the run's own 180 — so
 // runJumpDy is 420 here and 480 for character 1, whose tag 4 is its own
-const MEASURED_0: PlayerMeasured = { walk: 95, run: 180, jump: 420, runJumpDy: 420, rise: 125, launchDx: 100, runJumpDx: 180, crawl: 47, flyKickDx: 190, flyKickDy: 310, hopDx: 120, hopDy: 210 };
+const MEASURED_0: PlayerMeasured = { walk: 95, run: 180, jump: 420, runJumpDy: 420, rise: 125, launchDx: 100, runJumpDx: 180, crawl: 47, flyKickDx: 190, flyKickDy: 310, hopDx: 120, hopDy: 210, barSwing: 120 };
 
 /**
  * Which cels are which — `SC.EXE`'s own table, not a guess any more.
@@ -335,6 +344,20 @@ const ANIM_0: PlayerAnim = {
   ],
   /** tags 6 and 7 — one cel, held: hanging on a rung, going nowhere */
   hang: [405],
+  /**
+   * `0x472048` kind 8, two ticks a cel — the monkeybar, and its tags are not
+   * interchangeable the way the ladder's are. Tag 1 goes out 4400…4405 with
+   * `dx 120` on every frame of it and tag 2 comes back the same six mirrored;
+   * tags 3 and 4 are 4420…4422 and its reverse, carry no `dx` at all, and are
+   * the chin-up W holds you in.
+   */
+  bar: [
+    [4400],
+    [4400, 4401, 4402, 4403, 4404, 4405],
+    [4405, 4404, 4403, 4402, 4401, 4400],
+    [4420, 4421, 4422],
+    [4422, 4421, 4420],
+  ],
 };
 
 /**
@@ -504,7 +527,7 @@ const TUCK_FEET_0 = 69;
  * is 63 — the file's own number divided by the file's own frame count, and said
  * here rather than left to look like a measurement.
  */
-const MEASURED_1: PlayerMeasured = { walk: 105, run: 200, jump: 500, runJumpDy: 480, rise: 125, launchDx: 100, runJumpDx: 180, crawl: 63, flyKickDx: 190, flyKickDy: 370, hopDx: 120, hopDy: 240 };
+const MEASURED_1: PlayerMeasured = { walk: 105, run: 200, jump: 500, runJumpDy: 480, rise: 125, launchDx: 100, runJumpDx: 180, crawl: 63, flyKickDx: 190, flyKickDy: 370, hopDx: 120, hopDy: 240, barSwing: 100 };
 
 /**
  * Character 1's cels — `0x475c88` and its neighbours, tag for tag against
@@ -553,6 +576,18 @@ const ANIM_1: PlayerAnim = {
   ],
   /** tags 6 and 7 — hanging on a rung */
   hang: [5405],
+  /**
+   * `0x4765f8` — the same five tags at `dx 100`, and the swing SKIPS two cels
+   * the chin-up owns: 9401 and 9402 appear in tags 3 and 4 only, so tag 1 runs
+   * `9400 9403 9404 9405 9406 9407`.
+   */
+  bar: [
+    [9400],
+    [9400, 9403, 9404, 9405, 9406, 9407],
+    [9407, 9406, 9405, 9404, 9403, 9400],
+    [9400, 9401, 9402],
+    [9402, 9401, 9400],
+  ],
 };
 
 /**

@@ -256,6 +256,65 @@ const main = async (): Promise<void> => {
   );
 
   /**
+   * ...and a flare DOES raise one, and costs the boss nothing doing it.
+   *
+   * `0x43ac04` is where the flare's own think writes `obj+0x1a = 0xfff7`
+   * against the `0x64` it carries otherwise, and `0x441d30` is the first thing
+   * kragg's hit handler asks. That arm plays a sound, installs `0x473a88` —
+   * state 9 — and **returns at `0x441d94` before any damage is computed**. So
+   * the water is the tactic rather than a flourish: sixteen rounds at a
+   * hundred would be more than kragg's whole thousand, and you could simply
+   * shoot it.
+   */
+  await page.goto(`${BASE}/walk.html?level=8&x=1740`);
+  await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(700);
+  // ARCADE's one `statflaregun` stands at x1756, which is why the walk starts here
+  for (let i = 0; i < 20 && !/IN REACH/.test(await say()); i++) {
+    await page.keyboard.down("ArrowRight");
+    await page.waitForTimeout(110);
+    await page.keyboard.up("ArrowRight");
+    await page.waitForTimeout(110);
+  }
+  await page.keyboard.down("s");
+  await page.waitForTimeout(800);
+  await page.keyboard.up("s");
+  await page.waitForTimeout(400);
+  if (!/holding flaregun \d+\/16/.test(await say()))
+    fail(`could not pick up ARCADE's flare gun; the panel says ${/· (holding|no) \w+ \d+\/\d+/.exec(await say())?.[0]}`);
+  let lit = 0;
+  let hpWas = (await boss())?.hp ?? 1000;
+  for (let i = 0; i < 90 && lit === 0; i++) {
+    const t = await say();
+    lit = Number(/sprinklers, (\d+) up/.exec(t)?.[1] ?? 0);
+    if (lit) break;
+    const b = await boss();
+    if (!b || b.state === "dead") break;
+    const me = Number(/· x (-?\d+)/.exec(t)?.[1] ?? 0);
+    if (Math.abs(b.x - me) > 260) {
+      const key = b.x > me ? "ArrowRight" : "ArrowLeft";
+      await page.keyboard.down(key);
+      await page.waitForTimeout(110);
+      await page.keyboard.up(key);
+    } else {
+      // P is the trigger when a weapon is in your hands, not K
+      await page.keyboard.press("p");
+      await page.waitForTimeout(340);
+    }
+    await page.waitForTimeout(80);
+  }
+  if (lit === 0)
+    fail(`burning kragg should send a sprinkler up — 0x4415bd; ${/\d+ sprinklers[^·]*/.exec(await say())?.[0]}`);
+  const hpNow = (await boss())?.hp ?? 0;
+  // the scald is the boss's own three a frame, which is what it is SUPPOSED to
+  // cost it; a flare landing its hundred would show up as a far bigger drop
+  if (hpWas - hpNow >= 100)
+    fail(`0x441d94 returns before the damage, so a flare costs kragg nothing; it went ${hpWas} -> ${hpNow}`);
+  console.log(
+    `ok    ...and burning it DOES raise one, for ${hpWas - hpNow} health rather than the flare's hundred`,
+  );
+
+  /**
    * 8. ...and felling it is TWO fights, because it stands up once.
    *
    * `0x441e4a` is the frame its health runs out and it does not install the

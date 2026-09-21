@@ -322,9 +322,15 @@ const main = async (): Promise<void> => {
     ball = Math.max(ball, await brightest());
     await page.waitForTimeout(90);
   }
-  // the ball is 89x76 of solid bright green — thousands of pixels — while the
-  // splats a dying rat leaves are 22 to 106 pixels wide and a few tall
-  if (ball > 1500)
+  /**
+   * The ball is 89x76 of solid bright green — call it six or seven thousand
+   * pixels — while the splats a dying rat leaves are 22 to 106 wide and a few
+   * tall. The threshold used to be 1500, and a run under pool load measured
+   * **1524** of splat: enough of them land in one frame to cross it. Three
+   * thousand still leaves better than a factor of two either way, and it is
+   * the gap between the two things that matters here, not the exact figure.
+   */
+  if (ball > 3000)
     fail(
       `a rat left a ${ball}-pixel green ball; only the punks' corpses do that`,
     );
@@ -482,6 +488,43 @@ const main = async (): Promise<void> => {
   console.log(
     `ok    three kicks burst the hydrant into a second object, and it shuts again`,
   );
+
+  /**
+   * 13. ...and the jet HITS, which it did not.
+   *
+   *     The water is a second object of the hydrant's class and this page keeps
+   *     it as an enemy in the `burst` state, which `takeHits` was skipping
+   *     beside the corpses. Six of its ten cels carry a strike box (9802..9807)
+   *     and five of those carry a blow pair as well — `dx -74` on 9803 and
+   *     `-125` on the four after it — so a jet at full width is the hardest
+   *     single blow in the chapter, and it knocks you flat.
+   */
+  await page.goto(`${BASE}/walk.html?level=1&x=8560&foehit=1&damage=1`);
+  await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(500);
+  const hp = async (): Promise<number> =>
+    Number(/damage ON (\d+)\//.exec(await say())?.[1] ?? "0");
+  const full = await hp();
+  if (!full) fail(`the damage switch did not come on`);
+  await page.keyboard.down("ArrowRight");
+  await page.waitForTimeout(300);
+  await page.keyboard.up("ArrowRight");
+  let floored = "";
+  for (let i = 0; i < 10 && !floored; i++) {
+    await page.keyboard.press("k");
+    for (let j = 0; j < 10 && !floored; j++) {
+      await page.waitForTimeout(60);
+      const t = await say();
+      if (/· down(Front|Back)/.test(t) && (await hp()) < full) floored = t;
+    }
+  }
+  if (!floored)
+    fail(`standing in a burst hydrant's jet should floor you; health stayed at ${await hp()}`);
+  const took = full - Number(/damage ON (\d+)\//.exec(floored)?.[1] ?? full);
+  // 9803's own pair, and the port takes the cel's blow rather than a class number
+  if (took !== 74 && took !== 125)
+    fail(`the jet's cels carry dx -74 and dx -125; it took ${took}`);
+  console.log(`ok    ...and standing in the jet costs ${took} and puts you on your back`);
 
   await finish(browser);
   console.log(

@@ -936,20 +936,103 @@ own seam rather than being bent into a `CastKit`:
 
 ### What is still read and not done
 
-Three, each of them a different seam again:
+Very little, and the thing that unlocked the rest was one code.
 
-- **`initwerec`'s throw**, `0x452b20`. It allocates out of `0x477ca0`, starts the
-  shot seventeen above and twenty either side of the thrower, and solves the arc
-  from the horizontal gap through `0x434630`, the integer square root — which is
-  `BrainCtx.root` and already on the page. Its third argument picks the shape:
-  zero is the aimed shot the single throw makes, anything else one of the flat
-  ones the fan makes, with the lift zeroed at `0x452bc0`. `e.side` already
-  carries `AI+6`, the fan index, and steers nothing yet. This was scoped out on
-  "nothing in this port hits the player back", which stopped being true.
-- **`initkragg`'s sprinklers**, the dive at `0x4415a9` that ends over whichever
-  `initsprinkler` rect `0x441b20` answers with and sends it up. The level data
-  already carries the seven positions; what is missing is the state machine
-  around them, three thousand bytes at `0x440ab0`.
-- **`initcoke`'s cans**, `0x45af60`. Cels 8600..8614 arc out, land, and turn
-  themselves into a type-2 pickup — so they want a PICKUP spawner, which is a
-  third seam again and belongs with the pickups rather than here.
+**−9 is not damage.** It falls below `0x448c84`'s range test, so against the
+player it lands as ordinary hurt; against a creature it is read by **eight**
+handlers of their own that accept nothing else, and every one of them begins by
+calling `0x44ff20`. That function does not play an effect — it builds a FLAME,
+an object with its own position, parked at a random point inside whatever the
+victim's current cel covers, and `0x453ea0` carries it along with the victim
+(mirroring its offset by the facing) for as long as it burns. The flame is worth
+a hundred on paper (`0x453eed` writes it every frame) and worth nothing in fact:
+not one of 9600..9629 carries a strike box or a blow pair. It is a reaction, not
+a weapon.
+
+Two things carry a −9. The flamer's flame always (`0x453b9b`), and **a flare on
+stage 5** — `0x43abfa` writes `0xfff7` while `[0x4abdfc]` is 5 and `0x64`
+otherwise, and `SkullSave.stage` already reads that word as the fourth level of
+a chapter: levels 4, 8, 12 and 16. ARCADE is level 8, which is why the one level
+with sprinklers is also one of the four where a flare is a code.
+
+This page had read "a strength below 1 is not a blow" as "harmless", so the
+flamethrower crossed sixteen levels touching nothing at all. The creature classes
+answer it now — `initwerea` leaps, `initwereb` bolts on its own walk cels,
+`initwerec` throws, `initwered` burns *and* takes the blow (the one that falls
+through), `initdog` plays its own sound, `initwbooly` simply catches, and
+`initkragg` goes to state 9.
+
+And `Reaction` in `brains/kit.ts` is the seam the last three needed: a think for
+the states the PAGE owns. It is deliberately not a brain — it returns nothing
+and installs nothing — and it is what lets `initwerec` fire a shot a frame out
+of a corpse, `initvpriest` throw twelve bats and wait out of sight until half of
+them are dead, and `initkragg` drag itself onto a sprinkler.
+
+### The nameless handler is the crow's
+
+`0x4520d0` had no owner because the class it hangs off has no NAME. `0x4519d8` is
+the write — `mov dword ptr [esi+0x12], 0x4520d0` — and the descriptor it writes
+into is registered by `0x451990` with `0x430cc0(0x4519b0)`, no `init*` string
+attached, from a single call at `0x451628` inside CITY's own entry function. No
+level places one of these: `0x450910`, CITY's creator, builds them off the
+`initcrow` records, twelve of them. So the eighth −9 reader is **`initcrow`**,
+and its scripts say so on their own — `0x476e58`'s 1884..1887 are the last four
+cels of `0x476da0`, the crow's dive, and every one of the class's nine scripts
+sits in the same `0x476aa8`..`0x476ef8` block that `0x451aa0` installs from.
+
+The chapter is what makes it fit rather than merely match, and the art settles
+it twice over. The flamer is CITY's own weapon — `0x4511f0` names it for
+`woods.sbk` and `city.sbk` — so the level that perches twelve crows is one of the
+two that hand you the thing that lights them. And the flame's own 9600..9629 are
+in four books: CITY, PLAYGR, VAT and WOODS. A crow is the only thing in CITY that
+reads the code, so the crow is why CITY carries the fire.
+
+The arm itself is the shortest of the eight: `0x44ff20(self, 3, 0)` for the
+flame — a nonzero second argument, so `0x44ffe2` puts it straight on `0x478978`
+tag 2, and a zero third, so it goes out — then `0x476e58`, then `return 1`, above
+both the class test at `0x452109` and the dying test. The code never lands as a
+blow and throws no feathers. What kills the crow is the state: `0x451e5a` plays
+woods 17 under those eight frames and ends them with `0x42f850(obj, 1.0f)`, the
+tumble and the same eighty a punched crow pays. The height code at `0x451aeb`
+still runs while it burns, so the crow holds its station for the eight frames and
+only then drops.
+
+It is not a `Reaction`, because a crow is not a `Foe` and has no brain: it is
+`CROW.fall`, `CROW.burns` and `burnCrow` in `src/props.ts`, which is where the
+rest of the class lives. It needed a site as much as the fireball did, and for
+the same reason — `0x430367` hands every OBJECT in the room its own `obj+0x12`,
+not every creature — so the flamer's stream now looks for a crow beside the pool
+and the casts, `stepFlames` follows one, and the state ends into the tumble. The
+flare is not a second site here: CITY is level 2, so `0x43abfa` makes a flare
+there a hundred rather than a code, and no `statflare` is placed in CITY anyway.
+
+And the odd one out is closed as well: **the fireball's own**,
+`0x455763`, is the only −9 handler in the game on a thing that is not a
+creature. `0x45554f` writes it into `obj+0x12` as the class creates the object —
+the same word every creature's class writes its own handler into — so what it
+needed was a hit handler on a CAST, and that is `CastKit.onCode`, the cast half
+of `Reaction`. A function rather than a row of data, because what a fireball
+does with a −9 is none of the three things the creature handlers do. It needed a
+site as well as a seam: both of the things that carry a −9 now look for a cast
+beside the creatures they already looked for. The flamer's stream is one, and on
+PLAYGR the flare is the other: PLAYGR is level 4, the fourth level of its
+chapter, and `0x43abfa` makes every flare on one of those four a code.
+
+Struck in flight, a fireball stops dead. `0x455791` sticks a LATE flame on it,
+`0x4557a1` marks the class's own six-byte record so it cannot catch twice, and
+`0x4557a9` zeroes the horizontal velocity and sends it ten UP. Ten is inside
+`0x4556d3`'s fifteen, so it is worth nothing from that frame; ten is also
+`0x4555e9`'s rest, so the next surface it meets removes it. It hops, drops and
+is gone, and it cannot hurt anybody on the way down.
+
+Two of its arms stay read, and neither is about a thing anybody threw. State 2
+is `0x450ff0`'s: one object of this class for every `inittirepile` record a
+level places, weightless, showing cel 7020 and pinned to the record's own point
+by `0x4556b9`. Burning THAT is the arm that latches `[0x4782dc]`, and the latch
+is the prize — `0x4562d3` lights every fireball built afterwards at birth and
+`0x4556f6` holds all of them at a strength of zero for the rest of the level.
+Nothing else in the executable writes that word — and no book in the rip places
+an `inittirepile`, so the pinned object is never built, the arm never runs and
+the latch is never set in the original either. This page carries neither. `0x4557ba` is the other arm: the burst and the sound a fireball answers
+the PLAYER's own fist with, and nothing here puts a fist through a cast.
+
