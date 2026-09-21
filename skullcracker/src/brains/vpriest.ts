@@ -533,12 +533,34 @@ function attack(
      * ---- tag 2, `0x425ff3`: the summon.
      *
      * The same halving under sixteen cels, and then `0x42601a` counts three bats
-     * out through `0x426340` before handing to the settle. See
-     * {@link VPRIEST.bat} — again, no creator here.
+     * out through `0x426340` before handing to the settle — which is what
+     * {@link BrainCtx.hatch} is, and the loop below is `0x426031`…`0x426085`
+     * read one instruction at a time.
+     *
+     * Each one's y is `e.y − 0x23 + (roll(0x46) − 0x23)`, so it is let go
+     * anywhere in the seventy pixels ABOVE the bishop and never below it; its x
+     * is `0x26 + roll(0x23)` out along the facing; and `0x42639f` gives it the
+     * class's own ±30, which is a whole pixel a frame through `initbat`'s
+     * divisor of one and so `* TICK_SCALE` in this page's units.
+     *
+     * The two states that throw TWELVE — the vanish at `0x4261df` and the death
+     * at `0x4262f7` — are not here and are not reachable: both live in states
+     * this port never runs, because {@link Foe.flinch} and {@link Foe.death}
+     * own them and a brain is never called while either is playing. They stay
+     * in {@link NOT_HERE} with the rest of that machinery.
      */
     case 2:
       halve(e);
       if (!done) return false;
+      for (let i = 0; i < VPRIEST.bat.count; i += 1) {
+        const b = VPRIEST.bat;
+        k.hatch(e, "initbat", {
+          x: e.x + e.facing * (b.ahead + k.roll(b.aheadSpread)),
+          y: e.y - b.up + (k.roll(b.upSpread) - b.up),
+          facing: e.facing,
+          vx: e.facing * b.vx * TICKS,
+        });
+      }
       return install(e, VPRIEST.settle, true);
     // ---- tag 3, `0x4260a7`: and the settle just ends, back into the float
     default:

@@ -2739,6 +2739,83 @@ export interface Board {
   life: number;
 }
 
+/**
+ * The ROLLER — `0x43a790`, class `0x43a8a0`, think `0x43a960`, hit `0x43aa40`.
+ *
+ * The only hazard in the game a CREATURE builds. Everything else that rolls,
+ * swings or falls is a record the level places; this one is made at runtime by
+ * `initmaskboy` and by nothing else, which is why it has no `init*` name — it
+ * is not in the class table under one, and no level can place it.
+ *
+ * ```
+ *   43a793  cmp word ptr [0x474868], 0   ; the latch, and it bails if set
+ *   43a7a5  0x433f20(0xc)                ; a twelve-byte AI struct
+ *   43a7c8  0x42f7a0(obj, 0.1f)          ; obj+0x1e — it barely slows
+ *   43a8d8  obj+0xe = 7                  ; the divisor
+ *   43a8e5  obj+0x0 = 0x7b2              ; cel 1970
+ *   43a81b  AI+8 = 0x28, AI+0xa = 0      ; the wait, and the counter
+ *   43a841  [0x474868] = 1               ; ...and the latch is set
+ * ```
+ *
+ * ## It waits before it rolls
+ *
+ * The creator does NOT launch it. `0x43a99b` — state 1, which is the kind of
+ * the script the creator installs — counts `AI+8` down from forty and only
+ * then installs `0x4747e8` and calls `0x42f8b0(obj, AI+4)`, the packed velocity
+ * the spawner stored. So there are forty-one frames of cel 1970 sitting where
+ * it was born before it moves at all, which is the warning the room gets.
+ *
+ * `0x43a9dc` clears the latch on that same frame rather than when the thing
+ * dies — so the keeper may start a second one the moment the first rolls, and
+ * the latch is a "one WAITING", not a "one alive".
+ *
+ * ## And it is only worth something while it is fast
+ *
+ * `0x43a97d` is the think's common tail and it writes `obj+0x1a` every frame:
+ * a hundred while `|obj+0xc|` is over ten, and `0x43aa34` writes **zero** once
+ * it is not. The same shape as `initwbooly`'s fireball ({@link CastKit.fastBlow}),
+ * and the reason a roller that has slid to a stop is scenery.
+ */
+export const ROLLER = {
+  /** `0x43a8d8` — `obj+0xe`, what the launch velocity is divided by */
+  divisor: 7,
+  /** `0x43a8e5` — the cel it waits on, and the first of the two it rolls on */
+  waits: 1970,
+  /** `0x4747e8` tag 0 — the roll, two cels at one frame each */
+  rolls: { cels: [1970, 1971], hold: 1, from: "0x4747e8 tag 0" },
+  /** `0x43a81b` — `AI+8`, counted down before `0x42f8b0` is ever called */
+  wait: 0x28,
+  /**
+   * `0x43a7c8` — `0x42f7a0(0.1f)`, and it is never spent.
+   *
+   * `0x4302c0` lives in the mover's contact arm and `0x42fdba` skips that arm
+   * while `obj+0xa` is zero or less. Nothing gives a roller a weight, so its
+   * `vy` never leaves zero, it never stands on anything, and the drag sits in
+   * `obj+0x1e` unread for its whole life. Carried because it IS written.
+   */
+  friction: 0.1,
+  /** `0x43a993` — what it is worth while it is moving */
+  strength: 0x64,
+  /** `0x43a986` — and `0x43aa34` takes that away at ten or under */
+  fastBlow: 0xa,
+  /** `0x43a9d7` — the cue on the frame it starts to roll */
+  sound: 0x21,
+  /** `0x43a82c` — and the one when it is built */
+  bornSound: 0x46,
+  from: "0x43a790 / 0x4747d8 / 0x4747e8, class 0x43a8a0",
+} as const;
+
+/** the one roller a level may have — {@link ROLLER}, and only `initmaskboy` makes it */
+export interface Roller {
+  x: number;
+  y: number;
+  vx: number;
+  /** `AI+8` — frames left before it is launched, and it rolls at −1 */
+  wait: number;
+  /** its own clock, for the two cels of {@link ROLLER.rolls} */
+  clock: number;
+}
+
 export interface Boggs {
   x: number;
   y: number;

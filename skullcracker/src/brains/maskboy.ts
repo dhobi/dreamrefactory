@@ -80,7 +80,19 @@
  * below reads or writes it. There is no beat, no decision budget and no side
  * word anywhere in the struct — this class does not circle and does not taunt.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import { TICK_SCALE, install, type Brain, type BrainCtx, type Enemy } from "./kit";
+
+/**
+ * A tick is a QUARTER of an engine frame — {@link TICK_SCALE}.
+ *
+ * Every other class needs this to turn a script's pixels-a-frame into a
+ * velocity. This one needs it for a PROBABILITY: `0x438848` rolls once per
+ * engine frame and a brain is called once per tick, so the executable's own two
+ * in sixty-eight would come out four times too often. Dividing the denominator
+ * is the same trick the movers use in the other direction — the disc's numbers
+ * stay on the page and the rate is the disc's.
+ */
+const TICKS = TICK_SCALE;
 
 /**
  * Everything `0x438760` does that is deliberately not in this file, with the
@@ -103,12 +115,6 @@ import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
  *   ever called while a lever is still in the patch — so porting it here would
  *   give one animation two owners. It is dead in MALL anyway: the level places
  *   no switch.
- * - **The roller, `0x438848`.** Outside state 9, a `0x434540(0x44) < 3` roll —
- *   two in sixty-eight — with the player within 300 in x and this one WEST of
- *   him sends `0x43a790` to build an object at the player's own y, 600 pixels
- *   the far side of him, carrying `vx -480`. `[0x474868]` latches, so exactly
- *   one exists for the level. Nothing in {@link BrainCtx} can spawn, and the
- *   thing it spawns would hit the player — it is read and not written.
  * - **`obj+0x2c`, the blocked word.** `0x42ff8d`, `0x42ffe2`, `0x430088`,
  *   `0x4300ff` and `0x430181` — the level-geometry bounce inside `0x42ff40` —
  *   set it to 1 on the frame an object's stride is turned back by the scenery.
@@ -147,6 +153,24 @@ const NOT_HERE =
  * is already a blow.
  */
 export const MASKBOY = {
+  /**
+   * `0x438848` — the roll that builds the level's one roller, and its three
+   * gates. See {@link ROLLER} for what the thing then does.
+   */
+  roller: {
+    /**
+     * `push 0x44` then `cmp eax, 3; jge` — two in sixty-eight, every ENGINE
+     * frame, which is why the brain divides the first by {@link TICKS}.
+     */
+    odds: [0x44, 3] as const,
+    /** `0x438871` — and only with the player this close in x */
+    within: 0x12c,
+    /** `0x43889c` — it is built this far the FAR side of him */
+    beyond: 0x258,
+    /** `0x43887d` — `vx`, pre-divisor, so it comes back towards him */
+    vx: -0x1e0,
+    from: "0x438848 / 0x43a790",
+  },
   /** kind 1 tag 0 — one cel, and what `0x4386f5` stands it up on */
   dormant: { cels: [1801], hold: 1, kind: 1, tag: 0, from: "0x4740b8 tag 0" },
   /**
@@ -316,13 +340,36 @@ export const MASKBOY = {
  * with its stride unspent.
  *
  * `0x438e84` also writes `obj+0x1a = 0x64` on the way out of every frame — the
- * strength percent, re-asserted whatever the state. Nothing hits the player
- * back in this port, so it is carried as a comment and spends nothing.
+ * strength percent, re-asserted whatever the state. {@link Foe} carries that
+ * number, so it is not written again here.
  */
 export const maskboy: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
   const t = k.track(e, MASKBOY.bands);
   const state = e.script ?? 0;
+  /**
+   * `0x438848` — the roller, and it is the preamble's business rather than any
+   * one state's.
+   *
+   * Both arms of the player-down test at `0x438805` fall into `0x438841`, so
+   * the roll happens whatever he is doing; the only state it is skipped in is
+   * 9, the death, which this page owns and a brain is never called during. So
+   * there is no state gate here at all, which is what the executable has.
+   *
+   * The three conditions are its own: the roll, the player within 300 in x, and
+   * this one WEST of him (`0x438878 cmp bx, bp; jge`) — so the roller is always
+   * built on the side of the player this one is not, and rolls back through
+   * him. {@link BrainCtx.roller} carries the latch that keeps it to one.
+   */
+  {
+    const r = MASKBOY.roller;
+    if (
+      k.roll(Math.round(r.odds[0] / TICKS)) < r.odds[1] &&
+      Math.abs(k.player.x - e.x) < r.within &&
+      e.x < k.player.x
+    )
+      k.roller(e, { x: k.player.x + r.beyond, y: k.player.y, vx: r.vx });
+  }
   /**
    * `0x438805` — `0x402f60` says the player is down, and then everything on its
    * feet but the dormant one and the gloat itself drops what it is doing,

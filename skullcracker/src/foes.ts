@@ -669,15 +669,13 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * times the chained punk's and the largest number in the chapter, and 2500
    * points for it at `0x456420` — ten times a werewolf.
    *
-   * What it does while it lives is a real loop and most of it is here. What is
-   * NOT here is the fireball: `0x456240` builds a second object of its own class
-   * (cels 7010..7015 in flight, 7016..7019 bursting) with a restitution of 0.8 so
-   * the low shot bounces, and every frame of it carries a strike box — it is the
-   * one attack of the six that exists to hit you, and nothing in this port hits
-   * the player back yet. Its two muzzle points and both velocities are at
-   * `0x455cc3` and `0x455d01` for when they can be used. The charge, by contrast,
-   * carries **no** strike box on any frame: it closes the distance and nothing
-   * else, so it is honest to run it.
+   * What it does while it lives is a real loop and all of it is here, the
+   * fireball included: `0x456240` builds a second object of its own class (cels
+   * 7010..7015 in flight, 7016..7019 bursting) with a restitution of 0.8 so the
+   * low shot bounces, and every frame of it carries a strike box. Its two muzzle
+   * points and both velocities are at `0x455cc3` and `0x455d01`, and the module
+   * flies both through {@link BrainCtx.cast}. The charge, by contrast, carries
+   * **no** strike box on any frame: it closes the distance and nothing else.
    */
   initwbooly: {
     // `0x478340` kind 1 — standing, two frames a cel, going nowhere
@@ -823,10 +821,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * the book — so what the level actually shows is spawn, walk, idle, attack,
    * leap, flinch and death, which is what is here.
    *
-   * It is also the only class in the chapter that spawns a hazard: a one-in-thirty
-   * roll each frame, inside 300 pixels and from behind, sends `0x43a790` to put a
-   * roller 600 pixels the far side of the player. Exactly one can exist at a time
-   * (`0x474868` latches), and it is not here.
+   * It is also the only class in the chapter that spawns a hazard: a two-in-68
+   * roll each frame (`0x438848`), inside 300 pixels and from behind, sends
+   * `0x43a790` to put a roller 600 pixels the far side of the player. Only one
+   * may be WAITING — `0x474868` latches at `0x43a841` and `0x43a9dc` clears it
+   * on the frame the thing starts to roll, not when it dies. It goes through
+   * {@link BrainCtx.roller}; see `ROLLER` in {@link file://./props.ts}.
    */
   initmaskboy: {
     lever: {

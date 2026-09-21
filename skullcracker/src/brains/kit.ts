@@ -240,6 +240,22 @@ export interface Track {
  * the three helpers the classes actually call, and the two random generators,
  * and nothing else. That is what makes one class one file.
  */
+/**
+ * Where a summoned creature is let go — the four things `0x426340` is handed.
+ *
+ * The point is one packed dword in the engine (`obj+6` low is y, `obj+8` high
+ * is x) and two numbers here, and the facing is `obj+0x28` with this port's own
+ * sign: **+1 east, −1 west**.
+ */
+export interface Hatch {
+  x: number;
+  y: number;
+  /** +1 east, −1 west — `0x426383` writes the engine's own word */
+  facing: number;
+  /** `0x42639f` — `obj+0xc`, which the creator writes and the script adds to */
+  vx?: number;
+}
+
 export interface BrainCtx {
   /** the player, as much of him as `0x45efd0` and the band tests see */
   player: {
@@ -289,6 +305,31 @@ export interface BrainCtx {
    * the class calls its own spawner at, and quote that address there.
    */
   cast(e: Enemy, kit: CastKit): void;
+  /**
+   * Put one of ANOTHER class's creatures in the level, where its machine does.
+   *
+   * The sibling of {@link cast}, and the line between them is the engine's own:
+   * a cast is an object with a script and no mind, stepped by the page; this is
+   * an object with a brain of its own, which the page will then step exactly
+   * like one the level placed. `0x426340` is the only creator a think calls —
+   * the priest's bats — and what it settles is that a summoned thing is handed
+   * the SUMMONER's territory (`AI+4` and `AI+8`, the same two rect corners
+   * `0x450fc3` stores for a placed one), so a bat patrols where the priest
+   * stands rather than where it happened to be let go.
+   *
+   * It comes out AWAKE. `0x426340` installs `0x46f060` tag 1 outright, which is
+   * the flight, and never the dormant cel a placed bat waits on — so the caller
+   * gets a thing already flying and {@link Foe.wake} is not consulted.
+   */
+  hatch(e: Enemy, kind: string, at: Hatch): void;
+  /**
+   * `0x43a790` — the keeper's roller, the one HAZARD any class builds.
+   *
+   * Its own seam rather than a {@link CastKit} because it is neither: it has a
+   * think with four states, a hit handler that knocks it into the air, and a
+   * latch of its own. `ROLLER` in {@link file://../props.ts} carries the rest.
+   */
+  roller(e: Enemy, at: { x: number; y: number; vx: number }): void;
   /** what a leap is pulled down by, per tick */
   gravity: number;
 }

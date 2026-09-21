@@ -284,8 +284,13 @@ Two of their state machines reach for things that are not in this level at all.
 Both the masked one and the one with the bat have a sub-state for walking to a
 `switch` record and throwing it, and MALL places no `switch` — the cels its script
 wants are not even in the book. The next level places six of them, and that
-sub-state turns out to be the whole of how it works. The masked one also has a one-in-thirty roll that
-drops a roller behind the player, with a latch so that only one can ever exist.
+sub-state turns out to be the whole of how it works. The masked one also has a two-in-68 roll, taken every
+frame it is within 300 of the player and standing WEST of him, that builds a
+roller six hundred pixels the far side of him and rolls it back through him. It
+sits still on its first cel for forty-one frames before it moves — that pause is
+the warning — and then it holds a flat sixty-eight pixels a frame, because the
+drag it is given is never spent on anything. The latch holds one WAITING rather
+than one alive: it is released the frame the thing starts to roll.
 
 The Coke machine is furniture worth describing because of how it ends. It holds
 exactly four cans: a blow under 30 rocks it and nothing more, 30 to 75 rocks it
