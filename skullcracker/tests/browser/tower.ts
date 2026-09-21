@@ -142,11 +142,22 @@ const main = async (): Promise<void> => {
   }
   if (low >= 1200)
     fail(`the bishop should be taking damage; it never dropped below ${low}`);
+  /**
+   * The bishop itself pays nothing — `0x4264f0` has no `0x40d450` in it at all
+   * and `initvpriest`'s own award is 0.
+   *
+   * What it can no longer be is a flat zero, because beating it hard enough
+   * sends it to the VANISH (`0x426633`'s half-of-`AI+6` bar) and twelve bats
+   * come out of it. Those DO pay: `0x42640c` is `0x40d450(0x46)`, seventy
+   * apiece, and it is the same seventy `initbat`'s own panel carries. So the
+   * test is that every point earned here is a whole bat, and none of them is
+   * the bishop.
+   */
   const paid = Number(/(\d+) points/.exec(await say())?.[1] ?? 0) - before;
-  if (paid !== 0)
-    fail(`0x4264f0 pays nothing at all; the score moved by ${paid}`);
+  if (paid % 70 !== 0)
+    fail(`0x4264f0 pays nothing and a bat pays seventy; the score moved by ${paid}`);
   console.log(
-    `ok    the bishop is 1200 health, stands on the goal, and pays nothing — down to ${low}`,
+    `ok    the bishop is 1200 health, stands on the goal, and pays nothing itself — down to ${low}, ${paid / 70} bats`,
   );
 
   // 4. the two surges, arcing down the tower wall on their own six cels

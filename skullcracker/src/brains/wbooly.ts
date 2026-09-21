@@ -52,6 +52,7 @@ import {
   install,
   type Brain,
   type BrainCtx,
+  type CastCode,
   type CastKit,
   type Enemy,
 } from "./kit";
@@ -173,12 +174,93 @@ const THROW = {
   rest: 0xa,
   /** `0x455700` — a hundred, the same as the bishop's bolt */
   strength: 0x64,
+  /** `0x455763` — the one code its own hit handler accepts, and nothing else */
+  burns: -9,
+  /** `0x4557af` — `0xfff6`, the ten it is sent UP by as it goes out */
+  doused: 0xa,
   /** `0x478250` tag 0 is the one launch frame, tag 1 the flight it loops */
   flight: [7010, 7011, 7012, 7013, 7014, 7015],
   /** `0x478290` tag 0 — the bounce, after which `0x4556a0` flies again */
   burst: [7016, 7017, 7018, 7019],
   from: "0x455cc3 / 0x455d01 / 0x456240",
 } as const;
+
+/**
+ * ...and what a −9 does to one — `0x455730`, the class's own hit handler.
+ *
+ * `0x45554f` writes it into `obj+0x12` as the object is created, which is the
+ * same word every creature's class writes its own handler into and makes the
+ * fireball the only thing in the game that is not a creature and still answers
+ * a code. Two things carry one: the flamer's flame (`0x453b9b`) and a flare on
+ * the fourth level of a chapter (`0x43abfa`) — and PLAYGR is a fourth level, so
+ * on this level both of them are −9 and either can put a fireball out.
+ *
+ * ## Three tests, in this order
+ *
+ * ```
+ *   455751  the record's word 0 is set  -> ax = 0, and nothing happens
+ *   455763  the hitter's obj+0x1a != -9 -> the burst arm at 0x4557ba
+ *   45576a  obj+0x18 == 2               -> the PINNED arm at 0x455771
+ * ```
+ *
+ * The first is a re-entry guard and it guards everything rather than just the
+ * code: one already alight takes no further notice of anything at all, the
+ * player's fists included.
+ *
+ * The flying arm is the one this page can reach, and it is four writes:
+ *
+ * ```
+ *   455791  0x44ff20(self, 1, 0)     ; a LATE flame, so it starts going out
+ *   4557a1  word[record] = 1         ; ...and it cannot catch twice
+ *   4557a9  word[obj+0xc] = 0        ; the horizontal velocity, dead
+ *   4557af  word[obj+0xa] = 0xfff6   ; ...and ten UP
+ * ```
+ *
+ * Which kills it by the class's own rules rather than by a death. Ten is inside
+ * `0x4556d3`'s fifteen, so {@link CastKit.fastBlow} makes it harmless from that
+ * frame; and a vertical velocity that small on the next surface it meets is
+ * `0x4555e9`'s rest test — `obj+0x2e` set, no horizontal velocity and
+ * `|obj+0xa| <= 10` — which answers 1 and removes it. A doused fireball hops,
+ * drops and is gone, and it cannot hurt anybody on the way down.
+ *
+ * ## The other two arms, which are read and have nothing here to hang on
+ *
+ * State 2 is not a fireball anybody threw. `0x450ff0` builds one of this class
+ * for every `inittirepile` record a level places — weightless, facing 1, cel
+ * 7020, and `0x4556b9` pins it to the record's own point every frame — and THAT
+ * is what `0x455771` is for: `0x44ff20(self, 0, 1)` sticks a flame on it that
+ * never goes out, it answers 0 so the blow is not even spent, and `0x455781`
+ * latches `[0x4782dc]`.
+ *
+ * The latch is the point of the thing. `0x4562d3` reads it as every fireball is
+ * built and lights that one at birth (`0x4562e7` writes its record's word), and
+ * `0x4556f6` reads it in the strength gate, where it beats the fifteen: while
+ * it is set no fireball on the level is worth its hundred again. Nothing else
+ * in the executable writes that word, so burning one of these would disarm the
+ * boss's throws for the rest of the level — except that no book in the rip
+ * places an `inittirepile`, so the object is never built and the latch is never
+ * set in the original either. This page carries neither.
+ *
+ * `0x4557ba` is the not-a-code arm: struck by the PLAYER (`0x4ac3d4`) or by
+ * another fireball (`0x430ee0` against the class's own list) it installs the
+ * burst `0x478290` once and plays sound 2, and struck by anything else it
+ * answers 0. Nothing in this port puts a fist through a cast, so that arm has
+ * no site here either.
+ */
+const ballBurns: CastCode = (self, code, k) => {
+  // `0x455751` — the record's own word, read before the code and before the
+  // state, through `0x430eb0`'s walk of the class list
+  if (self.alight) return false;
+  // `0x455763` — this handler accepts exactly one number
+  if (code !== THROW.burns) return false;
+  // `0x455791` — late, and not for ever: the thing is about to be removed
+  k.burn({ late: true });
+  self.alight = true;
+  self.vx = 0;
+  // ...and `0xfff6` is ten UP, this page's y growing downward as the engine's
+  self.vy = -THROW.doused;
+  return true;
+};
 
 /**
  * ...and the two of them as the page flies them.
@@ -212,6 +294,7 @@ function ball(t: { dx: number; dy: number; vx: number; vy: number }): CastKit {
     rest: THROW.rest,
     then: { cels: THROW.flight, hold: 1 },
     burst: { cels: THROW.burst, hold: 1 },
+    onCode: ballBurns,
     from: "0x456240 / 0x478250, class 0x455520",
   };
 }

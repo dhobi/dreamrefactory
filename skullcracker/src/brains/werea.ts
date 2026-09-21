@@ -392,7 +392,7 @@ export const werea: Brain = (e, foe, run, k) => {
   }
 };
 
-/** the leap's steering is ten pixels an ENGINE frame, and a tick is half of one */
+/** the leap's steering is ten pixels an ENGINE frame, and a tick is a QUARTER of one */
 const TICKS = TICK_SCALE;
 
 /**

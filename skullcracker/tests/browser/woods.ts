@@ -346,9 +346,77 @@ const main = async (): Promise<void> => {
     `ok    ran the level end to end and reached the goal at x ${end.x}, y ${end.y}`,
   );
 
+  /**
+   * ...and the FLAMER, which crossed sixteen levels touching nothing.
+   *
+   * `0x453b9b` gives the flame a strength of `0xfff7` — **−9** — and this page
+   * read "below 1" as "harmless". It is not damage at all: it is the one code
+   * a creature reads, and eight classes have a handler that accepts nothing
+   * else. Every one of them starts by calling `0x44ff20`, which sticks a
+   * FLAME on the victim at a random point inside its own cel bitmap, and then
+   * does something of its own.
+   *
+   * `initwerec`'s (`0x45296e`) is the one worth watching, because it costs no
+   * health: the arm lights the thing and installs `0x477a68` — one cel at five
+   * engine frames — and answers 1 before any arithmetic runs. Those five
+   * frames are the death throw.
+   */
+  await page.goto(`${BASE}/walk.html?level=3&x=3800&y=284&foehit=1&damage=1`);
+  await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(700);
+  // WOODS' one `statflamer` stands at x3822, and a werec paces the same row
+  for (let i = 0; i < 25 && !/IN REACH/.test(await say()); i++) {
+    await page.keyboard.down("ArrowRight");
+    await page.waitForTimeout(100);
+    await page.keyboard.up("ArrowRight");
+    await page.waitForTimeout(100);
+  }
+  await page.keyboard.down("s");
+  await page.waitForTimeout(900);
+  await page.keyboard.up("s");
+  await page.waitForTimeout(400);
+  if (!/holding flamer \d+\/160/.test(await say()))
+    fail(`could not pick up WOODS' flamer; the panel says ${/· (holding|no) \w+ \d+\/\d+/.exec(await say())?.[0]}`);
+  let lit = "";
+  let threw = "";
+  let hpWhenLit = 0;
+  for (let i = 0; i < 220 && !threw; i++) {
+    const t = await say();
+    if (!lit) {
+      const f = /· (\d+) alight, first cel (\d+) at x (-?\d+), y (-?\d+) stage (\d+)/.exec(t);
+      if (f) {
+        lit = f[0];
+        hpWhenLit = Number(/initwerec (\d+)\//.exec(t)?.[1] ?? 0);
+      }
+    }
+    if (/initwerec \d+\/\d+hp \w+ at x -?\d+, y -?\d+ cel 6040/.test(t)) threw = t;
+    // ...and CHASE it: the werec paces its own patch, so a fixed walk east
+    // either stops short of the stream's reach or goes straight past it
+    const w = /initwerec \d+\/\d+hp \w+ at x (-?\d+), y (-?\d+)/.exec(t);
+    const me = /· x (-?\d+), y (-?\d+)/.exec(t);
+    if (w && me && Math.abs(Number(w[1]) - Number(me[1])) > 110) {
+      const key = Number(w[1]) > Number(me[1]) ? "ArrowRight" : "ArrowLeft";
+      await page.keyboard.down(key);
+      await page.waitForTimeout(80);
+      await page.keyboard.up(key);
+    }
+    await page.keyboard.press("p");
+    await page.waitForTimeout(130);
+  }
+  if (!lit)
+    fail(`the flamer should SET THINGS ON FIRE — 0x44ff20; nothing caught in 220 samples`);
+  if (!/cel 96\d\d/.test(lit))
+    fail(`a flame is 9600..9629 — 0x4788d0 and 0x478978; it showed ${lit}`);
+  if (!threw)
+    fail(`a burning werec goes to state 3, cel 6040 — 0x45298d; it never did`);
+  // `0x452992` answers 1 before the arithmetic, so the code costs it nothing
+  if (hpWhenLit !== 180)
+    fail(`0x45296e returns before any damage is computed; it was on ${hpWhenLit} of 180 when it caught`);
+  console.log(`ok    the flamer sets a werec alight, for none of its 180 health, and it throws from cel 6040`);
+
   await finish(browser);
   console.log(
-    "PASS  WOODS is populated by its own records and can be crossed to its goal",
+    "PASS  WOODS is populated by its own records, burns, and can be crossed to its goal",
   );
 };
 

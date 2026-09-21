@@ -204,6 +204,25 @@ export function plankFrames(k: Plank): number {
  * script, or THREE when the blow beats 50), plays woods 18 — "0225 crow gets [hit]"
  * — turns gravity on and installs the tumble. Its own frame function resets
  * `obj+0x1a` to 100 every frame, so it is always hittable until it is dying.
+ *
+ * ## And one blow that is not one: −9
+ *
+ * `0x4520d0` opens on `cmp word ptr [esi + 0x1a], -9`, before the class test and
+ * before anything else, which makes the crow the **eighth** reader of the burn
+ * code — the one this port had read every other owner of and could not put a
+ * name to, because the class it hangs off has no name to put. `0x451990`, called
+ * from CITY's own entry at `0x451628`, registers it straight off the handler
+ * (`0x430cc0(0x4519b0)`) with no `init*` string, since no level places one: the
+ * level's creator `0x450910` does, off the `initcrow` records.
+ *
+ * The fit is the chapter's, and the ART settles it. The flamer is CITY's own
+ * weapon — `0x4511f0` names it for `woods.sbk` and `city.sbk`, see
+ * `CHAPTER_WEAPON` in {@link file://./guns.ts} — so the one level that perches
+ * twelve crows is one of the two that hand you the thing that lights them; and
+ * {@link FLAME}'s 9600..9629 are in CITY, PLAYGR, VAT and WOODS, of which CITY
+ * has no other class that reads the code. The crow is why CITY carries the fire.
+ *
+ * See {@link CROW.burns} and {@link burnCrow}.
  */
 export const CROW = {
   sleep: { cels: [1854, 1855, 1856, 1857, 1858, 1859], hold: 2, from: "0x476aa8 kind 1" },
@@ -227,6 +246,21 @@ export const CROW = {
     cels: [1870, 1871, 1872, 1873, 1874, 1875, 1876, 1877, 1878, 1879, 1880, 1881, 1882, 1883, 1884, 1885, 1886, 1887],
     hold: 1,
     from: "0x476da0 kind 8",
+  },
+  /**
+   * kind 6 — the fall, and the one state no ordinary blow can reach. `0x476e58`
+   * is 1884..1887 played TWICE, eight frames of the dive's last four cels, and
+   * `0x451e5a` plays woods 17 under it and ends it with `0x42f850(obj, 1.0f)`,
+   * the tumble and the same award a punched crow pays.
+   *
+   * The height code at `0x451aeb` still runs while it plays — state 6 is past 3
+   * and is neither 9 nor 10 — so a burning crow goes on holding its station for
+   * these eight frames and only drops when they are up.
+   */
+  fall: {
+    cels: [1884, 1885, 1886, 1887, 1884, 1885, 1886, 1887],
+    hold: 1,
+    from: "0x476e58 kind 6",
   },
   /** kind 10 — a killed crow, with gravity on */
   tumble: { cels: [1830, 1831, 1832, 1833, 1834], hold: 2, from: "0x476ef8 kind 10" },
@@ -260,11 +294,42 @@ export const CROW = {
   sound: { sleep: 14, flap: 15, strike: 16, fall: 17, hit: 18 },
   /** `cmp ax, 0x32` — a blow over this throws three feathers instead of one */
   hardBlow: 50,
+  /**
+   * What a blow of **−9** does to it — the same shape `Foe.burns` records for
+   * the seven creature classes that read the code, written out here because a
+   * crow is not a `Foe` and has no brain to hang a reaction off.
+   */
+  burns: {
+    /**
+     * `0x44ff20(self, 3, 0)` — a NONZERO second argument, so `0x44ffe2` puts the
+     * flame straight on `0x478978` tag 2 rather than letting it take hold first.
+     */
+    late: true,
+    /** ...and a zero third, so `0x453f6f` never reinstalls it: this one goes out */
+    forever: false,
+    /**
+     * `0x4520df`..`0x452108` returns 1 out of that arm, above `0x452109`'s class
+     * test and above the `obj+0x1a < 0` test, so the code never lands as a blow
+     * and no feathers come off.
+     */
+    andHurts: false,
+    /** what it plays while it burns is {@link CROW.fall}, and that is the end of it */
+    fatal: true,
+    from: "0x4520d0 / 0x44ff20 / 0x476e58",
+  },
   from: "0x450910 / 0x4519b0 / 0x451aa0 / 0x4520d0",
 } as const;
 
 /** what a crow is doing — the engine's own states, by name */
-export type CrowState = "sleep" | "wake" | "rise" | "fly" | "strike" | "tumble";
+export type CrowState =
+  | "sleep"
+  | "wake"
+  | "rise"
+  | "fly"
+  | "strike"
+  /** kind 6 — burning, on its way to the tumble; see {@link burnCrow} */
+  | "fall"
+  | "tumble";
 
 export interface Crow {
   x: number;
@@ -305,6 +370,27 @@ export function crowCel(c: Crow): number {
 /** how many engine frames the current script runs for */
 export function crowFrames(c: Crow): number {
   return CROW[c.state].cels.length * CROW[c.state].hold;
+}
+
+/**
+ * The crow's reaction to a **−9** — `0x4520d0`'s first arm, and the whole of it.
+ *
+ * One `0x44ff20` for the flame ({@link CROW.burns} carries its two arguments)
+ * and one `0x45d090` for `0x476e58`, which is the crow's own sixth state. That
+ * is all the arm does: it returns 1 before the ordinary handler is reached, so
+ * there is no sound of being hit, no feathers, no damage and no award on this
+ * frame. The award and the tumble come when the fall ENDS (`0x451e5a`), which is
+ * the same pair of calls a punched crow gets at once — so burning a crow kills
+ * it, eight frames later than a punch does.
+ *
+ * The arm carries no state test of its own, so this does not add one; the clock
+ * is rewound only on a change of state, the way `install` in
+ * {@link file://./brains/kit.ts} does it, which is what keeps a crow held in the
+ * flame from being pinned on the fall's first cel for ever.
+ */
+export function burnCrow(c: Crow): void {
+  if (c.state !== "fall") c.clock = 0;
+  c.state = "fall";
 }
 
 /**
@@ -1494,9 +1580,20 @@ export interface Roach {
  * rolls `0x434540(7)` for a free one and tries up to seven times. So the thing
  * you are fighting turns on the water it is standing over.
  *
- * That last part needs the boss's state machine, three thousand bytes at
- * `0x440ab0`, which this page does not drive. The seven positions and the
- * column's own cels are here; nothing yet sends one up.
+ * ...and what puts the boss there is a FLARE, not a dive. `0x441b60`'s one
+ * caller is `0x4415bd`, inside kragg's state 9, and `0x441d30` is what installs
+ * that state: a blow whose strength is exactly −9. `0x43ac04` is what makes a
+ * flare carry one — and only while `[0x4abdfc]` is **5**, which by
+ * `SkullSave.stage`'s own arithmetic is the FOURTH level of a chapter. ARCADE
+ * is level 8, so it is stage 5, so the one level with sprinklers in it is one
+ * of the four where a flare is a code rather than a hundred.
+ *
+ * That arm returns at `0x441d94` before any damage is computed, so burning the
+ * boss costs it nothing and raises the water instead — `raiseSprinkler` in
+ * {@link file://./walk.ts}. Two things are still not done: the thrash itself
+ * (five tags, and the drag toward a point 120 below the record), and the
+ * general form of the −9, which on stages 5 makes the flare a code against
+ * every class and not only against kragg.
  */
 export const SPRINKLER = {
   /** `0x473748` tag 0 — up it comes */
@@ -2776,6 +2873,181 @@ export interface Board {
  * it is not. The same shape as `initwbooly`'s fireball ({@link CastKit.fastBlow}),
  * and the reason a roller that has slid to a stop is scenery.
  */
+/**
+ * The Coke can — `0x43b780` builds it, `0x43ae00` is its class and `0x43af00`
+ * is the whole of its life.
+ *
+ * It is the third thing on this page that belongs to nobody's hand (the
+ * skateboard and {@link ROLLER} are the others) and the only one that turns
+ * into something else: what it leaves behind is a PICKUP.
+ *
+ * ## Out of the machine
+ *
+ * `0x43b780` copies the machine's own point, then `0x43b7e2` turns it AWAY
+ * from you — `obj+0x28` stays 0 when the player is left of the machine and
+ * goes to 1 when he is not — and installs `0x474ce0` tag 0, whose first record
+ * is the only one in the script that carries a stride: `dx 120, dy -70` over
+ * the class's own divisor of five (`0x43ae0e`). So a can leaves at 24 across
+ * and 14 up, and everything after that is gravity.
+ *
+ * `0x43ae34` gives each one its own drag: `1.0 - (0x434540(4) + 5) * 0.1`,
+ * which is one of 0.4, 0.3, 0.2 and 0.1. A can keeps a tenth to two fifths of
+ * its speed per frame once it is down, so they all stop, and none of them
+ * stops in quite the same place.
+ *
+ * ## ...and into a pickup
+ *
+ * `0x43af00`'s four tags are one animation and two endings. Tag 0 tumbles
+ * 8600..8610, tag 1 rolls 8611..8614, and then `0x43af4e` rolls `0x434540(3)`
+ * to pick between going round tag 1 again and settling on tag 2 or tag 3. Both
+ * of those wait for `obj+0x30` — the ground — and then do the same two things:
+ *
+ * ```
+ *   43af80  0x45af60(2, point, 0, 0x43aff0)   a code-2 pickup, where it lies
+ *   43af90  0x45d090(self, 0x474d70, tag)     ...and the can holds still
+ * ```
+ *
+ * The pickup is INVISIBLE: `0x45afa3` only re-cels codes 6..17, so a 2 keeps
+ * the default 14000 and no book in the game carries that cel. The can lying
+ * there IS the art, which is why both objects have to exist. `0x43aff0` is the
+ * other half of that: taking the pickup walks the can list for one at the same
+ * point and sets its state to 2, which is the one case of `0x43af00` that
+ * answers 1 and has the can removed.
+ *
+ * What a code 2 is worth is `0x428868`'s hundred and fifty health — see
+ * `GUN_CODES` in {@link file://./guns.ts}, which has carried the case since
+ * before there was anything in the game that dropped one.
+ */
+/**
+ * Catching FIRE — `0x44ff20`, and it is what a blow of −9 means.
+ *
+ * −9 is the one strength that is not a number and not one of the player's own
+ * codes either: it falls below `0x448c84`'s range test, so against the PLAYER
+ * it lands as ordinary damage, and against a CREATURE it is read by eight
+ * handlers of their own that accept nothing else. The flamer's flame carries it
+ * (`0x453b9b`), and so does a flare on stage 5 (`0x43ac04`).
+ *
+ * ## What the code does is stick a flame to you
+ *
+ * `0x44ff20(victim, late, forever)` is the shared half, and all eight call it
+ * before doing anything of their own:
+ *
+ * ```
+ *   44ff42  0x42f9f0(victim)              the victim's own cel BITMAP box
+ *   44ff59  bp = |x1 - x0| / 2            ...and half of each side of it
+ *   44ff8c  0x430d40([0x4789d0], user)    a flame on the flame class's list
+ *   44ff9b  user+8 = victim               which is what it hangs off
+ *   44ffa5  user+6 = roll(bp) - bp/2      at a random point inside that box...
+ *   44ffc6  user+4 = roll(bh) - bh/2      ...on both axes
+ *   44ffe2  late ? 0x478978 tag 2 : 0x4788d0 tag 0
+ * ```
+ *
+ * So a flame is not an effect drawn over a creature — it is an object with its
+ * own position, parked at a random point in whatever the victim's current cel
+ * happens to cover, and `0x453ea0` moves it with the victim every frame
+ * afterwards (mirroring its offset by the victim's own facing).
+ *
+ * **It carries a hundred.** `0x453dcb` writes `obj+0x1a = 0x64` at birth and
+ * `0x453eed` writes it again every single frame, so a burning creature is
+ * standing next to a live strike box for as long as it burns.
+ *
+ * ## Three stages, and one of them can be forever
+ *
+ * `0x4788d0` tag 0 grows it, tag 1 burns, and `0x478978` tag 2 — three engine
+ * frames a cel rather than one — is it going out. `0x453f6f` is the whole of
+ * the `forever` argument: at the end of tag 2 a flame whose `user+2` is set
+ * installs tag 2 again instead of answering 1, so it never stops. One caller
+ * passes it, and it is the one for a boss that is already dead.
+ *
+ * The art is in CITY, PLAYGR, VAT and WOODS — the four books that need it,
+ * which is the check that this reading is the right way round.
+ */
+export const FLAME = {
+  /** `0x4788d0` tag 0 — ten cels of it taking hold */
+  grow: {
+    cels: [9600, 9601, 9602, 9603, 9604, 9605, 9606, 9607, 9608, 9609],
+    hold: 1,
+    from: "0x4788d0 tag 0",
+  },
+  /** tag 1 — and ten of it burning */
+  burn: {
+    cels: [9610, 9611, 9612, 9613, 9614, 9615, 9616, 9617, 9618, 9619],
+    hold: 1,
+    from: "0x4788d0 tag 1",
+  },
+  /** `0x478978` tag 2 — ten of it going out, at THREE frames a cel */
+  fade: {
+    cels: [9620, 9621, 9622, 9623, 9624, 9625, 9626, 9627, 9628, 9629],
+    hold: 3,
+    from: "0x478978 tag 2",
+  },
+  /** `0x453dcb`, and `0x453eed` writes it again every frame */
+  blow: 0x64,
+  /** `0x453de6` — `obj+0xe`, though nothing ever spends a stride through it */
+  divisor: 5,
+  from: "0x44ff20 / 0x453db0 / 0x453ea0, class [0x4789d0]",
+} as const;
+
+/** one flame, hanging off whatever it was lit on */
+export interface Flame {
+  /** the thing it burns on — `user+8`, and a flame with none removes itself */
+  on: object;
+  /** `user+6`, mirrored by the victim's facing — `0x453eb7` */
+  dx: number;
+  /** `user+4`, which is not mirrored */
+  dy: number;
+  /** which of the three it is playing */
+  stage: 0 | 1 | 2;
+  /** engine frames into that */
+  clock: number;
+  /** `user+2` — `0x453f6f`, and it never goes out */
+  forever: boolean;
+  x: number;
+  y: number;
+}
+
+export const CAN = {
+  /** `0x43ae0e` — `obj+0xe`, what the one stride in the script is divided by */
+  divisor: 5,
+  /** `0x474ce0` tag 0 frame 0, and the only record in the script with a stride */
+  launch: { dx: 120, dy: -70, from: "0x474ce0 tag 0 frame 0" },
+  /** tag 0 — eleven cels of it turning over, one engine frame each */
+  tumble: {
+    cels: [8600, 8601, 8602, 8603, 8604, 8605, 8606, 8607, 8608, 8609, 8610],
+    hold: 1,
+    from: "0x474ce0 tag 0",
+  },
+  /** tag 1 — and four more, which `0x43af4e` may come back round to */
+  settle: { cels: [8611, 8612, 8613, 8614], hold: 1, from: "0x474ce0 tag 1" },
+  /** `0x474d70` tags 0 and 1 — the two cels a stopped can is allowed to be */
+  rests: [8600, 8611],
+  /** `0x43ae3c` — `1.0 - (roll(4) + 5) * 0.1`, spent the way `0x4302c0` spends one */
+  drags: [0.4, 0.3, 0.2, 0.1],
+  /** `obj+0x24`, which the constructor never writes, so `0x42f5ca`'s own ten */
+  pull: 10,
+  /** `0x45b004`/`0x45b010` — the pickup's own band, and it is not `GRAB.bandPx` */
+  reach: 0x37,
+  /** what `0x43af80` asks `0x45af60` for */
+  code: 2,
+  from: "0x43b780 / 0x43ae00 / 0x43af00 / 0x474ce0 / 0x474d70",
+} as const;
+
+/** one can, from the frame the machine lets it go */
+export interface Can {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** engine frames into the tag playing */
+  clock: number;
+  /** which tag of `0x474ce0`: 0 tumbling, 1 rolling, 2 and 3 waiting to land */
+  tag: number;
+  /** its own share of {@link CAN.drags} */
+  drag: number;
+  /** the cel it came to rest on, once it has — and the pickup exists from then */
+  rest?: number;
+}
+
 export const ROLLER = {
   /** `0x43a8d8` — `obj+0xe`, what the launch velocity is divided by */
   divisor: 7,

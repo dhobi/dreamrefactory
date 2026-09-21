@@ -123,15 +123,17 @@ above 7 and added below it. So a flare leaves the barrel thrashing and
 straightens out over about seven frames. It is not aimed and it is not flat.
 A masked one is 40 and a knotted one is 50, so one flare is one kill either way.
 
-The other four fire functions are not here, and the reason is not the same in
-each case. The **flamer**'s `0x44dae0` is a held stream rather than a shot — its
+The other four fire functions are here too, and they did not all need the same
+thing. The **flamer**'s `0x44dae0` is a held stream rather than a shot — its
 modes −1 and −2 reach into every live flame to stop it — and the flame's blow
 strength is `0xfff7`, **−9**. That is a code and not a number: it is the same −9
 the kragg tests for, and what it means is each class handler's own business. The
 **soaker**'s `0x41f820` is the same shape, but its droplet does carry a real
 number — `0x4217ba` writes the same hundred the flare has — so what stops that
-one is the stream rather than the damage. The **blaster** and the **scepter**
-belong to chapters this port has not reached.
+one is the stream rather than the damage. The **scepter** is the third of that
+shape and the only one that spends forty a shot. All three are `STREAMS` in
+`src/guns.ts`, one contract with three sets of numbers; the **blaster**'s bolt
+is `BOLT`, and `fireGun` is where the five meet.
 
 One fact that fell out of reading all five: **the blaster and the flamer spend
 no ammunition at all.** `0x45ef00` appears once in the flare gun's fire function

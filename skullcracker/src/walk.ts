@@ -89,13 +89,15 @@ import {
   install,
   type BrainCtx,
   type Brain,
+  type Aim,
+  type CastCtx,
   type CastKit,
   type Enemy,
   type Hatch,
   type FoeState,
   type Track,
 } from "./brains/kit";
-import { BRAINS } from "./brains";
+import { BRAINS, REACTIONS } from "./brains";
 import { FIGHTS, FoeFight } from "./fights";
 import {
   CRAFT,
@@ -120,6 +122,7 @@ import {
   Feather,
   PLANK,
   Plank,
+  burnCrow,
   crowCel,
   crowFrames,
   elevatorCel,
@@ -202,6 +205,10 @@ import {
   BoggsWorm,
   SKATEBOARD,
   Board,
+  CAN,
+  Can,
+  FLAME,
+  Flame,
   ROLLER,
   Roller,
 } from "./props";
@@ -720,6 +727,98 @@ const LADDER = {
   },
   from: "0x42ae50 / 0x471e78 / the ladder records' own param",
 };
+
+/**
+ * The monkeybar — the one of the five regions `0x412390` sorts the player's
+ * point into that had nothing on this page's side at all.
+ *
+ * ## Getting on is the ladder's reach and a different test
+ *
+ * `0x42edd0(0, 1)` is the W reach, gated on W itself at `0x4297f0` in the idle
+ * state and at `0x429f1f` in the jump state. It asks the chapter's classifier
+ * `[0x4abe00]`, and `0x412390` tries five names in a fixed order: `ladder`
+ * answers 4, `exitfarm` 1, `exitroom` 2, **`monkeybar` 3** and `initswitch` 5.
+ * A bar is only ever found where no ladder and no exit is, which is the order
+ * {@link barAt} is asked in.
+ *
+ * The test is not the ladder's. A ladder is `0x40b660` geometry **1**,
+ * `0x434140` — the current cel's whole bitmap against the rect. A monkeybar is
+ * geometry **0**, `0x434200` — the player's own ANCHOR POINT inside the rect
+ * and nothing else. VAT's rect is `y 1779..1899`, 120 rows of air above the
+ * floor, so the anchor has to be up there already: you jump to a bar, you
+ * cannot walk into one.
+ *
+ * ## Installing the script IS the state
+ *
+ * `0x42ef11` is four things — `0x42f850(player, 0)` to take gravity off, the
+ * anchor to the record's own `top`, `0x45d090(player, 0x472048, 0)`, and return
+ * 1 so the calling state ends its tick. Nothing there assigns a state number,
+ * because `0x45d090` already has: it copies the script's KIND into `obj+0x18`,
+ * and `0x472048` is kind 8. Hanging IS state 8, and `0x42b410` is its handler.
+ *
+ * ## A hold is a number, the way a rung is
+ *
+ * `0x42b410` opens every frame by zeroing both velocities, putting the anchor
+ * back on the record's `top` and clamping x into `left..right`, and only then
+ * dispatches the five tags of `0x472048` on `obj+0x44`. What ends a swing is
+ * not a distance but the TAG: `0x42b5e5` waits for `obj+0x46`, and then
+ *
+ * ```
+ *   n = (x - left) / param        ...and + 1 when obj+0x28 is clear
+ *   x = n * param + left
+ * ```
+ *
+ * — the same "a number times a spacing, and nothing in between" the ladder is
+ * built out of ({@link LADDER}). The `+1` on one facing and not the other is
+ * what makes it symmetric rather than lopsided: the swing carries 10 pixels an
+ * engine frame either way, and truncation already rounds the westward one past
+ * the hold below where the eastward one is still short of the hold above.
+ *
+ * **One record ships**, VAT's: `param 65, top 1779, left 5908, right 6617` —
+ * eleven holds across 709 pixels, two of them to a swing.
+ *
+ * ## Tags 3 and 4 are a chin-up, and nothing else
+ *
+ * `0x42b7ff` holds the last cel while W is down and installs tag 4 when it
+ * comes up; `0x42b827` goes back to tag 0 when that ends. Neither touches x,
+ * the hold, or y — the preamble puts the anchor back on the bar regardless. It
+ * is a flourish, and it is here because W does nothing else while hanging.
+ *
+ * ## Letting go
+ *
+ * S or J, `0x42b522`, **and only from tag 0** — the four other arms never test
+ * for it, so a swing cannot be abandoned half way. Gravity goes back to 1 and
+ * `0x471b28` tag 0 goes in: the plain fall, with no hop and no velocity, which
+ * is not at all how the ladder leaves ({@link canLetGo}).
+ */
+const MONKEYBAR = {
+  /** engine frames one swing takes: six records of `0x472048` at two each */
+  handFrames: 12,
+  /** and the chin-up's three */
+  pullFrames: 6,
+  /**
+   * `0x42b5b7` and `0x42b5d8` going out, `0x42b6e5` and `0x42b704` coming back,
+   * and the bank is the ladder's own two — one hand, then the other.
+   *
+   * The index is the SCRIPT's, which runs across the whole of `0x472048` rather
+   * than from the start of the tag: tag 1 is frames 1..6 and tag 2 is 7..12, so
+   * these are the third and sixth cel of the swing out and the first and fourth
+   * of the swing back.
+   */
+  soundAt: {
+    1: [
+      { frame: 3, own: OWN.rung[1] },
+      { frame: 6, own: OWN.rung[0] },
+    ],
+    2: [
+      { frame: 7, own: OWN.rung[1] },
+      { frame: 10, own: OWN.rung[0] },
+    ],
+  } as Record<number, readonly { frame: number; own: number }[]>,
+  /** where each tag starts in `0x472048`, so that index can be the script's */
+  tagStart: { 0: 0, 1: 1, 2: 7, 3: 13, 4: 16 } as Record<number, number>,
+  from: "0x42b410 / 0x42ef11 / 0x472048 / VAT's one record",
+};
 /**
  * `[0x46b1b8]` — set by the leave (`0x42ae98`), cleared by `0x42849c` the frame
  * the player is grounded again, and while it is set neither the idle state
@@ -1175,6 +1274,14 @@ interface Level {
    */
   ladders: readonly SbkEntity[];
   /**
+   * The level's monkeybars, and there is exactly one in the game — VAT's.
+   *
+   * Filed whole rather than by room for the same reason the ladders are: the
+   * record is found by `0x40b660`, which scans the entity table and consults no
+   * room at all (its region argument is 0 at `0x41243b`). See {@link MONKEYBAR}.
+   */
+  bars: readonly SbkEntity[];
+  /**
    * The shared AI's table, narrowed to what THIS book can draw.
    *
    * A class ships one repertoire and appears in several levels, and a level
@@ -1383,6 +1490,18 @@ const p = {
   ladder: undefined as SbkEntity | undefined,
   /** the world y of the anchor the climb cels hang from, while on a ladder */
   climbY: 0,
+  /**
+   * The monkeybar being hung from, and where along it — see {@link MONKEYBAR}.
+   *
+   * `barHold` is a handhold counted from the record's `left` in its own `param`
+   * exactly as a rung is counted from a ladder's `top`, `barTag` is which of
+   * `0x472048`'s five tags is playing, and `barClock` counts engine frames into
+   * it. The record itself is `0x4ac3a0`, copied once by the grab.
+   */
+  bar: undefined as SbkEntity | undefined,
+  barHold: 0,
+  barTag: 0,
+  barClock: 0,
   /**
    * How far the feet are below the ANCHOR in the pose showing now — see
    * {@link poseFeet}. `p.y` is the feet, the engine's `y` is the anchor, and this
@@ -1612,6 +1731,8 @@ async function loadLevel(index: number): Promise<void> {
   casts = [];
   skates = [];
   rollers = [];
+  cans = [];
+  flames = [];
   // the chapter's own entry function: zero every count, name the chapter's
   // weapon, and leave the hands empty (`0x4511f0` and its three siblings). It
   // runs once per CHAPTER, not once per level, and that is the whole reason
@@ -1630,6 +1751,7 @@ async function loadLevel(index: number): Promise<void> {
     rooms,
     solids,
     ladders: sbk.entities.filter((e) => e.isEntity && e.name === "ladder"),
+    bars: sbk.entities.filter((e) => e.isEntity && e.name === "monkeybar"),
     fights: Object.fromEntries(
       Object.entries(FIGHTS).map(([kind, f]) => [
         kind,
@@ -3022,6 +3144,7 @@ function enter(room: SbkRoom | undefined, x: number, y: number): void {
   p.vy = 0;
   p.onGround = true;
   p.climbing = false;
+  p.bar = undefined;
   p.act = null;
   // `0x428ff6` — the point moves, and the corner goes with it in one step
   snapCamera();
@@ -3298,6 +3421,22 @@ function ladderAt(): SbkEntity | undefined {
 }
 
 /**
+ * The monkeybar the player's own point is inside — see {@link MONKEYBAR}.
+ */
+function barAt(): SbkEntity | undefined {
+  if (!level) return undefined;
+  // `0x41243b` asks `0x40b660` with geometry 0, which is `0x434200`: the
+  // player's own ANCHOR POINT inside the rect. Not the bitmap the ladder is
+  // tested with, and not the feet — `p.y` is the feet on this page and the
+  // engine's `obj+6` is the anchor, so the difference has to come off.
+  const anchor = p.y - p.feet;
+  return level.bars.find(
+    (e) =>
+      p.x >= e.left && p.x <= e.right && anchor >= e.top && anchor <= e.bottom,
+  );
+}
+
+/**
  * Whether forward, backward or J may take you OFF the ladder this tick.
  *
  * `0x42ae50` leaves only when three things hold at once: the rung tag playing
@@ -3311,6 +3450,9 @@ function ladderAt(): SbkEntity | undefined {
  * with W left the ladder the tick it was pressed and W grabbed it again the
  * next, one rung higher each time. Now the rung finishes, the hop is taken, and
  * {@link ladderLatch} keeps the ladder out of reach until the ground.
+ *
+ * A monkeybar's leave is none of this — see {@link MONKEYBAR}: S or J, from
+ * the hang tag only, and straight down.
  */
 function canLetGo(): boolean {
   if (p.climbClock < LADDER.rungFrames) return false;
@@ -4281,9 +4423,38 @@ function strikeFoe(
   from: number,
   mid: number,
   box: { top: number; left: number; bottom: number; right: number },
+  /**
+   * A CODE — and against a creature there is only one, which is fire.
+   *
+   * `0x448c84`'s range test is the player's table and −9 falls below it, so
+   * against the player this lands as ordinary damage. Against a creature it is
+   * read by eight handlers of their own, and every one of them tests it as the
+   * FIRST thing it does, before any of the arithmetic below: `0x44f0aa`,
+   * `0x4520d8`, `0x4547b3`, `0x4550d3`, `0x455763`, `0x45296e`, `0x441d30`
+   * and `0x45631e`. See {@link Foe.burns} and `FLAME`.
+   *
+   * A class with no such handler is not set on fire and takes nothing, which
+   * is why the flamer crosses these sixteen levels touching almost nothing.
+   */
+  code = 0,
 ): void {
   if (!level) return;
   const foe = FOES[e.kind];
+  if (code === BURN_CODE) {
+    const how = foe.burns;
+    if (!how) return; // nothing in this class reads a −9
+    burnFoe(e, how);
+    if (how.sound !== undefined) sound?.effect(how.sound, e.x, e.y);
+    if (how.anim) {
+      e.state = how.fatal ? "dead" : "flinch";
+      e.anim = how.anim;
+      e.clock = 0;
+      e.swing = false;
+    }
+    // ...and seven of the eight answer 1 here and are done. `0x4547b3` is the
+    // one that falls through into the arithmetic as well.
+    if (!how.andHurts) return;
+  }
   // the spray goes first, exactly as `0x40cba0` is called before the subtract —
   // and only for the kinds whose handler calls it at all
   if (foe.bleeds) spray(e, damage, shove);
@@ -4373,10 +4544,33 @@ function strikeFoe(
     dy: Math.abs(mid - (box.top + box.bottom) / 2),
     facingAway: e.facing === from,
   };
+  /**
+   * ...and what the blow shakes OUT of it, before the animation is chosen.
+   *
+   * `0x43b6f5` is a can every third counted blow and `0x43b755` is everything
+   * left at once for a blow of seventy-five or more. The counted blows are
+   * `e.dents` here rather than the engine's own `AI+2`, which counts only the
+   * ones in the middle band — the same approximation {@link Foe.pick} already
+   * makes for this class, and for the same reason: this page keeps one
+   * counter where the executable keeps two.
+   */
+  const shakes = foe.shakes;
+  if (shakes) {
+    const out = e.shaken ?? 0;
+    const want =
+      damage >= shakes.bursts
+        ? shakes.holds - out
+        : damage >= shakes.counts && e.dents % shakes.every === 0
+          ? 1
+          : 0;
+    const n = Math.max(0, Math.min(want, shakes.holds - out));
+    for (let i = 0; i < n; i += 1) canAt(e);
+    e.shaken = out + n;
+  }
   // a progressive kind advances one stage per blow instead of picking; a
   // hydrant's handler switches on the state it is already showing, not on how
   // hard it was hit
-  const which = foe.progressive ? e.dents - 1 : foe.pick ? foe.pick(blow) : 0;
+  const which = foe.progressive ? e.dents - 1 : foe.pick ? foe.pick(blow, e) : 0;
   if (foe.progressive && which >= foe.flinch.length) return; // beaten in already
   e.state = "flinch";
   e.anim = foe.flinch[Math.min(foe.flinch.length - 1, Math.max(0, which))];
@@ -4906,7 +5100,20 @@ function takeHits(): void {
   }
   if (!damageOn) return;
   for (const e of foesHurt ? spawnedHere() : []) {
-    if (e.state === "dead" || e.state === "burst") continue;
+    /**
+     * ...and the WATER counts, which it did not.
+     *
+     * A hydrant's jet is a second object of the hydrant's own class
+     * (`0x44fb81`) and this page keeps it as an enemy in the `burst` state, so
+     * it was falling out of this loop beside the corpses. It should not:
+     * 9802..9807 carry a strike box and 9803..9807 carry a blow pair as well,
+     * `dx -74` on the first and `-125` on the four after it. A jet at full
+     * width is 510 pixels of jet and the hardest single blow in the chapter,
+     * which is what "it knocks things about" meant.
+     *
+     * A corpse still does not: `dead` has no box worth reading and never had.
+     */
+    if (e.state === "dead") continue;
     const c = celRec(lvl.sbk, celOf(e));
     if (!c?.strike) continue;
     if (hit(c, e.x, e.y, e.facing, e.vx / TICK_SCALE, e.vy / TICK_SCALE))
@@ -4945,14 +5152,37 @@ function takeHits(): void {
    * — gets the whole of it.
    */
   for (const c of foesHurt ? casts : []) {
-    if (c.landed !== undefined) continue; // already met something
-    if (castBlow(c) === 0) continue; // still flying harmless — `0x413e43`
+    /**
+     * ...and the one class whose flight is a DUD stays in this loop after it
+     * has met something, because for that one the burst is the attack.
+     *
+     * `0x452e00` installs the burst on the collision words and `0x452ec0`
+     * writes the hundred and one as its state comes up, so the frame it
+     * touches you is the first frame it can hurt you and the flash goes on
+     * hurting for as long as its own cels carry a pair. See
+     * {@link CastKit.onImpact}.
+     */
+    const dud = c.kit.onImpact === true;
+    if (c.landed !== undefined && !dud) continue; // already met something
+    if (!dud && castBlow(c) === 0) continue; // still flying harmless — `0x413e43`
     const cel = celRec(lvl.sbk, castCel(c));
     if (!cel?.strike) continue;
     const box = strikeOf(cel, c.x, c.y, c.facing);
     if (!box) continue;
     if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
       continue;
+    if (dud) {
+      // meeting you IS the landing. The flight's own cels carry a strike box
+      // and no blow pair (6004..6006), so `hit` resolves them to nothing of
+      // its own accord and the first cel that can take health is 7000's.
+      if (c.landed === undefined) {
+        c.landed = 0;
+        c.vx = 0;
+        c.vy = 0;
+      }
+      if (hit(cel, c.x, c.y, c.facing, 0, 0, c.kit.blow)) return;
+      continue;
+    }
     c.spent = true;
     // `0x42f910` adds what the HITTER was doing to the cel's own pair, and a
     // cast's velocity is already in the executable's units — a frame's worth
@@ -7262,6 +7492,17 @@ function takeGun(): void {
   // `0x428868` — the one code that is not a weapon at all: 150 health and the
   // player's own sound 0xa, for the thing a dying class drops
   if (g.code === 2) {
+    // `0x43aff0` — the callback walks the can list for one lying at the
+    // pickup's own point and puts its state to 2, which is the one case of
+    // `0x43af00` that answers 1. Without this the can stays on the floor and
+    // the health is free every time you press S at it.
+    // ...and exactly ONE: `0x43aff0` walks the list until the first can whose
+    // point matches and stops there, so two that came to rest on the same
+    // pixel are two pickups and two takings.
+    const mine = cans.findIndex(
+      (c) => c.rest !== undefined && c.x === g.x && c.y === g.y,
+    );
+    if (mine >= 0) cans.splice(mine, 1);
     stats.health = Math.min(stats.maxHealth, stats.health + 150);
     sound?.own(0xa, g.x, g.y);
     return;
@@ -7400,12 +7641,24 @@ function stepStreams(): void {
       q.clock = 0;
       continue;
     }
-    // ...and what it touches. A strength below 1 is not a blow, so the flame
-    // reaches everything in these sixteen levels and hurts none of it.
-    if (kit.blow < 1) continue;
+    /**
+     * ...and what it touches.
+     *
+     * A strength below 1 is not damage — but −9 is not damage either, it is a
+     * CODE, and `0x453b9b` is where the flamer's flame gets it. This page read
+     * "below 1" as "harmless" and so the flamethrower crossed sixteen levels
+     * touching nothing at all. What it actually does is set things on fire:
+     * see {@link Foe.burns}, and `0x44ff20` is the half all eight readers
+     * share.
+     *
+     * A code needs no blow pair on the cel, because none of the arithmetic
+     * runs — which matters, since the flame's own cels carry one anyway.
+     */
+    const burns = kit.blow === BURN_CODE;
+    if (kit.blow < 1 && !burns) continue;
     const cel = celRec(lvl.sbk, streamCel(q));
     const box = streamBox(q, cel);
-    if (!cel?.blow || !box) continue;
+    if (!box || (!cel?.blow && !burns)) continue;
     for (const e of pool) {
       if (e.state === "dead" || e.state === "burst") continue;
       const c = celRec(lvl.sbk, celOf(e));
@@ -7422,9 +7675,13 @@ function stepStreams(): void {
       // magnitude of that is the damage. It is small on purpose — the soaker's
       // 9806 carries `dx 8`, so a stream is eight a frame rather than a blow,
       // and a two-hundred-health zombie takes about twenty-five frames of it.
+      if (burns) {
+        strikeFoe(e, 0, { dx: 0, dy: 0 }, q.facing, (box.top + box.bottom) / 2, hurt, BURN_CODE);
+        continue;
+      }
       const scale = kit.blow / 100;
-      const bx = cel.blow.dx * scale;
-      const by = cel.blow.dy * scale;
+      const bx = cel!.blow!.dx * scale;
+      const by = cel!.blow!.dy * scale;
       strikeFoe(
         e,
         Math.sqrt(bx * bx + by * by),
@@ -7434,6 +7691,73 @@ function stepStreams(): void {
         hurt,
       );
     }
+    /**
+     * ...and what it does to a CAST, which is where the −9 stops being a
+     * creature's business.
+     *
+     * `0x430367` walks every object in the room, not every creature, and hands
+     * each one its own `obj+0x12`. The flame's box against a thing in the air
+     * is the same test as against a thing on its feet, and what reads the code
+     * at the far end of it is {@link CastKit.onCode} — `0x455763`, the boss's
+     * fireball, and nothing else in the game.
+     *
+     * Only a code: the stream's other two are ordinary damage, and no cast has
+     * a handler that accepts a number above zero.
+     */
+    if (burns)
+      for (const c of casts) {
+        if (c.spent || !c.kit.onCode) continue;
+        const art = celRec(lvl.sbk, castCel(c));
+        if (!art) continue;
+        const hurt = castHurtBox(c, art);
+        if (!(
+          box.right > hurt.left &&
+          box.left < hurt.right &&
+          box.bottom > hurt.top &&
+          box.top < hurt.bottom
+        ))
+          continue;
+        strikeCast(c, BURN_CODE);
+      }
+    /**
+     * ...and a CROW, which is the eighth reader of the code and the last to be
+     * found — see `CROW.burns` in {@link file://./props.ts} for why it took the
+     * class descriptor to name it.
+     *
+     * It is not in `pool` and it is not a `Foe`, so it needs its own pass, the
+     * same shape as `landHits`'s: a crow's hurt box is its CURRENT cel about its
+     * own point. `0x4520d0`'s first arm is `0x44ff20(self, 3, 0)` — a flame put
+     * straight on its going-out stage — and `0x476e58`, the crow's own sixth
+     * state, and then it answers 1, so there is no damage and no feathers.
+     *
+     * The flamer is CITY's own weapon and CITY is the level that perches twelve
+     * of these, which is the whole reason this arm exists.
+     */
+    if (burns)
+      for (const c of i >= 0 ? lvl.crows[i]! : []) {
+        // one already on its way down is out of it, the way `landHits` has it
+        if (c.state === "tumble") continue;
+        const art = celRec(lvl.sbk, crowCel(c));
+        if (!art) continue;
+        const hurt = {
+          left: c.x - art.posX,
+          right: c.x - art.posX + art.width,
+          top: c.y - art.posY,
+          bottom: c.y - art.posY + art.height,
+        };
+        if (!(
+          box.right > hurt.left &&
+          box.left < hurt.right &&
+          box.bottom > hurt.top &&
+          box.top < hurt.bottom
+        ))
+          continue;
+        // woods 17 is the fall's own sound and `0x451e5a` plays it under the
+        // state, so it goes with entering it rather than with the blow
+        if (c.state !== "fall") sound?.effect(CROW.sound.fall, c.x, c.y);
+        lightFlame(c, art, c.x, c.y, CROW.burns);
+        burnCrow(c);
+      }
   }
   streams = streams.filter(
     (q) =>
@@ -7814,28 +8138,72 @@ function stepFlares(): void {
         box.top < hurt.bottom
       ))
         continue;
-      strikeFoe(
-        e,
-        FLARE.blow,
-        { dx: FLARE.dx, dy: 0 },
-        f.facing,
-        (box.top + box.bottom) / 2,
-        hurt,
-      );
       /**
-       * ...and a FLARE is what sends a sprinkler up, not a dive.
+       * ...and on a STAGE 5 a flare is not a hundred at all — it is a −9.
        *
-       * `0x441b60` has exactly one caller: `0x4415bd`, inside kragg's state 9 —
-       * the reaction to a blow of strength **−9**, which is the flare's. It
-       * drags the boss towards the nearest `initsprinkler` 120px below its own
-       * point and lights one on each of four tags. This page had it on the dive
-       * (`Foe.drives.raises`), which is the wrong state entirely, and reading
-       * `0x440ab0` out properly is what found it.
+       * `0x43abfa` is the whole rule and it is two instructions: the flare's
+       * own think writes `obj+0x1a = 0xfff7` while `[0x4abdfc]` is 5 and
+       * `0x64` otherwise. `[0x4abdfc]` is the stage within a chapter — see
+       * `SkullSave.stage`, which reads it as 2..5 — so 5 is the FOURTH level
+       * of one, and that is levels 4, 8, 12 and 16.
+       *
+       * ARCADE is level 8. So the one level in the game with sprinklers in it
+       * is also one of the four where a flare is a code rather than damage,
+       * and that is not a coincidence: `0x441b60`'s only caller is inside
+       * kragg's state 9, and the only way into state 9 is `0x441d30`'s −9.
+       *
+       * It matters for the rest of the level too. A flare on a stage 5 cannot
+       * hurt anything that has no −9 handler, and sets alight everything that
+       * has: see {@link Foe.burns}.
        */
-      if (FOES[e.kind].drives?.raises) raiseSprinkler(e);
+      if (levelIndex % 4 === 3) {
+        strikeFoe(e, 0, { dx: 0, dy: 0 }, f.facing, (box.top + box.bottom) / 2, hurt, BURN_CODE);
+      } else {
+        strikeFoe(
+          e,
+          FLARE.blow,
+          { dx: FLARE.dx, dy: 0 },
+          f.facing,
+          (box.top + box.bottom) / 2,
+          hurt,
+        );
+      }
       f.burn = 0;
       break;
     }
+    /**
+     * ...and a cast, on the levels where a flare is a code.
+     *
+     * The same argument as the stream's own cast pass, and on PLAYGR it is the
+     * likelier of the two: level 16 is a fourth level, so `0x43abfa` makes
+     * every flare on it a −9, and the boss's fireball is the one thing in the
+     * air that reads one. A flare that meets it is spent either way —
+     * `0x43acae` installs the burn-out on anything it touches, whatever the
+     * thing it touched made of the blow.
+     *
+     * There is deliberately no crow pass here, unlike the stream's. A crow is
+     * CITY's and CITY is level 2, so `levelIndex % 4 === 3` is never true where
+     * one stands and a flare there is `0x64`, not a code; and no `statflare` is
+     * placed in CITY at all — the chapter's weapon is the flamer (see
+     * `CHAPTER_WEAPON` in {@link file://./guns.ts}). The two can never meet.
+     */
+    if (f.burn === null && levelIndex % 4 === 3)
+      for (const c of casts) {
+        if (c.spent || !c.kit.onCode) continue;
+        const art = celRec(lvl.sbk, castCel(c));
+        if (!art) continue;
+        const hurt = castHurtBox(c, art);
+        if (!(
+          box.right > hurt.left &&
+          box.left < hurt.right &&
+          box.bottom > hurt.top &&
+          box.top < hurt.bottom
+        ))
+          continue;
+        strikeCast(c, BURN_CODE);
+        f.burn = 0;
+        break;
+      }
   }
   flares = flares.filter((f) => !f.spent);
 }
@@ -8607,6 +8975,15 @@ function stepCrows(): void {
       c.clock = 0;
       if (Math.floor(Math.random() * 10) >= CROW.giveUp)
         sound?.effect(CROW.sound.flap, c.x, c.y);
+    } else if (c.state === "fall" && c.clock >= run) {
+      // `0x451e5a` — the eight frames of the burn are up, so gravity 1.0, the
+      // tumble and `0x40d450(0x50)`, which is the same award a punch pays. The
+      // height block above still ran while it burned, because state 6 is past 3
+      // and is neither 9 nor 10 (`0x451aeb`)
+      c.state = "tumble";
+      c.clock = 0;
+      c.vy = 0;
+      stats.score += CROW.award;
     }
   }
   // and the feathers: they fall at the player's own gravity and go on landing
@@ -8883,6 +9260,13 @@ interface Cast {
   bounced?: number;
   /** has it come close enough to arm — see {@link CastKit.arm}. One-way */
   armed: boolean;
+  /**
+   * It is on FIRE — word 0 of the six bytes `0x456240` allocates beside the
+   * object, and the only cast in the game with a hit handler is the only one
+   * that has any. One-way too, and {@link CastKit.onCode} owns it: see
+   * {@link CastSelf.alight}.
+   */
+  alight?: boolean;
   spent: boolean;
 }
 
@@ -8983,6 +9367,272 @@ function stepBoards(): void {
 
 /** the one roller a level may have — {@link ROLLER} */
 let rollers: Roller[] = [];
+
+/** what the Coke machines have thrown out — {@link CAN} */
+let cans: Can[] = [];
+
+/**
+ * `0xfff7` — the one strength that is a code against a creature.
+ *
+ * `0x453b9b` is the flamer's flame and `0x43ac04` is a flare on stage 5; those
+ * are the only two things in the game that carry it.
+ */
+const BURN_CODE = -9;
+
+/** what is on fire — {@link FLAME}, and a blow of −9 is what lights one */
+let flames: Flame[] = [];
+
+/**
+ * Light one — `0x44ff20`, the half of a −9 that every class shares.
+ *
+ * The offset is a random point inside the victim's CURRENT cel bitmap, both
+ * axes, and it is kept rather than re-rolled: `0x453ea0` reads `user+6` and
+ * `user+4` back every frame and mirrors the first of them by the victim's own
+ * facing. So a flame sits somewhere on the creature and stays there.
+ */
+function burnFoe(e: Enemy, how: NonNullable<Foe["burns"]>): void {
+  if (!level) return;
+  lightFlame(e, celRec(level.sbk, celOf(e)), e.x, e.y, how);
+}
+
+/**
+ * ...and on a CAST, which is the same function on a different kind of object.
+ *
+ * `0x44ff20` takes whatever it is given and asks `0x42f9f0` for its current
+ * cel's box, so nothing in it cares that the fireball is not a creature — see
+ * {@link CastKit.onCode}, which is the only caller.
+ */
+function burnCast(
+  c: Cast,
+  how: { late?: boolean; forever?: boolean },
+): void {
+  if (!level) return;
+  lightFlame(c, celRec(level.sbk, castCel(c)), c.x, c.y, how);
+}
+
+/** the shared half: one flame, somewhere inside the victim's own cel */
+function lightFlame(
+  on: object,
+  art: SbkCel | undefined,
+  x: number,
+  y: number,
+  how: { late?: boolean; forever?: boolean },
+): void {
+  const lvl = level;
+  if (!lvl) return;
+  // no art, no fire: only four books carry the 9600s
+  if (!FLAME.grow.cels.every((id) => lvl.sbk.byId.has(id))) return;
+  // ...and one flame at a time, which the engine gets for free because every
+  // handler answers 1 and the class is out of the fight the same frame
+  if (flames.some((f) => f.on === on)) return;
+  const halfW = art ? Math.floor(art.width / 2) : 20;
+  const halfH = art ? Math.floor(art.height / 2) : 40;
+  flames.push({
+    on,
+    // `0x44ffa5`/`0x44ffc6`: `roll(half) - half/2`, so it is centred on the
+    // middle of the box and spread half a box either way
+    dx: roll(Math.max(1, halfW)) - Math.floor(halfW / 2),
+    dy: roll(Math.max(1, halfH)) - Math.floor(halfH / 2),
+    stage: how.late ? 2 : 0,
+    clock: 0,
+    forever: how.forever === true,
+    x,
+    y,
+  });
+}
+
+/**
+ * The flames, one engine frame at a time — `0x453ea0`.
+ *
+ * It follows its victim, it is worth a hundred every frame it exists
+ * (`0x453eed`), and it goes out at the end of its third stage unless it was
+ * lit to burn forever. A flame whose victim is gone goes with it: `0x453eae`
+ * answers 1 the moment `user+8` is null.
+ */
+function stepFlames(): void {
+  const lvl = level;
+  if (!lvl) return;
+  const alive = new Set<object>(spawnedHere());
+  // ...and a cast can be alight as well — `0x455763`, the one hit handler on a
+  // thing that is not a creature, and `0x453eae` takes a flame with its victim
+  const lit = new Set<object>(casts);
+  for (const c of casts) alive.add(c);
+  // ...and so can a crow — `0x4520d0`. `0x430367` hands every OBJECT in the room
+  // its own `obj+0x12`, so what can be lit is not only what is in the pool
+  const birds = new Set<object>(crowsHere());
+  for (const c of birds) alive.add(c);
+  for (const f of flames) {
+    if (!alive.has(f.on)) continue;
+    if (birds.has(f.on)) {
+      // a crow's point is its own anchor, and nothing on this page mirrors its
+      // art, so `0x453eb7`'s facing has nothing to flip the offset by
+      const c = f.on as Crow;
+      f.x = c.x + f.dx;
+      f.y = c.y + f.dy;
+    } else if (lit.has(f.on)) {
+      // ...and a cast's own point IS its anchor: `obj+6` is what `0x453eb7`
+      // reads back, and one of these has no separate foot to measure from
+      const c = f.on as Cast;
+      f.x = c.x + (c.facing < 0 ? -f.dx : f.dx);
+      f.y = c.y + f.dy;
+    } else {
+      const e = f.on as Enemy;
+      // `0x453eb7` — the offset is mirrored by the victim's facing, the
+      // vertical one is not, and both are against the victim's own anchor
+      const at = foeAnchor(e, lvl);
+      f.x = e.x + (e.facing < 0 ? -f.dx : f.dx);
+      f.y = (at?.y ?? e.y) + f.dy;
+    }
+    f.clock += 1;
+    const run =
+      f.stage === 0
+        ? FLAME.grow.cels.length * FLAME.grow.hold
+        : f.stage === 1
+          ? FLAME.burn.cels.length * FLAME.burn.hold
+          : FLAME.fade.cels.length * FLAME.fade.hold;
+    if (f.clock < run) continue;
+    if (f.stage === 0) {
+      f.stage = 1;
+      f.clock = 0;
+    } else if (f.stage === 1) {
+      f.stage = 2;
+      f.clock = 0;
+    } else if (f.forever) {
+      // `0x453f76` — tag 2 goes back on itself and the thing burns for ever
+      f.clock = 0;
+    }
+  }
+  // gone: the victim left the level, or the third stage ran out on one that
+  // was not lit to last
+  flames = flames.filter(
+    (f) =>
+      alive.has(f.on) &&
+      (f.forever ||
+        f.stage !== 2 ||
+        f.clock < FLAME.fade.cels.length * FLAME.fade.hold),
+  );
+}
+
+/** the cel a flame is showing — {@link FLAME}'s three stages in order */
+function flameCel(f: Flame): number {
+  const a =
+    f.stage === 0 ? FLAME.grow : f.stage === 1 ? FLAME.burn : FLAME.fade;
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(f.clock / a.hold))];
+}
+
+/**
+ * A can out of a machine — `0x43b780`, and the point is the machine's own.
+ *
+ * `0x43b7e2` turns it away from the player, and the first record of
+ * `0x474ce0` is the only stride in the script: `dx 120, dy -70` over the
+ * class's divisor of five. `0x43ae34` then gives this one its own drag.
+ */
+function canAt(e: Enemy): void {
+  const lvl = level;
+  if (!lvl) return;
+  // no art, no can — MALL is the only book with the 8600s and the only level
+  // with a Coke machine, but a level list is not a guarantee
+  if (!CAN.tumble.cels.every((id) => lvl.sbk.byId.has(id))) return;
+  const away = p.x < e.x ? 1 : -1;
+  // `0x43b7ad`/`0x43b7be` copy the machine's own `obj+6`, which is the ANCHOR
+  // and not the feet — a Coke machine's anchor is twelve rows under the floor
+  // it stands on, and a can born there is already through it
+  const at = foeAnchor(e, lvl) ?? { y: e.y };
+  cans.push({
+    x: e.x,
+    y: Math.min(at.y, groundAt(e.x) ?? at.y),
+    vx: away * roundAway(CAN.launch.dx / CAN.divisor),
+    vy: roundAway(CAN.launch.dy / CAN.divisor),
+    clock: 0,
+    tag: 0,
+    drag: CAN.drags[Math.floor(Math.random() * CAN.drags.length)],
+  });
+}
+
+/**
+ * The cans, one engine frame at a time — `0x43af00`.
+ *
+ * Tag 0 tumbles and tag 1 rolls; when tag 1 ends `0x43af4e` rolls one to three
+ * and either goes round tag 1 again or settles on tag 2 or tag 3, both of
+ * which hold one cel and wait for the ground. Landing is what makes the
+ * pickup, and after that the can is scenery with a `Gun` underneath it.
+ */
+function stepCans(): void {
+  const lvl = level;
+  if (!lvl) return;
+  for (const c of cans) {
+    if (c.rest !== undefined) continue; // down, and its pickup is made
+    c.clock += 1;
+    c.x += c.vx;
+    c.vy += CAN.pull;
+    c.y += c.vy;
+    const floor = surfaceUnder(c.x, c.y - Math.abs(c.vy) - 1, c.y + 1);
+    // ...and the page's own backstop, the same one the player has: under the
+    // floor is not a place, and a can that gets there is put back on top of it
+    // rather than falling out of the level
+    const under = groundAt(c.x);
+    const through = under !== null && c.y > under ? under : null;
+    const down = floor !== null || through !== null;
+    if (down) {
+      c.y = through ?? (floor as number);
+      // `0x42ff6f` — a bounce inside two pixels is not a bounce, and nothing
+      // gave a can a restitution, so it simply stops falling
+      c.vy = 0;
+      // `0x4302c0` — the frame it spends ON a surface is the frame its drag is
+      // spent, and the truncation is the engine's own `imul`/`sar 13`
+      c.vx = castScale(c.vx, c.drag, 8192);
+    }
+    const len =
+      c.tag === 0
+        ? CAN.tumble.cels.length * CAN.tumble.hold
+        : c.tag === 1
+          ? CAN.settle.cels.length * CAN.settle.hold
+          : 1;
+    if (c.tag <= 1) {
+      if (c.clock < len) continue;
+      // `0x43af32` hands tag 0 to tag 1; `0x43af4e` rolls 1..3 out of tag 1
+      c.tag = c.tag === 0 ? 1 : 1 + Math.floor(Math.random() * 3);
+      c.clock = 0;
+      continue;
+    }
+    // tags 2 and 3 — `0x43af6c` and `0x43af9d`, both waiting on `obj+0x30`
+    if (!down) continue;
+    c.rest = CAN.rests[c.tag - 2] ?? CAN.rests[0];
+    const i = lvl.rooms.findIndex(
+      (r) => c.x >= r.left && c.x <= r.right && c.y >= r.top && c.y <= r.bottom,
+    );
+    if (i < 0) continue;
+    // `0x45af60(2, point, 0, 0x43aff0)` — and the band is the pickup's own
+    // fifty-five, not the thirty-six a placed record is filed with
+    lvl.guns[i] = [
+      ...lvl.guns[i],
+      {
+        code: CAN.code,
+        x: c.x,
+        y: c.y,
+        left: c.x - CAN.reach,
+        right: c.x + CAN.reach,
+        clock: 0,
+      },
+    ];
+  }
+  // ...and the page's own guard, as every free object here has: out of the
+  // room's span and it is gone. `0x43af00` has no such rule because a can that
+  // has landed is a pickup, and the level owns those.
+  const span = p.room ? roomSpan(p.room) : null;
+  if (span)
+    cans = cans.filter(
+      (c) => c.rest !== undefined || (c.x >= span.lo && c.x <= span.hi),
+    );
+}
+
+/** the cel a can is showing — {@link CAN} */
+function canCel(c: Can): number {
+  if (c.rest !== undefined) return c.rest;
+  const a = c.tag === 0 ? CAN.tumble : CAN.settle;
+  if (c.tag >= 2) return CAN.rests[c.tag - 2] ?? CAN.rests[0];
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(c.clock / a.hold))];
+}
 
 /**
  * `0x426346` — how many of a summoned class may be alive before the creator
@@ -9146,13 +9796,13 @@ const FALLS_FOREVER = 1200;
  * lift. `0x418433`/`0x418440`/`0x41843b` are the spitter's, and the others are
  * the same three instructions with their own constants.
  */
-function spawnCast(e: Enemy, kit: CastKit): void {
+function spawnCast(e: Enemy, kit: CastKit, aim?: Aim): void {
   const lvl = level;
   if (!lvl) return;
   const at = foeAnchor(e, lvl);
   if (!at) return;
   // the anchor, which is what `obj+6` is — a gob leaves the mouth, not the feet
-  castAt(e.x, at.y, e.facing, kit);
+  castAt(e.x, at.y, e.facing, kit, aim);
 }
 
 /**
@@ -9162,7 +9812,13 @@ function spawnCast(e: Enemy, kit: CastKit): void {
  * called on one of Boggs' MACHINES, which is an object this page keeps as a
  * fixture rather than as an enemy. The three numbers are the same three.
  */
-function castAt(x: number, y: number, facing: number, kit: CastKit): void {
+function castAt(
+  x: number,
+  y: number,
+  facing: number,
+  kit: CastKit,
+  aim?: Aim,
+): void {
   if (!level) return;
   const bornX = x + facing * kit.ahead + (kit.offX ?? 0);
   const bornY = y - kit.lift;
@@ -9170,9 +9826,11 @@ function castAt(x: number, y: number, facing: number, kit: CastKit): void {
     kit,
     x: bornX,
     y: bornY,
-    vx: facing * kit.speed,
+    // an aim is already signed and already in the executable's own units, so
+    // the facing has had its say before it got here — see {@link Aim}
+    vx: aim ? aim.vx : facing * kit.speed,
     // up-positive in the kit, and this page's y grows downward
-    vy: -(kit.rise ?? 0),
+    vy: -(aim ? aim.rise : (kit.rise ?? 0)),
     facing,
     clock: 0,
     bornX,
@@ -9242,11 +9900,69 @@ function castStride(c: Cast): number {
 /** what it would hit for — zero until it arms, which is the slug's whole design */
 function castBlow(c: Cast): number {
   if (!c.armed) return 0;
+  // ...and the one whose flight is a dud is worth nothing until it bursts —
+  // `0x452ec0` is where the hundred and one is written, and it is the burst's
+  // own state that writes it. See {@link CastKit.onImpact}.
+  if (c.kit.onImpact && c.landed === undefined) return 0;
   // ...and the ones that bounce are worth nothing once they have slowed down —
   // `0x4556d3`, which picks between `obj+0x1a = 0x64` and `obj+0x1a = 0`
   const fast = c.kit.fastBlow;
   if (fast !== undefined && Math.abs(c.vx) < fast && Math.abs(c.vy) < fast) return 0;
   return c.kit.blow;
+}
+
+/**
+ * ...and a CODE landing on one — the same hit loop run at a cast instead of at
+ * a creature, for the one class that has anything to say about it.
+ *
+ * A creature goes to {@link strikeFoe} and reads its −9 out of {@link
+ * Foe.burns}. A cast has no class module, no health and no reaction table, so
+ * what answers for it is the handler its own kit carries — `obj+0x12`, and
+ * `0x45554f` installs one on exactly one class. See {@link CastKit.onCode}.
+ *
+ * The context is built per blow rather than shared the way `BRAIN_CTX` is,
+ * because a hit handler is called once and about one thing: it needs no name
+ * for the cast it is already holding.
+ */
+function strikeCast(c: Cast, code: number): boolean {
+  const own = c.kit.onCode;
+  // no handler is the executable's own answer for everything else in the air:
+  // the blow is read by nobody and the thing carries on
+  if (!own) return false;
+  const k: CastCtx = { burn: (how) => burnCast(c, how ?? {}) };
+  return own(c, code, k);
+}
+
+/**
+ * ...and one as a VICTIM, which is the only thing that ever asks a cast for a
+ * box other than the strike box it hits WITH.
+ *
+ * The body box if its art carries one, mirrored by the facing the way
+ * {@link hurtBox} mirrors a creature's; otherwise the bitmap where
+ * {@link drawLevelCel} puts it, which is the rect `0x42f9f0` builds.
+ */
+function castHurtBox(
+  c: Cast,
+  art: SbkCel,
+): { top: number; left: number; bottom: number; right: number } {
+  const b =
+    c.facing < 0 && art.body
+      ? { ...art.body, x0: -art.body.x1, x1: -art.body.x0 }
+      : art.body;
+  if (b)
+    return {
+      left: c.x + b.x0,
+      right: c.x + b.x1,
+      top: c.y + b.y0,
+      bottom: c.y + b.y1,
+    };
+  const left = c.facing < 0 ? c.x - (art.width - art.posX) : c.x - art.posX;
+  return {
+    left,
+    right: left + art.width,
+    top: c.y - art.posY,
+    bottom: c.y - art.posY + art.height,
+  };
 }
 
 /**
@@ -9317,6 +10033,9 @@ function stepCasts(): void {
       // point, neither of them divided by anything
       c.vy += c.kit.pull;
     }
+    // ...and the one class that bounds what it may become — `0x452d4d`
+    if (c.kit.capFall !== undefined)
+      c.vy = Math.max(-c.kit.capFall, Math.min(c.kit.capFall, c.vy));
     if (home || c.kit.pull !== undefined) c.y += c.vy;
     const dx = Math.abs(c.x - p.x);
     // the class's own end, whichever of the two it keeps
@@ -9912,7 +10631,59 @@ const BRAIN_CTX: BrainCtx = {
   // pixels in the engine and a fractional root would drift them
   root: (n) => Math.floor(Math.sqrt(Math.max(0, n))),
   say: (e, id) => sound?.effect(id, e.x, e.y),
-  cast: (e, kit) => spawnCast(e, kit),
+  /**
+   * `0x441519` — `0x40b660("initsprinkler", boss, 1, -1, out)`, and geometry
+   * −1 is `0x40b756`: the record whose `pointY`/`pointX` is nearest in
+   * MANHATTAN distance, not the one whose rect holds anything.
+   */
+  sprinkler: (e) => {
+    const all = hereOf((l) => l.sprinklers);
+    if (!all.length) return null;
+    let best: Sprinkler | null = null;
+    let by = Infinity;
+    for (const q of all) {
+      const d = Math.abs(q.y - e.y) + Math.abs(q.x - e.x);
+      if (d < by) {
+        by = d;
+        best = q;
+      }
+    }
+    return best ? { x: best.x, y: best.y } : null;
+  },
+  raise: (e) => raiseSprinkler(e),
+  count: (kind) => spawnedHere().filter((q) => q.kind === kind && q.state !== "dead").length,
+  nearest: (kind, within) => {
+    let best: Enemy | null = null;
+    let by = within;
+    for (const q of spawnedHere()) {
+      if (q.kind !== kind || q.state === "dead") continue;
+      const d = Math.abs(q.x - p.x);
+      if (d <= by) {
+        by = d;
+        best = q;
+      }
+    }
+    return best ? { x: best.x, y: best.y } : null;
+  },
+  /**
+   * `0x4263e0` — every one of them, where it stands, with the lift and the
+   * award its own death carries.
+   */
+  slayAll: (kind) => {
+    for (const q of spawnedHere()) {
+      if (q.kind !== kind || q.state === "dead") continue;
+      const kid = FOES[kind];
+      if (!kid.death) continue;
+      q.state = "dead";
+      q.anim = kid.death;
+      q.clock = 0;
+      q.linger = kid.linger ?? CORPSE_LINGER;
+      // `0x4263f7` — each one is thrown UP as it is taken
+      q.vy = -40 * TICK_SCALE;
+      stats.score += kid.award ?? kid.panel?.award ?? 0;
+    }
+  },
+  cast: (e, kit, aim) => spawnCast(e, kit, aim),
   hatch: (e, kind, at) => hatchAt(e, kind, at),
   roller: (_e, at) => rollerAt(at.x, at.y, at.vx),
   gravity: INVENTED.gravityPx,
@@ -9945,6 +10716,20 @@ function stepEnemies(): void {
       pops.push({ x: e.x, y: e.y - 20, age: 0 });
     }
     const run = e.anim.cels.length * e.anim.hold;
+    /**
+     * ...and a class that DOES something while the page plays its reaction.
+     *
+     * See {@link Reaction}: three classes have a state a brain is never called
+     * during and that no animation can express — and all three were out of
+     * reach for exactly that reason. It runs once an ENGINE FRAME, as a brain
+     * does, and it may not install anything: the page goes on owning the
+     * animation and the frame count.
+     */
+    if (
+      (e.state === "flinch" || e.state === "dead") &&
+      Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE)
+    )
+      REACTIONS[e.kind]?.(e, foe, run, BRAIN_CTX);
     if (e.state === "dead") {
       /**
        * ...and what comes out of it. `0x454690` calls the punk's own creator
@@ -10076,6 +10861,30 @@ function stepEnemies(): void {
     if (e.state === "flinch" && e.anim.then && e.clock >= run) {
       e.anim = e.anim.then;
       e.clock = 0;
+      continue;
+    }
+    /**
+     * ...and a reaction that is FATAL hands to the death when it ends.
+     *
+     * `0x4526ef` is the shape: the five frames of werec's state 3 run out, it
+     * squeals, clears the bar and installs `0x477a78` — the death — rather
+     * than going back to standing. So `fatal` does not mean "play this as the
+     * death", it means "and then die", which is why the burn animation and
+     * {@link Foe.death} are two different things.
+     */
+    if (
+      e.state === "flinch" &&
+      foe.burns?.fatal &&
+      e.anim === foe.burns.anim &&
+      e.clock >= run &&
+      foe.death
+    ) {
+      if (foe.deathSound !== undefined) sound?.effect(foe.deathSound, e.x, e.y);
+      e.state = "dead";
+      e.anim = foe.death;
+      e.clock = 0;
+      e.linger = foe.linger ?? CORPSE_LINGER;
+      stats.score += foe.award ?? foe.panel?.award ?? 0;
       continue;
     }
     if (e.state === "flinch" && e.clock >= run) {
@@ -10820,10 +11629,30 @@ function loop(now: number): void {
       (held.down || (held.up && held.right === held.left))
     )
       ladder = ladderAt();
+    /**
+     * ...and the other thing the same W reach finds — see {@link MONKEYBAR}.
+     *
+     * `0x412390` answers `monkeybar` only after `ladder`, `exitfarm` and
+     * `exitroom` have all missed, so the bar is asked for last. Letting go is
+     * S or J and **only out of the hang tag**: `0x42b522` is in tag 0's arm
+     * and no other arm tests for it, so a swing always finishes.
+     */
+    const barLetGo =
+      !!p.bar && p.barTag === 0 && (held.down || held.jump || jumpPressed);
+    let bar: SbkEntity | undefined;
+    if (p.bar) bar = p.act || barLetGo ? undefined : p.bar;
+    else if (
+      !ladder &&
+      !p.act &&
+      !ladderLatch &&
+      held.up &&
+      held.right === held.left
+    )
+      bar = barAt();
     // ...and INV stands you still: state 15 reads no direction at all, so a
     // holstered player cannot walk while the button is down
     const dir =
-      ladder || p.act || held.inv
+      ladder || bar || p.act || held.inv
         ? 0
         : (held.right ? 1 : 0) - (held.left ? 1 : 0);
     p.moving = dir !== 0;
@@ -10837,7 +11666,8 @@ function loop(now: number): void {
      * RUNNING launch, `250 251 252 253` with dx 100 where the standing one has
      * dx 0, so a run-jump carries its speed off the edge.
      */
-    p.running = p.moving && held.up && ladder === undefined && !held.down;
+    p.running =
+      p.moving && held.up && ladder === undefined && bar === undefined && !held.down;
     /**
      * THE ENGINE'S FRAME, in the engine's order. The level loop (`0x417c20`)
      * runs the player's input handler first — `0x402950` → `0x428080`, the
@@ -11077,6 +11907,8 @@ function loop(now: number): void {
       upPressed = jumpPressed = false;
     const wasClimbing = p.climbing;
     p.climbing = ladder !== undefined;
+    const wasHanging = p.bar !== undefined;
+    p.bar = bar;
     if (ladder) {
       /**
        * Step ONTO it, where the record says and facing the way it says.
@@ -11183,10 +12015,130 @@ function loop(now: number): void {
         if (into) p.room = into;
       }
       p.onGround = false;
+    } else if (bar) {
+      /**
+       * State 8 — `0x42b410`, and its preamble runs before the dispatch does.
+       *
+       * Both velocities to zero, the anchor back on the record's `top` and x
+       * clamped into `left..right`, every frame and whatever the tag. See
+       * {@link MONKEYBAR}.
+       */
+      p.vx = 0;
+      p.vy = 0;
+      p.vyRaw = 0;
+      p.stepPx = 0;
+      if (p.x > bar.right) p.x = bar.right;
+      if (p.x < bar.left) p.x = bar.left;
+      const spacing = Math.abs(bar.param) || 65;
+      // the swing reads the keys RAW: `dir` above is already zero because a
+      // hanging player does not walk, and these are the engine's own two
+      // flags, `[0x4ac3d2]` toward and `[0x4ac38c]` away, which are relative
+      // to the facing and not to the screen
+      const barDir = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+      const toward = barDir !== 0 && barDir === p.facing;
+      const away = barDir !== 0 && barDir !== p.facing;
+      if (!wasHanging) {
+        // `0x42ef11` — tag 0, and nothing is snapped on the grab: you hang
+        // where the jump put you and the first swing puts you on the grid
+        p.barTag = 0;
+        p.barClock = 0;
+      } else if (p.barTag === 0) {
+        // `0x42b4bf` reads toward, away and W in that order
+        if (toward || away) {
+          p.barTag = toward ? 1 : 2;
+          p.barClock = 0;
+        } else if (held.up) {
+          p.barTag = 3;
+          p.barClock = 0;
+        }
+      } else {
+        const swinging = p.barTag === 1 || p.barTag === 2;
+        /**
+         * Which way the body is actually going, which is not the facing: tag 1
+         * carries `dx +120` and tag 2 carries `-120`, and `0x45d18e` mirrors
+         * either by `obj+0x28`. Nothing on a monkeybar ever turns the player,
+         * so a westward swing is a player facing east playing tag 2.
+         */
+        const way = p.facing * (p.barTag === 1 ? 1 : -1);
+        // the script's own `dx`, spent by `0x45d0f0` on EVERY frame and not
+        // once a cel — `0x42b410` zeroes the velocity again next frame, so
+        // what it really amounts to is 10 pixels of travel an engine frame
+        if (swinging) p.x += way * (MEASURED.barSwing / DIVISOR) * TICK_SCALE;
+        const before = MONKEYBAR.tagStart[p.barTag] + Math.floor(p.barClock / 2);
+        p.barClock += TICK_SCALE;
+        const frame = MONKEYBAR.tagStart[p.barTag] + Math.floor(p.barClock / 2);
+        if (frame !== before)
+          for (const hand of MONKEYBAR.soundAt[p.barTag] ?? [])
+            if (hand.frame === frame) sound?.own(hand.own, p.x, p.y);
+        const len = swinging ? MONKEYBAR.handFrames : MONKEYBAR.pullFrames;
+        if (p.barClock >= len) {
+          if (swinging) {
+            /**
+             * The snap — and the `+1` belongs to TRAVELLING EAST, not to the
+             * facing, which is the thing that is easy to read wrong here.
+             *
+             * All four arms are written out separately in the executable and
+             * only two of them carry the `inc`: `0x42b621` is tag 1 with
+             * `obj+0x28` clear and `0x42b77b` is tag 2 with it set. Both of
+             * those are the body going east — where truncation leaves you
+             * short of the hold above — and the two without it are the body
+             * going west, where truncation has already carried you past the
+             * hold below. Take the facing alone and a westward swing snaps
+             * fifteen pixels back east every time it completes.
+             */
+            const n =
+              p.x > bar.left
+                ? Math.trunc((p.x - bar.left) / spacing) + (way === 1 ? 1 : 0)
+                : 0;
+            p.x = Math.max(
+              bar.left,
+              Math.min(bar.right, bar.left + n * spacing),
+            );
+            // `0x42b67a` / `0x42b7a6`: the SAME direction carries on, W goes
+            // to the chin-up, and anything else drops back to the hang. The
+            // opposite direction is not tested, so a reversal costs a tag.
+            const keep = p.barTag === 1 ? toward : away;
+            p.barTag = keep ? p.barTag : held.up ? 3 : 0;
+            p.barClock = 0;
+          } else if (p.barTag === 3) {
+            // `0x42b7ff` — W still down and the last cel simply HOLDS
+            if (held.up) p.barClock = MONKEYBAR.pullFrames;
+            else {
+              p.barTag = 4;
+              p.barClock = 0;
+            }
+          } else {
+            p.barTag = 0;
+            p.barClock = 0;
+          }
+        }
+      }
+      p.barHold = Math.round((p.x - bar.left) / spacing);
+      // the anchor is the record's own `top`, and `p.y` is the feet, so the
+      // hanging cel's own box is what stands between them
+      const hung = celRec(player, (ANIM.bar[0] ?? [])[0] ?? 0);
+      const feet = hung?.body ? hung.body.y1 : p.feet;
+      p.y = bar.top + feet;
+      p.feet = feet;
+      p.onGround = false;
+      // ...and the room is NOT re-asked, unlike the ladder: `0x42b410` never
+      // calls `0x40b940`, and it does not have to — the one bar in the game
+      // spans 5908..6617 inside a VAT room of 5719..6688
     } else {
       if (wasClimbing) {
         ladderLatch = true;
         p.ladder = undefined;
+      }
+      if (wasHanging) {
+        // `0x42b53a` — gravity back to 1 and `0x471b28` tag 0, which is the
+        // plain fall. No hop, no velocity, and no latch: the ladder's leave
+        // sets `[0x46b1b8]` and this one does not, so you may grab again at
+        // once if you can get your anchor back into the rect.
+        p.vy = 0;
+        p.vyRaw = 0;
+        p.stepPx = 0;
+        p.onGround = false;
+        jumpPressed = false;
       }
       if (wasClimbing && !p.onGround && (dir || held.jump || jumpPressed)) {
         /**
@@ -11374,6 +12326,8 @@ function loop(now: number): void {
     if (frame) stepCasts();
     if (frame) stepBoards();
     if (frame) stepRollers();
+    if (frame) stepCans();
+    if (frame) stepFlames();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -11600,6 +12554,13 @@ function loop(now: number): void {
   // ...and a roller rolls along the same ground
   for (const r of rollers)
     drawLevelCel(rollerCel(r), r.x, r.y, camX, camY, r.vx < 0);
+  // ...and the cans, which outlive their flight: a landed one is the ART of
+  // the pickup underneath it, because code 2 keeps cel 14000 and no book in
+  // the game carries that. See {@link CAN}.
+  for (const c of cans) drawLevelCel(canCel(c), c.x, c.y, camX, camY, c.vx < 0);
+  // ...and the flames LAST, because a flame is an object standing on top of
+  // whatever it is burning and not a wash over its cel
+  for (const f of flames) drawLevelCel(flameCel(f), f.x, f.y, camX, camY, false);
   drawCasts(camX, camY);
   drawStreams(camX, camY);
   drawGobs(camX, camY);
@@ -11636,21 +12597,23 @@ function loop(now: number): void {
     inv.armed && !held.inv ? (WEAPONS[inv.weapon]?.moveset ?? null) : null;
   const seq = acting
     ? acting.cels
-    : p.climbing
-      ? (ANIM.climb[p.climbTag] ?? ANIM.hang)
-      : p.landLeft > 0
-        ? p.hardLand
-          ? (kit?.fall ?? ANIM.air)
-          : (kit?.land ?? ANIM.land)
-        : !p.onGround || p.windup > 0
-          ? (kit?.jump ?? ANIM.air)
-          : p.crouching
-            ? (kit?.duck ?? ANIM.crouch)
-            : p.running
-              ? (kit?.run ?? ANIM.run)
-              : p.moving
-                ? (kit?.walk ?? ANIM.walk)
-                : (kit?.idle ?? ANIM.idle);
+    : p.bar
+      ? (ANIM.bar[p.barTag] ?? ANIM.bar[0] ?? ANIM.hang)
+      : p.climbing
+        ? (ANIM.climb[p.climbTag] ?? ANIM.hang)
+        : p.landLeft > 0
+          ? p.hardLand
+            ? (kit?.fall ?? ANIM.air)
+            : (kit?.land ?? ANIM.land)
+          : !p.onGround || p.windup > 0
+            ? (kit?.jump ?? ANIM.air)
+            : p.crouching
+              ? (kit?.duck ?? ANIM.crouch)
+              : p.running
+                ? (kit?.run ?? ANIM.run)
+                : p.moving
+                  ? (kit?.walk ?? ANIM.walk)
+                  : (kit?.idle ?? ANIM.idle);
   // Three clocks, because the engine has three. An action and the idle run on
   // engine frames at their script's own ticksPerFrame; anything that covers
   // ground is clocked by the GROUND it covers, one cel per stride, so the feet
@@ -11663,6 +12626,10 @@ function loop(now: number): void {
       seq[
         Math.min(seq.length - 1, Math.floor(p.actClock / (acting.hold ?? 1)))
       ];
+  // `0x472048` is two engine frames a cel, and the last of a tag HOLDS —
+  // which is what the chin-up standing still at the top of tag 3 is
+  else if (p.bar)
+    id = seq[Math.min(seq.length - 1, Math.floor(p.barClock / 2))];
   // a rung is four cels at one engine frame each, and the last of them is what a
   // ladder holds you on when you stop asking to move
   else if (p.climbing)
@@ -11843,9 +12810,12 @@ function loop(now: number): void {
       : "";
   const state = p.act
     ? ` · ${p.act}`
-    : p.climbing
-      ? ` · climbing rung ${p.rung} tag ${p.climbTag}`
-      : !p.onGround
+    : p.bar
+      ? ` · hanging hold ${p.barHold} tag ${p.barTag}` +
+        ` at x ${Math.round(p.x)}, y ${Math.round(p.y)}`
+      : p.climbing
+        ? ` · climbing rung ${p.rung} tag ${p.climbTag}`
+        : !p.onGround
         ? " · in the air"
         : p.crouching
           ? " · crouching"
@@ -12190,6 +13160,17 @@ function loop(now: number): void {
       : "") +
     // ...and the roller, whose whole first second is standing still, so a probe
     // needs the countdown as much as it needs the position
+    (flames.length
+      ? ` · ${flames.length} alight, first cel ${flameCel(flames[0])}` +
+        ` at x ${Math.round(flames[0].x)}, y ${Math.round(flames[0].y)}` +
+        ` stage ${flames[0].stage}${flames[0].forever ? " FOREVER" : ""}`
+      : "") +
+    (cans.length
+      ? ` · ${cans.length} can, first cel ${canCel(cans[0])}` +
+        ` at x ${Math.round(cans[0].x)}, y ${Math.round(cans[0].y)}` +
+        ` tag ${cans[0].tag} vx ${Math.round(cans[0].vx)}` +
+        `${cans[0].rest !== undefined ? " RESTING" : ""}`
+      : "") +
     (rollers.length
       ? ` · ${rollers.length} roller, first cel ${rollerCel(rollers[0])}` +
         ` at x ${Math.round(rollers[0].x)}, y ${Math.round(rollers[0].y)}` +

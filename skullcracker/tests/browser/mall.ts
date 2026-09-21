@@ -158,16 +158,89 @@ const main = async (): Promise<void> => {
   await go(700);
   await page.waitForTimeout(700);
   const cans = new Set<number>();
-  for (let i = 0; i < 80; i++) {
-    await page.waitForTimeout(60);
+  // 40ms a sample, because an engine frame is 66 and 8501 is the FIRST cel of
+  // both rocking tags at a hold of one — sampled slower than the engine runs,
+  // whether it is seen at all is a race
+  for (let i = 0; i < 120; i++) {
+    await page.waitForTimeout(40);
     const m = /unplated initcoke [^·]*? cel (\d+)/.exec(await say());
     if (m) cans.add(Number(m[1]));
-    if (i % 3 === 0) await page.keyboard.press("p");
+    if (i % 4 === 0) await page.keyboard.press("p");
   }
   if (!cans.has(8500)) fail(`a Coke machine stands on 8500; saw ${[...cans].join(" ")}`);
   if (![8501, 8502].every((c) => cans.has(c))) fail(`punching it should rock it on 8501/8502; saw ${[...cans].join(" ")}`);
   if (!cans.has(8505)) fail(`four cans in and it should be showing the emptied 8505; saw ${[...cans].join(" ")}`);
   console.log(`ok    a Coke machine rocks through ${cans.size} of its own cels and empties on 8505`);
+
+  /**
+   * ...and the four CANS it was holding, which is what emptying it means.
+   *
+   * `0x43b6f5` shakes one loose on every third counted blow and `0x43b71a`
+   * stops the machine at four. Each is an object of its own — `0x43b780`,
+   * cels 8600..8614 — that arcs away from the player at 24 across and 14 up
+   * (`0x474ce0` tag 0's `dx 120, dy -70` over the class's divisor of five),
+   * settles, and then makes a code-2 pickup where it lies. The pickup itself
+   * is invisible, because `0x45afa3` only re-cels 6..17 and no book in the
+   * game carries the 14000 a 2 keeps; the can lying there IS the art.
+   */
+  // ...on its own load, because what a can is worth is HEALTH and the switch
+  // that lets the player lose any is off for the rest of this suite
+  await page.goto(`${BASE}/walk.html?level=5&x=700&damage=1&foehit=1`);
+  await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(800);
+  for (let i = 0; i < 140; i++) {
+    await page.waitForTimeout(60);
+    if (i % 3 === 0) await page.keyboard.press("p");
+  }
+  const lying = /· (\d+) can, first cel (\d+) at x (-?\d+), y (-?\d+) tag (\d+) vx (-?\d+) RESTING/.exec(await say());
+  if (!lying) fail(`four cans should be lying in front of it — 0x43b6f5; the HUD says ${/· \d+ can[^·]*/.exec(await say())?.[0] ?? "no cans at all"}`);
+  if (Number(lying[1]) !== 4)
+    fail(`0x43b71a stops the machine at four; it gave up ${lying[1]}`);
+  if (![8600, 8611].includes(Number(lying[2])))
+    fail(`0x474d70 rests a can on 8600 or 8611; this one is on ${lying[2]}`);
+  // thrown AWAY from the player — `0x43b7e2`, and the machine is at x760
+  if (Number(lying[3]) <= 760)
+    fail(`0x43b7e2 throws a can away from you, so east of x760; it is at ${lying[3]}`);
+  console.log(`ok    ...and gives up ${lying[1]} cans, resting on ${lying[2]} at x ${lying[3]}`);
+
+  /**
+   * ...and one is worth a hundred and fifty health. `GUN_CODES[2]` has carried
+   * `0x428868`'s case since before anything in the game dropped one, and this
+   * is the thing that does: `0x43af80` asks `0x45af60` for a code 2, and
+   * `0x43aff0` — the callback it hands over with it — is what takes the can
+   * off the floor again when the pickup is taken.
+   */
+  const guns = async (): Promise<number> => Number(/· (\d+) guns/.exec(await say())?.[1] ?? 0);
+  const wasGuns = await guns();
+  const wasCans = Number(lying[1]);
+  for (let i = 0; i < 30 && !/IN REACH/.test(await say()); i++) {
+    await page.keyboard.down("ArrowRight");
+    await page.waitForTimeout(120);
+    await page.keyboard.up("ArrowRight");
+    await page.waitForTimeout(120);
+  }
+  if (!/IN REACH/.test(await say())) fail(`a resting can should come into reach walking east from x700`);
+  const hurtTo = Number(/damage ON (\d+)\//.exec(await say())?.[1] ?? 0);
+  await page.keyboard.down("s");
+  await page.waitForTimeout(700);
+  await page.keyboard.up("s");
+  await page.waitForTimeout(400);
+  const nowCans = Number(/· (\d+) can/.exec(await say())?.[1] ?? 0);
+  // ...and the invariant is that the two lists move TOGETHER, not that one
+  // press takes one: the reach is a one-shot the engine repeats while S is
+  // held, so how many fit in the hold is a matter of timing. What `0x43aff0`
+  // guarantees is that a can leaves the floor for every pickup taken.
+  if (nowCans >= wasCans)
+    fail(`taking a pickup should lift its can — 0x43aff0; ${wasCans} cans became ${nowCans}`);
+  if (wasGuns - (await guns()) !== wasCans - nowCans)
+    fail(
+      `a can and its pickup go together: ${wasCans - nowCans} cans went and ` +
+        `${wasGuns - (await guns())} pickups did`,
+    );
+  const healed = Number(/damage ON (\d+)\//.exec(await say())?.[1] ?? 0);
+  if (healed <= hurtTo)
+    fail(`0x428868 pays 150 health for a code 2; it went ${hurtTo} -> ${healed}`);
+  console.log(`ok    ...and taking one is worth health, ${hurtTo} to ${healed}, and lifts the can with it`);
 
   /**
    * 9. the ROLLER, which is the one hazard a creature in this game builds.

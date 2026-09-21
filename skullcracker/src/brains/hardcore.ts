@@ -377,7 +377,7 @@ const CLOSE_BAND = 4;
 /** `0x43cd73` — more than two throws since the last roar and it stops to roar */
 const THROWS_BEFORE_ROAR = 2;
 
-/** the page advances `e.clock` half an engine frame a tick — `walk.ts`'s `TICK_SCALE` */
+/** the page advances `e.clock` a QUARTER of an engine frame a tick — {@link TICK_SCALE} */
 const TICKS = TICK_SCALE;
 
 /**

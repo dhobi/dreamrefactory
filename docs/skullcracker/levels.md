@@ -81,8 +81,10 @@ object: `0x44fb20` calls the hydrant's own creator for one 25 pixels to its faci
 side on the water tag, plays the burst, and reinstalls tag 0 on itself, so the
 hydrant is whole again and can be turned open all over again. The water's own ten
 cels grow from 35x17 to 510x96, carry no collision box at all, and the object
-removes itself the frame they end. Six of them do carry a strike box, so the jet
-knocks things about in the original; that is read and not wired.
+removes itself the frame they end. Six of them carry a strike box and five of those
+carry a blow pair as well — `dx -74` on 9803 and `-125` on the four after it —
+so the jet is the hardest single blow in the chapter, and standing in one puts
+you flat on your back.
 
 A punk's body then leaves a **green ball**: `0x40cba0`'s −13 branch, eleven cels
 of a sphere swelling to 89 pixels and collapsing to nothing, fired by the corpse's
@@ -248,11 +250,13 @@ gave it. Every third consecutive blow puts it over instead of making it flinch
 three. Dead, it comes apart over eighteen frames and burns as cel 3140 for ever;
 the object is never destroyed.
 
-The one thing deliberately left out is its fireball. `0x456240` builds a second
-object of its own class with a restitution of 0.8 so the low shot bounces, and
-every frame of it carries a strike box — it is the one attack of the six that
-exists to hit you. The charge, by contrast, carries no strike box on any frame: it
-closes the distance and nothing else, so running it costs the player nothing.
+Its fireball is here. `0x456240` builds a second object of its own class with a
+restitution of 0.8 so the low shot bounces, and every frame of it carries a strike
+box — it is the one attack of the six that exists to hit you. Which of the two
+throws it is comes off `0x455cba`'s dispatch on the tag, and the module flies both
+muzzles through `BrainCtx.cast`. The charge, by contrast, carries no strike box on
+any frame: it closes the distance and nothing else, so running it costs the player
+nothing.
 
 ## MALL is a new chapter, and a new shape of level
 
