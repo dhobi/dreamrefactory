@@ -169,7 +169,85 @@ const main = async (): Promise<void> => {
   if (!cans.has(8505)) fail(`four cans in and it should be showing the emptied 8505; saw ${[...cans].join(" ")}`);
   console.log(`ok    a Coke machine rocks through ${cans.size} of its own cels and empties on 8505`);
 
-  // 9. the whole level, end to end, on its own two jumps
+  /**
+   * 9. the ROLLER, which is the one hazard a creature in this game builds.
+   *
+   * `0x438848` sits in the keeper's preamble: two in sixty-eight an engine
+   * frame, with the player inside 300 in x and the keeper WEST of him, sends
+   * `0x43a790` to build one at the player's own y, six hundred pixels the far
+   * side of him. x1200 is the place to stand for it — the masked one at x1146
+   * is 54 west and well inside the 300 — and the three legs above have already
+   * shown that the same spot with the keeper EAST of the player builds nothing.
+   *
+   * Then `0x43a99b` counts `AI+8` down from forty before `0x42f8b0` spends the
+   * stored velocity, so it sits on cel 1970 for forty-one frames and only then
+   * rolls. It is worth a hundred while it is quick and nothing when it is not
+   * (`0x43a993` against `0x43aa34`).
+   */
+  await go(1200);
+  const roll = /· \d+ roller, first cel (\d+) at x (-?\d+), y (-?\d+) wait (-?\d+) vx (-?\d+) blow (-?\d+)/;
+  /**
+   * ...and the budget is thirty seconds rather than ten, because the roll is
+   * only taken while the keeper is IN position.
+   *
+   * Two in sixty-eight a frame would be near-certain inside ten seconds on its
+   * own. The gate is not: this one is awake and fighting, so it walks in and
+   * out of the 300 and back and forth across the player, and only the frames it
+   * spends west of him and inside that band roll at all. Under the pooled
+   * runner the browser also gets fewer frames to the wall-clock second. Ten
+   * seconds flaked on both counts.
+   */
+  let born: RegExpExecArray | null = null;
+  for (let i = 0; i < 750 && !born; i++) {
+    await page.waitForTimeout(40);
+    const m = roll.exec(await say());
+    if (m && Number(m[4]) > 30) born = m;
+  }
+  if (!born) fail(`0x438848 should build a roller with the player at x1200; none came in thirty seconds`);
+  const me = await at();
+  if (!near(Number(born![2]), me.x + 0x258, 40))
+    fail(`0x43889c builds it 600 east of the player; he is at x ${me.x} and it is at x ${born![2]}`);
+  if (Number(born![1]) !== 1970) fail(`0x43a8e5 stands it on cel 1970; it showed ${born![1]}`);
+  if (Number(born![5]) !== -0x1e0) fail(`0x43887d gives it vx -480; the line reads ${born![5]}`);
+  if (Number(born![6]) !== 0) fail(`a roller that has not been launched is worth nothing; it read ${born![6]}`);
+  console.log(`ok    a keeper west of you builds a roller at x ${born![2]}, 600 the far side, waiting on cel 1970`);
+
+  // ...and it waits, and then it rolls — west, at a flat 480 over a divisor of 7
+  const cels = new Set<number>();
+  const xs: number[] = [];
+  let armed = 0;
+  for (let i = 0; i < 400; i++) {
+    await page.waitForTimeout(40);
+    const m = roll.exec(await say());
+    if (!m || Number(m[4]) >= 0) continue;
+    cels.add(Number(m[1]));
+    armed = Math.max(armed, Number(m[6]));
+    const x = Number(m[2]);
+    if (xs[xs.length - 1] !== x) xs.push(x);
+    if (xs.length > 6) break;
+  }
+  if (xs.length < 3) fail(`0x43a99b launches it after forty frames; it never moved (${xs.join(",")})`);
+  if (xs[xs.length - 1] >= xs[0]) fail(`it rolls back WEST at the player; it went ${xs.join(" -> ")}`);
+  /**
+   * 480 over the divisor of 7 is 68 a frame, and nothing takes it away: the
+   * drag `0x43a7c8` set is never spent, because `0x42fdba` skips the contact
+   * arm while `obj+0xa` is zero and nothing ever gives a roller a weight.
+   *
+   * The step is asked as a MULTIPLE of 68 rather than 68 itself, because this
+   * loop samples the HUD and does not drive the clock: a poll slower than the
+   * engine's frame sees two or three frames' worth in one reading. What a
+   * multiple still proves is the part that matters — the speed never decays,
+   * which is the whole of the misreading this leg was written for.
+   */
+  const steps = xs.slice(1).map((x, i) => xs[i] - x);
+  if (!steps.every((d) => d > 0 && d % 68 === 0))
+    fail(`480 over 7 is 68 a frame and it does not decay; the steps were ${steps.join(",")}`);
+  if (![...cels].every((c) => c === 1970 || c === 1971))
+    fail(`0x4747e8 tag 0 is cels 1970 and 1971; saw ${[...cels].join(",")}`);
+  if (armed !== 0x64) fail(`0x43a993 makes a moving one worth 0x64; the line read ${armed}`);
+  console.log(`ok    ...and it waits its forty frames, then rolls west 68 a frame on ${[...cels].sort().join(",")}, worth ${armed}`);
+
+  // 10. the whole level, end to end, on its own two jumps
   await go();
   await page.keyboard.down("ArrowRight");
   await page.keyboard.down("w");

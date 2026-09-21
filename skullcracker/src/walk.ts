@@ -91,6 +91,7 @@ import {
   type Brain,
   type CastKit,
   type Enemy,
+  type Hatch,
   type FoeState,
   type Track,
 } from "./brains/kit";
@@ -201,6 +202,8 @@ import {
   BoggsWorm,
   SKATEBOARD,
   Board,
+  ROLLER,
+  Roller,
 } from "./props";
 import {
   DEATH_FILMS,
@@ -1608,6 +1611,7 @@ async function loadLevel(index: number): Promise<void> {
   streams = [];
   casts = [];
   skates = [];
+  rollers = [];
   // the chapter's own entry function: zero every count, name the chapter's
   // weapon, and leave the hands empty (`0x4511f0` and its three siblings). It
   // runs once per CHAPTER, not once per level, and that is the whole reason
@@ -4971,6 +4975,26 @@ function takeHits(): void {
         continue;
       if (hit(cel, m.x, m.y, 1, 0, 0, BOGGS.worms.strength)) return;
     }
+  }
+  /**
+   * ...and the ROLLER, which is the same argument again and one number apart.
+   *
+   * `0x43a993` writes its strength every frame it is quick enough and
+   * `0x43aa34` writes a zero every frame it is not, so what arms it is its own
+   * speed rather than anything it has met — {@link rollerBlow}. It hands the
+   * reaction its velocity the way a cast does, because it has a real one.
+   */
+  for (const r of foesHurt ? rollers : []) {
+    const blow = rollerBlow(r);
+    if (blow === 0) continue;
+    const cel = celRec(lvl.sbk, rollerCel(r));
+    if (!cel?.strike) continue;
+    const face = r.vx < 0 ? -1 : 1;
+    const box = strikeOf(cel, r.x, r.y, face);
+    if (!box) continue;
+    if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
+      continue;
+    if (hit(cel, r.x, r.y, face, Math.trunc(r.vx / ROLLER.divisor), 0, blow)) return;
   }
   // `0x454a38` arms a press only while its stroke runs, and only two of its cels
   // carry a box; `0x4537d0` arms a girder on every frame it has
@@ -8956,6 +8980,154 @@ function stepBoards(): void {
   skates = skates.filter((d) => d.life >= 0);
 }
 
+
+/** the one roller a level may have — {@link ROLLER} */
+let rollers: Roller[] = [];
+
+/**
+ * `0x426346` — how many of a summoned class may be alive before the creator
+ * refuses.
+ *
+ * It is a test on the class's own object list (`[0x46ecc4]`, the bats') and it
+ * is `jg`, so the sixteenth still gets made and the seventeenth does not.
+ */
+const HATCH_CAP = 0x10;
+
+/**
+ * One of another class's creatures, let go where a machine says — `0x426340`.
+ *
+ * Everything {@link spawnIn} does from a record, done from a point instead: the
+ * cel-presence test, the anchor conversion through the class's own first gait
+ * cel, and the rect the thing will patrol — which is the SUMMONER's, not one of
+ * its own. What it deliberately does NOT do is consult {@link Foe.wake}: the
+ * creator installs the flight outright, so a summoned thing is awake.
+ */
+function hatchAt(owner: Enemy, kind: string, at: Hatch): void {
+  const lvl = level;
+  if (!lvl) return;
+  const foe = FOES[kind];
+  if (!foe) return;
+  // it goes on the list of the room it was let go IN, and a point in no room
+  // at all is not a place a creature can be put
+  const where = roomAt(at.x, at.y);
+  const room = where ? lvl.rooms.indexOf(where) : -1;
+  if (room < 0) return;
+  const pool = lvl.spawned[room];
+  // the creator's own cap, counted the way it counts: this class, on this list
+  if (pool.filter((q) => q.kind === kind).length > HATCH_CAP) return;
+  if (!everyAnim(foe).every((a) => a.cels.every((id) => lvl.sbk.byId.has(id))))
+    return;
+  // ...and no anchor conversion, which {@link spawnIn} has to do. A record's
+  // point is the cel's anchor and this page carries a foe by its FEET; but the
+  // caller here is a brain, and `e.x`/`e.y` are already feet. Converting would
+  // move every summoned thing by half a body.
+  pool.push({
+    kind,
+    x: at.x,
+    y: at.y,
+    facing: at.facing,
+    // `0x4263af`/`0x4263b1` — AI+4 and AI+8 are the THROWER's two rect corners
+    left: owner.left,
+    right: owner.right,
+    top: owner.top,
+    bottom: owner.bottom,
+    // it has no record, so the point it can be sent back to is where it was let go
+    home: at.x,
+    param: 0,
+    // `0x4263cb` installs the flight, never the dormant cel
+    asleep: undefined,
+    decisions: foe.drives?.decisions,
+    clock: 0,
+    state: "gait",
+    anim: foe.gait,
+    linger: 0,
+    dents: 0,
+    vx: at.vx ?? 0,
+    vy: 0,
+    hp: foe.health,
+    max: foe.health,
+  });
+}
+
+/**
+ * The roller, built where a keeper says and not moving yet — `0x43a790`.
+ *
+ * The latch is the length of this array: `[0x474868]` is set here and cleared
+ * on the frame the thing is launched, so what it forbids is a second one
+ * WAITING, and {@link stepRollers} drops the waiter from the count the moment
+ * it rolls.
+ */
+function rollerAt(x: number, y: number, vx: number): void {
+  const lvl = level;
+  if (!lvl) return;
+  if (!lvl.sbk.byId.has(ROLLER.waits)) return;
+  // `0x43a793` — one may be waiting, and it is never two
+  if (rollers.some((r) => r.wait >= 0)) return;
+  rollers.push({ x, y, vx, wait: ROLLER.wait, clock: 0 });
+  sound?.effect(ROLLER.bornSound, x, y);
+}
+
+/**
+ * The rollers, one engine frame each — `0x43a960`.
+ *
+ * Forty-one frames of sitting still on cel 1970 and then `0x42f8b0` spends the
+ * stored velocity into `obj+0xc` in one go. After that it is the same mover the
+ * boards and the casts run through, with the friction of a tenth that
+ * `0x43a7c8` gave it and no weight setter at all — it rolls along the ground it
+ * was born on and this page keeps it there, because the engine's own does: the
+ * roller is built at the PLAYER's y and never given a gravity.
+ */
+function stepRollers(): void {
+  for (const r of rollers) {
+    if (r.wait >= 0) {
+      // `0x43a99f` — the countdown, and the launch is the frame it goes under
+      r.wait -= 1;
+      if (r.wait < 0) sound?.effect(ROLLER.sound, r.x, r.y);
+      continue;
+    }
+    r.clock += 1;
+    r.x += Math.trunc(r.vx / ROLLER.divisor);
+    /**
+     * ...and its velocity does NOT decay, though `0x43a7c8` gave it a drag.
+     *
+     * `0x4302c0` is inside the mover's contact arm, and `0x42fdba` skips that
+     * whole arm while `obj+0xa` is zero or less. The roller is never given a
+     * weight — `0x43a8d2` sets the divisor, the cel and the think and calls no
+     * `0x42f850` — so its `vy` is zero for its whole life, it never registers a
+     * surface, and the tenth it was handed is never spent on anything. It rolls
+     * at a flat `-480/7`, sixty-eight pixels a frame, which is the only speed
+     * that gets it across the six hundred it was built away at.
+     *
+     * The drag is real and set; it simply has no frame to be spent on. Much the
+     * same as the restitution every object is born with — see {@link ROLLER}.
+     */
+  }
+  /**
+   * ...and nothing in `0x43a960` removes a roller that has merely stopped.
+   *
+   * State 3 is the only path that answers 1, and that is the one a BLOW puts it
+   * in. A roller that slides to a halt is left lying there as scenery with a
+   * strength of zero — which is honest, and would also be a slow leak across a
+   * long level, so the page adds the guard it adds to every other free object:
+   * out of the room's own span and it is gone.
+   */
+  const span = p.room ? roomSpan(p.room) : null;
+  if (span)
+    rollers = rollers.filter((r) => r.x >= span.lo && r.x <= span.hi);
+}
+
+/** cel 1970 while it waits, and the two of {@link ROLLER.rolls} once it rolls */
+function rollerCel(r: Roller): number {
+  if (r.wait >= 0) return ROLLER.waits;
+  const c = ROLLER.rolls;
+  return c.cels[Math.floor(r.clock / c.hold) % c.cels.length];
+}
+
+/** what a roller is worth this frame — `0x43a993`, and `0x43aa34` takes it away */
+function rollerBlow(r: Roller): number {
+  return r.wait < 0 && Math.abs(r.vx) > ROLLER.fastBlow ? ROLLER.strength : 0;
+}
+
 /**
  * How far below its own launch a cast may fall before this page takes it.
  *
@@ -9226,10 +9398,12 @@ function drawCasts(camX: number, camY: number): void {
  * is the scepter's own fire function, so the thing it throws at you is the
  * weapon you are carrying.
  *
- * The others are read and not yet done, each written up in its own module —
- * `initpuke` and `initeyeball` spit, `initvpriest` casts and summons bats,
- * `initknifeboy` throws, `inithardcore` and `initigor` lob, `initzomb` gobs,
- * `initcop` fires a slug, `initkragg` and `initwbooly` volley.
+ * Every OTHER class that throws does it through {@link BrainCtx.cast} in its
+ * own module, which is the seam this function predates: `initpuke` and
+ * `initeyeball` spit, `initvpriest` casts, `initknifeboy` throws, `inithardcore`
+ * and `initigor` lob, `initzomb` gobs, `initcop` fires a slug, and `initkragg`
+ * and `initwbooly` volley. The wraith stays here because what it throws is not
+ * a cast at all — it is the player's own weapon, on the stream list.
  */
 function castFor(e: Enemy): void {
   if (e.kind !== "initwraith") return;
@@ -9739,6 +9913,8 @@ const BRAIN_CTX: BrainCtx = {
   root: (n) => Math.floor(Math.sqrt(Math.max(0, n))),
   say: (e, id) => sound?.effect(id, e.x, e.y),
   cast: (e, kit) => spawnCast(e, kit),
+  hatch: (e, kind, at) => hatchAt(e, kind, at),
+  roller: (_e, at) => rollerAt(at.x, at.y, at.vx),
   gravity: INVENTED.gravityPx,
 };
 
@@ -11197,6 +11373,7 @@ function loop(now: number): void {
     if (frame) stepStreams();
     if (frame) stepCasts();
     if (frame) stepBoards();
+    if (frame) stepRollers();
     stepCrows();
     stepEnemies();
     stepGobs();
@@ -11420,6 +11597,9 @@ function loop(now: number): void {
   // a dropped board lies under everything that is still standing up
   for (const d of skates)
     drawLevelCel(d.down ? SKATEBOARD.rest : SKATEBOARD.hop.cel, d.x, d.y, camX, camY, d.vx < 0);
+  // ...and a roller rolls along the same ground
+  for (const r of rollers)
+    drawLevelCel(rollerCel(r), r.x, r.y, camX, camY, r.vx < 0);
   drawCasts(camX, camY);
   drawStreams(camX, camY);
   drawGobs(camX, camY);
@@ -12007,6 +12187,13 @@ function loop(now: number): void {
       ? ` · ${wormsHere().length} worm, first kind ${wormsHere()[0].kind}` +
         ` cel ${boggsWormCel(wormsHere()[0])} at x ${Math.round(wormsHere()[0].x)}` +
         `, y ${Math.round(wormsHere()[0].y)}`
+      : "") +
+    // ...and the roller, whose whole first second is standing still, so a probe
+    // needs the countdown as much as it needs the position
+    (rollers.length
+      ? ` · ${rollers.length} roller, first cel ${rollerCel(rollers[0])}` +
+        ` at x ${Math.round(rollers[0].x)}, y ${Math.round(rollers[0].y)}` +
+        ` wait ${rollers[0].wait} vx ${rollers[0].vx} blow ${rollerBlow(rollers[0])}`
       : "");
   // ...and a BOSS always, whichever of the three it is: the "nearest" line goes
   // to whatever is closest in x, and TOWER's bats chase, so one of them is

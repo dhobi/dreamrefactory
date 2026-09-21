@@ -220,6 +220,61 @@ const main = async (): Promise<void> => {
     `ok    and its bishop works its own bands — ${[...modes].sort().join(", ")} — on its 2500s, 2600s and 2650s`,
   );
 
+  /**
+   * ...and the summon LETS THREE BATS GO, which is the only thing in this game
+   * a creature builds that has a mind of its own.
+   *
+   * `0x42601a` sets the count to three and `0x426340` makes each one: sixty
+   * health, the bishop's own record rect copied into its `AI+4`/`AI+8`, `±30`
+   * of sideways velocity, and script `0x46f060` tag 1 — the flight, never the
+   * dormant cel a placed bat waits on. `BrainCtx.hatch` is that seam, and it is
+   * the sibling of `cast`: what comes out is stepped by the page exactly like a
+   * bat the level placed, which is why the census below still holds.
+   *
+   * The summon is not free to ask for. `0x425e8a` wants `0x434540(0x2a) <= 13`
+   * AND the bishop under half its health, so this has to FIGHT it — and the
+   * fight is the jump-kick the leg above uses, because a standing kick passes
+   * under a body box that starts 109 above the anchor. The loop leaves as soon
+   * as it has both halves of the answer rather than running its budget out.
+   */
+  await go("&x=17600&y=15300");
+  const wasMob = Number(/· (\d+) spawned/.exec(await say())?.[1] ?? 0);
+  if (!wasMob) fail(`TOWER's room should report a spawned count; the HUD says ${await say()}`);
+  let summoned = false;
+  let most = wasMob;
+  let where: number | null = null;
+  for (let i = 0; i < 900 && !(summoned && most >= wasMob + 3); i++) {
+    const t = await say();
+    const w = /boss initvpriest [^·]*/.exec(t)?.[0] ?? "";
+    if (/kind 2 tag 2/.test(w)) summoned = true;
+    most = Math.max(most, Number(/· (\d+) spawned/.exec(t)?.[1] ?? 0));
+    const m = /nearest initvpriest (-?\d+)\/\d+hp \w+ at x (-?\d+)/.exec(t);
+    if (m) where = Number(m[2]);
+    if (where === null) {
+      await page.waitForTimeout(40);
+      continue;
+    }
+    const d = where - (await at()).x;
+    if (Math.abs(d) < 90) {
+      await page.keyboard.press("j");
+      await page.waitForTimeout(160);
+      await page.keyboard.press("k");
+      await page.waitForTimeout(260);
+    } else {
+      const key = d > 0 ? "ArrowRight" : "ArrowLeft";
+      await page.keyboard.down(key);
+      await page.waitForTimeout(80);
+      await page.keyboard.up(key);
+    }
+  }
+  if (!summoned)
+    fail(`0x425e8a reaches for the summon once the bishop is hurt; kind 2 tag 2 never played`);
+  if (most < wasMob + 3)
+    fail(`0x42601a lets three go; the room held ${wasMob} and never got past ${most}`);
+  console.log(
+    `ok    ...and its summon lets three bats go — the room went from ${wasMob} to ${most}`,
+  );
+
   // the LIGHTNING — `initlightfx`, the one class in the game that nothing places
   // and nothing triggers. `0x426800` is a metronome on the level's own counter:
   // 202 engine frames a period, the strike on 195, and the two records carry

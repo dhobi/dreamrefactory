@@ -39,10 +39,15 @@
  * the horizontal gap to the target through `0x434630`, the integer square root
  * (`0x452b85`). Its third argument picks the shape: zero is the aimed shot the
  * single throw makes, and anything else is one of the flat ones the fan makes,
- * with the lift zeroed at `0x452bc0`. **Nothing in this port hits the player
- * back**, so a thrown rock would be scenery and no shot is spawned here. The
- * throw's own animation, its beat and its two tags are, because those are what
- * the thing on screen is doing between shots.
+ * with the lift zeroed at `0x452bc0`. The throw's own animation, its beat and
+ * its two tags ARE here, because those are what the thing on screen is doing
+ * between shots.
+ *
+ * What kept the shot itself out was "nothing in this port hits the player back",
+ * and that stopped being true: {@link BrainCtx.cast} flies ten other classes'
+ * projectiles and they hurt. So this one is a gap rather than a decision now,
+ * and everything it needs is above — the muzzle, the arc through
+ * {@link BrainCtx.root}, and `e.side` already carrying `AI+6`, the fan index.
  *
  * ## Two fields that are NOT what the punk's are
  *
@@ -54,7 +59,7 @@
  * `AI+6` is not a side either. `0x4526bd` and `0x452851` step it and wrap it
  * past five, and the only thing it is ever spent on is choosing which of the
  * fan's shots goes out — so it is carried on `e.side` (which is that word) and
- * steers nothing here, because no shot goes out.
+ * steers nothing here until the shot above is flown.
  *
  * ## The preamble, which is the health bar and not a decision
  *

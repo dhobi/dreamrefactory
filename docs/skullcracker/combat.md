@@ -111,7 +111,9 @@ The **hand** (`0x41f090`) is two hands, and the record's `param` says which:
 0 takes the player's own x and comes up under their feet, 1 picks a random x
 inside its rect. Each holds on one cel of `0x4704b8`, whose `ticksPerFrame` is
 thirty — two seconds a frame, and that pause is the hazard. Its blows are −3 and
-−7, codes rather than damage, so it cannot yet take hold of anything.
+−7, codes rather than damage, and `takeHits` hands each to `takeCode`
+along with the grip read off the cel it is holding, so the two-second pause is a
+hazard rather than a picture of one.
 
 The **blade** (`0x41ef90`) is a pendulum that does not move: its whole think is
 three tags handed round in a ring, twenty-seven cels at one engine frame each, a
@@ -819,14 +821,15 @@ the creature half of it now has a switch of its own, `?foehit=1`, and it is off
 even when `?damage=1` is on. Everything else `?damage=1` arms — the presses, the
 girders, TOWER's current, the sewage — is unchanged.
 
-### What the classes throw, and what still throws nothing
+### What the classes throw
 
-Ten classes in this game fight at a distance. For a long time not one of them
-could reach the player: a `Brain` is handed one enemy and has no creator, and
-every projectile in the game is an object of ANOTHER class that the thrower's
-machine spawns. `BrainCtx.cast` is that seam now — a module reads its class's
-spawner into a `CastKit` and calls `cast` at the instruction the executable
-calls the spawner at — and **five of the ten are wired**:
+Ten classes in this game fight at a distance, and Boggs' machine is an eleventh.
+For a long time not one of them could reach the player: a `Brain` is handed one
+enemy and has no creator, and every projectile in the game is an object of
+ANOTHER class that the thrower's machine spawns. `BrainCtx.cast` is that seam —
+a module reads its class's spawner into a `CastKit` and calls `cast` at the
+instruction the executable calls the spawner at — and **every one of them is
+wired**:
 
 | class | where | what leaves it |
 |---|---|---|
@@ -842,7 +845,7 @@ calls the spawner at — and **five of the ten are wired**:
 | `initwbooly` | PLAYGR | a fireball that BOUNCES: restitution 0.8, friction 0.25, a hundred while it is moving and nothing once it is not |
 | `initboggsbody` | VAT | a throw out of its second MACHINE, six cels at `dx 0 25 25 25 25 50 / 7`, worth twenty in the air and 101 where it splats |
 
-Two of the five carry codes rather than damage, which makes them the first
+Four of them carry codes rather than damage, which makes them the first
 classes a level places that can send one — see `codes.ts`, whose note about that
 had to be corrected. And `initeyeball` and `initpuke` are the two classes with
 no strike box on any cel of their own: until this, they closed on the player and
@@ -881,10 +884,8 @@ bullet used to describe is applied — `walk.ts` spends an animation's `dy` as a
 IMPULSE into the thing's velocity on the frame it appears, which is what
 `0x42f8b0` does with it, and `tests/browser/fights.ts` watches `initwerea` leap.
 
-What is left:
-
-Both of the two that were here are now done, and one of them was not what this
-page said it was.
+Two that were on this list are now done, and one of them was not what this page
+said it was.
 
 - **The patrol's margin is a wall, not a line.** The hundred was already being
   turned at. What `0x44e699` and `0x44e6aa` also do is write the margin straight
@@ -896,3 +897,59 @@ page said it was.
   page saying, with the struct's own offsets, that the word at `AI+4` is not a
   budget in that class. An AI struct is per class; giving a budget to one that
   never had one would be inventing behaviour rather than porting it.
+
+### A brain can build something that is not a projectile
+
+`BrainCtx.cast` puts an object with a script and no mind in the air. Two things
+in this game are neither that nor a record the level places, and each got its
+own seam rather than being bent into a `CastKit`:
+
+- **`BrainCtx.hatch`** — another CLASS's creature, stepped by the page exactly
+  like one the level placed. `0x426340` is the only creator a think calls, and
+  it is `initvpriest`'s: the summon at `0x42601a` lets **three bats** go, sixty
+  health each, the bishop's own record rect copied into their `AI+4`/`AI+8` so
+  they patrol where it stands, `±30` of sideways velocity, and script `0x46f060`
+  tag 1 — the flight, never the dormant cel a placed bat waits on. `0x426346`
+  refuses once sixteen are alive. The summon is not free: `0x425e8a` wants
+  `0x434540(0x2a) <= 13` **and** a bishop under half its health, so a healthy
+  one only ever throws.
+
+  The two states that let **twelve** go — the vanish at `0x4261df` and the death
+  at `0x4262f7`, the latter followed by `0x4263e0` killing every bat on the level
+  with a lift of −40 — are not reachable here and are not done. Both live in
+  states `Foe.flinch` and `Foe.death` own, and a brain is never called while
+  either is playing.
+
+- **`BrainCtx.roller`** — the one HAZARD a creature builds, and the one class in
+  the game with no `init*` name, because no level can place it. `initmaskboy`'s
+  preamble rolls `0x434540(0x44) < 3` every engine frame, and with the player
+  inside 300 in x and the keeper WEST of him `0x43a790` builds one at the
+  player's own y, six hundred pixels the far side, carrying `vx -480`.
+
+  Three things about it are worth the reading. It **waits**: `0x43a99b` counts
+  `AI+8` down from forty and only then calls `0x42f8b0`, so there are forty-one
+  frames of cel 1970 standing where it was born. Its drag is **never spent** —
+  `0x4302c0` is inside the mover's contact arm and `0x42fdba` skips that arm
+  while `obj+0xa` is zero or less, and nothing ever gives a roller a weight, so
+  it rolls at a flat `-480/7`. And `[0x474868]` latches a **waiting** one rather
+  than a live one: `0x43a9dc` clears it on the frame the thing starts to roll.
+
+### What is still read and not done
+
+Three, each of them a different seam again:
+
+- **`initwerec`'s throw**, `0x452b20`. It allocates out of `0x477ca0`, starts the
+  shot seventeen above and twenty either side of the thrower, and solves the arc
+  from the horizontal gap through `0x434630`, the integer square root — which is
+  `BrainCtx.root` and already on the page. Its third argument picks the shape:
+  zero is the aimed shot the single throw makes, anything else one of the flat
+  ones the fan makes, with the lift zeroed at `0x452bc0`. `e.side` already
+  carries `AI+6`, the fan index, and steers nothing yet. This was scoped out on
+  "nothing in this port hits the player back", which stopped being true.
+- **`initkragg`'s sprinklers**, the dive at `0x4415a9` that ends over whichever
+  `initsprinkler` rect `0x441b20` answers with and sends it up. The level data
+  already carries the seven positions; what is missing is the state machine
+  around them, three thousand bytes at `0x440ab0`.
+- **`initcoke`'s cans**, `0x45af60`. Cels 8600..8614 arc out, land, and turn
+  themselves into a type-2 pickup — so they want a PICKUP spawner, which is a
+  third seam again and belongs with the pickups rather than here.

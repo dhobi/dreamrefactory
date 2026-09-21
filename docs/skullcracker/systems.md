@@ -24,10 +24,11 @@ their hit handler, and `0x41bb10` is `xor ax, ax; ret`. The jaws hang at the
 centre of the arm cel's own collision box (`0x412180`), which is the same rule
 `gripOf` reads for a grab.
 
-What is still not here is Boggs' two attacks — `0x41c330`, the throw it winds up
-beyond three hundred pixels on a cooldown of `0x434540(30) + 30`, and
-`0x41c3c0`, the 7-in-55 spit thrown at `-30 - roll(60)` up and `roll(160) + 30`
-along. Boggs lunges, heals and dies correctly; it does not yet throw anything.
+Boggs' two attacks are both here now. `0x41c330` is the throw it winds up beyond
+three hundred pixels on a cooldown of `0x434540(30) + 30`, out of the second of
+its eight machines; `0x41c3c0` is the 7-in-55 spit, thrown at `-30 - roll(60)`
+up and `roll(160) + 30` along, and what it lands is a worm that waits, rises and
+strikes. So Boggs lunges, heals, throws, spits and dies.
 
 ## A record belongs to one room
 
