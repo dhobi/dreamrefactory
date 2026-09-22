@@ -33,6 +33,13 @@ interface XRRenderState {
 interface XRSession extends EventTarget {
   readonly renderState: XRRenderState;
   readonly inputSources: ArrayLike<XRInputSource> & Iterable<XRInputSource>;
+  /** the rates this headset will run a session at, and OPTIONAL: a browser that
+   *  does not let the page choose has neither this nor the two below */
+  readonly supportedFrameRates?: Float32Array;
+  /** the rate it is running at now, which is not what was asked for until the
+   *  promise below has settled */
+  readonly frameRate?: number;
+  updateTargetFrameRate?(rate: number): Promise<void>;
   updateRenderState(state: XRRenderStateInit): void;
   requestReferenceSpace(type: string): Promise<XRReferenceSpace>;
   requestAnimationFrame(callback: (time: number, frame: XRFrame) => void): number;
@@ -41,13 +48,23 @@ interface XRSession extends EventTarget {
   addEventListener(type: string, listener: EventListenerOrEventListenerObject): void;
 }
 
-interface XRReferenceSpace extends EventTarget {
+interface XRReferenceSpace extends XRSpace {
   getOffsetReferenceSpace(originOffset: XRRigidTransform): XRReferenceSpace;
 }
 
 interface XRFrame {
   readonly session: XRSession;
   getViewerPose(space: XRReferenceSpace): XRViewerPose | undefined;
+  /** where one space is relative to another THIS frame, or null when the
+   *  headset has lost track of it — a controller put down, or out of view */
+  getPose(space: XRSpace, baseSpace: XRReferenceSpace): XRPose | null;
+}
+
+/** anything a pose can be asked about: a reference space, or a hand's ray */
+interface XRSpace extends EventTarget {}
+
+interface XRPose {
+  readonly transform: XRRigidTransform;
 }
 
 interface XRRigidTransform {
@@ -87,6 +104,11 @@ declare class XRWebGLLayer {
   readonly framebuffer: WebGLFramebuffer;
   readonly framebufferWidth: number;
   readonly framebufferHeight: number;
+  /** how hard the periphery is foveated, 0 to 1 — WRITTEN to ask and READ to
+   *  find out what was granted, which are not the same number. Optional because
+   *  most browsers do not have it at all: see `foveate` in bedsit-xr.ts, which
+   *  is careful not to mistake its own assignment for an answer. */
+  fixedFoveation?: number | null;
   getViewport(view: XRView): XRViewport | undefined;
 }
 
@@ -94,6 +116,11 @@ interface XRInputSource {
   readonly handedness: "none" | "left" | "right";
   readonly targetRayMode: string;
   readonly gamepad: Gamepad | null;
+  /** the ray the controller is MEANT to point with, which is not the grip: it
+   *  leaves the front of the thing at the angle the hardware says a person aims
+   *  it. Optional here because a faked input source in a test need not have one
+   *  to be a hand that walks. */
+  readonly targetRaySpace?: XRSpace;
 }
 
 interface GamepadHapticActuator {

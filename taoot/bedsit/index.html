@@ -449,8 +449,8 @@
       <kbd>G</kbd> walk/fly · <kbd>Space</kbd>/<kbd>C</kbd> up, down while flying ·
       <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> or <kbd>T</kbd> stand where the game stands<br />
       <kbd>P</kbd> painted or bare · <kbd>[</kbd><kbd>]</kbd> exposure · <kbd>L</kbd> lights ·
-      <kbd>X</kbd> readout · <kbd>F</kbd> furniture · <kbd>R</kbd> reset ·
-      <kbd>Esc</kbd> release the mouse
+      <kbd>X</kbd> readout · <kbd>F</kbd> furniture · <kbd>O</kbd> the board ·
+      <kbd>R</kbd> reset · <kbd>Esc</kbd> release the mouse
     </div>
     <div class="panel" id="lights">
       <b>lights</b> <i style="color: var(--dim); font-style: normal">· <kbd>L</kbd> hides</i>
@@ -474,6 +474,11 @@
         <option value="1" selected>on</option>
         <option value="0">off</option>
       </select><span></span></label>
+      <label><span>vignette</span><select id="vignette">
+        <option value="big" selected>big</option>
+        <option value="middle">middle</option>
+        <option value="none">none</option>
+      </select><span></span></label>
       <label><span>shadows</span><select id="shadows">
         <option value="5" selected>soft</option>
         <option value="1">hard</option>
@@ -491,6 +496,7 @@
       <button id="pad-skin" title="painted or bare">skin</button>
       <button id="pad-fly" title="walk or fly">fly</button>
       <button id="pad-light" title="the lamps, one slider each">light</button>
+      <button id="pad-board" title="the controls, on a board in the room">board</button>
       <button id="pad-up" hidden>▲</button>
       <button id="pad-down" hidden>▼</button>
     </div>

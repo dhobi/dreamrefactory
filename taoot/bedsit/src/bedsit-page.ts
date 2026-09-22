@@ -25,6 +25,11 @@ import {
 import { CHIMNEYS, WIND } from "./bedsit-chimneys";
 import { lookAlong, perspective, view } from "./bedsit-optics";
 import { enterXR, inXR, type Room, xrSupported } from "./bedsit-xr";
+import {
+  cycleSkin, NOMINAL_EXPOSURE, onSettings, set, settings, SKINS, takeOut, takeOutAll,
+  type VignetteSetting,
+} from "./bedsit-settings";
+import { makePanel } from "./bedsit-panel";
 
 /**
  * The tonemap: the last thing that happens to every LIT pixel, and the reason
@@ -80,7 +85,30 @@ void main() {
  * down gets that as extra ambient; the floor and the walls get none of it.
  */
 const FRAG = `
+/**
+ * HIGHP WHERE THE BROWSER HAS IT, and the shadow cubes are the reason.
+ *
+ * The bake packs a distance into four bytes and says so in its own note: "the
+ * packing is 32 bits and mediump carries ten". This shader UNPACKS the same
+ * four bytes: unpackUnit weights them by 1, 1/255, 1/65025 and 1/16581375, and
+ * it was asking mediump to hold them. A desktop driver hides that
+ * completely, because desktop GL promotes mediump to full 32-bit float and the
+ * declaration means nothing there; a mobile GPU does not, and fp16 has ten bits
+ * of mantissa, so the last two of those four weights fall off the bottom
+ * outright and the distance comes back quantised to about a 255th of the cube's
+ * range. At the far corner of this room that is tens of units of noise against
+ * a bias of a few, so the comparison collapses towards "lit" and the three
+ * shadowed lamps stop casting: a room that reads as flat and over-lit, on
+ * exactly the machines nobody develops on.
+ *
+ * The writer was careful and the reader was not, which is the kind of asymmetry
+ * that survives every test run on a desktop.
+ */
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
+#endif
 varying vec3 vPos;
 varying vec3 vNormal;
 varying vec3 vColour;
@@ -620,18 +648,6 @@ const parts: Drawable[] = [...buildRoom(), ...pendantPiece(), ...doorPiece(), ..
     return buf;
   }),
 }));
-/**
- * The pieces that have been taken OUT of the room, by name.
- *
- * A set of what is absent rather than a list of what is present, so the room
- * comes up furnished without anything having to say so, and a piece added to
- * {@link FURNITURE} later needs no entry here to appear.
- */
-const out = new Set<string>();
-
-/** whether the chimneys are alight — see the smoke control */
-let smokeOn = true;
-
 /** how many triangles the room came out as — the cheapest honest answer to
  *  "is this tab running the current model, or one from an hour ago?", since a
  *  phone has no console to ask a better question with */
@@ -837,7 +853,7 @@ function bakeShadow(lamp: Lamp, far: number): WebGLTexture {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.uniformMatrix4fv(sView, false, lookAlong(from, fwd, up));
     for (const part of parts) {
-      if (part.piece !== null && out.has(part.piece)) continue;
+      if (part.piece !== null && settings.out.has(part.piece)) continue;
       gl.bindBuffer(gl.ARRAY_BUFFER, part.buffers[0]);
       gl.vertexAttribPointer(sPos, 3, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, part.buffers[UNLIT_ATTR]);
@@ -915,13 +931,13 @@ const LAMP_TINT: readonly (readonly [number, number, number])[] = [
  * `LAMP_TINT` above is still the room as it is MEANT to be lit, and 1.00 is
  * still that. What the panel opens at is a setting, not a correction of it.
  */
-const gain = ((): { lamp: number[]; fill: number } => {
+((): void => {
   const at = (which: string): number => {
     const i = document.querySelector<HTMLInputElement>(`input[data-light="${which}"]`);
     return i ? +i.value : 1;
   };
   const sky = at("sky");
-  return { lamp: [at("0"), at("1"), at("2"), sky, sky], fill: at("fill") };
+  set({ lamp: [at("0"), at("1"), at("2"), sky, sky], fill: at("fill") });
 })();
 const uLampTint = gl.getUniformLocation(prog, "uLampTint");
 const uEmit = gl.getUniformLocation(prog, "uEmit");
@@ -954,11 +970,11 @@ const uFill = gl.getUniformLocation(prog, "uFill");
  * the right way round: the mismatch only ever showed in a dark room.
  */
 function applyLights(): void {
-  const sky = (i: number): number => (i >= 3 ? gain.lamp[i] ** TONEMAP : gain.lamp[i]);
+  const sky = (i: number): number => (i >= 3 ? settings.lamp[i] ** TONEMAP : settings.lamp[i]);
   gl.uniform3fv(uLampTint, new Float32Array(LAMP_TINT.flatMap((t, i) => t.map((c) => c * sky(i)))));
   // and the same gain again, for each lamp's own glass — see `uEmit`
-  gl.uniform1fv(uEmit, new Float32Array(gain.lamp));
-  gl.uniform1f(uFill, gain.fill);
+  gl.uniform1fv(uEmit, new Float32Array(settings.lamp));
+  gl.uniform1f(uFill, settings.fill);
 }
 applyLights();
 /** the distance at which a lamp is down to half — the pendant carries the middle
@@ -1044,8 +1060,46 @@ const uAlpha = gl.getUniformLocation(prog, "uAlpha");
 gl.uniform1f(uAlpha, 1);
 const uShadowOn = gl.getUniformLocation(prog, "uShadowOn");
 const uShadowTaps = gl.getUniformLocation(prog, "uShadowTaps");
-gl.uniform1f(uShadowOn, 1);
-gl.uniform1f(uShadowTaps, 5);
+
+/**
+ * The shadows, as the shader is actually running them.
+ *
+ * TWO numbers stand behind this one uniform: what the visitor chose, and what
+ * the frame can afford. They are the same number everywhere but a headset —
+ * which gets ONE tap whatever the panel says, because five taps is the most
+ * expensive thing this shader does per pixel and a session asks for every pixel
+ * twice at a frame rate that cannot be missed. One tap is the same shadow with
+ * a stair-stepped edge, which is a far smaller loss than a judder somebody is
+ * wearing on their face. Shadows turned OFF stay off: that is a choice, not a
+ * budget, and `uShadowOn` is what carries it.
+ *
+ * Working it out HERE, from the session and the setting together, is what lets
+ * a second interface show the shadows honestly. The page used to save the old
+ * value into a `tapsWas` on the way into a session and put it back on the way
+ * out, which worked exactly as long as nothing else could change the setting
+ * while the visitor was wearing the headset.
+ */
+function applyShadows(): void {
+  const chosen = settings.shadowTaps;
+  gl.uniform1f(uShadowOn, chosen > 0 ? 1 : 0);
+  if (chosen > 0) gl.uniform1f(uShadowTaps, inXR() ? 1 : chosen);
+}
+applyShadows();
+
+/**
+ * The ROOM's half of the store: what each setting costs to apply.
+ *
+ * Told which settings moved rather than merely that something did, because the
+ * difference is eighteen passes over the room: taking a piece of furniture out
+ * re-bakes three shadow cubes, and dragging the fill slider must not. The rest
+ * — the skin, the exposure, the smoke, the detail — needs no applier at all,
+ * since the frame loop reads them where it stands.
+ */
+onSettings((changed) => {
+  if (changed.has("lamp") || changed.has("fill")) applyLights();
+  if (changed.has("shadowTaps")) applyShadows();
+  if (changed.has("out")) bakeAll();
+});
 
 // ---------------------------------------------------------------------------
 // standing in it
@@ -1076,14 +1130,9 @@ let standpoint = 0;
  * of projection at every load to answer a question that has been answered, and
  * what is left is the room as it is meant to look and the model underneath it.
  */
-const SKINS = ["painted", "plaster"] as const;
-function cycleSkin(): void {
-  skinMode = SKINS[(SKINS.indexOf(skinMode) + 1) % SKINS.length];
-}
-let skinMode: (typeof SKINS)[number] = "painted";
-/** the exposure at which a frame's pixels read as the material they show */
-const NOMINAL_EXPOSURE = 1.8;
-let exposure = NOMINAL_EXPOSURE;
+/** `SKINS`, the skin itself and the exposure are all in
+ *  {@link file://./bedsit-settings.ts} now, with everything else the room is
+ *  set to — see the note at the top of it */
 /** whether the rip answered, and which pictures came from a drawn file */
 let hung: SurfaceId[] = [];
 
@@ -1151,11 +1200,12 @@ addEventListener("keydown", (e) => {
    * the blank. So the frame loop checks the same class and skips the work.
    */
   if (k === "v") toHeadset();
+  if (k === "o") panel.toggle([me.x, me.z, me.y], me.yaw);
   if (k === "x") hud.classList.toggle("hidden");
   if (k === "l") lightsPanel.classList.toggle("hidden");
   if (k === "f") furniturePanel.classList.toggle("hidden");
-  if (k === "[") exposure = Math.max(0.4, exposure - 0.15);
-  if (k === "]") exposure = Math.min(4, exposure + 0.15);
+  if (k === "[") set({ exposure: Math.max(0.4, settings.exposure - 0.15) });
+  if (k === "]") set({ exposure: Math.min(4, settings.exposure + 0.15) });
   if (k >= "1" && k <= "3") goTo(+k - 1);
   if (["w", "a", "s", "d", " "].includes(k)) e.preventDefault();
 });
@@ -1293,11 +1343,10 @@ for (const input of lightsPanel.querySelectorAll<HTMLInputElement>("input[data-l
   input.addEventListener("input", () => {
     const g = +input.value;
     const which = input.dataset.light!;
-    if (which === "fill") gain.fill = g;
-    else if (which === "sky") { gain.lamp[3] = g; gain.lamp[4] = g; }
-    else gain.lamp[+which] = g;
-    readout.textContent = g.toFixed(2);
-    applyLights();
+    if (which === "fill") { set({ fill: g }); return; }
+    const lamp = [...settings.lamp];
+    if (which === "sky") { lamp[3] = g; lamp[4] = g; } else lamp[+which] = g;
+    set({ lamp });
   });
 }
 
@@ -1327,9 +1376,8 @@ for (const input of lightsPanel.querySelectorAll<HTMLInputElement>("input[data-l
  * 1080p is — the second lever is much the larger of the two, and it is the one
  * that still helps once the shadows are already off.
  */
-let renderScale = 1;
 const detail = document.getElementById("detail") as HTMLSelectElement;
-detail.addEventListener("change", () => { renderScale = +detail.value; });
+detail.addEventListener("change", () => { set({ detail: +detail.value }); });
 
 /**
  * The furniture panel: one box a piece, bottom right, under F.
@@ -1352,10 +1400,7 @@ for (const name of [...new Set(parts.map((p) => p.piece).filter((n): n is string
   const box = document.createElement("input");
   box.type = "checkbox";
   box.checked = true;
-  box.addEventListener("change", () => {
-    if (box.checked) out.delete(name); else out.add(name);
-    bakeAll();
-  });
+  box.addEventListener("change", () => { takeOut(name, !box.checked); });
   row.append(box, Object.assign(document.createElement("span"), { textContent: name }));
   boxes.set(name, box);
   furniturePanel.append(row);
@@ -1370,14 +1415,51 @@ for (const name of [...new Set(parts.map((p) => p.piece).filter((n): n is string
  */
 for (const b of furniturePanel.querySelectorAll<HTMLButtonElement>("#furniture-all button")) {
   b.addEventListener("click", () => {
-    const on = b.dataset.all === "1";
-    for (const [name, box] of boxes) {
-      box.checked = on;
-      if (on) out.delete(name); else out.add(name);
-    }
-    bakeAll();
+    takeOutAll(boxes.keys(), b.dataset.all !== "1");
   });
 }
+
+/**
+ * The same controls, as a board standing in the room.
+ *
+ * The second view of the store, and the one a headset can reach: see the note
+ * at the top of {@link file://./bedsit-panel.ts}. It is pointed at rather than
+ * clicked on, and the ray is the only part of it that differs between a hand
+ * holding a controller and an eye looking at the middle of a screen — so this
+ * page works out the ray and the board works out what was hit.
+ *
+ * `O` puts it up on a desk; a controller's B or squeeze does in a headset. The
+ * panels stay exactly where they are: a real slider under a thumb is better
+ * than a painted one under a ray, and this is for the place there are none.
+ */
+const panel = makePanel({ gl, program: prog, locs, pieces: () => boxes.keys() });
+
+/** the board hears about a change made from the other interface — a slider on
+ *  the desk panel, a key, the console — and repaints just the row that moved */
+onSettings((changed) => { panel.refresh(changed); });
+
+/** where the flat page is looking FROM and ALONG, in the room's GL frame: the
+ *  middle of the screen, which is where a pointer-locked page's cursor is */
+function gaze(): { from: [number, number, number]; dir: [number, number, number] } {
+  const cp = Math.cos(me.pitch);
+  return {
+    from: [me.x, me.z, me.y],
+    dir: [Math.cos(me.yaw) * cp, Math.sin(me.pitch), Math.sin(me.yaw) * cp],
+  };
+}
+
+/**
+ * Press and let go, on a desk and on a phone alike.
+ *
+ * The aim is the middle of the screen either way, so holding the button and
+ * MOVING — the mouse, or a thumb in the look half — is what drags a slider.
+ * That is the same gesture as holding a trigger and moving a controller, which
+ * is the point of doing it this way rather than giving the board a cursor of
+ * its own.
+ */
+canvas.addEventListener("pointerdown", () => { if (panel.shown) panel.press(); });
+addEventListener("pointerup", () => { panel.release(); });
+addEventListener("pointercancel", () => { panel.release(); });
 
 /**
  * The chimney smoke, on or off.
@@ -1405,13 +1487,50 @@ edges.addEventListener("change", () => {
 });
 
 const smokeSel = document.getElementById("smoke") as HTMLSelectElement;
-smokeSel.addEventListener("change", () => { smokeOn = smokeSel.value === "1"; });
+smokeSel.addEventListener("change", () => { set({ smoke: smokeSel.value === "1" }); });
+
+/**
+ * The vignette, on the desk panel as well as the board.
+ *
+ * It does nothing at all on a flat screen — there is no glide to be made ill by
+ * and no ring drawn over it — and it is here anyway, because the visitor who
+ * knows they want it wider is usually the one who found out last time, and the
+ * moment to say so is before the headset goes on rather than after.
+ */
+const vignetteSel = document.getElementById("vignette") as HTMLSelectElement;
+vignetteSel.addEventListener("change", () => {
+  set({ vignette: vignetteSel.value as VignetteSetting });
+});
 
 const shadows = document.getElementById("shadows") as HTMLSelectElement;
-shadows.addEventListener("change", () => {
-  const taps = +shadows.value;
-  gl.uniform1f(uShadowOn, taps > 0 ? 1 : 0);
-  if (taps > 0) gl.uniform1f(uShadowTaps, taps);
+shadows.addEventListener("change", () => { set({ shadowTaps: +shadows.value }); });
+
+/**
+ * The PANEL's half of the store: every control put where the setting is.
+ *
+ * This is the half that did not exist before, and the half that makes a second
+ * interface possible at all. A control used to be the only record of its own
+ * setting, so anything else changing the room left the panel saying something
+ * the room was not doing. Now the panel is told, and a slider moved from a
+ * headset — or from the console, or by a test — moves here too.
+ *
+ * Writing to `value` fires no event, so this cannot loop back into the handlers
+ * above.
+ */
+onSettings((changed) => {
+  if (changed.has("lamp") || changed.has("fill")) {
+    for (const input of lightsPanel.querySelectorAll<HTMLInputElement>("input[data-light]")) {
+      const which = input.dataset.light!;
+      const g = which === "fill" ? settings.fill : settings.lamp[which === "sky" ? 3 : +which];
+      input.value = String(g);
+      (input.nextElementSibling as HTMLElement).textContent = g.toFixed(2);
+    }
+  }
+  if (changed.has("out")) for (const [name, box] of boxes) box.checked = !settings.out.has(name);
+  if (changed.has("detail")) detail.value = String(settings.detail);
+  if (changed.has("smoke")) smokeSel.value = settings.smoke ? "1" : "0";
+  if (changed.has("vignette")) vignetteSel.value = settings.vignette;
+  if (changed.has("shadowTaps")) shadows.value = String(settings.shadowTaps);
 });
 
 // ---------------------------------------------------------------------------
@@ -1468,8 +1587,19 @@ function offerVR(): void {
   }
 }
 
-/** the taps the flat page was using, to be put back when the session ends */
-let tapsWas = 5;
+/** whether a hand's trigger was down last frame — see `point` below */
+let triggered = false;
+/**
+ * When a hand last pointed at the board, and why the gaze waits for it.
+ *
+ * Two things can aim: a hand holding a controller, and the middle of the screen.
+ * They are never both in use — the flat loop stops dead while a session runs —
+ * but they write to the same pointer, so whichever ran last is what is drawn.
+ * A hand is the more deliberate of the two, so it wins for a moment after it
+ * has spoken, and the gaze takes over again when it goes quiet.
+ */
+let handAt = -Infinity;
+const HAND_HOLDS = 250;
 
 const headset: Room = {
   gl,
@@ -1480,30 +1610,35 @@ const headset: Room = {
   locs,
   draw: drawRoom,
   inside,
+  point(from, dir, pressed) {
+    if (!panel.shown) return false;
+    handAt = performance.now();
+    const on = panel.aim(from, dir, true);   // a hand's ray is one you can see
+    // the EDGE is what acts, not the level: a trigger held down is one press,
+    // and a slider being dragged is that same press still going on
+    if (pressed && !triggered) { triggered = true; if (on) panel.press(); }
+    if (!pressed && triggered) { triggered = false; panel.release(); }
+    return on;
+  },
+  summon(at, yaw) { panel.toggle(at, yaw); },
   enter(target) {
     xrTarget = target;
     vrButton.disabled = true;
     vrButton.textContent = "in the headset";
+    // the board was hung for the flat page's eye, which is not where the
+    // visitor is about to be standing: it comes down, and the controller's own
+    // button puts it back up where they are
+    panel.hide();
     document.exitPointerLock();
-    /**
-     * The shadows go to one tap for the session, and come back after.
-     *
-     * It is the only thing entering VR changes about how the room looks, and it
-     * is changed because the arithmetic leaves no choice: the five taps are the
-     * most expensive thing this shader does per pixel, and a session asks for
-     * every pixel twice at a frame rate that cannot be missed. One tap is the
-     * same shadow with a stair-stepped edge, which is a far smaller loss than a
-     * judder somebody is wearing on their face. Shadows turned OFF stay off —
-     * that is a choice, not a budget.
-     */
-    tapsWas = +shadows.value || 5;
-    if (tapsWas > 0) gl.uniform1f(uShadowTaps, 1);
+    // the shadows go to one tap for the session and come back after, which
+    // `applyShadows` works out from the session rather than remembering here
+    applyShadows();
   },
   leave() {
     xrTarget = null;
     vrButton.disabled = false;
     vrButton.textContent = "VR";
-    if (tapsWas > 0) gl.uniform1f(uShadowTaps, tapsWas);
+    applyShadows();
     // `last` is reset because the flat loop measures `dt` from it, and the gap
     // it would otherwise measure is the whole length of the session
     last = performance.now();
@@ -1545,6 +1680,20 @@ const pad = (id: string): HTMLButtonElement => document.getElementById(id) as HT
  */
 lightsPanel.classList.add("hidden");
 hud.classList.add("hidden");
+/**
+ * The board, on a phone.
+ *
+ * A touch screen has no keyboard, so `O` is no way in at all — and the board is
+ * worth more here than on a desk: the lights panel is a column of sliders over
+ * a small screen, and this is the same controls standing in the room being
+ * looked at. Aimed with the middle of the screen and pressed with a thumb in
+ * the look half, which is the same gesture as a trigger and a controller.
+ */
+pad("pad-board").addEventListener("click", () => {
+  panel.toggle([me.x, me.z, me.y], me.yaw);
+  pad("pad-board").classList.toggle("on", panel.shown);
+});
+
 pad("pad-light").addEventListener("click", () => {
   const shown = !lightsPanel.classList.toggle("hidden");
   pad("pad-light").classList.toggle("on", shown);
@@ -1640,7 +1789,7 @@ function drawRoom(proj: Float32Array, look: Float32Array, at: [number, number, n
   const GLASS = "mat:glass";
   const draw = (glass: boolean): void => {
   for (const part of parts) {
-    if (part.piece !== null && out.has(part.piece)) continue;
+    if (part.piece !== null && settings.out.has(part.piece)) continue;
     if ((part.surface === GLASS) !== glass) continue;
     ATTRS.forEach(([, , size], i) => {
       gl.bindBuffer(gl.ARRAY_BUFFER, part.buffers[i]);
@@ -1648,7 +1797,7 @@ function drawRoom(proj: Float32Array, look: Float32Array, at: [number, number, n
     });
     // a chart is worn painted if it has a painting, else by the tile of its
     // material, else — the three pictures — by the frames' own pixels
-    const paint = skinMode === "plaster" ? null : part.painted ?? part.tiled ?? part.projected;
+    const paint = settings.skin === "plaster" ? null : part.painted ?? part.tiled ?? part.projected;
     gl.uniform1f(uTextured, paint ? 1 : 0);
     // a projection arrives lit by the room's own lamp; anything else is a
     // material and gets the shader's lights
@@ -1665,8 +1814,9 @@ function drawRoom(proj: Float32Array, look: Float32Array, at: [number, number, n
      * pulling the window light down used to leave a bright terrace behind a
      * dark room. It is the sky's own picture, so it follows the sky.
      */
-    const sky = part.surface === "street" ? gain.lamp[3] : 1;
-    gl.uniform1f(uExposure, (paint && !paint.fromFrames ? exposure / NOMINAL_EXPOSURE : exposure) * sky);
+    const sky = part.surface === "street" ? settings.lamp[3] : 1;
+    const e = settings.exposure;
+    gl.uniform1f(uExposure, (paint && !paint.fromFrames ? e / NOMINAL_EXPOSURE : e) * sky);
     if (paint) {
       gl.bindTexture(gl.TEXTURE_2D, paint.texture);
       gl.uniform2fv(uUVScale, new Float32Array(paint.scale));
@@ -1685,6 +1835,11 @@ function drawRoom(proj: Float32Array, look: Float32Array, at: [number, number, n
   gl.depthMask(true);
   gl.disable(gl.BLEND);
   drawSmoke(proj, look, seconds);
+  // last, and over everything: the board is an instrument rather than a thing
+  // in the room. One call serves both loops, because both of them draw the
+  // room through here — and `at` is this eye's own position, which is what
+  // turns the pointer's beam to face it.
+  panel.draw(proj, look, at);
 }
 
 let fps = 60;
@@ -1737,11 +1892,14 @@ function frame(now: number): void {
    * move at a tenth, nothing that is drawn per pixel is the problem, and the
    * cost is somewhere else entirely.
    */
-  const dpr = Math.min(2, devicePixelRatio || 1) * renderScale;
+  const dpr = Math.min(2, devicePixelRatio || 1) * settings.detail;
   const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   gl.viewport(0, 0, w, h);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  // …unless a hand is pointing, which is the more deliberate of the two
+  if (panel.shown && now - handAt > HAND_HOLDS) { const g = gaze(); panel.aim(g.from, g.dir); }
 
   const eye: [number, number, number] = [me.x, me.z, me.y]; // world (x,y,z) → GL (x,z,y)
   drawRoom(perspective(fovY, w / h, CLIP[0], CLIP[1]), view(eye, me.yaw, me.pitch), eye, now / 1000);
@@ -1761,7 +1919,7 @@ function frame(now: number): void {
     `<dt>facing</dt><dd>${((me.yaw * 180) / Math.PI).toFixed(0)}° <i>deg8 ${deg8}</i></dd>` +
     `<dt>ceiling</dt><dd>${ceilingAt(me.x, me.y).toFixed(0)} <i>${m(ceilingAt(me.x, me.y))} m</i></dd>` +
     `<dt>lens</dt><dd>${((fovY * 180) / Math.PI).toFixed(0)}° <i>${gravity ? "walking" : "flying"}</i></dd>` +
-    `<dt>surfaces</dt><dd>${skinMode}</dd>` +
+    `<dt>surfaces</dt><dd>${settings.skin}</dd>` +
     `<dt>standing</dt><dd>${STANDPOINTS[standpoint].name}</dd>` +
     `<dt>built</dt><dd>${TRIANGLES.toLocaleString("en")} <i>triangles</i></dd>` +
     `<dt>frames</dt><dd>${fps.toFixed(0)} <i>${raw.toFixed(0)} ms</i></dd>` +
@@ -2157,7 +2315,7 @@ function lightSmoke(worldOf: (px: number, py: number) => [number, number], units
 /** the smoke pass: after the room, blended over it, behind whatever the depth
  *  buffer says is nearer — which is the sash, so the bars cross the plumes */
 function drawSmoke(proj: Float32Array, look: Float32Array, seconds: number): void {
-  if (!smoke || !smokeOn) return;
+  if (!smoke || !settings.smoke) return;
   gl.useProgram(smokeProg);
   gl.uniformMatrix4fv(smokeU.proj, false, proj);
   gl.uniformMatrix4fv(smokeU.view, false, look);
@@ -2172,7 +2330,7 @@ function drawSmoke(proj: Float32Array, look: Float32Array, seconds: number): voi
    * plumes come out lighter than the sky behind them and read as steam lit from
    * somewhere. Scaling both by the same gain keeps the step.
    */
-  gl.uniform3fv(smokeU.colour, new Float32Array(SMOKE_COLOUR.map((c) => c * gain.lamp[3])));
+  gl.uniform3fv(smokeU.colour, new Float32Array(SMOKE_COLOUR.map((c) => c * settings.lamp[3])));
   gl.bindTexture(gl.TEXTURE_2D, smoke.noise);
   // attribute arrays are the context's, not the program's: the room's five are
   // put away so a short buffer is never read past its end for a vertex here
@@ -2447,7 +2605,7 @@ async function skin(): Promise<void> {
   /** the room is up and painted — there is no bake to wait for any more */
   get ready(): boolean { return roomReady; },
   get painted(): boolean { return parts.some((p) => p.painted !== null); },
-  set skin(mode: string) { if ((SKINS as readonly string[]).includes(mode)) skinMode = mode as typeof skinMode; },
+  set skin(mode: string) { if ((SKINS as readonly string[]).includes(mode)) set({ skin: mode as typeof settings.skin }); },
   set pitch(p: number) { me.pitch = Math.max(-1.45, Math.min(1.45, p)); },
   /** the lens, in radians of height: what the wheel does, for a test */
   set fov(f: number) { fovY = Math.max(0.4, Math.min(1.7, f)); },
@@ -2460,10 +2618,29 @@ async function skin(): Promise<void> {
    */
   /** the chimney smoke, off and on: the one thing in this page that is drawn
    *  BLENDED, which is the kind of work a weak GPU is worst at */
-  set smoke(on: boolean) { smokeOn = !!on; },
+  set smoke(on: boolean) { set({ smoke: !!on }); },
+  /** the board in the room: whether it is up, and a way to put it up or down
+   *  without a key — the browser suite drives it through here */
+  get board(): boolean { return panel.shown; },
+  set board(on: boolean) { if (!!on !== panel.shown) panel.toggle([me.x, me.z, me.y], me.yaw); },
+  /**
+   * A hand's ray, as a headset would hand one over.
+   *
+   * The same door the session uses — `headset.point` — so that the board's VR
+   * path can be driven, and therefore checked, on a machine with no headset on
+   * it. That is the whole of why it is here: a pointer that only exists inside
+   * a session is a pointer nobody can test, and the first version of this one
+   * shipped with no beam at all because it had only ever been read.
+   */
+  /** which row the board's pointer is on, or −2 for off it: see `aimed` */
+  get aimedRow(): number { return panel.aimed; },
+  hand(from: [number, number, number], dir: [number, number, number], pressed: boolean): boolean {
+    const len = Math.hypot(...dir) || 1;
+    return headset.point!(from, dir.map((v) => v / len) as [number, number, number], pressed);
+  },
   set shadow(mode: number) { gl.uniform1f(uShadowOn, +mode); },
   /** the taps per lamp, 1 to 5: what the shadows control in the panel sets */
-  set shadowTaps(n: number) { gl.uniform1f(uShadowTaps, Math.max(1, Math.min(5, n))); },
+  set shadowTaps(n: number) { set({ shadowTaps: Math.max(1, Math.min(5, n)) }); },
 };
 
 /**

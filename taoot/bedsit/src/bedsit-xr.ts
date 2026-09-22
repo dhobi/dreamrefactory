@@ -34,6 +34,7 @@
  */
 import { view } from "./bedsit-optics";
 import { EYE_HEIGHT, ROOM, STANDPOINTS, UNITS_PER_METRE } from "./bedsit-room";
+import { settings } from "./bedsit-settings";
 
 /** the walker, as the flat page keeps it. In a session it is the PLAY SPACE:
  *  where the floor under the visitor's feet stands in the room, and its bearing. */
@@ -45,6 +46,25 @@ export interface Room {
   me: Walker;
   /** MSAA as the page has it — the context's own `antialias` means nothing here */
   antialias: boolean;
+  /**
+   * A hand is pointing somewhere, and whether its trigger is down.
+   *
+   * The ray is in the ROOM's own frame and its own units — the same (x, up, y)
+   * the shader works in — so that whatever answers this has nothing to do with
+   * headsets. Returning true means the press was TAKEN, and the standpoint
+   * button leaves it alone for that frame: a trigger pulled at a control panel
+   * is not also a request to be somewhere else.
+   *
+   * Optional, because a session is a room to stand in before it is a room with
+   * anything in it to point at.
+   */
+  point?(
+    from: readonly [number, number, number],
+    dir: readonly [number, number, number],
+    pressed: boolean,
+  ): boolean;
+  /** the visitor asked for the controls, standing here and facing this way */
+  summon?(at: readonly [number, number, number], yaw: number): void;
   /** the near and far planes the flat page clips at, in GAME UNITS */
   clip: readonly [number, number];
   /** draw the room once, from one eye. No clear and no viewport: the caller owns
@@ -111,6 +131,44 @@ const SNAP = [0.7, 0.4] as const;
 const SCALE = 0.8;
 
 /**
+ * How hard to foveate: 0 shades every pixel alike, 1 is the most a headset will
+ * take off the periphery.
+ *
+ * The other half of the same argument as `SCALE`. This room is fill-bound and
+ * nothing else — 88,000 triangles in 32 draw calls is free, and every pixel of
+ * it costs five lamps, three cube-map lookups and an analytic sash — so the
+ * pixels at the edge of the lens, which the optics are blurring anyway and
+ * which are most of the framebuffer, are the cheapest thing in the frame to
+ * stop paying full price for.
+ *
+ * 0.75 rather than 1.0 because of what is actually AT the edge of vision here.
+ * The room is dim, soft and largely untextured, which is the content foveation
+ * flatters — but the window is a bright sash against a dark wall, and that is
+ * the one high-contrast edge in the room that the top level makes shimmer when
+ * it sits off to the side. It is the first dial to raise if frames are still
+ * being missed, and the granted value is reported below rather than assumed.
+ */
+const FOVEATION = 0.75;
+
+/**
+ * The rate to ask the headset for, and why it is not the highest one offered.
+ *
+ * A headset that offers 90 will take the request and then reproject whatever
+ * the page fails to deliver, and a room drawn twice through this shader is not
+ * obviously inside 11 ms. 72 gives 13.9 ms instead, which is a quarter as much
+ * again — and what is lost for it is almost nothing HERE: this is a still room
+ * walked slowly around, with a snapped turn rather than a smooth one, so there
+ * is no fast motion in it for the extra frames to smooth. A rate that is held
+ * beats a rate that is aimed at, and a dropped frame in a headset is felt
+ * rather than seen.
+ *
+ * It is a CEILING, not a demand: what is asked for is the nearest supported
+ * rate at or below it, and on a headset whose slowest is faster than this, its
+ * slowest.
+ */
+const RATE = 72;
+
+/**
  * The vignette: what it is for, and why it is measured in tangents.
  *
  * Gliding is the thing that makes people ill. The eye is carried across a room
@@ -135,6 +193,16 @@ const SCALE = 0.8;
  * provocation.
  */
 const APERTURE = { open: 1.8, shut: 0.6, feather: 0.2 } as const;
+/**
+ * How far the ring actually closes, per the visitor's own choice.
+ *
+ * These are TANGENTS of the angle off the eye's axis, like everything else
+ * here: 0.6 is 31° and 1.0 is 45°, against an open 1.8 which is past the corner
+ * of any headset made. `none` is simply the open aperture — the ring is not
+ * drawn at all in that case, and this entry is what keeps the arithmetic below
+ * from having to know that.
+ */
+const SHUT = { big: APERTURE.shut, middle: 1.0, none: APERTURE.open } as const;
 /**
  * How fast it closes and opens, in seconds.
  *
@@ -305,6 +373,42 @@ export function leaveXR(): void {
 }
 
 /**
+ * Ask the layer for foveation, and report what it actually gave.
+ *
+ * The `in` test is not a formality. `fixedFoveation` is missing outright in
+ * most browsers, and a layer is an ordinary extensible object — so assigning to
+ * a name it does not have would simply PUT the name there, and reading it back
+ * would hand this function its own number and read as a granted request. The
+ * one browser this matters on is also the one that can refuse a value it does
+ * have, which is the other reason the answer is read rather than assumed: a
+ * multisampled layer is foveated on some versions and not on others.
+ */
+function foveate(layer: XRWebGLLayer): number | null {
+  if (!("fixedFoveation" in layer)) return null;
+  try {
+    layer.fixedFoveation = FOVEATION;
+    return layer.fixedFoveation ?? null;
+  } catch {
+    return null;                         // the name without the support behind it
+  }
+}
+
+/**
+ * The rate to ask for, out of the ones a headset says it has.
+ *
+ * The nearest at or below `RATE`, and failing that the slowest there is —
+ * because if every rate on offer is faster than the ceiling, the slowest is
+ * still the one this room has the best chance of holding. `null` when there is
+ * nothing to choose from, which is a browser that does not let a page choose.
+ */
+function bestRate(rates: ArrayLike<number> | undefined): number | null {
+  const all = Array.from(rates ?? []).filter((r) => r > 0).sort((a, b) => a - b);
+  if (all.length === 0) return null;
+  const under = all.filter((r) => r <= RATE);
+  return under.length > 0 ? under[under.length - 1] : all[0];
+}
+
+/**
  * Ask for the headset, and hold it until it is given back.
  *
  * Every way out of here — the visitor taking the headset off, the system menu
@@ -406,6 +510,33 @@ export async function enterXR(room: Room): Promise<void> {
     depthNear: room.clip[0] / UNITS_PER_METRE,
     depthFar: room.clip[1] / UNITS_PER_METRE,
   });
+
+  /**
+   * The two dials only a headset has, both optional everywhere.
+   *
+   * Neither is checked for success and neither can fail the session: a browser
+   * that has no opinion about foveation or frame rate runs the room at whatever
+   * it was going to run it at, which is what happened before these existed.
+   *
+   * What they are is REPORTED, and to the console, because the console over
+   * remote devtools is the only one a headset has — there is no DOM inside a
+   * session, so a number put on the page would be a number nobody can read
+   * until they take the headset off. One line, at the one moment it is worth
+   * knowing: what was asked for, and what was given.
+   */
+  const foveation = foveate(layer);
+  const rate = bestRate(s.supportedFrameRates);
+  console.info(
+    `bedsit: headset at ${Math.round(SCALE * 100)}% of its own resolution,` +
+    ` foveation ${foveation ?? "not offered"}`,
+  );
+  if (rate !== null && s.updateTargetFrameRate) {
+    void s.updateTargetFrameRate(rate)
+      // `frameRate` is the rate it is running at, which is not the rate that
+      // was asked for until this has settled — which is why it is read here
+      .then(() => console.info(`bedsit: headset at ${s.frameRate ?? rate} Hz`))
+      .catch(() => console.info(`bedsit: headset refused ${rate} Hz, and keeps its own`));
+  }
 
   /**
    * Feet on the floor if the headset knows where the floor is.
@@ -516,6 +647,63 @@ export async function enterXR(room: Room): Promise<void> {
     }
   };
 
+  /**
+   * Which way a hand is pointing, in the room rather than in the play space.
+   *
+   * A direction is the same rotation the points get and none of the shift —
+   * and none of the scale either, since what comes back is a unit vector. The
+   * axis order at the end is the room's own: `at` answers in the walker's
+   * frame, (x, y, up), and the shader and everything drawn for it work in
+   * (x, up, y).
+   */
+  const along = (x: number, y: number, z: number): [number, number, number] => {
+    const sin = Math.sin(me.yaw), cos = Math.cos(me.yaw);
+    const rx = -x * sin - z * cos;
+    const ry = x * cos - z * sin;
+    const len = Math.hypot(rx, ry, y) || 1;
+    return [rx / len, y / len, ry / len];
+  };
+
+  /** the hands that have asked for the controls, so that a held button is one
+   *  ask rather than one an animation frame */
+  const menued = new WeakMap<XRInputSource, boolean>();
+  /** whether a control panel took this frame's trigger — see `point` */
+  let swallowed = false;
+
+  /**
+   * Point the hands at whatever the room has put in front of them.
+   *
+   * `targetRaySpace` is the ray a controller is MEANT to point with, which is
+   * not the same as the grip: it comes out of the front of the thing at the
+   * angle the hardware says a person aims it, and the two differ by enough on
+   * every headset to be the difference between a button and the one below it.
+   *
+   * A pose can be missing for a frame — a controller out of the guardian's
+   * view, one being put down — and that is not a failure: it is a hand that is
+   * not pointing this frame, and the panel simply hears nothing from it.
+   */
+  const aimAt = (frame: XRFrame): void => {
+    swallowed = false;
+    if (!room.point && !room.summon) return;
+    for (const src of s.inputSources) {
+      const pad = src.gamepad;
+      const menu = !!(pad?.buttons[5] ?? pad?.buttons[1])?.pressed;
+      if (menu && !menued.get(src)) {
+        const h = where();
+        room.summon?.([h[0], h[2], h[1]], bearing);
+      }
+      menued.set(src, menu);
+
+      const pose = src.targetRaySpace ? frame.getPose(src.targetRaySpace, space) : null;
+      if (!pose || !room.point) continue;
+      const m = pose.transform.matrix;
+      const from = at(m[12], m[13], m[14]);
+      // the third column is the ray's own z axis, and a ray points along -z
+      const dir = along(-m[8], -m[9], -m[10]);
+      if (room.point([from[0], from[2], from[1]], dir, !!pad?.buttons[0]?.pressed)) swallowed = true;
+    }
+  };
+
   const stick = (pad: Gamepad): [number, number] =>
     // `axes[2]` and `axes[3]` are the thumbstick under the standard mapping;
     // `axes[0]` and `axes[1]` are a touchpad, and a controller with only those
@@ -565,7 +753,17 @@ export async function enterXR(room: Room): Promise<void> {
     if (look) {
       const [ax] = stick(look);
       if (!turning && Math.abs(ax) > SNAP[0]) {
-        turn(Math.sign(ax) * -TURN);
+        /**
+         * PUSHED RIGHT TURNS RIGHT, and the sign is the whole of it.
+         *
+         * This room's bearing is the game's — 0 is +x and +y is on the right —
+         * so a yaw that INCREASES turns the visitor to their right. The stick
+         * reads positive pushed right. The two agree, and the negation that
+         * used to be here made them disagree: a shove right turned the room
+         * left, which is a thing you cannot see on a screenshot and cannot
+         * miss standing up wearing it.
+         */
+        turn(Math.sign(ax) * TURN);
         buzz(BUZZ.turn);
         turning = true;
       }
@@ -580,7 +778,7 @@ export async function enterXR(room: Room): Promise<void> {
       const down = !!(pad.buttons[4] ?? pad.buttons[0])?.pressed;
       // the press only ASKS. Where it lands is decided when the view is black,
       // below — a press during a blink already in flight is the same press
-      if (down && !pressed.get(src) && jump === null && blink === 0) jump = standpoint + 1;
+      if (down && !pressed.get(src) && !swallowed && jump === null && blink === 0) jump = standpoint + 1;
       pressed.set(src, down);
     }
   };
@@ -659,6 +857,7 @@ export async function enterXR(room: Room): Promise<void> {
       bearing = Math.atan2(f[1] - me.y, f[0] - me.x);
     }
 
+    aimAt(frame);
     drive(dt);
 
     /**
@@ -698,7 +897,8 @@ export async function enterXR(room: Room): Promise<void> {
     // past it and swinging back.
     const rate = pushing > closed ? VIGNETTE.close : VIGNETTE.open;
     closed += (pushing - closed) * Math.min(1, dt / rate);
-    const aperture = APERTURE.open + (APERTURE.shut - APERTURE.open) * closed;
+    const shut = SHUT[settings.vignette] ?? APERTURE.shut;
+    const aperture = APERTURE.open + (shut - APERTURE.open) * closed;
 
     const world = play();
     for (const view of pose.views) {
@@ -721,9 +921,19 @@ export async function enterXR(room: Room): Promise<void> {
       // with this eye's own axis. Skipped outright when there is nothing to
       // draw: a fully open ring over a still room is a screen of transparent
       // black, paid for at every pixel of both eyes.
-      if (blink > 0 || closed > 0.001) {
+      /**
+       * Skipped outright when there is nothing to draw.
+       *
+       * A fully open ring over a still room is a screen of transparent black,
+       * paid for at every pixel of both eyes — and a visitor who has turned the
+       * vignette off has asked for exactly that to stop happening. The BLINK is
+       * not part of the choice: it is what covers a jump, and a jump with no
+       * blink is the cut the blink was put in to prevent.
+       */
+      const ringing = settings.vignette !== "none" && closed > 0.001;
+      if (blink > 0 || ringing) {
         ring ??= makeVignette(gl, room);
-        ring.draw(view.projectionMatrix, aperture, blink);
+        ring.draw(view.projectionMatrix, ringing ? aperture : APERTURE.open, blink);
       }
     }
   };

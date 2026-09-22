@@ -99,6 +99,25 @@ export default defineConfig({
   server: {
     port: 5175,
     strictPort: true,
+    /**
+     * The hostnames this dev server will answer to, beyond the usual ones.
+     *
+     * Vite checks the `Host` header and answers anything it does not know with
+     * "Blocked request" rather than the page — which is right, since a dev
+     * server on 0.0.0.0 is otherwise reachable by any name that resolves here.
+     * A tunnel arrives under a name it cannot know, so the name has to be said.
+     *
+     * `.trycloudflare.com` is the free quick tunnel — `cloudflared tunnel --url
+     * http://localhost:5175` — and it is here for ONE reason: WebXR needs a
+     * secure context, so `/bedsit/` in a headset cannot be served over plain
+     * http from the LAN. The subdomain is random and different every run, which
+     * is why this is the whole domain and not one host.
+     *
+     * It costs nothing when no tunnel is running: a name that resolves nowhere
+     * reaches nothing. Anything longer-lived belongs on its own hostname, added
+     * here beside it.
+     */
+    allowedHosts: [".trycloudflare.com"],
     watch: {
       // gamefiles/ is a CD rip — ~7,800 files that the middleware streams as raw
       // bytes. Vite never transforms them and a change to one could not
