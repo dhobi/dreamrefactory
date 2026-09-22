@@ -17,14 +17,19 @@ that stands on, see [the engine](../engine/).
 - [Languages & the chooser](languages.md) — six pressings, six code pages, and a
   chooser stage this port authored because the original shipped one language per
   install
+- [Developer mode](devmode.md) — the 1996 debug build put back up: one edited
+  line, TI.EXE's own menu bar, and what `debugging` really opens
+  - [The census](devmode-census.md) — every read of the flag and every modifier
+    probe in the corpus, generated, with what each branch does
 - [How we know it's right](verification.md) — what was checked, against what, and
   what "right" was allowed to mean
 
 ## The code
 
-`taoot/` in the repository. Four pages — the front page, `/play/`,
-`/collection/`, and the unlisted `/speedrun/` workbench — the six editions and
-the demo, its own tools, and the suites that play the game through to the end.
+`taoot/` in the repository. Five pages — the front page, `/play/`,
+`/collection/`, and the unlisted `/speedrun/` workbench and `/devmode/` — the six
+editions and the demo, its own tools, and the suites that play the game through
+to the end.
 
 Being the game the engine was recovered *from*, it also carries most of the
 project's evidence:

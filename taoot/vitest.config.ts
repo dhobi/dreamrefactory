@@ -36,6 +36,7 @@ const NEEDS_THE_RIP = [
   "shp-play-order",
   "cst-play-order",
   "smokestack",
+  "devmode",
 ];
 
 export default defineConfig({

@@ -1,0 +1,724 @@
+/*
+ * Developer mode's shell (taoot/devmode/index.html).
+ *
+ * The page is a terminal window, and it is arranged as one: a title strip, the
+ * menu bar under it, and then the game and the scrollback SIDE BY SIDE, with the
+ * prompt at the foot of the scrollback. That arrangement is the whole design
+ * argument — a developer watches the picture and the log at the same time, and a
+ * column that sits below the fold is a column that gets forgotten.
+ *
+ * Everything in the chrome is mono, which this game's own palette already
+ * reserves for "anything read off a file — offsets, sizes, hex, decompiled
+ * script" (taoot/src/theme.css). A dev page is that, end to end.
+ *
+ * The colours are the game's: abyss for the ground, hull hairlines for every
+ * division, ice for what is live, brass for what has changed, alarm for a fault.
+ * No phosphor green — this port has a palette and a terminal is not a good enough
+ * reason to leave it.
+ *
+ * The play page's rule still holds underneath: **nothing beside the canvas may be
+ * brighter than the canvas**. The game draws in its own 1996 palette, and the
+ * chrome's job is to be the dark frame around it, so everything here is hairlines
+ * and dim text and the only lit thing on the screen is the screen.
+ */
+
+body.devmode {
+  margin: 0;
+  padding: 0.6rem;
+  background: var(--abyss-900);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+#devshell {
+  display: flex;
+  flex-direction: column;
+  /*
+   * HEIGHT, not min-height.
+   *
+   * The scrollback scrolls inside its column, and an inner `overflow: auto` only
+   * scrolls when something above it has a definite height to bound it. Written
+   * `min-height`, the shell was free to grow, so every line the game logged made
+   * the page taller instead — the log never scrolled and the prompt walked off
+   * the bottom of the window.
+   *
+   * `dvh` rather than `vh` because a phone's `100vh` is the LARGE viewport, the
+   * one that assumes the browser's own bars are gone; a `vh`-tall shell hangs its
+   * last row behind them.
+   */
+  height: calc(100dvh - 1.2rem);
+  border: 1px solid var(--hull-400);
+  border-radius: var(--radius);
+  background: var(--abyss-850);
+  overflow: hidden;
+}
+
+/* ---- the title strip ---- */
+
+#devtitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid var(--hull-500);
+  background: var(--abyss-800);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.devbrand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  text-decoration: none;
+  color: var(--text-dim);
+}
+.devbrand img {
+  opacity: 0.8;
+}
+.devbrand b {
+  color: var(--ice-200);
+  font-weight: 600;
+}
+/* The separator is drawn rather than typed, so it cannot be selected or
+   translated: it is punctuation between two names, not a word.
+
+   As an ESCAPE and not the character. Vite serves a stylesheet as `text/css`
+   with no charset, and a browser that then decodes the file as anything but
+   UTF-8 reads the middle dot's two bytes as two characters — which is what
+   happened: the strip read "Â· developer mode". No other stylesheet in this
+   repository puts a non-ASCII character in a `content` string, and an escape
+   keeps the source ASCII so the question cannot come up. */
+.devbrand span::before {
+  content: "\00b7";
+  margin: 0 0.4rem;
+  color: var(--hull-300);
+}
+.devbrand span {
+  color: var(--text-mute);
+}
+
+#devnav {
+  display: flex;
+  gap: 0.9rem;
+}
+#devnav a {
+  color: var(--text-mute);
+  text-decoration: none;
+}
+#devnav a:hover {
+  color: var(--ice-400);
+}
+
+/* ---- the strip under it: menu bar, latches, flag ---- */
+
+#devslot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid var(--hull-500);
+  background: var(--abyss-800);
+}
+
+/* ---- the two columns ---- */
+
+#devmain {
+  display: grid;
+  /* The picture takes what it needs and the scrollback takes the rest. `minmax(0,
+     …)` on both, because a grid track's default `min-width: auto` is its
+     content's — and a <pre> of log lines never shrinks, so without it a long
+     line pushed the canvas off the side instead of scrolling. */
+  grid-template-columns: minmax(0, auto) minmax(26rem, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#devgame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem;
+  border-right: 1px solid var(--hull-500);
+  background: var(--abyss-900);
+  min-width: 0;
+}
+
+#devside {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* a flex item's floor is its content by default, which is exactly what a
+     growing <pre> must not be allowed to set */
+  min-height: 0;
+}
+/* the prompt keeps its row whatever the scrollback does */
+#devpromptslot {
+  flex: 0 0 auto;
+}
+
+/* One column on anything narrow: the picture first, the scrollback under it. */
+@media (max-width: 62rem) {
+  #devmain {
+    /* stacked, and still bounded: the picture takes what it needs and the
+       scrollback takes the rest of the viewport rather than the rest of the
+       document */
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(6rem, 1fr);
+  }
+  #devgame {
+    border-right: 0;
+    border-bottom: 1px solid var(--hull-500);
+  }
+}
+
+/* ---- the picture ---- */
+
+#stage {
+  display: grid;
+  grid-template-areas: "screen";
+  place-items: center;
+}
+#screen {
+  grid-area: screen;
+  width: 1024px;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  image-rendering: pixelated;
+  border: 1px solid var(--hull-400);
+  background: #000;
+  display: block;
+  /* The canvas keeps its own gestures: a phone has no arrow keys, so a swipe
+     across the screen is how you walk and turn (engine/src/web/touch.ts, and the
+     swipe handler in taoot/src/main.ts). Without this the browser claims a
+     vertical drag for scrolling and the walk-forward swipe never arrives.
+     Scoped to the canvas — the page around it scrolls normally. */
+  touch-action: none;
+}
+#minimap {
+  grid-area: screen;
+  justify-self: start;
+  align-self: start;
+  margin: 8px;
+  image-rendering: pixelated;
+  border: 1px solid var(--hull-400);
+  background: rgba(0, 6, 15, 0.72);
+  display: none;
+  width: 160px;
+}
+#netbusy {
+  grid-area: screen;
+  justify-self: end;
+  align-self: end;
+  margin: 10px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hull-400);
+  border-radius: 50%;
+  background: rgba(0, 6, 15, 0.72);
+  pointer-events: none;
+}
+#netbusy[hidden] {
+  display: none;
+}
+#netbusy span {
+  display: block;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: var(--ice-400);
+  border-radius: 50%;
+  animation: netspin 700ms linear infinite;
+}
+@keyframes netspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* a reader who has asked for less motion still needs to know it is waiting */
+@media (prefers-reduced-motion: reduce) {
+  #netbusy span {
+    animation: none;
+    border-color: var(--ice-400);
+  }
+}
+
+#booting {
+  visibility: hidden;
+  padding: 1.2rem;
+  text-align: center;
+  font-family: var(--font-mono);
+}
+body.spoken #booting {
+  visibility: visible;
+}
+#booting h1 {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+#booting .intro {
+  font-size: 0.75rem;
+  color: var(--text-mute);
+}
+#preload {
+  margin: 1rem auto 0;
+  width: 18rem;
+  max-width: 80%;
+}
+#preloadTrack {
+  height: 2px;
+  background: var(--abyss-700);
+  border: 1px solid var(--hull-500);
+  overflow: hidden;
+}
+#preloadFill {
+  height: 100%;
+  width: 0;
+  background: var(--ice-500);
+  transition: width 140ms linear;
+}
+#preloadNum {
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-mute);
+}
+
+/* ---- the scrollback ---- */
+
+#details {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0;
+}
+/* The pane's own heading is dropped: the column is labelled by being where it
+   is, and a word above it costs a line of scrollback. */
+#details h2 {
+  display: none;
+}
+
+#hud {
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid var(--hull-500);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  min-height: 1.1em;
+}
+
+#dbgBar {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.25rem 0.6rem;
+  border-bottom: 1px solid var(--hull-500);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-mute);
+}
+#dbgBar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  cursor: pointer;
+}
+#dbgBar button {
+  margin: 0;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--hull-400);
+  border-radius: 2px;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-mute);
+  cursor: pointer;
+}
+#dbgBar button:hover {
+  color: var(--ice-300);
+  border-color: var(--hull-300);
+}
+
+/* The scrollback proper. It grows to fill the column and scrolls inside it, so
+   the prompt under it stays put — a prompt that walks down the page as the log
+   fills is a prompt you have to chase. */
+#scriptlog {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--text-mute);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#dbgState {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid var(--hull-500);
+  padding: 0.4rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+}
+#dbgTools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.3rem 0;
+}
+#dbgTools input[type="search"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--hull-400);
+  border-radius: 2px;
+  background: var(--abyss-900);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text);
+}
+
+/* ---- the bar ---- */
+
+#devbar {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--hull-500);
+  background: var(--abyss-900);
+}
+
+/* the flag can be turned off from inside the game (Options ▸ Debug On/Off), and
+   when it is, the bar is still there but nothing behind it will fire — the 1996
+   build took the bar away entirely, which we cannot do and still offer it back */
+#devbar.dim {
+  opacity: 0.55;
+}
+
+.devmenu {
+  position: relative;
+}
+
+.devmenu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.25rem 0.7rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  user-select: none;
+}
+.devmenu > summary::-webkit-details-marker {
+  display: none;
+}
+.devmenu > summary:hover {
+  color: var(--ice-300);
+  background: var(--abyss-700);
+}
+.devmenu[open] > summary {
+  color: var(--abyss-900);
+  background: var(--ice-400);
+}
+.devmenu > summary:focus-visible {
+  outline: 1px solid var(--ice-400);
+  outline-offset: -1px;
+}
+
+.devitems {
+  position: absolute;
+  z-index: 50;
+  top: 100%;
+  left: 0;
+  min-width: 15rem;
+  padding: 0.25rem 0;
+  border: 1px solid var(--hull-400);
+  background: var(--abyss-800);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.9);
+}
+
+.devitems hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 0.25rem 0;
+}
+
+.devitems button {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.devitems button:hover:not(:disabled) {
+  background: var(--abyss-700);
+  color: var(--ice-300);
+}
+/* The nine script-editor commands. Greyed rather than dropped, because they were
+   on the 1996 bar and did nothing there either — their `title` says why. */
+.devitems button:disabled {
+  color: var(--text-mute);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.devitems kbd {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-mute);
+}
+
+/* ---- the latches and the readout ---- */
+
+.devlatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-mute);
+  cursor: pointer;
+}
+.devlatch:hover {
+  color: var(--text-dim);
+}
+#devlatches {
+  display: inline-flex;
+  gap: 0.9rem;
+}
+
+/* A button, not a label: the game's own menu can only turn the flag OFF
+   (`menuselect` has no case that raises it), so the way back on has to be the
+   page's. Styled down to read as a readout, because that is what it is most of
+   the time. */
+#devstatus {
+  margin: 0;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--brass-400);
+  cursor: pointer;
+}
+#devstatus:hover,
+#devstatus:focus-visible {
+  border-color: var(--hull-300);
+  background: var(--abyss-700);
+  color: var(--ice-300);
+}
+/* Off is the state people have to get OUT of, so it carries the affordance: a
+   visible edge, where "on" is a bare word. A control styled flat in both states
+   is one nobody tries. */
+#devstatus.off {
+  color: var(--text-dim);
+  border-color: var(--hull-500);
+  background: var(--abyss-900);
+}
+
+/* ---- the deck map's areas, outlined while the plan is open ----
+   taoot/src/devmode/map-overlay.ts. `position: fixed` and sized to the canvas
+   once a frame; the boxes inside are percentages of the game's own 512x384, so
+   they scale with the picture and need no recomputing.
+
+   Nothing here may take a click: the overlay is a picture, and the engine's own
+   hittest decides what a press does. A layer that caught clicks and forwarded
+   them would be a second hit test, free to disagree with the real one. */
+#devmap {
+  position: fixed;
+  z-index: 40;
+  display: none;
+  pointer-events: none;
+}
+
+.devarea {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid currentcolor;
+  border-radius: 1px;
+  /* a wash rather than a fill: the plan underneath is the thing being pointed
+     at, and a box you cannot see through points at nothing */
+  background: color-mix(in srgb, currentcolor 12%, transparent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+/* The kind's colour is a custom property, not just `color`, because the label
+   needs it as a BACKGROUND while its own text is black. Written as
+   `background: currentcolor` beside `color: #000` it resolved to black on
+   black and the labels were invisible — a variable keeps the two apart. */
+
+/* amber — developer mode only. The 14 the flag opens, and the reason this
+   overlay exists: they carry no highlight on the plan and no cursor change. */
+.devarea.debug {
+  --area: #ffb020;
+}
+/* green — any player's. Drawn too, so the two kinds can be told apart at a
+   glance rather than by remembering which is which. */
+.devarea.live {
+  --area: #50e678;
+}
+/* red — the 1st Class Lounge on A deck, which does nothing in ANY build: a bare
+   `exitcode` sits above its jumpbaby. Marked apart from the amber ones so it is
+   not read as a debug area that failed. */
+.devarea.dead {
+  --area: #ff5050;
+  border-style: dashed;
+}
+
+.devarea {
+  color: var(--area);
+}
+
+.devarea span {
+  position: absolute;
+  left: 0;
+  /* above the box, and BELOW it for anything near the top of the screen, so a
+     label on a promenade strip at y 115 is not clipped off the picture */
+  bottom: 100%;
+  padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: #000;
+  background: var(--area);
+}
+.devarea.high span {
+  bottom: auto;
+  top: 100%;
+}
+
+/* ---- the console (taoot/src/devmode/console.ts) ----
+   A full-width row under the bar, because a line of script is long and a box
+   that truncates it is a box you cannot read what you typed in. Mono, since
+   what goes in it is code. */
+#devconsole {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.35rem 0.6rem;
+  border-top: 1px solid var(--hull-400);
+  background: var(--abyss-800);
+}
+
+/* The marker, drawn rather than typed: it is the prompt's punctuation, never
+   something to select or translate, and it sits in the input's own colour so
+   the row reads as one field. */
+#devconsole::before {
+  content: ">";
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ice-400);
+}
+
+#devconsole input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.1rem 0;
+  /* Flat, because the row IS the field: the shared sheet gives every input a
+     border, a radius and an inset shadow, and a boxed control inside a prompt
+     row reads as two things where there is one. */
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ice-100);
+}
+/* ...and the row takes the focus ring instead, so tabbing to it is still
+   visible without putting the box back. */
+#devconsole:focus-within {
+  background: var(--abyss-700);
+}
+#devconsole input::placeholder {
+  color: var(--text-mute);
+}
+#devconsole input:focus-visible {
+  outline: 0;
+}
+
+/* The answer sits beside the prompt rather than under it: it is one value or one
+   fault, and everything longer — what the line printed with `message ()` — is in
+   the Details pane, which is where the engine routes it. */
+/* Proportional rather than fixed: the answer shares the row with the prompt, and
+   a fixed 20rem left the placeholder truncated on a narrow column. */
+#devanswer {
+  flex: 0 1 auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--brass-400);
+  text-align: right;
+}
+#devanswer.bad {
+  color: var(--alarm);
+}
+
+/* ---- the title strip's nav ----
+   It carries `topnav` so site/src/play-menu.ts finds it and folds the three ways
+   into the same dropdown every other Titanic page has. The shared chrome styles
+   that class for a site bar, so the terminal register is restored here: mono,
+   smaller, and no auto margin (the strip is already a flex row that puts this at
+   its end). */
+#devnav.topnav {
+  margin-left: 0;
+  gap: 0.6rem;
+}
+#devnav.topnav a,
+#devnav .navmenu > summary {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0;
+  padding: 0.1rem 0.3rem;
+  color: var(--text-mute);
+}
+#devnav.topnav a:hover,
+#devnav .navmenu > summary:hover,
+#devnav .navmenu[open] > summary {
+  color: var(--ice-400);
+  background: none;
+}
+/* the dropdown itself keeps the shared panel, but in this page's own ground */
+#devnav .navmenu-list {
+  border-color: var(--hull-400);
+  background: var(--abyss-800);
+}
+#devnav .navmenu-list a {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+#devnav .navmenu-list a.here {
+  color: var(--ice-300);
+}

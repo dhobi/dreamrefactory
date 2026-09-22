@@ -193,6 +193,12 @@ export default withMermaid(
             // shadows the first and every branch is in this game's scripts.
             // Titanic's data names it in 112 files, Dust's in none.
             { text: "The low-memory game", link: "/taoot/low-memory" },
+            // The 1996 debug build, and the complete list behind it. The census
+            // is generated (`npx tsx taoot/tools/devcensus.ts`) and listed under
+            // the page that explains it rather than beside it, because nobody
+            // reads 1,700 lines of quoted script without being sent there.
+            { text: "Developer mode", link: "/taoot/devmode" },
+            { text: "…the census", link: "/taoot/devmode-census" },
             // "How was this checked?" is a headline question for a
             // reverse-engineering project, not lookup material — so it sits with
             // the game it was checked against rather than in Reference.

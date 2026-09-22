@@ -44,6 +44,7 @@ import { siteUrl } from "@dreamfactory/site/site";
 import { installI18n, t, uiLanguage } from "@dreamfactory/site/locales";
 import type { Key } from "@dreamfactory/site/locales/en";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
+import { installPlayMenu } from "@dreamfactory/site/play-menu";
 import { installVersion } from "@dreamfactory/site/version";
 
 /** Titanic's screen, which both of these stages are drawn for */
@@ -122,6 +123,7 @@ export async function bootMinigame(game: Minigame): Promise<void> {
    */
   await installI18n();
   void installLanguageMenu();
+  void installPlayMenu();
   installVersion();
 
   const canvas = document.getElementById("screen") as HTMLCanvasElement;

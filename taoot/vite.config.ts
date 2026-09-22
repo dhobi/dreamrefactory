@@ -1,6 +1,7 @@
 /**
- * Titanic's four pages: the front page, the game, the collection page and the
- * unlisted speedrun workbench.
+ * Titanic's pages: the front page, the game, the collection page, the minigames,
+ * and the two developer pages the top bar carries as marks — the speedrun
+ * workbench and developer mode.
  *
  * The Vite ROOT is this directory, which is what makes `/src/main.ts` in a page
  * mean `taoot/src/main.ts` and `gamefiles/` mean Titanic's rip and no other.
@@ -136,9 +137,15 @@ export default defineConfig({
         main: join(HERE, "index.html"),
         play: join(HERE, "play/index.html"),
         // The speedrun workbench: the play page plus a sheet to drive it with.
-        // Unlisted — nothing links to it and it carries `noindex` — but built,
-        // because a tool that only exists on a dev server is a tool nobody uses.
+        // Reached by its mark (🏃‍➡️) in the top bar and carrying `noindex`, and
+        // built, because a tool that only exists on a dev server is a tool
+        // nobody uses.
         speedrun: join(HERE, "speedrun/index.html"),
+        // Developer mode: the debug build put back up — `debugging` raised after
+        // the boot, `optionkey()`/`commandkey()` answering for real, and
+        // TI.EXE's own menu bar read out of its RT_MENU resource. Reached by its
+        // mark (🛠️) in the top bar, and built for the reason the workbench is.
+        devmode: join(HERE, "devmode/index.html"),
         // The collection page: the physical release's box and CD artwork, and
         // the offline DBGL downloads that sit beside the rip on the host.
         collection: join(HERE, "collection/index.html"),
