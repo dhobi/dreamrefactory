@@ -20,10 +20,11 @@
  * There is no GL here and no DOM: the module touches the context for six calls,
  * all of which are recorded rather than performed.
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { enterXR, inXR, leaveXR, type Room } from "../../bedsit/src/bedsit-xr";
 import { perspective, view } from "../../bedsit/src/bedsit-optics";
 import { EYE_HEIGHT, ROOM, STANDPOINTS, UNITS_PER_METRE } from "../../bedsit/src/bedsit-room";
+import { set as setRoom } from "../../bedsit/src/bedsit-settings";
 
 // --- the fake headset -------------------------------------------------------
 
@@ -68,15 +69,45 @@ function transform(m: Float32Array): XRRigidTransform {
   } as XRRigidTransform;
 }
 
-/** a controller: two sticks' worth of axes and the one button the page binds */
-interface Stick { handedness: "left" | "right" | "none"; axes: number[]; a?: boolean }
+/**
+ * A controller: two sticks' worth of axes, the buttons the page binds, and —
+ * for the ones that point at the board — a ray space of its own.
+ *
+ * The ray space is an ordinary object used as a KEY. That is what an `XRSpace`
+ * is to a page: a token handed back to `getPose`, with nothing readable on it,
+ * which is why the fake can be one line and still be honest.
+ */
+interface Stick {
+  handedness: "left" | "right" | "none";
+  axes: number[];
+  a?: boolean;
+  /** the trigger, which is what presses a control */
+  trigger?: boolean;
+  /** B or the squeeze, which is what asks for the board */
+  menu?: boolean;
+  /** where this hand is and which way it points, in the play space */
+  ray?: Float32Array;
+  /**
+   * A controller too old to have an A or an X: its buttons stop at the trigger.
+   *
+   * This is the only shape of controller on which the standpoint button and the
+   * board's press are the SAME button, and therefore the only one on which the
+   * session having to be told "that press was taken" can be seen at all.
+   */
+  old?: boolean;
+}
 function source(s: Stick): XRInputSource {
   return {
     handedness: s.handedness,
     targetRayMode: "tracked-pointer",
+    targetRaySpace: s.ray ? ({ ray: s.ray } as unknown as XRSpace) : undefined,
     gamepad: {
       axes: [0, 0, ...s.axes],
-      buttons: [0, 1, 2, 3, 4].map((i) => ({ pressed: i === 4 && !!s.a, touched: false, value: 0 })),
+      buttons: (s.old ? [0] : [0, 1, 2, 3, 4, 5]).map((i) => ({
+        pressed: (i === 4 && !!s.a) || (i === 0 && !!s.trigger) || (i === 5 && !!s.menu),
+        touched: false,
+        value: 0,
+      })),
     } as unknown as Gamepad,
   } as XRInputSource;
 }
@@ -87,19 +118,51 @@ interface Fake {
   sticks: XRInputSource[];
   end(): void;
   session: XRSession;
+  /** the layer itself, for the one assertion that is about what is NOT on it */
+  layer: XRWebGLLayer;
+  /** what the module asked this headset for, as opposed to what it was given */
+  asked: { foveation?: number; rate?: number };
 }
 
 interface Drawn { proj: Float32Array; look: Float32Array; at: [number, number, number] }
+
+/** a ray the room was handed, and whether a trigger came with it */
+interface Pointed { from: [number, number, number]; dir: [number, number, number]; pressed: boolean }
+/** where the board was asked for, and facing which way */
+interface Summoned { at: [number, number, number]; yaw: number }
 
 /** the two eyes, 64 mm apart, which is a head */
 const IPD = 0.064;
 const FRAMEBUFFER = { fake: "framebuffer" } as unknown as WebGLFramebuffer;
 
-function fakeHeadset(drawn: Drawn[], opts: { floor?: boolean } = {}): { install(): void; fake(): Fake } {
+/**
+ * What kind of headset to be.
+ *
+ * `floor` is whether it knows where the floor is. The other three are the two
+ * dials that only a headset has, and every one of them is OPTIONAL in the
+ * specification — so the fake has to be able to be a browser that has neither,
+ * which is nearly all of them, as well as one that has both.
+ */
+interface Headset {
+  floor?: boolean;
+  /** false for a browser with no `fixedFoveation` on its layers at all */
+  foveation?: boolean;
+  /** the most this headset will grant, however hard it is asked */
+  foveationCap?: number;
+  /** the rates it offers; absent for a browser that does not let a page choose */
+  rates?: number[];
+  /** and whether it refuses the one it is asked for anyway */
+  refuseRate?: boolean;
+}
+
+function fakeHeadset(drawn: Drawn[], opts: Headset = {}): { install(): void; fake(): Fake } {
   let onFrame: ((t: number, f: XRFrame) => void) | null = null;
   let ended: (() => void) | null = null;
   const sticks: XRInputSource[] = [];
   let pose = poseAt(0, 0, 0);
+
+  const asked: { foveation?: number; rate?: number } = {};
+  let running = 90;                      // the rate before anybody asks for one
 
   const layer = {
     framebuffer: FRAMEBUFFER,
@@ -108,9 +171,36 @@ function fakeHeadset(drawn: Drawn[], opts: { floor?: boolean } = {}): { install(
     getViewport: (v: XRView) => ({ x: v.eye === "left" ? 0 : 1024, y: 0, width: 1024, height: 1024 }),
   } as unknown as XRWebGLLayer;
 
+  /**
+   * The foveation dial, present only where a headset has one — and a GETTER and
+   * SETTER rather than a number, because the two halves of it are different
+   * numbers: a headset may grant less than it was asked for, and the module is
+   * supposed to report what it got rather than what it wanted.
+   */
+  if (opts.foveation !== false) {
+    let level: number | null = 0;
+    Object.defineProperty(layer, "fixedFoveation", {
+      configurable: true,
+      enumerable: true,
+      get: () => level,
+      set: (v: number) => { asked.foveation = v; level = Math.min(v, opts.foveationCap ?? 1); },
+    });
+  }
+
   const session = {
     renderState: { baseLayer: layer },
     inputSources: sticks,
+    ...(opts.rates
+      ? {
+        supportedFrameRates: Float32Array.from(opts.rates),
+        updateTargetFrameRate(rate: number): Promise<void> {
+          asked.rate = rate;
+          if (opts.refuseRate) return Promise.reject(new Error("no"));
+          running = rate;
+          return Promise.resolve();
+        },
+      }
+      : {}),
     updateRenderState() { /* the fake layer is already the one it would set */ },
     requestReferenceSpace: (type: string) =>
       type === "local-floor" && opts.floor === false
@@ -120,6 +210,15 @@ function fakeHeadset(drawn: Drawn[], opts: { floor?: boolean } = {}): { install(
     end() { ended?.(); return Promise.resolve(); },
     addEventListener(_t: string, l: () => void) { ended = l; },
   } as unknown as XRSession;
+
+  /**
+   * What it is running at NOW, which is 90 until it is told otherwise — and
+   * defined HERE rather than in the literal above, because a getter inside an
+   * object that is spread is read once and copied as the value it had at the
+   * time. Spread into that conditional it would have been a permanent 90, and a
+   * module that never read the answer back would have passed.
+   */
+  if (opts.rates) Object.defineProperty(session, "frameRate", { configurable: true, get: () => running });
 
   return {
     install() {
@@ -138,6 +237,8 @@ function fakeHeadset(drawn: Drawn[], opts: { floor?: boolean } = {}): { install(
       return {
         sticks,
         session,
+        layer,
+        asked,
         end: () => { ended?.(); },
         frame(next: Float32Array, ms = 0): Drawn[] {
           pose = next;
@@ -158,6 +259,13 @@ function fakeHeadset(drawn: Drawn[], opts: { floor?: boolean } = {}): { install(
           const frame = {
             session,
             getViewerPose: () => ({ transform: transform(pose), views }) as XRViewerPose,
+            // a hand's ray, out of the space that was handed back for it. A
+            // hand with no ray this frame gets `null`, which is a controller
+            // out of the headset's view and not a failure
+            getPose: (sp: XRSpace) => {
+              const m = (sp as unknown as { ray?: Float32Array }).ray;
+              return m ? ({ transform: transform(m) } as XRPose) : null;
+            },
           } as unknown as XRFrame;
           const go = onFrame;
           onFrame = null;
@@ -232,8 +340,16 @@ function headOf(drawn: Drawn[]): [number, number, number] {
   return [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2];
 }
 
-function makeRoom(drawn: Drawn[], entered: WebGLFramebuffer[], bound: unknown[], left: { n: number }, rings: Ring[]): Room {
+function makeRoom(
+  drawn: Drawn[], entered: WebGLFramebuffer[], bound: unknown[], left: { n: number }, rings: Ring[],
+  pointed: Pointed[] = [], summoned: Summoned[] = [], takes = { it: false },
+): Room {
   return {
+    point(from, dir, pressed): boolean {
+      pointed.push({ from: [...from], dir: [...dir], pressed });
+      return takes.it;
+    },
+    summon(at, yaw): void { summoned.push({ at: [...at], yaw }); },
     gl: fakeGL(bound, rings),
     me: { x: 7000, y: 7000, z: EYE_HEIGHT, yaw: 0, pitch: 0.4 },
     antialias: true,
@@ -278,17 +394,37 @@ describe("the bedsit in a headset", () => {
   let bound: unknown[];
   let left: { n: number };
   let rings: Ring[];
+  let pointed: Pointed[];
+  let summoned: Summoned[];
+  /** whether the room says it TOOK the press, which is what a board under the
+   *  pointer does — see `point` in the module */
+  let takes: { it: boolean };
 
-  async function enter(opts: { floor?: boolean } = {}): Promise<void> {
+  /** what the module said it was given, since the console is the only place it
+   *  can say it: collected here rather than printed through the suite */
+  let said: string[];
+
+  async function enter(opts: Headset = {}): Promise<void> {
     drawn = []; entered = []; bound = []; left = { n: 0 }; rings = [];
+    pointed = []; summoned = []; takes = { it: false };
     rig = fakeHeadset(drawn, opts);
     rig.install();
-    room = makeRoom(drawn, entered, bound, left, rings);
+    room = makeRoom(drawn, entered, bound, left, rings, pointed, summoned, takes);
     fake = rig.fake();
     await enterXR(room);
   }
 
-  beforeEach(() => { if (inXR()) leaveXR(); });
+  beforeEach(() => {
+    if (inXR()) leaveXR();
+    setRoom({ vignette: "big" });        // the store is a singleton; put it back
+    said = [];
+    vi.spyOn(console, "info").mockImplementation((...a: unknown[]) => { said.push(a.map(String).join(" ")); });
+  });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  /** one turn of the microtask queue, which is what the frame rate's answer is
+   *  behind: the ask is a promise and the report is what it settles into */
+  const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
   it("puts a point of the room exactly where the flat page puts it", async () => {
     await enter();
@@ -450,10 +586,53 @@ describe("the bedsit in a headset", () => {
     fake.sticks.push(source({ handedness: "right", axes: [1, 0] }));
     const after = headOf(fake.frame(pose, 16));
 
-    expect(room.me.yaw - yaw).toBeCloseTo(-Math.PI / 6, 6);
+    expect(room.me.yaw - yaw).toBeCloseTo(Math.PI / 6, 6);
     // the room turned; the visitor did not move an inch
     expect(after[0]).toBeCloseTo(before[0], 0);
     expect(after[2]).toBeCloseTo(before[2], 0);
+  });
+
+  /**
+   * WHICH WAY, in the only terms that cannot be got wrong.
+   *
+   * The two tests around this one pin how FAR a snap turns and that it turns
+   * about the visitor — and both of them passed happily for a fortnight while
+   * the turn went the wrong way, because `-π/6` is as plausible a number as
+   * `π/6` when nothing says what the sign means. What says it is the picture: a
+   * thing standing 30° to your right is dead ahead after you have turned 30° to
+   * your right. That is checked here against the matrices the room was actually
+   * drawn with, so it holds whatever the sign conventions underneath decide to
+   * be, and it fails the moment the stick turns the room the other way.
+   */
+  it("brings what was on the visitor's right to the middle when the stick goes right", async () => {
+    await enter();
+    const eyes = fake.frame(poseAt(0, EYE_HEIGHT / UNITS_PER_METRE, 0), 0);
+    const bearing = room.me.yaw;
+    // a point 30° to the right of where the visitor is facing, across the room
+    const d = 3000;
+    const mark = [
+      room.me.x + d * Math.cos(bearing + Math.PI / 6),
+      EYE_HEIGHT,
+      room.me.y + d * Math.sin(bearing + Math.PI / 6),
+    ];
+    /**
+     * Where the mark sits across the picture, BETWEEN the eyes.
+     *
+     * One eye is half an interpupillary distance off the head, which at this
+     * mark's distance is a real 0.03 of the screen — the same order as the
+     * thing being measured. The mean of the two is the head's own view, and
+     * the parallax cancels out of it exactly.
+     */
+    const screenX = (drawn: Drawn[]): number =>
+      drawn.reduce((sum, d) => {
+        const c = through(mul(d.proj, d.look), mark);
+        return sum + c[0] / c[3];
+      }, 0) / drawn.length;
+    expect(screenX(eyes)).toBeGreaterThan(0.2);     // off to the right
+
+    fake.sticks.push(source({ handedness: "right", axes: [1, 0] }));
+    const after = fake.frame(poseAt(0, EYE_HEIGHT / UNITS_PER_METRE, 0), 16);
+    expect(screenX(after)).toBeCloseTo(0, 2);       // and now straight ahead
   });
 
   it("snaps once per shove, however long it is held", async () => {
@@ -463,13 +642,13 @@ describe("the bedsit in a headset", () => {
     fake.sticks.push(stick);
     const yaw = room.me.yaw;
     for (let i = 1; i <= 10; i++) fake.frame(poseAt(0, 1.6, 0), i * 16);
-    expect(room.me.yaw - yaw).toBeCloseTo(-Math.PI / 6, 6);
+    expect(room.me.yaw - yaw).toBeCloseTo(Math.PI / 6, 6);
     // released and shoved again: a second snap
     (stick.gamepad as unknown as { axes: number[] }).axes[2] = 0;
     fake.frame(poseAt(0, 1.6, 0), 200);
     (stick.gamepad as unknown as { axes: number[] }).axes[2] = 1;
     fake.frame(poseAt(0, 1.6, 0), 216);
-    expect(room.me.yaw - yaw).toBeCloseTo(-Math.PI / 3, 6);
+    expect(room.me.yaw - yaw).toBeCloseTo(Math.PI / 3, 6);
   });
 
   it("holds the HEAD inside the room, and moves the floor to do it", async () => {
@@ -561,6 +740,57 @@ describe("the bedsit in a headset", () => {
   });
 
   /**
+   * The vignette the visitor chose, which is the whole of what it is for.
+   *
+   * What one person needs at the edge of vision, the next feels as a tunnel —
+   * so the ring is a setting, and these are the two ends of it. `middle` leaves
+   * more of the room visible while gliding, and `none` means the ring is not
+   * drawn AT ALL rather than drawn fully open: a transparent black screen over
+   * both eyes costs every pixel of every frame and shows nothing for it.
+   */
+  it("opens the ring wider on `middle` than on `big`", async () => {
+    const glide = async (): Promise<number> => {
+      await enter();
+      let t = 0;
+      const still = (): void => { fake.frame(poseAt(0, 1.6, 0), (t += 16)); };
+      still(); still();
+      fake.sticks.push(source({ handedness: "left", axes: [0, -1] }));
+      for (let i = 0; i < 40; i++) still();
+      return rings.at(-1)!.aperture;
+    };
+
+    setRoom({ vignette: "big" });
+    const big = await glide();
+    leaveXR();
+    setRoom({ vignette: "middle" });
+    const middle = await glide();
+
+    expect(big).toBeLessThan(0.75);
+    expect(middle).toBeGreaterThan(0.9);
+    expect(middle).toBeLessThan(1.15);
+    expect(middle).toBeGreaterThan(big);
+  });
+
+  it("draws no ring at all on `none`, and still blinks for a jump", async () => {
+    setRoom({ vignette: "none" });
+    await enter();
+    let t = 0;
+    const still = (): void => { fake.frame(poseAt(0, 1.6, 0), (t += 16)); };
+    still(); still();
+    fake.sticks.push(source({ handedness: "left", axes: [0, -1] }));
+    for (let i = 0; i < 40; i++) still();
+    expect(rings).toHaveLength(0);       // gliding, and nothing drawn over it
+
+    // the blink is not part of the choice: it is what covers a jump, and a jump
+    // without it is the cut it was put in to prevent
+    const pad = source({ handedness: "right", axes: [0, 0], a: true });
+    fake.sticks.push(pad);
+    for (let i = 0; i < 4; i++) still();
+    expect(rings.length).toBeGreaterThan(0);
+    expect(rings.at(-1)!.blink).toBeGreaterThan(0);
+  });
+
+  /**
    * A tick in the hand for the two things that happen without being watched.
    *
    * Both are comfort: a snap and a blink are deliberately things the eye cannot
@@ -611,6 +841,198 @@ describe("the bedsit in a headset", () => {
     expect(room.me.y).toBeCloseTo(head[2], 0);
     expect(room.me.z).toBe(EYE_HEIGHT);
     expect(room.me.pitch).toBe(0);
+  });
+
+  /**
+   * The periphery, shaded cheaper.
+   *
+   * Two things are pinned and they are different things. That the ask is MADE,
+   * because this room is fill-bound and the edge of the lens is most of the
+   * framebuffer. And that what comes back out of the layer afterwards is the
+   * headset's answer and not the page's request — a headset is allowed to grant
+   * less than it was asked for, and a page that reports its own number has no
+   * way of ever finding that out.
+   */
+  it("asks the headset to foveate the periphery, and leaves the granted level alone", async () => {
+    await enter({ foveationCap: 0.5 });
+    expect(fake.asked.foveation).toBe(0.75);
+    expect(fake.layer.fixedFoveation).toBe(0.5);       // what it gave, not what it was asked
+    expect(said.join(" ")).toContain("foveation 0.5");
+    expect(fake.frame(poseAt(0, 1.6, 0))).toHaveLength(2);
+  });
+
+  /**
+   * And the trap under it.
+   *
+   * `fixedFoveation` is missing from nearly every browser's layers, and a layer
+   * is an ordinary extensible object: assigning to a name it does not have puts
+   * the name THERE, and reading it back hands the page its own number. That
+   * reads exactly like a granted request and is the opposite of one. What is
+   * pinned is that nothing was written at all.
+   */
+  it("does not take its own assignment for a headset that foveates", async () => {
+    await enter({ foveation: false });
+    expect("fixedFoveation" in fake.layer).toBe(false);
+    expect(said.join(" ")).toContain("not offered");
+    expect(fake.frame(poseAt(0, 1.6, 0))).toHaveLength(2);
+  });
+
+  /**
+   * The frame rate, which is a ceiling and not a demand.
+   *
+   * The nearest rate at or below 72, because a rate that is held beats a rate
+   * that is aimed at and reprojected. And on a headset whose slowest is faster
+   * than the ceiling, its slowest — the alternative is asking for nothing and
+   * taking whatever it would have done.
+   */
+  it("asks for the nearest rate at or below the ceiling", async () => {
+    await enter({ rates: [60, 72, 80, 90, 120] });
+    expect(fake.asked.rate).toBe(72);
+    await settle();
+    expect(said.join(" ")).toContain("72 Hz");
+
+    fake.end();
+    await enter({ rates: [90, 120] });     // every one of them above the ceiling
+    expect(fake.asked.rate).toBe(90);
+  });
+
+  /**
+   * Neither dial is allowed to cost anybody the room.
+   *
+   * Both are optional in the specification and the browser that has them is the
+   * exception — so the two failures that matter are a headset with no opinion
+   * at all, and one that offers a rate and then refuses it. Each has to end in
+   * a room being drawn, which is what it would have done before either of these
+   * was asked for.
+   */
+  it("runs the room for a headset with neither dial, and for one that refuses the rate", async () => {
+    await enter({ foveation: false });
+    expect(fake.asked).toEqual({});        // nothing offered, so nothing asked
+    expect(fake.frame(poseAt(0, 1.6, 0))).toHaveLength(2);
+
+    fake.end();
+    await enter({ rates: [72], refuseRate: true });
+    expect(fake.asked.rate).toBe(72);
+    await settle();
+    expect(said.join(" ")).toContain("refused");
+    expect(fake.frame(poseAt(0, 1.6, 0))).toHaveLength(2);
+  });
+
+  /**
+   * The hand's ray, in the room rather than in the play space.
+   *
+   * This is the same claim as the very first test in this file and about a
+   * different thing: a POINT the headset reports has to arrive in the room's
+   * own units and axes, and so does a DIRECTION — by the same rotation and
+   * none of the shift. A direction that picked up the play space's translation
+   * would point somewhere that looked plausible from the origin and nowhere at
+   * all once the visitor had walked, which is the kind of fault that gets found
+   * by wearing it.
+   *
+   * The room is at (7000, 7000) facing along +x, and a hand at the play space's
+   * origin 1.2 m up pointing along -z — WebXR's forward — must come back
+   * pointing along the room's +x, level, from a point 1.2 m above the floor.
+   */
+  it("hands the room a pointing ray in the room's own units and axes", async () => {
+    await enter();
+    const hand = source({ handedness: "right", axes: [0, 0], ray: poseAt(0, 1.2, 0) });
+    fake.sticks.push(hand);
+    fake.frame(poseAt(0, EYE_HEIGHT / UNITS_PER_METRE, 0));
+
+    expect(pointed).toHaveLength(1);
+    const [p] = pointed;
+    // the GL frame the room is drawn in: (x, up, y)
+    expect(p.from[0]).toBeCloseTo(room.me.x, 0);
+    expect(p.from[2]).toBeCloseTo(room.me.y, 0);
+    expect(p.from[1]).toBeCloseTo(ROOM.floor + 1.2 * UNITS_PER_METRE, 0);
+    expect(p.dir[0]).toBeCloseTo(1, 3);
+    expect(p.dir[1]).toBeCloseTo(0, 3);
+    expect(p.dir[2]).toBeCloseTo(0, 3);
+    expect(p.pressed).toBe(false);
+    // a unit vector, because the far end of the ray is somebody else's business
+    expect(Math.hypot(...p.dir)).toBeCloseTo(1, 6);
+  });
+
+  /** and it TURNS with the play space: the same hand, after a snap turn, points
+   *  somewhere else in the room and nowhere else in the visitor's own room */
+  it("turns the ray with the play space", async () => {
+    await enter();
+    const hand = source({ handedness: "left", axes: [0, 0], ray: poseAt(0, 1.2, 0) });
+    fake.sticks.push(hand);
+    fake.frame(poseAt(0, 1.6, 0));
+    const before = pointed.at(-1)!.dir;
+
+    // the right stick snaps the view round. The ray is read at the TOP of a
+    // frame and the stick is driven under it, so the turn shows in the frame
+    // after the one that made it
+    fake.sticks.push(source({ handedness: "right", axes: [1, 0] }));
+    fake.frame(poseAt(0, 1.6, 0), 16);
+    fake.frame(poseAt(0, 1.6, 0), 32);
+    const after = pointed.at(-1)!.dir;
+    const turned = Math.atan2(after[2], after[0]) - Math.atan2(before[2], before[0]);
+    expect(Math.abs(turned)).toBeCloseTo(Math.PI / 6, 3);
+  });
+
+  /**
+   * A trigger pulled AT something is not also a request to be somewhere else.
+   *
+   * The standpoint button falls back to the trigger on a controller too old to
+   * have an A — so on those, every press at the board would also have moved the
+   * visitor across the room. What the room says it took, the session leaves
+   * alone.
+   */
+  it("leaves the trigger alone when the room says it took the press", async () => {
+    await enter();
+    takes.it = true;
+    const hand = source({ handedness: "right", axes: [0, 0], ray: poseAt(0, 1.2, 0), trigger: true, old: true });
+    fake.sticks.push(hand);
+    const was = headOf(fake.frame(poseAt(0, 1.6, 0), 0));
+    for (let i = 0; i < 20; i++) fake.frame(poseAt(0, 1.6, 0), 16 * (i + 1));
+    expect(pointed.at(-1)!.pressed).toBe(true);
+    const now = headOf(fake.frame(poseAt(0, 1.6, 0), 400));
+    expect(now[0]).toBeCloseTo(was[0], 0);
+    expect(now[2]).toBeCloseTo(was[2], 0);
+  });
+
+  /** and when it did not take it, the button still stands the visitor where the
+   *  game stood — which is the behaviour that was there before the board */
+  it("still stands the visitor when nothing took the press", async () => {
+    await enter();
+    takes.it = false;
+    fake.sticks.push(source({ handedness: "right", axes: [0, 0], ray: poseAt(0, 1.2, 0), trigger: true, old: true }));
+    const was = headOf(fake.frame(poseAt(0, 1.6, 0), 0));
+    for (let i = 0; i < 20; i++) fake.frame(poseAt(0, 1.6, 0), 16 * (i + 1));
+    const now = headOf(fake.frame(poseAt(0, 1.6, 0), 400));
+    expect(Math.hypot(now[0] - was[0], now[2] - was[2])).toBeGreaterThan(100);
+  });
+
+  /** the board is asked for ONCE however long the button is held, and it is
+   *  asked for where the visitor is standing and facing */
+  it("asks for the board on the press and not on the holding", async () => {
+    await enter();
+    const hand = source({ handedness: "right", axes: [0, 0], menu: true });
+    fake.sticks.push(hand);
+    fake.frame(poseAt(0, 1.6, 0));
+    fake.frame(poseAt(0, 1.6, 0), 16);
+    fake.frame(poseAt(0, 1.6, 0), 32);
+    expect(summoned).toHaveLength(1);
+    expect(summoned[0].at[0]).toBeCloseTo(room.me.x, 0);
+    expect(summoned[0].yaw).toBeCloseTo(room.me.yaw, 2);
+
+    (hand.gamepad as unknown as { buttons: { pressed: boolean }[] }).buttons[5].pressed = false;
+    fake.frame(poseAt(0, 1.6, 0), 48);
+    (hand.gamepad as unknown as { buttons: { pressed: boolean }[] }).buttons[5].pressed = true;
+    fake.frame(poseAt(0, 1.6, 0), 64);
+    expect(summoned).toHaveLength(2);     // let go and pressed again: a second ask
+  });
+
+  /** a hand the headset cannot see this frame is a hand that is not pointing,
+   *  and not a frame that fails */
+  it("survives a hand with no pose this frame", async () => {
+    await enter();
+    fake.sticks.push(source({ handedness: "right", axes: [0, 0] }));   // no ray at all
+    expect(fake.frame(poseAt(0, 1.6, 0))).toHaveLength(2);
+    expect(pointed).toHaveLength(0);
   });
 
   it("puts the floor under the head when the headset cannot find one", async () => {
