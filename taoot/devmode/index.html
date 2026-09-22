@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Developer mode - Titanic - Adventure Out Of Time RE</title>
+    <!-- Reached by its mark in the top bar (🛠️), and told to stay out of search:
+         a developer page is worth finding from inside the site and is not worth
+         being a search result for the game. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- No intro film: this page is reloaded to get a clean game far more often
+         than it is opened to play one. -->
+    <meta name="skip-intro" content="1" />
+    <!-- The log is half of this page's layout, not a pane to be asked for, so it
+         is up from the first paint and X does not take it away. -->
+    <meta name="details-always" content="log" />
+    <!-- English, always: every address and script line this page is built on was
+         read out of the English tree. -->
+    <meta name="edition" content="en" />
+    <meta name="site-root" content="../" />
+    <link rel="icon" type="image/png" href="/taoot-mark.png" />
+    <link rel="stylesheet" href="/src/theme.css" />
+    <link rel="stylesheet" href="/src/saves.css" />
+    <link rel="stylesheet" href="/src/devmode.css" />
+  </head>
+  <body class="deep devmode">
+    <!-- The whole page is one framed shell: a title strip, the menu bar, and
+         then the game and the log side by side. The arrangement is the point —
+         a developer watches the picture and the log at the same time, and a
+         layout that puts the log a scroll away is a layout that hides it. -->
+    <div id="devshell">
+      <div id="devtitle">
+        <a class="devbrand" href="../" title="RE — a re-implementation of the DreamFactory engine, not the original 1996 release">
+          <img src="/taoot-mark.png" alt="" width="16" height="16" />
+          <b>titanic</b><span>developer mode</span>
+        </a>
+        <!-- `topnav` as well as its own id: that class is what
+             site/src/play-menu.ts looks for, so this strip gets the same "Play"
+             dropdown every other Titanic page has. devmode.css overrides the
+             shared chrome so it still reads as a terminal title bar. -->
+        <nav id="devnav" class="topnav">
+          <a href="../play/" class="playway">Play</a>
+          <a href="../devmode/" class="playway">Developer</a>
+          <a href="../speedrun/" class="playway">Speedrunner</a>
+          <a href="../../docs/taoot/devmode">docs</a>
+        </nav>
+      </div>
+
+      <!-- The menu bar, the latches and the flag readout; filled by
+           taoot/src/devmode-page.ts from TI.EXE's own RT_MENU resource. -->
+      <div id="devslot"></div>
+
+      <div id="devmain">
+        <div id="devgame">
+          <div id="booting">
+            <h1 data-i18n="play.h1">Starting</h1>
+            <div class="intro"><span data-i18n="play.intro">Loading the game's files…</span></div>
+            <div id="preload" hidden>
+              <div id="preloadTrack"><div id="preloadFill"></div></div>
+              <div id="preloadNum"></div>
+            </div>
+          </div>
+
+          <div id="stage" style="display: none">
+            <canvas id="screen" width="512" height="384"></canvas>
+            <canvas id="minimap"></canvas>
+            <!-- nothing draws during a fetch, so without this a room change
+                 reads as a hang at whatever the last frame was -->
+            <div id="netbusy" hidden aria-hidden="true"><span></span></div>
+          </div>
+        </div>
+
+        <!-- The scrollback and the prompt, in one column: what a line prints
+             lands above the line you type it on. -->
+        <div id="devside">
+          <div id="details">
+            <div id="hud"></div>
+            <div id="dbgBar">
+              <label title="Every script global, and the six the game's own readout names"
+                ><input type="checkbox" id="dbgStateOn" />
+                <span data-i18n="play.debugState">state</span></label
+              >
+              <label title="Every press and click, what it hit, and what it did"
+                ><input type="checkbox" id="dbgInputsOn" />
+                <span data-i18n="play.debugInputs">inputs</span></label
+              >
+              <button id="dbgCopy" title="Copy the state and the whole log">⧉ copy</button>
+              <span id="dbgNote" class="note"></span>
+            </div>
+            <pre id="scriptlog"></pre>
+            <div id="dbgState" hidden>
+              <div id="dbgSpine"></div>
+              <div id="dbgTools">
+                <input id="dbgFilter" type="search" placeholder="filter" title="One or more terms, | or , apart" />
+                <label title="Every global, not just the ones that have just moved"
+                  ><input type="checkbox" id="dbgAll" />
+                  <span data-i18n="play.debugAll">all</span></label
+                >
+              </div>
+              <div id="dbgRows"></div>
+            </div>
+          </div>
+          <!-- the console (taoot/src/devmode/console.ts), at the foot of the
+               scrollback where a prompt belongs -->
+          <div id="devpromptslot"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- `position: fixed` in the engine's sheet, so where it sits here decides
+         nothing about where it draws -->
+    <div id="saveModal" class="modal">
+      <div class="modal-box">
+        <div class="modal-head">
+          <span id="saveModalTitle">Saved Games</span>
+          <button id="saveModalClose" title="Close">✕</button>
+        </div>
+        <div id="saveList" class="save-list"></div>
+        <div class="modal-foot">
+          <div id="saveNewRow" class="save-newrow">
+            <input id="saveNameInput" type="text" placeholder="save name" />
+            <button id="saveConfirmBtn">Save</button>
+          </div>
+          <div>
+            <button id="saveUploadBtn">⬆ Upload .ti</button>
+            <input id="saveUploadInput" type="file" accept=".ti" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/devmode-page.ts"></script>
+  </body>
+</html>

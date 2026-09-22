@@ -1,11 +1,10 @@
 /**
  * The Konami code, and the one door it opens.
  *
- * The speedrun workbench (speedrun/index.html) is built and deployed but
- * deliberately unlisted — nothing links to it, it carries `noindex`, and it is
- * meant to stay that way: it is a tool for driving the game with a script, not
- * a feature of the site. But "unlisted" and "unreachable" are different things,
- * and typing a URL from memory is a poor way to reach a page you use often.
+ * The speedrun workbench (speedrun/index.html) is reached by its mark in
+ * Titanic's top bar, and it carries `noindex` so it stays out of search. The
+ * front page is the one place with no bar of that kind, and typing a URL from
+ * memory is a poor way to reach a page you use often.
  *
  * So the front page listens for ↑ ↑ ↓ ↓ ← → ← → B A. It costs nothing to anyone
  * who does not know it is there, which is the whole point of the shape: nobody

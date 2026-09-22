@@ -60,6 +60,7 @@ import {
   editionName,
 } from "./languages";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
+import { installPlayMenu } from "@dreamfactory/site/play-menu";
 import { VERSION, installVersion } from "@dreamfactory/site/version";
 import {
   gamefileManifest,
@@ -760,6 +761,9 @@ const mutesTheme = (): boolean =>
  * the checkbox still checkable, the filter, the copy button — is the same on
  * both pages, because the pane is the same pane.
  *
+ * `content="log"` asks for the column without the two panes inside it — see
+ * {@link DETAILS_PANES}.
+ *
  * A page-level fact and not a URL parameter, for the reason {@link skipsIntro}
  * gives: `/speedrun/` should behave the same however it was reached, and you can
  * see the declaration by looking at the page. The markup on that page also drops
@@ -768,6 +772,24 @@ const mutesTheme = (): boolean =>
  * putting it back.
  */
 const DETAILS_ALWAYS = !!document.querySelector('meta[name="details-always"]');
+
+/**
+ * ...and whether the two PANES inside that column start open with it.
+ *
+ * The state list is every script global — a hundred-odd rows — and the input log
+ * doubles the length of the log itself. On the workbench both are wanted from
+ * the first paint, because a route is tuned against exactly those. On the
+ * developer-mode page the column is the terminal's scrollback and what belongs
+ * in it is what the game and the console print; a hundred variable names on
+ * arrival is a wall in front of that.
+ *
+ * So the meta carries a value: `content="log"` is the column with its panes
+ * shut, anything else (the workbench says `"1"`) is the column as it was. Both
+ * boxes stay checkable and both are remembered, so this decides the FIRST visit
+ * and nothing after it.
+ */
+const DETAILS_PANES =
+  document.querySelector('meta[name="details-always"]')?.getAttribute("content") !== "log";
 
 /**
  * Which copy of the game this PAGE plays, if it is not a question.
@@ -1065,6 +1087,7 @@ async function boot(): Promise<void> {
   // other five languages should not be shown the English it is about to replace
   document.body.classList.add("spoken");
   installLanguageMenu();
+  installPlayMenu();
   installVersion();
   // Which copy of the game is being played — above the stage, never hidden with
   // it: the same row the editors and the collection carry (taoot/src/editions.ts).
@@ -1657,8 +1680,9 @@ const stateList = installStateList({
   storageKey: DEBUG_STATE_KEY,
   // On where the pane is the page and off where it is a player's aid — the same
   // rule the column itself follows (DETAILS_ALWAYS). A workbench whose debug
-  // column opened on the log alone would answer half the question it is there for.
-  defaultOn: DETAILS_ALWAYS,
+  // column opened on the log alone would answer half the question it is there for;
+  // a page that says `content="log"` is asking for exactly that (DETAILS_PANES).
+  defaultOn: DETAILS_ALWAYS && DETAILS_PANES,
   visible: () => !details.hidden,
 });
 
@@ -1681,7 +1705,7 @@ function installDebugPanel(): void {
   // The input log (#178): on the workbench a run IS a sequence of gestures, and
   // on the play page a player who has not asked should not have their log
   // doubled in length. This game's own, because this game's log is.
-  bindRememberedBox(dbgInputsOn, DEBUG_INPUTS_KEY, (on) => (inputs.on = on), DETAILS_ALWAYS);
+  bindRememberedBox(dbgInputsOn, DEBUG_INPUTS_KEY, (on) => (inputs.on = on), DETAILS_ALWAYS && DETAILS_PANES);
   dbgCopy.addEventListener("click", () => void copyDetails());
 }
 

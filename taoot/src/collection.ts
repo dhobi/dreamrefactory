@@ -45,6 +45,7 @@
  * menu shows for those codes.
  */
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
+import { installPlayMenu } from "@dreamfactory/site/play-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { chosenEdition, installEditionPicker, markEdition, rememberEdition } from "./editions";
 import { installI18n } from "@dreamfactory/site/locales";
@@ -53,6 +54,7 @@ import { siteUrl } from "@dreamfactory/site/site";
 
 void installI18n();
 void installLanguageMenu();
+void installPlayMenu();
 installVersion();
 
 /** the five editions with box/disc scans — Russian shipped too, but nothing

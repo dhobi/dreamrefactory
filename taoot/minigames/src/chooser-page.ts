@@ -9,8 +9,10 @@
  */
 import { installI18n } from "@dreamfactory/site/locales";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
+import { installPlayMenu } from "@dreamfactory/site/play-menu";
 import { installVersion } from "@dreamfactory/site/version";
 
 void installI18n();
 void installLanguageMenu();
+void installPlayMenu();
 installVersion();

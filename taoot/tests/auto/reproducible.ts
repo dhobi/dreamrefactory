@@ -155,6 +155,13 @@ const CLOCK_ALLOWED = new Set([
   // first. It is the store's bookkeeping, not the engine's — no session waits on
   // it and no golden records it.
   "dust-saves.ts",
+  // The developer-mode page shell (taoot/devmode/), which is a page shell in the
+  // same sense `main.ts` is: its one timer polls for the boot to have opened a
+  // set, and then it writes `debugging` and stops. Nothing in the game waits on
+  // that poll, no session is driven by it and no golden records anything it
+  // produces — and the page it belongs to is not one a route is ever run on. The
+  // module it drives, `devmode/menu.ts`, reads no clock and stays covered.
+  "devmode-page.ts",
 ]);
 
 /**

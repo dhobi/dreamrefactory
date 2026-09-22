@@ -577,10 +577,21 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    * The modifier-key probes.
    *
    * `shiftkey()` answers for real, and exactly one thing in the shipping game
-   * changes as a result. Census of the English tree: 383 probe calls across 248
-   * script containers, and all but FOUR are gated on `debugging` — which is
-   * assigned once in the whole corpus, `debugging = false` in BOOTFILE, so those
-   * stay as dormant as they were when this returned 0. Of the four ungated ones,
+   * changes as a result. Census of the English tree — generated, and the whole of
+   * it is `docs/taoot/devmode-census.md` (`npx tsx taoot/tools/devcensus.ts`):
+   * **324 probe calls across 211 script containers**, and all but FOUR are gated
+   * on `debugging` — which is assigned once in the whole corpus, `debugging =
+   * false` in BOOTFILE, so those stay as dormant as they were when this returned
+   * 0.
+   *
+   * (This used to say 383 calls across 248 containers. That figure does not
+   * reproduce: read through the game's own file index, which resolves each
+   * basename once, it is 324/211, and even the raw dump — which holds both case
+   * spellings of most files, so nearly everything twice — only reaches 331. The
+   * generated census is the number to trust, because it is re-measured rather
+   * than remembered.)
+   *
+   * Of the four ungated ones,
    * three are `optionkey` (option-drag moves the cricket in Z, scales a smokestack
    * prop, and opens `debugger()` in PHOTO.SHP) and the fourth is the one worth
    * having: house.shp's "help" prop answers a shift-click with the game's own
@@ -588,13 +599,22 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    * Level added in the three smokestack sets. That is #8, and it was never missing
    * — only unreachable, because this said "not held".
    *
-   * So the other two keep answering 0. Not for want of a browser event to read
-   * them from: nothing in the shipping game reaches them except those three
-   * dev tools, and "option-drag rescales the artwork" is not a thing a player
-   * should be able to do to their own game by accident.
+   * So the other two answer from the session and the session leaves them false.
+   * That is not the same as hardwiring them to 0, which is what this used to do:
+   * nothing in the shipping game reaches them except those three dev tools, and
+   * "option-drag rescales the artwork" is not a thing a player should be able to
+   * do to their own game by accident — but it IS the thing the 1996 debug build
+   * could do, and a page whose whole purpose is to be that build should be able
+   * to ask for it. So the decision moves to the page: Titanic's play page sets
+   * `shiftDown` and nothing else, so `optionkey()` answers 0 there exactly as
+   * before, and only `taoot/devmode/` ever raises these two.
+   *
+   * That matters more than the count suggests. Of the 383 probes, the ones behind
+   * `debugging` are overwhelmingly `optionkey () & debugging` — the placement
+   * mode, the bedsit's item grab, the coordinate readouts, `debugger()` — so with
+   * these stuck at 0 the flag on its own opens almost nothing.
    */
   r("shiftkey", () => (session.shiftDown ? 1 : 0));
-  for (const key of ["optionkey", "commandkey"]) {
-    r(key, () => 0);
-  }
+  r("optionkey", () => (session.altDown ? 1 : 0));
+  r("commandkey", () => (session.metaDown ? 1 : 0));
 }

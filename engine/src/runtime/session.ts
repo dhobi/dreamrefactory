@@ -2169,10 +2169,30 @@ export class GameSession {
    * handler (house.shp's HELP button), so what matters is the modifier the click
    * carried and not whether the key happens to still be down two frames later.
    *
-   * `optionkey()` and `commandkey()` stay 0 — see the census where they are
-   * registered (builtins/scene.ts).
+   * {@link altDown} and {@link metaDown} are the same snapshot for the other two
+   * probes — see the census where all three are registered (builtins/scene.ts).
    */
   shiftDown = false;
+  /**
+   * Whether OPTION (alt) and COMMAND (meta) were held — `optionkey()` and
+   * `commandkey()`.
+   *
+   * These stay `false` for a player, and the page that runs the game is what
+   * decides: nothing in the engine ever sets them. Titanic's play page feeds
+   * `shiftDown` from the press and leaves these alone, so `optionkey()` answers 0
+   * there exactly as it did when it was hardwired to — which is the behaviour to
+   * keep, because the three ungated `optionkey` branches in the shipping game are
+   * dev tools that move the cricket in Z, rescale a smokestack prop and open
+   * `debugger()`, and none of those is a thing a player should be able to do to
+   * their own game by accident.
+   *
+   * The developer-mode page (taoot/devmode/) is what sets them, because the whole
+   * point of that page is to reach what the 1996 debug build could reach: nearly
+   * every `debugging` branch in the corpus is gated `optionkey () & debugging`,
+   * so with these two stuck at 0 the flag alone opens almost nothing.
+   */
+  altDown = false;
+  metaDown = false;
   /** engine time of the last `button()`/`stilldown()` — see {@link pollingInput} */
   private lastInputPoll = -Infinity;
   /** a script just read the button state: it owns this press (`button`, `stilldown`) */

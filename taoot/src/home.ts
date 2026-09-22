@@ -12,6 +12,7 @@
  * and staying that way.
  */
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
+import { installPlayMenu } from "@dreamfactory/site/play-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { installI18n } from "@dreamfactory/site/locales";
 import { installKonami } from "./konami";
@@ -19,6 +20,7 @@ import { siteUrl } from "@dreamfactory/site/site";
 
 void installI18n();
 void installLanguageMenu();
+void installPlayMenu();
 installVersion();
 
 /**
