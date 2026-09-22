@@ -51,18 +51,31 @@ const main = async (): Promise<void> => {
 
   // 1. the level places five, and every one of them found a landing to own
   await go(7164, 3979);
-  const decks = [...(await say()).matchAll(/lift (idle|starting|up|down) car (\d+) winch (\d+) deck y(-?\d+) of (-?\d+)\.\.(-?\d+)/g)];
+  const decks = [...(await say()).matchAll(/lift (idle|starting|up|down) car (\d+)\/(\d+) winch (\d+) deck y(-?\d+) of (-?\d+)\.\.(-?\d+)/g)];
   if (decks.length !== 5) fail(`CITY places five initelevator records; the HUD shows ${decks.length}`);
-  console.log(`ok    CITY's five cars are on their landings: ${decks.map((d) => `y${d[4]}`).join(", ")}`);
+  console.log(`ok    CITY's five cars are on their landings: ${decks.map((d) => `y${d[5]}`).join(", ")}`);
 
-  // the cage is 1150 — `obj+0 = 0x47e` — and the WINCH above it is the one with
-  // the script. Drawing the winch as the car put a motor where the lift should be
+  /**
+   * The car is TWO cels with the rider between them, and the WINCH above it is
+   * the one with the script.
+   *
+   * `obj+0 = 0x47e` at `0x4533c3` is the object's base cel, and reading that as
+   * "the car" gave this one cel for a long time. The class's own collector
+   * ignores `obj+0` and picks by its argument — `0x45332e` queues `0x47f` (1151)
+   * for 0 and `0x45334a` queues `0x47e` (1150) for 1 — and CITY's frame function
+   * calls it once each way with the PLAYER queued between them (`0x4517ad`,
+   * `0x402980`, `0x4517ed`). So 1151 is the cage's back wall and 1150 its front:
+   * 113x190 at 73% opaque against 106x314 at 42%, a frame with a hollow middle
+   * and a mesh across its lower front. Drawing 1150 alone, and before the
+   * player, put his boots over the mesh he should be standing behind.
+   */
   for (const d of decks) {
-    if (Number(d[2]) !== 1150) fail(`a car should draw cel 1150 (obj+0 = 0x47e); got ${d[2]}`);
-    const w = Number(d[3]);
+    if (Number(d[2]) !== 1151) fail(`the cage's BACK is cel 1151 (0x45332e's 0x47f); got ${d[2]}`);
+    if (Number(d[3]) !== 1150) fail(`its FRONT is cel 1150 (0x45334a's 0x47e); got ${d[3]}`);
+    const w = Number(d[4]);
     if (w < 1160 || w > 1163) fail(`a winch should draw from 0x477db0's 1160..1163; got ${w}`);
   }
-  console.log(`ok    each is the cage 1150 with a winch from 0x477db0's 1160..1163 above it`);
+  console.log(`ok    each is the cage 1151 behind and 1150 in front, with a winch from 0x477db0's 1160..1163 above it`);
 
   // 2. the car departs on its own — tag 0 is eighteen frames, then it goes —
   //    and a rider on the landing goes up with it

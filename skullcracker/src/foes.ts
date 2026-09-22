@@ -272,7 +272,7 @@ export interface Foe {
     /**
      * Whether the blow ALSO lands as damage. Seven of the eight answer 1 and
      * are done; `0x4547b3` is the one that falls through into the ordinary
-     * arithmetic after lighting itself, so a burning husk takes the hit too.
+     * arithmetic after lighting itself, so a burning CHOPPER takes the hit too.
      */
     andHurts?: boolean;
     from: string;
@@ -352,9 +352,69 @@ export interface Foe {
    *
    * `0x454690`, in the first tag of the fourth kind's death: `call 0x450a50` —
    * the punk's own creator, at the dying thing's own position. The big one is a
-   * husk with a man inside it.
+   * CHOPPER with a man inside it.
    */
   hatches?: { kind: string; afterCels: number; from: string };
+  /**
+   * The class's own GROUND DRAG, when it is not the allocator's.
+   *
+   * This is the field that made the CHOPPER a motorcycle, and missing it made
+   * it slower than a walk. A script's `dx` is not a speed: `0x42f8b0` divides it
+   * by the object's divisor and **adds** it to the velocity (`add word ptr
+   * [esp+6], ax`), once a frame, for ever. What stops the sum running away is
+   * `0x4302c0`, which on any frame that ended on the ground takes
+   * `v * obj+0x1e >> 13` back off. So the speed a thing settles at is its
+   * impulse over its drag, not its impulse:
+   *
+   * ```
+   *   allocator  0x42f550   obj+0x1e = 0x1666 = 5734   ->  70% off, x1.43
+   *   CHOPPER    0x45436a   0x42f7a0(obj, 0.05f) = 409  ->   5% off, x20
+   * ```
+   *
+   * 8192 is the scale, read as the float at `0x46a108`; the 0x800 restitution
+   * beside it comes from `0x42f7f0` against the −8192.0 at `0x46a10c`. The
+   * CHOPPER is the only class in chapter one that sets either.
+   */
+  drag?: number;
+  /**
+   * A ceiling its own think puts on `obj+0xc`, in whole pixels an engine frame.
+   *
+   * The drag is not the only thing holding a speed down: a class whose think
+   * function clamps its velocity by hand has the last word, and reading the
+   * drag without the clamp is how the CHOPPER first came out at three thousand
+   * pixels a second. Its `0x454410` opens with the clamp, before the state
+   * switch and before anything else it does:
+   *
+   * ```
+   *   454473  mov ax, word ptr [esi + 0xc]
+   *   454477  cmp ax, 0x1e            ; +30
+   *   45447d  mov word ptr [esi + 0xc], 0x1e
+   *   454485  cmp ax, 0xffe2          ; -30
+   *   45448b  mov word ptr [esi + 0xc], 0xffe2
+   * ```
+   *
+   * Thirty a frame is 450 pixels a second — half again the player's run, which
+   * is what a motorcycle ought to be. The probe does the same thing at
+   * `0x410486` with ±27 ({@link PROBE.maxVx}).
+   */
+  speedCap?: number;
+  /**
+   * The death that THROWS the body clear — the CHOPPER's wrecking bike.
+   *
+   * Four of the seven kinds' deaths are one animation played where the thing
+   * stood. This one is not: `0x477ba0` is four tags, and the first frame of tag
+   * 1 — cel 4900, the frame `0x454690` hatches FANG on — carries **dx 190, dy
+   * -140**, the only motion in either class's death. Through the class's own
+   * divisor of 20 (`0x454364`) that is nine and a half pixels forward and seven
+   * up, spent as an impulse the way every other script number is, with gravity
+   * taking it from there. Then tags 2 and 3 (cels 4904, 4905..4911) are the
+   * bike coming down and wrecking — `woods.snd`'s "0550 cycle wrec[k]".
+   *
+   * Reading the four tags as one flat fourteen-cel animation, which is what this
+   * page did, played the whole wreck on the spot: the rider stood up out of a
+   * bike that never went anywhere.
+   */
+  deathThrow?: { dx: number; dy: number; afterCels: number; from: string };
   /**
    * What killing it pays, when that is not the panel's own figure.
    *
@@ -1736,7 +1796,26 @@ export const FOES: Readonly<Record<string, Foe>> = {
     from: "0x450bf0 / 0x452310 / 0x4523d0 / 0x452960",
   },
   /**
-   * The husk. Creator `0x450cb0`, class `0x454330`, hit `0x454790`.
+   * The CHOPPER. Creator `0x450cb0`, class `0x454330`, hit `0x454790`.
+   *
+   * ## The name is the game's own, and it is a MOTORCYCLE
+   *
+   * This class was "the husk" here for a long time, which was a guess at what
+   * the art showed. The game says otherwise, twice over. Its panel plate is cel
+   * **13003 in `PLAYER.SBK`**, and the plate is a picture of a word: it reads
+   * `CHOPPER`. `0x454465` is what claims the bar with it, and the seven plates
+   * chapter one uses read
+   *
+   * ```
+   *   13000 CLETUS   13001 FANG   13002 LINK   13003 CHOPPER
+   *   13004 MOLITOV  13006 OX GHOUL   13009 WOLFMEISTER
+   * ```
+   *
+   * — so `initwerea` is FANG, `initwereb` LINK and `initwerec` MOLITOV, which
+   * `woods.snd`'s "0510 wolf molot[ov]" confirms for the thrower. And the same
+   * bank names this one's whole life: **0520 cycle spar[ks], 0530 cycle atta[ck],
+   * 0540 cycle wolf, 0550 cycle wrec[k]**. It is a wolf on a bike, the bike
+   * wrecks, and FANG is the rider getting up.
    *
    * The biggest thing in the chapter and the strangest: **it dies in three blows
    * of any size and a punk climbs out of it**. Its creator never calls the
@@ -1765,7 +1844,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
     /**
      * 0x477ba0, its four tags run together: it falls (4890, 4891), the punk comes
      * out of it (4900, whose record carries dx 190 and dy −140 — the only lift in
-     * either class), and the husk sinks (4905..4911).
+     * either class), and the CHOPPER sinks (4905..4911).
      */
     death: {
       cels: [
@@ -1776,6 +1855,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
       from: "0x477ba0 tags 0..3",
     },
     hatches: { kind: "initwerea", afterCels: 2, from: "0x454690" },
+    /** `0x477ba0` tag 1's first frame — the same frame FANG is hatched on */
+    deathThrow: { dx: 190, dy: -140, afterCels: 2, from: "0x477ba0 tag 1" },
+    /** `0x45436a`: `0x42f7a0(obj, 0.05f)` — 409, against everything else's 5734 */
+    drag: 409,
+    /** `0x454473` — its think clamps `obj+0xc` to ±0x1e before it does anything */
+    speedCap: 30,
     oneHitEach: true,
     health: 3,
     // `0x454828` — one index, and no random pick behind it
@@ -1790,7 +1875,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * `0x4547b3` — the odd one out of the eight. It lights itself, writes 1
      * into `AI+0x14` and zeroes the caller's own word, and then **falls
      * through into the ordinary damage arithmetic** instead of answering 1.
-     * So a husk is the one thing that both catches fire and takes the hit, and
+     * So a CHOPPER is the one thing that both catches fire and takes the hit, and
      * it installs no script of its own while it burns.
      */
     burns: { andHurts: true, from: "0x4547b3" },

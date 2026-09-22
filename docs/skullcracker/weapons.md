@@ -179,8 +179,32 @@ object to a list the player owns, and `0x421700` plants it fresh every frame:
 ```
 
 So a stream is not fired and forgotten, it is redrawn where you are — which is
-why walking while you hold the button sweeps it across a room. Two negative
-variants end it: `-2` walks the list installing the shutting-off tag, and `-1`
+why walking while you hold the button sweeps it across a room. (The flamer's own
+copy of that arithmetic is `0x453c70`, the think its class files at
+`0x453ba8`; it reads the same two user fields the same way.)
+
+**The offset belongs to a pose, and the pose is in a second script.** Each fire
+function files a muzzle offset chosen by the variant the state machine passes —
+the flamer's four are at `0x44db90` and the three after it, `(135, -35)`,
+`(63, 15)`, `(49, -22)`, `(66, 5)` — and the flame cel is anchored at its NOZZLE
+(9508 is 255x56 with `posX 1`), so the offset has to land on the barrel. It only
+does for one cel. Measuring the blue muzzle spark every armed cel carries,
+against that cel's own anchor:
+
+```
+  1240  (73,-14)    1241  (86,-34)    1242  (97,-54)    1243  (132,-37)
+  1222..1227 (crouching)  (~61,+14)   ->  variant 1 to the pixel
+```
+
+`0x470f98` tag 2 is a single frame of cel **1240**, and reading that as the
+firing pose left the player holding the gun low with the flame hanging 135
+pixels away and nothing in between. The sustained pose is a different script:
+`0x46faf8`, installed by `0x423726` (tag 0) and `0x42370d` (tag 1, for the
+second character), whose tag 0 is `1240 1241 1242 1243 1244 1243 1244` — the gun
+RISES and the arm extends, settling on 1243/1244, whose spark is variant 0's
+offset to four pixels. So the offset was never wrong; the pose under it was.
+
+Two negative variants end it: `-2` walks the list installing the shutting-off tag, and `-1`
 writes the expire kind straight into every member. The player's own hit handler
 sends that `-1` before it has even looked at the blow (`0x448c19`, `0x448c40`),
 so **being hit puts your flamethrower out**.

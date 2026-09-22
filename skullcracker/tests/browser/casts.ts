@@ -137,6 +137,20 @@ const sweep = async (
 // ---- 1 — the spitter's gob -------------------------------------------------
 
 await go(15, 700, 8521);
+/**
+ * ...once one of them is the thing the panel is showing.
+ *
+ * LAB's nearest spitter to x700 stands at `(610, 8423)` and the nearest arm at
+ * `(813, 8364)` — ninety pixels against a hundred and thirteen, so the spitter
+ * wins the panel on the frame the level stands up and this used to be a bare
+ * check. It only held while a foe's stride was its script's `dx`: now that a
+ * stride is the settled velocity the engine actually walks at, the spitter is
+ * far enough into its own patrol by the time the page has painted for the arm
+ * to have taken the bar. Waiting for it asserts the same thing without
+ * depending on how fast the level's population moves.
+ */
+for (let i = 0; i < 24 && !/nearest initpuke/.test(await say()); i++)
+  await page.waitForTimeout(150);
 if (!/nearest initpuke/.test(await say())) fail(`LAB x700 should stand by a spitter: ${(await say()).slice(0, 180)}`);
 /**
  * 110..180 is the band `0x41809b` spits from on a plain coin toss, and

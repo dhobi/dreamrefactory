@@ -170,16 +170,46 @@ export class Film {
   }
 
   /**
-   * How long frame `i` is held.
+   * How long frame `i` is held — the film's own authored hold, and nothing else.
    *
-   * A segment WITH a bed is paced against the bed, which is what {@link
-   * segmentInterval} computes and what the chapter films want. A segment
-   * without one is paced by its own authored holds and by nothing else: its
-   * `minHoldTicks` IS its frame rate, and `interval`'s 66 ms native-rate floor
-   * — a rule for films that carry no timing at all — must not raise it.
+   * `SC.EXE` computes the deadline in four instructions and consults no sound
+   * anywhere in them (`0x44b7db`, the per-frame head of the movie loop):
    *
-   * The films say so themselves. Every inset segment in this rip is authored at
-   * 3 ticks, 50 ms, and the one-shot over it is exactly as long as the picture:
+   * ```
+   *   44b7db  call 0x4087c0           ; now, in ticks of 50/3 ms
+   *   44b7f5  [0x4a76f4] = eax        ; the deadline is NOW...
+   *   44b800  edx = [frame + 2]       ; ...plus this frame's own hold
+   *   44b809  ecx = [hdr + 0x1c]      ; ...or the movie's floor
+   *   44b80c  cmp edx, ecx            ; whichever is LARGER
+   *   44b810  add [0x4a76f4], ecx
+   *   44b818  add [0x4a76f4], edx
+   * ```
+   *
+   * and `0x44a033` then spins on `now < [0x4a76f4]`. That is exactly
+   * {@link frameHoldMs} — `max(frame.holdTicks, minHoldTicks)` — so a segment
+   * that carries a BED is paced no differently from one that does not. The bed
+   * is started at segment entry and plays under the picture; it does not set the
+   * frame rate, and `interval` (which still says whether this film runs on the
+   * clock at all, and still cuts the bed to length) must not raise a hold.
+   *
+   * Flooring a bed-bearing segment at {@link segmentInterval}'s rate is what
+   * made the front end crawl, because every film between the title and level one
+   * has one:
+   *
+   *     MENU.MOV    175 frames   17.10s authored   25.38s played   1.48x
+   *     CHAR.MOV     63           4.72s            9.13s           1.94x
+   *     LTPAN/RTPAN  59           2.95s            8.55s           2.90x
+   *
+   * The pans are the worst of it: 59 frames authored at the film's own 3 ticks,
+   * held at the 145 ms an interactive film with sound was given, and the camera
+   * took three times as long to reach the character it was panning to. It reads
+   * the same way further in — a bed authored over a WHOLE film divided by its
+   * FIRST segment's frames gave `MALL.MOV` 830 ms a frame, sixteen times the
+   * authored rate, for a bed that covers all ten of its segments.
+   *
+   * The films say the same thing from the other side. Every inset segment in
+   * this rip is authored at 3 ticks, 50 ms, and the one-shot over it is exactly
+   * as long as the picture:
    *
    *     KILL1  seg2  186 frames x 50ms = 9.30s   "kill 8"  9.29s
    *     BOGGS01 seg2 106                = 5.30s   "1a"     5.25s
@@ -187,13 +217,12 @@ export class Film {
    *     BOGGS01 seg4 127                = 6.35s   "1c"     6.32s
    *     BOGGS01 seg5 177                = 8.85s   "1d"     8.82s
    *
-   * At 66 ms those same segments ran a third longer than the line spoken over
-   * them, which is what a floor meant for `logo.mov` does to a film that was
-   * timed by hand.
+   * `engine/src/web/movie-player.ts` has read it this way since the same loop
+   * was read in TI.EXE (`0x44b10f`, the identical pair of adds): the hold is the
+   * film's, and `interval` only decides whether there is a clock at all.
    */
   private holdMs(i: number): number {
-    const authored = frameHoldMs(this.seg, i);
-    return this.seg.audioChunks.length ? Math.max(authored, this.interval) : authored;
+    return frameHoldMs(this.seg, i);
   }
 
   private draw(): void {

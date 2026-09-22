@@ -475,8 +475,48 @@ sound over one is exactly as long as its picture:
 
 `mov-pace.ts`'s 66ms native floor — a rule for the films that carry no timing at
 all, the publisher logos — was raising every one of them by a third, so the
-picture outran the line spoken over it. A segment with a bed is paced against the
-bed; a segment without one is paced by its own authored holds and by nothing else.
+picture outran the line spoken over it.
+
+**And a bed is not a frame rate either**, which is the other half of the same
+correction and the one the front end was paying for. `SC.EXE` computes the
+deadline for a frame out of the film and nothing else, four instructions at
+`0x44b7db`:
+
+```
+  44b7db  call 0x4087c0           ; now, in ticks of 50/3 ms
+  44b7f5  [0x4a76f4] = eax        ; the deadline is NOW...
+  44b800  edx = [frame + 2]       ; ...plus this frame's own hold
+  44b809  ecx = [hdr + 0x1c]      ; ...or the movie's own floor
+  44b80c  cmp edx, ecx            ; whichever is LARGER
+  44b810  add [0x4a76f4], ecx
+  44b818  add [0x4a76f4], edx
+```
+
+and `0x44a033` spins on `now < [0x4a76f4]`. No sound is consulted anywhere in the
+loop — it is `max(frame.holdTicks, minHoldTicks)`, the same pair of adds TI.EXE
+makes at `0x44b10f`. This page's player was flooring a segment that carries a bed
+at the rate a soundtrack implied, and every film between the title and level one
+carries one:
+
+| film | frames | authored | it played |
+| --- | --- | --- | --- |
+| `menu.mov` | 175 | 17.10s | 25.38s |
+| `char.mov` | 63 | 4.72s | 9.13s |
+| `ltpan.mov` / `rtpan.mov` | 59 | 2.95s | 8.55s |
+
+The pans are the worst of it: 59 frames authored at the film's own three ticks,
+held at 145ms apiece, and the camera took three times as long to reach the
+character it was panning to. In a browser, clicking a figure to the Start button
+took 9.14s and now takes 4.68s, and the chooser's own idle loop runs at the 100ms
+it is authored at rather than 150. Further in it reads the same way, because a
+bed is authored over a whole FILM and was being divided by its FIRST segment's
+frames: that gave `mall.mov` 830ms a frame, sixteen times its authored rate, for
+music that covers all ten of its segments.
+
+So: every segment is paced by its own authored holds and by nothing else. The bed
+starts when the segment does and plays under the picture; `interval` still says
+whether a film runs on the clock at all, and still decides how much of a loop
+order to take, but it may not raise a hold.
 
 Both ends of every one of these films then hold on a frame whose flags bit 0 says
 **wait for the voice**: `kill1.mov` holds its console still until `soundout 3` is

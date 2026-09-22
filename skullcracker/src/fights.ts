@@ -69,7 +69,7 @@ import type { FoeAnim } from "./foes";
  * - **The leaping attacks do not leap.** Their own `dy` is in the table below —
  *   `0x477368 tag 0` is `dy -480` on the frame the punk leaves the ground — and
  *   nothing applies it: the engine carries a leap as velocity through `obj+0xa`
- *   and this page putting it straight into `y` sent WOODS' husk through the floor
+ *   and this page putting it straight into `y` sent WOODS' CHOPPER through the floor
  *   and out of the level.
  * - A class whose own {@link Foe.gait} carries no stride does not close and is
  *   not moved by its attack either. LAB's ten `initarm` are the case — arms out

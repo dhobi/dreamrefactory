@@ -1,14 +1,14 @@
 /**
- * The husk — `initwered`, `0x454410`, the thing that hatches a punk when it dies.
+ * The CHOPPER — `initwered`, `0x454410`, the thing that hatches a punk when it dies.
  *
  * ## Its five scripts, and therefore its six states
  *
  * `0x45d090` copies word 4 of a script's header into `obj+0x18`, so the kinds of
- * the scripts a class owns ARE its state machine's alphabet. The husk's live in
+ * the scripts a class owns ARE its state machine's alphabet. The CHOPPER's live in
  * one run of `.data` and they were read out of it whole:
  *
  * ```
- *   0  0x477ad0  one cel, no stride: the husk standing in its patch
+ *   0  0x477ad0  one cel, no stride: the CHOPPER standing in its patch
  *   1  0x477ae0  tag 0 the four-cel walk, tag 1 the lurch that loops and squeals
  *   2  0x477b28  the maul — six cels that travel, and the only attack it has
  *   3  0x477b70  one cel, no stride: the turn, and a state that lasts one frame
@@ -30,7 +30,7 @@
  * `AI+6`, zeroes `AI+0x12` and `AI+0x14`, and hands `0x45ef70` the band list at
  * `0x477c28`. There is no `AI+4` decision budget, no `AI+2` beat, no `AI+6`
  * side: the two words this class ever spends are `AI+0x12`, the count the corpse
- * lies still for, and `AI+0x14`, the flag one particular blow sets. So the husk
+ * lies still for, and `AI+0x14`, the flag one particular blow sets. So the CHOPPER
  * does not circle, does not back off, does not taunt and never once turns to
  * face you inside four hundred pixels. It walks the way it is pointed, turns at
  * a wall or when you have got six hundred behind it, and mauls whatever is
@@ -38,7 +38,7 @@
  *
  * ## What this module owns, and what it does not
  *
- * States 0 to 4 are the ones a husk is in while it is on its feet, and those are
+ * States 0 to 4 are the ones a CHOPPER is in while it is on its feet, and those are
  * here. State 5 is the whole of the death, which the page already drives through
  * {@link Foe.death} and {@link Foe.hatches}; a brain is never called during it.
  * It is named at {@link NOT_HERE} so the next reader can see what is deliberately
@@ -57,7 +57,7 @@ import { install, type Brain, type Enemy, TICK_SCALE } from "./kit";
  *   installs kind 5 tag 0 and `0x454873` calls `0x40d450(0x12c)`.
  * - **5 tag 0**, `0x454653`: the fall (4890, 4891) ends, sound 0x20 goes out
  *   through `0x40f110`, kind 5 tag 1 goes on, and then `0x454690` calls
- *   `0x450a50` — the punk's own creator — at the husk's point with the husk's
+ *   `0x450a50` — the punk's own creator — at the CHOPPER's point with the CHOPPER's
  *   own rect out of `AI+6` and `AI+0xa`. That is {@link Foe.hatches}.
  * - **5 tag 1**, `0x4546a1`: `0x44ff20(obj, 3, 1)`, sound 0x20 through
  *   `0x40ef30`, kind 5 tag 2, and `AI+0x12 = 0x434540(0x4b) + 0x32` — between
@@ -74,13 +74,13 @@ const NOT_HERE = "0x454634, 0x454653, 0x4546a1, 0x4546f7, 0x454748" as const;
  * `0x477b80` — kind 4, three tags of one cel each, `1970`, `1971` and `1972` at
  * four frames a cel.
  *
- * Those are the PUNK's flinch cels, not the husk's; the husk's own art is the
+ * Those are the PUNK's flinch cels, not the CHOPPER's; the CHOPPER's own art is the
  * 4870..4911 run. A raw search of the image for `struct.pack('<I', 0x477b80)`
  * finds no reference anywhere in `SC.EXE`, so no `0x45d090` call ever installs
  * it and `obj+0x18` is never 4. It is a leftover of whichever class this one was
- * copied from, and it is the reason the husk cannot flinch: the table at
+ * copied from, and it is the reason the CHOPPER cannot flinch: the table at
  * `0x454764` has no flinch state and the hit handler `0x454790` never reaches
- * for one. A blow on a husk is a sound, some blood, and one off three.
+ * for one. A blow on a CHOPPER is a sound, some blood, and one off three.
  */
 const ORPHAN = "0x477b80" as const;
 
@@ -92,7 +92,7 @@ const ORPHAN = "0x477b80" as const;
  * ground — a big slow thing covering about the same distance as the punk's walk.
  */
 export const WERED = {
-  /** kind 0 — one cel, no stride: what a husk nobody has walked up to is doing */
+  /** kind 0 — one cel, no stride: what a CHOPPER nobody has walked up to is doing */
   idle: { cels: [4870], hold: 1, kind: 0, tag: 0, from: "0x477ad0 tag 0" },
   /** kind 1 tag 0 — the four-cel walk, and every frame of it travels */
   walk: {
@@ -105,7 +105,7 @@ export const WERED = {
   },
   /**
    * kind 1 tag 1 — the same stride on half the cels: 4871 and 4873 twice each,
-   * which is the walk with its two extremes held. This is the state the husk
+   * which is the walk with its two extremes held. This is the state the CHOPPER
    * spends its life in, and the one that decides.
    */
   lurch: {
@@ -117,7 +117,7 @@ export const WERED = {
     from: "0x477ae0 tag 1",
   },
   /**
-   * kind 2 — the maul, and the only attack a live husk has. Six cels, all of
+   * kind 2 — the maul, and the only attack a live CHOPPER has. Six cels, all of
    * them travelling, and `fights.ts` already has it as this class's attack
    * because its cels carry a strike box where the walk's do not.
    */
@@ -155,7 +155,7 @@ export const WERED = {
  * `cmp word ptr [esp+0x12], 0xfda8` is a signed word compare against −600.
  * `out+0xa` is already negated when `obj+0x28` is set (`0x45eff3`), so a
  * negative forward distance means behind and this is the one thing short of a
- * wall that makes a husk think about turning round.
+ * wall that makes a CHOPPER think about turning round.
  */
 const TURN_BEHIND = -600;
 
@@ -174,7 +174,7 @@ const STEP_OFF = 100;
  * `0x454477`/`0x45448b` — the sideways speed cap, applied before the dispatch.
  *
  * `obj+0xc` is clamped to ±0x1e on every think, whatever state the thing is in.
- * The husk is the one class in the chapter carrying a drag and a restitution of
+ * The CHOPPER is the one class in the chapter carrying a drag and a restitution of
  * its own (`0x45436a` pushes 0.1f, `0x454378` pushes 0.3f), so it is the one
  * that can be bounced hard enough off an obstacle to need the cap.
  */
@@ -204,7 +204,7 @@ const TICKS = TICK_SCALE;
  * the player back in this port**, so it is carried as read and spends nothing.
  *
  * And before both of those, `0x45442a`: with the player at band 2 or better and
- * in front, and the husk neither asleep (state 0) nor dead (state 5),
+ * in front, and the CHOPPER neither asleep (state 0) nor dead (state 5),
  * `0x40d1c0` is handed `AI+0` — its three points of health — against
  * `0x40e300(0x64)` and plate `0x32cb`. That is the boss bar's claim, decided by
  * Manhattan distance across every claimant in the room, and the page already has
@@ -216,7 +216,7 @@ const TICKS = TICK_SCALE;
  * Every path out of `0x454410` is `xor ax, ax` except `0x454759`, the frame the
  * corpse is removed — which is in state 5 and therefore not here. **So every
  * path below returns `false`**, the waiting ones included: a think function
- * never suppresses the animation, and returning `true` would freeze the husk
+ * never suppresses the animation, and returning `true` would freeze the CHOPPER
  * mid-stride with its nine and a half pixels unspent.
  */
 export const wered: Brain = (e, foe, run, k) => {
@@ -232,14 +232,14 @@ export const wered: Brain = (e, foe, run, k) => {
      *
      * `0x434200(player.point, AI+6)` — the player's own point inside the four
      * words the creator copied out of this record — and nothing else. There is
-     * no script-finished test and no alternative branch: a husk outside the
+     * no script-finished test and no alternative branch: a CHOPPER outside the
      * fight holds cel 4870 and does not move. The page's own boundary test is
      * `e.fighting`, and it is the same rect.
      */
     case 0:
       return e.fighting ? install(e, WERED.walk) : install(e, WERED.idle);
     /**
-     * ---- 1, `0x4544d8`: the walk, and the whole of the husk's judgement.
+     * ---- 1, `0x4544d8`: the walk, and the whole of the CHOPPER's judgement.
      *
      * It opens on the wall test and then sub-dispatches on `obj+0x44`; a tag
      * that is neither 0 nor 1 falls straight out at `0x454521`, which is what
@@ -307,7 +307,7 @@ export const wered: Brain = (e, foe, run, k) => {
  * The engine's mover sets `obj+0x2c` when the object's own anchor is inside one
  * of the level's obstacle rects (`0x430146`, which `walk.ts` already documents),
  * ejects it along the shortest axis, and scales the velocity it had on that axis
- * by the restitution at `obj+0x20`. The husk is the only class in the chapter
+ * by the restitution at `obj+0x20`. The CHOPPER is the only class in the chapter
  * that is given one — `0x454378` pushes 0.3f at it through `0x42f7f0` — so it is
  * the only one that comes off a wall with speed pointing the wrong way, and the
  * test is exactly that: `obj+0x2c` set AND `obj+0xc` disagreeing with the mirror
@@ -315,7 +315,7 @@ export const wered: Brain = (e, foe, run, k) => {
  *
  * **The port keeps only the second half.** `Enemy` carries no obstacle flag —
  * this page does not run foes through the obstacle solver — so `obj+0x2c` cannot
- * be asked for. Dropping it costs nothing here: the husk has no flinch and does
+ * be asked for. Dropping it costs nothing here: the CHOPPER has no flinch and does
  * not fly ({@link Foe.flies} is not set on it), so the only thing that could put
  * sideways speed on a live one is the bounce this test is looking for, and
  * `e.vx` is otherwise flat zero for its whole life. If foes are ever given the

@@ -231,9 +231,21 @@ const main = async (): Promise<void> => {
     `ok    and the goo has fallen: ${settled[0]} green above the middle, ${settled[1]} below`,
   );
 
-  // 7. furniture does not bleed. `0x44fe80` fetches the blow, installs a dent and
-  //    plays a sound, and never calls `0x40cba0` — so a mailbox makes no mess.
-  await page.goto(`${BASE}/walk.html?level=1&x=3470`);
+  /**
+   * 7. furniture does not bleed. `0x44fe80` fetches the blow, installs a dent and
+   *    plays a sound, and never calls `0x40cba0` — so a mailbox makes no mess.
+   *
+   * At STREETS' SECOND mailbox, not its first. `green()` counts every green
+   * pixel on the screen, so the check only means anything while nothing that
+   * bleeds is in the window — and the box at x3522 has an `initwerea` 167px
+   * away, inside a view that is 512 wide. That held while a foe's stride was
+   * its script's `dx`; it stopped holding the moment a stride became the
+   * settled velocity the engine actually walks at, and the punk arrived to be
+   * punched with the furniture. The box at x6906 has 450px of clear ground
+   * around it — more than the half-width of the view, and more than anything in
+   * the level covers in the second or so this takes.
+   */
+  await page.goto(`${BASE}/walk.html?level=1&x=6860`);
   await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
   await page.waitForTimeout(500);
   const dry = await green();
