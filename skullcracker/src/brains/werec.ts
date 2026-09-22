@@ -7,7 +7,7 @@
  * `0x45d090` writes a script's own kind into `obj+0x18`, so this table IS the
  * machine's alphabet. The class's data region is contiguous from `0x4778c0` to
  * `0x477abe` and then the band list starts, so these nine are all of them —
- * there is no orphan script in the gap the way the husk has one:
+ * there is no orphan script in the gap the way the CHOPPER has one:
  *
  * ```
  *   0  0x4778c0  the idle: one cel, no stride — it does NOT patrol

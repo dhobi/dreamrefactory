@@ -64,8 +64,17 @@ export interface Enemy {
    * the rest of the level whatever else is done to it.
    */
   shaken?: number;
-  /** has the husk already let out what was inside it — see {@link Foe.hatches} */
+  /** has the CHOPPER already let out what was inside it — see {@link Foe.hatches} */
   hatched?: boolean;
+  /** ...and has its bike already been thrown clear — see {@link Foe.deathThrow} */
+  threw?: boolean;
+  /**
+   * Its walking velocity, in whole pixels an ENGINE frame — `obj+0xc`.
+   *
+   * Not the script's `dx`: that is an impulse added to this every frame, with
+   * the ground taking {@link Foe.drag} of it back. See the stride in `walk.ts`.
+   */
+  speed?: number;
   /** the record's rect, top and bottom — what a sleeper watches ({@link Foe.wake}) */
   top: number;
   bottom: number;

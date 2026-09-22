@@ -167,7 +167,7 @@ same reason twice: the port was reading records at the wrong field.
 `0x4503a0` pulls three things out of each 48-byte record and hands them to the
 class's creator: the point as one dword, then the rect's two corners. Every
 creator's first move on the first of those is `mov dword [obj+6], eax`
-(`0x450f90` the dog, `0x450a7b` the punk, `0x450cdc` the husk), and `0x4026d0`
+(`0x450f90` the dog, `0x450a7b` the punk, `0x450cdc` the CHOPPER), and `0x4026d0`
 draws a cel with its anchor at `obj+6`. So the point is where the thing stands and
 the rect is only the territory its AI struct keeps (`0x450fc3` stores both corners
 into it). This port had been standing every enemy on the rect's bottom edge. In
@@ -197,13 +197,58 @@ the only enemy in the chapter with a real repertoire, choosing a trot, a walk, a
 leap that leaves the ground (`dx 160, dy -80` twice) or a flat-out charge from its
 own five distance bands at `0x478240`.
 
-The strangest of them is the husk. Its creator never calls the difficulty scaler
+The strangest of them is the CHOPPER, and its name is the first thing to get
+right. The panel plate an enemy claims the health bar with is a picture of a
+word, and chapter one's seven read **CLETUS** (13000, `initeyeball`), **FANG**
+(13001, `initwerea`), **LINK** (13002, `initwereb`), **CHOPPER** (13003,
+`initwered`), **MOLITOV** (13004, `initwerec`), **OX GHOUL** (13006) and
+**WOLFMEISTER** (13009). This page called `initwered` "the husk" for a long
+time, which was a guess at what the art showed; the game calls it a motorcycle,
+and `woods.snd` names its whole life — *0520 cycle sparks, 0530 cycle attack,
+0540 cycle wolf, 0550 cycle wreck*. MOLITOV's own "0510 wolf molotov" confirms
+the thrower at the same time.
+
+Its creator never calls the difficulty scaler
 at all: it writes the literal 3 into its state (`0x450d1c`), and its hit handler
 fetches the blow's damage only to hand to the blood before doing `dec word ptr
 [eax]` (`0x454821`). Three blows of any size. Then the first tag of its death
-calls `0x450a50` — the punk's own creator — at its own position (`0x454690`), so
+calls `0x450a50` — FANG's own creator — at its own position (`0x454690`), so
 what falls over leaves a fresh 250-health punk standing where it was. It pays no
 award, because the thing that climbs out of it carries the 300.
+
+**And the bike goes.** `0x477ba0` is four tags, not one animation, and the first
+frame of tag 1 — cel 4900, the frame FANG is hatched on — carries `dx 190, dy
+-140`, the only motion in either class's death. Tags 2 and 3 are the wreck coming
+down. Read as one flat fourteen-cel sequence, which is how this port played it,
+the rider stood up out of a bike that never went anywhere.
+
+### A script's `dx` is not a speed
+
+The CHOPPER is also where this page learned what a stride is, because it was the
+one class the mistake was visible on. `0x42f8b0` divides the script's `dx` by the
+object's divisor and **adds** it to the velocity — `add word ptr [esp+6], ax` —
+once a frame, for ever. What stops the sum running away is `0x4302c0`, which on
+any frame that ended on the ground takes `v * obj+0x1e >> 13` back off. So the
+speed a thing settles at is its impulse over its drag.
+
+`obj+0x1e` is per class. The allocator (`0x42f5ba`) gives everything `0x1666` —
+5734, and 5734/8192 is the 70% the player's own walk is tuned around. The CHOPPER
+overrides it at `0x45436a` with `0x42f7a0(obj, 0.05f)`, which against the 8192.0
+at `0x46a108` is **409**: five percent off a frame instead of seventy, and a top
+speed twenty times its impulse rather than one and a half. It is the only class
+in the chapter that sets either that or the restitution beside it.
+
+Assigning `dx / divisor` as a speed, which is what this page did, therefore made
+every class about 1.4x slow and this one **twenty times** slow: a motorcycle
+settling at 142 pixels a second, against a walk of 180 and a run of 330. Measured
+in a browser after the fix it charges at thirteen hundred.
+
+One consequence had to be paid for. A stride that can be two hundred pixels an
+engine frame is longer than the wall it has to notice — `CLIMB_PX` is 50 — so
+the walk is now cut into pieces no longer than that and each piece tested and
+pinned on its own. Without it the CHOPPER stepped clean over WOODS' ledges,
+found nothing under the far side, and fell fifty-six thousand pixels out of the
+level.
 
 The three `initcrush` records across the path are hydraulic presses, and
 `woods.snd` index 19 is named "0230 hydraulic ". A press has no timer and no

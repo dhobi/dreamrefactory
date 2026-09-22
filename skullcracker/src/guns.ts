@@ -177,9 +177,36 @@ export const WEAPONS: Readonly<Record<number, Weapon>> = {
       land: [1262],
       // and its duck is in the SECOND script, `0x471128`, which is the same kind
       duck: [1220],
-      fire: [1240],
-      shot: [],
-      from: "0x470f98 tags 0,1,16,12,14,14,2 and 0x471128 tag 5",
+      /**
+       * The flamer FIRES OUT OF A SECOND SCRIPT, and that is why its flame hung
+       * in the air.
+       *
+       * `0x470f98` tag 2 is one frame of cel 1240, and reading it as the whole
+       * firing pose left the player holding the gun low while the flame drew
+       * itself 135 pixels away with nothing in between. The sustained pose is
+       * `0x46faf8`, installed by `0x42370d` (tag 1 when `[0x46b1a8]` is 1, the
+       * second character) and `0x423726` (tag 0):
+       *
+       * ```
+       *   tag 0   1240 1241 1242 1243 1244 1243 1244     SKULLCRACKER
+       *   tag 1   1340 1341 1342 1343 1344 1343 1344     BONEBREAKER
+       * ```
+       *
+       * The gun RISES through it. Measured off the blue muzzle spark each cel
+       * carries, relative to that cel's own anchor:
+       *
+       * ```
+       *   1240  (73,-14)   1241  (86,-34)   1242  (97,-54)
+       *   1243  (132,-37)  1244  — and 1243/1244 are what it settles on
+       * ```
+       *
+       * The flamer's own muzzle offset is `0x44db90`'s `(0x87, 0xffdd)` =
+       * **(135, -35)**, which is cel 1243's spark to four pixels. So the offset
+       * was never wrong; the pose under it was. See {@link STREAMS}.
+       */
+      fire: [1240, 1241, 1242],
+      shot: [1243, 1244],
+      from: "0x470f98 tags 0,1,16,12,14,14 and 0x471128 tag 5; fire 0x46faf8 tag 0",
     },
   },
   12: {

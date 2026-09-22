@@ -483,10 +483,27 @@ export function burnCrow(c: Crow): void {
  */
 export const ELEVATOR = {
   /**
-   * The CAR, and it is one cel: `mov word ptr [esi], 0x47e` at `0x4533c3` sets the
-   * object's base cel to 1150 and nothing ever installs a script over it.
+   * The CAR, and it is TWO cels with the rider between them.
+   *
+   * `0x4533c3` sets the object's base cel to 1150 and nothing installs a script
+   * over it, which is why this read "one cel" for a long time. But the base cel
+   * is not what gets drawn: the class's own collector `0x453310` ignores
+   * `obj+0` and picks by its ARGUMENT, calling `0x40e5f0` with cel `0x47f` when
+   * it is 0 (`0x45332e`) and `0x47e` when it is 1 (`0x45334a`, which also
+   * queues the winch). CITY's frame function calls it once each way, with the
+   * player queued between — see the second pass in `walk.ts`'s painter.
+   *
+   * The art is the confirmation. 1151 is 113x190 and 73% opaque, a back wall;
+   * 1150 is 106x314 and 42%, a frame with a hollow middle, a diamond mesh
+   * across its lower front and the cable running up out of it.
    */
-  car: { cels: [1150], from: "obj+0 = 0x47e at 0x4533c3" },
+  car: {
+    /** cel `0x47f`, queued by `0x453310(0)` at `0x45332e` — behind the rider */
+    back: 1151,
+    /** cel `0x47e`, queued by `0x453310(1)` at `0x45334a` — over the rider */
+    front: 1150,
+    from: "0x453310 — 0x45332e (0x47f) and 0x45334a (0x47e)",
+  },
   /** tag 0 — the winch at rest */
   idle: { cels: [1160], hold: 3, from: "0x477db0 tag 0" },
   /** tags 1 and 3 — one beat of wind-up before either direction */

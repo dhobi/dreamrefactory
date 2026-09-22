@@ -199,7 +199,30 @@ const main = async (): Promise<void> => {
   const fidle = await showed(600, []);
   if (fidle.join() !== "1215,1216,1217") fail(`the flamer's idle is 0x470f98 tag 0, three cels; saw ${fidle.join(" ")}`);
   const ffire = await showed(900, ["p"]);
-  if (!ffire.includes(1240)) fail(`its fire pose is tag 2, cel 1240; saw ${ffire.join(" ")}`);
+  /**
+   * Its firing pose is a SEQUENCE, and it comes out of a second script.
+   *
+   * `0x470f98` tag 2 is one frame of cel 1240 and this line used to assert
+   * exactly that — which left the player holding the gun low while the flame
+   * drew itself at the muzzle offset of a pose he never reached. The sustained
+   * one is `0x46faf8`, installed by `0x423726` (tag 0) and `0x42370d` (tag 1,
+   * the second character):
+   *
+   * ```
+   *   tag 0   1240 1241 1242 1243 1244 1243 1244
+   * ```
+   *
+   * The gun RISES through it. Measuring the blue muzzle spark each cel carries
+   * against that cel's own anchor gives 1240 `(73,-14)` … 1243 `(132,-37)`, and
+   * the flamer's own offset — `0x44db90`'s `(0x87, 0xffdd)` = `(135, -35)` — is
+   * 1243's to four pixels. So the pose that matters is the one it settles on,
+   * and 1240 is a single frame at the front that a poll can miss.
+   */
+  const AUTHORED = [1240, 1241, 1242, 1243, 1244];
+  const stray = ffire.filter((c) => !AUTHORED.includes(c));
+  if (stray.length) fail(`its fire pose is 0x46faf8 tag 0, ${AUTHORED.join(" ")}; saw ${ffire.join(" ")}`);
+  if (!ffire.some((c) => c === 1243 || c === 1244))
+    fail(`it should settle on 1243/1244, which is where the flame's offset belongs; saw ${ffire.join(" ")}`);
   // ...and now it POURS: `0x42bab5` spends a round an engine frame for as long
   // as the tag runs, which this suite once asserted could not happen because
   // the flamer had no fire function here at all. See tests/browser/streams.ts.

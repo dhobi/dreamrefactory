@@ -391,9 +391,18 @@ const AIR_TURN = 10;
  */
 const DRAG = 5734;
 const DRAG_ONE = 8192;
-function dragged(v: number): number {
+/**
+ * One frame of ground drag, at the allocator's rate or at a class's own.
+ *
+ * `0x42f7a0(obj, f)` is how a class overrides it: the float is multiplied by
+ * the 8192.0 at `0x46a108` and stored as the word `obj+0x1e`, so the allocator's
+ * 0x1666 IS 0.6999 and the CHOPPER's `0x3d4ccccd` (0.05) is 409. That word is
+ * the fraction TAKEN OFF, which is why a lower one is faster — see
+ * {@link Foe.drag}.
+ */
+function dragged(v: number, rate: number = DRAG): number {
   if (v === 0) return 0;
-  let off = Math.trunc((v * DRAG) / DRAG_ONE);
+  let off = Math.trunc((v * rate) / DRAG_ONE);
   if (off === 0) off = Math.sign(v);
   return v - off;
 }
@@ -2974,7 +2983,7 @@ function elevatorsIn(
       continue;
     // the cels are one book's, exactly as the planks' are: only CITY carries these
     if (
-      ![...ELEVATOR.car.cels, ...ELEVATOR.idle.cels].every((id) =>
+      ![ELEVATOR.car.back, ELEVATOR.car.front, ...ELEVATOR.idle.cels].every((id) =>
         sbk.byId.has(id),
       )
     )
@@ -4156,13 +4165,13 @@ function baseOf(e: Enemy, lvl: Level, cel = celOf(e)): number {
  * ...and a thing standing in a FIGHT is footed by its GAIT cel, not by whichever
  * pose it is striking in.
  *
- * WOODS' husk is why. Its walk, cel 4870, carries a body box reaching `y1 -1` —
+ * WOODS' CHOPPER is why. Its walk, cel 4870, carries a body box reaching `y1 -1` —
  * the feet are at the anchor. Its swing, cel 4905, carries NO box at all, so
  * {@link baseOf} falls back to the art's own extent, `height - posY` = 44, and
  * the thing this page thinks it is standing on moves forty-five pixels down the
  * moment the swing starts. Cel 4884 puts it thirty-four UP again. That is more
  * than {@link CLIMB_PX} of swing either way, so the pin below lost the floor
- * mid-attack, found nothing under the new base, and dropped a husk five thousand
+ * mid-attack, found nothing under the new base, and dropped a CHOPPER five thousand
  * pixels through WOODS while it was still swinging.
  *
  * The current cel is still right for the two things it was written for — a
@@ -10733,7 +10742,7 @@ function stepEnemies(): void {
     if (e.state === "dead") {
       /**
        * ...and what comes out of it. `0x454690` calls the punk's own creator
-       * from the first tag of the husk's death, at the husk's own position, so
+       * from the first tag of the CHOPPER's death, at the CHOPPER's own position, so
        * the thing that climbs out arrives as the death reaches its second group
        * of cels ({@link Foe.hatches}).
        */
@@ -10763,6 +10772,47 @@ function stepEnemies(): void {
             hp: kid.health,
             max: kid.health,
           });
+        }
+      }
+      /**
+       * ...and the BIKE goes with it. Same frame, after the rider is out: the
+       * wreck is thrown forward and up as an impulse and gravity brings it
+       * down, which is what tags 2 and 3 of `0x477ba0` are drawn for. See
+       * {@link Foe.deathThrow}.
+       */
+      const thrown = foe.deathThrow;
+      if (
+        thrown &&
+        !e.threw &&
+        e.clock >= thrown.afterCels * e.anim.hold
+      ) {
+        e.threw = true;
+        e.vx = (thrown.dx / foe.divisor) * TICK_SCALE * e.facing;
+        e.vy = (thrown.dy / foe.divisor) * TICK_SCALE;
+      }
+      // ...and a thrown wreck FLIES, which the ordinary mover below never gets
+      // to do for it: the dead branch has always ended in `continue`. Same
+      // arithmetic, kept here rather than hoisted, because a corpse does not
+      // want the walls, the patrol rect or any of the rest of it.
+      if (e.vx !== 0 || e.vy !== 0) {
+        e.vy = Math.min(e.vy + INVENTED.gravityPx, INVENTED.maxFallPx);
+        e.x += e.vx;
+        e.y += e.vy;
+        const span = p.room ? roomSpan(p.room) : null;
+        if (span) e.x = Math.max(span.lo, Math.min(span.hi, e.x));
+        const base = lvl ? baseOf(e, lvl) : e.y;
+        const floor = foeSurfaceUnder(
+          e.x,
+          base - Math.max(e.vy, 0) - CLIMB_PX,
+          base + 1,
+        );
+        if (floor !== null && base >= floor) {
+          e.y -= base - floor;
+          e.vy = 0;
+          if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE))
+            e.vx =
+              dragged(Math.round(e.vx / TICK_SCALE), foe.drag ?? DRAG) *
+              TICK_SCALE;
         }
       }
       // the death animation, then the body, then a green ball where it was
@@ -10847,7 +10897,9 @@ function stepEnemies(): void {
           // and on the ground the allocator's drag takes 70% a frame off it
           // ({@link dragged}) — once a frame, on the frame's whole pixels
           if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE))
-            e.vx = dragged(Math.round(e.vx / TICK_SCALE)) * TICK_SCALE;
+            e.vx =
+              dragged(Math.round(e.vx / TICK_SCALE), foe.drag ?? DRAG) *
+              TICK_SCALE;
         }
       }
     }
@@ -10987,7 +11039,58 @@ function stepEnemies(): void {
       e.state === "gait" && !e.swing
         ? loopIndex(e.anim, e.clock)
         : Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
-    const step = ((e.anim.dx?.[i] ?? 0) / foe.divisor) * TICK_SCALE;
+    /**
+     * The stride is a SETTLED velocity, not the script's number.
+     *
+     * `0x42f8b0` ends `idiv cx` with `add word ptr [esp+6], ax` — the script's
+     * `dx` over the divisor is an impulse ADDED to whatever velocity the object
+     * already has, every frame, and `0x4302c0` takes `v * obj+0x1e >> 13` back
+     * off on every frame that ended on the ground. So a walk is not its `dx`:
+     * it accelerates until the drag balances the impulse, which is the same
+     * arithmetic {@link DRAG} already describes for the player ("each frame adds
+     * 8 and the ground keeps 30%, and that settles at 12").
+     *
+     * Assigning `dx / divisor` instead — which this did — gave every class its
+     * impulse as a top speed, about 1.4x slow for the thirty that use the
+     * allocator's drag and **twenty times** slow for the one that does not. The
+     * CHOPPER settled at 142px a second, slower than the player walks; its own
+     * drag of 409 ({@link Foe.drag}) puts it where a motorcycle belongs.
+     *
+     * The move itself is still positional — the wall, the step and the pin below
+     * all read the place it is going — so this changes the speed and nothing
+     * about how a foe negotiates ground.
+     */
+    const onFrame = Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE);
+    // ...and a class that stands still stands still while it fights: its attack's
+    // own stride would otherwise walk it off the wall it reaches out of
+    const still = !brain && (e.fighting || e.swing) && !travels(foe);
+    // it only builds speed on the frames it is actually walking. Off its feet or
+    // rooted in a fight it keeps none, so nothing it could not spend is waiting
+    // to be spent the moment it lands.
+    const rolling = !still && e.vx === 0 && (e.vy === 0 || foe.floats);
+    if (onFrame) {
+      e.speed = rolling
+        ? dragged(e.speed ?? 0, foe.drag ?? DRAG) +
+          roundAway((e.anim.dx?.[i] ?? 0) / foe.divisor)
+        : 0;
+      // ...and its own think has the last word on how fast it may go
+      const cap = foe.speedCap;
+      if (cap !== undefined) e.speed = Math.max(-cap, Math.min(cap, e.speed));
+    }
+    /**
+     * ...and a FLOATER is not dragged, because the drag is the ground's.
+     *
+     * `0x4302c0` sits behind `0x4302a4`, which skips it in the air — the same
+     * test that lets the player's jump coast. A class built with
+     * `0x42f850(obj, 0)` and `obj+0x30 = 0` is never on the ground and so never
+     * meets it, and a velocity that only ever accumulates would run away. The
+     * things that fly are steered by their own think function instead (the
+     * probe's `0x410486` clamps `obj+0xc` to ±27 by hand), which this page has
+     * never modelled through the stride. So they keep the stride they had.
+     */
+    const step = foe.floats
+      ? ((e.anim.dx?.[i] ?? 0) / foe.divisor) * TICK_SCALE
+      : (e.speed ?? 0) * TICK_SCALE;
     /**
      * A leap is an IMPULSE, not an offset — which is the whole of the fix.
      *
@@ -10999,7 +11102,7 @@ function stepEnemies(): void {
      * Adding it straight to `e.y` instead — which this did — moved the thing
      * ninety-six pixels in four frames with no velocity to show for it, so the
      * landing test never saw a fall: `foeSurfaceUnder` reaches {@link CLIMB_PX}
-     * below the feet and no further, found nothing, and WOODS' husk went nine
+     * below the feet and no further, found nothing, and WOODS' CHOPPER went nine
      * thousand pixels out of the level still swinging. As velocity it uses the
      * flight path every knocked-back thing already uses, sweeping the surfaces
      * along the way down, and it lands.
@@ -11008,7 +11111,6 @@ function stepEnemies(): void {
      * is not what tag 0 says — and the stride block below then leaves it alone,
      * because that only runs on a thing with no velocity.
      */
-    const onFrame = Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE);
     const lift = e.anim.dy?.[i] ?? 0;
     // ...and a class with a machine of its own does not need {@link travels}
     // to vouch for it: it installed the script that carries the lift
@@ -11022,12 +11124,8 @@ function stepEnemies(): void {
       e.vy = (lift / foe.divisor) * TICK_SCALE;
       e.vx = (step || 0) * e.facing;
     }
-    // ...and a class that stands still stands still while it fights: its attack's
-    // own stride would otherwise walk it off the wall it reaches out of
-    // a floater's own hover keeps `vy` busy for ever, and its script's stride has
-    // to travel anyway
     /**
-     * ...and a class with a machine of its own is never pinned.
+     * ...and a class with a machine of its own is never pinned ({@link still}).
      *
      * {@link travels} reads {@link Foe.gait}, and `gait` was picked per class by
      * eye: for `initwerea`, `inittube`, `inithardcore`, `initarm`, `initslurp`
@@ -11035,67 +11133,102 @@ function stepEnemies(): void {
      * carries no stride, so those classes read as rooted and had every `dx`
      * thrown away. A brain installs the script the executable installs, by kind,
      * so it does not need the guess — and the guess is wrong for six of them.
+     * A floater's own hover keeps `vy` busy for ever, and its script's stride
+     * has to travel anyway.
      */
-    const still = !brain && (e.fighting || e.swing) && !travels(foe);
     // and a NEGATIVE stride is a stride: `0x4771a0 tag 0` is the punk walking
     // backwards at -225, and every class that gives ground has one
+    /**
+     * ...and the walk is SWEPT, because a stride can now be longer than a wall.
+     *
+     * Every test in this block — the climbable step, the patrol edge, the pin
+     * that follows — reads the one place the move ends at. That was safe while
+     * a stride was the script's `dx` over a divisor: a dozen pixels, less than
+     * {@link CLIMB_PX}. It is not safe now that a stride is a settled velocity,
+     * and the CHOPPER proved it: at two hundred pixels an engine frame it
+     * stepped clean over WOODS' ledges, found nothing under the far side and
+     * fell fifty-six thousand pixels out of the level.
+     *
+     * So the move is cut into pieces no longer than the wall it has to notice,
+     * and each piece is tested and pinned on its own. Same arithmetic, sampled
+     * often enough to mean what it says.
+     */
+    const SWEEP_PX = CLIMB_PX;
     if (step !== 0 && !still && e.vx === 0 && (e.vy === 0 || foe.floats)) {
-      const nx = e.x + step * e.facing;
-      /**
-       * ...unless the ground there stands too high to climb, in which case the
-       * whole move is thrown away.
-       *
-       * This is `0x42fef3` — the body stepper's own wall, {@link CLIMB_PX} — and
-       * everything the stepper does applies to every object, not just the player.
-       * Without it a foe that walks into a rise it cannot climb is left standing
-       * where no floor is within reach of its feet, and the pin below then reads
-       * that as thin air and drops it: WOODS' ground steps up 85 pixels in ONE
-       * column at x10230, and the werewolf patrolling east of it fell through the
-       * world every time it walked west into that step.
-       */
-      const baseNow = lvl ? footOf(e, lvl, foe) : e.y;
-      const ground = groundAt(nx);
-      const reach = foeSurfaceUnder(nx, baseNow - CLIMB_PX, baseNow + STICK_PX);
-      // a floater has no feet to catch on a step
-      const blocked =
-        !foe.floats &&
-        ground !== null &&
-        ground < baseNow - CLIMB_PX &&
-        reach === null;
-      // a flinch that travels is a knockdown: it goes the way it was hit and is
-      // not turned round by its own rect
-      /**
-       * ...and a class with states of its own is not on a patrol.
-       *
-       * The rect is a territory for the things that walk up and down one; a boss
-       * hunts. Level eight's record is a **twenty-pixel box** at x1373, and
-       * turning it round at the edges of that pinned it there for ever — while
-       * its own state machine was asking it to close from a thousand away.
-       */
-      // ...and a class in a FIGHT is not on a patrol either: its territory is
-      // where it noticed you, not where it may walk, and `0x44e580` reads no
-      // rect at all once `obj+0x18` is 1
-      if (
-        e.state === "gait" &&
-        !aim &&
-        !foe.drives &&
-        !e.fighting &&
-        (nx < e.left || nx > e.right)
-      )
-        e.facing = -e.facing;
-      else if (!blocked) {
-        const span = p.room ? roomSpan(p.room) : null;
-        e.x =
-          foe.drives || e.fighting
-            ? span
-              ? Math.max(span.lo, Math.min(span.hi, nx))
-              : nx
-            : // ...and never through where it already stands, so a foe walking
-              // home from a fight it followed you out of is not teleported
-              Math.max(
-                Math.min(e.left - 200, e.x),
-                Math.min(Math.max(e.right + 200, e.x), nx),
-              );
+      const total = step * e.facing;
+      const parts = Math.max(1, Math.ceil(Math.abs(total) / SWEEP_PX));
+      for (let part = 0; part < parts; part++) {
+        const nx = e.x + total / parts;
+        /**
+         * ...unless the ground there stands too high to climb, in which case the
+         * whole move is thrown away.
+         *
+         * This is `0x42fef3` — the body stepper's own wall, {@link CLIMB_PX} — and
+         * everything the stepper does applies to every object, not just the player.
+         * Without it a foe that walks into a rise it cannot climb is left standing
+         * where no floor is within reach of its feet, and the pin below then reads
+         * that as thin air and drops it: WOODS' ground steps up 85 pixels in ONE
+         * column at x10230, and the werewolf patrolling east of it fell through the
+         * world every time it walked west into that step.
+         */
+        const baseNow = lvl ? footOf(e, lvl, foe) : e.y;
+        const ground = groundAt(nx);
+        const reach = foeSurfaceUnder(nx, baseNow - CLIMB_PX, baseNow + STICK_PX);
+        // a floater has no feet to catch on a step
+        const blocked =
+          !foe.floats &&
+          ground !== null &&
+          ground < baseNow - CLIMB_PX &&
+          reach === null;
+        // a flinch that travels is a knockdown: it goes the way it was hit and is
+        // not turned round by its own rect
+        /**
+         * ...and a class with states of its own is not on a patrol.
+         *
+         * The rect is a territory for the things that walk up and down one; a boss
+         * hunts. Level eight's record is a **twenty-pixel box** at x1373, and
+         * turning it round at the edges of that pinned it there for ever — while
+         * its own state machine was asking it to close from a thousand away.
+         */
+        // ...and a class in a FIGHT is not on a patrol either: its territory is
+        // where it noticed you, not where it may walk, and `0x44e580` reads no
+        // rect at all once `obj+0x18` is 1
+        if (
+          e.state === "gait" &&
+          !aim &&
+          !foe.drives &&
+          !e.fighting &&
+          (nx < e.left || nx > e.right)
+        ) {
+          // it reached its patrol edge: turn, and spend no more of this stride
+          // going the way it has just stopped going
+          e.facing = -e.facing;
+          break;
+        } else if (!blocked) {
+          const span = p.room ? roomSpan(p.room) : null;
+          e.x =
+            foe.drives || e.fighting
+              ? span
+                ? Math.max(span.lo, Math.min(span.hi, nx))
+                : nx
+              : // ...and never through where it already stands, so a foe walking
+                // home from a fight it followed you out of is not teleported
+                Math.max(
+                  Math.min(e.left - 200, e.x),
+                  Math.min(Math.max(e.right + 200, e.x), nx),
+                );
+        } else break; // it walked into a step it cannot climb: the rest is thrown away
+        // ...and it is pinned HERE, not at the end of the whole stride, so it
+        // meets a ledge where the ledge is and steps off it rather than over it
+        if (parts > 1 && !foe.floats && e.vx === 0 && e.vy === 0) {
+          const b = lvl ? footOf(e, lvl, foe) : e.y;
+          const under = foeSurfaceUnder(e.x, b - CLIMB_PX, b + STICK_PX);
+          if (under !== null) e.y += under - b;
+          else {
+            e.vy = INVENTED.gravityPx;
+            break;
+          }
+        }
       }
     }
     /**
@@ -11559,7 +11692,16 @@ function loop(now: number): void {
           held.punch &&
           roundsIn(inv.weapon) > 0
         ) {
-          p.actClock = 0;
+          // ...and it goes back to the SHOT pose, not to the wind-up. The
+          // flamer's gun rises through 1240..1242 once and then works out of
+          // 1243/1244 (`0x46faf8` tag 0, whose own tail is 1243 1244), and the
+          // muzzle offset the flame is drawn at belongs to those two cels. A
+          // loop that replayed the rise would drop the gun under its own flame
+          // once a second. A weapon with no shot pose restarts where it did.
+          const back = WEAPONS[inv.weapon]?.moveset.shot.length
+            ? (WEAPONS[inv.weapon]?.moveset.fire.length ?? 0) * (a?.hold ?? 1)
+            : 0;
+          p.actClock = back;
           p.fired = true;
         } else if (p.heldBy) {
           p.act = "held";
@@ -12408,11 +12550,10 @@ function loop(now: number): void {
 
   // the level's own spawned things, on the play plane with the player
   for (const k of planksHere()) drawPlank(k, camX, camY);
-  // the cage, then the winch that hauls it at the head of its shaft
-  for (const e of elevatorsHere()) {
-    drawLevelCel(ELEVATOR.car.cels[0], e.x, e.y, camX, camY);
-    drawLevelCel(elevatorCel(e), e.x, e.winchY, camX, camY);
-  }
+  // the BACK of the cage. Its front half and its winch come after the player —
+  // see the second pass below, and {@link ELEVATOR.car}.
+  for (const e of elevatorsHere())
+    drawLevelCel(ELEVATOR.car.back, e.x, e.y, camX, camY);
   for (const b of ibeamsHere()) drawLevelCel(ibeamCel(b), b.x, b.y, camX, camY);
   for (const c of crushesHere())
     drawLevelCel(crushCel(c), c.x, c.y, camX, camY);
@@ -12727,6 +12868,33 @@ function loop(now: number): void {
       } else ctx.drawImage(art, left, top);
     }
   }
+  /**
+   * ...and the FRONT of every lift car, over the player standing in it.
+   *
+   * `0x453310` is the elevator class's collector and CITY's frame function
+   * (`0x4515d0`) calls it TWICE, with the player queued between the two:
+   *
+   * ```
+   *   4517ac  push edi (0)      ; 45332e: cel 0x47f = 1151, the BACK
+   *   4517ad  call 0x453310
+   *   4517d7  call 0x402980     ; 42fbd0([0x4ac3d4]) — THE PLAYER
+   *   4517eb  push 1            ; 45334a: cel 0x47e = 1150, the FRONT,
+   *   4517ed  call 0x453310     ;         and 42fbd0(winch) with it
+   *   4517fc  call 0x40c8b0(1)  ; the foreground planes, last
+   * ```
+   *
+   * `0x4515db` zeroes edi for the whole function, so the first pass really is
+   * the 0 case. The art agrees: 1151 is 113x190 and 73% opaque — a back wall —
+   * while 1150 is 106x314 and only 42%, a frame with a hollow middle, a mesh
+   * across its lower front and the cable above. Drawing 1150 alone, and before
+   * the player, put the rider's boots over the mesh he should be standing
+   * behind and left the back of the cage off the screen entirely.
+   */
+  for (const e of elevatorsHere()) {
+    drawLevelCel(ELEVATOR.car.front, e.x, e.y, camX, camY);
+    drawLevelCel(elevatorCel(e), e.x, e.winchY, camX, camY);
+  }
+
   // and everything after (planes 4, 1, 2 — the lamp-post and cables in front)
   for (const q of lvl.draw) if (q.z > PLAY_PLANE_Z) drawOne(q);
 
@@ -12942,7 +13110,7 @@ function loop(now: number): void {
     ? ` · ${cars
         .map(
           (e) =>
-            `lift ${e.state} car ${ELEVATOR.car.cels[0]} winch ${elevatorCel(e)} deck y${Math.round(e.floor.top)} of ${e.top}..${e.bottom}` +
+            `lift ${e.state} car ${ELEVATOR.car.back}/${ELEVATOR.car.front} winch ${elevatorCel(e)} deck y${Math.round(e.floor.top)} of ${e.top}..${e.bottom}` +
             `${ridingElevator(e) ? " RIDDEN" : ""}`,
         )
         .join(" · ")}`
