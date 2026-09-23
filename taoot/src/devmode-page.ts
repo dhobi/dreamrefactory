@@ -2,10 +2,11 @@
  * Titanic's developer mode — the 1996 debug build, put back up.
  *
  * `BOOTFILE/0001.txt:14` is `debugging = false`, and it is the only assignment to
- * that global in the whole corpus: 437 containers read it, nothing else writes
- * it, and the menu's own "Debug On/Off" can only turn it OFF again. So a debug
- * build was a build with that line edited, and everything behind the flag has sat
- * in the shipped game files ever since, unreachable.
+ * that global in the whole corpus: 355 lines across 29 files read it (the
+ * generated census, `docs/taoot/devmode-census.md`), nothing else writes it, and
+ * the menu's own "Debug On/Off" can only turn it OFF again. So a debug build was
+ * a build with that line edited, and everything behind the flag has sat in the
+ * shipped game files ever since, unreachable.
  *
  * This page is that build. It boots the game exactly as the play page does — the
  * game module is `main.ts`, the same one — and then does the three things the
@@ -17,16 +18,19 @@
  *  3. puts TI.EXE's own menu bar back on the screen, read out of the executable's
  *     `RT_MENU` resource rather than written down (taoot/tools/devmenu.ts).
  *
- * ## What that opens, and what it does not
+ * ## What that opens
  *
- * It is not a free-roam mode and there is no room teleport in it, because the
- * game never had one. What the flag reaches is: the deck map's 15 developer areas
+ * The flag reaches: the deck map's 15 developer areas
  * (`MAP.STG`'s `if not debugging → exitcode` regions — the gymnasium, the lounge,
  * the smoking room, the café, the fore and poop decks), `pathblocked` answering
  * false on the false smokestack (`SMSTACK2.SET` c1, the one place in the game it
  * is overridable), the bedsit's option-click that hands you bag, map and watch,
  * the position and distance readouts in `idle()`, and `setuptour` forcing the
  * tour actors in whether or not their films are on the disc.
+ *
+ * Walking the ship is a mode of its own and a player's rather than a
+ * developer's: `playmode.mov`'s second button sets `tour`, which is what
+ * `taoot/freeroam/` boots into (`docs/taoot/freeroam.md`).
  *
  * ## Why the modifier latches, rather than just holding the key
  *

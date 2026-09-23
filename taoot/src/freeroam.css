@@ -1,0 +1,30 @@
+/*
+ * The free-roam page's own three rules. Everything else it looks like is the
+ * play page's sheet (taoot/src/play.css), linked ahead of this one, because
+ * this page IS that page with the story turned off.
+ *
+ * What is here is the one difference the markup cannot state on its own: the
+ * Details column is not part of this page. `<meta name="details-never">` is what
+ * decides that (taoot/src/main.ts), and this is the same answer said in CSS, so
+ * that a path which raises the column without asking — a future branch, a
+ * stylesheet loaded in a different order, `?debug=1` gaining another way in —
+ * still cannot put a tool column on a page that is only a screen.
+ */
+
+#details,
+#playlayout > #details {
+  display: none;
+}
+
+/* ...which leaves #playlayout a single column, so the screen keeps the middle
+   of the window rather than sitting left of a gap where the pane would be. */
+#playlayout {
+  justify-content: center;
+}
+
+/* The doorway readout sits in the bars under the screen and is the one line on
+   this page that changes by itself. Dim like every other readout there, and
+   given room so a long doorway id (`hallb-gstair3 p`) does not reflow the row. */
+#roamnote {
+  min-width: 18rem;
+}

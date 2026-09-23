@@ -199,6 +199,11 @@ export default withMermaid(
             // reads 1,700 lines of quoted script without being sent there.
             { text: "Developer mode", link: "/taoot/devmode" },
             { text: "…the census", link: "/taoot/devmode-census" },
+            // The OTHER mode the disc ships — a player's, not a developer's,
+            // which is why it sits after the debug build rather than among the
+            // tools: `playmode.mov` is a two-button menu and this is its second
+            // button, with the six doors that answer a tour with a knock opened.
+            { text: "Free roam", link: "/taoot/freeroam" },
             // "How was this checked?" is a headline question for a
             // reverse-engineering project, not lookup material — so it sits with
             // the game it was checked against rather than in Reference.

@@ -1,6 +1,10 @@
 {
   "brandTitle": "RE — rétro-ingénierie : une réimplémentation au plus près du moteur DreamFactory, et non la version originale de 1996",
   "navPlay": "Jouer",
+  "navOriginal": "Original",
+  "navFreeRoam": "Exploration libre",
+  "navFreeRoamTitle": "Exploration libre — la visite guidée du disque, où chaque porte s'ouvre",
+  "navPlayMenuTitle": "Comment ouvrir le jeu",
   "navEditors": "Éditeurs",
   "navCollection": "Collection",
   "navMinigames": "Mini-jeux",

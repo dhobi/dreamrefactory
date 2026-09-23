@@ -1,6 +1,6 @@
 {
   "name": "@dreamfactory/taoot",
-  "version": "0.9.77",
+  "version": "0.9.78",
   "private": true,
   "description": "Titanic: Adventure Out of Time (1996) — DreamFactory 4. The game's own pages, its six editions and the demo, and the suites that play it.",
   "type": "module",
@@ -17,6 +17,8 @@
     "test:browser:playthrough": "tsx tests/browser/playthrough.ts",
     "test:browser:lang": "tsx tests/browser/lang-chooser.ts",
     "test:browser:workbench": "tsx tests/browser/workbench.ts",
+    "test:browser:devmode": "tsx tests/browser/devmode.ts",
+    "test:browser:freeroam": "tsx tests/browser/freeroam.ts",
     "test:browser:vr": "tsx tests/browser/bedsit-vr.ts",
     "test:browser:board": "tsx tests/browser/bedsit-board.ts",
     "test:browser:transitions": "tsx tests/browser/transition-hold.ts",

@@ -93,6 +93,25 @@ export const en = {
     brandTitle:
       "RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1996 release" as Text,
     navPlay: "Play" as Text,
+    /**
+     * The two ways into the game that a reader can take in their own edition,
+     * which is why these two are translated and the other two in that dropdown
+     * are not: developer mode and the speedrun workbench open pages that are
+     * English by construction (site/src/play-menu.ts says why), and a menu that
+     * translated the way in but not the page would promise what it cannot keep.
+     *
+     * `navOriginal` has no markup to match — the menu RENAMES the first link,
+     * which is the translated "Play", once the dropdown above it already says
+     * that word. "Original" rather than "Normal": the other ways in are the
+     * same game with something added, and this one is the game as it shipped.
+     */
+    navOriginal: "Original" as Text,
+    navFreeRoam: "Free roam" as Text,
+    /** the tooltip on that link, and on the dropdown that holds it — the two
+        words a reader hovers in the bar, so they travel with the two labels */
+    navFreeRoamTitle:
+      "Free roam — the disc's own guided tour, with every door answering" as Text,
+    navPlayMenuTitle: "How to open the game" as Text,
     navEditors: "Editors" as Text,
     navCollection: "Collection" as Text,
     /** the door to the two diversions aboard that are whole games on their own */

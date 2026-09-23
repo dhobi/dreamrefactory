@@ -37,6 +37,8 @@ const PAGES = [
   // Titanic's, under taoot/
   "taoot/index.html",
   "taoot/play/index.html",
+  // ...and the same page with the story turned off, which carries the same bar
+  "taoot/freeroam/index.html",
   "taoot/collection/index.html",
   // the three diversions that are games on their own, and the door to them
   "taoot/minigames/index.html",

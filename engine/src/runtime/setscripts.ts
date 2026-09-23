@@ -355,6 +355,22 @@ export class SetScripts {
       this.main,
       this.session.stageScript,
     ];
+    // Where the click happened, read BEFORE the chain runs: a handler may change
+    // the set out from under it (A-14's `kickout` walks you back to the corridor),
+    // and what the hook reports has to be the hotspot that was pressed.
+    const where =
+      handler === "mousedown"
+        ? {
+            paint: identifier,
+            set: this.session.currentSetName,
+            scene: this.set.scenes[sceneIdx]?.sceneName ?? "",
+            view: this.set.scenes[sceneIdx]?.views[viewIdx]?.viewName ?? "",
+          }
+        : null;
+    const answered = (consumed: boolean): boolean => {
+      if (where) this.session.onHotspotClick?.({ ...where, consumed });
+      return consumed;
+    };
     for (const inst of chain) {
       if (!inst) continue;
       try {
@@ -362,12 +378,12 @@ export class SetScripts {
           me: inst.name,
           target: identifier,
         }, parent);
-        if (interp.eventConsumed || (res.handled && !res.passed)) return true;
+        if (interp.eventConsumed || (res.handled && !res.passed)) return answered(true);
       } catch (e) {
         this.onLog(`script error in ${inst.name}.${handler}: ${(e as Error).message}`);
       }
     }
-    return false;
+    return answered(false);
   }
 
   /** mouse click on a hotspot; returns true when a handler consumed it */
@@ -410,6 +426,15 @@ export class SetScripts {
     // bindings dead (#14).
     const router = this.session.bootScripts.find((b) => b.script.codes.has("keydown"));
     const chain = router ? [router] : [this.sceneScripts[sceneIdx], this.main];
+    // where the press was MADE, read before the chain runs: a step that is taken
+    // has changed the room by the time it is over
+    const scene = this.set.scenes[sceneIdx];
+    const where = {
+      key: keyName,
+      set: this.session.currentSetName,
+      scene: scene?.sceneName ?? "",
+      view: this.session.currentViewName(),
+    };
     for (const inst of chain) {
       if (!inst) continue;
       try {
@@ -419,6 +444,7 @@ export class SetScripts {
         this.onLog(`script error in ${inst.name}.keydown: ${(e as Error).message}`);
       }
     }
+    this.session.onSetKey?.({ ...where, consumed: interp.eventConsumed });
     return interp.eventConsumed;
   }
 

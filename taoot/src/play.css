@@ -1,0 +1,667 @@
+/*
+ * The game page. Nothing introduces it and nothing asks anything of you:
+ * arriving here IS the decision — the welcome and the Play button are the
+ * front page (index.html), and this page settles a language and cold
+ * boots. The shared sheet (site/src/theme.css) carries the palette, the topbar
+ * and the controls; what is left here is the one thing only this page has
+ * — a 512x384 framebuffer and the bars that sit under it.
+ *
+ * The rule this page is built on: nothing beside the canvas may be
+ * brighter than the canvas. The game draws in its own 1996 palette and
+ * the page's job is to be the dark water around the porthole, so the
+ * chrome here is hairlines and dim text, and the only lit thing on the
+ * screen is the screen.
+ */
+
+/* ---- the porthole: the framebuffer and its rim ---- */
+
+/* The box the canvas sits in. It starts hidden — the markup carries
+   `style="display: none"`, because there is nothing to show until the
+   first frame — and the script gives that inline value back as `""`
+   rather than as `"block"` when the picture arrives. That matters more
+   than it looks: an inline declaration outranks a stylesheet, so a stage
+   revealed as inline-`block` could never be turned into the grid that
+   `#stage.fs` letterboxes with, and fullscreen laid the picture out as a
+   plain block in the top-left of a black field instead. */
+#stage {
+  position: relative;
+  margin-top: 0.9rem;
+}
+
+/* The renderer always presents a fixed 512x384 (4:3) framebuffer — see
+   engine/src/web/screen.ts. `aspect-ratio` derives the height from the element's own
+   width instead of from the image inside it, so the layout no longer
+   reflows when a scene switches between a full-screen flat and a bare
+   room view. 1024px is a crisp 2x integer scale of 512x384; use the
+   Fullscreen button to fit the screen to the display instead. */
+#screen {
+  image-rendering: pixelated;
+  aspect-ratio: 4 / 3;
+  width: 1024px;
+  max-width: 96vw;
+  background: #000;
+  display: block;
+  /* The canvas keeps its own gestures: a phone has no arrow keys, so a
+     swipe across the screen is how you walk and turn (see the swipe
+     handler in main.ts). Without this the browser claims a vertical drag
+     for scrolling and the walk-forward swipe never arrives. Scoped to the
+     canvas on purpose — the page around it scrolls normally. */
+  touch-action: none;
+  /* The rim, and the reason the logo works as a mark for this page: a
+     brass hairline with the iceberg's light bleeding past it. The glow is
+     outside the frame, so it never touches a game pixel. */
+  border: 1px solid var(--brass-700);
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.9),
+    0 0 0 2px rgba(184, 120, 36, 0.16),
+    0 0 60px -12px rgba(96, 192, 240, 0.4),
+    0 18px 60px -20px rgba(0, 0, 0, 0.9);
+}
+
+/* Fullscreen: letterbox the 4:3 screen inside a black field. The stage
+   (not the canvas) is fullscreened so the minimap overlay comes along and
+   the bar colour stays ours. The rim and its glow come off here — at
+   fullscreen the game IS the porthole and does not need a frame drawn
+   around it.
+
+   A CLASS and not `:fullscreen`, because an iPhone has no element
+   fullscreen for a pseudo to match: engine/src/web/fullscreen.ts puts
+   `.fs` on by whichever route the browser has, and pins the stage over
+   the viewport itself where there is no real one. Hence `position:
+   fixed`, which is what the UA's own `:fullscreen` rule already does —
+   free on the real route, and the whole of the other one.
+
+   Both selectors in one list (`#stage:fullscreen, #stage.fs`) is the
+   thing NOT to do: an engine that cannot parse one member of a selector
+   list drops the entire list, so the pseudo would have taken the class
+   down with it on exactly the browsers this is for.
+
+   `dvh`, not `vh`: on an iPhone `100vh` is the LARGE viewport — the one
+   that assumes the toolbars are gone — and faux fullscreen cannot make
+   them go, so a `vh`-tall overlay hangs the bottom of the picture behind
+   Safari's own bar. */
+#stage.fs {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 200;
+  display: grid;
+  grid-template-areas: "screen";
+  place-items: center;
+  width: 100dvw;
+  height: 100dvh;
+  margin: 0;
+  background: #000;
+}
+#stage.fs #screen {
+  grid-area: screen;
+  width: min(100dvw, calc(100dvh * 4 / 3));
+  height: min(100dvh, calc(100dvw * 3 / 4));
+  max-width: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* keep the map overlay pinned to the SCREEN's corner, not the viewport's,
+   by sharing the screen's grid cell instead of #stage's padding box */
+#stage.fs #minimap {
+  grid-area: screen;
+  position: static;
+  justify-self: end;
+  align-self: start;
+  margin: 10px;
+}
+
+/* The waiting-on-the-network mark. Ice, like the preload bar, because it
+   is the live thing on the screen; the opposite corner from the minimap,
+   and small — it reports a wait, it does not ask to be looked at. No
+   words: it sits over 1996 artwork, and a spinner needs no translating. */
+/* The plate is not decoration: the frame underneath is whatever the game
+   last drew, which is as often a white flat as it is black, so the mark
+   carries its own ground the way the minimap does. */
+#netbusy {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hull-400);
+  border-radius: 50%;
+  background: rgba(0, 6, 15, 0.72);
+  box-shadow: 0 6px 22px -8px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+#netbusy span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: var(--ice-400);
+  border-radius: 50%;
+  animation: netspin 700ms linear infinite;
+}
+/* Not redundant with the UA sheet, for the same reason `#help .bar[hidden]`
+   below is not: the `display: flex` above beats `[hidden] { display: none }`,
+   so `netbusy.hidden = true` (taoot/src/main.ts, every time the last fetch lands)
+   took nothing off the screen and the spinner turned for the whole session.
+   The show/hide logic was never visible — only its `false` case was. */
+#netbusy[hidden] {
+  display: none;
+}
+@keyframes netspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* A reader who has asked for less motion still needs to know it is
+   waiting, so the mark stays and breathes instead of turning. */
+@media (prefers-reduced-motion: reduce) {
+  #netbusy span {
+    animation: netpulse 1.4s ease-in-out infinite;
+    border-color: var(--ice-400);
+  }
+  @keyframes netpulse {
+    50% {
+      opacity: 0.25;
+    }
+  }
+}
+/* same corner trick as the minimap's, so it tracks the SCREEN fullscreen */
+#stage.fs #netbusy {
+  grid-area: screen;
+  position: static;
+  justify-self: end;
+  align-self: end;
+  margin: 12px;
+}
+
+#minimap {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  image-rendering: pixelated;
+  border: 1px solid var(--hull-400);
+  border-radius: 2px;
+  background: rgba(0, 6, 15, 0.72);
+  box-shadow: 0 6px 22px -8px rgba(0, 0, 0, 0.9);
+  display: none;
+  width: 180px;
+}
+
+/* The brightness presets: three segments rather than a slider, because a
+   slider is the wrong control for a thumb — this started as one and a
+   phone could not hit it. Three targets a finger can land on, each a
+   whole tap wide, and no dragging.
+
+   Styled down like everything else here: the rule this page is built on
+   is that nothing beside the canvas may be brighter than the canvas, so
+   the chosen segment is a brass hairline and a lift in text colour, not a
+   filled block. The radios themselves are hidden — they carry the state
+   and the keyboard semantics (a radio group is one arrow-key stop, which
+   is what this is), the labels carry the looks. */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.seg label {
+  margin: 0;
+  cursor: pointer;
+  /* 44px is the tap target a finger wants, and padding alone did not get
+     there (measured 35 at this font size) — so the height is asked for and
+     the text centred in it. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 0.75rem;
+  font-size: 0.78rem;
+  color: var(--text-mute);
+  border-left: 1px solid var(--border);
+}
+.seg label:first-child {
+  border-left: 0;
+}
+.seg input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.seg label:hover {
+  color: var(--text-dim);
+}
+.seg input:checked + span {
+  color: var(--brass-500, var(--brass-700));
+}
+.seg label:has(input:checked) {
+  background: rgba(184, 120, 36, 0.1);
+  box-shadow: inset 0 -2px 0 var(--brass-700);
+}
+/* the focus ring has to be visible even though the input is not */
+.seg label:has(input:focus-visible) {
+  outline: 1px solid var(--ice-400);
+  outline-offset: -1px;
+}
+
+/* ---- where the game says where you are, and what it is doing ----
+   Both live in #details at the bottom of the bars, and both are off until
+   X is pressed (taoot/src/main.ts): where you are standing and a script log are
+   answers to questions the player has not asked, and the rule this page is
+   built on is that the only lit thing on the screen is the screen. */
+
+#hud {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  min-height: 1.2em;
+  text-align: center;
+  padding: 0 1rem;
+}
+
+/* ---- what stands here until the screen does (taoot/src/main.ts) ----
+   Held only while the files are being found and read, and left up for
+   good when there are none — so it has to read as both "starting" and
+   "this is as far as it gets". */
+
+/* The boot text says "starting" — in the reader's language or not at all.
+   The pages carry their English inline, and a catalogue arrives over a
+   dynamic import a beat later (site/src/locales/index.ts), so a German reader was
+   reading "Starting" for ~200 ms first. Hidden, not undrawn: it keeps its
+   space, so nothing moves when the words arrive. `body.spoken` is set by
+   main.ts's boot() the moment installI18n has had its say, which for an
+   English reader is the same tick — nothing is fetched in that case. */
+#booting {
+  visibility: hidden;
+  padding: 1.2rem clamp(0.9rem, 4vw, 2rem) 3rem;
+  margin-top: 1.4rem;
+  text-align: center;
+  width: 100%;
+  max-width: 54rem;
+}
+body.spoken #booting {
+  visibility: visible;
+}
+#booting .intro {
+  font-size: 0.95rem;
+  color: var(--text-dim);
+  max-width: 40rem;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+#booting .intro .sub {
+  display: block;
+  margin-top: 0.7rem;
+  font-size: 0.82rem;
+  color: var(--text-mute);
+}
+/* The edition picker (shared chrome, site/src/theme.css): its own row under the
+   top bar, above the boot text and the stage both, so which copy of the
+   game is running is answerable at any moment without opening a menu. */
+#editionPicker {
+  margin: 1rem 0 0.2rem;
+}
+
+/* The preload bar: ice, because it is the live thing on the page — brass is
+   for what has changed or commits. A hairline track and a 3px fill; the
+   numbers under it are mono, being read off the wire. */
+#preload {
+  margin: 1.4rem auto 0;
+  width: 22rem;
+  max-width: 80%;
+}
+#preloadTrack {
+  height: 3px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+#preloadFill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(to right, var(--ice-600), var(--ice-400));
+  transition: width 140ms linear;
+}
+#preloadNum {
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-mute);
+  text-align: center;
+}
+
+/* ---- the script log, and the bars of controls ---- */
+
+/* The X pane. Under the screen's column on a narrow window and beside it
+   on a wide one — see #playlayout below — so it carries the same width as
+   #under here and is overridden there. */
+#details {
+  width: 1024px;
+  max-width: 96vw;
+  padding-top: 0.5rem;
+}
+/* The pane's heading, and the hairline under it.
+   The pane used to be a bordered, filled panel when it sat beside the
+   screen — which put a border around #scriptlog's border and #dbgState's,
+   boxes inside a box. It is a SECTION instead, the same shape the speedrun
+   page's two carry: a heading, a rule, and the readouts keeping their own
+   insets. Nothing is drawn around the column itself. */
+#details h2 {
+  font-size: 0.9rem;
+  margin: 0 0 0.5rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  border-bottom: 1px solid var(--hull-400);
+  padding-bottom: 0.4rem;
+  /* in the column below it is a flex item, and a heading gives up no
+     height to the log and the state list that share the rest */
+  flex: none;
+}
+#scriptlog {
+  display: none;
+  min-height: 250px;
+  max-height: 8em;
+  overflow-y: auto;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--ice-500);
+  margin: 0.5rem 0 0;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.6rem;
+}
+
+/* ---- one column, or two --------------------------------------------
+   #22 reported the details pane as "tiny, under the window (off screen at
+   1920px, 100% zoom)", and it was: four bars of controls put it about
+   1030 px down a 945 px-tall viewport, so at that window size it was never
+   on screen. On a window with room to spare the pane sits BESIDE the
+   screen instead, as the second column of this row.
+
+   It used to do that as a `position: fixed` rail with the body padded by
+   the rail's width to re-centre the screen in what was left. #249 is what
+   that costs: the speedrun page pads its own layout for the rail as well,
+   so with the pane open at 1920 the page gave away ~960 px to a 480 px
+   pane and the run sheet was squeezed to a few pixels wide. A column that
+   takes its share of a row cannot do that to its siblings — it is an
+   ordinary element, it pushes nothing, and it scrolls with the page.
+
+   The break is 1480px: 1024 for the screen (a crisp 2x of 512x384 — the
+   canvas is `pixelated`, and shrinking it to fit a column would make every
+   pixel a different size), a gap, and a column wide enough for `neckphase
+   4` and a log line. Below that the pane stays under the screen, which is
+   also what a phone gets. The row wraps rather than shrinking, so a window
+   that is over the break but still short of holding both never squeezes
+   either one. */
+#playlayout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding-bottom: 3rem;
+}
+#gamecol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+@media (min-width: 1480px) {
+  #playlayout {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1.4rem;
+    padding: 0 0.7rem 3rem;
+  }
+  /* the screen's own width, held whether or not the game has booted, so
+     the columns do not jump sideways when #booting gives way to #stage */
+  #gamecol {
+    flex: 0 0 1024px;
+    width: 1024px;
+  }
+  /* The pane as a column: the log takes what it needs and the state list
+     takes the rest, each scrolling itself. The ceiling is the CANVAS's own
+     height, so the pane ends where the screen beside it ends and the two
+     read as a pair — and a 161-row state list makes the LIST scroll rather
+     than the column three screens tall. It is not `sticky`, because #249's
+     answer is that this is a regular element and a regular element scrolls
+     away. */
+  #playlayout > #details {
+    flex: 1 1 20rem;
+    width: auto;
+    /* A floor and a ceiling, both in here only: stacked, the pane is the
+       screen's column at 96vw and a floor would push a phone sideways.
+       The floor is what the ceiling used to be — the pane is never
+       narrower than it was at its widest — and it feeds the row's wrap
+       decision, so a window that cannot hold the canvas and a 480px pane
+       drops the pane to its own line rather than shaving it thin. */
+    min-width: 480px;
+    max-width: 1024px;
+    display: flex;
+    flex-direction: column;
+    /* A DEFINITE height, and both halves of that matter — the same lesson
+       .sr-editor on the speedrun page carries. The log's `max-height: 40%`
+       below is a PERCENTAGE, and a percentage resolves against the
+       parent's height: with only a `max-height` here that height is
+       indefinite, the 40% computes to `none`, and the log takes the whole
+       column with the state list crushed under it. The fixed rail this
+       replaced got its definite height from `top` + `bottom`. */
+    height: 768px;
+    /* #stage's own margin-top, so the pane's top edge lines up with the
+       top of the screen rather than sitting 0.9rem above it. The speedrun
+       page's sheet column carries the same offset for the same reason. */
+    margin-top: 0.9rem;
+  }
+  /* `hidden` alone loses to the display above (see the paired-rule test in
+     site/tests/locales.ts, and #55 for the spinner that turned all session) */
+  #playlayout > #details[hidden] {
+    display: none;
+  }
+  #playlayout > #details #hud {
+    text-align: left;
+    padding: 0 0 0.4rem;
+  }
+  /* With nothing under it the log takes the whole column; with the state
+     list open it gives most of the height away, because the list is the
+     longer thing and the log is read at its tail. */
+  #playlayout > #details #scriptlog {
+    flex: 1 1 auto;
+    max-height: none;
+  }
+  #playlayout > #details:has(#dbgState:not([hidden])) #scriptlog {
+    flex: 0 1 auto;
+    max-height: 40%;
+    min-height: 250px;
+  }
+  #playlayout > #details #dbgState {
+    flex: 1 1 auto;
+    min-height: 0;
+    /* the column has a definite height here, so the stacked layout's
+       ceiling would only leave a gap under the list (#178) */
+    max-height: none;
+  }
+}
+
+/* ---- the state list ----
+   Names and numbers out of the game's own tables, so it is mono and it is
+   not translated: `neckphase 4` is the same sentence in six languages. */
+#dbgBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-mute);
+}
+/* A column with the scrollport INSIDE it, not a scrollport with everything
+   in it (#178). The six the game names and the filter box stay put while
+   the list moves under them: the ask was to watch the props and the main
+   states at once, which the one-scrollport shape made impossible — the
+   spine went off the top on the first turn of the wheel, and so did the
+   box you type the filter into, which is worse because you are typing in
+   it while you read.
+
+   `overflow: hidden` here and `overflow-y: auto` on #dbgRows below, so
+   there is exactly one scroller and it is the list. #dbgRows also needs
+   `min-height: 0`: a flex item's floor is its own content, so without it
+   it refuses to shrink, takes the whole column and scrolls nothing. */
+#dbgState {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Stacked, nothing above this bounds the column, so it needs a ceiling
+     of its own — with no scroll there is nothing to pin anything out of,
+     and the spine leaves with the page instead. #scriptlog's own
+     max-height above is the same admission. Side by side, #details hands
+     this a definite height and the media query below drops the ceiling. */
+  max-height: 60vh;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.6;
+  margin-top: 0.5rem;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.6rem;
+}
+#dbgState[hidden] {
+  display: none;
+}
+/* The six the game's own HELP button answers with — apart from the rest,
+   because they are the ones the game itself thinks locate a player. */
+#dbgSpine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.9rem;
+  color: var(--ice-300);
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+  /* Never shrinks and never scrolls: it wraps to two lines at a narrow
+     width and both of them are meant to be readable (#178) */
+  flex: 0 0 auto;
+}
+/* Pinned with the spine, because it is read with it: a filter box that
+   scrolls away from the list it is filtering is the same complaint (#178) */
+#dbgTools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  flex: 0 0 auto;
+}
+#dbgTools input[type="search"] {
+  flex: 1;
+  min-width: 4rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 0.15rem 0.35rem;
+  color: var(--text);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+#dbgTools label {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  color: var(--text-mute);
+  white-space: nowrap;
+}
+/* The one thing in the section that scrolls — see #dbgState */
+#dbgRows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+#dbgRows .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--ice-500);
+}
+#dbgRows .row b {
+  font-weight: normal;
+  color: var(--text-mute);
+}
+/* Brass for what has just moved: the palette's rule is that brass marks a
+   change and ice marks what is live (site/src/theme.css). */
+#dbgRows .row.lit,
+#dbgSpine .lit {
+  color: var(--brass-400);
+}
+#dbgRows .none,
+#dbgState .quiet {
+  color: var(--text-mute);
+}
+
+/* The bars under the screen, in the screen's own column so that they line
+   up with the canvas and with the pane below them. */
+#under {
+  width: 1024px;
+  max-width: 96vw;
+  margin-top: 0.6rem;
+}
+#help .bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0;
+}
+#help .bar + .bar {
+  border-top: 1px solid var(--border);
+}
+#help .keys {
+  font-size: 0.78rem;
+  color: var(--text-mute);
+}
+/* the key itself: a cap, not just a brighter word */
+#help .keys b {
+  color: var(--ice-200);
+  font-family: var(--font-mono);
+  font-weight: normal;
+  font-size: 0.74rem;
+  background: var(--raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 0.04rem 0.32rem;
+}
+/* A whole bar can be taken out — the swipe row is hidden until taoot/src/main.ts
+   finds a touch pointer, and a mouse never swipes. Not redundant with the
+   UA sheet: `display: flex` above would otherwise beat `[hidden]`, and the
+   row would come back as an empty hairline-topped strip. */
+#help .bar[hidden] {
+  display: none;
+}
+/* what became of the screenshot: said beside the button that took it, and
+   taken down again once it has been read (taoot/src/main.ts) */
+#help .note {
+  font-size: 0.74rem;
+  color: var(--ice-400);
+}
+#help .bar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--text-mute);
+}
+#help .seclabel {
+  font-size: 0.63rem;
+  text-transform: uppercase;
+  letter-spacing: 0.17em;
+  color: var(--text-mute);
+  margin-right: 0.2rem;
+}

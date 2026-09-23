@@ -189,6 +189,29 @@ export interface HostOptions {
   screen?: ScreenSize;
 }
 
+/** what a page can decide about a cold boot before it starts */
+export interface ColdBootOptions {
+  /**
+   * Take the guided tour instead of the first day, whatever the boot menu was
+   * answered.
+   *
+   * TAOOT ships two modes and `playmode.mov` is where a player picks between
+   * them: `boot()` reads the click region with `actionframe(1)` and sets the
+   * `tour` global from it, and the tour branch resets the story to
+   * `mission = -1`, hands over the deck map and opens the whole ship. Saying so
+   * here is how a page that is FOR the tour gets it without asking the player to
+   * hit the right half of a movie.
+   *
+   * It does two things. The films in front of the game do not play — including
+   * the menu, which parks modally and would stop a boot that has already been
+   * told which mode it is — and the flag is written directly, which is what
+   * `actionframe(1)` would have written had anyone been asked.
+   *
+   * Left undefined, the menu's answer stands, which is every other page.
+   */
+  tour?: boolean;
+}
+
 /**
  * Run a callback on the next macrotask — the yield {@link GameHost}'s
  * `nextFrame` renders on. `setImmediate` where there is one (node: it runs in
@@ -704,12 +727,12 @@ export class GameHost {
    * Not tracked by the session on purpose: prepareRestart awaits `settle()`, and a
    * restart added to `inflight` would be waiting for itself.
    */
-  async restart(): Promise<void> {
+  async restart(opts: ColdBootOptions = {}): Promise<void> {
     await this.session.prepareRestart();
-    await this.coldBoot();
+    await this.coldBoot(opts);
   }
 
-  async coldBoot(): Promise<void> {
+  async coldBoot(opts: ColdBootOptions = {}): Promise<void> {
     const session = this.session;
     session.interp.globals.set("tour", 0); // safe default; boot() sets it from the menu
     // paint the screen black up front so the movie host's openset doesn't flash
@@ -807,6 +830,26 @@ export class GameHost {
     // inert — we run the day-advance below, after resetting currentset->"none"
     // and the mix volumes. (Otherwise the day advances twice, skipping the flat.)
     session.suppressStageBootFallback = true;
+    /*
+     * ...and, where the caller has already chosen a mode, the films in front of
+     * it do not play.
+     *
+     * There are three, and all three are a question this page is not asking.
+     * `logo.mov` and `opentour.mov` are eight and a half megabytes of preamble
+     * in front of a room the player asked for by opening the page, and
+     * `playmode.mov` is worse than slow: it parks MODALLY on a frame with two
+     * buttons and `boot()` does not continue until one is pressed, so a boot
+     * that has been told which mode it is would otherwise stop and wait to be
+     * told again.
+     *
+     * Suppressing the hook rather than pressing buttons and sending Escape at
+     * the player's own pace, because that is the one way that is not a race:
+     * `playmovie` returns at once, `actionframe(1)` is simply never set, and
+     * `boot()` writes `tour = false` off it — which the flag below then
+     * overrides, exactly as it does for a host with no menu movie at all.
+     */
+    const films = session.onPlayMovie;
+    if (opts.tour !== undefined) session.onPlayMovie = () => {};
     try {
       await session.runGlobal("boot");
     } finally {
@@ -823,8 +866,16 @@ export class GameHost {
     session.currentSetFile = "";
     this.startAtHalfMix();
     // finish what boot()'s closing sendtostage(advanceday()) couldn't reach
-    const tour = Number(session.interp.globals.get("tour")) !== 0;
-    await session.runGlobal(tour ? "advancetour" : "advanceday");
+    const tour = opts.tour ?? Number(session.interp.globals.get("tour")) !== 0;
+    if (opts.tour !== undefined) session.interp.globals.set("tour", tour ? 1 : 0);
+    try {
+      // the advance plays one more — `opentour.mov`, 367 frames — and it is part
+      // of the same preamble, so the suppression covers it too
+      await session.runGlobal(tour ? "advancetour" : "advanceday");
+    } finally {
+      // ...and every film the GAME plays from here is the game's
+      session.onPlayMovie = films;
+    }
   }
 
   /**

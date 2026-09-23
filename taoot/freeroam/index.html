@@ -3,24 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title data-i18n="play.docTitle">Play — Titanic - Adventure Out Of Time RE</title>
+    <title>Free roam — Titanic - Adventure Out Of Time RE</title>
     <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
     <meta name="site-root" content="../" />
     <link rel="icon" type="image/png" href="/taoot-mark.png" />
-    <!-- Installed to a home screen, this page opens with no address bar — the
-         only way to be rid of one on an iPhone, which has no element fullscreen
-         at all. Android reads the manifest, where `display: fullscreen` takes
-         the status bar too; iOS ignores the manifest's display and reads the
-         `apple-` tags, where standalone is the best on offer and the status bar
-         stays a black strip. In an ordinary tab none of this changes anything.
-         site/tests/app-icons.ts holds every value below to its source. -->
-    <link rel="manifest" href="/app.webmanifest" />
-    <link rel="apple-touch-icon" href="/taoot-apple-touch-180.png" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-    <meta name="apple-mobile-web-app-title" content="Titanic" />
     <meta name="theme-color" content="#00060f" />
+    <!-- The disc's second mode, entered directly rather than by hitting the
+         right half of `playmode.mov`: `advancetour()` puts the story to
+         `mission = -1`, resets every actor and prop, and opens the deck map
+         everywhere. taoot/src/main.ts's startsInTour reads this, and the boot it
+         asks for presses the tour button itself and skips the films in front of
+         it with the ESC the disc gives a player for them — so this page opens in
+         C-73 rather than on eight megabytes of logos and a menu with one
+         answer. -->
+    <meta name="start-mode" content="tour" />
+    <!-- ...and no ownership film either, for the same reason: this page is one
+         room away from the address bar and nothing in front of it is a question
+         the reader is being asked. -->
+    <meta name="skip-intro" content="1" />
+    <!-- One screen and its bars, and nothing that reads like a tool: the scene
+         readout and the log are never shown here, by X or otherwise. The column
+         is still in the markup below, because the log is written on every page
+         and the bug report copies it out. -->
+    <meta name="details-never" content="1" />
     <link rel="stylesheet" href="/src/theme.css" />
     <!-- The saved-games dialog, which is the engine's
          (engine/src/web/save-browser.css) because the module that drives it is,
@@ -29,10 +34,10 @@
          directly: a bare package specifier is a thing Vite resolves in CSS and
          a `<link href>` into another workspace package is not. -->
     <link rel="stylesheet" href="/src/saves.css" />
-    <!-- The game page's own sheet. It lives in a file rather than in this head
-         because /freeroam/ is this page with the story turned off, and it needs
-         exactly these rules: one 512x384 framebuffer and the bars around it. -->
+    <!-- The game page's sheet, shared: this page IS that page with the story
+         turned off, so it wants exactly those rules. -->
     <link rel="stylesheet" href="/src/play.css" />
+    <link rel="stylesheet" href="/src/freeroam.css" />
   </head>
   <body class="deep">
     <header class="topbar">
@@ -245,6 +250,14 @@
           >
         </div>
 
+        <!-- What this page is, and what it has just done: the doorway it stood
+             the `door` prop up in, when the game's own handler refused to.
+             Filled by taoot/src/freeroam-page.ts. -->
+        <div class="bar">
+          <span class="seclabel">Free roam</span>
+          <span class="keys" id="roamnote">guided tour</span>
+        </div>
+
         <div class="bar">
           <span class="keys" data-i18n-html="play.keys">
             <b>←</b> <b>→</b> turn &nbsp;·&nbsp; <b>↑</b> walk &nbsp;·&nbsp;
@@ -323,5 +336,6 @@
     </div>
 
     <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/freeroam-page.ts"></script>
   </body>
 </html>

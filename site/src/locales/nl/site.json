@@ -1,6 +1,10 @@
 {
   "brandTitle": "RE — reverse-engineered: een zo getrouw mogelijke herimplementatie van de DreamFactory-engine, niet de oorspronkelijke uitgave uit 1996",
   "navPlay": "Spelen",
+  "navOriginal": "Origineel",
+  "navFreeRoam": "Vrij verkennen",
+  "navFreeRoamTitle": "Vrij verkennen — de rondleiding van de schijf, waarbij elke deur opengaat",
+  "navPlayMenuTitle": "Hoe je het spel opent",
   "navEditors": "Editors",
   "navCollection": "Collectie",
   "navMinigames": "Minigames",

@@ -328,6 +328,58 @@ export class GameSession {
   onDiscChange: ((disc: 1 | 2) => void) | null = null;
 
   /**
+   * Host hook: a hotspot's `mousedown` chain has run to completion.
+   *
+   * The moment a click on a painting has been ANSWERED — the object script, the
+   * scene, the set main and the stage have all had their turn, and whatever the
+   * handler did (a sound, a puppet, a prop stood up, a set change) is done,
+   * because {@link SetScripts.fireChain} awaits each one.
+   *
+   * It exists because "did the game do anything about that click?" cannot be
+   * answered from the outside by watching. A page that listens for `pointerdown`
+   * is ahead of the dispatch on a touch screen, where a finger is ambiguous
+   * until it moves and TouchGestures holds the press back for
+   * {@link TAP_HOLD_MS} — so it reads "nothing happened" from a click that is
+   * about to happen, and a swipe that merely STARTED on a hotspot looks like a
+   * click on one. Polling `scriptBusy` has the same fault from the other end: a
+   * handler can begin and finish between two animation frames.
+   *
+   * Fires for `mousedown` only, and for both ways one is delivered — the pointer
+   * and BOOTFILE's SPACE key, which routes through `sendtopainting` to the same
+   * chain.
+   */
+  onHotspotClick:
+    | ((hit: {
+        /** the hotspot's own name, as `indextopainting` reports it */
+        paint: string;
+        set: string;
+        scene: string;
+        view: string;
+        /** whether a handler answered it, rather than passing it along */
+        consumed: boolean;
+      }) => void)
+    | null = null;
+
+  /**
+   * Host hook: a key delivered to the open set has been answered.
+   *
+   * The same seam {@link onHotspotClick} is, for the other half of how a room is
+   * used. Fires once the boot's `keydown` router and everything it re-routed to
+   * have run, with the room and standpoint the press was made at and whether a
+   * handler took it.
+   *
+   * `consumed` does not mean the press did something: a handler that refuses a
+   * step consumes it just as firmly as one that takes it, which is the whole
+   * shape of a guard like TAOOT's
+   * `if currentview () = "view12" & arg = "uparrow" & (tour | mission < 4) →
+   * exitcode`. What it means is that the set answered, and a host that wants to
+   * know whether anything MOVED should compare the room before and after.
+   */
+  onSetKey:
+    | ((press: { key: string; set: string; scene: string; view: string; consumed: boolean }) => void)
+    | null = null;
+
+  /**
    * The CD volume the game has mounted, by its own label — what `currentcd()`
    * answers, set by BOOTFILE's `setpath` (`currentcd("Titanic2")`) and by a load
    * putting back the disc its save names.
