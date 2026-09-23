@@ -70,6 +70,7 @@
  * Which is exactly what it looks like: the thing flies in, waits for you, and
  * unfolds a screen with a picture on it.
  */
+import { random } from "./random";
 
 /**
  * The goo, and the whole of its life — `0x40cba0` throws it and `0x40c480`, the
@@ -99,10 +100,10 @@
  * puddle growing — and then dries back down one stage at a time. Which is why
  * killing something leaves a mess on the pavement rather than a shower.
  *
- * The one thing not in the executable is the fall itself. There is no gravity
- * constant anywhere in `SC.EXE` — that was established for the player and holds
- * here — so a gob falls under {@link INVENTED.gravityPx}, the same number the
- * player falls under, and nothing else about it is this port's.
+ * The fall is the mover's: the allocator gives every object a gravity of ten
+ * pixels a frame² (`0x42f5ca`) and the effect class leaves it alone, and the
+ * velocity a gob leaves with is the hitter's blow pair itself (`0x40cdb6`),
+ * not divided by anything — the divisor below scales script steps only.
  */
 export const SPRAY = {
   /** `0x46bbd8` tag 0: rising, three cels held three engine frames each */
@@ -111,7 +112,10 @@ export const SPRAY = {
   fall: { cels: [18203, 18204] as readonly number[], hold: 3, from: "0x46bbd8 tag 1" },
   /** tags 2 to 7: the puddle, one cel per stage, spreading as more goo lands */
   pool: [18205, 18206, 18207, 18208, 18209, 18210] as readonly number[],
-  /** the class's own speed divisor, `obj+0xe` in `0x40c3c0` message 1 */
+  /**
+   * the class's own speed divisor, `obj+0xe` in `0x40c3c0` message 1 — which
+   * scales a script's steps and not the velocity `0x40cba0` writes
+   */
   divisor: 2,
   /** `[ctx+2] = 0x3c` — engine frames a gob may spend in the air */
   life: 60,
@@ -208,7 +212,7 @@ export interface Gob {
 
 /** `0x434540(0x28) + 0x28` — how long a puddle holds its stage */
 export function dryTime(): number {
-  return SPRAY.dry[0] + Math.floor(Math.random() * (SPRAY.dry[1] - SPRAY.dry[0] + 1));
+  return SPRAY.dry[0] + Math.floor(random() * (SPRAY.dry[1] - SPRAY.dry[0] + 1));
 }
 
 /**
@@ -217,12 +221,12 @@ export function dryTime(): number {
  * throws the goo about.
  *
  * `0x40cdb9..0x40ce77`, once per axis. The engine's `0x434540(n)` returns 1..n,
- * so the spread is `v - span/2 + (1..span)`; `Math.random()` stands in for the
+ * so the spread is `v - span/2 + (1..span)`; `random()` stands in for the
  * generator and nothing else here does.
  */
 export function scatter(v: number): number {
   const span = Math.max(Math.abs(v), SPRAY.spread);
-  return v - Math.trunc(span / 2) + 1 + Math.floor(Math.random() * span);
+  return v - Math.trunc(span / 2) + 1 + Math.floor(random() * span);
 }
 
 /** how many gobs a blow of this strength throws — `clamp(damage/6, 1, 20)` */

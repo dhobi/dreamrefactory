@@ -29,12 +29,14 @@
  *      says "the game started" rather than "a picture appeared" — it goes
  *      through the film's region table, its action type and its frame index, all
  *      read big-endian, and then through `char.mov` into `walk.html`.
- *   6. Prefs opens its panel and ALL FOURTEEN of its controls answer — the
- *      eight key boxes, the volume slider, the three difficulty boxes, the music
- *      switch and the button that is the only way out of it;
- *   7. ...and a rebound key is still bound in `walk.html`, which is the whole
- *      point of a preferences panel and the one thing the panel alone cannot
- *      show.
+ *   6. Prefs opens its panel, its controls answer a click and a key, and the
+ *      button at the bottom right is the way out of it. The panel's own
+ *      arithmetic — which rect is which control, what a key box refuses, what
+ *      the slider's x means — and a rebound key still bound in the level are
+ *      the machine suite's (`tests/machine/controls.ts`); this is the page
+ *      routing clicks and keys to it.
+ *
+ * Prefs is visited BEFORE Begin, on the one boot: the menu is where both are.
  *
  * ## Two traps this file is deliberately shaped around
  *
@@ -68,19 +70,16 @@ const LEFT_FIGURE = { x: 110, y: 150 };
 const RIGHT_FIGURE = { x: 400, y: 150 };
 const ACCEPT = { x: 255, y: 244 };
 /** the prefs panel's three difficulty boxes — `0x4791d8`, `0x4791e0`, `0x4791e8` */
-const EASY = { x: 130, y: 233 };
 const HARD = { x: 226, y: 233 };
+const MEDIUM = { x: 178, y: 233 };
 /**
- * ...and the rest of the fourteen, every rect out of `.data` (see `src/prefs.ts`).
+ * ...and two more of the fourteen, every rect out of `.data` (see `src/prefs.ts`).
  *
  * `TOWARD_BOX` is `0x479190`, the key box for action 2 — the one `0x402be0`
- * swaps on the player's facing, which this page calls "right". `SLIDER` is a
- * click 45 pixels into `0x4791d0`, and `0x45d743` divides that by ten: volume 4.
+ * swaps on the player's facing, which this page calls "right". `OK` is
+ * `0x4791c8`, the only way out.
  */
 const TOWARD_BOX = { x: 254, y: 155 };
-const RUN_BOX = { x: 254, y: 80 };
-const SLIDER = { x: 122 + 45, y: 207 };
-const MUSIC = { x: 130, y: 180 };
 const OK = { x: 412, y: 224 };
 
 const browser = await launch({ headless: !HEADED });
@@ -107,7 +106,10 @@ console.log(
 );
 
 await page.click("#start");
-await page.waitForTimeout(2000);
+for (let i = 0; i < 40 && !/cyber/i.test((await page.textContent("#loc")) ?? ""); i++)
+  await page.waitForTimeout(100);
+// ...and a moment for its first frames to paint, which step 3 counts
+await page.waitForTimeout(500);
 
 // 2 — the sequence begins where the binary says it begins
 const opening = (await page.textContent("#loc")) ?? "";
@@ -193,18 +195,6 @@ console.log(
   `ok    and the high-score board is on the menu — ${onMenu} green pixels of it`,
 );
 
-// 5 — the click that starts the game.
-//
-// "different from before" is NOT the assertion, and the first version of this
-// file made it: the click really did reach the region, the menu really did end
-// on "frame 2" as it should, and nothing picked that up — so the page went
-// blank, `#loc` went empty, "after !== before" held, and the test reported PASS
-// on a broken page.
-//
-// What Begin MEANS is the correction. It does not begin: `menu.mov`'s "frame 2"
-// is frame index 168, and `0x45df7c` — the 168th slot of the jump table at
-// `0x45e1ac` — sets `[0x46b208] = -1`, which `0x40312c` plays as `char.mov`. The
-// game asks which of its two players you are before it starts.
 const at = async (p: { x: number; y: number }): Promise<void> => {
   const box = (await page.locator("#screen").boundingBox())!;
   await page.mouse.click(
@@ -227,6 +217,54 @@ const until = async (what: RegExp, ms = 40_000): Promise<boolean> => {
   return false;
 };
 
+// 6 — Prefs. Its panel has no regions at all: 0x45db40 draws the fourteen
+//     controls and 0x45d700 takes the clicks. Difficulty is +1 easy, 0 medium,
+//     -1 hard (0x448ac2's health).
+//
+//     The film that opens it is `prefs.mov` — frames 1..30 of one sixty-frame
+//     move, with `prefs2.mov` as 31..60. `0x4030ac` calls the modal and only
+//     `0x4030b1` plays prefs2, so a film after the modal can only be the panel
+//     leaving.
+await at(PREFS);
+if (!(await until(/prefs panel/)))
+  fail(`Prefs should open its panel; #loc says "${await loc()}"`);
+if (!/difficulty 0/.test(await loc()))
+  fail(`the panel should open on the middle difficulty: "${await loc()}"`);
+await at(HARD);
+if (!(await until(/difficulty -1/, 3_000)))
+  fail(`0x4791e8's box stores -1 (0x45d7ae); the panel says "${await loc()}"`);
+await at(MEDIUM);
+if (!(await until(/difficulty 0/, 3_000)))
+  fail(`0x4791e0's box stores 0 (0x45d79b); the panel says "${await loc()}"`);
+// ...and a key box binds the next character typed (`0x45d72f`, `0x45d810`)
+if (!/toward D/.test(await loc()))
+  fail(`action 2 ships bound to D (0x46b210); the panel says "${await loc()}"`);
+await at(TOWARD_BOX);
+await page.waitForTimeout(100);
+await page.keyboard.press("z");
+if (!(await until(/toward Z/, 3_000)))
+  fail(`0x45d810 should have bound Z to action 2; the panel says "${await loc()}"`);
+console.log(`ok    the preferences panel answers a click and a key`);
+
+// ...and control 8, the one rect whose handler returns zero and so ends
+// `0x45d5a0`'s loop. It is the only way out of the panel the original has.
+await at(OK);
+if (!(await until(/menu\.mov/i, 20_000)))
+  fail(`0x4791c8 is the way out (0x45d73f); #loc says "${await loc()}"`);
+console.log(`ok    and the button at the bottom right is the one way out of it`);
+
+// 5 — the click that starts the game.
+//
+// "different from before" is NOT the assertion, and the first version of this
+// file made it: the click really did reach the region, the menu really did end
+// on "frame 2" as it should, and nothing picked that up — so the page went
+// blank, `#loc` went empty, "after !== before" held, and the test reported PASS
+// on a broken page.
+//
+// What Begin MEANS is the correction. It does not begin: `menu.mov`'s "frame 2"
+// is frame index 168, and `0x45df7c` — the 168th slot of the jump table at
+// `0x45e1ac` — sets `[0x46b208] = -1`, which `0x40312c` plays as `char.mov`. The
+// game asks which of its two players you are before it starts.
 await at(BEGIN);
 if (!(await until(/char\.mov/i)))
   fail(`Begin should reach the chooser (0x45df7c); #loc says "${await loc()}"`);
@@ -281,6 +319,13 @@ console.log(
 
 if (!(await until(/frame 58\/59/)))
   fail(`rtpan.mov should end waiting on its accept button`);
+// ...and the menu page's own error line is read HERE, while the menu page is
+// still the one drawing: accepting the chooser hands the canvas to the level.
+{
+  const err = (await page.textContent("#err")) ?? "";
+  if (err.trim()) problems.push(`#err: ${err}`);
+}
+
 await at(ACCEPT);
 /**
  * ...and the game starts HERE, on this page.
@@ -333,132 +378,9 @@ if (!cels || Number(cels) < 5000)
   fail(`character 1 wears the 5xxx cels; it is standing on ${cels}`);
 console.log(`ok    and walk.html is playing character 1, on cel ${cels}`);
 
-// 6 — Prefs. Its panel has no regions at all: 0x45db40 draws the fourteen
-//     controls and 0x45d700 takes the clicks. Difficulty is +1 easy, 0 medium,
-//     -1 hard (0x448ac2's health).
-//
-//     The film that opens it is `prefs.mov` — frames 1..30 of one sixty-frame
-//     move, with `prefs2.mov` as 31..60. `0x4030ac` calls the modal and only
-//     `0x4030b1` plays prefs2, so a film after the modal can only be the panel
-//     leaving. This page had the two the wrong way round and opened the panel
-//     by playing it shut.
-await page.goBack();
-await page.waitForTimeout(500);
-await page.goto(URL_BASE, { waitUntil: "domcontentloaded" });
-await page.waitForFunction(
-  () => !(document.getElementById("start") as HTMLButtonElement).disabled,
-  null,
-  { timeout: 180_000 },
-);
-await page.click("#start");
-for (let i = 0; i < 40 && !/menu\.mov/i.test(await loc()); i++) {
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(1200);
-}
-await at(PREFS);
-if (!(await until(/prefs panel/)))
-  fail(`Prefs should open its panel; #loc says "${await loc()}"`);
-if (!/difficulty 0/.test(await loc()))
-  fail(`the panel should open on the middle difficulty: "${await loc()}"`);
-await at(HARD);
-await page.waitForTimeout(300);
-if (!/difficulty -1/.test(await loc()))
-  fail(`0x4791e8's box stores -1 (0x45d7ae); the panel says "${await loc()}"`);
-await at(EASY);
-await page.waitForTimeout(300);
-if (!/difficulty 1/.test(await loc()))
-  fail(`0x4791d8's box stores 1 (0x45d788); the panel says "${await loc()}"`);
-console.log(
-  `ok    the preferences panel is live, and its three boxes are the disc's own rects`,
-);
-
-// ...the eight key boxes. `0x45d72f` stores the box index in `[0x47917c]` and
-// `0x45d810` binds the next character typed — unless one of the eight already
-// has it, which is the loop at `0x45d824` refusing before the jump table.
-if (!/toward D/.test(await loc()))
-  fail(`action 2 ships bound to D (0x46b210); the panel says "${await loc()}"`);
-await at(TOWARD_BOX);
-await page.waitForTimeout(200);
-await page.keyboard.press("z");
-await page.waitForTimeout(300);
-if (!/toward Z/.test(await loc()))
-  fail(
-    `0x45d810 should have bound Z to action 2; the panel says "${await loc()}"`,
-  );
-await at(RUN_BOX);
-await page.waitForTimeout(200);
-await page.keyboard.press("z");
-await page.waitForTimeout(300);
-if (!/run \/ climb W/.test(await loc()))
-  fail(
-    `Z is spoken for, so 0x45d824 refuses it; the panel says "${await loc()}"`,
-  );
-console.log(
-  `ok    a key box binds the next character typed, and refuses one already spoken for`,
-);
-
-// ...the slider and the music switch, which are controls 9 and 13
-await at(SLIDER);
-await page.waitForTimeout(300);
-if (!/volume 4/.test(await loc()))
-  fail(
-    `45px into 0x4791d0 over ten is 4 (0x45d743); the panel says "${await loc()}"`,
-  );
-await at(MUSIC);
-await page.waitForTimeout(300);
-if (!/music off/.test(await loc()))
-  fail(`0x4791f0 flips [0x46b1fc] (0x45d7c1); the panel says "${await loc()}"`);
-console.log(
-  `ok    the slider takes the click's own x, and the music box flips [0x46b1fc]`,
-);
-
-// ...and control 8, the one rect whose handler returns zero and so ends
-// `0x45d5a0`'s loop. It is the only way out of the panel the original has.
-await at(OK);
-if (!(await until(/menu\.mov/i, 20_000)))
-  fail(`0x4791c8 is the way out (0x45d73f); #loc says "${await loc()}"`);
-console.log(
-  `ok    and the button at the bottom right is the one way out of it`,
-);
-
-// ...and the menu page's own error line is read HERE, while the menu page is
-// still the one on screen: step 7 navigates to walk.html, which has no `#err`.
-const err = (await page.textContent("#err")) ?? "";
-if (err.trim()) problems.push(`#err: ${err}`);
 if (problems.length) fail(problems.join(" | "));
 
-// 7 — the binding outlives the panel. walk.html reads the same store at load,
-//     so Z walks the player right and D no longer does anything at all.
-await page.goto(`${URL_BASE}walk.html?level=0`, {
-  waitUntil: "domcontentloaded",
-});
-await hud.filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 60_000 });
-await page.waitForTimeout(700);
-const xOf = async (): Promise<number> =>
-  Number(/· x (-?\d+),/.exec((await hud.textContent()) ?? "")?.[1] ?? NaN);
-const hold = async (key: string, ms: number): Promise<number> => {
-  const from = await xOf();
-  await page.keyboard.down(key);
-  await page.waitForTimeout(ms);
-  await page.keyboard.up(key);
-  await page.waitForTimeout(200);
-  return (await xOf()) - from;
-};
-const byZ = await hold("z", 1200);
-if (byZ <= 20)
-  fail(
-    `Z was bound to action 2 in the panel; holding it moved the player ${byZ}px`,
-  );
-const byD = await hold("d", 1200);
-if (Math.abs(byD) > 8)
-  fail(
-    `D was rebound away from action 2; holding it still moved the player ${byD}px`,
-  );
 console.log(
-  `ok    ...and walk.html honours it: Z walks ${byZ}px and D, which used to, moves ${byD}`,
-);
-
-console.log(
-  "PASS — logo → intro → menu, Begin asks which player, and the answer starts the game",
+  "PASS — logo → intro → menu, Prefs answers, Begin asks which player, and the answer starts the game",
 );
 await finish(browser);

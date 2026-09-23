@@ -98,11 +98,45 @@
  * `0x4b0` = 1200, cel bank `0x4a6220`, and kind 0 installed as the first
  * script.
  */
-import { install, type Brain } from "./kit";
+import { install, type Brain, type CastKit, type Reaction } from "./kit";
+
+/**
+ * The bone — `0x421310(point, velocity, 0)`, called at `0x4238a3` on the frame
+ * the wind-up ends.
+ *
+ * The same thrown class igor lobs out of (`[0x46ecd0]`, create `0x41fc47`:
+ * divisor 5, `0x41fc7b`'s 0.8f of weight, `obj+0x1a = 0x64` every frame at
+ * `0x41fd0d`), in its flavour 0: `0x421388` files base cel `0x4cb` and
+ * installs `0x46f978` tag 0, 1227..1230 at one frame each. The skeleton puts
+ * it seventy in front (`0x42385b`) and forty up (`0x423872`) with `vy −0x1a`
+ * and `vx ±0x23` (`0x42387a`, `0x423892`). On any collision `0x41fd7b`
+ * installs `0x46f9e0` at tag + 1 — tag 1, the same four cels at two frames
+ * — and then it is gone.
+ */
+export const SKEL_BONE: CastKit = {
+  cels: [1227, 1228, 1229, 1230],
+  hold: 1,
+  /** `0x423892` — ±35 along the facing */
+  speed: 0x23,
+  /** `0x42387a` — and 26 up, which the pull spends */
+  rise: 0x1a,
+  /** `0x41fc7b`'s 0.8f through `0x42f850`: `trunc(0.8 * 10)` */
+  pull: 8,
+  /** `0x42385b` / `0x423872` — seventy in front, forty above the point */
+  ahead: 0x46,
+  lift: 0x28,
+  /** `0x41fd0d`, every frame */
+  blow: 0x64,
+  /** `0x46f9e0` tag 1 — its own four cels again, two frames each */
+  impact: { cels: [1227, 1228, 1229, 1230], hold: 2 },
+  from: "0x4238a3 / 0x421310 index 0 / 0x46f978 tag 0",
+};
 
 /**
  * The hit reactions, kinds 6 to 8, and `0x423a30` — the frame handler that
- * installs them. Read, not done: the page owns those animations.
+ * installs them. The page owns those animations (`Foe.initskel`'s flinches,
+ * pick and death); the landing wait and the death's cry are
+ * {@link skelReacts}, and kind 7's closing roll is state 7 of the machine.
  *
  * - **`0x423a30`, the handler.** It answers 0 outright for a blow from classes
  *   `[0x46ecd0]` (its own thrown bone), `[0x46ecc4]` and `[0x46fdf8]` (another
@@ -120,7 +154,8 @@ import { install, type Brain } from "./kit";
  *   only `mov ax, 1` in the whole of `0x4234b0`.
  * - **6, the knockdown**, `0x46fcf0`: `0x423b41` takes it whenever the blow's
  *   power is **0x3c or more**. Tag 0 is cels 1260–1265, and cel 1265 carries
- *   `dx 170, dy -420` — the frame it is thrown backwards off its feet. State 6
+ *   `dx 170, dy -420` on both of its frames — pushed along its own facing
+ *   (`0x45d18c` negates the dx only for the mirror flag) and up. State 6
  *   (`0x4238fc`) waits for both `obj+0x46` AND `obj+0x2e`, back on the ground,
  *   before handing to tag 1, cels 1266–1268, getting up; that hands to the
  *   walk.
@@ -129,8 +164,7 @@ import { install, type Brain } from "./kit";
  *   whether it came from behind. From the front it is tag 0, cel 1260. From
  *   **behind** it is tag 1 or 2 — `0x434540(2)`, cels 1212 and 1261 — and
  *   `0x423b9a` takes a further **0x14 off `AI+0`** on top of the blow. A
- *   skeleton hit in the back loses twenty more health than one hit in the face,
- *   and the port's flat health subtraction cannot express that.
+ *   skeleton hit in the back loses twenty more health than one hit in the face.
  * - And the way out of a flinch is a **leap**: `0x423965` rolls
  *   `0x434540(5)` and, three times in five, installs kind 5 tag 0 rather than
  *   the walk. So a skeleton you tap springs away six times in ten.
@@ -247,6 +281,8 @@ export const SKEL = {
    */
   call: 0x14,
   crunch: 0x17,
+  /** `0x4239c2` — on the death script's frame 2 */
+  groan: 0x15,
   from: "0x4234b0",
 } as const;
 
@@ -337,7 +373,7 @@ export const skel: Brain = (e, foe, run, k) => {
        * finish. `0x42368d` then tosses for which leap: `0x434540(2) - 1`, so
        * the standing one that rocks back and the running one are even money.
        */
-      if (e.y - k.player.y > DEPTH || k.player.vy < RISING) {
+      if (k.anchorY(e) - k.player.anchor > DEPTH || k.player.vy < RISING) {
         return install(e, k.roll(2) - 1 === 0 ? SKEL.leap : SKEL.lunge, true);
       }
       /**
@@ -386,8 +422,7 @@ export const skel: Brain = (e, foe, run, k) => {
      * ---- 2, `0x4236b1`: the reach, and the four things the grab needs.
      *
      * `0x4236b1` opens by setting `obj+0x1a` to 0x64 — the strength percent
-     * this thing would land a blow at. **Nothing hits the player back in this
-     * port**, so it is carried as read and spends nothing.
+     * this thing would land a blow at — the page's default strength already.
      *
      * Then, on the frame the reach ends, all four of these or it just walks
      * away: the band is 3, inside a hundred (`0x4236c2`); `[0x46b1b4]` is set
@@ -407,7 +442,7 @@ export const skel: Brain = (e, foe, run, k) => {
      */
     case 2: {
       if (!done) return false;
-      const near = Math.abs(e.y - k.player.y) < GRAB_ROW;
+      const near = Math.abs(k.anchorY(e) - k.player.anchor) < GRAB_ROW;
       if (t.band >= 3 && near && !k.player.down) {
         return install(e, SKEL.grab, true);
       }
@@ -429,8 +464,9 @@ export const skel: Brain = (e, foe, run, k) => {
      * `[0x46b1b4]` handed back, and `0x402fa0(2)` — which dispatches on the
      * character index and puts him into his own thrown state. Only then kind 1.
      *
-     * **Nothing hits the player back in this port** and the kit hands a brain
-     * no way to move him, so all five of those are read and not done. What
+     * The kit hands a brain no way to hold, drain or throw the player, so all
+     * five of those are read and not done (the grab's own cels still hit him
+     * through the page's ordinary strike-box pass). What
      * survives is the transition, which is the state machine: hold the grab
      * until it ends, then walk.
      */
@@ -450,15 +486,18 @@ export const skel: Brain = (e, foe, run, k) => {
      * ignores any blow that came from class `[0x46ecd0]`, so the bones cannot
      * hurt the thing that threw them.
      *
-     * The kit has no way to spawn an object and **nothing hits the player back
-     * in this port**, so the bone is read and not made. Tag 1 plays out the
+     * The page flies it as {@link SKEL_BONE}. Tag 1 plays out the
      * follow-through and `0x4238b4` hands to the walk.
      */
     case 4: {
       const tag = e.tag ?? 0;
       if (!done) return false;
-      // `0x423847` — the wind-up always ends in the follow-through
-      if (tag === 0) return install(e, SKEL.sling, true);
+      // `0x423847` — the wind-up always ends in the follow-through, and
+      // `0x4238a3` lets the bone go on the same frame
+      if (tag === 0) {
+        k.cast(e, SKEL_BONE);
+        return install(e, SKEL.sling, true);
+      }
       // `0x4238bf` — and the follow-through always ends in the walk
       if (tag === 1) return install(e, SKEL.walk);
       // `0x423833` — any other tag falls straight out
@@ -474,9 +513,37 @@ export const skel: Brain = (e, foe, run, k) => {
      */
     case 5:
       return done ? install(e, SKEL.walk) : false;
+    /**
+     * ---- 7, `0x423965`: a take has run out (the flinch's `resume`), and
+     * `0x434540(5)` under 4 — three in five — springs away on the standing
+     * leap; anything else walks.
+     */
+    case 7:
+      return k.roll(5) < 4
+        ? install(e, SKEL.leap, true)
+        : install(e, SKEL.walk);
     default:
       return false;
   }
+};
+
+/**
+ * What the skeleton does in the two states the page animates.
+ *
+ * - **6**, the knockdown: `0x42391d` will not hand tag 0 to the get-up until
+ *   `obj+0x2e` says it is on the ground again, so the last cel is held (the
+ *   clock pinned a frame short) for as long as it is still in the air.
+ * - **8**, the death: `0x4239b5` plays `zombie.snd` 0x15 when the frame index
+ *   `obj+0x42` is 2 — the third cel, six frames in.
+ */
+export const skelReacts: Reaction = (e, foe, run, k) => {
+  if (e.state === "dead") {
+    if (Math.floor(e.clock) === 2 * (foe.death?.hold ?? 3)) k.say(e, SKEL.groan);
+    return;
+  }
+  const down = foe.flinch?.[3];
+  if (down && e.anim === down && e.clock >= run && e.vy !== 0)
+    e.clock = run - 1;
 };
 
 export { NOT_HERE as SKEL_NOT_HERE };

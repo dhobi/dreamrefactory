@@ -1,83 +1,72 @@
 # How it is checked
 
-Every suite in `skullcracker/tests/browser` over sixteen levels, and the reason
-they run in one process. Titanic keeps the same page under the same name
+The game is checked HEADLESS: the port's own game code, loaded in node on the
+rip read from disk, stepped a frame at a time as fast as the CPU goes, and asked
+directly what happened. Titanic keeps the same page under the same name
 ([How we know it's right](../taoot/verification.md)) and for the same reason:
 "how was this checked?" is a headline question for a project like this, not
 lookup material.
 
-## One browser, not thirty
+## The game has no page in it
 
-The suites in `tests/browser` run in one process against one shared Chromium,
-not as a `tsx` process each with its own `chromium.launch()`. A process per suite
-costs twice.
+`skullcracker/src/game.ts` is the whole game — the world's state, `tick()`, the
+level loader, every class's machine — and it touches no DOM. `src/walk.ts` is
+the page around it: the canvas, the drawing, the HUD, the keys, the films. The
+two meet in a few places only:
 
-The visible cost is time: each process imports Playwright from scratch, about a
-second apiece, thirty seconds across the set before a single assertion runs.
+- **the switches** — `?level=`, `?x=`, `?damage=` and the rest are read through
+  one `QUERY`, which a headless run supplies as a string (`setQuery`);
+- **the files** — `SkullFiles` reads the rip by `fetch` in a page and from disk
+  headless (`SkullFiles.fromReader`), through the same manifest rules;
+- **what only a page can do** — films, the status line, the level picker and
+  the end of a game go through the `ui` hooks, which the page fills in and a
+  headless run leaves as they are, so the game goes straight on past each one.
 
-The cost that matters is correctness. The development machine has around a
-gigabyte free, with several gigabytes held by things that are not this repo, and
-a Chromium per suite is more than that will take. Suites run back to back fail in
-ways they never fail alone, for example:
+## The dice are the executable's
+
+`src/random.ts` is `SC.EXE`'s own generator, `0x434560` — a lagged Fibonacci
+table of 55 words — and every level reseeds it with the same constant as it
+starts (`0x4036ff`), exactly as the original does. So the game is
+deterministic: the same inputs from the same start give the same result every
+time, and a suite asserts exact numbers — the walk is 180px a second, not
+"about 180".
+
+## Machine suites
+
+`skullcracker/tests/machine/*.ts`, one per subject. Each stands the game up with
+`headless(query)` from `tests/machine/harness.ts` — the same query string a URL
+would carry — then holds keys the way the page's handler does
+(`h.hold("right", true)`), steps engine frames (`h.frame(n)`, fifteen to a
+second), waits on STATE rather than a clock (`h.until(done, maxFrames)`), and
+reads the answer straight off `game.p`, `game.stats`, `game.spawnedHere()` and
+the rest.
 
 ```
-  woods      a dog pays 0x40d450(0xc8); the score reads 0
-  service    no position in the HUD
-  arcade     TypeError: Cannot read properties of null (reading 'y')
-  guns       0x451520 gives 40 and 0x45eed0 one more: · no flamer 0/160
+npm test -w skullcracker                              every suite
+npx tsx tools/runmachine.mts speed foes               just these (from skullcracker/)
 ```
 
-Each of those passes on a re-run, and each needs a re-run to tell it apart from a
-real regression — which defeats the point of the suites.
+The runner gives each suite a process of its own — the game keeps its world in
+module state, one per process — and runs several at once. The whole set takes
+about twenty seconds; the browser suites it replaced took about an hour and
+still needed a retry pass to tell flakes from regressions.
 
-The full set runs in **993 seconds, one process, one Chromium** — 630MB across
-its helper processes, flat from the first suite to the last, against a
-machine with about a gigabyte free. It is not a cure for flakiness: some suites
-drive the game with fixed waits and can fail on their own whatever the browser
-does (`codes` and `service` did, and passed again). What it removes is the class
-of failure that comes from the machine rather than the page.
+Two things carry across `h.load()` in one process, because the game carries
+them from level to level: the score and lives (a suite that wants a clean start
+passes `score=` and `lives=`, the game's own saved-game switches), and what the
+player is holding.
 
-A suite does not own a browser. It asks `harness.ts` for one, gets the shared
-Chromium under the runner or a fresh one on its own, and gives back its contexts
-rather than closing anything. A suite's top level awaits its own work —
-importing a suite IS running it — and `fail()` throws rather than exiting,
-because one `process.exit` would take every other suite with it.
+## Page suites
 
-### A failure is not taken at its word
+What only a page can show stays in a browser: the front end's films and buttons
+(`menu`), the touch pad (`pad`, `touch`) and the pause panel (`pause`), in
+`skullcracker/tests/browser`, each a short check against the dev server.
 
-Under the pooled runner, about one run in three still has one or two suites fail
-— `codes`, `lift`, `mall`, `vat`, `woods`, `grave`, `service`, `ravecave`,
-`mission`, `foes`, never the same pair twice — and each passes standalone on the
-first ask. A red run alone therefore cannot tell a real regression from a flake.
+```
+npm run test:browser:all -w skullcracker
+```
 
-The runner re-runs a failed suite itself, and first undoes the two things that
-make a pooled failure different from a standalone one.
-
-The first is a leak. `fail()` throws, so a suite that FAILS never reaches its own
-`finish()` — and `finish()` is what closes its context. Without cleanup, the
-page, its canvas, its audio graph and its copy of the rip stay open on the shared
-browser for every suite that runs after it; on a machine with a gigabyte free,
-one failure leaves a corpse and the next suites run beside it. This is the
-mechanism behind the symptoms listed above. `harness.sweep()` closes whatever is
-left after every suite, pass or fail, and prints the count when there is one.
-
-The second is the browser. A retry closes the shared Chromium and launches a
-fresh one, because that is all "standalone" means here.
-
-Passing the second time prints `FLAKE` and does not fail the run; failing twice
-is a `FAIL` and does. The last line names both sets, so what the run is worth is
-readable without running anything again.
-
-The re-import needs a cache-buster — `import()` twice in one process hands back
-the first import's result, so the retry asks for `suite.ts?attempt=1`. The
-suite's own `import "./harness"` carries no query and so still resolves to the
-one harness module, which is what keeps the browser shared and leaves `sweep()`
-able to see the contexts.
-
-Both paths are tested against a suite written to fail on demand: fail-then-pass
-reports `FLAKE` and exits 0, fail-twice reports `FAIL` and exits 1.
-
-`menu` has no `test:browser:menu` script — its script is the bare
-`test:browser` — so running it by that name runs nothing and reports a failure.
-`speed` asserts the strides the drag settles at: 12 a frame for the walk and 22
-for the run, 180 and 330 px/s.
+`tools/runsuites.mts` runs them in one process against one shared Chromium,
+closes whatever a suite left open after it (`harness.sweep()`), and re-runs a
+failed suite once in a fresh browser: passing the second time prints `FLAKE`,
+failing twice is a `FAIL`.

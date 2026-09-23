@@ -227,7 +227,7 @@ doing, and returns the magnitude — and every hit handler in the game subtracts
 result from the victim's health. So the punch is cel 602's `dx 47`, the kick is
 663's 55, a punk with 250 takes six punches, and thresholds that look arbitrary
 are speeds: a mailbox dents at 10 and springs back but topples on its side for
-good at 55, a punk is knocked down over 50. A punch staggers and a kick floors,
+good at 55 (and still skids when kicked on its side), a punk is knocked down over 50. A punch staggers and a kick floors,
 by arithmetic rather than by design intent. Every blow also throws `damage / 6` gobs of green goo, up to twenty
 of them, along its own direction — `0x40cba0`, and the goo is the same green that
 runs out of a dead punk's head in the last eight cels of its death, though only
@@ -246,10 +246,12 @@ of any size launches it nine cels through the air, because its hit handler
 `0x44e3f0` has no health test at all. The two-pixel gap is authored.
 
 `obj+0xe` is a mass as well as a divisor. `0x430470`, which the
-collision dispatcher calls after a hit handler returns, is the textbook elastic
+collision dispatcher calls after a hit handler returns nonzero (`0x43042b`), is the textbook elastic
 collision applied per axis with that field as the weight — the player is 12, a
 punk 20, a hydrant 10, a mailbox 7 — so a kick's 55 against a mailbox comes out as
-69 pixels a frame and throws it most of a screen. So `obj+0xa`/`obj+0xc` are a
+69 pixels a frame and throws it most of a screen. A handler that answers 0
+on a blow it takes skips the exchange for both sides: the CHOPPER's and the
+hydrant's always do, and kragg's does once it is down on the ground. So `obj+0xa`/`obj+0xc` are a
 persistent velocity, not a per-frame stride. Anything
 that should not drift cancels them itself, and the hydrant's frame function does it
 on its first two instructions. What slows a slide is the allocator: `0x42f550`
@@ -345,7 +347,7 @@ The rest is `0x410480`, which is three comparisons and a clamp — 27 pixels a
 frame across, 23 up or down, and gone once it is half a screen past you
 horizontally or a quarter of one vertically. None of the ten cels carries a
 strike box, so a flypast cannot touch you: it is scenery with a trigger, and
-CITY's own step in `tests/browser/city.ts` watches one cross and one rise.
+CITY's own step in `tests/machine/city.ts` watches one cross and one rise.
 
 ### The classes
 
@@ -386,9 +388,11 @@ a level with no class anywhere.
   through WOODS meets three hydraulic presses and every route test becomes a
   fight. `begin()` throws both switches, so a player who comes through the front
   door meets the health, the knockdown, the seven KILL films and the lives.
-- **The KILL vignette is the last life's**, which is what `0x4294b7` says: the
-  death branch reads the count, spends one, and takes the ordinary path while
-  the count before the spend was not negative.
+- **The KILL vignette is the death after the last life**: `0x4293f3` spends one
+  as the dying animation ends and `0x4294cb` plays the film only once
+  `0x40d490` is below zero, so three on the panel is four deaths. Every other
+  death is `0x402760`: back at the checkpoint (`[0x4ac38a]`), with the level
+  left exactly as it was.
 - **The shell is finished except for the demo player.** All fourteen preferences
   controls answer, all eight cheat words work, and the high-score board takes a
   finished game and shows it over the title film, and Open loads a `.SKL`
@@ -404,36 +408,42 @@ a level with no class anywhere.
 - `engine/tests/byte-order.ts` — detection (needs no rip) and the menu (needs one)
 - `skullcracker/tools/records.mts` — how much of the sixteen books is on the
   page, counted rather than remembered
-- `skullcracker/tools/runsuites.mts` — **every browser suite, one process, one
-  Chromium**: `npm run test:browser:all -w skullcracker`, or name the ones you
-  want after a `--`
-- `skullcracker/tests/browser/harness.ts` — where a suite gets its browser from
+- `skullcracker/src/game.ts` — **the game itself**, headless: the world, `tick()`
+  and the level loader, with no page in it; `src/walk.ts` is the page around it
+- `skullcracker/src/random.ts` — `SC.EXE`'s own dice, reseeded as each level starts
+- `skullcracker/tools/runmachine.mts` — **every machine suite**, a process each:
+  `npm test -w skullcracker`, or name the ones you want — see
+  [how it is checked](verification.md)
+- `skullcracker/tests/machine/harness.ts` — the game stood up headless on the rip,
+  stepped a frame at a time
+- `skullcracker/tools/runsuites.mts` — the page suites, one process, one Chromium:
+  `npm run test:browser:all -w skullcracker`
 - `skullcracker/tests/browser/menu.ts` — the menu in a real browser
 - `engine/src/df/sbk.ts` — the sprite book reader, and `engine/tests/sbk.ts`
 - `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow, the press, the lever, the goop, the door and the scenery that moves
 - `skullcracker/src/foes.ts` — what each `init*` name is, and the numbers behind it
-- `skullcracker/tests/browser/city.ts` — CITY's opening, in a browser
-- `skullcracker/tests/browser/lift.ts` — CITY's five lifts, and the ride to its goal
-- `skullcracker/tests/browser/woods.ts` — WOODS' population, its two steps and its goal
-- `skullcracker/tests/browser/playgr.ts` — PLAYGR's statue, the fight and the television
-- `skullcracker/tests/browser/damage.ts` — the switch that lets things hit back
-- `skullcracker/tests/browser/mall.ts` — MALL's three regions, its population and its machines
-- `skullcracker/tests/browser/service.ts` — SERVICE's two new classes, its six levers and what they pour
-- `skullcracker/tests/browser/sewer.ts` — SEWER's five locks, its lifts and the way through its thirteen regions
-- `skullcracker/tests/browser/arcade.ts` — ARCADE's one boss, out of reach until you jump at it
-- `skullcracker/tests/browser/pickups.ts` — the `stat*` records, and what each one gives
-- `skullcracker/tests/browser/guns.ts` — the weapons, the reach that takes one, and what a flare does
-- `skullcracker/tests/browser/grave.ts` — GRAVE's zombies, its graves and the hands between them
-- `skullcracker/tests/browser/cavern.ts` — CAVERN's four creatures, its blades and its bridges
-- `skullcracker/tests/browser/ravecave.ts` — RAVECAVE's Igors, its one wraith and its scepter
-- `skullcracker/tests/browser/tower.ts` — TOWER's floors, its bishop and its surges
-- `skullcracker/tests/browser/maze.ts` — MAZE's cops, its cage doors and the switches they throw
-- `skullcracker/tests/browser/barrel.ts` — BARREL's forty-two conveyors and what rides them
-- `skullcracker/tests/browser/lab.ts` — LAB's Puke Boys, its ten arms and its one test tube
-- `skullcracker/tests/browser/vat.ts` — VAT's furniture, its one blaster and Boggs
+- `skullcracker/tests/machine/city.ts` — CITY's opening
+- `skullcracker/tests/machine/lift.ts` — CITY's five lifts, and the ride to its goal
+- `skullcracker/tests/machine/woods.ts` — WOODS' population, its two steps and its goal
+- `skullcracker/tests/machine/playgr.ts` — PLAYGR's statue, the fight and the television
+- `skullcracker/tests/machine/damage.ts` — the switch that lets things hit back
+- `skullcracker/tests/machine/mall.ts` — MALL's three regions, its population and its machines
+- `skullcracker/tests/machine/service.ts` — SERVICE's two new classes, its six levers and what they pour
+- `skullcracker/tests/machine/sewer.ts` — SEWER's five locks, its lifts and the way through its thirteen regions
+- `skullcracker/tests/machine/arcade.ts` — ARCADE's one boss, out of reach until you jump at it
+- `skullcracker/tests/machine/pickups.ts` — the `stat*` records, and what each one gives
+- `skullcracker/tests/machine/guns.ts` — the weapons, the reach that takes one, and what a flare does
+- `skullcracker/tests/machine/grave.ts` — GRAVE's zombies, its graves and the hands between them
+- `skullcracker/tests/machine/cavern.ts` — CAVERN's four creatures, its blades and its bridges
+- `skullcracker/tests/machine/ravecave.ts` — RAVECAVE's Igors, its one wraith and its scepter
+- `skullcracker/tests/machine/tower.ts` — TOWER's floors, its bishop and its surges
+- `skullcracker/tests/machine/maze.ts` — MAZE's cops, its cage doors and the switches they throw
+- `skullcracker/tests/machine/barrel.ts` — BARREL's forty-two conveyors and what rides them
+- `skullcracker/tests/machine/lab.ts` — LAB's Puke Boys, its ten arms and its one test tube
+- `skullcracker/tests/machine/vat.ts` — VAT's furniture, its one blaster and Boggs
 - `skullcracker/src/sound.ts` — which bank a level opens and which index is which
 - `engine/tests/skull-sound.ts` — the 24 banks, and the indices against their names
-- `skullcracker/tests/browser/sound.ts` — the theme and the one-shots, in a browser
+- `skullcracker/tests/machine/sound.ts` — the theme and the one-shots
 - `skullcracker/tools/scdis.mts` — disassemble `SC.EXE`; `scnames.mts` — its names against the books'
 
 - `tools/dumpsbk.ts` — a sprite book's cels, level plan and backdrop, as PNGs

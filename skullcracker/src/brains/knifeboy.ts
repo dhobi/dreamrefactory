@@ -78,7 +78,7 @@
  * `0x45ef9f` copies while the next word is positive. `fights.ts` already carries
  * the same three.
  *
- * ## The one thing this port cannot express: `obj+0xc`
+ * ## Momentum: `obj+0xc`
  *
  * This is a class on wheels. `0x45d1a3` hands every frame's `dx` to `0x42f8b0`,
  * which **adds** `dx / obj+0xe` into `obj+0xc` — an impulse, not an offset — and
@@ -93,17 +93,10 @@
  * - `0x439feb` — `obj+0x30`, which `0x430314`/`0x43031c` set exactly when
  *   `obj+0xa` and `obj+0xc` are BOTH zero, ends the brake (state 4 tag 5).
  *
- * The page moves a live foe by position, not by velocity: `walk.ts` spends a
- * frame's `dx` straight into `e.x` and only ever writes {@link Enemy.vx} for a
- * leap that lifts or a blow that throws, so a knifeboy on its feet has `e.vx`
- * flat zero. The three tests are written here against `e.vx` all the same, in
- * the disc's own engine-frame units ({@link coasting}), because that is the
- * quantity they ask about and a page that ever gives foes momentum gets the real
- * behaviour back for nothing. **What they answer today** is: the coast is always
- * spent, so state 4 tag 0/1 re-pushes at once, state 4 tag 5 brakes for exactly
- * one script, and — the one that shows — the knife lunge commits on its first
- * frame instead of riding the glide in. Cels 1850/1853 flash rather than travel.
- * That is a consequence of the missing momentum, not a choice made here.
+ * The page carries the same friction ({@link Foe.drag} 409) and keeps the
+ * speed in {@link Enemy.speed}; {@link ahead} reads it back as the engine's one
+ * signed word, and {@link turn} flips the mirror without flipping the slide, as
+ * `xor [esi+0x28], 1` does.
  *
  * ## What this module owns, and what it does not
  *
@@ -115,7 +108,15 @@
  * {@link Foe.flinch}/{@link Foe.death} path. All four are named at
  * {@link NOT_HERE}.
  */
-import { install, type Brain, type BrainCtx, type CastKit, type Enemy } from "./kit";
+import {
+  install,
+  rewind,
+  type Brain,
+  type BrainCtx,
+  type CastKit,
+  type Enemy,
+} from "./kit";
+import { ahead, turn } from "./batboy";
 
 /**
  * The four states that are deliberately elsewhere, and what they carry.
@@ -452,20 +453,15 @@ export const KNIFEBOY = {
   from: "0x439ca0",
 } as const;
 
-/** the port's `e.vx` is per TICK and `obj+0xc` is per engine frame — `walk.ts` */
-const TICK = 0.5;
-
 /**
  * `obj+0xc`, read the way the three states that care about it read it.
  *
  * `0x439f4e` and `0x43a213` both do `movsx eax, [esi+0xc]; cdq; xor; sub` — an
  * absolute value on the signed word — and compare it against a plain constant in
- * engine-frame pixels. {@link Enemy.vx} is the same quantity per tick, so the
- * scale comes back out before the comparison. See the module note: a live foe on
- * this page carries none of it, so this answers `false` every time today.
+ * engine-frame pixels. {@link ahead} is that word.
  */
 function coasting(e: Enemy, atLeast: number): boolean {
-  return Math.abs(e.vx) / TICK >= atLeast;
+  return Math.abs(ahead(e)) >= atLeast;
 }
 
 /**
@@ -477,19 +473,15 @@ function coasting(e: Enemy, atLeast: number): boolean {
  * `0x43a00e` closed until `obj+0x30` opens it.
  */
 function slidingBack(e: Enemy): boolean {
-  return e.facing < 0 ? e.vx > 0 : e.vx < 0;
+  return ahead(e) < 0;
 }
 
 /**
- * `obj+0x30`, and it is the one velocity flag the port CAN answer.
- *
- * `0x430314`/`0x43031c` — the mover's last act — writes 1 when `obj+0xa` and
- * `obj+0xc` are both zero and 0 otherwise. A foe this page is not throwing has
- * neither, so a knifeboy standing on the floor is at rest, exactly as the disc
- * would have it.
+ * `obj+0x30` — `0x430314`/`0x43031c`, the mover's last act, writes 1 when
+ * `obj+0xa` and `obj+0xc` are both zero and 0 otherwise.
  */
 function atRest(e: Enemy): boolean {
-  return e.vx === 0 && e.vy === 0;
+  return ahead(e) === 0 && e.vy === 0;
 }
 
 /**
@@ -523,7 +515,10 @@ export const knifeboy: Brain = (e, foe, run, k) => {
 
   // `0x439d43` — and states 1, 8 and 9 are the three it does not interrupt
   if (k.player.down && state !== 1 && state !== 8 && state !== 0) {
-    e.facing = e.x < k.player.x ? -1 : 1; // `0x439d7c`, and it is AWAY from him
+    // `0x439d7c`, and it is AWAY from him — the mirror is written, the slide
+    // under it is not
+    const away = k.anchorX(e) < k.player.x ? -1 : 1;
+    if (away !== e.facing) turn(e);
     return install(e, KNIFEBOY.flee);
   }
 
@@ -533,20 +528,21 @@ export const knifeboy: Brain = (e, foe, run, k) => {
      *
      * Zero its speed, and do nothing at all until `0x434200` puts the player's
      * own point inside `AI+0xa`, this record's rect — {@link Enemy.fighting}.
-     * Then one sound and straight into the push-off.
+     * Then one sound and straight into the push-off — the sound `0x439dd2`
+     * plays is the page's {@link Foe.wake} sound, already played on the frame
+     * it woke, so it is not said twice here.
      *
-     * Kind 0 is folded in because the PAGE uses it: `walk.ts` writes
-     * `e.script = 0` on the frame the player leaves the rect, and this class has
-     * no state 0 — `0x439c2f` lays a fresh one down in kind 1 and the table's
-     * `dec eax` drops a zero through to the common return. Installing the statue
-     * on that frame is what puts the port back on a state the disc has.
+     * Kind 0 is folded in because a page-spawned one carries no kind until it
+     * is installed into something; this class has no state 0 — `0x439c2f` lays
+     * a fresh one down in kind 1 and the table's `dec eax` drops a zero through
+     * to the common return.
      */
     case 0:
     case 1: {
       e.vx = 0; // `0x439da8`
       e.vy = 0;
+      e.speed = 0;
       if (!e.fighting) return install(e, KNIFEBOY.statue);
-      k.say(e, KNIFEBOY.wake); // `0x439dd2`
       return install(e, KNIFEBOY.push);
     }
     /**
@@ -562,7 +558,7 @@ export const knifeboy: Brain = (e, foe, run, k) => {
      * the same.
      */
     case 2: {
-      if (t.forward < 0) e.facing = -e.facing;
+      if (t.forward < 0) turn(e);
       switch (tag) {
         // `0x439e37` — the two standing poses, and the whole of its opening move
         case 0:
@@ -646,15 +642,15 @@ export const knifeboy: Brain = (e, foe, run, k) => {
          * `0x439feb` — the brake, which repeats until the speed is gone.
          *
          * `obj+0x30` set, or the speed already pointing back the other way, and
-         * it is done: turn to face him and take one of the standing poses. On
-         * this page {@link atRest} is true the moment it arrives, so the brake
-         * plays once and hands over.
+         * it is done: turn to face him and take one of the standing poses.
+         * Otherwise `0x43a019` puts the brake on again, rewinding it, each
+         * time it ends.
          */
         case 5: {
           if (!atRest(e) && !slidingBack(e)) {
-            return done ? install(e, KNIFEBOY.brake) : false;
+            return done ? rewind(e, KNIFEBOY.brake) : false;
           }
-          if (t.forward < 0) e.facing = -e.facing; // `0x43a028`
+          if (t.forward < 0) turn(e); // `0x43a028`
           return install(e, KNIFEBOY.poise[0]);
         }
         // tags 2 and 3 do not exist in `0x474648`
@@ -742,8 +738,9 @@ export const knifeboy: Brain = (e, foe, run, k) => {
      */
     case 8: {
       if (!done) return false;
+      // `0x43a2fc` puts the same script on again, from its first cel
       return k.player.down
-        ? install(e, KNIFEBOY.flee)
+        ? rewind(e, KNIFEBOY.flee)
         : install(e, KNIFEBOY.push);
     }
     // state 3 has no script, and 9 and 10 are the page's — see `NOT_HERE`

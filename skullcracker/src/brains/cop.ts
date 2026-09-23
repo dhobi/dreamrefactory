@@ -30,11 +30,10 @@
  *
  * ## What this module owns, and what it does not
  *
- * Nine of the twelve — 0 to 7 and 9 — are the ones a cop is in while it is on
- * its feet, and those are here. 8 and 11 are the hit reactions, which the page
- * already drives through {@link Foe.flinch} and {@link Foe.death}; a brain is
- * never called while a thing is flinching or dying, so wiring them here would
- * give one animation two owners. **10 is the lever**, and the page owns that
+ * Ten of the twelve — 0 to 9 — are here. 8 is the flinch's aftermath: the
+ * page plays `0x46c828` through {@link Foe.flinch} and hands kind 8 back when
+ * it ends. 11 is the death, which the page drives through {@link Foe.death}; a
+ * brain is never called while a thing is dying. **10 is the lever**, and the page owns that
  * too — {@link Foe.lever}, and {@link stepFight} returns before any brain while
  * an unlit switch is still standing in this one's rect, so the machine below is
  * only ever reached once there is none. What those three do that the page's own
@@ -128,13 +127,11 @@ import type { FoeAnim } from "../foes";
  *
  * - **8**, the flinch (`0x46c828`, cels 2250/2251). `0x414898` takes the blow
  *   off `AI+0` and `0x4148a1` rolls `0x434540(4) + 0xe` for the noise — lab.snd
- *   **15…18**, the four `#0087…#0090 TCop punc[h]`es, where {@link FOE_SFX}
- *   carries 14…17 and 14 is the eat. State 8 itself (`0x41440e`) is the
- *   interesting half: when the flinch ends it looks at `AI+0x30`, and a cop
- *   interrupted on its way to a switch **resumes the switch run** at the stage
- *   it was on (`0x414422`, `0x46c888` tag `AI+0x30 − 1`). With no switch in
- *   hand it rolls `0x434540(3)`: one time in three the wind-up (`0x46c660`
- *   tag 0) and otherwise the walk out (`0x46c720` tag 1).
+ *   **15…18**, the four `#0087…#0090 TCop punc[h]`es. What follows it is state
+ *   8 itself (`0x41440e`), and that is below: the flinch's `resume` hands the
+ *   machine kind 8 the frame the page's animation ends. `0x414933` is the
+ *   other thing in the handler: a blow that leaves it under half health with
+ *   `AI+0x30` still 0 starts the switch run instead of the flinch.
  * - **10**, the switch run (`0x46c888`). `0x4145d6` asks `0x404440` for the
  *   nearest **`initswitch`**, files its point at `AI+0x34`, runs to it on
  *   2100…2105 at 130, and inside ten pixels of `AI+0x36` plays the reach and
@@ -149,9 +146,12 @@ import type { FoeAnim } from "../foes";
  *   `obj+0x26`, the shove weight, every frame of it, and on frame 3 of the
  *   script (`obj+0x42`) plays lab.snd 0xd — `#0084 TCop Dies` — sprays
  *   `0x40cba0` twice and answers 1, the one frame in the whole function that
- *   does. The gunner's death is kind 9 tag 3 instead (`0x4148f4`), and
- *   `0x414566` ends THAT by handing to kind 11 anyway, after one
- *   `0x45b060(6, …)` at a hundred pixels to the side.
+ *   does — which {@link FOES.initcop} carries as three cels and no corpse. The
+ *   gunner's death is kind 9 tag 3 instead (`0x4148f4`), and `0x414566` ends
+ *   THAT by handing to kind 11 anyway, after one `0x45b060(6, …)` a hundred
+ *   pixels BEHIND it (`0x414588`: `sbb`, `and 0xff38`, `add 0x64`) — the
+ *   blaster, which the page drops at the kill. The four cels of tag 3 are not
+ *   played: a page death is one animation.
  */
 const NOT_HERE = "0x41440e, 0x4145b0, 0x414696" as const;
 
@@ -397,13 +397,11 @@ function gunner(e: Enemy): boolean {
  * has as {@link BrainCtx.atBound}, and `0x41c630` is the same fifty-one bytes
  * with the `je` and the `jne` swapped. `obj+0x28` set is facing west and picks
  * `obj+0x38`, clear is facing east and picks `obj+0x3a`, so `obj+0x38` is the
- * left bound and `obj+0x3a` the right — which is exactly the reading the page's
- * own `atBound` already makes. The kit has no helper for the other one, so here
- * it is, and it is only ever asked while the cop is walking BACKWARDS.
+ * left bound and `obj+0x3a` the right — the kit's {@link BrainCtx.atRear},
+ * against the mover's bounds rather than the rect ({@link Foe.span}). It is only
+ * ever asked while the cop is walking BACKWARDS.
  */
-function behind(e: Enemy): boolean {
-  return Math.abs(e.x - (e.facing > 0 ? e.left : e.right)) <= 60;
-}
+const behind = (e: Enemy, k: BrainCtx): boolean => k.atRear(e);
 
 /**
  * `0x45d090` on the script that is already playing — the rewind, which
@@ -503,7 +501,7 @@ export const cop: Brain = (e, foe, run, k) => {
         e.facing = -e.facing;
         return install(e, COP.walkIn);
       }
-      if ((e.tag ?? 0) === 1 && behind(e)) return install(e, COP.charge, true);
+      if ((e.tag ?? 0) === 1 && behind(e, k)) return install(e, COP.charge, true);
       if (!done) return false;
       if (t.forward < 0) e.facing = -e.facing;
       // `0x414383` — the two mirror flags agreeing means he is looking away
@@ -538,6 +536,18 @@ export const cop: Brain = (e, foe, run, k) => {
     case 7:
       return done ? install(e, COP.stance) : false;
     /**
+     * ---- 8, `0x41440e`: what follows the flinch, and the flinch has already
+     * ended by the time the machine is handed this — {@link Foe.flinch}'s
+     * `resume`. A cop on its way to a switch (`AI+0x30` over 0) goes back to
+     * that stage of the run (`0x414422`), which the page's {@link Foe.lever}
+     * owns; otherwise `0x434540(3)`: one time in three the wind-up
+     * (`0x46c660` tag 0), and otherwise the walk out (`0x46c720` tag 1).
+     */
+    case 8:
+      return k.roll(3) === 1
+        ? install(e, COP.wind, true)
+        : install(e, COP.walkOut);
+    /**
      * ---- 9, `0x414456`: the gunner, and it is a machine inside the machine.
      *
      * Once a param-1 cop is in kind 9 it stays there: each of the three tags
@@ -554,7 +564,7 @@ export const cop: Brain = (e, foe, run, k) => {
           return rewind(e, GUN[k.roll(3) - 1]);
         // `0x41449e` — and backed into the bound behind it, it comes forward
         case 1:
-          if (behind(e)) return install(e, COP.runIn);
+          if (behind(e, k)) return install(e, COP.runIn);
           if (!done) return false;
           return rewind(e, GUN[k.roll(3) - 1]);
         case 2: {
@@ -563,7 +573,7 @@ export const cop: Brain = (e, foe, run, k) => {
            * band: more than 512 pixels away in X or 200 in Y and it stops
            * shooting and walks in on kind 4 instead.
            */
-          if (Math.abs(k.player.x - e.x) > 0x200 || Math.abs(t.dy) > 0xc8) {
+          if (Math.abs(k.player.x - k.anchorX(e)) > 0x200 || Math.abs(t.dy) > 0xc8) {
             return install(e, COP.walkIn);
           }
           /**

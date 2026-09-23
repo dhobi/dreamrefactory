@@ -112,12 +112,15 @@ happens across a chapter.
   436db0  0x430d40(0x474cb8, …)    ; and there it is, at 0x1a = 100
 ```
 
-The flight is a corkscrew. The spawner files a random 13…29 at
+The flight is a corkscrew. The spawner files `0x434540(17) + 13` — 14…30 — at
 `user+2` and `0x43ac3b` reads it down two at a time, each frame adding that
 value to the flare's vertical velocity and flipping its sign — written outright
-above 7 and added below it. So a flare leaves the barrel thrashing and
+from 7 up and added below it. So a flare leaves the barrel thrashing and
 straightens out over about seven frames. It is not aimed and it is not flat.
-A masked one is 40 and a knotted one is 50, so one flare is one kill either way.
+Its strength of 100 is a percentage: `0x42f910` makes the blow out of the flight
+cel's own pair (7207's `dx 8`) plus the flare's velocity, forty a frame across
+and whatever the corkscrew is doing, so a flare hits for about fifty. Whatever it
+hits or lands on, it burns out (tag 4) and slides to a stop before it goes.
 
 The other four fire functions differ. The **flamer**'s `0x44dae0` is a held stream rather than a shot — its
 modes −1 and −2 reach into every live flame to stop it — and the flame's blow
@@ -125,8 +128,9 @@ strength is `0xfff7`, **−9**. That is a code and not a number: it is the same 
 the kragg tests for, and what it means is each class handler's own business. The
 **soaker**'s `0x41f820` is the same shape, but its droplet does carry a real
 number — `0x4217ba` writes the same hundred the flare has — so what stops that
-one is the stream rather than the damage. The **scepter** is the third of that
-shape and the only one that spends forty a shot. All three are `STREAMS` in
+one is the stream rather than the damage. The **scepter** fires one of the same
+objects but does not hold it: `0x424620` frees it the frame its six cels end, and
+its fire function spends forty a press. All three are `STREAMS` in
 `src/guns.ts`, one contract with three sets of numbers; the **blaster**'s bolt
 is `BOLT`, and `fireGun` is where the five meet.
 
@@ -225,8 +229,7 @@ ends in its death; the dog, whose arm at `0x4550d3` installs its death script
 `0x478208` and pays its 200 (`0x455115`); and CITY's crows, which burn for eight
 frames and tumble
 ([The nameless handler is the crow's](combat.md#the-nameless-handler-is-the-crows)).
-This page carries the first and the last; its dog plays the death cels and gets
-up again.
+This page carries all three.
 
 The damage, where there is any, is small and comes from the art: `0x42f910`
 scales the striking cel's own `(dy, dx)` by the object's strength, and the

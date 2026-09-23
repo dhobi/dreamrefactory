@@ -83,9 +83,14 @@ await page.evaluate(() => {
 });
 
 await page.tap("#start");
-await page.waitForTimeout(2000);
-
-const opening = (await page.textContent("#loc")) ?? "";
+// ...and let it get going: the intro is fetched behind the logo, and a skip
+// asked for before it has arrived has nowhere to go
+let opening = "";
+for (let i = 0; i < 50; i++) {
+  await page.waitForTimeout(100);
+  opening = (await page.textContent("#loc")) ?? "";
+  if (/cyber/i.test(opening) && Number(/frame (\d+)\//.exec(opening)?.[1] ?? 0) >= 20) break;
+}
 console.log(`opening: ${opening}`);
 if (!/cyber/i.test(opening)) fail(`Start did not begin the CyberFlix logo: "${opening}"`);
 
@@ -191,8 +196,7 @@ if (!/frame 1\//.test(menu)) fail(`not on the menu's first frame: "${menu}"`);
 // tap that reached the region and was then dropped leaves the page blank and
 // "something changed" would still hold. See menu.ts, which learned that first.
 await tap(BEGIN);
-await page.waitForTimeout(6000);
-const after = (await page.textContent("#loc")) ?? "";
+const after = (await settle(/char\.mov/i, 10_000)) || ((await page.textContent("#loc")) ?? "");
 console.log(`after tapping Begin: ${after}`);
 if (!after.trim()) fail("nothing is playing after Begin — the page went blank");
 // Begin does not begin: `menu.mov`'s "frame 2" is frame index 168, and

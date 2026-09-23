@@ -1,0 +1,231 @@
+/**
+ * Does the game make its own noise?
+ *
+ *   npx tsx tests/machine/sound.ts        (from skullcracker/)
+ *
+ * The game asks its `Sounds` for everything it plays — `open(book)` as a level
+ * stands up, `own(i)` out of the character's bank, `effect(i)` out of the
+ * chapter's — so this records those calls ({@link recordSound}) and reads the
+ * banks they name straight off the disc. That turns "is there music" into
+ * arithmetic, because the durations are the disc's own and they are distinctive.
+ *
+ * `THEME01`, the theme STREETS opens (`0x44dc1e`), is eleven bars and a 62-step
+ * play order that begins `1 1 5 5 5 3 4 …`. Bars 1 and 2 are 1.63s and bar 5 is
+ * **6.55s**, so the first four things the bed plays are 1.63, 1.63, 6.55, 6.55 —
+ * an order no other reading of the bank produces. The effects are equally
+ * unmistakable: a footfall out of `skulz.snd` is 0.19s or 0.23s, and they
+ * alternate because the engine fires them off the walk cycle's frame number
+ * (`0x429b3d` plays sound 0 on frame 1, `0x429b5c` sound 1 on frame 6).
+ *
+ * The last of it is the FILMS, whose sounds are not the level's at all: they live
+ * in the film's own chunk table and are named by the frame that starts a segment.
+ */
+import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
+import { readBankTables } from "@dreamfactory/engine/df/banks";
+import { readContainerFile } from "@dreamfactory/engine/df/container";
+import { readMovFile } from "@dreamfactory/engine/df/mov";
+import type { DecodedAudio } from "@dreamfactory/engine/df/audio";
+import type { AudioSink, PlayHandle } from "@dreamfactory/engine/runtime/audio";
+import { Film } from "../../src/film";
+import { DEATH_FILMS } from "../../src/mission";
+import { FOE_SFX, LEVEL_BANKS, OWN, PLAYER_BANK } from "../../src/sound";
+import { fail, headless, ok, pass, recordSound } from "./harness";
+
+const h = await headless("level=1&x=9500");
+const { game } = h;
+const calls = recordSound(game);
+await h.load("level=1&x=9500");
+
+/** a bank off the disc: its tables, and each record's length and rate */
+const bank = async (name: string) => {
+  const bytes = await game.files.load(name.toLowerCase());
+  if (!bytes) fail(`${name} is not in the rip`);
+  const file = readContainerFile(bytes!);
+  const tables = readBankTables(file);
+  const order = file.order === "be" ? "be" : "le";
+  const audio = (loc: number): DecodedAudio => decodeAudioContainer(file.containers[loc].data, order);
+  const secs = (a: DecodedAudio): number => Number((a.samples.length / a.sampleRate).toFixed(2));
+  return { tables, audio, secs };
+};
+const round = (s: number): number => Number(s.toFixed(2));
+
+// 1. the theme, in the order the bank's own table gives
+const opened = calls.filter((c) => c.call === "open").map((c) => String(c.args[0]).toUpperCase());
+if (opened.at(-1) !== "STREETS") fail(`STREETS should open its own banks; the game opened ${opened.join(" ") || "nothing"}`);
+const want = LEVEL_BANKS.STREETS;
+if (want.theme !== "theme01.snd") fail(`STREETS' theme is THEME01 (0x44dc1e); the table says ${want.theme}`);
+const theme = await bank(want.theme);
+const bars = theme.tables.loopOrder.slice(0, 4).map((n) => {
+  const rec = theme.tables.loopRecords[n - 1];
+  return theme.secs(theme.audio(rec.containerLoc));
+});
+if (theme.tables.loopOrder.slice(0, 2).join(" ") !== "1 1" || bars[0] !== 1.63 || bars[1] !== 1.63) {
+  fail(`THEME01 opens on two 1.63s bars (its order starts 1 1); got ${theme.tables.loopOrder.slice(0, 4).join(" ")} = ${bars.join(" ")}`);
+}
+if (bars[2] !== 6.55) fail(`...and its third is bar 5's 6.55s; got ${bars.join(" ")}`);
+ok(`the level's theme plays its own arrangement: ${bars.join(" ")}`);
+
+// 2. every buffer is at one of the two rates the disc mixes
+const own = await bank(PLAYER_BANK);
+const sfx = await bank(want.sfx);
+for (const b of [theme, own, sfx]) {
+  const locs = [...b.tables.loopRecords, ...b.tables.singles].map((r) => r.containerLoc);
+  for (const loc of locs) {
+    const rate = b.audio(loc).sampleRate;
+    if (rate !== 22050 && rate !== 11025) fail(`a record came out at ${rate}Hz`);
+  }
+}
+ok(`and every record in the three banks is 22k or 11k, the disc's own rates`);
+
+// 3. footfalls: two sounds, alternating, off the walk cycle's frames
+let mark = calls.length;
+h.hold("left", true);
+h.frame(39);
+h.hold("left", false);
+const steps = calls.slice(mark).filter((c) => c.call === "own").map((c) => Number(c.args[0]));
+const feet = steps.filter((i) => (OWN.step as readonly number[]).includes(i));
+if (feet.length < 4) fail(`walking made ${feet.length} footfalls, wanted at least 4 (own sounds: ${steps.join(" ")})`);
+for (let i = 1; i < feet.length; i++) if (feet[i] === feet[i - 1]) fail(`the footfalls should alternate foot by foot; got ${feet.join(" ")}`);
+const footSecs = feet.map((i) => own.secs(own.audio(own.tables.singles[i].containerLoc)));
+if (!footSecs.includes(0.19) || !footSecs.includes(0.23)) fail(`the two steps are 0.19s and 0.23s; got ${footSecs.join(" ")}`);
+ok(`walking alternates the two footfalls: ${footSecs.slice(0, 6).join(" ")}`);
+
+// 4. a kick makes a swing whether or not it lands
+mark = calls.length;
+h.press("kick");
+h.frame(10);
+const swung = calls.slice(mark).filter((c) => c.call === "own" && (OWN.swing as readonly number[]).includes(Number(c.args[0])));
+if (!swung.length) fail(`a kick made no swing (0x434540(4) + 5); heard ${calls.slice(mark).map((c) => `${c.call} ${c.args[0]}`).join(", ") || "nothing"}`);
+ok(`a kick swings audibly (skulz.snd ${swung.map((c) => c.args[0]).join(" ")})`);
+
+/**
+ * 5. the hydrant, which is the one sound with an unarguable name.
+ *
+ *    `0x44fb94` plays index 4 of the chapter's bank on the frame the water is
+ *    created, and index 4 of `woods.snd` is the record called "0040 hydrant".
+ *    Its buffer is 1.07s — longer than a footfall and shorter than a bar.
+ */
+// a kick's box hangs 95..125 ahead of the player's anchor (`0x40e680`), so
+// the valve is kicked from about a hundred short of it, not from on top of it
+await h.load("level=1&x=8480");
+h.frame(9);
+// a step, not a stroll: the walk settles at twelve a frame against the drag
+h.hold("right", true);
+h.frame(1);
+h.hold("right", false);
+mark = calls.length;
+const water = (): boolean => game.spawnedHere().some((e) => e.state === "burst");
+for (let i = 0; i < 4 && !water(); i++) {
+  h.press("kick");
+  h.until(water, 8);
+  h.frame(3);
+}
+if (!water()) fail(`the hydrant never burst, so its sound cannot be checked`);
+const hit = calls.slice(mark).filter((c) => c.call === "effect").map((c) => Number(c.args[0]));
+if (!hit.includes(FOE_SFX.hydrant)) fail(`the burst should play woods.snd's index ${FOE_SFX.hydrant}; played ${hit.join(" ")}`);
+const rec = sfx.tables.singles[FOE_SFX.hydrant];
+const hydrantSecs = sfx.secs(sfx.audio(rec.containerLoc));
+if (!/hydrant/i.test(rec.identifier) || hydrantSecs !== 1.07) fail(`woods.snd ${FOE_SFX.hydrant} should be the 1.07s "0040 hydrant"; it is "${rec.identifier}" ${hydrantSecs}s`);
+ok(`the hydrant bursts on its own sound: "${rec.identifier.trim()}", ${hydrantSecs}s`);
+
+/**
+ * 6. the FILMS' own one-shots, which are where nearly all of this game's
+ *    speech and most of its atmosphere live.
+ *
+ *    Only `menu.mov` and the sixteen chapter briefings carry a loop-table bed.
+ *    Everything else — Boggs' spoken orders, the seven kill vignettes, the four
+ *    time-out ones — is a one-shot NAMED BY A FRAME.
+ *
+ *    Every one of those films is the same four-part shape: a console powering
+ *    down (`soundout 2` 2.97s, `soundout 3` 0.74s), the little monitor coming on
+ *    (`sound 1` 0.98s), the vignette itself, and the monitor snapping off
+ *    (`Mon. OFF` 0.46s). Four fixed durations, whichever of the seven is rolled.
+ *
+ *    The vignette segment is also where the film's PACE is checked, because the
+ *    two facts are the same fact: its frames are authored at the film's own
+ *    3 ticks (50ms) and the sound over it is exactly as long as the picture —
+ *    `kill1.mov`'s 186 frames against 9.29s.
+ *
+ *    A kill film is the LAST life's (`0x4294cb`: the lives below zero is state 9),
+ *    so the death is staged with none left: CITY has no floor east of its ledge,
+ *    and walking off it is a death the damage switch does not decide.
+ */
+const films: string[] = [];
+game.ui.film = async (name: string) => {
+  films.push(name);
+};
+await h.load("level=2&x=650");
+h.frame(6);
+game.stats.lives = 0;
+h.hold("right", true);
+h.until(() => films.length > 0, 600);
+h.hold("right", false);
+if (!films.length) fail(`walking off CITY's ledge with no lives left should play a kill film; none was asked for`);
+const kill = films[0];
+if (!(DEATH_FILMS as readonly string[]).includes(kill)) fail(`the last death plays one of KILL1..7.MOV (0x4033ca); it asked for ${kill}`);
+
+// ...and the film itself, played by the page's own player on a clock this
+// suite owns: every one-shot it starts is recorded with its length, and a
+// one-shot is "done" once that much of the clock has passed
+const bytes = await game.files.load(kill);
+if (!bytes) fail(`${kill} is not in the rip`);
+let now = performance.now();
+const heard: { secs: number; at: number }[] = [];
+const sink: AudioSink = {
+  play(channel, audio): PlayHandle {
+    const secs = audio.samples.length / audio.sampleRate;
+    const at = now;
+    let stopped = false;
+    if (channel === "sound") heard.push({ secs: round(secs), at });
+    return {
+      get done() {
+        return stopped || now >= at + secs * 1000;
+      },
+      stop() {
+        stopped = true;
+      },
+    };
+  },
+  halt() {},
+  isDone: () => true,
+  setChannelVolume() {},
+  setSuspended() {},
+};
+let ended = false;
+let began = -1;
+let stopped = -1;
+let frames = 0;
+const film = new Film(kill, readMovFile(bytes!), {
+  audio: sink,
+  paint() {},
+  log() {},
+  onChain() {},
+  onEnd() {
+    ended = true;
+  },
+});
+for (let ms = 0; ms < 120_000 && !ended; ms++) {
+  now += 1;
+  film.tick(now);
+  const m = /segment 3\/4 · frame \d+\/(\d+)/.exec(film.where);
+  if (m) {
+    if (began < 0) began = now;
+    frames = Number(m[1]);
+    stopped = now;
+  }
+}
+if (!ended) fail(`${kill} never ended on the suite's clock; stuck at ${film.where}`);
+if (began < 0) fail(`${kill} never reached its vignette, segment 3 of 4`);
+const secs = heard.map((s) => s.secs);
+for (const [dur, what] of [[2.97, "soundout 2"], [0.74, "soundout 3"], [0.98, "sound 1"], [0.46, "Mon. OFF"]] as const) {
+  if (!secs.includes(dur)) fail(`the kill film should play its own "${what}" (${dur}s); heard ${secs.join(" ") || "silence"}`);
+}
+ok(`the last death asks for ${kill}, and it plays its four frame-entry one-shots: ${secs.join(" ")}`);
+const ran = (stopped - began + 50) / 1000;
+const authored = frames * 0.05;
+if (Math.abs(ran - authored) > 0.06) {
+  fail(`the vignette is ${frames} frames at the film's own 50ms — ${authored.toFixed(2)}s; it took ${ran.toFixed(2)}s`);
+}
+ok(`...and its ${frames} frames run in ${ran.toFixed(2)}s, the ${authored.toFixed(2)}s its author gave them`);
+
+pass(`the level's theme is its own arrangement, and the handlers' and films' one-shots are the disc's`);

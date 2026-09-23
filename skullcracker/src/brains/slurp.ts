@@ -144,12 +144,10 @@ import type { Foe } from "../foes";
  *   `lab.snd` index 13 — `#0084 TCop Dies`, which is not this creature's own
  *   sound and is what the disc plays anyway — then two `0x40cba0` effects,
  *   `-0xd` and `0x78`, and answers 1 as well. Those two answers are the ONLY
- *   `mov ax, 1` in the whole of `0x414ae0`: the frame the object is removed.
- * - and the corpse RISES. `0x414b5c` sits in the preamble, before the jump
- *   table, and while `obj+0x2e` is non-zero it takes **twenty pixels off
- *   `obj+6`** every frame. A dead brain floats up out of the level. The page
- *   spends `obj+0x2e` as {@link Enemy.linger} and does not lift anything, so
- *   this is read and not done.
+ *   `mov ax, 1` in the whole of `0x414ae0`: the frame the object is removed,
+ *   which is the first think after the blow. There is no corpse, and the
+ *   `[0x46b204]` the handler writes into `AI+0x2e` is never read —
+ *   {@link FOES.initslurp} carries that as a `linger` of 0.
  */
 const NOT_HERE = "0x414e12, 0x41507a, 0x415100" as const;
 
@@ -357,7 +355,7 @@ export const SLURP = {
   from: "0x414ae0",
 } as const;
 
-/** an engine frame is two ticks, and `e.vx`/`e.vy` are in pixels per TICK */
+/** `e.vx`/`e.vy` are pixels per TICK and the engine's words pixels per FRAME */
 const TICKS = TICK_SCALE;
 
 /**
@@ -379,6 +377,8 @@ const TICKS = TICK_SCALE;
 export const slurp: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
   const t = k.track(e, SLURP.bands);
+  // `0x414a36` — the class's create stands it on a vertical speed of −5
+  if (e.hover === undefined) e.vy = -5 * TICKS;
   e.hover ??= SLURP.lift;
   bob(e, foe);
   switch (e.script ?? 0) {
@@ -446,24 +446,32 @@ export const slurp: Brain = (e, foe, run, k) => {
  * knock-back left over from a blow to work on.
  *
  * The arithmetic, because the units differ: `0x42f8b0` spends the lift once an
- * ENGINE frame and `e.vy` is pixels per TICK, of which there are two to the
- * frame. So the engine's `ceil(15 / 8) = 2` pixels a frame is `2 * TICKS` of
- * port velocity, added across two calls — `2 * TICKS * TICKS` in each. The
- * turn-round test goes the other way, `e.vy / TICKS` back into engine pixels
- * before it is weighed against five.
+ * ENGINE frame, and so does this — the brain is called once a frame — while
+ * `e.vy` is pixels per TICK. So the engine's `ceil(15 / 8) = 2` pixels a frame
+ * is `2 * TICKS` of port velocity, added once. The turn-round test goes the
+ * other way, `e.vy / TICKS` back into engine pixels before it is weighed
+ * against five.
  *
- * The third line of the preamble, `0x414b5c`, is the corpse's own rise and
- * belongs to {@link NOT_HERE}.
+ * The third line of the preamble, `0x414b5c`, lifts it twenty pixels on any
+ * frame `obj+0x2e` — its own floor-contact word — is set. This page never lands
+ * a floater, so it has no such word to read and the push is not made.
  */
 function bob(e: Enemy, foe: Foe): void {
   // `0x414b43` — `|obj+0xa|` past five and `AI+0x3e` is negated
-  if (Math.abs(e.vy / TICKS) > SLURP.limit) e.hover = -(e.hover ?? SLURP.lift);
+  // (the word is whole pixels; the port's velocity carries float dust)
+  if (Math.abs(Math.round(e.vy / TICKS)) > SLURP.limit)
+    e.hover = -(e.hover ?? SLURP.lift);
   // `0x414b68` → `0x42f8b0`: the lift through the object's own divisor
   const lift = e.hover ?? SLURP.lift;
   const step = Math.sign(lift) * Math.ceil(Math.abs(lift) / foe.divisor);
-  e.vy += step * TICKS * TICKS;
+  e.vy += step * TICKS;
   // `0x414b79` — and a sideways speed over thirty is halved
-  if (Math.abs(e.vx / TICKS) > SLURP.clamp) e.vx = e.vx / 2;
+  if (Math.abs(e.vx / TICKS) > SLURP.clamp) halve(e);
+}
+
+/** `cdq; sub eax, edx; sar eax, 1` — half of `obj+0xc`, toward zero */
+function halve(e: Enemy): void {
+  e.vx = Math.trunc(e.vx / TICKS / 2) * TICKS;
 }
 
 /**
@@ -492,7 +500,7 @@ function decide(
    * askable and which a player up a ladder is nearly always on the far side
    * of anyway.
    */
-  if (Math.abs(e.y - k.player.y) > SLURP.apart) return install(e, SLURP.walk);
+  if (Math.abs(k.anchorY(e) - k.player.anchor) > SLURP.apart) return install(e, SLURP.walk);
   /**
    * `0x414e52` — and while it is off a ladder it has no region index, so it
    * asks `0x40b940` which record's rect it is standing in and takes the stance
@@ -504,7 +512,7 @@ function decide(
    * `0x44e736` this one does NOT return; it turns and carries on deciding.
    */
   if (t.forward < 0) {
-    e.vx = e.vx / 2;
+    halve(e);
     e.facing = -e.facing;
   }
   /**
@@ -533,7 +541,7 @@ function decide(
         k.say(e, SLURP.sfxFly);
         return install(e, SLURP.drift);
       }
-      e.vx = e.vx / 2;
+      halve(e);
       // `0x414f29`'s "is he already juddering" is permanently false here — see
       // {@link HYPNOSIS} — and `0x402f60` is `k.player.down` negated
       if (k.roll(2) === 1 && !k.player.down) {
@@ -554,7 +562,7 @@ function decide(
      * stance run out and asks again.
      */
     case 2: {
-      e.vx = e.vx / 2;
+      halve(e);
       if (e.facing !== k.player.facing) {
         if (k.player.down) return done ? install(e, SLURP.stance) : false;
         k.say(e, SLURP.sfxHyp);

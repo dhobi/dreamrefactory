@@ -15,8 +15,9 @@ name: Browser suite
 #   * WHAT A GAME'S FULL RUN IS, which is not the same script in any two of them.
 #     Titanic's `test:browser` is the route; Dust's is three short suites and its
 #     real depth is `speedrun:legs`, the fifty-five legs off the run sheet; Skull
-#     Cracker's `test:browser` is the menu alone and its thirty-six suites are
-#     `test:browser:all`. A single default of `test:browser` therefore ran the
+#     Cracker's `test:browser` is the menu alone and its page suites together are
+#     `test:browser:all` (the game itself is checked headless, on every pull
+#     request, in tests.yml). A single default of `test:browser` therefore ran the
 #     MENU for a `full-run-skullcracker` label and reported green, and never ran
 #     Dust's legs at all under any trigger but a hand-typed dispatch.
 #   * WHICH CRON MEANS WHICH, because a scheduled run carries no inputs. The only
@@ -37,7 +38,7 @@ on:
     - cron: "0 2 * * *" # Titanic, the route
     - cron: "0 3 * * *" # Dust, the three short suites
     - cron: "0 4 * * *" # Dust, the legs
-    - cron: "0 5 * * *" # Skull Cracker, all thirty-six
+    - cron: "0 5 * * *" # Skull Cracker, the page suites
   workflow_dispatch:
     inputs:
       game:

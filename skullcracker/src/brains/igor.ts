@@ -90,14 +90,28 @@
  * `0x425296` tests it against **200**. Past that, in any state but 5 or 0, the
  * igor is put on kind 5 tag 0 (`0x4252db`), given `AI+0x2c = [0x46b204] * 2`
  * frames and `belfry.snd` 0x0a, and state 5 then takes it away. A fall of two
- * hundred kills an igor outright. The kit hands a brain `e.vy` but not the fall
- * sum, so this is read and not done.
+ * hundred kills an igor outright; the brain keeps the sum itself
+ * ({@link Enemy.fell}) and runs state 5.
  */
-import { install, type Brain, type CastKit, type Enemy } from "./kit";
+import {
+  install,
+  TICK_SCALE,
+  type Brain,
+  type CastKit,
+  type Enemy,
+} from "./kit";
 
 /**
- * The three states a brain is never in, and what they do that the page's own
- * flinch and death path does not. Read, not done.
+ * `0x4252ad` — `[0x46b204] * 2`, the corpse word the level leaves at fifty
+ * frames ({@link file://../walk.ts}'s `CORPSE_LINGER`), doubled.
+ */
+const FALL_WAIT = 50 * 2;
+
+/**
+ * The states a brain is never in: 8 and 9, the page's flinch and death
+ * (`Foe.initigor`); 9's rising object is read and not done. State 5 is the
+ * brain's own now (the panel clear at `0x4254d0` is not ported), and is kept
+ * here because it is the reason the class reads the fall at all.
  *
  * - **5**, `0x42545e` — the fall death, and the only state with two tags that
  *   are not an animation and its tail. Tag 0 is cel 3100 held while `AI+0x2c`
@@ -117,18 +131,17 @@ import { install, type Brain, type CastKit, type Enemy } from "./kit";
  * - **9**, `0x4255ea` — the death and the corpse. `0x4257b5` installs tag 0 and
  *   seeds `AI+0x2c` from `[0x46b204]`, the same word {@link Enemy.linger}
  *   carries. `0x42561b` hands tag 0 to tag 1 when it ends and spawns one more
- *   object through `0x4208e0` — class `[0x46faa8]`, twelve pixels up
- *   (`0xfff4`), velocity `vx` ±30 and then ±10, the thing that comes off an
+ *   object through `0x4208e0` — class `[0x46faa8]`, thirty pixels along its
+ *   facing, with `vy −12` (`0xfff4`) and `vx ±10`, the thing that comes off an
  *   igor as it dies. `0x4255f1` counts `AI+0x2c` down and on the frame it runs
  *   out calls `0x40cba0(self.point, -0xd, 0)` and returns 1.
  *
- * Note for whoever wires this up: {@link file://../foes.ts}'s `initigor` entry
- * reads `0x46ff30 tag 0` as the flinch and `0x46ff98 tag 1` as the death. Out of
- * `0x4256d0` the flinch is `0x46ff80` and the death is `0x46ffd8`; `0x46ff30 tag
- * 0` is the throw and `0x46ff98 tag 1` is the fall death. That file is not mine
- * to edit.
+ * {@link file://../foes.ts}'s `initigor` entry carries the two the handler
+ * installs — `0x46ff80` for the flinch, `0x46ffd8` for the death — with the
+ * flinch handing back to the stance; `0x46ff30 tag 0` is the throw and
+ * `0x46ff98 tag 1` the fall death, neither of them a reaction to a blow.
  */
-const NOT_HERE = "0x42545e, 0x4255cd, 0x4255ea, 0x4256d0" as const;
+const NOT_HERE = "0x4255cd, 0x4255ea, 0x4256d0" as const;
 
 /**
  * Its repertoire, by kind and tag, straight out of `0x46fe00`…`0x46ffd8`.
@@ -158,11 +171,8 @@ export const IGOR = {
     from: "0x46fe20 tag 0",
   },
   /**
-   * kind 3 — the walk out: those five cels backwards, and the dx negative.
-   *
-   * Worth knowing before this is wired: {@link file://../walk.ts}'s stride block
-   * is gated `step > 0`, so a negative `dx` spends nothing and this script
-   * currently plays on the spot. The numbers here are the script's.
+   * kind 3 — the walk out: those five cels backwards, and the dx negative, so
+   * the stride carries it backwards along its facing.
    */
   retreat: {
     cels: [3104, 3103, 3102, 3101, 3100],
@@ -221,6 +231,25 @@ export const IGOR = {
     tag: 1,
     from: "0x46ff30 tag 1",
   },
+  /**
+   * kind 5 — `0x46ff98`, the fall death: tag 0 cel 3100 held while it is
+   * still falling, tag 1 3140..3145 and then it is gone. The header's hold is 1.
+   */
+  stunned: { cels: [3100], hold: 1, kind: 5, tag: 0, from: "0x46ff98 tag 0" },
+  smashed: {
+    cels: [3140, 3141, 3142, 3143, 3144, 3145],
+    hold: 1,
+    kind: 5,
+    tag: 1,
+    from: "0x46ff98 tag 1",
+  },
+  /** `0x425296` — `cmp word ptr [esi+0x32], 0xc8`: a fall past this kills */
+  deadly: 0xc8,
+  /** `0x4252c4` — `belfry.snd` 0x0a as it goes over, `0x4254b1` 0x36 as it lands */
+  over: 0x0a,
+  smash: 0x36,
+  /** `0x4254d8` — `0x40d450(0x15e)` */
+  fallAward: 0x15e,
   /** `0x470018`, the fourth argument `0x41eea9` hands `0x45ef70` — four deep */
   bands: [350, 300, 150, 80],
   /**
@@ -347,13 +376,29 @@ export const IGOR_THROW: CastKit = {
  * The three `mov ax, 1` are `0x4254ec`, `0x42560e` and the handler's own, and
  * all three are frames on which the object is removed. So every path below
  * returns `false`, waiting included; returning `true` would freeze the thing
- * mid-throw with its stride unspent. Nothing hits the player back in this port,
- * so the 100 is carried as read and spends nothing.
+ * mid-throw with its stride unspent. The 100 is the page's default strength,
+ * so nothing needs writing.
  */
 export const igor: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
   const t = k.track(e, IGOR.bands);
-  switch (e.script ?? 0) {
+  /**
+   * `0x425296`, the second half of the preamble: a fall past 200 in any state
+   * but 0 or 5 is the fall death. `obj+0x32` is the sum of `obj+0xa` over the
+   * frames it has been coming down (`0x42fdbc`), so this adds the frame's
+   * velocity — in whole pixels a frame — while it is falling and forgets it
+   * otherwise. The retreat, kind 3, walks backwards with no edge test, so an
+   * igor backed off its ledge dies of it.
+   */
+  e.fell = e.vy > 0 ? (e.fell ?? 0) + e.vy / TICK_SCALE : 0;
+  const now = e.script ?? 0;
+  if (e.fell > IGOR.deadly && now !== 5 && now !== 0) {
+    // `0x4252ad` — `AI+0x2c = [0x46b204] * 2`
+    e.beat = FALL_WAIT;
+    k.say(e, IGOR.over);
+    return install(e, IGOR.stunned);
+  }
+  switch (now) {
     /**
      * ---- 0, `0x4252f7`: the statue, and the one thing that ends it.
      *
@@ -454,8 +499,29 @@ export const igor: Brain = (e, foe, run, k) => {
       }
       return install(e, IGOR.stance);
     /**
-     * 5, 8 and 9 are {@link NOT_HERE} — the fall death, the flinch and the
-     * death. The page drives those and a brain is not called during them.
+     * ---- 5, `0x42545e`: the fall death, in two tags.
+     *
+     * Tag 0 (`0x425470`) spends `AI+0x2c` a frame at a time and holds cel 3100
+     * for as long as the count lasts AND the fall goes on (`0x425480`); tag 1
+     * (`0x42549d`) plays 3140..3145 and, as it ends, says 0x36, books 350
+     * (`0x4254d8`), jolts the screen (`0x4254e7`) and answers 1 — the object
+     * is removed there, with no corpse.
+     */
+    case 5:
+      if ((e.tag ?? 0) === 0) {
+        const left = e.beat ?? 0;
+        e.beat = left - 1;
+        if (left >= 0 && (e.fell ?? 0) > 0) return false;
+        return install(e, IGOR.smashed);
+      }
+      if (!done) return false;
+      k.say(e, IGOR.smash);
+      k.shake(1);
+      k.remove(e, IGOR.fallAward);
+      return false;
+    /**
+     * 8 and 9 are {@link NOT_HERE} — the flinch and the death. The page drives
+     * those and a brain is not called during them.
      */
     default:
       return false;

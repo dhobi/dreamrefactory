@@ -31,9 +31,16 @@
  * The compact table the mover actually reads is a second one — `0x4a69d0`, twelve
  * bytes a record, `{i16 y0, x0, y1, x1; ptr owner}` — rebuilt from the 48-byte
  * records every frame. `0x42fd80` searches it for the nearest top below the
- * object's feet and remembers the owner as the CARRIER, which is the part of this
- * that this page approximates rather than implements: a plank falls at three times
- * the player's gravity and leaves them behind in one frame either way.
+ * object's feet and remembers the owner as the CARRIER. What a carrier gives its
+ * rider is its HORIZONTAL speed (`0x4302b1`: a carrier with a nonzero `obj+0xc`
+ * sets the rider's) — the vertical comes from the record moving under the rider's
+ * feet. A plank falls at three times the player's gravity: the record drops 30
+ * pixels in its first frame, past the mover's 8-pixel snap (`0x42ff56`), and the
+ * rider is left to fall on their own.
+ *
+ * The plank's own fall ends on the room's floor: its `obj+0x34` is the
+ * allocator's 0 (`0x42f5a7`), so `0x42fe4a` skips the platform table for it and
+ * `0x40bbd0`'s floor is the only one it meets, and its record comes to rest with it.
  */
 
 /** one of the three states a plank shows, as its own script */
@@ -90,8 +97,14 @@ export const PLANK = {
   fall: { cels: [1054, 1055, 1056, 1057, 1058, 1059, 1060, 1061], hold: 1, from: "0x477ce0" },
   /** `mov word ptr [esi+0xe], 0xa` — the divisor, and so the mass */
   divisor: 10,
-  /** `0x42f850(obj, 3.0f)` — raw gravity 300, three times the player's 100 */
-  gravity: 300,
+  /**
+   * `0x42f850(obj, 3.0f)` at `0x453275` writes `3.0 × 10.0` (`0x46a110`) into
+   * `obj+0x24`: 30 pixels a frame added to `obj+0xa` on every airborne frame
+   * (`0x43032b`), three times the player's 10. The divisor plays no part — it
+   * scales `0x42f8b0`'s impulses, not the mover's gravity — and nothing caps the
+   * speed it builds.
+   */
+  gravity: 30,
   /** `cmp word ptr [edx+0xc], 5` — crossings before it gives way */
   crossings: 5,
   /**
@@ -125,6 +138,8 @@ export interface Plank {
   crossings: number;
   /** pixels per tick, once it is falling */
   vy: number;
+  /** a fallen plank that the room's floor has caught */
+  landed?: boolean;
   /**
    * The platform record this plank owns, or null where the level gave it none.
    * It is a COPY made per level ({@link file://./walk.ts}'s `solidsIn`), so moving
@@ -153,57 +168,65 @@ export function plankFrames(k: Plank): number {
  *
  * Its constructor says what it is before any of the states do: `obj+0xe = 1` (a
  * divisor of one, so it moves in whole pixels), `obj+0x2e = 0` — NOT on the ground
- * — and `0x42f850(obj, 0)`, which is gravity zero. Nothing else in the game is
- * built that way.
+ * — and `0x42f850(obj, 0)`, which is gravity zero. The creator faces every one of
+ * them east (`0x45095c`, `obj+0x28 = 0`) and nothing turns one round.
  *
- * ## The nine states, and they are all its own
+ * ## The states, and they are all its own
  *
  * `0x451aa0` dispatches on the script's kind through the table at `0x45207c`, and
- * two of the states dispatch again on the tag. Read out:
+ * three of the states dispatch again on the tag. Read out:
  *
  * ```
  *   1  asleep   1854..1859  the player's POINT inside the crow's own rect wakes it
  *                           (0x434200 against ctx+8); otherwise it loops, and each
  *                           loop plays woods 14, "0170 crow sleep"
  *   2  waking   1835..1838  ends into 3
- *   3  rising   1840..1853  ends into 5, and woods 15, "0180 crow flap"
- *   5  flying   1800..1825  four tags in sequence; the third holds while the player
- *                           is within 350px and the fourth, past that, strikes
- *   4  circling 1830..1867  three tags, and inside 160px it strikes (woods 16,
- *                           "0210 crow strik[e]")
- *   8  striking 1870..1887  five tags: a 4-in-10 chance of giving up back to 4, and
- *                           a dive that repeats while the crow is west of the player
- *   6  falling  1884..1887  woods 17, "0220 crow fall", then gravity 1.0 into 10
- *   9  feathers 1890..1899  what a blow throws off; removed on touching the ground
- *  10  tumbling 1830..1834  where a killed crow ends
+ *   3  rising   1840..1853  ends into 5 tag 0, and woods 15, "0180 crow flap"
+ *   5  flying   tag 0 sheds speed, 1 flaps, 2 backs off from a player within 350
+ *               ahead, 3 strikes a player 350 or more east of it
+ *   4  hopping  tag 0 (1860..1867, three steps of dx 10) strikes a player less
+ *               than 160 east of it — or anywhere west; tags 1 and 2 fold and
+ *               unfold (1830..1834)
+ *   8  striking tag 0 gives up 3 times in 10 (0x434540(10) < 4) into 4, else the
+ *               dive: tag 2 and 3 drop until it is at its height, tag 4 runs east
+ *               and repeats while the crow is still west of the player
+ *   6  falling  1884..1887 twice, woods 17, then gravity 1.0 into 10
+ *   9  feathers 1890..1899  what a blow throws off; gone on touching the ground
+ *  10  tumbling 1830..1834  where a killed crow ends — lying on the floor, its
+ *                           foot 33 up (0x45205f writes obj+0x10 = -33)
  * ```
  *
- * ## What moves it, and what does not
+ * ## What moves it
  *
- * **Every frame of every one of its scripts carries `dx 0, dy 0`.** A crow's
- * motion is entirely in the code, and the only motion the code contains is
- * vertical: before the dispatch, for any airborne state past 3 (`0x451aeb`),
+ * Velocity, and nothing takes it back in the air — the mover's drag is the
+ * ground's (`0x4302c0`). Every push is an impulse into `obj+0xa`/`obj+0xc`:
+ * the scripts' own steps (the hop's and the dive's frames carry `dx 10`, the
+ * dive's `dy 10..30`), and before the dispatch, for any airborne state from 4
+ * up bar 9 and 10 (`0x451aeb`), the height:
  *
  * ```
- *   want = (0x434540(50) + 50) * ctx+0x12 + player.y - 100
- *   if (want - crow.y >  5) move (dy +10)
- *   if (want - crow.y < -5) move (dy -10)
+ *   want = (0x434540(50) + 50) * ctx+0x12 + player.y - 100   ; rolled each frame
+ *   if (want - crow.y >  5) push dy +10
+ *   if (want - crow.y < -5) push dy -10
  *   else vy = 0
  *   and |vy| over 10 is halved unless the state is 8 — which is what a dive is
  * ```
  *
- * So a crow holds a height about a hundred pixels above the player's own y,
- * jittered, and keeps its x. It does not fly across the level, and this page does
- * not invent a drift for it: what the file says is what it does.
+ * `ctx+0x12` is 0 until a dive starts (`0x451ef4` rolls it 1 or 2) and 0 again
+ * once one ends (`0x45202a`), so a crow on the wing holds a hundred above the
+ * player's point exactly, and a diving one aims 51..200 lower. Its horizontal
+ * speed is halved by the states that want it slower (`0x451d29`, `0x451dbc`,
+ * `0x451fc3`) and zeroed at the end of a flight (`0x451dd4`).
  *
  * ## One blow
  *
  * `0x4520d0` has no health test — a crow cannot be hit by another crow
- * (`0x430ee0`) and cannot be hit while dying (`obj+0x1a < 0`), and any blow that
- * lands throws feathers (`0x4521d0` creates one crow-class object on the feather
- * script, or THREE when the blow beats 50), plays woods 18 — "0225 crow gets [hit]"
- * — turns gravity on and installs the tumble. Its own frame function resets
- * `obj+0x1a` to 100 every frame, so it is always hittable until it is dying.
+ * (`0x430ee0`) nor by a hitter whose strength is a code (`0x452121`), and any
+ * blow that lands throws feathers (`0x4521d0` creates one crow-class object on
+ * the feather script, or FOUR when the blow beats 50), plays woods 18 — "0225
+ * crow gets [hit]" — turns gravity on and installs the tumble. Its own frame
+ * function resets `obj+0x1a` to 100 every frame; the tumble's cels carry no body
+ * box, so a dead crow cannot be hit again.
  *
  * ## And one blow that is not one: −9
  *
@@ -224,29 +247,49 @@ export function plankFrames(k: Plank): number {
  *
  * See {@link CROW.burns} and {@link burnCrow}.
  */
+/** one tag of a crow script: its cels, ticks a cel, and each cel's own push */
+export interface CrowTag {
+  cels: readonly number[];
+  hold: number;
+  dx?: readonly number[];
+  dy?: readonly number[];
+}
+
 export const CROW = {
-  sleep: { cels: [1854, 1855, 1856, 1857, 1858, 1859], hold: 2, from: "0x476aa8 kind 1" },
-  wake: { cels: [1835, 1835, 1835, 1835, 1836, 1837, 1838], hold: 2, from: "0x476ae0 kind 2" },
-  rise: {
-    cels: [1840, 1841, 1842, 1843, 1844, 1845, 1846, 1847, 1848, 1849, 1850, 1851, 1852, 1853],
-    hold: 1,
-    from: "0x476b20 kind 3",
-  },
-  /** kind 5's tags 1, 2 and 3 run in sequence — tag 0 is a single beat on 1800 */
-  fly: {
-    cels: [
-      1800, 1801, 1802, 1803, 1804, 1805, 1806, 1807, 1808, 1809, 1810, 1811, 1812, 1813, 1814, 1815, 1816, 1817,
-      1818, 1819, 1820, 1821, 1822, 1823, 1824, 1825,
-    ],
-    hold: 2,
-    from: "0x476b98 kind 5 tags 1..3",
-  },
-  /** kind 8 — the dive, and the one state whose vertical speed is not damped */
-  strike: {
-    cels: [1870, 1871, 1872, 1873, 1874, 1875, 1876, 1877, 1878, 1879, 1880, 1881, 1882, 1883, 1884, 1885, 1886, 1887],
-    hold: 1,
-    from: "0x476da0 kind 8",
-  },
+  sleep: [{ cels: [1854, 1855, 1856, 1857, 1858, 1859], hold: 2 }],
+  wake: [{ cels: [1835, 1835, 1835, 1835, 1836, 1837, 1838], hold: 2 }],
+  rise: [
+    {
+      cels: [1840, 1841, 1842, 1843, 1844, 1845, 1846, 1847, 1848, 1849, 1850, 1851, 1852, 1853],
+      hold: 1,
+    },
+  ],
+  /** `0x476b98`, kind 5 */
+  fly: [
+    { cels: [1800], hold: 2 },
+    { cels: [1800, 1801, 1802, 1803, 1804, 1805, 1806], hold: 2 },
+    { cels: [1807, 1808, 1809, 1810, 1811, 1812, 1813, 1814, 1815, 1816], hold: 2 },
+    { cels: [1817, 1818, 1819, 1820, 1821, 1822, 1823, 1824, 1825], hold: 2 },
+  ],
+  /** `0x476d08`, kind 4 */
+  hop: [
+    { cels: [1860, 1861, 1862, 1863, 1864, 1865, 1866, 1867], hold: 1, dx: [0, 0, 0, 10, 10, 10, 0, 0] },
+    { cels: [1830, 1831, 1832, 1833, 1834], hold: 1 },
+    { cels: [1834, 1833, 1832, 1831, 1830], hold: 1 },
+  ],
+  /** `0x476da0`, kind 8 — the one state whose vertical speed is not damped */
+  strike: [
+    { cels: [1879], hold: 1, dx: [10] },
+    {
+      cels: [1884, 1885, 1886, 1887, 1887, 1887, 1887, 1887, 1887, 1887],
+      hold: 1,
+      dx: [0, 0, 0, 10, 10, 10, 5, 5, 5, 10],
+      dy: [0, 0, 0, 0, 20, 20, 20, 20, 20, 30],
+    },
+    { cels: [1870, 1871, 1872, 1873, 1874], hold: 1, dy: [0, 0, 0, 10, 10] },
+    { cels: [1875, 1876], hold: 1, dy: [10, 10] },
+    { cels: [1877, 1878, 1878, 1879], hold: 1, dx: [10, 10, 10, 10] },
+  ],
   /**
    * kind 6 — the fall, and the one state no ordinary blow can reach. `0x476e58`
    * is 1884..1887 played TWICE, eight frames of the dive's last four cels, and
@@ -257,43 +300,50 @@ export const CROW = {
    * and is neither 9 nor 10 — so a burning crow goes on holding its station for
    * these eight frames and only drops when they are up.
    */
-  fall: {
-    cels: [1884, 1885, 1886, 1887, 1884, 1885, 1886, 1887],
-    hold: 1,
-    from: "0x476e58 kind 6",
-  },
+  fall: [{ cels: [1884, 1885, 1886, 1887, 1884, 1885, 1886, 1887], hold: 1 }],
   /** kind 10 — a killed crow, with gravity on */
-  tumble: { cels: [1830, 1831, 1832, 1833, 1834], hold: 2, from: "0x476ef8 kind 10" },
-  /** kind 9 — the feathers a blow throws off, gone when they touch the ground */
-  feathers: {
-    cels: [1890, 1891, 1892, 1893, 1894, 1895, 1896, 1897, 1898, 1899],
-    hold: 1,
-    from: "0x476ea0 kind 9 / 0x4521d0",
-  },
+  tumble: [{ cels: [1830, 1831, 1832, 1833, 1834], hold: 2 }],
+  /** kind 9 — the feathers a blow throws off, looping until they touch the ground */
+  feathers: { cels: [1890, 1891, 1892, 1893, 1894, 1895, 1896, 1897, 1898, 1899], hold: 1 },
   /** `mov word ptr [esi+0xe], 1` — whole pixels, and the lightest thing in the game */
   divisor: 1,
   /** `sub ax, 0x64` — how far above the player it holds */
   above: 100,
-  /** `0x434540(0x32) + 0x32` — the jitter on that, times `ctx+0x12` (1 or 2) */
-  jitter: [50, 100] as const,
-  /** `mov word ptr [esp+0xc], 0xa` — pixels a frame it closes the gap by */
+  /** `0x434540(0x32) + 0x32` — the jitter on that, times `ctx+0x12` (0, 1 or 2) */
+  jitter: 50,
+  /** `mov word ptr [esp+0xc], 0xa` — the push toward its height, each frame */
   climb: 10,
   /** `cmp eax, 5` — the deadband it stops inside */
   band: 5,
-  /** `cmp eax, 0xa0` — inside this the circling state strikes */
+  /** `cmp eax, 0xa` / `0x451b77` — over this the climb is halved, bar a dive */
+  damp: 10,
+  /** `cmp eax, 0xa0` — a player less than this east of a hopping crow is struck */
   strikeAt: 160,
-  /** `cmp ecx, 0x15e` — and the flight's last tag strikes past this */
+  /** `cmp ecx, 0x15e` — the flight backs off inside this and strikes past it */
   farAt: 350,
+  /** `0x451d87`/`0x451d90` — the back-off push, and `0x451db1`'s cap on it */
+  backOff: 10,
+  backOffCap: 20,
+  /** `0x451fb8` — the dive's run east is halved over this */
+  runCap: 30,
   /** `0x434540(0xa)` under 4 — the chance a dive is abandoned */
   giveUp: 4,
-  /** `0x42f850(obj, 1.0f)` on death — the player's own gravity, raw */
-  deadGravity: 100,
+  /** `0x42f850(obj, 1.0f)` on death — the allocator's own ten a frame² */
+  deadGravity: 10,
+  /** `0x45205f` — `obj+0x10 = -33`, the tumbling crow's foot */
+  deadFoot: -33,
   /** `0x40d450(0x50)` — what a crow is worth */
   award: 80,
   /** woods.snd, and the names are in the table above */
   sound: { sleep: 14, flap: 15, strike: 16, fall: 17, hit: 18 },
-  /** `cmp ax, 0x32` — a blow over this throws three feathers instead of one */
+  /** `cmp ax, 0x32` — a blow over this throws four feathers instead of one */
   hardBlow: 50,
+  /**
+   * `0x4521d0` — one feather: at the crow's point, facing `0x434540(2) - 1`,
+   * pushed `0x434540(11) - 6` across and `0x434540(11)` down, with gravity
+   * `0x42f850(obj, 0.1)` — one pixel a frame².
+   */
+  feather: { gravity: 1, from: "0x4521d0" },
   /**
    * What a blow of **−9** does to it — the same shape `Foe.burns` records for
    * the seven creature classes that read the code, written out here because a
@@ -309,8 +359,8 @@ export const CROW = {
     forever: false,
     /**
      * `0x4520df`..`0x452108` returns 1 out of that arm, above `0x452109`'s class
-     * test and above the `obj+0x1a < 0` test, so the code never lands as a blow
-     * and no feathers come off.
+     * test and above the strength test, so the code never lands as a blow and
+     * no feathers come off.
      */
     andHurts: false,
     /** what it plays while it burns is {@link CROW.fall}, and that is the end of it */
@@ -326,6 +376,8 @@ export type CrowState =
   | "wake"
   | "rise"
   | "fly"
+  /** kind 4 — see {@link CROW.hop} */
+  | "hop"
   | "strike"
   /** kind 6 — burning, on its way to the tumble; see {@link burnCrow} */
   | "fall"
@@ -340,36 +392,57 @@ export interface Crow {
   bottom: number;
   right: number;
   state: CrowState;
-  /** engine frames into the current script */
+  /** `obj+0x44` — which tag of the state's script */
+  tag: number;
+  /** engine frames into the current tag */
   clock: number;
-  /** pixels per tick, once it is dead and falling */
+  /** `obj+0xc` and `obj+0xa`, pixels an engine frame */
+  vx: number;
   vy: number;
+  /** `obj+0x24` — zero until it dies */
+  gravity: number;
+  /** `obj+0x2e` — on the ground */
+  grounded: boolean;
+  /** `obj+0x2a` — its strike box met the player since the dive's run began */
+  hit: boolean;
   /** `ctx+0x12` — the altitude factor, `0x434540(2)` when a dive begins */
   factor: number;
-  /** the jitter drawn for this pass, so the height is steady between them */
-  slack: number;
 }
 
 /** one puff of feathers — a crow-class object on kind 9, and it falls */
 export interface Feather {
   x: number;
   y: number;
+  vx: number;
   vy: number;
+  /** `obj+0x28` — `0x434540(2) - 1` */
+  mirror: boolean;
   age: number;
+  /** `obj+0x2e` — it has landed, and the next think lets it go */
+  grounded: boolean;
 }
 
-/** which cel a crow is showing */
+/** the tag a crow is on */
+export function crowTag(c: Crow): CrowTag {
+  const tags = CROW[c.state] as readonly CrowTag[];
+  return tags[Math.min(tags.length - 1, c.tag)];
+}
+
+/**
+ * which cel a crow is showing — `clock` counts the frames the tag has shown, so
+ * the one on screen is the one before it; a script that has ended holds its
+ * last cel
+ */
 export function crowCel(c: Crow): number {
-  const a = CROW[c.state];
-  const i = Math.floor(c.clock / a.hold);
-  // the looping states cycle; the one-shots hold their last cel
-  const loop = c.state === "sleep" || c.state === "fly";
-  return a.cels[loop ? i % a.cels.length : Math.min(a.cels.length - 1, i)];
+  const a = crowTag(c);
+  const k = Math.floor(Math.max(0, c.clock - 1) / a.hold);
+  return a.cels[Math.min(a.cels.length - 1, k)];
 }
 
-/** how many engine frames the current script runs for */
+/** how many engine frames the current tag runs for */
 export function crowFrames(c: Crow): number {
-  return CROW[c.state].cels.length * CROW[c.state].hold;
+  const a = crowTag(c);
+  return a.cels.length * a.hold;
 }
 
 /**
@@ -389,7 +462,10 @@ export function crowFrames(c: Crow): number {
  * flame from being pinned on the fall's first cel for ever.
  */
 export function burnCrow(c: Crow): void {
-  if (c.state !== "fall") c.clock = 0;
+  if (c.state !== "fall") {
+    c.clock = 0;
+    c.tag = 0;
+  }
   c.state = "fall";
 }
 
@@ -435,17 +511,22 @@ export function burnCrow(c: Crow): void {
  * the state, and each handler's job is to install the next tag:
  *
  * ```
- *   0  idle      1160          waits on obj+0x46; on it, sound 9 and a DIRECTION:
- *                              tag 3 if the far end is below, tag 1 if above
+ *   0  idle      1160 x6       waits on obj+0x46; on it, sound 9 and a DIRECTION:
+ *                              tag 1 if the car is above the shaft's bottom, else tag 3
  *   1  starting  1160 x3, 1163 one beat, then tag 2
- *   2  down      1161 1162 1163  moves +0x28 a frame and re-installs itself until
+ *   2  down      1161 1162 1163  pushes +0x28 a frame and re-installs itself until
  *                              the end is reached: then sound 10 and back to tag 0
  *   3  starting  1160 x3, 1161 the mirror of 1, then tag 4
- *   4  up        1163 1162 1161  moves -0x28 a frame, otherwise as tag 2
+ *   4  up        1163 1162 1161  pushes -0x28 a frame, otherwise as tag 2
  * ```
  *
- * `0x28` is 40, and 40 over the divisor of 10 is **four pixels an engine frame** —
- * 60 a second, a little over half the player's walk. The two sounds are
+ * The `0x28` is an IMPULSE, not a speed: `0x42f8b0` adds `40/10 = 4` to the car's
+ * `obj+0xa` every frame and the mover carries it. Down is then clamped to 6 a
+ * frame (`0x453538`) and up to 13 (`0x4535f2`), so a car accelerates over a frame
+ * or two and then runs at **90 pixels a second down and 195 up** at the engine's
+ * 15 frames a second. The end test reads the car's y BEFORE the mover moves it
+ * (`0x453549`, `0x45360c`), so the last frame's travel carries it a few pixels past
+ * the end before `obj+0xa = 0` stops it. The two sounds are
  * `0x40ef30(bank, 9, …)` on departure and `(…, 10, …)` on arrival.
  *
  * ## `obj+0x46` is not a trigger
@@ -504,33 +585,42 @@ export const ELEVATOR = {
     front: 1150,
     from: "0x453310 — 0x45332e (0x47f) and 0x45334a (0x47e)",
   },
-  /** tag 0 — the winch at rest */
-  idle: { cels: [1160], hold: 3, from: "0x477db0 tag 0" },
-  /** tags 1 and 3 — one beat of wind-up before either direction */
-  starting: { cels: [1160, 1160, 1160, 1163], hold: 3, from: "0x477db0 tags 1/3" },
+  /** tag 0 — the winch at rest: six frames of 1160 at three ticks, eighteen frames in all */
+  idle: { cels: [1160, 1160, 1160, 1160, 1160, 1160], hold: 3, from: "0x477db0 tag 0" },
+  /** tag 1 — one beat of wind-up before going down */
+  starting: { cels: [1160, 1160, 1160, 1163], hold: 3, from: "0x477db0 tag 1" },
+  /** tag 3 — the same before going up, ending on 1161 */
+  startingUp: { cels: [1160, 1160, 1160, 1161], hold: 3, from: "0x477db0 tag 3" },
   /** tag 2 — travelling with `+0x28` a frame */
   down: { cels: [1161, 1162, 1163], hold: 3, from: "0x477db0 tag 2" },
   /** tag 4 — travelling with `-0x28` a frame */
   up: { cels: [1163, 1162, 1161], hold: 3, from: "0x477db0 tag 4" },
   /** `mov word ptr [esi+0xe], 0xa` at `0x4533bd` — and so not the player's 12 */
   divisor: 10,
-  /** `mov word ptr [esp+8], 0x28` at `0x45351f` — 40 raw, four pixels a frame */
+  /**
+   * `mov word ptr [esp+8], 0x28` at `0x45351f` (and `0xffd8` at `0x4535d9`) — an
+   * impulse of 40 raw into `obj+0xa` through `0x42f8b0`, four pixels a frame
+   * added every frame
+   */
   speed: 40,
+  /** `cmp word ptr [edi+0xa], 6` at `0x453538` — the fastest a car goes down, px a frame */
+  maxDown: 6,
+  /** `cmp word ptr [edi+0xa], -0xd` at `0x4535f2` — the fastest a car goes up, px a frame */
+  maxUp: 13,
   /**
    * How far below the head of its shaft a car stops — `add ecx, 0xc8` at
    * `0x453606`, where `ecx` is the shaft's top and the comparison is against the
    * car's own y. Travel UP runs while `y >= top + 200`, so the last 200 pixels of
    * the rect are not travel at all: they are the room the winch and its cable
    * need. Down has no such margin (`0x453549` tests the bottom outright), which
-   * is why a car at rest sits exactly on its landing.
+   * is why a car at rest sits on its landing — a few pixels under it, by the
+   * last frame's travel.
    */
   headroom: 200,
   /** `0x40ef30(bank, 9, pos)` — on departure */
   soundStart: 9,
   /** `0x40ef30(bank, 0xa, pos)` — on arrival */
   soundStop: 10,
-  /** eighteen frames of rest at each end — tag 0's six cels at three ticks — before it goes again */
-  pause: 18,
   from: "0x450dc0 / 0x4533a0 / 0x453470",
 } as const;
 
@@ -552,17 +642,21 @@ export interface Elevator {
   clock: number;
   /** which way tag 1/3's wind-up is about to send it: +1 down, -1 up */
   dir: 1 | -1;
+  /** the car's `obj+0xa`, pixels an engine frame — the impulses build it and the mover spends it */
+  vy: number;
   /**
-   * The platform the car is. Created by this port rather than read, because the
-   * disc has none for it — see the block comment. It is a live record in the
-   * room's `platforms`, so moving it moves the floor and the rider with it.
+   * The platform the car is: the landing `0x42fb70` claimed at the shaft's
+   * bottom — see the block comment. It is a live record in the room's
+   * `platforms`, so moving it moves the floor and the rider with it.
    */
   floor: { top: number; bottom: number; left: number; right: number };
 }
 
 /** the cel the WINCH is showing — the car is always {@link ELEVATOR.car} */
 export function elevatorCel(e: Elevator): number {
-  const a = ELEVATOR[e.state];
+  // tag 3, the wind-up before going UP, ends on 1161 where tag 1 ends on 1163
+  const a =
+    e.state === "starting" && e.dir < 0 ? ELEVATOR.startingUp : ELEVATOR[e.state];
   const i = Math.floor(e.clock / a.hold);
   // the travelling states cycle; idle and the wind-up hold their last cel
   const loop = e.state === "up" || e.state === "down";
@@ -601,8 +695,10 @@ export function elevatorFrames(e: Elevator): number {
  *   2  back   1547 1548 1549 1550 1551   away again on the other side, with sound 7
  * ```
  *
- * Each handler installs the next tag and flips `ctx+6`'s low bit, which is the
- * side it swings from, so consecutive passes alternate. `obj+0x1a` is set to 100
+ * The handlers for tags 0 and 1 install the next tag and flip `ctx+6`'s low bit
+ * (`0x453835`, `0x45385b`); tag 2's hands back to tag 0 with sound 6 and no flip.
+ * A beam with no delay has no script at all on its first frame, and `obj+0x46`
+ * starts at 1 (`0x45d07d`), so it goes straight into tag 1 — the pass. `obj+0x1a` is set to 100
  * at the top of every cycle, which in this engine is "live" — the same field the
  * crow resets to stay hittable.
  *
@@ -630,8 +726,16 @@ export const IBEAM = {
   back: { cels: [1547, 1548, 1549, 1550, 1551], hold: 3, from: "0x477e60 tag 2" },
   /** `mov word ptr [esi+0xe], 0x14` at `0x453751` — twenty, and it moves nothing */
   divisor: 20,
-  /** `0x40ef30(bank, 7, pos)` on entering tag 2 */
+  /** `0x40ef30(bank, 7, pos)` on entering tag 2 (`0x453873`) */
   sound: 7,
+  /** `0x40ef30(bank, 6, pos)` as tag 2 hands back to tag 0 (`0x4538a8`) */
+  soundBack: 6,
+  /**
+   * `mov word ptr [esi], 0x604` at `0x45373d` — the base cel, shown while the
+   * beam waits out its delay: the class init installs no script (`0x45d070`
+   * only clears one), so nothing draws over it until `0x453800` installs tag 0
+   */
+  base: 1540,
   /** `mov word ptr [esi+0x1a], 0x64` — live, the crow's own "hittable" field */
   health: 100,
   /** `obj+0x46` is "my script ended" (written only by `0x45d0f0`): each tag hands to the next as it finishes, so it swings on its own */
@@ -651,12 +755,13 @@ export interface Ibeam {
   clock: number;
   /** frames still to wait before the first swing — the record's own stagger */
   delay: number;
-  /** `ctx+6`'s low bit: which side this pass swings from, flipped at every tag */
+  /** `ctx+6`'s low bit, flipped entering tags 1 and 2 */
   side: 0 | 1;
 }
 
 /** which cel a girder is showing */
 export function ibeamCel(b: Ibeam): number {
+  if (b.delay > 0) return IBEAM.base;
   const a = IBEAM[b.state];
   return a.cels[Math.min(a.cels.length - 1, Math.floor(b.clock / a.hold))];
 }
@@ -844,6 +949,12 @@ export interface Switch {
   param: number;
   state: SwitchState;
   clock: number;
+  /**
+   * MAZE's `initswitch`: chapter two's lever (think `0x413340`, throw
+   * `0x412550`, broadcast `0x413410` to the cage doors). Its throw plays no
+   * sound, where `0x436820`'s plays 0x4b / 0x4a.
+   */
+  maze?: boolean;
 }
 
 /** which cel a lever is showing */
@@ -955,8 +1066,13 @@ export const GOOP = {
     initbatboy: 60,
     initknifeboy: 20,
   } as Readonly<Record<string, number>>,
-  /** `0x43a695` and its three counterparts — one sound for being fed */
-  fedSound: 11,
+  /** the sound each one's handler plays on being fed — not the same one */
+  fedSound: {
+    initknotboy: 8, // `0x438379`
+    initmaskboy: 8, // `0x439019`
+    initbatboy: 3, // `0x439a99`
+    initknifeboy: 0xb, // `0x43a699`
+  } as Readonly<Record<string, number>>,
   from: "0x435db0 / 0x437260 / 0x437310",
 } as const;
 
@@ -986,6 +1102,10 @@ export interface Drip {
   clock: number;
   /** has it already made whatever it makes — the `user+2` latch every branch tests */
   spent?: boolean;
+  /** `obj+0x2a` — a gob's strike box has met something, which bursts it (`0x43746a`) */
+  hit?: boolean;
+  /** `obj+0x2e` — it is down, and the next think lets it go */
+  landed?: boolean;
 }
 
 /** which cel a drip is showing */
@@ -1191,7 +1311,7 @@ export interface Elev {
  *                              rect installs the opening
  *   kind 1  1221 … 1226        opening; at the end of it, if the player has
  *                              LEFT the rect, the closing goes on
- *   kind 2  1221 … 1225        closing; at the end, back to shut
+ *   kind 2  1225 … 1221        closing; at the end, back to shut
  * ```
  *
  * Two details worth keeping. The tag is carried across each install
@@ -1205,8 +1325,8 @@ export const SHACK = {
   shut: { cels: [1220], hold: 1, from: "0x4787d8" },
   /** kind 1 — up it goes */
   opening: { cels: [1221, 1222, 1223, 1224, 1225, 1226], hold: 2, from: "0x4787e8" },
-  /** kind 2 — and down, one cel shorter */
-  closing: { cels: [1221, 1222, 1223, 1224, 1225], hold: 2, from: "0x478820" },
+  /** kind 2 — and down, one cel shorter, from 1225 back to 1221 */
+  closing: { cels: [1225, 1224, 1223, 1222, 1221], hold: 2, from: "0x478820" },
   from: "0x4511b0 / 0x453980 / 0x453a60",
 } as const;
 
@@ -1251,10 +1371,28 @@ export function shackFrames(k: Shack): number {
  *
  * Its bob is in the script rather than in the class. `0x473330` is eight frames
  * at two engine frames each carrying `dx 22, dy 20` on the way down and
- * `dx -10, dy -20` on the way back, and the think keeps it honest: it clamps the
- * horizontal velocity to ±7 and walks the barrel three pixels a frame back
- * towards the x its record gave it, so it wallows around its own point instead
- * of drifting off down the sewer.
+ * `dx -10, dy -20` on the way back — IMPULSES, through `0x42f8b0`, into a body
+ * with no gravity and no drag (`0x43fbaf`, `0x43fbba`). The vertical ones cancel
+ * over a cycle; the horizontal ones do not (+3 +3 −1 −1 −1 −1 +3 +3), so a barrel
+ * drifts, and the think (`0x43fc30`) holds it:
+ *
+ * ```
+ *   43fc39  a positive param is a delay: count it down with no script at all,
+ *           then start the bob with ctx+0xc = -40
+ *   43fc71  it bounced off something last frame (obj+0x2c): turn round — which
+ *           flips the sign of every dx the script adds
+ *   43fc7c  its horizontal speed held within ±7
+ *   43fc9a  its y kept inside the record's rect: above the top, top+3; below
+ *           the bottom, bottom-3
+ * ```
+ *
+ * So it floats back and forth across its pool at up to seven pixels a frame,
+ * turning at whatever wall stops it. And half of them SINK (`0x435d91`: ctx+0xe
+ * is a roll of 0 or 1): stood on — the player's x strictly inside the record's
+ * rect carried with the barrel, their point above it by less than 150 — the
+ * counter climbs; at −10 the barrel wobbles (`0x473378` tag 2), and at −2 it
+ * goes under (tag 1: ten down and ten along a frame for eight frames), and comes
+ * back up at its own point's height with the counter at −40.
  */
 export const BARREL = {
   /** `0x473330` tag 0 — the wallow, and the stride is the animation's own */
@@ -1265,12 +1403,38 @@ export const BARREL = {
     dy: [20, 0, 0, -20, -20, 0, 0, 20],
     from: "0x473330 tag 0",
   },
+  /** `0x473378` tag 2 — the wobble before it goes under: the bob twice at one frame a cel */
+  wobble: {
+    cels: [3180, 3181, 3182, 3183, 3184, 3183, 3182, 3181, 3180, 3181, 3182, 3183, 3184, 3183, 3182, 3181],
+    hold: 1,
+    dx: [22, 0, 0, -10, -10, 0, 0, 22, 22, 0, 0, -10, -10, 0, 0, 22],
+    dy: [20, 0, 0, -20, -20, 0, 0, 20, 20, 0, 0, -20, -20, 0, 0, 20],
+    from: "0x473378 tag 2",
+  },
+  /** `0x473378` tag 1 — going under */
+  sink: {
+    cels: [3185, 3186, 3187, 3188, 3189, 3190, 3191, 3192],
+    hold: 1,
+    dx: [0, 0, 0, 0, 0, 0, 0, 0],
+    dy: [0, 0, 0, 0, 0, 0, 0, 0],
+    from: "0x473378 tag 1",
+  },
   /** `mov word ptr [esi+0xe], 0xa` at `0x43fb7b` */
   divisor: 10,
   /** `0x43fc80` / `0x43fc8e` — the horizontal velocity is held inside this */
   drift: 7,
-  /** `0x43fca6` — and it walks this far back towards its own point each frame */
-  home: 3,
+  /** `0x43fca6` / `0x43fcb5` — the y it is put back to, this far inside its rect */
+  inset: 3,
+  /** `0x43fc5b` / `0x43fe1e` — the counter the bob starts on */
+  rest: -40,
+  /** `0x43fd49` — stood on until the counter passes this, it wobbles */
+  wobbleAt: -10,
+  /** `0x43fe11` — and past this, it goes under */
+  sinkAt: -2,
+  /** `0x43fd32` — how far above it the player's point may be and still be on it */
+  reach: 150,
+  /** `0x43fd99`..`0x43fdab` — going under, pixels a frame down and along */
+  sinkStep: 10,
   from: "0x435d20 / 0x43fb60 / 0x43fc30",
 } as const;
 
@@ -1278,10 +1442,30 @@ export const BARREL = {
 export interface Barrel {
   x: number;
   y: number;
-  /** where its record put it, which it keeps drifting back to */
+  /** the record's own point, which going under brings it back to (`0x43fdba`) */
   homeX: number;
   homeY: number;
+  /** the record's rect: it keeps the barrel's y, and — carried with it — says who is on it */
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** engine frames — the tick-level clock the step reads frames from */
   clock: number;
+  /** engine frames into the current script */
+  aclock: number;
+  /** `ctx+0xc`: the delay while positive, then the stood-on counter */
+  wait: number;
+  /** `ctx+0xe` — whether this one sinks */
+  sinker: boolean;
+  /** which script it shows; "none" while its delay runs */
+  tag: "none" | "bob" | "wobble" | "sink";
+  vx: number;
+  vy: number;
+  /** `obj+0x28` */
+  mirror: boolean;
+  /** `obj+0x2c` — it hit something last frame */
+  bounced: boolean;
   floor?: { top: number; bottom: number; left: number; right: number };
 }
 
@@ -1368,12 +1552,17 @@ export interface Sewage {
  * record's point (`0x435bf7 add word ptr [edi+6], 0x50`) and facing whichever
  * way `0x434540(2)` came out at creation.
  *
- * What it does when you come near is not here, and the reason to say so
- * precisely is the two constants: `0x43ee9d` and `0x43eedb` write **-3** and
- * **-5** into `obj+0x1a`, and a negative strength is not damage — it is a code.
- * The one other place a negative shows up is `0x43d25c`, where level seven's big
- * one swallows a blow of exactly -6. So these are grabs, and the handler that
- * reads them is the player's.
+ * The two constants that matter are `0x43ee9d` and `0x43eedb`, which write
+ * **-3** and **-5** into `obj+0x1a` — and a negative strength is not damage, it
+ * is a code. The one other place a negative shows up is `0x43d25c`, where level
+ * seven's big one swallows a blow of exactly -6. So these are grabs, and the
+ * handler that reads them is the player's.
+ *
+ * A record whose `param` is 1 is TWO objects (`0x435b30` calls `0x435ba0`
+ * twice): the bush, and a second one of the same class with `user+8 = 1` and
+ * the first in `user+0x14`. That one sits on its partner, turns to face you
+ * (`0x43eda4`), and from three hundred pixels lashes out — see
+ * {@link BUSH.lash}. Three of SEWER's eight carry it.
  */
 export const BUSH = {
   /** `0x472b70` tag 0 — what it does while it is waiting */
@@ -1398,9 +1587,61 @@ export const BUSH = {
    */
   nearPx: 0x46,
   dropPx: 0x12c,
-  /** `0x43ed19` — and `0x43ef17`'s 0x2a is the one it makes going back down */
+  /**
+   * `0x43ed19` — and `0x43ef17`'s 0x2a is what it plays, every frame, once it
+   * has closed on a player who is no longer alive (`0x402f60` answering 0)
+   */
   sound: 0x27,
   sinkSound: 0x2a,
+  /**
+   * `0x43ed41`: waiting with nobody near, it counts `AI+0xa` down, and on the
+   * frame it is found already below zero it plays 0x28, reseeds the wait at
+   * `roll(40)+10`, puts itself thirty below the top of its travel (`0x43ed8a`:
+   * `obj+6`, the Y, is `user+0x10 + 0x1e`) and PEEKS — `0x472c90` tag 1.
+   */
+  homeSound: 0x28,
+  peekDy: 0x1e,
+  /**
+   * The peek, the same state as the grab (both scripts are kind 1) on its other
+   * two tags, two ticks a cel. Tag 1 (`0x43ef7c`) comes up three a frame while
+   * the top of its travel is above it; its end installs tag 2 (`0x43efbc`), which
+   * goes down three a frame until it is thirty under the top and then drops to
+   * the bottom and idles. Both edge six a frame toward the player's x.
+   */
+  peek: {
+    up: { cels: [5040, 5041, 5042, 5043, 5044, 5045, 5046], hold: 2, from: "0x472c90 tag 1" },
+    down: { cels: [5046, 5045, 5044, 5043, 5042, 5041, 5040], hold: 2, from: "0x472c90 tag 2" },
+    stepPx: 3,
+    chasePx: 6,
+  },
+  /**
+   * The partner's attack. Its idle (`0x43ed9b`) sits on the bush's point; with
+   * the player within `0x12c` across, the bush idle, the wait run out and the
+   * player free and alive (`0x402f00`, `0x402f60`), it reseeds the wait, plays
+   * 0x29 and installs `0x472ba8` on itself — the eleven-cel tentacle, 3820..3831,
+   * whose last cel carries the grip — and `0x472c08` tag 0 on the bush, which
+   * rises ten a frame to the top of its travel on cel 5023 (`0x43f0b0`).
+   *
+   * While it lashes it holds `obj+0x1a = -3` and rides ten above the bush
+   * (`0x43f10e`); at its end it idles and sends the bush `0x472c08` tag 1 (cel
+   * 5020), ten a frame back to the bottom (`0x43f0d0`). A player within fifty of
+   * a bush on either tag is grabbed the ordinary way (`0x43f04d`).
+   */
+  lash: {
+    cels: [3820, 3821, 3822, 3823, 3824, 3825, 3826, 3827, 3828, 3830, 3831],
+    hold: 2,
+    nearPx: 0x12c,
+    sound: 0x29,
+    above: 0xa,
+    from: "0x472ba8",
+  },
+  lift: {
+    up: 5023,
+    down: 5020,
+    stepPx: 0xa,
+    grabPx: 0x32,
+    from: "0x472c08 tags 0 and 1",
+  },
   /**
    * It sends TWO codes, one after the other, and which one is a three-state
    * latch at `user+0xe` rather than anything about the player's health.
@@ -1487,9 +1728,34 @@ export interface Bush {
    * page's own: the engine has the script running or the script ended, and the
    * moment it ends the thing starts sinking. See {@link BUSH.risePerFrame}.
    */
-  state: "idle" | "rise" | "sink";
+  state:
+    | "idle"
+    | "rise"
+    | "sink"
+    /** kind 1 tags 1 and 2 — see {@link BUSH.peek} */
+    | "peekUp"
+    | "peekDown"
+    /** kind 2 tags 0 and 1, the bush lifted for its partner's lash */
+    | "liftUp"
+    | "liftDown"
+    /** kind 4 — the partner's lash */
+    | "lash";
   /** the y it came up from, which is where it goes back to */
   restY: number;
+  /** `user+0x10` — the record's point y, the TOP of its travel */
+  top: number;
+  /**
+   * `user+2` and `user+6` — the record rect's x extent, which `0x43f017` holds
+   * the object inside after every move of the rise, the sink and the peek
+   */
+  left: number;
+  right: number;
+  /** `AI+0xa` — the idle wait, `roll(5)+10` at birth (`0x435c38`) */
+  wait: number;
+  /** `user+8` — 0 the bush, 1 the partner a `param` 1 record adds */
+  variant: 0 | 1;
+  /** `user+0x14` — the bush a partner sits on */
+  partner?: Bush;
 }
 
 /**
@@ -1615,11 +1881,26 @@ export interface Roach {
 export const SPRINKLER = {
   /** `0x473748` tag 0 — up it comes */
   rise: { cels: [150, 151, 152, 153, 154, 155, 156], hold: 2, from: "0x473748 tag 0" },
-  /** tag 1 — and this is what it does while it is up */
+  /** tag 1 — and this is what it does while it is up, looping (`0x440a0d`) */
   spray: { cels: [157, 158, 157, 158, 156, 157, 158, 157, 158, 156, 157, 156], hold: 2, from: "0x473748 tag 1" },
-  /** `mov word ptr [eax], 0x15e` at `0x441ba3` — the context's own first word */
+  /**
+   * tags 2 and 3 — going: `0x4409b7` installs tag 2 the frame the count runs
+   * out, its end installs tag 3 (`0x440a31`), and tag 3's end frees the object
+   * (`0x440a4e`)
+   */
+  sink: { cels: [150, 151, 152, 153, 154, 155, 154, 155], hold: 2, from: "0x473748 tags 2, 3" },
+  /**
+   * `mov word ptr [eax], 0x15e` at `0x441ba3` — the context's own first word,
+   * counted down one a frame from the column's creation (`0x4409ac`), rise
+   * included
+   */
   life: 350,
-  /** `mov di, 7` at `0x441b68` — how many slots there are, and how many tries */
+  /**
+   * `mov di, 7` at `0x441b68` — how many slots there are, and how many tries.
+   * A slot is marked taken at `0x441bb5` and nothing ever clears it: each
+   * sprinkler goes up once a level, and the boss is scalded in its rect from
+   * then on, water or no water (`0x440bb0`).
+   */
   slots: 7,
   from: "0x440800 / 0x440870 / 0x441b20 / 0x441b60",
 } as const;
@@ -1678,8 +1959,8 @@ export interface Sprinkler {
  * player's current cel, walks the list, and for each pickup whose code is
  * negative does two tests: `0x434140` for a rect overlap, and then `0x40e680`,
  * which is the **pixel-perfect** one — both cels, both positions, both mirror
- * flags. No button, no facing, no range band. This page does the first test and
- * not the second, and takes the boxes as drawn.
+ * flags. No button, no facing, no range band. The first pickup to pass both is
+ * the one taken, and the walk stops there (`0x45b38b`).
  *
  * ## What each one does
  *
@@ -1752,17 +2033,25 @@ export interface Pickup {
  *   shut   0x4704d0 tag 0, cel 3310   the slab. Stand ON it and 0x4210bd
  *                                     shoves you back off by the width of its
  *                                     own rect, with `0136 grave pull`
- *   near   0x4704d0 tag 1             the frame your x comes within 100 of its
- *   open   0x4704e8 tag 0, 3310..3319 and now it PULLS: 0x4211af halves your
- *                                     horizontal velocity and 0x4211c4 adds one
- *                                     to your fall every frame
- *   held   0x470540 tag 0, cel 3319   the hole, standing open
+ *   near   0x4704d0 tag 1             your x has come within 100 of its. If it
+ *                                     is still within 100 next frame, 0x4211af
+ *                                     halves your horizontal velocity and
+ *                                     0x4211c4 adds one to your fall — ONCE —
+ *                                     with sound 3 if you are 50 below its point,
+ *                                     and it opens; if not, it is shut again
+ *   open   0x4704e8 kind 1, 3310..3319 ten frames, and only in these can it
+ *                                     take you
+ *   held   0x470540 kind 2, cel 3319  the hole, standing open, with a lid laid
+ *                                     across it (`0x4212bb`) — and kind 2 has
+ *                                     no handler at all (`0x42105c`)
  * ```
  *
- * and then `0x42120c`: once the player is **86 pixels below the grave's own
- * point**, `0x402fa0(5)` — the same call that ends the player anywhere else.
- * There is no health subtraction anywhere in the class. You do not get hurt by
- * a grave, you fall into it.
+ * `0x42120c`, in the ten opening frames: once the player is **86 pixels below the
+ * grave's own point**, and not already dying (`0x402f60`: player kind under
+ * 0x1a), `0x402fa0(5)` — the same call that ends the player anywhere else — and
+ * sound 0x31. There is no health subtraction anywhere in the class. You do not
+ * get hurt by a grave, you fall into it while it opens, and once it has opened
+ * its lid carries you over.
  */
 export const HOLE = {
   /** `0x420fb4` — the slab, before anything has happened to it */
@@ -1775,10 +2064,14 @@ export const HOLE = {
   nearPx: 100,
   /** `0x42121b`'s `sub ecx, 0x56` — how far down is far enough */
   deathPx: 86,
-  /** `0x4211c4`'s `inc word ptr [eax+0xa]` — one unit of fall a frame */
+  /** `0x4211c4`'s `inc word ptr [eax+0xa]` — one unit of fall, on the frame it opens */
   pullPerFrame: 1,
   /** `0x4211af` — and half your speed along with it */
   dragHalves: true,
+  /** `0x4211d7`'s `sub eax, 0x32` — sound 3 as it opens if you are this far below its point */
+  soundBelowPx: 50,
+  /** `0x4211e2` — `0x40ef30(bank, 3, pos)` */
+  openSound: 3,
   /**
    * The ledge an open grave lays across its own mouth.
    *
@@ -1812,8 +2105,13 @@ export interface Hole {
   left: number;
   bottom: number;
   right: number;
-  /** "shut" until the player is inside 100, then it opens and stays open */
-  state: "shut" | "opening" | "open";
+  /**
+   * `0x4704d0` tag 0 ("shut") and tag 1 ("near"), `0x4704e8` ("opening", kind 1)
+   * and `0x470540` ("open", kind 2) — see {@link HOLE}
+   */
+  state: "shut" | "near" | "opening" | "open";
+  /** whether `0x421470` has appended the lid's platform record yet */
+  lid?: boolean;
   /** `0x421230`'s `cmp word ptr [edi+0xa], 0` — one grave takes one player */
   taken?: boolean;
   clock: number;
@@ -1836,8 +2134,12 @@ export interface Hole {
  *   + left`) and keeps the record's y. Script tag 3 — five narrow ones.
  *
  * Each holds on one cel out of `0x4704b8`, whose `ticksPerFrame` is **30**: two
- * seconds a frame, and that pause is the whole of the hazard. `0x420dc6` lets it
- * go early — after 20 frames, but only if it has hold of something.
+ * seconds a frame. The underfoot one lets go early: `0x420dc6` sinks it once
+ * fewer than 20 of those 30 remain (`obj+0x48`) unless its `obj+0x2a` is set —
+ * and `obj+0x2a` is only ever set by `0x430663`, the rebound of a POSITIVE blow,
+ * which a hand's code never is. So the underfoot hand holds for eleven frames
+ * and the other (`0x420e54`, which tests only the script's end and `obj+0x2a`)
+ * for the full thirty.
  *
  * Its blow strengths are `0xfffd` and `0xfff9` — **−3 and −7**. Those are codes
  * and not damage, the same kind of number `initbush`'s grab carries and the same
@@ -1845,7 +2147,7 @@ export interface Hole {
  * `takeHits` hands each hand's own code to `takeCode` along with a grip read
  * from the cel it is holding (`gripAt`), so a hand that comes up under you
  * takes hold and the two-second pause `0x4704b8` gives it is a hazard rather
- * than a picture of one. `tests/browser/grave.ts` watches one come up on cel
+ * than a picture of one. `tests/machine/grave.ts` watches one come up on cel
  * 1556 under the player's own feet.
  *
  * This note used to end "cannot yet take hold of anything", which was true when
@@ -1870,6 +2172,11 @@ export const HAND = {
   hidden: 1550,
   /** `0x4704b8`'s own `ticksPerFrame` */
   holdFrames: 30,
+  /**
+   * `cmp word ptr [esi+0x48], 0x14` at `0x420dc6`: the underfoot hand sinks on
+   * the first frame fewer than twenty of its thirty remain — the eleventh
+   */
+  underfootLeft: 20,
   /** `0x420bcb` */
   divisor: 10,
   /** `0x420cba` — `belfry.snd` names 3 "0020 hands brea[k]" */
@@ -1937,32 +2244,43 @@ export interface Axe {
  * The rope bridge — `initbridge`, four of them in CAVERN. Creator `0x41e9c0`,
  * class `0x4222b0`, think `0x422370`.
  *
- * A 220x25 record laid across a gap, and three states:
+ * A 220x25 record laid across a gap, and it is the PLANK's think over again
+ * (`0x4531d0`), with its own art:
  *
  * ```
- *   whole   0x46ecf8 tag 0, cel 750
- *   rocking 0x46ed08 tag 0, 750 751 750 751   `0124 bridge cru[mbles]`
- *   gone    0x46ed30 tag 0, 751..754          then tag 1 (755) and tag 2 (756)
+ *   whole   0x46ecf8 kind 1, cel 750
+ *   rocking 0x46ed08 kind 2, 750 751 750 751   `0124 bridge cru[mbles]` (0x34)
+ *   falling 0x46ed30 tag 0, 751..754
+ *   gone    tag 1 (755), gravity 1.0 and `0x35`; tag 2 (756); then 0x46ece8 (750)
  * ```
  *
- * and the test that starts it (`0x4223c5`) is the player on the ground, within
- * 300 of it, and EITHER a counter at `user+0xc` past five — how long you have
- * been on it — or a fall of more than a hundred onto it. So you can cross one
- * if you keep moving, and you cannot stand on one.
+ * Kind 1 tests the player: x strictly inside the record's rect (`0x4223ac`), on
+ * the ground, and their point above the bridge's by less than 300 (`0x4223e0`).
+ * Then, if the counter at `user+0xc` is 5 or less and the fall onto it
+ * (`player+0x32`) 100 or less, it rocks, with 0x34; otherwise it falls, without a
+ * sound. Each rock that ends is one more on the counter (`0x422460`) and a whole
+ * bridge again — so standing still on one rocks it six times and then it goes.
+ *
+ * It owns the platform laid over it (`0x41e9ec`, `0x42fb70`), and when the
+ * falling cels end `0x4224ad` gives it gravity 1.0: the bridge drops, and the
+ * record with it. Its region is −1 (`0x41e9e6`), so no room's floor holds it.
  */
 export const BRIDGE = {
   whole: 750,
   /** `0x46ed08` tag 0 — the warning, and it is two cels alternating */
   rocking: { cels: [750, 751, 750, 751], hold: 1, from: "0x46ed08 tag 0" },
-  /** `0x46ed30` tag 0 then 1 then 2 */
+  /** `0x46ed30` tag 0 */
   falling: { cels: [751, 752, 753, 754], hold: 2, from: "0x46ed30 tag 0" },
-  gone: 756,
-  /** `0x4223e0`'s `cmp ecx, 0x12c` */
+  /** `0x46ed30` tags 1 and 2, then `0x46ece8`'s 750 — the bridge dropping */
+  gone: { cels: [755, 755, 756, 756, 750], from: "0x46ed30 tags 1/2, 0x46ece8" },
+  /** `0x4223e0`'s `cmp ecx, 0x12c` — how far above it the player's point may be */
   reachPx: 300,
-  /** `0x4223f5`'s `cmp word ptr [edx+0xc], 5` — engine frames of standing */
+  /** `0x4223f5`'s `cmp word ptr [edx+0xc], 5` — rocks it gives before it goes */
   standFrames: 5,
   /** `0x422401`'s `cmp word ptr [eax+0x32], 0x64` — or one hard landing */
   fallPx: 100,
+  /** `0x4224ad`'s `0x42f850(obj, 1.0)` — ten pixels a frame, every frame, once it drops */
+  gravity: 10,
   /** `0x4222e1` */
   divisor: 10,
   from: "0x41e9c0 / 0x4222b0 / 0x422370",
@@ -1976,9 +2294,11 @@ export interface Bridge {
   bottom: number;
   right: number;
   state: "whole" | "rocking" | "falling" | "gone";
-  /** how many engine frames the player has been standing on it */
+  /** `user+0xc` — how many times it has rocked */
   stood: number;
   clock: number;
+  /** pixels a frame, once it drops */
+  vy?: number;
 }
 
 /**
@@ -1994,9 +2314,19 @@ export interface Bridge {
  *   caving   0x4705a8 tag 0, 9012..9017          `0121 floor cave[s in]`
  * ```
  *
- * `0x42703e` writes 5 into `obj+0x10` — the floor offset — on the way through,
- * and `0x427100` gives what is left a divisor of 10 and gravity 3.0. Then the
- * rect test again, and the player goes with it.
+ * The player's point in its rect, on the ground, starts `0x470568` tag 0 — four
+ * frames of the whole cel. While the player's x is more than 50 from the
+ * floor's, a grace counter (`ctx+0x10`, 10 from the creator) runs down, and when
+ * it runs out the floor is whole again with a grace of 5 (`0x42703e`). Within
+ * 50, the four frames end into `0120 floor crea[ks]` and tag 1; tag 1 ends into
+ * `0121 floor cave[s in]` and `0x4705a8` if the player is still within 50 across
+ * and 200 down (`0x42709a`, `0x4270b3`), and back to tag 0 if not.
+ *
+ * On the caving script's third cel `0x427100` gives the floor a divisor of 10 and
+ * gravity 3.0, and it falls — with the platform it owns (`0x41f1a9`), and with no
+ * room to hold it (region −1, `0x41f170`). From then on, every frame, a player
+ * whose point is inside the record's own x span and between 100 and 1000 below
+ * its bottom (`0x41f196`, `0x41f1a1`) is ended by `0x402fa0(1)`.
  */
 export const FLOOR = {
   whole: 9010,
@@ -2006,8 +2336,18 @@ export const FLOOR = {
   caving: { cels: [9012, 9013, 9014, 9015, 9016, 9017], hold: 1, from: "0x4705a8 tag 0" },
   /** `0x470568` tag 0 — four frames of the whole cel before it starts */
   holdFrames: 4,
-  /** `0x427100` — `0x42f850(obj, 3.0)`, three times the player's own pull */
-  gravity: 3,
+  /** `0x427100` — `0x42f850(obj, 3.0)`: 30 pixels a frame, every frame, three times the player's own pull */
+  gravity: 30,
+  /** `cmp eax, 0x32` at `0x427012` / `0x42709a` — how near the player's x must stay */
+  nearPx: 50,
+  /** `cmp eax, 0xc8` at `0x4270b3` — and how near their y, for it to cave */
+  nearY: 200,
+  /** `0x41f17e` — the grace the creator gives, and `0x42703e` — the grace after */
+  grace: 10,
+  regrace: 5,
+  /** `0x41f192` / `0x41f19d` — the death zone, this far below the rect's bottom */
+  deathFrom: 0x64,
+  deathTo: 0x3e8,
   from: "0x41f140 / 0x426ea0 / 0x426f80",
 } as const;
 
@@ -2018,8 +2358,16 @@ export interface Floor {
   left: number;
   bottom: number;
   right: number;
-  state: "whole" | "creaking" | "caving" | "gone";
+  /**
+   * `0x470558` ("whole"), `0x470568` tag 0 ("settling") and tag 1 ("creaking"),
+   * `0x4705a8` while it plays ("caving") and after ("gone")
+   */
+  state: "whole" | "settling" | "creaking" | "caving" | "gone";
   clock: number;
+  /** `ctx+0x10` — frames of grace while the player is away, 10 at first and 5 after (`0x41f17e`, `0x42703e`) */
+  grace?: number;
+  /** pixels a frame, once it falls */
+  vy?: number;
 }
 
 /**
@@ -2032,8 +2380,23 @@ export interface Floor {
  * two tall thin columns, 63 by 1310 and 60 by 1122, running the height of the
  * tower's wall.
  *
- * Its divisor is 1 and its script is six cels; what turns it on and off has not
- * been read, so this page runs it on its own loop.
+ * What turns it on is the LIGHTNING's counter: `0x426800`, TOWER's own frame
+ * function, sets every surge's `ctx+0` as the counter wraps (`0x42682b`). The
+ * creator stands the object at its rect's TOP-LEFT corner (`0x41ec66`,
+ * `0x41ec6a`), mirrored by the param (`0x41ec6e`). While it is on, `0x426a70`:
+ *
+ * ```
+ *   426a90  obj+0x1a = -4, and 0x38 looping
+ *   426ad4  the player armed (0x402ee0) with weapon 16, the scepter (0x426ade),
+ *           their point inside the rect widened 100 each side (0x426ac8), and
+ *           within 30 of the arc's y (0x426b18): 0x45ef30(13) — thirteen rounds
+ *   426b2c  as the six cels end: if the arc is still above its rect's bottom
+ *           less 75, again, 75 lower (0x426b5a); if not, off — strength 0, the
+ *           loop stopped, and back to the top (0x426b89)
+ * ```
+ *
+ * So the arc runs DOWN its column in hops of 75, six frames a hop, once every
+ * lightning period.
  */
 export const SURGE = {
   /** `0x46f648` tag 0 */
@@ -2043,10 +2406,21 @@ export const SURGE = {
   /** `0x426aa8` — `0134 surge` */
   sound: 0x38,
   divisor: 1,
+  /** `0x426b5a` — how far down the arc hops as each run of its cels ends */
+  hop: 0x4b,
+  /** `0x426ac8` / `0x426ace` — the rect widened this much each side */
+  reachX: 0x64,
+  /** `0x426b18` — and this near the arc's y */
+  reachY: 0x1e,
+  /** `0x426ade` — the weapon it charges, the scepter */
+  weapon: 16,
+  /** `0x426b1d` — rounds a frame */
+  rounds: 0xd,
   from: "0x41ec20 / 0x426990 / 0x426a70",
 } as const;
 
 export interface Surge {
+  /** the arc — the rect's left, and a y that runs from its top down */
   x: number;
   y: number;
   top: number;
@@ -2054,6 +2428,10 @@ export interface Surge {
   bottom: number;
   right: number;
   clock: number;
+  /** `ctx+0` — switched on by the lightning's counter */
+  on?: boolean;
+  /** `obj+0x28` — the record's param */
+  mirror?: boolean;
 }
 
 /**
@@ -2086,6 +2464,8 @@ export const CAGE = {
   opening: { cels: [2011, 2012], hold: 4, from: "0x46c010 tag 2" },
   /** `0x413142` — `lab.snd` 0x22 */
   sound: 0x22,
+  /** `0x413440` / `0x413457` — `lab.snd` 0x21, as a lever's broadcast turns it */
+  toggle: 0x21,
   from: "0x4113d0 / 0x413060 / 0x413100",
 } as const;
 
@@ -2107,8 +2487,10 @@ export interface Cage {
  * class `0x412f40`, think `0x412fc0`.
  *
  * Two tags and a sound. `0x46bfc0` tag 0 is one cel, 3566, and tag 1 is the
- * whole sweep 3560…3566; the think hands one to the other as each ends and
- * plays `lab.snd` 0x24 on the way round.
+ * whole sweep 3560…3566. The think reinstalls whichever tag it is on as it ends,
+ * with `lab.snd` 0x24 each time round tag 1 (`0x412fdf`) — and it is created on
+ * tag 0 (`0x4113b5`). What moves it between them is the vertical fan whose
+ * param is the alarm's own (`0x415dc0`): see {@link FAN}.
  */
 export const ALARM = {
   quiet: 3566,
@@ -2124,50 +2506,100 @@ export interface Alarm {
   y: number;
   param: number;
   clock: number;
+  /** on tag 1, the sweep — set and cleared by its fan */
+  on?: boolean;
 }
 
 /**
  * The fans — `inithfan` (three) and `initvfan` (five), both in MAZE. Creators
  * `0x411ae0` and `0x411b40`, classes `0x4152b0` and `0x415870`.
  *
- * One script shape between them, four tags: spin up, hold, spin down, stopped.
- * What turns the wheel is a counter in the fan's OWN user data — `0x41541d`
- * writes 15 into `user+0xc` and `0x4155ef` writes 60 — so a fan is off for
- * fifteen frames and on for sixty, for ever, and nothing in the level starts it.
+ * Four tags, each a loop the think reinstalls as it ends, and a counter in the
+ * fan's own user data (`user+0xc`, 40 from the creator) that hands one to the
+ * next (`0x4153a0` for the horizontal, `0x415960` for the vertical):
  *
- * The horizontal one's blades carry a strike box (10020's runs the full 217
- * pixels of its own height, 80 wide on the left of its anchor) and the vertical
- * one's do not, which is the difference between the two.
+ * ```
+ *   0  "suck"  the blades turning (0..4)   60 frames: it DRAWS the player's point
+ *                                          in its rect toward it — ±80 across
+ *                                          (0x415464) or −200 up (0x415a2c)
+ *                                          through 0x42f8b0 every frame — and
+ *                                          kills within 140 across (0x4154a3) or
+ *                                          100 up (0x415a6e): 0x402fa0(8), sound
+ *                                          0x16, and the blades run red
+ *   1  "stop"  held on 4                   15 frames, then 0x15
+ *   2  "blow"  the blades backwards        60 frames: the same push the other way,
+ *                                          ±80 (0x415650) or +100 (0x415bf0)
+ *   3  "rest"  held on 0                   15 frames, then 0x15, and back to 0
+ * ```
+ *
+ * The vertical fan also works the ALARMS whose param is its own (`0x415dc0`):
+ * they go quiet as it stops sucking (`0x4159e1`) and flash as it starts again
+ * (`0x415c5a`). Its think writes `obj+0x1a = 0` every frame (`0x4153bb`,
+ * `0x41597b`), so neither fan's blades can hit anything — what kills is the
+ * distance test.
  */
 export const FAN = {
   h: {
-    /** `0x46d478` — tag 0 up, tag 1 held, tag 2 down, tag 3 stopped */
+    /** `0x46d478` tag 0 — the blades turning */
     spin: { cels: [10020, 10021, 10022, 10023, 10024], hold: 1, from: "0x46d478 tag 0" },
     held: 10024,
     stopped: 10020,
+    /** `0x46d4e0` tag 1 (tag 0 for the second character, `0x41553a`) — the blades run red */
+    red: { cels: [1090, 1091, 1092, 1093, 1094, 1095, 10020, 10021, 10022, 10023, 10024], hold: 1, from: "0x46d4e0 tag 1" },
+    /** `0x415464` — the push across, raw, toward the fan while it sucks */
+    push: 0x50,
+    /** `0x4154a3` — within this across, it kills */
+    killPx: 0x8c,
   },
   v: {
+    /** `0x46d598` tag 0 */
     spin: { cels: [10030, 10031, 10032, 10033, 10034], hold: 1, from: "0x46d598 tag 0" },
     held: 10034,
     stopped: 10030,
+    /** `0x46d600` tag 0 */
+    red: { cels: [10608, 10607, 10606], hold: 1, from: "0x46d600 tag 0" },
+    /** `0x415a2c` — the pull, raw, up into it while it sucks */
+    suck: -200,
+    /** `0x415bf0` — and the push, raw, back down while it blows */
+    blow: 0x64,
+    /** `0x415a6e` — within this up or down, it kills */
+    killPx: 0x64,
   },
-  /** `0x4155ef` and `0x41541d` — engine frames turning, and engine frames still */
+  /** `0x411b38` / `0x411b86` — the counter a fan starts on, in tag 0 */
+  first: 0x28,
+  /** `0x4155ef` — engine frames sucking or blowing */
   onFrames: 0x3c,
+  /** `0x41541d` — engine frames stopped between */
   offFrames: 0xf,
-  /** `0x415430` and `0x415590` */
-  spinUp: 0x16,
-  spinDown: 0x15,
+  /** `0x415500` — the blades running red */
+  kill: 0x16,
+  /** `0x4155cd` — a fan changing over */
+  change: 0x15,
+  /** `0x4152cb` — the fan's own; the pushes go through the PLAYER's 12 */
   divisor: 10,
-  from: "0x411ae0 / 0x4152b0 / 0x4153a0 and 0x411b40 / 0x415870",
+  from: "0x411ae0 / 0x4152b0 / 0x4153a0 and 0x411b40 / 0x415870 / 0x415960",
 } as const;
 
 export interface Fan {
   x: number;
   y: number;
-  /** `inithfan`'s blades have a strike box and `initvfan`'s have none */
+  /** `inithfan` pulls across, `initvfan` pulls up */
   horizontal: boolean;
-  state: "up" | "on" | "down" | "off";
+  /** the four tags, named — see {@link FAN} */
+  state: "suck" | "stop" | "blow" | "rest";
+  /** engine frames into the current script */
   clock: number;
+  /** `user+0xc` */
+  count: number;
+  /** the blades running red, until the script ends into tag 1 */
+  red?: boolean;
+  /** the record's rect — the player's point in it is what it moves */
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  /** the vertical fan's `user+0xe` — the alarms it works */
+  param: number;
 }
 
 /**
@@ -2176,25 +2608,27 @@ export interface Fan {
  * Think `0x416840`.
  *
  * Each record is a 278x36 strip. The think measures the player's own drawn box
- * (`0x4025b0` then `0x42f9f0`), asks whether their bottom sits inside the
- * belt's own band (`0x416899` against `user+8` and `user+0xc`) and whether they
- * are on the ground (`0x4168d0`), and if so writes **0x14 — twenty** into
- * `user+4`. That is the carry, and it is the same twenty whichever way the belt
- * runs; the class is what says which way.
+ * (`0x4025b0` then `0x42f9f0`) and asks three things: that its bottom is above
+ * the belt's point by less than 20 (`0x416881`), that the player's point x is
+ * strictly inside the rect (`0x416899`, against `user+8` and `user+0xc`, the
+ * rect's two x), and that they are on the ground (`0x4168d0`). Then it adds
+ * `user+2` — the record's `param`, 4, 6, 8 or 10 (`0x41159d`) — to the player's
+ * horizontal velocity, every frame: `initbeltright` adds, `initbeltleft`
+ * subtracts. The `0x14` at `0x416965` is not a carry at all; it reloads
+ * `user+4`, the countdown a third belt class (creator argument −1, placed by no
+ * shipped book) uses to reverse itself every 21 frames.
  *
- * Two scripts and the same five cels in both: `0x46c0d8` runs them at one
- * engine frame each and `0x46c188` at three. The record's own `param` — 4, 6, 8
- * or 10 across BARREL's forty-two — is what picks between them.
+ * Three scripts and the same five cels in all of them: the param picks — under 5
+ * `0x46c188` at three engine frames a cel, under 10 `0x46c130` at two, and
+ * `0x46c0d8` at one (`0x411532`).
  */
 export const BELT = {
   /** `0x46c0d8` tag 0 — and tag 1 is the same five backwards */
   roll: { cels: [5570, 5571, 5572, 5573, 5574], hold: 1, from: "0x46c0d8 tag 0" },
   /** `0x46c188`, the same five at three frames a cel */
   slowHold: 3,
-  /** `0x416965`'s `mov word ptr [edx+4], 0x14` */
-  carry: 0x14,
-  /** how far below the strip's own point the player's feet may be and still ride */
-  bandPx: 36,
+  /** `0x416881`'s `cmp ax, 0x14` — how far above the belt's point the player's drawn bottom may be */
+  bandPx: 0x14,
   from: "0x411500 / 0x4167c0 / 0x416840",
 } as const;
 
@@ -2216,10 +2650,13 @@ export interface Belt {
  * The chair — `initchair`, two of them, both in BARREL. Creator `0x411d40`,
  * class `0x417970`, think `0x4179f0`.
  *
- * One script, `0x46dfd8`, four tags of six cels at two frames each: 2200s,
- * 2210s, 2220s and then 2226 held. The think hands them round in order and
- * there is nothing else in the class — no health, no blow, no rect test. It is
- * a piece of the factory that moves.
+ * One script, `0x46dfd8`: three tags of six cels at two frames each (2200s,
+ * 2210s, 2220s) and a fourth that is 2226 alone. The think hands 0 → 1 → 2 → 0
+ * round as each ends — and on every frame of tag 2, if the player's x is within
+ * 150 of the chair's (`0x417a7c`), it installs tag 3 instead, which no handler
+ * leaves: the chair is empty from then on. The same frame `0x417ad0` and
+ * `0x411660` stand its occupant up — a creature of class `0x46c9e0` with 250
+ * health, counted in the census — which this page does not yet make.
  */
 export const CHAIR = {
   runs: [
@@ -2227,8 +2664,10 @@ export const CHAIR = {
     { cels: [2210, 2211, 2212, 2213, 2214, 2215], hold: 2, from: "0x46dfd8 tag 1" },
     { cels: [2220, 2221, 2222, 2223, 2224, 2225], hold: 2, from: "0x46dfd8 tag 2" },
   ],
-  /** tag 3 — one cel, and the think comes back round to tag 0 from it */
+  /** tag 3 — one cel, and nothing leaves it */
   rest: 2226,
+  /** `0x417a7c`'s `cmp eax, 0x96` — how near the player's x empties it */
+  nearPx: 0x96,
   from: "0x411d40 / 0x417970 / 0x4179f0",
 } as const;
 
@@ -2436,8 +2875,10 @@ export const BOGGS = {
    *
    * `0x46e6d8` carries the stride itself: tag 0 is `5980 5981(-470) 5982(-470)
    * 5983(-470) 5984..5988` and tag 1 the same the other way. Four hundred and
-   * seventy through its divisor of a hundred is under five pixels a frame, so
-   * the biggest number in the game moves the slowest thing in it.
+   * seventy through its divisor of a hundred is an impulse of 5 (`0x42f8b0`
+   * rounds away from zero), added every one of the nine frames those three cels
+   * show; the ground's drag keeps 30% of the speed each frame, so the lunge
+   * settles at about eight pixels a frame and carries it some seventy-five.
    */
   lunge: {
     left: { cels: [5980, 5981, 5982, 5983, 5984, 5985, 5986, 5987, 5988], hold: 3, dx: [0, -470, -470, -470, 0, 0, 0, 0, 0], from: "0x46e6d8 tag 0" },
@@ -2786,8 +3227,9 @@ export const BOGGS = {
 /**
  * The SKATEBOARD — `0x438450`, class `0x437610`, script `0x473de8`.
  *
- * Two of the gang carry one and both drop it as they die: `0x4383d9` out of
- * `initknotboy`'s hit handler and `0x43a6f9` out of `initknifeboy`'s. It is the
+ * All four of the gang carry one and drop it as they die: `0x4383d9` out of
+ * `initknotboy`'s hit handler, `0x43a6f9` out of `initknifeboy`'s, `0x43908e`
+ * out of `initmaskboy`'s and `0x439af9` out of `initbatboy`'s. It is the
  * one object in the game whose whole life is physics — it hops, it falls, it
  * bounces, it slides to a stop and then it is swept up.
  *
@@ -3113,6 +3555,10 @@ export interface Boggs {
   hp: number;
   /** which way it is lunging, or null while it is on its idle — {@link BOGGS.lunge} */
   lunge: "left" | "right" | null;
+  /** `obj+0xc`, pixels a frame — the lunge's impulses, spent by the ground's drag */
+  vx?: number;
+  /** `[0x4a50d2]`..`[0x4a50d6]` — its record's two x, which `0x41bb40` keeps it between */
+  span?: [number, number];
   /** the eight of {@link BOGGS.machines}, in the order that table lists them */
   machines: BoggsMachine[];
   /**

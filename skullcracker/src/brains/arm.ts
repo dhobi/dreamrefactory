@@ -78,10 +78,8 @@
  *   0x2d  #2026 Bones muf[fled]    the held player, character 1
  * ```
  *
- * Whether the stride is then SPENT is the page's, not this module's:
- * `walk.ts`'s stride block is gated on `travels(foe)`, which reads
- * {@link Foe.gait} and so is false for this class. The crawl is installed here
- * faithfully and arrives at a page that currently stands still through it.
+ * The page spends the stride of whatever a brain installs, so the crawl
+ * travels and the reach in the wall does not.
  *
  * ## What this module owns, and what it does not
  *
@@ -92,7 +90,14 @@
  * named at {@link NOT_HERE} together with the object words and engine globals
  * this class leans on that a brain here cannot see.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import {
+  install,
+  type Brain,
+  type BrainCtx,
+  type Enemy,
+  type Reaction,
+  TICK_SCALE,
+} from "./kit";
 
 /**
  * The state and the handler the page owns, and everything else the executable
@@ -395,6 +400,22 @@ export const arm: Brain = (e, foe, run, k) => {
      * is put on again and `lab.snd` 0x26, `#2016 armhits ground`, goes with it.
      */
     case 0: {
+      /**
+       * `0x411962` — a record with param 0 is not in a wall at all. The creator
+       * gives it weight 2, divisor 6 and gravity 1.0 and installs the stance,
+       * `0x46cfc8`, straight away (`0x411995`..`0x4119b7`), so it is on the
+       * floor and fighting from the first frame. LAB places four of these and
+       * six of the wall kind (param 1).
+       */
+      if (!e.param) {
+        // `0x41199b` — and its divisor is 6, not the 10 a wall arm comes out
+        // with; `0x4119a7` gives it gravity 1.0, where the wall kind has none
+        e.divisor = 6;
+        e.weightless = false;
+        return install(e, ARM.stance);
+      }
+      // `0x41196d` — a hand in a wall has no shove weight until it is loose
+      e.shove = 0;
       if (e.fighting) {
         // `0x4187f2` — out through the wall, and `0x41883a` will sound it
         e.thrown = false;
@@ -435,10 +456,12 @@ export const arm: Brain = (e, foe, run, k) => {
        * from 0 to **2**, the shove weight `0x430680` gates the overlap pass on;
        * and `0x42f850(esi, 1.0f)` puts `obj+0x24`, the gravity multiplier, up
        * from nothing to ten times one. A hand in a wall does not fall and a hand
-       * on the floor does. None of the three is a brain's to set — the page
-       * takes its divisor from {@link Foe.divisor} — and `0x418877` clearing
+       * on the floor does. The divisor is {@link Foe.divisor}'s 10 and the
+       * gravity is {@link Enemy.weightless} going off; `0x418877` clearing
        * `AI+0x2a` is the record param going away ({@link NOT_HERE}).
        */
+      e.weightless = false;
+      e.shove = undefined;
       return install(e, ARM.stance);
     }
     /**
@@ -555,5 +578,27 @@ export const arm: Brain = (e, foe, run, k) => {
 function reach(e: Enemy): false {
   return install(e, ARM.lunge, true);
 }
+
+/**
+ * State 8, `0x418af6`, while the page plays `0x46d0b0`.
+ *
+ * The death's first frame carries `dy -130`, which `0x42f8b0` adds to
+ * `obj+0xa` through the divisor — ten for an arm that came out of the wall
+ * (`0x418868`), six for one that started on the floor (`0x41199b`) — rounded
+ * away from zero; gravity 1.0 brings the hand back down, and
+ * `0x418afc` removes it once it has landed and the six cels are done. The page
+ * does not spend a death script's lift, so it is spent here on the first call.
+ */
+export const armReacts: Reaction = (e, foe, _run, _k) => {
+  if (e.state !== "dead" || e.anim !== foe.death || e.threw) return;
+  e.threw = true;
+  // `0x418af6` — `obj+0x10 = -150` on every frame of state 8: the foot goes a
+  // hundred and fifty up the cel, so the body falls that far through the floor
+  // before `obj+0x2e` calls it landed
+  e.floor = -150;
+  const lift = foe.death.dy?.[0] ?? 0;
+  const q = lift / (e.divisor ?? foe.divisor);
+  e.vy = (q < 0 ? -Math.ceil(-q) : Math.ceil(q)) * TICK_SCALE;
+};
 
 export { NOT_HERE as ARM_NOT_HERE };

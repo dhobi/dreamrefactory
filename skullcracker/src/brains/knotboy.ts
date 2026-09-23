@@ -80,7 +80,8 @@
  * that state is the page's. So nothing below returns true; a waiting state that
  * did would freeze the thing mid-stride.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import { install, rewind, type Brain, type BrainCtx, type Enemy } from "./kit";
+import { ahead, turn } from "./batboy";
 
 /**
  * The four things `0x437b20` does that this module deliberately does not.
@@ -281,25 +282,22 @@ export const KNOTBOY = {
  * can disagree with the flag at all — a walk that has been turned round mid
  * stride still carries the speed it had.
  *
- * {@link Enemy.vx} is that word, and the port keeps it flat zero for anything
- * that is not a struck {@link Foe.flies} kind, so this answers no for a live
- * keeper and the two branches below always take their other side. Kept whole
- * because it costs one line and is the half that comes back first.
+ * {@link ahead} is that word read along the facing, so "pointing away" is a
+ * negative answer; a zero points nowhere and answers no.
  */
 function adrift(e: Enemy): boolean {
-  if (e.vx === 0) return false;
-  return e.facing > 0 ? e.vx < 0 : e.vx > 0;
+  return ahead(e) < 0;
 }
 
 /**
  * `0x437e46`'s first test — `cmp word ptr [esi+0x30], 0`.
  *
- * `obj+0x30` is the settled flag: set once a thing has come to rest on a
- * surface, and the reason a weapon still bouncing cannot be picked up
- * (`0x45ae90`, in `walk.ts`). Everything this brain drives is standing on a
- * floor, so it is always set, and the branch that depends on it is always taken.
+ * `obj+0x30` is the mover's at-rest word: `0x43031c` writes 1 when `obj+0xa`
+ * and `obj+0xc` are both zero and `0x430314` writes 0 while either is not.
  */
-const SETTLED = true;
+function settled(e: Enemy): boolean {
+  return ahead(e) === 0 && e.vy === 0;
+}
 
 /**
  * `initknotboy`'s machine, states 1, 2, 4, 5, 7 and 8.
@@ -336,7 +334,9 @@ export const knotboy: Brain = (e, foe, run, k) => {
     state !== 8 &&
     state !== 9
   ) {
-    e.facing = k.player.x > e.x ? -1 : 1;
+    // the mirror is written; the slide under it (`obj+0xc`) is not
+    const away = k.player.x > k.anchorX(e) ? -1 : 1;
+    if (away !== e.facing) turn(e);
     return install(e, KNOTBOY.saunter);
   }
 
@@ -348,15 +348,18 @@ export const knotboy: Brain = (e, foe, run, k) => {
      * nailed down — and then asks `0x434200(player.point, AI+0xa)`, the player's
      * own point inside the four words the creator copied off the record. Not a
      * radius and not the room. {@link Enemy.fighting} is exactly that test.
-     * State 0 is the port's name for the same thing once the player has left.
+     * State 0 is a page-spawned one that has not been installed into anything.
+     *
+     * `0x437c58` sounds 8 as it goes, which is the page's {@link Foe.wake}
+     * sound, played already on the frame it woke — so it is not said twice.
      */
     case 0:
     case 1: {
       e.vx = 0;
       e.vy = 0;
+      e.speed = 0;
       if (!e.fighting) return install(e, KNOTBOY.stand);
-      // `0x437c58` — and then it is walking at you on the very same frame
-      k.say(e, KNOTBOY.wake);
+      // `0x437c65` — and then it is walking at you on the very same frame
       return install(e, KNOTBOY.approach);
     }
     /**
@@ -367,7 +370,7 @@ export const knotboy: Brain = (e, foe, run, k) => {
      */
     case 2: {
       // `0x437c72` — and it does not return: it turns and carries on
-      if (t.forward < 0) e.facing = -e.facing;
+      if (t.forward < 0) turn(e);
       // `0x437c76` — the stuck-in-an-obstacle leap, which this port cannot reach
       switch (tag) {
         case 0:
@@ -416,18 +419,13 @@ export const knotboy: Brain = (e, foe, run, k) => {
         case 0:
         case 1: {
           // `0x437d82` — a facing that disagrees with the stride is turned round
+          // (`0x437d9e`: `xor al, 1` on the mirror, the slide left as it is)
           if (adrift(e)) {
-            e.facing = -e.facing;
+            turn(e);
             return install(e, KNOTBOY.approach);
           }
-          /**
-           * `0x437db2` — and below twenty of speed it simply walks again.
-           *
-           * `e.vx` is flat zero here, so this is the branch a keeper always
-           * takes and the two below it are written from the executable rather
-           * than from anything this port can currently reach. See {@link NO_FLAG}.
-           */
-          if (Math.abs(e.vx) < 20) return install(e, KNOTBOY.approach);
+          // `0x437db2` — and below twenty of speed it simply walks again
+          if (Math.abs(ahead(e)) < 20) return install(e, KNOTBOY.approach);
           // `0x437dc3` — still moving and he is behind: one step back
           if (t.forward < 0) return install(e, KNOTBOY.back);
           // `0x437dca` — still moving, and only the 150…400 band commits
@@ -468,18 +466,18 @@ export const knotboy: Brain = (e, foe, run, k) => {
         /**
          * `0x437e46` — the single backward frame, and it ends facing him.
          *
-         * Two ways out and they land in the same place: `obj+0x30` set, which is
-         * every keeper standing on a floor ({@link SETTLED}), or a stride
-         * disagreeing with the facing. Both turn towards the player and install
-         * the stance. Only a keeper that is airborne AND still moving the way it
-         * faces repeats the step, which is the branch this port cannot reach.
+         * Two ways out and they land in the same place: `obj+0x30` set — at
+         * rest ({@link settled}) — or a slide disagreeing with the facing. Both
+         * turn towards the player and install the stance. Still sliding the way
+         * it faces, `0x437e74` puts the step on again, rewinding it, each time
+         * it ends.
          */
         case 5: {
-          if (SETTLED || adrift(e)) {
-            if (t.forward < 0) e.facing = -e.facing;
+          if (settled(e) || adrift(e)) {
+            if (t.forward < 0) turn(e);
             return install(e, KNOTBOY.stance);
           }
-          return done ? install(e, KNOTBOY.back) : false;
+          return done ? rewind(e, KNOTBOY.back) : false;
         }
         default:
           return false;
@@ -522,17 +520,13 @@ export const knotboy: Brain = (e, foe, run, k) => {
            * this order: something collided with it (`obj+0x2a`, never set in
            * this port), the player is behind it, or it has slowed below ten.
            *
-           * That last one is the real rule and the one the port changes.
-           * `obj+0xc` is the speed `0x42f8b0` has been adding the script's own
-           * strides to — the walk in puts roughly fifty on it across its six
-           * frames and the floor bleeds it off again — so on the disc the strike
-           * lands on the frame the lunge runs out of momentum. {@link Enemy.vx}
-           * is zero for a live foe here, so the port takes the branch at once
-           * and the wind-up cel is spent in a single tick. It is written as the
-           * executable has it; the fix is a stride-carrying `vx`, not a number
-           * invented in this file.
+           * That last one is the real rule. `obj+0xc` is the speed `0x42f8b0`
+           * has been adding the script's own strides to — the walk in puts
+           * forty-odd on it across its six frames and the 0.05 friction bleeds
+           * it off slowly — so the strike lands on the frame the lunge runs out
+           * of momentum.
            */
-          if (t.forward >= 0 && Math.abs(e.vx) >= 10) return false;
+          if (t.forward >= 0 && Math.abs(ahead(e)) >= 10) return false;
           // `0x438051` — 10, on the frame it commits
           k.say(e, KNOTBOY.swing);
           return install(
@@ -559,7 +553,8 @@ export const knotboy: Brain = (e, foe, run, k) => {
     case 8: {
       if (!done) return false;
       if (!k.player.down) return install(e, KNOTBOY.approach);
-      return install(e, KNOTBOY.saunter);
+      // `0x4380ad` — the same script again, from its first cel
+      return rewind(e, KNOTBOY.saunter);
     }
     default:
       return false;

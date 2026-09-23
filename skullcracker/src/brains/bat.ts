@@ -117,12 +117,14 @@ import {
   type Brain,
   type BrainCtx,
   type Enemy,
+  type Reaction,
   TICK_SCALE,
 } from "./kit";
 import type { FoeAnim } from "../foes";
 
 /**
- * State 4 and the hit handler — read, not done, because the page owns them.
+ * State 4 and the hit handler — the page plays them, and {@link batReacts}
+ * does the throw and the removal.
  *
  * - **state 4, `0x42329e`, the death.** `0x42f850(obj, 1.0f)` turns its gravity
  *   back on — the creator gave it **zero** (`0x422e5f`), which is why a live bat
@@ -140,8 +142,7 @@ import type { FoeAnim } from "../foes";
  * - **`obj+0x1a`, the strength percent.** `0x422f30` zeroes it at the top of
  *   every think and `0x423199` sets it to **0x14** — twenty — for the two dive
  *   tags that carry the strike, and for nothing else; the steep dive, tag 3,
- *   goes in at zero. `0x430470` scales the shove it lands by that. Nothing hits
- *   the player back in this port, so it is read and spends nothing.
+ *   goes in at zero. {@link Enemy.strength} carries it.
  * - **`obj+0x22 |= 0xc`, `0x422e75`.** Bits 4 and 8 are the two horizontal wall
  *   bounces (`0x430072`, `0x4300e9`) — a bat rebounds off the room's left and
  *   right edges rather than walking through them — but its restitution
@@ -348,22 +349,15 @@ function restart(e: Enemy, a: FoeAnim): false {
  * Every tag a bat owns carries one `dx` across all its cels, so the frame index
  * does not have to be found: the first entry is the frame's.
  *
- * It is spent here at half strength every TICK rather than whole once a frame,
- * which sums to the same acceleration and needs no frame-edge test — and a test
- * on `e.clock` would be wrong anyway, since `0x423189` reinstalls the dive on
- * top of itself and rewinds the clock while it does. Hence `TICKS` twice: once
- * to turn the engine's pixels-a-FRAME into this page's pixels-a-tick, and once
- * to split the frame's impulse across the two ticks that make it up.
+ * The brain is called once an engine frame, as the think is, so the impulse is
+ * added whole once a call and converted once into this page's pixels a tick.
  */
 function fly(e: Enemy): void {
   const dx = e.anim.dx?.[0] ?? 0;
   if (dx !== 0) {
     const step = dx / DIVISOR;
     e.vx +=
-      (step < 0 ? -Math.ceil(-step) : Math.ceil(step)) *
-      e.facing *
-      TICKS *
-      TICKS;
+      (step < 0 ? -Math.ceil(-step) : Math.ceil(step)) * e.facing * TICKS;
   }
   const cap = CAP * TICKS;
   e.vx = Math.max(-cap, Math.min(cap, e.vx));
@@ -386,6 +380,9 @@ export const bat: Brain = (e, foe, run, k) => {
   const t = k.track(e, BAT.bands);
   // `0x41eb39` — `AI+2`, the dive counter, seeded zero by the creator
   e.beat ??= 0;
+  // `0x422f30` — the strength is zeroed at the top of every think; only the
+  // shallow dive (`0x423199`) puts anything back
+  e.strength = 0;
   // the mover's impulse and then `0x422f0e`'s clamp, in that order
   fly(e);
   // ...and the ceiling the engine has and this page does not — {@link CEILING}
@@ -395,13 +392,9 @@ export const bat: Brain = (e, foe, run, k) => {
      * ---- 0: not a state. `0x422f36`'s `dec eax` drops kind 0 into the common
      * return, and nothing installs `0x46f050` anyway ({@link BAT.orphan}).
      *
-     * The only thing that can put a bat here is this page: `stepFight` sets
-     * `e.script = 0` on the frame the player leaves a foe's rect. Nothing in
-     * `SC.EXE` ever takes a woken bat back to a dormant state — `0x46f130` is
-     * installed exactly twice, by the creator at `0x41eb51` and by state 1 on
-     * itself at `0x422f7f` — so that reset has no counterpart here and should
-     * be suppressed for this class. Falling through to state 1, the state a
-     * newly created bat is in, is the least surprising thing to do with it.
+     * A bat arrives with no script of its own — the page spawns it on its
+     * dormant cel with `e.script` unset — and the creator installs `0x46f130`
+     * (`0x41eb51`), so an unset script is state 1 and falls through to it.
      */
     case 0:
     /* falls through */
@@ -482,10 +475,9 @@ function fall(e: Enemy, k: BrainCtx, done: boolean): boolean {
      */
     case 1:
       // the engine's ten a frame² over the divisor tag 0 rolled, truncated by
-      // `0x45f270` exactly as `0x42f850` truncates — 10, 5 or 3
-      // ...spent per TICK rather than per frame, which is the same acceleration:
-      // `g` pixels a frame² is `g * TICKS` more velocity a frame, half of it a tick
-      e.vy += Math.trunc(ENGINE_GRAVITY / (e.nerve || 1)) * TICKS * TICKS;
+      // `0x45f270` exactly as `0x42f850` truncates — 10, 5 or 3 — added once
+      // a call, which is once an engine frame
+      e.vy += Math.trunc(ENGINE_GRAVITY / (e.nerve || 1)) * TICKS;
       if (!done) return false;
       return restart(e, BAT.level);
     /**
@@ -522,7 +514,7 @@ function flight(
   t: ReturnType<BrainCtx["track"]>,
   done: boolean,
 ): boolean {
-  const below = k.player.y - e.y;
+  const below = k.player.anchor - k.anchorY(e);
   switch (e.tag ?? 0) {
     /**
      * tag 0, `0x4230a3` — the cruise, and the state a bat spends its life in.
@@ -577,7 +569,9 @@ function flight(
       // `0x423183` — and it is the PREVIOUS frame's `obj+0xa`, read before the
       // one below is written
       if (2 * e.vy <= e.vx) restart(e, BAT.glide);
-      // `0x423199` — strength 20, for the shove nothing in this port takes
+      // `0x423199` — strength 20: the dive's cels carry a strike box and no
+      // pair, so the blow is the bat's own velocity at a fifth (`0x42f910`)
+      e.strength = 0x14;
       // `0x4231af`/`0x4231bc` — seven a frame down, or level inside 45 pixels
       e.vy = (below > PULL_UP ? 7 : 0) * TICKS;
       /**
@@ -589,7 +583,7 @@ function flight(
        * one taken here and the dive always ends the other way.
        */
       // `0x4231f4` — he is behind it, or he is above it: break off and climb
-      if (t.forward < TURN_DIVE || k.player.y < e.y) {
+      if (t.forward < TURN_DIVE || k.player.anchor < k.anchorY(e)) {
         e.facing = -e.facing;
         return restart(e, BAT.cruise);
       }
@@ -607,7 +601,7 @@ function flight(
       // `0x423238`/`0x423245`
       e.vy = (below > PULL_UP ? 10 : 2) * TICKS;
       // `0x42324b` — the same two tests as the shallow dive
-      if (t.forward < TURN_DIVE || k.player.y < e.y) {
+      if (t.forward < TURN_DIVE || k.player.anchor < k.anchorY(e)) {
         e.facing = -e.facing;
         return restart(e, BAT.cruise);
       }
@@ -615,5 +609,31 @@ function flight(
       return done ? restart(e, BAT.stoop) : false;
   }
 }
+
+/** `0x423334` — `obj+0xa = 0xffd8`, written outright by the hit handler */
+const DEATH_LIFT = -40;
+
+/**
+ * State 4, `0x42329e`, while the page plays `0x46f140`.
+ *
+ * The hit handler throws the body up at forty a frame (`0x423334`) and the
+ * death's own `0x42f850(obj, 1.0f)` lets {@link Foe.gravity} bring it down;
+ * `0x4232b2` removes it the frame `obj+0x2e` says it has landed: the body
+ * lies for ever ({@link Foe.linger}) until then, and this lets it go. `e.threw`
+ * marks the throw spent.
+ */
+export const batReacts: Reaction = (e, foe) => {
+  if (e.state !== "dead" || e.anim !== foe.death) return;
+  // `0x4232a9` — `obj+0x10 = -150`, every frame of state 4: it falls that far
+  // through the floor before `obj+0x2e` calls it landed
+  e.floor = -150;
+  if (!e.threw) {
+    e.threw = true;
+    e.vy = DEATH_LIFT * TICKS;
+    return;
+  }
+  // landed: the page's dead branch zeroes `vy` and forgets the last base
+  if (e.vy === 0 && e.lastBase === undefined) e.linger = 0;
+};
 
 export { NOT_HERE as BAT_NOT_HERE, CEILING as BAT_CEILING };

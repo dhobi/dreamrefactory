@@ -10,7 +10,7 @@
  *   - **What a game's full run IS.** `test:browser` is the right answer for
  *     exactly one of the three. Dust's runs three short suites while its depth
  *     is `speedrun:legs`, the fifty-five legs off the run sheet; Skull Cracker's
- *     opens the menu and stops, and its thirty-six suites are `test:browser:all`.
+ *     opens the menu and stops, and its page suites together are `test:browser:all`.
  *     With one default for all three, a `full-run-skullcracker` label ran the
  *     menu and reported the pull request green.
  *   - **Which cron means which.** A scheduled run carries no inputs at all. The

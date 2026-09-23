@@ -108,7 +108,22 @@
  * needs to keep playing; returning `true` would freeze the thing mid-swing with
  * its frame unspent.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import {
+  install,
+  type Brain,
+  type BrainCtx,
+  type CastKit,
+  type Enemy,
+  type Reaction,
+} from "./kit";
+
+/**
+ * The corpse lies lower: state 10 writes `obj+0x10 = -12` on every frame its
+ * count lasts (`0x4197ec`), the only write to the floor offset in the class.
+ */
+export const tubeCorpse: Reaction = (e) => {
+  if (e.state === "dead") e.floor = -12;
+};
 
 /**
  * The hit reactions, states 9 and 10, and the handler that picks between them.
@@ -137,30 +152,81 @@ import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
 const NOT_HERE = "0x419990, 0x4197a3, 0x4197bc" as const;
 
 /**
- * The two things a tube boy puts into the world, and why neither is below.
+ * The two things a tube boy puts into the world.
  *
  * Both build an object of the class at `[0x46bfb4]` — registered by `0x418ee0`
  * one call after the tube's own `0x419200`, sharing its cel bank `0x4a5178` —
  * copy the tube's mirror flag and point into it, offset it forward and **140
  * pixels up** (`sub word ptr [esi+6], 0x8c`), and install one of that class's
- * scripts. A {@link Brain} cannot spawn: the page hands it one enemy and takes
- * a boolean back, so these are read and named, not wired. Nothing in this port
- * hits the player anyway.
+ * scripts. The class's create (`0x418f17`) gives it a divisor of **13** and
+ * `0x42f850(obj, 0.6)` — a pull of 6 — and its think (`0x418fd0`) holds
+ * `obj+0x1a` at `0x64` in flight.
  *
  * - **`0x419860`**, from state 8 tag 0 — the throw. It puts the thing **70**
  *   pixels in front (`0x41989f`: `and eax, 0x8c; sub eax, 0x46`, so +0x46 east
  *   and −0x46 west) and then rolls `0x434540(2)`: 1 installs `0x46d658` tag 0,
  *   cel 5520 at **dx 400, dy −100**, and 2 installs tag 2, the same cel at
- *   **dx 200**. Tags 1 and 3 of that script are the ten-cel burst it breaks
- *   into. The caller at `0x41973e` spawns them in a loop — one, then another
- *   for as long as a fresh `0x434540(5)` still beats the count — so a throw is
- *   one to four of them.
+ *   **dx 200, dy −100**. Tags 1 and 3 are the ten cels it spins through in the
+ *   air, and they hold their last. The caller at `0x41973e` spawns them in a
+ *   loop — one, then another for as long as a fresh `0x434540(5)` still beats
+ *   the count — so a throw is one to four of them. `0x41902c`: on the floor,
+ *   against anything, or a thousand from the player in X, it floods the window
+ *   with palette 5 (`0x40e4c0`), says 0x2e and breaks on `0x46d740`, whose end
+ *   (`0x419169`) removes it.
  * - **`0x419910`**, from state 2 tag 0 on frame index 2 — the flip's breath. It
  *   puts the thing **40** pixels in front (`0x41994f`: `and eax, 0x50; sub eax,
- *   0x28`) and installs `0x46d710` tag 0, cel 5527 drifting **dy −30** into a
- *   four-cel fade.
+ *   0x28`) and installs `0x46d710` tag 0, cel 5527 lifting **dy −30**, whose
+ *   end hands to tag 1's four-cel fade (`0x41913d`) and whose end removes it
+ *   (`0x419163`).
  */
 const SPAWNS = "0x419860, 0x419910" as const;
+
+/** `0x46d740` — the glass breaking, one frame a cel, and gone at its end */
+const SHATTER = { cels: [5530, 5531, 5532, 5534, 5536, 5538, 5539], hold: 1 };
+
+/**
+ * `0x46d658` tag 0 or 2 then 1 or 3 — the spin, whose last cel holds. The launch
+ * frame's `dx` and `dy` go in once through the class's 13 (`0x42f8b0`, away from
+ * zero): 400 is 31 and 200 is 16, and −100 is a rise of 8.
+ */
+const shard = (dx: number, tag: number): CastKit => ({
+  cels: [5520, 5521, 5522, 5523, 5524, 5525, 5526, 5527, 5528, 5529, 5520],
+  hold: 1,
+  speed: Math.ceil(dx / 13),
+  rise: Math.ceil(100 / 13),
+  // `0x418f41` — 0.6 through `0x42f850`
+  pull: 6,
+  ahead: 0x46,
+  lift: 0x8c,
+  blow: 0x64,
+  // `0x41904f`
+  reach: 0x3e8,
+  impact: SHATTER,
+  // `0x419056`..`0x419064` — the flash is unconditional, so no band limits it
+  bang: { sound: 0x2e, flash: 5, near: { x: Infinity, y: Infinity } },
+  from: `0x419860, script 0x46d658 tag ${tag}`,
+});
+
+/** `0x4198e0` and `0x4198f5` — the roll's two throws */
+export const TUBE_SHARDS: readonly CastKit[] = [shard(400, 0), shard(200, 2)];
+
+/**
+ * `0x419910` — the breath: `0x46d710`, one frame of 5527 with `dy −30` (a rise
+ * of 3 through the 13) and four of fade, five frames and gone.
+ */
+export const TUBE_BREATH: CastKit = {
+  cels: [5527, 5526, 5525, 5524, 5523],
+  hold: 1,
+  speed: 0,
+  rise: Math.ceil(30 / 13),
+  pull: 6,
+  ahead: 0x28,
+  lift: 0x8c,
+  // `0x419150`
+  blow: 0x64,
+  life: 5,
+  from: "0x419910, script 0x46d710",
+};
 
 /**
  * Its repertoire, by kind and tag, straight out of `0x46d780`…`0x46da30`.
@@ -336,19 +402,23 @@ export const TUBE = {
 } as const;
 
 /**
- * The two footstep calls, and why they are named rather than played.
+ * The two footstep calls.
  *
  * State 1 opens `cmp word ptr [esi+0x42], 3` and `cmp word ptr [esi+0x42], 7`
  * (`0x419385` and `0x41939f`) and says {@link TUBE.step} on each — `obj+0x42`
- * being the frame index `0x45d090` rewinds at `0x45d0ab`. That is a once-per-
- * frame edge, and the engine gets it for free because its think function runs
- * once per engine frame; this page runs a brain once per TICK, several to the
- * frame, and hands it neither the tick size nor a scratch word to latch the
- * edge in. Firing them off `e.clock` alone would re-trigger the sample every
- * tick the index sat on 3. So: read, addressed, and left — the alternative was
- * inventing a tick constant, and this module invents nothing.
+ * being the frame index `0x45d090` rewinds at `0x45d0ab`. The think runs once
+ * an engine frame and the walk holds each cel for two, so each call is made on
+ * both of the frames its cel shows, as the executable makes it.
  */
 const FOOTSTEPS = "0x419385, 0x41939f" as const;
+
+/**
+ * `obj+0x42` as the think reads it: the animator (`0x45d0f0`) has already run
+ * once for every frame since the install, advancing after `ticksPerFrame` of
+ * them.
+ */
+const frameIndex = (e: Enemy): number =>
+  Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
 
 /**
  * `inittube`'s own machine, states 0 to 8.
@@ -391,6 +461,8 @@ export const tube: Brain = (e, foe, run, k) => {
      * The two footstep calls it makes on the way are {@link FOOTSTEPS}.
      */
     case 1:
+      if (frameIndex(e) === 3) k.say(e, TUBE.step[0]);
+      if (frameIndex(e) === 7) k.say(e, TUBE.step[1]);
       if (!done) return false;
       // `0x4193c4` — forward distance negative means he got behind it
       if (t.forward < 0) e.facing = -e.facing;
@@ -408,8 +480,13 @@ export const tube: Brain = (e, foe, run, k) => {
     case 2: {
       if (t.forward < 0) e.facing = -e.facing;
       const tag = e.tag ?? 0;
-      // `0x419403`
-      if (tag === 0) return done ? install(e, TUBE.unflip, true) : false;
+      // `0x419403` — and `0x41941a` breathes on frame index 2, asked after the
+      // hand-over, so never on the frame tag 1 goes on
+      if (tag === 0) {
+        if (done) return install(e, TUBE.unflip, true);
+        if (frameIndex(e) === 2) k.cast(e, TUBE_BREATH);
+        return false;
+      }
       // `0x419433`
       if (tag === 1) return done ? install(e, TUBE.stand) : false;
       return false;
@@ -461,7 +538,15 @@ export const tube: Brain = (e, foe, run, k) => {
       // `0x419708`
       if (tag === 0) {
         k.say(e, TUBE.flipSay);
-        return install(e, TUBE.hurl, true);
+        install(e, TUBE.hurl, true);
+        // `0x41973e` — one, then another while a fresh `0x434540(5)` beats the
+        // count, each one `0x419860`'s own `0x434540(2)` between the two throws
+        let thrown = 0;
+        do {
+          thrown += 1;
+          k.cast(e, TUBE_SHARDS[k.roll(2) - 1]);
+        } while (k.roll(5) > thrown);
+        return false;
       }
       // `0x419771` and `0x41978a`
       if (tag === 1 || tag === 3) return install(e, TUBE.stand);

@@ -368,6 +368,13 @@ export interface SbkEntity {
    */
   regionLocation: number;
   /**
+   * The word at +46, the record's last: for a room with no region, how far
+   * below its top the flat floor `0x40bbd0` answers lies (`0x40bcb5` adds it to
+   * +2). MAZE's two floorless rooms carry 255 and 200. It shares the record's
+   * tail with the name's buffer, which is never that long.
+   */
+  floorDrop: number;
+  /**
    * The record's per-instance parameter (+0) — small, signed, and different for
    * each copy of the same kind: `initbeltleft` stores 4, 6, 8 or 10, `door`
    * stores -4, -1, 2, 7 or 8, `initcagedoor` -4 to 4. Direction, speed or
@@ -407,6 +414,12 @@ export interface SbkPlacement {
    * is on rate-1 planes and lines up exactly as stored.
    */
   parallax: number;
+  /**
+   * The word at +10 — the high half of the same dword, read on its own. An
+   * animated placement's script takes it as its hold, in engine frames
+   * (`0x40c165`, reloaded each cel at `0x45d168`).
+   */
+  hold: number;
   /**
    * The plane type, 0..4 — the low byte of +8. The engine builds five display
    * lists and this picks which one the placement joins; a value over 4 is a
@@ -713,6 +726,8 @@ export interface SbkRoom {
   right: number;
   /** the container its floor came from, or 0 for a room with none */
   regionLocation: number;
+  /** {@link SbkEntity.floorDrop} — a floorless room's flat floor, below its top */
+  floorDrop: number;
   /**
    * The record's `flags` (+14) — for a room, the CAMERA's clamp mask.
    *
@@ -769,6 +784,7 @@ export function readRooms(sbk: SbkFile): SbkRoom[] {
       right: e.right,
       regionLocation: e.regionLocation,
       flags: e.flags,
+      floorDrop: e.floorDrop,
       ground: region ? rasteriseGround(region) : null,
       exits: [],
     });
@@ -856,6 +872,7 @@ function readEntities(d: Uint8Array): SbkEntity[] {
       bottom: v.getInt16(at + 6, true),
       right: v.getInt16(at + 8, true),
       regionLocation: v.getInt32(at + 10, true),
+      floorDrop: v.getInt16(at + 46, true),
       flags: v.getInt16(at + 14, true),
       // `!== 0` and not `=== 1`, because that is the test the engine makes:
       // SC.EXE's collector at 0x40b850 does `cmp word ptr [rec+0x16], 0; je skip`
@@ -916,6 +933,7 @@ function readBackdrop(d: Uint8Array): SbkPlacement[] {
       mirror: v.getInt16(at + 6, true) !== 0,
       // see the interface: the low byte is the plane, the rest is the depth
       parallax: (v.getInt32(at + 8, true) >> 8) / 256,
+      hold: v.getInt16(at + 10, true),
       plane: v.getUint8(at + 8),
       flags: v.getUint16(at + 16, true),
       frames,

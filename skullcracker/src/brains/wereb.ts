@@ -56,11 +56,20 @@
  * `0x44e5c2`. That is the enemy health bar, the page owns it ({@link Foe.panel}),
  * and it moves nothing — so it is read here and not done.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import {
+  install,
+  rewind,
+  type Brain,
+  type BrainCtx,
+  type Enemy,
+  type Reaction,
+} from "./kit";
 
 /**
  * The hit-reaction states — 4, 6 and 7 — and what the class's own handler
- * (`0x44f8b0`) does with them. Read, not done: the page owns those animations.
+ * (`0x44f8b0`) does with them. The page plays the animations; the drain of
+ * state 4 is {@link werebReacts}, its end is state 4 in {@link wereb}, and the
+ * flinch hands back to the stance through {@link FoeAnim.resume}.
  *
  * - **`0x44f8b5`, the strength gate.** The handler opens on `[attacker+0x1a]`,
  *   the striking object's strength percent. `-9` (`0xfff7`) is a code, not a
@@ -75,7 +84,7 @@ import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
  *   if anything is left, and if not it sets `AI+2` to 200 corpse frames and
  *   installs the death. The script itself is twelve frames of the walk cels at
  *   one tick each — twice the walk's rate — so the thing scuttles while it is
- *   being drained. Pure health subtraction cannot express that.
+ *   being drained.
  * - **6**, `0x477820`, the flinches: FOUR of them, one cel each (5080..5083) at
  *   four ticks, and `0x44f9d3` picks with `0x434540(4) - 1` — a flat roll, not
  *   the punk's facing test and not a dent count. `0x44f7e2`, the state, returns
@@ -86,7 +95,7 @@ import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
  *   `0x44f802`, the corpse state, counts `AI+2` down from `[0x46b204]`, holds
  *   `obj+0x10` at -27, and on the frame it expires is the one and only place in
  *   this whole function that answers **1** instead of 0.
- * - **the growl**, `0x44f942`: `0x434540(4) + 0x23`, so 0x23..0x26 — four of
+ * - **the growl**, `0x44f942`: `0x434540(4) + 0x23`, so 0x24..0x27 — four of
  *   them — every time a blow lands.
  */
 const NOT_HERE = "0x44f8b0, 0x44f735, 0x44f7e2, 0x44f802" as const;
@@ -221,11 +230,10 @@ export const WEREB = {
  * `atBound` — and `0x456590` is the one at its back. This class asks both, and
  * asks the second one in the two places it is about to walk backwards, so the
  * distinction is load-bearing rather than cosmetic. Sixty is `0x4565b7`'s own
- * `cmp eax, 0x3c`.
+ * `cmp eax, 0x3c`, and the bounds are the mover's, not the rect
+ * ({@link Foe.span}) — which is the kit's {@link BrainCtx.atRear}.
  */
-function atRear(e: Enemy): boolean {
-  return Math.abs(e.x - (e.facing > 0 ? e.left : e.right)) <= 60;
-}
+const atRear = (e: Enemy, k: BrainCtx): boolean => k.atRear(e);
 
 /**
  * `initwereb`'s own machine, states 0, 1, 2, 3 and 5.
@@ -259,8 +267,7 @@ function atRear(e: Enemy): boolean {
  * the class message proc already seeded at `0x44f32d`, and the innermost band —
  * `0x44f5db` and `0x44f5fa` — writes **0** into it as it commits to the step
  * that ends the stand-off, so a LINK that has decided to close stops pushing
- * you. The port has no field for it ({@link Enemy} carries no shove weight), so
- * it is carried as read on both sites and spends nothing.
+ * you ({@link Enemy.shove}).
  */
 export const wereb: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
@@ -282,7 +289,8 @@ export const wereb: Brain = (e, foe, run, k) => {
       // `0x44f450`
       if (t.forward < 0) e.facing = -e.facing;
       // `0x44f461`, and the page keeps the rect test as `e.fighting`
-      return e.fighting ? install(e, WEREB.stance) : false;
+      // `0x44f35e` installed `0x477610`, one cel with no stride
+      return install(e, e.fighting ? WEREB.stance : WEREB.patrol);
     // ---- 1, `0x44f48b`: the stance, and the only state that thinks every frame
     case 1:
       return decide(e, k, t);
@@ -299,7 +307,7 @@ export const wereb: Brain = (e, foe, run, k) => {
     case 2: {
       // `0x44f60a` — `cmp eax, 3; ja` drops a tag past the table's four entries
       if ((e.tag ?? 0) > 3) return false;
-      const wall = (e.tag ?? 0) === 2 ? atRear(e) : k.atBound(e);
+      const wall = (e.tag ?? 0) === 2 ? atRear(e, k) : k.atBound(e);
       // `0x44f61f`/`0x44f651` — script finished OR out of room, whichever first
       if (!done && !wall) return false;
       return install(e, WEREB.stance);
@@ -347,13 +355,47 @@ export const wereb: Brain = (e, foe, run, k) => {
      */
     case 5:
       if (!done) return false;
-      if (k.player.down) return install(e, WEREB.mill);
+      if (k.player.down) return rewind(e, WEREB.mill);
       e.x = e.home ?? e.x;
       e.fighting = false;
       return install(e, WEREB.patrol);
+    /**
+     * ---- 4, `0x44f74c`: the burn has run out ({@link werebReacts} spent it).
+     *
+     * `0x44f757`: anything left and it is back in the stance; nothing, and it
+     * dies — `AI+2 = 200` corpse frames (`0x44f776`) and the death script, with
+     * no death sound and no award, because this arm calls neither.
+     */
+    case 4:
+      if (e.hp > 0) return install(e, WEREB.stance);
+      if (foe.death) {
+        e.state = "dead";
+        e.anim = foe.death;
+        e.clock = 0;
+        e.swing = false;
+        e.linger = BURNT_CORPSE;
+      }
+      return false;
     default:
       return false;
   }
+};
+
+/** `0x44f776` — `mov word ptr [edi+2], 0xc8` */
+const BURNT_CORPSE = 0xc8;
+
+/**
+ * State 4 while it plays — `0x44f735`, once an engine frame: ten off the
+ * health (`sub word ptr [edi], 0xa`) and a growl `0x23` (`0x44f73d`) on every
+ * one of `0x477700`'s twelve frames.
+ */
+export const werebReacts: Reaction = (e, foe, _run, k) => {
+  // `0x44f85d` — state 7, the death and the corpse, lies 27 into the ground
+  // (`obj+0x10 = 0xffe5`) on every frame it plays
+  if (e.state === "dead") e.floor = -27;
+  if (e.state !== "flinch" || e.anim !== foe.burns?.anim) return;
+  e.hp -= 0xa;
+  k.say(e, 0x23);
 };
 
 /**
@@ -370,6 +412,7 @@ function decide(
   t: ReturnType<BrainCtx["track"]>,
 ): boolean {
   // `0x44f48b` — obj+0x26 = 8, the shove weight, re-asserted every frame
+  e.shove = undefined;
   // `0x44f497`
   if (t.forward < 0) e.facing = -e.facing;
   /**
@@ -377,8 +420,8 @@ function decide(
    *
    * Two flips, not one: `0x44f499` has already turned it to face him and
    * `0x44f4a7` turns it straight back, so whichever side he fell on the LINK
-   * ends up pointing away from him and the mill's `+75` carries it off. The
-   * street punk does the opposite at `0x44e6f7` and stands over you.
+   * ends up pointing away from him and the mill's `+75` carries it off — the
+   * same thing the street punk arrives at by a direct write at `0x44e710`.
    */
   if (k.player.down) {
     e.facing = -e.facing;
@@ -399,6 +442,7 @@ function decide(
    * shared zero return: the facing has already been flipped above, so the frame
    * it turns is a frame it does nothing else.
    */
+  if (t.band < 0) return false;
   switch (t.band) {
     /**
      * Beyond 350 — the lunge, three cels of 300/225/300. `0x44f4fe` asks
@@ -436,10 +480,11 @@ function decide(
      * threshold the LINK backs off six cels, and the only thing that stops it is
      * having nowhere to back into — `0x456590`, the bound at its BACK, at which
      * point it lunges past you instead. Both arms then zero `obj+0x26`
-     * (`0x44f5db`, `0x44f5fa`), which the port carries as read.
+     * (`0x44f5db`, `0x44f5fa`).
      */
     default:
-      return atRear(e) ? install(e, WEREB.lunge) : install(e, WEREB.away);
+      e.shove = 0;
+      return atRear(e, k) ? install(e, WEREB.lunge) : install(e, WEREB.away);
   }
 }
 

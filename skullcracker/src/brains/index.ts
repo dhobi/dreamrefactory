@@ -13,35 +13,35 @@
  * says so with the addresses to prove it rather than leaving a gap.
  */
 import type { Brain, Reaction } from "./kit";
-import { arm } from "./arm";
-import { bat } from "./bat";
-import { batboy } from "./batboy";
-import { coke } from "./coke";
+import { arm, armReacts } from "./arm";
+import { bat, batReacts } from "./bat";
+import { batboy, gangCorpse } from "./batboy";
+import { coke, cokeGate } from "./coke";
 import { cop } from "./cop";
-import { dog } from "./dog";
-import { eyeball } from "./eyeball";
-import { ghengis } from "./ghengis";
-import { hardcore } from "./hardcore";
+import { dog, dogReacts } from "./dog";
+import { eyeball, eyeballReacts } from "./eyeball";
+import { ghengis, ghengisReacts } from "./ghengis";
+import { hardcore, hardcoreReacts } from "./hardcore";
 import { hydrant } from "./hydrant";
 import { igor } from "./igor";
 import { knifeboy } from "./knifeboy";
 import { knotboy } from "./knotboy";
-import { kragg, kraggReacts } from "./kragg";
+import { kragg, kraggGate, kraggReacts } from "./kragg";
 import { mailbox } from "./mailbox";
 import { maskboy } from "./maskboy";
-import { ox } from "./ox";
-import { puke } from "./puke";
-import { rat } from "./rat";
-import { skel } from "./skel";
+import { ox, oxReacts } from "./ox";
+import { puke, pukeCorpse } from "./puke";
+import { rat, ratReacts } from "./rat";
+import { skel, skelReacts } from "./skel";
 import { slurp } from "./slurp";
-import { tube } from "./tube";
+import { tube, tubeCorpse } from "./tube";
 import { vpriest, vpriestReacts } from "./vpriest";
-import { wbooly } from "./wbooly";
-import { werea } from "./werea";
-import { wereb } from "./wereb";
+import { wbooly, wboolyGate } from "./wbooly";
+import { werea, wereaReacts } from "./werea";
+import { wereb, werebReacts } from "./wereb";
 import { werec, werecReacts } from "./werec";
-import { wered } from "./wered";
-import { wraith } from "./wraith";
+import { wered, weredGate, weredReacts } from "./wered";
+import { wraith, wraithGate, wraithReacts } from "./wraith";
 import { zomb } from "./zomb";
 
 export const BRAINS: Readonly<Record<string, Brain | undefined>> = {
@@ -82,7 +82,41 @@ export const BRAINS: Readonly<Record<string, Brain | undefined>> = {
  * see {@link Reaction}. Everything else reacts by animation alone.
  */
 export const REACTIONS: Readonly<Record<string, Reaction>> = {
+  initarm: armReacts,
+  initdog: dogReacts,
+  initrat: ratReacts,
+  initbat: batReacts,
+  initbatboy: gangCorpse,
+  initeyeball: eyeballReacts,
+  initghengis: ghengisReacts,
+  initknifeboy: gangCorpse,
+  initknotboy: gangCorpse,
+  initmaskboy: gangCorpse,
+  inithardcore: hardcoreReacts,
   initkragg: kraggReacts,
+  initox: oxReacts,
+  initpuke: pukeCorpse,
+  initskel: skelReacts,
+  inittube: tubeCorpse,
   initvpriest: vpriestReacts,
+  initwerea: wereaReacts,
+  initwereb: werebReacts,
   initwerec: werecReacts,
+  initwered: weredReacts,
+  initwraith: wraithReacts,
+};
+
+/**
+ * The classes whose hit handler asks the class's own STATE before it reads the
+ * blow — see {@link kraggGate}, the one that does. `null` is a blow that lands
+ * as nothing at all.
+ */
+export const GATES: Readonly<
+  Record<string, typeof kraggGate>
+> = {
+  initkragg: kraggGate,
+  initwbooly: wboolyGate,
+  initwered: weredGate,
+  initcoke: cokeGate,
+  initwraith: wraithGate,
 };

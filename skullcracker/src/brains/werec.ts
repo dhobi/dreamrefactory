@@ -91,11 +91,12 @@
  */
 import {
   install,
+  rewind,
   type Brain,
   type BrainCtx,
+  type CastCode,
   type CastKit,
   type Enemy,
-
   type Reaction,
 } from "./kit";
 
@@ -110,15 +111,14 @@ import {
  *   and forty either side (`0x45269b`, `0x4526a8`), fires a shot from there,
  *   flips its own mirror flag and puts the point back; then when the script ends
  *   it squeals `0x21`, clears the bar, installs the death and pays **0x104** to
- *   the score (`0x452737`). The spawner is here now and the shot it fires is
- *   {@link WEREC_SHOT} — `0x4526db` passes SELF as the target, so the gap is
- *   zero and every one of them comes out flat. What is still out of reach is
- *   the state: the page has no notion of a blow strength of −9, and a brain is
- *   never called during {@link Foe.death}, which is where these five frames
- *   live. It would want the death path to run a think, not another seam.
+ *   the score (`0x452737`). The page plays it as {@link Foe.burns} with
+ *   `fatal`, and the shots are {@link werecReacts} — `0x4526db` passes SELF as
+ *   the target, so the gap is zero and every one of them comes out flat. One
+ *   thing differs: this death's corpse lies `0xc8` frames (`0x452731`), and the
+ *   page lays every death of the class down for the same {@link Foe.linger}.
  * - **7**, `0x452898`: the flinch, and it ends in the stance rather than in
- *   anything of its own — one branch shorter than the punk's, which is what
- *   {@link Foe.pick} already says.
+ *   anything of its own — one branch shorter than the punk's. The flinch's
+ *   {@link FoeAnim.resume} is that stance.
  * - **8**, `0x4528ba`: the corpse. It zeroes the shove weight, counts `AI+2`
  *   down as the linger, holds `obj+0x10` at −12 while it lasts and is the ONLY
  *   path in the whole function that answers 1 — the frame the object is removed.
@@ -205,6 +205,52 @@ export const WEREC = {
   from: "0x4523d0",
 } as const;
 
+/** `0x452fcc`'s `cmp ax, 0xfff7` — the code a flame carries */
+const BURNS = -9;
+
+/**
+ * `0x452f80` — the shot's own hit handler, which `0x452c83` writes into
+ * `obj+0x12` as the thing is built. Two arms, and both end in the burst:
+ *
+ * ```
+ *   452f8d  strength == 0x65 and obj+0x18 != 1    ; another shot's burst...
+ *   452f9a    0x40f090(0x4a7910, 0x34, self.y)    ; ...sound 0x34
+ *   452fae    0x452ef0(self)                      ; ...shake, and flash if close
+ *   452fbe    0x45d090(self, 0x477c60, 0)         ; ...and burst; answer 1
+ *   452fcc  strength == -9
+ *   452fd7    0x44ff20(self, 0, 0)                ; a flame, from its first stage
+ *   452fdf    ...then the same three calls, and answer 1
+ *   453011  anything else: answer 1
+ * ```
+ *
+ * `0x65` is exactly what `0x452ec0` gives a burst, so the first arm is a
+ * chain: a shot going off sets off every other shot its flash touches. The
+ * `obj+0x18 == 1` guard is the burst script's own kind, and `0x4303b3` makes it
+ * moot in practice — the burst cels 7000..7005 carry no body box, so a shot
+ * that is already bursting is never handed a blow at all. The page makes that
+ * same test before it calls this (see `strikeCast`), and `self.landed` is the
+ * guard here for the record.
+ *
+ * Two things are not carried: the shake (see {@link CastKit.bang}), and
+ * `0x45d090` leaving the velocity alone, so the engine's shot keeps travelling
+ * under its flash. This page plays every impact where it starts, the way it
+ * plays the one on the ground.
+ */
+const shotBursts: CastCode = (self, code, k) => {
+  // `0x452f8d` — a burst's own strength, on a shot that is not bursting yet
+  if (code === WEREC_SHOT.blow && self.landed === undefined) {
+    k.burst();
+    return true;
+  }
+  // `0x452fcc` — the flame, then the same burst
+  if (code === BURNS) {
+    k.burn();
+    k.burst();
+  }
+  // `0x453011` — and every other blow is answered 1 and changes nothing
+  return true;
+};
+
 /**
  * What `0x452b20` builds — one shot, whichever of the two shapes it is.
  *
@@ -218,7 +264,7 @@ export const WEREC = {
  * attack is that **only 7000, 7001 and 7002 carry a blow pair** (`dx 43`);
  * 6004, 6005 and 6006 carry a strike box and nothing to put through it.
  */
-const WEREC_SHOT: CastKit = {
+export const WEREC_SHOT: CastKit = {
   // `0x477c38` kind 0: tag 0 is two records of 6004, tag 1 is 6005 and tag 2
   // is 6006, one engine frame each. `0x452dbf` leaves tag 0 the frame the
   // thing starts to FALL, so the launch pair is only ever what it looks like
@@ -252,6 +298,15 @@ const WEREC_SHOT: CastKit = {
    * figure `0x418621` keeps the gob to.
    */
   reach: 0x3e8,
+  /**
+   * `0x452e0e`, `0x452e8e`, `0x452f9a` and `0x452fdf` — every burst install
+   * plays the level bank's 0x34 first, and `0x452f2e` floods the window with index
+   * 5 when the player is inside 512 across and 128 up or down of it
+   * (`0x452f21`, `0x452f28`)
+   */
+  bang: { sound: 0x34, flash: 5, near: { x: 0x200, y: 0x80 } },
+  /** `0x452c83` — {@link shotBursts} */
+  onCode: shotBursts,
   from: "0x452b20 / 0x452c50, script 0x477c38 and burst 0x477c60",
 };
 
@@ -264,7 +319,7 @@ const WEREC_SHOT: CastKit = {
  * the lob is meant to fall short.
  */
 function arc(e: Enemy, k: BrainCtx): { vx: number; rise: number } {
-  const v = k.root(Math.abs(e.x - k.player.x) * (WEREC_SHOT.pull ?? 10)) >> 1;
+  const v = k.root(Math.abs(k.anchorX(e) - k.player.x) * (WEREC_SHOT.pull ?? 10)) >> 1;
   return { vx: e.facing * v, rise: v };
 }
 
@@ -273,8 +328,10 @@ function arc(e: Enemy, k: BrainCtx): { vx: number; rise: number } {
  *
  * Flat, and thirteen pixels a frame per step of the counter. `0x452bcd`'s
  * `and eax, 0x1a; sub eax, 0xd` is +13 facing east and −13 facing west, times
- * `AI+6`, so the six shots of a fan go out at 13, 26, 39, 52, 65 and 78 — and
- * the one thrown on a counter of zero does not move at all.
+ * `AI+6`, so the six shots of a fan go out at 13, 26, 39, 52, 65 and 78. The
+ * seventh, on a counter of zero, is not flat: `0x452bb5` sends a zero to the
+ * aimed arc instead. (The death throw aims at ITSELF, so its zero is an arc
+ * across no gap and sits still.)
  */
 const FAN_STEP = 0xd;
 
@@ -351,7 +408,7 @@ export const werec: Brain = (e, foe, run, k) => {
      */
     case 5:
       if (!done) return false;
-      if (k.player.down) return install(e, WEREC.mill);
+      if (k.player.down) return rewind(e, WEREC.mill); // `0x452790`
       e.x = e.home ?? e.x;
       e.fighting = false;
       return install(e, WEREC.idle);
@@ -381,11 +438,17 @@ export const werec: Brain = (e, foe, run, k) => {
          */
         const was = e.side ?? 0;
         e.side = was > 5 ? 0 : was + 1;
-        // `0x452875` — and the counter it throws on is the one AFTER the step
-        k.cast(e, WEREC_SHOT, {
-          vx: e.facing * FAN_STEP * e.side,
-          rise: 0,
-        });
+        // `0x452875` — and the counter it throws on is the one AFTER the step.
+        // A counter of zero is not a fan shot at all: `0x452bb5` tests it
+        // before the flat arm and a zero falls through to the aimed lob, the
+        // same arc the wind-up throws, at the player
+        k.cast(
+          e,
+          WEREC_SHOT,
+          e.side === 0
+            ? arc(e, k)
+            : { vx: e.facing * FAN_STEP * e.side, rise: 0 },
+        );
         return install(e, WEREC.release, true);
       }
       // `0x4527de` — a fourth tag would fall straight out, and there isn't one
@@ -410,7 +473,8 @@ function decide(
   t: ReturnType<BrainCtx["track"]>,
 ): boolean {
   // `0x452491` — and it puts its shove weight back to 8 here, the figure
-  // `0x45233c` gives it at init. The port has no shove weight.
+  // `0x45233c` gives it at init
+  e.shove = undefined;
   // `0x452497` — turn to face him, and carry on deciding
   if (t.forward < 0) e.facing = -e.facing;
   /**
@@ -469,6 +533,7 @@ function decide(
      * the retreat pushes through its own kind.
      */
     case 3:
+      e.shove = 0;
       if (!atBackBound(e, k)) e.facing = -e.facing;
       return install(e, WEREC.charge);
     // inside 80 — `0x4525da`, the swipe, and there is nothing else in here
@@ -550,11 +615,14 @@ export { NOT_HERE as WEREC_NOT_HERE };
  * so moving the point, firing, and moving back is how five shots leave five
  * different places without the body appearing to move at all.
  *
- * `0x4526ef` is the end of it: when the script runs out it squeals `0x21`,
- * clears the bar and installs the death. The page's own path owns that last
- * part — which is why this returns nothing and installs nothing.
+ * `0x4526ef` is the end of it: when the script runs out it plays `0x21`,
+ * clears the bar and installs the death. The page's own path (`killFoe`) owns
+ * all of that — which is why this returns nothing and installs nothing.
  */
 export const werecReacts: Reaction = (e, foe, run, k) => {
+  // `0x452917` — state 8, the death and the corpse, lies 12 into the ground
+  // (`obj+0x10 = 0xfff4`) on every frame it plays
+  if (e.state === "dead") e.floor = -12;
   // the page only ever puts it here through {@link Foe.burns}, and only this
   // class's burn animation is the throw — a flinch from an ordinary blow is
   // still an ordinary flinch
@@ -574,7 +642,6 @@ export const werecReacts: Reaction = (e, foe, run, k) => {
   e.facing = e.facing > 0 ? -1 : 1;
   e.x = wasX;
   e.y = wasY;
-  // `0x4526fa`: the squeal belongs to the frame the script runs out, and the
-  // death the page installs after it is {@link Foe.death}
-  if (e.clock >= run - 1) k.say(e, WEREC.squeal);
+  // `0x4526fa`'s sound is 0x21, the death sound, which the page's `killFoe`
+  // plays with {@link Foe.death} when the script runs out
 };

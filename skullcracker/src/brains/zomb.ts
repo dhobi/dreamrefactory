@@ -46,26 +46,24 @@
  * ## The preamble, which belongs to no state and cannot be ported
  *
  * `0x42034a`…`0x420390` runs before the jump table, and it is not behaviour: it
- * is a claim on the chapter's ambient moan. While the player is inside the
+ * is the claim on the on-screen enemy bar. While the player is inside the
  * outermost band (`[esp+0x10] >= 1`), in front (`[esp+0x16] > 0`), and this one
  * is neither a statue (state 0) nor dying (state 7), it calls
- * `0x40d1c0(AI+0, 0x40e300(0xc8), AI+0x32, self.point)`. That function is NOT
- * `0x40ef30`, the one-shot effect: it measures `|player.y - self.y| +
- * |player.x - self.x|` and, if that beats the best distance so far in
- * `[0x46bd28]`, writes the triple into `[0x4a8a00]`. `0x40d734` reads that
- * triple back once a frame and clamps it into the mixer's level at `[0x4a3b50]`.
- * So the NEAREST zombie on screen is the one whose groan you hear, at a loudness
- * of its own `AI+0` out of a full `0x40e300(0xc8)`, playing whichever of nine
- * samples `AI+0x32` drew at the creator. The kit has one sound primitive,
- * {@link BrainCtx.say}, and no global arbiter, so this is read and not done.
+ * `0x40d1c0(AI+0, 0x40e300(0xc8), AI+0x32, self.point)` — health, full health,
+ * plate, point — the same four every class hands it, and the nearest claimant
+ * a frame wins the bar (the page's `claimBar`). The one thing peculiar to the
+ * zombie is the plate: `AI+0x32` is `0x3489 + 0x434540(9)`, drawn once at the
+ * creator (`0x41ef61`), so each zombie wears one of nine name plates,
+ * 13450..13458. The page keeps one plate per class; see `Foe.initzomb`.
  */
 import { install, type Brain, type BrainCtx, type CastKit, type Enemy } from "./kit";
 
 /**
- * The hit reactions, kinds 6 and 7, and the handler that installs them. Read,
- * not done — the page owns those animations.
+ * The hit reactions, kinds 6 and 7, and the handler that installs them. The
+ * page owns those animations; `Foe.initzomb` carries the pick, the hand-back
+ * to the guard and the two-tag death.
  *
- * - **6**, the flinch, `0x470248`: four one-cel tags at three engine frames
+ * - **6**, the flinch, `0x470248`: four one-cel tags at four engine frames
  *   apiece, 1860/1861/1862 and 1846. `0x420afe` picks one of the first three
  *   with `0x434540(3) - 1`, but `0x420ae1` takes tag **3** instead — cel 1846,
  *   the arms still up — whenever it is hit in state 5, state 3, or state 2 tag
@@ -360,19 +358,21 @@ export const zomb: Brain = (e, foe, run, k) => {
      * ---- 5, `0x4207a3`: the claw, and where it puts the arms afterwards.
      *
      * `0x4207a3` sets `obj+0x1a` to **100** for the whole state, tag 0 and tag 1
-     * alike: this is the class committing its full strength. **Nothing hits the
-     * player in this port**, so that is carried as read and spends nothing.
+     * alike — the page's default strength, so nothing needs writing.
      *
-     * `0x4207a9` also watches `obj+0x42` for the value 2 — the engine's
-     * once-per-blow marker, the frame the reach actually connects — and lets out
-     * sound `0x20` when it sees it. The page has no equivalent word, so the
-     * swipe is said once as the claw is chosen instead (`0x420608`, below) and
-     * not again here.
+     * `0x4207a9` also watches `obj+0x42` — the script's frame index — for 2,
+     * the claw's third cel, and lets out sound `0x20` there. The index counts
+     * the whole script, so tag 1's six cels are 6..11 and only tag 0 ever
+     * reaches 2: the forward claw cries twice (once as it is chosen,
+     * `0x420608`, and once here), the backhand not at all.
      *
      * And when the six cels are done it goes back to the guard, not to the sway.
      * That is the loop: hold, claw, hold, claw.
      */
     case 5:
+      // `0x4207a9` — frame index 2 is tag 0's third cel, `2 * hold` frames in
+      if ((e.tag ?? 0) === 0 && Math.floor(e.clock) === 2 * ZOMB.claw.hold)
+        k.say(e, ZOMB.swipe);
       return done ? install(e, ZOMB.hold) : false;
     default:
       return false;

@@ -512,14 +512,28 @@ bands the gap against `0x46f8f8`:
   bc 02  e6 00  82 00  3c 00  00 00      ; 700, 230, 130, 60
 ```
 
-Four thresholds, five bands, and `0x424f1c` sorts them into four behaviours:
-over 230 it closes on you, 130..230 and 60..130 are where it fights, and inside
-sixty it does nothing at all but hang there (`0x424c07` installs the standing
-hover and nothing else). Which move it picks when it fights is `0x434540`'s.
+Four thresholds, five bands, and `0x424f1c` sorts them into four behaviours.
+Over 230 it installs nothing and drifts in: `0x4248e9` adds ten sideways and
+twenty towards the player's row through `0x42f8b0`, one and two pixels a frame
+more every frame. At 130..230 it halves its sideways speed, writes its vertical
+one towards his row, teleports behind him if he is mid-blow and otherwise
+shudders on a five-frame beat. At 60..130 a blow in progress is a coin between a
+shudder and a SPLIT; otherwise six in forty-seven it casts. Inside sixty it claws
+in place (`0x424c05`, `0x46f6c8` tag 0) when level with him.
 
 `0x424d77`: the wraith's cast calls **`0x41f6b0`**, the scepter's own fire
-function, variant 0 — the one that spends no rounds. The thing you take the
-scepter from in RAVECAVE casts it at you first.
+function, variant 0 — the one that spends no rounds. The object it makes is
+planted every frame 0x46 in front of the WRAITH (`0x424620` reads the caster
+out of its user words), strength a hundred, for the six frames of `0x46f4d0`
+tag 0. The thing you take the scepter from in RAVECAVE casts it at you first.
+
+The split (`0x424de0`) calls the class's own creator seventy pixels behind it,
+facing the other way, with the argument that starts the copy teleporting in.
+`0x41ed12` makes the one the level places the named one (`AI+4` = 1) because it
+is alone when created; every copy is lesser: `0x42503d` kills it with any blow,
+and `0x424f30` dissolves all of them as the named one's death ends. A take
+(`0x46f898`, one cel) splits three times in ten as it ends (`0x424e14`); the
+killing blow gets the nine-cel dissolve `0x46f8a8`, and nothing is left lying.
 
 ### The -3 is dead code
 
@@ -551,15 +565,23 @@ Two more machines on the same tracker the wraith and the claw use.
 in on its 2500s and rolls:
 
 ```
-  425e56  band 1       -> 0x434540(10) < 3, or nothing at all
+  425e56  band 1       -> 0x434540(10) < 3 walks away, else considers
   425e64  band 2 or 3  -> always considers
-  425e8c  0x434540(0x2a) <= 13 -> tag 2, the sixteen cels
+  425e8c  0x434540(0x2a) <= 13 and health <= 600 -> tag 2, the summon
                          else  -> tag 0, the throw
 ```
 
-Three in ten at the far band, always inside 170, and then thirteen in forty-two
-for the sweep over the throw. The throw's recoil is `0x46f1c0` tag 1 carrying
-dx -30, -20, -10 — authored into the animation rather than applied to it.
+Eight in ten at the far band, always inside 170, and only once level with the
+player's row. The throw's recoil is `0x46f1c0` tag 1 carrying dx -30, -20, -10
+— authored into the animation rather than applied to it.
+
+Its hit handler (`0x4264f0`) weighs what is LEFT, not the blow: under half of
+`AI+6` (seeded 1200) it vanishes (`0x46f308`, sound `0x1f`) and `AI+6` becomes
+what is left, so it goes under 600, then under half of that, and so on. The
+vanish throws twelve bats, waits until half of them are dead, re-forms at the
+surviving bat nearest the player (`0x426450`, Manhattan, inside 500) with `0x1c`,
+and plays `0x46f370`, the vanish backwards. The death takes every bat on the
+level with it and leaves nothing behind.
 
 **Boggs** — `0x41be50` rolls once a frame while its kind is 0 and seven of the
 forty-two take it, toward whichever side the player is on:
@@ -797,9 +819,12 @@ at — and **every one of them is wired**:
 |---|---|---|
 | `initpuke` | LAB | a gob: 100 ahead, 65 up, `dx 400 / 13` = 31px a frame, gone at 1000 from the player (`0x418400`) |
 | `initcop` | MAZE, BARREL | a slug that writes its own ±35, lives a hundred FRAMES, and flies **harmless** until it is inside 130 of the player, where `0x413e79` arms it at a hundred |
+| `inittube` | LAB | one to four shards (`0x41973e`): 70 ahead, 140 up, `dx 400` or `200 / 13` with a rise of 8 and a weight of 0.6, breaking on `0x46d740` with sound 0x2e and a flash; and a puff off the flip's third frame (`0x419910`) |
 | `initeyeball` | SEWER | a glob, five cel sets cycling on `AI+4`, launch into a looping flight, gone 600 from where it STARTED, and worth **−2** — a code, not damage |
 | `initzomb` | CAVERN, GRAVE | a cloud that does not move at all: 40 up, 65 in front, eight frames, **−2** (`0x420990`) |
 | `initigor` | RAVECAVE | 26 up and 35 along with a weight of 0.8, so it ARCS, and it unwinds its own four cels where it lands (`0x421310` index 1) |
+| `initskel` | CAVERN, TOWER | a bone out of the same class: 70 ahead, 40 up, 26 up and 35 along, the same arc (`0x421310` index 0) |
+| `initwraith` | RAVECAVE | the scepter's own beam, variant 0: planted 0x46 in front of the wraith for six frames, worth a hundred (`0x41f6b0`) |
 | `initknifeboy` | SERVICE | two things off one roll: a knife whose own script carries a stride per cel (`dx 0 50 0 50 0 0 0`, so it gets FASTER), and a lob that goes up first |
 | `inithardcore` | SERVICE | a lob at 80 a frame with a weight of 0.2 |
 | `initvpriest` | TOWER | a bolt: 100 ahead, 35 up, `dx 600 / 13` = **46px a frame**, the fastest thing anybody throws, and worth a hundred |
@@ -841,7 +866,7 @@ hundred or a zero depending on how fast it is going (`0x4556d3`).
 so the shared "innermost band swings" reading governs no enemy in the game. An
 animation's `dy` is applied — `walk.ts` spends it as an IMPULSE into the thing's
 velocity on the frame it appears, which is what `0x42f8b0` does with it, and
-`tests/browser/fights.ts` watches `initwerea` leap.
+`tests/machine/fights.ts` watches `initwerea` leap.
 
 Two more:
 
@@ -868,7 +893,10 @@ own seam rather than being bent into a `CastKit`:
   health each, the bishop's own record rect copied into their `AI+4`/`AI+8` so
   they patrol where it stands, `±30` of sideways velocity, and script `0x46f060`
   tag 1 — the flight, never the dormant cel a placed bat waits on. `0x426346`
-  refuses once sixteen are alive. The summon is not free: `0x425e8a` wants
+  refuses once sixteen are alive. Every one is born in region −1
+  (`0x426378`), which the mover files by its point only once that point is
+  inside a region, so a bat thrown past the room's wall stays in the fight
+  instead of being filed somewhere else. The summon is not free: `0x425e8a` wants
   `0x434540(0x2a) <= 13` **and** a bishop under half its health, so a healthy
   one only ever throws.
 
@@ -916,17 +944,17 @@ compare against `0xfff7` in `SC.EXE`'s code sits in a hit handler, and there are
 eleven of them — eight creatures, one prop and two things in the air:
 
 ```
-  0x44f0aa  initwerea   hit 0x44f0a0   leaps                    Foe.burns
-  0x44f8bd  initwereb   hit 0x44f8b0   bolts on its walk cels   Foe.burns
+  0x44f0aa  initwerea   hit 0x44f0a0   leaps, −10 a frame       Foe.burns + wereaReacts
+  0x44f8bd  initwereb   hit 0x44f8b0   bolts, −10 a frame       Foe.burns + werebReacts
   0x4520d8  initcrow    hit 0x4520d0   burns, then tumbles      CROW.burns (props.ts)
   0x45296e  initwerec   hit 0x452960   the death throw          Foe.burns + werecReacts
-  0x4547b3  initwered   hit 0x454790   burns AND takes the blow Foe.burns (andHurts)
-  0x4550d3  initdog     hit 0x4550b0   its sound, then its death Foe.burns, not fatal
+  0x4547b3  initwered   hit 0x454790   burns, health to 0       Foe.burns + weredGate
+  0x4550d3  initdog     hit 0x4550b0   its death, and its 200   Foe.burns (dies)
   0x45631e  initwbooly  hit 0x456310   catches, nothing else    Foe.burns
-  0x441d30  initkragg   hit 0x441cf0   state 9                  Foe.burns + kraggReacts, ungated
-  0x44fe89  initmailbox hit 0x44fe80   a late flame, no dent    NOT HANDLED
+  0x441d30  initkragg   hit 0x441cf0   state 9                  Foe.burns + kraggReacts + kraggGate
+  0x44fe89  initmailbox hit 0x44fe80   a late flame, no dent    Foe.burns (late)
   0x455763  fireball    hit 0x455730   stops, hops, is removed  CastKit.onCode (wbooly.ts)
-  0x452fcc  MOLITOV's   hit 0x452f80   bursts                   NOT HANDLED
+  0x452fcc  MOLITOV's   hit 0x452f80   burns and bursts         CastKit.onCode (werec.ts)
             shot
 ```
 
@@ -937,11 +965,38 @@ Kragg's `0x441cf0` asks three things first: it ignores its own shots
 (`0x430ee0` against `[0x472568]`) and a strength of zero, and while its state is
 9 or more it sends every blow to `0x441ef0` — nothing at all in states 9..11, a
 flat `0x46` for any negative strength from 12 up. So the −9 arm is reached only
-while the flying form is in states 1..8. `strikeFoe` does not carry that gate: a
-−9 on this page reaches `Foe.burns` whatever state kragg is in. The dog's arm
-installs `0x478208`, which is its death, and pays the death's 200 at
-`0x455115`; its `Foe.burns` is not `fatal`, so the dog here plays the death's
-cels and gets up again.
+while the flying form is in states 1..8. `kraggGate` in `brains/kragg.ts` is
+that gate, and `strikeFoe` asks it (through `GATES` in `brains/index.ts`) before
+anything else; it reads the state off `Enemy.script`, and state 9 off the
+page's own burn. What `0x441ef0` then does with a blow on the ground form is
+the class's `pick`: `[0x473de4]` counts the blows, the first three take
+`0x473ba8`, and the fourth snaps it round (`0x473bd8` tag mirror + 2) if the
+player is behind it or swings (`0x473cc8` tag 1) if not.
+
+The dog's arm installs `0x478208`, which is its death, plays its death sound
+0x18 and pays the death's 200 at `0x455115` — its death path at `0x4551c9`,
+less the subtract. Its `Foe.burns` is `dies`, so a flame kills a dog outright,
+whatever its health, and pays for it once. MOLITOV's is `fatal`: its five
+frames of `0x477a68` run as a flinch, and when they run out `0x4526ef`'s end —
+the death sound, `0x477a78` and `0x40d450(0x104)` — is the page's `killFoe`,
+the same one a blow that empties the health goes through. A death writes no
+velocity: `obj+0xc` is the same word before and after `0x45d090` installs the
+death script, so `killFoe` hands the walker's speed (`e.speed`) on to the
+corpse's flight (`e.vx`), where the class's ground drag takes it down.
+`0x452960` has no
+state test, so a blow landed during those five frames is read like any other,
+and a second −9 puts `0x477a68` on again from its first frame.
+
+The two punks' flames cost nothing up front and everything after: FANG's state
+8 (`0x44ed8c`) and LINK's state 4 (`0x44f735`) take ten off the health and
+growl 0x23 on every frame of the burn script — fifteen frames for FANG, twelve
+for LINK. When the script ends, a punk with health left goes back to its stance
+and one without dies where it stands with a 200-frame corpse (`0x44edce`,
+`0x44f776`), no death sound and no award. `wereaReacts` and `werebReacts` are
+the drain; the burn's `FoeAnim.resume` hands the end to the class's own
+machine. The CHOPPER's arm zeroes its health (`0x4547d5`) and then throws the
+−9 away as a negative strength (`0x4547f2`), so the flame takes nothing off
+that blow and the next blow of any size kills it; `weredGate` is the zeroing.
 
 MOLITOV's shot (class `0x452c50`, which writes `0x452f80` into `obj+0x12` at
 `0x452c83`) tests `0x65` first — the strength `0x452ec0` gives a shot's own
@@ -950,12 +1005,20 @@ burst, so a burst landing on another shot sets it off unless that shot's
 through `0x40f090`, `0x452ef0` shaking the screen by how close the player is
 (`0x4307c0` 3, 2 or 1, with a `0x40e4c0` flash at the closest), and the burst
 `0x477c60`; the −9 arm lights a flame first. `WEREC_SHOT` in `brains/werec.ts`
-carries no `onCode`, so neither arm is on this page. The mailbox's `0x44fe89` arm is
+carries both as its `onCode`, and `CastKit.bang` carries the sound and the flash
+for every burst of the shot, whatever set it off; the page has no screen shake.
+`0x65` is the one strength `0x430443` leaves on a hitter after a hit, so a burst
+goes on striking for as long as its cels carry a box (7000..7002), and
+`chainCasts` in `walk.ts` runs it against the other casts. `0x4303b3` passes over
+a victim whose cel has no body box, and the burst cels 7000..7005 have none, so
+a shot that is already bursting is struck by nothing. A shot set off mid-air
+bursts where it is: `0x45d090` leaves its velocity alone, and the page stops it. The mailbox's `0x44fe89` arm is
 `0x44ff20(self, 1, 0)` and `return 1` — a flame that goes straight to its
-going-out stage, before the speed test, so no dent and no sound — and
-`initmailbox` has no `burns`, so that is not on this page either. Only
-STREETS places a mailbox, and STREETS is level 1: a flare there is `0x64`, and
-`0x4511f0` names the flamer for CITY and WOODS.
+going-out stage, before the speed test, so no dent and no sound — and that is
+`initmailbox`'s `Foe.burns`, `late`. Only STREETS places a mailbox, and STREETS
+is level 1: a flare there is `0x64`, and `0x4511f0` names the flamer for CITY
+and WOODS. A flamer carried in reaches nothing either: STREETS' book has none
+of the stream's 9500s, whose strike boxes are what a stream hits with.
 
 `Reaction` in `brains/kit.ts` is the seam these three reactions need: a think for the
 states the PAGE owns. It is deliberately not a brain — it returns nothing and
@@ -1001,8 +1064,8 @@ here: CITY is level 2, so `0x43abfa` makes a flare there a hundred rather than a
 code, and no `statflare` is placed in CITY anyway.
 
 **The fireball's own** handler, `0x455730` (its −9 test at `0x455763`), is one of
-the two −9 handlers on a thing in the air; MOLITOV's shot has the other, and
-this page does not carry it. `0x45554f` writes it into `obj+0x12` as the
+the two −9 handlers on a thing in the air; MOLITOV's shot has the other.
+`0x45554f` writes it into `obj+0x12` as the
 class creates the object — the same word every creature's class writes its own
 handler into — so it needs a hit handler on a CAST: `CastKit.onCode`, the cast
 half of `Reaction`. A function rather than a row of data, because what a

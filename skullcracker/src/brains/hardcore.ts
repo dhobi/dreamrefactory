@@ -1,5 +1,5 @@
 /**
- * The thing at the end of MALL — `inithardcore`, think function `0x43cc60`, ten
+ * The thing at the end of SERVICE — `inithardcore`, think function `0x43cc60`, ten
  * states. Creator `0x436460`, class message proc `0x43cbb0`, damage proc
  * `0x43d250` (hung on `obj+0x12` at `0x43cbde`).
  *
@@ -162,12 +162,22 @@ import {
   type BrainCtx,
   type CastKit,
   type Enemy,
-  TICK_SCALE,
+  type Reaction,
 } from "./kit";
 
 /**
+ * State 9, `0x43d0c5`, on the frames the page's death is playing: `0x43d13e`
+ * writes `obj+0x10 = -35` on every frame the script has not yet ended, and
+ * nothing puts it back, so the body lies thirty-five pixels lower than the
+ * zero the class init leaves it on.
+ */
+export const hardcoreReacts: Reaction = (e) => {
+  if (e.state === "dead") e.floor = -35;
+};
+
+/**
  * The hit reactions, states 8 and 9, and the damage proc that installs them.
- * Read, not done — the page owns those animations.
+ * The page owns those animations; state 8's exit is the brain's, below.
  *
  * - **`0x43d250`**, the damage proc, is the shortest in the chapter and the only
  *   one with no ignore list. It swallows a blow of exactly −6 (`0x43d25c`,
@@ -176,11 +186,13 @@ import {
  *   0x45 and installs the flinch, `0x474b88`; at or under it clears the bar with
  *   `0x40d1c0(0, 0, 0, player.point)`, installs the death `0x474bb0`, pays
  *   `0x40d450(0x15e)` — 350 — seeds `AI+0x30` from `[0x46b204]` and sets
- *   `[0x472574] = 1`, the level's own flag that this thing is down.
+ *   `[0x472574] = 1`, the level's own flag that this thing is down — which
+ *   SERVICE's goal waits for (`0x43b9ec`; `goalReady` in `walk.ts`).
  * - **8**, the flinch's exit, `0x43d062`: when the flinch ends it flips a coin.
  *   Heads is sound 0x48 and the WALK, `0x474a38`; tails is sound 0x47 and the
  *   swipe, `0x4749c8` tag 0. So hitting this thing is what makes it come at you,
- *   and it never returns to the stance off a flinch.
+ *   and it never returns to the stance off a flinch. The flinch's
+ *   {@link FoeAnim.resume} hands the brain kind 8 and `case 8` flips the coin.
  * - **9**, the corpse, `0x43d0c5`: `0x42f7f0(obj, 0.7)` sets the bounce, sound
  *   0x3d plays on the frame `obj+0x2c` says it has landed, `AI+0x30` counts down
  *   and `0x43d131` is the only `mov ax, 1` in the whole of `0x43cc60` — the
@@ -220,10 +232,14 @@ const NOT_HERE = "0x43d062, 0x43d0c5, 0x43d250" as const;
  * frame, so a thing that has already struck cannot strike twice. Landing
  * (`obj+0x2e`) installs `0x474910`, four cels of it coming apart.
  *
- * **Not modelled:** `0x43c917`'s fork. When the launch frame ends it rolls
- * `0x434540(0x64)` and under 30 takes tag 4 (cels 2114, 2115) rather than the
- * ordinary tag 2, which is the same object tumbling a different way. The page
- * flies the common one. Written down rather than left out.
+ * **Not modelled:** the whoosh `0x43c8af` loops while it flies (sound 0x3e
+ * through `0x40ee90`), and `0x43c917`'s fork. When the launch frame ends a HIGH
+ * throw (its `AI+8`, the thrower's tag, zero) rolls `0x434540(0x64)` and under
+ * 30 takes tag 4 (cels 2114, 2115) rather than the ordinary tag 2 — and tag 4
+ * comes BACK: `0x43c9bd` waits until it is more than 700 pixels from the thrower,
+ * flips its mirror, zeroes its velocity, drops to the thrower's y + 25 and
+ * returns on `0x4748c8`. The page flies the common one. Written down rather
+ * than left out.
  */
 export const HARDCORE_THROW: CastKit = {
   /** `0x474870` tag 0 — the launch, one cel */
@@ -235,7 +251,7 @@ export const HARDCORE_THROW: CastKit = {
   pull: 2,
   /** `0x43d1d0` */
   ahead: 60,
-  /** `0x43d1ea` — the HIGH throw, which is the tag this page throws */
+  /** `0x43d1ea` — the HIGH throw, out of `0x474ab8` tag 0 */
   lift: 0x46,
   blow: 0x64,
   /** `0x474870` tag 2, the ordinary flight */
@@ -245,16 +261,20 @@ export const HARDCORE_THROW: CastKit = {
   from: "0x43d190, script 0x474870, class 0x43c770",
 };
 
+/** ...and the LOW one, out of tag 1: `0x43d1f7` puts it 25 BELOW the point */
+export const HARDCORE_THROW_LOW: CastKit = {
+  ...HARDCORE_THROW,
+  lift: -0x19,
+  from: "0x43d190 tag 1, script 0x474870, class 0x43c770",
+};
+
 export const HARDCORE = {
   /**
    * kind 0 — one cel at one frame, and the only script the class is ever born
    * in: `0x43cbfc`, from the class message proc's create case.
    *
    * `0x43ccda` never re-installs it, because the engine leaves state 0 once and
-   * never comes back. This page does come back — `walk.ts` puts `e.script` to 0
-   * the frame the player's point leaves the rect, which is what keeps a level
-   * walkable — so the port installs it there, and that is the one place the port
-   * reaches a script the executable reaches only at birth.
+   * never comes back.
    */
   wake: { cels: [6070], hold: 1, kind: 0, tag: 0, from: "0x474940 tag 0" },
   /** kind 1 — the same cel at two frames: the stance, and the state that decides */
@@ -272,11 +292,7 @@ export const HARDCORE = {
   /**
    * kind 3 — the walk, and the ONLY script in the class with a stride.
    *
-   * `fights.ts` already reads this one as the class's `close`. Note that
-   * {@link Foe.gait} for `inithardcore` points at `0x474960` instead, the roar,
-   * whose twelve frames carry no `dx` at all — so `walk.ts`'s `travels()` reads
-   * this class as rooted and its `still` gate would hold these four cels in
-   * place. That is a wiring question for the caller and not this module's.
+   * `fights.ts` already reads this one as the class's `close`.
    */
   close: {
     cels: [6070, 6071, 6072, 6073],
@@ -294,8 +310,8 @@ export const HARDCORE = {
    * feet and tag 1 **`0x19` (25) below** them, both `0x3c` (60) in front,
    * `0x43d1d0`'s `sbb`/`and 0x78`/`sub 0x3c` being the usual sign trick on
    * `obj+0x28`. The object is class `[0x474938]` on script `0x474870`, cels
-   * 2100..2107 and 2114/2115, and it is not this class — nothing of it is
-   * ported here, and **nothing in this port hits the player anyway**.
+   * 2100..2107 and 2114/2115: {@link HARDCORE_THROW} and
+   * {@link HARDCORE_THROW_LOW}.
    */
   hurl: [
     {
@@ -377,34 +393,22 @@ const CLOSE_BAND = 4;
 /** `0x43cd73` — more than two throws since the last roar and it stops to roar */
 const THROWS_BEFORE_ROAR = 2;
 
-/** the page advances `e.clock` a QUARTER of an engine frame a tick — {@link TICK_SCALE} */
-const TICKS = TICK_SCALE;
-
 /**
  * `obj+0x42`, the script's frame index, as this page can see it.
  *
  * `0x45d0ab` puts `obj+0x42` to zero on every install and the engine steps it
  * once every `ticksPerFrame` engine frames, so it is `floor(clock / hold)`. Two
  * states watch it and both do it to play a sound: `0x43cf1c` wants frame 2 of
- * the walk and `0x43cffa` wants every even frame of the breather. The executable
- * re-plays the sound on each engine frame the index sits on, which at two ticks
- * an engine frame and a hold of two or three would fire {@link BrainCtx.say}
- * four or six times over; this answers only on the tick the index ARRIVES, so
- * the walk treads once a cycle and the breather pants five times, which is once
- * per frame index the executable names.
+ * the walk and `0x43cffa` wants every even frame of the breather. Both test it
+ * on every engine frame, and the brain is called once an engine frame, so a
+ * frame index held for two or three engine frames plays its sound on each.
  */
-function arrivesOn(
-  e: Enemy,
-  hold: number,
-  want: (i: number) => boolean,
-): boolean {
-  const now = Math.floor(e.clock / hold);
-  const was = Math.floor(Math.max(0, e.clock - TICKS) / hold);
-  return now !== was && want(now);
+function frameIndex(e: Enemy, hold: number): number {
+  return Math.floor(e.clock / hold);
 }
 
 /**
- * `inithardcore`'s own machine, states 0 to 7.
+ * `inithardcore`'s own machine, states 0 to 8.
  *
  * Every path returns `false`. `0x43d144` — the tail every state in `0x43cc60`
  * jumps to, the "my script has not finished" return included — is `xor ax, ax`,
@@ -413,9 +417,8 @@ function arrivesOn(
  * mid-throw with its stride unspent.
  *
  * `0x43d148` also writes `obj+0x1a = 0x64` on that tail — the strength percent
- * it would hit with, set unconditionally on every frame of every state.
- * **Nothing hits the player back in this port**, so it is carried as a comment
- * and spends nothing.
+ * it would hit with, set unconditionally on every frame of every state — 100,
+ * which is what {@link Enemy.strength} reads when nothing sets it.
  */
 export const hardcore: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
@@ -461,10 +464,8 @@ export const hardcore: Brain = (e, foe, run, k) => {
       if (east ? e.x >= e.right : e.x <= e.left) {
         return install(e, HARDCORE.stance);
       }
-      // `0x43cf1c` — the tread, on frame 2 of the four and on that frame only
-      if (arrivesOn(e, HARDCORE.close.hold, (i) => i === 2)) {
-        k.say(e, HARDCORE.tread);
-      }
+      // `0x43cf1c` — the tread, on frame 2 of the four
+      if (frameIndex(e, HARDCORE.close.hold) === 2) k.say(e, HARDCORE.tread);
       return done ? install(e, HARDCORE.stance) : false;
     }
     /**
@@ -484,8 +485,9 @@ export const hardcore: Brain = (e, foe, run, k) => {
         return install(e, HARDCORE.swipe, true);
       }
       if (!done) return false;
-      // `0x43cf97` — the thing leaves here, on the frame the wind-up ends
-      k.cast(e, HARDCORE_THROW);
+      // `0x43cf97` — the thing leaves here, on the frame the wind-up ends, high
+      // off tag 0 and low off tag 1 (`0x43d1de`)
+      k.cast(e, (e.tag ?? 0) === 0 ? HARDCORE_THROW : HARDCORE_THROW_LOW);
       e.decisions = (e.decisions ?? 0) + 1; // `0x43cf9c`
       return install(e, HARDCORE.stance);
     }
@@ -515,13 +517,27 @@ export const hardcore: Brain = (e, foe, run, k) => {
      * {@link BrainCtx.say}.
      */
     case 7: {
-      if (arrivesOn(e, HARDCORE.pant.hold, (i) => i % 2 === 0)) {
+      if (!done && frameIndex(e, HARDCORE.pant.hold) % 2 === 0)
         k.say(e, HARDCORE.breath);
-      }
       if (!done) return false;
       k.say(e, HARDCORE.sigh + k.roll(2));
       return install(e, HARDCORE.stance);
     }
+    /**
+     * ---- 8, `0x43d062`: the flinch's exit, and a coin.
+     *
+     * The page plays the flinch (`0x474b88`) and its {@link FoeAnim.resume}
+     * puts this state on the frame it ends — which is the frame `obj+0x46`
+     * lets `0x43d06d` roll. Heads: sound 0x48 and the walk. Tails: sound 0x47
+     * and the swipe.
+     */
+    case 8:
+      if (k.roll(2) === 1) {
+        k.say(e, HARDCORE.tread);
+        return install(e, HARDCORE.close);
+      }
+      k.say(e, HARDCORE.swing);
+      return install(e, HARDCORE.swipe, true);
     default:
       return false;
   }
@@ -550,7 +566,7 @@ function decide(
    */
   if (k.player.down) {
     k.say(e, HARDCORE.breath);
-    e.facing = e.x >= k.player.x ? 1 : -1;
+    e.facing = k.anchorX(e) >= k.player.x ? 1 : -1;
     return install(e, HARDCORE.pant);
   }
   // `0x43cd5f` — he is behind me, so turn; and this one does NOT return

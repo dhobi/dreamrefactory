@@ -47,6 +47,36 @@ export interface Enemy {
   /** the record's own rect — its territory */
   left: number;
   right: number;
+  /**
+   * `obj+0x38` and `obj+0x3a` — the ends of the ground under it, as the mover
+   * last measured them ({@link Foe.span}). Not the rect: a ledge's own ends, or
+   * where the floor breaks, and zero until measured.
+   */
+  lo?: number;
+  hi?: number;
+  /**
+   * Where its feet were at the end of the last airborne step, so the landing
+   * sweep starts there: a pose change between two frames moves the box's foot,
+   * and the sweep from the new one alone could start below the floor.
+   */
+  lastBase?: number;
+  /**
+   * `obj+0x1a`, the strength its blows land with — 100 unless its own think
+   * says otherwise (a punk's taunt swings at 50, its over-leap at 0 and cannot
+   * hurt, `0x44eb16` / `0x44ed50`). Zero hits nothing (`0x430367`).
+   */
+  strength?: number;
+  /**
+   * `obj+0xe`, where one instance's differs from its class's — the arm's
+   * floor form at 6 (`0x41199b`) — else {@link Foe.divisor}.
+   */
+  divisor?: number;
+  /**
+   * `obj+0x10`, the floor offset a state has written: the gang's −20 in their
+   * lying states, a death's −150 (the rat's `0x44e33f`, the arm's, the bat's),
+   * hardcore's −35. Absent, the class's {@link Foe.floor} holds.
+   */
+  floor?: number;
   /** engine frames elapsed in the current animation, fractional */
   clock: number;
   /** which animation is running, and which of the kind's it is */
@@ -68,6 +98,12 @@ export interface Enemy {
   hatched?: boolean;
   /** ...and has its bike already been thrown clear — see {@link Foe.deathThrow} */
   threw?: boolean;
+  /**
+   * `obj+0x32`, the fall so far: `0x42fdbc` adds `obj+0xa` to it every frame
+   * the thing is off its feet and moving down, and zeroes it otherwise. Kept
+   * by the brain that reads it (the igor's `0x425296`).
+   */
+  fell?: number;
   /**
    * Its walking velocity, in whole pixels an ENGINE frame — `obj+0xc`.
    *
@@ -141,6 +177,11 @@ export interface Enemy {
    * `obj+0x28`, and a mismatch at the outermost band leaps the thing OVER you.
    */
   side?: number;
+  /**
+   * `AI+0x38`..`AI+0x46` — the ladder it found, as `0x40b660` copies it out of
+   * the record: the point, and the rect's top and bottom (`0x43e550`)
+   */
+  ladder?: Rung;
   /** `AI+0` — `0x40e300(0xfa)` at the creator, the class's nerve for the frame */
   nerve?: number;
   /** has the reach already made its one call — `obj+0x42` passes the frame once */
@@ -191,9 +232,20 @@ export interface Enemy {
    */
   home?: number;
   /**
+   * The y half of that point — `AI+6` is the whole record point, and the rat's
+   * `0x44e2db` puts both halves back when it gets home.
+   */
+  homeY?: number;
+  /**
+   * `obj+0x26`, the shove weight, when a state has written its own over the
+   * class's ({@link Foe.shove}): the dog's charge and the chained punk's step
+   * clear it so they pass through the player, kragg's phases write 40 and 100.
+   */
+  shove?: number;
+  /**
    * Pixels per TICK, and it persists — `obj+0xa`/`obj+0xc`, which the collision
    * solver `0x430470` writes and which only the kinds that cancel it stop
-   * carrying. Zero for everything but a struck {@link Foe.flies} kind.
+   * carrying — what a blow's exchange (`0x430470`) left it with, until the drag spends it.
    */
   vx: number;
   vy: number;
@@ -212,6 +264,12 @@ export interface Enemy {
   hp: number;
   /** what it stood up with, for the bar's fraction */
   max: number;
+  /**
+   * The name plate it claims the bar with, where its creator drew one of
+   * several ({@link Foe.panel}'s `plates`): the zombie's `AI+0x32`
+   * (`0x41ef61`)
+   */
+  plate?: number;
 }
 
 /**
@@ -237,7 +295,7 @@ export const TICK_SCALE = (15 * (1000 / 60)) / 1000;
 export interface Track {
   /** `out+0x0a` — `player.x - self.x`, negated when this one faces west */
   forward: number;
-  /** `out+0x08` — `player.y - self.y` */
+  /** `out+0x08` — `player.y - self.y`, the two ANCHORS (`obj+6`), not the feet */
   dy: number;
   /**
    * `out+0x04` — which band of the class's own descending list he is in.
@@ -264,6 +322,14 @@ export interface Track {
  * is x) and two numbers here, and the facing is `obj+0x28` with this port's own
  * sign: **+1 east, −1 west**.
  */
+/** a ladder record as a think holds it: its point and its rect's top and bottom */
+export interface Rung {
+  x: number;
+  y: number;
+  top: number;
+  bottom: number;
+}
+
 export interface Hatch {
   x: number;
   y: number;
@@ -279,8 +345,14 @@ export interface BrainCtx {
     x: number;
     /** the top of him — his y less his standing cel's height */
     top: number;
-    /** his feet: the y the bands are measured against */
+    /** his feet */
     y: number;
+    /**
+     * His `obj+6` — the anchor, which is what the engine calls his y. Every
+     * height a think weighs is anchor against anchor ({@link BrainCtx.anchorY}),
+     * and this port's `y` is the feet, `p.feet` below it.
+     */
+    anchor: number;
     /** pixels per tick, negative going up — `0x44e77f` reads it for the anti-air */
     vy: number;
     /** is he mid-blow: his current cel carries a strike box (`out+0x06`) */
@@ -298,11 +370,37 @@ export interface BrainCtx {
      * from here instead of guessing it out of the side.
      */
     facing: number;
+    /** is he on a ladder — his `obj+0x18` is 7 (`0x43e02b`) */
+    climbing: boolean;
   };
+  /**
+   * `0x40b660(<"ladder">, self, 0, -1)` — the level's nearest ladder to this
+   * one's anchor, by the sum of the two distances to the record's point, over
+   * every region (`0x40b756`); nothing on a level that has none
+   */
+  ladderNear(e: Enemy): Rung | undefined;
   /** `0x45efd0` against this class's own band list */
   track(e: Enemy, bands: readonly number[]): Track;
-  /** `0x456550`/`0x456590` — within 60px of the bound it is walking towards */
+  /** this one's `obj+6` y — its gait cel's anchor, above {@link Enemy.y}, its feet */
+  anchorY(e: Enemy): number;
+  /**
+   * ...and its `obj+8` x, the anchor, which is not {@link Enemy.x} — that is the
+   * middle of its gait cel, a class's own few pixels (the dog's 29) away. Every
+   * distance a think weighs is anchor to anchor, and the player's x IS his.
+   */
+  anchorX(e: Enemy): number;
+  /** `0x44ff20(obj, late, forever)` — set it alight, the way a burning blow does */
+  burn(e: Enemy, how: { late?: boolean; forever?: boolean }): void;
+  /** `0x40cba0(obj+6, damage, 0)` — goo out of its own point, no blow behind it */
+  spray(e: Enemy, damage: number): void;
+  /** `0x4307c0(n)` — jolt the view down and let the chase bring it back */
+  shake(n: 1 | 2 | 3): void;
+  /** `0x40e4c0(colour)` — flood the view with one palette entry for a frame */
+  flash(colour: number): void;
+  /** `0x456550` — within 60px of the bound it faces, {@link Enemy.hi} or {@link Enemy.lo} */
   atBound(e: Enemy): boolean;
+  /** `0x456590` — the same test against the bound at its back */
+  atRear(e: Enemy): boolean;
   /** `0x44f020` — more than three of its own class within 200px of the player */
   crowded(e: Enemy): boolean;
   /** `0x434540(n)` — 1..n */
@@ -325,6 +423,12 @@ export interface BrainCtx {
    * Nothing else in the game clears a class this way.
    */
   slayAll(kind: string): void;
+  /**
+   * The frame a think answers 1 on its own: the object is removed where it
+   * stands, with no corpse and no death of the page's, after booking `award`
+   * through `0x40d450` — the igor's fall death, `0x4254d8`..`0x4254ec`.
+   */
+  remove(e: Enemy, award: number): void;
   /** `0x40e300(n)` — `n - (n/2)*difficulty` */
   scaled(n: number): number;
   /** `0x434630` — the integer square root the ballistic leaps solve their arc with */
@@ -625,7 +729,7 @@ export interface CastKit {
   /**
    * `obj+0x1e` — what a frame spent ON a surface keeps of the horizontal
    * velocity. `0x4302c0`, the same `imul`/`sar 13` over 8192, and the scale
-   * here is positive so it only ever slows.
+   * here is the fraction TAKEN OFF each grounded frame, so it only ever slows.
    *
    * Every object is born with `0x1666` (`0x42f5ba`), which is 0.7. The
    * fireball's creator writes 0.25 (`0x42f7a0` on `0x3e800000`), so it stops in
@@ -677,14 +781,28 @@ export interface CastKit {
   onImpact?: boolean;
   /**
    * ...and what a CODE landing on it does — `obj+0x12`, a hit handler of its
-   * own. See {@link CastCode}, and one class in the game has one.
+   * own. See {@link CastCode}, and two classes in the game have one.
    *
-   * `0x45554f` is the install and `0x455730` the handler: the fireball's class
-   * writes it into the object as it is created, which is the same word every
+   * `0x45554f` is the install and `0x455730` the handler for the boss's
+   * fireball; `0x452c83` and `0x452f80` for MOLITOV's shot. Each class writes
+   * it into the object as it is created, which is the same word every
    * creature's class writes its own into. Nothing else a creature throws has
-   * one, so a code that lands on any other cast is read by nobody.
+   * one, so a blow that lands on any other cast is read by nobody.
    */
   onCode?: CastCode;
+  /**
+   * What its impact announces itself with, the frame it goes on — `0x452ef0`
+   * and the sound in front of it.
+   *
+   * MOLITOV's shot is the one: all four of its burst installs (`0x452e0e`,
+   * `0x452e8e`, `0x452f9a`, `0x452fdf`) play `sound` through `0x40f090` at the
+   * shot's own point and then call `0x452ef0`, which measures the player's
+   * distance from the shot and, inside `near` on both axes, floods the window
+   * with palette index `flash` through `0x40e4c0`. The same function shakes the
+   * screen — `0x4307c0` 3 inside `near`, 2 inside 750×300, 1 inside 1200×500 —
+   * and this page has no screen shake, so that half is not carried.
+   */
+  bang?: { sound: number; flash: number; near: { x: number; y: number } };
   /** the spawner and the script it installs */
   from: string;
 }
@@ -768,22 +886,34 @@ export interface CastCtx {
    * goes out on, the second means it never does.
    */
   burn(how?: { late?: boolean; forever?: boolean }): void;
+  /**
+   * `0x45d090(self, impact, 0)` — put the class's impact script on from its
+   * first frame, which is what a handler installs when the blow sets it off.
+   *
+   * The same install the page makes when the thing meets the player or the
+   * ground, {@link CastKit.bang} included, so a burst is one path whichever
+   * of the three started it.
+   */
+  burst(): void;
 }
 
 /**
  * What a CODE does to a cast — the cast half of {@link Reaction}.
  *
- * `0x455763` is one of three −9 handlers on things that are not creatures (with
- * the mailbox's `0x44fe89` and MOLITOV's shot's `0x452fcc`, neither ported). A
+ * `0x455763` and `0x452fcc` are two of the three −9 handlers on things that
+ * are not creatures (the mailbox's `0x44fe89` is the third, carried as its
+ * {@link Foe.burns}). A
  * {@link Foe} carries its own as DATA because the creature handlers do the same
- * few things with different arguments; this one is a
- * function because the fireball's is not one of the three — it reads its own
- * state, stops itself dead and latches a word of its own.
+ * few things with different arguments; these are functions because neither
+ * cast's is one of those few things — the fireball reads its own state, stops
+ * itself dead and latches a word of its own, and MOLITOV's shot bursts.
  *
- * `code` is the hitter's `obj+0x1a` and is always negative: a positive strength
- * is damage and never comes here. Returning **true** is the handler's `ax = 1`,
- * which spends the blow on this cast; false is its `ax = 0` — read, and
- * declined.
+ * `code` is the hitter's `obj+0x1a`. The page hands a cast two: the −9, from
+ * the flamer and a fourth level's flare, and `0x65`, the strength a burst of
+ * MOLITOV's shot carries (`0x452ec0`) — the one strength `0x430443` leaves on
+ * the hitter after a hit, and the one `0x452f8d` reads. Returning **true** is
+ * the handler's `ax = 1`, which spends the blow on this cast; false is its
+ * `ax = 0` — read, and declined.
  */
 export type CastCode = (
   self: CastSelf,
@@ -806,5 +936,21 @@ export function install(e: Enemy, a: FoeAnim, once = false): false {
   e.script = a.kind;
   e.tag = a.tag;
   e.swing = once;
+  return false;
+}
+
+/**
+ * `0x45d090` on the script that is already playing: the same as
+ * {@link install}, and it starts the script again.
+ *
+ * `install` only rewinds when the animation changes, because this port's
+ * brains re-assert their script every frame where the executable installs it
+ * once. Where a think really does install the script it is already in — a
+ * repeated lurch, a taunt that rolls the same tag, a decision budget spent
+ * once a cycle — the rewind is the mechanism, and this is the call.
+ */
+export function rewind(e: Enemy, a: FoeAnim, once = false): false {
+  install(e, a, once);
+  e.clock = 0;
   return false;
 }

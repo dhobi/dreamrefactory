@@ -56,6 +56,7 @@ import {
   type CastKit,
   type Enemy,
 } from "./kit";
+import type { Foe } from "../foes";
 
 /**
  * The hit-reaction states, and what the executable does in them that the page's
@@ -66,10 +67,10 @@ import {
  * pick a script by the state the thing was ALREADY in:
  *
  * - **death**, `0x4563f2`: `obj+0x18 == 5` — struck during the melee half —
- *   takes kind 11 **tag 0**, seven frames of it folding up, and `0x45610f` then
- *   hands that to tag 1; struck anywhere else it goes straight to tag 1. The
- *   page's {@link Foe.death} flattens tags 1 and 2 only, so the seven-frame
- *   preamble of a boss killed in melee is the one thing missing from it.
+ *   takes kind 11 **tag 0**; struck anywhere else it goes straight to tag 1.
+ *   But `0x45610f` installs tag 1 on the first frame state 11 thinks, with no
+ *   `obj+0x46` test, so tag 0's seven frames are cut to one — the page's
+ *   {@link Foe.death}, tags 1 and 2 run together, is what shows.
  * - **11 tag 2**, `0x456171`: the burning wreck is not a corpse that lingers.
  *   It counts `AI+4` down, and each time it reaches zero plays `0x434540(2)-1`
  *   — sound 0 or 1 — at the PLAYER's y through `0x40f090`, then reseeds `AI+4`
@@ -77,22 +78,21 @@ import {
  *   frame, which is what takes it out of the census `0x4502d0` polls: the level
  *   opens as it starts to burn, not when it is removed, because it is never
  *   removed. {@link Foe.linger} `Infinity` is right for that.
- * - **9**, `0x456058` — **the one the port has backwards.** The small flinch
- *   does NOT hand back to standing. Tag 0, the take it uses when the blow
- *   landed in state 5, installs `0x4785e8` **tag 4** — straight back into the
- *   melee stance, with `AI+4` untouched, so a boss interrupted mid-charge
- *   carries on charging. Only tag 1, the take it uses when the blow landed
- *   anywhere else, goes to `0x4786e0` tag 0 — the throw. Neither one is kind 1.
- *   And `0x4564dc` picks between the two takes on `obj+0x18 == 5`, the state,
- *   not on how many blows have landed.
+ * - **9**, `0x456058`: the small flinch does NOT hand back to standing. Tag 0,
+ *   the take it uses when the blow landed in state 5, installs `0x4785e8`
+ *   **tag 4** — straight back into the melee stance, with `AI+4` untouched, so
+ *   a boss interrupted mid-charge carries on charging. Tag 1, the take it uses
+ *   when the blow landed anywhere else, goes to `0x4786e0` tag 0 — the throw.
+ *   Neither one is kind 1, and each flinch's `resume` says which. `0x4564dc`
+ *   picks between the two takes on `obj+0x18 == 5`, the state — the `pick`.
  * - **7 → 8**, `0x455fde` and `0x456033`: the knockdown hands to the get-up at
  *   the same tag (`0x456016` re-reads `obj+0x44` and passes it straight on) and
  *   the get-up hands to `0x4785e8` tag 4 — the melee stance again, never kind 1.
- * - **`0x456496`**: every third consecutive blow (`AI+0x12`) is a knockdown
- *   rather than a flinch, and `AI+0x12` only counts up while `obj+0x18 == 5`
- *   (`0x456461`) — blows taken during the ranged half never accumulate towards
- *   one. A blow arriving while it is already in state 2, 8 or 9 is absorbed
- *   with no reaction at all (`0x456470`).
+ * - **`0x456496`**: the third blow landed in the melee half (`AI+0x12`, which
+ *   steps only while `obj+0x18 == 5`, `0x456461`) is a knockdown rather than a
+ *   flinch, and it zeroes `AI+4` so the get-up goes home. A blow arriving while
+ *   it is already in state 2, 8 or 9 takes its health and no reaction at all
+ *   (`0x456470`). Both are {@link wboolyGate}.
  */
 const NOT_HERE = "0x455fde, 0x456033, 0x456058, 0x4560ed, 0x456310" as const;
 
@@ -457,8 +457,9 @@ export const WBOOLY = {
    * has `AI+0xe = 0x892` and `AI+0x10 = 0x122a` written in by the creator, and
    * `0x455e7c`/`0x4560cd` put the packed dword straight back into `obj+6` — the
    * y AND the x — to snap it home. Only the x is used here: this page's y is a
-   * room anchor rather than the engine's absolute, which is the same choice the
-   * old `stepBoss` made with `d.homeX`.
+   * room anchor rather than the engine's absolute. The x reaches the brain as
+   * `e.home`, through {@link FOES.initwbooly}'s `homeAt` — PLAYGR's record puts
+   * the boss at x4199, four hundred and fifty short of where it goes home to.
    */
   homeX: 4650,
   homeY: 2194,
@@ -556,7 +557,9 @@ export const wbooly: Brain = (e, foe, run, k) => {
   e.beat ??= BEAT0; // `0x4510d7` — ten, and reseeded fifteen after
   e.decisions ??= 0; // `0x4510d3`
   e.nerve ??= 0; // `0x4510f0` — AI+0x14, NOT a nerve; see above
-  e.home ??= WBOOLY.homeX; // `0x4510dd` — a constant, not the record's point
+  // `0x4510dd` — a constant, not the record's point: {@link Foe.homeAt} puts
+  // it in `e.home` at spawn, converted to the page's foot x
+  e.home ??= WBOOLY.homeX;
   switch (e.script ?? 0) {
     /**
      * ---- 0, `0x4559bb`: the statue, the stir and the climb.
@@ -594,17 +597,9 @@ export const wbooly: Brain = (e, foe, run, k) => {
           e.decisions = 0; // `0x455a72`
           k.say(e, WBOOLY.wake); // `0x455a7c`
           return install(e, WBOOLY.crouch);
-        /**
-         * `0x4559d1` is `xor ax, ax` — the executable cannot reach state 0
-         * again, so it does nothing here. This page can: `stepFight` writes
-         * `e.script = 0` the frame the player leaves the rect, and a woken boss
-         * left in kind 0 with a tag it has no arm for would hold its last cel
-         * for good. Standing is where the class would be, so standing is where
-         * this puts it. The only line in the file that is the port's and not
-         * the disc's.
-         */
+        // `0x4559d1` — `xor ax, ax`: kind 0 has no other tag
         default:
-          return install(e, WBOOLY.stance);
+          return false;
       }
     /**
      * ---- 1, `0x455aa5`: standing, and the RANGED half.
@@ -700,7 +695,7 @@ export const wbooly: Brain = (e, foe, run, k) => {
      */
     case 2: {
       if (t.band >= 5) {
-        return Math.abs(e.y - k.player.y) > OVERHEAD
+        return Math.abs(k.anchorY(e) - k.player.anchor) > OVERHEAD
           ? install(e, WBOOLY.swat, true)
           : install(e, WBOOLY.swipe, true);
       }
@@ -726,12 +721,12 @@ export const wbooly: Brain = (e, foe, run, k) => {
      * The low swipe, the overhead swat and the roar play through and hand back
      * to standing, and the only other thing the handler does is stamp
      * `obj+0x1a = 0x64` — a hundred percent of this class's blow — on the way
-     * past. **Nothing hits the player back in this port**, so that spends
-     * nothing and is carried as read.
+     * past, which is {@link Enemy.strength}.
      */
     case 3:
     case 4:
     case 6:
+      e.strength = 0x64; // `0x455d70`
       return done ? install(e, WBOOLY.stance) : false;
     /**
      * ---- 5, `0x455d9b`: the melee half, all six tags of it.
@@ -741,6 +736,7 @@ export const wbooly: Brain = (e, foe, run, k) => {
      * anything else to "wait, then take the stance".
      */
     case 5: {
+      e.strength = 0x64; // `0x455d9b`
       switch (e.tag ?? 0) {
         // `0x455db8` — the gather ends and the stance takes over
         case 0:
@@ -895,6 +891,63 @@ function decide(e: Enemy, k: BrainCtx, done: boolean): boolean {
    * as fast when it is coming east as when it is coming west.
    */
   return install(e, e.facing < 0 ? WBOOLY.walk : WBOOLY.run);
+}
+
+/**
+ * `0x456310` asks the STATE before it reacts — the part of it the page's own
+ * flinch path cannot ask for itself.
+ *
+ * ```
+ *   4563c1  AI+0 -= blow                     the health, whatever the state
+ *   4563ce  AI+0 <= 0 -> the death           ...and a lethal blow always kills
+ *   456461  obj+0x18 == 5 -> AI+0x12 += 1    blows counted only in the melee
+ *   456470  obj+0x18 in {8, 2, 9} -> ax = 1  getting up, throwing, flinching:
+ *                                            taken, and no reaction at all
+ *   456496  AI+0x12 > 2 -> the knockdown,    and AI+4 = 0, AI+0x12 = 0
+ *   4564dc  otherwise the flinch             tag by the state, see the pick
+ * ```
+ *
+ * The absorbed states are answered here: the health comes off and the blow
+ * lands as nothing else. A blow that empties the health goes through, because
+ * `0x4563ce` kills before `0x456470` is reached.
+ *
+ * `AI+0x12` is kept in {@link Enemy.dents}, which the page steps once per blow
+ * after this gate and weighs against {@link Foe.knockdown}'s `every`. Written
+ * as `1 + AI+0x12` after that step — so 1, 2, 3 for a count of 0, 1, 2, and 4
+ * on the blow that knocks it down, which is why `every` is 4 for this class.
+ */
+export function wboolyGate(
+  e: Enemy,
+  foe: Foe,
+  blow: { damage: number; code: number },
+): { damage: number; code: number } | null {
+  // `0x45631e` — the −9 arm lights it and returns before any of this
+  if (blow.code < 0) return blow;
+  const over = foe.knockdown?.anim;
+  const state =
+    e.state !== "flinch"
+      ? (e.script ?? 0)
+      : e.anim === over
+        ? 7
+        : e.anim === over?.then
+          ? 8
+          : 9;
+  // `0x456470` — absorbed, unless it is the blow that kills
+  if (state === 8 || state === 2 || state === 9) {
+    if (e.hp - blow.damage > 0) {
+      e.hp -= blow.damage;
+      return null;
+    }
+    return blow;
+  }
+  // `0x456461` / `0x456496` — the count, read back out of `dents` (see above)
+  const count = e.dents >= 4 ? 0 : Math.max(0, e.dents - 1);
+  const next = state === 5 ? count + 1 : count;
+  if (next > 2) {
+    e.dents = 3; // -> 4 after the page's step: the knockdown
+    e.decisions = 0; // `0x4564c5`
+  } else e.dents = next; // -> next + 1
+  return blow;
 }
 
 export {
