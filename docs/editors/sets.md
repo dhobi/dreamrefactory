@@ -55,5 +55,5 @@ so everything you did not touch is the byte it was
 
 - [SET — rooms, scenes & views](../engine/formats/set.md) — what the structures are
 - [The image codec](../engine/formats/image-codec.md) — what the frame encoder does
-- [The browser editors](README.md) — what the seven pages share
+- [The browser editors](README.md) — what the pages share
 

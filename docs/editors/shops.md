@@ -58,5 +58,5 @@ reordered view has to land on the record that frame came from.
 
 - [SHP — props ("shop" files)](../engine/formats/shp.md) — what the structures are
 - [The set editor](sets.md) — the room a prop is drawn on top of
-- [The browser editors](README.md) — what the seven pages share
+- [The browser editors](README.md) — what the pages share
 

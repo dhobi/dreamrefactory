@@ -773,9 +773,10 @@ export interface CastCtx {
 /**
  * What a CODE does to a cast — the cast half of {@link Reaction}.
  *
- * `0x455763` is the only −9 handler in the game on a thing that is not a
- * creature. A {@link Foe} carries its own as DATA because all eight creature
- * handlers do the same three things with different arguments; this one is a
+ * `0x455763` is one of three −9 handlers on things that are not creatures (with
+ * the mailbox's `0x44fe89` and MOLITOV's shot's `0x452fcc`, neither ported). A
+ * {@link Foe} carries its own as DATA because the creature handlers do the same
+ * few things with different arguments; this one is a
  * function because the fireball's is not one of the three — it reads its own
  * state, stops itself dead and latches a word of its own.
  *

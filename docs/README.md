@@ -13,21 +13,18 @@ CyberFlix, and the studio's games were made with it: *Lunicus* (1993),
 well. So "the DreamFactory games" is a longer list than this project covers, and
 nothing here should be read as claiming otherwise.
 
-Two of those attributions are documented and two are measured, which is worth
-separating: published sources name *Dust* and *Titanic* as DreamFactory titles,
+Those four attributions are documented, and the two that follow are measured:
+published sources name *Dust* and *Titanic* as DreamFactory titles,
 and *Lunicus* and *Jump Raven* are named as such in accounts of the Pippin
-platform they were announced for. *Timelapse* needs no source at all — its discs
-are DreamFactory 4 containers and this port reads them with the same code that
-reads Titanic's, which is the strongest evidence available for any of them.
+platform they were announced for. *Timelapse* needs no source — its discs are
+DreamFactory 4 containers and this port reads them with the same code that reads
+Titanic's, which is the strongest evidence available for any of them.
 
-**And so, it turns out, does *Skull Cracker*** (1996). This page used to say the
-opposite — that CyberFlix's remaining titles were deliberately not claimed, since
-no source consulted attributed them to the engine. That was the right position to
-hold on the evidence available, and the files then answered for themselves: every
-one of Skull Cracker's 111 data files is a DreamFactory container, its 66 films are
-MOV files this port reads with Titanic's own reader, and container 0 of each says
-version 4. What is new about it is not the format but the byte order — its rip is
-a **Macintosh** one, so every integer in it is the other way round
+**So does *Skull Cracker*** (1996), measured the same way: every one of its 111
+data files is a DreamFactory container, its 66 films are MOV files this port
+reads with Titanic's own reader, and container 0 of each says version 4. What
+differs is not the format but the byte order — its rip is a **Macintosh** one,
+so every integer in it is the other way round
 ([byte order](engine/formats/README.md)). It is a beat-'em-up rather than an
 adventure and its levels are in a PowerPC binary, so what runs here is its film
 layer and its menu, not its game; see
@@ -56,14 +53,14 @@ a table you can skim past.
 
 ## Standing on other people's work
 
-Almost nothing about DreamFactory is publicly documented, so it's worth being
-clear up front: **the hard part of understanding these formats was done by
-other people**, and this project mostly builds on their shoulders. Where a
+Almost nothing about DreamFactory is publicly documented. **The hard part of
+understanding these formats was done by other people**, and this project mostly
+builds on their work. Where a
 doc knows something, it tries to say where that knowledge came from.
 
 1. **[DFET](https://github.com/M3tox/DFET), by M3tox** — a GPL-3.0 C++ tool
    that *extracts* assets (images, audio, scripts) from DreamFactory games.
-   This is the big one. The container skeleton, the image-decompression codec,
+   The container skeleton, the image-decompression codec,
    the audio codecs, the script encoding and the full command-name table —
    essentially the entire "how do you *read* these files" story — was worked
    out by M3tox and published in DFET. This project's file-reading layer is a
@@ -81,9 +78,9 @@ doc knows something, it tries to say where that knowledge came from.
    need to know what the scripts and coordinates actually *do*. That behaviour
    (what each script command means, how a prop is placed in 3D, how timers
    fire) isn't in DFET, so this project worked it out by disassembling the
-   shipped Windows executable. This is the part that's genuinely new here —
-   recovered incrementally, one command at a time (the
-   [builtin reference](reference/builtins.md) shows how far that has come).
+   shipped Windows executable. This is the part that is new here, recovered
+   one command at a time (the [builtin reference](reference/builtins.md) shows
+   its coverage).
    Whenever a doc says "recovered from `TI.EXE`", that's what it means.
 4. **The game files themselves** — a lot was simply confirmed by decoding a
    file and checking the result against what the real game shows.
@@ -179,12 +176,12 @@ with them — the behaviour recovered from the games' own binaries (`TI.EXE`, an
   `.11K` is not 11 kHz.
 - **[Languages & the chooser](taoot/languages.md)** — one data tree per
   language, the two selectors a bare filename resolves through, the code page
-  its text turns out to be in, and the chooser this port wrote as a real
+  its text is in, and the chooser this port wrote as a real
   DreamFactory stage.
 
 ### Editors — reading the formats back out
 
-Eight browser pages the site hosts, one per container format: load a
+Browser pages the site hosts, one per container format: load a
 file, take it apart, change what is safe to change, export the repacked
 original. They read with the engine's own code, so they double as the best
 debugger the file layer has. Overview: **[the browser editors](editors/README.md)**.
@@ -215,7 +212,7 @@ commands](reference/builtins.md)**, **[tools](reference/tools.md)**,
 ### How the repository is arranged
 
 Five npm workspaces, and the split these docs follow: **`engine/`** knows about
-no particular game, **`site/`** is the shared web presence and the eight format
+no particular game, **`site/`** is the shared web presence and the format
 editors, and **`taoot/`**, **`dust/`** and **`timelapse/`** are a game each.
 Dependencies point one way only and there is a test that says so. The map is
 **[Engine architecture](engine/architecture.md)**.

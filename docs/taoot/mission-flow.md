@@ -3,12 +3,11 @@
 *Prerequisite: [How the game works](../engine/how-a-game-works.md) and
 [The scripting language](../engine/scripting-language.md).*
 
-A natural question once the engine runs is: **can we see the whole game, start
-to finish, from the data we already have?** The answer is yes — and it needs no
-extra reverse engineering of `TI.EXE`. The plot does not live in the engine
-binary. It lives entirely in the **scripts**, which we already decode. This page
-explains how the story is encoded, and shows the mission graph reconstructed
-straight from the shipped scripts.
+The whole game, start to finish, can be read from the data without further
+reverse engineering of `TI.EXE`: the plot does not live in the engine binary but
+entirely in the **scripts**, which the port already decodes. This page explains
+how the story is encoded, and shows the mission graph reconstructed straight from
+the shipped scripts.
 
 ## The whole plot is a handful of variables
 
@@ -34,14 +33,14 @@ endif
 ```
 
 That single `if` is the entire "flow logic" — a guard on `mission`/`phase` (plus
-some puzzle state), and an effect. Multiply it across ~2000 script blocks and you
-have the game.
+some puzzle state), and an effect. The game is this pattern across ~2000 script
+blocks.
 
 ### `progress()` is a *question*, not a command
 
-Scripts constantly call `progress(m, p)`. It's easy to assume this *advances* the
-story, but the BOOTFILE definition shows it only **asks** whether you've reached
-at least mission `m`, phase `p`:
+Scripts constantly call `progress(m, p)`. Despite the name it does not *advance*
+the story: the BOOTFILE definition only **asks** whether the player has reached at
+least mission `m`, phase `p`:
 
 ```
 code progress (themission, thephase)
@@ -73,7 +72,7 @@ The state is only ever moved forward by three BOOTFILE helpers:
 
 Everywhere else, a script simply **calls one of these** when you finish a puzzle
 or reach a story beat — most often at the end of a conversation. Those call sites
-are the concrete moments the plot moves. We call them *beats* below.
+are the concrete moments the plot moves, called *beats* below.
 
 ## The mission spine
 
@@ -144,8 +143,8 @@ resetgamevars ()                     resetpupvars ()
 `fencewins`, …) and `resetpupvars` the twenty-two per-character conversation phases;
 the two loops disown every actor and every prop. So a failed ending is not a fresh
 process — the loop back through `playmore.mov` and `bktoship.mov` is a **scripted**
-teardown, and anything it fails to reach follows you into the next game. When the
-prop loop walked nothing, the next game began with the previous one's inventory in
+teardown, and anything it fails to reach follows you into the next game. If the
+prop loop walks nothing, the next game begins with the previous one's inventory in
 the bag, the painting still Zeitel's and mission 2 unfinishable (#89).
 
 ## The scene-travel map
@@ -187,12 +186,11 @@ the story spine. A sample of what the extractor pulls out:
 | `DECKBD.SET` `keydown` | `mission = 4 & phase < 2 & clock = "endgame"` | walking forward on the boat deck at the climax |
 
 Most beats live inside **`.PUP` conversation scripts** — the game advances when
-you say (or hear) the right thing — which is exactly what you'd expect from a
-talk-driven adventure.
+you say (or hear) the right thing.
 
 ### Reading a conversation's guard
 
-One trap in that table. A conversation guard can look impossible:
+A conversation guard can look impossible:
 
 ```
 PENNY1.PUP  intent   advancephase()   when  f2 = 0 & arg = 102 & arg = 101
@@ -214,18 +212,17 @@ case 102                                  ← the first answer
 
 So read repeated conditions on `arg` as a **sequence of answers**, not a
 conjunction: say 102, then say 101. Which bevels those are depends on where the
-conversation already is — playing this one through, Penny's opening exchange is
-102 → 101 → 103 before the `intent` block is even reached. The guard tells you
+conversation already is — in play, Penny's opening exchange is 102 → 101 → 103
+before the `intent` block is even reached. The guard tells you
 the last two clicks before the beat fires, not the whole conversation.
 
 ## What each mission actually asks of you
 
-The spine above says where the boundaries are. What it does not say is what a
-*player* has to do to cross one, and that only came out of
-[playing the whole game](../reference/route.md) — the extractor reports the
-`advancephase()` call site, not the errand in front of it. Three of the four
-missions are worth writing down, because in each case the shape was not what
-reading the guards suggested.
+The spine above says where the boundaries are, not what a *player* has to do to
+cross one: the extractor reports the `advancephase()` call site, not the errand in
+front of it. The errands below come from
+[playing the whole game](../reference/route.md); in each case their shape differs
+from what the guards suggest.
 
 **Mission 2 phase 0 is a chain, and the Purser is all of it.** `PURS1.PUP` c6
 offers a different bevel 102 for each rung of `actorowner("purs")`, and the phase
@@ -325,23 +322,22 @@ way to keep the painting.
 
 ## Reading the flow as a map you can walk
 
-The report above is a description. Making a route planner out of it
+The report above is a description, not yet a usable map. A route planner
 ([`taoot/tests/playthrough/nav/`](https://github.com/dhobi/dreamrefactory/tree/master/taoot/tests/playthrough/nav), which
-walks the ship for the [playthrough tests](verification.md#routes-name-places-not-pixels)) turned up three
-places where a faithful description is still not a usable map, all worth knowing
-before trusting the graph:
+walks the ship for the [playthrough tests](verification.md#routes-name-places-not-pixels)) has
+to account for the following before it can trust the graph:
 
 **Exits set flow state, they don't only read it.** C73's door records
 `hallside = "star"` as you leave, and the grand staircase's landings record
 `savedeck` — which is what later decides which deck the staircase doors open
 onto. Read guards without effects and the ship looks disconnected above whatever
-deck you start on. The scene graph's trips now carry their branch's own
-assignments for this reason.
+deck you start on. The scene graph's trips therefore carry their branch's own
+assignments.
 
 **The staircase changes deck onto itself.** `changeset("gstair3", …)` from inside
 `GSTAIR3.SET` is a self-loop, and the scene graph drops self-loops as
 uninteresting same-set scene jumps. That particular one is the ship's vertical
-connection. With effects and self-loops both restored, 50 of the 63 rooms with
+connection. With effects and self-loops both included, 50 of the 63 rooms with
 exits are reachable from cabin C73 at mission 1; without them, none are.
 
 **A travel guard understates what the room needs.** The exit from C73 asks only
@@ -364,8 +360,8 @@ still has to supply the preconditions, and a planner should report a door that
 refuses rather than assume it opened.
 
 **And a door can have a doorman.** The wireless room's exit guard is not a guard
-at all; the refusal lives in the doorway hotspot, which doesn't open the door so
-much as decline to:
+at all; the refusal lives in the doorway hotspot, which declines to open the
+door:
 
 ```
 DECKBD.SET c110  mousedown
@@ -381,9 +377,9 @@ sendtoprop ("door", setupprop ("deckbd-wireless"))
 
 `actorowner("morrow") = "enterwireless"` is permission, and it is earned seven
 answers deep in MORROW1.PUP — through the weather, the Admiralty, and the war he
-survived, because `morrowphase = 3` is what unlocks the bevel that asks. A guard
-condition on the exit would never show you that; the sub-plot machine
-(`morrowphase`) and the conversation are where the door really is.
+survived, because `morrowphase = 3` is what unlocks the bevel that asks. The exit
+guard does not show this; the gate is in the sub-plot machine (`morrowphase`) and
+the conversation.
 
 **Characters also start conversations you didn't ask for.** `gang.cst`'s shared
 `hasattention(seconds)` fires `mousedown` on a character who has had your
@@ -392,7 +388,7 @@ driving the game has to expect a conversation to open between two gestures.
 
 ### The guard vocabulary is small
 
-What makes this tractable at all: across all 271 exits the guards draw on six
+Across all 271 exits the guards draw on six
 variables — `propvisible`, `savedeck`, `hallside`, `tour`, `mission`, `phase` —
 plus a standpoint (`currentview()`, sometimes `currentscene()`). 214 of the 271
 parse completely; the holdouts are the elevator's `stacklevel = stackmax - 1`

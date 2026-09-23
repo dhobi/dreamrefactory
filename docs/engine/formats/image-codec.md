@@ -54,7 +54,7 @@ map/overview images. That is a rule about who *writes* the CLUT, not about who
 reads it — room frames may still draw through the upper half, and two Titanic
 sets do. c73 and lnghall each stray onto index 255 and nothing else: in c73 that
 is 6811 pixels of the mission-4 cabin's ceiling light and table-lamp pool, which
-rendered as black blobs for as long as the white above was conditional (#351).
+render as black blobs unless index 255 is forced white unconditionally (#351).
 
 ### The palette bytes are not the colours you draw
 
@@ -75,11 +75,10 @@ in   16   32   64   96  128  160  200  240
 out  42   66  104  135  163  188  218  245
 ```
 
-The port skipped this for a long time and drew the bytes verbatim, which is exactly
-why it was reported as "very dark in general" (#115). The curve now lives in
-`engine/src/web/screen-gamma.ts`; `paletteToRGBA` deliberately stays raw, because it is also
-what the asset tools and `paletteBlock`'s round-trip test use, and a decoder that
-quietly brightened its output would be lying about the file.
+Drawing the bytes verbatim makes the game look "very dark in general" (#115). The
+curve lives in `engine/src/web/screen-gamma.ts`; `paletteToRGBA` deliberately stays
+raw, because it is also what the asset tools and `paletteBlock`'s round-trip test
+use, and a decoder that brightened its output would misreport the file.
 
 Two consequences to keep in mind:
 
@@ -93,8 +92,8 @@ Two consequences to keep in mind:
   and [the host doc](../runtime/host.md#the-brightness-controls) for where the port
   puts them.
 
-**F1 brightens and F2 darkens**, which reads backwards until you remember the value
-is an exponent: F1 divides it by 1.05, and a *smaller* exponent lifts a colour.
+**F1 brightens and F2 darkens**, because the value is an exponent: F1 divides it
+by 1.05, and a *smaller* exponent lifts a colour.
 
 ## Why images are "delta-encoded" (and why order matters)
 
@@ -113,8 +112,8 @@ That's why the decoder centres on a persistent `FrameBuffer` that's handed
 from frame to frame.
 
 The sequence that matters is the **ring** — one scene's turn circle, one
-direction of a road — and a ring turns out to need nothing before it: its first
-frame repaints every pixel. Checked over the 20 largest sets, all 998 rings,
+direction of a road — and a ring needs nothing before it: its first frame
+repaints every pixel. Checked over the 20 largest sets, all 998 rings,
 each decoded from a fresh buffer and from a deliberately poisoned one: every
 frame byte-identical. So the viewer decodes a ring at a time, on demand, in any
 order ([see the viewer](../runtime/host.md#setviewer-navigation-and-rendering)).
@@ -159,8 +158,8 @@ what `rep movsb` does on the hardware this shipped on. Copying the source as it
 stood before the write (a `memmove`, which is what JavaScript's `copyWithin`
 gives you) duplicates the block once instead of tiling it. It is rare — four
 runs in a whole walk down the boat deck — but a frame is the base for the next
-one, so each mistake compounds down the chain: this was the coloured streaking
-that appeared in the sky partway through a walk and never when standing still.
+one, so each mistake compounds down the chain, showing as coloured streaking in
+the sky partway through a walk and never when standing still.
 
 Modes 0/1 are the clever part: instead of storing whole pixel values, they
 store tiny differences from the neighbouring pixel using a variable number of

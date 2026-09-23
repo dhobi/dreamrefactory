@@ -66,7 +66,7 @@ word "flat".
 | **`passcode`** | The opposite: hand the event on, so the engine's own default behaviour still runs. [→ the chain](engine/scripting-language.md#the-chain-and-how-an-event-is-consumed) |
 | **Builtin** | A command implemented by the engine rather than in script — about 250 of them, plus 22 `sendto*` special forms. [→ the builtin reference](reference/builtins.md) |
 | **Mission / phase** | The two globals that encode where you are in the plot. Nearly the whole story is a state machine over these. [→ the mission flow](taoot/mission-flow.md#the-whole-plot-is-a-handful-of-variables) |
-| **Guard** | The `if` in front of a story beat, deciding whether it can fire yet. The vocabulary of guards turns out to be small. [→ the guard vocabulary](taoot/mission-flow.md#the-guard-vocabulary-is-small) |
+| **Guard** | The `if` in front of a story beat, deciding whether it can fire yet. The vocabulary of guards is small. [→ the guard vocabulary](taoot/mission-flow.md#the-guard-vocabulary-is-small) |
 
 ## Time and sound
 
@@ -90,8 +90,8 @@ These aren't DreamFactory words; they're names for parts of this project.
 | **Golden** | A recorded trace a later run is diffed against. [→ what a golden speaks for](taoot/verification.md#one-game-carried-not-a-chain-of-loads) |
 | **Segment** | One stretch of the playthrough route — 27 of them cover the boot to the ending. [→ the playthrough](taoot/verification.md#the-playthrough-the-game-played-not-probed) |
 | **Carried / loaded** | Whether a segment continued the live game or resumed a `.ti` checkpoint. The two produce different traces, which is why a golden only speaks for one. [→ one game carried](taoot/verification.md#one-game-carried-not-a-chain-of-loads) |
-| **Editor** | One of seven browser pages that opens a container format with the engine's own reader, lets you change what's safe, and exports the repacked file. They belong to `site/`, not to a game. [→ the browser editors](editors/README.md) |
-| **Package** | One of the four workspaces: `engine/` (knows no game), `site/` (the shared web presence and the editors), `taoot/` and `dust/` (a game each). Dependencies point one way only. [→ four packages](engine/architecture.md#four-packages-and-which-way-they-point) |
+| **Editor** | One of the browser pages that opens a container format with the engine's own reader, lets you change what's safe, and exports the repacked file. They belong to `site/`, not to a game. [→ the browser editors](editors/README.md) |
+| **Package** | One of the workspaces: `engine/` (knows no game), `site/` (the shared web presence and the editors), `taoot/`, `dust/`, `timelapse/` and `skullcracker/` (a game each). Dependencies point one way only. [→ six packages](engine/architecture.md#six-packages-and-which-way-they-point) |
 | **Shell** | A game's own `src/` — the page around the canvas, and which disc it reads. Everything a `GameHost` is parameterised on. [→ where a game's own code lives](engine/architecture.md#where-a-game-s-own-code-lives) |
 
 Back to the [documentation home](README.md).

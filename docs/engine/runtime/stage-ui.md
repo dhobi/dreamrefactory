@@ -47,8 +47,7 @@ Switching flats with `gotoflat` fires `closeflat` / `openflat` — the flat-leve
 mirror of `closescene` / `openscene`.
 
 Everything *per-stage* belongs to the game's `transtoflat` script below, not to
-the primitive, and this is where the port used to keep three tables of TAOOT
-stage names:
+the primitive:
 
 - the per-stage entry handler **`open<basename>`** — `openwireless()` opens the
   wireless set's shop and track and places its props — is `transtoflat`'s own
@@ -63,9 +62,9 @@ stage names:
 
 The teardown half is the same: `close<basename>` (which tears down the stage's
 shop and track) is run by `transfromflat` *before* `closestagefile`, so the
-primitive must not mirror it — doing so ran it twice.
+primitive must not mirror it, or it runs twice.
 
-One naming quirk, and it is the script's rather than ours: the darkroom's two
+One naming quirk, from the script: the darkroom's two
 stages (`photo.stg` white light, `redphoto.stg` red light) are the *same room*
 sharing `photo.shp`, so `redphoto` maps to base name `photo` throughout.
 
@@ -76,25 +75,25 @@ and the two things it does to the fade both follow from that.
 
 It lifts a **ramp**. `screentoblack(name, steps)` walks a *named* palette to
 black, so the black belongs to that palette and cannot outlive it — and replacing
-the stage replaces the palette. Timelapse's photo album is the flat that proves
-it: `begininterface` is `screentoblack(curclutname, 10)`, `closestagefile()`,
+the stage replaces the palette. Timelapse's photo album depends on it:
+`begininterface` is `screentoblack(curclutname, 10)`, `closestagefile()`,
 `openstagefile("P.Stg")`, `gotoflat(coder)`, `visualeffect(plain, 0)`, and the
 album (panel flat 3) is the one flat whose `openflatx` ends without a
-`blacktoscreen`. A level that survived the swap left its caption, its furniture
-and the photograph painted into a framebuffer nobody could see.
+`blacktoscreen`. A level that survived the swap would leave its caption, its
+furniture and the photograph painted into a framebuffer nobody could see.
 
 It does **not** lift a black the script put up with `blackscreen()` or
 `clut("black")`. That one is the framebuffer, not a palette, and a stage swap
-draws nothing over it. The painting crate is the sighting
+draws nothing over it. The painting crate is the example
 ([#308](https://github.com/dhobi/dreamrefactory/issues/308)): `binl.set`'s crate
 is `transtoflat("cargo.stg")`, and that arm ends on a **film** rather than a fade
 — `screentoblack`, `blackscreen`, swap, `sendtostage(opencargo())`,
 `setvisible(false)`, `playmovie("cratep.mov")`. Nothing between the swap and the
 clip says what the screen should be, because the clip *is* the reveal; lifting the
-black there painted the arriving flat, which is the open crate with the painting
-in it, and left it up for the whole 648 KB of `cratep.mov` — the end of the
-animation, before the animation. The trunk and the Enigma machine are the same
-three lines with their own clip.
+black there would paint the arriving flat — the open crate with the painting in
+it — for the whole 648 KB of `cratep.mov`, showing the end of the animation before
+the animation. The trunk and the Enigma machine are the same three lines with
+their own clip.
 
 A held black is **armed**, not stuck: the swap sets the same `pendingReveal` flag
 a movie's end sets, so `tickFade` lifts it the moment the script falls quiet. So
@@ -112,14 +111,12 @@ The inventory doesn't *replace* your screen, it **covers** it — and can cover
 a screen that is itself an overlay.
 
 **This is the game's script, not the engine's.** `transtoflat` and
-`transfromflat` are ~200 lines of BOOTFILE code with no opcode id, and the port
-registered builtins of those names — which shadowed them, because `evalCall` tries
-builtins before the fallback chain, and which is what forced the transcription of
-the per-stage switches above. They are gone; `GameSession.transToFlat` runs the
-shipped handler, so the host, the dev bar and the ~60 test sites reach it
-unchanged. The copy had been skipping content, too: the shipped `restorescreen`
-handles a dead player, the unlit cabin, the guided tour and the long fade after
-the Vlad fight, none of which the transcription had.
+`transfromflat` are ~200 lines of BOOTFILE code with no opcode id. The port
+registers no builtins of those names: `evalCall` tries builtins before the fallback
+chain, so a builtin would shadow the shipped handler. `GameSession.transToFlat`
+runs the shipped handler, and the host, the dev bar and the tests reach it through
+that. The shipped `restorescreen` handles a dead player, the unlit cabin, the
+guided tour and the long fade after the Vlad fight.
 
 What it does, taking `transtoflat("inven1.stg")`:
 
@@ -128,7 +125,7 @@ What it does, taking `transtoflat("inven1.stg")`:
    the matching `show<base>` can restore it (`main.stg` is special: its band
    lives on `house.shp` via `hideinterface`/`showinterface`);
 2. **pushes** the current `{stage, active flat, ambient theme}` on a stack —
-   which *is* the boot's `savestage1..3`/`saveflat1..3` globals, no longer a port
+   which *is* the boot's `savestage1..3`/`saveflat1..3` globals, not a port
    array mirroring them (clearing the stack on a hard navigation therefore means
    clearing those, which is also what a fresh `boot()` does);
 3. opens the overlay stage full-screen (`setvisible(false)`), hiding a live
@@ -147,14 +144,14 @@ there" works.
 The stack is why nesting works: `patty.stg → inven1.stg → patty.stg` needs
 three frames of memory, which the original's three `savestage` globals provide.
 
-One builtin the un-shadowing exposed as a no-op: **`visualeffect`**. Every effect
-but `plain` is a *reveal* — the new screen wiped, irised or scrolled in over the
-old — and this port draws them instantly, which is only half a translation,
-because a reveal also **ends the transition-black the script put up**. Blackjack
-is where that showed: `HOUSE` fades the dealer out with `screentoblack("puppet")`
-and `transtoflat("blkjack.stg")`, the one stage the boot deliberately neither
-blacks out nor fades back in, because `newgame`'s own `visualeffect(wiperight,
-20)` is the reveal. The deal ran perfectly behind a screen that stayed dark.
+**`visualeffect`** matters here too. Every effect but `plain` is a *reveal* — the
+new screen wiped, irised or scrolled in over the old. This port draws them
+instantly, but a reveal also **ends the transition-black the script put up**, and
+that half is kept. Blackjack depends on it: `HOUSE` fades the dealer out with
+`screentoblack("puppet")` and `transtoflat("blkjack.stg")`, the one stage the boot
+deliberately neither blacks out nor fades back in, because `newgame`'s own
+`visualeffect(wiperight, 20)` is the reveal. Without it the deal runs behind a
+screen that stays dark.
 `plain` is excluded because it is the opposite instruction — scripts call it to
 clear a pending effect immediately before the `blacktoscreen` that does the
 revealing.
@@ -166,7 +163,7 @@ Hit-testing on a stage runs **front-to-back through what's drawn**:
 1. **Props** — front-to-back by `propdist`, *pixel-accurate* against each
    frame's opaque mask (a transparent hole in a prop is not a hit).
 2. **Flat click regions** — the rectangles from the STG's click-logic
-   container. Two subtleties recovered the hard way:
+   container. Two subtleties:
    - a region **with** its own script normally handles the click, *but* a
      visible prop with its own `mousedown` drawn over that point wins — the
      prop is foreground art (the matryoshka doll overlaps the very hotspots
@@ -196,6 +193,6 @@ main → boot). `target` is the addressee, the same value a click resolved by
 position gives that handler, and it is what lets the BOOTFILE's generic `trackbut`
 hit-test "this button" for any stage that borrows it: its body reads
 `pointinbutton(currentflat(), target, mouse())`. With the caller's name there
-instead, every OK button in the game silently refuses its confirm.
+instead, every OK button in the game would silently refuse its confirm.
 
 Next: the people — **[Characters at runtime](characters.md)**.

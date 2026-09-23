@@ -630,11 +630,12 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     // beside a floor wearing maze 3's crates.
     //
     // Closed rather than hidden, and only the non-persistent ones: a room shop
-    // belongs to a room that is being thrown away, and the room ARRIVING opens
-    // its own from its `openset` — which does run on a load (`restoringSave`
-    // gates the scene half, not the set half; see SetViewer.start). The two boot
-    // shops are persistent, so their 72 props are still here to receive the
-    // records the file does carry.
+    // belongs to a room that is being thrown away. The room ARRIVING does not
+    // get its shop from its `openset`, which does not run on a load
+    // (`restoringSave` mutes the whole lifecycle; see SetScripts.fireLifecycle);
+    // a set's own `.shp` is opened when the viewer wires it (SetViewer.addResource).
+    // The two boot shops are persistent, so their 72 props are still here to
+    // receive the records the file does carry.
     for (const shop of [...session.propRuntime.shops.entries()]) {
       if (!shop[1].persistent) await session.closeShop(shop[0]);
     }

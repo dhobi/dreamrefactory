@@ -4437,10 +4437,13 @@ function strikeFoe(
    *
    * `0x448c84`'s range test is the player's table and −9 falls below it, so
    * against the player this lands as ordinary damage. Against a creature it is
-   * read by eight handlers of their own, and every one of them tests it as the
-   * FIRST thing it does, before any of the arithmetic below: `0x44f0aa`,
-   * `0x4520d8`, `0x4547b3`, `0x4550d3`, `0x455763`, `0x45296e`, `0x441d30`
-   * and `0x45631e`. See {@link Foe.burns} and `FLAME`.
+   * read by a −9 arm of the class's own hit handler, before any of the
+   * arithmetic below: `0x44f0aa`, `0x44f8bd`, `0x45296e`, `0x4547b3`,
+   * `0x4550d3`, `0x45631e` and `0x441d30` here, and the crow's `0x4520d8` in
+   * its own pass. Kragg's is the one with a gate in front of it that this
+   * function does not carry — see {@link Foe.burns} on `initkragg`. The
+   * mailbox's `0x44fe89` has no entry, and the two in the air are casts'. See
+   * {@link Foe.burns} and `FLAME`.
    *
    * A class with no such handler is not set on fire and takes nothing, which
    * is why the flamer crosses these sixteen levels touching almost nothing.
@@ -4460,8 +4463,8 @@ function strikeFoe(
       e.clock = 0;
       e.swing = false;
     }
-    // ...and seven of the eight answer 1 here and are done. `0x4547b3` is the
-    // one that falls through into the arithmetic as well.
+    // ...and every creature arm but one returns here and is done. `0x4547b3`
+    // is the one that falls through into the arithmetic as well.
     if (!how.andHurts) return;
   }
   // the spray goes first, exactly as `0x40cba0` is called before the subtract —
@@ -7708,10 +7711,13 @@ function stepStreams(): void {
      * each one its own `obj+0x12`. The flame's box against a thing in the air
      * is the same test as against a thing on its feet, and what reads the code
      * at the far end of it is {@link CastKit.onCode} — `0x455763`, the boss's
-     * fireball, and nothing else in the game.
+     * fireball. MOLITOV's shot is the other cast with a −9 arm (`0x452fcc`, in
+     * hit handler `0x452f80`, which bursts it), and its kit carries no
+     * `onCode`, so this pass passes it by.
      *
-     * Only a code: the stream's other two are ordinary damage, and no cast has
-     * a handler that accepts a number above zero.
+     * Only a code: the stream's other two are ordinary damage. (`0x452f80`
+     * also bursts on a blow of exactly `0x65`, a shot's own burst; that is not
+     * carried either.)
      */
     if (burns)
       for (const c of casts) {
@@ -7729,7 +7735,7 @@ function stepStreams(): void {
         strikeCast(c, BURN_CODE);
       }
     /**
-     * ...and a CROW, which is the eighth reader of the code and the last to be
+     * ...and a CROW, whose `0x4520d8` was the last reader of the code to be
      * found — see `CROW.burns` in {@link file://./props.ts} for why it took the
      * class descriptor to name it.
      *
@@ -8184,7 +8190,7 @@ function stepFlares(): void {
      * ...and a cast, on the levels where a flare is a code.
      *
      * The same argument as the stream's own cast pass, and on PLAYGR it is the
-     * likelier of the two: level 16 is a fourth level, so `0x43abfa` makes
+     * likelier of the two: level 4 is a fourth level, so `0x43abfa` makes
      * every flare on it a −9, and the boss's fireball is the one thing in the
      * air that reads one. A flare that meets it is spent either way —
      * `0x43acae` installs the burn-out on anything it touches, whatever the
@@ -9271,7 +9277,7 @@ interface Cast {
   armed: boolean;
   /**
    * It is on FIRE — word 0 of the six bytes `0x456240` allocates beside the
-   * object, and the only cast in the game with a hit handler is the only one
+   * object, and of the two casts with a −9 arm the fireball is the only one
    * that has any. One-way too, and {@link CastKit.onCode} owns it: see
    * {@link CastSelf.alight}.
    */
@@ -9462,8 +9468,8 @@ function stepFlames(): void {
   const lvl = level;
   if (!lvl) return;
   const alive = new Set<object>(spawnedHere());
-  // ...and a cast can be alight as well — `0x455763`, the one hit handler on a
-  // thing that is not a creature, and `0x453eae` takes a flame with its victim
+  // ...and a cast can be alight as well — `0x455763`, the one −9 arm on a cast
+  // this page carries, and `0x453eae` takes a flame with its victim
   const lit = new Set<object>(casts);
   for (const c of casts) alive.add(c);
   // ...and so can a crow — `0x4520d0`. `0x430367` hands every OBJECT in the room
@@ -9926,8 +9932,9 @@ function castBlow(c: Cast): number {
  *
  * A creature goes to {@link strikeFoe} and reads its −9 out of {@link
  * Foe.burns}. A cast has no class module, no health and no reaction table, so
- * what answers for it is the handler its own kit carries — `obj+0x12`, and
- * `0x45554f` installs one on exactly one class. See {@link CastKit.onCode}.
+ * what answers for it is the handler its own kit carries — `obj+0x12`, which
+ * `0x45554f` installs on the fireball and `0x452c83` on MOLITOV's shot. Only
+ * the fireball's is carried here. See {@link CastKit.onCode}.
  *
  * The context is built per blow rather than shared the way `BRAIN_CTX` is,
  * because a hit handler is called once and about one thing: it needs no name
@@ -9935,8 +9942,9 @@ function castBlow(c: Cast): number {
  */
 function strikeCast(c: Cast, code: number): boolean {
   const own = c.kit.onCode;
-  // no handler is the executable's own answer for everything else in the air:
-  // the blow is read by nobody and the thing carries on
+  // no handler here: the blow is read by nobody and the thing carries on — the
+  // executable's own answer for everything in the air but the fireball and
+  // MOLITOV's shot
   if (!own) return false;
   const k: CastCtx = { burn: (how) => burnCast(c, how ?? {}) };
   return own(c, code, k);
@@ -13502,12 +13510,13 @@ async function boot(): Promise<void> {
    * After `loadLevel`, not before, and that ordering is the file's own. A
    * chapter's entry function (`0x44da80` and its three siblings) zeroes all
    * twenty-one rounds counts and names its own weapon the moment the chapter
-   * opens — but only while `[0x47913c]` is 0, and `0x45e069` sets it to 1 on a
+   * opens — but only while `[0x47913c]` is 0, and `0x45e068` sets it to 1 on a
    * load. Applying these after the level has stood up is the same exemption:
    * whatever the chapter did to the inventory, the file wins.
    *
-   * `0x479438` is NOT in the file, so the weapon lands in the inventory and not
-   * in the player's hands. See {@link file://./savegame.ts}.
+   * `0x479438` is not in the file, but the reader sets it: `0x45e041` arms the
+   * player whenever the saved weapon is not 1 (none), so a loaded gun is in
+   * the player's hands. See {@link file://./savegame.ts}.
    */
   const carriedScore = params.get("score");
   if (carriedScore !== null)
@@ -13519,10 +13528,11 @@ async function boot(): Promise<void> {
       Math.max(1, Number(carriedLives) || 1),
     );
   }
+  // `0x45e039`: a saved 1 (none) skips the weapon, its rounds and the arming
   const carriedWeapon = params.get("weapon");
-  if (carriedWeapon !== null) {
+  if (carriedWeapon !== null && Number(carriedWeapon) !== 1) {
     inv.weapon = Number(carriedWeapon) || 0;
-    inv.armed = false;
+    inv.armed = true;
     inv.rounds = {
       [inv.weapon]: Math.max(0, Number(params.get("rounds") ?? 0) || 0),
     };

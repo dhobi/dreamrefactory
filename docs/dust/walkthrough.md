@@ -3,14 +3,13 @@
 *Prerequisite: nothing. This page is for playing the game. Where it came from and
 how far it can be trusted is [the golden thread](thread.md).*
 
-This is not a walkthrough somebody wrote from memory. `gamefiles/save/` holds
-**a continuous session saved about sixty times** — CyberFlix's own playthrough,
-written by the shipped `DF.EXE`, running from the first night in Diamondback to
-the closing scene on day 5. Most steps below are a change those saves record, in
-the order they record it. The rest are read out of the game's own scripts, which
-is the stronger source where it exists.
+`gamefiles/save/` holds **a continuous session saved about sixty times** —
+CyberFlix's own playthrough, written by the shipped `DF.EXE`, running from the
+first night in Diamondback to the closing scene on day 5. Most steps below are a
+change those saves record, in the order they record it. The rest are read out of
+the game's own scripts, which is the stronger source where it exists.
 
-So read it with its grain in mind:
+How to read it:
 
 - **What the saves know is the *what*, not always the *how*.** They record that
   `fearphase` went 0 → 2 and that a Cigar arrived in your hand. They do not
@@ -19,8 +18,7 @@ So read it with its grain in mind:
 - **Most steps end with a save name in brackets.** `[D2A_003]` means the file
   `D2A_003.RTD`, in the play page's **From the disc** folder, *is* the game
   immediately after that step. Stuck, curious, or in a hurry — load it and carry
-  on from there. That is the one thing this walkthrough has that no other does.
-  The opening minutes have no save of their own — the collection begins at
+  on from there. The opening minutes have no save of their own — the collection begins at
   `D1E_001`, a few minutes in — so those steps are taken from the scripts. They
   are still checked: [the playthrough](../reference/tests.md) plays them from a
   cold boot and has to arrive at `D1E_001`, which is the one rung of it with no
@@ -34,9 +32,9 @@ So read it with its grain in mind:
   npm run play -w dust -- --list     # every rung, in the order they were made
   ```
 
-  It boots (about three minutes), loads that save, and leaves the window open —
-  and prints the room and view to the terminal as you walk, which is how you
-  check a step on this page against the game.
+  It boots (about three minutes), loads that save, leaves the window open, and
+  prints the room and view to the terminal as you walk, so a step on this page
+  can be checked against the game.
 - **It is one route, not the only one.** Dust is a town you wander, and much of
   what the original player did was optional. Treat the order as a thread to
   follow, not a combination to enter.
@@ -46,7 +44,7 @@ So read it with its grain in mind:
 
 ## Before you start
 
-From the disc's own release notes, which are worth taking literally:
+From the disc's own release notes:
 
 > As the stranger who wanders in from the desert, you enter the gates of
 > Diamondback possessing little more than your wits. … **On the first day you'll
@@ -71,11 +69,11 @@ where all of it comes from; see [Money](#money) below.
 ## Day 1 — night
 
 You arrive after dark. The whole first day is one long night, and it is the
-tightest, most scripted stretch in the game.
+most tightly scripted stretch in the game.
 
-The opening is the one part of this page that comes from `HELP1.PUP` rather than
-from a save, because the collection starts a few minutes after it. It is
-therefore the *exact* sequence rather than an inferred one.
+The opening comes from `HELP1.PUP` rather than from a save, because the
+collection starts a few minutes after it, so it is the exact sequence rather
+than an inferred one.
 
 1. **Walk up the street from the gate, into the dog.** It is not a waiting game
    and there is nothing to time: `NITE.SET/0135 keydown` answers the FIRST
@@ -83,8 +81,8 @@ therefore the *exact* sequence rather than an inferred one.
    `dog1.mov` and brings the help character out (`sendtoactor ("help",
    setupactor ("dog"))`). The dog's growling and looking about is
    `EXTRA.CST/0039`'s idle loop on a `random ()` timer — flavour, not a gate.
-2. **Talk to the help character, and let him help.** He is the disc's own hand
-   on your shoulder, he is rude about it, and the bone is three questions deep.
+2. **Talk to the help character, and let him help.** He is the disc's built-in
+   guide, he is rude about it, and the bone is three questions deep.
    `HELP1.PUP/0033` opens on `mainloop ()`, and only one of its three replies
    keeps the conversation going:
 
@@ -113,7 +111,7 @@ therefore the *exact* sequence rather than an inferred one.
    The two replies he offers here — *I want to learn how to play* / *I already
    know how to play* — both end at `ringer()`, so the Ring is not at risk.
 
-   **A safety net worth knowing:** the first thing his script checks is
+   **Safety net:** the first thing his script checks is
    `if playercash <= 0`, and if you are broke he gives you $5. You cannot be
    stranded penniless.
 
@@ -143,12 +141,11 @@ therefore the *exact* sequence rather than an inferred one.
     morning. [`D2M_001`]
 
 > **What the saves don't say:** which answers you give anybody. The opening above
-> is the exception, because it was read out of the script instead — and it is
-> worth noticing that the two sources disagreed. The saves showed the Bone
-> leaving and the Ring arriving across one gap, which reads as *the dog traded
-> you up*; the script says the dog only has to be **gone**, and the Ring is the
-> help character's parting gift. That is the difference between what changed and
-> what caused it.
+> is the exception, because it is read out of the script. The saves alone show
+> the Bone leaving and the Ring arriving across one gap, which reads as a trade
+> with the dog; the script says the dog only has to be **gone**, and the Ring is
+> the help character's parting gift. The saves record what changed, not what
+> caused it.
 
 ---
 
@@ -234,9 +231,8 @@ talking about: gun, bullets, boots.
 
 ## Day 3 — morning
 
-You wake with **$150**, and this is the longest single gap on the whole thread:
-**twenty-two minutes** of play between waking and the next save. Whatever the
-original player did that morning, they did a lot of it.
+You wake with **$150**. This is the longest single gap on the whole thread:
+**twenty-two minutes** of play between waking and the next save.
 
 1. **Get the Sugarcubes back from Trotter**, and learn the story of the Ring
    (`jonesringstory`) — Jones, Buick, Fear and the Mayor's wife are all part of
@@ -358,8 +354,7 @@ for word:
 
     answerstr = "1,2,3,4,5,"
 
-The saves cannot tell you that, and this is the one puzzle where they actively
-mislead. `FLUTE.FLT` builds `flutestr` a note at a time and, on the far side of
+The saves do not show the answer. `FLUTE.FLT` builds `flutestr` a note at a time and, on the far side of
 a completed phrase, resets it to `0,0,0,0,0,` — so the save taken in the solved
 room carries the reset string rather than the answer. It is five presses and not
 six because `FLUTE.SET/0041 mousedown` seeds `flutenum = 1` on the way in and
@@ -371,8 +366,7 @@ each press writes word `flutenum` and then increments: the presses land on words
 
 ## Money
 
-Worth knowing before you spend anything, because the thread's own player was
-broke twice:
+The thread's own player was broke twice:
 
 | | cash | in the bank |
 |---|---:|---:|
@@ -390,12 +384,8 @@ survives the night.
 
 ## Where this walkthrough is thin
 
-Said plainly, because a walkthrough that hides its gaps is worse than one that
-doesn't have them:
-
 - **The 22-minute morning of day 3** (`D3M_001` → `D3M_002`) is one rung with
-  seven changes in it. Something happened in there that the saves compress to
-  nothing.
+  seven changes in it; the saves do not record the steps in between.
 - **Conversation choices are nowhere in the data.** Every "talk to X" step is
   real — the save proves the conversation ran — but which reply advanced it is
   not recorded.
@@ -403,8 +393,8 @@ doesn't have them:
   tactics.
 - **Day 5** is one save long.
 
-If you play it and a step is wrong or missing, that is exactly the feedback that
-fixes this page — and the fix is usually one grep away in the scripts.
+A step that is wrong or missing is worth reporting; the fix is usually one grep
+away in the scripts.
 
 Back to [Dust](README.md), or on to [the golden thread](thread.md) for how this
 was derived.

@@ -17,47 +17,42 @@ char.mov   kill1.mov … kill7.mov
 ```
 
 The first three are the startup — CyberFlix logo, intro, menu — and the page
-follows that order rather than opening on the menu. The Windows engine carries the
-identical table (at offset 435497 of `INSTALL/BIN/SC.EXE`, laid out backwards in
-memory and reading the same order), which is the independent witness for this. The next three are where the
-menu's own buttons go, which corroborates the exit table below from the other
-side. Per-level records sit earlier in the same region, each pairing a
-`BoggsNN.Mov` with a `ChpNN.Mov` beside that level's sprite book and theme.
+plays them in that order rather than opening on the menu. The Windows engine
+carries the identical table (at offset 435497 of `INSTALL/BIN/SC.EXE`, laid out
+backwards in memory and reading the same order). The next three are where the
+menu's own buttons go, matching the exit table below. Per-level records sit
+earlier in the same region, each pairing a `BoggsNN.Mov` with a `ChpNN.Mov`
+beside that level's sprite book and theme.
 
-The strings *around* them are the useful negative result, because none of this is
-in any data file: `"Enter name for high scores:"`, `Name`/`Score`/`Level`,
-`Easy`/`Hard`, `"Enter level (1-16):"`, `"Load from which slot?"`,
-`"Save in which slot?"` — and seven cheat words. High scores, save slots, level
-select, difficulty: the entire shell is native code, and the films are assets it
-plays.
+The strings *around* them are in no data file: `"Enter name for high scores:"`,
+`Name`/`Score`/`Level`, `Easy`/`Hard`, `"Enter level (1-16):"`, `"Load from which
+slot?"`, `"Save in which slot?"` — and seven cheat words. High scores, save
+slots, level select, difficulty: the entire shell is native code, and the films
+are assets it plays.
 
-**There is no DreamFactory script interpreter in it either**, and that is measured
-rather than inferred from the missing BOOTFILE. Titanic's Dutch disc ships a
+**There is no DreamFactory script interpreter in it either**, and that is
+measured, not inferred from the missing BOOTFILE. Titanic's Dutch disc ships a
 Macintosh build — `INSTALL_MAC/Titanic`, a PEF binary like Skull Cracker's — and
 that one carries the engine's command vocabulary as plain strings: `playmovie`,
 `opentrackfile`, `actionframe`, `wavevolume`. Skull Cracker's binary carries none
-of them. Two PowerPC executables from the same studio and the same year, and only
-one of them has the script language in it.
+of them.
 
-The Windows release says the same thing on its own hardware. Its root `SKULL.EXE`
-is an 83 KB Win16 launcher stub; the engine is `INSTALL/BIN/SC.EXE`, 584 KB, and it
-carries **the same film table in the same order** — mixed casing and all, with
-`helpmac.mov` swapped for `helpwin.mov`, the one entry the two platforms disagree
-about — the same shell strings, six of the same seven cheat words, and **zero**
-DreamFactory verbs. Two executables, two platforms, two executable formats, one
-answer.
+The Windows release is the same. Its root `SKULL.EXE` is an 83 KB Win16 launcher
+stub; the engine is `INSTALL/BIN/SC.EXE`, 584 KB, and it carries **the same film
+table in the same order** — mixed casing and all, with `helpmac.mov` swapped for
+`helpwin.mov`, the one entry the two platforms disagree about — the same shell
+strings, six of the same seven cheat words, and **zero** DreamFactory verbs.
 
 ## How a DreamFactory menu answers with no script
 
 `menu.mov`'s six buttons are type-2 jumps to six one-frame stubs at the tail of
 the same film — `"frame 2"`…`"frame 7"` — and each stub is a type-1 **exit**. The
-film's whole return value is *which frame it stopped on*; the executable read that
-and did the rest. One button is the exception and answers by itself: Prefs is a
-type-3 chain naming `prefs.mov`.
+film's whole return value is *which frame it stopped on*; the executable reads
+that and does the rest. One button is the exception and answers by itself: Prefs
+is a type-3 chain naming `prefs.mov`.
 
-That is half of it. The other half is not this port's reading of the labels, which
-is what `skullcracker/src/main.ts` used to keep, but the executable's own table —
-and it is reached by FRAME INDEX rather than by frame name:
+The other half is the executable's own table, reached by FRAME INDEX rather than
+by frame name:
 
 ```
   45dee7  movsx eax, si          ; si = the film's current frame index
@@ -70,18 +65,17 @@ and it is reached by FRAME INDEX rather than by frame name:
 
 | frame | index | slot | what it does |
 | --- | --- | --- | --- |
-| `"Name 169"` | 167 | `0x45deff` | the attract branch |
+| `"Name 169"` | 167 | `0x45deff` | the attract branch — a `skuldemo.dmo` slot through `0x4034a0` |
 | `"frame 2"` | 168 | `0x45df7c` | `[0x46b208] = -1` → `char.mov` — **Begin** |
-| `"frame 3"` | 169 | `0x45df8d` | `[0x46b208] = -2` → a slot dialog — Open |
+| `"frame 3"` | 169 | `0x45df8d` | `[0x46b208] = -2` → a `.SKL` file dialog — **Open** |
 | `"frame 4"` | 170 | `0x45e082` | `[0x46b208] = 3` → `helpwin.mov` |
 | `"frame 5"` | 171 | `0x45e093` | `[0x46b208] = 2` → `prefs2.mov` |
 | `"frame 6"` | 172 | `0x45e0a4` | `[0x4abdfe] = 11` → `0x40340f` — **Quit** |
 | `"frame 7"` | 173 | `0x45e0be` | `[0x46b208] = 6` → `credits.mov` |
 | `"demo frame"` | 174 | `0x45e0cf` | the attract branch again |
 
-Two of those had been read wrong here, and the second is the interesting one.
-"frame 6" is Quit — state 11 sets `[0x46b200]` and `0x403433` falls out of the
-shell loop into `0x40a4a0` — where this page had it playing a film.
+"frame 6" is Quit, not a film: state 11 sets `[0x46b200]` and `0x403433` falls
+out of the shell loop into `0x40a4a0`.
 
 **And Begin does not begin.** It plays `char.mov`, which asks which of the two
 Skull Crackers you are. The game starts after that: the chooser leaves
@@ -90,13 +84,11 @@ already 3 — `0x4031b2`, the level runner. So the whole front end is
 **menu → chooser → level one**, and this port follows it without leaving the
 page: `begin()` puts the two words the front end settled into the query string
 with `replaceState`, stops the film loop, hands the canvas over and imports the
-level runner (`handOver` in `src/main.ts`). It used to navigate to `walk.html`,
-which put the game on the page whose own header calls itself an experiment and
-left the page that claims to BE Skull Cracker stopping at the menu.
+level runner (`handOver` in `src/main.ts`).
 
-Prefs needs BOTH of its films, and this page had them the wrong way round. The
-menu's stub is a type-3 chain naming `prefs.mov`; `0x45e093` sets
-`[0x46b208] = 2`, which is what the shell loop reads when the menu ends:
+Prefs needs BOTH of its films. The menu's stub is a type-3 chain naming
+`prefs.mov`; `0x45e093` sets `[0x46b208] = 2`, which is what the shell loop reads
+when the menu ends:
 
 ```
   403085  0x4498c0(Menu.Mov)      ; play the menu and wait
@@ -109,10 +101,10 @@ menu's stub is a type-3 chain naming `prefs.mov`; `0x45e093` sets
 
 A film played after the modal has returned can only be the panel going away, so
 the chain is not overruled at all: `prefs.mov` is the panel arriving and
-`prefs2.mov` is it leaving. The frame names say the same thing from the other
-side — the two are one sixty-frame move cut in half, named `picsout 1`…`30` and
-`picsout 31`…`60`. Opening the panel with the second half played the animation
-backwards: it slid off the screen and then took clicks.
+`prefs2.mov` is it leaving. The frame names agree — the two are one sixty-frame
+move cut in half, named `picsout 1`…`30` and `picsout 31`…`60`. Opening the panel
+with the second half plays the animation backwards: it slides off the screen and
+then takes clicks.
 
 ## The panel the pan slides in is empty, and the executable fills it
 
@@ -152,9 +144,9 @@ as *Bonebreaker Jones*. The two lists are not even in the same order — charact
 `char.mov` is 63 frames that loop from 20 to 63 with four regions live the whole
 way — two on the left figure chaining `ltpan.mov`, two on the right chaining
 `rtpan.mov`. Every one of those frames sets flags bit 2, "do not wait for the
-regions", which is a frame that animates and is still clickable. Reading that bit
-as "has no regions" is why the two figures could not be clicked here at all;
-`0x44979f` reads the region count either way and only the wait is skipped.
+regions", which is a frame that animates and is still clickable. The bit does
+not mean "has no regions": `0x44979f` reads the region count either way and only
+the wait is skipped.
 
 Which pan means which player is in the pans' own headers, through the one
 mechanism a DreamFactory film has for answering a question it was not asked:
@@ -174,11 +166,12 @@ header fields, one comparison a frame. Each pan then ends on a frame that DOES
 wait, for a single region at (219,225)-(291,264) — the accept button.
 
 Each pan also leaves a HOLE, and the film never fills it — see the section
-below.
+above.
 
-Neither prefs film has **any regions anywhere in it**. The executable owns the panel from the
-moment the film stops: `0x45db40` draws it and `0x45d700` is a fourteen-way
-dispatch on a control id. Fourteen controls, and their rects are in `.data`:
+Neither prefs film has **any regions anywhere in it**. The executable owns the
+panel from the moment the film stops: `0x45db40` draws it and `0x45d700` is a
+fourteen-way dispatch on a control id. Fourteen controls, and their rects are in
+`.data`:
 
 ```
   0…7    0x479188..0x4791c0   eight boxes, two columns of four  -> [0x47917c] = i
@@ -192,25 +185,23 @@ dispatch on a control id. Fourteen controls, and their rects are in `.data`:
 
 Control 8 is the one whose handler returns zero, and `0x45d6ea` loops while the
 return is not zero — so that wide rect across the bottom right is the only way
-out of the panel, and the slider is the rect after it rather than that one. This
-page had the two the other way round.
+out of the panel, and the slider is the rect after it.
 
-Which corrects something this page had written down as a fact: *nothing writes
-`0x46b20c`, so the difficulty is always zero*. Three instructions write it —
-`0x45d788`, `0x45d79b`, `0x45d7ae` — and they are those three boxes. Zero is the
-default, not the only value. Which end is which is settled by what the number
-does rather than by a label: `0x448ac2` gives `trunc(d × 600) + 1200` health and
-`0x40e300(n)` returns `n - (n/2)·d`, so **+1 is easy** — more health, softer
-blows — and `0x40e300` is called from the classes' own constructors (Boggs' four
-thousand at `0x41be84`, his machines' three at `0x41b474`) and from neither
-player's hit handler. The difficulty makes the LEVEL harder, not the blow.
+`0x46b20c`, the difficulty, has three writers — `0x45d788`, `0x45d79b`,
+`0x45d7ae` — and they are those three boxes. Zero is the default, not the only
+value. Which end is which follows from what the number does rather than from a
+label: `0x448ac2` gives `trunc(d × 600) + 1200` health and `0x40e300(n)` returns
+`n - (n/2)·d`, so **+1 is easy** — more health, softer blows — and `0x40e300` is
+called from the classes' own constructors (Boggs' four thousand at `0x41be84`,
+his machines' three at `0x41b474`) and from neither player's hit handler. The
+difficulty makes the LEVEL harder, not the blow.
 
 ## The eight boxes are the keyboard, and `[0x47917c]` is not a setting
 
-The eight numbered boxes looked like a setting with eight values. They are not:
-`[0x47917c]` is which box is SELECTED, and the panel's event loop does the rest.
-`0x45d6d5` uppercases whatever character was typed and calls
-`0x45d810([0x47917c], char)`, which binds it — or refuses, twice over:
+The eight numbered boxes are not a setting with eight values: `[0x47917c]` is
+which box is SELECTED, and the panel's event loop does the rest. `0x45d6d5`
+uppercases whatever character was typed and calls `0x45d810([0x47917c], char)`,
+which binds it — or refuses, twice over:
 
 ```
   45d824  for action 1..8: if 0x40e7e0(action) == char  ->  return   ; spoken for
@@ -223,14 +214,14 @@ The eight numbered boxes looked like a setting with eight values. They are not:
 So a binding is one byte of the 256-byte table at `0x46b210`, indexed by the
 character, holding the action number 1…8 — the same table `0x403b90` indexes on
 every keypress in the level, and the same eight actions `0x402be0` spends on one
-global apiece. **Every key in the game is rebindable, and the eight letters this
-port had hard-coded are only what `0x46b210` ships with.**
+global apiece. **Every key in the game is rebindable, and the eight default
+letters are only what `0x46b210` ships with.**
 
-The other half of `0x40e870` settles something this page had guessed. A bound
-character can be named three ways: `A`…`Z` and `0`…`9` are themselves, character
-32 is the string at `0x46bf0c` — `"Sp"`, two characters wide, which is what the
-`cmp byte ptr [esp + 0x18], 2` in the draw loop shifts left by four pixels — and
-characters 24…27 come out of a four-entry table at `0x40e980`:
+`0x40e870` names a bound character three ways: `A`…`Z` and `0`…`9` are
+themselves, character 32 is the string at `0x46bf0c` — `"Sp"`, two characters
+wide, which is what the `cmp byte ptr [esp + 0x18], 2` in the draw loop shifts
+left by four pixels — and characters 24…27 come out of a four-entry table at
+`0x40e980`:
 
 ```
   24  ->  0x46bf08  "J4"      26  ->  0x46bf00  "J2"
@@ -238,8 +229,8 @@ characters 24…27 come out of a four-entry table at `0x40e980`:
 ```
 
 They are a **joystick's four buttons**, and the shipped table binds them beside
-the letters: J4 punches, J3 kicks, J2 jumps and J1 is INV. This port had those
-four entries written down as arrow keys. The arrows in this page are its own.
+the letters: J4 punches, J3 kicks, J2 jumps and J1 is INV. They are not arrow
+keys; the arrows in this page are its own.
 
 ## The slider is ten segments and step 0 is not silence
 
@@ -261,16 +252,27 @@ of the same switch: on, `0x40f190(0x4ac370)` starts the level's theme bank; off,
 `0x427960(0, 0, 1, 0)` stops it. No effects bank is ever consulted, so turning it
 off leaves every fist and every door exactly as loud as they were.
 
-## The second menu button is a DEMO PLAYER, and the save game does not exist
+## The second menu button loads a save game, and the demo player is elsewhere
 
-`0x45df8d` sets `[0x46b208] = -2`, which this page had written down as "a save
-dialog". It is not one, and there is no save game in Skull Cracker at all.
+`0x45df8d` sets `[0x46b208] = -2` and is **Open**: it asks `0x40ae80` for a file
+through `GetOpenFileNameA` with the `.SKL` filter, reads twenty-two bytes and
+restores the chapter, the stage, the score, the lives and the weapon — the save
+game laid out in [What the executable runs](systems.md#there-is-a-save-game-and-it-is-twenty-two-bytes).
 
-**The recorder is dead code.** `0x403900` is the routine behind "Save in which
-slot?" (`0x46b401`) and it has **zero callers** anywhere in the executable. Only
-the reader is reachable, from `0x45df3c` and `0x45e10c`.
+The strings "Save in which slot?" and "Load from which slot?" belong to a
+different thing, the demo recorder and player, and neither is behind a menu
+button of its own.
 
-**And the slots are not saves.** `0x4034a0` asks "Load from which slot?"
+**The recorder is dead code.** `0x4038d0` appends one input word a frame to the
+buffer at `[0x4a02b8]` and is called only from `0x403716`, behind
+`[0x46b310]`; the only write to `[0x46b310]` in the executable is the clear at
+`0x403b53`. When the buffer reaches 0xe10 entries `0x4038d0` jumps to
+`0x403900`, the routine behind "Save in which slot?" (`0x46b401`), which has **no call
+sites** — that jump is its only way in. Only the reader is reachable, from
+`0x45df3c` and `0x45e10c`: the attract branch at frame 167 and the "demo frame"
+at 174.
+
+**And the slots are input recordings.** `0x4034a0` asks "Load from which slot?"
 (`0x46b3e9`), opens `skuldemo.dmo` — `0x46b3d9`, as a `DEMO` container — pulls
 container N out of it and copies it into a 0x1c2c buffer at `[0x4a02b8]`. What
 that buffer holds is:
@@ -292,21 +294,20 @@ and `0x4037b2` walks it with the cursor at `[0x46b31c]`:
 
 `0x403820` is the same function the keyboard reaches through `0x46b210`. So a
 slot is an **input recording** — one signed action a frame, of the same eight
-actions the preferences panel binds keys to — and the button plays it back.
-That is also what `skuldemo.dmo` is, which answers the other open question about
-that file.
+actions the preferences panel binds keys to — and the attract branch plays it
+back. That is also what `skuldemo.dmo` is.
 
 It is not built. A 1996 input stream replayed against a re-implementation
 desyncs, and the desync is the only thing it would demonstrate.
 
 ## The writing that was missing is on the TITLE screen
 
-The kill vignette shows nothing written on it because there is nothing written on
-it. The high-score board is drawn over `menu.mov`, and `0x45de89` is the line
-that says so: while `[0x46b208]` is 1 — the menu — and the film's frame index is
-**0…0xa7**, `0x45ddd0` draws the board over whatever the film is showing. 0xa7 is
-167 and `"frame 2"` is index 168, so that range is exactly the attract loop and
-it stops where the six button stubs begin.
+The kill vignette has nothing written on it. The high-score board is drawn over
+`menu.mov`, and `0x45de89` is the line that says so: while `[0x46b208]` is 1 —
+the menu — and the film's frame index is **0…0xa7**, `0x45ddd0` draws the board
+over whatever the film is showing. 0xa7 is 167 and `"frame 2"` is index 168, so
+that range is exactly the attract loop and it stops where the six button stubs
+begin.
 
 What gets a score onto it is `0x403340`, the state the seven vignettes belong to:
 
@@ -318,9 +319,8 @@ What gets a score onto it is `0x403340`, the state the seven vignettes belong to
   4033ee  cx = 1                   ; and the shell goes back to the title
 ```
 
-Which also settles what the kill films ARE: `0x4294e7` only sets that state once
-`0x40d490` has found the lives below zero, so they are the GAME OVER films, not
-the per-death ones.
+`0x4294e7` only sets that state once `0x40d490` has found the lives below zero,
+so the kill films are the GAME OVER films, not the per-death ones.
 
 There are **three boards of ten**, one per difficulty, each row nineteen bytes —
 `{ Pascal name[13], dword score, word level }`, which is the `lea edx, [eax +
@@ -347,8 +347,8 @@ all three of `Easy`, `Med` and `Hard` and the second draws only the one
 looking at. An empty row shows `-----` for the name (`0x46bf71`) and `-` for the
 other two (`0x46bf6d`).
 
-The one thing a browser cannot have is `Skull.sco`, the file `0x40f210` reads the
-thirty rows back from. They live beside the preferences instead.
+A browser cannot have `Skull.sco`, the file `0x40f210` reads the thirty rows back
+from. They live beside the preferences instead.
 
 ## Eight words, one per length, and a two-thirds-of-a-second memory
 
@@ -369,7 +369,7 @@ and the recogniser is this:
 
 The jump table is indexed by **how many characters have been typed since the last
 pause**, and each of its eight slots compares the accumulator against exactly one
-string. Which is why the eight words are eight different lengths: type nine
+string. That is why the eight words are eight different lengths: type nine
 letters and the only word you can possibly have typed is `marsupial`. `0x4087c0`
 is `ms * 3 / 50`, a sixtieth-of-a-second tick, so the 0x28 is two thirds of a
 second between letters.
@@ -385,39 +385,37 @@ second between letters.
   10  myxzltplkt  0x46b418   0x404136 mov ax, 1       nothing at all
 ```
 
-Two of those are corrections. **`jetson` is TIME, not score.** `0x40d350`'s
-argument is signed — positive sets `[0x4a4d68]` and negative adds to it — and
-`[0x4a4d68]` is the mission clock, the word every chapter's entry function fills
-from its book's `timer` record — see "The mission clock was a record all along"
-above. The gift is capped at
-`[0x4a3b18]`, the dial's own full scale, and the same −850 is what the clock
-PICKUP hands over (`0x428354`). And **`myxzltplkt` really is the joke it looks
-like**: `0x40411e` makes the comparison and `0x404136` loads 1 into `ax` whether
-it matched or not, so the branch that would have done something was never
-written.
+**`jetson` is TIME, not score.** `0x40d350`'s argument is signed — positive sets
+`[0x4a4d68]` and negative adds to it — and `[0x4a4d68]` is the mission clock, the
+word every chapter's entry function fills from its book's `timer` record — see
+"The mission clock was a record all along" in
+[What the executable runs](systems.md#the-mission-clock-was-a-record-all-along).
+The gift is capped at `[0x4a3b18]`, the dial's own full scale, and the same −850
+is what the clock PICKUP hands over (`0x428354`). **`myxzltplkt` does nothing**:
+`0x40411e` makes the comparison and `0x404136` loads 1 into `ax` whether it
+matched or not, so the branch that would have done something was never written.
 
 `eshs` is the only one with a guard: `0x402ee0` dispatches on the character and
 both halves (`0x42e6e0`, `0x448bf0`) ask the same thing — is the player's kind
 between 0x12 and 0x16, which is the armed set. Empty-handed the word is nothing.
 
-One consequence for this page. Four of its own keys were bare letters — `h` for
-the damage switch, `n` for the spawn cycler, `c` for the character switch and `m`
-for the mute — and three of those are the first letter of a word. **They are held
-with SHIFT now.** None of the four is the original's key, and the original's own
-designer set is behind a modifier too (`0x403c40` tests the event's modifiers
-against 0x1fa0 before it will read one), so this is the shape the executable
-already has. `[` and `]` stay bare: no cheat word has a bracket in it.
+This page's own keys — `h` for the damage switch, `n` for the spawn cycler, `c`
+for the character switch and `m` for the mute — are **held with SHIFT**, because
+three of those are the first letter of a word. None of the four is the original's
+key, and the original's own designer set is behind a modifier too (`0x403c40`
+tests the event's modifiers against 0x1fa0 before it will read one), so this is
+the shape the executable already has. `[` and `]` stay bare: no cheat word has a
+bracket in it.
 
 ## The sound was one pointer away
 
 The disc's 24 `.SND` files are DreamFactory 4 audio banks — the format Titanic
-spells `.TRK` and Timelapse `.SFX`, which this project has read from the start.
-`readBankTables` took the loop table to be container 1, true of 615 of the 630 v4
-banks across the four discs and false of exactly the fifteen that are
-Skull Cracker's music: `THEME01.SND` is 14 containers with its bars in 1..11, its
-loop table in **12** and its empty one-shot table in 13, and container 0's own
-field at +28 says so. Reading that field opens all 24 banks, in the game and in
-the track editor, which had called them "not a bank".
+spells `.TRK` and Timelapse `.SFX`. The loop table is container 1 in 615 of the
+630 v4 banks across the four discs, but not in the fifteen that are Skull
+Cracker's music: `THEME01.SND` is 14 containers with its bars in 1..11, its loop
+table in **12** and its empty one-shot table in 13, and container 0's own field
+at +28 says so. Reading that field opens all 24 banks, in the game and in the
+track editor.
 
 A theme is a bed of BARS and a play ORDER over them, and the order is the
 arrangement: `THEME01` is eleven bars and 62 steps beginning `1 1 5 5 5 3 4 3 4`,
@@ -431,15 +429,14 @@ is a Pascal string referenced from exactly one place, and every place is
 levels with their themes, four chapters with their effects banks, and the two
 playable characters with `skulz.snd` and `bones.snd`.
 
-The last piece is what makes the reading provable rather than plausible.
-`0x40ef30(bank, index, point)` plays a one-shot **by record index**, and every
-index in the chapter's hit handlers lands on a name that says what it is — the
-hydrant's 4 on "0040 hydrant", the mailbox's 5 on "0050 mailbox falls", the rat's
-12 on "0150 rat gets squashed", a punk's 33 on "0560 wolf death", its `rand(4) +
-0x23` on the four "wolf hit" takes, the ladder state's 2 and 3 on the two "ladder
-step"s, and the walk cycle's frames 1 and 6 on the two "skull step"s. Nine
-independent hits on a table nobody indexed by hand, which is also how the levels'
-own name for their punks came out: they are werewolves.
+The one-shot indices confirm the reading. `0x40ef30(bank, index, point)` plays a
+one-shot **by record index**, and every index in the chapter's hit handlers lands
+on a name that says what it is — the hydrant's 4 on "0040 hydrant", the mailbox's
+5 on "0050 mailbox falls", the rat's 12 on "0150 rat gets squashed", a punk's 33
+on "0560 wolf death", its `rand(4) + 0x23` on the four "wolf hit" takes, the
+ladder state's 2 and 3 on the two "ladder step"s, and the walk cycle's frames 1
+and 6 on the two "skull step"s. Nine independent matches; the names also give the
+levels' own name for their punks: they are werewolves.
 
 `0x40efb0` places each one — the volume falls off linearly with the Manhattan
 distance from the middle of the view and nothing 768 pixels past it is played at
@@ -450,10 +447,9 @@ all — and that is the whole of the mixer.
 None of that mixer reaches a film. A film's audio is in the film, and there are
 two kinds of it: the loop-table **bed** a segment starts by itself, and one-shots
 named by a frame. `menu.mov` and the sixteen chapter briefings have a bed. Nothing
-else does — and "nothing else" is Boggs' spoken orders, the seven kill vignettes
-and the four time-out ones, all of which this page played in silence, because its
-player fired a one-shot only from a CLICKED region and a frame's own sound was
-read and thrown away.
+else does — Boggs' spoken orders, the seven kill vignettes and the four time-out
+ones are all frame one-shots, so a player has to fire a frame's own sound, not
+only one from a CLICKED region.
 
 The films are all one shape, and the shape is a television set: a console powers
 down (`soundout 2`, `soundout 3`), a little 160x111 monitor comes on inside it
@@ -461,7 +457,6 @@ down (`soundout 2`, `soundout 3`), a little 160x111 monitor comes on inside it
 (`Mon. OFF`). `boggs01.mov` is that with four segments of speech in the middle —
 `1a`, `1b`, `1c`, `1d` — and `kill1.mov` is the same with one.
 
-Which is also where the pacing was wrong, because the two facts are the same fact.
 Those inset segments are authored at the film's own three ticks, 50ms, and the
 sound over one is exactly as long as its picture:
 
@@ -473,14 +468,12 @@ sound over one is exactly as long as its picture:
 | `boggs01.mov` seg 4 | 127 | 6.35s | `1c` 6.32s |
 | `boggs01.mov` seg 5 | 177 | 8.85s | `1d` 8.82s |
 
-`mov-pace.ts`'s 66ms native floor — a rule for the films that carry no timing at
-all, the publisher logos — was raising every one of them by a third, so the
-picture outran the line spoken over it.
+`mov-pace.ts`'s 66ms native floor is a rule for the films that carry no timing at
+all, the publisher logos; applied to these it raises every one by a third, and
+the picture outruns the line spoken over it.
 
-**And a bed is not a frame rate either**, which is the other half of the same
-correction and the one the front end was paying for. `SC.EXE` computes the
-deadline for a frame out of the film and nothing else, four instructions at
-`0x44b7db`:
+**A bed is not a frame rate either.** `SC.EXE` computes the deadline for a frame
+out of the film and nothing else, four instructions at `0x44b7db`:
 
 ```
   44b7db  call 0x4087c0           ; now, in ticks of 50/3 ms
@@ -494,24 +487,24 @@ deadline for a frame out of the film and nothing else, four instructions at
 
 and `0x44a033` spins on `now < [0x4a76f4]`. No sound is consulted anywhere in the
 loop — it is `max(frame.holdTicks, minHoldTicks)`, the same pair of adds TI.EXE
-makes at `0x44b10f`. This page's player was flooring a segment that carries a bed
-at the rate a soundtrack implied, and every film between the title and level one
-carries one:
+makes at `0x44b10f`. Flooring a segment that carries a bed at the rate its
+soundtrack implies stretches every film between the title and level one, since
+each carries one:
 
-| film | frames | authored | it played |
+| film | frames | authored | floored by the bed |
 | --- | --- | --- | --- |
 | `menu.mov` | 175 | 17.10s | 25.38s |
 | `char.mov` | 63 | 4.72s | 9.13s |
 | `ltpan.mov` / `rtpan.mov` | 59 | 2.95s | 8.55s |
 
-The pans are the worst of it: 59 frames authored at the film's own three ticks,
-held at 145ms apiece, and the camera took three times as long to reach the
-character it was panning to. In a browser, clicking a figure to the Start button
-took 9.14s and now takes 4.68s, and the chooser's own idle loop runs at the 100ms
-it is authored at rather than 150. Further in it reads the same way, because a
-bed is authored over a whole FILM and was being divided by its FIRST segment's
-frames: that gave `mall.mov` 830ms a frame, sixteen times its authored rate, for
-music that covers all ten of its segments.
+The pans suffer most: 59 frames authored at the film's own three ticks, held at
+145ms apiece, and the camera takes three times as long to reach the character it
+is panning to. In a browser, clicking a figure to the Start button takes 4.68s
+at the authored rate against 9.14s floored, and the chooser's own idle loop runs
+at the 100ms it is authored at rather than 150. A bed is also authored over a
+whole FILM, so dividing it by the FIRST segment's frames gives `mall.mov` 830ms a
+frame, sixteen times its authored rate, for music that covers all ten of its
+segments.
 
 So: every segment is paced by its own authored holds and by nothing else. The bed
 starts when the segment does and plays under the picture; `interval` still says
@@ -521,4 +514,4 @@ order to take, but it may not raise a hold.
 Both ends of every one of these films then hold on a frame whose flags bit 0 says
 **wait for the voice**: `kill1.mov` holds its console still until `soundout 3` is
 done, and holds again before the black frame until `Mon. OFF` is. With no sound
-playing that waits on nothing, which is exactly what it did while there was none.
+playing that waits on nothing.

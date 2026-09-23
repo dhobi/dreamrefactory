@@ -243,11 +243,12 @@ const COMPASS: Record<number, string> = { 192: "north", 0: "east", 64: "south", 
  *
  * The string half is v4's exactly — name, then set, star, pose and owner on a
  * 16-byte stride after it — and the numeric half is four bytes longer, so v4's
- * offsets for the tail (`turn`, `speed`, `scale`, `zclip`) do not transfer and
- * are not guessed at here. What IS pinned is the placement, and by measurement
- * rather than by analogy: the three words at +26/+28/+30 match the world
- * coordinates of the record's own named star in 23 of the 38 records whose star
- * belongs to the open set, and no other offset in the record matches even once.
+ * offsets for the tail (`turn`, `speed`, `scale`, `zclip`) do not transfer
+ * (`turn` and `speed` are pinned below, at +36 and +40). The placement is
+ * pinned by measurement rather than by analogy: the three words at +26/+28/+30
+ * match the world coordinates of the record's own named star in 23 of the 38
+ * records whose star belongs to the open set, and no other offset in the record
+ * matches even once.
  */
 const ACTOR_STRIDE = 164;
 const ACTOR_VISIBLE = 0;

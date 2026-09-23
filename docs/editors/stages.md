@@ -9,7 +9,7 @@ band (`MAIN.STG`), the inventory (`INVEN1.STG`), the deck plan (`MAP.STG`), a
 mini-game board (`BLKJACK.STG`) — and it comes apart into its flats.
 
 Dust's are `.FLT`, DreamFactory 1's name for a stage, and its container-0 header
-really is at different offsets — but the reader and every patch take their tables
+is at different offsets — but the reader and every patch take their tables
 from the file's own version tag, so an edit lands on the byte the name came out of
 and its twenty open here too. Timelapse's stages are `.STG` and 640×480; the
 caption reads the size out of the file rather than assuming one.
@@ -40,15 +40,15 @@ click-logic container (`patchFlatName`, `patchRegionName`, `patchRegionRect` in
 
 One entry in the file picker is not CyberFlix's: **`lang.stg`**, the language
 chooser (`npm run mklang -w taoot` builds it; it ships in `taoot/public/`, which every
-package's Vite plugin lists alongside its `gamefiles/`). It is a good thing to open here, because it is the
-whole round trip in one file — a stage this repository *wrote*, with two flats, six
+package's Vite plugin lists alongside its `gamefiles/`). It shows the whole
+round trip in one file — a stage this repository *wrote*, with two flats, six
 click regions and a compiled `mousedown` handler each, which the editor reads like
 any other. Restyle its art by PNG import, nudge the button rectangles, export, drop
 the result over `public/lang.stg`, and the game still boots into it: the click
 regions are where the chooser reads its layout from, so the dimming of
 uninstalled languages follows whatever you moved.
 
-That is also the honest fix for the one thing the generator cannot do — its 5×8
+Art import is also the fix for the one thing the generator cannot do — its 5×8
 pixel font has no Cyrillic or CJK, so `Русский` and `日本語` are drawn as
 `RUSSIAN` and `JAPANESE` until someone imports art with a real font.
 
@@ -60,7 +60,7 @@ runtime.
 
 - [STG — stage files & the UI](../engine/formats/stg.md) — what the structures are
 - [Stage & UI](../engine/runtime/stage-ui.md) — how the runtime drives flats and overlays
-- [The browser editors](README.md) — what the seven pages share
+- [The browser editors](README.md) — what the pages share
 - [Languages & the chooser](../taoot/languages.md) — `lang.stg`, the stage this
   repository authored
 

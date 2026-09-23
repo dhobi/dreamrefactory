@@ -18,7 +18,7 @@ that stands on, see [the engine](../engine/).
   chooser stage this port authored because the original shipped one language per
   install
 - [Developer mode](devmode.md) — the 1996 debug build put back up: one edited
-  line, TI.EXE's own menu bar, and what `debugging` really opens
+  line, TI.EXE's own menu bar, and what `debugging` opens
   - [The census](devmode-census.md) — every read of the flag and every modifier
     probe in the corpus, generated, with what each branch does
 - [Free roam](freeroam.md) — the guided tour `playmode.mov` offers, entered

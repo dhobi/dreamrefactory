@@ -113,7 +113,9 @@ test("the lede does not hand CyberFlix somebody else's game", () => {
 });
 
 test("the lede does not make the engine's games only the ones this port plays", () => {
-  // Games built on DreamFactory that are NOT in this port. Naming some of them
+  // CyberFlix games that are NOT in this port — Lunicus and Jump Raven on
+  // DreamFactory, Redjack (named as the studio's last game, not claimed as a
+  // DreamFactory title) on engines of its own. Naming some of them
   // is what stops the sentence collapsing back into a count of what happens to
   // be playable here — the mistake it shipped with, which reads as though the
   // engine had three games rather than the port having three.

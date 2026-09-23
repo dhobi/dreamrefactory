@@ -99,8 +99,8 @@ lounge says it is locked:
 | C-78, Burns's | `hallc` `hallc-c78` | `voicesound ("knock1")` |
 | 1st Class Lounge | `lnghall` `lnghall-lounge` | `voicesound ("doorlocked")` |
 
-All six open here — five of them straightforwardly, and the lounge with the one
-extra thing described two sections down.
+All six open here — five of them directly, and the lounge with the one extra
+step described two sections down.
 
 On this page the game goes first and is not interrupted. The knock plays, the
 speech plays, the character who answers answers, and the door that shuts in your
@@ -109,7 +109,7 @@ shut, does the page stand the doorway up itself — the same `setupprop` line th
 hotspot's own script holds, so the ↑ that follows is the game's, landing in the
 scene and view the game chose.
 
-"Once all of that has finished" is the engine's own word for it and not a wait:
+"Once all of that has finished" is an engine event, not a wait:
 `session.onHotspotClick` fires from the bottom of the hotspot dispatch chain,
 after every handler in it has been awaited. A door with nothing behind it —
 B deck's `locked` hotspot is a cabin that opens in no build — stays shut, because
@@ -124,8 +124,8 @@ purser's stairwell picks by `savedeck`.
 
 ## Which side of the ship you are on
 
-Free roam breaks story state on purpose — that is the whole of it. What it does
-not break is **where you are standing**.
+Free roam breaks story state on purpose. It does not break **where you are
+standing**.
 
 Each passenger corridor is one set used for both sides, mirrored, and `hallside`
 says which. B deck's `Scene29/View40` is B-59's door to starboard and B-62's to
@@ -146,6 +146,11 @@ does not have is a step behind it — its `uparrow` handlers are at `view103` an
 `view32`, and D-19 is not a place the game has. Penny's door on F deck and
 Shay's below are the same shape. Opening one would show you a doorway and a
 wall, so it stays shut.
+
+**There is no door on this side.** A hotspot whose every doorway is conditioned
+on the other `hallside` or `savedeck` has nothing to stand up here (see above).
+B deck's `Scene29/View40` offers only `hallb-b59`, under `hallside = "star"`, so
+to port, where the door is B-62's, it stays shut.
 
 ## The one step the page takes itself
 

@@ -1,30 +1,24 @@
 # Skull Cracker
 
-**Two words, and the disc had to be asked twice.** Its release notes and its
-executable both compress the title — "SKULLCRACKER" in the README's heading,
+**Two words.** The release notes and the executable both compress the title — "SKULLCRACKER" in the README's heading,
 `SkullCracker` in every string the binary carries, and one string that even offers
 *aka "Skullcracker"*. The game's own TITLE CARD disagrees, and it is the last frame
 of `IMAIN.MOV`'s fourth segment: **SKULL / CRACKER**, on two lines, over the skull.
 So the title is two words here and the directory stays one, the way the filesystem
-had it.
+has it.
 
 *Skull Cracker* (1996) is CyberFlix's own, and the fourth game in this repository
 — the one whose logic is compiled into an executable rather than authored in the
 data, so every behaviour on this page was read out of `SC.EXE` with a
 disassembler instead of interpreted.
 
-That sentence used to end "and whose game it cannot play at all", which was true
-when the page was a film player over a menu and stopped being true one change at
-a time. It plays: the logo, the intro, the menu, the chooser, sixteen levels with
-their own populations, the weapons, the bosses, the score board and the credits,
-all of it in one document. What is interesting here is still not that a game
-runs — it is WHERE each number in it came from, which is what the rest of this
-file is.
+It plays: the logo, the intro, the menu, the chooser, sixteen levels with their
+own populations, the weapons, the bosses, the score board and the credits, all of
+it in one document. What these pages record is WHERE each number in it came from.
 
-Both releases have now been read. The Macintosh disc is what the port was built
-against; the Windows one came later and is the reason several findings in these
-pages are *confirmed* rather than argued — most of all the palette one, which had rested on
-a single frame.
+Both releases are read. The port is built against the Macintosh disc; the Windows
+one *confirms* several findings in these pages — most of all the palette one,
+which otherwise rests on a single frame.
 
 - [The sixteen levels](levels.md) — what each level places, the population it
   carries, and the shape of the four chapters
@@ -41,10 +35,8 @@ a single frame.
 
 ## What was found
 
-This project's own documentation used to say that Skull Cracker was **not** a
-DreamFactory title: no published source attributes it to the engine, and the
-right thing to do with an unsourced claim is not make it. The discs settle it
-without a source:
+No published source attributes Skull Cracker to the DreamFactory engine. The
+discs show that it is a DreamFactory title:
 
 | | |
 |---|---|
@@ -68,15 +60,15 @@ is a hybrid disc whose `INSTALL_MAC/` holds a PowerPC executable beside a
 converted data. So the order is asked, never assumed, and nothing above the
 container reader is ever told what platform a disc came off.
 
-Two consequences of that reached further than Skull Cracker:
+Two consequences of that reach further than Skull Cracker:
 
-- **Three fields were 32 bits wide and were being read as 16.** A bank's loop
-  count, a loop record's container location and a one-shot table's count are
-  `long`s whose low half this port took, which is the same number on a
-  little-endian file and the empty half on a big-endian one. Read as an i16, this
-  game's menu had no music and its buttons no click. Fixed in
-  `engine/src/df/banks.ts`; every bank and film in the other three rips reads
-  identically before and after (1973 films, 646 banks, no differences).
+- **Three fields are 32 bits wide.** A bank's loop count, a loop record's
+  container location and a one-shot table's count are `long`s. Their low half is
+  the same number on a little-endian file and the empty half on a big-endian one,
+  so read as an i16 this game's menu has no music and its buttons no click.
+  `engine/src/df/banks.ts` reads all three as 32 bits; every bank and film in the
+  other three rips reads identically either way (1973 films, 646 banks, no
+  differences).
 - **The two reserved palette entries belong to the build being rendered, not to
   the format.** Palettised Windows reserves black at 0 and white at 255, so the
   port forces those for the games it renders as PC releases. The palette as
@@ -91,8 +83,7 @@ Two consequences of that reached further than Skull Cracker:
   data wants the PC correction and whose *display* would not, and that is a
   distinction the proxy cannot draw; nothing here renders one.
 
-  **The Windows release confirms the model, and does it better than by agreeing.**
-  The conversion swapped the two indices in the *pixel data*, so that each landed
+  **The Windows release confirms the model.** The conversion swapped the two indices in the *pixel data*, so that each landed
   on whichever end the target platform reserves:
 
   | disc | index 0 | index 255 |
@@ -102,20 +93,18 @@ Two consequences of that reached further than Skull Cracker:
 
   A mirror, over every film on each disc. `Belfry.mov`'s flat frame is 100% index 0
   on one and 100% index 255 on the other, and under these rules **both render
-  white** — the lightning flash, called from one frame on one disc and confirmed by
-  a disc that was not consulted to make the call. And the menu's first frame
+  white** — the lightning flash. And the menu's first frame
   decodes **pixel-for-pixel identically** from the two files: 0 differences over
   196,608 pixels, from files of 1.74 MB and 1.08 MB whose every integer runs the
-  other way. That is the byte-order axis verified end to end.
+  other way: the byte-order axis verified end to end.
 
 ## What runs, and what does not
 
 Skull Cracker is a side-scrolling beat-'em-up. Its disc carries **no BOOTFILE, no
 `.SET`, no `.STG` and no script container of any kind** — there is nothing for the
 interpreter to interpret, because the game's logic is in a PowerPC executable
-(`Install Folder/Skull`, a PEF binary). Its levels are `.sbk` sprite books — which
-this document once called a format of the game's own that nothing here reads, and
-was wrong twice; see below.
+(`Install Folder/Skull`, a PEF binary). Its levels are `.sbk` sprite books; see
+below.
 
 What is completely DreamFactory is its **film layer**, and that includes the
 menu. `menu.mov` is an interactive movie — 175 frames, a looping bed, and seven
@@ -147,7 +136,7 @@ renders its level):
   levels are named. The point cross-checks the reading: for static kinds
   (`obstacle` 100%, `stat*` 99%, `timer` 100%) it is the rect's own midpoint, and
   for `switch`/`door`/`ladder` it deliberately is not — it is a destination. A
-  `ladder`'s two extra fields have since been read: its `param` is the RUNG
+  `ladder`'s two extra fields are read too: its `param` is the RUNG
   SPACING, ±35 in every one of the nine ladders in the game, and its `pointX` is
   the x the player is put at. The sign is the ladder art's own mirror flag, so it
   says which side of the pole you climb from and which way you face doing it.
@@ -157,11 +146,10 @@ renders its level):
   levels resolve through the directory**, and every level renders as a
   recognisable place (the one vertical canvas belongs to TOWER, as it should).
 
-Container 0's own 32-byte header turned out to name the palette container, the
-root container and the cel count outright, which replaced three guesses by size.
-That mattered: the guess for the palette was "find a 2056-byte container", and
-`STREETS.SBK` has **two** — taking the first painted that whole level in the wrong
-colours. Verified on all 17 books. The full layout is
+Container 0's own 32-byte header names the palette container, the root container
+and the cel count outright. Do not find the palette by size: `STREETS.SBK` has
+**two** 2056-byte containers, and taking the first paints that whole level in the
+wrong colours. Verified on all 17 books. The full layout is
 **[SBK](../engine/formats/sbk.md)**, and
 **[the sprite book viewer](../editors/books.md)** is it in a browser: the layers
 separable, the plan clickable, the cels browsable.
@@ -170,17 +158,17 @@ separable, the plan clickable, the cels browsable.
 
 `SC.EXE` is a **PE32** binary (the 16-bit one is the root `SKULL.EXE` launcher),
 self-contained but for Windows DLLs, and `skullcracker/tools/scdis.mts`
-disassembles it the way `taoot/tools/disasmcmd.mts` does `TI.EXE`. Pointed at the
-sprite book format it settled three things inference could not:
+disassembles it the way `taoot/tools/disasmcmd.mts` does `TI.EXE`. On the sprite
+book format it establishes three things the data alone does not:
 
 - **The entity table has a discriminator, and the binary agrees with it.** `+22`
   says object or region, and **96 of the 113 names in the books appear in `SC.EXE`
-  as strings while the 17 that do not are exactly the region records**. Two
-  independent statements of one fact. The executable never compares those names
+  as strings while the 17 that do not are exactly the region records**. The
+  executable never compares those names
   because it never compares any name — each class is interned once into a 16-bit
   id (registration blocks at `0x40b400`, 0x3a bytes apart, capped at 100 classes),
   and everything after dispatches on the id.
-- **Three fields the reader was dropping carry data**: a per-instance parameter at
+- **Three more fields carry data**: a per-instance parameter at
   +0, four flag bits at +14 that are all set except on `platform` and
   `initplank` — surfaces — and the region link at +10.
 - **`inithealth` is a 1996 typo.** One record, in a level whose every other pickup
@@ -189,8 +177,7 @@ sprite book format it settled three things inference could not:
   level places (`initdoor`, `initpainting`, `statshield`, `suckto`, …) are content
   built and not used.
 
-**The engine also settled what a platform IS at runtime, and unsettled a guess.**
-Three functions touch the platform array: an overlap query that walks it, tests
+**What a platform IS at runtime.** Three functions touch the platform array: an overlap query that walks it, tests
 rects, and writes the colliding object's pointer into the record's +10 — so that
 field is the *occupant*, which is why the disc always has 0 there; an appender
 that creates platforms mid-game; and a remover that matches on +10 and compacts
@@ -203,24 +190,22 @@ collector at `0x40b850` takes a class name and copies every matching entity reco
 into a per-class array: `add ebx, 0x1c` past the table header, `add ebx, 0x30` per
 record, `cmp dword ptr [level+0x18], ecx` against the count, `rep movsd` with
 `ecx = 12` for the 48 bytes, `lea eax, [rec+0x1c]` for the name — and
-`cmp word ptr [rec+0x16], 0; je next`, which is this port's `isEntity` being used
-as the engine's own filter. Every offset the reader had inferred, doing the job it
-was inferred to do. The full table is in
+`cmp word ptr [rec+0x16], 0; je next`, which is this port's `isEntity` used as the
+engine's own filter. The full table is in
 **[SBK](../engine/formats/sbk.md#the-layout-confirmed-by-the-code-that-read-it)**.
 
-It also recovered something the discs do not contain: **the order the sixteen
-levels come in**, and then corrected it. The first reading paired each book with
-the theme bank pushed beside it — `streets.sbk` with `theme01.snd` through
-`vat.sbk` with `theme16.snd` — which is right for fifteen of the sixteen. The
-sixteenth is the sewer: `theme03.snd` is its bank, but `0x436b51`, the only place
+It also gives something the discs' data does not contain: **the order the sixteen
+levels come in**. Pairing each book with the theme bank pushed beside it —
+`streets.sbk` with `theme01.snd` through `vat.sbk` with `theme16.snd` — is right
+for fifteen of the sixteen. The exception is the sewer: `theme03.snd` is its bank, but `0x436b51`, the only place
 `sewer.sbk` is opened, sits in the second chapter's third stage, the one that
-plays `chp07`. The order that settles it is the four film sequencers, each a
+plays `chp07`. The order comes from the four film sequencers, each a
 switch on the scene state where states 2 to 5 name `chp01`…`chp04`,
 `chp05`…`chp08` and so on, and each of those cases opens exactly one book.
 `LEVEL_ORDER` in `engine/src/df/sbk.ts` carries it and the viewer lists by it.
 
-The same functions say **when a level is over**, which turned out not to be
-"reach the goal": the goal is not spawned until the mission's share of the
+The same functions say **when a level is over**, which is not simply "reach the
+goal": the goal is not spawned until the mission's share of the
 level's population is dead, and the share is a `double` per stage — 75% of
 STREETS, 35% of the MAZE, everything in the ARCADE, nothing at all in RAVECAVE
 and the TOWER. `skullcracker/src/mission.ts` is the table and
@@ -235,16 +220,15 @@ lowering a panel with a picture on it. Cels 20200…20255 of `PLAYER.SBK`: a
 **flying television**, which is what every mission in the game ends by walking up
 to.
 
-**Damage is speed**, which is the other thing that reading turned up. A cel record
-in a sprite book has three fields nothing had read: a strike box, a collision box,
-and a `(dy, dx)` pair. `0x42f910` takes the striking object's current cel, scales
+**Damage is speed.** A cel record in a sprite book has three more fields: a strike
+box, a collision box, and a `(dy, dx)` pair. `0x42f910` takes the striking object's current cel, scales
 that pair by the object's own percentage, adds whatever the object was already
 doing, and returns the magnitude — and every hit handler in the game subtracts the
 result from the victim's health. So the punch is cel 602's `dx 47`, the kick is
 663's 55, a punk with 250 takes six punches, and thresholds that look arbitrary
-turn out to be speeds: a mailbox dents at 10 and springs back but topples on its
-side for good at 55, a punk is knocked down over 50. A punch staggers and a kick floors, by arithmetic rather than by
-design intent. Every blow also throws `damage / 6` gobs of green goo, up to twenty
+are speeds: a mailbox dents at 10 and springs back but topples on its side for
+good at 55, a punk is knocked down over 50. A punch staggers and a kick floors,
+by arithmetic rather than by design intent. Every blow also throws `damage / 6` gobs of green goo, up to twenty
 of them, along its own direction — `0x40cba0`, and the goo is the same green that
 runs out of a dead punk's head in the last eight cels of its death, though only
 from a creature: a mailbox's handler never calls it. The gobs then
@@ -259,23 +243,21 @@ A rat's collision box tops out at `y -14`; the punch's fist box bottoms out at
 `y -16` and the standing kick's boot is higher still. **Nothing standing up can hit
 a rat** — the duck-kick's boot box at `y 38..83` is what reaches one, and one blow
 of any size launches it nine cels through the air, because its hit handler
-`0x44e3f0` has no health test at all. Two pixels is not an accident in authored
-data.
+`0x44e3f0` has no health test at all. The two-pixel gap is authored.
 
-`obj+0xe` turned out to be a mass as well as a divisor. `0x430470`, which the
+`obj+0xe` is a mass as well as a divisor. `0x430470`, which the
 collision dispatcher calls after a hit handler returns, is the textbook elastic
 collision applied per axis with that field as the weight — the player is 12, a
 punk 20, a hydrant 10, a mailbox 7 — so a kick's 55 against a mailbox comes out as
-69 pixels a frame and throws it most of a screen. Which also settles what
-`obj+0xa`/`obj+0xc` are: a persistent velocity, not a per-frame stride. Anything
+69 pixels a frame and throws it most of a screen. So `obj+0xa`/`obj+0xc` are a
+persistent velocity, not a per-frame stride. Anything
 that should not drift cancels them itself, and the hydrant's frame function does it
 on its first two instructions. What slows a slide is the allocator: `0x42f550`
 gives every object `obj+0x1e = 5734` and `obj+0x20 = 2048` at birth, and the body
 stepper takes `v.x × 5734 / 8192` — 70%, truncated, never less than a pixel — off
-the horizontal velocity on every frame that ends on the ground (`0x4302c0`). The
-port had invented a drag of 0.7 a tick here and calibrated it against a kicked
-mailbox crossing about a screen; the calibration had found the field. Where it comes to rest is not invented: each
-cel carries its own collision box, the upright mailbox's reaching 93 pixels below
+the horizontal velocity on every frame that ends on the ground (`0x4302c0`).
+Where it comes to rest is also in the data: each cel carries its own collision
+box, the upright mailbox's reaching 93 pixels below
 the anchor and the fallen one's 56, so a thing that changes shape has to land on the
 box it is currently showing or it floats.
 
@@ -283,9 +265,7 @@ box it is currently showing or it floats.
 
 All sixteen levels stand, and this is what is missing from them. The numbers are
 MEASURED — `npx tsx skullcracker/tools/records.mts` reads every book and checks
-each record's name against what the page actually looks for — because the figure
-that used to be here was counted once by hand and every level built since made it
-a little more wrong.
+each record's name against what the page actually looks for.
 
 ### The records
 
@@ -303,9 +283,8 @@ a little more wrong.
 `inithealth` do not appear in `SC.EXE` anywhere** — LAB places one of each and
 nothing in the game will ever ask for them.
 
-The three that used to sit beside them were not tables at all, which is what an
-earlier reading of this page had them as. Each is a REGION some object's own
-code asks a question of, and all three are now answered:
+Three other records are not tables but REGIONs that some object's own code asks a
+question of, and all three are answered:
 
 - **`wormbounds`** is the box Boggs' worms are kept inside. `0x41ac7f` reads it
   once, at the class's own setup, into `[0x4a50c8]`, and `0x41ac09`…`0x41ac26`
@@ -355,11 +334,9 @@ level's own book — which is why no level book carries the cels:
 arriving from under your feet or down out of the sky, and 20200..20207 is
 something else crossing.
 
-**What held this up was one word, and it is in the class's constructor.**
-`0x45d1a3`'s mover, `0x42f8b0`, does `idiv [obj+0xe]` twice; `0x42f550` zeroes
-that word, `0x410170` never writes it and `0x45d090` writes only the kind. A
-shipped game does not divide by zero, so something had to — and it is the
-message every new object on this list gets. `0x430cc0(0x4103c0)` builds the list
+**The divisor is written by the class's constructor.** `0x45d1a3`'s mover, `0x42f8b0`, does `idiv [obj+0xe]` twice; `0x42f550` zeroes
+that word, `0x410170` never writes it and `0x45d090` writes only the kind. What
+writes it is the message every new object on this list gets. `0x430cc0(0x4103c0)` builds the list
 and `0x4103c0`'s case 1 writes **1** into `obj+0xe`, along with the book
 (`0x4abe10`), the first cel, no gravity and no bounce. A divisor of one divides
 nothing: the script's own `dx` goes into the velocity whole.
@@ -372,9 +349,9 @@ CITY's own step in `tests/browser/city.ts` watches one cross and one rise.
 
 ### The classes
 
-**Every `init*` class the levels place is built.** `initbiggun` and
-`initlightfx` were the last two — [see them in Fighting](combat.md#a-hatch-in-the-ceiling-and-a-fork-of-lightning) — and before them Boggs'
-`initboggshead`, `initbgclawarm` and `initbgmachinery`.
+**Every `init*` class the levels place is built**, among them `initbiggun` and
+`initlightfx` ([see them in Fighting](combat.md#a-hatch-in-the-ceiling-and-a-fork-of-lightning))
+and Boggs' `initboggshead`, `initbgclawarm` and `initbgmachinery`.
 
 The executable registers **73**, and four of them exist in the game with no
 level placing one: `initbeltboth`, `initdoor`, `initpainting` and
@@ -383,19 +360,17 @@ a level with no class anywhere.
 
 ### The systems
 
-- **All five weapons fire now**, and the INV button with them — see
+- **All five weapons fire**, and the INV button with them — see
   [Weapons and pickups](weapons.md). There was never an inventory screen to build.
-- **The blow codes are carried, and so are the claw and the bush.** What had
-  looked like a bush hanging 190 pixels too high was every prop's strike box
-  being lifted by `height - posY`; `0x40e680` translates the rect by the object's
-  own position and does nothing else. The bush grabs, and BARREL's claw is back
-  on the record's point that `0x411cfd` gives it rather than the rect bottom it
-  had been nudged to.
+- **The blow codes are carried, and so are the claw and the bush.** `0x40e680`
+  translates a strike box by the object's own position and does nothing else, so
+  no prop's box is lifted by `height - posY`. The bush grabs, and BARREL's claw
+  hangs on the record's point that `0x411cfd` gives it.
 - **Every boss has its own state machine** — PLAYGR's `initwbooly`, ARCADE's
   `initkragg`, RAVECAVE's wraith, TOWER's bishop and VAT's Boggs, and Boggs'
-  head, claw arm and machinery objects with him (`src/props.ts`). What is
-  missing of him is his two ATTACKS — `0x41c330`'s throw and `0x41c3c0`'s spit;
-  he lunges, heals and dies correctly and throws nothing.
+  head, claw arm and machinery objects with him (`src/props.ts`), including
+  his two attacks — `0x41c330`'s throw out of the second machine and
+  `0x41c3c0`'s worms. A landed throw's splat is drawn but strikes nothing.
 - **A hard blow disarms you, and the button band is labelled from the key map** —
   the disarm is in [Fighting](combat.md#a-hard-blow-costs-you-the-gun-and-the-band-says-which-key),
   the band in [What the executable runs](systems.md#the-letters-under-the-buttons-are-typeset-from-the-key-map).
@@ -403,27 +378,23 @@ a level with no class anywhere.
 - **The camera is the engine's**, not this page's: `0x4309f0`'s eased chase with
   its 120-pixel lead, clamped by `0x4308a0` to the room's own rect one side at a
   time. What is left invented is spending its step across the frame's four ticks.
-- **Both of the two tests are here now**, and so is the ending — the tests in
+- **Both of the two tests are built**, and so is the ending — the tests in
   [Weapons and pickups](weapons.md#a-pickup-is-taken-on-the-art-not-the-box),
   the ending in [The sixteen levels](levels.md#the-sixteenth-level-is-the-end).
 - **Damage is off on the BENCH and on in the game.** `walk.html?level=N` starts
   with `damage` and `foehit` clear, because with them on a probe walking east
   through WOODS meets three hydraulic presses and every route test becomes a
-  fight. That was never a fact about the game, though, and for a while it meant
-  a player who came through the front door could not be killed by anything but a
-  fall. `begin()` throws both switches now, so the health, the knockdown, the
-  seven KILL films and the lives — all built, all previously unreachable from
-  that door — are what a player meets.
+  fight. `begin()` throws both switches, so a player who comes through the front
+  door meets the health, the knockdown, the seven KILL films and the lives.
 - **The KILL vignette is the last life's**, which is what `0x4294b7` says: the
   death branch reads the count, spends one, and takes the ordinary path while
-  the count before the spend was not negative. This page used to play one on
-  every death, which made the best animation in the game the most familiar
-  thing in it.
+  the count before the spend was not negative.
 - **The shell is finished except for the demo player.** All fourteen preferences
   controls answer, all eight cheat words work, and the high-score board takes a
-  finished game and shows it over the title film. The one thing left is the
-  second menu button, which plays a recorded input stream out of `skuldemo.dmo`
-  — see [the menu](menu.md#the-second-menu-button-is-a-demo-player-and-the-save-game-does-not-exist)
+  finished game and shows it over the title film, and Open loads a `.SKL`
+  saved game. The one thing left is the attract loop's demo, which plays a
+  recorded input stream out of `skuldemo.dmo` — see
+  [the menu](menu.md#the-second-menu-button-loads-a-save-game-and-the-demo-player-is-elsewhere)
   for why replaying it here would only measure drift.
 
 ## Where the pieces are

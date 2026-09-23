@@ -4,15 +4,15 @@
 generation as *Titanic*, shipped a few months later, and the last one there was.
 
 It is the one game in this project CyberFlix did not make. They wrote the engine
-and licensed it; this is somebody else's adventure built on it, which is worth
-saying at the top because everything else on these pages says "the DreamFactory
-games" as though that were one studio's shelf.
+and licensed it; this is somebody else's adventure built on it, although the rest
+of these pages say "the DreamFactory games" as though that were one studio's
+shelf.
 
-Four CDs, one language, and **not one `.SET` file on any of them**. That single
-absence is what makes this game worth a section: everything the other two do with
-a room — a standpoint, a turn ring, a hotspot, a road to walk down — this game
-does with a **stage flat** and a script table, and for a long time the port could
-not draw it at all because its compositor belonged to a room.
+Four CDs, one language, and **not one `.SET` file on any of them**. That absence
+is why the game has its own section: everything the other two do with a room — a
+standpoint, a turn ring, a hotspot, a road to walk down — this game does with a
+**stage flat** and a script table, so it needs a compositor that does not belong
+to a room.
 
 ## What it is, in one paragraph
 
@@ -23,13 +23,13 @@ between them, and it navigates almost entirely by the **shape of the mouse
 cursor**: the picture has no visible affordances, and the arrow that appears
 under your hand is the whole interface.
 
-That last part is measured, not impressionistic. **11,031 of the game's 13,200
+That last part is measured. **11,031 of the game's 13,200
 `cursor(...)` calls** are `godown` and `goup` — *you can back up from here*, *you
 can step forward here* — and **27,179 of its 29,105 clickable regions** are named
 `up`, `down`, `left` or `right`, across 7,967 flats. Both step arrows were
 **redrawn** for this game: the same resource names in *Titanic*'s executable are
-plain arrows, and Timelapse's stand on a foot. Which is why this is the one game
-in the project whose port carries the original 32×32 cursor art rather than
+plain arrows, and Timelapse's stand on a foot. This is therefore the one game in
+the project whose port carries the original 32×32 cursor art rather than
 mapping it onto CSS keywords — see
 [`engine/src/web/cursors.ts`](../engine/architecture.md) and
 [`tools/dumpcursors.ts`](../reference/tools.md).
@@ -67,9 +67,9 @@ for *the game does not offer that from here*. A refused key is the commonest
 thing to mistake for a broken one, so the port's page prints the whole table.
 
 **The screen is 640×480.** 512×384 is the DreamFactory 4 *default*, not the law,
-and every one of this game's stage headers says otherwise. The framebuffer used
-to be a constant; a fifth of every picture was off the right and bottom edges
-until it was not.
+and every one of this game's stage headers says otherwise. The framebuffer is
+therefore not a constant: a fixed 512×384 leaves a fifth of every picture off the
+right and bottom edges.
 
 **Half the game is in the installer's tree.** `TLAPSE1/install/data/` holds
 fourteen files and 43 MB the 1996 installer copied to the hard disc rather than
@@ -101,7 +101,7 @@ down in the port instead, and the page says so in its boot log.
 
 ## The page
 
-`npm run dev -w timelapse`, port 5177. It is a game page rather than a report now —
+`npm run dev -w timelapse`, port 5177. It is a game page rather than a report —
 a title card, a gauge that measures real bytes, and the picture in a moulding
 taken off the title card's own letters — but the **boot log is still the
 deliverable** when something goes wrong on a rip this project is still finding
@@ -113,8 +113,8 @@ frame**, and 52 MB of that is two files — `i001.stg`, which is a stage and all
 283 flats in it, and `open.mov`. Both are fetched *in front of* the Enter button
 rather than behind it, because `open.mov` is what plays the instant the boot ends
 and a stall there lands exactly where the game's opening starts. The button is
-also what a browser wants before it will make a sound: for as long as the page
-started its boot on load, that scored film played to a page nobody had clicked.
+also the gesture a browser wants before it will make a sound; a boot started on
+load would play that scored film to a page nobody had clicked.
 
 ## The engine pages that carry Timelapse's half
 

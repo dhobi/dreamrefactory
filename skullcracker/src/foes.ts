@@ -241,9 +241,9 @@ export interface Foe {
   /**
    * What a blow of **−9** does to it — see `FLAME` in {@link file://./props.ts}.
    *
-   * −9 is not damage and not one of the player's codes: eight classes read it
-   * with a handler of their own that accepts nothing else, and every one of
-   * them starts by calling `0x44ff20` to stick a flame on itself. What differs
+   * −9 is not damage and not one of the player's codes: eight creature classes
+   * read it in an arm of their own hit handler, and every such arm starts by
+   * calling `0x44ff20` to stick a flame on itself. What differs
    * after that is the two arguments it passes and the script it then installs.
    *
    * A class without this entry cannot be set on fire, which is the executable's
@@ -975,8 +975,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     /**
-     * `0x45631e` — the shortest of the eight, and the only one that installs
-     * NOTHING. It lights itself with `0x44ff20(self, 0, 0)` and returns 0 at
+     * `0x45631e` — the only creature's −9 arm that installs NOTHING. It lights itself with `0x44ff20(self, 0, 0)` and returns 0 at
      * `0x456332`, before the handler's own arithmetic: so the boss catches
      * fire, goes on doing whatever it was doing, and takes not a point for it.
      */
@@ -1460,7 +1459,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * uses the same threshold for tags 4 and 3 of the same script.
    *
    * And there is a third kind of blow it knows about. `0x441d30` tests the
-   * hitter's strength for exactly **-9** before it tests anything else, and
+   * hitter's strength for exactly **-9** before any damage is worked out, and
    * answers with a script of its own — twenty-six frames of `0x473a88` — and an
    * extra sound. Minus nine is the flare, and level eight is the level that
    * places a `statflaregun` and a `statflare` to throw at it.
@@ -1583,8 +1582,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
     bleeds: true,
     vanishes: true,
     /**
-     * `0x441d30` — the FIRST thing its handler asks, and the arm costs it no
-     * health: it plays `0x13`, throws a spark, installs `0x473a88` and returns
+     * `0x441d30` — asked only after `0x441cf0` has thrown out its own shots
+     * (`0x430ee0` against `[0x472568]`) and a strength of zero, and only while
+     * its state is under 9: from 9 up every blow goes to `0x441ef0`, where
+     * states 9..11 take nothing and 12 up take a flat `0x46` for any negative
+     * strength. {@link strikeFoe} does not carry that gate, so on this page a
+     * −9 reaches this entry in any state. The arm costs it no health: it plays `0x13`, throws a spark, installs `0x473a88` and returns
      * at `0x441d94` before any damage is computed. `0x473a88` is state 9, and
      * state 9 is the whole tactic of level eight — see `kraggReacts` in
      * {@link file://./brains/kragg.ts}.
@@ -1720,10 +1723,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
     bleeds: true,
     vanishes: true,
     /**
-     * `0x4550d3` — the only one of the eight that plays a sound of its own as
-     * it catches: `0x4550eb` is `0x40ef30(0x4a7910, 0x18, point)`, out of the
-     * PLAYER's bank rather than the chapter's. Then `0x478208` tag 0, six
-     * cels, and none of them carries a strike box either.
+     * `0x4550d3` — the only creature's −9 arm that plays a sound of its own
+     * as it catches: `0x4550eb` is `0x40ef30(0x4a7910, 0x18, point)`, out of
+     * the PLAYER's bank rather than the chapter's. Then `0x478208` tag 0, six
+     * cels, and none of them carries a strike box either. `0x478208` is the
+     * dog's DEATH, and the arm pays the death's 200 as well (`0x455115`); this
+     * entry is not `fatal` and pays nothing, so the dog here gets up again.
      */
     burns: {
       anim: { cels: [4850, 4851, 4852, 4853, 4854, 4855], hold: 1, from: "0x478208 tag 0" },
@@ -1872,7 +1877,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
     bleeds: true,
     vanishes: true,
     /**
-     * `0x4547b3` — the odd one out of the eight. It lights itself, writes 1
+     * `0x4547b3` — the odd one out of the creature arms. It lights itself, writes 1
      * into `AI+0x14` and zeroes the caller's own word, and then **falls
      * through into the ordinary damage arithmetic** instead of answering 1.
      * So a CHOPPER is the one thing that both catches fire and takes the hit, and
@@ -1948,6 +1953,14 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * over — a kick, at 55 — it plays 2410, 2411, 2412, 2413 and **stays on 2413**,
    * which is the mailbox lying on its side; `0x44fe10` sets `obj+0x18 = 2` when
    * that animation ends and the hit handler will not touch it again.
+   *
+   * It is also one of the eleven hit handlers with a −9 arm, and the only one
+   * on furniture: `0x44fe89` tests the code before the speed and answers it with
+   * `0x44ff20(self, 1, 0)` — a flame that starts at its going-out stage — and
+   * `return 1`, so no dent and no sound. This entry has no `burns`, so that arm
+   * is not on this page. Only STREETS places a mailbox, and nothing there
+   * carries a −9 in the original either: level 1's flares are `0x64` and the
+   * flamer is CITY's and WOODS'.
    *
    * Anchored, those four cels are a topple: the anchor sits near the top of the
    * box in all of them, the art swings from 93 pixels below it to 58, and the

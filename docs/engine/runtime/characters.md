@@ -44,10 +44,9 @@ drawn is *not* picked from the actor's facing alone — it's the facing **relati
 to the bearing from the actor to the camera**, because which side of someone you
 see depends on where *you* stand, and the engine keeps whichever stored view is
 angularly closest to it. A view depicted at angle 0 is "facing the viewer": an
-actor looking straight at the camera shows it wherever you are. Get the
-reference backwards (camera→actor instead of actor→camera) and every character
-shows their back at the wrong moments — one of those bugs the regression tests
-now pin down.
+actor looking straight at the camera shows it wherever you are. With the
+reference backwards (camera→actor instead of actor→camera) every character shows
+their back at the wrong moments; the regression tests pin this down.
 
 *When* it changes is the pose's own **[play
 script](../formats/pup-cst.md#the-play-script-says-how-long-a-picture-is-held)**,
@@ -66,7 +65,7 @@ against the view's [Z layer](../formats/image-codec.md#the-z-layer-a-hidden-dept
 so a character walks convincingly *behind* furniture that's nearer the camera.
 Click-testing (`actorAt`) uses the same rules: opaque pixels only, and an
 occluded pixel is not clickable. What cursor an actor reports is the CAST's
-business, not ours: `hittest` answers `"actor"`, the hover sends `setcursor`
+business, not the engine's: `hittest` answers `"actor"`, the hover sends `setcursor`
 there, and `gang.cst`'s main is the only cast in the tree that defines one —
 
     if realdist (target) < hotdist ()   cursor ("touch")   exitcode
@@ -74,8 +73,7 @@ there, and `gang.cst`'s main is the only cast in the tree that defines one —
     passcode
 
 so a character within reach is a hand and one across the room is the plain
-arrow. (It read `talk` here for as long as the port chose the cursor itself; no
-script in the game ever emits that name.)
+arrow. (No script in the game emits a `talk` cursor.)
 
 Walking — who moves, how fast, and the `endwalk` chain that drives patrols —
 is the scheduler's job: see **[Timing](timing.md#walks)**.
@@ -88,8 +86,8 @@ walked in either direction, and with `"resume"` as the start it is found by the
 destination alone. Six exist and three bend, but those three are the ones with
 something in the way: Georgia leaving you on the boat deck curves around the
 second-class stairs in ten points, Sasha steps out of A14 and turns down the hall
-in five, and the hacker's runs nine. Walking their straight lines instead took
-each of them through the scenery (#122).
+in five, and the hacker's runs nine. Their straight lines go through the scenery
+(#122).
 
 It is one walk, not a leg-by-leg chain: the route's container stores every point's
 distance from the one before *and* the total, so the service runs the whole
@@ -102,13 +100,12 @@ the route either: the walk records where the actor is standing and the first
 `"resume"` is the form that matters for a character you have talked to, and it
 does more than look the route up loosely. It **cuts the route down to the part
 still ahead of them**: nearest point, their own position written over it,
-everything before it dropped, every remaining leg re-measured. That is what makes
-the word true. `walktopuppet` stands whoever you clicked in front of the camera
+everything before it dropped, every remaining leg re-measured. `walktopuppet` stands whoever you clicked in front of the camera
 for the conversation and then puts them back on their route with it — recognising
 a route walk by the `"walkonpath"` that `actorstar` reports while one runs, the
-only mid-walk sentinel any script reads — so without the trim they snapped back to
-where the route begins, both at the conversation's end and every time you
-interrupted the walk itself (#230).
+only mid-walk sentinel any script reads — so without the trim they would snap back
+to where the route begins, both at the conversation's end and every time you
+interrupt the walk itself (#230).
 
 ### Characters who speak first
 
@@ -135,8 +132,8 @@ standing on B — inside its 4000, and through the floor. The other gate is insi
 distance at all: `actordist` answers that sentinel whenever the actor would not
 be **drawn**, which includes a sprite that lands nowhere on the screen. Out of
 view, the attention clock is reset rather than run down, so a character can only
-stop you if you could have seen them coming. Leaving that half out is #180 —
-Daisy Cashmore accosting from a deck below, with the player facing a wall.
+stop you if you could have seen them coming. Without that half, Daisy Cashmore
+accosts from a deck below, with the player facing a wall (#180).
 
 The engine says both halves on the log while they happen, which is the trace to
 reach for when a character speaks up and it isn't obvious why:
@@ -153,12 +150,12 @@ plot lives entirely in globals, so any of them can be put on the log this way;
 `curattention` is the one the engine watches by default. The `sight:` lines are
 `actordist` changing its mind, and it only speaks on a change.
 
-The timing is worth knowing too, when a change to it looks harmless. The
+The timing matters too, when a change to it looks harmless. The
 conversion is `(seconds * 60) / framerate()`, where `framerate()` is **ticks
 per displayed frame** against a 60 Hz base (which is why scripts pass 0 for
 "unthrottled" and 5 for the fight stage's slow frames). So `frame()` counts
-displayed frames, not ticks. While it counted ticks, every timer built on it
-ran `framerate()`× fast and Georgia and Morrow accosted the player *during* the
+displayed frames, not ticks. Counting ticks would run every timer built on it
+`framerate()`× fast, and Georgia and Morrow would accost the player *during* the
 walk animation instead of after four seconds of standing there.
 
 ## Puppets: the conversation close-up
@@ -186,7 +183,8 @@ four commands:
   `dpenny.pup` is the only file in either tree whose script names lines that way
   (`puppetspeak("It's about time you got here! …")` where everything else says
   `puppetspeak("penny1.007")`), and all 36 of its calls match a subtitle while none
-  match an ident — Penny opened, offered her bevels and said nothing. The fallback
+  match an ident — without the fallback Penny opens, offers her bevels and says
+  nothing. The fallback
   is consulted only *after* the ident lookup and the index is built lazily on the
   first miss, so no other puppet can resolve differently or pay for it.
 - **`puppetbase(ident)`** — seats a resting pose taken from a line's first
@@ -227,7 +225,7 @@ details worth knowing:
   matte** and is skipped — otherwise Smethells' plate of colour 247 would
   cover the room.
 - Frame caches are keyed **per puppet**, not per container index — two
-  characters can reuse the same container numbers, and a shared cache made
+  characters can reuse the same container numbers, and a shared cache would make
   the second character wear the first one's face.
 - The subtitle band sits at y = 268 (two wrapped lines max, gated on the
   subtitles setting); bevels are full-width plaques anchored to the bottom
@@ -236,8 +234,7 @@ details worth knowing:
 - Both the band and the bevels wrap through
   [`wrapText`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/fonts.ts), which
   breaks between CJK characters as well as at spaces, because a Japanese line has
-  no spaces to break at and ran off both ends of the band when it was split on
-  `" "`. The font stacks lead with this port's chosen face and fall through to a
+  no spaces to break at and, split on `" "`, runs off both ends of the band. The font stacks lead with this port's chosen face and fall through to a
   gothic, in the order the original's own font requests imply.
 
 While a puppet is up, it eats clicks before everything else (see [the click
@@ -249,13 +246,13 @@ to run its own input loop, and restores it afterwards.
 
 The two waits a conversation sits in — `puppetspeak`'s and `puppetevent`'s — pop
 the event queue themselves in the original, so while one of them is running the
-scripts see no input at all. What each wait does with what it pops is the whole of
-this section, and the port had both halves wrong until #3.
+scripts see no input at all. This section is what each wait does with what it
+pops (#3).
 
 **Only ESC skips a line.** The wait's interrupt filter (`0x441d80`) drops any event
 that is not a KEY on its first instruction, and then requires the `0x1fa0` marker
 — the key is ESC, or was held with Ctrl. So a click on a talking character does
-nothing whatever, and the port's old click-to-skip was an invention.
+nothing whatever.
 
 **And ESC skips the whole speech, not one line of it.** Skipping raises a flag
 (`0x48ac00`); every following `puppetspeak` queues its line and returns without
@@ -299,7 +296,7 @@ page adds no control of its own
 ([host](host.md#the-sound-keys-and-why-the-page-has-no-sound-control)).
 
 **ESC also answers the plaque wait, with −1** (`0x4418a7`) — which is how a player
-walks out of a conversation. That value is not a spare: every one of the **516**
+walks out of a conversation. Every one of the **516**
 `puppetevent` calls in the tree is `puppetevent (-1)` followed by a switch with a
 `case -1` arm, so it is a branch the authors wrote for every single prompt in the
 game. SMETH1's advice loop is the clearest case —
@@ -315,12 +312,11 @@ game. SMETH1's advice loop is the clearest case —
 			exitcode
 ```
 
-— where an unanswered plaque is the *only* way out of that `while true`. Until #131
-those 516 arms were unreachable.
+— where an unanswered plaque is the *only* way out of that `while true` (#131).
 
 Two things it deliberately does **not** do. It does not raise the skip flag, unlike
-a spoken-line ESC: the script's own −1 arm may have a parting line, and the original
-agrees — the plaque pump writes the −1 and returns without touching `0x48ac00`. And
+a spoken-line ESC: the script's own −1 arm may have a parting line, and in the
+original the plaque pump writes the −1 and returns without touching `0x48ac00`. And
 the abandoned plaque is remembered with **no** picked row, because `chosen` outlives
 its own list until the next `puppetclear`, so recording it would frame a row of this
 plaque that nobody touched.
@@ -328,7 +324,7 @@ plaque that nobody touched.
 The consequence for anything *driving* the game is that ESC has to be aimed rather
 than hammered: it skips a line only while one is being spoken, and does something
 quite different the rest of the time. `SetViewer.speaking` is that aim, and both
-playthrough drivers now check it before pressing.
+playthrough drivers check it before pressing.
 
 ### Idling while you read the choices
 
@@ -340,13 +336,12 @@ blinks, shifts, and eventually says something while you decide.
 **The intervals are per character**, read from the PUP's own header — four
 `[min, max]` tick pairs at `0x83A`/`0x84A`, immediately before `bandLocation`
 (`PupFile.idleTimers`) — and each firing re-draws its own with
-`min + rand(1 .. max-min)`. That is the argument for reading them rather than
-picking a constant: across the 55 PUPs in the tree slot 1, the blink, ranges from
+`min + rand(1 .. max-min)`. They vary too much for a constant: across the 55 PUPs in the tree slot 1, the blink, ranges from
 **65 to 200 ticks**, so Burns blinks half again as often as Asea, and Jones's second
 slot is set to blink speed so he fidgets.
 
 Slot 4 is the one with words in it and the rarest at 17–33 s — `bx2`'s is
-"Excuse me.". Its text still does not print: the subtitle gate rejects any record
+"Excuse me.". Its text does not print: the subtitle gate rejects any record
 whose ident is `idle 1`..`idle 4` (`0x44084c`), so the nudge is heard and not read.
 
 **`puppetparam 8` is the switch, and it is the game's.** Of the 316 puppets in the
@@ -361,8 +356,8 @@ Two notes on how this port runs them:
   single `rand()`, so this is a deliberate deviation — and it is the crickets'
   argument exactly (`GameSession.ambientRng`): these timers re-arm on the CLOCK, so
   how many times they draw depends on how long a host dwells at a plaque, and moving
-  them re-values every script draw after them. That cost the Gorse/Jones coin its
-  determinism once already. Which arbitrary number an idle timer gets is unobservable
+  them re-values every script draw after them, which would break the Gorse/Jones
+  coin's determinism. Which arbitrary number an idle timer gets is unobservable
   to any script; when the story's coin lands is not.
 - **A bevel click still answers while an idle line plays.** The original ignores the
   mouse inside that wait, so the click would be dropped; for a 300 ms blink that is a
@@ -377,11 +372,10 @@ it does not act — it sets the filter's out-param and answers "not an interrupt
 (`0x44a3e9`), so during a spoken line T does nothing in the original either. What it
 does over a clip is toggle an audio latch (`0x48c510`, `0x425080` to start and
 `0x424d80` to stop) whose stream is not yet identified — so it stays unbound until
-someone names it, rather than being guessed at as a subtitle toggle (which is what
-it was first mistaken for).
+it is, rather than being bound to a guess such as a subtitle toggle.
 
 One deviation on purpose: the original's waits swallow *every* key, so an unmarked
 one never reaches the scripts. The port passes those through, because nothing needs
-them eaten and a conversation is not the place to find out otherwise.
+them eaten.
 
 Next: what all of this sounds like — **[Audio at runtime](audio.md)**.

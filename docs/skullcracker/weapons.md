@@ -6,10 +6,9 @@ why the guns are here and not with the classes that carry them.
 
 ## The pickups are one table and one test
 
-A hundred and forty `stat*` records across the sixteen levels, and until now not
-one of them was drawn. They are the one system the whole game shares: **one
-creator**, `0x45b160`, and **one collector**, `0x45b270`, called from the
-player's own think every frame.
+A hundred and forty `stat*` records across the sixteen levels, and they are the
+one system the whole game shares: **one creator**, `0x45b160`, and **one
+collector**, `0x45b270`, called from the player's own think every frame.
 
 Each chapter's init reads its own list of names and hands the creator a NEGATIVE
 code — `0x45b19a` dispatches on `code + 9`, so the nine are −9 to −1 — and the
@@ -25,8 +24,7 @@ is why the eleven levels that place one place it with a param.
 Collecting is two tests and no button: `0x434140` for a rect overlap and then
 `0x40e680`, which compares the two sprites **pixel by pixel**. No facing, no
 range band, no action key — you walk into it. And the reach is the record's own
-rect, filed at `user+4` by the creator; the art is only what is drawn. This page
-does the first test and not the second.
+rect, filed at `user+4` by the creator; the art is only what is drawn.
 
 `0x42827a`'s table is what each one does, and every sound comes out of the
 CHARACTER's bank (`skulz.snd`) rather than the level's:
@@ -42,8 +40,7 @@ CHARACTER's bank (`skulz.snd`) rather than the level's:
                     rect holds it and stores that index — a CHECKPOINT
 ```
 
-One thing the records themselves say, once they are on the screen: **STREETS'
-first four are on the roofs.** They sit at y914…994 where the street is 1223 and
+**STREETS' first four are on the roofs.** They sit at y914…994 where the street is 1223 and
 the top of a jump is 1099, so twenty jumps from the pavement reach none of them.
 The level's ladder is not a shortcut, it is the way to the pickups.
 
@@ -105,8 +102,7 @@ falling object with the player's own gravity, before the reach has even played.
 You can only ever carry one. No single level places two kinds, so this only
 happens across a chapter.
 
-**The flare is the gun that is built here.** Its fire function `0x436d40` is a
-shot and does a number:
+**The flare is a shot, and it does a number.** Its fire function is `0x436d40`:
 
 ```
   436d43  cmp [0x4a7f82], 0        ; rounds left, or nothing happens at all
@@ -116,15 +112,14 @@ shot and does a number:
   436db0  0x430d40(0x474cb8, …)    ; and there it is, at 0x1a = 100
 ```
 
-The corkscrew is the whole character of it. The spawner files a random 13…29 at
+The flight is a corkscrew. The spawner files a random 13…29 at
 `user+2` and `0x43ac3b` reads it down two at a time, each frame adding that
 value to the flare's vertical velocity and flipping its sign — written outright
 above 7 and added below it. So a flare leaves the barrel thrashing and
 straightens out over about seven frames. It is not aimed and it is not flat.
 A masked one is 40 and a knotted one is 50, so one flare is one kill either way.
 
-The other four fire functions are here too, and they did not all need the same
-thing. The **flamer**'s `0x44dae0` is a held stream rather than a shot — its
+The other four fire functions differ. The **flamer**'s `0x44dae0` is a held stream rather than a shot — its
 modes −1 and −2 reach into every live flame to stop it — and the flame's blow
 strength is `0xfff7`, **−9**. That is a code and not a number: it is the same −9
 the kragg tests for, and what it means is each class handler's own business. The
@@ -135,15 +130,12 @@ shape and the only one that spends forty a shot. All three are `STREAMS` in
 `src/guns.ts`, one contract with three sets of numbers; the **blaster**'s bolt
 is `BOLT`, and `fireGun` is where the five meet.
 
-One fact that fell out of reading all five: **the blaster and the flamer spend
-no ammunition at all.** `0x45ef00` appears once in the flare gun's fire function
+**The blaster and the flamer spend no ammunition at all.** `0x45ef00` appears once in the flare gun's fire function
 and twice each in the soaker's and the scepter's, and not once in either of the
 other two.
 
-The panel had the other half of this waiting: the special-weapon window at
-290,305–380,450 was already painting its plate and its four gauge rows against
-an empty hand, because the reading of `0x40d691` came before there was anything
-to read. It is wired now — the icon appears while `0x479438` is set, and the
+The panel's special-weapon window at 290,305–380,450 paints its plate and its
+four gauge rows (`0x40d691`); the icon appears while `0x479438` is set, and the
 gauge is the weapon record's own `rounds * 64 / max`.
 
 ## Five weapons, and three of them pour
@@ -196,13 +188,13 @@ against that cel's own anchor:
   1222..1227 (crouching)  (~61,+14)   ->  variant 1 to the pixel
 ```
 
-`0x470f98` tag 2 is a single frame of cel **1240**, and reading that as the
-firing pose left the player holding the gun low with the flame hanging 135
+`0x470f98` tag 2 is a single frame of cel **1240**, and it is not the firing
+pose: drawn with it, the player holds the gun low with the flame hanging 135
 pixels away and nothing in between. The sustained pose is a different script:
 `0x46faf8`, installed by `0x423726` (tag 0) and `0x42370d` (tag 1, for the
 second character), whose tag 0 is `1240 1241 1242 1243 1244 1243 1244` — the gun
 RISES and the arm extends, settling on 1243/1244, whose spark is variant 0's
-offset to four pixels. So the offset was never wrong; the pose under it was.
+offset to four pixels. The offset is right for that pose.
 
 Two negative variants end it: `-2` walks the list installing the shutting-off tag, and `-1`
 writes the expire kind straight into every member. The player's own hit handler
@@ -225,10 +217,16 @@ and an empty gauge.
 
 Two of the three are ordinary damage; the flame is a code. And -9 is the one
 code that is not in the player's own table — it falls below `0x448c84`'s range
-test — so what reads it is five handlers of their own (`0x44f0aa`, `0x4520d8`,
-`0x4547b3`, `0x4550d3`, `0x455763`) which accept nothing else. Like the
-blaster's bolt, the flamethrower is a key rather than a weapon, and a full gauge
-of it kills nothing in any of these sixteen levels.
+test — so what reads it is a −9 arm in the victim's own hit handler
+([Fighting](combat.md#what-is-still-read-and-not-done)). Like the blaster's
+bolt, the flamethrower is a key rather than a weapon. What a full gauge of it
+kills is three kinds of thing: MOLITOV (`initwerec`), whose −9 arm at `0x45296e`
+ends in its death; the dog, whose arm at `0x4550d3` installs its death script
+`0x478208` and pays its 200 (`0x455115`); and CITY's crows, which burn for eight
+frames and tumble
+([The nameless handler is the crow's](combat.md#the-nameless-handler-is-the-crows)).
+This page carries the first and the last; its dog plays the death cels and gets
+up again.
 
 The damage, where there is any, is small and comes from the art: `0x42f910`
 scales the striking cel's own `(dy, dx)` by the object's strength, and the
@@ -237,12 +235,10 @@ takes about twenty-five frames of water.
 
 ### INV is a holster, and there is no inventory screen
 
-This repo carried a gap that said "the inventory screen behind `0x42edd0`'s
-message 1 is not here", and both halves of that were wrong. `0x42edd0` message 1
-is the CROUCH state — it reads the keys, probes 0x23 ahead for a pickup and
+`0x42edd0` message 1 is the CROUCH state — it reads the keys, probes 0x23 ahead for a pickup and
 installs `0x4717c8` — and there is no inventory screen anywhere in `SC.EXE`.
 
-What the fourth button on the lower band actually does is two instructions, and
+What the fourth button on the lower band does is two instructions, and
 all 81 of its readers are the same two:
 
 ```
@@ -260,8 +256,7 @@ of the five.
 
 So it is a holster. You put the gun away to look at yourself, and taking your
 finger off draws it again — nothing is spent, nothing is swapped, and no screen
-is drawn. Finding that out cost less than building the screen would have, which
-is the argument for reading the executable before believing a gap.
+is drawn.
 
 ## A pickup is taken on the ART, not the box
 
@@ -271,13 +266,13 @@ intersection looking for a row where BOTH cels have an opaque span — and it is
 spans rather than pixels because that is how the SHP stores a row, which is why
 `0x4320c0` compares span lists and never touches a pixel value.
 
-The difference is not academic. The player's cel is a tall rectangle with a
+The player's cel is a tall rectangle with a
 great deal of nothing in it: STREETS' `statlife` runs 3629..3729, and standing
 at 3600 or 3760 overlaps that rect by a pixel or two while touching none of the
 art. The rect alone hands you the life; the art does not, and the suite asserts
 exactly that pair of positions.
 
-One detail worth keeping: the point `0x40e680` hands back is the centre of the
+The point `0x40e680` hands back is the centre of the
 RECT intersection (`0x40e782` reads back what `0x434140` wrote), not the centre
 of the pixels it found. So the pixel walk only ever answers yes or no, and can
 stop at the first row that touches.

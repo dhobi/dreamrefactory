@@ -3,14 +3,14 @@
 *Prerequisite: [Audio — TRK / SFX / 11K / SND](../engine/formats/audio.md) (what a bank
 is) and [Audio at runtime](../engine/runtime/audio.md) (how a name finds one).*
 
-Titanic shipped with a second, quieter version of itself. Not a different build
-and not a menu option — a set of branches inside the game's own scripts that fire
-when the machine reports too little free memory, swapping half the songs out and
-switching part of the ambience off.
+Titanic ships with a second, quieter version of itself: not a separate build or a
+menu option, but branches inside the game's own scripts that fire when the machine
+reports too little free memory. They swap half the songs for shorter ones and
+switch part of the ambience off.
 
-The port has memory to spare, so those branches never ran. This page is what they
-do, how they were measured, and the one number the play page moves to let a player
-ask for them anyway.
+The port has memory to spare, so these branches do not run by default. This page
+covers what they do, how they were measured, and the one number the play page
+changes to let a player ask for them.
 
 Reference implementation: `GameSession.lowMemory`
 ([`engine/session.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/session.ts))
@@ -35,13 +35,11 @@ code lowmemory ()
 endcode
 ```
 
-Under **6 MB** free — 6144000 bytes — and it was 1996, so that was a real machine
-rather than a pathological one. `heapsize()` is the engine probe; everything
-downstream is script.
+The threshold is **6 MB** free (6144000 bytes), a realistic figure for a 1996
+machine. `heapsize()` is the engine probe; everything downstream is script.
 
-This matters for where the feature lives. The port implements none of the
-behaviour: it answers `heapsize()` with 4 MB instead of 64 and TAOOT does the
-rest. The setting is one lie in one builtin.
+The port therefore implements none of the behaviour: with the setting on, it
+answers `heapsize()` with 4 MB instead of 64 and TAOOT does the rest.
 
 ## The five sites that branch on it
 
@@ -54,8 +52,8 @@ rest. The setting is one lie in one builtin.
 | MAP.STG | `openstage` | `stageparam(1, 0)`, `stageparam(2, 0)` |
 
 `lowmemory()` is re-read at each of those, and `openset` runs per room, so the
-answer is allowed to change mid-game: a room entered after the machine got tight
-is quieter than the one before it.
+answer can change mid-game: a room entered after memory runs short is quieter
+than the one before it.
 
 ### The theme swap
 
@@ -72,10 +70,9 @@ is quieter than the one before it.
         playnewtheme ("deckb.trk")
 ```
 
-Note the last line: whichever file was opened, the theme is asked for by its
-**`.trk`** name. That is not a bug and not a fallback — a `.11k` bank's
-`trackName` field *says* `deckb.trk`. The file name and the track name inside it
-are deliberately different, so one `playnewtheme` serves both branches. See
+Whichever file was opened, the theme is asked for by its **`.trk`** name: a
+`.11k` bank's `trackName` field is `deckb.trk`. The file name and the track name
+inside it differ by design, so one `playnewtheme` serves both branches. See
 [how a name finds its bank](../engine/runtime/audio.md#the-library-how-a-name-finds-a-sound); this
 is one of the 27 banks (of 92) whose two names disagree.
 
@@ -94,15 +91,13 @@ one of the deck's `life*` stars — `soundloop("party1", true)` plus
 `makecricket("party1", starxyz("life14", 1), starxyz("life14", 2), 2000, 0, 0)`,
 five times, with a different star set per phase. They are
 [crickets](../engine/runtime/timing.md): positional ambient sound that pans and fades with where
-you stand. Skip the call and mission 4's boat deck has no crowd on it at all.
-
-This is the one change you cannot miss, because it is a presence rather than a
-duration.
+you stand. Without the call, mission 4's boat deck has no crowd at all — the most
+audible change, since it removes a sound rather than shortening one.
 
 ## `.11K` is not 11 kHz
 
-The name says sample rate and means nothing of the kind. Measured across every
-bank that has a `.11k` twin:
+The extension suggests a sample rate but does not denote one. Measured across
+every bank that has a `.11k` twin:
 
 | bank | loop chunks | full | short | cut |
 |---|---|---|---|---|
@@ -123,9 +118,8 @@ concatenated loop chunks as the port assembles a theme. They are the *short*
 versions of the songs, roughly half the loop, and the two `.trk` banks that mix
 11025 Hz chunks into their lists (`deckb`, `decke`) have `.11k` twins that don't.
 
-`sink3` is the odd one out and worth stating precisely, because it is easy to get
-wrong: the two files are the **same size** and differ in **592 bytes, all inside
-the first 1531** — the container tables, not the audio. Decoded, both give 801792
+`sink3` is the exception: the two files are the **same size** and differ in
+**592 bytes, all inside the first 1531** — the container tables, not the audio. Decoded, both give 801792
 samples at 22050 Hz with the same hash. Sinking phase 3 sounds identical either
 way.
 
@@ -136,8 +130,8 @@ tree — the five deck banks appear on both discs.)
 ## The two params are invisible
 
 `setparam` and `stageparam` are otherwise pure scratch: the scripts write 1 and 2
-here and no script ever reads them back. So their meaning lives in `TI.EXE`, and
-it is not anything on screen.
+here and no script reads them back. Their meaning lives in `TI.EXE`, and nothing
+on screen depends on them.
 
 The setter stores two words:
 
@@ -159,15 +153,15 @@ path at `0x43aa30`:
   param-1-off path calls an extra `0x438b80` when the last reference has dropped.
   A free-immediately versus keep-cached knob.
 
-Both are memory-pressure knobs, and both are answers to a problem this port does
-not have: it has its own decoded-ring LRU
+Both are memory-pressure knobs. The port manages memory differently — it has its
+own decoded-ring LRU
 ([`ring-cache.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/ring-cache.ts))
 and warms neighbouring rings itself. So they stay the scratch words `setparam`
 already stored, and everything the setting reaches here is **sound**.
 
-That is also why the play page names the row for the *condition* — **Low
-memory** — and not for the result. What a small machine got is the game's answer,
-and it is a different answer in a different port.
+The play page therefore names the row for the *condition* — **Low memory** — and
+not for the result: what a small machine gets is the game's answer, and would
+differ in a different port.
 
 ## Using it
 
@@ -175,7 +169,7 @@ The box is in its own row under the screen; the answer is remembered under
 `taoot.sound.lowmemory`. It takes effect at the next `openset`, i.e. **the next
 room you walk into**, not the one you are standing in.
 
-Where it is worth listening:
+Where the difference is audible:
 
 | where | what changes |
 |---|---|
@@ -187,7 +181,7 @@ Where it is worth listening:
 | the cargo holds, the bins, crew quarters | 74.8 s → 37.5 s |
 | mission 4, sinking phase 1 | 74.8 s → 27.1 s, the largest proportional cut |
 
-And where nothing happens at all, because those `setupdecksound` cases have no
+Nothing changes where those `setupdecksound` cases have no
 `.11k` to swap to: the bedsit, `deckbd`/`fore`/`poop`, C and D decks (`c73`,
 `c78`, `hallc`, `recept1c`, `halld`), the engine room and control room, the
 turbine, and the false smokestacks.

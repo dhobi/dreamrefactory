@@ -1,12 +1,12 @@
 # The browser editors
 
-Eight pages the project's own site hosts — `npm run dev`, on 5173, beside the
+Pages the project's own site hosts — `npm run dev`, on 5173, beside the
 front door rather than beside either game. They are not CLIs and they
 need no `gamefiles/` directory: each one takes a file you give it, takes it
 apart into the pieces that format is made of, lets you change the parts that
-are safe to change, and hands the repacked file back. Seven of them do; the
-eighth, the [sprite book viewer](books.md), only reads — nothing in this project
-writes a `.SBK`, so it would be a button with no round-trip behind it.
+are safe to change, and hands the repacked file back. All but one do: the
+[sprite book viewer](books.md) only reads, because nothing in this project writes
+a `.SBK`.
 
 Between them they cover **every container format the games ship**: rooms (SET),
 props (SHP, and DreamFactory 1's PRP), movies (MOV — logic only, for a reason
@@ -31,13 +31,11 @@ belongs to a game with no interpreter. The one file the game *writes* rather tha
 All of it lives in `site/editors/`: one HTML page and one module per editor,
 the `editor.css` all of them share, and an `index.html` that lists them — the
 page `/editors/` itself serves. Each page is its own Vite entry point in
-`site/vite.config.ts`, which builds nine in total: the front door and these
-eight.
+`site/vite.config.ts`, beside the front door.
 
-They are the **site's** rather than a game's, and deliberately: an editor opens
-a file out of whichever rip you point it at, so making it belong to one game
-would have pointed a dependency from the shared package into one of its own
-consumers. What they need to know about a game — which trees a rip offers, what
+They are the **site's** rather than a game's: an editor opens a file out of
+whichever rip you point it at, so making it belong to one game would point a
+dependency from the shared package into one of its own consumers. What they need to know about a game — which trees a rip offers, what
 to call them, which code page each one's text is in — is
 `site/src/games.ts`.
 
@@ -47,8 +45,8 @@ editor a file tool rather than half a game.
 
 ## What they have in common
 
-The seven pages look different because the formats do, but underneath they are
-the same four ideas.
+The pages look different because the formats do, but underneath they share the
+same ideas.
 
 **They read with the engine's own code.** An editor does not have a parser of
 its own. `site/editors/sets.html` opens a room through the same `readSetFile` the
@@ -80,8 +78,7 @@ replaces just that container with an edited copy and leaves the rest of the
 loaded buffer pristine, and `writeContainerFile` reserializes the file with the
 original header bytes kept verbatim (so header fields nobody has decoded yet
 survive the trip). The result is the guarantee each page's export note repeats:
-**everything you did not touch is the byte it was.** That is not a hope, it is
-pinned per format — the [editor test suites](../reference/tests.md) round-trip
+**everything you did not touch is the byte it was.** It is pinned per format — the [editor test suites](../reference/tests.md) round-trip
 a synthesized file of each type and assert that every single edit moves exactly
 its own field, in the bytes *and* in the structure the editor drew from.
 
@@ -119,10 +116,8 @@ awkward shapes on purpose (a state whose play order reverses its frames, a pose 
 a missing direction, a movie frame that holds the picture before it).
 
 Those fixtures are built by the library's own writers, `engine/src/df/*-build.ts`
-([the write path](../engine/formats/README.md#writing-one-back)). Before that they were
-hand-laid byte arrays inside each test, which only proved an edit worked on bytes
-the test itself chose — and were a wall of `i16(d, 0x76 + i * 44, …)` that said
-nothing about what was being built.
+([the write path](../engine/formats/README.md#writing-one-back)), rather than
+hand-laid byte arrays, so a fixture reads as what it builds.
 
 Back to the [documentation home](../README.md).
 

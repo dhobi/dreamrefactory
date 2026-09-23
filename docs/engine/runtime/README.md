@@ -4,14 +4,14 @@
 
 The [format docs](../formats/README.md) answer one question: **what is in the
 bytes on disk**. This section answers the other one: **what the engine does
-with them at runtime** — the behaviour that DFET never needed and that was
-recovered from `TI.EXE` and from watching the real game.
+with them at runtime** — the behaviour that DFET never needed, recovered from
+`TI.EXE` and from observing the real game.
 
-Keeping the two apart is deliberate. A format page should stay true as long as
-the 1996 files don't change (they won't); a runtime page describes living code
-that gets refactored. When a format doc used to carry runtime detail ("how the
-UI band is drawn", "how a cricket pans"), every refactor quietly made it stale.
-Now the format pages stick to bytes and link here for behaviour.
+The two are kept apart deliberately. A format page stays true as long as the
+1996 files don't change; a runtime page describes living code that gets
+refactored. Runtime detail in a format doc ("how the UI band is drawn", "how a
+cricket pans") goes stale with every refactor, so the format pages stick to
+bytes and link here for behaviour.
 
 ## The pages
 
@@ -47,7 +47,7 @@ Read in any order — each names its own prerequisites.
    it.
 9. **[Languages & the chooser](../../taoot/languages.md)** — one data tree per language, how
    a bare filename resolves through two selectors (disc and language), the code
-   page a tree's text turns out to be in, and the language chooser: this port's
+   page a tree's text is in, and the language chooser: this port's
    own DreamFactory stage, scripts and all.
 
 ## Where the code lives

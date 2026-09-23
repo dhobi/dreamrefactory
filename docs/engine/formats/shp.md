@@ -6,7 +6,7 @@
 A **SHP** file holds **props** — the images drawn *on top* of a SET's
 background: doors, items you pick up, buttons you press, the watch and menu
 button in the UI band. If it moves, appears, disappears, or reacts to a click,
-it's almost certainly a prop.
+it is almost certainly a prop.
 
 Reference implementation: [`engine/src/df/shp.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/shp.ts) (decoding) and
 [`engine/src/runtime/props.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/props.ts) (runtime).
@@ -37,7 +37,7 @@ flowchart TD
 
 Prop-state animations **play once and hold** — a door opens and *stays* open.
 Anything that genuinely loops has to be re-triggered by a script
-(`makeloop`); the format itself doesn't loop.
+(`makeloop`); the format itself does not loop.
 
 Those three levels are pointers, and pointers are what a block map can show.
 `CUFF.SHP` — the cufflink bag, its three props and their 46 pictures — with the
@@ -45,7 +45,7 @@ group table hovered, so every container it addresses lights up:
 
 <ByteMap map="cuff.shp" />
 
-### Container 0 names two things, and one of them was read at the wrong offset
+### Container 0 names two things
 
 The header's tail is a **script ref immediately followed by the file's own name** —
 the same idiom a group container uses one level down (its script at +38, its name
@@ -58,12 +58,11 @@ at +42):
 | `2360` | i32 group count |
 | `2364` | the group table, 16 bytes per entry |
 
-The port read the main script from offset **20** instead, with `|| 1` on top —
-which is to say the container-1 convention hardcoded over a field that reads 0 in
-149 of the 207 shipped `.shp`/`.prp` and 1 in the other 58, i.e. never a pointer.
-That is the shape #291 charged us for in `set-v1.ts`. No file in the corpus
-exercises the difference (every shop's main script IS container 1), so both engines
-were read to settle it — TI.EXE's shop opener `0x415780`:
+Offset **20** is not the main script: it reads 0 in 149 of the 207 shipped
+`.shp`/`.prp` and 1 in the other 58, never a pointer (compare #291 in
+`set-v1.ts`). Every shop's main script in the corpus is container 1, so no file
+tells the two readings apart; the offset is taken from both engines — TI.EXE's
+shop opener `0x415780`:
 
 ```
 0x41583b: lea  ecx, [ebx + 0x928]   ; the ref name
@@ -83,7 +82,7 @@ identical — `opencastfile`'s parser `0x40dac0` reads `[ebx+0x924]` and
 Unlike a SET background (which fills its rectangle), a prop is a **cut-out** —
 a door occupies only a door-shaped region, the rest is transparent. So SHP
 frames use the **transparent variant** of the [image codec](image-codec.md):
-alongside the pixels there's an **opaque mask** marking which pixels are real
+alongside the pixels there is an **opaque mask** marking which pixels are real
 and which are see-through.
 
 Each frame also stores its own **draw offset** in the header — where the
@@ -96,13 +95,13 @@ A prop is decoded **palette-independently**: the loader keeps it as *indexed*
 pixels plus the opaque mask, and does **not** bake in colours. The prop is
 colourised only at **composite time, through the currently active SET's
 palette** (a shared colour table — the `clut`/`mixclut` commands exist to
-manage it). That's how the same door art looks right in every room it appears
+manage it). That is how the same door art looks right in every room it appears
 in.
 
 ## Placing a prop on screen
 
-There are two placement worlds, and knowing which one a prop is in explains a
-whole class of bugs:
+There are two placement worlds, and which one a prop is in decides how it is
+drawn:
 
 ### Screen-space props (UI, inventory, cards)
 
@@ -128,15 +127,15 @@ a prop returns it to screen space — which is exactly what "picking it up"
 does.
 
 A world prop is bound to its set with `propset(name, set)`, so it only draws
-in the room it belongs to. Getting the projection right is what finally let
-the bag on the C73 bed render, be clicked, and go into the inventory.
+in the room it belongs to. The bag on the C73 bed is such a prop: projected,
+clickable, and picked up into the inventory.
 
 ## How props behave: they have their own scripts
 
 Each prop group has a script whose `code` handlers respond to events
 (`mousedown`, `setcursor`, `initprop`, …), joining the same event chain as
 everything else (see [scripting](../scripting-language.md)). Two runtime
-facts worth carrying:
+facts:
 
 - Prop clicks are hit-tested **front-to-back and pixel-accurately** (using the
   opaque mask), so you can only click the visible part of a prop, and the
@@ -150,7 +149,7 @@ facts worth carrying:
 
 Some SHP files are **loaded once at startup by the boot** and live for the
 whole session, not per-set: `house.shp` (44 ship-wide props including the
-135-state `door`), `inven.shp` (the inventory). That's why
+135-state `door`), `inven.shp` (the inventory). That is why
 `sendtoprop("door", …)` from any room reaches a real, already-loaded prop.
 See [BOOTFILE](bootfile.md).
 

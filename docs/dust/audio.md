@@ -12,10 +12,9 @@ and the [track editor](../editors/tracks.md) opens all forty.
 
 ## The name a script asks for is not the filename
 
-This is the thing to know, and it is easy to trip on. `playnewtheme` and
-`opentrackfile` are given a bank's **own stored name** — its `refName`, the string
-at offset 158 — and that is frequently *not* what the file is called on the disc.
-Worse, **several files answer to one name.**
+`playnewtheme` and `opentrackfile` are given a bank's **own stored name** — its
+`refName`, the string at offset 158 — and that is frequently *not* what the file
+is called on the disc. **Several files can answer to one name.**
 
 | a script asks for | steps | the file that holds it |
 |---|---|---|
@@ -41,11 +40,11 @@ night, under one name — the same doubling the SET side has, where the town is
 game has open, not on the name.
 
 **`"isaopractice.sn"` is truncated in the file**, one character short of
-`.snd`, and the scripts ask for it that way. It is not a typo to fix: the name
-field is what it is, and the port matches it character for character. Titanic's
-v4 banks store `"BEDRAD1.WAV"` and are asked for as `bedrad1.trk`, so the runtime
-strips a suffix there — doing the same here made three of Dust's themes
-unfindable, the town's among them.
+`.snd`, and the scripts ask for it that way. It is not a typo to fix: the port
+matches the name field character for character. Titanic's v4 banks store
+`"BEDRAD1.WAV"` and are asked for as `bedrad1.trk`, so the runtime strips a
+suffix there; stripping one here makes three of Dust's themes unfindable, the
+town's among them.
 
 ## The bank says how many of its sounds are the theme
 
@@ -55,32 +54,26 @@ one-shots it holds, then how many **loop chunks** follow them. The bed is that m
 sounds at the end of the name table, and their order in the table *is* the playback
 order — `daymusic1` through `daymusic10`.
 
-The pair is identifiable because the two halves sum to the bank's sound count in
-**40 of 40** banks on the disc, and because the loop half lands on the run the
-names already suggested: TOWN.SND is (15, 10) and its bed is `daymusic1..10`;
-NIGHT.SND (16, 5) and `nightwind1..5`; HELP.SND (0, 11) and `helptheme1..11`.
-Read as one i32 the field looks like nonsense — 327687 is (7, 5) and 720896 is
-(0, 11) — which is how it went unidentified.
+The two halves sum to the bank's sound count in **40 of 40** banks on the disc,
+and the loop half lands on the run the names suggest: TOWN.SND is (15, 10) and
+its bed is `daymusic1..10`; NIGHT.SND (16, 5) and `nightwind1..5`; HELP.SND
+(0, 11) and `helptheme1..11`. Read as one i32 the field looks like nonsense —
+327687 is (7, 5) and 720896 is (0, 11).
 
-This replaced a heuristic that read the bed **out of the names**: the trailing run
-of one stem plus ascending numbers from 1, with two rules to keep dialogue out (a
-stem ending in `.` is a speaker — `ruby.108`, `fear.44` — and a run must start at
-1). It agreed with the field on 37 of the 40 and was wrong about three, in both
-directions (#325):
+The names alone are not a reliable guide to the bed (#325):
 
-- `DOORLIB.SND` and `SALGAMES.SND` hold **no** bed. The heuristic made one out of
-  `lsing1..3`, three hinge squeaks, and `discard1..4`, four card sounds.
+- `DOORLIB.SND` and `SALGAMES.SND` hold **no** bed, although `lsing1..3` (three
+  hinge squeaks) and `discard1..4` (four card sounds) look like numbered runs.
 - `MISSION.SND` holds **five**, and they are `silence wind1 wind2 chantwind1
-  chantwind2` — two stems, which a single-stem rule cannot see. It played the last
-  two, so `playtheme("mission.snd")` was three bars short of the mission's theme.
+  chantwind2` — two stems, which a single-stem rule cannot see.
 
 ## The rest are one-shot libraries
 
-`DEATH.SND`, `UNILIB.SND`, `HOTROOM.SND`, the six `gossip` banks and the rest hold
-no theme at all — just sounds a script fires by name. Five banks are named
-`"gossip"` between them (`FEARWITT`, `HAPYRUBY`, `MARBLOOD`, `MAYORBLD`, `MAZIE`,
-`MISCLIB`, `TROTRUBY`, `TROTSIDE`), which is the same one-name-many-files pattern
-as the themes.
+`DEATH.SND`, `UNILIB.SND`, `HOTROOM.SND`, the nine `gossip` banks and the rest hold
+no theme at all — just sounds a script fires by name. All nine store the name
+`"gossip"` (`FEARWITT`, `HAPYRUBY`, `MARBLOOD`, `MAYORBLD`, `MAZIE`, `MISCLIB`,
+`TROTRUBY`, `TROTSIDE` and `UNDER/SHAMAN`), which is the same one-name-many-files
+pattern as the themes.
 
 Fourteen of the forty are not in `DATA/` but beside the thing that uses them —
 `CHECKERS/`, `CRACK/`, `DRUGS/`, `FIGHT/`, `SALGAMES/`, `SCORP/`, `TARGET/`,

@@ -54,9 +54,9 @@
  *
  * The gun is the single exception and it is deliberate. `0x44da80` and its three
  * siblings zero all twenty-one rounds counts on entering a chapter, but only
- * while `[0x47913c]` is 0 — and `0x45e069` sets it to 1 on a load. `0x479438`,
- * the ARMED flag, is not in the file, so a loaded game has the weapon in the
- * inventory and NOT in its hands.
+ * while `[0x47913c]` is 0 — and `0x45e068` sets it to 1 on a load. `0x479438`,
+ * the ARMED flag, is not in the file, but `0x45e041` sets it whenever the saved
+ * weapon is not 1 (none), so a loaded game has its gun in its hands.
  */
 
 /** what the writer and the reader agree on */

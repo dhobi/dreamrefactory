@@ -48,52 +48,48 @@ game's `main.ts` owns the browser. The host may not mention `document`,
 **UI notifications** (`log`, `hud`, `showStage`, `mapChanged`, `setsChanged`)
 and an `AudioSink`.
 
-That line is not tidiness. The lifecycle used to live in `main.ts` purely
-because the mutable `viewer` did, and the test suite — unable to import a module
-that touches `document` — hand-rolled a seven-line `onSetChange` in its place.
-It was therefore testing a stand-in that didn't prefetch, didn't start a theme
-and didn't reset the scheduler, while three defects sat in the real thing.
-`taoot/tests/auto/regression.ts` now builds the **same `GameHost`** over the on-disk
-`gamefiles/` index and a recording sink, so activation and the cold boot are
-ordinary tests. Anything a test could contradict belongs below the line.
+The line is what makes the lifecycle testable: the test suite cannot import a
+module that touches `document`, so lifecycle code on the page side could only be
+tested through a stand-in. `taoot/tests/auto/regression.ts` builds the **same
+`GameHost`** over the on-disk `gamefiles/` index and a recording sink, so
+activation and the cold boot are ordinary tests. Anything a test could contradict
+belongs below the line.
 
 It is also what lets one host run two games. `HostFiles` is the whole contract
-for "where is the data", so Dust's 212-line `files.ts` and Titanic's
-six-edition `FileStore` are interchangeable to everything above them — which is
-why the second game cost a shell rather than a second engine.
+for "where is the data", so Dust's small `files.ts` and Titanic's
+six-edition `FileStore` are interchangeable to everything above them — a second
+game needs a shell rather than a second engine.
 
 ## One rule the host keeps breaking
 
 `TI.EXE` issued screen and sound as **fire-and-forget** commands; a retained
 renderer and WebAudio give us **state** instead — a fade level that persists, a
-`currentThemeName`, an audio source that plays until stopped. Every bug of this
-shape found so far has been the host writing that state at the wrong moment,
-in one of four ways:
+`currentThemeName`, an audio source that plays until stopped. Bugs of this
+shape are the host writing that state at the wrong moment, in one of four ways:
 
-1. **A default applied before the script has spoken.** `startTheme` ran ahead
-   of `openset` → `setupsound`, so the set-named bank blipped before the deck
-   theme; the black was lifted at movie end, before the script that played the
-   movie had finished dressing the screen. *Rule: the script gets the last word;
-   the host fills in only what it leaves.*
+1. **A default applied before the script has spoken.** A `startTheme` ahead of
+   `openset` → `setupsound` blips the set-named bank before the deck theme;
+   lifting the black at movie end comes before the script that played the movie
+   has finished dressing the screen. *Rule: the script gets the last word; the
+   host fills in only what it leaves.*
 2. **A play with no owner.** A movie's event sounds and a skipped `puppetspeak`
-   line ran on after the thing that started them was gone. *Rule: whoever starts
+   line run on after the thing that started them is gone. *Rule: whoever starts
    a sound ends it — by handle, since channels are shared with room ambience.*
 3. **State the engine believes but the host never delivered.** Loops started
-   before the AudioContext existed were dropped while `currentThemeName` said
-   they were playing; a set-swap with no `closeset` behind it left the previous
+   before the AudioContext exists are dropped while `currentThemeName` says
+   they are playing; a set-swap with no `closeset` behind it leaves the previous
    room's scheduled work running. *Rule: if the engine records it as running,
    something must actually be running — or the record has to go.*
-4. **A once-per-session step run per room.** Booting the session re-fired
-   `house.shp`'s `openshop` on every activation — a LAYOUT pass (`propxy("bag",
-   256, 324)`, the interface band), where putting the bag on the C73 bed is
-   `initprops`' one-time job. So the bag stopped being a world prop as soon as
-   any later set opened, and leaving the cabin and coming back through the door
-   lost it. `boot()` opens those shops once and never again. The method is now
-   `session.ensureBooted()` — no caller can know whether it is the first, so
-   they state what they need and the session decides; naming it `load…` is what
-   invited the repeat. *Rule: match the boot's cardinality, and say so in the
-   name — a silent guard under an imperative name is a trap for the next
-   caller.*
+4. **A once-per-session step run per room.** `house.shp`'s `openshop` is a
+   LAYOUT pass (`propxy("bag", 256, 324)`, the interface band), where putting the
+   bag on the C73 bed is `initprops`' one-time job; re-firing it on every
+   activation stops the bag being a world prop as soon as any later set opens, so
+   leaving the cabin and coming back through the door loses it. `boot()` opens
+   those shops once and never again. The method is `session.ensureBooted()` — no
+   caller can know whether it is the first, so they state what they need and the
+   session decides; an imperative name like `load…` invites the repeat. *Rule:
+   match the boot's cardinality, and say so in the name — a silent guard under an
+   imperative name is a trap for the next caller.*
 
 Each is cheap to re-check when adding host code: *does a script still have
 something to say after this line, and who ends what this line starts?*
@@ -107,26 +103,22 @@ shell has two — the game and its own `/collection/` — and reaches the same
 edition axis and no language chooser.
 
 The game is its own page, `/play/` (`taoot/play/index.html`); the front page
-(`taoot/index.html`) is welcome text and a Play button, and nothing else. They
-were one document until the welcome had to be hidden the moment the boot had
-something to draw — which put the sentence explaining that this is a
-re-implementation on screen for exactly as long as the files took to load.
-Splitting them means the front page can wait as long as the reader does, and the
-play page can assume the decision was already made a navigation ago.
+(`taoot/index.html`) is welcome text and a Play button, and nothing else. As
+one document the welcome would have to be hidden the moment the boot had
+something to draw, leaving the sentence explaining that this is a
+re-implementation on screen only as long as the files take to load. Split, the
+front page can wait as long as the reader does, and the play page can assume the
+decision was already made a navigation ago.
 
 The play page reads the `gamefiles.json` manifest, settles an
 **edition**, preloads everything the boot will want with a bar over the bytes, and
 then **cold boots itself** — the real `boot()`, logos into the main menu. (What
 "everything the boot will want" *is* comes from the game rather than from a list
-here — see [the boot plan](#the-boot-plan-what-a-game-says-it-needs) below.) It used to show a landing screen first: cold
-boot, **Load game**, three story-state shortcuts, and a clickable list of every
-hosted `.SET`; a `#devstate` bar with jump buttons for every puzzle followed them
-once a set was open. Everything except the cold boot was a shortcut for working on
-the game rather than playing it, and the dev harness behind them is **gone** —
-saves reach the same places through the in-game menu (the same modal `opengame`
-uses) and any room through the editors, and what the harness was really for is
-covered by [the playthrough](../../taoot/verification.md), which plays the game rather than
-jumping around inside it. What is left on the page before the framebuffer is
+here — see [the boot plan](#the-boot-plan-what-a-game-says-it-needs) below.) There
+are no story-state or room shortcuts on the page: saves are reached through the
+in-game menu (the same modal `opengame` uses), any room through the editors, and
+[the playthrough](../../taoot/verification.md) plays the game rather than jumping
+around inside it. What the page shows before the framebuffer is
 `#booting`: one paragraph — held invisible until the
 catalogue has translated it, so a German reader is not shown the English first —
 taken down when the stage appears, and left standing when no game files were
@@ -172,12 +164,11 @@ whatever they can see in the box.
 
 Two things have to be known before a DreamFactory game can start over HTTP: which
 files to have in hand so `boot()` never waits mid-sequence, and which room the
-boot ends up in. Both used to be **hardcoded lists of TAOOT filenames** —
-`bedsit1.set`, `logo.mov`, `gang.cst`, `house.shp`, sixteen of them — which is
-knowledge about one game sitting in the layer that runs any of them. The 1996 demo
-shares four of those names and needs a fifth the list had never heard of.
+boot ends up in. A hardcoded list of TAOOT filenames (`bedsit1.set`, `logo.mov`,
+`gang.cst`, `house.shp`, …) would be knowledge about one game in the layer that
+runs any of them: the 1996 demo shares four of those names and needs a fifth.
 
-They are read instead, out of the game's own BOOTFILE
+Both are read out of the game's own BOOTFILE
 ([`engine/bootplan.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/bootplan.ts)),
 because every one of those files is named as a string literal by the boot's own
 scripts — `opencastfile("gang.cst")`, `openshopfile("house.shp")`,
@@ -203,7 +194,7 @@ the host divides, since `coldBoot` runs `boot()` and then kicks the day advance
 itself. And `fileexists` is deliberately **not** a resource call though it names a
 file: the demo's `boot()` does `fileexists("gstair2.set")` as its "is the CD in the
 drive?" check, and fetching 9 MB of grand staircase to answer a question about
-presence would be the most expensive no-op in the boot.
+presence would be an expensive no-op.
 
 The plan is fetched and parsed **once** and shared; an edition switch is a page
 reload, so there is no live invalidation to get wrong. Three other places take
@@ -211,9 +202,8 @@ their answer from it rather than from a list: `loadServerSet` (an entry point th
 may be reached without `boot()` ever running — a dev jump, a resumed save),
 `session.ensureBooted`'s stand-in boot, which replays the plan's openings in the
 boot's own order and skips movies because playing the intro is not what a stand-in
-is for, and `FileStore.setVolumes`, where `discOfUrl` used to be a
-`/titanic([12])/` regex — one title's CD labels in the layer that resolves any
-title's files.
+is for, and `FileStore.setVolumes`, so `discOfUrl` takes the disc labels from
+the game rather than from one title's CD names.
 
 ## Hosting it as static files
 
@@ -255,18 +245,17 @@ manifest should not.
 Saved games are IndexedDB and were never server-side; the editors export by
 download. There is no other moving part.
 
-The click those buttons carried was also what unlocked audio; the window arms
-the same `ensureAudio()` on the first pointerdown or keydown anywhere, so the
-boot runs silently until the player touches something and `attach()` restarts
-the theme already playing.
+Audio needs a user gesture in a browser, so the `WebAudioSink` is created
+lazily ([see Audio](audio.md#sinks-browser-vs-headless)): the window arms
+`ensureAudio()` on the first pointerdown or keydown anywhere, so the boot runs
+silently until the player touches something and `attach()` restarts the theme
+already playing.
 
 Loading a set lazy-loads it plus its siblings (`.shp`, `.trk`, `.sfx`,
 `.11k`); anything scripts ask for later (`openshopfile("blkjack.shp")`) is
 fetched on demand — a `FileStore` miss the dev server could satisfy kicks off
 a background fetch. Production builds don't bundle or serve game files.
 
-Audio needs a user gesture in a browser, so the `WebAudioSink` is created
-lazily on the first pointer/key event ([see Audio](audio.md#sinks-browser-vs-headless)).
 The session's dialog hooks map to native `alert`/`confirm`/`prompt`; save and
 load route to [the save browser](saves.md#the-saved-games-ui). `window.dbg`
 exposes the viewer and session to the console (and to the Playwright test).
@@ -289,20 +278,17 @@ repaints every pixel. Measured across the 20 largest sets, all 998 rings, each
 decoded from a fresh buffer and from a poisoned one: every frame byte-identical.
 So rings can be decoded on demand, in any order, with no priming.
 
-That reading cost a while to arrive at, because a **codec** bug wore the costume
-of an ordering bug. Run-mode-7 back-references shorter than their run must
-*tile* what they just wrote; the port memmoved instead. Four such runs in a walk
-down the boat deck were enough to poison every later frame in the chain, and the
-damage landed in the flattest part of the picture — the night sky — as coloured
-horizontal dashes that grew as the walk went on and vanished the moment you
-stood still. Under that corruption 38 rings *looked* like they needed a
-predecessor and roads *looked* like they needed the standpoint they departed;
-both readings evaporated when the copy was fixed. The suite now pins the real
-property (any ring, any buffer state, same bytes), which is the canary if it
-ever regresses.
+A **codec** bug can masquerade as an ordering dependency. Run-mode-7
+back-references shorter than their run must *tile* what they just wrote; a
+memmove instead poisons every later frame in the chain, showing in the flattest
+part of the picture — the night sky — as coloured horizontal dashes that grow as
+a walk goes on and vanish the moment you stand still. Under that corruption 38
+rings *look* as if they need a predecessor and roads as if they need the
+standpoint they depart. The suite pins the real property (any ring, any buffer
+state, same bytes) as the canary.
 
-Everything used to be decoded at set-open instead: correct, and **366 MB** for
-the boat deck (1420 frames, half of it Z planes). Now the same room holds
+Decoding everything at set-open is correct but costs **366 MB** for the boat deck
+(1420 frames, half of it Z planes); decoded on demand, the same room holds
 16 MB — where the player stands and where they can go. `tick` decodes one
 reachable ring per idle frame, so turning costs ~0.1 ms in play; the visible
 cost is a single ~70–90 ms frame when arriving somewhere whose ring nothing had
@@ -314,9 +300,8 @@ takes the first available road and picks the **arrival view nearest the
 travel direction** (a road's endpoint view faces back along the road — see
 [SET](../formats/set.md)). Turn/walk animation paces at **50 ms per
 frame** — one frame per service pass, which is TI.EXE's own frame period
-(`framerate` defaults to 3 ticks of 50/3 ms, `0x429643`/`0x43a940`). It was 90 ms
-until a player reported that the original in DosBox moves visibly faster; it does,
-by 1.8x, and the rate was never a feel decision to make. A player may move their
+(`framerate` defaults to 3 ticks of 50/3 ms, `0x429643`/`0x43a940`), checked
+against the original in DosBox; the rate is not a feel decision. A player may move their
 OWN moves off it — see [the Movement setting](#the-movement-setting) — and a
 script's stay here whatever they choose. While animating, `currentview()`
 returns the pseudo-view **`"moving"`** — scripts genuinely poll for it.
@@ -324,29 +309,25 @@ returns the pseudo-view **`"moving"`** — scripts genuinely poll for it.
 the nearest view by rotation.
 
 An arrival's **own scripts may drive the camera**, and they are trusted to.
-`currentscene()`/`currentview()` are unconditional setters in `TI.EXE`, but the
-port armed them only inside a user gesture's script chain — and a walk's arrival
-lifecycle runs *ticks* after the gesture ended, so an `openscene` that repositions
-the camera fired into no-op hooks. They are armed around the walk-arrival
-`closescene`/`openscene` now, scoped exactly as `keydown`'s and `press`'s are. The
-demo's grand staircase is where it showed: it fakes three decks out of two set
-files, and landing in `gstair2` runs `changeset(theset); currentscene(thescene);
-currentview(theview)` off `savedeck` — the `changeset` fired, the jumps were
-dropped, and every climb landed at the arriving set's *default* scene. A corpus
-audit finds exactly three `openscene` handlers that move the camera and no
-`closescene` that does.
+`currentscene()`/`currentview()` are unconditional setters in `TI.EXE`. The port
+arms them inside a user gesture's script chain and also around the walk-arrival
+`closescene`/`openscene`, scoped exactly as `keydown`'s and `press`'s are, because
+a walk's arrival lifecycle runs *ticks* after the gesture ended. The demo's grand
+staircase depends on it: it fakes three decks out of two set files, and landing in
+`gstair2` runs `changeset(theset); currentscene(thescene); currentview(theview)`
+off `savedeck` — with the jumps dropped, every climb would land at the arriving
+set's *default* scene. A corpus audit finds exactly three `openscene` handlers that
+move the camera and no `closescene` that does.
 
 **Rendering** asks one question per frame — `screenOwner()`: **movie**, **puppet**,
-**held**, **faded**, **world** — instead of the three if-chains in an order nothing
-enforced that it used to be. A movie is first, which is the rule the input path already
-kept, and the two had drifted: the puppet branch had been taught to yield to a
-movie and the fade branch never had. A movie carries its own palette and its own
-pixels, so a fade the script left standing is not a layer over it — it is applied
-*around* the rectangle the clip paints (see [`MoviePlayer`](#movieplayer)). The
-demo's Smethells briefing is where that showed — `screentoblack("puppet", 15)`,
-`puppetvisible(false)`, `playmovie("penote.mov")` with no `blackscreen()` between,
-and `blackscreen()` is the one thing that drops the held snapshot — so the note
-played, clickable, behind a black rectangle. `TI.EXE` settles what the black *is*:
+**held**, **faded**, **world**. A movie is first, the same rule the input path
+keeps. A movie carries its own palette and its own pixels, so a fade the script
+left standing is not a layer over it — it is applied *around* the rectangle the
+clip paints (see [`MoviePlayer`](#movieplayer)). The demo's Smethells briefing
+needs this: `screentoblack("puppet", 15)`, `puppetvisible(false)`,
+`playmovie("penote.mov")` with no `blackscreen()` between — and `blackscreen()` is
+the one thing that drops the held snapshot — so a fade drawn over the movie would
+leave the note playing, clickable, behind a black rectangle. In `TI.EXE`,
 `screentoblack` (id 12050 at `0x43e550`) is a blocking ramp that dims `steps` times
 and returns, leaving nothing behind, so the black is simply what was last drawn and
 the next thing to draw the screen owns it. The shipped game has the
@@ -355,16 +336,16 @@ same shape twice (the darkroom's `photobox.mov`, the wireless portrait).
 **held** is that last sentence made into a state: nobody owns the screen between a
 movie ending and the next thing that draws. `playmovie` frees its buffers and
 restores nothing (`0x448b00`, exit path `0x44969e`–`0x4496c7`) — the clip's final
-frame is still in the framebuffer and its palette is still installed. Ours handed
-the screen back to `world` on the frame the movie ended, and since the script
-resumes a rAF later, that was one fully-lit frame of the room in between: measured
-at exactly one 16 ms frame of the un-bombed London flat between `bedex.mov` and
-`ocredits.mov` ([#209](https://github.com/dhobi/dreamrefactory/issues/209)). While held
-the renderer composites nothing at all, which is the whole of what the original
-does. It is also why the boot looks right: `boot()` plays `playmode.mov` and then
-loads the cast, four shops and a stage before `advanceday` reaches `datebed.mov`,
-with no screen statement anywhere in between — so the menu's last frame is what
-stays up through the load, in `TI.EXE` and now here.
+frame is still in the framebuffer and its palette is still installed. Handing the
+screen back to `world` on the frame the movie ends shows one fully-lit frame of the
+room before the script resumes a rAF later: measured at exactly one 16 ms frame of
+the un-bombed London flat between `bedex.mov` and `ocredits.mov`
+([#209](https://github.com/dhobi/dreamrefactory/issues/209)). While held the
+renderer composites nothing at all, which is all the original does. It is also why
+the boot looks right: `boot()` plays `playmode.mov` and then loads the cast, four
+shops and a stage before `advanceday` reaches `datebed.mov`, with no screen
+statement anywhere in between — so the menu's last frame is what stays up through
+the load, in `TI.EXE` and here.
 
 Within `world`, the path is: stage flat (with the set view composited in when
 visible, then world sprites, then props) → bare set. On top: the persistent `drawstring` text
@@ -422,8 +403,8 @@ Two things about where they sit:
   Picture options, because the original's answer here is keyboard-only. Their unit is
   the keypress: a preset is ±6 notches of the same 1.05, so it is the same control
   rather than a second setting that drifts, and the keys move the selection with them.
-  Remembered under `taoot.picture.brightness`. A slider shipped first and was wrong on
-  a phone — a 44 px target you can hit is worth more than granularity nobody wants.
+  Remembered under `taoot.picture.brightness`. Presets rather than a slider, because on
+  a phone a 44 px target you can hit is worth more than granularity nobody wants.
 
 ### The picture setting
 
@@ -441,7 +422,7 @@ the right-turn ring, high-resolution in the left-turn one, paired by `framePairI
 That asymmetry is what `original` reproduces, and it is the default. The other three
 make every direction agree — `sharp`, `transition` (soft for one beat, then sharp),
 and `soft`, which keeps the low-res standpoint for the settled view as well and so
-leaves the whole room at the resolution the port drew before #68. Remembered under
+leaves the whole room at low resolution (the port's rendering before #68). Remembered under
 `taoot.picture.landing`; a player who had ticked the old **always land sharp** box
 (`taoot.picture.sharplanding`) starts on `sharp`.
 
@@ -469,9 +450,9 @@ own `framerate` could be given (`0x489efe`, ticks of 50/3 ms between frames; see
 | `fast` | 25 ms | 1.5 ticks: the one the original could not have asked for |
 | `instant` | nothing at all | `framerate(0)`, which the original documents as *don't wait* |
 
-The rate itself is still not a matter of taste — getting it wrong by 1.8× is what
-[#205](https://github.com/dhobi/dreamrefactory/pull/205) was, and `original` is the
-measured number. What this adds is the choice: the request
+The rate itself is not a matter of taste — `original` is the measured number
+([#205](https://github.com/dhobi/dreamrefactory/pull/205)). What this adds is the
+choice: the request
 ([#222](https://github.com/dhobi/dreamrefactory/issues/222)) is from players who find
 20 fps of low-res transition makes them motion-sick and want either a slower walk
 or, like Myst, no transition to watch. Remembered under `taoot.move.speed`.
@@ -482,25 +463,24 @@ Two things are deliberately outside it:
   (`SetViewer.navigate` passes `FRAME_MS`, the player's path passes
   `SetViewer.playerPace`). Scripts budget *passes* for the moves they ask for and
   then carry on without waiting — BEDSIT1's air raid gives a 7-frame road ten
-  passes — so a `slow` player would put the air raid back where
-  [#40](https://github.com/dhobi/dreamrefactory/issues/40) found it.
+  passes — so a `slow` player would break the air raid's timing
+  ([#40](https://github.com/dhobi/dreamrefactory/issues/40)).
 - **`session.frameRate`**, the script-side `framerate()`, stays separate. Scripts
   *write* it (the fight stage asks for 5; the turbine drag loops drop it and put
   it back), and a preference a script can overwrite on the way past is not a
   preference.
 
-`instant` needed one change to the frame loop rather than just a smaller number.
-`tick` drew at most one animation frame per call, which is faithful — the original's
-throttle waits out the period and then draws exactly one, so a machine that cannot
-keep up stretches the move instead of dropping frames from it — but it also puts a
-floor under the pace at whatever the host ticks: 50 ms headless, one display refresh
-in a browser. `0` would have meant "a frame every rAF", which is neither instant nor
-the same speed on a 60 Hz and a 120 Hz panel; `25` would have been 33 ms at 60 Hz.
-So below the engine step the tick now advances by **elapsed time** and draws only the
-frame it lands on. At or above the step nothing changed, frames are still never
-skipped, and `instant` falls out of it: the whole ring is spent on one tick, the
-settle runs inside that same tick, and the only picture that reaches the screen is
-the standpoint arrived at.
+`instant` needs more from the frame loop than a smaller number. Drawing at most one
+animation frame per `tick` is faithful — the original's throttle waits out the
+period and then draws exactly one, so a machine that cannot keep up stretches the
+move instead of dropping frames from it — but it puts a floor under the pace at
+whatever the host ticks: 50 ms headless, one display refresh in a browser. `0` would
+mean "a frame every rAF", which is neither instant nor the same speed on a 60 Hz and
+a 120 Hz panel; `25` would be 33 ms at 60 Hz. So below the engine step the tick
+advances by **elapsed time** and draws only the frame it lands on. At or above the
+step it draws one frame per tick and never skips, and `instant` falls out of it: the
+whole ring is spent on one tick, the settle runs inside that same tick, and the only
+picture that reaches the screen is the standpoint arrived at.
 
 ### The Low memory box
 
@@ -513,7 +493,7 @@ answering 4 MB instead of 64 when `GameSession.lowMemory` is set. It is re-read 
 `openset`, so a change lands in the next room; remembered under
 `taoot.sound.lowmemory`.
 
-**[The low-memory game](../../taoot/low-memory.md)** is the whole account — the five sites,
+**[The low-memory game](../../taoot/low-memory.md)** has the full account — the five sites,
 what `.11K` actually is (not 11 kHz), why the two engine params it also zeroes are
 invisible here, and where it is worth listening.
 
@@ -540,8 +520,8 @@ brightness decision above. The difference is whether the game already answers th
 question: brightness has *no* in-game control at all — the F-keys are the whole of
 it, and a phone cannot press them, so the page had to supply presets. Volume has a
 dial, and it is a **drag**, which a finger does as well as a mouse. A slider on the
-page would have been a second control for a value the game already owns, drifting
-from the dial the moment a savegame or a script moved it.
+page would be a second control for a value the game already owns, drifting from
+the dial the moment a savegame or a script moved it.
 
 What that leaves uncovered is real and is the original's own gap: with a clip or a
 conversation on screen the band is not reachable, so a player without a keyboard
@@ -561,9 +541,8 @@ both by identity, so a new array *is* a repaint.
 fade *is* a palette ramp, so re-establishing the palette is what brings the picture
 back, and a script that dims into place need issue no `blacktoscreen` at all.
 `transtoflat("redphoto.stg")` is the case: `screentoblack("current")`, then
-`mixclut("stage", "black", 0, 255, 245)` and nothing after it — so with an overlay
-fade and nothing lifting it, Burns' darkroom sat pitch black, red lamp and trays and
-all. It is the same shape as `visualeffect`'s reveal, one function up. Scoped to the
+`mixclut("stage", "black", 0, 255, 245)` and nothing after it — so without this
+rule Burns' darkroom would sit pitch black, red lamp and trays and all. It is the same shape as `visualeffect`'s reveal, one function up. Scoped to the
 *showing* surface deliberately: `CTL`'s exit runs `clut("set")` between a stage's
 `screentoblack` and its `blacktoscreen`, and lifting the black there would flash the
 room in early.
@@ -586,27 +565,26 @@ black it finds is one a script blanked on (`fade.blanked` — `blackscreen` or
 the palette that ramp was against is the one being replaced). See
 [the stage layer](./stage-ui#what-a-swap-does-to-the-black).
 
-**The fades BLOCK, and that is not a detail.** `screentoblack` and
-`blacktoscreen` are a linear lerp between the named surface's palette and the
-black one, and the loop that runs it (`0x435b90` / `0x435be0`) busy-waits one
-60 Hz tick per step on `0x41de90` with no message pump and no scheduler pass
-inside it. The interpreter is frozen for the whole ramp, so the statement after a
-fade cannot run until the fade is over. Ours queued the ramp and returned, and
-the game noticed: `gang.cst`'s `prepuppet` is `screentoblack("current", 10)`,
+**The fades block.** `screentoblack` and `blacktoscreen` are a linear lerp
+between the named surface's palette and the black one, and the loop that runs it
+(`0x435b90` / `0x435be0`) busy-waits one 60 Hz tick per step on `0x41de90` with no
+message pump and no scheduler pass inside it. The interpreter is frozen for the
+whole ramp, so the statement after a fade cannot run until the fade is over. The
+game depends on it: `gang.cst`'s `prepuppet` is `screentoblack("current", 10)`,
 `openpuppetfile`, `visualeffect(plain, 0)`, `blacktoscreen("puppet", 10)`, and
 only then does `runpuppet` send the puppet its boot script — which is what speaks
-the first line. With the fade non-blocking the line started while the screen was
-still black and rode the ramp up
-([#6](https://github.com/dhobi/dreamrefactory/issues/6)). They now `await`
+the first line. A non-blocking fade starts the line while the screen is still
+black and lets it ride the ramp up
+([#6](https://github.com/dhobi/dreamrefactory/issues/6)). The port's fades `await`
 `Clock.sleep` for `steps` script ticks, the same primitive and the same unit
 `delay(n)` uses.
 
 **And `clut(name)` installs a palette**, right now: `0x43dfd0` resolves the name
 through the table the fades share and hands it to `0x4363e0` — the very call the
 last step of a `blacktoscreen` ramp makes. So `clut` is the un-ramped fade, and
-`clut("black")` is the un-ramped `screentoblack`. It was a no-op here on the
-reasoning that `blackscreen()` is always beside it; not always — `transtoflat`'s
-`rub.stg` arm is `playmovie("rub.mov")` then `clut("black")` with no
+`clut("black")` is the un-ramped `screentoblack`. `blackscreen()` is not always
+beside it: `transtoflat`'s `rub.stg` arm is `playmovie("rub.mov")` then
+`clut("black")` with no
 `blackscreen` anywhere, and that black is what the stage is revealed *from* two
 lines later. Where the pair does occur it is not redundant either: `blackscreen`
 clears the buffer and `clut("black")` makes every subsequent draw invisible,
@@ -646,12 +624,12 @@ not the prop name.
 
 What counts as "there is a stage" is `GameSession.stageOpen` — the question the
 game's own `stagevisible` asks (`stageName != "none"`), and both the hit test and
-the dispatch use it. It used to be "does the stage have a **main script**?", and a
-stage need not have one: TAOOT's `inven1.stg` does, the demo's `inven.stg` does
-**not**, because there the *flat* carries the handlers. So in the demo a click on
-the open bag's OK button answered `("", "none")` instead of `("ok", "button")`, the
-boot's `mousedown` switch had no case to take, and nothing was dispatched at all —
-a live-looking button under an empty engine log.
+the dispatch use it. "Does the stage have a **main script**?" is the wrong test,
+because a stage need not have one: TAOOT's `inven1.stg` does, the demo's
+`inven.stg` does **not**, because there the *flat* carries the handlers. Under that
+test a click on the demo's open-bag OK button answers `("", "none")` instead of
+`("ok", "button")`, the boot's `mousedown` switch has no case to take, and nothing
+is dispatched at all.
 
 Hovering runs the **same** hit test and sends `setcursor` to whatever it answered,
 through the same six dispatch paths — so the cursor and the click cannot promise
@@ -659,9 +637,8 @@ different things. The name comes back from the scripts, and the whole corpus emi
 five of them: `touch` (809 times), `arrow` (75), `hand` (36), `watch` (18) and
 `fist` (2), which `main.ts` maps to CSS cursors. What makes a takeable thing a hand
 is `inven.shp`'s main and a person `gang.cst`'s, both gated on
-`realdist(target) < hotdist()` ([characters](characters.md)); the port used to
-choose the cursor itself and answered `talk` over a character, a name no script in
-the game ever emits.
+`realdist(target) < hotdist()` ([characters](characters.md)). The port does not
+choose a cursor of its own.
 
 ### Keys
 
@@ -679,10 +656,9 @@ queue's own policies are TI.EXE's, recovered in `engine/input.ts`). The gate is 
 original keeps it: its window proc posts and its main loop pops, both above any
 notion of *which* key it was, since the letter is only translated afterwards by
 BOOTFILE's `keydown` reading `keynorth`/`keywest`/`keyeast` — W/A/D by default and
-rebindable, so the engine cannot know which key means forward. The port had the
-gate in the arrow-only path, so pressing W during a walk was thrown away while ↑
-was kept: a burst of four Ws walked one room and four ↑s walked two (#207). A
-playing movie and a suspended conversation stay ahead of the queue, because both
+rebindable, so the engine cannot know which key means forward. A gate in the
+arrow-only path would throw W away during a walk while keeping ↑, so a burst of
+four Ws would walk one room and four ↑s two (#207). A playing movie and a suspended conversation stay ahead of the queue, because both
 own their keys outright rather than deferring them.
 
 **Escape** is forwarded, not acted on. `DF_KEY` maps it to the character `"."`
@@ -702,7 +678,7 @@ A phone has no Escape, so **two taps in the same place within 320 ms** are
 forwarded as one — `keyDown(".", true)`, the identical route the key takes, so a
 live movie aborts, a spoken line is skipped, and anything else ignores it exactly
 as the original does. That gesture is also what makes a conversation playable on a
-phone at all, now that a click no longer skips a line. Only
+phone at all, since a click does not skip a line. Only
 the *second* tap is swallowed: holding every tap back to see whether another
 follows would put 320 ms of lag on every press in the game, and during a clip —
 which is what this is for — the first tap reaches no region and does nothing. It
@@ -715,14 +691,14 @@ land further apart in page time than the window allows.
 **A finger that goes down on a control is never a swipe.** The classifier holds the
 mousedown back to tell a swipe (navigate) from a press (play) and resolves it by
 *waiting* — which is right for a tap and wrong for a drag, because a drag moves
-immediately. Travel 48 px inside 220 ms, as any real drag does, and the gesture was
-ruled a swipe: no mousedown ever arrived and the camera walked instead. The drag
+immediately: a real drag travels 48 px inside 220 ms and would be ruled a swipe,
+so no mousedown would arrive and the camera would walk instead. The drag
 that matters is the inventory's — `INVEN.SHP`'s `stdmouse` carries a held item with
 `propxy(handitem, pointx(arg), pointy(arg))` in a `while stilldown()` loop and drops
 it on whatever `hittest` finds, which is how the trunk key is used. So a finger that
 lands on a **prop** or a stage **button** takes the press at once and is never
-reclassified; a finger on a room surface keeps the old behaviour, because swiping the
-room is how a phone walks.
+reclassified; a finger on a room surface goes through the classifier, because swiping
+the room is how a phone walks.
 
 A phone has no arrow keys either, so a swipe presses the one it points at
 ([`swipeKey`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/keys.ts), pure, so
@@ -736,8 +712,7 @@ feels right is a matter of the hand rather than of the game. The answers live in
 
 Down is a **plain key event** rather than a nav press, which is the keyboard's own
 asymmetry (`ArrowDown` goes to the script chain and nothing in the engine acts on
-it). It was left unbound entirely for a while on that reasoning, and the reasoning
-was half right: almost nothing reads `downarrow`. The exceptions are `SMSTACK2` and
+it). Almost nothing reads `downarrow`; the exceptions are `SMSTACK2` and
 `SMSTACK3` views 43, 50, 54 and 56 — the false smokestack's ladder platforms, whose
 scene `keydown` is the only way down a level — and since the way out of the
 smokestack is at level 1, a player with no `downarrow` could climb the maze and
@@ -754,11 +729,10 @@ with a `keydown` target consumes all keys itself — the wireless telegraph key
 needs raw letters, which is also what keeps X out of the Zeitel machine's way.
 
 **The first `showStage`, and only that one.** It fires on every set activation,
-so resetting the pane there emptied the log and shut it at every changeset — 28
-rooms and at least 40 set changes over a full playthrough, which is what #22
-reported as "resets on every set change". The page now resets on the two things
-that really start a game from nothing (the cold boot, and `quit()`'s return to
-the menu), and the pane's open/shut answer is remembered in `localStorage` under
+so resetting the pane there would empty the log and shut it at every changeset —
+28 rooms and at least 40 set changes over a full playthrough (#22). The page resets
+on the two things that really start a game from nothing (the cold boot, and
+`quit()`'s return to the menu), and the pane's open/shut answer is remembered in `localStorage` under
 `taoot.details.open` alongside the swipe and picture ones.
 
 **Where the pane lives.** In the page, as the last column of the row that holds
@@ -767,12 +741,7 @@ speedrun page, which has the run sheet as a column of its own between them), and
 stacked under everything below that. Nothing moves the element and nothing is
 padded around it: the row wraps, so a window that is over the break but short of
 holding every column drops the pane to its own line rather than squeezing what is
-beside it.
-
-It used to be a `position: fixed` rail at the right edge with the body padded by
-the rail's width. #249 is what that cost: the speedrun page padded its own layout
-for the rail as well, so at 1920 with the pane open the page gave away ~960 px to
-a 480 px pane and the run sheet was left a few pixels wide.
+beside it (#249).
 
 **What the state list is.** Every script global, rendered from `snapshotState` —
 the same function the playthrough goldens are recorded with, so what a reporter
@@ -796,22 +765,21 @@ A filter takes **more than one term**, `|` or `,` apart: `hrs|min|sec` is the
 timer, and a timer is only worth watching whole ([#126](https://github.com/dhobi/dreamrefactory/issues/126),
 [#127](https://github.com/dhobi/dreamrefactory/issues/127)) — any-of, since a name
 cannot contain two of them. It matches a row's **type** as well as its name,
-because a prop's row reads `prop bag`: `prop` now answers with the props, where
-it used to answer with `saveprops`, `saveprops1` and `saveprops2` — the three
-globals that *encode* them. A space is not a separator, so `prop bag` still means
+because a prop's row reads `prop bag`: `prop` answers with the props rather than
+only with `saveprops`, `saveprops1` and `saveprops2` — the three globals that
+*encode* them. A space is not a separator, so `prop bag` still means
 that one prop. Under a filter the owned props and actors join the list without
 `all`, for the same reason the unmoved globals do: the reader has named what they
 want.
 
 The clock is excluded from "what just moved" by
 [`engine/masks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/masks.ts) —
-the same predicate the trace comparisons drop, moved out of `tests/` when the panel
-turned out to need the same answer. Without it the list was permanently `sec` and
-`clockcount` and nothing else.
+the same predicate the trace comparisons drop. Without it the list would
+permanently show `sec` and `clockcount` and nothing else.
 
 The list **patches** its rows rather than rebuilding them, because it polls (there
-is no "a global changed" event to listen for) and a rebuilt list threw away every
-row it had, four times a second, for a screen that had not changed. Measured with a
+is no "a global changed" event to listen for) and a rebuilt list would throw away
+every row it had, four times a second, for a screen that had not changed. Measured with a
 MutationObserver: a room standing still costs **0 mutations** over 16 refresh
 ticks, one moved global costs 2 (its number and its highlight), and the only writes
 left under `all` are the pocketwatch's own.
@@ -854,8 +822,7 @@ press at a two-minute film must not have its line land after the film's.
 
 The lines themselves live in a bounded buffer
 ([`log-buffer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/log-buffer.ts)),
-not in the `<pre>`: the pane used to be its own storage and grew without end. A
-whole game is 1141 lines / 40 923 bytes, so the 5000-line cap is not a budget for
+not in the `<pre>`, so the pane does not grow without end. A whole game is 1141 lines / 40 923 bytes, so the 5000-line cap is not a budget for
 playing — it is a ceiling for a session that never ends, where `movie click …`
 arrives once per click inside an interactive movie. Past the cap the oldest tenth
 goes at once, so a repaint costs once per batch rather than once per line, and
@@ -866,11 +833,9 @@ still tell where it got to.
 
 The credits end `playmovie("credits.mov"); quit()`, so `quit` is called from
 *inside* the dispatch that played them, and a boot re-entered underneath it would
-be building sets while the old game was still talking. That was answered with a
-page reload for a while, which is a poor front door: it throws the page away to
-reach something the page can show, and it took the run with it (the browser suite's
-segment 27 reported "Execution context was destroyed" and then read the theme off a
-dead page). It is done in place now, in two halves that are not timing guesses:
+be building sets while the old game was still talking. A page reload would throw
+the page away to reach something the page can show, and take a running browser
+test with it, so it is done in place, in two halves that are not timing guesses:
 `onQuit` returns immediately and continues on the next rendered frame through
 `session.nextFrame` — the engine's own yield, the same primitive script poll loops
 use — and `GameSession.prepareRestart` then awaits `settle()`, so nothing is torn
@@ -905,7 +870,7 @@ are polled on every tick and **outside** the self-pacing gate, because a timed
 jump fires out of any wait, a modal region wait included; each fires once, on the
 segment's own clock.
 
-**Pacing is the film's, not ours.** `frameHoldMs` — `max(frame hold, segment
+**Pacing is the film's.** `frameHoldMs` — `max(frame hold, segment
 floor)`, [recovered from the demo build](../formats/mov.md#a-movie-carries-its-own-pacing)
 — decides every advance. `chooseFrameInterval` only decides *whether* a movie is
 self-paced at all (0 = a click-through close-up); a frame authored to wait for the
@@ -932,7 +897,7 @@ applied around it instead.
 the same as `TI.EXE`'s no-next-segment teardown (`0x449d40`). Event sounds are
 stopped only for a clip the *player* was driving (dismissed, or interactive at
 all): a cutscene's frame-entry sound is often a spoken line timed to ring out
-past the last frame, and cutting that is the bug — measured, 16 of the 52
+past the last frame, and cutting it is wrong — measured, 16 of the 52
 region-less movies with audio fire a sound they leave no room for. And the frozen
 frame a fade-out was holding is **voided**, because a movie outranks a held fade
 in `screenOwner`: whatever a `screentoblack` snapshotted before the clip is not

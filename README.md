@@ -3,8 +3,8 @@
 # dreamREfactory
 
 CyberFlix built a game engine. Bill Appleton's **DreamFactory** was a CD-ROM
-authoring system, and it carried *Lunicus*, *Jump Raven*, *Redjack* and the
-studio's adventures, and was licensed to studios outside CyberFlix besides.
+authoring system, and it carried *Lunicus*, *Jump Raven* and the studio's
+adventures, and was licensed to studios outside CyberFlix besides.
 **dreamREfactory is that engine written again in TypeScript, from the files rather
 than from the source** — every container format decoded, the script language
 parsed and interpreted, and the games played in a browser with nothing installed.
@@ -67,7 +67,7 @@ for what a rip has to look like; nothing distributable is in this repository and
 
 ## Layout
 
-Eight directories, and each of them a thing rather than a kind of file.
+Each top-level directory is a thing rather than a kind of file.
 
 - **`engine/`** — the DreamFactory engine, knowing about no particular game. Its
   own package, and its own suite that runs with no game data anywhere.
@@ -82,13 +82,13 @@ Eight directories, and each of them a thing rather than a kind of file.
 - **`dust/`** — Dust: two pages, its own disc, its own tools
 - **`timelapse/`** — Timelapse: one page, four discs, and its own palette. The
   engine's screen with no room on it (`engine/src/web/screen-director.ts`) is what
-  made it possible at all
+  makes it possible
 - **`skullcracker/`** — Skull Cracker: the game on one page (the films, the menu,
   the chooser and the levels, which the chooser hands the canvas to) with
   `walk.html` beside it as the bench a level is opened on one at a time — and
   its own disassembler under `tools/`, because this game's logic is in `SC.EXE`
   and not in the data
-- **`site/`** — the project's own web presence: the front door, the eight format
+- **`site/`** — the project's own web presence: the front door, the format
   editors, the chrome every page shares, and the UI-language axis
 - **`tools/`** — tools that work on any DreamFactory rip because they take one as
   an argument. A tool that knows which game it is looking at lives in that game's
@@ -145,9 +145,8 @@ covers is in [Tests](docs/reference/tests.md).
 
 ## Credits
 
-**[DFET](https://github.com/M3tox/DFET) by M3tox** is why this project exists.
-The container formats were already legible when this repository started, because
-that tool had worked them out and written them down. The file-reading layer here
+**[DFET](https://github.com/M3tox/DFET) by M3tox** is why this project exists:
+it worked out the container formats and wrote them down. The file-reading layer here
 is a port of that C++ code, and the format docs lean on M3tox's own plain-English
 notes. Where a doc knows something, it tries to say where the knowledge came from.
 

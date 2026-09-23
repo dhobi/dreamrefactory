@@ -7,40 +7,36 @@ machine, and the split is forced by one fact: **the suites read the original
 game files.** A `gamefiles/` copy is a ~7 GB CD rip. It is gitignored, it will
 never be in the repository, and so no GitHub-hosted runner can ever open it.
 
-Measured, in a checkout with no `gamefiles/` present:
-
 | | Suites | Tests | Runs on |
 |---|---|---|---|
-| **without the rip** | 28 files | 211 pass, 2 skip, ~8 s | GitHub's machines — any pull request, forks included |
-| **needs the rip** | 10 files | 321 tests with it, and they fail without | the self-hosted runner, same-repo branches only |
+| **without the rip** | everything not excluded | pass or skip, ~8 s | GitHub's machines — any pull request, forks included |
+| **needs the rip** | the exclusion list below | fail without it | the self-hosted runner, same-repo branches only |
 
-The ten are all Titanic's — `regression`, `savegame`, `re_builtins`, `interp`,
-`nav`, `text`, `audio-rates`, `sound-channels`, `shp-play-order`,
-`cst-play-order` — and `tests.yml` names them as an **exclusion**, so a suite
-added later runs on GitHub's machines by default and, if it turns out to need
-the rip, fails loudly and gets added to the list. The other direction would
-have skipped it in silence.
+The rip-reading suites are all Titanic's — `regression`, `savegame`,
+`re_builtins`, `interp`, `nav`, `text`, `audio-rates`, `sound-channels`,
+`shp-play-order`, `cst-play-order` — and `tests.yml` names them as an
+**exclusion**, so a suite added later runs on GitHub's machines by default and,
+if it needs the rip, fails loudly and gets added to the list. An inclusion list
+would skip it in silence.
 
 Everything else builds its own fixtures with
 [the write path](../engine/formats/README.md#writing-one-back) instead of
-reading the game, which is exactly why it travels — and that now includes all
-of `engine/tests/` and `site/tests/`, plus Dust's three, which
+reading the game, which is why it travels — including all of `engine/tests/` and `site/tests/`, plus Dust's three, which
 [skip](tests.md#dust-s-suites-—-dust-tests) rather than fail without a disc.
 
-They fail rather than skip on purpose — `text.ts` asserts that it found language
-trees, because a suite that silently checks nothing would let the table rot
-behind a green tick.
+The rip-reading suites fail rather than skip on purpose — `text.ts` asserts that
+it found language trees, because a suite that silently checks nothing lets the
+table rot behind a green tick.
 
 ## What a change decides for itself
 
 One thing in `tests.yml` looks at the diff: **which playthroughs to run**. The
-automatic suite is not filtered and is not going to be — the reasoning is
-arithmetic rather than taste. Measured on the run that merged #333, the job is
+automatic suite is not filtered, for arithmetic reasons. Measured on the run that merged #333, the job is
 168 s: about 80 s of checkout, rip-linking and `npm ci` that no filter can touch,
 ~15 s of automatic suite, and **73 s of playthrough that belongs to one game**. So
-a change confined to Dust's package pays 73 s for Titanic's route and gains
-nothing, while filtering the suite would save a fifth as much and introduce the
-one failure this repository cannot afford — a change landing green with its tests
+a change confined to Dust's package would pay 73 s for Titanic's route and gain
+nothing, while filtering the suite would save a fifth as much and risk the one
+failure this repository cannot afford — a change landing green with its tests
 unrun.
 
 The rule is deliberately blunt. Only a diff confined to GAME PACKAGES — or to
@@ -54,12 +50,11 @@ recorded trace, and neither is reachable from `docs/` or from markdown anywhere.
 Whatever does read those — the front-door and manifest suites walk the tree — is
 in the automatic suite, which is never filtered. Measured over the last forty
 commits on master, three were prose alone and three were confined to a game
-package: this narrows six of forty and leaves the rest exactly as they were.
+package, so this narrows six of forty and leaves the rest unchanged.
 
 And it decides rather than skips. A `paths:` filter that skips the job would make
 the required status check never report, and a pull request waits on that forever
-with every job green — which is not hypothetical: see the note on the `full` job's
-name.
+with every job green (see the note on the `full` job's name).
 
 ## The four workflows
 
@@ -98,7 +93,7 @@ on the majors that run under Node 24 — `checkout@v7`, `setup-node@v7`,
 `upload-artifact@v7` — because GitHub is retiring the Node 20 runtime, and a
 node24 action needs a runner of **2.327.1 or newer**. GitHub's own machines
 update themselves; this one does not, so `tools/runner/runner.env` must never be
-pinned below that. It is on 2.337.0. A runner under the floor does not warn — it
+pinned below that. It pins 2.337.0. A runner under the floor does not warn — it
 fails at the first `actions/checkout` of the job.
 
 ### On a machine of its own
@@ -106,9 +101,8 @@ fails at the first `actions/checkout` of the job.
 The usual case — the runner belongs on a box that is always on, not on a
 laptop, because the nightly browser run needs it awake at 02:00.
 
-**A clone is not one of the things that host needs.** The runner makes its own
-checkout under `_work/` on every run, so a clone sitting next to it would only
-go stale and confuse. Two things have to be there: the runner and the rip.
+**That host needs no clone.** The runner makes its own checkout under `_work/`
+on every run, so a clone beside it would only go stale. Two things have to be there: the runner and the rip.
 
 ```bash
 # 1. the rip — anywhere OUTSIDE the runner's directory, so no checkout can
@@ -150,7 +144,7 @@ gh api repos/dhobi/dreamrefactory/actions/runners \
   --jq '.runners[] | {name, status, labels: [.labels[].name]}'
 ```
 
-`status: "online"` and a `dreamrefactory-gamefiles` label is the whole check — the
+`status: "online"` and a `dreamrefactory-gamefiles` label is the check — the
 workflows select that label, not a hostname, so a replacement machine needs no
 change here.
 
@@ -162,19 +156,17 @@ newer browser than the one the suite pins.
 
 ### The rips are linked in, never copied
 
-**Two** rips now, one per game package: each game's Vite config resolves
-`gamefiles/` inside its own root, so Titanic's tree goes to `taoot/gamefiles`
-and Dust's disc — which used to be a `dust/` subdirectory of the first — to
+One rip per game package: each game's Vite config resolves `gamefiles/` inside
+its own root, so Titanic's tree goes to `taoot/gamefiles` and Dust's disc to
 `dust/gamefiles`. The runner's `.env` names both.
 
-Titanic's is **required**, and Dust's was optional because its suites skip the
-disc rather than failing without it (`dust/tests/` passes with no rip present).
-**Half of that is no longer true.** `dust/vitest.playthrough.config.ts` exists
-now, so the step below selects Dust's playthrough whenever a change can reach
-its route — and that suite does NOT skip: a run asked for by name and answering
-"36 rungs passed" having played none is the one result it exists to prevent. So
-an unset `DUST_GAMEFILES` is still only a warning for the automatic suites, and
-a hard failure for any change that touches `dust/`.
+Titanic's is **required**. Dust's automatic suites skip the disc rather than
+failing without it (`dust/tests/` passes with no rip present), but Dust's
+playthrough (`dust/vitest.playthrough.config.ts`) is selected whenever a change
+can reach its route, and that suite does NOT skip: a run asked for by name that
+reports its rungs passed having played none is the one result it exists to
+prevent. So an unset `DUST_GAMEFILES` is only a warning for the automatic
+suites, and a hard failure for any change that touches `dust/`.
 
 Set it beside `TAOOT_GAMEFILES` in the runner's own `.env` — not in GitHub; no
 secret and no repository variable is involved — and restart the service, which
@@ -198,7 +190,12 @@ against).
 ```
 
 Titanic's is required; the other two are warnings, because those suites skip a
-missing rip rather than failing on it.
+missing rip rather than failing on it (Dust's playthrough excepted, above).
+
+The link must come after the checkout: `actions/checkout` cleans with
+`git clean -ffdx`, and `-x` deletes *ignored* files too, so a link made before
+the checkout is gone by the time the tests run. Remaking it costs nothing; the
+8 GB never moves.
 
 `browser.yml` links ONE rip — the game it was dispatched for. It names no game
 anywhere: `<GAME>_GAMEFILES` follows from the `game` input, so adding a game
@@ -211,43 +208,35 @@ links it — Timelapse has no suite that reads a rip yet.
 Do not uncomment a volume before the rip is on the host: a bind mount of a path
 that does not exist does not fail, it makes Docker CREATE it, empty and
 root-owned, and an empty rip is harder to diagnose than a missing one. The
-opposite mistake costs just as much and looks worse: with
-`SKULLCRACKER_GAMEFILES` set but the volume left out, the variable named a path
-that existed on the host and not in the container, and `browser.yml` reported
+opposite mistake — a variable set but its volume left out — names a path that
+exists on the host and not in the container, and `browser.yml` reports
 **"SKULLCRACKER_GAMEFILES (/srv/skullcracker/gamefiles) is not a directory — set
-it in the runner's .env"** — which sends you to the one file that was already
-right. Check <span v-pre>`docker inspect <container> --format '{{range .Mounts}}...'`</span>,
+it in the runner's .env"**, pointing at the one file that is already right.
+Check <span v-pre>`docker inspect <container> --format '{{range .Mounts}}...'`</span>,
 not the `.env`.
 
 <!-- v-pre, because VitePress compiles the rendered HTML as a Vue template and
-     `{{ ... }}` is an interpolation even inside a code span: this line threw
-     "Cannot read properties of undefined (reading 'Mounts')" during the build
-     and the sentence rendered without the command it was about. -->
+     `{{ ... }}` is an interpolation even inside a code span: without it the
+     build throws "Cannot read properties of undefined (reading 'Mounts')". -->
 
 ### The runner is called `dreamrefactory-runner`
 
-It used to be `taoot-runner`, from when the repository was `taoot-web` and
-Titanic was the only game. The unit file, the image, the container and the
-default runner name have all moved; **the `TAOOT_GAMEFILES` variable has not**,
-and should not — that one names Titanic's rip, not the runner, and
-`taoot/tools/gamefiles.ts` reads it under that name.
+The older name is `taoot-runner`, from when the repository was `taoot-web`. The
+unit file, the image, the container and the default runner name all use the new
+name; **the `TAOOT_GAMEFILES` variable does not** — it names Titanic's rip, not
+the runner, and `taoot/tools/gamefiles.ts` reads it under that name.
 
-The LABEL moved too, from `taoot-gamefiles`, and **a label rename has two halves
-that are deployed by different hands**: `runs-on:` changes when a pull request
-merges, and a runner's labels change when you redeploy the container. Change
-either alone and every job queues forever against a label nothing answers to. So
-it was done in two passes — the runner given BOTH names first, `runs-on:` moved
-once a runner answering to the new one was online, then the old name dropped from
-these files. Worth repeating rather than shortcutting the next time a label
-changes.
+The label is `dreamrefactory-gamefiles` (formerly `taoot-gamefiles`). **A label
+rename has two halves deployed by different hands**: `runs-on:` changes when a
+pull request merges, and a runner's labels change when the container is
+redeployed. Change either alone and every job queues forever against a label
+nothing answers to. Rename in two passes: give the runner BOTH names, move
+`runs-on:` once a runner answering to the new one is online, then drop the old
+name from these files.
 
 Upgrading an existing box: stop and disable the old unit before enabling the new
 one. Two runners registered for one repository both take jobs, and which one gets
 a given job is a race.
-
-The ordering is not cosmetic. `actions/checkout` cleans with `git clean -ffdx`,
-and `-x` deletes *ignored* files too — a link made before the checkout is gone
-by the time the tests run. Remaking it costs nothing; the 8 GB never moves.
 
 ### The dev server does not get port 5175
 
@@ -270,13 +259,13 @@ owner's server with it.
 
 ## The rip's directory must be named `gamefiles`
 
-Not a convention — a constraint, and it costs exactly one test to get wrong.
+A constraint, not a convention; getting it wrong fails exactly one test.
 
 `gamefilesRoot()` in `taoot/tools/gamefiles.ts` is `process.env.TAOOT_GAMEFILES`
 falling back to `taoot/gamefiles` resolved from that file — not from the working
-directory, because the two stopped being the same thing when each package got its
-own build (`npm test` runs from the repository root, a build from `taoot/`). So
-**the project already reads that variable**. The harness therefore enumerates
+directory, because the two differ (`npm test` runs from the repository root, a
+build from `taoot/`). **The project already reads that variable**, so the
+harness enumerates
 the shipped saves at whatever real path it names, and `SHIPPED_SAVE` in
 `taoot/src/save-seed.ts` matches them on a literal `gamefiles/` segment:
 
@@ -294,8 +283,8 @@ the dev-server manifest's shipped saves are all recognised for seeding
 ```
 
 So use `/srv/taoot/gamefiles`. Both `setup-runner.sh` and the container's
-entrypoint check the basename and refuse to start otherwise, because one red
-assertion in `savegame.ts` is a poor way to learn this.
+entrypoint check the basename and refuse to start otherwise, rather than leave
+it to one red assertion in `savegame.ts`.
 
 ## The runner in a container
 
@@ -315,8 +304,8 @@ docker pull danielhobi/dreamrefactory-runner:2.337.0
 
 It carries no game files and no registration, so there is nothing in it that is
 not in this directory. Pulling costs 1.2 GB compressed against a ~2.4 GB pull
-from Microsoft if you build instead, so the reason to prefer it is a pinned set
-of bytes rather than speed. If you do pull it, `dreamrefactory-runner.service` passes
+from Microsoft if you build instead; the reason to prefer it is a pinned set of
+bytes rather than speed. If you do pull it, `dreamrefactory-runner.service` passes
 `--pull=never` on purpose — change that to `--pull=always` only if you want a
 restart to pick up a newly published image, which also means a rebuild can
 change what runs without you asking.
@@ -334,15 +323,14 @@ Three things are deliberately absent from the image:
   read-only bind mount, which makes that mistake impossible rather than
   unlikely.
 - **any registration.** `config.sh` runs at start-up, so the image holds no
-  credential and no identity — which is also what allows one registration per
-  job.
+  credential and no identity, which also allows one registration per job.
 - **a clone of the repository.** The runner checks out its own copy per job.
 
 ### One job per container
 
 The entrypoint registers with `--ephemeral`: the runner takes exactly one job,
-de-registers, and the container exits. A supervisor starts the next one. That is
-what stops a job leaving anything behind for its successor — no files, no stray
+de-registers, and the container exits. A supervisor starts the next one. This
+stops a job leaving anything behind for its successor — no files, no stray
 process, no half-installed dependency.
 
 Because each start needs a fresh registration token and those live one hour, an
@@ -382,13 +370,13 @@ Three things differ from `compose.yml`, and each is a thing Portainer cannot do:
 - **no `env_file:`** — that wants a file beside the compose file, which a
   web-editor stack has not got;
 - **`RUNNER_EPHEMERAL=0`** — the container stays up and takes job after job.
-  This is the important one. In ephemeral mode the runner exits after *every*
+  In ephemeral mode the runner exits after *every*
   job, and Portainer draws that as a container restarting every few minutes,
   which at a glance is indistinguishable from a crash loop. Staying up trades
   the pristine-filesystem-per-job property for a supervisor display that means
   something.
 
-What that trade actually costs is small: `actions/checkout` still runs
+The trade costs little: `actions/checkout` still runs
 `git clean -ffdx` at the start of every job, so what carries between jobs is the
 npm cache and anything a job wrote outside the workspace. Set
 `RUNNER_EPHEMERAL: "1"` if you would rather have the isolation and read the
@@ -397,8 +385,8 @@ restarts as normal.
 The stack assumes **standalone Docker**. Under Swarm, `mem_limit` and `cpus`
 have to be rewritten as `deploy.resources.limits`.
 
-And the temptation Portainer puts one click away: **do not mount
-`/var/run/docker.sock`**. It hands any job root on the host.
+Portainer puts it one click away, but **do not mount `/var/run/docker.sock`**
+(see below).
 
 The PAT goes in a root-owned `0600` file — `/etc/dreamrefactory-runner.env` for systemd,
 `tools/runner/runner.secret` for compose. The latter is gitignored by pattern
@@ -416,9 +404,9 @@ the host and makes every other line here decorative.
 
 ## Who can make this runner execute code
 
-Worth being exact, because the honest answer is not about the runner at all:
-**the runner runs whatever this repository's workflows tell it to, so the
-question is who can write to the repository.**
+The answer is not about the runner itself: **the runner runs whatever this
+repository's workflows tell it to, so the question is who can write to the
+repository.**
 
 | Who | Can they run code on it? |
 |---|---|
@@ -434,12 +422,8 @@ Two things that are **not** protections, and are easy to mistake for them:
   `self-hosted`. What keeps a fork out is the `if:` guard in the job, not the
   label.
 - **"Require approval for first-time contributors"** — the default — is weaker
-  than it reads: one merged typo fix makes someone permanently trusted. Use
+  than it sounds: one merged typo fix makes someone permanently trusted. Use
   **all external contributors**.
-
-Never add `pull_request_target` to a workflow that checks out the PR head. That
-one combination hands a fork write-scoped credentials on your machine, and it is
-the most common way self-hosted runners are compromised.
 
 ## What the plan does and does not give you
 
@@ -472,25 +456,22 @@ Three things keep the pairing safe, and only two of them are in this repository:
 3. **The setting you must make by hand**, the day the repository goes public:
    *Settings → Actions → General → Approval for running fork pull request
    workflows from contributors →* **Require approval for all external
-   contributors**. The default is only *first-time* contributors, which is
-   weaker than it sounds — one merged typo fix makes someone permanently
-   trusted.
+   contributors**. The default, *first-time* contributors only, is weaker
+   (see above).
 
 Never add `pull_request_target` to a workflow that checks out the PR head. That
-combination hands a fork write-scoped credentials, and it is the single most
-common way self-hosted runners get compromised.
+combination hands a fork write-scoped credentials on your machine, and it is the
+most common way self-hosted runners get compromised.
 
 ## Adding a test that reads the rip
 
 Add it and let it fail. A new file runs in `portable` by default, and if it
 opens `gamefiles/` it fails there loudly — then add its name to the exclude glob
-in `tests.yml`. The list is written as the *inverse* (the ten that need the
-rip) for exactly this reason: the failure mode is "we noticed", not "silently
-untested".
+in `tests.yml`. The list is written as the *inverse* (the suites that need the
+rip) so that a missed entry fails visibly rather than going silently untested.
 
 Dust's automatic suites make the other bargain and **skip** without a disc. Its
-playthrough does not, and that is the exception the rule anticipated: a suite
-that is selected by name, for a change that reaches the thing it checks, must
+playthrough does not, by design: a suite that is selected by name, for a change that reaches the thing it checks, must
 not be able to report a pass it did not earn.
 
 Back to the [reference index](README.md).

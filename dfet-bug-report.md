@@ -5,13 +5,12 @@ Findings from porting DFET's container-format decoders to TypeScript for
 the DreamFactory 4.0 engine. Everything under `engine/src/df/` started as a port of
 `libs/DFfile/`; the entries below are places where that port had to *diverge*
 from the C++ to get correct output, plus defects noticed while reading the
-code closely.
+code.
 
-The port's advantage is not insight, it is the test harness: an extraction tool
-writes a BMP or a WAV that a human glances at, whereas the port **runs the
-game**, so a decoding error shows up as visibly wrong pixels in motion, a
-character who never walks, or a track that plays its loops in the wrong order.
-Several of these were found that way, and each one says how.
+An extraction tool writes a BMP or a WAV for a human to glance at; the port
+**runs the game**, so a decoding error shows up as wrong pixels in motion, a
+character who never walks, or loops played in the wrong order. Several entries
+were found that way, and most say how they were found.
 
 Checked against DFET at commit
 [`e97d34c`](https://github.com/M3tox/DFET/commit/e97d34c9166ff6d96245bd332d4aa755df49972f)
@@ -25,23 +24,21 @@ in `DFpup`, read while recovering which stance a dialogue line animates against)
 mislabels in `DFset` rather than a defect, and §16 is a crash on two files that
 ship on the retail disc.
 
-Wherever an entry says "latent", that is now a **measurement over the shipped
-corpus** rather than an impression: every stored count and length byte the
-latent entries are about was scanned across the game's own files (474 `.SET`,
-316 `.PUP`, 558 audio banks, 275 `.MOV`, both discs, seven language trees), and
-each entry reports what the largest stored value actually is. None of the latent
-defects fires on shipped data; all of them fire on a corrupt or truncated file —
-and §16 is there because the retail disc turns out to carry two of those.
+Wherever an entry says "latent", it is a **measurement over the shipped
+corpus**: every stored count and length byte the latent entries are about was
+scanned across the game's own files (474 `.SET`, 316 `.PUP`, 558 audio banks,
+275 `.MOV`, both discs, seven language trees), and each entry reports the
+largest stored value. None of the latent defects fires on shipped data; all of
+them fire on a corrupt or truncated file, and the retail disc carries two of
+those (§16).
 
-§13 was carried in an earlier revision of this report as "a divergence we could
-not settle — it may be ours, not yours". It is settled now, by the self-check
-that section proposed, run over 1836 real Z layers: the base is DFET's, and the
-entry is a bug like the rest.
+§13 is established by a self-check run over 1836 real Z layers: the wrong base
+is DFET's.
 
-Every entry carries a **Fix** section with a proposed patch. They are written
-against DFET's existing style and naming rather than as a rewrite, and they are
-*untested* — we have no build of DFET to run them through, so read them as
-worked-out suggestions, not as a pull request.
+Every entry carries a **Fix** section with a proposed patch, written against
+DFET's existing style and naming rather than as a rewrite. The patches are
+*untested* (no build of DFET was available), so read them as worked-out
+suggestions, not as a pull request.
 
 ---
 
@@ -83,23 +80,19 @@ It decodes the wrong pixels, and because the codec is delta-encoded the damage
 does not stay local: every later frame in the chain copies forward from the
 corrupted buffer, so one bad run poisons the rest of the sequence.
 
-Found visually. Walking the boat deck (`DECKBD`) produced coloured streaks
-across the sky that grew worse the further the walk went — the signature of a
-delta chain decoding against a poisoned predecessor rather than of a single bad
-frame. Instrumenting the decoder showed exactly **four** mode-7 runs in the
-whole walk with `distance < count`; special-casing those removed the streaking.
-Four runs in a multi-hundred-frame sequence is also why an extraction tool
-would not notice: dumped as stills, the corruption looks like a handful of
-slightly-off frames rather than a progressive smear.
+Found visually: walking the boat deck (`DECKBD`) produced coloured streaks
+across the sky that grew with the walk, the signature of a delta chain decoding
+against a poisoned predecessor. The walk contains exactly **four** mode-7 runs
+with `distance < count`; special-casing them removes the streaking. Dumped as
+stills, the same corruption looks like a handful of slightly-off frames, which
+is why an extraction tool does not show it.
 
-Scaled up to the corpus, the same instrumentation over every frame of the 78
-English sets — 21,876 frames, 67.8 million mode-7 runs — finds **3,619** runs
-with `distance < count`. They are concentrated exactly where the art has smooth
-gradients to tile: `deckbd2` 811, `DECKBD` 589, `POOP` 210, `FORE` 178, `DECKA`
-163. So this is not an exotic case; it is the sky. Mode 3, by contrast, has
-**zero** overlapping runs in the whole corpus, which confirms it is only
-reachable on images narrower than a run — worth fixing for correctness, never
-observed.
+Across every frame of the 78 English sets (21,876 frames, 67.8 million mode-7
+runs) there are **3,619** runs with `distance < count`, concentrated where the
+art has smooth gradients to tile: `deckbd2` 811, `DECKBD` 589, `POOP` 210,
+`FORE` 178, `DECKA` 163. It is not an exotic case; it is the sky. Mode 3 has
+**zero** overlapping runs in the corpus, consistent with it being reachable only
+on images narrower than a run: worth fixing for correctness, never observed.
 
 **Fix**
 
@@ -174,17 +167,13 @@ These stars are real, script-referenced placement markers, so skipping them is
 silent data loss: `walkonpath sasha.1 → sasha.2` and `sashaidle`'s
 `sasha.2` ↔ `sasha.3` toggle both name targets that a 41-byte skip throws away.
 
-How much is lost is measurable, since the record count and the star count are
-different numbers: across all 474 `.SET` files of both discs, 2,609 actor
-records carry **2,666** stars, so the 41-byte skip drops **57** of them.
+Across all 474 `.SET` files of both discs, 2,609 actor records carry
+**2,666** stars, so the 41-byte skip drops **57** of them.
 
-Found by running the game rather than by inspecting the file. Sasha simply
-never walked down the hall in `HALLA`: the script asked for a star that the set
-reader had not produced. Tracing the missing name back into the actor container
-showed a well-formed record sitting in the bytes the port (following DFET) was
-skipping. Since an extractor only ever *lists* actors, a missing one in the
-listing looks like a set that has fewer actors — there is nothing to contradict
-it.
+Found by running the game: Sasha never walked down the hall in `HALLA`, because
+the script asked for a star the set reader had not produced; the missing name
+sits in a well-formed record inside the skipped bytes. An extractor only
+*lists* actors, so a missing one just looks like a set with fewer actors.
 
 **Fix**
 
@@ -289,15 +278,14 @@ tables — comfortably inside the 130 slots, and never negative. The cap is the
 field's, not the corpus's, so nothing here is close to the edge until a file is
 damaged.
 
-Found by reading, prompted by having to pin the field width for the track
-editor's write path: making the play order *editable* meant establishing how
-many slots the format actually reserves, at which point the unclamped `memcpy`
-against the fixed 260-byte skip is visible in the same three lines.
+Found by reading, while pinning the field width for the track editor's write
+path: the unclamped `memcpy` and the fixed 260-byte skip sit in the same three
+lines.
 
 **Fix**
 
-Name the slot count, clamp to it, and derive the skip from it so the two can
-never drift apart again:
+Name the slot count, clamp to it, and derive the skip from it so the two cannot
+drift apart:
 
 ```cpp
 // the play-order field is a fixed 260 bytes: 130 int16_t slots
@@ -474,10 +462,9 @@ watch face, highlights on metal — extracts with those pixels black, and there 
 no way to recover them from the PNG afterwards. The transformation is silent
 and lossy.
 
-Found by construction rather than by symptom: separating decode from
-colourisation (required anyway, since the engine composites props through a
-shared CLUT the scripts can change with `clut`/`mixclut`) left no place to put
-a palette-dependent special case, which is what drew attention to it.
+Found by construction: separating decode from colourisation (required, since
+the engine composites props through a shared CLUT the scripts can change with
+`clut`/`mixclut`) leaves no place for a palette-dependent special case.
 
 **Fix**
 
@@ -554,9 +541,9 @@ The port decodes into a buffer with pair slack and trims to the declared size:
 
 Heap overflow bounded by attacker-influenced file content, and an
 overly strict exit condition that turns a recoverable end-of-stream into
-`ERRDECODEAUDIO` for the whole chunk. Found by reading; we have not seen a
-shipped TAOOT bank that triggers the large overshoot, so treat the overflow as
-latent rather than observed.
+`ERRDECODEAUDIO` for the whole chunk. Found by reading; no shipped TAOOT bank
+is known to trigger the large overshoot, so the overflow is latent rather than
+observed.
 
 **Fix**
 
@@ -620,8 +607,7 @@ contrast with the Z-layer pass immediately after, which *does* bounds-check
 A truncated or malformed frame container writes outside the allocation. Because
 `width`/`height` come from the container's own first four bytes and the run
 counts come from its body, nothing ties the decode to the buffer that was sized
-for it. Found by reading; flagged mainly because the unused variable shows this
-was already on someone's list.
+for it. Found by reading; the unused variable suggests the check was intended.
 
 **Fix**
 
@@ -710,9 +696,9 @@ function double as a sniff test for "is this container a script?":
 **Reason**
 
 Out-of-bounds reads on malformed input plus an uncaught exception on the
-unknown-opcode path. The sniffing use is what forced the change: the port has
-to probe arbitrary containers to find which hold scripts, so "unknown opcode"
-has to be an ordinary answer rather than a crash.
+unknown-opcode path. Found through the sniffing use: the port probes arbitrary
+containers to find which hold scripts, so "unknown opcode" has to be an ordinary
+answer rather than a crash.
 
 **Fix**
 
@@ -787,7 +773,8 @@ containers[container].size = dummySize;
 
 Format readers that peek a header field of a container they were pointed at —
 a version `int32_t`, a count, a location — read past the end of a 4-byte
-allocation whenever the reference happens to land on a gap.
+allocation whenever the reference happens to land on a gap. Found by reading,
+while porting the container reader.
 
 The port stores 8 zero bytes instead, sized so the common header peeks stay in
 bounds and read as zero:
@@ -821,13 +808,11 @@ test for a gap explicitly instead of inferring one from a suspicious size, and
 it is what a writer needs in order to round-trip the file (a gap must be
 re-emitted as a gap, not as an 8-byte record).
 
-That last part is no longer a suggestion on our side — the port carries the flag
-and its writer round-trips gaps through it
+The port carries such a flag and its writer round-trips gaps through it
 ([`engine/src/df/container.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/container.ts):
 `Container.gap`, honoured by `writeContainerFile` and by `patchContainerData`,
-which refuses to edit a gap). It earned its keep the moment the editors could
-save a file back, which is the point at which "a gap looks like a container with
-data in it" stops being cosmetic.
+which refuses to edit a gap). Once a tool saves files back, "a gap looks like a
+container with data in it" is no longer cosmetic.
 
 ---
 
@@ -860,7 +845,7 @@ sequenced by the assignment. `DFset.h:430` is the same construct as the actor
 line above, reading an object's identifier — so the hotspot names in §15 are
 exposed to it too.
 
-**Two more, and these two do decide something.** `DFpup::readPuppetStrings`
+**Two more, where the order changes the result.** `DFpup::readPuppetStrings`
 (`libs/DFfile/DFpup.cpp:203,205`) reads both Pascal strings in a dialogue record
 this way:
 
@@ -941,8 +926,7 @@ on any `.PUP` a user was handed. Found by reading, while establishing the record
 layout for the stance field in §12.
 
 Latent, measured: 681 script-table records across the 316 shipped `.PUP` files,
-longest stored name **11** characters ("Boot Script"). Nothing here is near the
-field, let alone past it — which is exactly why the copy has never been noticed.
+longest stored name **11** characters ("Boot Script"), well inside the field.
 
 **Fix**
 
@@ -1003,19 +987,17 @@ range check of its own (`DFfile.cpp:296-298`) and then runs its decompression lo
 over whatever that points at. Same shape as §3, in a file §3 doesn't touch.
 
 **And only the first 32 dwords are frame locations.** The rest is the engine's own
-scratch. We recovered this from `TI.EXE` while working out which stance a dialogue
-line animates against: the stance loader **errors** (`0x1077` at `0x441066`) on a
-count above 32, precisely because the table has room for exactly that many
+scratch, as read from `TI.EXE`: the stance loader **errors** (`0x1077` at
+`0x441066`) on a count above 32, because the table holds exactly that many
 locations before the runtime slots begin, and it **zeroes** the second 32 dwords on
-load (`0x441082`) as its handle cache. The shipped corpus tops out at 27 frames in
-a layer, so this changes no output today — a count in 33…64 would read handle-cache
+load (`0x441082`) as its handle cache. A count in 33…64 would read handle-cache
 slots as container ids, which is the case the clamp below closes.
 
-That ceiling is measured, not assumed: 13,816 layer tables across the 316 shipped
-`.PUP` files, largest stored count **27**, none negative and none above 32. So
-both halves of this entry are latent — but the count is one byte of a file away
-from indexing a handle-cache slot, and a negative one walks backwards out of the
-struct for as long as it takes an `int16_t` to reach zero.
+Measured: 13,816 layer tables across the 316 shipped `.PUP` files, largest stored
+count **27**, none negative and none above 32. Both halves of this entry are
+latent, but the count is one byte of a file away from indexing a handle-cache
+slot, and a negative one walks backwards out of the struct until the `int16_t`
+reaches zero.
 
 The two i16s DFET calls `unknown` and `totalEntries` are the layer's **home
 anchor** — Y then X, the same order and meaning as the per-tick anchors in the
@@ -1023,22 +1005,22 @@ animation-logic records. That is what says which *face* a layer slot belongs to,
 which matters because a two-character close-up re-uses the same eleven slots per
 stance: in `WILZEIT1.PUP` stances 0/1 park the moving `jaw` on the left face
 (anchor x=171) and stance 2 swaps it to the right one (x=388). The port's reader
-and our write-up of the structure are
+and its write-up of the structure are
 [`engine/src/df/pup.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/pup.ts)
 and
 [`docs/engine/formats/pup-cst.md`](https://github.com/dhobi/dreamrefactory/blob/master/docs/engine/formats/pup-cst.md#stances-and-animation-logic-the-face-as-11-layers);
 the same read is why `pupData`'s leading `int32_t unknownInt1` is really the
 **stance** the line is animated against (an i16 at record+0, `TI.EXE` `0x440fb0`),
 followed at +6 by the line's animation-logic tick count. Both are extraction-neutral
-for DFET, but they are what the field is, and knowing the first one is what lets a
-player see the right mouth move.
+for DFET; the stance is what selects the right mouth animation.
 
 **Reason**
 
 The clamp is the part that matters: a corrupt or hostile `.PUP` turns "export
 frames" into an out-of-bounds read with a file-controlled index. The naming half is
-offered rather than reported — DFET's own comment on that layer table already says
-`maybe??`, and this is the answer.
+offered rather than reported; it answers the `maybe??` in DFET's own comment.
+Found by reading, while recovering from `TI.EXE` which stance a dialogue line
+animates against.
 
 **Fix**
 
@@ -1085,10 +1067,7 @@ reached from every format reader with a location straight out of a file.
 
 **Description**
 
-An earlier revision of this report carried this section as an open question — one
-of the two readers is wrong and we could not tell which from the outside. It is
-settled now, by the check this entry's **Fix** proposed, and the base is DFET's.
-The measurement is under **Reason**.
+The wrong base is DFET's, as the coverage check under **Reason** shows.
 
 DFET treats each scanline offset as relative to the **end** of the row-offset
 table (`DFfile.cpp:951-959`):
@@ -1118,12 +1097,11 @@ table-relative (ours):   1784 fit uniquely, 52 fit under either base, 0 fail
 data-relative  (DFET's):    0 fit uniquely,  0 fit only this way,  1784 fail
 ```
 
-Not one frame is explained by the `height * 2` skip, and the 52 ambiguous ones are
-degenerate rows that parse either way — they never argue for it. The one-line
-smell test this section already proposed agrees and is even blunter: `offsets[0]`
-equals `height * 2` on **all 1836** frames (528 for a 264-row view), which is
-exactly the "the runs cannot start inside the table" signature of a table-relative
-offset. A data-relative `offsets[0]` would have been 0.
+No frame is explained by the `height * 2` skip; the 52 ambiguous ones are
+degenerate rows that parse either way. Independently, `offsets[0]` equals
+`height * 2` on **all 1836** frames (528 for a 264-row view): the runs start right
+after the table, the signature of a table-relative offset. A data-relative
+`offsets[0]` would be 0.
 
 So each scanline is read `height * 2` bytes late and every row's segment count is
 whatever run byte happens to sit there. Simulating DFET's own loop over the same
@@ -1141,18 +1119,15 @@ still inside the container it came from. On 95% of frames the read leaves the
 container first and the loop carries on over whatever heap follows — §7's missing
 input bound, reached through this entry rather than through the colour pass.
 
-It went unnoticed because a Z image is the one thing an extractor writes that no
-human glances at to check, and because the failure looks like "no depth output"
-rather than like a crash.
-
-Our own reading was verified the other way round, at runtime: actors pass behind
-the furniture they should. That was always the weaker argument, since our
-round-trip test encodes the layer the way our decoder reads it and so cannot
-distinguish the two conventions. The coverage sum can, and does.
+A Z image is rarely inspected by eye, and the failure looks like "no depth
+output" rather than a crash. At runtime the port's reading also places actors
+behind the right furniture; the port's round-trip test cannot distinguish the
+two conventions (it encodes the layer the way the decoder reads it), so the
+coverage sum is the decisive evidence.
 
 **Fix**
 
-The check that settles it is worth keeping either way. Each row's runs must cover
+The coverage check is worth keeping either way. Each row's runs must cover
 exactly `width` pixels, so summing the run lengths under a base is a decisive test
 needing no external reference:
 
@@ -1194,10 +1169,9 @@ existing corruption guard — which currently fires only once a run has already
 tried to write past the end of the buffer, i.e. after the damage rather than
 before it.
 
-If you read the measurement differently, we would like to know: it is the one
-entry here where a change on your side has to be right for a reason we could only
-establish indirectly, and the numbers above are reproducible from any Z-carrying
-frame in the shipped data.
+Corrections to this measurement are welcome: it is the one entry where the change
+rests on indirect evidence, and the numbers above are reproducible from any
+Z-carrying frame in the shipped data.
 
 ---
 
@@ -1260,18 +1234,16 @@ which is `>=`).
 Out-of-bounds read with a file-controlled index, in four places, one of which is
 an off-by-one that a correct-looking guard is meant to prevent.
 
-The guard is not decorative — the corpus leans on it. Of the 11,320 stance-register
-slots read before a zero terminator across the shipped `.PUP` files, **419** hold a
-location past the end of their own file: the register is a fixed 64-slot array and
-its unused tail holds junk rather than zeroes, so on most puppets the loop stops
-because of this test rather than because of a terminator. None of the 419 is
-*exactly* `containerCount`, so the off-by-one does not fire on shipped data. It is
-one byte away from firing, in a test the corpus exercises hundreds of times, which
-is a different kind of latent from the rest of this report.
+The shipped corpus depends on the guard. Of the 11,320 stance-register slots read
+before a zero terminator across the shipped `.PUP` files, **419** hold a location
+past the end of their own file: the register is a fixed 64-slot array whose unused
+tail holds junk rather than zeroes, so on most puppets the loop stops at this test
+rather than at a terminator. None of the 419 is *exactly* `containerCount`, so the
+off-by-one does not fire on shipped data, but it is one value away from firing in
+a test the corpus exercises hundreds of times.
 
-Found while re-verifying this report's line references against `e97d34c`: the
-stance-register guard sits four lines above §12's layer table, and reading them
-together is what made the `>` visible.
+Found by reading: the stance-register guard sits four lines above §12's layer
+table.
 
 **Fix**
 
@@ -1308,9 +1280,8 @@ themselves rather than wrap into range.
 
 **Description**
 
-Offered rather than reported — no output of DFET's changes — but these are three
-places where the name says one thing and the byte holds another, and each cost us
-time before we measured it.
+Offered rather than reported (no DFET output changes): three places where the name
+says one thing and the byte holds another.
 
 **The hotspot rectangle is stored Y-first.** `ObjectEntries` names its four
 region shorts X-first (`DFset.h:339-342`), reads them in that order
@@ -1318,8 +1289,8 @@ region shorts X-first (`DFset.h:339-342`), reads them in that order
 X: "`). The stored order is `(top, left, bottom, right)`. It never mattered for
 extraction — the numbers round-trip whatever they are called — but the printed
 label is wrong, and anyone who uses the coordinates to hit-test a click gets every
-hotspot in the room mirrored about the diagonal. We had a consistent
-bottom-left offset on every clickable object until the axes went back.
+hotspot in the room mirrored about the diagonal. Found at runtime, as a
+consistent bottom-left offset on every clickable object.
 
 ```cpp
 int16_t startRegionY, startRegionX;   // stored (top, left, ...)
@@ -1332,17 +1303,15 @@ quantization (`0x4078ad`) reads it as the far bound of the depth range a frame's
 layer is quantized against. Its partner, the **number of depth levels**, is an
 `int16_t` at `0x9fa`, inside bytes `DFset` skips. Together they are what a Z level
 *means* — `level = worldDepth × zLevelCount / zFarMax` — which is to say they are
-the units of the layer §13 is about. Our reading of the SET header, resolved to
-absolute offsets, is
+the units of the layer §13 is about. Read from disassembly; the port's reading of
+the SET header, resolved to absolute offsets, is
 [`engine/src/df/set.ts:436-470`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set.ts#L436-L470).
 
 **Reason**
 
-The axes are the one with a consequence: a mislabelled field that a consumer
-believes is a bug delivered to whoever builds on `FileInfos.md`, and DFET's own
-info output states it. The two header fields are the same shape as §12's naming
-half — DFET wrote down what it could see, and this is the answer for two of the
-fields it had to leave as dimensions.
+The axes have a consequence: a mislabelled field is a bug delivered to whoever
+builds on `FileInfos.md`, and DFET's own info output states it. The two header
+fields are like §12's naming half: names for two fields DFET left as dimensions.
 
 **Fix**
 
@@ -1400,9 +1369,8 @@ uninitialized heap handed to the format readers as file content.
 
 **Reason**
 
-This is the entry we would have called hypothetical a week ago. It is not: **two
-files in the retail corpus are truncated**, and both were found by pointing the
-port's container reader at every `.PUP` on both discs in all seven language trees
+**Two files in the retail corpus are truncated**, found by running the port's
+container reader over every `.PUP` on both discs in all seven language trees
 (314 of 316 parse; these are the two that do not):
 
 ```
@@ -1420,10 +1388,10 @@ and **121** sit inside the file but declare a size that runs past it, so those 1
 are the uninitialized-tail case. Both files ship on the disc, so neither needs an
 attacker: a user who clicks the wrong entry in `PUPPETS2` finds them.
 
-Our own reader hit these as thrown exceptions (`Invalid typed array length` and
-`Offset is outside the bounds of the DataView`) rather than as bad data, which is
-the outcome we want but by accident of JavaScript, not by design — the port checks
-the count no more carefully than DFET does.
+The port's reader fails on these with thrown exceptions (`Invalid typed array
+length` and `Offset is outside the bounds of the DataView`) rather than bad data,
+but by accident of JavaScript, not by design: it checks the count no more carefully
+than DFET does.
 
 **Fix**
 
@@ -1464,9 +1432,8 @@ containers[container].data = new uint8_t[containers[container].size]{};
 fileToRead.read((char*)containers[container].data, containers[container].size);
 ```
 
-Reporting `ERRFILEFORMAT` on the two files above is the whole win: a tool that says
-"this file is truncated" is telling the truth about the disc, which is more useful
-than either crashing or extracting 282 empty containers.
+Reporting `ERRFILEFORMAT` on the two files above tells the truth about the disc,
+which is more useful than crashing or extracting 282 empty containers.
 
 ---
 
@@ -1474,18 +1441,18 @@ than either crashing or extracting 282 empty containers.
 
 - **Not covered here:** the v41 audio decoder and the row-mode / bit-packed run
   logic in `getRawImageData` both matched DFET exactly once ported, including
-  the `int16_t` truncation in `current_sample = (input_byte << 9)`, which turns
-  out to be equivalent to sign-extending the low 7 bits. The `param == 1` row
+  the `int16_t` truncation in `current_sample = (input_byte << 9)`, which is
+  equivalent to sign-extending the low 7 bits. The `param == 1` row
   mode deliberately falling through into the `param <= 5` lookback assignment is
   likewise load-bearing, and the port reproduces it.
-- **One we did not fix either:** in `writeTransPNGimage`, the copy-from-previous-row
+- **Unfixed in the port too:** in `writeTransPNGimage`, the copy-from-previous-row
   mode on row 0 reads before the start of the image buffer (`DFfile.cpp:388`).
-  Our port has the same structural hole with different symptoms (JavaScript's
+  The port has the same structural hole with different symptoms (JavaScript's
   `copyWithin` reinterprets the negative index as end-relative), so this is an
-  observation rather than a fix. It is unreachable in the shipped art, and that is
-  now counted rather than assumed: across 10,389 transparent frames (every SHP prop
-  frame and PUP stance frame of the English tree) the mode accounts for 3.94
-  million runs and **none** of them is on row 0.
+  observation rather than a fix. It is unreachable in the shipped art, measured:
+  across 10,389 transparent frames (every SHP prop frame and PUP stance frame of
+  the English tree) the mode accounts for 3.94 million runs and **none** is on
+  row 0.
 - **How the numbers were produced.** Every count in this report comes from running
   the port's own readers over the shipped files and tallying stored fields — the
   format readers are the instrument, so a number here is a number the port agrees
@@ -1497,5 +1464,4 @@ than either crashing or extracting 282 empty containers.
   tree. Where a measurement covers only the English tree, the entry says so.
 - The port is GPL-3.0 precisely because it derives from DFET, and the docs credit
   `FileInfos.md` as the source for essentially the entire "how do you read these
-  files" story. These are corrections to a body of work that made the port
-  possible at all.
+  files" story. These are corrections to the work that made the port possible.

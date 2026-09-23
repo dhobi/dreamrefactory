@@ -5,8 +5,8 @@
 Open `http://localhost:5173/editors/movies.html`.
 
 Mostly an **inspector**, and the only editor whose art is read-only. Load a
-[MOV](../engine/formats/mov.md) and it shows the thing the format doc describes and
-nothing in the port could previously display: a movie is not a video, it is a
+[MOV](../engine/formats/mov.md) and it shows what the format doc describes: a movie
+is not a video, it is a
 **state machine of frames**, each of which either takes an action or waits for a
 click — and a *file* is a **chain of those machines**, which is why the page has a
 segment picker and why every edit is addressed to the segment it was made in.
@@ -24,14 +24,13 @@ segment picker and why every edit is addressed to the segment it was made in.
 | the **regions** | action code, rectangle and the same three names, with the rectangles drawn over the picture; **▶ take it** does the click without aiming |
 | the **movie** | the two **action-frame** slots — what `actionframe(1)`/`actionframe(2)` report having passed through, which is what `PLAYMODE.MOV` uses to decide `tour` — and the **ESC aborts** flag (header bit 0, set by all 218 shipped movies). Both are the **showing segment's**: each header in the chain carries its own pair and its own flags word, and the engine reads the playing segment's |
 | the **audio** | every chunk, playable, labelled by which table it came from: the loop table is a *bed* played under the whole movie, the one-shot block is the movie's **event sounds** fired by a frame or a region. A later segment that starts no bed of its own says so — it keeps playing the one before it |
-| the **pacing note** | what the player will do with this segment, in the same words the rule is written in: the ms-per-frame and fps its holds work out to, whether a soundtrack is a *bed* far longer than the picture, and whether the frames jump backwards (a picture authored as a loop). It comes from the shared [`mov-pace.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-pace.ts) rather than a second copy, which is exactly what it is for — the editor used to preview everything at the native rate while the player paced a cutscene off its soundtrack, so what you watched here was not what the game would do. The soundtrack is shared the same way, in [`mov-sound.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-sound.ts): which chunks play, how much of an authored loop order to take, and whether it repeats |
+| the **pacing note** | what the player will do with this segment, in the same words the rule is written in: the ms-per-frame and fps its holds work out to, whether a soundtrack is a *bed* far longer than the picture, and whether the frames jump backwards (a picture authored as a loop). It comes from the shared [`mov-pace.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-pace.ts) rather than a second copy, so the preview paces a cutscene exactly as the player does. The soundtrack is shared the same way, in [`mov-sound.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-sound.ts): which chunks play, how much of an authored loop order to take, and whether it repeats |
 
 ## A name is a string, not a link
 
 Renaming a frame does not retarget the jumps that named it, so the page counts
 them and says which are now broken, action-frame slots included. The count is
-taken **within the segment**, which is the right scope rather than a convenience:
-a jump's `target` names a frame of the segment it is in, and the action-frame
+taken **within the segment**, because a jump's `target` names a frame of the segment it is in, and the action-frame
 slots are that segment's own.
 
 ## Why the art is read-only
@@ -43,8 +42,8 @@ import: a replaced frame would leave everything after it decoding against a
 picture that no longer exists.
 
 [`taoot/tests/auto/mov-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/mov-editor.ts)
-pins that rather than asserting it — it hand-builds a frame that holds the
-picture before it (row mode 10, the mode our own encoder never emits) and shows
+pins that: it hand-builds a frame that holds the picture before it (row mode
+10, the mode the project's own encoder never emits) and shows
 the swap changing what that frame decodes to. A single frame *can* still be
 exported as a PNG.
 
@@ -58,16 +57,14 @@ that frame's own logic container (`patchFrameName`, `patchFrameLogic`,
 [`engine/src/df/mov.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov.ts)) —
 so everything you did not touch is the byte it was.
 
-Each of those takes a `MovSegment`, not the file. That is what makes reaching a
-later segment safe: the patches used to hardcode container 0, which is only the
-*first* segment's header, so an edit made while looking at segment 3 wrote its
-frame name into segment 0's table at the same record offset and silently renamed
-an unrelated frame. A single-segment movie patches exactly where it always did,
-because a `MovFile` **is** its first segment.
+Each of those takes a `MovSegment`, not the file, so an edit made while looking
+at a later segment lands in that segment's header rather than in container 0,
+which is only the *first* segment's header. A single-segment movie patches
+container 0, because a `MovFile` **is** its first segment.
 
 ## See also
 
 - [MOV — movies & inspectable objects](../engine/formats/mov.md) — what the structures are
 - [The browser host](../engine/runtime/host.md) — the movie player the game plays these with
-- [The browser editors](README.md) — what the seven pages share
+- [The browser editors](README.md) — what the pages share
 
