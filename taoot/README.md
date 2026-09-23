@@ -52,9 +52,9 @@ games, the format editors and the repository's layout, see the
 
 The front page (`index.html`) says what this is and has one control on it, a
 **Play** button; the game lives at **`/play/`** (`play/index.html`), which boots
-as soon as it is opened. Two pages rather than one because the welcome text used
-to be hidden the instant the boot had something to draw — it was on screen for
-exactly as long as the files took to load.
+as soon as it is opened. They are two pages so the welcome text is not hidden the
+instant the boot has something to draw, which on one page would leave it on
+screen only for as long as the files take to load.
 
 If your `taoot/gamefiles/` holds more than one language, the first thing `/play/` shows is the
 **language chooser** — which is itself a DreamFactory stage this repository
@@ -65,8 +65,7 @@ and the 🌐 picker in the page's top bar switches afterwards.
 
 Once a language is settled the play page runs the cold boot itself — the shipped
 `boot()`, logos into the main menu — rather than offering a screen of entry
-points first. There is no dev harness on the page any more; the ways in it used
-to offer are where you would look for them anyway, saves through the in-game
+points first. The page has no dev harness: saves are reached through the in-game
 menu and any room through the editors.
 
 In front of the **English** boot only, if the file is there, there is one more
@@ -90,8 +89,8 @@ build is still valid: no film served, no intro, and the boot is what it was.
 Which files exist is one manifest, `gamefiles.json`: a map of served path to
 byte size, walked live by each game's dev server ([tools/vite-gamefiles.ts](../tools/vite-gamefiles.ts)),
 written into `dist/` by a build, and regenerable against an uploaded tree with
-`npm run manifest -w taoot`. It is a file rather than an endpoint, which is the whole
-reason the site can be hosted as static files — no game data is bundled either
+`npm run manifest -w taoot`. It is a file rather than an endpoint, so the site can
+be hosted as static files — no game data is bundled either
 way, so a deployment serves whatever tree is laid down beside it, or none.
 Nor does a build name a host root: every URL is relative to the page that asks
 for it, so `dist/` runs from a subdirectory (`example.com/taoot/`) as readily as
@@ -108,8 +107,7 @@ scene readout and script log.
 
 ## Editors
 
-The **eight asset editors** are no longer part of this package: they belong to
-the site (`site/editors/`, served from the front door at `/editors/`, which is
+The **eight asset editors** belong to the site, not this package (`site/editors/`, served from the front door at `/editors/`, which is
 itself a page listing them) and they know no game — each asks the registry which
 rips exist and offers them as sources, so Titanic is chosen there the same way
 one of its editions is (`site/editors/sources.ts`).
@@ -125,7 +123,7 @@ repository is in the [root README](../README.md#layout).
 The stage editor's file list also holds one file CyberFlix never shipped:
 **`lang.stg`**, the language chooser this repository *wrote* (`npm run mklang -w taoot`) —
 palette, flats, click regions and compiled scripts. Read → edit → export, on a
-file whose every byte we chose ([writing a stage](../docs/engine/formats/stg.md#writing-a-stage)).
+file whose every byte this repository chose ([writing a stage](../docs/engine/formats/stg.md#writing-a-stage)).
 
 ## Collection
 
@@ -137,9 +135,8 @@ original 1996 DOS release under DBGL for anyone who wants the game exactly as
 it shipped rather than this reimplementation of it. The artwork is carried
 over unchanged from the old site at danielhobi.ch/taoot. The DBGL archives
 themselves are not in this repository — they run to roughly 1 GB apiece and
-stay linked at that site — which is the same rule this repo already applies
-to a game's `gamefiles/`: no game data is shipped here, and every rip is
-gitignored.
+stay linked at that site — by the same rule as a game's `gamefiles/`: no game
+data is shipped here, and every rip is gitignored.
 
 ## Tests
 
@@ -235,13 +232,12 @@ have to explain. A speedrun compares nothing, so each action waits on the
 minimum precondition instead (`wait=none|taken|ready|quiet`), and clicks are
 buffered against the engine's own event queue rather than serialised.
 
-Second, and the reason it is careful rather than merely fast: **keys are not
-buffered across a fade.** `SetViewer.keyDown` queues on `movingCamera` but
-refuses on `inputLocked`, and the two differ by exactly `session.fading` — a
-press in that gap is silently discarded (the long note on `pressNav` in
-`engine/src/web/viewer.ts`). Pressing earlier than anything else ever has means meeting
-that gap constantly, so every key is gated, and `left`/`right`/`up` confirm the
-standpoint actually changed and press again if it did not.
+Second: **keys are not buffered across a fade.** `SetViewer.keyDown` queues on
+`movingCamera` but refuses on `inputLocked`, and the two differ by exactly
+`session.fading` — a press in that gap is silently discarded (the note on
+`pressNav` in `engine/src/web/viewer.ts`). A run that presses as early as possible
+meets that gap constantly, so every key is gated, and `left`/`right`/`up` confirm
+the standpoint changed and press again if it did not.
 
 The run is **human-legal**: every gesture is a real Playwright mouse or keyboard
 event at the canvas, nothing writes to the engine, `framerate()` is untouched and
@@ -254,27 +250,26 @@ they are immune to machine load — and quote the seconds.
 
 **Loads are removed** ([#251](https://github.com/dhobi/dreamrefactory/issues/251)),
 and only the ones that crossed a link ([#369](https://github.com/dhobi/dreamrefactory/issues/369)).
-A room fetched over the internet moves the clock for reasons that have nothing to
-do with the route, so the timer stops for it, exactly as a PC speedrun's load
-remover does: the fetcher is the only thing that knows a download has begun, so
-the fetcher is what says so (`FileStore.onWire` → `engine/src/web/load-clock.ts`), and
-the run loop subtracts that total from every leg.
+A room fetched over the internet moves the clock for reasons unrelated to the
+route, so the timer stops for it, as a PC speedrun's load remover does. The
+fetcher is the only thing that knows a download has begun, so it reports it
+(`FileStore.onWire` → `engine/src/web/load-clock.ts`), and the run loop subtracts
+that total from every leg.
 
 What does **not** stop it is a read this machine could have done anyway — the
 browser's memory or disk cache, and a dev server on `localhost`, whose fetch is a
-disk read wearing HTTP. The original read its CD on its own clock and so does
-this one. The practical consequence: run against a dev server and nothing is
-removed, so `time` is the wall clock; run against the deployed page and the
-download comes out.
+disk read over HTTP. The original read its CD on its own clock and so does
+this one. Against a dev server nothing is removed, so `time` is the wall clock;
+against the deployed page the download comes out.
 
 Nor does a fetch **nobody is waiting for**. `FileStore.load` is awaited by its
 caller — a set activation blocks on the room and all of its siblings and casts
 before anything is composited — so the game is stopped for the whole of it.
-`FileStore.provide` is the opposite: the engine asked, was told "not yet", and
-carried on, and the file is wired into the running viewer when it lands. The run
+`FileStore.provide` is the opposite: the engine asks, is told "not yet", and
+carries on, and the file is wired into the running viewer when it lands. The run
 progresses throughout, so the clock keeps counting. Where two of these rules
-disagree the tiebreak is to **count** the time: a route that looks slower than it
-was misleads nobody, and one that looks faster invents a record.
+disagree the time is **counted**: a route that looks slower than it was misleads
+nobody, and one that looks faster invents a record.
 
 Nothing is hidden either way — a `load` column appears beside the splits when
 there was something to remove, and `time + load` is the wall clock to the
@@ -283,37 +278,35 @@ reading standing still cannot be mistaken for a hung page.
 
 **The workbench.** `/speedrun/` is an unlisted page — nothing links to it, it is
 not in the top bar, it carries `noindex` — that puts an editor under the game:
-write a sheet, press Play, watch it play, read which line broke. It is the play
-page duplicated rather than the play page reused, because the two are meant to
+write a sheet, press Play, watch it play, read which line broke. It is a copy of
+the play page rather than the play page reused, because the two are meant to
 diverge; the workbench has no need of the memory or picture options, and it skips
 the Nightdive film (`<meta name="skip-intro">`) because it is reloaded to get a
 clean game far more often than it is opened to play one.
 
 It shares the parser, the action table and the run loop with the CLI — all three
-are the engine's now (`engine/src/web/speedrun/`), with this ship's own verbs
+are the engine's (`engine/src/web/speedrun/`), with this ship's own verbs
 layered over them (`taoot/src/speedrun/actions.ts`) — so a sheet cannot mean one
 thing there and another here. Dust has the same workbench off the same modules
-and no verbs of its own yet, which is what that split was for. What
-differs is only delivery: the CLI drives real OS-level input over Playwright,
+and no verbs of its own yet. What differs is only delivery: the CLI drives real OS-level input over Playwright,
 while the page synthesizes `PointerEvent`/`KeyboardEvent` against the canvas.
 `main.ts` never asks `isTrusted`, so the engine cannot tell — but the synthetic
 path skips the browser's real input pipeline, so **the page is a previewer and
 the CLI is the clock of record**. Measured over the boot and the London flat the
 two agree to within 1% on engine frames (216 against 218) and about 6% on wall
-clock, which is the useful way round: same game, slightly different stopwatch.
+clock: same game, slightly different stopwatch.
 
 `pause()` is a breakpoint: the run stops and the pointer lands on the line
-*after* it, because a breakpoint you cannot get past is a deadlock rather than a
-tool. The CLI has nobody to press Resume, so it steps over one with a note —
-which is what makes it safe to leave breakpoints in a sheet while a leg is being
-worked on and still time the whole thing under `npm run speedrun -w taoot`.
+*after* it, so the breakpoint can be got past. The CLI has nobody to press
+Resume, so it steps over one with a note — breakpoints can stay in a sheet while
+a leg is worked on and the whole thing still times under
+`npm run speedrun -w taoot`.
 
-The workbench booted with the **music off** for a while (`<meta
-name="mute-theme">`, applied as the cold boot's theme mix) on the grounds that the
-same twenty seconds of a room play a hundred times over while a route is tuned.
-It plays the music now: a run is read by its sound as much as by its picture, and
-the theme is part of knowing where you are. The tag still works if you want it
-back — one line in `speedrun/index.html`'s head.
+The workbench plays the **music**: a run is read by its sound as much as by its
+picture, and the theme is part of knowing where you are. `<meta
+name="mute-theme">` in `speedrun/index.html`'s head (applied as the cold boot's
+theme mix) turns it off, for when the same twenty seconds of a room play over and
+over while a route is tuned.
 
 **Record mode** is the other half of writing one. Arm it and every key and click
 you make at the game is written into the sheet at the caret, one action per line:
@@ -327,9 +320,9 @@ pressing Play while armed does not fill the sheet with a copy of itself; and
 typing in the editor is filtered by the engine's own `focusOwnsKey`, so writing a
 sheet is not recorded as playing one.
 
-Where the next action lands is held by the page rather than read off the caret,
-and that is not a refinement — recording means clicking on the game, clicking on
-the game blurs the textarea, and a blurred textarea has no caret. The offset is
+Where the next action lands is held by the page rather than read off the caret:
+recording means clicking on the game, clicking on the game blurs the textarea,
+and a blurred textarea has no caret. The offset is
 advanced by exactly what was inserted and re-adopted from the caret whenever the
 editor is actually touched, so "put the cursor there and record into it" still
 works. A red band marks it, for the same reason: the thing it replaces is
@@ -367,8 +360,8 @@ state and the pointer are one fact: a pointer you could drop anywhere would let
 you run a sheet from a place the game was never brought to, and the run that
 followed would be nonsense that takes an expert to recognise.
 
-`save()` settles before it snapshots, and that is the verb's correctness rather
-than a nicety — `snapshotSave` reads the live engine at the instant it is called,
+`save()` settles before it snapshots, which the verb needs to be correct —
+`snapshotSave` reads the live engine at the instant it is called,
 so a save taken one action after a click whose script is still running records a
 game that had taken the bag but not yet been given it. Measured, saving at the
 same point with and without the settle and reloading each: `held=[trunkkey,bag,map]`
@@ -385,15 +378,15 @@ opening, rather than the Scene51/View63 the save was taken in; and the watch
 comes back owned by nobody.
 
 The pathfinding verbs (`travel`, `hunt`, `stand`) exist only in the CLI — they
-run the real `Navigator`, which parses `.SET` files off disk. The page says so
-rather than pretending. That is no great loss: all three are escape hatches that
-print the literal gestures they used precisely so a sheet can stop needing them.
+run the real `Navigator`, which parses `.SET` files off disk, and the page says
+so. All three are escape hatches that print the literal gestures they used, so a
+sheet can stop needing them.
 
 ## Releases
 
 The version is `version` in **this package's** `taoot/package.json` — **0.9.58**,
 semver, shown in the top bar of every page of this game and carried into a bug
-report. Every package holds its own number now (the site, Dust, Timelapse and
+report. Every package holds its own number (the site, Dust, Timelapse and
 Skull Cracker each release on theirs), and each `vite.config.ts` substitutes its
 own for `__APP_VERSION__`. Tagging is what publishes, and `master` is protected
 (the two `tests.yml` jobs are required checks, admins included), so the bump goes
@@ -411,9 +404,9 @@ git tag taoot-v0.9.59 && git push --tags
 
 The tag must sit on a commit whose `taoot/package.json` already says that version
 — `deploy.yml` compares the two and fails the deploy rather than announce a
-version nobody tagged. The `taoot-v` prefix matters twice over: this game's tag
-was a bare `v0.9.50` until 0.9.51 and the bare pattern is no longer matched, so
-`npm version`'s own `v0.9.59` would deploy nothing at all; and a tag naming none
+version nobody tagged. The `taoot-v` prefix matters twice over: a bare `v*` tag
+is not matched (this game's tags were bare up to `v0.9.50`), so `npm version`'s
+own `v0.9.59` would deploy nothing at all; and a tag naming none
 of the five targets (`site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`,
 `skullcracker-v*`) is an error rather than a default — see
 [Releasing and deploying](../docs/reference/deploy.md).
@@ -465,8 +458,8 @@ join.
 Those are the volumes BOOTFILE's `setpath(disk)` installs into the engine's
 9-slot resource search path — `titanic1:data:`, `titanic1:puppets2:`,
 `titanic2:puppets1:` and a per-room folder in slot 7 (`path(7, mainpath @
-"trunk:")`). The `puppets2`-on-disc-1 / `PUPPETS1`-on-disc-2 crossover is
-genuinely how the discs ship. `TAOOT_GAMEFILES` overrides the root and
+"trunk:")`). The `puppets2`-on-disc-1 / `PUPPETS1`-on-disc-2 crossover is how
+the discs ship. `TAOOT_GAMEFILES` overrides the root and
 `TAOOT_LANG` picks the language directory (defaulting to `en` when that
 directory exists, so a route can never silently mix two languages' data).
 

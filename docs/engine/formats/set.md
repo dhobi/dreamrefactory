@@ -4,7 +4,7 @@
 [The image codec](image-codec.md).*
 
 A **SET** file is one room or section of the ship — the Lounge, cabin B59, the
-Grand Staircase. It's the format you spend the most time inside, and it ties
+Grand Staircase. It is the central format of a game, and it ties
 together everything from the concept doc: **a set has scenes, a scene has
 views, and roads connect the scenes.**
 
@@ -37,9 +37,9 @@ flowchart TD
   while facing that way.
 - A **turn ring** is the sequence of frames that animate you rotating from one
   view to the next, so turning looks smooth instead of snapping.
-- A **transition** (the game's word; we call them *roads*) is the walking
-  animation that carries you from one scene to another. Roads can be diagonal
-  or curved, with waypoints — the world isn't locked to a grid.
+- A **transition** (the game's word; this project calls them *roads*) is the
+  walking animation that carries you from one scene to another. Roads can be
+  diagonal or curved, with waypoints — the world is not locked to a grid.
 
 ## What's in the file
 
@@ -62,7 +62,7 @@ container format's side:
 
 <ByteMap map="lnghall.set" />
 
-The proportions are the lesson. Everything the engine *reasons* about — the
+The proportions show where the bytes go. Everything the engine *reasons* about — the
 scene register, the view tables, the hotspot records, the scripts — is the thin
 band at the front; the other 95% is turn rings and walks. A room with three ways
 out costs almost nothing more to describe and a great deal more to picture.
@@ -90,18 +90,13 @@ misplaces the player:
 - A road's `viewIDstart` / `viewIDend` are **global** view IDs — numbered
   across the whole set.
 
-This distinction is easy to miss and caused real, user-visible bugs until it
-was pinned down.
-
 ## Hotspots: where you can click
 
 Each view carries **objects** (`ObjectEntry`) — the clickable regions. Each
 has a rectangle and a script location. The rectangle is stored **Y-first**:
-`(top, left, bottom, right)`, *not* the `(x, y, …)` you'd expect. DFET's
-struct labels these X-first — which never mattered for DFET, since it only
-*extracts* data and never draws a hotspot, but it does matter once you use the
-coordinates to hit-test clicks (they showed up here as a consistent
-bottom-left offset until the axes were swapped back).
+`(top, left, bottom, right)`, *not* `(x, y, …)`. DFET's struct labels these
+X-first, which is harmless for extraction but not for hit-testing: read X-first,
+every hotspot lands at a consistent bottom-left offset.
 
 When you hover, the engine finds the hotspot under the cursor and asks its
 script (via `setcursor`) what cursor to show; when you click, it fires
@@ -111,12 +106,12 @@ script (via `setcursor`) what cursor to show; when you click, it fires
 ## Roads: getting from scene to scene, facing the right way
 
 Walking a road plays its animation frames and drops you at the destination
-scene. Two subtleties, both learned from bugs:
+scene. Two subtleties:
 
 - A road register's `destination` is the **container index of the arrival
   scene's view table** — not a view ID directly.
-- The road's endpoint view faces *back along the road* (you'd be looking at
-  where you came from). So the **arrival facing** is chosen by matching the
+- The road's endpoint view faces *back along the road* (towards where you
+  came from). So the **arrival facing** is chosen by matching the
   **last walked frame's camera angle** against the destination scene's view
   rotations, and snapping to the closest one. The engine carries the last
   rotation across the transition to make this continuous.
@@ -130,8 +125,8 @@ level above this and is handled by the boot library's `changeset` /
 
 The actor register's records are a fixed **54 bytes**, and one record can hold
 **two** stars: the primary `{rotation8, X, Z, Y, id}` at `+4` and an optional
-nested secondary at `+30`. The tail that looks like leftover heap is not — HALLA's
-`sasha.1` record carries `sasha.2` there, and `ex1` carries `ex2`.
+nested secondary at `+30`. The tail is not leftover heap — HALLA's `sasha.1`
+record carries `sasha.2` there, and `ex1` carries `ex2`.
 
 A paired record may also carry the **walking route** between its two stars, as an
 i16 container ref at `+28` (the gap between the primary's identifier field and the
@@ -157,8 +152,8 @@ whole corpus holds **six**, and only three bend:
 | `halla` | `sasha.1` → `sasha.2` | 5 | 2432 vs 1973, up to 581 off |
 | `b70`, `decka`, `halla` | `ga`, `max`, `ex1`→`ex2` | 2 | straight |
 
-Those three are the difference between walking the deck and walking through it —
-the per-point distances and the total are what let the walk service run the whole
+Those three are the difference between walking the deck and walking through it.
+The per-point distances and the total let the walk service run the whole
 polyline on one progress scalar
 ([characters at runtime](../runtime/characters.md)).
 
@@ -175,12 +170,12 @@ round-trips byte for byte.
 Even though you only ever see pre-rendered stills, each view stores a real
 **camera** — position, rotation, and height — because the engine needs it to
 place *movable* props (an item on a bed, a character) correctly into the
-picture. The camera height is the per-view double that early analysis
-mislabeled "unknown"; it turned out to be the eye height (in the set's world
-units) that the world→screen projection needs.
+picture. The camera height is a per-view double (labelled "unknown" in early
+analysis): the eye height, in the set's world units, that the world→screen
+projection needs.
 
 The projection itself — the formula that turns a prop's 3D world coordinate
-into a screen pixel and a scale — was recovered from `TI.EXE`. The gist:
+into a screen pixel and a scale — is recovered from `TI.EXE`. The gist:
 
 ```
 dx, dy, dz = prop position − camera position
@@ -199,8 +194,8 @@ props code; you need it only when working on in-world prop placement.
 
 Everything above is a **v4** set, as *Titanic* writes them. *Dust* writes
 version 1, and this is the format where the two engines differ most — not in
-the bytes, but in the **model of movement**. It is worth reading even if you
-only care about v4, because v1 is where v4's rings and roads came from.
+the bytes, but in the **model of movement**. v1 is also where v4's rings and
+roads came from.
 
 ### A grid and one table, not rings and roads
 
@@ -211,7 +206,11 @@ table of transitions in which a turn and a walk are the same kind of record:
     from (x, z, facing)  ->  to (x, z, facing)   + a run of frames
 
 Turning is the record where the cell is equal and the facing differs; walking is
-the record where the facing is equal and the cell differs.
+the record where the facing is equal and the cell differs. `APOTH.SET` has 28 of
+these records, and 28 is exactly 3 walkable cells × 8 turns (four facings, each
+way round) + 4 walks (0↔1, 1↔2). Nothing else is stored because nothing else
+exists: **there is no way to face a direction the table has no record for.**
+Titanic's rings and roads are that table with the turns factored out of it.
 
 `UNDERTAK.SET` — the undertaker's, a 2×3 grid with eight moves — mapped as the v1
 file it is rather than through the v4 shapes:
@@ -222,11 +221,6 @@ Two things a v4 set never shows: the file carries **three palettes** (a v1 set c
 be relit by script), and four of its containers are **gaps** — drawer numbers
 reserved with nothing in them, which the reader keeps so the indices after them
 do not shift.
- `APOTH.SET` has 28 of
-them, and 28 is exactly 3 walkable cells × 8 turns (four facings, each way
-round) + 4 walks (0↔1, 1↔2). Nothing else is stored because nothing else exists:
-**there is no way to face a direction the table has no record for.** Titanic's
-rings and roads are that table with the turns factored out of it.
 
 The two engines also pack the header differently. The registers a v4 set spreads
 over eight bytes sit close together in v1: the transition register is the i32 at
@@ -235,11 +229,10 @@ over eight bytes sit close together in v1: the transition register is the i32 at
 0x419a3b and 0x419a18). The palette sits at 0x50 rather than 0xf2, and every
 offset after it shifts.
 
-**The main script is not in that run.** Reading the i32 at 0x1c as a packed pair
+**The main script is not in that run.** The i32 at 0x1c reads like a packed pair
 — `0x002c0001` in `APOTH`, a "main script" of 1 beside the transition register —
-is a coincidence, because that low half is a constant: it is 1 in all 35 sets on
-the disc, and DF.EXE never uses it as a container index. All it does with it is
-check the word is non-zero, alongside the same test on `defaultFacing` at 0x34,
+but that low half is a constant: it is 1 in all 35 sets on the disc, and DF.EXE
+never uses it as a container index. It only checks the word is non-zero, alongside the same test on `defaultFacing` at 0x34,
 and refuse the file if either is (0x419962, error line 5402).
 
 The real reference is the i32 at **0x1b78**, immediately before the set name at
@@ -252,11 +245,11 @@ a scene's script is taken from `scene+0x18`:
 ```
 
 It is the only offset in the whole header that names each set's real main script
-across all 35 of them, and 34 of those say 1 — which is why the wrong reading
-survived. `undertak.set` is the one that says 2, because its container 1 is the
-actor register (it is the only set where `actorRegister` and container 1 collide,
-and the bytes there are the star record `under.side.side`). Reading 0x1c cost
-that room its whole script: no main, so no `openset`, and its openset is the only
+across all 35 of them, and 34 of those say 1, the same value 0x1c holds.
+`undertak.set` is the one that says 2, because its container 1 is the actor
+register (it is the only set where `actorRegister` and container 1 collide, and
+the bytes there are the star record `under.side.side`). Read from 0x1c, that room
+loses its whole script: no main, so no `openset`, and its openset is the only
 thing in the corpus that places the undertaker.
 
 ### The frame runs, and the sixth container
@@ -270,10 +263,9 @@ frame slots.
 The sixth, where it exists at all, is not part of the move: it is the **hi-res
 standing view of the standpoint the transition departs from** — v4's
 `motionInfo == 2` twin, which v4 stores at the head of a register and v1 at the
-tail of the slot. Counting it as part of the move breaks the set outright: a
-standpoint's picture is agreed on by 44 of 44 arrivals and departures when the
-run is five, and by 12 of 44 when it is six, which showed up as a turn ending on
-a view of somewhere else entirely.
+tail of the slot. Counting it as part of the move breaks the set: a standpoint's
+picture is agreed on by 44 of 44 arrivals and departures when the run is five,
+and by 12 of 44 when it is six — a turn then ends on a view of somewhere else.
 
 ### Read as v1, played as v4
 
@@ -285,8 +277,7 @@ Three modules, and the split is deliberate:
 | [`set-v1-to-v4.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set-v1-to-v4.ts) | rearranges that into the `SetFile` the viewer already knows, so there is one viewer rather than two |
 | [`set-any.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set-any.ts) | opens either without knowing which, as a tagged union, so the compiler asks which model you are holding |
 
-The rearrangement is **exact rather than approximate**, and for a reason worth
-stating: a v1 cell has exactly eight turns, so its two rings are already
+The rearrangement is **exact rather than approximate**: a v1 cell has exactly eight turns, so its two rings are already
 authored and merely not adjacent; a v1 turn is five frames ending on the
 arrival, which is precisely a ring walked from one standpoint to the next; and
 v4 wants each standpoint twice, low-res in the right ring and hi-res in the
@@ -297,9 +288,8 @@ rather than being simulated.
 ### What is derived, and how each number was pinned down
 
 A v4 `FrameInfo` carries the camera's world position and rotation. A v1 frame
-carries no pose at all, so the original engine must have derived one from the
-grid — and so does this, from measurements off the disc rather than from
-choices:
+carries no pose at all, so the original engine derives one from the grid, and so
+does this port, from measurements off the disc rather than from choices:
 
 - **the scale**, 256 world units per cell, from the actor registers: across
   every set with a cast the largest actor coordinate falls just under
@@ -310,8 +300,8 @@ choices:
   on 26 of 26 sets, so the cell delta names the heading, and read that way the
   disc has no contradictions at all.
 
-The **field of view** was the last of the four and the only one that did not come
-off the disc: it came out of the executable. DF.EXE writes `0x136` = 310 into the
+The **field of view** is the only one of the four that does not come off the
+disc: it comes out of the executable. DF.EXE writes `0x136` = 310 into the
 world camera at both of the sites that reset it (`0x4331e5` and `0x433418`), and
 that word is read in exactly one place — the projection at `0x433c60`, where it
 multiplies both the lateral offset and the height drop before the truncating
@@ -321,12 +311,12 @@ and `max(w, h) / 2` is the **v4** default only — the viewer takes
 `set.focalLength ?? max(w, h) / 2`.
 
 It matters by more than the phrase "field of view" suggests. At the v4 default
-(`max(512, 264) / 2` = 256) every Dust sprite sat about 21% too close to the
-centre of the screen on both axes: an actor at depth 176 had its feet at row 222
-where DF.EXE puts them at 241, which read in play as actors "misplaced and
-floating" against rooms whose perspective is baked into the art. The constant
-moves where a sprite *stands* and never how big it is — the sprite scale in both
-renderers carries no focal term at all.
+(`max(512, 264) / 2` = 256) every Dust sprite sits about 21% too close to the
+centre of the screen on both axes: an actor at depth 176 has its feet at row 222
+where DF.EXE puts them at 241, so actors look misplaced and floating against
+rooms whose perspective is baked into the art. The constant moves where a sprite
+*stands* and never how big it is — the sprite scale in both renderers carries no
+focal term at all.
 
 There *is* a Z layer in a v1 frame — all 10,616 of them carry one, in the same
 place and encoding v4 uses — so scenery occludes sprites here too. What v1 has
@@ -336,7 +326,7 @@ measured instead.
 `npx tsx dust/tools/dustsets.ts` reads every SET on the disc through the v1
 reader and prints what came out. Its last line is the one that matters:
 `warnings` is everything the reader had to assume and could not confirm, which
-is how each of the claims above was settled.
+is how each of the claims above is checked.
 
 ## Related tools
 

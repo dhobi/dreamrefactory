@@ -74,9 +74,9 @@
  * pass, so the bar belongs to the closest thing within 1024px this frame and to
  * the last one seen when nothing is in range.
  *
- * Each class passes its own two numbers, and this port carries the ones for the
- * three it animates — `NALLY` with 25, `LINK` with 200, `PUKE BOY` with 400,
- * from `0x439270`, `0x44f408` and `0x417f10`.
+ * Each class passes its own two numbers; this port carries them as the class's
+ * `panel` in `foes.ts` (chapter four's werewolves: `FANG` with 250 from
+ * `0x44e5be`, `LINK` with 200 from `0x44f408`).
  *
  * ### The mission clock is seventeen cels and a countdown
  *

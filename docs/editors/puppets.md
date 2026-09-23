@@ -48,5 +48,5 @@ and downloads the result; untouched parts round-trip byte-identically
 - [PUP & CST — characters ("puppets")](../engine/formats/pup-cst.md) — what the structures are
 - [Characters](../engine/runtime/characters.md) — how the runtime plays a conversation
 - [The cast editor](casts.md) — the other half of a character
-- [The browser editors](README.md) — what the seven pages share
+- [The browser editors](README.md) — what the pages share
 

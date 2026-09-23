@@ -55,5 +55,5 @@ so everything you did not touch is the byte it was
 
 - [Audio — TRK / SFX / 11K / SND](../engine/formats/audio.md) — the formats and their two codecs
 - [Audio](../engine/runtime/audio.md) — channels, bank resolution and the volume controls
-- [The browser editors](README.md) — what the seven pages share
+- [The browser editors](README.md) — what the pages share
 

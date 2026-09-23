@@ -7,9 +7,8 @@
 A DreamFactory game is a first-person adventure. You explore a place, look at
 things, pick up objects, and talk to people to solve a mystery — a liner two days
 from an iceberg in *Titanic: Adventure Out of Time* (1996), a mining town in *Dust:
-A Tale of the Wired West* (1995). The important thing to understand — because it
-shapes *everything* about the file formats — is **how** the engine draws that
-world.
+A Tale of the Wired West* (1995). **How** the engine draws that world shapes
+*everything* about the file formats.
 
 It is **not** a real-time 3D world. In the mid-nineties no home computer could
 render scenery this detailed in real time. Instead, CyberFlix pre-rendered
@@ -118,12 +117,11 @@ That applies to **turning**, not just walking. One set relies on it: the 2nd
 class staircase (`STAIR2C`) is the only SET in the game whose `keydown` takes
 ←/→. Its two landing scenes carry eight views — the four standpoints
 interleaved with four in-between corners — so it turns *twice* per press and
-consumes the key, which is what keeps you off the corners. Turn the camera
-straight from the key handler and you stop on views the game never lets you
-stand on, where the nav arrow is red and ↑ does nothing — and the first
-non-red arrow you meet turning away from the landing's corridor is the flight
-*up*, not the door out (the example is Titanic's Grand Staircase, where this was
-first got wrong).
+consumes the key, which is what keeps you off the corners. Turning the camera
+straight from the key handler stops on views the game never lets you stand on,
+where the nav arrow is red and ↑ does nothing — and the first non-red arrow
+turning away from the landing's corridor is `View51`, the flight *up*, not the
+door out.
 
 ### 5. You interact
 

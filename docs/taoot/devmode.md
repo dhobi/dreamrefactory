@@ -15,8 +15,8 @@
 ```
 
 `debugging` is read by 355 lines across 29 files and assigned by that one. A
-debug build was a build with the line edited, and everything behind the flag has
-been in the shipped game files ever since.
+debug build is this line edited; everything behind the flag is in the shipped
+game files.
 
 The `/devmode/` page runs the game with the flag raised, the modifier keys
 answering, and TI.EXE's own menu bar on the screen.
@@ -27,11 +27,10 @@ The page raises the flag itself, once the boot has opened a set. Three things
 switch it: **Options ▸ Debug On/Off**, its **Ctrl+D** accelerator, and the ● / ○
 indicator beside the menu bar.
 
-All three toggle, which takes one step past the disc. `menuselect`'s case is
-`if debugging → debugging = false`, so the command only ever turned developer
-mode *off* and the way back was to relaunch; a command labelled On/Off that does
-nothing every second press is a command that looks broken, so the page supplies
-the half the script does not have.
+All three toggle, which goes one step past the disc. `menuselect`'s case is
+`if debugging → debugging = false`, so on the disc the command only turns
+developer mode *off* and the way back is to relaunch; the page supplies the
+missing half so that On/Off does not do nothing on every second press.
 
 Loading a saved game lowers the flag too — `debugging` is one of the 68 numeric
 globals a `.ti` file carries, stored as 0 in all of them — and the page
@@ -51,7 +50,7 @@ on the smokestack's props and on the cricket mover.
 
 ## The menu bar
 
-`menuvisible (debugging)` put a native menu bar across the top of the window. The
+`menuvisible (debugging)` puts a native menu bar across the top of the window. The
 menu lives in TI.EXE as an `RT_MENU` resource, and a script hears about it when
 the engine calls `menuselect (name)`. `taoot/tools/devmenu.ts` reads the resource
 and emits `taoot/src/devmode/menu.gen.ts` — four menus, 24 commands, with the
@@ -76,7 +75,7 @@ shipping builds. **Options ▸ Report** is handled in the executable, and
 `menuselect` answers one name the bar does not carry, `"abort"`: the keyboard
 abort armed by `keyaborts (debugging)`.
 
-Two commands are worth knowing. **Options ▸ Close Puppet**, with no conversation
+Two commands are useful. **Options ▸ Close Puppet**, with no conversation
 open, asks for a name and opens `<name>.pup` cold. **Options ▸ Quit** skips the
 confirmation a player gets.
 
@@ -174,11 +173,11 @@ The handler's return value shows beside the prompt, which is what `return (…)`
 is for. Anything the line prints with `message ()` goes to the Details pane,
 where the engine routes a builtin's log. ↑ and ↓ walk the history.
 
-This is how the four handlers with no caller are reached — `addallinven()`
+The console reaches the four handlers with no caller — `addallinven()`
 (every item in the game), `movies()` (every item's film), `solvebomb()` and
-`solvedoll()`, all invoked from the script editor on the disc. It is also what
-stands in for the nine greyed **Scripts** commands: the editor needs a tool that
-is not in a shipping build, but the language it drove is here.
+`solvedoll()`, all invoked from the script editor on the disc. It also stands in
+for the nine greyed **Scripts** commands: the editor needs a tool that is not in
+a shipping build, but the language it drove is available.
 
 ### The placement mode
 

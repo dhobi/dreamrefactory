@@ -4,14 +4,13 @@
  *
  *   npx vitest run site/tests/layering.ts
  *
- * Four packages, and the allowed edges point one way only:
+ * Six packages, and the allowed edges point one way only:
  *
  *     engine   ← nothing. No DOM-free rule here (engine/src/web/ is full of DOM);
  *                the rule is that it knows about no particular game.
  *     site     ← engine. The chrome, the UI-language axis, the edition
  *                MECHANISM, and the registry of which games exist.
- *     taoot    ← engine, site
- *     dust     ← engine, site
+ *     taoot, dust, timelapse, skullcracker   ← engine, site
  *
  * Nothing enforces this except this file. It is worth a test because breaking it
  * is a one-line accident with no symptom: an editor needs an edition list, the

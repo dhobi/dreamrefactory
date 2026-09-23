@@ -25,8 +25,8 @@ channels, volumes, the sound library — is the runtime's job:
 
 Everywhere else, "one thing = one container." Audio is the exception: **a
 single sound is split across many containers**, each usually under 64 KB, that
-must be **concatenated** back together. This was a 1996 memory-management
-convenience. So the audio reader's job is to walk the containers, decode each,
+must be **concatenated** back together (a 1996 memory-management
+convenience). The audio reader's job is to walk the containers, decode each,
 and stitch the pieces into one waveform.
 
 ## Banks: ordered loops vs named one-shots
@@ -60,10 +60,9 @@ How a requested name finds its bank at runtime is
 
 `.11K` files are **shorter versions of the songs**. The name is misleading:
 
-> You'd assume "11K" means 11025 Hz. **It doesn't.** The BOOTFILE picks 11K
-> over TRK based on **available RAM** — if the machine has **less than 6000 KB**
-> of RAM, it loads the smaller 11K songs instead of the full TRK ones. (Yes,
-> under 6 MB. It was 1996.)
+> "11K" does **not** mean 11025 Hz. The BOOTFILE picks 11K over TRK based on
+> **available RAM** — if the machine has **less than 6000 KB** of RAM, it loads
+> the smaller 11K songs instead of the full TRK ones.
 
 Measured over the eleven banks that have a `.11k` twin: same codec, same 22050 Hz,
 about **half the loop chunks** — decka 11 → 6, deckb 17 → 8, decke 20 → 10, cargo
@@ -100,15 +99,14 @@ from the previous one rather than an absolute value, which is what makes them
 compress. Two variants exist:
 
 - **v40 (8-bit).** Uses three run modes: a literal sample, a **step-table
-  pair** delta, and a repeat. The two 256-entry step tables turn out to be
+  pair** delta, and a repeat. The two 256-entry step tables are
   **generated at load** from sign-extended nibbles, so they don't need to be
   embedded in the code at all.
 - **v41 (16-bit).** Each byte is either a delta from the previous 16-bit
   sample or a marker to read a new absolute value.
 
 DFET's author noted the game exposes a "16-bit stereo" audio option that seems
-to make no audible difference — an interesting loose end, not something the
-port needs to chase.
+to make no audible difference; the port does not model it.
 
 ## Playback in the engine
 
@@ -141,8 +139,8 @@ identifier, and the play order. Two asymmetries are worth knowing:
 
 The codec did not change: `audio.ts` decodes a Dust chunk unmodified, and the
 containers are the same containers. What changed is **how a bank says which
-sound is which**, and it is a simplification rather than a redesign — which is
-why it needs its own reader
+sound is which** — a simplification rather than a redesign, but different enough
+to need its own reader
 ([`snd.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/snd.ts)) rather than a
 branch in `banks.ts`.
 
@@ -156,17 +154,16 @@ the theme is not declared anywhere: it is the trailing run of consecutively
 numbered chunks, and the numbering *is* the order (`daymusic1` through
 `daymusic10`).
 
-`UNILIB.SND`, Dust's shared library, and the absence is visible: every arrow in
-this map comes straight out of container 0, because there is no table in between
-for it to come out of.
+`UNILIB.SND`, Dust's shared library: every arrow in this map comes straight out
+of container 0, because there is no table in between.
 
 <ByteMap map="unilib.snd" />
 
 The boot script treats the two as one thing — `opentrackfile("unilib.snd")` is
-the same builtin Titanic calls with `unilib.trk` — which is exactly why the
-reader has to tell them apart from the version tag rather than the extension.
+the same builtin Titanic calls with `unilib.trk` — so the reader tells them apart
+by the version tag rather than the extension.
 
-Two traps that only bite here, and both are on
+Two pitfalls apply only here, both covered on
 **[Dust's music and sound](../../dust/audio.md)**: the name a script asks for
 is the bank's own stored `refName` and frequently *not* the filename, and
 several files answer to one name. A `.SND` also opens **read-only** in the

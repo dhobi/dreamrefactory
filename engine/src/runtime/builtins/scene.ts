@@ -399,10 +399,11 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    * visualeffect(effect, steps): how the NEXT screen arrives.
    *
    * Every effect but `plain` is a reveal — the new screen is wiped, irised or
-   * scrolled in over the old one — and this port draws them instantly. Drawing
-   * them instantly is only half a translation, though: a reveal also ENDS the
-   * transition-black the script put up to hide the change, and with the effect
-   * itself a no-op nothing was ending it.
+   * scrolled in over the old one. This port animates the wipes, barn doors and
+   * the four turns over `steps` engine passes, and reveals `venetian`, the irises
+   * and the scrolls instantly. Either way a reveal also ENDS the
+   * transition-black the script put up to hide the change; an effect treated as
+   * a no-op would leave nothing ending it.
    *
    * TAOOT's blackjack is where that shows. HOUSE fades the dealer out with
    * `screentoblack("puppet")` and then `transtoflat("blkjack.stg")`, which is the

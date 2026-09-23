@@ -6,7 +6,7 @@ Everything is published under <https://www.danielhobi.ch/dreamrefactory/>, and
 **a release is a tag**. Nothing deploys from an ordinary push to master except
 the documentation.
 
-## Five things in one directory
+## Six things in one directory
 
 Five builds and a doc set share that one hosting directory, and each goes out on
 its own:
@@ -37,23 +37,21 @@ hand that knows which of the five it is.
 **Do not `git push --tags` a multi-game release.** GitHub creates **no workflow
 run at all** when more than three tags arrive in a single push — not merely the
 excess ones. Nothing warns you: the push succeeds, every tag is on the remote,
-and the Actions tab is empty. A four-game release hits it exactly, and did —
-Titanic 0.9.75, Dust 0.3.20, Timelapse 0.1.4 and Skull Cracker 0.1.2 went out as
-tags together and none of them deployed; they were recovered with four
-`workflow_dispatch` runs.
+and the Actions tab is empty. A four-game release hits it exactly; recovery is
+one `workflow_dispatch` run per tag.
 
-That is why there is a release tool. `npm run release`
+`npm run release`
 ([`tools/release.mts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/release.mts))
 pushes **one tag per push**, and after each one waits for the deploy to appear
-in the Actions tab — dispatching it by hand and saying so if it does not, which
-is the half a tool that only pushed would still get wrong. It refuses to tag
+in the Actions tab — dispatching it by hand and saying so if it does not. It
+refuses to tag
 anything but a clean master that matches its remote, and it spells each tag from
 the package's own version, which is the pairing `deploy.yml` re-checks before it
 uploads.
 
 Every namespace carries its target's name, and a tag naming none of them **fails
-the run** rather than defaulting to one. The old default-to-TAOOT is exactly what
-would let a mis-typed tag ship the wrong build. `deploy.yml` can also be run
+the run** rather than defaulting to one, since a default would let a mis-typed
+tag ship the wrong build. `deploy.yml` can also be run
 from the Actions tab, where a `workflow_dispatch` input picks the target.
 
 ### Adding a game to the lane
@@ -69,15 +67,15 @@ the four ways to get it wrong are silent.
 
 The manifest is written by `npm run manifest -w <game>` — or by `npm run manifest`,
 which fans out over every package that has one — or by `mkmanifest.ts` run inside
-the game's directory on the host — both produce the same keys now, which was not
-true before: run from the root, every key came out prefixed with the game's own
-directory and the page indexed nothing (`site/tests/manifest-keys.ts`).
+the game's directory on the host. All of them produce the same keys; a run from
+the root must not prefix every key with the game's own directory, or the page
+indexes nothing (`site/tests/manifest-keys.ts`).
 
 What the workflow cannot do is put the RIP there. A runner has no game data, so
 the manifest the build writes describes almost nothing and is deleted before the
 upload; a freshly deployed game shows its "no game data" page until the host's own
-copy and a manifest generated beside it (`tools/mkmanifest.ts`) are in place. That
-is true of every game here and is why the deploy of a new one is two steps.
+copy and a manifest generated beside it (`tools/mkmanifest.ts`) are in place, so
+deploying a new game is two steps.
 
 ### Why sharing a directory is safe
 
@@ -88,9 +86,6 @@ a superseded bundle is dead weight rather than a stale page.
 
 ### Each package holds its own version
 
-There used to be one `package.json` with a `version` and a `dustVersion` in it,
-which was a symptom of one build serving two games. Now:
-
 | | |
 |---|---|
 | `taoot/package.json`, `dust/package.json`, `timelapse/package.json`, `skullcracker/package.json`, `site/package.json` | the sources of truth — semver |
@@ -98,8 +93,7 @@ which was a symptom of one build serving two games. Now:
 | [`site/src/version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/version.ts) | exports `VERSION`, and draws it in the top bar beside the wordmark |
 | [`site/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | puts it in the issue body, so a report names the build it came from |
 
-There is one constant where there were two, because a page now belongs to exactly
-one package and reads exactly one number. Node does no substitution, so a test or
+A page belongs to exactly one package and reads exactly one number. Node does no substitution, so a test or
 a tool that imports `version.ts` reads `0.0.0-dev` rather than throwing.
 
 The deploy fails if the tag and the package disagree: the pages read their number
@@ -117,8 +111,8 @@ repository:
 | `*.zip` | the offline DBGL archives the collection page links to | ~1 GB apiece |
 | `*/gamefiles.json` | the listing of a rip | see below |
 
-`nightdive.mov` was a fourth until [#171](https://github.com/dhobi/dreamrefactory/issues/171).
-It is **generated and deployed now**, and reaches the host like `lang.stg` does.
+`nightdive.mov` is not one of them: since [#171](https://github.com/dhobi/dreamrefactory/issues/171)
+it is **generated and deployed**, and reaches the host like `lang.stg` does.
 The film is not in git — `taoot/assets/nightdive.gif` is, and a Vite plugin
 compiles the MOV into `taoot/public/` at build time.
 
@@ -150,10 +144,8 @@ The third argument is where the authored files (`lang.stg`, `nightdive.mov`) are
 `public/` in a checkout, but the game's directory in a deployment, because that
 is where `public/` is served from.
 
-There used to be a second file beside the first — `gamefiles-dust.json`, the same
-walk filtered to keys under `gamefiles/dust/` — because one tree held both games.
-Two trees need no filter, and Dust's page now downloads a 20 KB listing of its
-own disc instead of a slice of a 212 KB index.
+Each game's tree has its own listing, so Dust's page downloads a 20 KB listing
+of its own disc rather than a slice of Titanic's 212 KB index.
 
 ## Secrets
 
@@ -187,8 +179,7 @@ usually means by "FTP over SSL". Passive mode, because the runner is behind NAT.
 One connection rather than several, because shared FTP accounts cap concurrent
 logins.
 
-`FTP_HOST` is **`s067.cyon.net`**, not `www.danielhobi.ch`, and that is on
-purpose: the FTP server's certificate is a real one but it names the provider
+`FTP_HOST` is **`s067.cyon.net`**, not `www.danielhobi.ch`: the FTP server's certificate is a real one but it names the provider
 (`*.cyon.net`), so connecting by the domain fails verification while connecting
 by the server's own name passes it.
 
@@ -213,13 +204,7 @@ The password never reaches a command line: the action writes the lftp script to
 against a game — a correction to a format page should be readable the day it is
 written.
 
-It used to be a GitHub Pages project site at `dhobi.github.io/dreamrefactory/`, which
-put the one part of the project that explains the rest on a different domain from
-the thing it explains, under a base path made of the repository's name. Two
-things ended that at once: the site moved, and renaming the repository would have
-broken that base anyway.
-
-Unlike the four builds, the docs site cannot be path-independent: VitePress needs
+Unlike the five builds, the docs site cannot be path-independent: VitePress needs
 an absolute `base` for its router, so `docs/.vitepress/config.ts` names
 `/dreamrefactory/docs/` outright. It is the one place in the repository that knows
 the deployment's URL. It sits under `docs/` rather than at the root because a

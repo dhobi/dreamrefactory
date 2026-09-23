@@ -4,11 +4,10 @@ CyberFlix, 1995, on **DreamFactory 1** — the engine two years before *Titanic*
 and the reason several formats in this documentation have a `-v1` reader beside
 them.
 
-One CD, one language, no edition axis, and a town you can walk around. It exists
-in this repository to answer a question rather than to be finished: **how much of
-a port written against DreamFactory 4 can read DreamFactory 1 at all?** The
-answer has kept turning out to be *more than expected*, and that is the finding
-— the container envelope, the frame codec, the palette shape, the script
+One CD, one language, no edition axis, and a town you can walk around. It is in
+this repository to answer a question rather than to be finished: **how much of a
+port written against DreamFactory 4 can read DreamFactory 1 at all?** Most of it:
+the container envelope, the frame codec, the palette shape, the script
 bytecode and its opcode numbering, and the PUP and CST record layouts are all
 frozen across the two engines. What moved is the per-format container-0 header,
 plus two things that changed in kind rather than in layout: how a set describes
@@ -23,12 +22,12 @@ The page boots off the real disc, through the same `GameHost` Titanic uses:
 - **the intro films**, played by the engine's own `MoviePlayer` over
   [`mov-v1.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-v1.ts),
   including the frame flag that says *hold this frame until the sound it started
-  has finished* — which is what makes the dog at the edge of town growl twice
-  instead of once ([#278](https://github.com/dhobi/dreamrefactory/issues/278));
+  has finished* — which makes the dog at the edge of town growl twice instead
+  of once ([#278](https://github.com/dhobi/dreamrefactory/issues/278));
 - **the town**, walked with the three controls the original had, because its set
   scripts handle exactly `uparrow`, `leftarrow` and `rightarrow`;
 - **saved games** — its own `.rtd` in its own IndexedDB database, seeded from
-  the ones that ship beside the disc, which turn out to be
+  the ones that ship beside the disc, which are
   [a whole playthrough](thread.md);
 - **the control panel**, a full-screen flat with its buttons drawn on it;
 - **a collection page**, for how to run the 1995 DOS game instead of this port
@@ -43,8 +42,8 @@ names the frame after it, can block until the sound it started has finished,
 and carries typed click records rather than a region table. Its ambience is one
 track rather than a crowd of reopened containers. Its saves are `.rtd` and carry
 world coordinates that a v4 prop record does not have at all. And its town
-exists twice — `town.set` by day and `nite.set` by night — which turns out to
-matter to a save format.
+exists twice — `town.set` by day and `nite.set` by night — which matters to a
+save format.
 
 ## The pages here
 
@@ -54,7 +53,7 @@ matter to a save format.
   of the sixty-one shipped saves are one continuous session, written by the
   original `DF.EXE`, and what that is worth to a port
 - **[Music & sound — the 40 banks](audio.md)** — why `.SND` is not `.TRK`, and
-  the trap that the name a script asks for is frequently not the file's
+  why the name a script asks for is frequently not the file's
 
 ## And the engine pages that carry Dust's half
 

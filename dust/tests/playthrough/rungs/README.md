@@ -1,5 +1,5 @@
 One rung of [the golden thread](../../../../docs/dust/thread.md) per file, from
-`D2A_006` on. The earlier thirteen are still in
+`D2A_006` on. The earlier rungs are in
 [`segments.ts`](../segments.ts); everything they are written out of lives in
 [`route.ts`](../route.ts).
 

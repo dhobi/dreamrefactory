@@ -18,7 +18,7 @@ Reference implementation:
 `AudioLibrary` resolves a requested one-shot name across **all** currently
 open banks (case-insensitive, `.wav` suffix stripped), with a decode cache —
 which is why shared lines can live in the globally-open `UNILIB.TRK` and
-"just work" from any room. A **theme** is a bank's ordered loop chunks
+work from any room. A **theme** is a bank's ordered loop chunks
 **concatenated** into one waveform and looped whole.
 
 ### A theme's chunks are not all at one rate
@@ -28,12 +28,11 @@ rate per file: **a bank's loop chunks mix 22050 Hz and 11025 Hz, and which chunk
 are which differs per language.** So the join has to bring every chunk up to the
 highest rate present (`resampleTo` in
 [`df/audio.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/audio.ts),
-shared with the movie player's soundtrack join). Labelling the join `Math.max` and
-leaving the slower chunks alone plays them at double speed, which is what the
-bedsit radio did: `bedrad1.trk` is **two of fifteen chunks at 11025 in English and
-nine in German**, so the German announcer was the one anybody noticed — 56.1 s of
-chipmunk against its true 73.4 s. `taoot/tests/auto/audio-rates.ts` asserts a theme
-lasts as long as its chunks do, over every shipped tree.
+shared with the movie player's soundtrack join). Taking the highest rate without
+resampling the slower chunks plays them at double speed: `bedrad1.trk` has **two of
+fifteen chunks at 11025 in English and nine in German**, so its German announcer
+would last 56.1 s instead of its true 73.4 s. `taoot/tests/auto/audio-rates.ts`
+asserts a theme lasts as long as its chunks do, over every shipped tree.
 
 Two more behaviours worth knowing:
 
@@ -61,18 +60,18 @@ overlapping and looped ones (`multiplesound`, `dualsound`, `soundloop`ed
 sounds) slot 2 — `currentsound(n)` reads them, and the wireless's tuning
 static can hiss over a voice line because they sit in different slots.
 
-**A cricket occupies slot 2 as well, and has to say so.** `currentsound()` is the
-only way a script can ask whether a sound has finished, and the slots are written
-by the play path alone — so a cricket fired straight at the sink recorded nothing
-and read as silence. The bedsit landlady is the bill: her five lines are separate
-crickets sequenced entirely by that question (`lady()` re-arms itself every couple
-of ticks and starts the next line only when `currentsound(1) = curlady |
-currentsound(2) = curlady` is false), so with the gate permanently false she
-started a new line every 1.32 s over the top of the last — 21.25 22.57 23.89
-25.21 26.53 against 21.25 23.89 26.53 31.81 37.09 with the play recorded. Lines
-run 1.6–5.2 s, so four of the five overlapped. Pinned by
+**A cricket occupies slot 2 as well, and is recorded there.** `currentsound()` is
+the only way a script can ask whether a sound has finished, and the slots are
+written by the play path alone, so a cricket fired straight at the sink would read
+as silence. The bedsit landlady depends on it: her five lines are separate crickets
+sequenced entirely by that question (`lady()` re-arms itself every couple of ticks
+and starts the next line only when `currentsound(1) = curlady | currentsound(2) =
+curlady` is false). With the play recorded her lines start at 21.25 23.89 26.53
+31.81 37.09 s; without it the gate is permanently false and a new line starts every
+1.32 s (21.25 22.57 23.89 25.21 26.53), and since lines run 1.6–5.2 s, four of the
+five overlap. Pinned by
 [`sound-channels.ts`](../../reference/tests.md#titanic-s-automatic-suite-—-taoot-tests-auto), which
-has to bring its own clock-driven sink to see it at all.
+brings its own clock-driven sink to observe it.
 
 **Every play needs an owner that ends it.** A channel is shared, so "stop what
 I started" can rarely be "halt the channel": room ambience and sound loops sit
@@ -118,12 +117,11 @@ Three controls, all reachable from the game's own CTL.STG settings screen:
 | `themevolume` global | 0–255 | what the theme lever reads/writes; set entry calls `themevol` from it |
 
 `themevol` **answers what it is asked**: with two arguments it sets, with one it
-is a *getter* and returns the level in effect. That is not a nicety — the settings
-screen's own idiom is `themevol(t, themevol(t) / 4)`, so a version that answered
-nothing answered 0, and the music went silent the moment the panel touched it. A
-theme that starts on set entry without a `themevol` call of its own still gets the
-global applied, so the getter reads back the level actually playing rather than an
-untouched default.
+is a *getter* and returns the level in effect. The settings screen's own idiom is
+`themevol(t, themevol(t) / 4)`, so a getter that returned nothing would read as 0
+and silence the music. A theme that starts on set entry without a `themevol` call
+of its own still gets the global applied, so the getter reads back the level
+actually playing rather than an untouched default.
 
 One **deliberate divergence from the original**: the game's boot sets
 `themevolume` to 255 (full), but ambient themes at full volume wear over a

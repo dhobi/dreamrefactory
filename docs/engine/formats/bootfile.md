@@ -4,7 +4,7 @@
 [The scripting language](../scripting-language.md).*
 
 Every DreamFactory game has at least one **BOOTFILE**. It has no room, no
-picture you look at — it's a container file full of **scripts**. It plays two
+picture you look at — it is a container file full of **scripts**. It plays two
 roles at once:
 
 1. **The startup routine** — it decides what the game loads first and hands
@@ -13,7 +13,7 @@ roles at once:
    every set, scene and prop relies on: how doors work, how the menu works,
    how you move, how you travel between rooms.
 
-Reference: it's read with the ordinary [container](README.md) reader; its
+Reference: it is read with the ordinary [container](README.md) reader; its
 special *role* is implemented across
 [`engine/src/runtime/session.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/session.ts) and the interpreter's
 fallback resolution in [`engine/src/runtime/interp.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/interp.ts).
@@ -53,11 +53,11 @@ load-bearing:
 
 Because events run the whole [event chain](../scripting-language.md#the-chain-and-how-an-event-is-consumed),
 a key press reaches container 2's default movement **only if nothing earlier
-consumed it**. That's precisely how a scene script suppresses the default walk
+consumed it**. That is how a scene script suppresses the default walk
 and instead sends you through a door to another set: it handles `keydown` and
 ends with `exitcode`.
 
-The whole BOOTFILE, and it is the odd one out among these maps:
+The whole BOOTFILE, the odd one out among these maps:
 
 <ByteMap map="bootfile" />
 
@@ -82,16 +82,16 @@ TAOOT that is:
   background and `gotospecial`.
 
 **That list is not written down anywhere in the port.** It is *read out of the
-BOOTFILE*, because the boot's own scripts name every one of those files as a
-string literal — `openshopfile("house.shp")`, `opentrackfile("unilib.trk")`,
+BOOTFILE*: the boot's own scripts name every one of those files as a string
+literal — `openshopfile("house.shp")`, `opentrackfile("unilib.trk")`,
 `openstagefile("main.stg")`, `opencastfile("gang.cst")`, `playmovie("logo.mov")`,
 `initall("bedsit1")` — so the BOOTFILE *is* the manifest of what a launch needs.
 A browser host has to know it in advance (it cannot block on a fetch mid-`boot()`),
-and a hardcoded list of TAOOT filenames would be knowledge about one game sitting
-in the layer that runs any of them: the 1996 demo shares four of these names, needs
-a fifth this list never heard of, and boots into a menu stage rather than a room.
+and a hardcoded list of TAOOT filenames would put knowledge of one game in the
+layer that runs all of them: the 1996 demo shares four of these names, needs a
+fifth, and boots into a menu stage rather than a room.
 The same read also yields the game's disc volumes, from `setpath`'s own
-`currentcd("Titanic1")`. How the walk is done, and where it deliberately stops, is
+`currentcd("Titanic1")`. How the walk is done, and where it stops, is
 **[the boot plan](../runtime/host.md#the-boot-plan-what-a-game-says-it-needs)**.
 
 Global variables the scripts expect to exist (`savestage1-3`, `handitem`, the
@@ -100,18 +100,18 @@ them with `!= ""` and an uninitialised `0` would break under text comparison.
 
 ## Initialisation: `initprop` / `initprops`
 
-Because boot-loaded props are session-scoped and shared, they're initialised
+Because boot-loaded props are session-scoped and shared, they are initialised
 through the boot too. A `sendto*` to a prop that has **no matching handler**
 falls back to the boot library with `me` set to the target's name — so a
-generic `initprop()` in the boot runs "as" each prop in turn. That's how the
-whole prop set gets set up from one place at startup.
+generic `initprop()` in the boot runs "as" each prop in turn, so the whole
+prop set is set up from one place at startup.
 
 ## In short
 
 The BOOTFILE is where "the game" — as opposed to "the rooms" — actually lives.
-If you're trying to understand *why* something happens game-wide (a door
-closing when you leave, the ↑ key walking you forward, a fade covering a room
-change), the answer is almost always a handler in the boot library.
+When something happens game-wide (a door closing when you
+leave, the ↑ key walking you forward, a fade covering a room change), the cause
+is almost always a handler in the boot library.
 
 Next, if you want to go all the way down: **[the script container on
 disk](script-container.md)**.

@@ -57,20 +57,20 @@ fixed offset. The directory is the indirection.
 | +28 | i16 the cel's **ID** |
 | +30 | i16 the container holding its pixels |
 
-The record **duplicates the cel's own eight-byte header**, and that is how this
-reading was confirmed rather than assumed: the directory's copy and the decoded
-cel agree on all four numbers for 5424 of 5424 entries.
+The record **duplicates the cel's own eight-byte header**, which confirms the
+reading: the directory's copy and the decoded cel agree on all four numbers for
+5424 of 5424 entries.
 
 #### The two boxes, and what a blow is
 
 The three fields between the size and the draw position are the whole of the
-game's combat, and they were dead bytes in this reader until `0x42f910` was read.
+game's combat; `0x42f910` is what reads them.
 
 **The collision box at +12** is authored, not derived. 741 of `PLAYER.SBK`'s 1229
 cels carry one and only **43** of those are the cel's own extent — the punk's
 walking cel 1900 is 103x142 anchored at (48, 79), so its extent is
 `y -79..63, x -48..55`, and its box is `y -79..62, x -31..51`: a torso narrower
-than the art on both sides. A bounding box cannot give you that.
+than the art on both sides. A bounding box cannot produce that.
 
 **The strike box at +4** is on 42 cels of the 1229 and every one of them also
 carries a blow at +20. They are the impact frames and nothing else:
@@ -98,23 +98,21 @@ calls to find out how hard it was hit, and it is not a damage table:
     return 0x434630(dy² + dx²)                ← a square root
 ```
 
-**Damage is speed.** And the corpus confirms it one-directionally, which is the
-strongest shape a cross-check can have: across all 5424 cels **no cel has a blow
-without a strike box**, while 371 have a box and no blow. Those 371 are the
+**Damage is speed.** The corpus agrees one-directionally: across all 5424 cels
+**no cel has a blow without a strike box**, while 371 have a box and no blow. Those 371 are the
 projectiles and the hazards — `ARCADE`'s cel 1000 is 48x49 and its box is the whole
 of it — and they need no stored pair, because the object's own velocity is already
 in the sum. A flying thing's damage is how fast it is flying.
 
-It also explains thresholds that look arbitrary until you know what they are
-measuring: a mailbox dents at 10 and caves in at 55 (`0x44fe80`), so
+The hit thresholds are speeds too: a mailbox dents at 10 and caves in at 55
+(`0x44fe80`), so
 a punch marks it and a kick wrecks it; a punk is knocked down over 50
 (`0x44f1fd`), so a kick floors it and a punch only staggers it. And a blow thrown
 while running lands harder, because the striker's own velocity is in the sum.
 
-Its 32-byte header is the piece that was nearly missed, and it matters: an earlier
-reader found the palette by looking for a 2056-byte container, and `STREETS.SBK`
-has **two**. Taking the first painted that entire level in the wrong colours. The
-header names the right one.
+Container 0's 32-byte header names the palette container. Do not look for the
+palette by size: `STREETS.SBK` has **two** 2056-byte containers, and the first
+paints that level in the wrong colours.
 
 ### The entity table — the level design, and it is named
 
@@ -134,8 +132,8 @@ kind and one `stat*` per pickup.
 | +28 | Pascal string: what this is |
 | +16, +18, +20 | zero in all 1219 shipped records — unused, not merely unread. (+12 is zero too, but it is the high half of +10 rather than a field) |
 
-That second point is the strongest evidence the reading is real rather than a
-plausible stride, because **it sorts itself by what the thing is**:
+The second point confirms the stride, because **it sorts itself by what the
+thing is**:
 
 | kind | point == the rect's own midpoint |
 |---|---|
@@ -147,18 +145,17 @@ plausible stride, because **it sorts itself by what the thing is**:
 | `switch`, `door` | 0% |
 
 A thing that just sits there stores its own centre; a thing you operate stores
-somewhere else — a destination. A misread field would not do that.
+somewhere else — a destination.
 
 ### The discriminator at +22, confirmed from outside the data
 
-`+22` splits the table in two, and the reason to trust it is that **`SC.EXE`
-agrees**. Every name on the object side is a class the executable registers;
+`+22` splits the table in two, and **`SC.EXE` agrees**. Every name on the object side is a class the executable registers;
 every name on the region side is a label a designer typed that the binary has
 never heard of. Measured: 96 of the 113 names in the shipped books appear in
 `SC.EXE` as C strings, and **the 17 that do not are exactly the region records** —
 `newroom`, `newroom1`–`4`, `roomtwo`, `shaftone`, `shafttwo`, `entrance`,
 `tuberoom`, `bigshaft`, `hugeroom`, `chamber2`, `lab1`, `lab2`, `where`, and one
-more discussed below. Two independent statements of one fact.
+more discussed below.
 
 The executable never compares those names because it never compares *any* name:
 each class string is interned once at startup into a 16-bit id kept in a global
@@ -168,9 +165,9 @@ class), and everything downstream dispatches on the id. There is a hard ceiling 
 
 ### The flags at +14, and the one guess this page makes
 
-Four bits, and all four are set in 1156 of the 1167 object records. What makes the
-exceptions worth carrying is *which* records they are: eight `platform`s at 14,
-two at 11, one at 13, and one `initplank` at 14. Every one is a surface you stand
+Four bits, and all four are set in 1156 of the 1167 object records. The
+exceptions are eight `platform`s at 14, two at 11, one at 13, and one
+`initplank` at 14. Every one is a surface you stand
 on, and every value is 15 with a single bit cleared. Per-edge solidity — the
 jump-through platform every side-scroller has — would look exactly like this. That
 is a guess, and neither the reader nor the viewer acts on it.
@@ -179,8 +176,8 @@ is a guess, and neither the reader nor the viewer acts on it.
 
 One record, in one level whose every other pickup is `stat*`. `SC.EXE` has
 `stathealth` and has never heard of `inithealth`, so no class could be found for
-it and that pickup cannot have spawned in 1996. A typo in the shipped level data,
-found by comparing the two lists.
+it and that pickup cannot have spawned in 1996: a typo in the shipped level data,
+visible by comparing the two lists.
 
 And seven classes the engine knows that **no shipped level places** —
 `initbeltboth`, `initdoor`, `initpainting`, `inittirepile`, `statpunch`,
@@ -189,10 +186,9 @@ And seven classes the engine knows that **no shipped level places** —
 ### The regions — where the ground is
 
 A record with `+22 == 0` is a named area, and its `+10` is the container holding
-its shape. Those containers were the last unexplained thing in the format: 18 to
-362 bytes, 48 of them across the sixteen levels, with nothing known to point at
-them. The entity table points at them, and which record points at which is what
-makes a level a set of rooms — see below.
+its shape: 18 to 362 bytes, 48 of them across the sixteen levels, and nothing but
+the entity table points at them. Which record points at which is what makes a
+level a set of rooms — see below.
 
 | offset | field |
 |---|---|
@@ -202,7 +198,7 @@ makes a level a set of rooms — see below.
 | +10… | `(i16 y, i16 x)` × N — **the floor**, left to right |
 
 The engine's parser (`0x40ba70`, reached from the table loader `0x40b200` through
-entity +10) settles what the polyline IS: it computes `(len − 10) / 4` points,
+entity +10) defines the polyline: it computes `(len − 10) / 4` points,
 takes the first and last x, allocates one i16 per x column across that span, and
 walks consecutive points **interpolating a y for every column** — a rasterised
 height map, `[firstX, span, y…]`. The walkable ground, exactly. It skips the two
@@ -260,16 +256,13 @@ passage: leave the street through its door and you are put at the point of the
 basement's door back. The ninth stores its own midpoint, and it is the door out
 of `lab2`, the one room with no floor to stand in.
 
-**And a door is not triggered by touching it.** Two builds of the walk page
-tried. Plain contact bounced the player between the two rooms for as long as an
-arrow was held. Contact plus "you must be walking the way the point implies"
-stopped the bouncing and trapped the player in the basement instead. Both fail
-for a reason the file states: STREETS' street door stands between the spawn at
-x1840 and the goal at x7731, so walking right always enters it, and the arrival
-point beside it is **eight pixels** past its right edge against a player about a
-hundred pixels wide. You come out of every door still standing in it. A door
-whose own exit point leaves you inside it cannot be a contact trigger, so
-entering one is a deliberate act — the up key, in this port.
+**A door is not triggered by touching it.** STREETS' street door stands between
+the spawn at x1840 and the goal at x7731, so walking right always enters it, and
+the arrival point beside it is **eight pixels** past its right edge against a
+player about a hundred pixels wide: you come out of every door still standing in
+it. Plain contact therefore bounces the player between the two rooms, and
+contact gated on walking the way the point implies traps the player in the
+basement. Entering a door is a deliberate act — the up key, in this port.
 
 That last step is a reading and not a field the executable has been watched
 using; `SbkExit.side` says so. What it is checked against is the whole corpus and
@@ -283,8 +276,8 @@ its rooms are param 0. What `door`'s param names is still unknown.
 
 ### The floor is not a graph of y over x
 
-Three things the polyline does that "the terrain across the level" does not
-prepare you for, all of which the rasteriser has to survive:
+Three things the polyline does beyond plain terrain, all of which the rasteriser
+has to survive:
 
 - **vertical steps.** Two consecutive points share an x and differ in y — a curb.
   STREETS has nine of them.
@@ -317,19 +310,16 @@ y is never scaled. `k` comes from +16's bits: plane 2 (background) 5000/5300/560
 plane 3 (foreground) 7500/6700/6400; planes 0, 1 and 4 go through a transform
 with no camera in it at all — **rate exactly 1**. Two practical consequences:
 most of a level's art lines up exactly as stored, and rendering by the stored
-+9..+11 "depth" (which the engine ignores) misaligns everything — which is how
-this port's first walkable-level build looked, and why this section exists.
-`placementRate` in `sbk.ts` is this rule. One more from the same dig: the rect
-builder subtracts the cel's stored anchor (`pos − anchor`); adding it drew every
-scene's art 2·anchor low, which had been visible as entity boxes floating above
-GRAVE's ground since the first overlay render.
++9..+11 "depth" (which the engine ignores) misaligns everything.
+`placementRate` in `sbk.ts` is this rule. The rect builder subtracts the cel's
+stored anchor (`pos − anchor`); adding it draws every scene's art 2·anchor low,
+which shows as entity boxes floating above GRAVE's ground.
 
 All of that is read from `0x40bf40`, which copies each record out whole
 (`rep movsd`, 0x55 dwords and a word — 342 exactly, at a stride computed as
-19·2·9·i) and dispatches on the plane byte through a five-way jump table. The
-whole-i32-as-16.16 reading this replaces was almost right: it is the same depth
-with the plane byte folded into the low bits, which split one layer into
-"1.00000 / 1.00002 / 1.00003" in the viewer.
+19·2·9·i) and dispatches on the plane byte through a five-way jump table. Read
+as a whole i32 in 16.16, +8..+11 gives the same depth with the plane byte folded
+into the low bits, which splits one layer into "1.00000 / 1.00002 / 1.00003".
 
 **All 5048 placements across the sixteen levels resolve through the directory.**
 The factors are per-level: there is nothing canonical about 1.0, so code wanting
@@ -341,26 +331,24 @@ What the backdrop does **not** store is where the camera starts, because that
 belonged to `SC.EXE`. Composite the layers at their stored positions and you get
 the level *unrolled* — a true picture of the data and a false picture of the game.
 
-**"At its stored position" means the cel's ANCHOR, not its corner**, and the
-distinction is worth spelling out because getting it wrong is silent. A placement
-says where the anchor goes, so the art's top-left is `p − anchor` — `SC.EXE`'s
-rect builder, `0x4026d0` — and a mirrored placement reflects about that anchor
-rather than about the cel's own centre. Add the anchor instead of subtracting it
-and the art lands `2 × anchor` away: nothing at all on a cel anchored near its
-own corner, and 748px on `CITY.SBK`'s sky tiles, whose anchor is (374, 265).
-`tools/dumpsbk.ts` did exactly that until it was caught by a level whose
-platforms appeared to have no buildings under them at all — CITY's rooftop run,
-where in fact every platform sits on its building bay to the pixel. And the paint
-order is the PLANE's (`placementZ`), not the stored depth's: sorting by the 16.16
-factor puts plane 2's lamp-post and cables behind the level instead of in front.
+**"At its stored position" means the cel's ANCHOR, not its corner**, and getting
+it wrong is silent. A placement says where the anchor goes, so the art's top-left
+is `p − anchor` — `SC.EXE`'s rect builder, `0x4026d0` — and a mirrored placement
+reflects about that anchor rather than about the cel's own centre. Add the anchor
+instead of subtracting it and the art lands `2 × anchor` away: nothing at all on
+a cel anchored near its own corner, and 748px on `CITY.SBK`'s sky tiles, whose
+anchor is (374, 265), which leaves CITY's rooftop platforms with no buildings
+under them. Placed correctly, every platform on that run sits on its building bay
+to the pixel. The paint order is the PLANE's (`placementZ`), not the stored
+depth's: sorting by the 16.16 factor puts plane 2's lamp-post and cables behind
+the level instead of in front.
 
 ## The layout, confirmed by the code that read it
 
-Everything above was worked out from the files. `SC.EXE`'s record collector at
-`0x40b850` then reads the same table, and it agrees offset for offset — which is
-as close to a specification as this format will ever have. What it does is take a
-class name and copy every matching record into a per-class array, returning how
-many it found (the caller checks that against 100 and reports an error past it):
+The layout above is read from the files. `SC.EXE`'s record collector at
+`0x40b850` reads the same table and agrees offset for offset. It takes a class
+name and copies every matching record into a per-class array, returning how many
+it found (the caller checks that against 100 and reports an error past it):
 
 | this port | the engine |
 |---|---|
@@ -372,8 +360,7 @@ many it found (the caller checks that against 100 and reports an error past it):
 | the second point is at +24 | `mov ecx, [rec+0x18]`, passed to a geometric test when the caller asks for one |
 | the rect is 8 bytes at +2 | the runtime appender writes `[base+2]` and `[base+6]` as two dwords |
 
-One thing the code settles about the backdrop: the constant 342 (`0x156`) never
-appears as a multiplier — there is no `imul _,_,0x156` in the binary and its only
+About the backdrop: the constant 342 (`0x156`) never appears as a multiplier — there is no `imul _,_,0x156` in the binary and its only
 uses are unrelated struct offsets — so nothing strides the 342-byte backdrop
 records in place. Like the entity table, the backdrop is read once into a runtime
 array of a different shape; the exact copy-out was not traced.
@@ -385,11 +372,10 @@ field this port reads at +14 is the same field the game read at +14.
 
 ### What the engine actually does with a platform
 
-`platform`'s array is at `0x4aa600` and its count in the global at `0x46b9ac`, and
-five functions touch them — found with `scdis.mts bytes`, which searches the
-section for the literal rather than disassembling it, because the windowed sweep
-`find` uses can start mid-instruction and had already been caught missing real
-references:
+Five functions touch `platform`'s array and count — found with
+`scdis.mts bytes`, which searches the section for the literal rather than
+disassembling it; the windowed sweep `find` uses can start mid-instruction and
+miss real references:
 
 - **the overlap query** (`0x42fb70`, called from 11 places) walks every platform
   and calls `0x434200`, which is a strict **point-in-rect** test — `top <= y`,
@@ -409,12 +395,17 @@ references:
   now and the copy it kept at `0x4a69d0`, then calls `0x434270` to move the
   occupant by that delta. A platform is a thing that carries what stands on it.
 
-The compaction settles the stride from the other side: it copies +2..+10 as eight
-bytes and steps by 48, so a runtime platform record **is** the 48-byte entity
-record off the disc, rect and all.
+The compaction confirms the stride: it copies +2..+10 as eight bytes and steps by
+48, so a runtime platform record **is** the 48-byte entity record off the disc,
+rect and all.
 
-What none of the five contains is **gravity** — and the reason turned out to be
-that the engine has none. See below.
+**Nothing in the platform path reads +14.** The collector copies it, the appender
+does not set it, and the compaction does not preserve it. So the
+[flags guess](#the-flags-at-14-and-the-one-guess-this-page-makes) has no support
+from this route; whatever reads that field, if anything does, reads it somewhere
+else.
+
+None of the five contains **gravity**: the engine has none. See below.
 
 ### There is no gravity, and no velocity either
 
@@ -471,9 +462,8 @@ Four sixtieths is a fifteenth, and `0x40dfd0`, which calls it, is called from
 runs at **15fps**, and since the animation stepper advances one cel per frame,
 every animation in the game plays at 15.
 
-That is the number the rest of this was missing. With it, and the divisor of 12
-that `0x42e412` writes into the player, the motion units above become pixels per
-second at last:
+With it, and the divisor of 12 that `0x42e412` writes into the player, the motion
+units above become pixels per second:
 
 | | per frame | per second |
 |---|---|---|
@@ -483,12 +473,11 @@ second at last:
 | the held rise | 11px | 165 while it lasts |
 
 A twelve-cel walk cycle is therefore 800ms and covers 96px, and a five-cel punch
-takes 333ms. The port had been running them at 34fps, which is what a blurred
-punch looks like.
+takes 333ms.
 
 ### What a level spawns, and how to find its cels
 
-A level book's cels divide cleanly in two, and the split is free: of STREETS' 220
+A level book's cels divide cleanly in two: of STREETS' 220
 cels only **84 are placed by the backdrop**, and the 136 left over are what the
 level SPAWNS. Rendering them names them, and they line up one run per `init*`
 kind:
@@ -505,7 +494,7 @@ kind:
 
 #### Four objects describe one creature
 
-The cel range is where a reading of a class STARTS, and on its own it is a trap —
+The cel range is where a reading of a class starts, but on its own it misleads —
 see below. A creature is described by four things in the executable, and all four
 have to be found before any of its numbers mean anything:
 
@@ -528,8 +517,8 @@ For chapter four — levels 1 to 4, registered by `0x4503a0` — that chain read
 
 The way to enumerate those descriptors is `scdis.mts callers 0x430cc0`, which
 finds all eight this chapter installs. A grep for the `obj+0x12` write finds
-whichever register the compiler happened to use and misses the rest — which is
-how this table briefly claimed the rat had no hit handler and could not be killed.
+only whichever register the compiler happened to use and misses the rest (the
+rat's among them).
 
 #### The census is one call
 
@@ -547,7 +536,7 @@ it lies there.
 #### `obj+0xe` is a mass, and a hit is an elastic collision
 
 The field the mover divides an animation's `dx` by is also the weight the physics
-gives the object, and that is one field doing two jobs rather than a coincidence.
+gives the object: one field doing two jobs.
 `0x430350` is the collision dispatcher: it walks the object list, intersects the
 two drawn rects (`0x434140`), calls the victim's hit handler through `obj+0x12`,
 and then — if the hitter is still live — calls **`0x430470`**, which is the
@@ -568,25 +557,23 @@ expect: a kick's 55 against a mailbox is 55 × 24/19 = **69 pixels a frame**, a
 thousand a second, which is why the original throws a mailbox most of a screen
 width before it lands on its side.
 
-And that settles what `obj+0xa`/`obj+0xc` are. They are a **persistent velocity**,
-not a per-frame stride — an object that should not drift cancels them itself. The
+So `obj+0xa`/`obj+0xc` are a **persistent velocity**, not a per-frame stride — an object that should not drift cancels them itself. The
 hydrant's `0x44fb20` zeroes both on its first two instructions, which is why a
 hydrant never budges no matter how hard it is kicked; a gob of goo zeroes them the
 frame it lands; the punk's states zero them where its script wants to place it
 exactly. The mailbox's `0x44fe10` never touches them, so what the solver hands it
 is kept.
 
-Nothing found so far *slows* a slide down, though, which on the code alone means a
+Nothing found in the code *slows* a slide down, which on the code alone means a
 kicked mailbox travels for ever. So the one number a port has to invent here is the
 drag, and there is exactly one observable to calibrate it against: in the original
 a kicked mailbox crosses about a screen width. Solving `v²/2a` for it is not enough,
 because a kick's blow has no vertical component and the box has to fall the 37
 pixels between its upright shape and its fallen one before the ground can drag on
-it at all — the first fifty frames are free. Measured on the page instead: 0.7
-pixels per tick squared puts it down 536px from where it stood.
+it at all — the first fifty frames are free. Measured on the page: 0.7 pixels per
+tick squared puts it down 536px from where it stood.
 
-One more thing the boxes settle. A cel's strike box is anchor-relative and the
-engine mirrors it about the anchor, which is what `0x4026d0` does — but a port that
+A cel's strike box is anchor-relative and the engine mirrors it about the anchor, which is what `0x4026d0` does — but a port that
 draws the player centred on its own x and flips the cel within that band has to
 mirror the box the same way, inside the cel. The kick's cel 663 has its anchor at
 `posX -12`, twelve pixels OUTSIDE its own art, so the two conventions disagree by
@@ -597,8 +584,7 @@ What is NOT invented is where it comes to rest. Each cel carries its own collisi
 box, and the upright mailbox's reaches 93 pixels below the anchor while the fallen
 one's reaches 56 — so a thing that changes shape has to land on the box it is
 currently showing. Landing it on the standing footprint leaves it floating 37
-pixels above the pavement, which is what this port did until the two were told
-apart.
+pixels above the pavement.
 
 #### What a hit does
 
@@ -626,7 +612,7 @@ readable:
 | `initmailbox` | under 10 does nothing; 10 to 54 dents it and it springs back; 55 or over topples it for good |
 | `inithydrant` | by the stage it is already in: 0→1, 1→2, 2→3, and nothing after |
 
-Two of them do not follow that shape at all:
+Three of them do not follow that shape:
 
 - **the rat's `0x44e3f0` has no health test and no branch.** It fetches the blow,
   sprays, plays a sound and installs `0x477090`: nine cels at one frame each in
@@ -668,19 +654,18 @@ by two pixels and the kick is aimed at a standing man's midriff — **nothing
 standing up can touch a rat.** What reaches one is the duck-kick, S+K, whose cel
 724 puts a 45x44 box at `y 38..83`: a boot along the ground.
 
-Two pixels is not an accident in authored data, and it is the cleanest evidence
-that these rects are the art department's and not the engine's: a bounding box
-would have let anything hit anything.
+A two-pixel miss marks these rects as the art department's and not the engine's:
+a bounding box would have let anything hit anything.
 
 #### The trap: the same cels mean different creatures
 
 **Each of the four chapters registers its own classes, and each chapter's four
 books put a walking figure at cel 1900.** So a class function from the wrong
-chapter looks entirely plausible and is entirely wrong. This document and this
-port both had that error: `initwerea` was read off `0x439240` — health 25, plate
-`13101` NALLY, award 250, walk `0x4743b8` — and that function belongs to the
-chapter of gang members (`initbatboy`, `initknifeboy`, `initmaskboy`). The same
-mistake gave the rat 400 health and a 440 award off `0x417ed0`.
+chapter looks entirely plausible and is entirely wrong. `0x439240` — health 25,
+plate `13101` NALLY, award 250, walk `0x4743b8` — looks like `initwerea` but
+belongs to the chapter of gang members (`initbatboy`, `initknifeboy`,
+`initmaskboy`), and `0x417ed0` (400 health, a 440 award) is not chapter four's
+rat.
 
 Two checks catch it. The registration site: `initwerea` appears exactly once in the
 whole executable, at `0x4504d1`, and the creator its loop calls is `0x450a50`. And
@@ -699,12 +684,11 @@ struct — and sets the thing facing the player. So the wide rects on those reco
 are territories the AI is given. What the AI then does with the four thresholds has
 not been read.
 
-One consequence worth stating: the punk's walk script `0x4774b0` has `dx 0` on all
+The punk's walk script `0x4774b0` has `dx 0` on all
 eight frames. Its stride is in the AI, not the animation, which is why every other
 gait in the chapter carries 75 and this one carries nothing.
 
-The rat's default animation is worth a word too. Its creator installs `0x476f48`
-tag 0, which is cel 3011 — a 54x102 near-black shape with no rat discernible in
+The rat's creator installs `0x476f48` tag 0, which is cel 3011 — a 54x102 near-black shape with no rat discernible in
 it. Whatever state that is (in shadow, in a hole, about to come out), it is not
 what a rat looks like on a dark street, and a port that draws it literally draws
 nothing. The run, `0x476ff0` tag 0, is the recognisable animal: cels 3025 down to
@@ -772,7 +756,7 @@ sphere that swells and collapses: 19870, 19869, 19868, 19867, 19866, 19865 grow
 from 61 to 89 pixels across, then 19854, 19853, 19852, 19851, 19850 fall away to
 6x7. Eleven frames at one apiece, and the body is gone.
 
-Two things it is easy to get wrong here, and this port got both wrong first:
+Two details that are easy to get wrong:
 
 - **the census leaves before the body does.** The hit handler never calls
   `0x42f870(obj, 0)`, but the corpse's state handler does, on its first dead frame
@@ -795,7 +779,7 @@ is the screen:
 | 12000 | 512×43 | 256, 21 | the upper band — the two health bars, the score, the two names |
 | 12001 | 512×112 | 256, 56 | the lower band — the pad, the four shortcuts, the weapon, the lives, the dial, the quota |
 
-The bands are not backdrops that happen to be there: each of the panel's regions
+The bands are not incidental backdrops: each of the panel's regions
 blits its band clipped to its own rect before drawing, which is how a changed
 figure erases its old pixels. `0x40dad0` opens the upper band that way and
 `0x40dc10` the lower — and `0x40dc10` gives away the geometry, offsetting the
@@ -825,7 +809,7 @@ the painter that runs them:
 
 #### The health bars slide
 
-Nothing in this engine scales, and the bars are the proof. Cel `11500` is a
+Nothing in this engine scales, and the bars slide instead. Cel `11500` is a
 197×12 slab of red anchored 4 from its left edge, and `0x40d8ea` draws it at
 
 ```
@@ -846,10 +830,13 @@ player (`[0x4ac3d4]`, +6 and +8) has to beat both the best distance so far
 (`[0x46bd28]`) and 1024. The painter resets that best to `0x7fff` afterwards, so
 the bar belongs to the closest thing within 1024px this frame and to the last one
 seen when nothing is in range. Each class passes its own numbers as immediates,
-so they can simply be read: `0x439270` gives `initwerea` 25 health and the plate
-`13101` NALLY, `0x44f408` gives `initwereb` 200 and `13002` LINK, `0x417f10`
-gives `initrat` 400 and `13301` PUKE BOY. What a kill is worth comes the same
-way, through `0x40d450`: 250, 240 and 440 for those three.
+so they can simply be read: `0x44e5be` gives `initwerea` 250 health and the plate
+`13001` FANG, and `0x44f40d` gives `initwereb` 200 and `13002` LINK. Chapter
+four's rat never calls it, so a rat never takes the bar. What a kill is worth
+comes the same way, through `0x40d450`: 220 (`0x44f1db`) and 240 (`0x44f9ad`)
+for those two. (`0x439270` — 25, `13101` NALLY — and `0x417f10` — 400, `13301`
+PUKE BOY — are the same call in other chapters' classes; see
+[the trap](#the-trap-the-same-cels-mean-different-creatures).)
 
 #### The mission clock is seventeen cels
 
@@ -872,9 +859,9 @@ the magazine and `+6` what is left in it. The value is scaled to 0…64
 (`shl eax, 6` then a divide by the magazine), clamped, and laid out as **four
 rows of sixteen** at x417 stepping 7 down from y333 (`mov si, 0x14d`) — cel
 `14300` for a full row, `14316 − remainder` for a partial one — and the block
-clips to the special-weapon window. An earlier reading of this page had it as the
-player's health; the health is the sliding slab in the upper band, and this gauge
-sits inside the weapon's own black window with the weapon's own icon beside it.
+clips to the special-weapon window. It is not the player's health: the health is
+the sliding slab in the upper band, and this gauge sits inside the weapon's own
+black window with the weapon's own icon beside it.
 
 #### The buttons light up
 
@@ -901,12 +888,12 @@ scheme:
 | `A` | 4 | left/right, resolved against the player's facing at `obj+0x28` |
 | `D` | 2 | the other one |
 | `J` | 8 | **jump** — `0x4ac3da` |
-| `K` | 6 | **kick** — `0x4ac404`, `0x45d090(player, 0x471c90, 8)` |
+| `K` | 6 | **kick** — `0x4ac404`, `0x45d090(player, 0x471d68, 0)` |
 | `I` | 7 | `0x4ac386` — INV. |
 | `P` | 5 | **punch** — `0x4ac394` |
 | 24…27 | 5, 6, 8, 7 | P, K, J and I again under four more character codes — **not** arrows |
 
-Two things here are worth a port's attention.
+Two points matter for a port.
 
 **`W` is not "up".** It is one flag with three jobs, and which one you get depends
 on where the player is standing:
@@ -923,19 +910,20 @@ on where the player is standing:
 horizontal input, and they are resolved against facing rather than against the
 screen.
 
-And `K`'s tag 8 is `650 651 652 653(+95) 654(+95) 655(+95) 654(-95) 653(-95) 652
-651` — the sequence this page had guessed was a walk. It is the kick.
-
 The four buttons are the lower band's four labels, and the keys are their
-initials: **J**UMP, **K**ICK, **P**UNCH, **I**NV. Three of them install animations
-out of one script, `0x471c90`:
+initials: **J**UMP, **K**ICK, **P**UNCH, **I**NV. What each one installs:
 
 | key | call | frames |
 |---|---|---|
 | P | `0x45d090(player, 0x471c90, 0)` | tag 0 is the single cel `600`; the punches are tag 3 (`601 602`) and tag 4 (`603 604`) |
-| K | `0x45d090(player, 0x471c90, 8)` | tag 8 — `650…655` out at dx 95 and back at −95 |
+| K | `0x45d090(player, 0x471d68, 0)` | tag 0 is the guard `600`, then the kick `662 663`; the run installs tag 4, the flying kick |
 | J | `0x470f98`, kind 18 | `c1261(dx 0, dy −420)` standing, `(dx 95, dy −420)` running |
 | I | `[player+0x18] = 15` | an animation kind, and nothing else |
+
+`P` and `K` held together are a third move: the idle handler tests both at
+`0x429706`, before either alone, and installs `0x471c90` tag 8 — `650…655` out at
+dx 95 and back at −95, the headbutt. The punch and the kick are separate scripts;
+tag 8 belongs to the punch's.
 
 ### There is no gravity, and this is where it runs out
 
@@ -963,8 +951,7 @@ below it puts the player in the air for over a second and reads as flying.
 
 ### The unarmed player's whole animation table
 
-Worth writing out, because it is the answer to several questions at once. Every
-script the player's state machines install is a `push imm32` inside
+Every script the player's state machines install is a `push imm32` inside
 `0x428000…0x42b900`, and the unarmed set is:
 
 | script | kind | tpf | tag | cels |
@@ -982,12 +969,12 @@ script the player's state machines install is a `push imm32` inside
 | | | | 5 | `251 252 252 252 252 251 251 251 250` — airborne, longer |
 | `0x471c68` | 3 | **4** | 5 | `251 252 251 250` — airborne, held four frames a cel |
 | `0x471c90` | 4 | 1 | 0,3,4 | the **punch**: `600` guard, then `601 602` or `603 604` |
-| | | | 8 | `650 651 652 653(+95) 654(+95) 655(+95) 654(−95) 653(−95) 652 651` — a **headbutt**, and easy to mistake for a walk or a kick |
+| | | | 8 | `650 651 652 653(+95) 654(+95) 655(+95) 654(−95) 653(−95) 652 651` — a **headbutt**, not a walk or a kick |
 | `0x471d68` | 5 | 1 | 0,1,2 | the **kick**: `600` guard, then `662 663`, or `740…745` with W |
 | | | | 4 | `684(dx 190, dy −310) 685 686 687 688` — a flying kick, installed by the RUN state |
 | `0x471e78` | 7 | 1 | 0…3 | `400…407` — the ladder, up and back down |
 
-Three things fall out of it:
+What the table shows:
 
 - **the idle is an animation.** The walk state installs `0x471648` tag 0 whenever
   no direction is held, so a port that stands on cel 1 is missing it.
@@ -1000,14 +987,13 @@ Three things fall out of it:
   tag 0 — cels `200 220`, knees drawn up and forward, held. The `251/252` flail
   is the deep-fall pose: `0x42a109` compares `[player+0x32]` against 0x168 and
   only a fall past 360 gets `0x471c68`'s slow loop, plus sound 10.
-- **there IS a crouch, and it is a whole state machine.** This was misread
-  once — twice, in fact — and the architecture explains why: `[player+0x18]` is
-  the animation KIND, dispatched through the 28-entry table at `0x429570`; each
-  kind's handler re-dispatches on the running script's current TAG
-  (`[player+0x44]`); and **installing a script sets the kind from the script's
-  own header**, which is what the header's `kind` field is FOR — it names the
-  handler that drives it. Kind 0's handler (`0x429690`, the unarmed idle)
-  really has no duck, and stopping there was the misread. The ducks:
+- **there IS a crouch, and it is a whole state machine.** The architecture hides
+  it: `[player+0x18]` is the animation KIND, dispatched through the 28-entry
+  table at `0x429570`; each kind's handler re-dispatches on the running script's
+  current TAG (`[player+0x44]`); and **installing a script sets the kind from the
+  script's own header**, which is what the header's `kind` field is FOR — it
+  names the handler that drives it. Kind 0's handler (`0x429690`, the unarmed
+  idle) has no duck; the ducks are in other kinds:
 
   - every ARMED standing handler ducks on `S`: `0x42b8ae` (1200s) installs
     `0x471128` tag 5 — cel `1220` into `1222…1225`, ~116 tall against the 145
@@ -1026,8 +1012,8 @@ Three things fall out of it:
     Release `S` and it stands back up through the idle.
 - **the 650s are a COMBO.** The idle handler checks `[0x4ac394] && [0x4ac404]`
   — P and K together — at `0x429706`, before either alone, and installs
-  `0x471c90` tag 8: the out-and-back lunge at ±95. First mistaken for a walk,
-  then for the kick; it is the both-buttons move.
+  `0x471c90` tag 8: the headbutt, out and back at ±95, the both-buttons move —
+  not a walk and not the kick, which is `0x471d68`.
 - **a running jump has no wind-up.** The run handler (`0x429b80`) installs
   `0x471b28` tag 4: one record, `200(dx 180, dy −420)` — an instant leap
   already in the tuck, at the run's own 180. Only the standing and walking
@@ -1036,8 +1022,7 @@ Three things fall out of it:
   `0x434540(0x2a) < 13` and, 13 times in 42, plays tag `0x434540(2) + 1` — the
   short cycle `1 3 4 5 7 6 4 2` or the look-around `10 10 11 11 12 11 12 12 13`.
 
-Tag 5 of `0x471648` is dead code, which is the sort of thing this kind of listing
-turns up: `0x429690` tests `max/2 >= current` first and installs tag 4, and only
+Tag 5 of `0x471648` is dead code: `0x429690` tests `max/2 >= current` first and installs tag 4, and only
 falls through to the `max/4` test when the player is ABOVE half health — at which
 point `max/4 < current` always holds. Nothing can reach it.
 
@@ -1070,18 +1055,6 @@ The level warp's guard, `[0x470860]`, is not a debug switch: `0x427380` sets it
 to 1 during startup and the test at the top of that function is an
 already-initialised assertion. So the warp is live in the shipped game.
 
-One correction falls out of the same table. This port guessed the player's walk
-cels by eye, at 650…655; the engine's own script for that run is
-`650 651 652 653(+95) 654(+95) 655(+95) 654(−95) 653(−95) 652 651` — it goes out
-and comes back, so it is a lunge or a swing, not a walk. The walk is 100…111.
-
-Which settles the loose end, and not in the direction hoped for: **nothing in the
-platform path reads +14 at all.** The collector copies it, the appender does not
-set it, and the compaction does not preserve it. So the
-[flags guess](#the-flags-at-14-and-the-one-guess-this-page-makes) has no support
-from this route — whatever reads that field, if anything does, reads it somewhere
-else, and this page is not going to claim otherwise.
-
 ### How a level opens one
 
 The sixteen level loaders all have the same shape, and `STREETS`' (`0x44dc10`)
@@ -1093,13 +1066,12 @@ reads out plainly: wrap `"theme01.snd"` and hand it to the audio loader, wrap
 48-byte cel-directory records to build a spatial hash the backdrop draws through,
 so the cel directory this port reads is the same structure the engine opens a book
 by. It immediately handles the fourCC `'SPBK'` (`0x5350424b`), the engine's runtime
-type for a sprite book. It is worth knowing that this tag is
-**not in the Windows files**: they carry `LPPALPPA` at 0x20 like every other
+type for a sprite book. This tag is **not in the Windows files**: they carry `LPPALPPA` at 0x20 like every other
 DreamFactory file on that disc, and contain no `SPBK` anywhere. The Macintosh disc
 is where it comes from — `SPBK`/`SKLC` were that release's Finder type and
 creator. So the Windows engine knows a book is a book because of which loader
 opened it, not because the file says so, and `isSbkFile` testing the container
-fourCC is the right test rather than a weak one.
+fourCC is the right test.
 
 ## The order the levels come in
 
@@ -1135,16 +1107,15 @@ function altogether — the same split the files themselves show. `LEVEL_ORDER` 
 `sbk.ts` carries the order and the viewer lists books by it; the quota column is
 `skullcracker/src/mission.ts`, and the next section is where it comes from.
 
-### The correction, and what caused it
+### Theme numbers are not the order
 
-The first version of this table paired each book with the **theme bank** pushed
-beside it — `streets.sbk` with `theme01.snd`, `city.sbk` with `theme02.snd` — and
-ordered by theme number. That agrees with the sequencers for fifteen of the
-sixteen levels and puts `sewer` third. It is seventh: `theme03.snd` really is
-`sewer.sbk`'s bank, but `0x436b51` — the only place in the binary that opens
-`sewer.sbk` — is inside the case that plays `chp07`, in the second chapter,
-between `service` and `arcade`. A level that kept its old theme number after
-being moved is the kind of thing only the code can settle.
+Pairing each book with the **theme bank** pushed beside it — `streets.sbk` with
+`theme01.snd`, `city.sbk` with `theme02.snd` — and ordering by theme number
+agrees with the sequencers for fifteen of the sixteen levels and puts `sewer`
+third. It is seventh: `theme03.snd` is `sewer.sbk`'s bank, but `0x436b51` — the
+only place in the binary that opens `sewer.sbk` — is inside the case that plays
+`chp07`, in the second chapter, between `service` and `arcade`: a level that kept
+its old theme number after being moved.
 
 ## When a level is over
 
@@ -1168,9 +1139,8 @@ never disagree.
 
 ### The goal is a flying television
 
-What `0x410170` spawns, and what `0x410480` then does with it, is the most
-surprising thing in the file. The chapter's init function keeps four things off
-the level's own `goal` record (`0x450060`):
+The chapter's init function keeps four things off the level's own `goal` record
+(`0x450060`), for what `0x410170` spawns and `0x410480` drives:
 
 | global | from the record | what it is |
 |---|---|---|
@@ -1255,7 +1225,7 @@ this book has a 28-byte stub where it would be.
 
 `SUPPORT/DIRECTX/**/SYNTHGM.SBK` on the Windows disc is a **RIFF SoundFont bank**
 and has nothing to do with any of this. `isSbkFile` tells them apart by the
-container fourCC, which is the only honest test — the extension is shared.
+container fourCC, which is the only reliable test — the extension is shared.
 
 ## Where the code is
 
@@ -1265,4 +1235,4 @@ container fourCC, which is the only honest test — the extension is shared.
 - [`skullcracker/tools/scnames.mts`](https://github.com/dhobi/dreamrefactory/blob/master/skullcracker/tools/scnames.mts) — the books' names against the binary's, which is how +22 was confirmed
 - [`skullcracker/tools/scdis.mts`](https://github.com/dhobi/dreamrefactory/blob/master/skullcracker/tools/scdis.mts) — disassemble `SC.EXE`, the way `taoot/tools/disasmcmd.mts` does `TI.EXE`
 - [the sprite book viewer](../../editors/books.md) — the same thing in a browser
-- [Skull Cracker](../../skullcracker/README.md) — what else that disc turned out to hold
+- [Skull Cracker](../../skullcracker/README.md) — what else that disc holds

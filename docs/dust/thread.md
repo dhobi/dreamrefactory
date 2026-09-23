@@ -4,55 +4,47 @@
 what a save is made of. If you are here to play the game rather than to verify
 it, you want [the walkthrough](walkthrough.md).*
 
-`gamefiles/save/` was documented here as a handful of example saves, which is
-what it looks like. Sorted by `frame` — the service-pass counter, 20 Hz — it is
-something else entirely: **all but one of its files are a single continuous
-session**, from `D1E_001` at frame 4885 to `ENDING` at frame 224670. Day 1 to day
-5. Something over three hours of somebody at CyberFlix playing their own game to
-the end, saved about sixty times on the way, and every byte of it written by the
-shipped `DF.EXE`.
+`gamefiles/save/` looks like a handful of example saves. Sorted by `frame` — the
+service-pass counter, 20 Hz — **all but one of its files are a single continuous
+session**, from `D1E_001` at frame 4885 to `ENDING` at frame 224670, day 1 to day
+5: something over three hours of CyberFlix playing their own game to the end,
+saved about sixty times on the way, every byte written by the shipped `DF.EXE`.
 
-It does not quite start at the beginning. The collection's earliest save is a few
+It does not start at the beginning. The collection's earliest save is a few
 minutes into the first night — the bone, the dog and the ring are already behind
 it — so [the walkthrough](walkthrough.md) takes that opening out of `HELP1.PUP`
 instead.
-
-That is the most valuable thing in the Dust rip, and it is worth being precise
-about why.
 
 ## What it is worth
 
 Titanic is verified by [a route the port plays and a golden trace it recorded
 itself](../taoot/verification.md). That proves a great deal — the run is
 deterministic, the two hosts agree, the game is winnable — but every assertion in
-it is ultimately the port's own word. There was no 1996 machine to ask.
+it is ultimately the port's own word, with no 1996 reference to compare against.
 
-Dust has sixty answers from the 1995 machine. A save is a serialized heap: the
-props and who owns them, the cast and where they stand, every global the scripts
-ever set. So for sixty points across the whole game we can ask a question the
-Titanic route cannot even phrase — *play from here and do you arrive where
-`DF.EXE` arrived?* — and the thing being compared against was not written by this
-project.
+Dust has sixty reference states from the 1995 engine. A save is a serialized
+heap: the props and who owns them, the cast and where they stand, every global
+the scripts ever set. So at sixty points across the whole game a test can ask
+*play from here and do you arrive where `DF.EXE` arrived?*, against data this
+project did not write.
 
-The route that follows from that is **loads by construction**, and the loads are
-not a compromise. They are the original's own checkpoints.
+The route is therefore **loads by construction**: its loads are the original's
+own checkpoints.
 
 ## Establishing that it is one session
 
-Two things had to be shown rather than assumed, and
 [`dust/tools/rtdthread.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tools/rtdthread.ts)
-shows both.
+checks two things.
 
 **Frame order is not lineage.** A save made in a later sitting has a higher frame
-and an earlier day, so sorting by `frame` alone would happily splice two sessions
+and an earlier day, so sorting by `frame` alone would splice two sessions
 together and report the join as one enormous rung. The walk therefore tracks the
-highest `day` seen so far and calls out anything that goes backwards. Exactly one
+highest `day` seen so far and reports anything that goes backwards. Exactly one
 file does: **`DAY2.RTD`, at frame 261166, back at day 2** — later than the ending
 and earlier in the story. It is a second sitting, and it is not a rung.
 
-`dust/tests/saves.ts` asserts this rather than leaving it to the tool: distinct
-frame counters, and at most one lineage break. Many breaks would mean the
-collection is not a session at all, which is the thing worth being told about.
+`dust/tests/saves.ts` asserts this too: distinct frame counters, and at most one
+lineage break. Many breaks would mean the collection is not a session at all.
 
 **Not every change means anything.** A `.rtd` is a heap dump and the engine moves
 its own counters every service pass. The filter is a named list with a reason
@@ -61,15 +53,15 @@ the next fidget, the effects channel's round-robin cursor. The bar is not *how
 often* a global changes: `playercash` and `handitem` change constantly and are
 the story; `attentionspan` is a countdown in an idle handler and is not.
 
-One entry on that list is a curiosity: a global whose **name is a bare double
-quote**, carrying a nine-digit number under a type (4080) the reader knows no
-meaning for, present in two saves and mentioned by no script on the disc. Heap
-residue that the writer dumped along with the real variables.
+One entry on that list is a global whose **name is a bare double quote**,
+carrying a nine-digit number under a type (4080) the reader knows no meaning
+for, present in two saves and mentioned by no script on the disc: heap residue
+that the writer dumped along with the real variables.
 
 ## Reading a rung
 
 A prop record carries an `owner`, and the player character's owner string is
-**`stranger`** — Dust's hero has no name and the data agrees. So
+**`stranger`** — Dust's hero has no name. So
 
     owner "none" → "stranger"
 
@@ -87,10 +79,10 @@ npx tsx dust/tools/rtdthread.ts --md         # the table below
 
 ## The spine
 
-Derived rather than declared: the globals that only ever move forwards along the
+Derived, not declared: the globals that only ever move forwards along the
 thread are the closest thing the collection has to a list of story flags. A
-`*phase` that resets every midnight is not on it, by construction — and that
-reset is itself the clearest structural fact in the data. **Crossing midnight
+`*phase` that resets every midnight is not on it, by construction. That reset is
+the clearest structural fact in the data: **crossing midnight
 zeroes every character's thread**, so a day boundary is a different kind of rung
 from every other one.
 
@@ -105,11 +97,10 @@ from every other one.
 | `combo` = `08,23,41,` | `D3E_004` |
 | `snakepuzzle` = `done` | `MSKPZL` |
 
-The last three are puzzle answers, and the saves hold them because the original
-player solved them. They agree with the scripts that check them
-([the puzzles](walkthrough.md#the-puzzles-solved)), which is a pleasing
-cross-check in both directions: the data confirms the code was read right, and
-the code confirms the save was parsed right.
+The last three are puzzle answers, held because the original player solved them.
+They agree with the scripts that check them
+([the puzzles](walkthrough.md#the-puzzles-solved)), which checks both the script
+reading and the save parsing.
 
 ## The ladder
 
@@ -177,12 +168,10 @@ between it and the one above it, summarized — the full delta is what
 
 ## What it does not carry
 
-Worth stating before anyone builds a test on it:
-
 - **The gaps are uneven and the play in them is not minimal.** `D3M_005` →
-  `D3A_001` is twelve seconds; `D3M_001` → `D3M_002` is twenty-two minutes. The thread is what
-  one player did, wandering included — so a route reproducing it must reach the
-  **state**, never replay the minutes.
+  `D3A_001` is twelve seconds; `D3M_001` → `D3M_002` is twenty-two minutes. The
+  thread is what one player did, wandering included — so a route reproducing it
+  must reach the **state**, never replay the minutes.
 - **A global's presence in a save is not proof it was live.** The globals
   container is a 32-byte node array and the save writer walks it by physical
   slot, so a name destroyed by `dumpglobal` keeps its record — name, value and
@@ -192,8 +181,7 @@ Worth stating before anyone builds a test on it:
   shooting range's hit counts do the same at `D3E_003`; `saveitem` goes to the
   number `0` at `D3M_CLAS` and stays there for the rest of the game. So a rung
   whose `to` save gains or loses a name has not necessarily done anything to it
-  — [the whole argument is under `dumpglobal`](../engine/scripting-language.md),
-  which this thread is what settled.
+  — [see `dumpglobal`](../engine/scripting-language.md).
 - **A save cannot be matched byte for byte.** Frame counter, cast positions, the
   live loop set and the RNG stream all differ between two runs that played the
   same. The assertion has to be a chosen set of globals and prop owners.
@@ -203,6 +191,6 @@ Worth stating before anyone builds a test on it:
   `D4M_MISS`, which is named for the Santa Marta **Mission** and was taken at
   night. The files that skip the pattern are named for a place or a puzzle
   outright — `D4MINES`, `MESAPZL`, `ENDING`. The tool re-checks this in its
-  footer rather than asking to be believed.
+  footer.
 
 Back to [Dust](README.md).

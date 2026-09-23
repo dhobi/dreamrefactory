@@ -54,33 +54,30 @@ and one `.ti` in `out/checkpoints/` named for the state it *starts* from.
 | 26 | m4penny | m4.0 | Clariss's shawl; Zeitel's deal for the painting **refused** |
 | 27 | m4anti | m4.0 → **the end** | the boat deck, a place in a lifeboat, and the closing narration |
 
-Some of those checkpoint names are historical and no longer describe what happens
-at them — segment 27 still resumes from `m4anti` although the antidote errand it
-was named for is retired. The name is the file on disk; the row says what the
-segment does.
+Some checkpoint names no longer describe what happens at them — segment 27
+resumes from `m4anti`, named for an antidote errand the route does not run. The
+name is the file on disk; the row says what the segment does.
 
-Two segments are missing from that history and both are worth knowing about,
-because each was deleted rather than fixed:
+Two routing choices keep the run deterministic:
 
-- There used to be a twenty-eighth that went six decks down to trade Clariss's
-  shawl for the real necklace in the turbine room. It could only ever *load* — the
-  trip crosses the boat deck and answers away the Gorse-Joneses' one-shot lifeboat
-  offer, leaving the ending segment with nobody at the rail. The necklace sub-plot
-  gets that necklace in mission 1 instead, so the trade had nothing left to buy.
-- Segment 26 used to hand the painting to Zeitel for Lady Georgia's antidote and
-  buy it back with a boat pass won at blackjack. `savegeorgia()`'s **102 — "No.
-  You're bluffing."** is the one answer that never enters `givepaint()`, so the
-  painting is simply never let go of. That retired two segments' worth of work and
-  with them the only part of the run whose outcome was a property of the RNG stream
-  rather than of the play. **Lady Georgia dies of the poison for it**; the closing
-  narration does not score her, and `segments.ts` says so where it makes the choice.
+- The route does not go six decks down to trade Clariss's shawl for the real
+  necklace in the turbine room. That trip crosses the boat deck and answers away
+  the Gorse-Joneses' one-shot lifeboat offer, leaving the ending segment with
+  nobody at the rail. The necklace sub-plot gets the necklace in mission 1
+  instead.
+- Segment 26 refuses Zeitel's deal for the painting. `savegeorgia()`'s **102 —
+  "No. You're bluffing."** is the one answer that never enters `givepaint()`, so
+  the painting is never let go of and no boat pass has to be won at blackjack,
+  whose outcome is a property of the RNG stream rather than of the play. **Lady
+  Georgia dies of the poison for it**; the closing narration does not score her,
+  and `segments.ts` says so where it makes the choice.
 
 ## How much to run
 
 The headless suite is the commit gate and is cheap enough to run every time. The
-browser suite only ever says something new about the segment just written — every
-divergence found so far came from the new segment, never from an old one — and a
-full run spends most of its time replaying segments untouched for days.
+browser suite usually says something new only about the segment just written —
+divergences have come from the new segment, not from old ones — and a full run
+spends most of its time replaying untouched segments.
 
 | while | run | cost |
 |-------|-----|------|
@@ -89,11 +86,11 @@ full run spends most of its time replaying segments untouched for days.
 | a mission is finished | `npm run test:browser:m0 -w taoot` / `:m1` / `:m2` | 1 – 8 min |
 | before a long break, or after touching nav/aim/drivers | `npm run test:browser -w taoot` | ~24 min |
 
-The last row is the one that matters: a change to the shared navigation, aiming or
-driver code is exactly what CAN break an old segment, and that is when the whole
-thing earns its twenty-four minutes. It was 36.5, and what the three parts of that
-difference were is TODO §4a — the accost sweep's dud clicks, one wait in the ending,
-and the deck plan the map lands you on; none of them the game's own pace.
+The last row matters most: a change to the shared navigation, aiming or driver
+code is what can break an old segment, and that is when the full run is worth its
+twenty-four minutes. TODO §4a records what brought it down from 36.5 — the accost
+sweep's dud clicks, one wait in the ending, and the deck plan the map lands you
+on; none of them the game's own pace.
 
 ```
 npm test                        # the gate
@@ -106,15 +103,15 @@ SEGMENTS=9 npx tsx taoot/tests/browser/playthrough.ts    # one segment alone, ~3
 
 ## The minigames, and what driving one costs
 
-Six of the game's mechanics are on the route. Each needed something the one before
-it did not, and the shapes recur.
+Six of the game's mechanics are on the route. Each needs something different,
+and the shapes recur.
 
 **The turbine plant** (segments 4 and 21) is a simulation with a fixed point, and
 the route waits for it rather than for a number of ticks: `PLANT_STEADY` holds all
 four flows stationary, because `iterateone` computes the flows from the levels
 *before* moving them and whether one more iteration fits before a beat depends on
-frames drawn. It has to be re-dialled in segment 21, and that is the save's fault,
-not the plant's — the twelve plant globals have no record in the shipped template
+frames drawn. It has to be re-dialled in segment 21 because of the save, not the
+plant — the twelve plant globals have no record in the shipped template
 and only three free node slots exist to make records in, so a checkpoint cannot
 carry them. The dial loop is idempotent, so a carried session sets the same numbers
 and waits on a fixed point it is already at.
@@ -125,7 +122,7 @@ tick and sets the BLOCK from the X alone — so the route clicks in the column t
 guards the side Haderlitz has chosen, and leaves the cursor there. `willieidle`
 fills its four defence slots from where the cursor *is*, weakest at the cursor's own
 quadrant, so attacking where you hover is attacking what he guards least. The route
-wins **5-0**, and that is not showing off: `pointgoesto` moves `fencelevel` by four
+wins **5-0** deliberately: `pointgoesto` moves `fencelevel` by four
 per point, so a point conceded would leave the two hosts running different
 difficulties and diverging on every random draw after it.
 
@@ -137,9 +134,8 @@ different blows on alternating sides trips none of the four repetitions that wou
 hand him a turn. The trap is the ending: the end-of-fight test lives in Vlad's own
 idle handler, his idle only runs when the loop `vladdamage` arms comes round, and
 every click cancels that loop so a blow can interrupt him. A driver clicking as fast
-as it can pump starves its own win condition — 400 blows, `vladpower` −520, the flat
-still open. The route stops at `vladpower < -50` and waits, which is what a player
-does.
+as it can starves its own win condition — 400 blows, `vladpower` −520, the flat
+still open. The route stops at `vladpower < -50` and waits.
 
 **The smokestack maze** (segment 23) is `smstack2`, one floor of an eight-scene ring
 replayed eleven times. Climbing is four views and is never blocked; walking round the
@@ -153,16 +149,15 @@ stricter test than a fixed value. It has to solve: **one of the sixteen (maze, e
 pairs is a dead end**, maze 4 into scene39, both gaps closed. Maze 4 is the hard one
 and it climbs in 18 moves.
 
-Two things about the maze are worth knowing before reading a walkthrough, and
-[#339](https://github.com/dhobi/dreamrefactory/issues/339) is where both surfaced.
+Two things about the maze are worth knowing before reading a walkthrough (both
+from [#339](https://github.com/dhobi/dreamrefactory/issues/339)).
 
-**A load used to leave the last climb's crates behind.** `setupblocks()` only ever
-makes gaps visible, so a checkpoint loaded out of the stack and a walk back in put two
-mazes on one floor — the readout naming maze 1 beside crates from maze 3. The cause is
-not the maze at all: a save's prop table is the boot shops and nothing else (all 109
-shipped saves carry exactly 72 records), so `restoreProps` left the departing room's
-props exactly as the abandoned game had them, and the load now closes that room's shop
-the way `resetCast` has always emptied its cast.
+**A load closes the departing room's shop.** `setupblocks()` only ever makes gaps
+visible, and a save's prop table is the boot shops and nothing else (all 109
+shipped saves carry exactly 72 records), so `restoreProps` alone would leave the
+departing room's props as the abandoned game had them: a checkpoint loaded out of
+the stack and a walk back in would put two mazes on one floor. The load closes
+that room's shop the way `resetCast` empties its cast.
 
 **The entry is also what the maze *looks* like.** Runners identify it by climbing,
 turning right and reading the crates — blocked at once is maze 4, crates across the
@@ -170,8 +165,7 @@ shaft is maze 3, nothing is 1 or 2 — and those rules are relative to **one** o
 `smstack1`'s four ladders, View42 into Scene37. The crate list is positions on the
 ring, so coming up elsewhere on it shows a different part of the same maze, and two of
 those views are another maze's signature exactly: maze 1 from Scene38 reads as maze 3.
-That one is not a bug, and `taoot/tests/auto/smokestack.ts` pins it alongside the rest
-so it is not reported as one. All four mazes solve from Scene37 in 18 moves, so that is
+That is not a bug; `taoot/tests/auto/smokestack.ts` pins it alongside the rest. All four mazes solve from Scene37 in 18 moves, so that is
 the ladder to take.
 
 **The necklace sub-plot** (segment 6) is what clears `onehappens`, and it is the
@@ -192,17 +186,16 @@ The last one comes from one place — `hammershake()`, which only runs with
 unturned. So the order is forced: `switch1` down, power on, solenoid up, **wait 58
 iterations (~42 s) for the timer to run out harmlessly**, `switch1` back up, then the
 key. `changedone()` runs after every control change and five of its nine branches are
-`boomer()`. It was defused first time and costs three minutes of the endgame clock.
+`boomer()`. Defusing it costs three minutes of the endgame clock.
 
 **Blackjack** is measured but off the route: the deck is 52 draws off a stream
 every earlier gesture has been moving, so winning is a property of the world rather
-than of the play, and the route stopped needing the boat pass. The same hand has
-been measured winning and busting with nothing about the play changed, so a future
-route must not assume the first one wins.
+than of the play. The same hand has been measured winning and busting with nothing
+about the play changed, so a route must not assume the first one wins.
 
 ## Conventions a new route will trip on
 
-Learned the hard way, all verified:
+All verified:
 
 - **In mission 4, a conversation costs two minutes.** `gang.cst prepuppet()` does
   `min = min + 2` at `mission = 4`, and the sinking's phase is a clock
@@ -231,10 +224,9 @@ Learned the hard way, all verified:
   prop's pixels are. The shipped `trackbut` (BOOTFILE 0002) answers
   `pointinbutton(currentflat(), target, mouse())` — the flat's named click region,
   where `target` is the region the click arrived on — and the bevel it is NAMED with
-  is only the highlight it shows while you hold. In practice the two coincide, which
-  is why the aim points here did not move when the engine stopped transcribing this
-  helper: measured, `cuff.stg` and `wireless.stg`'s `ok` regions are 429..485,
-  338..362, and `fuse.stg`'s `fuseoklit` prop is 428,338 57×25. What still fails is
+  is only the highlight it shows while you hold. In practice the two coincide —
+  measured, `cuff.stg` and `wireless.stg`'s `ok` regions are 429..485,
+  338..362, and `fuse.stg`'s `fuseoklit` prop is 428,338 57×25. What fails is
   aiming at the DARK prop: `fuseokdark` is 419,330 76×42 and overhangs on every side,
   so a click on its edge samples outside the region and `trackbut` answers 0,
   silently, with the flat left open. `cuffok` is the same geometry.
@@ -243,8 +235,8 @@ Learned the hard way, all verified:
   with all 9840 pixels opaque, at `propdist -3`, in front of both.
 - **An actor outranks a hotspot in the hit order, and dismissing one takes frames,
   not an answer.** The seaman in front of the A-deck fusebox ends his own lines with
-  `putdownactor()`; until that lands the second click cannot even be aimed. Waiting
-  ~40 ticks after his last line is the whole fix.
+  `putdownactor()`; until that lands the second click cannot be aimed. Wait ~40
+  ticks after his last line.
 - **An instrument's state can live in `propvalue`, not `propdeg`.** The wireless
   needle's frequency is its value (14..200, `tuned()` wants 34..40 to transmit); its
   deg is only which of ten pictures the small view draws. `NavDriver.propValue` exists
@@ -260,8 +252,8 @@ Learned the hard way, all verified:
   wireless from 200 to the transmit band is ~80 swings and 12 s in a browser — there is
   no acceleration in `adjustneedle`.
 - **Owner is not presence.** `actorOwner("ga")` reads `"none"` while Georgia is
-  standing right there. The runtime record (`visible`, `worldX/Y/Z`, `starName`) is
-  what to read, and reading the owner that way once cost a session an hour.
+  standing right there. Read the runtime record (`visible`, `worldX/Y/Z`,
+  `starName`) instead.
 - **Name the standpoint in a big room; do not sweep.** `nav.accost` caps at
   `MAX_GESTURES_PER_ROOM = 60` and the boat deck has 27 scenes, so a blind sweep never
   reaches the far end of it.
@@ -285,8 +277,8 @@ Learned the hard way, all verified:
   route computes it (nav/reach.ts).
 - **Find a hotspot's script by container id.** `ObjectEntry.locationScript` in
   [`engine/src/df/set.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/set.ts) maps a
-  view's object to the container that handles it — that is how Sasha's door turned out
-  to be the `"door"` of Scene51/View57 and not the `"knock"` beside it.
+  view's object to the container that handles it — Sasha's door, for example, is the
+  `"door"` of Scene51/View57, not the `"knock"` beside it.
 - **Bevel ids, never positions.** `PENNY1.PUP`'s `zeitelgram()` calls
   `puppetscramble()`, which shuffles its plaques.
 - **`out/scripts/` is the first place to look** for any of this

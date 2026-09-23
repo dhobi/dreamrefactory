@@ -48,9 +48,9 @@
  * quietly left out.
  *
  * And -9 is a different alphabet: it is below the range test, so it lands as
- * ordinary damage on the player and is read instead by five handlers of their
- * own (`0x44f0aa`, `0x4520d8`, `0x4547b3`, `0x4550d3`, `0x455763`) which accept
- * nothing else. The flare carries it — `0x43abf0` sets its strength to -9 rather
+ * ordinary damage on the player and is read instead by a −9 arm in eleven hit
+ * handlers of their own (listed in `docs/skullcracker/combat.md`). The flare
+ * carries it — `0x43abf0` sets its strength to -9 rather
  * than 100 when the global at `0x4abdfc` is 5 — which is why that one is named
  * below but not in this table.
  *

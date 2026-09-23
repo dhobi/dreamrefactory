@@ -51,8 +51,7 @@ Things to notice:
 
 ### Values, operators and quirks
 
-There are numbers and strings, and the operators have a couple of surprises
-that took reverse engineering to pin down:
+There are numbers and strings, and the operators have a couple of surprises:
 
 | Operator | Meaning | Note |
 |----------|---------|------|
@@ -61,33 +60,37 @@ that took reverse engineering to pin down:
 | `&` `\|` | logical and / or | **short-circuit** |
 | `=` | equality | **case-insensitive for strings** |
 
-Two gotchas that the interpreter has to honour exactly, or real scripts
-misbehave:
+Two rules the interpreter has to honour exactly, or real scripts misbehave:
 
 - **Mixed-type `=` compares as text.** An uninitialised global variable is
   `0`, and scripts rely on `"uparrow" = 0` being *false*. So comparisons
   coerce to text.
 - **`dumpglobal` looks like a declaration and is a demolition.** `global x, y`
-  brings variables into scope; `dumpglobal x, y` *destroys* them. All 64 uses in
-  the corpus are in a teardown — `closeset`, `closestage`, `closeenigma`,
-  `endfight`, or a `dump…globals()` helper called from one — and
-  `TURBINE.STG`'s exists for nothing else: `dumpturbineglobals` is four
-  `dumpglobal` lines and no other statement, against `initvalue`'s plain
-  `global` + assignment on the way in. `BRIDGE.STG`'s `monkey()` proves it from
-  the author's side, because it works around it: `arg = drifthappen`, then
-  `dumpglobal drifthappen`, then every test against `arg` — a copy that is
-  pointless unless the next line destroys the original. The shipped saves agree
-  from the far side: `coal`, `valve1..3`, `pump1`, `pump2` and `savenorth` are
-  dumped on a stage close and have a record in **none** of the 109 (#85).
+  brings variables into scope; `dumpglobal x, y` *destroys* them — **the whole
+  list**, as `DF.EXE` does and the port does. All 64 uses in the corpus are in a
+  teardown — `closeset`, `closestage`, `closeenigma`, `endfight`, or a
+  `dump…globals()` helper called from one — and `TURBINE.STG`'s exists for
+  nothing else: `dumpturbineglobals` is four `dumpglobal` lines and no other
+  statement, against `initvalue`'s plain `global` + assignment on the way in.
+  `BRIDGE.STG`'s `monkey()` works around it from the author's side: `arg =
+  drifthappen`, then `dumpglobal drifthappen`, then every test against `arg` — a
+  copy that is pointless unless the next line destroys the original. The shipped
+  saves agree: `coal`, `valve1..3`, `pump1`, `pump2` and `savenorth` are dumped on
+  a stage close and have a record in **none** of the 109 (#85).
 
-  **It destroys the whole list**, which is what the port has always done — but
-  the shipped saves took a long time to agree, and the reason they seemed not to
-  is worth keeping, because it is a trap that reads like evidence.
+  **A global's presence in a save is not proof it is live.** The globals
+  container is a 32-byte node array and the reader walks it by physical slot, so
+  a destroyed name keeps its node — name, value and all — until something is
+  allocated over it (found at byte level by
+  [`rungs/d4mines.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/playthrough/rungs/d4mines.ts)).
+  `D4E_001` and `D4M_MISS` hold `cutdowns` at +3644 and `wincount` at +3676 with
+  a stale *second* `wincount` node at +3708 and seven stale `roundnum` nodes after
+  it. Nothing distinguishes those from live records, so "the save carries the
+  name" measures how little has been allocated since, not what `dumpglobal` did.
 
-  Five teardowns look like controlled experiments. In each, one function creates
-  the whole list unconditionally, one destroys it, and nothing else in the corpus
-  touches the names — so whatever survives ought to say how much of the list the
-  dump took:
+  This makes five teardowns look as if **only the first name is destroyed**. In
+  each, one function creates the whole list unconditionally, one destroys it, and
+  nothing else in the corpus touches the names:
 
   | teardown | dumped | what the saves carry |
   |---|---|---|
@@ -97,26 +100,13 @@ misbehave:
   | `KID.PUP/0051` | `badcount, wincount` | `runyoself ()` assigns both on adjacent unconditional lines and `talk5 ()` dumps them; `D4E_001` carries `wincount` and no `badcount` |
   | `map.stg` (TAOOT) | `savenorth, saveeast, savewest` | `saveeast` in 78 of 109 and `savewest` in 85, `savenorth` in none |
 
-  Five of five say **only the first name is destroyed**, and for a long time the
-  only thing against them was `bedsit1.set`, whose fourteen names are all gone
-  from 107 Titanic saves — a dissenter that could be waved off, because
-  everything between its `closeset` and those saves happens across the start of
-  the game proper, which the BOOTFILE rebuilds.
+  `bedsit1.set` does not fit that pattern: its fourteen names are all gone from
+  107 Titanic saves (everything between its `closeset` and those saves happens
+  across the start of the game proper, which the BOOTFILE rebuilds).
 
-  **What breaks it is that a name can be legible in a save and dead in the
-  game.** [`rungs/d4mines.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/playthrough/rungs/d4mines.ts)
-  found the mechanism at byte level: the globals container is a 32-byte node
-  array and the reader walks it by physical slot, so a destroyed name keeps its
-  node — name, value and all — until something is allocated over it. `D4E_001`
-  and `D4M_MISS` hold `cutdowns` at +3644 and `wincount` at +3676 with a stale
-  *second* `wincount` node at +3708 and seven stale `roundnum` nodes after it.
-  Nothing distinguishes those from live records. So "the save carries the name"
-  is not a measurement of what `dumpglobal` did; it is a measurement of how
-  little has been allocated since.
-
-  Walked across all 55 saves of [the golden thread](../dust/thread.md), every
-  row above dissolves the same way — **a dumped name never changes value again,
-  and it disappears at the first save after new globals are allocated:**
+  Across all 55 saves of [the golden thread](../dust/thread.md), every row above
+  behaves the same way — **a dumped name never changes value again, and it
+  disappears at the first save after new globals are allocated:**
 
   | name | after its teardown | goes |
   |---|---|---|
@@ -125,30 +115,26 @@ misbehave:
   | `cutdowns`, `wincount` | `5` and `3` in `D4E_001`, `D4M_MISS` | `D4MINES`, which allocates six underground globals |
   | `betorder`, `winner`, `playercount`, `playerhand` | unchanged from `D3E_003` to `MSKPZL` | `MESAPZL`, which allocates five over four of their slots |
 
-  And `saveitem` is the one that settles it, because it is `LEROY.PUP/0088`'s
-  **second** name — the one the surviving-tail reading says is spared. It is
-  `"boots"`, then `"sugarcubes"`, and from `D3M_CLAS` onwards it is the number
-  **`0`** and stays `0` for the remaining 83,602 frames of the game. A string
-  global frozen as a number is a released payload in a record nobody has
-  overwritten yet, not a variable anybody is still using.
+  `saveitem`, `LEROY.PUP/0088`'s **second** name, is `"boots"`, then
+  `"sugarcubes"`, and from `D3M_CLAS` onwards the number **`0`**, which it stays
+  for the remaining 83,602 frames of the game: a released payload in a record not
+  yet overwritten, not a variable in use.
 
-  So the pattern the five controls all showed — first name gone, tail surviving
-  — is **slot-reclaim order**, not semantics. One function creates the list, so
-  the names are adjacent nodes; the dump frees them together; the next
-  allocation takes the lowest freed node, which is the first name. The two rows
-  that fitted no reading at all now fit this one. `TOWN.SET/0128 openkid ()`
-  dumps ONE name and `D4E_001` still reads `cutdowns = 5` — a save taken before
-  anything was allocated. `SALGAMES.FLT`'s poker teardown appears to keep
-  `hasnopair`, its own list's first name, all the way to `ENDING` — and
-  `hasnopair` sits in the deepest region the teardown freed, which the rest of
-  the game never reaches.
+  The first-name-gone, tail-surviving pattern is therefore **slot-reclaim
+  order**, not semantics. One function creates the list, so the names are
+  adjacent nodes; the dump frees them together; the next allocation takes the
+  lowest freed node, which is the first name. Two further cases fit the same
+  reading: `TOWN.SET/0128 openkid ()` dumps ONE name and `D4E_001` still reads
+  `cutdowns = 5` — a save taken before anything was allocated; and
+  `SALGAMES.FLT`'s poker teardown appears to keep `hasnopair`, its own list's
+  first name, all the way to `ENDING`, because `hasnopair` sits in the deepest
+  region the teardown freed, which the rest of the game never reaches.
 
-  `GANG.CST/0984`'s `bouncer, dirgo` was withdrawn from the table before any of
-  this and stays withdrawn, for a reason that now reads as corroboration: the
-  two names are written by `isaoidle ()` on different schedules — `bouncer`
-  every pass, `dirgo` only at the ends of Isao's 40° sweep — so they appear and
-  vanish repeatedly across the thread. That is what a live name looks like. The
-  corpses above never move.
+  `GANG.CST/0984`'s `bouncer, dirgo` is excluded from the table: the two names
+  are written by `isaoidle ()` on different schedules — `bouncer` every pass,
+  `dirgo` only at the ends of Isao's 40° sweep — so they appear and vanish
+  repeatedly across the thread, as live names do. The dead records above never
+  move.
 
       if bouncer = 1 … bouncer = 0 else … bouncer = 1 endif
       if dirgo = 0
@@ -158,14 +144,11 @@ misbehave:
           actordeg (me, actordeg (me) - 2)
           if actordeg (me) < 64 - 20    dirgo = 0     ← and here
 
-  The port needs no change for any of this: it destroys every name, which is
-  what `DF.EXE` does. What changes is how a save may be read — **a global's
-  presence in an `.rtd` is not proof it was live**, and three playthrough rungs
-  that claimed around the disagreement
+  Playthrough rungs must not rely on a dumped name in an `.rtd`; three that did
   ([`d2e002`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/playthrough/rungs/d2e002.ts),
   [`d3a001`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/playthrough/rungs/d3a001.ts),
   [`d3e003`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/playthrough/rungs/d3e003.ts))
-  were claiming around a table of dead records.
+  were reading dead records.
 - The original compiler emitted some **oddities** the parser must tolerate:
   `//` comment lines that tokenize as two division operators, unterminated
   blocks, dead statements before the first `case`, and the occasional
@@ -180,10 +163,10 @@ misbehave:
   `endswitch`. SMETH1.PUP's `stewardwell` nests a second plaque inside `case
   101` and closes only the inner one, and a parser still hunting for `case` or
   `endswitch` reads clean through `endcode` and eats the handlers that follow —
-  four of them there, one of which is why Smethells never turned you away from
+  four of them there, one of which is what makes Smethells turn you away from
   the first class lounge ([#177](https://github.com/dhobi/dreamrefactory/issues/177)).
   Measured across all six editions: every handler declared in every script
-  container is now parsed, the only exception being `gang.cst`'s container 1267,
+  container is parsed, the only exception being `gang.cst`'s container 1267,
   which really does declare `endwalk` twice.
 
 ## The event model: objects, handlers, and the chain
@@ -223,13 +206,12 @@ event is consumed and the chain stops. If it ends normally *or* with
 **`passcode`** — or the object has no handler for that event at all — the
 event **forwards to the next link**.
 
-**"Consumed" means a handler of *this* event exitcoded**, and the qualifier is the
-whole of it. A handler routinely calls routines and fires other events, and those
+**"Consumed" means a handler of *this* event exitcoded.** A handler routinely calls routines and fires other events, and those
 end in `exitcode` for their own reasons, so a flag set from any depth answers a
 question nobody asked — "did anything, anywhere under here, stop?" rather than "was
 the player's event consumed?". The interpreter therefore tests the `exitcode`'s own
-frame **by handler name** against the event under dispatch. Two shipped scripts pay
-the bill when it doesn't:
+frame **by handler name** against the event under dispatch. Two shipped scripts
+depend on this:
 
 - `STAIR2C.SET`'s deck rung calls `setupshayhack()` and `setupcsea()` — both of
   which end in `exitcode` — and then `passcode`s, precisely so the engine's default
@@ -237,9 +219,9 @@ the bill when it doesn't:
   consumed, the walk never runs, and the 2nd-class staircase cannot be climbed
   past C deck.
 - `recept1c`'s `openset` does `sendtoactor("elev", setupactor())` and then
-  `passcode`s; `setupactor` exitcodes, so the `openset` looked consumed and the
-  boot's own `openset` (`setupsound`) was skipped — the room came up silent on the
-  wrong theme.
+  `passcode`s; `setupactor` exitcodes, so read as consumed, the boot's own
+  `openset` (`setupsound`) is skipped and the room comes up silent on the wrong
+  theme.
 
 The one case that must still consume looks the same from a distance: `boot1`'s
 `keydown` routes the event on with `sendtoscene(currentscene(), keydown(arg))`, and
@@ -253,23 +235,22 @@ never does. TI.EXE's main loop pops one event and runs it to completion; here th
 heartbeat overlaps a player's press deliberately — `serviceGameClock` dispatches
 `calctime` so that it does *not* count as a busy script, or a press posted while it
 settled would sit in the queue — so a press drained on the same tick begins while
-`calctime` is still suspended at an `await`. Answering "which event?" from one
-interpreter-wide field set at nesting depth zero therefore gave the press
-`calctime`'s name, every `exitcode` in its chain compared against the wrong event
-and quietly declined to consume, and the chain ran on into the boot library's
-default move. That is how a held key walked through the smokestack crates
-([#232](https://github.com/dhobi/dreamrefactory/issues/232)): `SMSTACK2`'s set main is
-nothing but `if blocked & arg = "uparrow" exitcode`, and the flag was right every
-time — it was the *consumption* that was lost. Each frame now carries the name its
-own chain was dispatched under, inherited across routine calls and `sendto*`
-re-routes alike, so two chains in flight cannot answer for one another.
+`calctime` is still suspended at an `await`. A single interpreter-wide "current
+event" field would give the press `calctime`'s name, every `exitcode` in its chain
+would compare against the wrong event and decline to consume, and the chain would
+run on into the boot library's default move — a held key walks through the
+smokestack crates ([#232](https://github.com/dhobi/dreamrefactory/issues/232)), whose
+`SMSTACK2` set main is nothing but `if blocked & arg = "uparrow" exitcode`. Each
+frame therefore carries the name its own chain was dispatched under, inherited
+across routine calls and `sendto*` re-routes alike, so two chains in flight cannot
+answer for one another.
 
 **A `passcode` off the *end* of a chain keeps climbing.** `passcode` means "not
 mine, ask whoever holds me", and that is as true of the last link as of any other:
 when a chain runs out on one, the event carries on up the **containment** chain —
 the file that holds the thing — exactly as an event nobody had a handler for
-already did. For a prop the chain is a single link, so this used to be a dead end
-and the shop main behind it was unreachable. `inven.shp`'s notebook (container
+already did. For a prop the chain is a single link, so without this the shop main
+behind it would be unreachable. `inven.shp`'s notebook (container
 0088) is the measured case: its own `setcursor` claims the one place the notebook
 is scenery rather than luggage and `passcode`s everywhere else, onto the shop
 main's distance-gated answer —
@@ -284,10 +265,9 @@ cursor ("touch")
 ```
 
 — which is where the hand cursor over a takeable thing comes from in the whole
-game, and it could not be reached. Two rules come with it: a link the chain
-**already ran must not run twice** (a scene's chain is scene → set main → stage,
-and the stage is also the last thing containment tries, so a passcoding stage
-handler was the one that got run again), and a `passcode` *inside* the containment
+game. Two rules come with it: a link the chain **already ran must not run twice**
+(a scene's chain is scene → set main → stage, and the stage is also the last thing
+containment tries, so a passcoding stage handler would otherwise run again), and a `passcode` *inside* the containment
 walk keeps climbing too, for the same reason it does along the chain.
 
 This one mechanism explains a lot of the game's behaviour:
@@ -327,8 +307,7 @@ twins. `me` says who is running, `target` says who was addressed, and a great ma
 shipped handlers are written as `switch target` or read it directly:
 `propview(target)`, `realdist(target)`, and BOOTFILE's own `trackbut`, whose body
 is `pointinbutton(currentflat(), target, mouse())` and which every OK button in
-the game borrows. It is *not* "always the addressee", and the suite drew that line
-in one run: `sendtoshopfx("house.shp", watchidle())` addresses a **file**, where
+the game borrows. It is *not* "always the addressee": `sendtoshopfx("house.shp", watchidle())` addresses a **file**, where
 there is no thing being addressed and the caller's context is what the handler
 reads. So the addressee for a thing, the caller for a shop, a cast, a stage, a
 puppet, the boot.
@@ -340,7 +319,7 @@ in: `fight.shp`'s `vlad` and `fence.shp`'s `willie`. `sendtoactor("vlad", …)` 
 to reach the *cast member* even while the fistfight overlay is up, which is exactly
 where the fistfight ends — `endfight` puts Vlad down on the catwalk with
 `sendtoactor("vlad", setupactor("lostfight"))` and the prop has no such handler, so
-resolving the prop first dropped the line and left him standing (#84).
+resolving the prop first would drop the line and leave him standing (#84).
 
 ## The boot library = the standard library
 
@@ -370,8 +349,8 @@ The runtime is three files:
 2. **[`interp.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/interp.ts)** — the interpreter core: variable
    scopes (global + local), the operators, control flow (`if`, `switch`/
    `case`, loops), handler dispatch with `me`/`target` context, the
-   `exitcode`/`passcode`/`return` signals, and a **builtin registry** where
-   each engine command's real behaviour is filled in as it's recovered.
+   `exitcode`/`passcode`/`return` signals, and a **builtin registry** holding
+   each engine command's recovered behaviour.
 3. **[`setscripts.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/setscripts.ts)** — binds a specific SET's
    scripts (main, per-scene, per-view-object) to interpreter instances and
    implements the event chain described above.

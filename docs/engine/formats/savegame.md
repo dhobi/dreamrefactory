@@ -41,9 +41,9 @@ is from a different version of this title."* come from these checks.
 ### Packing is fixed and reproducible
 
 Unlike the RAM-garbage padding inside the containers (see below), the **file
-layout is deterministic**, so we can rewrite a save and reproduce every byte the
-loader reads (the output is not byte-identical — we zero the ignored regions the
-original left junk in, see below):
+layout is deterministic**, so a rewritten save reproduces every byte the loader
+reads (the output is not byte-identical — the port zeroes the ignored regions the
+original left junk in):
 
 - container 0 always begins at offset **1536** (1024-byte header + a 512-byte,
   128-entry position-table region);
@@ -53,17 +53,16 @@ original left junk in, see below):
 
 The bytes *between* the position table and 1536, and the padding *between*
 containers, are leftover process memory (stale heap pointers) — the loader never
-reads them. We zero-fill them; the original left junk there. Everything the
-loader actually reads (header fields, position table, and each container's
-`id`/`size`/`data`) round-trips exactly across all shipped saves.
+reads them. The port zero-fills them. Everything the loader actually reads
+(header fields, position table, and each container's `id`/`size`/`data`)
+round-trips exactly across all shipped saves.
 
 ## It is a memory dump, not a tidy document
 
 The containers are a **serialization of the engine's live C++ object graph**.
 Many records embed raw process pointers (`0x7c91056d`, `0x01d2…`, a DFValue
 vtable at `0x00431e0f`) that mean nothing on reload — the loader rebuilds them.
-They still have to be treated as pointers rather than as magic numbers, which is
-a lesson this format charged us for once: see
+They must still be treated as pointers rather than as magic numbers: see
 [Finding the grid](#finding-the-grid-the-vtable-is-a-pointer).
 Two consequences:
 
@@ -76,14 +75,13 @@ Two consequences:
   exceptions.
 - To *read* a save you skip the pointers and take the names, counts and values;
   to *write* one byte-compatibly you reproduce the meaningful bytes and may put
-  anything (we use zeros) where the loader expects an ignored pointer.
+  anything (the port uses zeros) where the loader expects an ignored pointer.
 
 ## What each container holds
 
-The roles were first recovered empirically (diffing the same record across many
-saves to separate stable structure from per-run pointers); the order below is
-the writer's own, read out of `0x413910` and then checked positionally against
-all 109 shipped saves.
+The order below is the writer's own, read out of `0x413910` and checked
+positionally against all 109 shipped saves; the roles are also confirmed by
+diffing the same record across many saves.
 
 | Container | Contents |
 |-----------|----------|
@@ -109,10 +107,9 @@ the globals place everything after them.
 
 <ByteMap map="lounge.ti" />
 
-A save looks nothing like the other formats in this section: no pictures, no
-sound, no scripts. It is 46 KB of tables — and the biggest single block is the
-manifest, because the paths of every open file cost more bytes than the state of
-the game.
+A save holds no pictures, no sound and no scripts. It is 46 KB of tables — and
+the biggest single block is the manifest, because the paths of every open file
+cost more bytes than the state of the game.
 
 The three tables at the end are not a serialization of anything: `0x442530`
 sits directly in front of the master service pass `0x442550` and hands back
@@ -120,13 +117,10 @@ pointers to its own three tables (`0x48bcd0` loops, `0x48b830` crickets,
 `0x48b150` walks), which the writer `memcpy`s into the file. The save *is* the
 live scheduler.
 
-(There is **no location-stream container**. A "savestate stack" of facing, road,
-coordinate and set strings was long believed to have one — see
+(There is **no location-stream container** — see
 [the container that wasn't there](#the-location-container-that-wasn-t-there).)
 
 ### The crowd comes from this container
-
-Container 3 was mapped early and read late, and the gap cost the game its extras.
 
 A room's crowd is not in the boot cast. `gang.cst` is opened once at boot and
 holds the 25 named characters; the eight members the extras are instanced from —
@@ -134,9 +128,9 @@ holds the 25 named characters; the eight members the extras are instanced from �
 `lounge1c.set`, `smoke.set` and `deckbd2.set` each `opencastfile` from their own
 `openset`.
 
-A load runs no `openset` ([#143](https://github.com/dhobi/dreamrefactory/issues/143)).
-So the file was never opened, the crowd records had no cast member to be
-re-instanced from, and `restoreActors` dropped every one of them. Measured across
+A load runs no `openset` ([#143](https://github.com/dhobi/dreamrefactory/issues/143)),
+so unless container 3's list is reopened the crowd records have no cast member to
+be re-instanced from, and `restoreActors` drops every one of them. Measured across
 the 109 shipped English saves:
 
 | | |
@@ -146,15 +140,14 @@ the 109 shipped English saves:
 | such records | **344** |
 
 Worst case `ENDGAME1/09 - Traded letter for Baby` (deckbd2), 39 records. The three
-affected sets are the most populated rooms of the endgame, so a loaded game was
-visibly emptier than the game that was saved.
+affected sets are the most populated rooms of the endgame.
 
-The identification is the correlation: the 47 saves whose container 3 carries a
-second record carry `extra.cst` in **every** one, and they are exactly the 47 with
-crowd records that resolve to nothing. Reopening what the list names fixes all
-344 ([#186](https://github.com/dhobi/dreamrefactory/issues/186)).
+The 47 saves whose container 3 carries a second record carry `extra.cst` in
+**every** one, and they are exactly the 47 with crowd records that resolve to
+nothing without it. Reopening what the list names resolves all 344
+([#186](https://github.com/dhobi/dreamrefactory/issues/186)).
 
-Two things worth keeping in mind:
+Two points:
 
 - **The list is the file's, not a guess from the set being entered.** The save
   records what was open, which is precisely the question being asked.
@@ -162,11 +155,9 @@ Two things worth keeping in mind:
   open**, not closed. It is inert — `resetCast` puts every member down, and a
   member the file has no record for stays down.
 
-It went unnoticed because `restoreActors` *logs* a drop rather than failing, and
-the saves the suite leant on hardest are in rooms that only ever need `gang.cst`.
-The regression added with the fix is the assertion that would have caught it:
-every record with a set and `visible`, in every shipped save, has to resolve to a
-live actor after the load.
+`restoreActors` *logs* a drop rather than failing, so a missed reopen is silent.
+The regression test asserts that every record with a set and `visible`, in every
+shipped save, resolves to a live actor after the load.
 
 ## The loader re-opens the room from the manifest, not from the set name
 
@@ -179,12 +170,11 @@ reads the set's scene register from the container refs restored at **c1 @644 /
 @652** and looks the saved scene and view names up in it (`0x43a0b0`) — walking
 exactly **c1 @656** records, a count that is restored verbatim and never
 recomputed from the file it just read. A scene the walk doesn't reach raises
-error 10 → **"Fatal error at line 4248 (code 2)"**, and there are two ways to
-earn it: the manifest still pathing another room's set, and a base set with
-fewer scenes than the current one, whose smaller count hides the tail of the
-register (crew's 2 hid cargo's Scene4–6 — both happened, in that order, on the
-first DosBox loads). The casts, shops and tracks resolve the same way: each of
-their records leads with an old handle that is matched against the manifest
+error 10 → **"Fatal error at line 4248 (code 2)"**. Two ways to hit it: the
+manifest still pathing another room's set, and a base set with fewer scenes than
+the current one, whose smaller count hides the tail of the register (crew's 2
+hides cargo's Scene4–6). The casts, shops and tracks resolve the same way: each
+of their records leads with an old handle that is matched against the manifest
 (`0x4152e0` with the `ODCC`/`ODDP`/`GNOS`/`ODCS` type tags).
 
 Measured across all 109 shipped saves: c1 @544 matches exactly one manifest
@@ -199,20 +189,19 @@ everything up to and including the LAST `":"` — `titanic2:data:cargo.set` beco
 `cargo.set` — and `0x429e30` opens *that*, through the resource path table, in the
 same call the engine uses for a script's own `opensetfile("cargo.set")`. So the
 volume and directory a record carries are decoration: which disc the file comes
-off is settled by the mounted CD (container 0 @256), not by the prefix. Which is
-why a patch may keep the base's prefix even when the story has crossed to the
-other disc since — it names the wrong volume and nothing reads it.
+off is decided by the mounted CD (container 0 @256), not by the prefix. A patch
+may therefore keep the base's prefix even when the story has crossed to the other
+disc since — it names the wrong volume and nothing reads it.
 
 The consequence for writing: a patch that changes the room **must re-path the
 manifest's set record and rewrite the register refs and the scene count**
 (`SavePatch.setFile` — the record's id is left alone so everything else still
-resolves). This was found the hard way: the port's first DosBox-tested save
-carried `crew.set` in the manifest and `cargo`/`scene4` in c1, so TI.EXE
-restored the crew hallway and died at line 4248 looking for a scene it could
-never have; the second, with the manifest fixed, kept crew's scene count of 2
-and died at the same line with cargo's Scene5 sitting unreachable at register
-index 4. (A correlation sweep of every u16/u32 in c1's tail against the sets'
-own facts — scene index, view index/ID/count, register record offsets,
+resolves). In DosBox, a save carrying `crew.set` in the manifest and
+`cargo`/`scene4` in c1 makes TI.EXE restore the crew hallway and die at line 4248
+looking for a scene it can never have; with the manifest fixed but crew's scene
+count of 2 kept, it dies at the same line with cargo's Scene5 sitting unreachable
+at register index 4. (A correlation sweep of every u16/u32 in c1's tail against
+the sets' own facts — scene index, view index/ID/count, register record offsets,
 viewport — matches nothing else across the 109; @656 is the only set-shape
 field the blob restores.)
 
@@ -235,10 +224,9 @@ bumps it once per pass, 20 a second — see
 and restoring it is what makes an absolute frame stamp in a global mean
 anything after a load. BOOTFILE's `advancephase` writes `paintframe = frame()`
 when mission 2 opens and BINL.SET's cargo crate asks
-`frame() - paintframe > 10000`, so a counter that kept running from the
-*session's* start rather than the *saved game's* declared the ten minutes over
-the instant the save came back — the painting gone, on a save taken with it
-still in the crate
+`frame() - paintframe > 10000`, so a counter that runs from the *session's* start
+rather than the *saved game's* declares the ten minutes over the instant the save
+comes back — the painting gone, on a save taken with it still in the crate
 ([#221](https://github.com/dhobi/dreamrefactory/issues/221)). Measured across the
 corpus: the counter rises monotonically along each numbered series (disc 1:
 64 → 32469 → … → 346349) and no [frame stamp](#how-wide-is-the-value-32-bits)
@@ -247,12 +235,11 @@ in the globals ever exceeds its own save's.
 ## The actor container: fixed 160-byte actor records
 
 The actor container is a grid of **160-byte** records, and each one is **the live
-runtime struct dumped verbatim** — which is why the frame is the whole difficulty.
-It is tempting to read a record as beginning at its name, the way the prop grid
-does. It does not, and TI.EXE says so: `0x410d00` is the routine that fetches a
-record by name, and it computes the record with a stride of 160
-(`lea eax,[eax+eax*4]; shl eax,5`), string-compares against **`record+0x50`**, and
-then `rep movsd`s all 160 bytes to the caller.
+runtime struct dumped verbatim** — so the frame is the whole difficulty. A record
+does not begin at its name, unlike the prop grid, and TI.EXE says so: `0x410d00`
+is the routine that fetches a record by name, and it computes the record with a
+stride of 160 (`lea eax,[eax+eax*4]; shl eax,5`), string-compares against
+**`record+0x50`**, and then `rep movsd`s all 160 bytes to the caller.
 
 So the **name is at +0x50**: the five string fields are the record's *second* half
 and every numeric field sits before them. Each accessor then reads its own field out
@@ -267,7 +254,7 @@ of that copy, which is how the rest is mapped — the buffer is at `esp+8`, or
 | +18 | i16 | **placed flag** — 1 iff the record names a set (2258/2258 vs 0/1207): assigned a place at least once, and `putdownactor` hides without clearing it | the corpus |
 | +24 | i16 | `actordeg`, 0..255 | `0x40e850` |
 | +26 / +28 / +30 | i16 | `actorxyz` 1/2/3 — the SET's own X, Z, Y order | `0x40f285/97/a9` |
-| +32 | i16 | **`actorturn`** — degrees per service pass while turning. Exactly two values over the 3465 records: **16** (the engine's default at creation — every record naming no set, plus 51 placed ones) and **10** (`stdturn`, the other 2207 placed). Carried by the port since [#191](https://github.com/dhobi/dreamrefactory/issues/191); before that a load left it 0 and every restored character turned ten times too slowly | `0x410937` |
+| +32 | i16 | **`actorturn`** — degrees per service pass while turning. Exactly two values over the 3465 records: **16** (the engine's default at creation — every record naming no set, plus 51 placed ones) and **10** (`stdturn`, the other 2207 placed). Carried by the port since [#191](https://github.com/dhobi/dreamrefactory/issues/191); a load that leaves it 0 makes every restored character turn ten times too slowly | `0x410937` |
 | +34 | i16 | current **step** within the pose (the walk cycle's frame; < the count at +36 in 2959 of 3101) | the corpus |
 | +36 | i16 | **step count** of the current pose, cached (stand = 1, the gang's walk = 20 — matches the CST pose tables) | the CST files |
 | +38 | i16 | `actorspeed` | `0x40ead0` |
@@ -297,45 +284,42 @@ exactly, in 2105 (99.2%)**. The 17 that differ are Max mid-patrol on the boat de
 and one record parked on the `walktostar` sentinel, i.e. an actor genuinely not
 standing on his star. No other framing of these bytes produces that.
 
-`actorscale` at **+42** is the late addition, and it is confirmed three ways: the
-accessor (`0x40ea40` reads `[esp+0x32]` of a buffer at `esp+8`, i.e. record+42),
-the value distribution (a handful of round values per actor, 1000 neutral), and
-the per-character clustering — about one scale per room, which is what `stdscale`
-being a table of per-room constants predicts. It is the field that makes a
-restored character **drawable**: a record put back with scale 0 is placed
-correctly and gates every script correctly, and is never drawn. It also carries
-the two script overrides `stdscale(currentset())` cannot reproduce (`gang.cst`
-1323's stoker at 9000, `extra.cst` 0003's 2700), which is why the port now reads
-it from the record and writes it back rather than asking the cast — see
+`actorscale` at **+42** is confirmed three ways: the accessor (`0x40ea40` reads
+`[esp+0x32]` of a buffer at `esp+8`, i.e. record+42), the value distribution (a
+handful of round values per actor, 1000 neutral), and the per-character
+clustering — about one scale per room, which is what `stdscale` being a table of
+per-room constants predicts. It is the field that makes a restored character
+**drawable**: a record put back with scale 0 is placed correctly and gates every
+script correctly, and is never drawn. It also carries the two script overrides
+`stdscale(currentset())` cannot reproduce (`gang.cst` 1323's stoker at 9000,
+`extra.cst` 0003's 2700), which is why the port reads it from the record and
+writes it back rather than asking the cast — see
 [Saving & loading at runtime](../runtime/saves.md#loading-restore-the-engine-from-the-file).
 
-Two conclusions were drawn from the wrong frame and are worth recording as traps.
-`actorvalue` was read at name+152 — which is `(name+160)−8`, the same field one
-record along — so every character was restored with their **neighbour's**
-conversation count, and that count gates whether anyone ever walks up to you again;
-the plausible series 0→1→3→5→8→13→21 belongs to Penny, not Morrow (his is 0→2→3).
-And the numeric half, read from the name, lands in the *next* record's heap pointers,
-which is what made the positions look like uninterpretable junk. **Validate a binary
-frame by range, not by whether the values look plausible.**
+A wrong frame produces plausible-looking values, so **validate a binary frame by
+range, not by whether the values look plausible.** Reading `actorvalue` at
+name+152 — `(name+160)−8`, the same field one record along — gives every character
+their **neighbour's** conversation count (the series 0→1→3→5→8→13→21 is Penny's,
+not Morrow's, whose is 0→2→3), and that count gates whether anyone ever walks up
+to you again. Reading the numeric half from the name lands in the *next* record's
+heap pointers, so the positions look like junk.
 
 `actorowner` is the one-word memory each character keeps of the player, and it
 is a story gate, not decoration: the Purser's whole mission-2 errand is a ladder
 of his (`none → sendgram → sentgram → left1 → none2 → findcuff → foundcuff →
 left2`), Morrow's permission to enter the wireless room is `"enterwireless"`, and
-the chief engineer's turbine job is `actorowner("csea")`. The port did not save
-it at all until this was found, which cost more than it looks: a playthrough
-checkpoint taken at the wireless came back with the Purser at `"none"` — the
-telegram in your hand unexplained and his ladder reset — and it also produced a
-*wrong measurement*, that Morrow has to be re-persuaded after the mission
-rollover. He does not; the save had simply forgotten him. `resetpupvars()` zeroes
-the puppet's globals (`morrowphase`), not actor owners.
+the chief engineer's turbine job is `actorowner("csea")`. A save that drops it
+brings a wireless checkpoint back with the Purser at `"none"` — the telegram in
+your hand unexplained and his ladder reset — and makes Morrow appear to need
+re-persuading after the mission rollover. He does not. `resetpupvars()` zeroes the
+puppet's globals (`morrowphase`), not actor owners.
 
 Ground truth is the shipped save named for that exact moment: `1/12 - Sending
 Telegram for Jack Thayer.ti` holds `purs` at c2+3760 with `"sendgram"` 64 bytes
 later, plus `morrow → "enterwireless"`, `csea → "thanks1"`, `vlad → "help"`,
 `max → "yofrank"`.
 
-Finding the container is by grid, with one trap worth knowing: the **globals**
+Finding the container is by grid, with one pitfall: the **globals**
 container is an array of 32-byte nodes and 32 divides 160, so every fifth node
 sits one actor stride from the last and a pair of variable names 64 bytes apart
 decodes as a perfect name/owner record. Three shipped saves (ENDGAME2 09/12/13)
@@ -344,20 +328,18 @@ then write actor owners over variable names — so the globals container, its po
 and the prop container are excluded explicitly.
 
 The whole record is written and restored: the memory of the player (owner, value)
-and the placement half — including, since #143, the **crowd extras**. This page
-used to say they were not written *and could not be*, because a patch-write cannot
-grow a container. That is true of the globals blob, which declares its own storage,
-and it is **not** true here: the actor container has no self-declared capacity at
-all. TI.EXE's save writer dumps the live actor-list handle, and its loader
-(`0x4143d2`) duplicates the read container's handle straight back into the
-actor-list global — so the record count is **implicit in the container's size**, and
-one more 160-byte record on the end is one more actor. Which is exactly why the
-shipped saves disagree about how many there are: `setupgroup` makes the deck extras
-per room from `EXTRA.CST`, and the corpus runs from 25 records to 64, the named cast
-constant and the extras churning. Every one of the 109 does hold a record for all 25
-named characters, so those never want for a slot; a crowd record the base save lacks
-is now **appended**. That mattered as soon as the load stopped re-running the room:
-the file is the only witness left to a crowd nobody is going to remake. See
+and the placement half — including, since #143, the **crowd extras**. Unlike the
+globals blob, which declares its own storage, the actor container has no
+self-declared capacity at all, so it can grow. TI.EXE's save writer dumps the live
+actor-list handle, and its loader (`0x4143d2`) duplicates the read container's
+handle straight back into the actor-list global — so the record count is
+**implicit in the container's size**, and one more 160-byte record on the end is
+one more actor. That is also why the shipped saves disagree about how many there
+are: `setupgroup` makes the deck extras per room from `EXTRA.CST`, and the corpus
+runs from 25 records to 64, the named cast constant and the extras churning. Every
+one of the 109 holds a record for all 25 named characters, so those never want for
+a slot; a crowd record the base save lacks is **appended**. Since the load does
+not re-run the room, the file is the only record of the crowd. See
 [Saving & loading at runtime](../runtime/saves.md#the-actor-record) for what the load
 does with them.
 
@@ -385,7 +367,7 @@ Each node's fields sit at fixed offsets:
 | +0 | u32 | heap pointer (ignored) |
 | +4 | u32 | heap pointer (ignored) |
 | +8 | — | **name**: one length byte + characters, in a 12-byte buffer (trailing bytes are uninitialised) |
-| +20 | u32 | DFValue **vtable** — a raw code pointer, **not a constant**: `0x00431e0f` in all 109 shipped saves, `0x87c4596f` in a player's own (#179). It is still what the node grid is found by, but the value has to be read out of the file rather than matched against ours — see [Finding the grid](#finding-the-grid-the-vtable-is-a-pointer) |
+| +20 | u32 | DFValue **vtable** — a raw code pointer, **not a constant**: `0x00431e0f` in all 109 shipped saves, `0x87c4596f` in a player's own (#179). It is still what the node grid is found by, but the value has to be read out of the file rather than matched against a fixed one — see [Finding the grid](#finding-the-grid-the-vtable-is-a-pointer) |
 | +24 | u16 | **type tag** (2, 3 or 4) |
 | +26 | i32 | **value** (see [How wide is the value?](#how-wide-is-the-value-32-bits)) |
 | +30 | … | trailing padding |
@@ -398,32 +380,29 @@ name in node *k+1***. Reading the name and the value out of the same 32-byte
 window (the "obvious" pairing) silently mis-assigns *every* variable to its
 neighbour's value: it yields plausible-looking but wrong numbers (`neckphase=3`
 where the truth is `neckphase=5`, `mission=0` instead of `2`) and turns every
-string variable into apparent garbage. This mis-pairing is what previously led
-us to believe type-3 values were "unrecoverable heap pointers / atom ids" — they
-are not; see below. (Recovered by decompiling TI.EXE's `savegame` writer —
-container *N* = the live variables blob, container *N+1* = the pool handle
-stored at blob `+0x10` — and confirmed by same-session DosBox save pairs:
-after saving on the poop deck the shifted pairing reads `oldset="stair2c"`,
-`newset="poop"`; keyboard bindings decode as `keynorth="w"`, `keyeast="d"`,
-`keywest="a"`; `mainpath="titanic2:"`.)
+string variable into apparent garbage, making type-3 values look like
+unrecoverable heap pointers or atom ids — they are not; see below. (Recovered by
+decompiling TI.EXE's `savegame` writer — container *N* = the live variables blob,
+container *N+1* = the pool handle stored at blob `+0x10` — and confirmed by
+same-session DosBox save pairs: after saving on the poop deck the shifted pairing
+reads `oldset="stair2c"`, `newset="poop"`; keyboard bindings decode as
+`keynorth="w"`, `keyeast="d"`, `keywest="a"`; `mainpath="titanic2:"`.)
 
 ### Finding the grid: the vtable is a pointer
 
 The node array is located by the word at `+20`, because it is the one field
-whose value repeats across every node. What it is *not* is a format constant.
-It is the address of the DFValue vtable in the running engine, dumped along
-with the object, and it is only stable for as long as the engine is loaded at
-the same address.
+whose value repeats across every node. It is *not* a format constant: it is the
+address of the DFValue vtable in the running engine, dumped along with the
+object, and it is only stable for as long as the engine is loaded at the same
+address.
 
-All 109 shipped saves read `0x00431e0f`, which made that look like a fact about
-the format for a long time. A save Nicholas Mischler made in his own DosBox
-reads `0x87c4596f` — the same game, somewhere else in memory. Matching the
-corpus's byte pattern found nothing in it, so the reader decoded **zero**
-variables, and a load applied an empty map: the right room opened with the
-previous game's mission, phase and every other global still in place (#179 —
-Trask still showing you the clock, a shawl in your hand three missions before it
-exists). Nothing about that announces itself as a parse failure, which is why it
-was reported as a room bug.
+All 109 shipped saves read `0x00431e0f`. A save Nicholas Mischler made in his own
+DosBox reads `0x87c4596f` — the same game, somewhere else in memory. A reader that
+matches the corpus's byte pattern decodes **zero** variables from it, and a load
+applies an empty map: the right room opens with the previous game's mission,
+phase and every other global still in place (#179 — Trask still showing you the
+clock, a shawl in your hand three missions before it exists). Nothing about that
+looks like a parse failure; it looks like a room bug.
 
 So the grid is found by **agreement** instead: whatever address a session ran
 at, all of its nodes carry the same one, and the most common word at `+20`
@@ -433,15 +412,15 @@ vote. `nodeVtable` in `engine/src/df/savegame.ts`; the fixture and the regressio
 `taoot/tests/data/M4P0FCL.ti` and `taoot/tests/auto/save-original.ts`, the one save test
 that needs no copy of the rip.
 
-The **writer** reads the same value rather than stamping ours: a save the port
-writes patches the file that was loaded, so a record made for a new global goes
-into a grid that may be foreign. Stamped with the corpus's constant, that node
-is one neither reader ever finds again.
+The **writer** reads the same value rather than stamping a fixed one: a save the
+port writes patches the file that was loaded, so a record made for a new global
+goes into a grid that may be foreign. Stamped with the corpus's constant, that
+node is one neither reader ever finds again.
 
 Two quirks:
 
 - The **first** name in the list (`clock`) pairs one stride BACK, into the blob
-  header, whose bytes past the pool handle turn out to be its real DFValue —
+  header, whose bytes past the pool handle are its real DFValue —
   see `decodeVarSlots`, and the measurement in its comment (missions 0–3 read
   type 3 → "bedsit"; every mission-4 save reads type 4 → `hrs*100+min`, exactly
   what BOOTFILE's `calctime` writes there).
@@ -461,14 +440,13 @@ Each node's `+20..+27` is a serialized `DFValue`:
   and its number-taking ones exactly tag 4 (~30 `cmp …, 4` → error-14 sites).
   Feeding the wrong tag is the ignorable-but-endless DosBox dialog *"A
   scripting error has occured … [Bad argument type.]"* (interpreter error 14 =
-  string 1100+14). This page used to say "type 2 / type 4 → number", and the
-  merged reading survived every corpus measurement because both carry an
-  inline 16-bit value — it took loading a port-written save in the real
-  engine, and bisecting the resulting dialog down to exactly ten `02→04` tag
-  bytes, to split them. The port's writer therefore **preserves a tag-2
-  record's tag** while the value stays 0/1 (its interpreter carries booleans
-  as numbers, so the tag is the only witness), and lets a non-boolean value
-  retype the record the way an assignment in the original would.
+  string 1100+14). Corpus measurements alone cannot tell the two apart, since
+  both carry an inline 16-bit value; loading a port-written save in the real
+  engine and bisecting the dialog down to ten `02→04` tag bytes does. The port's
+  writer therefore **preserves a tag-2 record's tag** while the value stays 0/1
+  (its interpreter carries booleans as numbers, so the tag is the only witness),
+  and lets a non-boolean value retype the record the way an assignment in the
+  original would.
 - **type 4 → number**, stored inline as the signed i32 at `+26`.
 - **type 3 → string**: `+26` (unsigned) is the **byte offset of the string in
   the string-pool container** that follows the globals container. The pool is a
@@ -480,16 +458,16 @@ Each node's `+20..+27` is a serialized `DFValue`:
 
 ### How wide is the value? 32 bits
 
-A word was read here for a long time, and nothing in the game's own story state
-minds: a phase, a count, a clock reading and a pool offset all fit in 16 bits,
-and the boolean tag carries 0/1. What does not fit is the other thing a script
-can put in a variable — a **`frame()` reading**. The counter runs at 20 Hz, so it
-leaves 32767 behind after 27 minutes of play, and TAOOT stamps four globals with
-it: `paintframe`, `lastsail`, `jonesframe` and `secframe`.
+Nearly everything in the game's story state fits in 16 bits: a phase, a count, a
+clock reading and a pool offset, and the boolean tag carries 0/1. What does not
+fit is the other thing a script can put in a variable — a **`frame()` reading**.
+The counter runs at 20 Hz, so it leaves 32767 behind after 27 minutes of play,
+and TAOOT stamps four globals with it: `paintframe`, `lastsail`, `jonesframe` and
+`secframe`.
 
 The node has room for the full dword — the value field runs `+26..+30` inside a
 32-byte node, and TI.EXE's `frame` handler (`0x4273b0`) writes one:
-`mov ecx, [0x489efa]` / `mov [eax+2], ecx`. The corpus settles it. Across all
+`mov ecx, [0x489efa]` / `mov [eax+2], ecx`. The corpus agrees. Across all
 109 shipped saves the high word at `+28` is **0 in every string (3380 records)
 and every boolean (1015)**, and non-zero in exactly six numbers — every one of
 which reads as noise truncated to a word and as the obvious thing at full width:
@@ -505,11 +483,11 @@ which reads as noise truncated to a word and as the obvious thing at full width:
 
 and each of the frame stamps lands a few hundred to a few thousand frames below
 its own save's [frame counter](#the-frame-counter-c1-442), which is the
-relationship the game reads them for. Truncating `paintframe` is what stopped
-the cargo hold's ten-minute painting timer from surviving a save
+relationship the game reads them for. Truncating `paintframe` stops the cargo
+hold's ten-minute painting timer from surviving a save
 ([#221](https://github.com/dhobi/dreamrefactory/issues/221)).
 
-With the corrected pairing, save 20 ("Meeting Conkling in his suite") decodes
+With the correct pairing, save 20 ("Meeting Conkling in his suite") decodes
 completely and self-consistently: `mission=2`, `letterphase=3` (a plain number —
 satisfying the B59 knock's `letterphase = 2 | letterphase = 3`, so Conkling says
 *"Come in"* exactly as the original does), `neckphase=5`, `hrs/min/sec` =
@@ -552,19 +530,19 @@ count from the container's size.
   bytes free), but in 28 of the 109 saves a record holds a stale offset above the
   watermark, pointing at zeroed space that decodes as `""` (the blackjack
   down-cards, `saveeast`). Writing under one of those would turn that variable's
-  `""` into whatever landed there. (The first version of this appended past the
-  container's end instead — round-tripped perfectly here, and would not have
-  survived DosBox.)
+  `""` into whatever landed there. Appending past the container's end instead
+  round-trips in the port but would not survive DosBox.
 - **A global the base has no record for** gets one in a FREE node slot. A `.ti`
   carries the variable list that existed when it was taken and the engine creates
   a global on first assignment, so an early save simply has no record for a later
   one: `savedeck` and `hallside` are missing from exactly the four pre-boarding
   saves of the 109, and `shippedSaveTemplate` picks the first file in `save/1`,
-  which is one of them — 12 of the globals the engine holds by mission 2 could
-  not be written at all. Every shipped save has free slots (4 in that template,
-  26 in one of the boiler saves): the array is allocated at `capacity` and the
-  engine takes the next slot when a script assigns a new global, which is exactly
-  the gesture being reproduced, at the same stride, inside the same block.
+  which is one of them — without free-slot records, 12 of the globals the engine
+  holds by mission 2 could not be written at all. Every shipped save has free
+  slots (4 in that template, 26 in one of the boiler saves): the array is
+  allocated at `capacity` and the engine takes the next slot when a script
+  assigns a new global, which is exactly the gesture being reproduced, at the
+  same stride, inside the same block.
 
   The pairing quirk does the linking: the last named node's own DFValue belongs
   to nobody (dangling, and zero in every shipped save), so a name written one
@@ -573,24 +551,24 @@ count from the container's size.
   of the 109 — elsewhere it holds heap junk with an impossible type tag — and it is
   overwritten either way.)
 
-  The u16 at +0 is not touched, and the reason matters for whether any of this
-  works in the original engine: it **cannot** be the list's length, so the loader
-  cannot be walking it as a count, so a record in a free slot is read like any
-  other. `1/01` makes it look like a count (96, against 96 names); `1/12` reads 95
-  against 112 names, and the 17 past it are live game state — `boiler=20000`,
-  `condtemp=10`, `electricity=78`, `saveeast="d"`. A loader that stopped at 95
-  would lose the entire turbine plant.
+  The u16 at +0 is not touched, and this matters for whether any of this works in
+  the original engine: it **cannot** be the list's length, so the loader cannot be
+  walking it as a count, so a record in a free slot is read like any other. `1/01`
+  makes it look like a count (96, against 96 names); `1/12` reads 95 against 112
+  names, and the 17 past it are live game state — `boiler=20000`, `condtemp=10`,
+  `electricity=78`, `saveeast="d"`. A loader that stopped at 95 would lose the
+  entire turbine plant.
 
 Free slots and pool bytes are finite, so a patch can still leave something out.
 Which globals get the slots is ordered by what a load cannot recover any other
 way (`savedeck`, `hallside` first — they decide where you come back standing),
 and anything dropped is **reported** through `SavePatch.onDrop` rather than
-vanishing. `zeitclue` vanishing quietly once cost a mission.
+vanishing silently (a silently dropped `zeitclue` costs a mission).
 
 ### What is verified, and what is not
 
 Everything above is **measured** — but measured *here*, and against the 109
-shipped `.ti` files, never in DosBox. That distinction is the whole risk of
+shipped `.ti` files, not in DosBox. That distinction is the whole risk of
 writing saves at all, so here is the split.
 
 **From the shipped files** (written by the real engine), all 109 unless stated:
@@ -610,7 +588,7 @@ writing saves at all, so here is the split.
 - every `actorowner` fitting the 15-character field (the longest any script assigns
   is `readhackerclue`).
 
-**The one thing that needed more than shape** is whether the loader walks a
+**The one thing that needs more than shape** is whether the loader walks a
 *count*, which would make a record in a free slot invisible to it. It does not, and
 the files say so — [the u16 at +0 cannot be a
 length](#writing-must-not-lengthen-this-container).
@@ -623,39 +601,37 @@ node is written at the same stride, with the base's *own* vtable, in space real
 saves also leave. The one container that *is* grown, the actor grid, is grown because the
 disassembly says its count comes from its size (`0x4143d2`) — a claim about the
 loader, and so on this list rather than off it. The result *should*
-be indistinguishable from a save the original wrote, and "should" is doing work in
-that sentence until someone loads `out/checkpoints/m2gram.ti` in DosBox — walk to
-the wireless room after it and the Purser should still be expecting his telegram
-(`actorowner("purs") = "sendgram"`), with the staircase showing C deck. `opengame`
-is at `0x413860` and the load routine it calls at `0x414080`, which is where to
-pick up the disassembly if the file alone is not enough.
+be indistinguishable from a save the original wrote, pending a DosBox load of
+`out/checkpoints/m2gram.ti` — walk to the wireless room after it and the Purser
+should still be expecting his telegram (`actorowner("purs") = "sendgram"`), with
+the staircase showing C deck. `opengame` is at `0x413860` and the load routine it
+calls at `0x414080`, which is where to pick up the disassembly if the file alone
+is not enough.
 
-**Two route "facts" have been produced by save bugs**, which is the practical
-argument for fixing these before trusting a measurement taken after a load. A
-checkpoint that dropped actor owners produced "Morrow has to be re-persuaded after
-the mission rollover" — he does not, the save had forgotten him. And `zeitclue`
-vanishing quietly once cost a whole mission.
+**Save bugs produce false route "facts"**, so fix these before trusting a
+measurement taken after a load. A checkpoint that drops actor owners suggests
+"Morrow has to be re-persuaded after the mission rollover" (he does not), and a
+silently dropped `zeitclue` costs a whole mission.
 
 ### The location container that wasn't there
 
-This page used to describe a "location container": a clean Pascal-string stream of
-facing, road, coordinates and set names, read as a **stack of location snapshots**,
-with two loader fallbacks hanging off it (`hallside` from its last
-`"port"`/`"star"` token, `savedeck` from the hall set's deck letter). Decompiling
-the writer ended that: its fixed order emits no such container, and the heuristic
-that "found" one was locking onto the **string pool** — measured, in 109 of 109
-shipped saves — whose entries are the same facing/side/coordinate strings, in
-allocation order, because they are the string *globals'* values (`savestage1-3`
-and friends).
+There is no "location container" — no Pascal-string stream of facing, road,
+coordinates and set names forming a **stack of location snapshots**. The writer's
+fixed order emits no such container. A heuristic search for one locks onto the
+**string pool** instead — measured, in 109 of 109 shipped saves — whose entries
+are the same facing/side/coordinate strings, in allocation order, because they
+are the string *globals'* values (`savestage1-3` and friends).
 
-The fallbacks it fed also never fired. Exactly 4 shipped saves lack a decodable
-`hallside` record, all pre-boarding (bedsit1/c73), and none of their pools hold a
-side token, because no hallway had ever been entered — an unset `hallside` is what
-a fresh game has until the first hall assigns one. So `hallside` now decodes from
-its variable record alone (it still matters: halla's `keydown` guard is
+Nor are fallbacks derived from it needed (`hallside` from its last
+`"port"`/`"star"` token, `savedeck` from the hall set's deck letter). Exactly 4
+shipped saves lack a decodable `hallside` record, all pre-boarding (bedsit1/c73),
+and none of their pools hold a side token, because no hallway had ever been
+entered — an unset `hallside` is what a fresh game has until the first hall
+assigns one. So `hallside` decodes from its variable record alone (it still
+matters: halla's `keydown` guard is
 `if hallside != "star" & hallside != "port" error()`, which swallows **every** key
 on an invalid value), and `savedeck` keeps only the set-derived deck-letter
-fallback, which never depended on the phantom container.
+fallback.
 
 ## The inventory container: fixed 158-byte prop records
 
@@ -743,27 +719,17 @@ in the base is skipped: unlike
 is not grown, and the extras it would take — the props of a room's own shop, on top
 of the two boot shops' 72 — are furniture that room rebuilds anyway.
 `inventorySnapshot` offers every prop the engine has loaded, in the engine's own
-list order — the same rule as above, arrived at after a hand-kept list came up
-short twice (first the bag/pocketwatch/deck map, then `baby`; see
-[runtime/saves.md](../runtime/saves.md)).
+list order — the same rule as above; a hand-kept list misses props (the
+bag/pocketwatch/deck map, `baby`; see [runtime/saves.md](../runtime/saves.md)).
 
-**This used to be `view` and `owner` only, and the rationale is worth keeping as
-history.** The argument was that the game re-derives the rest per room —
-`setupsigns()` picks the destination sign from where you stand, `showinterface()`
-re-derives `propvisible` from the owner, `setuparrow()` recolours the nav arrow —
-so writing our value over the original engine's reading would replace a real
-measurement with a worse guess. Measured against four saves spanning the game, our
-`owner` agreed with the file for **72 of 72** props while the `view` disagreed for
-**6–8** (`navtoggle`, `subtoggle`, `invenctl`, `lid`, `invenhelp`, `door`, `signs`,
-`wiremsg`) — a real disagreement, and at the time the room was going to overwrite
-those fields anyway, so the base's value was the better one to keep.
-
-#143 removed the premise. The load no longer runs `showinterface`, `setupsigns` or
-`setuparrow` — it runs no room script at all — so **the file's values *are* the
-restore**, and a field left unwritten is a field the base save gets to decide. The
-port therefore writes every one of them, and the disagreement above is now the
-port's own state being written where the room used to have the last word. The one
-field still withheld is a **`view` the port has never set**: an untouched prop is
+Since #143 the load runs no room script — no `showinterface`, `setupsigns` or
+`setuparrow` — so **the file's values *are* the restore**, and a field left
+unwritten is a field the base save gets to decide. The port therefore writes every
+one of them. (Measured against four saves spanning the game, the port's `owner`
+agrees with the file for **72 of 72** props while the `view` disagrees for **6–8**
+— `navtoggle`, `subtoggle`, `invenctl`, `lid`, `invenhelp`, `door`, `signs`,
+`wiremsg` — fields those room scripts would otherwise re-derive.) The one field
+still withheld is a **`view` the port has never set**: an untouched prop is
 sitting in its file default and `""` is not a reading, so the base's stays.
 
 ## The scheduler containers: loops, crickets and walks
@@ -778,9 +744,9 @@ searched for by those sizes; they are the tail of the computed map, and
 uses the triple the other way round — as the check that the map landed where it
 should.
 
-There is **no separate "puppet container"**. The parked-conversation state this
-page used to list as an unknown is the walks table plus its per-walk payload —
-a character mid-`walkto` is the only "in-flight" thing the format carries.
+There is **no separate "puppet container"**. Parked-conversation state is the
+walks table plus its per-walk payload — a character mid-`walkto` is the only
+"in-flight" thing the format carries.
 
 ### The loop record — 42 bytes (`makeloop`, builder `0x442950`)
 
@@ -796,8 +762,9 @@ a character mid-`walkto` is the only "in-flight" thing the format carries.
 It decodes cleanly in 109 of 109: `actor ga → gaidle`, `actor purs →
 playcrickets`, `scene scene49 → smethknock` at `per = 278`, the stoker's dig
 loops, the extras' `extraidle` — every record a real script at a sane countdown.
-This table is what a load used to have to rebuild by re-running the arriving
-room's `openset`: the idles that make characters act, and the scene timers.
+This table holds the idles that make characters act and the scene timers, which
+a load would otherwise have to rebuild by re-running the arriving room's
+`openset`.
 
 ### The cricket record — 74 bytes (`makecricket`, builder `0x444130`)
 
@@ -825,11 +792,10 @@ a centred pan.
 
 ### The walk record's payload
 
-A walk record is the 110 bytes mapped before (+4 type, +0xa deg, +0xc/+0xe/+0x10
-xyz, +0x16 progress, +0x2e actor), with one field that had no meaning until the
-writer was read: **`+0x12` is a handle to the walk's waypoint path**, and only
-type-3 walks have one. Each active slot with a non-null handle appends **one
-payload container** after the walks table:
+A walk record is 110 bytes (+4 type, +0xa deg, +0xc/+0xe/+0x10 xyz, +0x16
+progress, +0x2e actor). **`+0x12` is a handle to the walk's waypoint path**, and
+only type-3 walks have one. Each active slot with a non-null handle appends
+**one payload container** after the walks table:
 
 | Offset | Type | Field |
 |-------:|------|-------|
@@ -848,8 +814,7 @@ backwards), legs and total recomputed to match. **The box is copied unchanged**,
 which is why the shipped payloads' boxes fit their authored polylines exactly —
 byte-identical at +12 with `deckbd`'s `ga.1→ga.2` and `scot3`'s `hack1→hack2` —
 and miss their own runtime points by the width of the snap. It reads as noise
-until the two files are put side by side; this page called it "the current
-segment" for as long as they weren't.
+unless compared with the set file's authored path.
 
 The container is the raw allocation, so a row or two of slack trails it. The
 loader (`0x4149bd`) `memcpy`s the walks table back and then, for each active
@@ -864,11 +829,11 @@ match: `1/20 - Meeting Conkling in his suite - B59` (36 bytes),
 mid-`walkto` across the boat deck, serialized.
 
 **The port resumes a walk from all of this** — see [Loading, step
-11](../runtime/saves.md). The record holds the origin, the deltas, the distance
+13](../runtime/saves.md#loading-restore-the-engine-from-the-file). The record holds the origin, the deltas, the distance
 and the progress, and a route holds its waypoints and its length here, so the
 walker sets off from where the save caught them with only what was left to run.
 Rebuilding the position from these fields lands on the actor record's own for
-every live slot in the corpus, which is what says they are read right.
+every live slot in the corpus, which confirms the reading.
 
 Two things to hold on to. The **type is which mover**, and only type 1 fills the
 record's movement words in: a type-0 turn has no mover, and a type-3 route keeps
@@ -879,19 +844,17 @@ through its pose's play script whether a walk is running or not, so a drop that
 left the walk pose alone leaves a character treadmilling.
 
 **The port writes one too** ([#191](https://github.com/dhobi/dreamrefactory/issues/191)).
-It used to zero the walks table instead, because a base slot left active would send
-the original's loader looking for a payload container belonging to the previous
-save's moment — correct for as long as we wrote nothing, and an asymmetry a player
-met the moment they saved mid-conversation-approach (`walktopuppet` is a walk, and
-it is how most characters reach you).
+A base slot left active would send the original's loader looking for a payload
+container belonging to the previous save's moment, so the walks table must be
+written consistently — and a save mid-conversation-approach has a live walk
+(`walktopuppet` is a walk, and it is how most characters reach you).
 
 What writing one takes, beyond filling the slot:
 
 - **The payload is appended**, one per type-3 slot, in slot order — the order being
   the only thing that matches a payload to its slot. This is the single field a save
   patch writes that does not fit a slot the base already has; every other one does.
-  The base's own payloads are dropped rather than left as tails, which is what the
-  zeroing was protecting against.
+  The base's own payloads are dropped rather than left as tails.
 - **`+0x12` is a flag, not a pointer to forge.** The shipped values are DOS heap
   addresses TI.EXE allocated (`0xa6b4b0`, `0xa6c1f0`, `0xa6d820`), and the loader
   stores its own handle back over the word, so any non-zero value does. The port
@@ -906,14 +869,12 @@ What writing one takes, beyond filling the slot:
   which queries the set's own registry, never a save's payload.
 
 All 16 live slots across the 12 shipped saves that have one are written back and read
-again unchanged — all three shapes. That is the strongest claim available without
-running the original: the expected bytes are the ones TI.EXE wrote. It is not the
-same as TI.EXE reading ours — **which DosBox has now said**: one save per shape,
-written by this writer mid-flight and opened in TI.EXE — `cash` mid-`walktostar` on
-the Grand Staircase, `ga` mid-`walkonpath` across the boat deck (the appended
-waypoint container, box and all — the shape the shipped-save writer's five DosBox
-fatals said to fear), `max` mid-`turntodeg` — and all three resumed and finished
-their walks in the original engine (#191).
+again unchanged — all three shapes. Beyond that round trip, DosBox confirms TI.EXE
+reads the port's output: one save per shape, written by this writer mid-flight and
+opened in TI.EXE — `cash` mid-`walktostar` on the Grand Staircase, `ga`
+mid-`walkonpath` across the boat deck (the appended waypoint container, box and
+all), `max` mid-`turntodeg` — and all three resume and finish their walks in the
+original engine (#191).
 
 ## The track containers: what was playing
 
@@ -951,8 +912,8 @@ room sounding like": a boat-deck save carries `Boat Deck` in both.
 ### An open bank is not a playing bank
 
 The descriptor list answers a *different* question from the playing/looping
-arrays, and reading only the second one was
-[#199](https://github.com/dhobi/dreamrefactory/issues/199). A bank can be open with
+arrays, and a load must read both
+([#199](https://github.com/dhobi/dreamrefactory/issues/199)). A bank can be open with
 all three of its arrays empty and still be the bank a restored `makeloop` or
 `makecricket` reaches into: BOOTFILE's `playcrickets` opens `insddest.sfx` once
 when mission 4 starts, then picks a random one-shot out of it every few seconds,
@@ -965,8 +926,8 @@ bank alone. All 50 resolve from the banks the descriptor list names.
 
 It does not heal by walking, either. `setupsound` only calls `setupcrickets()`
 when `crickettype(currentset())` changes, and lnghall, lounge1c and smoke are all
-`"insd"` — so a load that skipped the bank spent the rest of the game logging
-`sound not found: ` with an **empty name** (`countsounds` 0 → `indextosound` "").
+`"insd"` — so a load that skips the bank logs `sound not found: ` with an **empty
+name** (`countsounds` 0 → `indextosound` "") for the rest of the game.
 
 **`savetheme` is not the playing theme.** The script global of that name records
 the theme to restore *after* an interlude, and measured against all 109 shipped
@@ -976,14 +937,13 @@ shipped save. That is the value a load restores.
 
 ### The playing/looping lists mirror the bank, record for record
 
-The two live lists are **not free-form**, and this page learning that cost a
-DosBox fatal. Measured across all 109 shipped saves (111 live tracks, 2583
-records, no exceptions): the playing list is **one record per loop-table record
-of the bank, in table order**, and the looping list is **one record per entry of
-the bank's play order**, each a copy of the playing record the order entry names.
-`idx` is the chunk's container location, `+2` is 0, pan is 128, and the name is
-the chunk identifier — the shipped cargo-hold save carries `01 main`…`11 end`,
-idx 2–12, counts `0, 11, 11`.
+The two live lists are **not free-form**. Measured across all 109 shipped saves
+(111 live tracks, 2583 records, no exceptions): the playing list is **one record
+per loop-table record of the bank, in table order**, and the looping list is
+**one record per entry of the bank's play order**, each a copy of the playing
+record the order entry names. `idx` is the chunk's container location, `+2` is 0,
+pan is 128, and the name is the chunk identifier — the shipped cargo-hold save
+carries `01 main`…`11 end`, idx 2–12, counts `0, 11, 11`.
 
 The reason is the loader's other half. `opengame`'s post-restore resume
 (`0x414a70`) pairs playing record *n* with the **bank's own loop-table record
@@ -992,14 +952,14 @@ the looping list by copying `playing[order[n] − 1]` for every entry of the
 bank's play order, **bounded by the bank's chunk count** (the u16 at
 `loop table + 0x10a`), not by the save's counts. The arrays were allocated from
 the descriptor counts at `+6`/`+8`, so a playing list shorter than the bank's
-tables is an out-of-bounds read *and* write on 104-byte-stride heap blocks. The
-port's writer once put a single invented record (`idx=1, name="cargo"`) there;
-TI.EXE allocated 104 bytes per list, copied eleven records through both, and
-the smashed heap surfaced as **"Memory error at line 301 (code 2): Unknown
-compression format"** — the codec-table lookup at `0x401539` (raise `0x435160`,
-error 999) reading a clobbered sound header. The port loaded the same file
-happily, which is exactly why [what is verified](#what-is-verified-and-what-is-not)
-insists a save has to load in the original engine, not only here.
+tables is an out-of-bounds read *and* write on 104-byte-stride heap blocks. A
+single invented record there (`idx=1, name="cargo"`) makes TI.EXE allocate 104
+bytes per list and copy eleven records through both, and the smashed heap
+surfaces as **"Memory error at line 301 (code 2): Unknown compression format"** —
+the codec-table lookup at `0x401539` (raise `0x435160`, error 999) reading a
+clobbered sound header. The port loads the same file happily, which is why
+[what is verified](#what-is-verified-and-what-is-not) insists a save has to load
+in the original engine, not only here.
 
 So `applyPatch` writes the lists from the bank itself: `SavePatch.theme` carries
 the loop records (container location + identifier) and the play order, supplied
@@ -1019,18 +979,14 @@ room loads silent.
 **It restores the engine from the file, and runs no room script at all.** That is
 what the original does — `opengame` (`0x413860` → the restore at `0x414080`)
 rebuilds the room through the engine's own set machinery and never reaches the
-script runners — and since #143 it is what this port does too. The port used to
-put the room back by *arriving* in it: restore the globals, then travel to the
-saved set/scene/view through `initall` (`changeset` + `initactors` + `initprops`)
-and let the normal `openset`/`openscene` scripts rebuild the loops, props, crickets
-and music at the restored mission/phase. That worked because the loader deliberately
-*didn't* restore the fields those scripts recompute; the two halves were one
-decision, and reading the remaining containers is what allowed both to be dropped.
-The history — and the bug that forced the question, a conversation opening *inside*
-a load ([#125](https://github.com/dhobi/dreamrefactory/issues/125)) — is in
+script runners — and since #143 it is what this port does too. The alternative,
+arriving in the room through `initall` (`changeset` + `initactors` + `initprops`)
+and letting the `openset`/`openscene` scripts rebuild state, is described with
+the bug that ruled it out — a conversation opening *inside* a load
+([#125](https://github.com/dhobi/dreamrefactory/issues/125)) — in
 [Saving & loading at runtime](../runtime/saves.md#a-load-is-not-an-arrival).
 
-What a load now takes out of the file:
+What a load takes out of the file:
 
 - the **globals**, numbers and strings, plus the `hallside`/`savedeck` fallbacks;
 - the **open cast files** (container 3), reopened before any record is applied —
@@ -1048,8 +1004,10 @@ What a load now takes out of the file:
   [an open bank is not a playing bank](#an-open-bank-is-not-a-playing-bank);
 - the **loop and cricket tables**, mid-count, straight into the scheduler;
 - the **theme**, from the track state rather than from `savetheme` or a re-score;
-- **walks are dropped**, with a log line naming the character (the actor's restored
-  position stands and their restored idle re-decides).
+- the **walks table**, resumed mid-stride — turns, straight lines and waypoint
+  routes alike (see [the walk record's payload](#the-walk-records-payload)); a walk
+  that cannot be put back is dropped with a log line naming the character, who is
+  stood up out of the walk pose at their restored position.
 
 The set/scene/view is then opened through the engine's set machinery with the whole
 lifecycle muted — no `closeset` on the way out, no `openset`/`openscene` on the way
@@ -1065,8 +1023,8 @@ host-supplied per-disk template) with the current globals, the set/scene/view **
 the set file's manifest path + register refs** (see
 [the loader re-opens the room from the manifest](#the-loader-re-opens-the-room-from-the-manifest-not-from-the-set-name)),
 every loaded prop's full record, every actor's full record — **appending** one for a
-crowd extra the base save lacks — the scheduler's loop and cricket tables (walks
-zeroed), and the playing theme
+crowd extra the base save lacks — the scheduler's loop, cricket and walk tables (a
+`walkonpath` appending its waypoint container), and the playing theme
 ([one record per loop chunk of the bank](#the-playing-looping-lists-mirror-the-bank-record-for-record)).
 Everything the loader ignores stays byte-for-byte as the base had it.
 

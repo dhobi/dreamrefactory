@@ -333,6 +333,10 @@ export async function openIfRefused(
    * there is no room behind that number in the game. Penny's on F deck and
    * Shay's below are the same. Opening one shows a doorway and a wall.
    *
+   * The second is a door with no doorway on this side: every doorway's
+   * `hallside`/`savedeck` condition fails, so {@link pickDoorway} answers null
+   * (B-62 from the port side is one).
+   *
    * The 1st Class Lounge is not one of them, though it looks like one: its step
    * exists and reaches `lounge1c`, and what refuses it is the corridor's own
    * guard above the door. That is a door with a room behind it, so it opens —

@@ -49,14 +49,11 @@ repository. Two flats, and the picture each one draws is nearly all of it:
 
 Container 0 names it, at **+44** on a v4 `.stg` and **+32** on a v1 `.flt` — right
 after the screen size, which sits at `0x28`/`0x1c` for the same reason (v1's header
-runs 12 bytes earlier, and its palette 20). The port did not read it at all until
-#325: it had `MAIN_SCRIPT_LOCATION = 1`, "by convention", and the runtime
-hardcoded `containers[1]` without even using that constant. SET names its main
-script and SHP names its own, so STG having no field was the gap in the port
-rather than in the format.
+runs 12 bytes earlier, and its palette 20). SET and SHP name their main scripts
+the same way (#325).
 
-The corpus cannot settle it — container 1 IS the main script in all 388 shipped
-`.stg`/`.flt` — so both engines were read instead. TI.EXE's stage parser
+The corpus alone cannot show this — container 1 IS the main script in all 388
+shipped `.stg`/`.flt` — so it is read from both engines. TI.EXE's stage parser
 `0x4451b0`:
 
 ```
@@ -76,13 +73,12 @@ checks it makes either side of it:
 0x40113e: add  ebx, 0x824          ; = c0 + 2084, the stage name
 ```
 
-Which turned up the v1 **stage name** as well. This page and the reader both said
-a `.flt` had none, because reading it at v4's 2104 lands on the first flat record
-and comes back with two NULs. It is 20 bytes earlier, all 20 of Dust's carry a
-real one, and six do not match their filename — `CREDITS.FLT` is `"cred.flt"`,
+That also locates the v1 **stage name**: 20 bytes earlier than v4's 2104 (reading
+at 2104 lands on the first flat record and returns two NULs). All 20 of Dust's
+`.flt` files carry a real one, and six do not match their filename — `CREDITS.FLT` is `"cred.flt"`,
 `INVEN/HIST.FLT` is `"DBhist.flt"`, `SALGAMES.FLT` is `"cardflats"`,
 `UNDER/SNAKE.FLT` is `"puzzle"`, `NEW.FLT` is `"new"`. Three of Dust's own
-`currentstage()` tests ask for those names, so three branches were unreachable:
+`currentstage()` tests ask for those names, and are unreachable without them:
 `HOUSE.PRP`'s avatar forwards a click to the flat's `handleit()` on `"scorp"` and
 `"yunnibox"`, and `NEW.FLT` arms its cash-update loop on `"new"`.
 
@@ -134,8 +130,7 @@ subtleties; see **[the click order](../runtime/stage-ui.md#who-gets-the-click-th
 
 ## Writing a stage
 
-Reading a format well enough is one claim; writing one the engine cannot tell from
-a shipped file is a stronger one. Every format here has a builder now
+Every format here has a builder
 ([the write path](README.md#writing-one-back)); a stage needs two of them:
 
 - **[`engine/src/df/stg-build.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/stg-build.ts)**
@@ -166,8 +161,7 @@ CyberFlix stage. What it does with the choice, and why a script global rather th
 a builtin, is in **[Languages & the chooser](../../taoot/languages.md)**.
 
 The same builder makes the fixture the stage editor's tests are checked against,
-which is the point: read → edit → write is verified against a file the library
-itself produced.
+so read → edit → write is verified against a file the library itself produced.
 
 ## The same file in Dust — `.FLT`
 
@@ -186,9 +180,9 @@ size — which is what it is, 512×384, for every flat on the disc.
 ## Not just UI — mini-games too
 
 Mini-game boards live in STG files as well. The blackjack game's real
-`winner()` logic, for example, runs out of the original `BLKJACK.STG` script —
-which is how the interpreter was first validated (8/8 rule checks against the
-shipped binary).
+`winner()` logic, for example, runs out of the original `BLKJACK.STG` script,
+which also serves as an interpreter check (8/8 rule checks against the shipped
+binary).
 
 ## Related tools
 

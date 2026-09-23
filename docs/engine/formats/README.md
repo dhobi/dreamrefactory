@@ -62,16 +62,13 @@ reads a big-endian double.
 
 #### …unless the disc is Skull Cracker's, and then every integer flips too
 
-That split describes every disc anyone had looked at for a long time.
 *Skull Cracker* (1996) is the same formats with their integers **big-endian** as
-well — so on that disc the rule is simply "everything is big-endian", and the odd
-split above turns out to be the *converted* form rather than the original one.
-Something byte-swapped the integers on the way across and left the floats alone.
+well — on that disc everything is big-endian, and the split above is the
+*converted* form rather than the original one: something byte-swapped the
+integers on the way across and left the floats alone.
 
-**It is a property of the title, not of the platform**, and it is worth being
-careful about because the obvious shorthand is wrong. Skull Cracker's disc is a
-Macintosh one, which makes "Mac discs are big-endian" an inviting guess — but
-Titanic's Dutch release is a hybrid disc whose `INSTALL_MAC/` holds a PowerPC
+**It is a property of the title, not of the platform.** Skull Cracker's disc is a
+Macintosh one, but "Mac discs are big-endian" is wrong: Titanic's Dutch release is a hybrid disc whose `INSTALL_MAC/` holds a PowerPC
 executable beside a `bootfile`, a `Local/` and a `Tour/`, and every one of those
 data files is little-endian. Titanic's Mac build ran on converted data. So the
 order is asked, never assumed.
@@ -79,9 +76,8 @@ order is asked, never assumed.
 Nothing above the container reader is told which is which:
 [`byte-order.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/byte-order.ts)
 asks the file. The header's size field holds the file's own length, so exactly one
-of the two readings equals the bytes in hand — and little-endian is tried first
-and wins ties, so no disc that read correctly before can be re-read as something
-else. `readContainerFile` records the answer on the file and every reader
+of the two readings equals the bytes in hand. Little-endian is tried first and
+wins ties, so a little-endian file is never misread as big-endian. `readContainerFile` records the answer on the file and every reader
 downstream inherits it.
 
 Three details worth knowing if you go looking:
@@ -89,15 +85,15 @@ Three details worth knowing if you go looking:
 - The **version tag moves**. It is an i32 at container 0 +0x02 on a PC file and a
   u16 at +0x00 on a Mac one — the only field in the whole suite that does this.
   Ask `versionOf()` rather than reading the offset.
-- Several fields are **32 bits wide** where this port used to read 16. Harmless on
-  a little-endian file (you get the low half, and the high half is zero); on a
+- Several fields are **32 bits wide**. Reading only 16 is harmless on a
+  little-endian file (you get the low half, and the high half is zero); on a
   big-endian one you get the empty half, and a bank quietly reports no music.
 - The **two reserved palette entries are the host platform's**. Windows reserves
   black at 0 and white at 255, so a PC rip is corrected to those; the palette as
   *stored* is the Macintosh pair (white at 0, black at 255) in every rip, and a
   Mac rip needs no correction at all.
 
-See **[Skull Cracker](../../skullcracker/)** for how that was worked out.
+See **[Skull Cracker](../../skullcracker/)** for the evidence.
 
 ### Pascal strings — length first, no terminator
 
@@ -120,7 +116,7 @@ padding.
 Everything up to byte 1024 is header/padding; the real index starts there.
 
 > **About these maps.** Every byte layout in this section is switchable:
-> **Table view** is the offset table these docs have always had, **Block view**
+> **Table view** is the offset table, **Block view**
 > is the same regions drawn to scale from byte 0 at the top left, and hovering a
 > block says what it is for. On a whole-file map, hovering also **rings every
 > container the hovered one points at** — the pointer itself is four bytes inside
@@ -198,11 +194,9 @@ file in the game and none of them is obvious from a table:
 
 ## Writing one back
 
-Every format doc here describes a reader, and for a long time that was all there
-was: the browser [editors](../../editors/README.md) *patched* fields inside a file
-you gave them, and could not have produced a DF file from nothing.
-
-They can now. Beside each `engine/src/df/<fmt>.ts` reader sits a
+Every format doc here describes a reader, and the library also writes. The
+browser [editors](../../editors/README.md) can patch fields inside a file you give
+them or produce a DF file from nothing. Beside each `engine/src/df/<fmt>.ts` reader sits a
 `engine/src/df/<fmt>-build.ts` writer — SET, SHP, STG, PUP, CST, MOV and the audio banks
 — over one shared piece of scaffolding,
 [`build.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/build.ts): a
@@ -231,10 +225,9 @@ which lexes source text into the token stream `encodeScript` writes
 
 Two things fall out of having a writer:
 
-- **The editors' tests got stronger.** Their fixtures used to be hand-laid byte
-  arrays inside the test file, which only ever proved an edit worked on bytes the
-  test itself chose. They are now built by the library, so read → edit → write is
-  checked against a file the write path produced — and the fixtures say what they
+- **The editors' test fixtures are built by the library** rather than hand-laid
+  as byte arrays, so read → edit → write is checked against a file the write path
+  produced rather than bytes the test itself chose — and the fixtures say what they
   mean (`{ identifier: "closeclosed", frames: swing, order: [3, 2, 1] }` instead of
   `i16(d, 46 + i * 2, o)`).
 - **Authoring is possible at all.** `public/lang.stg`, the language chooser, is a

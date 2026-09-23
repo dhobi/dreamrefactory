@@ -639,10 +639,9 @@ export interface Bolt {
  *
  * So two of the three are ordinary damage and the flame is a code — and -9 is
  * the one code that is not in the player's table at all (it falls below
- * `0x448c84`'s range test). What reads it is five handlers of their own:
- * `0x44f0aa`, `0x4520d8`, `0x4547b3`, `0x4550d3` and `0x455763`, which accept
- * nothing else. Like the blaster, the flamethrower is a key rather than a
- * weapon.
+ * `0x448c84`'s range test). What reads it is a −9 arm in the victim's own hit
+ * handler — eleven of them; see `docs/skullcracker/combat.md`. Like the
+ * blaster, the flamethrower is a key rather than a weapon.
  *
  * And they are not free: `0x45ef00` takes rounds off the current weapon, one a
  * frame for the flamer and the soaker — a full 160 is about eleven seconds of

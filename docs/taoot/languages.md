@@ -15,9 +15,9 @@ gamefiles/en/titanic1/…   gamefiles/en/titanic2/…   gamefiles/en/save/…
 gamefiles/de/titanic1/…   gamefiles/de/titanic2/…   gamefiles/de/save/…
 ```
 
-The original had nothing to decide — you installed one language and that was the
-game. **The chooser is this port's own addition**, and it is deliberately built
-so that nothing in the engine knows about it: no new opcode, no new builtin, no
+The original had nothing to decide — one language was installed and that was the
+game. **The chooser is this port's own addition**, built so that nothing in the
+engine knows about it: no new opcode, no new builtin, no
 special case in the interpreter. What it *is* is an authored DreamFactory stage.
 
 ## Editions, not languages
@@ -25,8 +25,7 @@ special case in the interpreter. What it *is* is an authored DreamFactory stage.
 A tree under `gamefiles/` is an **edition**: one pressing of the game. Six of them
 are the six localisations, and an edition need not be a translation of anything —
 `gamefiles/demo/` is the 1996 demo, the same shape of tree with different content
-in it. "Language" was the wrong name for this axis as soon as that was true, and
-the name it has now is what the code says: `?edition=`, `taoot.edition`,
+in it. The code therefore calls the axis the edition: `?edition=`, `taoot.edition`,
 `FileStore.setEdition`, `taoot/src/editions.ts`.
 
 ## Two selectors on one basename
@@ -47,17 +46,16 @@ Both resolve the same way — an active selection, then a documented fallback:
   edition code: a flat single-edition dump (the layout the tools were first
   written against), and this port's own authored assets. `lang.stg` is neutral of
   necessity — it has to load before there is an edition to load it from. Matching
-  against the known codes is also what lets `demo/` be an edition at all: while
-  the rule was "any two-letter directory", a tree named `demo` read as neutral and
-  would have had its files offered under every edition at once.
+  against the known codes is also what lets `demo/` be an edition at all: under a
+  rule of "any two-letter directory", a tree named `demo` would read as neutral and
+  have its files offered under every edition at once.
 
 Switching edition drops every cached file that came from an edition tree, and
 keeps the neutral ones. Node-side, the same decision is one function:
 `TAOOT_LANG`, else `en` when that directory exists, else walk the tree whole
 (`taoot/tools/gamefiles.ts`) — it takes a directory name, so `TAOOT_LANG=demo` selects
-the demo. Before the axis existed, an unset `TAOOT_LANG` merged *all* editions
-into one basename map and picked a winner per name — a route could read German
-scenery for one room and English for the next.
+the demo. It never merges editions into one basename map, so a route cannot read
+German scenery for one room and English for the next.
 
 ## The code page is not in the data
 
@@ -69,7 +67,7 @@ one character is right for identifiers — prop names, idents, file names, all A
 German and `§` if you assume Latin-1, and a Japanese line is not single-byte at
 all.
 
-Nothing was found to read the answer out of. The container and dialogue-record
+No file records it. The container and dialogue-record
 headers are byte-identical across all six trees apart from offsets and sizes;
 there is no charset field and no font name. The original did it the 1996 way —
 `TI.EXE` calls `CreateFontA(…, iCharSet = DEFAULT_CHARSET, …)` and `TextOutA`, and
@@ -78,7 +76,7 @@ Windows was running. The one visible trace of a localiser's decision is the font
 **face**: every build asks for "Arial" except the Japanese one, which is a separate
 binary asking for "mspgothic". A hint, not a declaration, and only for Japanese.
 
-So the tree is the only thing left to ask, and the table lives next to the
+So the encoding is a per-tree table, kept next to the
 languages themselves (`taoot/src/languages.ts`). Measured over all **52 puppet files per
 tree**:
 
@@ -100,13 +98,13 @@ deliberately not a fourth — the PUP dialogue field, and the two opcodes whose
 argument is human text (`puppetbevel`, `drawstring`). Script **string pools keep
 their bytes**, so a disassembly still round-trips. The session asks the file source
 for the live language (`session.textEncoding()`) rather than being handed a value,
-so a switch cannot leave it decoding the tree it used to be reading. All three
+so a switch cannot leave it decoding the tree it was reading before. All three
 encodings agree with ASCII below `0x80`, which is what lets every identifier go on
 being read a byte at a time.
 
-**Line breaking had the matching assumption.** Splitting on `" "` gave a Japanese
-subtitle one unbreakable 40-character word, which ran off both ends of the
-subtitle band. `wrapText`
+**Line breaking cannot assume spaces.** Split on `" "`, a Japanese subtitle is
+one unbreakable 40-character word that runs off both ends of the subtitle band.
+`wrapText`
 ([`engine/src/web/fonts.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/fonts.ts))
 breaks between CJK characters as well as at spaces, and refuses to start a line
 with closing punctuation (`。`, `？`, the small kana, the closing brackets) —
@@ -151,18 +149,17 @@ interpreter through the engine's ordinary stage click routing. The keyboard
 shortcuts are the `choose` flat's own `keydown` handler (a `switch` over "1".."6"),
 because a stage's keys go to its current flat when it has one.
 
-Setting a global rather than calling something is the crux: **there is no builtin
+The script sets a global rather than calling something because **there is no builtin
 for "pick a language"**, and inventing an opcode the 1996 engine never had would
 make the file unopenable by anything but this port. So the script states the
 choice and the host reads it back — `LangChooser.chosen()` in
 [`taoot/src/lang-chooser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/lang-chooser.ts).
 
-Closing the chooser then **deletes** that global, which is not tidiness:
-`snapshotSave` writes every script global into the `.ti`, and a base save has only
-a handful of free variable slots and a finite string pool
-([saving & loading](../engine/runtime/saves.md)) — the route has already had globals dropped for want
-of one. A language choice belongs to the page, so it must not compete for that
-space.
+Closing the chooser then **deletes** that global: `snapshotSave` writes every
+script global into the `.ti`, and a base save has only a handful of free variable
+slots and a finite string pool ([saving & loading](../engine/runtime/saves.md)) —
+the route already has globals dropped for want of one. A language choice belongs
+to the page, so it must not compete for that space.
 
 ## What the host has to lend it
 
@@ -178,9 +175,9 @@ nothing in it at all:
 - **no theme, no props, no cast**.
 
 `openStageFile`, `stageClickAt`, `flatImage` and `keydownTarget` are all willing
-to work in that state, which is what makes the whole approach possible. The page
-supplies a small draw loop (`LangChooser.render`) and forwards pointer and key
-events; that is the entire host side.
+to work in that state. The page supplies a small draw loop
+(`LangChooser.render`) and forwards pointer and key events; that is the entire
+host side.
 
 ## Languages you don't have
 
@@ -264,8 +261,7 @@ storage key:
 
 Neither writes the other's key. The page's language resolves as `?lang=`, then
 `taoot.lang`, then the browser's own preference, then English (`?uilang=` and
-`taoot.uilang` are still read: they are what this parameter was called for the few
-weeks the two axes were one). The edition resolves as `?edition=`, then
+`taoot.uilang`, older names for this parameter, are also read). The edition resolves as `?edition=`, then
 `taoot.edition`, then — and this is the one place they touch — **the reader's UI
 language, where that edition exists**. That default is what keeps two controls
 from reading as two chores: a German reader gets the German game without being
@@ -315,7 +311,7 @@ choices are visible in one place per language (`<code>/editors.json`), which is
 where to start if a term reads wrong.
 
 Japanese needed two things beyond the words. The display face is Georgia, which
-carries no CJK at all, so both stacks in `site/src/theme.css` now end in the same
+carries no CJK at all, so both stacks in `site/src/theme.css` end in the same
 families [`engine/src/web/fonts.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/fonts.ts)
 hands the canvas — page and game text agree on a face instead of each falling
 through to a different generic. And the sheet's tracking, which is what makes a
@@ -330,22 +326,19 @@ game data needed) and were watched end to end in a real browser — but against 
 **synthetic** second language tree, so what those runs prove is *which files get
 asked for*.
 
-The **data** is a different matter now: real trees for all six languages have been
-read by this port's own code, which is where the encoding table and the mixed
-sample rates came from. That is 52 puppet files and every loop chunk per tree, not
-a boot. What has still not happened is **playing** a localised pressing: nobody has
-booted the game in German, French, Russian, Dutch or Japanese and walked around in
-it. Four specific things a real second pressing could break, none of which the
+The **data** has been read: real trees for all six languages, by this port's own
+code, which is the source of the encoding table and the mixed sample rates. That is
+52 puppet files and every loop chunk per tree, not a boot. A localised pressing has
+not been **played**: nobody has booted the game in German, French, Russian, Dutch
+or Japanese and walked around in it. Four specific things a real second pressing could break, none of which the
 synthetic tree exercises: the localised discs might not use the same **basenames**
 (the lookup is case-insensitive and per-disc, so `BEDSIT1.SET` vs `bedsit1.set` is
 handled, but a renamed room file would miss); `save/` might not be called `save/`,
-in which case nothing seeds and the save browser is empty, which looks like a bug
-and isn't; a tree missing `LOCAL/BOOTFILE` fails at the cold boot rather than at the
+in which case nothing seeds and the save browser is empty (not a bug); a tree missing `LOCAL/BOOTFILE` fails at the cold boot rather than at the
 chooser, so the error points at the wrong place; and voice/subtitle pacing differs
 per language. `npm run test:browser:lang -w taoot` settles the first three and needs two or
 more real trees — it skips with a reason when the install has only one.
-Voice and subtitle *pacing* is no longer only-English by assumption — a
-missing-audio line is paced by its stored byte count for exactly that reason — but
-it has not been watched in another language either.
+A missing-audio line is paced by its stored byte count so that *pacing* does not
+assume English, but it has not been watched in another language either.
 
 Next: the people — **[Characters at runtime](../engine/runtime/characters.md)**.

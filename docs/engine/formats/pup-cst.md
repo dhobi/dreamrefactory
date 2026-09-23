@@ -54,11 +54,10 @@ use the [SHP transparent codec](shp.md)):
 | Container 3 | **stance register**: up to 64 × i32 @ `22`, each pointing at a stance container |
 
 Containers 2 and 3 are **not named by the header, and neither engine names them
-either** — that is the answer rather than a gap. #325 listed the two literals as
-suspect on the good ground that container 0 does carry container refs (the answer
-band, and each dialogue line's audio/animLogic pair), so a header with refs in it
-having hardcoded neighbours is worth a look. Both engines' puppet openers push the
-container numbers as immediates, one call each, into four globals:
+either**, although container 0 does carry other container refs (the answer band,
+and each dialogue line's audio/animLogic pair; see #325). Both engines' puppet
+openers push the container numbers as immediates, one call each, into four
+globals:
 
 ```
 TI.EXE 0x43ef30            DF.EXE 0x435910
@@ -68,19 +67,17 @@ TI.EXE 0x43ef30            DF.EXE 0x435910
   push 3; ... 0x489ff4       push 3; ... 0x460bea
 ```
 
-So the port's literals are the engine's own, and DF.EXE walking its container 3
-with the 262-byte layer stride directly (`shl ecx,6; add ecx,eax; lea ebx,[eax+ecx*2]`
-at `0x4359f7`) is a second reading of "a DreamFactory 1 puppet has exactly one
-stance and container 3 IS it" — the first was the corpus.
+So the port's literals are the engine's own. DF.EXE walks its container 3 with
+the 262-byte layer stride directly (`shl ecx,6; add ecx,eax; lea ebx,[eax+ecx*2]`
+at `0x4359f7`): a DreamFactory 1 puppet has exactly one stance and container 3 IS
+it, which the corpus shows too.
 
-Two things the audit did change here. A `.pup` is read with **the byte order the
-file declares**, not always little-endian: the German
-`titanic1/PUPPETS2/bsea2.pup` is a Macintosh build that got into a Windows rip, and
-`readContainerFile` had been honouring that while `readPupFile` read every field the
-other way round — its dialogue count came out 16896 instead of 66 (`0x0042`
-reversed), the record walk ran off container 0, and Ben-Sea did not load at all in
-that edition. And both table counts are now **clamped to the container that holds
-them**: the same file says 512 scripts in a 104-byte container, room for two.
+A `.pup` is read with **the byte order the file declares**, not always
+little-endian: the German `titanic1/PUPPETS2/bsea2.pup` is a Macintosh build that
+got into a Windows rip. Read little-endian, its dialogue count comes out 16896
+instead of 66 (`0x0042` reversed) and the record walk runs off container 0. Both
+table counts are also **clamped to the container that holds them**: the same file
+says 512 scripts in a 104-byte container, room for two.
 
 `BLKJACK1.PUP` laid out — a puppet is mostly *voice*, and the faces are the small
 part. Hover the header container to see the fan-out: the stances, the scripts,
@@ -153,10 +150,9 @@ That matters most where two people share one close-up — `WILZEIT1.PUP`,
 same eleven slots for whichever character is talking: in `WILZEIT1` stances 0/1
 put the moving `jaw` on the left face (home anchor x=171) and hold the right one's
 mouth on the `nose` slot, and stance 2 swaps them (`jaw` at x=388, 17 frames where
-stance 0 has 1 on that slot). Play a stance-2 line against stance 0 and the tick
-anchors still place the mouth over the right-hand character while the art comes
-from the left one's lips — the port did exactly that until the field was read, and
-the symptom was a mouth animating on the wrong face.
+stance 0 has 1 on that slot). A stance-2 line played against stance 0 animates a
+mouth on the wrong face: the tick anchors still place it over the right-hand
+character while the art comes from the left one's lips.
 
 A dialogue line's **animation-logic** container is what brings it to life:
 a flat array of **82-byte records, one per ~33 ms tick**. Each record is a
@@ -224,10 +220,9 @@ entry is how the format holds a picture for more than one 50 ms pass, and this
 is the same table a [prop state](shp.md) uses for the same purpose.
 
 Every walk in the game draws ten pictures and lists twenty steps —
-`1,1,2,2,…,10,10` — so a full stride takes a second, not half of one. Reading
-the pictures and ignoring the script is what made the port's cast look like it
-was "trying to moon walk" (#181): the same ground, in the same time, with the
-feet going twice as fast. `stok1`'s `dig` and `throw` are the only other
+`1,1,2,2,…,10,10` — so a full stride takes a second, not half of one. Playing the
+pictures without the script covers the same ground in the same time with the feet
+going twice as fast, a moonwalk (#181). `stok1`'s `dig` and `throw` are the only other
 authored scripts (14 steps over 7 pictures); every `stand` in the game lists one
 step, which is what makes a still pose still.
 

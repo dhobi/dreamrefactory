@@ -6,8 +6,7 @@
 Everything in the game that happens *without* you clicking — a faucet that
 shuts itself off, steam that hisses every few seconds, a character walking a
 patrol, the pocketwatch's second hand — runs through one small subsystem: the
-scheduler. Its behaviour was recovered from `TI.EXE` and is now fully
-implemented; this page is the write-up.
+scheduler. Its behaviour is recovered from `TI.EXE`.
 
 Reference implementation:
 [`engine/src/runtime/scheduler.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/scheduler.ts) and
@@ -25,28 +24,27 @@ The engine keeps time at two granularities, and scripts touch both:
 | **Master heartbeat** | one service step every **50 ms** (20 Hz) | loops, crickets, walks |
 
 A **screen ramp** — a `visualeffect` reveal, and a `screentoblack` /
-`blacktoscreen` fade — is on the script tick, not the heartbeat, and that is not a
-detail: it is the difference between four seconds and twelve. Both spin on the same
+`blacktoscreen` fade — is on the script tick, not the heartbeat, which makes a
+long fade three times shorter than heartbeat pacing would. Both spin on the same
 counter (`0x41de90`, `timeGetTime() × 3 / 50`) waiting for it to advance by one, so
 one step is one tick in both directions. `RAMP_STEP_MS` in `clock.ts` is that step,
 and it is written as `ENGINE_STEP_MS / 3` so the arithmetic stays exact.
 
 The waiting is a **busy-wait inside the command**, with no message pump and no
 service pass in it, so a fade suspends the interpreter for its whole length — a
-`screentoblack(x, 10)` is 167 ms during which the script does not advance. Ours
-returned immediately for a long time, which is what let a conversation's first
-line start under a screen that was still black
-([#6](https://github.com/dhobi/dreamrefactory/issues/6)); the two fade builtins now
+`screentoblack(x, 10)` is 167 ms during which the script does not advance. A fade
+that returned immediately would let a conversation's first line start under a
+screen that is still black
+([#6](https://github.com/dhobi/dreamrefactory/issues/6)), so the two fade builtins
 `await Clock.sleep(steps × 50/3)`, the same primitive `delay(n)` uses. See
 [the host doc](host.md) for the rest of the transition machinery.
 
-Fades were on the heartbeat here for a long time, which made every fade in the game
-three times slower than the original's. It shows only where a script asks for a long
-one, which is where it was reported from: losing the fistfight brings the engine room
-back over 240 steps — 4.0 s, against 12.0 s at the heartbeat. The engine room goes on
-fading in slowly for the rest of that game, and *that* part is faithful — the boot
-library's `restorescreen` picks the 240 out of `currentset () = "engine" &
-actorowner ("vlad") = "wonfight"`, and nothing ever clears `wonfight`.
+The difference shows where a script asks for a long fade: losing the fistfight
+brings the engine room back over 240 steps — 4.0 s, against 12.0 s at the
+heartbeat. The engine room goes on fading in slowly for the rest of that game, as in
+the original — the boot library's `restorescreen` picks the 240 out of
+`currentset () = "engine" & actorowner ("vlad") = "wonfight"`, and nothing ever
+clears `wonfight`.
 
 The heartbeat is `ENGINE_STEP_MS` in `clock.ts`. On every service step the
 scheduler processes, **in this order: walks, then crickets, then due loops** —
@@ -60,8 +58,7 @@ isn't replayed as a burst.
 
 ## `makeloop`: a loop that isn't a loop
 
-The single most important recovered fact: a "loop" is really a **one-shot
-delayed callback**.
+A "loop" is really a **one-shot delayed callback**.
 
 ```
 makeloop ("scene", "steamhiss", 45)
@@ -90,8 +87,7 @@ Details that matter in practice:
 
 ### `forceupdate` is one pass of the main loop
 
-Both halves of it, which is the part easy to get wrong: it **services** the
-world *and* **renders a frame**. The service pass lives in the builtin; the
+It does both halves: it **services** the world *and* **renders a frame**. The service pass lives in the builtin; the
 frame is the host's (`GameHost` wires `session.nextFrame`, and `main.ts`
 replaces that with `requestAnimationFrame` because a browser draws on its own
 clock). Rendering is what advances a turn or walk animation, so a script that
@@ -180,11 +176,10 @@ travelling away silences it and coming back re-arms it — no script cleanup
 needed.
 
 A cricket is an overlapping play, so it lands in **sound channel slot 2** and is
-**published there** like any other play. That is not bookkeeping: `currentsound()`
-is the only way a script can ask whether a cricket has finished, and scripts do —
-the bedsit landlady's five lines are separate crickets sequenced entirely by that
-question. Firing one without recording it left both slots reading empty and her
-talking over herself; see
+**published there** like any other play. `currentsound()` is the only way a script
+can ask whether a cricket has finished, and scripts do — the bedsit landlady's five
+lines are separate crickets sequenced entirely by that question, and with the play
+unrecorded both slots read empty and her lines overlap; see
 [Audio at runtime](audio.md#three-channels).
 
 ## Walks
@@ -192,8 +187,7 @@ talking over herself; see
 `walktostar` / `walktoxyz` / `walkonpath` give an actor a walk serviced on the
 heartbeat: **the actor's own `actorspeed` in world units per 50 ms step**, not
 scaled — that is `TI.EXE`'s straight-line mover at `0x443E7C` verbatim, and its
-pass rate is ours. (A ×4 approximation stood here once and moved the whole cast
-at four times its scripted pace.) While walking:
+pass rate is the port's. While walking:
 
 - the actor **turns before it moves**, stepping the facing by `actorturn` and
   dispatching `endturn` when it lands — the cast's own `endturn` is what
@@ -205,8 +199,8 @@ at four times its scripted pace.) While walking:
 How fast the legs move is **not** this: it is the pose's [play
 script](../formats/pup-cst.md#the-play-script-says-how-long-a-picture-is-held),
 which every actor steps through once per pass whether it is walking or not. The
-two are independent in the original too, which is what let #181 arrive at the
-right place at the right time with the feet going twice as fast.
+two are independent in the original too: #181 was a walk that arrived at the right
+place at the right time with the feet going twice as fast.
 
 One walk per actor. On arrival the scheduler fires the actor's **`endwalk`**
 handler — that's how patrol scripts chain legs: each `endwalk` starts the next
@@ -227,14 +221,13 @@ and the second hand ticks once a second, but that is an equivalence rather than 
 definition, and things that add passes add clock.
 
 It runs on **both hosts**, off whatever `now` reaches `tickTime` — wall time in
-the browser, the pumped virtual clock headless. It used to be browser-only, out of
-a fear that an auto-advancing clock would fire the mission-4 sinkmovie chain
-mid-test; the gate cost more than it bought, because `calctime` is also where
-`sinkflag` becomes `advancephase()`, so headless the ship never sank at all and
-the mission-4 goldens were traces of a ship sitting still.
+the browser, the pumped virtual clock headless. Headless needs it as much as the
+browser does: `calctime` is also where `sinkflag` becomes `advancephase()`, so
+without it the ship never sinks and the mission-4 goldens would trace a ship
+sitting still.
 
 That is only the heartbeat. Mission 4 has three more things that move the clock —
-one of them is *walking around* — and the whole of it is
+one of them is *walking around* — all described in
 **[The sinking](../../taoot/sinking.md)**.
 
 ## Poll loops and the runaway guard

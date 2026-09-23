@@ -83,8 +83,10 @@
  *
  * ## The flare, and the sprinklers
  *
- * `0x441d30` — the FIRST thing the hit handler asks, before it computes any
- * damage at all — is whether the striking cel's strength is exactly **−9**. That
+ * `0x441d30` — asked before any damage is computed, once the hit handler
+ * `0x441cf0` has skipped kragg's own shots, a strength of 0 and states 9 and up
+ * (which go to `0x441ef0`) — is whether the striking cel's strength is exactly
+ * **−9**. That
  * is `statflare`, which level eight places a `statflaregun` for. A −9 hit costs
  * kragg nothing: it plays sound `0x13`, throws a spark, installs `0x473a88` and
  * returns. `0x473a88` is state 9, and state 9 is the whole tactic of the level:

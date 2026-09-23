@@ -6,9 +6,9 @@ This doc is about *this project* — how the TypeScript code is organised — as
 opposed to the game's file formats (those get their own docs). If you want to
 find where something lives in the source, start here.
 
-## Four packages, and which way they point
+## Six packages, and which way they point
 
-The repository is an npm workspace of five packages, and the arrangement is one
+The repository is an npm workspace of six packages, and the arrangement is one
 rule: **nothing shared knows which game it is.**
 
 | Package | What it is | Imports |
@@ -18,18 +18,18 @@ rule: **nothing shared knows which game it is.**
 | `taoot/` | *Titanic*: four pages, six editions and the demo, its own tools, the suites that play it to the end | `engine`, `site` |
 | `dust/` | *Dust*: two pages, one disc, its own tools and suites | `engine`, `site` |
 | `timelapse/` | *[Timelapse](../timelapse/)*: one page and four discs — its own palette, its own title card, and the boot log it started life as, now a panel the page opens over the picture | `engine`, `site` |
+| `skullcracker/` | *[Skull Cracker](../skullcracker/)*: the game on one page, `walk.html` beside it as the bench a level is opened on, and its own disassembler for `SC.EXE` | `engine`, `site` |
 
-There is a test that says so — `site/tests/layering.ts` fails the build if
-`engine/` reaches for a game, or if any of the three games reaches for another.
+`site/tests/layering.ts` enforces this: it fails the build if `engine/` reaches
+for a game, or if any game reaches for another.
 
 Everything below `## Where a game's own code lives` is a game shell. Everything
-above it is the engine, and this page spends most of its length there, because
-that is where most of the code is.
+above it is the engine, where most of the code is.
 
 ## Two layers inside the engine: "read the files" vs "run the game"
 
-`engine/src/` splits cleanly in two, and it's worth keeping the split in your
-head because the two halves came from very different places. A third directory,
+`engine/src/` splits in two, and the two halves have very different sources
+(a port of DFET versus behaviour recovered from the game). A third directory,
 `engine/src/web/`, puts the result on a canvas.
 
 ```mermaid
@@ -105,9 +105,9 @@ plays. Every file in here corresponds to a format doc:
 
 ### `engine/src/runtime/` — the runtime ("how the game *behaves*")
 
-This is the part DFET never needed and never had: the actual **game engine**.
-Its behaviour was reconstructed by watching the real game and by
-disassembling `TI.EXE`. Key files:
+This part has no counterpart in DFET: it is the actual **game engine**. Its
+behaviour is reconstructed from observing the real game and from disassembling
+`TI.EXE`. Key files:
 
 | File | Responsibility |
 |------|----------------|
@@ -131,7 +131,7 @@ disassembling `TI.EXE`. Key files:
 | [`signature.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/signature.ts) | a running hash of everything the next frame would be drawn from, so a composite can be skipped when the picture has not changed — hashing the *inputs* rather than counting mutations, because a revision counter can be forgotten at a write site |
 | [`point.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/point.ts) | the packed-point format `(x<<16)\|y` scripts pass coordinates in |
 | [`input.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/input.ts) | the event queue — input made while the engine was mid-gesture, and what `flushevents()` discards (recovered from the binary) |
-| [`bootplan.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/bootplan.ts) | what a game's boot needs, read out of its own BOOTFILE — the resource list, the landing room and the disc volumes that used to be hardcoded TAOOT filenames in the host ([the boot plan](runtime/host.md#the-boot-plan-what-a-game-says-it-needs)) |
+| [`bootplan.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/bootplan.ts) | what a game's boot needs, read out of its own BOOTFILE — the resource list, the landing room and the disc volumes, rather than TAOOT filenames hardcoded in the host ([the boot plan](runtime/host.md#the-boot-plan-what-a-game-says-it-needs)) |
 | [`rng.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/rng.ts) | the seedable source behind the session's two streams — script `random()` and the engine's own ambient draws — which is what makes a run reproducible ([why two](../taoot/verification.md#two-streams-because-the-clock-must-not-re-roll-the-story)) |
 | [`trace.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/trace.ts) | the state snapshot a [playthrough](../taoot/verification.md#the-playthrough-the-game-played-not-probed) asserts at each story beat |
 
@@ -148,7 +148,7 @@ but it may mention `document`, and it is where a game shell attaches.
 | File | Responsibility |
 |------|----------------|
 | [`host.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/host.ts) | `GameHost` — what it means to *run* the game (set activation, prefetch, cold boot, resuming a save) with no reference to `document`; a shell passes its side in as a file source, five UI notifications and an `AudioSink`. See [the browser host](runtime/host.md#the-split-and-why-it-is-where-it-is) |
-| [`viewer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/viewer.ts) | `SetViewer` — the navigation state machine over a parsed SET (turn/walk/teleport, the geometry of its own hit-testing), and one optional `RoomLayer` of the screen. It used to own the rendering and the click priority chain too; see the row below |
+| [`viewer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/viewer.ts) | `SetViewer` — the navigation state machine over a parsed SET (turn/walk/teleport, the geometry of its own hit-testing), and one optional `RoomLayer` of the screen. Rendering and the click priority chain are in the row below |
 | [`screen-director.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-director.ts) | `ScreenDirector` — **who owns the screen, and who gets a click**: the five-way arbitration between a movie, a conversation, a fade, the world and a held frame, the flat/room compositor, the CLUT, the per-frame service of the whole session, and the input priority chain (`hittest`, clicks, keys, the cursor). Held by the host, and it works with **no room at all** — which is what lets *Timelapse*, a game with no `.SET` on any of its four discs, draw and play its films |
 | [`screen-presenter.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-presenter.ts) | `ScreenPresenter` — the single persistent framebuffer every render path composites into, the fade overlays, and the [signature](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/signature.ts) check that skips a composite when the picture has not changed. Held by the host, so it **outlives** the viewer a set change replaces |
 | [`screen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen.ts) | the screen contract: how big the framebuffer is, and where a SET view sits inside it. 512×384 is the DF4 **default** (Titanic, Dust) rather than the law — Timelapse says 640×480 in every one of its stage headers |
@@ -159,7 +159,7 @@ but it may mention `document`, and it is where a game shell attaches.
 | [`fonts.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/fonts.ts) | the canvas font stacks and `wrapText` — including breaking a line that has no spaces in it |
 | [`cursors.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/cursors.ts) | `cursor(name)` as something `style.cursor` will take: the 32×32 monochrome `CURS.*` art a DreamFactory build keeps in its own executable, resampled (nearest neighbour, never blended) to the size the picture is being shown at — a whole-number zoom is exact pixel doubling and a fractional one an even mix of one- and two-pixel rows, capped at the 128×128 past which browsers ignore a cursor image outright. All three games have their own set, extracted from their own build by [`tools/dumpcursors.ts`](../reference/tools.md) — 15 for Timelapse, 11 for Titanic, 9 for Dust — because the sets differ: Timelapse navigates BY cursor (11,031 of its 13,200 `cursor(...)` calls are the two step arrows, and it redrew both), Dust's v1 build has no step arrows at all, and the two disagree about the pointing hand |
 | [`photos-idb.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/photos-idb.ts) | the IndexedDB store behind Timelapse's photo album (`plugin("camera", …)`) — the one thing this engine produces that the *player* made, and the one the original kept outside a saved game. Everything in it is allowed to fail: a blocked or full store costs persistence and nothing else |
-| [`keys.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/keys.ts) | whether a keypress belongs to whatever has focus or to the game. The page listens on `window`, so without this a filter box typing `mission` toggled the minimap on the M and sent all seven letters into the running game |
+| [`keys.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/keys.ts) | whether a keypress belongs to whatever has focus or to the game. The page listens on `window`, so without this, typing `mission` into a filter box would toggle the minimap on the M and send every letter into the running game |
 | [`save-browser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-browser.ts) / [`save-store.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-store.ts) | the saved-games UI and its IndexedDB "file system" — parameterised on a `SaveKind`, so Titanic's `.ti` and Dust's `.rtd` get a database each off one implementation |
 | [`speedrun/`](https://github.com/dhobi/dreamrefactory/tree/master/engine/src/web/speedrun) | the **speedrun workbench**, whole: the sheet grammar, the run loop, both drivers (Playwright's contract and the in-page one), the aim sweep, the panel's markup and stylesheet, and the verbs that name no game. A game supplies its own verbs and five facts about itself (`workbench.ts`, `Workbench`); Titanic and Dust each get a `/speedrun/` page out of it. Which table a verb belongs in is argued in [`action.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/speedrun/action.ts) |
 | [`debug-panel.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/debug-panel.ts) / [`state-list.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/state-list.ts) | the **state pane** behind X — a DreamFactory game's plot lives entirely in script globals, so a snapshot of the globals table IS the game state, and this renders the same snapshot the playthrough goldens hold. A list that patches rather than redraws (it polls; the engine has no "a global changed" event), filtered by [`masks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/masks.ts). The SPINE — the handful of variables shown above the rest — is the game's to name: Titanic's six come from a readout the original carries, Dust's two are what its own suites set |
@@ -168,8 +168,9 @@ but it may mention `document`, and it is where a game shell attaches.
 
 ## Where a game's own code lives
 
-The four packages above the engine. None of them adds engine behaviour; they
+The five packages above the engine. None of them adds engine behaviour; they
 say which disc, which pages, and what the page around the canvas looks like.
+`skullcracker/` is laid out in [Skull Cracker's own docs](../skullcracker/).
 
 ### `site/` — the shared web presence
 
@@ -240,19 +241,15 @@ When you travel to a new set, the *set* is swapped out but the *session*
 stays. That's the key architectural fact: **sets are disposable, the session
 is not**.
 
-`GameSession` used to be one very large class. The cohesive sub-runtimes have
-since been extracted into their own files — `Clock`, `Scheduler`,
+The cohesive sub-runtimes live in their own files — `Clock`, `Scheduler`,
 `PuppetController`, `StageController` — which the session **composes**
 (`this.scheduler`, `this.stageCtrl`, …).
 
-For a while it also **forwarded** to them: a `session.makeLoop(...)` that called
-`this.scheduler.makeLoop(...)`, and forty more like it, so that nothing outside
-had to know the extraction had happened. Those are gone. A caller addresses the
-subsystem it means — `session.scheduler.makeLoop(...)`,
-`session.stageCtrl.gotoFlat(...)` — because a forwarder is a second name for one
-thing, and a second name is somewhere for the two to drift apart. What stays on
-the session is what genuinely belongs to it: the interpreter, the cross-set state,
-and the fields more than one subsystem reads.
+The session does not forward to them. A caller addresses the subsystem it
+means — `session.scheduler.makeLoop(...)`, `session.stageCtrl.gotoFlat(...)` —
+because a forwarder is a second name for one thing, and two names can drift
+apart. What stays on the session is what belongs to it: the interpreter, the
+cross-set state, and the fields more than one subsystem reads.
 
 ## The render picture: layers on a 512×384 screen
 
@@ -279,8 +276,7 @@ The screen is **512×384**. It is drawn back-to-front:
 
 ## How one mouse click flows through the system
 
-This is the single most useful thing to understand, because the same
-"event travels down a chain" idea appears everywhere.
+The same "event travels down a chain" idea appears throughout the engine.
 
 ```mermaid
 sequenceDiagram
@@ -322,19 +318,18 @@ re-routes with `sendtoscene(currentscene(), keydown(arg))`. Everything else the 
 reaches, it reaches along that re-route, which is what carries the **mapped** value:
 scene → set main → stage → the boot library's own `keydown`, the default that turns
 `"leftarrow"` into `currentscene("left")`. Dispatching the boot's two containers side
-by side instead handed the default the key the player actually pressed, so the arrows
-worked and the W/A/D bindings did nothing at all (#14).
+by side instead would hand the default the unmapped key, so the arrows would work and
+the W/A/D bindings would do nothing (#14).
 
 That mapping is a *script*, so everything above it is key-blind — and the
 [event queue](runtime/host.md#keys) is above it. TI.EXE posts the record in its
 window proc and pops it in the main loop, both of them before any script has said
 what the key means, so a press made mid-move waits its turn whether the player
-made it with an arrow or with the letter they bound. The port kept its queue in
-the arrow path instead, one level *below* where the original keeps it, and the
-letters were dropped while the arrows were kept (#207).
+made it with an arrow or with the letter they bound. A queue in the arrow path, one
+level *below* the original's, would keep the arrows and drop the letters (#207).
 
 And a link that merely **finishes** does not end the walk — only `exitcode` does.
-`deckbd.set`'s `keydown` is the proof: a ladder of `if currentview() = "viewNN" & arg
+`deckbd.set`'s `keydown` shows why: a ladder of `if currentview() = "viewNN" & arg
 = "uparrow" … exitcode` that falls off the end for every other key. Under the pointer
 event's rule that would consume the press, and no arrow would ever reach the default
 movement. (This is also why a scene script can quietly steal ↑ to send you through a
@@ -342,8 +337,8 @@ door instead of walking — it takes the key with an `exitcode`.)
 
 What keeps the router from resolving its own re-route back into itself is a
 re-entrancy check: a script already running a handler further up the dispatch stack
-is never given it again. Before that existed the boot had to be kept off every
-fallback list, and reaching it was an out-of-memory rather than a wrong answer.
+is never given it again. Without it, reaching the boot recurses until it runs out of
+memory.
 
 The boot is also where a title keeps its **defaults**, which is the other half of why
 events walk that far. They are written against `target` rather than `me`, because the
@@ -362,8 +357,8 @@ you, only `door` and `signs` carry an `initprop` of their own, and no cast membe
 the tree carries a `resetactor`. So a prop or an actor answering nothing for an event
 is the normal case, not the broken one — and a **stub** target, with no script at all,
 still has to reach them. TAOOT ships one: the purser is an actor record with an
-eight-byte script container, and dropping his events as "target not loaded" is what
-left him holding the cufflink into the next game (#89).
+eight-byte script container, and dropping his events as "target not loaded" leaves
+him holding the cufflink into the next game (#89).
 
 And a press may never reach the chain at all, because two things are modal ahead of
 it: a **playing movie** and a **suspended conversation**. Both are places where the
@@ -407,12 +402,11 @@ audio playback, and saving/loading.
   problem.
 - On Titanic's server, `/play/` cold boots itself into the game with nothing in
   front of it but the boot text. The saved-games browser reaches saves from the
-  in-game menu and the editors reach every `.SET` under `gamefiles/`; the dev
-  harness that used to sit beside them — story-state presets, puzzle-jump
-  buttons — is gone, and what it was for is
+  in-game menu and the editors reach every `.SET` under `gamefiles/`; there are
+  no story-state presets or puzzle-jump buttons, since that is
   [the playthrough](../taoot/verification.md)'s job. Assets are fetched on
   demand. See **[the browser host](runtime/host.md)**.
-- `npm test` — 534 Vitest tests across 38 files and all four packages: the
+- `npm test` — the Vitest suites across all packages: the
   end-to-end regression scenarios, savegame round-trips, recovered-builtin
   checks, the blackjack interpreter test, the editors' write path, the
   authoring and language suites, the text/audio encoding ones, Dust's movies
@@ -428,8 +422,8 @@ audio playback, and saving/loading.
   tool that knows which game it is looking at lives in that game's own
   `tools/`: the `TI.EXE` mining tools and the flow-map generator are
   `taoot/tools/`. See **[the tool reference](../reference/tools.md)**. The dev
-  server also hosts the seven **[browser editors](../editors/README.md)**, one
-  per container format.
+  server also hosts the **[browser editors](../editors/README.md)**, one per
+  container format.
 
 Now that you know where things live, the two deep topics are the
 **[scripting language](scripting-language.md)** and, underneath all the

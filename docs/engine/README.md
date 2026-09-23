@@ -7,8 +7,7 @@ is about one particular game — where a page cites *Titanic* or *Dust*, it is
 citing the evidence, because the machinery was recovered from what those two
 discs actually contain.
 
-Two generations of it ship in this repository, and the difference matters often
-enough to be worth stating once: **DreamFactory 1** is what *Dust: A Tale of the
+Two generations of it ship in this repository: **DreamFactory 1** is what *Dust: A Tale of the
 Wired West* ran on in 1995, and **DreamFactory 4** is what *Titanic: Adventure
 Out of Time* ran on in 1996. Two years apart, the same lineage, and different
 enough on disk that several formats have a `-v1` page of their own.
@@ -31,9 +30,9 @@ enough on disk that several formats have a `-v1` page of their own.
 
 The code is `engine/` in the repository — `src/df/` for the formats,
 `src/runtime/` for the machine, `src/web/` for the browser it runs in. It
-imports nothing from either game, which is a rule with a test behind it
-(`site/tests/layering.ts`) — the rule being that it knows about no particular
-game, *not* that it is DOM-free: `src/web/` is full of DOM.
+imports no other package — no game, and not `site/` — a rule enforced by
+`site/tests/layering.ts`. The rule is that it knows about no particular game, *not* that it is DOM-free:
+`src/web/` is full of DOM.
 
 Where the two generations differ, the difference is a **separate reader** and
 not a branch, which is why `src/df/` carries `set-v1.ts`, `mov-v1.ts`,

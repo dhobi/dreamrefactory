@@ -2,9 +2,9 @@
 
 *Prerequisite: [The DFile container format](README.md) and
 [The scripting language](../scripting-language.md). This is the deepest
-format doc — you only need it if you're working on the decoder itself.*
+format doc — it is needed only for work on the decoder itself.*
 
-Scripts don't live in their own files. A script is **one container** inside
+Scripts do not live in their own files. A script is **one container** inside
 whatever file owns it — a SET, an STG, the BOOTFILE. This doc explains what
 that container's bytes look like.
 
@@ -13,11 +13,10 @@ from DFET's [`DFscript`](https://github.com/M3tox/DFET/blob/main/libs/DFfile/DFs
 
 ## First surprise: the script is *bigger* compiled than as text
 
-You might expect a compiled script to be a compact stream of one-byte opcodes.
-It isn't — the on-disk form is **larger** than the readable text. The reason is
-**speed, not size**: the format is laid out so the 1996 engine could step
-through it with almost no parsing. Every token is a fixed-width record it can
-read in one go. It was already "interpreted" (tokenised) at build time.
+A compiled script is not a compact stream of one-byte opcodes: the on-disk form
+is **larger** than the readable text. The layout serves **speed, not size** — the
+1996 engine steps through it with almost no parsing, because every token is a
+fixed-width record it can read in one go. Tokenising happened at build time.
 
 ## The token stream: fixed 8-byte segments
 
@@ -62,7 +61,7 @@ flowchart LR
 
 ## Command IDs: the opcode table
 
-When `cmd` isn't 3/4/5/6, it's an **opcode** — a number naming a built-in
+When `cmd` is not 3/4/5/6, it is an **opcode** — a number naming a built-in
 command or operator. The IDs are banded by purpose:
 
 | Band | Purpose | Examples |
@@ -83,11 +82,11 @@ executable contains a plaintext table of 6-byte records `{ char* name, u16 id
 }` mapping every command name to its ID. The tool that extracts that table is
 [`taoot/tools/exetable.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/exetable.ts).
 
-> **Names vs. behaviour — the crucial gap.** Having the ID→name table means we
-> can *decompile* a script into readable text. It does **not** tell us what
-> each command *does*. `propxy` is command 16018 — but *how* it places a prop
-> had to be recovered from the disassembly. Recovering these per-command
-> semantics, one at a time, is the bulk of the reverse-engineering work; the
+> **Names vs. behaviour.** The ID→name table is enough to *decompile* a script
+> into readable text. It does **not** say what each command *does*. `propxy` is
+> command 16018 — but *how* it places a prop is recovered from the disassembly.
+> These per-command semantics, recovered one at a time, are the bulk of the
+> reverse-engineering work; the
 > [scripting doc](../scripting-language.md) explains where they land
 > (the interpreter's builtin registry).
 
